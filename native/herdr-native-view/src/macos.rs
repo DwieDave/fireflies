@@ -467,6 +467,9 @@ fn web_state(view: &WKWebView) -> Value {
     unsafe {
         json!({
             "url": view.URL().and_then(|u| u.absoluteString()).map(|s| crate::redact_url(&s.to_string())),
+            // The whole URL, for the mod's own address bar (url above drops
+            // the query and fragment, for logs).
+            "href": view.URL().and_then(|u| u.absoluteString()).map(|s| s.to_string()),
             "title": view.title().map(|s| s.to_string()),
             "loading": view.isLoading(),
             "progress": view.estimatedProgress(),
