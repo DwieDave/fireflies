@@ -60,6 +60,8 @@ struct Grid {
     scale: f32,
     /// The cell in device pixels the local screen was sized with.
     vt_cell: (u32, u32),
+    /// A size the layout asked for that hasn't held for `SETTLE` yet, and since when.
+    pending_fit: Option<((u16, u16, (u32, u32)), std::time::Instant)>,
     /// The colors and device-pixel cell size the core was last told.
     told_display: Option<DisplayFacts>,
     /// Top-left of the cell grid in window coordinates, from the last paint.
@@ -174,6 +176,34 @@ impl Grid {
         }
     }
 
+    /// Sizes the screen from a paint: a new size is taken once the layout has
+    /// asked for it for `SETTLE`. A tab coming back into view is laid out once at
+    /// a placeholder size before its real one; passing both on made programs
+    /// redraw twice in a row, and TUIs (Claude Code) were left half-drawn. Returns
+    /// whether a size is waiting, so the caller asks for another frame.
+    fn fit_settled(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) -> bool {
+        let want = (cols, rows, device_cell(cell, scale));
+        if (cols, rows) == (self.vt.cols, self.vt.rows) && want.2 == self.vt_cell {
+            self.pending_fit = None;
+            self.fit(cols, rows, cell, scale);
+            return false;
+        }
+        match self.pending_fit {
+            Some((p, since)) if p == want => {
+                if since.elapsed() < SETTLE {
+                    return true;
+                }
+            }
+            _ => {
+                self.pending_fit = Some((want, std::time::Instant::now()));
+                return true;
+            }
+        }
+        self.pending_fit = None;
+        self.fit(cols, rows, cell, scale);
+        false
+    }
+
     /// Sizes the screen to `cols` x `rows` of `cell` at `scale`; the program hears of a change.
     fn fit(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) {
         self.cell = cell;
@@ -194,6 +224,9 @@ impl Grid {
         }
     }
 }
+
+/// How long a size from layout has to hold before the terminal takes it.
+const SETTLE: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// A cell in device pixels.
 fn device_cell(cell: Size<Pixels>, scale: f32) -> (u32, u32) {
@@ -240,6 +273,7 @@ impl TerminalView {
                 cell: size(px(9.0), px(18.0)),
                 scale: 1.0,
                 vt_cell: (9, 18),
+                pending_fit: None,
                 told_display: None,
                 origin: Point::default(),
                 buttons_down: Vec::new(),
@@ -1966,7 +2000,9 @@ impl Render for TerminalView {
                 canvas(
                     move |bounds, window, _cx| {
                         let (cols, rows) = grid_size(bounds.size, cell);
-                        grid.borrow_mut().fit(cols, rows, cell, window.scale_factor());
+                        if grid.borrow_mut().fit_settled(cols, rows, cell, window.scale_factor()) {
+                            window.request_animation_frame();
+                        }
                     },
                     move |bounds, _, window, cx| {
                         paint_grid(bounds, &grid_paint, focused, window, cx);
