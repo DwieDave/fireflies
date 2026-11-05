@@ -115,6 +115,9 @@ pub struct TerminalView {
     was_focused: bool,
     /// The window frame this terminal was last put on screen in (`FRAME`).
     shown_in: Cell<u64>,
+    /// Output changed the screen while it wasn't drawn: the window's cached
+    /// copy of this view is stale, so it is drawn afresh when shown again.
+    missed: Cell<bool>,
     /// When the person last typed here: output right after is shown at once.
     typed_at: Cell<Option<Instant>>,
     /// Scrolled this gesture, in lines, toward the next whole one.
@@ -294,6 +297,7 @@ impl TerminalView {
             focus: cx.focus_handle(),
             was_focused: false,
             shown_in: Cell::new(0),
+            missed: Cell::new(false),
             typed_at: Cell::new(None),
             scrolled: point(0.0, 0.0),
             search_open: false,
@@ -519,8 +523,12 @@ impl TerminalView {
         // Output in a terminal nobody sees doesn't redraw the window; it's
         // drawn fresh when shown again. Nor does output that changed nothing
         // on screen (an agent spinning its title).
-        if self.shown_in.get() == FRAME.load(Ordering::Relaxed) && self.grid.borrow_mut().vt.shows_change() {
-            self.redraw_soon(cx);
+        if self.grid.borrow_mut().vt.shows_change() {
+            if self.shown_in.get() == FRAME.load(Ordering::Relaxed) {
+                self.redraw_soon(cx);
+            } else {
+                self.missed.set(true);
+            }
         }
         open
     }
@@ -552,8 +560,11 @@ impl TerminalView {
     }
 
     /// The window puts this terminal on screen in the frame it's building.
-    pub fn mark_shown(&self) {
+    /// Returns whether output changed it while it was off screen (its cached
+    /// drawing is stale then).
+    pub fn mark_shown(&self) -> bool {
         self.shown_in.set(FRAME.load(Ordering::Relaxed));
+        self.missed.replace(false)
     }
 
     /// Sizes a terminal that isn't on screen as its pane would be (`AppWindow::fit_hidden_tabs`).
@@ -1883,6 +1894,7 @@ impl Render for TerminalView {
         self.link = link;
         self.grid.borrow_mut().link_spans = spans.unwrap_or_default();
         let grid = self.grid.clone();
+        let me = cx.entity().downgrade();
         let grid_paint = self.grid.clone();
         let selection_view = cx.entity().downgrade();
         let (input_focus, input_view) = (self.focus.clone(), cx.entity());
@@ -2002,10 +2014,15 @@ impl Render for TerminalView {
             }))
             .child(
                 canvas(
-                    move |bounds, window, _cx| {
+                    move |bounds, window, cx| {
                         let (cols, rows) = grid_size(bounds.size, cell);
                         if grid.borrow_mut().fit_settled(cols, rows, cell, window.scale_factor()) {
-                            window.request_animation_frame();
+                            // The view is cached: a bare frame would reuse this
+                            // layout and never look at the size again.
+                            let me = me.clone();
+                            cx.defer(move |cx| {
+                                let _ = me.update(cx, |_, cx| cx.notify());
+                            });
                         }
                     },
                     move |bounds, _, window, cx| {

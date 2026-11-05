@@ -4437,7 +4437,11 @@ pub(crate) fn cached<V: Render>(view: &Entity<V>) -> AnyElement {
 }
 
 pub(crate) fn shown_terminal(view: &Entity<TerminalView>, cx: &App) -> AnyElement {
-    view.read(cx).mark_shown();
+    // Output that arrived while it was off screen didn't redraw it: draw it
+    // afresh this once, or the window keeps the screen it had when hidden.
+    if view.read(cx).mark_shown() {
+        return view.clone().into_any_element();
+    }
     cached(view)
 }
 
