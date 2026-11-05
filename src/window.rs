@@ -3508,7 +3508,15 @@ impl AppWindow {
             }
         });
         let (name, mut props) = if kind == OverlayKind::Toast {
-            ("toast".to_owned(), spec.get("notification").cloned().unwrap_or(Value::Null))
+            // The layout's `toast_mod` draws notifications, like `terminal_menu` for menus.
+            let requested = self.chrome.toast_mod.as_deref().unwrap_or("toast");
+            let name = if self.folders.contains_key(requested) {
+                requested
+            } else {
+                tracing::warn!(mod_name = requested, "toast mod not found; using toast");
+                "toast"
+            };
+            (name.to_owned(), spec.get("notification").cloned().unwrap_or(Value::Null))
         } else {
             (spec.get("mod").and_then(Value::as_str).unwrap_or_default().to_owned(), spec.get("props").cloned().unwrap_or(json!({})))
         };
@@ -5197,6 +5205,16 @@ mod tests {
         root.terminal_menu = Some("personal-menu".into());
         let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
         assert_eq!(restored.terminal_menu.as_deref(), Some("personal-menu"));
+    }
+
+    #[test]
+    fn toast_mod_is_a_root_layout_choice_that_roundtrips() {
+        let mut root = super::default_layout("main");
+        assert_eq!(root.toast_mod, None);
+        assert!(serde_json::to_value(&root).unwrap().get("toast_mod").is_none());
+        root.toast_mod = Some("personal-toast".into());
+        let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
+        assert_eq!(restored.toast_mod.as_deref(), Some("personal-toast"));
     }
 
     /// Runs `window::tests::<name>` alone in a test process of its own, on a
