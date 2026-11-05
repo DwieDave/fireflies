@@ -693,6 +693,11 @@ pub fn send_command_to(copy: u64, command: &str) -> bool {
     })
 }
 
+/// HUP: the copies on screen now, for native views (src/native_view.rs).
+pub fn shown_copies() -> std::collections::HashSet<u64> {
+    SHOWN_COPIES.with(|s| s.borrow().clone())
+}
+
 /// The copies on screen now (`prepare_load` numbers them).
 pub fn set_shown_copies(copies: std::collections::HashSet<u64>) {
     SHOWN_COPIES.with(|s| *s.borrow_mut() = copies);
@@ -886,6 +891,9 @@ fn module(inst: Instance, copy: u64) -> HostModule {
     let feedback_layout = inst.props.get("layout").and_then(Value::as_str).unwrap_or("other").to_owned();
     let (cmd_tx, commands) = async_channel::unbounded::<String>();
     COMMANDS.with(|c| c.borrow_mut().push((copy, inst.name.clone(), cmd_tx)));
+    // HUP: native view events for this copy (nextNativeViewEvent).
+    let (native_tx, native_events) = async_channel::bounded::<String>(256);
+    crate::native_view::register_events(copy, native_tx);
     HostModule::new("herdr")
         .declarations(DECLARATIONS)
         .async_function("exec", |a| {
@@ -1082,6 +1090,24 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         .async_function("nextCommand", move |_| {
             let rx = commands.clone();
             Ok(async move { rx.recv().await.map(HostValue::Str).map_err(|_| HostError::new("herdr-app is shutting down")) })
+        })
+        // HUP: native content views (src/native_view.rs), interface native-view/0.
+        .component("nativeView", move |mut args, window, cx| {
+            let id = args.id().to_owned();
+            let props = from_host(args.props());
+            let children = args.take_children();
+            crate::native_view::element(copy, &id, props, children, window, cx)
+        })
+        .function("nativeViewCapabilities", |_| Ok(to_host(&crate::native_view::capabilities())))
+        .function("nativeViewCall", move |a| {
+            let id = a.string(0)?.to_owned();
+            let action = a.string(1)?.to_owned();
+            let args = a.get(2).map(from_host).unwrap_or(Value::Null);
+            crate::native_view::call(copy, &id, &action, &args).map(|v| to_host(&v)).map_err(HostError::new)
+        })
+        .async_function("nextNativeViewEvent", move |_| {
+            let rx = native_events.clone();
+            Ok(async move { rx.recv().await.map(HostValue::Str).map_err(|_| HostError::new("this view's mod was unloaded")) })
         })
 }
 

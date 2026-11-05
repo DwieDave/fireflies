@@ -3249,6 +3249,14 @@ impl AppWindow {
                     return self.fail(format!("no stack {s:?} with a child {ch:?}"));
                 }
             }
+            // HUP: native view inspection and actions for the test harness.
+            "native.debug" => self.answer(Ok(crate::native_view::debug())),
+            "native.call" => {
+                let (Some(key), Some(action)) = (Self::arg(a, "key"), Self::arg(a, "action")) else { return self.fail("native.call needs key and action") };
+                let r = crate::native_view::call_key(&key, &action, a.get("args").unwrap_or(&Value::Null));
+                self.answer(r);
+                cx.notify();
+            }
             "mod.open" => {
                 let name = Self::arg(a, "name").unwrap_or_default();
                 let Some(f) = self.folders.get(name) else { return self.fail(format!("no mod folder {name:?}")) };
@@ -4857,6 +4865,13 @@ impl Render for AppWindow {
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
+            // HUP: native views follow their elements; they step aside while a
+            // dialog, popup, window or pane drag may be drawn above them.
+            .child(crate::native_view::frame_end(
+                self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
+                mods::shown_copies(),
+                self.pane_drag.is_some() || self.overlays.iter().any(|o| o.kind != OverlayKind::Toast),
+            ))
     }
 }
 

@@ -19,6 +19,7 @@ mod persist;
 #[cfg(target_os = "macos")]
 mod macos;
 mod mods;
+mod native_view;
 mod mod_files;
 mod process_cwd;
 mod programs;

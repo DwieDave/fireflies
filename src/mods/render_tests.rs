@@ -151,7 +151,11 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
     module = module.async_function("feedbackPickImages", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("knownAgents", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("pickFolder", |_| Ok(async { Ok(HostValue::Null) }));
-    for name in ["nextCommand", "watchFolder"] {
+    // HUP: native views have no window here; the element renders empty.
+    module = module.component("nativeView", |_, _, _| gpui::IntoElement::into_any_element(gpui::div()));
+    module = module.function("nativeViewCapabilities", |_| Ok(to_host(&json!({"interface":"native-view/0","available":false,"kinds":[]}))));
+    module = module.function("nativeViewCall", |_| Err(HostError::new("no native views in render tests")));
+    for name in ["nextCommand", "watchFolder", "nextNativeViewEvent"] {
         module = module.async_function(name, |_| Ok(std::future::pending::<gpui_shell::HostResult>()));
     }
     for name in ["exec", "hc", "readTextFile", "writeTextFile", "sendFeedback"] {
