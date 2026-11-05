@@ -62,6 +62,9 @@ struct Grid {
     vt_cell: (u32, u32),
     /// A size the layout asked for that hasn't held for `SETTLE` yet, and since when.
     pending_fit: Option<((u16, u16, (u32, u32)), std::time::Instant)>,
+    /// Whether a paint has sized this screen yet: a new terminal takes its first
+    /// size at once.
+    fitted: bool,
     /// The colors and device-pixel cell size the core was last told.
     told_display: Option<DisplayFacts>,
     /// Top-left of the cell grid in window coordinates, from the last paint.
@@ -183,7 +186,7 @@ impl Grid {
     /// whether a size is waiting, so the caller asks for another frame.
     fn fit_settled(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) -> bool {
         let want = (cols, rows, device_cell(cell, scale));
-        if (cols, rows) == (self.vt.cols, self.vt.rows) && want.2 == self.vt_cell {
+        if !std::mem::replace(&mut self.fitted, true) || ((cols, rows) == (self.vt.cols, self.vt.rows) && want.2 == self.vt_cell) {
             self.pending_fit = None;
             self.fit(cols, rows, cell, scale);
             return false;
@@ -274,6 +277,7 @@ impl TerminalView {
                 scale: 1.0,
                 vt_cell: (9, 18),
                 pending_fit: None,
+                fitted: false,
                 told_display: None,
                 origin: Point::default(),
                 buttons_down: Vec::new(),
