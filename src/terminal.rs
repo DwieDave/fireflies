@@ -119,6 +119,9 @@ pub struct TerminalView {
     missed: Cell<bool>,
     /// How many frames in a row this terminal has been on screen.
     shown_streak: Cell<u32>,
+    /// While another client's size is being taken back (`hold`), output isn't
+    /// drawn: the window keeps showing the last good screen. Since when.
+    held: Cell<Option<Instant>>,
     /// When the person last typed here: output right after is shown at once.
     typed_at: Cell<Option<Instant>>,
     /// Scrolled this gesture, in lines, toward the next whole one.
@@ -139,6 +142,11 @@ thread_local! {
     /// Terminals with output waiting for the next tick of the output clock.
     static OUTPUT_CLOCK: RefCell<Vec<WeakEntity<TerminalView>>> = const { RefCell::new(Vec::new()) };
 }
+
+/// The longest a screen is held while its size is taken back (`hold`).
+const HOLD_MAX: Duration = Duration::from_millis(400);
+/// After the core is at our size again, the time a program gets to redraw for it.
+const HOLD_SETTLE: Duration = Duration::from_millis(60);
 
 /// The window's frame number, counted where the window renders.
 static FRAME: AtomicU64 = AtomicU64::new(0);
@@ -288,6 +296,7 @@ impl TerminalView {
             shown_in: Cell::new(0),
             missed: Cell::new(false),
             shown_streak: Cell::new(0),
+            held: Cell::new(None),
             typed_at: Cell::new(None),
             scrolled: point(0.0, 0.0),
             search_open: false,
@@ -514,7 +523,9 @@ impl TerminalView {
         // drawn fresh when shown again. Nor does output that changed nothing
         // on screen (an agent spinning its title).
         if self.grid.borrow_mut().vt.shows_change() {
-            if self.shown_in.get() == FRAME.load(Ordering::Relaxed) {
+            if self.held.get().is_some() {
+                // Drawn when the hold ends.
+            } else if self.shown_in.get() == FRAME.load(Ordering::Relaxed) {
                 self.redraw_soon(cx);
             } else {
                 self.missed.set(true);
@@ -570,6 +581,52 @@ impl TerminalView {
         // of the frame that first showed it (a placeholder size), so it is laid
         // out anew for a few frames, until the size it waited for is applied.
         self.missed.replace(false) || self.shown_streak.get() < 3
+    }
+
+    /// Keeps showing the last drawn screen while another client's size is being
+    /// taken back: the program redraws for that size, then for ours, and the
+    /// window would show both. Ends when the core reports our size again
+    /// (`release_soon`), or after `HOLD_MAX` whatever happens.
+    pub fn hold(&self, cx: &mut Context<Self>) {
+        if self.held.get().is_some() {
+            return;
+        }
+        let since = Instant::now();
+        self.held.set(Some(since));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(HOLD_MAX).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.held.get() == Some(since) {
+                    this.release(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The core is at our size again: draw once the program has had a moment
+    /// to redraw for it.
+    pub fn release_soon(&self, cx: &mut Context<Self>) {
+        let Some(since) = self.held.get() else { return };
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(HOLD_SETTLE).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.held.get() == Some(since) {
+                    this.release(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn release(&self, cx: &mut Context<Self>) {
+        if self.held.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub fn held(&self) -> bool {
+        self.held.get().is_some()
     }
 
     /// Tells the core this window's size for the terminal again, without a

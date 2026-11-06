@@ -601,6 +601,45 @@ impl AppWindow {
                 }
             }));
         }
+        // Size changes, as they happen: the main loop reads the core's events
+        // twice a second, too late for a terminal another client just resized.
+        w._tasks.push(cx.spawn_in(window, async move |this, cx| {
+            loop {
+                let Ok(core) = this.update(cx, |this, _| this.core.clone()) else { break };
+                let sub = cx.background_executor().spawn({
+                    let core = core.clone();
+                    async move { core.subscribe() }
+                }).await;
+                let Ok((channel, events, _)) = sub else {
+                    cx.background_executor().timer(Duration::from_secs(2)).await;
+                    continue;
+                };
+                let mut pending = Vec::new();
+                while let Ok(crate::hc::Stream::Data(bytes)) = events.recv().await {
+                    core.credit(channel, bytes.len());
+                    pending.extend_from_slice(&bytes);
+                    let mut sizes = Vec::new();
+                    while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+                        let line: Vec<u8> = pending.drain(..=end).collect();
+                        let Ok(v) = serde_json::from_slice::<Value>(&line) else { continue };
+                        let p = v.get("params").unwrap_or(&v);
+                        if p.get("type").and_then(Value::as_str) != Some("size") { continue }
+                        let (Some(t), Some(c), Some(r)) = (
+                            p.get("terminal").and_then(Value::as_str),
+                            p.pointer("/data/cols").and_then(Value::as_u64),
+                            p.pointer("/data/rows").and_then(Value::as_u64),
+                        ) else { continue };
+                        sizes.push((t.to_owned(), c, r));
+                    }
+                    if !sizes.is_empty()
+                        && this.update(cx, |this, cx| for (t, c, r) in sizes { this.on_core_size(&t, c, r, cx) }).is_err()
+                    {
+                        return;
+                    }
+                }
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+            }
+        }));
         w._tasks.push(cx.spawn_in(window, async move |this, cx| {
             while let Ok(req) = requests.recv().await {
                 if this.update_in(cx, |this, window, cx| this.handle(req, window, cx)).is_err() {
@@ -2032,6 +2071,28 @@ impl AppWindow {
     /// terminals get this window's size back. Otherwise the other client keeps
     /// its size. Without this, a TUI drew for the phone in a desktop pane until
     /// the next keypress or mouse move here.
+    /// A size change the core reported for a terminal (from `watch_sizes`).
+    /// Another client resized one shown here while this window is active: hold
+    /// its screen and give it our size back at once; once the core is at our
+    /// size again, let it draw.
+    fn on_core_size(&mut self, address: &str, cols: u64, rows: u64, cx: &mut Context<Self>) {
+        if !self.window_active || !self.visible_addresses().iter().any(|a| a == address) {
+            return;
+        }
+        let views: Vec<_> = self.terms.values().filter(|t| t.address == address).map(|t| t.view.clone()).collect();
+        for view in views {
+            let (c, r) = view.read(cx).dimensions();
+            view.update(cx, |v, cx| {
+                if (cols, rows) == (u64::from(c), u64::from(r)) {
+                    v.release_soon(cx);
+                } else {
+                    v.hold(cx);
+                    v.reclaim_size();
+                }
+            });
+        }
+    }
+
     fn reclaim_sizes(&self, cx: &App) {
         if !self.window_active { return }
         let visible: HashSet<String> = self.visible_addresses().into_iter().collect();
@@ -4467,7 +4528,8 @@ pub(crate) fn cached<V: Render>(view: &Entity<V>) -> AnyElement {
 pub(crate) fn shown_terminal(view: &Entity<TerminalView>, cx: &App) -> AnyElement {
     // Output that arrived while it was off screen didn't redraw it: draw it
     // afresh this once, or the window keeps the screen it had when hidden.
-    if view.read(cx).mark_shown() {
+    // Not while held: the last drawn screen is the one to keep showing then.
+    if view.read(cx).mark_shown() && !view.read(cx).held() {
         return view.clone().into_any_element();
     }
     cached(view)
