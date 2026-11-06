@@ -592,6 +592,11 @@ impl Node {
     /// Puts `new` beside `target` along `axis` (after it). Reuses the parent
     /// if it already runs along that axis, else wraps the target.
     pub fn split(&mut self, target: &str, axis: Axis, new: Node, container_id: String) -> bool {
+        self.split_at(target, axis, false, new, container_id)
+    }
+
+    /// `split`, with `before`: `new` goes before the target (left of / above it).
+    pub fn split_at(&mut self, target: &str, axis: Axis, before: bool, new: Node, container_id: String) -> bool {
         if let Some(parent) = self.parent_of(target).map(|p| p.id.clone())
             && let Some(p) = self.find_mut(&parent)
             && p.axis() == Some(axis)
@@ -609,14 +614,15 @@ impl Node {
             }
             let mut new = new;
             new.size = Some(Size::Weight { weight: share / 2.0 });
-            c.insert(i + 1, new);
+            c.insert(if before { i } else { i + 1 }, new);
             return true;
         }
         let Some(t) = self.find_mut(target) else { return false };
         let old = std::mem::replace(t, Node::new(container_id, Kind::Row { children: vec![] }));
         let mut old = old;
         let slot_size = old.size.take();
-        let mut wrapper = Node::container(t.id.clone(), axis, vec![old, new]);
+        let children = if before { vec![new, old] } else { vec![old, new] };
+        let mut wrapper = Node::container(t.id.clone(), axis, children);
         wrapper.size = slot_size;
         *t = wrapper;
         true

@@ -569,8 +569,10 @@ The main ones:
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
   skip settled tabs).
-- Panes: `pane.split {direction: "right" | "down", pane?, argv? | mod?, props?}` (a new
-  terminal, or a mod pane), `pane.close {pane?}`,
+- Panes: `pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}` (a new
+  terminal, or a mod pane; left/up put it before the pane, left of or above it; "auto"
+  alternates: below a pane whose parent split is side by side, right of one whose parent is
+  stacked, right of a lone pane; keys too: `"pane.split:auto"`), `pane.close {pane?}`,
   `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {direction}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
@@ -585,12 +587,15 @@ The main ones:
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and
-  `terminal.show` fail, as do `terminal.open`/`terminal.keep` with place right/down.
+  `terminal.show` fail, as do `terminal.open`/`terminal.keep` with place right/down/left/up/auto
+  and no `pane`.
   They never act on the terminal's source pane. An explicit `pane` still targets that
   model pane; composition edits belong to the mod (edit its layout instead).
-- Terminals: `terminal.open {argv?, folder?, place?, name?}` (`folder` sets the
-  starting directory for tabs and right/down splits, with or without `argv`), `terminal.kill {terminal}`,
-  `terminal.keep {terminal, place?}`, `terminal.park {terminal}`,
+- Terminals: `terminal.open {argv?, folder?, place?, name?, pane?}` (place: "tab" (default),
+  "right" | "down" | "left" | "up" | "auto" of `pane` (default: the focused one; directions as
+  `pane.split`), or "float"; `folder` sets the starting directory for tabs and splits, with or
+  without `argv`), `terminal.kill {terminal}`,
+  `terminal.keep {terminal, place?, pane?}` (the same places, but no "float"), `terminal.park {terminal}`,
   `terminal.peek {terminal, float?}` (peek over the tab, with keep-as-tab, dock and close;
   `float: true` shows it as a floating terminal),
   `terminal.open {place: "float"}` starts a terminal without a pane and floats it over the

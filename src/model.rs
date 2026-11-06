@@ -91,6 +91,31 @@ pub struct Model {
     pub folder_info: HashMap<String, FolderInfo>,
 }
 
+/// Where a split puts the new pane beside its target (`pane.split {direction}`,
+/// `terminal.open {place}`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Direction {
+    Right,
+    Down,
+    Left,
+    Up,
+    /// Across the target's parent: below panes side by side, right of stacked ones.
+    Auto,
+}
+
+impl Direction {
+    pub fn parse(s: &str) -> Option<Direction> {
+        Some(match s {
+            "right" => Direction::Right,
+            "down" => Direction::Down,
+            "left" => Direction::Left,
+            "up" => Direction::Up,
+            "auto" => Direction::Auto,
+            _ => return None,
+        })
+    }
+}
+
 /// Herdr's attention priority: blocked > done > working > idle > nothing.
 pub fn priority(status: Option<&str>) -> u8 {
     match status {
@@ -283,11 +308,41 @@ impl Model {
 
     /// Splits a pane with any block: a terminal, or a mod (a viewer beside the shell).
     pub fn split_with(&mut self, target: &str, axis: Axis, block: Node) -> bool {
+        self.split_at(target, axis, false, block)
+    }
+
+    /// Splits a pane toward a direction (`pane.split {direction}`).
+    pub fn split_toward(&mut self, target: &str, dir: Direction, block: Node) -> bool {
+        let (axis, before) = self.split_side(target, dir);
+        self.split_at(target, axis, before, block)
+    }
+
+    /// Which way a split of `target` toward `dir` runs, and whether the new
+    /// pane goes before it. `Auto` alternates with the target's parent: beside
+    /// panes side by side it goes below, below panes stacked it goes right; a
+    /// lone pane gets a neighbor on the right.
+    pub fn split_side(&self, target: &str, dir: Direction) -> (Axis, bool) {
+        match dir {
+            Direction::Right => (Axis::Row, false),
+            Direction::Down => (Axis::Column, false),
+            Direction::Left => (Axis::Row, true),
+            Direction::Up => (Axis::Column, true),
+            Direction::Auto => {
+                let parent = self.tab_of(target).and_then(|c| c.root.parent_of(target)).filter(|p| p.children().len() > 1);
+                match parent.and_then(Node::axis) {
+                    Some(Axis::Row) => (Axis::Column, false),
+                    _ => (Axis::Row, false),
+                }
+            }
+        }
+    }
+
+    fn split_at(&mut self, target: &str, axis: Axis, before: bool, block: Node) -> bool {
         let machine = self.space_of(target).and_then(|s| s.machine.clone());
         let container = self.fresh_id_on("s", machine.as_deref());
         let new_pane = block.id.clone();
         let Some(c) = self.tab_of_mut(target) else { return false };
-        if !c.root.split(target, axis, block, container) {
+        if !c.root.split_at(target, axis, before, block, container) {
             return false;
         }
         c.zoomed = None;
@@ -787,6 +842,36 @@ mod tests {
         let order: Vec<&str> = m.spaces[0].tabs.iter().map(|c| c.id.as_str()).collect();
         assert_eq!(order, ["c1", "c3", "c2"]);
         assert_eq!(m.active_tab().map(|c| c.id.as_str()), Some("c3"));
+    }
+
+    #[test]
+    fn auto_splits_alternate_with_the_parent_and_left_up_go_before() {
+        let mut m = model_with_one();
+        // A lone pane gets a neighbor on the right.
+        assert_eq!(m.split_side("x1", Direction::Auto), (Axis::Row, false));
+        assert!(m.split_toward("x1", Direction::Auto, pane("x2", "t2")));
+        let root = &m.tab("c1").unwrap().root;
+        assert_eq!(root.axis(), Some(Axis::Row));
+        assert_eq!(root.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x1", "x2"]);
+        // Side by side: the next one goes below.
+        assert_eq!(m.split_side("x2", Direction::Auto), (Axis::Column, false));
+        assert!(m.split_toward("x2", Direction::Auto, pane("x3", "t3")));
+        let parent = m.tab("c1").unwrap().root.parent_of("x3").unwrap();
+        assert_eq!(parent.axis(), Some(Axis::Column));
+        assert_eq!(parent.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x2", "x3"]);
+        // Stacked: right again.
+        assert_eq!(m.split_side("x3", Direction::Auto), (Axis::Row, false));
+        assert_eq!(m.focused_pane().as_deref(), Some("x3"));
+        // Left and up put the new pane before the target.
+        assert_eq!(m.split_side("x1", Direction::Left), (Axis::Row, true));
+        assert!(m.split_toward("x1", Direction::Left, pane("x4", "t4")));
+        let ids: Vec<_> = m.tab("c1").unwrap().root.children().iter().map(|n| n.id.clone()).collect();
+        assert_eq!(ids[..2], ["x4".to_owned(), "x1".to_owned()]);
+        assert!(m.split_toward("x3", Direction::Up, pane("x5", "t5")));
+        let parent = m.tab("c1").unwrap().root.parent_of("x3").unwrap();
+        assert_eq!(parent.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x2", "x5", "x3"]);
+        assert_eq!(Direction::parse("auto"), Some(Direction::Auto));
+        assert_eq!(Direction::parse("sideways"), None);
     }
 
     #[test]

@@ -39,10 +39,11 @@ pub const COMMANDS: &[Command] = &[
     cmd("tab.close", &[opt("id"), opt("confirmed")], "Close a tab and end its terminals."),
     cmd("tab.rename", &[opt("id"), opt("name")], "Rename a tab (asks the person when no name; an empty name: called by its number again)."),
     cmd("tab.move", &[req("id"), req("index")], "Move a tab to a position in its space (1 = first)."),
-    cmd("pane.split", &[req("direction"), opt("pane"), opt("argv"), opt("mod"), opt("props")], "Split a pane (default: the focused one) \"right\" or \"down\" with a new terminal, or with a mod (`mod`, its `props`) beside it."),
+    cmd("pane.split", &[req("direction"), opt("pane"), opt("argv"), opt("mod"), opt("props")],
+        "Split a pane (default: the focused one) \"right\", \"down\", \"left\", \"up\" or \"auto\" (below a pane beside others, right of one stacked or alone) with a new terminal, or with a mod (`mod`, its `props`) beside it."),
     cmd("pane.close", &[opt("pane")], "Close a pane and end its terminal."),
-    cmd("terminal.open", &[opt("argv"), opt("folder"), opt("place"), opt("name")], "Start a terminal: as a new tab (place \"tab\", default), \"right\"/\"down\" of the focused pane, or \"float\": without a pane, floating over the tab."),
-    cmd("terminal.keep", &[req("terminal"), opt("place")], "Give a running terminal without a pane (a sub-agent) a pane: a new tab, or \"right\"/\"down\"."),
+    cmd("terminal.open", &[opt("argv"), opt("folder"), opt("place"), opt("name"), opt("pane")], "Start a terminal: as a new tab (place \"tab\", default), \"right\"/\"down\"/\"left\"/\"up\"/\"auto\" of a pane (default: the focused one), or \"float\": without a pane, floating over the tab."),
+    cmd("terminal.keep", &[req("terminal"), opt("place"), opt("pane")], "Give a running terminal without a pane (a sub-agent) a pane: a new tab, or \"right\"/\"down\"/\"left\"/\"up\"/\"auto\" of a pane (default: the focused one)."),
     cmd("terminal.park", &[req("terminal")], "Take a terminal's pane away and disable core keep; it keeps running (a sub-agent shows under its parent again)."),
     cmd("terminal.right_click", &[req("to"), opt("terminal")], "Where right-clicks in a terminal (default: the focused one) go when its program takes the mouse: \"program\" or \"menu\" (Herdr's, the default). Shift+right-click is always the menu."),
     cmd("terminal.pin", &[req("terminal"), req("pinned")], "Pin an agent to the top of the agent lists (pinned true) or unpin it (false). Pins are kept with the terminal, so every Herdr client shows them, and end with it."),
@@ -226,6 +227,7 @@ mod tests {
         assert_eq!(names.len(), COMMANDS.len());
         assert_eq!(shorthand(find("tab.select").unwrap(), "3"), json!({ "index": 3 }));
         assert_eq!(shorthand(find("pane.split").unwrap(), "right"), json!({ "direction": "right" }));
+        assert_eq!(shorthand(find("pane.split").unwrap(), "auto"), json!({ "direction": "auto" }));
         let move_ = find("space.move").unwrap();
         assert_eq!(missing(move_, &json!({ "id": " ", "index": 1 })), Some("id"));
         assert_eq!(missing(move_, &json!({ "id": "sp1", "index": 1 })), None);

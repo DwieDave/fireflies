@@ -266,7 +266,7 @@ struct Term {
 }
 
 enum TerminalChange {
-    Keep { space: String, tab: String, pane: String, name: String, target: Option<String>, axis: Axis },
+    Keep { space: String, tab: String, pane: String, name: String, target: Option<String>, dir: model::Direction },
     Park,
 }
 
@@ -2561,7 +2561,7 @@ impl AppWindow {
         Ok(json!({ "space": space, "tab": ctx, "pane": pane }))
     }
 
-    fn split(&mut self, pane: Option<String>, axis: Axis, argv: Option<Vec<String>>, folder: Option<String>, window: &Window) -> Result<Value, String> {
+    fn split(&mut self, pane: Option<String>, dir: model::Direction, argv: Option<Vec<String>>, folder: Option<String>, window: &Window) -> Result<Value, String> {
         let target = pane.or_else(|| self.model.focused_pane()).ok_or("no pane to split")?;
         let (Some(p), Some(c)) = (self.model.space_of(&target), self.model.tab_of(&target)) else { return Err(format!("no pane {target:?}")) };
         let (space, ctx, fallback) = (p.id.clone(), c.id.clone(), p.folder.clone());
@@ -2570,17 +2570,18 @@ impl AppWindow {
         // A split stays on the machine of the pane it splits (else its space's).
         let on = target_addr.and_then(|a| a.split_once('/').map(|(m, _)| m.to_owned())).or_else(|| self.machine_of(&space));
         let new = self.model.fresh_id_on("p", on.as_deref());
+        let (axis, before) = self.model.split_side(&target, dir);
         let mut root = self.model.tab(&ctx).expect("target tab").root.clone();
-        root.split(&target, axis, Node::block(new.clone(), Content::Terminal { terminal: String::new() }), "initial-size".into());
+        root.split_at(&target, axis, before, Node::block(new.clone(), Content::Terminal { terminal: String::new() }), "initial-size".into());
         let size = self.model.active_tab().filter(|tab| tab.id == ctx)
             .and_then(|_| self.initial_size(&root, &new, window));
         let addr = self.spawn(argv, cwd, &space, &ctx, on.as_deref(), size, window)?;
-        self.model.split(&target, axis, &new, &addr);
+        self.model.split_toward(&target, dir, model::pane(&new, &addr));
         Ok(json!({ "pane": new, "terminal": addr }))
     }
 
     /// A mod as a pane beside the target (a viewer next to the shell).
-    fn split_mod(&mut self, pane: Option<String>, axis: Axis, name: String, props: Value) -> Result<Value, String> {
+    fn split_mod(&mut self, pane: Option<String>, dir: model::Direction, name: String, props: Value) -> Result<Value, String> {
         let target = pane.or_else(|| self.model.focused_pane()).ok_or("no pane to split")?;
         if self.model.tab_of(&target).is_none() {
             return Err(format!("no pane {target:?}"));
@@ -2591,7 +2592,7 @@ impl AppWindow {
         let machine = self.model.space_of(&target).and_then(|s| s.machine.clone());
         self.require_document(machine.as_deref())?;
         let new = self.model.fresh_id_on("p", machine.as_deref());
-        self.model.split_with(&target, axis, Node::block(new.clone(), Content::Mod { name, props }));
+        self.model.split_toward(&target, dir, Node::block(new.clone(), Content::Mod { name, props }));
         Ok(json!({ "pane": new }))
     }
 
@@ -2651,29 +2652,35 @@ impl AppWindow {
 
     /// Gives a running terminal without a pane (a sub-agent, say) one in the
     /// shown space and focuses it; already in a pane: focuses that.
-    fn keep_terminal(&mut self, addr: &str, place: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+    fn keep_terminal(&mut self, addr: &str, place: &str, pane: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
         if let Some(p) = self.model.pane_of(addr) {
             self.model.focus_pane(&p);
             return Ok(json!({ "pane": p }));
         }
         if !self.live.contains_key(addr) { return Err(format!("no running terminal {addr:?}")); }
         if self.changing_terminals.contains(addr) { return Err("This terminal already has a pane change in progress.".into()); }
-        let space = self.model.active_space().map(|p| p.id.clone()).ok_or("no space to keep it in")?;
+        // A split beside a pane (the given one, else the focused one); anything else: a new tab.
+        let dir = model::Direction::parse(place);
+        let target = dir.and_then(|_| pane.or_else(|| self.model.focused_pane()));
+        if let Some(t) = &target && self.model.tab_of(t).is_none() {
+            return Err(format!("no pane {t:?}"));
+        }
+        let space = target.as_deref().and_then(|t| self.model.space_of(t)).or_else(|| self.model.active_space())
+            .map(|p| p.id.clone()).ok_or("no space to keep it in")?;
         let machine = self.machine_of(&space);
         if addr.split_once('/').map(|(m, _)| m) != machine.as_deref() {
             return Err("A terminal's pane must stay on its own machine.".into());
         }
         self.require_document(machine.as_deref())?;
-        let target = matches!(place, "right" | "down").then(|| self.model.focused_pane()).flatten();
         let ctx = target.as_deref().and_then(|p| self.model.tab_of(p)).map(|t| t.id.clone())
             .unwrap_or_else(|| self.model.fresh_id_on("tb", machine.as_deref()));
         let pane = self.model.fresh_id_on("p", machine.as_deref());
         let name = self.live.get(addr).and_then(|r| r["name"].as_str()).filter(|s| !s.is_empty()).map(str::to_owned)
             .or_else(|| self.model.agents.get(addr).and_then(|a| a.app.as_deref()).map(agent_name)).unwrap_or_else(|| addr.to_owned());
-        let (address, place) = (addr.to_owned(), place.to_owned());
+        let address = addr.to_owned();
         let reply = json!({"pending":true,"terminal":addr,"pane":pane,"tab":ctx});
         self.start_terminal_change(address, TerminalChange::Keep {
-            space, tab: ctx, pane, name, target, axis: if place == "right" { Axis::Row } else { Axis::Column },
+            space, tab: ctx, pane, name, target, dir: dir.unwrap_or(model::Direction::Right),
         }, window, cx);
         Ok(reply)
     }
@@ -2727,7 +2734,7 @@ impl AppWindow {
             return;
         }
         match change {
-            TerminalChange::Keep { space, tab, pane, name, target, axis } => {
+            TerminalChange::Keep { space, tab, pane, name, target, dir } => {
                 if !self.live.contains_key(&address) { return; }
                 if self.model.space(&space).is_none() {
                     if let Err(error) = self.park_terminal(&address, window, cx) {
@@ -2739,7 +2746,7 @@ impl AppWindow {
                     let destination = target.filter(|p| self.model.tab_of(p).is_some_and(|t| t.id == tab))
                         .or_else(|| self.model.tab(&tab).and_then(|t| t.root.panes().first().map(|p| p.id.clone())));
                     if let Some(target) = destination {
-                        self.model.split(&target, axis, &pane, &address);
+                        self.model.split_toward(&target, dir, model::pane(&pane, &address));
                     } else {
                         self.model.add_tab(&space, Tab::new(&tab, &name, &pane, &address));
                     }
@@ -3066,14 +3073,15 @@ impl AppWindow {
             }
             // ---- panes
             "pane.split" => {
-                let axis = match Self::arg(a, "direction") {
-                    Some("right") => Axis::Row,
-                    Some("down") => Axis::Column,
-                    other => return self.fail(format!("pane.split direction is \"right\" or \"down\", not {other:?}")),
+                let Some(dir) = Self::arg(a, "direction").and_then(model::Direction::parse) else {
+                    return self.fail(format!(
+                        "pane.split direction is \"right\", \"down\", \"left\", \"up\" or \"auto\", not {:?}",
+                        Self::arg(a, "direction")
+                    ));
                 };
                 let r = match Self::owned(a, "mod") {
-                    Some(name) => self.split_mod(Self::owned(a, "pane"), axis, name, a.get("props").cloned().unwrap_or(Value::Null)),
-                    None => self.split(Self::owned(a, "pane"), axis, Self::argv(a), None, window),
+                    Some(name) => self.split_mod(Self::owned(a, "pane"), dir, name, a.get("props").cloned().unwrap_or(Value::Null)),
+                    None => self.split(Self::owned(a, "pane"), dir, Self::argv(a), None, window),
                 };
                 self.answer(r);
             }
@@ -3168,9 +3176,9 @@ impl AppWindow {
             // ---- terminals
             "terminal.open" => {
                 let argv = Self::argv(a);
-                let r = match Self::arg(a, "place").unwrap_or("tab") {
-                    "right" => self.split(None, Axis::Row, argv, Self::owned(a, "folder"), window),
-                    "down" => self.split(None, Axis::Column, argv, Self::owned(a, "folder"), window),
+                let place = Self::arg(a, "place").unwrap_or("tab");
+                let r = match place {
+                    _ if let Some(dir) = model::Direction::parse(place) => self.split(Self::owned(a, "pane"), dir, argv, Self::owned(a, "folder"), window),
                     "float" => self.open_float(argv, Self::owned(a, "folder"), window, cx),
                     _ => {
                         let name = Self::owned(a, "name")
@@ -3182,7 +3190,7 @@ impl AppWindow {
                 self.answer(r);
             }
             "terminal.keep" => {
-                let r = self.keep_terminal(Self::arg(a, "terminal").unwrap_or_default(), Self::arg(a, "place").unwrap_or("tab"), window, cx);
+                let r = self.keep_terminal(Self::arg(a, "terminal").unwrap_or_default(), Self::arg(a, "place").unwrap_or("tab"), Self::owned(a, "pane"), window, cx);
                 self.answer(r);
             }
             "terminal.park" => {
@@ -4779,7 +4787,9 @@ fn needs_model_pane(name: &str, args: &Value) -> bool {
             AppWindow::arg(args, "pane").is_none()
         }
         "pane.go" | "pane.swap" => true,
-        "terminal.open" | "terminal.keep" => matches!(AppWindow::arg(args, "place"), Some("right" | "down")),
+        "terminal.open" | "terminal.keep" => {
+            AppWindow::arg(args, "pane").is_none() && AppWindow::arg(args, "place").and_then(model::Direction::parse).is_some()
+        }
         _ => false,
     }
 }
@@ -5692,9 +5702,11 @@ export default class Probe extends View {
             assert!(!super::needs_model_pane(name, &json!({"pane": "explicit-pane"})), "{name}");
         }
         for name in ["terminal.open", "terminal.keep"] {
-            for place in ["right", "down"] {
+            for place in ["right", "down", "left", "up", "auto"] {
                 assert!(super::needs_model_pane(name, &json!({"place": place})), "{name} {place}");
+                assert!(!super::needs_model_pane(name, &json!({"place": place, "pane": "explicit-pane"})), "{name} {place}");
             }
+            assert!(!super::needs_model_pane(name, &json!({"place": "float"})), "{name}");
             assert!(!super::needs_model_pane(name, &json!({})), "{name}");
             assert!(!super::needs_model_pane(name, &json!({"place": "tab"})), "{name}");
         }
