@@ -2596,6 +2596,39 @@ impl AppWindow {
         Ok(json!({ "pane": new }))
     }
 
+    /// `pane.split {edge}`: a new pane along one edge of a whole tab (default:
+    /// the shown one), spanning it; `px` fixes its size. A terminal, or `mod`.
+    fn split_at_edge(&mut self, tab: Option<String>, edge: crate::layout::Edge, px: Option<f32>, a: &Value, window: &Window) -> Result<Value, String> {
+        let ctx = tab.or_else(|| self.model.active_tab().map(|c| c.id.clone())).ok_or("no tab to split")?;
+        let (Some(p), Some(c)) = (self.model.space_of(&ctx), self.model.tab(&ctx)) else { return Err(format!("no tab {ctx:?}")) };
+        let (space, root, fallback) = (p.id.clone(), c.root.clone(), p.folder.clone());
+        let here = c.focused_pane().and_then(|f| self.model.address_of(&f));
+        let on = self.machine_of(&space);
+        self.require_document(on.as_deref())?;
+        let new = self.model.fresh_id_on("p", on.as_deref());
+        let sized = |mut n: Node| {
+            n.size = px.map(|px| Span::Px { px });
+            n
+        };
+        if let Some(name) = Self::owned(a, "mod") {
+            if !self.folders.contains_key(&name) {
+                return Err(format!("no mod {name:?} in mods/"));
+            }
+            let props = a.get("props").cloned().unwrap_or(Value::Null);
+            self.model.split_edge(&ctx, edge, sized(Node::block(new.clone(), Content::Mod { name, props })));
+            return Ok(json!({ "pane": new, "tab": ctx }));
+        }
+        let cwd = Self::owned(a, "folder")
+            .or_else(|| here.filter(|h| h.split_once('/').map(|(m, _)| m) == on.as_deref()).and_then(|h| self.cwds.get(&h).cloned()))
+            .unwrap_or(fallback);
+        let mut shown = root;
+        shown.add_at_edge(edge, sized(Node::block(new.clone(), Content::Terminal { terminal: String::new() })), "initial-size".into());
+        let size = self.model.active_tab().filter(|t| t.id == ctx).and_then(|_| self.initial_size(&shown, &new, window));
+        let addr = self.spawn(Self::argv(a), cwd, &space, &ctx, on.as_deref(), size, window)?;
+        self.model.split_edge(&ctx, edge, sized(model::pane(&new, &addr)));
+        Ok(json!({ "pane": new, "tab": ctx, "terminal": addr }))
+    }
+
     /// Ask only whether a missing terminal is closed. Core owns restarting it.
     fn check_closed(&mut self, missing: Vec<(String, String)>, window: &mut Window, cx: &mut Context<Self>) {
         self.checking_closed = true;
@@ -2909,7 +2942,7 @@ impl AppWindow {
             args["machine"] = json!(machine);
         }
         if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
-            let node = ["id", "space", "pane"].into_iter().find_map(|k| Self::arg(&args, k));
+            let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
                 else if name == "terminal.park" { Self::arg(&args, "terminal").and_then(|a| a.split_once('/').map(|(m, _)| m)) }
@@ -3073,15 +3106,29 @@ impl AppWindow {
             }
             // ---- panes
             "pane.split" => {
-                let Some(dir) = Self::arg(a, "direction").and_then(model::Direction::parse) else {
-                    return self.fail(format!(
-                        "pane.split direction is \"right\", \"down\", \"left\", \"up\" or \"auto\", not {:?}",
-                        Self::arg(a, "direction")
-                    ));
-                };
-                let r = match Self::owned(a, "mod") {
-                    Some(name) => self.split_mod(Self::owned(a, "pane"), dir, name, a.get("props").cloned().unwrap_or(Value::Null)),
-                    None => self.split(Self::owned(a, "pane"), dir, Self::argv(a), None, window),
+                let r = if let Some(edge) = a.get("edge").filter(|e| !e.is_null()) {
+                    let Some(edge) = edge.as_str().and_then(split_edge) else {
+                        return self.fail(format!("pane.split edge is \"right\", \"left\", \"top\" or \"bottom\", not {edge}"));
+                    };
+                    let px = match a.get("px").filter(|p| !p.is_null()) {
+                        None => None,
+                        Some(p) => match p.as_f64().filter(|p| *p > 0.0) {
+                            Some(p) => Some(p as f32),
+                            None => return self.fail(format!("pane.split px is a number above 0, not {p}")),
+                        },
+                    };
+                    self.split_at_edge(Self::owned(a, "tab"), edge, px, a, window)
+                } else {
+                    let Some(dir) = Self::arg(a, "direction").and_then(model::Direction::parse) else {
+                        return self.fail(format!(
+                            "pane.split direction is \"right\", \"down\", \"left\", \"up\" or \"auto\" (or give edge), not {:?}",
+                            Self::arg(a, "direction")
+                        ));
+                    };
+                    match Self::owned(a, "mod") {
+                        Some(name) => self.split_mod(Self::owned(a, "pane"), dir, name, a.get("props").cloned().unwrap_or(Value::Null)),
+                        None => self.split(Self::owned(a, "pane"), dir, Self::argv(a), Self::owned(a, "folder"), window),
+                    }
                 };
                 self.answer(r);
             }
@@ -4781,9 +4828,23 @@ fn terminal_block<'a>(chrome: &'a Node, focused: Option<&str>) -> Option<&'a Nod
     chrome.visible_blocks().into_iter().find(|n| n.id == id && n.terminal().is_some())
 }
 
+/// `pane.split {edge}`: which side of the tab.
+fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
+    use crate::layout::Edge;
+    Some(match edge {
+        "right" => Edge::Right,
+        "left" => Edge::Left,
+        "top" => Edge::Top,
+        "bottom" => Edge::Bottom,
+        _ => return None,
+    })
+}
+
 fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
-        "pane.split" | "pane.close" | "pane.zoom" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+        // An edge split goes by the tab, not a pane.
+        "pane.split" => AppWindow::arg(args, "pane").is_none() && args.get("edge").is_none_or(Value::is_null),
+        "pane.close" | "pane.zoom" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
             AppWindow::arg(args, "pane").is_none()
         }
         "pane.go" | "pane.swap" => true,
@@ -5701,6 +5762,8 @@ export default class Probe extends View {
         for name in ["pane.split", "pane.close", "pane.zoom", "terminal.show"] {
             assert!(!super::needs_model_pane(name, &json!({"pane": "explicit-pane"})), "{name}");
         }
+        // An edge split goes by the tab.
+        assert!(!super::needs_model_pane("pane.split", &json!({"edge": "right"})));
         for name in ["terminal.open", "terminal.keep"] {
             for place in ["right", "down", "left", "up", "auto"] {
                 assert!(super::needs_model_pane(name, &json!({"place": place})), "{name} {place}");

@@ -56,7 +56,9 @@ export function playSound(sound: string): null;
  *   tab.next, tab.prev.
  * Panes: pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}
  *   (left/up: before the pane; auto: below a pane in a side-by-side split, right of one in a stacked
- *   split or a lone pane), pane.close {pane?}, pane.zoom {pane?},
+ *   split or a lone pane), pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}
+ *   (a new pane along that side of a whole tab, default the shown one, spanning it; px: its fixed width
+ *   or height), pane.close {pane?}, pane.zoom {pane?},
  *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
  *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
  *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {direction}. Pane menus get target { pane, terminal }.

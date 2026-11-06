@@ -3,7 +3,7 @@
 //! how they're split. Plus which pane has focus and agent attention (done vs
 //! seen) with Herdr's rollup. Pure data; the window drives it.
 
-use crate::layout::{Axis, Content, Node};
+use crate::layout::{Axis, Content, Edge, Node};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, HashMap};
@@ -350,6 +350,21 @@ impl Model {
         true
     }
 
+    /// Adds a pane along one edge of a whole tab (`pane.split {edge}`),
+    /// spanning it, and focuses it; a `px` size on `block` stays fixed.
+    pub fn split_edge(&mut self, tab: &str, edge: Edge, block: Node) -> bool {
+        let machine = self.space_of(tab).and_then(|s| s.machine.clone());
+        let container = self.fresh_id_on("s", machine.as_deref());
+        let new_pane = block.id.clone();
+        let Some(c) = self.tab_mut(tab) else { return false };
+        if !c.root.add_at_edge(edge, block, container) {
+            return false;
+        }
+        c.zoomed = None;
+        c.focus(&new_pane);
+        true
+    }
+
     /// Rearranges existing panes in one tab without changing their terminal addresses.
     /// No edge swaps their places; an edge places the source beside the target.
     pub fn move_pane(&mut self, source: &str, target: &str, edge: Option<crate::layout::Edge>) -> bool {
@@ -362,7 +377,6 @@ impl Model {
         }
         let mut root = tab.root.clone();
         if let Some(edge) = edge {
-            use crate::layout::Edge;
             let mut pane = root.remove(source).unwrap();
             pane.size = None;
             let axis = if matches!(edge, Edge::Left | Edge::Right) { Axis::Row } else { Axis::Column };
@@ -872,6 +886,46 @@ mod tests {
         assert_eq!(parent.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x2", "x5", "x3"]);
         assert_eq!(Direction::parse("auto"), Some(Direction::Auto));
         assert_eq!(Direction::parse("sideways"), None);
+    }
+
+    #[test]
+    fn edge_splits_span_the_whole_tab_and_keep_a_fixed_size() {
+        use crate::layout::Size;
+        let mut m = model_with_one();
+        m.split("x1", Axis::Row, "x2", "t2");
+        // Right edge of a side-by-side tab: one more column at the end, fixed px.
+        let mut side = pane("x3", "t3");
+        side.size = Some(Size::Px { px: 320. });
+        assert!(m.split_edge("c1", Edge::Right, side));
+        let root = &m.tab("c1").unwrap().root;
+        assert_eq!(root.id, "c1");
+        assert_eq!(root.axis(), Some(Axis::Row));
+        assert_eq!(root.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x1", "x2", "x3"]);
+        assert_eq!(root.children()[2].size, Some(Size::Px { px: 320. }));
+        assert_eq!(m.focused_pane().as_deref(), Some("x3"));
+        // Bottom edge: everything so far goes in one row above it, full width.
+        assert!(m.split_edge("c1", Edge::Bottom, pane("x4", "t4")));
+        let root = &m.tab("c1").unwrap().root;
+        assert_eq!(root.id, "c1");
+        assert_eq!(root.axis(), Some(Axis::Column));
+        assert_eq!(root.children().len(), 2);
+        assert_eq!(root.children()[0].axis(), Some(Axis::Row));
+        assert_eq!(root.children()[0].children().len(), 3);
+        assert_eq!(root.children()[1].id, "x4");
+        // Top edge goes first; later splits of a pane stay in the remaining region.
+        assert!(m.split_edge("c1", Edge::Top, pane("x5", "t5")));
+        assert_eq!(m.tab("c1").unwrap().root.children()[0].id, "x5");
+        assert!(m.split("x2", Axis::Row, "x6", "t6"));
+        let root = &m.tab("c1").unwrap().root;
+        assert_eq!(root.children().len(), 3);
+        let row: Vec<_> = root.parent_of("x6").unwrap().children().iter().map(|n| n.id.as_str()).collect();
+        assert_eq!(row, ["x1", "x2", "x6", "x3"]);
+        // A lone pane: the root just turns.
+        let mut m = model_with_one();
+        assert!(m.split_edge("c1", Edge::Left, pane("x2", "t2")));
+        let root = &m.tab("c1").unwrap().root;
+        assert_eq!(root.children().iter().map(|n| n.id.as_str()).collect::<Vec<_>>(), ["x2", "x1"]);
+        assert!(!m.split_edge("missing", Edge::Left, pane("x9", "t9")));
     }
 
     #[test]

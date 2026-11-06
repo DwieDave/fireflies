@@ -572,7 +572,11 @@ The main ones:
 - Panes: `pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}` (a new
   terminal, or a mod pane; left/up put it before the pane, left of or above it; "auto"
   alternates: below a pane whose parent split is side by side, right of one whose parent is
-  stacked, right of a lone pane; keys too: `"pane.split:auto"`), `pane.close {pane?}`,
+  stacked, right of a lone pane; keys too: `"pane.split:auto"`),
+  `pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}`
+  (instead of `direction`: the new pane along that side of a whole tab, default the shown
+  one, spanning its full height or width; `px` fixes its width or height and the rest stays
+  flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
   `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {direction}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this

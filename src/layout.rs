@@ -628,6 +628,42 @@ impl Node {
         true
     }
 
+    /// Adds `new` along one edge of this container (a tab's root), spanning
+    /// it: the root turns to run along that edge's axis, its old contents
+    /// wrapped in `container_id` when they ran the other way. `new` keeps the
+    /// size it comes with (a fixed `px`); without one it takes an equal share.
+    pub fn add_at_edge(&mut self, edge: Edge, mut new: Node, container_id: String) -> bool {
+        let axis = if edge.vertical() { Axis::Row } else { Axis::Column };
+        let first = matches!(edge, Edge::Left | Edge::Top);
+        if !matches!(self.kind, Kind::Row { .. } | Kind::Column { .. }) {
+            return false;
+        }
+        let children = std::mem::take(self.children_mut().unwrap());
+        let children = if self.axis() == Some(axis) || children.len() <= 1 {
+            children
+        } else {
+            let old = self.axis().unwrap_or(Axis::Row);
+            vec![Node::container(container_id, old, children)]
+        };
+        if new.size.is_none() {
+            let weights: Vec<f32> = children.iter().filter_map(|n| match n.size {
+                Some(Size::Weight { weight }) => Some(weight),
+                None => Some(1.0),
+                Some(Size::Px { .. }) => None,
+            }).collect();
+            if !weights.is_empty() {
+                new.size = Some(Size::Weight { weight: weights.iter().sum::<f32>() / weights.len() as f32 });
+            }
+        }
+        let mut children = children;
+        if first { children.insert(0, new) } else { children.push(new) }
+        self.kind = match axis {
+            Axis::Row => Kind::Row { children },
+            Axis::Column => Kind::Column { children },
+        };
+        true
+    }
+
     /// Makes `child` the visible child of `stack`.
     pub fn select(&mut self, stack: &str, child: &str) -> bool {
         if let Some(s) = self.find_mut(stack)
