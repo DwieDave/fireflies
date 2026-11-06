@@ -2651,7 +2651,64 @@ fn rect_minus(base: NSRect, cut: &[NSRect]) -> Vec<NSRect> {
 }
 
 extern "C" fn handle_key_equivalent(this: &Object, _: Sel, native_event: id) -> BOOL {
+    // HERDR: while a native view placed beside this one (a WKWebView in a
+    // pane) holds the keyboard, the standard editing shortcuts are its: sent
+    // down the responder chain (there is no Edit menu to do it), before
+    // Herdr's own bindings (cmd-c is terminal.copy) can take them.
+    if let Some(action) = unsafe { native_edit_action(this, native_event) } {
+        unsafe {
+            let app: id = msg_send![class!(NSApplication), sharedApplication];
+            let _: BOOL = msg_send![app, sendAction: action to: nil from: nil];
+        }
+        return YES;
+    }
     handle_key_event(this, native_event, true)
+}
+
+/// HERDR: the editing action (select all, copy, paste, cut, undo, redo) for a
+/// key equivalent, when the window's first responder is a view outside `this`
+/// one; None otherwise, and for every other key.
+unsafe fn native_edit_action(this: &Object, event: id) -> Option<Sel> {
+    unsafe {
+        let me = this as *const Object as id;
+        let window: id = msg_send![me, window];
+        if window == nil {
+            return None;
+        }
+        let fr: id = msg_send![window, firstResponder];
+        if fr == nil || fr == me {
+            return None;
+        }
+        let is_view: BOOL = msg_send![fr, isKindOfClass: class!(NSView)];
+        let inside: BOOL = if is_view == YES { msg_send![fr, isDescendantOf: me] } else { YES };
+        if inside == YES {
+            return None;
+        }
+        let flags: NSUInteger = msg_send![event, modifierFlags];
+        const SHIFT: NSUInteger = 1 << 17;
+        const CONTROL: NSUInteger = 1 << 18;
+        const OPTION: NSUInteger = 1 << 19;
+        const COMMAND: NSUInteger = 1 << 20;
+        let mods = flags & (SHIFT | CONTROL | OPTION | COMMAND);
+        let chars: id = msg_send![event, charactersIgnoringModifiers];
+        if chars == nil {
+            return None;
+        }
+        let utf8: *const std::os::raw::c_char = msg_send![chars, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        let key = std::ffi::CStr::from_ptr(utf8).to_string_lossy().to_lowercase();
+        match (mods, key.as_str()) {
+            (COMMAND, "a") => Some(sel!(selectAll:)),
+            (COMMAND, "c") => Some(sel!(copy:)),
+            (COMMAND, "v") => Some(sel!(paste:)),
+            (COMMAND, "x") => Some(sel!(cut:)),
+            (COMMAND, "z") => Some(sel!(undo:)),
+            (m, "z") if m == COMMAND | SHIFT => Some(sel!(redo:)),
+            _ => None,
+        }
+    }
 }
 
 extern "C" fn handle_key_down(this: &Object, _: Sel, native_event: id) {
