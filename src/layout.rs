@@ -378,6 +378,15 @@ pub struct Node {
     /// Root only: the mod that draws notifications (default: `toast`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub toast_mod: Option<String>,
+    /// Root only: the mod that asks for a name (rename tab/space; default: `prompt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_mod: Option<String>,
+    /// Root only: the mod that asks before something destructive (default: `confirm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_mod: Option<String>,
+    /// Root only: the mod that draws the command palette (default: the frame's `palette`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette_mod: Option<String>,
     /// Dragging this node moves the window; a double-click maximizes it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub window_drag: bool,
@@ -418,6 +427,9 @@ impl Node {
             preview: None,
             terminal_menu: None,
             toast_mod: None,
+            prompt_mod: None,
+            confirm_mod: None,
+            palette_mod: None,
             window_drag: false,
         }
     }

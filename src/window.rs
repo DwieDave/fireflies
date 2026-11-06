@@ -2902,8 +2902,9 @@ impl AppWindow {
                 ("rename tab", "empty: its number", current)
             }
         };
-        let spec = json!({ "mod": "prompt", "kind": "dialog", "width": 380,
+        let mut spec = json!({ "mod": "prompt", "kind": "dialog", "width": 380,
             "props": { "title": title, "value": current.as_deref().unwrap_or(""), "hint": hint, "command": { "name": name, "args": args } } });
+        self.skin_dialog(&mut spec, self.chrome.prompt_mod.clone(), "prompt");
         self.open_overlay(mods::new_overlay_id(), spec, window, cx);
     }
 
@@ -3379,7 +3380,8 @@ impl AppWindow {
                 if self.overlays.iter().any(|o| o.id == "palette") {
                     self.close_overlay("palette", window, cx);
                 } else {
-                    let spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+                    let mut spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+                    self.skin_dialog(&mut spec, self.chrome.palette_mod.clone(), "palette");
                     self.open_overlay("palette".into(), spec, window, cx);
                 }
                 return;
@@ -3550,9 +3552,26 @@ impl AppWindow {
     // ---- overlays ----------------------------------------------------------
 
     fn confirm(&mut self, title: &str, detail: &str, command: &str, args: Value, window: &mut Window, cx: &mut Context<Self>) {
-        let spec = json!({ "mod": "confirm", "kind": "dialog", "width": 380, "height": 150,
+        let mut spec = json!({ "mod": "confirm", "kind": "dialog", "width": 380, "height": 150,
             "props": { "title": title, "detail": detail, "command": { "name": command, "args": args } } });
+        self.skin_dialog(&mut spec, self.chrome.confirm_mod.clone(), "confirm");
         self.open_overlay(mods::new_overlay_id(), spec, window, cx);
+    }
+
+    /// The layout's `prompt_mod` / `confirm_mod` / `palette_mod`, like
+    /// `toast_mod`: that mod draws the overlay instead of the shipped one, with
+    /// no frame of Herdr's (it draws its own) and `dialog` (`"prompt"`,
+    /// `"confirm"`, `"palette"`) added to its props so one mod can play
+    /// several parts. An unknown mod logs a warning and keeps the shipped one.
+    fn skin_dialog(&self, spec: &mut Value, chosen: Option<String>, dialog: &str) {
+        let Some(name) = chosen else { return };
+        if !self.folders.contains_key(&name) {
+            tracing::warn!(mod_name = %name, dialog, "dialog mod not found; using the shipped one");
+            return;
+        }
+        spec["mod"] = json!(name);
+        spec["frame"] = json!("none");
+        spec["props"]["dialog"] = json!(dialog);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -5299,6 +5318,21 @@ mod tests {
         root.terminal_menu = Some("personal-menu".into());
         let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
         assert_eq!(restored.terminal_menu.as_deref(), Some("personal-menu"));
+    }
+
+    #[test]
+    fn dialog_mods_are_root_layout_choices_that_roundtrip() {
+        let mut root = super::default_layout("main");
+        assert_eq!((root.prompt_mod.as_deref(), root.confirm_mod.as_deref(), root.palette_mod.as_deref()), (None, None, None));
+        let bare = serde_json::to_value(&root).unwrap();
+        assert!(bare.get("prompt_mod").is_none() && bare.get("confirm_mod").is_none() && bare.get("palette_mod").is_none());
+        root.prompt_mod = Some("my-prompt".into());
+        root.confirm_mod = Some("my-confirm".into());
+        root.palette_mod = Some("my-palette".into());
+        let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
+        assert_eq!(restored.prompt_mod.as_deref(), Some("my-prompt"));
+        assert_eq!(restored.confirm_mod.as_deref(), Some("my-confirm"));
+        assert_eq!(restored.palette_mod.as_deref(), Some("my-palette"));
     }
 
     #[test]

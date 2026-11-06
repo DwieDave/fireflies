@@ -268,6 +268,16 @@ Properties any node can have:
   `icon`, `action`, `overlay`) and keeps the toast's size and spot, 340×72 at the
   bottom right. Omit it for the shipped `toast`; an unknown mod logs a warning
   and falls back to `toast`.
+- Root only: `"prompt_mod"`, `"confirm_mod"`, `"palette_mod"` (this fork) choose
+  the mods for the name prompt (rename tab/space), the confirm dialog (close a
+  space, ...) and the command palette, in place of the shipped `prompt`,
+  `confirm` and the frame's palette. Each gets the shipped one's props (prompt:
+  `title`, `value`, `hint`, `command`; confirm: `title`, `detail`, `command`;
+  palette: none) plus `dialog` (`"prompt"`, `"confirm"`, `"palette"`) and
+  `overlay`, keeps its size and spot, and opens with `frame: "none"`: the mod
+  draws its own border and background. Run `command.name` with `command.args`
+  (a prompt adds `name`) and close with `closeOverlay(props().overlay)`. An
+  unknown mod logs a warning and keeps the shipped one.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
