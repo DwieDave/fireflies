@@ -19,6 +19,9 @@ pub struct Tab {
     /// Panes focused before, most recent last: closing the focused pane goes back.
     pub before: Vec<String>,
     pub zoomed: Option<String>,
+    /// Panes whose terminal text is bigger or smaller than the app's
+    /// (`pane.font_bigger`): its multiplier on `settings::font_size()`.
+    pub font_zoom: BTreeMap<String, f32>,
     /// Put away (ms since the epoch): out of the lists, still running. Comes
     /// back when it's shown or one of its agents needs the person.
     pub settled: Option<u64>,
@@ -114,6 +117,7 @@ impl Tab {
             before: Vec::new(),
             root: Node::container(id, Axis::Row, vec![pane]),
             zoomed: None,
+            font_zoom: BTreeMap::new(),
             settled: None,
         }
     }
@@ -331,6 +335,7 @@ impl Model {
         if c.zoomed.as_deref() == Some(pane_id) {
             c.zoomed = None;
         }
+        c.font_zoom.remove(pane_id);
         if !c.root.panes().is_empty() {
             c.before.retain(|p| p != pane_id);
             if c.focused.as_deref() == Some(pane_id) {

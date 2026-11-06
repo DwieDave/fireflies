@@ -561,7 +561,7 @@ pub struct Snapshot {
     pub spaces: Value,
     pub machines: Value,
     pub agents: Value,
-    /// Every pane: { pane, terminal, tab, title, cwd, branch, status, app, focused, zoomed }.
+    /// Every pane: { pane, terminal, tab, title, cwd, branch, status, app, focused, zoomed, font_zoom }.
     pub panes: Value,
     pub terminals: Value,
     pub focused: Value,

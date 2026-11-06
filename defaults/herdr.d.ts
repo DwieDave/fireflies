@@ -183,7 +183,7 @@ export function agents(): AgentInfo[];
 export interface PaneInfo {
   pane: string;
   /** null for a mod pane (`pane.split {mod}`): then `mod` names it, and only
-   *  pane, mod, tab, title, focused and zoomed are set. */
+   *  pane, mod, tab, title, focused, zoomed, font_zoom and movable are set. */
   terminal: string | null;
   mod?: string;
   tab: string;
@@ -198,6 +198,9 @@ export interface PaneInfo {
   program: Program;
   focused: boolean;
   zoomed: boolean;
+  /** This pane's terminal text size on top of the app's (pane.font_bigger/smaller/reset):
+   *  1 = the app's size, steps of 0.1 from 0.5 to 3. Always 1 for a mod pane. */
+  font_zoom: number;
   /** The app's top-center grip can rearrange this pane. False when zoomed or alone. */
   movable: boolean;
 }

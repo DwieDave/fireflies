@@ -89,6 +89,8 @@ struct Grid {
     painted: Vec<(Rc<Vec<vt::Cell>>, Vec<RowOp>, Option<usize>)>,
     /// Font size, cell size, font, loaded fonts and ligature setting used to draw.
     painted_with: (u32, Size<Pixels>, String, u64, bool),
+    /// This pane's own text size, a multiplier on the app's (`pane.font_bigger`).
+    font_zoom: f32,
 }
 
 pub struct TerminalView {
@@ -290,6 +292,7 @@ impl TerminalView {
                 track: None,
                 painted: Vec::new(),
                 painted_with: (0, Size::default(), String::new(), 0, false),
+                font_zoom: 1.0,
             })),
             focus: cx.focus_handle(),
             was_focused: false,
@@ -461,6 +464,16 @@ impl TerminalView {
     fn find_field_focused(&self, window: &Window, cx: &App) -> bool {
         self.search_open
             && self.search_input.as_ref().is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window))
+    }
+
+    /// This pane's own text size (1: the app's); the grid refits on the next paint.
+    pub fn set_font_zoom(&mut self, font_zoom: f32, cx: &mut Context<Self>) {
+        let mut g = self.grid.borrow_mut();
+        if g.font_zoom != font_zoom {
+            g.font_zoom = font_zoom;
+            drop(g);
+            cx.notify();
+        }
     }
 
     pub fn detach(&self) {
@@ -1318,10 +1331,10 @@ fn is_icon(text: &str) -> bool {
 }
 
 /// Keep the configured font’s icon proportions; only fit bundled fallback glyphs.
-fn fallback_icon(text: &str, font: &Font, ts: &gpui::TextSystem) -> Option<IconGlyph> {
+fn fallback_icon(text: &str, font: &Font, fs: Pixels, ts: &gpui::TextSystem) -> Option<IconGlyph> {
     let c = text.chars().next().filter(|_| is_icon(text))?;
     let id = ts.resolve_font(font);
-    if ts.advance(id, px(crate::settings::font_size()), c).is_ok() {
+    if ts.advance(id, fs, c).is_ok() {
         return None;
     }
     icon_glyph(c)
@@ -1506,11 +1519,19 @@ fn needs_ligatures(text: &str, font: &Font) -> bool {
         || text.as_bytes().windows(2).any(|pair| pair[0].is_ascii_punctuation() && pair[1].is_ascii_punctuation())
 }
 
+/// The terminal font size at a pane's own multiplier (1: the app's).
+fn font_px(font_zoom: f32) -> Pixels {
+    px(crate::settings::font_size() * font_zoom)
+}
+
 pub fn cell_size(window: &Window) -> Size<Pixels> {
+    cell_size_at(window, font_px(1.0))
+}
+
+fn cell_size_at(window: &Window, fs: Pixels) -> Size<Pixels> {
     let ts = window.text_system();
     let f = cell_font(false, false);
     let id = ts.resolve_font(&f);
-    let fs = px(crate::settings::font_size());
     let w = ts.advance(id, fs, 'M').map(|s| s.width).unwrap_or(fs * 0.6);
     let h = ts.ascent(id, fs) + ts.descent(id, fs).abs();
     // The width stays the font's own advance: GPUI only moves a glyph onto the
@@ -1521,12 +1542,12 @@ pub fn cell_size(window: &Window) -> Size<Pixels> {
 }
 
 // Force-width shaping moves glyph origins, but does not resize fallback glyphs.
-fn fallback_size(c: &vt::Cell, font: &Font, width: Pixels, ts: &gpui::WindowTextSystem) -> Option<Pixels> {
+fn fallback_size(c: &vt::Cell, font: &Font, width: Pixels, fs: Pixels, ts: &gpui::WindowTextSystem) -> Option<Pixels> {
     if c.wide || c.text.is_ascii() {
         return None;
     }
     let first = c.text.chars().next()?;
-    let size = px(crate::settings::font_size());
+    let size = fs;
     let primary = ts.resolve_font(font);
     if ts.advance(primary, size, first).is_ok() {
         return None;
@@ -1546,7 +1567,12 @@ enum RowOp {
 
 /// A row's drawing: its backgrounds, merged into runs of one color, then its
 /// text in runs of one style (wide characters, sprites and icons on their own).
+#[cfg(test)]
 fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: &mut Window) -> Vec<RowOp> {
+    row_ops_at(row, cell, cursor, font_px(1.0), window)
+}
+
+fn row_ops_at(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, fs: Pixels, window: &mut Window) -> Vec<RowOp> {
     crate::bench::count(&crate::bench::ROWS);
     let ligatures = crate::settings::get().font_ligatures;
     let mut ops = Vec::new();
@@ -1581,7 +1607,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             continue;
         }
         let mut text_font = cell_font(c.bold, c.italic);
-        if let Some(icon) = fallback_icon(&c.text, &text_font, window.text_system()) {
+        if let Some(icon) = fallback_icon(&c.text, &text_font, fs, window.text_system()) {
             // Fit missing icons from the bundled font by their outlines:
             // centered, as tall as fits, two cells wide when a space
             // follows (prompts, statuslines, file trees).
@@ -1600,7 +1626,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             ops.push(RowOp::Icon { x: start, offset: point(px(left), px(baseline)), font, glyph: GlyphId(icon.id), size, color });
             continue;
         }
-        let fitted_size = fallback_size(c, &text_font, cell.width, window.text_system());
+        let fitted_size = fallback_size(c, &text_font, cell.width, fs, window.text_system());
         let mut text = if c.text.is_empty() { " ".to_owned() } else { c.text.clone() };
         // Shape the cursor cell separately, so its plain glyph doesn't cover a ligature.
         if !c.wide && fitted_size.is_none() && cursor != Some(start) {
@@ -1615,7 +1641,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
                     && d.underline == c.underline
                     && d.strike == c.strike;
                 // Bundled fallback icons are fitted separately from the text run.
-                if !same || cursor == Some(x) || (d.text.is_empty() && !d.underline && !d.strike) || crate::sprites::is_sprite(&d.text) || fallback_icon(&d.text, &text_font, window.text_system()).is_some() || fallback_size(d, &text_font, cell.width, window.text_system()).is_some() {
+                if !same || cursor == Some(x) || (d.text.is_empty() && !d.underline && !d.strike) || crate::sprites::is_sprite(&d.text) || fallback_icon(&d.text, &text_font, fs, window.text_system()).is_some() || fallback_size(d, &text_font, cell.width, fs, window.text_system()).is_some() {
                     break;
                 }
                 text.push_str(if d.text.is_empty() { " " } else { &d.text });
@@ -1637,7 +1663,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             strikethrough: c.strike.then(|| StrikethroughStyle { thickness: px(1.0), color: Some(color) }),
         };
         let force = (!c.wide).then_some(cell.width);
-        let line = window.text_system().shape_line(text.into(), fitted_size.unwrap_or_else(|| px(crate::settings::font_size())), &[run], force);
+        let line = window.text_system().shape_line(text.into(), fitted_size.unwrap_or(fs), &[run], force);
         ops.push(RowOp::Text { x: start, line });
     }
     ops
@@ -1660,6 +1686,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     crate::bench::count(&crate::bench::GRID);
     let mut g = grid.borrow_mut();
     let cell = g.cell;
+    let fs = font_px(g.font_zoom);
     let (pad_x, pad_y) = pad();
     // Rows rarely fill the height exactly: split what's left above and below.
     let spare = (f32::from(bounds.size.height) - 2.0 * pad_y - f32::from(cell.height) * g.vt.rows as f32).max(0.0);
@@ -1721,7 +1748,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     // line rebuilds one row, not the whole screen.
     let ligatures = crate::settings::get().font_ligatures;
     let cursor = frame.cursor_cell.filter(|_| ligatures);
-    let with = (crate::settings::font_size().to_bits(), cell, crate::settings::terminal_font(), crate::settings::fonts_added(), ligatures);
+    let with = (f32::from(fs).to_bits(), cell, crate::settings::terminal_font(), crate::settings::fonts_added(), ligatures);
     // When every row changed (output scrolling), nothing is kept: the next
     // frame would find none of them the same.
     let mut painted = std::mem::take(&mut grid.borrow_mut().painted);
@@ -1732,7 +1759,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     for (y, row) in frame.rows.iter().enumerate() {
         let column = cursor.filter(|(_, cy)| *cy as usize == y).map(|(x, _)| x as usize);
         if frame.all || painted.get(y).is_none_or(|(r, _, c)| !Rc::ptr_eq(r, row) || *c != column) {
-            let ops = row_ops(row, cell, column, window);
+            let ops = row_ops_at(row, cell, column, fs, window);
             if y < painted.len() {
                 painted[y] = (row.clone(), ops, column);
             } else {
@@ -1817,7 +1844,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
                         underline: None,
                         strikethrough: None,
                     };
-                    let line = window.text_system().shape_line(c.text.clone().into(), px(crate::settings::font_size()), &[run], None);
+                    let line = window.text_system().shape_line(c.text.clone().into(), fs, &[run], None);
                     let _ = line.paint(p, cell.height, TextAlign::Left, None, window, cx);
                 }
             }
@@ -1843,7 +1870,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
             underline: Some(UnderlineStyle { thickness: px(1.0), color: Some(fg), wavy: false }),
             strikethrough: None,
         };
-        let line = window.text_system().shape_line(text.into(), px(crate::settings::font_size()), &[run], None);
+        let line = window.text_system().shape_line(text.into(), fs, &[run], None);
         window.paint_quad(fill(snap_box(Bounds::new(p, size(line.width, cell.height))), hsla(frame.bg)));
         let _ = line.paint(p, cell.height, TextAlign::Left, None, window, cx);
     }
@@ -1959,7 +1986,7 @@ impl Render for TerminalView {
                 g.core.focus(ch, focused);
             }
         }
-        let cell = cell_size(window);
+        let cell = cell_size_at(window, font_px(self.grid.borrow().font_zoom));
         let hover = self.grid.borrow().hover;
         let found = hover.filter(|_| link_mods(&window.modifiers())).and_then(|pos| self.link_at(pos));
         let (link, spans) = found.unzip();

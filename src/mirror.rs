@@ -49,6 +49,8 @@ struct TabView {
     focused: Option<String>,
     before: Vec<String>,
     zoomed: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    font_zoom: BTreeMap<String, f32>,
     settled: Option<u64>,
 }
 
@@ -129,7 +131,7 @@ impl Document {
                 .map(|t| {
                     let mut root = t.root.clone();
                     map_node(&mut root, &map);
-                    Tab { id: map(&t.id), name: t.name.clone(), root, focused: None, before: vec![], zoomed: None, settled: None }
+                    Tab { id: map(&t.id), name: t.name.clone(), root, focused: None, before: vec![], zoomed: None, font_zoom: BTreeMap::new(), settled: None }
                 })
                 .collect(),
         });
@@ -145,7 +147,7 @@ impl View {
             active: model.active.clone(),
             recent: model.recent.clone(),
             spaces: model.spaces.iter().map(|s| (s.id.clone(), s.active.clone())).collect(),
-            tabs: model.tabs().map(|t| (t.id.clone(), TabView { focused: t.focused.clone(), before: t.before.clone(), zoomed: t.zoomed.clone(), settled: t.settled })).collect(),
+            tabs: model.tabs().map(|t| (t.id.clone(), TabView { focused: t.focused.clone(), before: t.before.clone(), zoomed: t.zoomed.clone(), font_zoom: t.font_zoom.clone(), settled: t.settled })).collect(),
             attention: model.agents.iter().map(|(a, s)| (a.clone(), Seen { word: s.word.clone(), seen: s.seen })).collect(),
         }
     }
@@ -200,6 +202,7 @@ impl View {
                 if let Some(v) = self.tabs.get(&t.id) {
                     t.focused = v.focused.clone().filter(|id| t.root.find(id).is_some());
                     t.zoomed = v.zoomed.clone().filter(|id| t.root.find(id).is_some());
+                    t.font_zoom = v.font_zoom.iter().filter(|(id, _)| t.root.find(id).is_some()).map(|(id, z)| (id.clone(), *z)).collect();
                     t.before = v.before.iter().filter(|id| t.root.find(id).is_some()).cloned().collect();
                     t.settled = v.settled;
                 }

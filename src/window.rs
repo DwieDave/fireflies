@@ -1463,6 +1463,12 @@ impl AppWindow {
                 t.view.read(cx).detach();
             }
         }
+        // Each pane's own text size (`pane.font_bigger`), also while it shows another terminal.
+        for (id, t) in &self.terms {
+            let pane = id.trim_end_matches(SWAP);
+            let zoom = self.model.tab_of(pane).and_then(|c| c.font_zoom.get(pane).copied()).unwrap_or(1.0);
+            t.view.update(cx, |v, cx| v.set_font_zoom(zoom, cx));
+        }
 
         // A mod copy lives while its slot is in the layout, hidden or not (an
         // inactive stack child, a hidden column, a pane in another tab), so it
@@ -1750,7 +1756,7 @@ impl AppWindow {
                     let zoomed = ctx.zoomed.as_deref() == Some(p.id.as_str());
                     // A mod pane: what it shows, no terminal.
                     if let Some(Content::Mod { name, .. }) = p.content() {
-                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "movable": self.pane_movable(&p.id) }));
+                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id) }));
                         continue;
                     }
                     let Some(addr) = p.terminal() else { continue };
@@ -1762,7 +1768,8 @@ impl AppWindow {
                         "pane": p.id, "terminal": addr, "tab": ctx.id, "title": title.clone().unwrap_or_default(),
                         "cwd": self.cwds.get(addr), "branch": m.folder_info.get(addr).and_then(|f| f.branch.clone()),
                         "status": m.status(addr), "app": a.and_then(|a| a.app.clone()), "program": self.program(addr),
-                        "focused": focused, "zoomed": zoomed, "movable": self.pane_movable(&p.id),
+                        "focused": focused, "zoomed": zoomed, "font_zoom": ctx.font_zoom.get(&p.id).copied().unwrap_or(1.0),
+                        "movable": self.pane_movable(&p.id),
                     }));
                     let Some(status) = m.status(addr) else { continue };
                     agents.push(json!({
