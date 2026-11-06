@@ -417,7 +417,12 @@ export function watchFolder(path: string): Promise<string[]>;
  *  Web: `url` (http/https; `localhost:3000` style input is normalized, never searched) or a local
  *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
  *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
-export interface NativeViewProps { kind: "web" | "pdf" | "media" | "quicklook"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string }
+export interface NativeViewProps {
+  kind: "web" | "pdf" | "media" | "quicklook"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
+   *  Changing only `zoom` zooms the page in place; it doesn't reload. */
+  zoom?: number;
+}
 /** HUP: a real macOS view (WKWebView, PDFView, AVPlayerView, QLPreviewView) placed where this element
  *  is drawn, inside the window. Children draw underneath (shown while it loads or steps aside for a
  *  menu or dialog). Same id + same props keeps the view; new props load into it. Not on stock Herdr:

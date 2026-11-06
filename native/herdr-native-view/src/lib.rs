@@ -208,12 +208,22 @@ pub struct Spec {
     /// Web only: keep cookies and logins in this app's own persistent WebKit
     /// store (separate from Safari/Chrome). Default: a throwaway store.
     pub persist: bool,
+    /// Web only: WKWebView's page zoom (1 = 100%). Changing only this keeps the page.
+    pub zoom: f64,
 }
 
 impl Spec {
     /// Validates the props a mod passed: `{ kind, url }` or `{ kind, path, trust?, root? }`.
     pub fn parse(v: &Value) -> Result<Spec, String> {
         let persist = v.get("persist").and_then(Value::as_bool).unwrap_or(false);
+        let zoom = match v.get("zoom") {
+            None | Some(Value::Null) => 1.0,
+            Some(z) => z
+                .as_f64()
+                .filter(|z| z.is_finite() && *z > 0.0)
+                .ok_or("`zoom` must be a positive number")?
+                .clamp(0.25, 5.0),
+        };
         let kind = Kind::parse(
             v.get("kind")
                 .and_then(Value::as_str)
@@ -232,6 +242,7 @@ impl Spec {
                 kind,
                 source: Source::Url(url),
                 persist,
+                zoom,
             });
         }
         let raw = v
@@ -268,6 +279,7 @@ impl Spec {
                 trust,
             },
             persist,
+            zoom,
         })
     }
 

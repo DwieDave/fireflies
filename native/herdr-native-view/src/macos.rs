@@ -137,6 +137,18 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
         None => {}
     }
     let spec = Spec::parse(props)?;
+    // Only the zoom changed: zoom the page in place, without reloading it.
+    let rezoom = VIEWS.with(|v| {
+        let mut v = v.borrow_mut();
+        let e = v.get_mut(key).filter(|e| without_zoom(&e.spec_json) == without_zoom(props))?;
+        e.spec_json = props.clone();
+        e.spec.zoom = spec.zoom;
+        apply_zoom(&e.renderer, spec.zoom);
+        Some(e.generation)
+    });
+    if let Some(g) = rezoom {
+        return Ok(g);
+    }
     // Same kind: load the new content into the existing view (keeps its place).
     let reuse = VIEWS.with(|v| v.borrow().get(key).is_some_and(|e| e.kind == spec.kind));
     if reuse {
@@ -199,6 +211,7 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
         shown: true,
         suppressed: false,
     };
+    apply_zoom(&entry.renderer, spec.zoom);
     VIEWS.with(|v| v.borrow_mut().insert(key.to_owned(), entry));
     let r = load_entry(mtm, key, generation);
     emit(
@@ -211,6 +224,23 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
         emit(key, generation, "load.error", json!({ "message": err }));
     }
     Ok(generation)
+}
+
+fn without_zoom(props: &Value) -> Value {
+    let mut p = props.clone();
+    if let Some(o) = p.as_object_mut() {
+        o.remove("zoom");
+    }
+    p
+}
+
+/// A web view's page zoom (`zoom` prop); other kinds have their own zoom actions.
+fn apply_zoom(r: &Renderer, zoom: f64) {
+    if let Renderer::Web { view, .. } = r
+        && unsafe { view.pageZoom() } != zoom
+    {
+        unsafe { view.setPageZoom(zoom) };
+    }
 }
 
 fn make(
@@ -769,11 +799,12 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
         // Navigation through the address bar is a new load (new generation) of
         // the same view. `spec_json` keeps the mod's props, so the mod's next
         // render doesn't see a change and reload its own URL over this one.
-        let spec = Spec::parse(&spec)?;
+        let mut spec = Spec::parse(&spec)?;
         let generation = VIEWS.with(|v| {
             let mut v = v.borrow_mut();
             let e = v.get_mut(key).ok_or("view is gone")?;
             e.generation += 1;
+            spec.zoom = e.spec.zoom;
             e.spec = spec;
             Ok::<u64, String>(e.generation)
         })?;

@@ -617,7 +617,10 @@ The main ones:
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
 - Native views (this fork, interface native-view/0): `native.debug` (every native view's frame,
   visibility, focus, content state and recent events), `native.call {key, action, args?}`
-  (one whitelisted action, key `<copy>:<id>`).
+  (one whitelisted action, key `<copy>:<id>`). A web view takes a `zoom` prop
+  (`herdr.nativeView.new(id, { kind: "web", url, zoom: 1.25 })`, WKWebView page zoom,
+  default 1, clamped to 0.25–5): applied on create, and a change to only `zoom` zooms the
+  page in place without reloading it.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
