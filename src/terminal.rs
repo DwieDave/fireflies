@@ -60,11 +60,6 @@ struct Grid {
     scale: f32,
     /// The cell in device pixels the local screen was sized with.
     vt_cell: (u32, u32),
-    /// A size the layout asked for that hasn't held for `SETTLE` yet, and since when.
-    pending_fit: Option<((u16, u16, (u32, u32)), std::time::Instant)>,
-    /// Whether a paint has sized this screen yet: a new terminal takes its first
-    /// size at once.
-    fitted: bool,
     /// The colors and device-pixel cell size the core was last told.
     told_display: Option<DisplayFacts>,
     /// Top-left of the cell grid in window coordinates, from the last paint.
@@ -182,34 +177,6 @@ impl Grid {
         }
     }
 
-    /// Sizes the screen from a paint: a new size is taken once the layout has
-    /// asked for it for `SETTLE`. A tab coming back into view is laid out once at
-    /// a placeholder size before its real one; passing both on made programs
-    /// redraw twice in a row, and TUIs (Claude Code) were left half-drawn. Returns
-    /// whether a size is waiting, so the caller asks for another frame.
-    fn fit_settled(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) -> bool {
-        let want = (cols, rows, device_cell(cell, scale));
-        if !std::mem::replace(&mut self.fitted, true) || ((cols, rows) == (self.vt.cols, self.vt.rows) && want.2 == self.vt_cell) {
-            self.pending_fit = None;
-            self.fit(cols, rows, cell, scale);
-            return false;
-        }
-        match self.pending_fit {
-            Some((p, since)) if p == want => {
-                if since.elapsed() < SETTLE {
-                    return true;
-                }
-            }
-            _ => {
-                self.pending_fit = Some((want, std::time::Instant::now()));
-                return true;
-            }
-        }
-        self.pending_fit = None;
-        self.fit(cols, rows, cell, scale);
-        false
-    }
-
     /// Sizes the screen to `cols` x `rows` of `cell` at `scale`; the program hears of a change.
     fn fit(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) {
         self.cell = cell;
@@ -230,9 +197,6 @@ impl Grid {
         }
     }
 }
-
-/// How long a size from layout has to hold before the terminal takes it.
-const SETTLE: std::time::Duration = std::time::Duration::from_millis(50);
 
 /// A cell in device pixels.
 fn device_cell(cell: Size<Pixels>, scale: f32) -> (u32, u32) {
@@ -279,8 +243,6 @@ impl TerminalView {
                 cell: size(px(9.0), px(18.0)),
                 scale: 1.0,
                 vt_cell: (9, 18),
-                pending_fit: None,
-                fitted: false,
                 told_display: None,
                 origin: Point::default(),
                 buttons_down: Vec::new(),
@@ -434,7 +396,7 @@ impl TerminalView {
         }
     }
 
-    #[cfg(test)]
+    /// The screen's size in cells (`fit_hidden_tabs` checks its prediction with it).
     pub(crate) fn dimensions(&self) -> (u16, u16) {
         let grid = self.grid.borrow();
         (grid.vt.cols, grid.vt.rows)
@@ -1894,7 +1856,6 @@ impl Render for TerminalView {
         self.link = link;
         self.grid.borrow_mut().link_spans = spans.unwrap_or_default();
         let grid = self.grid.clone();
-        let me = cx.entity().downgrade();
         let grid_paint = self.grid.clone();
         let selection_view = cx.entity().downgrade();
         let (input_focus, input_view) = (self.focus.clone(), cx.entity());
@@ -2014,16 +1975,9 @@ impl Render for TerminalView {
             }))
             .child(
                 canvas(
-                    move |bounds, window, cx| {
+                    move |bounds, window, _cx| {
                         let (cols, rows) = grid_size(bounds.size, cell);
-                        if grid.borrow_mut().fit_settled(cols, rows, cell, window.scale_factor()) {
-                            // The view is cached: a bare frame would reuse this
-                            // layout and never look at the size again.
-                            let me = me.clone();
-                            cx.defer(move |cx| {
-                                let _ = me.update(cx, |_, cx| cx.notify());
-                            });
-                        }
+                        grid.borrow_mut().fit(cols, rows, cell, window.scale_factor());
                     },
                     move |bounds, _, window, cx| {
                         paint_grid(bounds, &grid_paint, focused, window, cx);

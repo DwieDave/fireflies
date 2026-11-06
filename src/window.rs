@@ -381,6 +381,8 @@ pub struct AppWindow {
     seen: BTreeSet<String>,
     bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     hidden_fit: pane_size::HiddenFit,
+    /// The hidden-tab size prediction disagreed with a pane on screen (logged once).
+    hidden_fit_warned: std::cell::Cell<bool>,
     drag: Option<Drag>,
     written_layout: String,
     /// The shown layout as its file has it; `chrome` is this plus the clicks
@@ -486,6 +488,7 @@ impl AppWindow {
             seen,
             bounds: Default::default(),
             hidden_fit: Default::default(),
+            hidden_fit_warned: Default::default(),
             drag: None,
             written_layout: String::new(),
             file_chrome: default_layout("main"),
