@@ -280,8 +280,10 @@ Properties any node can have:
   unknown mod logs a warning and keeps the shipped one.
 - Root only: `"peek_mod"` (this fork) draws the 34 px bar over a peeked or
   floating terminal in place of the shipped `peek`, with its props
-  (`terminal`, `float`, `overlay`) plus `dialog: "peek"`. Herdr still frames
-  the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls.
+  (`terminal`, `float`, `views`, `overlay`) plus `dialog: "peek"`. Herdr still frames
+  the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls
+  and the switch between a float's views (`views`: their names, or null; run
+  `float.view {index}`; `terminals()`' `floating_view` says which one shows).
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
@@ -611,6 +613,17 @@ The main ones:
   `floating: true` (all others false), so a mod toggles with
   `const f = terminals().find((t) => t.floating); f ? run("overlay.close", { id: "terminal-peek" }) : run("terminal.open", { argv: ["lazygit"], place: "float" })`.
   A float that ends closes by itself.
+  Float views: `terminal.open {place: "float", view?: {mod, props?, name?}, show?: 0 | 1}` and
+  `terminal.peek {terminal, float: true, view?, show?}` give the float's body two children, the
+  terminal (0) and a block of mod `view.mod` with `view.props` (1), one shown at a time (a stack),
+  starting with `show` (default 0). `float.view {index: 0 | 1}` switches the open float and gives
+  the shown one the keyboard (the terminal, or the mod if its `mod.json` says `"focusable": true`;
+  it gets `"focus"` from `nextCommand()`). Both stay alive while hidden. `terminal.peek` with the
+  same view on the terminal floating now only switches to `show` (no reopen). `terminals()` gives
+  the floating one `floating_view` (the shown index; 0 for a float without a view) and
+  `float_views` (`[its program's name, view.name ?? view.mod]`; null without a view); every other
+  terminal has null for both. The bar's props get `views` (the same names, or null), and the
+  shipped bar shows a switch between them.
   `terminal.show {terminal?, pane?}`, `terminal.search` (screen and scrollback;
   find bar state stays with that terminal), `terminal.copy`, `terminal.paste` (copied
   files, such as Finder's or a clipboard manager's image, as if dropped; an image

@@ -3,7 +3,10 @@
 // (terminal.open {place: "float"}, pane.float): who it is and how it's doing,
 // ↗ to go to its pane (or, without one, keep it as a tab of the shown space),
 // ⇥ to dock it as a split right of the focused pane, ✕ to close (it keeps
-// running); a float also has ⏻ to end it. Props: { terminal, float, overlay }.
+// running); a float also has ⏻ to end it. A float with a second view
+// (terminal.open {place: "float", view}) gets a switch between its views
+// (float.view; the shown one is terminals()' floating_view).
+// Props: { terminal, float, views, overlay }.
 
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -43,9 +46,34 @@ export default class Peek extends View {
       .child(label);
   }
 
+  // The float's views side by side, the shown one raised.
+  views(t, views, shown) {
+    return h_flex()
+      .flex_none()
+      .p(2)
+      .gap(2)
+      .rounded(6)
+      .bg(t.chrome)
+      .children(
+        views.map((name, i) =>
+          div()
+            .id(`view-${i}`)
+            .px(8)
+            .py(1)
+            .rounded(4)
+            .cursor_pointer()
+            .text_color(i === shown ? t.foreground : t.muted)
+            .when(i === shown, (el) => el.bg(t.raised))
+            .when(i !== shown, (el) => el.hover((s) => s.bg(t.hover).text_color(t.foreground)))
+            .on_click(() => run("float.view", { index: i }))
+            .child(name),
+        ),
+      );
+  }
+
   render() {
     const t = theme();
-    const { terminal, float, overlay } = props() ?? {};
+    const { terminal, float, views, overlay } = props() ?? {};
     const k = this.term();
     const st = this.status();
     const pic = icon(k?.program, 14, t.foreground);
@@ -67,6 +95,7 @@ export default class Peek extends View {
       .when(Boolean(st), (el) => el.child(div().flex_none().text_color(t[st] ?? t.dim).child(WORDS[st] ?? st)))
       .when(Boolean(parent), (el) => el.child(div().truncate().text_color(t.dim).child(`from ${parent.name || parent.address}`)))
       .child(div().flex_1())
+      .when(Array.isArray(views) && views.length > 1, (el) => el.child(this.views(t, views, k?.floating_view ?? 0)))
       .child(
         this.button(t, "keep", home ? "↗ go to" : "↗ keep", () => {
           run(home ? "pane.focus" : "terminal.keep", { terminal });

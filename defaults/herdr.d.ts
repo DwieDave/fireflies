@@ -62,12 +62,16 @@ export function playSound(sound: string): null;
  *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
  *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
  *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {direction}. Pane menus get target { pane, terminal }.
- * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?},
- *   terminal.kill {terminal} (pane: the one right/down/left/up/auto split, default the focused one),
- *   ("float": no pane, floating over the tab in the "terminal-peek" overlay; closing it leaves it running),
+ * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?, view?, show?}
+ *   (pane: the one right/down/left/up/auto splits, default the focused one; "float": no pane, floating over the tab
+ *   in the "terminal-peek" overlay; closing it leaves it running), terminal.kill {terminal},
  *   terminal.keep {terminal, place?, pane?} (a running one without a pane, e.g. a sub-agent, gets one; places as terminal.open but no float),
  *   terminal.park {terminal} (its pane goes, it keeps running; the menu's "Send back"),
- *   terminal.peek {terminal, float?} (peek over the tab, with keep-as-tab, dock-right and close; float: as a float),
+ *   terminal.peek {terminal, float?, view?, show?} (peek over the tab, with keep-as-tab, dock-right and close; float: as a float),
+ *   float views: terminal.open {place: "float", view?: {mod, props?, name?}, show?: 0 | 1} and terminal.peek {terminal,
+ *   float: true, view?, show?} make the float's body a stack of the terminal (0) and that mod (1), showing `show`
+ *   (default 0; peek with the same view on the one floating now only switches), float.view {index: 0 | 1} (switch the
+ *   open float and give the shown one the keyboard: the terminal, or the mod if its mod.json is focusable),
  *   terminal.show {terminal?, pane?} (shown in the pane for now, in place of its own), terminal.copy, terminal.paste,
  *   terminal.right_click {to: "program" | "menu", terminal?} (right-clicks to a program that takes the mouse; Shift: the menu).
  *   terminal.scroll {lines | pages | to: "top" | "bottom", terminal?} (Herdr's view of the history: negative goes up; pages may be fractional).
@@ -225,7 +229,10 @@ export function setAgentOrder(addresses: string[]): null;
 /** Every core terminal as `hc ls --json` describes it (address, argv, name, template, parent,
  *  labels, state, ...), with `status` as a plain word, the agent's report in `report`,
  *  `program` (see Program), and `floating`: true for the one floating over the tab now
- *  (terminal.open {place: "float"}, pane.float), else false. Live. */
+ *  (terminal.open {place: "float"}, pane.float), else false. The floating one also has
+ *  `floating_view: number` (the view its float shows: 0 the terminal, 1 its `view` mod; 0 without
+ *  one) and `float_views: string[] | null` ([its program's name, view.name ?? view.mod]; null
+ *  without a view); others have null for both. Live. */
 export function terminals(): any[];
 
 /** Actual terminal/pane focus. `space` and `tab` are the current window context.

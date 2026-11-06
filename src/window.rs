@@ -304,6 +304,55 @@ impl OverlayKind {
     }
 }
 
+/// A float's second view (`terminal.open {place: "float", view}`): a mod
+/// shown in the float's body in place of the terminal (`float.view`).
+#[derive(Clone, Debug)]
+struct FloatView {
+    name: String,
+    props: Value,
+    /// What it's called (default: the mod's name).
+    label: Option<String>,
+    /// What the terminal is called, when the caller knows better than `terminals()` yet.
+    term: Option<String>,
+}
+
+impl FloatView {
+    /// `view: {mod, props?, name?}`; null or missing: none.
+    fn parse(v: Option<&Value>) -> Result<Option<FloatView>, String> {
+        let Some(v) = v.filter(|v| !v.is_null()) else { return Ok(None) };
+        let name = v.get("mod").and_then(Value::as_str).filter(|m| !m.is_empty()).ok_or("view is {mod, props?, name?}")?;
+        Ok(Some(FloatView {
+            name: name.to_owned(),
+            props: v.get("props").cloned().unwrap_or(Value::Null),
+            label: v.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_owned),
+            term: None,
+        }))
+    }
+
+    fn same(&self, other: &FloatView) -> bool {
+        (&self.name, &self.props, &self.label) == (&other.name, &other.props, &other.label)
+    }
+}
+
+/// The floating terminal's views: which one shows, and what they're called.
+struct FloatViews {
+    view: FloatView,
+    names: [String; 2],
+    shown: usize,
+}
+
+/// The float's body: the terminal (view 0) and the mod (view 1), as a stack.
+const FLOAT_BODY: &str = "float-body";
+const FLOAT_CHILDREN: [&str; 2] = ["float-term", "float-view"];
+
+/// `show: 0 | 1` (default 0).
+fn float_show(a: &Value) -> Result<usize, String> {
+    match a.get("show").filter(|v| !v.is_null()) {
+        None => Ok(0),
+        Some(v) => v.as_u64().filter(|i| *i <= 1).map(|i| i as usize).ok_or_else(|| format!("show is 0 (the terminal) or 1 (the view), not {v}")),
+    }
+}
+
 struct Overlay {
     id: String,
     kind: OverlayKind,
@@ -361,6 +410,8 @@ pub struct AppWindow {
     /// The terminal floating over the tab (`terminal.open {place: "float"}`,
     /// `pane.float`): shown in the `terminal-peek` overlay, without a pane.
     floating: Option<String>,
+    /// The float's two views (`view`): its body a stack of the terminal and a mod.
+    float_views: Option<FloatViews>,
     float_drag: Option<floats::FloatDrag>,
     pane_drag: Option<pane_drag::PaneDrag>,
     pane_grip_hover: Option<String>,
@@ -475,6 +526,7 @@ impl AppWindow {
             agent_focused: None,
             swapped: HashMap::new(),
             floating: None,
+            float_views: None,
             float_drag: None,
             pane_drag: None,
             pane_grip_hover: None,
@@ -1315,8 +1367,9 @@ impl AppWindow {
             if let Some(c) = self.copies.get(&o.slot) {
                 out.insert(o.slot.clone(), c.inst.clone());
             }
+            // Inactive stack children too (a float's other view), like the layout's.
             if let Some(l) = &o.layout {
-                for n in l.visible_blocks() {
+                for n in l.walk() {
                     if let Some(Content::Mod { name, props }) = n.content() {
                         out.insert(n.id.clone(), inst(name, props));
                     }
@@ -1439,6 +1492,14 @@ impl AppWindow {
                 }
             }
         }
+        // An overlay's hidden terminal (a float showing its other view) stays attached too.
+        for n in self.overlays.iter().filter_map(|o| o.layout.as_ref()).flat_map(|l| l.terminals()) {
+            if let Some(a) = n.terminal()
+                && !terms.iter().any(|(id, _)| *id == n.id)
+            {
+                terms.push((n.id.clone(), a.to_owned()));
+            }
+        }
         let want_terms: HashSet<String> = terms.iter().map(|(id, _)| id.clone()).collect();
         for (id, address) in terms {
             if self.terms.get(&id).is_some_and(|t| t.address == address) {
@@ -1451,7 +1512,7 @@ impl AppWindow {
             self.tell_term(&view, &address, cx);
             let (block, addr) = (id.clone(), address.clone());
             let sub = cx.subscribe_in(&view, window, move |this, _, ev: &TerminalEvent, window, cx| match ev {
-                TerminalEvent::Peek(address) => this.peek_terminal(address, false, window, cx),
+                TerminalEvent::Peek(address) => this.peek_terminal(address, false, None, 0, window, cx),
                 TerminalEvent::TitleChanged => this.publish(cx),
                 TerminalEvent::Ended => this.terminal_ended(&block, window, cx),
                 TerminalEvent::ContextMenu(at) => {
@@ -1806,7 +1867,8 @@ impl AppWindow {
         changed |= mods::publish_spaces(Value::Array(spaces));
         changed |= mods::publish_agents(Value::Array(agents));
         changed |= mods::publish_panes(Value::Array(panes));
-        changed |= mods::publish_floating(self.floating.as_deref());
+        let (view, views) = self.float_marks(true);
+        changed |= mods::publish_floating(self.floating.as_deref(), view, views);
         changed |= mods::publish_focused(focused.unwrap_or(Value::Null));
         changed |= mods::publish_floats(self.float_placements());
         changed |= mods::publish_layout(&self.chrome);
@@ -2048,6 +2110,17 @@ impl AppWindow {
         });
     }
 
+    /// `terminals()`' `floating_view` and `float_views` for a terminal (floating or not).
+    fn float_marks(&self, floating: bool) -> (Value, Value) {
+        if !floating || self.floating.is_none() {
+            return (Value::Null, Value::Null);
+        }
+        match &self.float_views {
+            Some(f) => (json!(f.shown), json!(f.names)),
+            None => (json!(0), Value::Null),
+        }
+    }
+
     fn terminals_listed(&mut self, v: Value, window: &mut Window, cx: &mut Context<Self>) {
         let mut list = v.get("terminals").cloned().unwrap_or(Value::Array(vec![]));
         let mut live = HashMap::new();
@@ -2064,6 +2137,9 @@ impl AppWindow {
             }
             let floating = self.floating.is_some() && obj.get("address").and_then(Value::as_str) == self.floating.as_deref();
             obj.insert("floating".into(), floating.into());
+            let (view, views) = self.float_marks(floating);
+            obj.insert("floating_view".into(), view);
+            obj.insert("float_views".into(), views);
             if let Some(a) = obj.get("address").and_then(Value::as_str) {
                 live.insert(a.to_owned(), Value::Object(obj.clone()));
             }
@@ -2667,7 +2743,13 @@ impl AppWindow {
     /// `terminal.open {place: "float"}`: a terminal of the shown space's machine
     /// without a pane (no `herdr.space` label, so nothing adopts it), floating
     /// over the tab. Closing the float leaves it running; `terminal.keep` gives it a pane.
-    fn open_float(&mut self, argv: Option<Vec<String>>, folder: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+    fn open_float(&mut self, argv: Option<Vec<String>>, folder: Option<String>, view: Option<FloatView>, show: usize, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        if let Some(v) = &view && !self.folders.contains_key(&v.name) {
+            return Err(format!("no mod {:?} in mods/", v.name));
+        }
+        if show == 1 && view.is_none() {
+            return Err("show 1 needs a view".into());
+        }
         let space = self.model.active_space().map(|p| p.id.clone()).ok_or("no space yet: make one first (space.new)")?;
         let on = self.machine_of(&space);
         let here = self.model.focused_pane().and_then(|p| self.model.address_of(&p))
@@ -2676,10 +2758,12 @@ impl AppWindow {
         let cwd = folder.or(here).unwrap_or_else(|| self.folder_for(&space));
         self.require_document(on.as_deref())?;
         let labels = json!({ "herdr.space": "", "herdr.tab": "", "herdr.seen": "0" });
+        // Not listed yet: its view names come from what it runs.
+        let view = view.map(|v| FloatView { term: Some(program_name(None, argv.as_deref().unwrap_or_default())), ..v });
         let addr = self.core.run(argv.unwrap_or_default(), Some(cwd).filter(|c| !c.is_empty()), labels, on.as_deref(), None, crate::terminal::initial_display(window))
             .map_err(|e| format!("cannot start a terminal: {e:#}"))?;
         self.born.borrow_mut().insert(addr.clone(), Instant::now());
-        self.peek_terminal(&addr, true, window, cx);
+        self.peek_terminal(&addr, true, view, show, window, cx);
         Ok(json!({ "terminal": addr }))
     }
 
@@ -3180,7 +3264,7 @@ impl AppWindow {
                 let Some(addr) = self.model.address_of(&pane).filter(|a| self.live.contains_key(a)) else { return self.fail("only a running terminal's pane floats") };
                 match self.park_terminal(&addr, window, cx) {
                     Ok(_) => {
-                        self.peek_terminal(&addr, true, window, cx);
+                        self.peek_terminal(&addr, true, None, 0, window, cx);
                         self.answer(Ok(json!({ "pending": true, "terminal": addr })));
                     }
                     Err(e) => return self.fail(e),
@@ -3226,7 +3310,10 @@ impl AppWindow {
                 let place = Self::arg(a, "place").unwrap_or("tab");
                 let r = match place {
                     _ if let Some(dir) = model::Direction::parse(place) => self.split(Self::owned(a, "pane"), dir, argv, Self::owned(a, "folder"), window),
-                    "float" => self.open_float(argv, Self::owned(a, "folder"), window, cx),
+                    "float" => match (FloatView::parse(a.get("view")), float_show(a)) {
+                        (Ok(view), Ok(show)) => self.open_float(argv, Self::owned(a, "folder"), view, show, window, cx),
+                        (Err(e), _) | (_, Err(e)) => Err(format!("terminal.open: {e}")),
+                    },
                     _ => {
                         let name = Self::owned(a, "name")
                             .or_else(|| argv.as_ref().and_then(|v| v.first()).map(|p| p.rsplit('/').next().unwrap_or(p).to_owned()))
@@ -3292,7 +3379,33 @@ impl AppWindow {
                     return self.fail(format!("no running terminal {t:?}"));
                 }
                 let float = a.get("float").and_then(Value::as_bool).unwrap_or(false);
-                self.peek_terminal(t, float, window, cx);
+                let (view, show) = match (FloatView::parse(a.get("view")), float_show(a)) {
+                    (Ok(view), Ok(show)) => (view, show),
+                    (Err(e), _) | (_, Err(e)) => return self.fail(format!("terminal.peek: {e}")),
+                };
+                if let Some(v) = &view {
+                    if !float {
+                        return self.fail("terminal.peek: a view needs float: true");
+                    }
+                    if !self.folders.contains_key(&v.name) {
+                        return self.fail(format!("terminal.peek: no mod {:?} in mods/", v.name));
+                    }
+                }
+                if show == 1 && view.is_none() {
+                    return self.fail("terminal.peek: show 1 needs a view");
+                }
+                let t = t.to_owned();
+                self.peek_terminal(&t, float, view, show, window, cx);
+            }
+            "float.view" => {
+                let index = match a.get("index").and_then(Value::as_u64) {
+                    Some(i @ (0 | 1)) => i as usize,
+                    _ => return self.fail(format!("float.view index is 0 (the terminal) or 1 (the view), not {}", a.get("index").unwrap_or(&Value::Null))),
+                };
+                if self.float_views.is_none() {
+                    return self.fail("float.view: no float with a view is open");
+                }
+                self.show_float_view(index, window, cx);
             }
             "terminal.show" => {
                 let pane = Self::owned(a, "pane").or_else(|| self.model.focused_pane());
@@ -3833,18 +3946,47 @@ impl AppWindow {
 
     /// A terminal over the tab with the `peek` bar on top. `float`: a floating
     /// terminal (bigger, room for a full TUI), which `terminals()` marks `floating`.
-    fn peek_terminal(&mut self, address: &str, float: bool, window: &mut Window, cx: &mut Context<Self>) {
+    /// A float's `view`: its body holds the terminal and that mod, showing `show`.
+    fn peek_terminal(&mut self, address: &str, float: bool, view: Option<FloatView>, show: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let view = view.filter(|_| float);
+        // Already floating with this view: only switch, no close and reopen.
+        if let Some(v) = &view
+            && self.floating.as_deref() == Some(address)
+            && self.float_views.as_ref().is_some_and(|f| f.view.same(v))
+        {
+            return self.show_float_view(show, window, cx);
+        }
         self.close_overlay("terminal-peek", window, cx);
         let size = if float { 0.85 } else { 0.8 };
+        let names = view.as_ref().map(|v| {
+            let term = v.term.clone().unwrap_or_else(|| self.terminal_name(address));
+            [term, v.label.clone().unwrap_or_else(|| v.name.clone())]
+        });
+        let views = names.as_ref().map_or(Value::Null, |n| json!(n));
         // The layout's `peek_mod` draws the bar instead of the shipped `peek`,
         // with `dialog: "peek"` added to its props, like the dialog mods.
         let bar = match self.chrome.peek_mod.clone() {
-            Some(name) if self.folders.contains_key(&name) => json!({ "mod": name, "props": { "terminal": address, "float": float, "dialog": "peek" } }),
+            Some(name) if self.folders.contains_key(&name) => {
+                json!({ "mod": name, "props": { "terminal": address, "float": float, "views": views, "dialog": "peek" } })
+            }
             Some(name) => {
                 tracing::warn!(mod_name = %name, "peek mod not found; using the shipped one");
-                json!({ "mod": "peek", "props": { "terminal": address, "float": float } })
+                json!({ "mod": "peek", "props": { "terminal": address, "float": float, "views": views } })
             }
-            None => json!({ "mod": "peek", "props": { "terminal": address, "float": float } }),
+            None => json!({ "mod": "peek", "props": { "terminal": address, "float": float, "views": views } }),
+        };
+        let show = if view.is_some() { show.min(1) } else { 0 };
+        let body = match &view {
+            Some(v) => json!({
+                "type": "stack",
+                "id": FLOAT_BODY,
+                "active": FLOAT_CHILDREN[show],
+                "children": [
+                    { "type": "block", "id": FLOAT_CHILDREN[0], "content": { "terminal": address } },
+                    { "type": "block", "id": FLOAT_CHILDREN[1], "content": { "mod": v.name, "props": v.props } }
+                ]
+            }),
+            None => json!({ "type": "block", "content": { "terminal": address } }),
         };
         self.open_overlay("terminal-peek".into(), json!({
             "kind": "dialog",
@@ -3854,12 +3996,74 @@ impl AppWindow {
                 "type": "column",
                 "children": [
                     { "type": "block", "size": { "px": 34 }, "content": bar },
-                    { "type": "block", "content": { "terminal": address } }
+                    body
                 ]
             }
         }), window, cx);
         self.floating = float.then(|| address.to_owned());
+        self.float_views = view.zip(names).map(|(view, names)| FloatViews { view, names, shown: show });
+        if show == 1 {
+            self.focus_float_view(window, cx);
+        }
         self.publish(cx);
+    }
+
+    /// `float.view {index}`: the float's body shows the terminal (0) or its view (1),
+    /// and the keyboard goes there.
+    fn show_float_view(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(f) = self.float_views.as_mut() else { return };
+        f.shown = index.min(1);
+        let child = ov_id("terminal-peek", FLOAT_CHILDREN[f.shown]);
+        if let Some(l) = self.overlays.iter_mut().find(|o| o.id == "terminal-peek").and_then(|o| o.layout.as_mut()) {
+            l.select(&ov_id("terminal-peek", FLOAT_BODY), &child);
+        }
+        self.sync(window, cx);
+        self.focus_float_view(window, cx);
+        self.publish(cx);
+        cx.notify();
+    }
+
+    /// The keyboard to the float's shown view: its terminal, or its mod when
+    /// that mod's `mod.json` says `focusable` (else the float holds it).
+    fn focus_float_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(shown) = self.float_views.as_ref().map(|f| f.shown) else { return };
+        let block = ov_id("terminal-peek", FLOAT_CHILDREN[shown]);
+        if shown == 0 {
+            if let Some(t) = self.terms.get(&block) {
+                t.focus.focus(window, cx);
+            }
+            return;
+        }
+        if let Some(o) = self.overlays.iter().find(|o| o.id == "terminal-peek") {
+            o.focus.focus(window, cx);
+        }
+        if !self.focusable(&block) {
+            return;
+        }
+        // A copy that just started asks for commands a moment later.
+        cx.spawn_in(window, async move |this, cx| {
+            for _ in 0..40 {
+                let done = this.update(cx, |this, _| {
+                    let Some(copy) = this.copies.get(&block).map(|c| c.id) else { return true };
+                    this.float_views.as_ref().is_none_or(|f| f.shown != 1) || mods::send_command_to(copy, "focus")
+                });
+                if done.unwrap_or(true) {
+                    break;
+                }
+                cx.background_executor().timer(Duration::from_millis(25)).await;
+            }
+        })
+        .detach();
+    }
+
+    /// What a terminal is called in a float's views: its program's name.
+    fn terminal_name(&self, address: &str) -> String {
+        let rec = self.live.get(address);
+        rec.and_then(|r| r.pointer("/program/name")).and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| {
+            let argv: Vec<String> = rec.and_then(|r| r.get("argv")).and_then(Value::as_array).into_iter().flatten()
+                .filter_map(|a| a.as_str().map(str::to_owned)).collect();
+            program_name(None, &argv)
+        })
     }
 
     /// Which copies are on screen, for `<mod>.<command>` (`mods::send_command`).
@@ -3881,6 +4085,7 @@ impl AppWindow {
             let o = self.overlays.remove(i);
             if o.id == "terminal-peek" {
                 self.floating = None;
+                self.float_views = None;
             }
             if self.win_drag.as_ref().is_some_and(|d| d.id == o.id) {
                 self.win_drag = None;
@@ -4749,6 +4954,11 @@ fn position_popup(at: Point<Pixels>, body: Stateful<Div>) -> Anchored {
 }
 
 /// An overlay's blocks get ids of their own (`<overlay>/<id>`), and its mods learn the overlay.
+/// A node's id inside an overlay's layout (`overlay_layout`).
+fn ov_id(overlay: &str, id: &str) -> String {
+    format!("ov{overlay}/{id}")
+}
+
 fn overlay_layout(mut n: Node, overlay: &str) -> Node {
     fn walk(n: &mut Node, overlay: &str, seq: &mut usize) {
         *seq += 1;
@@ -4758,6 +4968,10 @@ fn overlay_layout(mut n: Node, overlay: &str) -> Node {
                 *props = json!({});
             }
             props["overlay"] = json!(overlay);
+        }
+        // A stack's shown child goes by its id, which gets the same prefix.
+        if let Kind::Stack { active: Some(a), .. } = &mut n.kind {
+            *a = ov_id(overlay, a);
         }
         for c in n.children_mut().into_iter().flatten() {
             walk(c, overlay, seq);
@@ -4978,6 +5192,11 @@ fn adoptable(record: &Value, space: &str, tab: Option<&str>, machine: Option<&st
     record["state"] == "live"
         && label == Some(crate::mirror::local(space, machine))
         && labeled_tab == tab.map(|t| crate::mirror::local(t, machine))
+}
+
+/// A program's name as `terminals()` gives it (`program.name`), else "shell".
+fn program_name(app: Option<&str>, argv: &[String]) -> String {
+    crate::programs::of(app, argv).get("name").and_then(Value::as_str).filter(|n| !n.is_empty()).unwrap_or("shell").to_owned()
 }
 
 fn program_of(report: &Value, argv: Option<&Value>) -> Value {
@@ -5750,6 +5969,32 @@ export default class Probe extends View {
         for id in [None, Some("hidden"), Some("tabs"), Some("source-pane"), Some("overlay:term")] {
             assert!(super::terminal_block(&chrome, id).is_none());
         }
+    }
+
+    #[test]
+    fn a_float_view_is_a_stack_child_and_show_picks_one() {
+        use serde_json::json;
+        let layout: crate::layout::Node = serde_json::from_value(json!({
+            "type": "stack", "id": super::FLOAT_BODY, "active": super::FLOAT_CHILDREN[1],
+            "children": [
+                { "type": "block", "id": super::FLOAT_CHILDREN[0], "content": { "terminal": "t1" } },
+                { "type": "block", "id": super::FLOAT_CHILDREN[1], "content": { "mod": "git", "props": {} } }
+            ]
+        })).unwrap();
+        // The shown child keeps pointing at its (prefixed) id.
+        let l = super::overlay_layout(layout, "terminal-peek");
+        assert_eq!(l.active_child().map(|n| n.id.as_str()), Some("ovterminal-peek/float-view"));
+        assert_eq!(super::ov_id("terminal-peek", super::FLOAT_CHILDREN[1]), "ovterminal-peek/float-view");
+        assert_eq!(super::float_show(&json!({})), Ok(0));
+        assert_eq!(super::float_show(&json!({"show": 1})), Ok(1));
+        assert!(super::float_show(&json!({"show": 2})).is_err());
+        let v = super::FloatView::parse(Some(&json!({"mod": "git", "props": {"a": 1}}))).unwrap().unwrap();
+        assert_eq!((v.name.as_str(), v.label.as_deref()), ("git", None));
+        assert!(super::FloatView::parse(Some(&json!({"props": {}}))).is_err());
+        assert!(super::FloatView::parse(None).unwrap().is_none());
+        let named = super::FloatView::parse(Some(&json!({"mod": "git", "props": {"a": 1}, "name": "Git"}))).unwrap().unwrap();
+        assert!(!v.same(&named));
+        assert!(v.same(&super::FloatView { term: Some("lazygit".into()), ..v.clone() }));
     }
 
     #[test]

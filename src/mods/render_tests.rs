@@ -660,6 +660,7 @@ fn local_state_and_overlay_initial_descriptions(cx: &mut TestAppContext) {
         ),
         ("mods/peek", json!({"terminal":"t1"})),
         ("mods/peek", json!({"terminal":"missing"})),
+        ("mods/peek", json!({"terminal":"t1","float":true,"views":["zsh","git"]})),
         ("mods/worktree", json!({"space":"s1","action":"new"})),
         ("mods/worktree", json!({"space":"s1","action":"remove"})),
     ];
