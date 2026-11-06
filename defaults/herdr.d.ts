@@ -55,11 +55,14 @@ export function playSound(sound: string): null;
  *   tab.close {id?}, tab.rename {id?, name}, tab.move {id, index}, tab.select {index | id},
  *   tab.next, tab.prev.
  * Panes: pane.split {direction: "right" | "down", pane?}, pane.close {pane?}, pane.zoom {pane?},
+ *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
+ *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
  *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {direction}. Pane menus get target { pane, terminal }.
- * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down"}, terminal.kill {terminal},
+ * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "float"}, terminal.kill {terminal},
+ *   ("float": no pane, floating over the tab in the "terminal-peek" overlay; closing it leaves it running),
  *   terminal.keep {terminal, place?} (a running one without a pane, e.g. a sub-agent, gets one),
  *   terminal.park {terminal} (its pane goes, it keeps running; the menu's "Send back"),
- *   terminal.peek {terminal} (peek over the tab, with keep-as-tab and close),
+ *   terminal.peek {terminal, float?} (peek over the tab, with keep-as-tab, dock-right and close; float: as a float),
  *   terminal.show {terminal?, pane?} (shown in the pane for now, in place of its own), terminal.copy, terminal.paste,
  *   terminal.right_click {to: "program" | "menu", terminal?} (right-clicks to a program that takes the mouse; Shift: the menu).
  *   terminal.scroll {lines | pages | to: "top" | "bottom", terminal?} (Herdr's view of the history: negative goes up; pages may be fractional).
@@ -215,8 +218,9 @@ export function panes(): PaneInfo[];
 export function setAgentOrder(addresses: string[]): null;
 
 /** Every core terminal as `hc ls --json` describes it (address, argv, name, template, parent,
- *  labels, state, ...), with `status` as a plain word, the agent's report in `report`, and
- *  `program` (see Program). Live. */
+ *  labels, state, ...), with `status` as a plain word, the agent's report in `report`,
+ *  `program` (see Program), and `floating`: true for the one floating over the tab now
+ *  (terminal.open {place: "float"}, pane.float), else false. Live. */
 export function terminals(): any[];
 
 /** Actual terminal/pane focus. `space` and `tab` are the current window context.

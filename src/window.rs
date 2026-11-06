@@ -358,6 +358,9 @@ pub struct AppWindow {
     /// Panes showing another terminal for now (pane → address), e.g. a sub-agent
     /// looked at in place of its parent. Not saved; the pane keeps its own.
     swapped: HashMap<String, String>,
+    /// The terminal floating over the tab (`terminal.open {place: "float"}`,
+    /// `pane.float`): shown in the `terminal-peek` overlay, without a pane.
+    floating: Option<String>,
     float_drag: Option<floats::FloatDrag>,
     pane_drag: Option<pane_drag::PaneDrag>,
     pane_grip_hover: Option<String>,
@@ -471,6 +474,7 @@ impl AppWindow {
             agent: None,
             agent_focused: None,
             swapped: HashMap::new(),
+            floating: None,
             float_drag: None,
             pane_drag: None,
             pane_grip_hover: None,
@@ -1447,7 +1451,7 @@ impl AppWindow {
             self.tell_term(&view, &address, cx);
             let (block, addr) = (id.clone(), address.clone());
             let sub = cx.subscribe_in(&view, window, move |this, _, ev: &TerminalEvent, window, cx| match ev {
-                TerminalEvent::Peek(address) => this.peek_terminal(address, window, cx),
+                TerminalEvent::Peek(address) => this.peek_terminal(address, false, window, cx),
                 TerminalEvent::TitleChanged => this.publish(cx),
                 TerminalEvent::Ended => this.terminal_ended(&block, window, cx),
                 TerminalEvent::ContextMenu(at) => {
@@ -1802,6 +1806,7 @@ impl AppWindow {
         changed |= mods::publish_spaces(Value::Array(spaces));
         changed |= mods::publish_agents(Value::Array(agents));
         changed |= mods::publish_panes(Value::Array(panes));
+        changed |= mods::publish_floating(self.floating.as_deref());
         changed |= mods::publish_focused(focused.unwrap_or(Value::Null));
         changed |= mods::publish_floats(self.float_placements());
         changed |= mods::publish_layout(&self.chrome);
@@ -2057,6 +2062,8 @@ impl AppWindow {
             if let Some(title) = obj.get("title").and_then(Value::as_str).map(|t| crate::terminal::shown_title(t).to_owned()) {
                 obj.insert("title".into(), title.into());
             }
+            let floating = self.floating.is_some() && obj.get("address").and_then(Value::as_str) == self.floating.as_deref();
+            obj.insert("floating".into(), floating.into());
             if let Some(a) = obj.get("address").and_then(Value::as_str) {
                 live.insert(a.to_owned(), Value::Object(obj.clone()));
             }
@@ -2066,6 +2073,10 @@ impl AppWindow {
         self.closing_terminals.retain(|addr, completed| !*completed || self.live.contains_key(addr));
         // A new sub-agent changes only this list; mods that show teams need to redraw.
         let terminals_changed = mods::publish_terminals(list);
+        // A floating terminal that ended takes its overlay with it.
+        if self.floating.as_ref().is_some_and(|a| !self.live.contains_key(a) && !self.just_born(a)) {
+            self.close_overlay("terminal-peek", window, cx);
+        }
         self.tend_terminals(true, window, cx);
         if terminals_changed {
             self.refresh_snapshot_mods(cx);
@@ -2619,6 +2630,25 @@ impl AppWindow {
         born.get(addr).is_some_and(|t| t.elapsed() < Duration::from_secs(5))
     }
 
+    /// `terminal.open {place: "float"}`: a terminal of the shown space's machine
+    /// without a pane (no `herdr.space` label, so nothing adopts it), floating
+    /// over the tab. Closing the float leaves it running; `terminal.keep` gives it a pane.
+    fn open_float(&mut self, argv: Option<Vec<String>>, folder: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        let space = self.model.active_space().map(|p| p.id.clone()).ok_or("no space yet: make one first (space.new)")?;
+        let on = self.machine_of(&space);
+        let here = self.model.focused_pane().and_then(|p| self.model.address_of(&p))
+            .filter(|a| a.split_once('/').map(|(m, _)| m) == on.as_deref())
+            .and_then(|a| self.cwds.get(&a).cloned());
+        let cwd = folder.or(here).unwrap_or_else(|| self.folder_for(&space));
+        self.require_document(on.as_deref())?;
+        let labels = json!({ "herdr.space": "", "herdr.tab": "", "herdr.seen": "0" });
+        let addr = self.core.run(argv.unwrap_or_default(), Some(cwd).filter(|c| !c.is_empty()), labels, on.as_deref(), None, crate::terminal::initial_display(window))
+            .map_err(|e| format!("cannot start a terminal: {e:#}"))?;
+        self.born.borrow_mut().insert(addr.clone(), Instant::now());
+        self.peek_terminal(&addr, true, window, cx);
+        Ok(json!({ "terminal": addr }))
+    }
+
     /// Gives a running terminal without a pane (a sub-agent, say) one in the
     /// shown space and focuses it; already in a pane: focuses that.
     fn keep_terminal(&mut self, addr: &str, place: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
@@ -3071,6 +3101,36 @@ impl AppWindow {
                     c.zoomed = if c.zoomed.as_deref() == Some(pane.as_str()) { None } else { Some(pane) };
                 }
             }
+            "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane") };
+                let Some(ctx) = self.model.tab_of(&pane).map(|c| c.id.clone()) else { return self.fail(format!("no pane {pane:?}")) };
+                let Some(c) = self.model.tab_mut(&ctx) else { return };
+                let steps = match name {
+                    "pane.font_bigger" => 1,
+                    "pane.font_smaller" => -1,
+                    _ => 0,
+                };
+                let zoom = settings::next_font_zoom(c.font_zoom.get(&pane).copied().unwrap_or(1.0), steps);
+                if zoom == 1.0 {
+                    c.font_zoom.remove(&pane);
+                } else {
+                    c.font_zoom.insert(pane, zoom);
+                }
+            }
+            "pane.float" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to float") };
+                if self.model.tab_of(&pane).is_none() {
+                    return self.fail(format!("no pane {pane:?}"));
+                }
+                let Some(addr) = self.model.address_of(&pane).filter(|a| self.live.contains_key(a)) else { return self.fail("only a running terminal's pane floats") };
+                match self.park_terminal(&addr, window, cx) {
+                    Ok(_) => {
+                        self.peek_terminal(&addr, true, window, cx);
+                        self.answer(Ok(json!({ "pending": true, "terminal": addr })));
+                    }
+                    Err(e) => return self.fail(e),
+                }
+            }
             "pane.focus" => {
                 if Self::arg(a, "pane").is_none()
                     && let Some(terminal) = Self::arg(a, "terminal")
@@ -3111,6 +3171,7 @@ impl AppWindow {
                 let r = match Self::arg(a, "place").unwrap_or("tab") {
                     "right" => self.split(None, Axis::Row, argv, Self::owned(a, "folder"), window),
                     "down" => self.split(None, Axis::Column, argv, Self::owned(a, "folder"), window),
+                    "float" => self.open_float(argv, Self::owned(a, "folder"), window, cx),
                     _ => {
                         let name = Self::owned(a, "name")
                             .or_else(|| argv.as_ref().and_then(|v| v.first()).map(|p| p.rsplit('/').next().unwrap_or(p).to_owned()))
@@ -3175,7 +3236,8 @@ impl AppWindow {
                 if !self.live.contains_key(t) {
                     return self.fail(format!("no running terminal {t:?}"));
                 }
-                self.peek_terminal(t, window, cx);
+                let float = a.get("float").and_then(Value::as_bool).unwrap_or(false);
+                self.peek_terminal(t, float, window, cx);
             }
             "terminal.show" => {
                 let pane = Self::owned(a, "pane").or_else(|| self.model.focused_pane());
@@ -3714,20 +3776,25 @@ impl AppWindow {
         cx.notify();
     }
 
-    fn peek_terminal(&mut self, address: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// A terminal over the tab with the `peek` bar on top. `float`: a floating
+    /// terminal (bigger, room for a full TUI), which `terminals()` marks `floating`.
+    fn peek_terminal(&mut self, address: &str, float: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.close_overlay("terminal-peek", window, cx);
+        let size = if float { 0.85 } else { 0.8 };
         self.open_overlay("terminal-peek".into(), json!({
             "kind": "dialog",
-            "width": 0.8,
-            "height": 0.8,
+            "width": size,
+            "height": size,
             "layout": {
                 "type": "column",
                 "children": [
-                    { "type": "block", "size": { "px": 34 }, "content": { "mod": "peek", "props": { "terminal": address } } },
+                    { "type": "block", "size": { "px": 34 }, "content": { "mod": "peek", "props": { "terminal": address, "float": float } } },
                     { "type": "block", "content": { "terminal": address } }
                 ]
             }
         }), window, cx);
+        self.floating = float.then(|| address.to_owned());
+        self.publish(cx);
     }
 
     /// Which copies are on screen, for `<mod>.<command>` (`mods::send_command`).
@@ -3747,6 +3814,9 @@ impl AppWindow {
     fn remove_overlay(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(i) = self.overlays.iter().position(|o| o.id == id) {
             let o = self.overlays.remove(i);
+            if o.id == "terminal-peek" {
+                self.floating = None;
+            }
             if self.win_drag.as_ref().is_some_and(|d| d.id == o.id) {
                 self.win_drag = None;
             }
@@ -4695,7 +4765,9 @@ fn terminal_block<'a>(chrome: &'a Node, focused: Option<&str>) -> Option<&'a Nod
 
 fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
-        "pane.split" | "pane.close" | "pane.zoom" | "terminal.show" => AppWindow::arg(args, "pane").is_none(),
+        "pane.split" | "pane.close" | "pane.zoom" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+            AppWindow::arg(args, "pane").is_none()
+        }
         "pane.go" | "pane.swap" => true,
         "terminal.open" | "terminal.keep" => matches!(AppWindow::arg(args, "place"), Some("right" | "down")),
         _ => false,

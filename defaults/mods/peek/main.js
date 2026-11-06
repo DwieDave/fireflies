@@ -1,7 +1,9 @@
 // The bar on top of a peeked agent (an overlay the agents list opens for a
-// sub-agent, or a terminal address link): who it is and how it's doing, ↗ to
-// go to its pane (or, without one, keep it as a tab of the shown space), ✕ to
-// close. Props: { terminal, overlay }.
+// sub-agent, or a terminal address link) or a floating terminal
+// (terminal.open {place: "float"}, pane.float): who it is and how it's doing,
+// ↗ to go to its pane (or, without one, keep it as a tab of the shown space),
+// ⇥ to dock it as a split right of the focused pane, ✕ to close (it keeps
+// running); a float also has ⏻ to end it. Props: { terminal, float, overlay }.
 
 import { View, div, image, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
@@ -43,7 +45,7 @@ export default class Peek extends View {
 
   render() {
     const t = theme();
-    const { terminal, overlay } = props() ?? {};
+    const { terminal, float, overlay } = props() ?? {};
     const k = this.term();
     const st = this.status();
     const pic = icon(k?.program, 14, t.foreground);
@@ -70,6 +72,22 @@ export default class Peek extends View {
           run(home ? "pane.focus" : "terminal.keep", { terminal });
           closeOverlay(overlay);
         }),
+      )
+      .when(!home, (el) =>
+        el.child(
+          this.button(t, "dock", "⇥ dock", () => {
+            run("terminal.keep", { terminal, place: "right" });
+            closeOverlay(overlay);
+          }),
+        ),
+      )
+      .when(Boolean(float), (el) =>
+        el.child(
+          this.button(t, "end", "⏻ end", () => {
+            run("terminal.kill", { terminal });
+            closeOverlay(overlay);
+          }),
+        ),
       )
       .child(this.button(t, "close", "✕", () => closeOverlay(overlay)));
   }

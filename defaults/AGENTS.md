@@ -567,7 +567,12 @@ The main ones:
   skip settled tabs).
 - Panes: `pane.split {direction: "right" | "down", pane?, argv? | mod?, props?}` (a new
   terminal, or a mod pane), `pane.close {pane?}`,
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {direction}`.
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {direction}`,
+  `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
+  terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
+  screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
+  `pane.float {pane?}` (its terminal floats over the tab: the pane goes as with `terminal.park`, the
+  terminal keeps running).
   `pane.go` prefers the most recently focused pane along the nearest edge in that
   direction; unvisited panes fall back to overlap, then top/left layout order.
   `pane.go` also reaches visible mods whose `mod.json` says `"focusable": true`, and
@@ -582,7 +587,17 @@ The main ones:
 - Terminals: `terminal.open {argv?, folder?, place?, name?}` (`folder` sets the
   starting directory for tabs and right/down splits, with or without `argv`), `terminal.kill {terminal}`,
   `terminal.keep {terminal, place?}`, `terminal.park {terminal}`,
-  `terminal.peek {terminal}` (peek over the tab, with keep-as-tab and close),
+  `terminal.peek {terminal, float?}` (peek over the tab, with keep-as-tab, dock and close;
+  `float: true` shows it as a floating terminal),
+  `terminal.open {place: "float"}` starts a terminal without a pane and floats it over the
+  shown tab (85% of it, room for lazygit). A float has one overlay, `terminal-peek` (one peek or
+  float at a time), with the `peek` bar: ↗ keep (a tab), ⇥ dock (`terminal.keep {terminal,
+  place: "right"}`: a split right of the focused pane), ⏻ end (`terminal.kill`) and ✕ (closes
+  the float; the terminal keeps running without a pane, so `terminal.peek {terminal, float: true}`
+  shows it again). Neither leaves a pane behind. `terminals()` marks the one floating now
+  `floating: true` (all others false), so a mod toggles with
+  `const f = terminals().find((t) => t.floating); f ? run("overlay.close", { id: "terminal-peek" }) : run("terminal.open", { argv: ["lazygit"], place: "float" })`.
+  A float that ends closes by itself.
   `terminal.show {terminal?, pane?}`, `terminal.search` (screen and scrollback;
   find bar state stays with that terminal), `terminal.copy`, `terminal.paste` (copied
   files, such as Finder's or a clipboard manager's image, as if dropped; an image

@@ -609,6 +609,27 @@ pub fn publish_panes(v: Value) -> bool {
 pub fn publish_terminals(v: Value) -> bool {
     publish("terminals", |s| (std::mem::replace(&mut s.terminals, v.clone()), v))
 }
+/// Marks `terminals()` entries `floating`: the one shown floating over the tab (or none).
+pub fn publish_floating(address: Option<&str>) -> bool {
+    let changed = SNAPSHOT.with(|s| {
+        let mut s = s.borrow_mut();
+        let mut changed = false;
+        for t in s.terminals.as_array_mut().into_iter().flatten() {
+            let floating = address.is_some() && t["address"].as_str() == address;
+            if t.get("floating").and_then(Value::as_bool) != Some(floating)
+                && let Some(o) = t.as_object_mut()
+            {
+                o.insert("floating".into(), floating.into());
+                changed = true;
+            }
+        }
+        changed
+    });
+    if changed {
+        REVISIONS.with_borrow_mut(|r| *r.entry("terminals").or_default() += 1);
+    }
+    changed
+}
 pub fn terminal_address(word: &str, source: &str) -> Option<String> {
     SNAPSHOT.with(|s| {
         let s = s.borrow();
