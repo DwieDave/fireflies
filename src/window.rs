@@ -2016,12 +2016,36 @@ impl AppWindow {
             }
         }
         self.live = live;
+        self.reclaim_sizes(cx);
         self.closing_terminals.retain(|addr, completed| !*completed || self.live.contains_key(addr));
         // A new sub-agent changes only this list; mods that show teams need to redraw.
         let terminals_changed = mods::publish_terminals(list);
         self.tend_terminals(true, window, cx);
         if terminals_changed {
             self.refresh_snapshot_mods(cx);
+        }
+    }
+
+    /// Terminals shown here that another client resized to its own screen (an
+    /// `hc attach` from a phone that follows the focused agent): while this
+    /// window is the active one, the person is looking here, so the shown
+    /// terminals get this window's size back. Otherwise the other client keeps
+    /// its size. Without this, a TUI drew for the phone in a desktop pane until
+    /// the next keypress or mouse move here.
+    fn reclaim_sizes(&self, cx: &App) {
+        if !self.window_active { return }
+        let visible: HashSet<String> = self.visible_addresses().into_iter().collect();
+        for t in self.terms.values() {
+            if !visible.contains(&t.address) { continue }
+            let Some(rec) = self.live.get(&t.address) else { continue };
+            let core = (rec.get("cols").and_then(Value::as_u64), rec.get("rows").and_then(Value::as_u64));
+            let view = t.view.read(cx);
+            let (cols, rows) = view.dimensions();
+            if let (Some(c), Some(r)) = core
+                && (c, r) != (u64::from(cols), u64::from(rows))
+            {
+                view.reclaim_size();
+            }
         }
     }
 
@@ -3826,6 +3850,7 @@ impl AppWindow {
             self.window_active = active;
             if active {
                 self.sync(window, cx);
+                self.reclaim_sizes(cx);
             } else {
                 self.looked.clear();
             }

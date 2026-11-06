@@ -60,6 +60,10 @@ struct Grid {
     scale: f32,
     /// The cell in device pixels the local screen was sized with.
     vt_cell: (u32, u32),
+    /// Whether a paint has sized this screen yet.
+    fitted: bool,
+    /// This frame is the first that shows the screen again (see `paint_fit`).
+    just_shown: bool,
     /// The colors and device-pixel cell size the core was last told.
     told_display: Option<DisplayFacts>,
     /// Top-left of the cell grid in window coordinates, from the last paint.
@@ -113,6 +117,8 @@ pub struct TerminalView {
     /// Output changed the screen while it wasn't drawn: the window's cached
     /// copy of this view is stale, so it is drawn afresh when shown again.
     missed: Cell<bool>,
+    /// How many frames in a row this terminal has been on screen.
+    shown_streak: Cell<u32>,
     /// When the person last typed here: output right after is shown at once.
     typed_at: Cell<Option<Instant>>,
     /// Scrolled this gesture, in lines, toward the next whole one.
@@ -175,6 +181,25 @@ impl Grid {
         {
             self.core.facts(chan, &facts);
         }
+    }
+
+    /// Sizes the screen from a paint. The first frame that shows a tab again
+    /// lays its panes out at a placeholder size (54x52 cells where 158x42 is
+    /// right); passing that on resized the program twice, and TUIs (Claude
+    /// Code) were left half-drawn. So in that frame a different size waits: the
+    /// window draws again at once (`mark_shown` keeps the view uncached for a
+    /// few frames, so it is laid out anew), and the real size is taken there.
+    /// Returns whether a size is waiting.
+    fn paint_fit(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) -> bool {
+        let same = (cols, rows) == (self.vt.cols, self.vt.rows) && device_cell(cell, scale) == self.vt_cell;
+        if self.just_shown && self.fitted && !same {
+            self.just_shown = false;
+            return true;
+        }
+        self.just_shown = false;
+        self.fitted = true;
+        self.fit(cols, rows, cell, scale);
+        false
     }
 
     /// Sizes the screen to `cols` x `rows` of `cell` at `scale`; the program hears of a change.
@@ -243,6 +268,8 @@ impl TerminalView {
                 cell: size(px(9.0), px(18.0)),
                 scale: 1.0,
                 vt_cell: (9, 18),
+                fitted: false,
+                just_shown: false,
                 told_display: None,
                 origin: Point::default(),
                 buttons_down: Vec::new(),
@@ -260,6 +287,7 @@ impl TerminalView {
             was_focused: false,
             shown_in: Cell::new(0),
             missed: Cell::new(false),
+            shown_streak: Cell::new(0),
             typed_at: Cell::new(None),
             scrolled: point(0.0, 0.0),
             search_open: false,
@@ -525,8 +553,33 @@ impl TerminalView {
     /// Returns whether output changed it while it was off screen (its cached
     /// drawing is stale then).
     pub fn mark_shown(&self) -> bool {
-        self.shown_in.set(FRAME.load(Ordering::Relaxed));
-        self.missed.replace(false)
+        let frame = FRAME.load(Ordering::Relaxed);
+        if self.shown_in.get() == frame {
+            // Shown twice in one frame: the first call decided.
+            return self.shown_streak.get() < 3;
+        }
+        let back = self.shown_in.get().wrapping_add(1) != frame;
+        if back {
+            self.shown_streak.set(0);
+            self.grid.borrow_mut().just_shown = true;
+        } else {
+            self.shown_streak.set(self.shown_streak.get().saturating_add(1));
+        }
+        self.shown_in.set(frame);
+        // Uncached while it comes back into view: a cached view keeps the layout
+        // of the frame that first showed it (a placeholder size), so it is laid
+        // out anew for a few frames, until the size it waited for is applied.
+        self.missed.replace(false) || self.shown_streak.get() < 3
+    }
+
+    /// Tells the core this window's size for the terminal again, without a
+    /// change here: another client (an `hc attach` elsewhere, a phone over mosh)
+    /// resized it to its own screen, and the person is at this window.
+    pub fn reclaim_size(&self) {
+        let g = self.grid.borrow();
+        if let Some(chan) = g.channel {
+            g.core.resize(chan, g.vt.cols, g.vt.rows);
+        }
     }
 
     /// Sizes a terminal that isn't on screen as its pane would be (`AppWindow::fit_hidden_tabs`).
@@ -1977,7 +2030,9 @@ impl Render for TerminalView {
                 canvas(
                     move |bounds, window, _cx| {
                         let (cols, rows) = grid_size(bounds.size, cell);
-                        grid.borrow_mut().fit(cols, rows, cell, window.scale_factor());
+                        if grid.borrow_mut().paint_fit(cols, rows, cell, window.scale_factor()) {
+                            window.request_animation_frame();
+                        }
                     },
                     move |bounds, _, window, cx| {
                         paint_grid(bounds, &grid_paint, focused, window, cx);
