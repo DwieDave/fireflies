@@ -278,6 +278,10 @@ Properties any node can have:
   draws its own border and background. Run `command.name` with `command.args`
   (a prompt adds `name`) and close with `closeOverlay(props().overlay)`. An
   unknown mod logs a warning and keeps the shipped one.
+- Root only: `"peek_mod"` (this fork) draws the 34 px bar over a peeked or
+  floating terminal in place of the shipped `peek`, with its props
+  (`terminal`, `float`, `overlay`) plus `dialog: "peek"`. Herdr still frames
+  the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.

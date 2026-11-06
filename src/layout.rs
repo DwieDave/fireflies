@@ -387,6 +387,9 @@ pub struct Node {
     /// Root only: the mod that draws the command palette (default: the frame's `palette`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub palette_mod: Option<String>,
+    /// Root only: the mod that draws the bar over a peeked or floating terminal (default: `peek`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peek_mod: Option<String>,
     /// Dragging this node moves the window; a double-click maximizes it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub window_drag: bool,
@@ -430,6 +433,7 @@ impl Node {
             prompt_mod: None,
             confirm_mod: None,
             palette_mod: None,
+            peek_mod: None,
             window_drag: false,
         }
     }

@@ -3781,6 +3781,16 @@ impl AppWindow {
     fn peek_terminal(&mut self, address: &str, float: bool, window: &mut Window, cx: &mut Context<Self>) {
         self.close_overlay("terminal-peek", window, cx);
         let size = if float { 0.85 } else { 0.8 };
+        // The layout's `peek_mod` draws the bar instead of the shipped `peek`,
+        // with `dialog: "peek"` added to its props, like the dialog mods.
+        let bar = match self.chrome.peek_mod.clone() {
+            Some(name) if self.folders.contains_key(&name) => json!({ "mod": name, "props": { "terminal": address, "float": float, "dialog": "peek" } }),
+            Some(name) => {
+                tracing::warn!(mod_name = %name, "peek mod not found; using the shipped one");
+                json!({ "mod": "peek", "props": { "terminal": address, "float": float } })
+            }
+            None => json!({ "mod": "peek", "props": { "terminal": address, "float": float } }),
+        };
         self.open_overlay("terminal-peek".into(), json!({
             "kind": "dialog",
             "width": size,
@@ -3788,7 +3798,7 @@ impl AppWindow {
             "layout": {
                 "type": "column",
                 "children": [
-                    { "type": "block", "size": { "px": 34 }, "content": { "mod": "peek", "props": { "terminal": address, "float": float } } },
+                    { "type": "block", "size": { "px": 34 }, "content": bar },
                     { "type": "block", "content": { "terminal": address } }
                 ]
             }
