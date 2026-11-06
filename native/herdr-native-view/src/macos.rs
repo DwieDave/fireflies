@@ -542,6 +542,7 @@ pub fn frame_end(
             .map(|(k, _)| k.clone())
             .collect()
     });
+    let mut moved = !dead.is_empty();
     for k in dead {
         dispose(&k);
     }
@@ -571,6 +572,7 @@ pub fn frame_end(
                 continue;
             }
             e.applied = Some((rect, visible));
+            moved = true;
             if visible && let Some(container) = e.container.load() {
                 let b = gpui.bounds();
                 let (x, y, w, h) = if gpui.isFlipped() {
@@ -587,6 +589,17 @@ pub fn frame_end(
     });
     for (k, g) in paused {
         emit(&k, g, "media.paused", json!({ "reason": "hidden" }));
+    }
+    // GPUI's cursor rect leaves out the views above it (the page sets its own
+    // cursor there): recompute it where they now are.
+    if moved {
+        // SAFETY: the pointer is the live GPUI view this frame was drawn in, on the main thread.
+        if let Some(gpui) = unsafe { gpui_view.cast::<NSView>().as_ref() } {
+            let window: Option<Retained<AnyObject>> = unsafe { msg_send![gpui, window] };
+            if let Some(window) = window {
+                let _: () = unsafe { msg_send![&*window, invalidateCursorRectsForView: gpui] };
+            }
+        }
     }
 }
 
