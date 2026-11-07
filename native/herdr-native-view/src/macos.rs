@@ -12,7 +12,8 @@ use objc2::encode::{Encoding, RefEncode};
 use objc2::runtime::{AnyClass, AnyObject, NSObject, NSObjectProtocol, ProtocolObject};
 use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send};
 use objc2_app_kit::{
-    NSAutoresizingMaskOptions, NSEvent, NSEventMask, NSResponder, NSView, NSWindowOrderingMode,
+    NSAutoresizingMaskOptions, NSEvent, NSEventMask, NSEventModifierFlags, NSResponder, NSView,
+    NSWindowOrderingMode,
 };
 use objc2_av_foundation::{AVPlayer, AVPlayerItemStatus};
 use objc2_av_kit::AVPlayerView;
@@ -39,6 +40,7 @@ thread_local! {
     static VIEWS: RefCell<HashMap<String, Entry>> = RefCell::new(HashMap::new());
     static SINK: RefCell<Option<Sink>> = const { RefCell::new(None) };
     static MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
+    static KEY_MONITOR: RefCell<Option<Retained<AnyObject>>> = const { RefCell::new(None) };
     static LOG: RefCell<Vec<Value>> = const { RefCell::new(Vec::new()) };
 }
 
@@ -100,6 +102,8 @@ enum Renderer {
         target: String,
         inspector: RefCell<Option<Retained<AnyObject>>>,
         window: RefCell<Option<Retained<AnyObject>>>,
+        /// Undocked once (WebKit may have it docked into the page).
+        detached: Cell<bool>,
     },
 }
 
@@ -196,10 +200,23 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
             return Err(e);
         }
     };
-    if unsafe { inner.superview() }.is_none_or(|s| !std::ptr::eq(Retained::as_ptr(&s), Retained::as_ptr(&view))) {
-        view.addSubview(&inner);
+    // A web view sits in a plain (unflipped) container: WebKit docks its
+    // inspector into the web view's superview assuming y up, and the host is
+    // flipped, which put a docked inspector on top instead of below.
+    let parent: Retained<NSView> = if spec.kind == Kind::Web {
+        let c = NSView::initWithFrame(NSView::alloc(mtm), view.bounds());
+        c.setAutoresizingMask(
+            NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
+        );
+        view.addSubview(&c);
+        c
+    } else {
+        view.clone()
+    };
+    if unsafe { inner.superview() }.is_none_or(|s| !std::ptr::eq(Retained::as_ptr(&s), Retained::as_ptr(&parent))) {
+        parent.addSubview(&inner);
     }
-    inner.setFrame(view.bounds());
+    inner.setFrame(parent.bounds());
     inner.setAutoresizingMask(
         NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
     );
@@ -245,7 +262,16 @@ fn start_inspector(key: &str) {
     let tries = Cell::new(0u32);
     let block = RcBlock::new(move |timer: NonNull<AnyObject>| {
         tries.set(tries.get() + 1);
-        if inspector_step(&k) || tries.get() > 100 {
+        let done = inspector_step(&k);
+        if !done && tries.get() > 50 {
+            // Five seconds: the page it inspects is gone (e.g. a pane kept
+            // across a restart: view keys don't survive one), or WebKit won't.
+            let g = VIEWS.with(|v| v.try_borrow().ok().and_then(|v| v.get(&k).map(|e| e.generation)));
+            if let Some(g) = g {
+                emit(&k, g, "load.error", json!({ "message": "There's no page to inspect: open the inspector again from a browser." }));
+            }
+        }
+        if done || tries.get() > 50 {
             let _: () = unsafe { msg_send![timer.as_ref(), invalidate] };
         }
     });
@@ -270,32 +296,50 @@ fn inspector_step(key: &str) -> bool {
             _ => return false,
         };
         let Some(e) = v.get_mut(key) else { return true };
-        let Renderer::Inspector { inspector, window, .. } = &e.renderer else { return true };
+        let Renderer::Inspector { inspector, window, detached, .. } = &e.renderer else { return true };
         if window.borrow().is_some() {
             return true;
         }
         unsafe {
-            if inspector.borrow().is_none() {
-                let i: Option<Retained<AnyObject>> = msg_send![&*web, _inspector];
-                let Some(i) = i else { return false };
-                // A window of its own (not docked into the page), which we empty.
-                let attached: bool = msg_send![&*i, isAttached];
-                if attached {
-                    let _: () = msg_send![&*i, detach];
-                }
+            let i: Option<Retained<AnyObject>> = msg_send![&*web, _inspector];
+            let Some(i) = i else { return false };
+            let visible: bool = msg_send![&*i, isVisible];
+            if !visible {
                 let _: () = msg_send![&*i, show];
-                *inspector.borrow_mut() = Some(i);
             }
-            let Some((w, page)) = find_inspector_window() else { return false };
+            *inspector.borrow_mut() = Some(i.clone());
+            // It may open docked into the page (WebKit remembers the last
+            // choice, e.g. a right-click "Inspect Element"): undock it once,
+            // then take its page out of the window it gets.
+            if !detached.get() {
+                detached.set(true);
+                let _: () = msg_send![&*i, detach];
+                return false;
+            }
+            let page: Option<Retained<NSView>> = msg_send![&*i, inspectorWebView];
+            let Some(page) = page else { return false };
+            if page.window().is_none() {
+                return false;
+            }
+            let w: Option<Retained<AnyObject>> = msg_send![&*page, window];
             page.removeFromSuperview();
             page.setFrame(e.view.bounds());
             page.setAutoresizingMask(
                 NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
             );
             e.view.addSubview(&page);
-            let none: Option<&AnyObject> = None;
-            let _: () = msg_send![&*w, orderOut: none];
-            *window.borrow_mut() = Some(w);
+            let mine: Option<Retained<AnyObject>> = msg_send![&*e.view, window];
+            let w = w.filter(|w| mine.as_ref().is_none_or(|m| !std::ptr::eq(&**m, &**w)));
+            if let Some(w) = &w {
+                let none: Option<&AnyObject> = None;
+                let _: () = msg_send![&**w, orderOut: none];
+            }
+            // Holds on to it: an empty window that stays hidden (frame_end).
+            let held: Retained<AnyObject> = match w {
+                Some(w) => w,
+                None => msg_send![&*page, self],
+            };
+            *window.borrow_mut() = Some(held);
             e.inner.removeFromSuperview();
             e.inner = page;
             adopted = Some(e.generation);
@@ -306,31 +350,6 @@ fn inspector_step(key: &str) -> bool {
         emit(key, g, "load.finish", json!({}));
     }
     done
-}
-
-/// WebKit's inspector window that still holds its page (a WKWebView), and that page.
-fn find_inspector_window() -> Option<(Retained<AnyObject>, Retained<NSView>)> {
-    unsafe {
-        let app: Retained<AnyObject> = msg_send![AnyClass::get(c"NSApplication")?, sharedApplication];
-        let windows: Retained<AnyObject> = msg_send![&*app, windows];
-        let n: usize = msg_send![&*windows, count];
-        let web = AnyClass::get(c"WKWebView")?;
-        for i in 0..n {
-            let w: Retained<AnyObject> = msg_send![&*windows, objectAtIndex: i];
-            if !w.class().name().to_string_lossy().contains("Inspector") {
-                continue;
-            }
-            let content: Option<Retained<NSView>> = msg_send![&*w, contentView];
-            let Some(content) = content else { continue };
-            for sub in content.subviews().iter() {
-                let is_web: bool = msg_send![&*sub, isKindOfClass: web];
-                if is_web {
-                    return Some((w, sub.clone()));
-                }
-            }
-        }
-    }
-    None
 }
 
 fn without_zoom(props: &Value) -> Value {
@@ -468,6 +487,7 @@ fn make(
                         target: target.clone(),
                         inspector: RefCell::new(None),
                         window: RefCell::new(None),
+                        detached: Cell::new(false),
                     },
                 ))
             }
@@ -710,6 +730,7 @@ pub fn frame_end(
             // (another "Inspect Element"): it's empty, keep it out of sight.
             if let Renderer::Inspector { window, .. } = &e.renderer
                 && let Some(w) = window.borrow().as_ref()
+                && AnyClass::get(c"NSWindow").is_some_and(|c| unsafe { msg_send![&**w, isKindOfClass: c] })
             {
                 let on: bool = unsafe { msg_send![&**w, isVisible] };
                 if on {
@@ -1219,6 +1240,49 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
         NSEventMask::LeftMouseDown | NSEventMask::RightMouseDown | NSEventMask::OtherMouseDown;
     let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(mask, &block) };
     MONITOR.with(|m| *m.borrow_mut() = monitor);
+    install_key_monitor();
+}
+
+/// ⌥⌘I in a web view that has the keyboard: the page would take it before
+/// Herdr's keys see it, so its mod hears `web.inspectKey` instead.
+fn install_key_monitor() {
+    if KEY_MONITOR.with(|m| m.borrow().is_some()) {
+        return;
+    }
+    let block = RcBlock::new(move |ev: NonNull<NSEvent>| -> *mut NSEvent {
+        let event = unsafe { ev.as_ref() };
+        let flags = event.modifierFlags();
+        let want = NSEventModifierFlags::Command | NSEventModifierFlags::Option;
+        let chord = flags.contains(want)
+            && !flags.contains(NSEventModifierFlags::Control)
+            && !flags.contains(NSEventModifierFlags::Shift);
+        let is_i = chord
+            && event
+                .charactersIgnoringModifiers()
+                .is_some_and(|c| c.to_string().eq_ignore_ascii_case("i"));
+        if !is_i {
+            return ev.as_ptr();
+        }
+        let Some(fr) = unsafe { event.window(MainThreadMarker::new_unchecked()) }.and_then(|w| w.firstResponder()) else {
+            return ev.as_ptr();
+        };
+        let hit = VIEWS.with(|v| {
+            v.try_borrow().ok().and_then(|v| {
+                v.iter()
+                    .find(|(_, e)| matches!(e.renderer, Renderer::Web { .. }) && responder_inside(&fr, &e.view))
+                    .map(|(k, e)| (k.clone(), e.generation))
+            })
+        });
+        match hit {
+            Some((k, g)) => {
+                emit(&k, g, "web.inspectKey", json!({ "of": k }));
+                std::ptr::null_mut()
+            }
+            None => ev.as_ptr(),
+        }
+    });
+    let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &block) };
+    KEY_MONITOR.with(|m| *m.borrow_mut() = monitor);
 }
 
 pub struct WebIvars {
