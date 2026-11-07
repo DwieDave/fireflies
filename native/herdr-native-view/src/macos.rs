@@ -5,7 +5,7 @@
 //! State lives in thread-locals; AppKit callbacks never borrow the registry
 //! while it is borrowed (events go through a separate sink).
 
-use crate::{Event, Kind, Rect, Source, Spec, Trust};
+use crate::{Cover, Event, Kind, Rect, Source, Spec, Trust};
 use block2::RcBlock;
 use objc2::rc::{Retained, Weak};
 use objc2::encode::{Encoding, RefEncode};
@@ -117,7 +117,7 @@ struct Entry {
     wanted_hidden: bool,
     /// Its copy was on screen at the last frame end.
     shown: bool,
-    /// Hidden because a Herdr overlay may be above it.
+    /// Hidden while a pane is dragged (overlays cut holes instead).
     suppressed: bool,
 }
 
@@ -520,13 +520,16 @@ pub fn painted(key: &str, rect: Rect) {
 
 /// Applies frames and visibility at the end of a window's frame.
 /// `alive(key)`: its mod copy still exists (else the view is disposed).
-/// `shown(key)`: its copy is on screen now. `suppressed`: a Herdr overlay may
-/// be drawn above native views, so they step aside (state kept).
+/// `shown(key)`: its copy is on screen now. `suppressed`: native views step
+/// aside (state kept), e.g. while a pane is dragged. `covers(key)`: the Herdr
+/// overlays drawn above that view, and whether a dialog dims it: the view
+/// stays and those parts are cut away so the overlays show through.
 pub fn frame_end(
     gpui_view: *mut c_void,
     alive: &dyn Fn(&str) -> bool,
     shown: &dyn Fn(&str) -> bool,
     suppressed: bool,
+    covers: &dyn Fn(&str) -> (Vec<Cover>, bool),
 ) {
     let Some(_mtm) = MainThreadMarker::new() else {
         return;
@@ -568,6 +571,24 @@ pub fn frame_end(
             e.suppressed = suppressed;
             let rect = e.painted.unwrap_or(Rect::ZERO);
             let visible = now_shown && !suppressed && !e.wanted_hidden && !rect.is_empty();
+            if visible {
+                let (over, dim) = covers(k);
+                let cut = over
+                    .iter()
+                    .filter_map(|c| {
+                        let r = c.rect.intersect(&rect);
+                        (!r.is_empty()).then(|| Hole {
+                            x: Some(r.x - rect.x),
+                            right: None,
+                            y: r.y - rect.y,
+                            w: r.w,
+                            h: r.h,
+                            radius: c.radius,
+                        })
+                    })
+                    .collect();
+                e.host.set_cover(cut, dim);
+            }
             if e.applied == Some((rect, visible)) {
                 continue;
             }
@@ -1205,6 +1226,11 @@ unsafe extern "C" {
 
 pub struct HostIvars {
     holes: RefCell<Vec<Hole>>,
+    /// Holes for Herdr overlays above the view (frame_end), beside the mod's own.
+    cover: RefCell<Vec<Hole>>,
+    /// A dialog's backdrop over the view: a dimming layer on the page.
+    dimmed: Cell<bool>,
+    dim: RefCell<Option<Retained<AnyObject>>>,
     /// Soft shadow around the holes, drawn on the page (the hole itself is
     /// masked away, so the shadow only shows outside the card).
     shadow: RefCell<Option<Retained<AnyObject>>>,
@@ -1249,7 +1275,13 @@ define_class!(
 
 impl HoleHost {
     fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(HostIvars { holes: RefCell::new(Vec::new()), shadow: RefCell::new(None) });
+        let this = Self::alloc(mtm).set_ivars(HostIvars {
+            holes: RefCell::new(Vec::new()),
+            cover: RefCell::new(Vec::new()),
+            dimmed: Cell::new(false),
+            dim: RefCell::new(None),
+            shadow: RefCell::new(None),
+        });
         let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
         this.setWantsLayer(true);
         this
@@ -1257,7 +1289,7 @@ impl HoleHost {
 
     fn in_hole(&self, p: NSPoint) -> bool {
         let width = self.bounds().size.width;
-        self.ivars().holes.borrow().iter().any(|h| {
+        self.all_holes().iter().any(|h| {
             let r = h.rect(width);
             p.x >= r.origin.x && p.y >= r.origin.y && p.x < r.origin.x + r.size.width && p.y < r.origin.y + r.size.height
         })
@@ -1271,11 +1303,56 @@ impl HoleHost {
         self.update_mask();
     }
 
+    /// The mod's holes and the overlays' together.
+    fn all_holes(&self) -> Vec<Hole> {
+        let mut all = self.ivars().holes.borrow().clone();
+        all.extend(self.ivars().cover.borrow().iter().cloned());
+        all
+    }
+
+    fn set_cover(&self, cover: Vec<Hole>, dim: bool) {
+        if *self.ivars().cover.borrow() == cover && self.ivars().dimmed.get() == dim {
+            return;
+        }
+        *self.ivars().cover.borrow_mut() = cover;
+        self.ivars().dimmed.set(dim);
+        self.update_mask();
+    }
+
+    /// A dialog's backdrop, continued over the page (Herdr draws it below).
+    fn update_dim(&self, layer: &AnyObject) {
+        let dim = self.ivars().dimmed.get();
+        let mut slot = self.ivars().dim.borrow_mut();
+        if slot.is_none() {
+            if !dim {
+                return;
+            }
+            let Some(cls) = AnyClass::get(c"CALayer") else { return };
+            let d: Retained<AnyObject> = unsafe { msg_send![cls, layer] };
+            unsafe {
+                // The same black at 35% as the backdrop in Herdr's window.
+                let color = CGColorCreateGenericGray(0.0, 0.35);
+                let _: () = msg_send![&*d, setBackgroundColor: color.cast_const()];
+                CGColorRelease(color);
+                let _: () = msg_send![&*d, setZPosition: 999.0f64];
+                let _: () = msg_send![layer, addSublayer: &*d];
+            }
+            *slot = Some(d);
+        }
+        let d = slot.as_ref().unwrap();
+        let b = self.bounds();
+        unsafe {
+            let _: () = msg_send![&**d, setFrame: b];
+            let _: () = msg_send![&**d, setHidden: !dim];
+        }
+    }
+
     /// A shape mask: the whole view minus the holes (even-odd fill).
     fn update_mask(&self) {
-        let holes = self.ivars().holes.borrow();
+        let holes = self.all_holes();
         let layer: Option<Retained<AnyObject>> = unsafe { msg_send![self, layer] };
         let Some(layer) = layer else { return };
+        self.update_dim(&layer);
         if holes.is_empty() {
             let none: Option<&AnyObject> = None;
             let _: () = unsafe { msg_send![&*layer, setMask: none] };

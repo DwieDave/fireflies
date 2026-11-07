@@ -662,6 +662,8 @@ The main ones:
   (`herdr.nativeView.new(id, { kind: "web", url, zoom: 1.25 })`, WKWebView page zoom,
   default 1, clamped to 0.25–5): applied on create, and a change to only `zoom` zooms the
   page in place without reloading it.
+  Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
+  instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;

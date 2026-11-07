@@ -18,6 +18,15 @@ pub mod macos;
 /// The interface version mods check before using any of this.
 pub const INTERFACE: &str = "native-view/0";
 
+/// A Herdr overlay drawn above a native view, in window points (top-left).
+/// The view stays visible and this part of it is cut away, so the overlay
+/// (drawn by Herdr underneath) shows through and gets the clicks there.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cover {
+    pub rect: Rect,
+    pub radius: f64,
+}
+
 /// A rectangle in window points, origin at the top-left (GPUI's convention).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Rect {

@@ -444,7 +444,8 @@ export interface NativeViewProps {
 }
 /** HUP: a real macOS view (WKWebView, PDFView, AVPlayerView, QLPreviewView) placed where this element
  *  is drawn, inside the window. Children draw underneath (shown while it loads or steps aside for a
- *  menu or dialog). Same id + same props keeps the view; new props load into it. Not on stock Herdr:
+ *  pane drag). Herdr's menus, dialogs and windows above it cut a hole in it, so the page keeps
+ *  rendering around them and a dialog's backdrop dims it. Same id + same props keeps the view; new props load into it. Not on stock Herdr:
  *  probe with `import * as herdr from "herdr"; if (herdr.nativeView) herdr.nativeView.new(id, props)`. */
 export const nativeView: { new: (id: string, props: NativeViewProps) => import("gpui-kit").NativeElement };
 /** HUP: `{ interface: "native-view/0", available, kinds: [{ kind, actions }] }`. */

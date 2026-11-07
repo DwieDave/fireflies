@@ -4747,6 +4747,9 @@ impl AppWindow {
                 // Scroll, hover and cursor stop here, not on the pane behind.
                 .occlude()
                 .when(o.kind != OverlayKind::Window, |d| d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+                // HUP: native views below keep rendering, with a hole here.
+                .relative()
+                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }))
                 .child(content);
             match o.kind {
                 OverlayKind::Window => out.push(self.render_window(o, body, viewport, cx)),
@@ -4756,6 +4759,7 @@ impl AppWindow {
                         .inset_0()
                         .bg(hsla(0.0, 0.0, 0.0, 0.35))
                         .occlude()
+                        .child(crate::native_view::dim_probe())
                         .flex()
                         .items_center()
                         .justify_center()
@@ -5365,12 +5369,12 @@ impl Render for AppWindow {
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
-            // HUP: native views follow their elements; they step aside while a
-            // dialog, popup, window or pane drag may be drawn above them.
+            // HUP: native views follow their elements; overlays above them cut
+            // holes (cover_probe), and they step aside while a pane is dragged.
             .child(crate::native_view::frame_end(
                 self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
                 mods::shown_copies(),
-                self.pane_drag.is_some() || self.overlays.iter().any(|o| o.kind != OverlayKind::Toast),
+                self.pane_drag.is_some(),
             ))
     }
 }
