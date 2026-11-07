@@ -1255,8 +1255,9 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
     install_key_monitor();
 }
 
-/// ⌥⌘I in a web view that has the keyboard: the page would take it before
-/// Herdr's keys see it, so its mod hears `web.inspectKey` instead.
+/// The browser chords in a web view that has the keyboard: the page would
+/// take them before Herdr's keys see them, so its mod hears an event instead:
+/// ⌥⌘I `web.inspectKey`, ⌘R `web.reloadKey`.
 fn install_key_monitor() {
     if KEY_MONITOR.with(|m| m.borrow().is_some()) {
         return;
@@ -1264,17 +1265,16 @@ fn install_key_monitor() {
     let block = RcBlock::new(move |ev: NonNull<NSEvent>| -> *mut NSEvent {
         let event = unsafe { ev.as_ref() };
         let flags = event.modifierFlags();
-        let want = NSEventModifierFlags::Command | NSEventModifierFlags::Option;
-        let chord = flags.contains(want)
+        let cmd = flags.contains(NSEventModifierFlags::Command)
             && !flags.contains(NSEventModifierFlags::Control)
             && !flags.contains(NSEventModifierFlags::Shift);
-        let is_i = chord
-            && event
-                .charactersIgnoringModifiers()
-                .is_some_and(|c| c.to_string().eq_ignore_ascii_case("i"));
-        if !is_i {
-            return ev.as_ptr();
-        }
+        let alt = flags.contains(NSEventModifierFlags::Option);
+        let key = event.charactersIgnoringModifiers().map(|c| c.to_string().to_ascii_lowercase());
+        let name = match (cmd, alt, key.as_deref()) {
+            (true, true, Some("i")) => "web.inspectKey",
+            (true, false, Some("r")) => "web.reloadKey",
+            _ => return ev.as_ptr(),
+        };
         let Some(fr) = unsafe { event.window(MainThreadMarker::new_unchecked()) }.and_then(|w| w.firstResponder()) else {
             return ev.as_ptr();
         };
@@ -1287,7 +1287,7 @@ fn install_key_monitor() {
         });
         match hit {
             Some((k, g)) => {
-                emit(&k, g, "web.inspectKey", json!({ "of": k }));
+                emit(&k, g, name, json!({ "of": k }));
                 std::ptr::null_mut()
             }
             None => ev.as_ptr(),
