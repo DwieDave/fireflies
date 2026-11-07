@@ -5369,11 +5369,16 @@ impl Render for AppWindow {
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
-            // HUP: native views follow their elements; overlays above them cut
-            // holes (cover_probe), and they step aside while a pane is dragged.
+            // HUP: native views follow their elements; overlays and floats above
+            // them cut holes (cover_probe), and they step aside while a pane is dragged.
             .child(crate::native_view::frame_end(
                 self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
                 mods::shown_copies(),
+                self.copies
+                    .iter()
+                    .filter(|(slot, _)| slot.starts_with("overlay:") || slot.starts_with("float:") || self.overlays.iter().any(|o| o.layout.as_ref().is_some_and(|l| l.find(slot.as_str()).is_some())))
+                    .map(|(_, c)| c.id)
+                    .collect(),
                 self.pane_drag.is_some(),
             ))
     }

@@ -21,31 +21,22 @@ thread_local! {
     /// Each mod copy's event channel (`nextNativeViewEvent`).
     static EVENTS: RefCell<HashMap<u64, async_channel::Sender<String>>> = RefCell::new(HashMap::new());
     static SINK_SET: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
-    /// This frame's paint order: views and overlays take the next number as
-    /// they paint, so an overlay covers only the views painted before it.
-    static SEQ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
-    static PAINTED: RefCell<HashMap<String, u64>> = RefCell::new(HashMap::new());
-    static COVERS: RefCell<Vec<(u64, herdr_native_view::Cover)>> = const { RefCell::new(Vec::new()) };
-    static DIMS: RefCell<Vec<u64>> = const { RefCell::new(Vec::new()) };
+    /// This frame's overlay cards and whether a dialog's backdrop is up. The
+    /// overlays are drawn by the window itself every frame, so these are
+    /// fresh at frame_end (mod panes are cached views: their paint can be
+    /// replayed without running closures, so nothing here relies on them).
+    static COVERS: RefCell<Vec<herdr_native_view::Cover>> = const { RefCell::new(Vec::new()) };
+    static DIM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
-fn next_seq() -> u64 {
-    SEQ.with(|s| {
-        s.set(s.get() + 1);
-        s.get()
-    })
-}
-
-/// Records an overlay's card where it was painted: native views painted
-/// before it get a hole there. Paint it before the overlay's content, so
-/// views inside the overlay itself stay whole.
+/// Records an overlay's card where it was painted: native views outside
+/// overlays get a hole there.
 pub fn cover_probe(radius: f32) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |b, _, _, _| {
-            let seq = next_seq();
             let cover = herdr_native_view::Cover { rect: rect(b), radius: f64::from(radius) };
-            COVERS.with(|c| c.borrow_mut().push((seq, cover)));
+            COVERS.with(|c| c.borrow_mut().push(cover));
         },
     )
     .absolute()
@@ -54,14 +45,11 @@ pub fn cover_probe(radius: f32) -> impl IntoElement {
     .size_full()
 }
 
-/// Records a dialog's backdrop: native views painted before it are dimmed too.
+/// Records a dialog's backdrop: native views outside overlays are dimmed too.
 pub fn dim_probe() -> impl IntoElement {
     canvas(
         |_, _, _| {},
-        |_, _, _, _| {
-            let seq = next_seq();
-            DIMS.with(|d| d.borrow_mut().push(seq));
-        },
+        |_, _, _, _| DIM.with(|d| d.set(true)),
     )
     .absolute()
     .top_0()
@@ -139,8 +127,6 @@ pub fn element(copy: u64, id: &str, props: Value, children: Vec<AnyElement>, win
             if std::env::var_os("HUP_NATIVE_TRACE").is_some() {
                 eprintln!("hup native paint {key}: bounds={b:?} clip={clip:?}");
             }
-            let seq = next_seq();
-            PAINTED.with(|p| p.borrow_mut().insert(key.clone(), seq));
             #[cfg(target_os = "macos")]
             herdr_native_view::macos::painted(&key, visible);
             #[cfg(not(target_os = "macos"))]
@@ -159,29 +145,29 @@ pub fn element(copy: u64, id: &str, props: Value, children: Vec<AnyElement>, win
 }
 
 /// Painted last in the window: applies frames, visibility and overlay holes
-/// for this window's views, then starts the next frame's paint order.
-pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, suppressed: bool) -> impl IntoElement {
+/// for this window's views. `in_overlay`: copies drawn inside an overlay,
+/// which its own hole must not cut.
+pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, in_overlay: HashSet<u64>, suppressed: bool) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |_, _, window, _| {
             EVENTS.with(|e| e.borrow_mut().retain(|c, tx| alive.contains(c) && !tx.is_closed()));
-            let painted = PAINTED.with(|p| std::mem::take(&mut *p.borrow_mut()));
             let covers = COVERS.with(|c| std::mem::take(&mut *c.borrow_mut()));
-            let dims = DIMS.with(|d| std::mem::take(&mut *d.borrow_mut()));
-            SEQ.with(|s| s.set(0));
+            let dim = DIM.with(|d| d.replace(false));
             #[cfg(target_os = "macos")]
             if let Some(v) = gpui_ns_view(window) {
                 let is_alive = |k: &str| copy_of(k).is_some_and(|c| alive.contains(&c));
                 let is_shown = |k: &str| copy_of(k).is_some_and(|c| shown.contains(&c));
                 let above = |k: &str| {
-                    let Some(&at) = painted.get(k) else { return (Vec::new(), false) };
-                    let over = covers.iter().filter(|(s, _)| *s > at).map(|(_, c)| *c).collect();
-                    (over, dims.iter().any(|s| *s > at))
+                    if copy_of(k).is_some_and(|c| in_overlay.contains(&c)) {
+                        return (Vec::new(), false);
+                    }
+                    (covers.clone(), dim)
                 };
                 herdr_native_view::macos::frame_end(v, &is_alive, &is_shown, suppressed, &above);
             }
             #[cfg(not(target_os = "macos"))]
-            let _ = (window, &shown, suppressed, painted, covers, dims);
+            let _ = (window, &shown, &in_overlay, suppressed, covers, dim);
         },
     )
     .absolute()
