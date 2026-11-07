@@ -1,0 +1,135 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "srgb:0.03137,0.03137,0.03137,1.00000",
+          "srgb:0.07451,0.12549,0.22745,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0.05
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.8
+          }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "srgb:0.03137,0.03137,0.03137,1.00000",
+          "srgb:0.07451,0.12549,0.22745,1.00000"
+        ],
+        "orientation": {
+          "start": {
+            "x": 0.5,
+            "y": 0.05
+          },
+          "stop": {
+            "x": 0.5,
+            "y": 0.8
+          }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "bodies.svg",
+          "name": "bodies",
+          "glass": true
+        },
+        {
+          "image-name": "wings.svg",
+          "name": "wings",
+          "glass": true
+        },
+        {
+          "image-name": "halos.svg",
+          "name": "halos",
+          "glass": false
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.4
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.25
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "near.svg",
+          "name": "near",
+          "glass": true
+        },
+        {
+          "image-name": "far.svg",
+          "name": "far",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.6
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.15
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "moon.svg",
+          "name": "moon",
+          "glass": true
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "specular": true,
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "sky.svg",
+          "name": "sky",
+          "glass": false
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.0
+      },
+      "specular": false,
+      "translucency": {
+        "enabled": false,
+        "value": 0.0
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
