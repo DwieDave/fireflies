@@ -50,16 +50,11 @@
           "image-name": "wings.svg",
           "name": "wings",
           "glass": true
-        },
-        {
-          "image-name": "halos.svg",
-          "name": "halos",
-          "glass": false
         }
       ],
       "shadow": {
         "kind": "neutral",
-        "opacity": 0.4
+        "opacity": 0.5
       },
       "specular": true,
       "translucency": {
@@ -70,13 +65,8 @@
     {
       "layers": [
         {
-          "image-name": "near.svg",
-          "name": "near",
-          "glass": true
-        },
-        {
-          "image-name": "far.svg",
-          "name": "far",
+          "image-name": "hill.svg",
+          "name": "hill",
           "glass": true
         }
       ],
