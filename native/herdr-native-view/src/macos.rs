@@ -1183,6 +1183,26 @@ pub fn debug() -> Value {
     json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()) })
 }
 
+/// Returns the keyboard to GPUI after Herdr selects a different pane. AppKit
+/// can otherwise leave a web view as first responder after GPUI focus moves.
+pub fn release_keyboard(gpui_view: *mut c_void) {
+    let Some(_mtm) = MainThreadMarker::new() else { return };
+    let Some(gpui) = (unsafe { gpui_view.cast::<NSView>().as_ref() }) else { return };
+    let Some(window) = gpui.window() else { return };
+    let Some(first) = window.firstResponder() else { return };
+    let native = VIEWS.with(|views| {
+        views.try_borrow().is_ok_and(|views| {
+            views.values().any(|entry| {
+                entry.view.window().is_some_and(|w| std::ptr::eq(Retained::as_ptr(&w), Retained::as_ptr(&window)))
+                    && responder_inside(&first, &entry.view)
+            })
+        })
+    });
+    if native {
+        window.makeFirstResponder(Some(gpui));
+    }
+}
+
 /// A click outside every native view hands the keyboard back to GPUI, so a
 /// terminal clicked after a web page gets the keys again.
 fn install_focus_monitor(_mtm: MainThreadMarker) {

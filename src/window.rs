@@ -1580,6 +1580,11 @@ impl AppWindow {
         self.synced_model_pane = model_pane;
         self.focused_pane = focused.clone();
         let no_dialog = !self.overlays.iter().any(|o| o.kind.modal_keys());
+        // GPUI focus alone does not change AppKit's first responder. A browser
+        // page can keep receiving keys after a keyboard pane switch.
+        if pane_changed {
+            crate::native_view::release_keyboard(window);
+        }
         // The tab shown again (`layout.select` back from another stack child): its
         // focused pane gets the keyboard, which went to the window while it was hidden.
         let tab_shown = self.shows_tab();
@@ -3751,6 +3756,7 @@ impl AppWindow {
         self.focused_block = Some(id.to_owned());
         self.sync(window, cx);
         if !self.overlays.iter().any(|o| o.kind.modal_keys()) {
+            crate::native_view::release_keyboard(window);
             self.focus.focus(window, cx);
             self.hand_keyboard();
         }

@@ -98,6 +98,14 @@ fn gpui_ns_view(window: &Window) -> Option<*mut std::ffi::c_void> {
     }
 }
 
+/// Completes a keyboard pane switch when a native view owns AppKit focus.
+pub fn release_keyboard(window: &Window) {
+    #[cfg(target_os = "macos")]
+    if let Some(view) = gpui_ns_view(window) {
+        herdr_native_view::macos::release_keyboard(view);
+    }
+}
+
 fn rect(b: Bounds<Pixels>) -> herdr_native_view::Rect {
     herdr_native_view::Rect { x: f64::from(b.origin.x), y: f64::from(b.origin.y), w: f64::from(b.size.width), h: f64::from(b.size.height) }
 }
