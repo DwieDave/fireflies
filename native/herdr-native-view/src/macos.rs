@@ -309,17 +309,25 @@ fn inspector_step(key: &str) -> bool {
             }
             *inspector.borrow_mut() = Some(i.clone());
             // It may open docked into the page (WebKit remembers the last
-            // choice, e.g. a right-click "Inspect Element"): undock it once,
-            // then take its page out of the window it gets.
-            if !detached.get() {
+            // choice, e.g. a right-click "Inspect Element"), and docking can
+            // finish after an early detach. Take its page only from a window
+            // of its own: while it's in Herdr's window, it's docked: undock it.
+            // (Taken while docked, WebKit keeps shrinking the page for it.)
+            let page: Option<Retained<NSView>> = msg_send![&*i, inspectorWebView];
+            let mine = e.view.window();
+            let docked = page.as_ref().and_then(|p| p.window()).is_some_and(|w| mine.as_ref().is_some_and(|m| std::ptr::eq(&**m, &*w)));
+            if docked || !detached.get() {
                 detached.set(true);
                 let _: () = msg_send![&*i, detach];
                 return false;
             }
-            let page: Option<Retained<NSView>> = msg_send![&*i, inspectorWebView];
             let Some(page) = page else { return false };
             if page.window().is_none() {
                 return false;
+            }
+            // The page fills its place again, whatever docking did to it.
+            if let Some(sup) = web.superview() {
+                web.setFrame(sup.bounds());
             }
             let w: Option<Retained<AnyObject>> = msg_send![&*page, window];
             page.removeFromSuperview();
@@ -1050,6 +1058,8 @@ fn entry_state(e: &Entry, r: &Renderer) -> Value {
         }
     };
     let f = e.view.frame();
+    let i = e.inner.frame();
+    let inner_frame = [i.origin.x, i.origin.y, i.size.width, i.size.height];
     let first = e
         .view
         .window()
@@ -1061,6 +1071,8 @@ fn entry_state(e: &Entry, r: &Renderer) -> Value {
         "source": e.spec.redacted(),
         "painted": e.painted.map(|r| json!([r.x, r.y, r.w, r.h])),
         "frame": [f.origin.x, f.origin.y, f.size.width, f.size.height],
+        // The content view's own frame in its holder (a docked inspector shrinks a page's).
+        "innerFrame": inner_frame,
         "hidden": e.view.isHidden(),
         "inWindow": e.view.window().is_some(),
         "shown": e.shown,
