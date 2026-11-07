@@ -664,6 +664,9 @@ The main ones:
   page in place without reloading it.
   Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
   instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
+  A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
+  `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
+  shows Safari's Web Inspector for that page in its place.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;

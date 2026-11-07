@@ -437,7 +437,9 @@ export function watchFolder(path: string): Promise<string[]>;
  *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
  *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
 export interface NativeViewProps {
-  kind: "web" | "pdf" | "media" | "quicklook"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  kind: "web" | "pdf" | "media" | "quicklook" | "inspector"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  /** Inspector only: the web view to inspect, the `of` its `web.inspect` action returned. */
+  of?: string;
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
    *  Changing only `zoom` zooms the page in place; it doesn't reload. */
   zoom?: number;

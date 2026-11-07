@@ -83,6 +83,9 @@ pub enum Kind {
     Pdf,
     Media,
     QuickLook,
+    /// Safari's Web Inspector for another web view (`of`: that view's key,
+    /// from its `web.inspect`), shown in this view's place.
+    Inspector,
     /// A Chromium (CEF) browser; only in builds with the `chromium` feature.
     Chromium,
 }
@@ -94,9 +97,10 @@ impl Kind {
             "pdf" => Ok(Kind::Pdf),
             "media" => Ok(Kind::Media),
             "quicklook" => Ok(Kind::QuickLook),
+            "inspector" => Ok(Kind::Inspector),
             "chromium" => Ok(Kind::Chromium),
             other => Err(format!(
-                "unknown native view kind `{other}` (web, pdf, media, quicklook, chromium)"
+                "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium)"
             )),
         }
     }
@@ -107,6 +111,7 @@ impl Kind {
             Kind::Pdf => "pdf",
             Kind::Media => "media",
             Kind::QuickLook => "quicklook",
+            Kind::Inspector => "inspector",
             Kind::Chromium => "chromium",
         }
     }
@@ -128,6 +133,7 @@ impl Kind {
                 "browser.forward",
                 "browser.reload",
                 "browser.stop",
+                "web.inspect",
             ],
             Kind::Pdf => &[
                 "focus",
@@ -156,7 +162,7 @@ impl Kind {
                 "media.setMuted",
                 "media.setVolume",
             ],
-            Kind::QuickLook => &COMMON,
+            Kind::QuickLook | Kind::Inspector => &COMMON,
             Kind::Chromium => &[
                 "focus",
                 "blur",
@@ -207,6 +213,8 @@ pub enum Source {
         read_root: PathBuf,
         trust: Trust,
     },
+    /// The key of the web view an inspector inspects.
+    Inspect(String),
 }
 
 /// A validated request for one view.
@@ -238,6 +246,19 @@ impl Spec {
                 .and_then(Value::as_str)
                 .ok_or("missing `kind`")?,
         )?;
+        if kind == Kind::Inspector {
+            let of = v
+                .get("of")
+                .and_then(Value::as_str)
+                .filter(|k| !k.is_empty())
+                .ok_or("an inspector needs `of`: the key `web.inspect` returned")?;
+            return Ok(Spec {
+                kind,
+                source: Source::Inspect(of.to_owned()),
+                persist,
+                zoom,
+            });
+        }
         if let Some(url) = v.get("url").and_then(Value::as_str) {
             if kind != Kind::Web && kind != Kind::Chromium {
                 return Err("`url` is only for web views; local content uses `path`".into());
@@ -296,6 +317,7 @@ impl Spec {
     pub fn redacted(&self) -> String {
         match &self.source {
             Source::Url(u) => redact_url(u),
+            Source::Inspect(_) => "inspector".into(),
             Source::File { path, .. } => path
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -411,7 +433,7 @@ pub fn redact_url(u: &str) -> String {
 
 /// What the host can do, for `nativeViewCapabilities()`.
 pub fn capabilities() -> Value {
-    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook];
+    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector];
     if cfg!(feature = "chromium") {
         all.push(Kind::Chromium);
     }

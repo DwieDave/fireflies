@@ -18,8 +18,8 @@ use objc2_av_foundation::{AVPlayer, AVPlayerItemStatus};
 use objc2_av_kit::AVPlayerView;
 use objc2_core_media::CMTime;
 use objc2_foundation::{
-    NSError, NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString, NSURL,
-    NSURLRequest,
+    NSError, NSNotification, NSNotificationCenter, NSNumber, NSPoint, NSRect, NSSize, NSString,
+    NSURL, NSURLRequest,
 };
 use objc2_pdf_kit::{PDFDisplayMode, PDFDocument, PDFView, PDFViewPageChangedNotification};
 use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
@@ -93,6 +93,14 @@ enum Renderer {
     QuickLook {
         view: Retained<QLPreviewView>,
     },
+    /// Safari's Web Inspector for the web view `target`. WebKit opens it in a
+    /// window of its own; its page (a WKWebView) is moved into this view's
+    /// host and the emptied window is kept out of sight.
+    Inspector {
+        target: String,
+        inspector: RefCell<Option<Retained<AnyObject>>>,
+        window: RefCell<Option<Retained<AnyObject>>>,
+    },
 }
 
 struct Entry {
@@ -119,6 +127,8 @@ struct Entry {
     shown: bool,
     /// Hidden while a pane is dragged (overlays cut holes instead).
     suppressed: bool,
+    /// Web: its Web Inspector was open at the last frame end.
+    inspecting: bool,
 }
 
 /// Creates the view for `key` if needed, or reloads it when the spec changed.
@@ -210,6 +220,7 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
         wanted_hidden: false,
         shown: true,
         suppressed: false,
+        inspecting: false,
     };
     apply_zoom(&entry.renderer, spec.zoom);
     VIEWS.with(|v| v.borrow_mut().insert(key.to_owned(), entry));
@@ -224,6 +235,102 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
         emit(key, generation, "load.error", json!({ "message": err }));
     }
     Ok(generation)
+}
+
+/// Opens an inspector's Web Inspector and moves its page in, retrying on a
+/// timer: the target view may not exist yet, and WebKit makes its window
+/// shortly after `show`.
+fn start_inspector(key: &str) {
+    let k = key.to_owned();
+    let tries = Cell::new(0u32);
+    let block = RcBlock::new(move |timer: NonNull<AnyObject>| {
+        tries.set(tries.get() + 1);
+        if inspector_step(&k) || tries.get() > 100 {
+            let _: () = unsafe { msg_send![timer.as_ref(), invalidate] };
+        }
+    });
+    let Some(cls) = AnyClass::get(c"NSTimer") else { return };
+    let _: Retained<AnyObject> = unsafe {
+        msg_send![cls, scheduledTimerWithTimeInterval: 0.1f64, repeats: true, block: &*block]
+    };
+}
+
+/// One try; true when there's nothing more to do (moved in, or gone).
+fn inspector_step(key: &str) -> bool {
+    let mut adopted = None;
+    let done = VIEWS.with(|v| {
+        // A timer fires from the run loop; never fight another borrow.
+        let Ok(mut v) = v.try_borrow_mut() else { return false };
+        let target = match v.get(key).map(|e| &e.renderer) {
+            Some(Renderer::Inspector { target, .. }) => target.clone(),
+            _ => return true,
+        };
+        let web = match v.get(&target).map(|e| &e.renderer) {
+            Some(Renderer::Web { view, .. }) => view.clone(),
+            _ => return false,
+        };
+        let Some(e) = v.get_mut(key) else { return true };
+        let Renderer::Inspector { inspector, window, .. } = &e.renderer else { return true };
+        if window.borrow().is_some() {
+            return true;
+        }
+        unsafe {
+            if inspector.borrow().is_none() {
+                let i: Option<Retained<AnyObject>> = msg_send![&*web, _inspector];
+                let Some(i) = i else { return false };
+                // A window of its own (not docked into the page), which we empty.
+                let attached: bool = msg_send![&*i, isAttached];
+                if attached {
+                    let _: () = msg_send![&*i, detach];
+                }
+                let _: () = msg_send![&*i, show];
+                *inspector.borrow_mut() = Some(i);
+            }
+            let Some((w, page)) = find_inspector_window() else { return false };
+            page.removeFromSuperview();
+            page.setFrame(e.view.bounds());
+            page.setAutoresizingMask(
+                NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
+            );
+            e.view.addSubview(&page);
+            let none: Option<&AnyObject> = None;
+            let _: () = msg_send![&*w, orderOut: none];
+            *window.borrow_mut() = Some(w);
+            e.inner.removeFromSuperview();
+            e.inner = page;
+            adopted = Some(e.generation);
+        }
+        true
+    });
+    if let Some(g) = adopted {
+        emit(key, g, "load.finish", json!({}));
+    }
+    done
+}
+
+/// WebKit's inspector window that still holds its page (a WKWebView), and that page.
+fn find_inspector_window() -> Option<(Retained<AnyObject>, Retained<NSView>)> {
+    unsafe {
+        let app: Retained<AnyObject> = msg_send![AnyClass::get(c"NSApplication")?, sharedApplication];
+        let windows: Retained<AnyObject> = msg_send![&*app, windows];
+        let n: usize = msg_send![&*windows, count];
+        let web = AnyClass::get(c"WKWebView")?;
+        for i in 0..n {
+            let w: Retained<AnyObject> = msg_send![&*windows, objectAtIndex: i];
+            if !w.class().name().to_string_lossy().contains("Inspector") {
+                continue;
+            }
+            let content: Option<Retained<NSView>> = msg_send![&*w, contentView];
+            let Some(content) = content else { continue };
+            for sub in content.subviews().iter() {
+                let is_web: bool = msg_send![&*sub, isKindOfClass: web];
+                if is_web {
+                    return Some((w, sub.clone()));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn without_zoom(props: &Value) -> Value {
@@ -294,8 +401,12 @@ fn make(
                         .defaultWebpagePreferences()
                         .setAllowsContentJavaScript(false);
                 }
+                // Web Inspector: right-click "Inspect Element", and `web.inspect`.
+                let yes = NSNumber::new_bool(true);
+                let _: () = msg_send![&*config.preferences(), setValue: &*yes, forKey: &*NSString::from_str("developerExtrasEnabled")];
                 let view =
                     WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config);
+                let _: () = msg_send![&*view, setInspectable: true];
                 let delegate = WebDelegate::new(mtm, key, generation);
                 view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 view.setUIDelegate(Some(ProtocolObject::from_ref(&*delegate)));
@@ -345,6 +456,21 @@ fn make(
                 ))
             }
             Kind::Chromium => Err("unreachable: Chromium handled above".into()),
+            Kind::Inspector => {
+                let Source::Inspect(target) = &spec.source else {
+                    return Err("an inspector needs `of`".into());
+                };
+                // A stand-in until WebKit's inspector page is moved in.
+                let view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+                Ok((
+                    view,
+                    Renderer::Inspector {
+                        target: target.clone(),
+                        inspector: RefCell::new(None),
+                        window: RefCell::new(None),
+                    },
+                ))
+            }
             Kind::QuickLook => {
                 let view = QLPreviewView::initWithFrame_style(
                     QLPreviewView::alloc(mtm),
@@ -397,6 +523,7 @@ fn load(
                             &file_url(read_root),
                         );
                     }
+                    Source::Inspect(_) => return Err("a web view takes a `url` or `path`".into()),
                 }
                 Ok(None)
             }
@@ -419,6 +546,10 @@ fn load(
                 view.setPlayer(Some(&player));
                 emit(key, generation, "load.finish", json!({}));
                 Ok(Some(player))
+            }
+            (Renderer::Inspector { .. }, Source::Inspect(_)) => {
+                start_inspector(key);
+                Ok(None)
             }
             (Renderer::QuickLook { view }, Source::File { path, .. }) => {
                 let url = file_url(path);
@@ -550,11 +681,41 @@ pub fn frame_end(
         dispose(&k);
     }
     let mut paused = Vec::new();
+    let mut inspect = Vec::new();
     VIEWS.with(|v| {
-        for (k, e) in v.borrow_mut().iter_mut() {
+        let mut v = v.borrow_mut();
+        // Pages with an inspector pane; another page whose inspector opens
+        // (right-click "Inspect Element") tells its mod, which opens one.
+        let panes: Vec<String> = v
+            .values()
+            .filter_map(|e| match &e.renderer {
+                Renderer::Inspector { target, .. } => Some(target.clone()),
+                _ => None,
+            })
+            .collect();
+        for (k, e) in v.iter_mut() {
+            if let Renderer::Web { view, .. } = &e.renderer {
+                let i: Option<Retained<AnyObject>> = unsafe { msg_send![&**view, _inspector] };
+                let open = i.is_some_and(|i| unsafe { msg_send![&*i, isVisible] });
+                if open && !e.inspecting && !panes.contains(k) {
+                    inspect.push((k.clone(), e.generation));
+                }
+                e.inspecting = open;
+            }
             let Some(gpui) = e.gpui.load() else { continue };
             if Retained::as_ptr(&gpui).cast::<c_void>() != gpui_view.cast_const() {
                 continue;
+            }
+            // WebKit brings its inspector window forward again now and then
+            // (another "Inspect Element"): it's empty, keep it out of sight.
+            if let Renderer::Inspector { window, .. } = &e.renderer
+                && let Some(w) = window.borrow().as_ref()
+            {
+                let on: bool = unsafe { msg_send![&**w, isVisible] };
+                if on {
+                    let none: Option<&AnyObject> = None;
+                    let _: () = unsafe { msg_send![&**w, orderOut: none] };
+                }
             }
             let now_shown = shown(k);
             if e.shown
@@ -610,6 +771,9 @@ pub fn frame_end(
     });
     for (k, g) in paused {
         emit(&k, g, "media.paused", json!({ "reason": "hidden" }));
+    }
+    for (k, g) in inspect {
+        emit(&k, g, "web.inspector", json!({ "of": k }));
     }
     // GPUI's cursor rect leaves out the views above it (the page sets its own
     // cursor there): recompute it where they now are.
@@ -724,6 +888,8 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                     reload = Some(json!({ "kind": "web", "url": crate::normalize_url(url)? }));
                     Ok(Value::Null)
                 }
+                // The key an `inspector` view takes as `of`; it opens the inspector.
+                ("web.inspect", Renderer::Web { .. }) => Ok(json!({ "of": key })),
                 ("browser.back", Renderer::Web { view, .. }) => Ok(json!(view.goBack().is_some())),
                 ("browser.forward", Renderer::Web { view, .. }) => {
                     Ok(json!(view.goForward().is_some()))
@@ -858,6 +1024,9 @@ fn entry_state(e: &Entry, r: &Renderer) -> Value {
         Renderer::QuickLook { view } => {
             json!({ "hasItem": unsafe { view.previewItem() }.is_some() })
         }
+        Renderer::Inspector { target, window, .. } => {
+            json!({ "of": target, "adopted": window.borrow().is_some() })
+        }
     };
     let f = e.view.frame();
     let first = e
@@ -949,6 +1118,12 @@ pub fn dispose(key: &str) {
                 view.setPlayer(None);
             }
             Renderer::QuickLook { view } => view.close(),
+            Renderer::Inspector { inspector, .. } => {
+                // Closes WebKit's inspector, and with it its (hidden) window.
+                if let Some(i) = inspector.borrow().as_ref() {
+                    let _: () = msg_send![&**i, close];
+                }
+            }
         }
     }
     e.view.removeFromSuperview();
