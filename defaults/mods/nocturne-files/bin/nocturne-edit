@@ -1,0 +1,35 @@
+#!/bin/sh
+# The files pane opens what you pick with this: $EDITOR (else $VISUAL, else
+# nvim, else vi) in a terminal pane beside it. nvim listens on a socket per
+# tab, so the pane asks it (--remote) to open later picks in that same nvim;
+# exit 1 tells the pane to start a new one.
+#   nocturne-edit --listen KEY PATH   run the editor on PATH
+#   nocturne-edit --remote KEY PATH   open PATH in KEY's nvim, if it's there
+mode=$1 key=$2 path=$3
+fallback=vi
+command -v nvim >/dev/null 2>&1 && fallback=nvim
+editor=${EDITOR:-${VISUAL:-$fallback}}
+dir="/tmp/nocturne-edit-$(id -u)"
+sock="$dir/$key.sock"
+nvim=
+case "$(basename "${editor%% *}")" in nvim | nvim-*) nvim=1 ;; esac
+case "$mode" in
+  --remote)
+    [ -n "$nvim" ] && [ -S "$sock" ] || exit 1
+    # A socket left by an nvim that quit doesn't answer.
+    $editor --server "$sock" --remote-expr 1 >/dev/null 2>&1 || exit 1
+    exec $editor --server "$sock" --remote "$path"
+    ;;
+  --listen)
+    if [ -n "$nvim" ]; then
+      mkdir -p -m 700 "$dir"
+      rm -f "$sock"
+      exec $editor --listen "$sock" "$path"
+    fi
+    exec $editor "$path"
+    ;;
+  *)
+    echo "usage: nocturne-edit --listen|--remote KEY PATH" >&2
+    exit 2
+    ;;
+esac

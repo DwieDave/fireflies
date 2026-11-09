@@ -133,15 +133,23 @@ fn launch_failure(record: &Value, output: &str) -> Option<String> {
 }
 
 /// The shipped layouts (defaults/layouts): `main` is Herdr's window (spaces
-/// sidebar, tab bar).
+/// sidebar, tab bar); `nocturne` is Fireflies' (its nocturne* mods).
 const LAYOUTS: &[(&str, &str)] = &[
     ("main", include_str!("../defaults/layouts/main.json")),
     ("terminals", include_str!("../defaults/layouts/terminals.json")),
     ("win98", include_str!("../defaults/layouts/win98.json")),
+    ("nocturne", include_str!("../defaults/layouts/nocturne.json")),
 ];
 
+/// The layout a first start shows (Fireflies: Nocturne). `main` stays the
+/// fallback when a layout's mods are gone and what the escape hatch restores.
+const FIRST_LAYOUT: &str = "nocturne";
+
 /// Pictures shipped layouts name as their `preview`, written beside them.
-const LAYOUT_PREVIEWS: &[(&str, &str)] = &[("win98.svg", include_str!("../defaults/layouts/win98.svg"))];
+const LAYOUT_PREVIEWS: &[(&str, &str)] = &[
+    ("win98.svg", include_str!("../defaults/layouts/win98.svg")),
+    ("nocturne.svg", include_str!("../defaults/layouts/nocturne.svg")),
+];
 
 pub fn shipped_layouts() -> Vec<&'static str> {
     LAYOUTS.iter().map(|(n, _)| *n).collect()
@@ -635,7 +643,7 @@ impl AppWindow {
         // A layout whose mods are gone (Zen, T4, ADE after the update took
         // theirs) starts on Herdr's instead of a wall of "did not load".
         let gone = name.as_deref().map(missing_mods).unwrap_or_default();
-        w.load_layout(if gone.is_empty() { name.as_deref().unwrap_or("main") } else { "main" });
+        w.load_layout(if gone.is_empty() { name.as_deref().unwrap_or(FIRST_LAYOUT) } else { "main" });
         w.apply_look(window, cx);
         w.show_layout_notes(window, cx);
         if let (Some(n), false) = (&name, gone.is_empty()) {
@@ -6804,6 +6812,20 @@ export default class SystemToast extends View {
         let terminals = super::default_layout("terminals");
         assert!(terminals.find("tabs").is_some());
         assert!(matches!(terminals.find("main").and_then(|n| n.content()), Some(super::Content::Context { .. })));
+        // Fireflies starts on Nocturne, whose mods all ship.
+        assert!(super::shipped_layouts().contains(&super::FIRST_LAYOUT));
+        let nocturne = super::default_layout(super::FIRST_LAYOUT);
+        assert!(matches!(nocturne.find("main").and_then(|n| n.content()), Some(super::Content::Context { .. })));
+        let mut mods: Vec<String> = nocturne.walk().iter().filter_map(|n| match n.content() {
+            Some(super::Content::Mod { name, .. }) => Some(name.clone()),
+            _ => None,
+        }).collect();
+        mods.extend([&nocturne.toast, &nocturne.prompt_mod, &nocturne.confirm_mod, &nocturne.palette_mod, &nocturne.peek_mod, &nocturne.terminal_menu].into_iter().flatten().cloned());
+        assert!(mods.len() > 6, "{mods:?}");
+        let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods");
+        for m in mods {
+            assert!(shipped.join(&m).join("main.js").is_file(), "nocturne names {m:?}, which doesn't ship");
+        }
     }
 
     #[test]

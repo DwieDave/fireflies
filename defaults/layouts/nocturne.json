@@ -1,0 +1,102 @@
+{
+  "id": "root",
+  "type": "row",
+  "children": [
+    {
+      "id": "sidebar",
+      "type": "block",
+      "content": {
+        "mod": "nocturne",
+        "props": {
+          "role": "sky"
+        }
+      },
+      "size": {
+        "px": 252
+      },
+      "min": 76,
+      "max": 440,
+      "window_drag": true
+    },
+    {
+      "id": "work",
+      "type": "column",
+      "children": [
+        {
+          "id": "tabs",
+          "type": "block",
+          "content": {
+            "mod": "nocturne",
+            "props": {
+              "role": "tabs"
+            }
+          },
+          "size": {
+            "px": 36
+          },
+          "window_drag": true
+        },
+        {
+          "id": "main",
+          "type": "block",
+          "content": {
+            "tab": "active",
+            "pane": {
+              "header": {
+                "content": {
+                  "mod": "nocturne",
+                  "props": {
+                    "role": "pane"
+                  }
+                },
+                "reveal": "always",
+                "height": 24,
+                "position": "top"
+              },
+              "background": "#080808",
+              "border": {
+                "width": 1,
+                "color": "#323437"
+              },
+              "focus": {
+                "width": 1,
+                "color": "#80a0ff"
+              },
+              "radius": 0,
+              "gap": 8,
+              "lone": true
+            }
+          },
+          "padding": [
+            8,
+            8
+          ]
+        }
+      ],
+      "resizable": false
+    }
+  ],
+  "background": "#080808",
+  "theme": "moonfly",
+  "ui_font": "Departure Mono",
+  "terminal_padding": [
+    10,
+    8
+  ],
+  "divider": {
+    "width": 1,
+    "color": "#323437"
+  },
+  "titlebar": "none",
+  "traffic_lights": [
+    16,
+    18
+  ],
+  "preview": "layouts/nocturne.svg",
+  "terminal_menu": "nocturne",
+  "toast": "nocturne",
+  "prompt_mod": "nocturne",
+  "confirm_mod": "nocturne",
+  "palette_mod": "nocturne",
+  "peek_mod": "nocturne"
+}

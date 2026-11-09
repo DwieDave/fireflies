@@ -1,0 +1,33 @@
+#!/bin/sh
+# Nocturne's lazygit (the tab strip's git button, + new > Lazygit, cmd-g):
+# lazygit over your own config plus Nocturne's skin (../lazygit.yml). Diffs
+# and the log graph are git's own output, so their moonfly colors go to this
+# lazygit's git through GIT_CONFIG_* (added to any already set).
+skin="$(cd "$(dirname "$0")/.." && pwd)/lazygit.yml"
+if ! command -v lazygit >/dev/null 2>&1; then
+  echo "Nocturne's git pane runs lazygit, which isn't installed (brew install lazygit)." >&2
+  exit 127
+fi
+configs=$skin
+base="$(lazygit --print-config-dir 2>/dev/null)/config.yml"
+[ -f "$base" ] && configs="$base,$configs"
+n=${GIT_CONFIG_COUNT:-0}
+add() {
+  export "GIT_CONFIG_KEY_$n=$1" "GIT_CONFIG_VALUE_$n=$2"
+  n=$((n + 1))
+}
+add color.decorate.HEAD "#74b2ff"
+add color.decorate.branch "#8cc85f"
+add color.decorate.remoteBranch "#cf87e8"
+add color.decorate.stash "#5F6D6D"
+add color.decorate.tag "#e3c78a"
+add color.diff.commit "#e3c78a"
+add color.diff.context "#bdbdbd"
+add color.diff.frag "#cf87e8"
+add color.diff.func "#ae81ff"
+add color.diff.meta "#80a0ff"
+add color.diff.new "#8cc85f"
+add color.diff.old "#ff5d5d"
+add color.diff.whitespace "#ff5d5d reverse"
+export GIT_CONFIG_COUNT=$n
+exec lazygit --use-config-file "$configs" "$@"

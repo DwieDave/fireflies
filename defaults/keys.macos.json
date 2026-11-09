@@ -69,5 +69,26 @@
     "cmd-left": "send:\u0001",
     "cmd-right": "send:\u0005",
     "cmd-backspace": "send:\u0015"
+  },
+  "layout:nocturne": {
+    "cmd-alt-]": "nocturne.next",
+    "cmd-alt-[": "nocturne.prev",
+    "cmd-b": "nocturne.fold",
+    "cmd-s": "nocturne.fold",
+    "cmd-n": "nocturne.new",
+    "cmd-d": "pane.split:auto",
+    "cmd-g": "nocturne.lazygit",
+    "cmd-e": "nocturne.files",
+    "cmd-alt-=": "pane.font_bigger",
+    "cmd-alt--": "pane.font_smaller",
+    "cmd-alt-0": "pane.font_reset"
+  },
+  "mod:nocturne-browser": {
+    "cmd-p": "nocturne-browser.url",
+    "cmd-l": "nocturne-browser.url",
+    "cmd-r": "nocturne-browser.reload",
+    "cmd-[": "nocturne-browser.back",
+    "cmd-]": "nocturne-browser.forward",
+    "cmd-alt-i": "nocturne-browser.inspect"
   }
 }
