@@ -15,9 +15,17 @@ use crate::macos::emit_event;
 use block2::RcBlock;
 use objc2::rc::{Retained, Weak};
 use objc2::runtime::{AnyClass, AnyObject, ProtocolObject};
-use objc2::{MainThreadMarker, MainThreadOnly, msg_send};
-use objc2_app_kit::{NSApplication, NSAutoresizingMaskOptions, NSView, NSWindow};
-use objc2_foundation::{NSError, NSNumber, NSString};
+use objc2::runtime::{NSObject, NSObjectProtocol};
+use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2_app_kit::{
+    NSApplication, NSAutoresizingMaskOptions, NSBackingStoreType, NSBox, NSBoxType, NSButton, NSColor, NSTitlePosition,
+    NSFloatingWindowLevel, NSFont, NSFontAttributeName, NSForegroundColorAttributeName, NSPanel,
+    NSTextField, NSView, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask,
+};
+use objc2_foundation::{
+    NSAttributedString, NSAttributedStringKey, NSDictionary, NSError, NSNumber, NSPoint, NSRect,
+    NSSize, NSString,
+};
 use std::cell::Cell;
 use std::ptr::NonNull;
 use std::time::{Duration, Instant};
@@ -120,6 +128,8 @@ struct Session {
     started: Instant,
     /// Polls while the session lives (the panel appears after `enter`).
     timer: Option<Retained<AnyObject>>,
+    /// The popped-out window, while the video is out of Herdr.
+    popped: Option<Popped>,
 }
 
 /// A `pip` view: whose video it shows and where.
@@ -226,6 +236,11 @@ fn run(
     event: &'static str,
 ) {
     let k = key.to_owned();
+    run_then(mtm, web, frame, script, move |data| emit_event(&k, generation, event, data));
+}
+
+/// `run`, handing the result (`{ result }` or `{ error }`) to `then`.
+fn run_then(mtm: MainThreadMarker, web: &WKWebView, frame: Option<&WKFrameInfo>, script: &str, then: impl Fn(Value) + 'static) {
     let done = RcBlock::new(move |result: *mut AnyObject, error: *mut NSError| {
         let data = match unsafe { error.as_ref() } {
             Some(e) => json!({ "error": e.localizedDescription().to_string() }),
@@ -236,7 +251,7 @@ fn run(
                 json!({ "result": s })
             }
         };
-        emit_event(&k, generation, event, data);
+        then(data);
     });
     unsafe {
         web.callAsyncJavaScript_arguments_inFrame_inContentWorld_completionHandler(
@@ -301,6 +316,7 @@ fn begin(web_key: &str, generation: u64, frame: Retained<WKFrameInfo>) {
                 serial: 0,
                 started: Instant::now(),
                 timer: Some(timer),
+                popped: None,
             })
         });
     }
@@ -317,6 +333,9 @@ fn finish(web_key: &str) {
     };
     if let Some(t) = &s.timer {
         let _: () = unsafe { msg_send![&**t, invalidate] };
+    }
+    if let Some(p) = &s.popped {
+        p.panel.orderOut(None);
     }
     // An exit nobody announced: the video is still out; put it back anyway.
     if let (Some(panel), Some(video)) = (&s.panel, &s.video)
@@ -362,6 +381,9 @@ fn give_back(_mtm: MainThreadMarker, s: &mut Session) {
         }
         panel.orderFront(None);
     }
+    if let Some(p) = &s.popped {
+        p.panel.orderOut(None);
+    }
     after(RETURN_GRACE, move || {
         with_session(&k, |s| {
             if s.serial == serial {
@@ -389,7 +411,13 @@ fn tick() {
             s.video = panel.contentView().and_then(|c| find_video(&c));
         }
         let Some(video) = s.video.clone() else { return };
-        match holder(&s.source) {
+        let popped = s.popped.as_ref().map(|p| (p.host.clone(), p.panel.clone()));
+        if let Some((_, p)) = &popped
+            && !p.isVisible()
+        {
+            p.orderFront(None);
+        }
+        match popped.map(|(h, _)| h).or_else(|| holder(&s.source)) {
             Some(holder) => {
                 if !is_in(&video, &holder) {
                     put(&video, &holder);
@@ -464,6 +492,10 @@ pub(crate) fn attach(key: &str, generation: u64, of: &str, host: &NSView) {
     ATTACHED.with(|a| {
         a.borrow_mut().insert(key.to_owned(), Attached { of: of.to_owned(), generation, host: Weak::from(host) })
     });
+    // Back into Herdr: the popped-out window goes.
+    if let Some(Some(p)) = with_session(of, |s| s.popped.take()) {
+        p.panel.orderOut(None);
+    }
     tick();
 }
 
@@ -482,7 +514,7 @@ pub(crate) fn detach(key: &str) {
 }
 
 /// A `pip` view's actions (`pip.toggle`, `pip.back`, `pip.close`).
-pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, _args: &Value) -> Result<Value, String> {
+pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, args: &Value) -> Result<Value, String> {
     let (of, generation) = ATTACHED
         .with(|a| a.borrow().get(key).map(|p| (p.of.clone(), p.generation)))
         .ok_or("this view shows nothing")?;
@@ -507,6 +539,14 @@ pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, _args: &Val
             end(mtm, &of, false);
             Ok(Value::Null)
         }
+        "pip.popOut" => {
+            let host = ATTACHED.with(|a| a.borrow().get(key).and_then(|p| p.host.load())).ok_or("this view shows nothing")?;
+            let rect = screen_rect(&host).ok_or("this view is not on screen")?;
+            let popped = Popped::new(mtm, &of, rect, &args["colors"]);
+            with_session(&of, |s| s.popped = Some(popped));
+            tick();
+            Ok(Value::Null)
+        }
         a => Err(format!("`{a}` is unavailable right now")),
     }
 }
@@ -517,7 +557,7 @@ pub(crate) fn state(key: &str) -> Value {
     let session = of.as_deref().and_then(|of| {
         with_session(of, |s| {
             let showing = s.video.as_ref().is_some_and(|v| holder(&s.source).is_some_and(|h| is_in(v, &h)));
-            json!({ "found": s.video.is_some(), "showing": showing, "returning": s.returning })
+            json!({ "found": s.video.is_some(), "showing": showing, "returning": s.returning, "popped": s.popped.is_some() })
         })
     });
     json!({ "of": of, "session": session })
@@ -540,4 +580,244 @@ fn repeat(secs: f64, f: fn()) -> Retained<AnyObject> {
     let block = RcBlock::new(move |_t: NonNull<AnyObject>| f());
     let cls = AnyClass::get(c"NSTimer").expect("NSTimer");
     unsafe { msg_send![cls, scheduledTimerWithTimeInterval: secs, repeats: true, block: &*block] }
+}
+
+// ---- popped out: a square window above every app
+
+const BAR: f64 = 22.0;
+
+/// The popped-out player: the video under a 22 px bar (back to the page,
+/// back into Herdr, play/pause, close), Nocturne's colors, square corners.
+struct Popped {
+    panel: Retained<NSPanel>,
+    host: Retained<NSView>,
+    target: Retained<PopTarget>,
+}
+
+pub struct PopIvars {
+    source: String,
+    play: RefCell<Option<Retained<NSButton>>>,
+    colors: RefCell<Colors>,
+}
+
+#[derive(Clone)]
+struct Colors {
+    background: Retained<NSColor>,
+    foreground: Retained<NSColor>,
+    dim: Retained<NSColor>,
+    border: Retained<NSColor>,
+}
+
+define_class!(
+    // SAFETY: NSObject has no subclassing requirements; no Drop impl.
+    #[unsafe(super(NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = PopIvars]
+    struct PopTarget;
+
+    unsafe impl NSObjectProtocol for PopTarget {}
+
+    impl PopTarget {
+        #[unsafe(method(back:))]
+        fn back(&self, _sender: Option<&AnyObject>) {
+            let Some(mtm) = MainThreadMarker::new() else { return };
+            let k = self.ivars().source.clone();
+            end(mtm, &k, true);
+            let g = with_session(&k, |s| s.generation).unwrap_or(0);
+            emit_event(&k, g, "view.press", json!({}));
+            #[allow(deprecated)]
+            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+        }
+
+        #[unsafe(method(home:))]
+        fn home(&self, _sender: Option<&AnyObject>) {
+            let Some(mtm) = MainThreadMarker::new() else { return };
+            let k = self.ivars().source.clone();
+            let g = with_session(&k, |s| s.generation).unwrap_or(0);
+            // The page's mod opens a player in Herdr again; it takes the video.
+            emit_event(&k, g, "pip.popIn", json!({ "of": k }));
+            #[allow(deprecated)]
+            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+        }
+
+        #[unsafe(method(toggle:))]
+        fn toggle(&self, _sender: Option<&AnyObject>) {
+            let Some(mtm) = MainThreadMarker::new() else { return };
+            let k = self.ivars().source.clone();
+            let Some((Some(web), frame)) = with_session(&k, |s| (s.web.load(), s.frame.clone())) else { return };
+            run_then(mtm, &web, Some(&frame), TOGGLE_SCRIPT, move |r| {
+                let me = with_session(&k, |s| s.popped.as_ref().map(|p| p.target.clone())).flatten();
+                if let Some(me) = me {
+                    me.show_playing(r["result"] == "playing");
+                }
+            });
+        }
+
+        #[unsafe(method(close:))]
+        fn close(&self, _sender: Option<&AnyObject>) {
+            let Some(mtm) = MainThreadMarker::new() else { return };
+            end(mtm, &self.ivars().source.clone(), false);
+        }
+    }
+);
+
+impl PopTarget {
+    fn show_playing(&self, playing: bool) {
+        if let Some(b) = self.ivars().play.borrow().as_ref() {
+            let c = self.ivars().colors.borrow().clone();
+            set_title(b, if playing { "❚❚" } else { "▶" }, &c.foreground);
+        }
+    }
+}
+
+impl Popped {
+    /// `rect`: the Herdr player's video on screen; the window adds its bar above.
+    fn new(mtm: MainThreadMarker, source: &str, rect: NSRect, colors: &Value) -> Popped {
+        let colors = Colors::parse(colors);
+        let frame = NSRect::new(rect.origin, NSSize::new(rect.size.width, rect.size.height + BAR));
+        let style = NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable;
+        let panel = unsafe {
+            NSPanel::initWithContentRect_styleMask_backing_defer(NSPanel::alloc(mtm), frame, style, NSBackingStoreType::Buffered, false)
+        };
+        unsafe { panel.setReleasedWhenClosed(false) };
+        panel.setLevel(NSFloatingWindowLevel);
+        panel.setCollectionBehavior(NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary);
+        panel.setMovableByWindowBackground(true);
+        panel.setHasShadow(false);
+        panel.setHidesOnDeactivate(false);
+        panel.setBackgroundColor(Some(&colors.background));
+        let w = frame.size.width;
+        let h = frame.size.height;
+        let content = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+        panel.setContentView(Some(&content));
+        let sizing = NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable;
+        // The frame: a 1 px square border around the background.
+        let frame_box = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), frame.size), &colors.background, Some(&colors.border));
+        frame_box.setAutoresizingMask(sizing);
+        content.addSubview(&frame_box);
+        // The video, inside the border, under the bar.
+        let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - 2.0, h - BAR - 1.0)));
+        host.setAutoresizingMask(sizing);
+        content.addSubview(&host);
+        // The bar: a dim title, then the buttons on the right.
+        let bar = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, h - BAR), NSSize::new(w - 2.0, BAR - 1.0)));
+        bar.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin);
+        content.addSubview(&bar);
+        let rule = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w - 2.0, 1.0)), &colors.border, None);
+        rule.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
+        bar.addSubview(&rule);
+        let title = NSTextField::labelWithString(&NSString::from_str("picture in picture"), mtm);
+        title.setFont(Some(&font()));
+        title.setTextColor(Some(&colors.dim));
+        title.setFrame(NSRect::new(NSPoint::new(8.0, 3.0), NSSize::new(160.0, 15.0)));
+        bar.addSubview(&title);
+        let target = PopTarget::new(mtm, source, colors.clone());
+        let buttons = [("↩", sel!(back:)), ("⇲", sel!(home:)), ("❚❚", sel!(toggle:)), ("✕", sel!(close:))];
+        let mut x = w - 2.0 - 24.0 * buttons.len() as f64 - 4.0;
+        for (label, action) in buttons {
+            let b = NSButton::initWithFrame(NSButton::alloc(mtm), NSRect::new(NSPoint::new(x, 0.0), NSSize::new(24.0, BAR - 1.0)));
+            b.setBordered(false);
+            set_title(&b, label, &colors.foreground);
+            unsafe {
+                b.setTarget(Some(&target));
+                b.setAction(Some(action));
+            }
+            b.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            bar.addSubview(&b);
+            if label == "❚❚" {
+                *target.ivars().play.borrow_mut() = Some(b.clone());
+            }
+            x += 24.0;
+        }
+        panel.orderFrontRegardless();
+        Popped { panel, host, target }
+    }
+}
+
+impl PopTarget {
+    fn new(mtm: MainThreadMarker, source: &str, colors: Colors) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(PopIvars { source: source.to_owned(), play: RefCell::new(None), colors: RefCell::new(colors) });
+        unsafe { msg_send![super(this), init] }
+    }
+}
+
+impl Colors {
+    /// `{ background, foreground, dim, border }` as `#rrggbb[aa]`; Nocturne's dark defaults.
+    fn parse(v: &Value) -> Colors {
+        let get = |k: &str, d: &str| color(v.get(k).and_then(Value::as_str).and_then(hex).unwrap_or_else(|| hex(d).unwrap()));
+        Colors {
+            background: get("background", "#0b0b0d"),
+            foreground: get("foreground", "#d6d6d6"),
+            dim: get("dim", "#6b6b6b"),
+            border: get("border", "#2a2a2e"),
+        }
+    }
+}
+
+/// A square, flat rectangle: `fill`, and a 1 px `border` if given.
+fn flat_box(mtm: MainThreadMarker, frame: NSRect, fill: &NSColor, border: Option<&NSColor>) -> Retained<NSBox> {
+    let b = NSBox::initWithFrame(NSBox::alloc(mtm), frame);
+    b.setBoxType(NSBoxType::Custom);
+    b.setTitlePosition(NSTitlePosition::NoTitle);
+    b.setCornerRadius(0.0);
+    b.setFillColor(fill);
+    match border {
+        Some(c) => {
+            b.setBorderColor(c);
+            b.setBorderWidth(1.0);
+        }
+        None => b.setBorderWidth(0.0),
+    }
+    b.setContentViewMargins(NSSize::new(0.0, 0.0));
+    b
+}
+
+/// `#rrggbb` or `#rrggbbaa` as 0–1 components.
+pub(crate) fn hex(s: &str) -> Option<[f64; 4]> {
+    let h = s.strip_prefix('#')?;
+    if !(h.len() == 6 || h.len() == 8) || !h.is_ascii() {
+        return None;
+    }
+    let n = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok().map(|b| f64::from(b) / 255.0);
+    Some([n(0)?, n(2)?, n(4)?, if h.len() == 8 { n(6)? } else { 1.0 }])
+}
+
+fn color([r, g, b, a]: [f64; 4]) -> Retained<NSColor> {
+    NSColor::colorWithSRGBRed_green_blue_alpha(r, g, b, a)
+}
+
+/// Nocturne's font when the system has it, else the system's monospaced one.
+fn font() -> Retained<NSFont> {
+    NSFont::fontWithName_size(&NSString::from_str("Departure Mono"), 11.0)
+        .unwrap_or_else(|| NSFont::monospacedSystemFontOfSize_weight(11.0, unsafe { objc2_app_kit::NSFontWeightRegular }))
+}
+
+fn set_title(b: &NSButton, text: &str, color: &NSColor) {
+    let attrs = NSDictionary::<NSAttributedStringKey, AnyObject>::from_slices(
+        &[unsafe { NSForegroundColorAttributeName }, unsafe { NSFontAttributeName }],
+        &[color.as_ref(), font().as_ref()],
+    );
+    let s = unsafe { NSAttributedString::new_with_attributes(&NSString::from_str(text), &attrs) };
+    b.setAttributedTitle(&s);
+}
+
+/// A view's rectangle in screen points.
+fn screen_rect(view: &NSView) -> Option<NSRect> {
+    let window = view.window()?;
+    let in_window = view.convertRect_toView(view.bounds(), None);
+    Some(window.convertRectToScreen(in_window))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::hex;
+
+    #[test]
+    fn theme_colors_parse_as_hex() {
+        assert_eq!(hex("#ff0080"), Some([1.0, 0.0, 128.0 / 255.0, 1.0]));
+        assert_eq!(hex("#00000080").map(|c| c[3]), Some(128.0 / 255.0));
+        for bad in ["ff0080", "#ff00", "#gg0000", "border", "#ff00800"] {
+            assert_eq!(hex(bad), None, "{bad}");
+        }
+    }
 }
