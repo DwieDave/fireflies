@@ -94,6 +94,9 @@ pub enum Kind {
     /// .app). Not inside the window: macOS can't embed another process's
     /// window, so its real window is moved, sized, ordered and hidden to match.
     App,
+    /// The video a web view (`of`: its key) put in Picture in Picture, taken
+    /// out of macOS's own window and shown in this view's place.
+    Pip,
 }
 
 impl Kind {
@@ -106,8 +109,9 @@ impl Kind {
             "inspector" => Ok(Kind::Inspector),
             "chromium" => Ok(Kind::Chromium),
             "app" => Ok(Kind::App),
+            "pip" => Ok(Kind::Pip),
             other => Err(format!(
-                "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium, app)"
+                "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium, app, pip)"
             )),
         }
     }
@@ -121,6 +125,7 @@ impl Kind {
             Kind::Inspector => "inspector",
             Kind::Chromium => "chromium",
             Kind::App => "app",
+            Kind::Pip => "pip",
         }
     }
 
@@ -142,6 +147,7 @@ impl Kind {
                 "browser.reload",
                 "browser.stop",
                 "web.inspect",
+                "web.pip",
             ],
             Kind::Pdf => &[
                 "focus",
@@ -180,6 +186,18 @@ impl Kind {
                 "dispose",
                 "app.activate",
                 "app.quit",
+            ],
+            Kind::Pip => &[
+                "focus",
+                "blur",
+                "setVisible",
+                "setHoles",
+                "state",
+                "dispose",
+                "pip.toggle",
+                "pip.back",
+                "pip.close",
+                "pip.popOut",
             ],
             Kind::Chromium => &[
                 "focus",
@@ -235,6 +253,8 @@ pub enum Source {
     Inspect(String),
     /// An application bundle, and how the view gets its window.
     App(AppSource),
+    /// The key of the web view whose Picture in Picture video a `pip` view shows.
+    Pip(String),
 }
 
 /// `{ kind: "app", path, instance?, quitOnClose? }`.
@@ -280,12 +300,16 @@ pub struct Spec {
     pub persist: bool,
     /// Web only: WKWebView's page zoom (1 = 100%). Changing only this keeps the page.
     pub zoom: f64,
+    /// Web only: the page may put a video in Picture in Picture (`pip` views
+    /// take it over). Default off: WebKit refuses Picture in Picture.
+    pub pip: bool,
 }
 
 impl Spec {
     /// Validates the props a mod passed: `{ kind, url }` or `{ kind, path, trust?, root? }`.
     pub fn parse(v: &Value) -> Result<Spec, String> {
         let persist = v.get("persist").and_then(Value::as_bool).unwrap_or(false);
+        let pip = v.get("pip").and_then(Value::as_bool).unwrap_or(false);
         let zoom = match v.get("zoom") {
             None | Some(Value::Null) => 1.0,
             Some(z) => z
@@ -310,10 +334,19 @@ impl Spec {
                 source: Source::Inspect(of.to_owned()),
                 persist,
                 zoom,
+                pip,
             });
         }
         if kind == Kind::App {
-            return Ok(Spec { kind, source: Source::App(AppSource::parse(v)?), persist, zoom });
+            return Ok(Spec { kind, source: Source::App(AppSource::parse(v)?), persist, zoom, pip });
+        }
+        if kind == Kind::Pip {
+            let of = v
+                .get("of")
+                .and_then(Value::as_str)
+                .filter(|k| !k.is_empty())
+                .ok_or("a pip view needs `of`: the key `web.pip` returned")?;
+            return Ok(Spec { kind, source: Source::Pip(of.to_owned()), persist, zoom, pip });
         }
         if let Some(url) = v.get("url").and_then(Value::as_str) {
             if kind != Kind::Web && kind != Kind::Chromium {
@@ -329,6 +362,7 @@ impl Spec {
                 source: Source::Url(url),
                 persist,
                 zoom,
+                pip,
             });
         }
         let raw = v
@@ -366,6 +400,7 @@ impl Spec {
             },
             persist,
             zoom,
+            pip,
         })
     }
 
@@ -374,6 +409,7 @@ impl Spec {
         match &self.source {
             Source::Url(u) => redact_url(u),
             Source::Inspect(_) => "inspector".into(),
+            Source::Pip(_) => "pip".into(),
             Source::App(a) => a.bundle.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             Source::File { path, .. } => path
                 .file_name()
@@ -490,7 +526,7 @@ pub fn redact_url(u: &str) -> String {
 
 /// What the host can do, for `nativeViewCapabilities()`.
 pub fn capabilities() -> Value {
-    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::App];
+    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::App, Kind::Pip];
     if cfg!(feature = "chromium") {
         all.push(Kind::Chromium);
     }
@@ -695,6 +731,25 @@ mod tests {
         }
         assert!(Kind::App.allows("app.quit") && !Kind::App.allows("browser.navigate"));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn pip_views_take_a_web_key() {
+        let s = Spec::parse(&json!({ "kind": "pip", "of": "7:web" })).unwrap();
+        assert_eq!(s.source, Source::Pip("7:web".into()));
+        assert_eq!(s.redacted(), "pip");
+        assert!(Spec::parse(&json!({ "kind": "pip" })).is_err());
+        assert!(Spec::parse(&json!({ "kind": "pip", "of": "" })).is_err());
+        assert!(Kind::Pip.allows("pip.back") && Kind::Pip.allows("pip.popOut"));
+        assert!(!Kind::Pip.allows("browser.navigate"));
+        assert!(Kind::Web.allows("web.pip"));
+        assert!(capabilities()["kinds"].as_array().unwrap().iter().any(|k| k["kind"] == "pip"));
+    }
+
+    #[test]
+    fn web_pip_prop_defaults_off() {
+        assert!(!Spec::parse(&json!({ "kind": "web", "url": "https://x.y" })).unwrap().pip);
+        assert!(Spec::parse(&json!({ "kind": "web", "url": "https://x.y", "pip": true })).unwrap().pip);
     }
 
 }
