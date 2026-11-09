@@ -17,7 +17,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared } from "herdr";
-import { dither, pip, eyebrow } from "./kit.js";
+import { dither, pip, eyebrow, place } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
 import { menuHeight, EDIT_SPACE } from "./menu.js";
 
@@ -25,12 +25,6 @@ const stop = (_e, cx) => cx.stop_propagation();
 const tilde = (p) => { const h = home(); return p === h ? "~" : p.startsWith(h + "/") ? "~" + p.slice(h.length) : p; };
 // How often to look for spaces in folders not yet placed in a repo.
 const SCAN = 1500;
-
-/** Where a space is now: its first terminal's live folder, else where it was made. */
-function place(s, all) {
-  const tabs = new Set(s.tabs.map((c) => c.id));
-  return all.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder || null;
-}
 
 export default class Spaces {
   init(cx) {
