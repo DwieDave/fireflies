@@ -509,6 +509,7 @@ fn make(
                     },
                 ))
             }
+            Kind::Pip => Err("pip views are not available yet".into()),
             Kind::QuickLook => {
                 let view = QLPreviewView::initWithFrame_style(
                     QLPreviewView::alloc(mtm),
@@ -561,7 +562,7 @@ fn load(
                             &file_url(read_root),
                         );
                     }
-                    Source::Inspect(_) | Source::App(_) => return Err("a web view takes a `url` or `path`".into()),
+                    Source::Inspect(_) | Source::App(_) | Source::Pip(_) => return Err("a web view takes a `url` or `path`".into()),
                 }
                 Ok(None)
             }
