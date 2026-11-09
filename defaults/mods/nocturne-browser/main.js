@@ -326,7 +326,7 @@ export default class Browser extends View {
     else {
       // The mod's children sit under the native view: seen while it loads,
       // or while a Herdr menu or dialog makes the view step aside.
-      body = div().flex_1().min_h(0).relative().child(herdr.nativeView.new(ID, { kind: "web", url: this.start, persist: true, zoom: this.zoom })
+      body = div().flex_1().min_h(0).relative().child(herdr.nativeView.new(ID, { kind: "web", url: this.start, persist: true, zoom: this.zoom, pip: true })
         .child(this.blank(t, this.page.loading ? "Loading…" : "", this.page.href)));
     }
     return v_flex().id("browser").size_full().bg(t.background).track_focus(this.handle)
