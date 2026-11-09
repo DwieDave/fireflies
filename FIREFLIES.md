@@ -23,7 +23,7 @@ same core, same mod API. On top of Herdr it adds:
   | `nocturne-diff` | the git diff beside lazygit |
   | `nocturne-files` | a file tree that opens picks in `$EDITOR` |
   | `nocturne-agents` | Claude Code's agents as a graph |
-  | `nocturne-usage` | Claude's usage limits |
+  | `nocturne-usage` | Claude's or Codex's usage limits |
 
   With them: `defaults/layouts/nocturne.json` (+ `.svg` preview),
   `defaults/themes/moonfly.json`, and its keys in `defaults/keys.macos.json`
