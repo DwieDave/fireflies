@@ -125,3 +125,19 @@
 - [ ] **Step 3:** `cargo test` (render tests load shipped mods; docs test) → PASS.
 - [ ] **Step 4: End-to-end in the isolated app:** browser pane on the local video page → PiP button → player window in Herdr; switch tab and space: player stays, video plays; back → source tab/space/pane focused, video playing inline; pop out → above another app; `⇲` → back in Herdr; close the source pane during PiP → player closes.
 - [ ] **Step 5:** `git commit -m "feat(nocturne): a picture in picture player for browser videos"`
+
+---
+
+## Revision 2 (2026-11-09): lift the video, no macOS Picture in Picture
+
+**Why:** macOS draws the Picture in Picture window in `PIPAgent` (`/System/Library/CoreServices/PIPAgent.app`), another process. Hiding or moving the in-process `PIPPanel` stand-in leaves it on screen, so the Revision 1 player always showed macOS's rounded window next to ours. The user chose to drop WebKit's Picture in Picture.
+
+**Design:** `web.pip` marks the page's biggest (playing) `<video>` (main frame first, else the frame that last played one) and starts a session; `pip.enter { of }` goes to the browser mod, which opens the player. When a `pip` view attaches, the page's whole `WKWebView` moves from its pane into that view (or the popped-out panel), and a fixed isolated-world script lifts the marked video into the top layer (`popover="manual"` + `showPopover()`, `position: fixed; inset: 0; object-fit: contain`, page scrolling off). A video in an iframe is lifted in its frame, and its `<iframe>` in the main frame. Back and close move the web view home and undo the lift (close also pauses). A navigation, a vanished video, a crashed page or a closed pane ends the session. Nothing appears outside Herdr except our own popped-out panel. No private Apple classes.
+
+**Kept:** `Kind::Pip`, `Spec.pip` (now: the page reports videos), actions and events (minus the macOS PiP ones), `Popped`, `focus_pressed`, the mods.
+
+### Task 6: lift instead of Picture in Picture
+**Files:** `native/herdr-native-view/src/pip.rs` (rewrite of the session), `src/macos.rs` (`web_of(key)`, commit → `pip::navigated`), `defaults/mods/nocturne-browser/main.js` (placeholder while the video is out), `defaults/AGENTS.md`.
+- [ ] Rewrite; `cargo build`; `cargo test -p herdr-native-view --lib` passes.
+- [ ] E2E in the test app, with the window sampler: open → pop out → back, twice; tab switch; close; navigation while lifted; page removes its video; video in an iframe. No `PIPAgent` window at any sample.
+- [ ] Commit: `feat(native-view): the pip player lifts the page's video instead of using macOS picture in picture`

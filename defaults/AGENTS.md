@@ -686,16 +686,19 @@ The main ones:
   draw underneath (seen while it launches). It needs the Accessibility permission
   (`app.permission`); a press on the app's window focuses the view's pane. Actions:
   `focus` / `app.activate` (the app gets the keyboard), `app.quit`, `state`.
-  Picture in Picture: a web view created with `pip: true` lets its page put a video in
-  Picture in Picture (any site; WebKit plays it). Its `web.pip` action toggles it for the
-  page's biggest (playing) video and returns `{ of }`; its events `pip.enter { of }` (also
-  when the site's own button starts it), `pip.leave` and `pip.popIn { of }` (the popped-out
-  window's ⇲). A native view `{ kind: "pip", of }` shows that video in its place (macOS's
-  own window stays hidden). Actions: `pip.toggle` (play/pause; event `pip.state { result }`),
-  `pip.back` (ends it, the page plays on, and the page's pane takes focus, across tabs and
-  spaces), `pip.close` (ends it, paused), `pip.popOut { colors: { background, foreground, dim,
-  border } }` (a square window above every app and space with ↩ ⇲ ❚❚ ✕; the view may go).
-  Event `pip.ended`: the video went back to its page. One video at a time.
+  Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
+  created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
+  biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
+  and sends `pip.enter { of }` (`pip.start { result | error }`: `"none"` when there is no video);
+  again: back. A native view `{ kind: "pip", of }` then takes the page's whole web view and
+  lifts the video into the page's top layer to fill it (an embedded player's iframe too); the
+  pane is left empty meanwhile (draw a placeholder; the page gets `pip.leave` when it's back).
+  Actions: `pip.toggle` (play/pause; event `pip.state { result }`), `pip.back` (the page goes
+  home playing on, and its pane takes focus, across tabs and spaces), `pip.close` (home,
+  paused), `pip.popOut { colors: { background, foreground, dim, border } }` (a square window
+  above every app and space with ↩ ⇲ ❚❚ ✕, whose ⇲ sends the page `pip.popIn { of }`; the
+  view may go). Event `pip.ended`: the page went home (also on a new page, a crash, a closed
+  pane, or the video leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
   `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip`.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
