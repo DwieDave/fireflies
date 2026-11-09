@@ -37,6 +37,9 @@ export function knownAgents(options?: { on?: string | null }): Promise<(Program 
 /** Opens the system's folder picker (this machine). Resolves with the chosen folder, or null
  *  when the person cancels. `prompt`: the confirm button's text (default "Open"). */
 export function pickFolder(options?: { prompt?: string }): Promise<string | null>;
+/** Opens the system's file picker (this machine), files only: an .app bundle counts as one.
+ *  Resolves with the chosen path, or null when cancelled. */
+export function pickFile(options?: { prompt?: string }): Promise<string | null>;
 
 /** Plays "done" or "blocked" (the attention sounds, or the files settings.json names), or an MP3
  *  file (absolute, or relative to ~/.config/herdr-app). */
@@ -444,7 +447,12 @@ export function watchFolder(path: string): Promise<string[]>;
  *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
  *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
 export interface NativeViewProps {
-  kind: "web" | "pdf" | "media" | "quicklook" | "inspector"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  kind: "web" | "pdf" | "media" | "quicklook" | "inspector" | "app"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  /** App only (`path`: an absolute .app): "shared" (default) uses the app if it runs, else launches it;
+   *  "new" always starts a separate instance. */
+  instance?: "shared" | "new";
+  /** App only: quit the app when the view goes, if this view launched it (default true). */
+  quitOnClose?: boolean;
   /** Inspector only: the web view to inspect, the `of` its `web.inspect` action returned. */
   of?: string;
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
@@ -463,6 +471,7 @@ export function nativeViewCapabilities(): { interface: string; platform: string;
  *  ("v", "media.pause"), ("v", "browser.navigate", { url }), ("v", "state"). Throws on unknown actions. */
 export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;
 /** HUP: the next event from this mod's native views, as JSON text:
- *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed …).
+ *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed,
+ *  app.launched {pid, name, launched}, app.window, app.terminated, app.permission {granted} …).
  *  `generation` grows with every load, so drop events older than the view's current one. */
 export function nextNativeViewEvent(): Promise<string>;

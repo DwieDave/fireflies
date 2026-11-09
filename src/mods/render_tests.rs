@@ -152,6 +152,7 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
     module = module.async_function("feedbackPickImages", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("knownAgents", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("pickFolder", |_| Ok(async { Ok(HostValue::Null) }));
+    module = module.async_function("pickFile", |_| Ok(async { Ok(HostValue::Null) }));
     // HUP: native views have no window here; the element renders empty.
     module = module.component("nativeView", |_, _, _| gpui::IntoElement::into_any_element(gpui::div()));
     module = module.function("nativeViewCapabilities", |_| Ok(to_host(&json!({"interface":"native-view/0","available":false,"kinds":[]}))));

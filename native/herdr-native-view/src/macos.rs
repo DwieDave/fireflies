@@ -105,6 +105,11 @@ enum Renderer {
         /// Undocked once (WebKit may have it docked into the page).
         detached: Cell<bool>,
     },
+    /// Another app's window over this view's rect (crate::app); the view is
+    /// an empty placeholder.
+    App {
+        key: String,
+    },
 }
 
 struct Entry {
@@ -220,6 +225,7 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
     inner.setAutoresizingMask(
         NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable,
     );
+    host.ivars().passthrough.set(spec.kind == Kind::App);
     install_focus_monitor(mtm);
     let entry = Entry {
         kind: spec.kind,
@@ -483,6 +489,10 @@ fn make(
                 ))
             }
             Kind::Chromium => Err("unreachable: Chromium handled above".into()),
+            Kind::App => {
+                let view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+                Ok((view, Renderer::App { key: key.to_owned() }))
+            }
             Kind::Inspector => {
                 let Source::Inspect(target) = &spec.source else {
                     return Err("an inspector needs `of`".into());
@@ -551,7 +561,7 @@ fn load(
                             &file_url(read_root),
                         );
                     }
-                    Source::Inspect(_) => return Err("a web view takes a `url` or `path`".into()),
+                    Source::Inspect(_) | Source::App(_) => return Err("a web view takes a `url` or `path`".into()),
                 }
                 Ok(None)
             }
@@ -577,6 +587,10 @@ fn load(
             }
             (Renderer::Inspector { .. }, Source::Inspect(_)) => {
                 start_inspector(key);
+                Ok(None)
+            }
+            (Renderer::App { .. }, Source::App(a)) => {
+                crate::app::start(key, generation, a);
                 Ok(None)
             }
             (Renderer::QuickLook { view }, Source::File { path, .. }) => {
@@ -710,6 +724,7 @@ pub fn frame_end(
     }
     let mut paused = Vec::new();
     let mut inspect = Vec::new();
+    let mut apps_moved: Vec<(String, bool, bool)> = Vec::new();
     VIEWS.with(|v| {
         let mut v = v.borrow_mut();
         // Pages with an inspector pane; another page whose inspector opens
@@ -761,6 +776,7 @@ pub fn frame_end(
             e.suppressed = suppressed;
             let rect = e.painted.unwrap_or(Rect::ZERO);
             let visible = now_shown && !suppressed && !e.wanted_hidden && !rect.is_empty();
+            let mut covered = false;
             if visible {
                 let (over, dim) = covers(k);
                 let cut = over
@@ -776,8 +792,13 @@ pub fn frame_end(
                             radius: c.radius,
                         })
                     })
-                    .collect();
+                    .collect::<Vec<_>>();
+                covered = !cut.is_empty() || dim || !e.host.ivars().holes.borrow().is_empty();
                 e.host.set_cover(cut, dim);
+            }
+            if let Renderer::App { .. } = &e.renderer {
+                // Laid out below (the view moves first); pinned after this loop.
+                apps_moved.push((k.clone(), visible, covered));
             }
             if e.applied == Some((rect, visible)) {
                 continue;
@@ -803,6 +824,17 @@ pub fn frame_end(
     }
     for (k, g) in inspect {
         emit(&k, g, "web.inspector", json!({ "of": k }));
+    }
+    // Apps' windows follow their placeholders now, not at the next tick.
+    let mut repin = false;
+    for (k, visible, covered) in apps_moved {
+        let view = VIEWS.with(|v| v.borrow().get(&k).map(|e| e.view.clone()));
+        if let Some(view) = view {
+            repin |= crate::app::place(&k, &view, visible, covered);
+        }
+    }
+    if repin {
+        crate::app::sync();
     }
     // GPUI's cursor rect leaves out the views above it (the page sets its own
     // cursor there): recompute it where they now are.
@@ -896,6 +928,8 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                 }
                 #[cfg(feature = "chromium")]
                 (a, Renderer::Chromium(c)) if a.starts_with("browser.") => c.action(a, args),
+                ("focus" | "app.activate", Renderer::App { key }) => crate::app::activate(key),
+                ("app.quit", Renderer::App { key }) => crate::app::quit(key),
                 ("focus", _) => {
                     let w = e.view.window().ok_or("not in a window")?;
                     w.makeFirstResponder(Some(&e.inner));
@@ -1056,6 +1090,7 @@ fn entry_state(e: &Entry, r: &Renderer) -> Value {
         Renderer::Inspector { target, window, .. } => {
             json!({ "of": target, "adopted": window.borrow().is_some() })
         }
+        Renderer::App { key } => crate::app::state(key),
     };
     let f = e.view.frame();
     let i = e.inner.frame();
@@ -1151,6 +1186,7 @@ pub fn dispose(key: &str) {
                 view.setPlayer(None);
             }
             Renderer::QuickLook { view } => view.close(),
+            Renderer::App { key } => crate::app::stop(key),
             Renderer::Inspector { inspector, .. } => {
                 // Closes WebKit's inspector, and with it its (hidden) window.
                 if let Some(i) = inspector.borrow().as_ref() {
@@ -1227,7 +1263,8 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
                             if gpui_for_window.is_none() {
                                 gpui_for_window = e.gpui.load();
                             }
-                            if !e.view.isHidden() {
+                            // A passthrough view (an app's placeholder) lets Herdr take the click itself.
+                            if !e.view.isHidden() && !e.host.ivars().passthrough.get() {
                                 let f = e.view.convertRect_toView(e.view.bounds(), None);
                                 if p.x >= f.origin.x
                                     && p.y >= f.origin.y
@@ -1512,6 +1549,9 @@ pub struct HostIvars {
     /// Soft shadow around the holes, drawn on the page (the hole itself is
     /// masked away, so the shadow only shows outside the card).
     shadow: RefCell<Option<Retained<AnyObject>>>,
+    /// Clicks pass through (an app view: its placeholder has nothing to click,
+    /// the mod's children underneath do).
+    passthrough: Cell<bool>,
 }
 
 define_class!(
@@ -1533,6 +1573,9 @@ define_class!(
 
         #[unsafe(method(hitTest:))]
         fn hit_test(&self, point: NSPoint) -> *mut NSView {
+            if self.ivars().passthrough.get() {
+                return std::ptr::null_mut();
+            }
             // `point` is in the superview's coordinates.
             if let Some(sup) = unsafe { self.superview() } {
                 let local = self.convertPoint_fromView(point, Some(&sup));
@@ -1559,6 +1602,7 @@ impl HoleHost {
             dimmed: Cell::new(false),
             dim: RefCell::new(None),
             shadow: RefCell::new(None),
+            passthrough: Cell::new(false),
         });
         let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
         this.setWantsLayer(true);

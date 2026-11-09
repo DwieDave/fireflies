@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 
 #[cfg(target_os = "macos")]
 pub mod macos;
+#[cfg(target_os = "macos")]
+mod app;
 
 
 
@@ -88,6 +90,10 @@ pub enum Kind {
     Inspector,
     /// A Chromium (CEF) browser; only in builds with the `chromium` feature.
     Chromium,
+    /// Another application's window, kept over the view's rect (`path`: its
+    /// .app). Not inside the window: macOS can't embed another process's
+    /// window, so its real window is moved, sized, ordered and hidden to match.
+    App,
 }
 
 impl Kind {
@@ -99,8 +105,9 @@ impl Kind {
             "quicklook" => Ok(Kind::QuickLook),
             "inspector" => Ok(Kind::Inspector),
             "chromium" => Ok(Kind::Chromium),
+            "app" => Ok(Kind::App),
             other => Err(format!(
-                "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium)"
+                "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium, app)"
             )),
         }
     }
@@ -113,6 +120,7 @@ impl Kind {
             Kind::QuickLook => "quicklook",
             Kind::Inspector => "inspector",
             Kind::Chromium => "chromium",
+            Kind::App => "app",
         }
     }
 
@@ -163,6 +171,16 @@ impl Kind {
                 "media.setVolume",
             ],
             Kind::QuickLook | Kind::Inspector => &COMMON,
+            Kind::App => &[
+                "focus",
+                "blur",
+                "setVisible",
+                "setHoles",
+                "state",
+                "dispose",
+                "app.activate",
+                "app.quit",
+            ],
             Kind::Chromium => &[
                 "focus",
                 "blur",
@@ -215,6 +233,41 @@ pub enum Source {
     },
     /// The key of the web view an inspector inspects.
     Inspect(String),
+    /// An application bundle, and how the view gets its window.
+    App(AppSource),
+}
+
+/// `{ kind: "app", path, instance?, quitOnClose? }`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AppSource {
+    /// The canonical `.app` folder.
+    pub bundle: PathBuf,
+    /// `instance: "new"`: always start a separate instance; default
+    /// `"shared"`: use the app if it's running, else launch it.
+    pub new_instance: bool,
+    /// Quit the app when the view goes, if this view launched it (default true).
+    pub quit_on_close: bool,
+}
+
+impl AppSource {
+    fn parse(v: &Value) -> Result<AppSource, String> {
+        let raw = v.get("path").and_then(Value::as_str).ok_or("an app view needs `path`: the .app to show")?;
+        let p = Path::new(raw);
+        if !p.is_absolute() {
+            return Err(format!("path must be absolute: {raw}"));
+        }
+        let bundle = std::fs::canonicalize(p).map_err(|e| format!("{raw}: {e}"))?;
+        if bundle.extension().and_then(|e| e.to_str()) != Some("app") || !bundle.join("Contents/Info.plist").is_file() {
+            return Err(format!("{raw} is not an application (.app)"));
+        }
+        let new_instance = match v.get("instance").and_then(Value::as_str) {
+            None | Some("shared") => false,
+            Some("new") => true,
+            Some(o) => return Err(format!("unknown instance `{o}` (shared, new)")),
+        };
+        let quit_on_close = v.get("quitOnClose").and_then(Value::as_bool).unwrap_or(true);
+        Ok(AppSource { bundle, new_instance, quit_on_close })
+    }
 }
 
 /// A validated request for one view.
@@ -258,6 +311,9 @@ impl Spec {
                 persist,
                 zoom,
             });
+        }
+        if kind == Kind::App {
+            return Ok(Spec { kind, source: Source::App(AppSource::parse(v)?), persist, zoom });
         }
         if let Some(url) = v.get("url").and_then(Value::as_str) {
             if kind != Kind::Web && kind != Kind::Chromium {
@@ -318,6 +374,7 @@ impl Spec {
         match &self.source {
             Source::Url(u) => redact_url(u),
             Source::Inspect(_) => "inspector".into(),
+            Source::App(a) => a.bundle.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
             Source::File { path, .. } => path
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
@@ -433,7 +490,7 @@ pub fn redact_url(u: &str) -> String {
 
 /// What the host can do, for `nativeViewCapabilities()`.
 pub fn capabilities() -> Value {
-    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector];
+    let mut all = vec![Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::App];
     if cfg!(feature = "chromium") {
         all.push(Kind::Chromium);
     }
@@ -613,4 +670,31 @@ mod tests {
         assert_eq!(e.to_json()["id"], "left");
         assert_eq!(e.to_json()["generation"], 3);
     }
+
+    #[test]
+    fn app_views_take_an_absolute_app_bundle() {
+        let dir = std::env::temp_dir().join(format!("hup-app-{}", std::process::id()));
+        let app = dir.join("Thing.app");
+        std::fs::create_dir_all(app.join("Contents")).unwrap();
+        std::fs::write(app.join("Contents/Info.plist"), "<plist/>").unwrap();
+        std::fs::create_dir_all(dir.join("Folder.app")).unwrap();
+        let s = Spec::parse(&json!({ "kind": "app", "path": app.to_str().unwrap() })).unwrap();
+        let Source::App(a) = &s.source else { panic!("{s:?}") };
+        assert_eq!((a.new_instance, a.quit_on_close), (false, true));
+        assert_eq!(s.redacted(), "Thing.app");
+        let s = Spec::parse(&json!({ "kind": "app", "path": app.to_str().unwrap(), "instance": "new", "quitOnClose": false })).unwrap();
+        assert!(matches!(&s.source, Source::App(a) if a.new_instance && !a.quit_on_close));
+        for bad in [
+            json!({ "kind": "app" }),
+            json!({ "kind": "app", "path": "Thing.app" }),
+            json!({ "kind": "app", "path": dir.join("Folder.app").to_str().unwrap() }),
+            json!({ "kind": "app", "path": dir.to_str().unwrap() }),
+            json!({ "kind": "app", "path": app.to_str().unwrap(), "instance": "twice" }),
+        ] {
+            assert!(Spec::parse(&bad).is_err(), "{bad}");
+        }
+        assert!(Kind::App.allows("app.quit") && !Kind::App.allows("browser.navigate"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
 }

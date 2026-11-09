@@ -1089,6 +1089,17 @@ fn module(inst: Instance, copy: u64) -> HostModule {
                 Ok(path.map(|p| HostValue::Str(p.to_string_lossy().into_owned())).unwrap_or(HostValue::Null))
             })
         })
+        .async_function("pickFile", |a| {
+            let prompt = a.get(0).map(from_host).and_then(|v| v.get("prompt").and_then(Value::as_str).map(str::to_owned)).unwrap_or_else(|| "Open".into());
+            // Files only; macOS counts a bundle (an .app) as one.
+            let picked = gpui_shell::with_current_app(|cx| cx.prompt_for_paths(gpui::PathPromptOptions {
+                files: true, directories: false, multiple: false, prompt: Some(prompt.into()),
+            })).ok_or_else(|| HostError::new("no window to pick from"))?;
+            Ok(async move {
+                let path = picked.await.ok().and_then(Result::ok).flatten().and_then(|p| p.into_iter().next());
+                Ok(path.map(|p| HostValue::Str(p.to_string_lossy().into_owned())).unwrap_or(HostValue::Null))
+            })
+        })
         .function("feedbackClearImages", move |_| {
             if feedback_frame { crate::feedback::clear_shots(); }
             Ok(HostValue::Null)
