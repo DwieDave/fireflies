@@ -28,7 +28,7 @@ const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 
 /** Nocturne's panels as palette entries: `go` runs them; `bind` is their key in keys.json's layout section. */
 function openEntries() {
-  const bind = { files: "nocturne.files", lazygit: "nocturne.lazygit" };
+  const bind = { files: "nocturne.files", lazygit: "nocturne.lazygit", github: "nocturne.github" };
   const out = [];
   for (const p of panels()) {
     const where = p.fixed === "float" ? "floating over the tab" : p.fixed === "edge" ? "down the right edge" : "beside the focused pane";

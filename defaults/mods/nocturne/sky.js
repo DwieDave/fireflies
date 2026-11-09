@@ -31,6 +31,7 @@ import { menuHeight, NAME_AGENT, MOVE_PANE, MOVABLE_MODS } from "./menu.js";
 import { toggleLazygit } from "./lazygit.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
+import { toggleGithub } from "./github.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -97,7 +98,8 @@ export default class Sky {
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
     // here: the next space in the sidebar's order (worktrees under their repo);
     // nocturne.lazygit toggles the lazygit pane (lazygit.js), nocturne.files
-    // the files pane (files.js), nocturne.new (cmd-n) the "+ new" menu.
+    // the files pane (files.js), nocturne.github (cmd-shift-g) the GitHub
+    // window (github.js), nocturne.new (cmd-n) the "+ new" menu.
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -108,6 +110,7 @@ export default class Sky {
         else if (c === "fold") this.fold(cx);
         else if (c === "lazygit") toggleLazygit();
         else if (c === "files") toggleFiles();
+        else if (c === "github") toggleGithub();
         else if (c === "new") openNewMenu({ centered: true });
         cx.notify();
       }
