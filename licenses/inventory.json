@@ -186,6 +186,13 @@
       ]
     },
     {
+      "name": "Departure Mono font (Nocturne)",
+      "source": "https://github.com/rektdeckard/departure-mono, v1.500, unchanged.",
+      "files": [
+        "defaults/mods/nocturne/fonts/LICENSE-DepartureMono.txt"
+      ]
+    },
+    {
       "name": "Herdr logo artwork",
       "source": "Ram path adapted from https://github.com/herdrdev/herdr/blob/HEAD/assets/logo.svg (Apache-2.0). Herdr 98 artwork is drawn by defaults/mods/win98/art/generate.ts, under the app's Apache-2.0 license.",
       "files": [

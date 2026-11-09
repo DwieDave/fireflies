@@ -181,6 +181,13 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 "exec" if first == "sh" && a.get(1).map(from_host).and_then(|v| v.get(2).cloned()) == Some(json!("files")) => {
                     Some(json!({"code":0,"stdout":"d\u{0}src\u{0}f\u{0}README.md\u{0}","stderr":""}))
                 }
+                // nocturne-usage reads Claude Code's login: none here (exit 3).
+                "exec"
+                    if first == "sh"
+                        && a.get(1).map(from_host).and_then(|v| v.get(1).and_then(Value::as_str).map(|s| s.contains("Claude Code-credentials"))) == Some(true) =>
+                {
+                    Some(json!({"code":3,"stdout":"","stderr":""}))
+                }
                 "exec"
                     if first == "git"
                         && [
@@ -934,7 +941,20 @@ fn shipped_layouts_and_keys() {
         layouts.insert(path.file_stem().unwrap().to_str().unwrap().to_owned());
     }
     assert_eq!(layouts, crate::window::shipped_layouts().into_iter().map(str::to_owned).collect());
-    let mod_commands = ["ribbon.next"];
+    let mod_commands = [
+        "ribbon.next",
+        "nocturne.next",
+        "nocturne.prev",
+        "nocturne.fold",
+        "nocturne.new",
+        "nocturne.lazygit",
+        "nocturne.files",
+        "nocturne-browser.url",
+        "nocturne-browser.reload",
+        "nocturne-browser.back",
+        "nocturne-browser.forward",
+        "nocturne-browser.inspect",
+    ];
     for text in [
         include_str!("../../defaults/keys.json"),
         include_str!("../../defaults/keys.macos.json"),

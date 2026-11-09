@@ -1,0 +1,30 @@
+# Nocturne's lazygit skin, layered over your own lazygit config by
+# bin/nocturne-lazygit. Square single-line borders for the 1-bit look, a
+# spinner that steps through dither shades, no tips or command log, and
+# moonfly for authors, branch kinds and the line under the cursor. The
+# dithered chrome around it is Nocturne's: the pane header, or the float's
+# bar (peek.js).
+gui:
+  border: single
+  nerdFontsVersion: "3"
+  showRandomTip: false
+  showCommandLog: false
+  showBottomLine: false
+  showPanelJumps: false
+  showDivergenceFromBaseBranch: arrowAndNumber
+  commitHashLength: 7
+  animateExplosion: false
+  spinner:
+    frames: ["░", "▒", "▓", "█", "▓", "▒"]
+    rate: 120
+  theme:
+    selectedLineBgColor: ["#13203a"]
+    cherryPickedCommitBgColor: ["#13203a"]
+    markedBaseCommitBgColor: ["#13203a"]
+    authorColors:
+      "*": "#cf87e8"
+    branchColorPatterns:
+      "^(main|master)$": "#74b2ff"
+      "^feat": "#8cc85f"
+      "^fix": "#ff5d5d"
+      "^(chore|docs|refactor)": "#cf87e8"

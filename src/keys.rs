@@ -44,6 +44,8 @@ const SHIPPED_KEYS: &[&str] = &[
 const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/v0.1.4-keys.macos.json"),
     include_str!("keys/shipped/v0.1.5-keys.macos.json"),
+    // Herdr's macOS keys before Fireflies added Nocturne's (layout:nocturne, mod:nocturne-browser).
+    include_str!("keys/shipped/v0.1.14-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
