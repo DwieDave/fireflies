@@ -55,6 +55,15 @@ export async function changes(r, scope) {
   return { files, since };
 }
 
+/** A pull request's changes, from `gh pr diff` (no checkout: works for any PR). */
+export async function prChanges(r, pr) {
+  const d = await exec("gh", ["pr", "diff", String(pr), "--color=never"], { cwd: r.root, on: r.on, timeout: 60000 });
+  if (d.code !== 0) throw new Error(d.stderr.trim().split("\n").pop() || `gh pr diff ${pr} failed`);
+  const files = parse(d.stdout);
+  files.sort((a, b) => a.path.localeCompare(b.path));
+  return { files, since: `#${pr}` };
+}
+
 function unquote(p) {
   return p.startsWith('"') ? JSON.parse(p) : p;
 }

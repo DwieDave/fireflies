@@ -3,7 +3,10 @@
 // diff. Two scopes: uncommitted work, or the whole branch since it left its
 // base. Tests, config, assets and docs can be hidden to leave the business
 // code. In wide panes the file list's edge drags.
-// Opened from the Nocturne tab strip with props { folder, on }.
+// Opened from the Nocturne tab strip with props { folder, on }. With
+// { pr } (the GitHub window's `d`) it starts on a third scope, that pull
+// request's diff from `gh pr diff`; with { back } too it sits in the GitHub
+// window's place, and esc puts that window back.
 //
 // It fits its pane: from SPLIT wide, list and diff side by side; narrower,
 // one at a time (the diff, with ‹ › and a files button); under SHORT high,
@@ -20,8 +23,8 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, h_resizable, resizable_panel, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { props, theme, settings, shared, setShared, watchFolder, nextCommand, window as appWindow } from "herdr";
-import { repo, changes } from "./git.js";
+import { props, theme, settings, shared, setShared, watchFolder, nextCommand, openOverlay, window as appWindow } from "herdr";
+import { repo, changes, prChanges } from "./git.js";
 import { KINDS, kind } from "./kinds.js";
 
 const MARKS = "nocturne-diff.reviewed";
@@ -43,7 +46,10 @@ export default class Diff extends View {
     const pr = props() ?? p ?? {};
     this.folder = pr.folder;
     this.on = pr.on ?? null;
-    this.scope = "work";
+    this.pr = pr.pr ?? null; // a pull request number: the "pr" scope
+    this.back = pr.back ?? null; // { mod, props }: the window to put back on esc
+    this.overlay = pr.overlay ?? null;
+    this.scope = this.pr ? "pr" : "work";
     this.state = "loading";
     this.files = [];
     this.sel = null;
@@ -56,6 +62,14 @@ export default class Diff extends View {
     this.diffScroll = VirtualListScrollHandle.new();
     this.diffAt = 0;
     this.help = false;
+    // In a window (the GitHub window's place) nothing hands over the keyboard;
+    // and it says it holds that window, so cmd-shift-g closes it.
+    if (this.overlay) for (const ms of [0, 60, 250, 600]) cx.timer.after(ms, () => this.handle.focus());
+    if (this.overlay && this.back) {
+      const hold = () => setShared("nocturne-github.window", { id: this.overlay, beat: Date.now() });
+      hold();
+      cx.timer.every(4000, hold);
+    }
     this.load(cx);
     // Remote folders can't be watched: poll those gently instead.
     cx.timer.every(this.on ? 15000 : 60000, (cx) => this.load(cx));
@@ -75,7 +89,7 @@ export default class Diff extends View {
       try {
         this.repo = this.repo ?? (this.folder ? await repo(this.folder, this.on) : null);
         if (!this.repo) { this.state = "norepo"; return; }
-        const { files, since } = await changes(this.repo, this.scope);
+        const { files, since } = this.scope === "pr" ? await prChanges(this.repo, this.pr) : await changes(this.repo, this.scope);
         for (const f of files) f.kind = kind(f);
         this.files = files; this.since = since;
         this.state = "ready";
@@ -140,6 +154,11 @@ export default class Diff extends View {
 
   pick(f) { this.sel = f.path; this.view = "file"; this.handle.focus(); }
 
+  /** Puts the window this diff stood in for back in its place (same key). */
+  goBack() {
+    openOverlay({ mod: this.back.mod, kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: this.back.props ?? {} });
+  }
+
   setScope(s, cx) { if (this.scope !== s) { this.scope = s; this.state = "loading"; this.load(cx); } }
 
   key(e, cx) {
@@ -176,7 +195,11 @@ export default class Diff extends View {
     } else if (k === "f") this.view = this.view === "list" ? "file" : "list";
     else if (k === "enter" && this.view === "list") this.view = "file";
     else if (k === "escape" && this.view === "file" && this.size.width < SPLIT) this.view = "list";
-    else if (k === "s" || k === "[" || k === "]") this.setScope(this.scope === "work" ? "branch" : "work", cx);
+    else if (k === "s" || k === "[" || k === "]") {
+      const scopes = this.pr ? ["pr", "work", "branch"] : ["work", "branch"];
+      const at = scopes.indexOf(this.scope);
+      this.setScope(scopes[(at + (k === "[" ? scopes.length - 1 : 1)) % scopes.length], cx);
+    } else if ((k === "escape" || k === "q") && this.back && !(this.view === "file" && this.size.width < SPLIT)) this.goBack();
     else if (k === "r" || k === "R") this.load(cx);
     else if (k === "?") this.help = true;
     else return;
@@ -214,6 +237,7 @@ export default class Diff extends View {
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(where))
       .when(Boolean(r), (el) => el
         .child(h_flex().flex_none().border(1).border_color(t.ansi0)
+          .when(Boolean(this.pr), (el) => el.child(this.chip(t, "scope-pr", `#${this.pr}`, this.scope === "pr", (cx) => this.setScope("pr", cx))))
           .child(this.chip(t, "scope-work", tight ? "work" : "uncommitted", this.scope === "work", (cx) => this.setScope("work", cx)))
           .child(this.chip(t, "scope-branch", roomy ? `since ${r.base ?? "base"}` : "branch", this.scope === "branch", (cx) => this.setScope("branch", cx))))
         .child(h_flex().flex_none().gap(6)
@@ -362,7 +386,7 @@ export default class Diff extends View {
   hints(t, narrow) {
     const list = this.help ? [["esc", "close"]]
       : narrow && this.view === "list" ? [["j/k", "file"], ["enter", "diff"], ["space", "reviewed"], ["s", "scope"], ["?", "keys"]]
-      : [["j/k", "file"], ["J/K", "scroll"], ["space", "reviewed"], ...(narrow ? [["esc", "files"]] : []), ["s", "scope"], ["?", "keys"]];
+      : [["j/k", "file"], ["J/K", "scroll"], ["space", "reviewed"], ...(narrow ? [["esc", "files"]] : []), ["s", "scope"], ...(this.back && !narrow ? [["esc", "back to GitHub"]] : []), ["?", "keys"]];
     return h_flex().id("diff-hints").relative().h(22).flex_none().px(10).gap(10).items_center().text_size(11).overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
       .children(list.map(([key, what], i) => h_flex().id(`diff-hint-${i}`).flex_none().gap(4)
@@ -375,7 +399,8 @@ export default class Diff extends View {
     const keys = [
       ["j k ↓ ↑", "next / previous file"], ["g G < >", "first / last file"], [", .", "a page of files"],
       ["J K pgdn pgup", "scroll the diff"], ["space", "mark reviewed, next unreviewed"], ["a", "all reviewed / none"],
-      ["enter", "the diff (narrow)"], ["esc f", "the files (narrow)"], ["s [ ]", "uncommitted / branch"], ["r", "refresh"], ["?", "these keys"],
+      ["enter", "the diff (narrow)"], ["esc f", "the files (narrow)"], ["s [ ]", this.pr ? `#${this.pr} / uncommitted / branch` : "uncommitted / branch"],
+      ...(this.back ? [["esc q", "back to the GitHub window"]] : []), ["r", "refresh"], ["?", "these keys"],
     ];
     return v_flex().id("diff-help").absolute().inset_0().bg(t.background).px(16).py(12).gap(2).text_size(11)
       .child(div().pb(6).text_color(t.ansi8).child("KEYS"))
@@ -403,7 +428,7 @@ export default class Diff extends View {
     else if (this.state === "norepo") body = this.empty(t, "Not a git repository", `${this.folder ?? "No folder"}: open the diff from a terminal inside a repo.`, short);
     else if (this.state === "error") body = this.empty(t, "git didn't answer", this.error, short);
     else if (!this.files.length) body = this.empty(t, "Nothing changed",
-      this.scope === "work" ? "No uncommitted changes. Press s for the branch." : `No changes since ${this.since ?? "the base"}.`, short);
+      this.scope === "pr" ? `#${this.pr} changes nothing.` : this.scope === "work" ? "No uncommitted changes. Press s for the branch." : `No changes since ${this.since ?? "the base"}.`, short);
     else if (!list.length) body = this.empty(t, `All ${this.files.length} changed files are hidden`, "Only tests, assets or docs changed.", short,
       this.chip(t, "show-all", "show them", false, () => setShared(HIDE, {})));
     else if (narrow) body = this.view === "list" ? this.fileList(t, list, cur, false, short) : this.fileView(t, list, cur, w, true, short);
@@ -414,6 +439,8 @@ export default class Diff extends View {
         .child(this.fileList(t, list, cur, true, short)))
       .child(resizable_panel().child(this.fileView(t, list, cur, this.diffW ?? w * 0.7, false, short)));
     return v_flex().id("diff").size_full().bg(t.background).track_focus(this.handle)
+      // Frameless in a window: its own 1-bit edge.
+      .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.ansi8))
       .on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_down("left", () => this.handle.focus())
       .on_size_change((size, cx) => {
