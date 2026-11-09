@@ -111,7 +111,7 @@ test("splits a job's log into its steps by markers and time", () => {
     line("14:39", "##[group]Run if [ -z \"${CARGO_INCREMENTAL+set}\" ]; then"), // the composite action, still step 3
     line("14:39", "##[group]Run mlugg/setup-zig@d143"),
     line("16:25", "##[group]Run cargo test"),
-    line("16:30", "\x1b[1mCompiling\x1b[0m herdr"),
+    line("16:30", "\x1b[1mCompiling^[[0m herdr"),
     line("17:13", "##[group]Run only=()"), // a named run: step, same second the last one ended
     line("17:20", "##[error]boom"),
     line("17:38", "Post job cleanup."),
