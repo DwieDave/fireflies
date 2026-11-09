@@ -100,15 +100,19 @@ Move a tab to a position in its space (1 = first).
 
 ## `pane.split`
 
-Split a pane (default: the focused one) "right" or "down" with a new terminal, or with a mod (`mod`, its `props`) beside it.
+Split a pane (default: the focused one) "right", "down", "left", "up" or "auto" (below a pane beside others, right of one stacked or alone) with a new terminal (in folder), or with a mod (`mod`, its `props`) beside it. Or edge ("right", "left", "top", "bottom") instead of direction: the new pane along that side of a whole tab (default: the shown one), px wide or tall if given.
 
 | Argument | Required |
 |---|---|
-| `direction` | yes |
+| `direction` | no |
 | `pane` | no |
 | `argv` | no |
 | `mod` | no |
 | `props` | no |
+| `folder` | no |
+| `edge` | no |
+| `px` | no |
+| `tab` | no |
 
 ## `pane.close`
 
@@ -120,7 +124,7 @@ Close a pane and end its terminal.
 
 ## `terminal.open`
 
-Start a terminal: as a new tab (place "tab", default), or "right"/"down" of the focused pane.
+Start a terminal: as a new tab (place "tab", default), "right"/"down"/"left"/"up"/"auto" of a pane (default: the focused one), or "float": without a pane, floating over the tab (view {mod, props?, name?}: a second view in the float, a mod; show 0 or 1: which one shows first).
 
 | Argument | Required |
 |---|---|
@@ -128,15 +132,19 @@ Start a terminal: as a new tab (place "tab", default), or "right"/"down" of the 
 | `folder` | no |
 | `place` | no |
 | `name` | no |
+| `pane` | no |
+| `view` | no |
+| `show` | no |
 
 ## `terminal.keep`
 
-Give a running terminal without a pane (a sub-agent) a pane: a new tab, or "right"/"down".
+Give a running terminal without a pane (a sub-agent) a pane: a new tab, or "right"/"down"/"left"/"up"/"auto" of a pane (default: the focused one).
 
 | Argument | Required |
 |---|---|
 | `terminal` | yes |
 | `place` | no |
+| `pane` | no |
 
 ## `terminal.park`
 
@@ -238,6 +246,38 @@ Show only this pane of its tab, or all again.
 |---|---|
 | `pane` | no |
 
+## `pane.font_bigger`
+
+Make this pane's terminal text bigger (default: the focused pane), on top of the app's zoom.
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+
+## `pane.font_smaller`
+
+Make this pane's terminal text smaller (default: the focused pane).
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+
+## `pane.font_reset`
+
+Back to the app's terminal text size in this pane (default: the focused pane).
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+
+## `pane.float`
+
+Float a pane's terminal over the tab (default: the focused pane): its pane goes (as terminal.park), it keeps running.
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+
 ## `pane.focus`
 
 Focus a pane (or the pane showing a terminal).
@@ -267,11 +307,22 @@ Swap a pane (default: the focused one) with its neighbor in a direction, or with
 
 ## `terminal.peek`
 
-Peek at a running terminal over the tab, with keep-as-tab and close controls.
+Peek at a running terminal over the tab, with keep-as-tab, dock-right and close controls (float true: as a floating terminal, bigger; view and show as terminal.open's float; the one floating already just shows `show`).
 
 | Argument | Required |
 |---|---|
 | `terminal` | yes |
+| `float` | no |
+| `view` | no |
+| `show` | no |
+
+## `float.view`
+
+Show the floating terminal's view 0 (the terminal) or 1 (its view's mod) and give it the keyboard (a mod only when its mod.json says focusable).
+
+| Argument | Required |
+|---|---|
+| `index` | yes |
 
 ## `terminal.show`
 
@@ -437,6 +488,22 @@ Close an overlay (default: the top dialog or popup).
 | Argument | Required |
 |---|---|
 | `id` | no |
+
+## `native.debug`
+
+Every native view: frame, visibility, focus, content state and recent events.
+
+No arguments.
+
+## `native.call`
+
+Run one whitelisted action on a native view (key: <copy>:<id>).
+
+| Argument | Required |
+|---|---|
+| `key` | yes |
+| `action` | yes |
+| `args` | no |
 
 ## `app.help`
 
