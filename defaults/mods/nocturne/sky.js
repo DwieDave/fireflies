@@ -3,7 +3,7 @@
 //            new moon while everything works, full when the herd is quiet
 //   spaces   one row each (spaces.js), with inline create / rename / delete
 //            spaces in a repo's worktrees sit indented under its main one
-//   usage    the Claude account's 5-hour and weekly limits (usage.js), foldable,
+//   usage    Claude's or Codex's 5-hour and weekly limits (usage.js), foldable,
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
 //            done glows green, working drifts amber, idle rests in the grass;
