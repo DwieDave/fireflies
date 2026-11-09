@@ -659,6 +659,17 @@ impl AppWindow {
                 cx.background_executor().timer(Duration::from_millis(400)).await;
             }
         }));
+        // A press on a mod's native view (a web page) focuses its pane, as a
+        // click does on any other pane: the view takes the click, so the
+        // pane's own mouse handler never runs.
+        let presses = crate::native_view::presses();
+        w._tasks.push(cx.spawn_in(window, async move |this, cx| {
+            while let Ok(copy) = presses.recv().await {
+                if this.update(cx, |this, cx| this.native_view_pressed(copy, cx)).is_err() {
+                    break;
+                }
+            }
+        }));
         if let Some(events) = w.file_events.clone() {
             w._tasks.push(cx.spawn_in(window, async move |this, cx| {
                 while let Ok(mut changed) = events.changes.recv().await {
@@ -4614,6 +4625,20 @@ impl AppWindow {
                 }
             },
         }
+    }
+
+    /// A press on the native view of mod copy `copy`: its pane takes focus, as
+    /// in render_slot's mouse handler (the keyboard stays with the page).
+    fn native_view_pressed(&mut self, copy: u64, cx: &mut Context<Self>) {
+        let Some(slot) = self.copies.iter().find(|(_, c)| c.id == copy).map(|(s, _)| s.clone()) else { return };
+        if self.model.tab_of(&slot).is_none() || self.focused_pane.as_deref() == Some(slot.as_str()) {
+            return;
+        }
+        self.model.focus_pane(&slot);
+        self.focused_pane = Some(slot);
+        self.publish(cx);
+        self.save();
+        cx.notify();
     }
 
     fn render_slot(&self, slot: &str, cx: &mut Context<Self>) -> AnyElement {
