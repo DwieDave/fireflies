@@ -1,16 +1,20 @@
 // A pane's header: name and folder, then a dithered band that fills the
 // rest; the band turns moonfly blue on the pane with the keyboard. Hover
 // shows text size (− / +, the % resets), float, split, zoom and close; a
-// right-click opens the pane's menu (menu.js: split, zoom, move to another
-// tab or a new one, close). Props from the app: { pane, terminal }.
+// right-click opens the pane's menu (menu.js: rename, split, zoom, move to
+// another tab or a new one, close). Props from the app: { pane, terminal }.
+// A terminal pane goes by the name a person gave it (kit.js givenName), else
+// its agent's or program's; double-click the name, or the menu's "Rename",
+// to name it in place (enter: keep, esc: leave it, empty: the default back).
 // A lazygit pane (lazygit.js) gets its own: a git mark, the branch, and a
 // band that fades out in steps toward ahead/behind and the changed files.
 
 import { div, svg } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { panes, spaces, props, run, theme, home, openOverlay } from "herdr";
-import { menuHeight } from "./menu.js";
-import { ART, LOGO, dither, pip, WORD } from "./kit.js";
+import { h_flex, InputState } from "gpui-base";
+import { panes, spaces, props, run, theme, home, openOverlay, shared } from "herdr";
+import { menuHeight, NAME_PANE } from "./menu.js";
+import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal } from "./kit.js";
+import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
 
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
@@ -42,6 +46,12 @@ export default class Header {
   init(_props, cx) {
     this.hovered = false;
     this.git = null;
+    this.naming = false;
+    this.nameInput = InputState.new({ placeholder: "name" });
+    this.nameInput.on("submit", (_e, cx) => this.name(this.nameInput.value(), cx));
+    // The pane menu (another copy of this mod) asks through shared(NAME_PANE);
+    // a request from before this header was made is old.
+    this.nameAsked = shared(NAME_PANE)?.at ?? null;
     // Only a lazygit pane shows git state; every other header stays idle.
     this.poll(cx);
     cx.timer.every(4000, (cx) => this.poll(cx));
@@ -69,6 +79,29 @@ export default class Header {
       } catch { /* unreachable: keep the last state */ }
       finally { this.polling = false; }
     });
+  }
+
+  startNaming(p) {
+    this.naming = true;
+    this.nameInput.set_value(givenName(p.terminal) ?? "");
+    this.nameInput.focus();
+  }
+
+  name(value, cx) {
+    const p = this.target();
+    this.naming = false;
+    cx.notify();
+    if (!p?.terminal) return;
+    nameTerminal(p.terminal, value);
+    run("pane.focus", { pane: p.pane });
+  }
+
+  /** Starts naming when the pane menu asked about this pane, once per request. */
+  answerNaming(p) {
+    const ask = shared(NAME_PANE);
+    if (!ask || ask.at === this.nameAsked) return;
+    this.nameAsked = ask.at;
+    if (p.terminal && ask.terminal === p.terminal) this.startNaming(p);
   }
 
   button(t, id, icon, command, args) {
@@ -142,12 +175,20 @@ export default class Header {
     const p = this.target();
     if (!p) return div();
     if (isLazygit(p)) return this.buttons(t, this.lazygit(t, p), p);
-    const name = MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell");
+    this.answerNaming(p);
+    const name = givenName(p.terminal) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell");
     const st = p.status;
+    const label = this.naming && p.terminal
+      ? h_flex().min_w(60).w(200).child(field(t, `name-${p.pane}`, this.nameInput, (cx) => { this.naming = false; cx.notify(); }))
+      : div().id(`h-n-${p.pane}`).min_w(24).max_w(220).truncate().text_color(p.focused ? t.foreground : t.muted)
+        .when(Boolean(p.terminal), (el) => el.on_mouse_down("left", (e, cx) => {
+          if (e.click_count === 2) { cx.stop_propagation(); this.startNaming(p); cx.notify(); }
+        }))
+        .child(name);
     return this.buttons(t, this.frame(t, p)
       .child(this.mark(t, p))
       .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))
-      .child(div().min_w(24).max_w(220).truncate().text_color(p.focused ? t.foreground : t.muted).child(name))
+      .child(label)
       .child(div().min_w(0).max_w(260).truncate().text_color(t.dim).child(folder(p.cwd)))
       .child(div().flex_1().min_w(12).h(6).relative().child(dither(p.focused ? t.accent : t.ansi0, 2)))
       .when(st === "blocked" || st === "working", (el) => el.child(div().flex_none().text_color(t[st]).child(WORD[st]))), p);

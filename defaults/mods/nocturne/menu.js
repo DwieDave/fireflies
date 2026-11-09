@@ -1,7 +1,8 @@
 // Right-click menus in Nocturne's look (popup.js), with Herdr's items:
 //   tab    the tab strip's tabs (tabs.js opens it, props { role: "menu", tab: "tab", target })
 //   pane   a terminal's menu: the layout's `terminal_menu` is "nocturne", and
-//          Herdr opens it with props { tab: "pane", target: { pane, terminal } }
+//          Herdr opens it with props { tab: "pane", target: { pane, terminal } };
+//          renaming happens inline in the pane's header, asked for through shared(NAME_PANE)
 //   fly    a sidebar firefly's (sky.js opens it, props { tab: "fly", target: { id, address } }):
 //          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT)
 //   space  a sidebar space's (spaces.js opens it, props { tab: "space", target: { id } }):
@@ -24,8 +25,11 @@ function item(t, id, glyph, name, command, args, color) {
   return { id, mark: icon(t, glyph, color), name, hint: shortcut(command, args), go: () => run(command, args) };
 }
 
-/** shared() key: { address, at } asks the sidebar to start naming that agent's tab. */
+/** shared() key: { address, at } asks the sidebar to start naming that agent (its terminal: kit.js NAME_LABEL). */
 export const NAME_AGENT = "nocturne.name-agent";
+
+/** shared() key: { terminal, at } asks that pane's header to start naming it. */
+export const NAME_PANE = "nocturne.name-pane";
 
 /** shared() key: { id, kind: "rename" | "delete", at } asks the sidebar to edit that space inline. */
 export const EDIT_SPACE = "nocturne.edit-space";
@@ -87,6 +91,7 @@ export function menuItems(t, p) {
   // Once right-clicks go to the program, Shift+right-click still opens this menu.
   const toProgram = term?.labels?.["herdr.right-click"] === "program";
   return [
+    ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_PANE, { terminal: term.address, at: Date.now() }) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane: tg.pane }),
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane: tg.pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),

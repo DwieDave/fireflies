@@ -2,7 +2,7 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
-import { settings, window as appWindow } from "herdr";
+import { settings, window as appWindow, terminals, hc } from "herdr";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -16,6 +16,21 @@ export function dither(color, cell = 1) {
   const zoom = Number(settings()?.zoom) || 1;
   const dpr = appWindow()?.platform === "macos" ? 2 : 1;
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
+}
+
+/** The label holding the name a person gave a pane's terminal (the pane menu's
+ *  and a firefly's "Rename"). It lives on the terminal, so the name follows it
+ *  to another pane or tab, and ends with it. */
+export const NAME_LABEL = "nocturne.name";
+
+/** The name a person gave this terminal (an address), or null. */
+export function givenName(terminal) {
+  return (terminal && terminals().find((x) => x.address === terminal)?.labels?.[NAME_LABEL]) || null;
+}
+
+/** Names a terminal; "" takes the name away, so it goes by its program's again. */
+export function nameTerminal(terminal, name) {
+  return hc(["label", terminal, `${NAME_LABEL}=${name.trim()}`]).catch(() => {});
 }
 
 /** Program keys with a dithered logo in art/logo-*.svg. */

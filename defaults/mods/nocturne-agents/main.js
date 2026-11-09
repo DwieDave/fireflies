@@ -51,6 +51,9 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { theme, spaces, panes, focused, terminals, hc, run, props, nextCommand, shared, setShared } from "herdr";
 import { dither, pip } from "./kit.js";
+
+/** The name a person gave a pane's terminal (Nocturne's "Rename": the nocturne.name label), or null. */
+const givenName = (terminal) => terminals().find((x) => x.address === terminal)?.labels?.["nocturne.name"] || null;
 import { sessionOf, snapshot, feed, usageOf, ranFor, span, count, emptyUsage, addUsage } from "./claude.js";
 import { tree, place, canvas, sky, dims, ZOOM, TONE, WORDS } from "./graph.js";
 
@@ -85,7 +88,7 @@ function claudePanes() {
   const tabs = new Map(space.tabs.map((c) => [c.id, c]));
   return panes().filter((p) => p.terminal && p.app === "claude-code" && tabs.has(p.tab))
     .sort((a, b) => (tabs.get(b.tab).active - tabs.get(a.tab).active) || (tabs.get(a.tab).index - tabs.get(b.tab).index))
-    .map((p) => ({ ...p, tabName: tabs.get(p.tab).named ? tabs.get(p.tab).name : null, machine: space.machine }));
+    .map((p) => ({ ...p, name: givenName(p.terminal) ?? p.program?.name ?? "Claude Code", machine: space.machine }));
 }
 
 function ago(ms) {
@@ -386,7 +389,7 @@ export default class Agents extends View {
             .on_click((_e, cx) => { this.terminal = p.terminal; this.pinned = true; this.session = null; this.busy = 0; this.poll(cx); cx.notify(); })
             .when(on, (el) => el.child(dither(t.ansi0, 1)))
             .child(div().relative().child(pip(t, p.status, 5)))
-            .child(div().relative().max_w(140).truncate().child(p.tabName || p.title || p.terminal));
+            .child(div().relative().max_w(140).truncate().child(p.name));
         })))
       .when(counts > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`${counts} working`)))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
@@ -699,7 +702,7 @@ export default class Agents extends View {
     if (!pane) return note("No Claude Code in this space", "Start one from + new, then its agents and workflows show here.");
     if (this.error && !this.data) return note(this.error, "");
     if (!this.data) return note("Reading the session…", pane.cwd ?? "");
-    const root = tree(this.data, { label: pane.tabName || "Claude Code", sub: [this.session?.name, WORDS[pane.status] ?? "idle"].filter(Boolean).join(" · "), status: pane.status ?? "idle" }, this.open);
+    const root = tree(this.data, { label: pane.name, sub: [this.session?.name, WORDS[pane.status] ?? "idle"].filter(Boolean).join(" · "), status: pane.status ?? "idle" }, this.open);
     const find = (n) => n.key === this.selected ? n : n.children.map(find).find(Boolean);
     const sel = this.selected === STATS ? { key: STATS, kind: "stats" } : this.selected ? find(root) : null;
     return shell
