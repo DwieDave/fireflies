@@ -27,6 +27,14 @@ thread_local! {
     /// replayed without running closures, so nothing here relies on them).
     static COVERS: RefCell<Vec<herdr_native_view::Cover>> = const { RefCell::new(Vec::new()) };
     static DIM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Mod copies whose native view was pressed, for the window to focus their pane.
+    static PRESSES: (async_channel::Sender<u64>, async_channel::Receiver<u64>) = async_channel::unbounded();
+}
+
+/// Copies whose native view was just pressed: their pane should take focus,
+/// as a click on any other pane does (the view swallows the click itself).
+pub fn presses() -> async_channel::Receiver<u64> {
+    PRESSES.with(|(_, rx)| rx.clone())
 }
 
 /// Records an overlay's card where it was painted: native views outside
@@ -73,6 +81,12 @@ pub fn register_events(copy: u64, tx: async_channel::Sender<String>) {
     if !SINK_SET.with(|s| s.replace(true)) {
         herdr_native_view::macos::set_event_sink(|ev| {
             let Some(copy) = copy_of(&ev.key) else { return };
+            if ev.name == "view.press" {
+                PRESSES.with(|(tx, _)| {
+                    let _ = tx.try_send(copy);
+                });
+                return;
+            }
             let line = ev.to_json().to_string();
             EVENTS.with(|e| {
                 if let Some(tx) = e.borrow().get(&copy) {

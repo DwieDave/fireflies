@@ -1215,6 +1215,7 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
             let p = event.locationInWindow();
             let mut inside = false;
             let mut clicked: Vec<(String, u64)> = Vec::new();
+            let mut pressed: Vec<(String, u64)> = Vec::new();
             let mut gpui_for_window: Option<Retained<NSView>> = None;
             VIEWS.with(|v| {
                 if let Ok(v) = v.try_borrow() {
@@ -1238,6 +1239,7 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
                                         continue;
                                     }
                                     inside = true;
+                                    pressed.push((k.clone(), e.generation));
                                     if !e.host.ivars().holes.borrow().is_empty() {
                                         clicked.push((k.clone(), e.generation));
                                     }
@@ -1264,6 +1266,11 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
             // Outside the card, on the page: the mod closes its menu, like a popover.
             for (k, g) in clicked {
                 emit(&k, g, "view.click", json!({}));
+            }
+            // Any press on a view: the host focuses the pane it sits in (the
+            // view takes the click, so the host's own mouse handlers never see it).
+            for (k, g) in pressed {
+                emit(&k, g, "view.press", json!({}));
             }
         }
         ev.as_ptr()
