@@ -344,6 +344,16 @@ fn finish(web_key: &str) {
     {
         put(video, &content);
     }
+    // WebKit leaves the view we gave back in its (reused) window: once its
+    // exit is done, take it out, unless a new session took it again.
+    if let Some(video) = s.video.clone() {
+        after(RETURN_GRACE, move || {
+            let current = SESSION.with(|c| c.try_borrow().ok().and_then(|c| c.as_ref().and_then(|s| s.video.clone())));
+            if current.is_none_or(|v| !std::ptr::eq(&*v, &*video)) {
+                video.removeFromSuperview();
+            }
+        });
+    }
     for (key, generation) in players_of(web_key) {
         emit_event(&key, generation, "pip.ended", json!({}));
     }
@@ -403,13 +413,15 @@ fn tick() {
         if s.returning {
             return;
         }
-        if s.panel.is_none() {
-            s.panel = find_panel(mtm);
+        if s.video.is_none() {
+            // macOS may make a new system window or reuse one: the right one
+            // is the one holding a video view.
+            if let Some((panel, video)) = find_panel_and_video(mtm) {
+                s.panel = Some(panel);
+                s.video = Some(video);
+            }
         }
         let Some(panel) = s.panel.clone() else { return };
-        if s.video.is_none() {
-            s.video = panel.contentView().and_then(|c| find_video(&c));
-        }
         let Some(video) = s.video.clone() else { return };
         let popped = s.popped.as_ref().map(|p| (p.host.clone(), p.panel.clone()));
         if let Some((_, p)) = &popped
@@ -468,13 +480,23 @@ fn class_is(obj: &AnyObject, name: &std::ffi::CStr) -> bool {
     AnyClass::get(name).is_some_and(|c| unsafe { msg_send![obj, isKindOfClass: c] })
 }
 
-fn find_panel(mtm: MainThreadMarker) -> Option<Retained<NSWindow>> {
+/// The system window showing WebKit's video, and that video view: shown
+/// windows first (the one just presented), the newest last in the list.
+fn find_panel_and_video(mtm: MainThreadMarker) -> Option<(Retained<NSWindow>, Retained<NSView>)> {
     let windows = NSApplication::sharedApplication(mtm).windows();
-    windows.iter().filter(|w| class_is(w, c"PIPPanel")).last()
+    let mut panels: Vec<Retained<NSWindow>> = windows.iter().filter(|w| class_is(w, c"PIPPanel")).collect();
+    panels.reverse();
+    panels.sort_by_key(|w| !w.isVisible());
+    panels.into_iter().find_map(|w| {
+        let video = w.contentView().and_then(|c| find_video(&c))?;
+        Some((w, video))
+    })
 }
 
+/// WebKit's video view in the system window. The newest one: the system
+/// window is reused, and an earlier session's view may still be in it.
 fn find_video(view: &NSView) -> Option<Retained<NSView>> {
-    for sub in view.subviews().iter() {
+    for sub in view.subviews().iter().collect::<Vec<_>>().into_iter().rev() {
         if class_is(&sub, c"WebVideoViewContainer") {
             return Some(sub);
         }
@@ -557,7 +579,12 @@ pub(crate) fn state(key: &str) -> Value {
     let session = of.as_deref().and_then(|of| {
         with_session(of, |s| {
             let showing = s.video.as_ref().is_some_and(|v| holder(&s.source).is_some_and(|h| is_in(v, &h)));
-            json!({ "found": s.video.is_some(), "showing": showing, "returning": s.returning, "popped": s.popped.is_some() })
+            let video = s.video.as_ref().map(|v| {
+                let f = v.frame();
+                let inside = s.popped.as_ref().map(|p| is_in(v, &p.host));
+                json!({ "frame": [f.origin.x, f.origin.y, f.size.width, f.size.height], "hidden": v.isHidden(), "inPopped": inside, "inWindow": v.window().is_some() })
+            });
+            json!({ "found": s.video.is_some(), "showing": showing, "returning": s.returning, "popped": s.popped.is_some(), "video": video })
         })
     });
     json!({ "of": of, "session": session })
@@ -676,9 +703,7 @@ impl Popped {
         let colors = Colors::parse(colors);
         let frame = NSRect::new(rect.origin, NSSize::new(rect.size.width, rect.size.height + BAR));
         let style = NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable;
-        let panel = unsafe {
-            NSPanel::initWithContentRect_styleMask_backing_defer(NSPanel::alloc(mtm), frame, style, NSBackingStoreType::Buffered, false)
-        };
+        let panel = NSPanel::initWithContentRect_styleMask_backing_defer(NSPanel::alloc(mtm), frame, style, NSBackingStoreType::Buffered, false);
         unsafe { panel.setReleasedWhenClosed(false) };
         panel.setLevel(NSFloatingWindowLevel);
         panel.setCollectionBehavior(NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary);

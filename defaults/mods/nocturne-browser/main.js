@@ -7,6 +7,8 @@
 //   cmd+r    reload, also while the page has the keyboard
 //   cmd+[ / cmd+]   back / forward
 //   cmd+alt+i  the inspector (the </> button)
+//   ⧉        the page's video in picture in picture: the nocturne-pip player,
+//            a Herdr window over every tab and space (command nocturne-browser.pip)
 //   ↗        the page in the system's default browser
 //   </>      Safari's Web Inspector for the page, in a pane split beside it
 //            (again: closes it). That pane is this mod with props
@@ -26,7 +28,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, nextCommand, shared, setShared, exec, run, panes, window as appWindow } from "herdr";
+import { props, theme, settings, nextCommand, shared, setShared, exec, run, panes, openOverlay, window as appWindow } from "herdr";
 
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
@@ -36,6 +38,8 @@ const ACTIVE = "nocturne-browser.active";
 // The open inspector panes: { [web view key]: pane id }, one per page.
 const INSPECTORS = "nocturne-browser.inspectors";
 const INSPECTOR = "inspector";
+// The picture in picture player: one window, whichever page's video it shows.
+const PLAYER = { mod: "nocturne-pip", kind: "window", key: "nocturne-pip", frame: "none", width: 384, height: 238 };
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 function dither(color, cell = 1) {
@@ -195,6 +199,10 @@ export default class Browser extends View {
       if (e.event === "load.finish" && this.page.href) { try { localStorage.setItem("url", this.page.href); } catch {} }
     }
     if (e.event === "load.error") { this.page = { ...this.page, loading: false }; this.error = d.message ?? "The page didn't load."; }
+    // A video went into picture in picture (the ⧉ button, or the site's own),
+    // or comes back into Herdr from its popped-out window: show it in the player.
+    if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of } });
+    if (e.event === "pip.start" && d.result === "none") this.error = "No video on this page.";
   }
 
   call(action, args) {
@@ -233,6 +241,7 @@ export default class Browser extends View {
     else if (c === "back") this.call("browser.back");
     else if (c === "forward") this.call("browser.forward");
     else if (c === "web") this.call("focus");
+    else if (c === "pip") { if (this.start) this.call("web.pip"); }
     else if (c === "zoom_in" || c === "zoom_out" || c === "zoom_reset") {
       const z = c === "zoom_reset" ? 0.9 : this.zoom + (c === "zoom_in" ? 0.1 : -0.1);
       this.zoom = Math.round(Math.min(3, Math.max(0.5, z)) * 10) / 10;
@@ -296,6 +305,7 @@ export default class Browser extends View {
         .on_click((_e, cx) => { this.command("zoom_reset"); cx.notify(); })
         .child(`${Math.round(this.zoom * 100)}%`))
       .child(this.icon(t, "zoom-in", "plus", this.zoom < 3, () => this.command("zoom_in")))
+      .child(this.icon(t, "pip", "picture-in-picture", Boolean(this.start && available()), () => this.command("pip")))
       .child(this.icon(t, "inspect", "code", Boolean(this.start && available()), (cx) => this.inspector(cx), { focus: true }))
       .child(this.icon(t, "external", "external-link", Boolean(this.start && p.href), (cx) => this.external(cx)))
       // Loading: a dithered line along the bar's foot, as far as the page has come.
