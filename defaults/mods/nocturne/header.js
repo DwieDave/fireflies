@@ -88,9 +88,9 @@ export default class Header {
     const count = (s, c) => div().flex_none().text_color(c).child(s);
     return this.frame(t, p)
       .child(svg("mods/workspace-chrome/git-branch.svg").size(11).flex_none().text_color(on ? t.ansi2 : t.dim))
-      .child(div().flex_none().text_color(on ? t.foreground : t.muted).child("Lazygit"))
-      .child(div().flex_none().max_w(200).truncate().text_color(t.dim).child(folder(p.cwd)))
-      .when(Boolean(g?.branch || p.branch), (el) => el.child(div().flex_none().max_w(180).truncate().text_color(on ? t.ansi2 : t.muted).child(g?.branch || p.branch)))
+      .child(div().min_w(0).truncate().text_color(on ? t.foreground : t.muted).child("Lazygit"))
+      .child(div().min_w(0).max_w(200).truncate().text_color(t.dim).child(folder(p.cwd)))
+      .when(Boolean(g?.branch || p.branch), (el) => el.child(div().min_w(0).max_w(180).truncate().text_color(on ? t.ansi2 : t.muted).child(g?.branch || p.branch)))
       .child(h_flex().flex_1().min_w(12).h(6).gap(2).child(step(1)).child(step(0.6)).child(step(0.3)))
       .when(Boolean(g?.ahead), (el) => el.child(count(`↑${g.ahead}`, t.ansi4)))
       .when(Boolean(g?.behind), (el) => el.child(count(`↓${g.behind}`, t.ansi5)))
@@ -101,9 +101,11 @@ export default class Header {
     return mark(t, p);
   }
 
-  /** The row every header draws on: click focuses the pane, hover shows its buttons. */
+  /** The row every header draws on: click focuses the pane, hover shows its buttons.
+   *  Name, folder and branch truncate so a narrow pane still has
+   *  room for every button: close, the last, used to be pushed off the edge. */
   frame(t, p) {
-    return h_flex().id(`head-${p.pane}`).size_full().px(10).gap(8).items_center().bg(t.background)
+    return h_flex().id(`head-${p.pane}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
       .text_size(11)
       .on_hover((h, cx) => { this.hovered = h; cx.notify(); })
       .on_mouse_down("right", (_e, cx) => {
@@ -145,8 +147,8 @@ export default class Header {
     return this.buttons(t, this.frame(t, p)
       .child(this.mark(t, p))
       .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))
-      .child(div().flex_none().max_w(220).truncate().text_color(p.focused ? t.foreground : t.muted).child(name))
-      .child(div().flex_none().max_w(260).truncate().text_color(t.dim).child(folder(p.cwd)))
+      .child(div().min_w(24).max_w(220).truncate().text_color(p.focused ? t.foreground : t.muted).child(name))
+      .child(div().min_w(0).max_w(260).truncate().text_color(t.dim).child(folder(p.cwd)))
       .child(div().flex_1().min_w(12).h(6).relative().child(dither(p.focused ? t.accent : t.ansi0, 2)))
       .when(st === "blocked" || st === "working", (el) => el.child(div().flex_none().text_color(t[st]).child(WORD[st]))), p);
   }
