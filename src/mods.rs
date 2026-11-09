@@ -129,6 +129,12 @@ fn sync_defaults(mods: &Path, installed_path: &Path, shipped_mods: &[(&str, &[u8
             let file = mods.join(path);
             std::fs::create_dir_all(file.parent().unwrap())?;
             std::fs::write(&file, bytes)?;
+            // A mod's bin/ holds programs its terminals run (Nocturne's lazygit wrapper).
+            #[cfg(unix)]
+            if path.split('/').nth(1) == Some("bin") {
+                use std::os::unix::fs::PermissionsExt;
+                std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o755))?;
+            }
         }
         installed.insert(name.to_owned(), shipped);
     }
@@ -1626,6 +1632,21 @@ mod tests {
         assert_eq!(read("b-edited/main.js"), "mine", "clones stay untouched");
         assert_eq!(read("d/notes.md"), "my notes", "a dropped default with an added file stays");
 
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn default_mods_install_bin_programs_executable() {
+        use std::os::unix::fs::PermissionsExt;
+        let root = std::env::temp_dir().join(format!("herdr-app-sync-bin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let (mods, record) = (root.join("mods"), root.join("installed.json"));
+        let v1: &[(&str, &[u8])] = &[("a/main.js", b"a1"), ("a/bin/tool", b"#!/bin/sh\n")];
+        sync_defaults(&mods, &record, v1).unwrap();
+        let mode = |p: &str| std::fs::metadata(mods.join(p)).unwrap().permissions().mode() & 0o111;
+        assert_ne!(mode("a/bin/tool"), 0, "bin/ files can run");
+        assert_eq!(mode("a/main.js"), 0, "the rest stays plain");
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
