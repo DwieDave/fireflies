@@ -1408,7 +1408,7 @@ define_class!(
         #[unsafe(method(webView:didCommitNavigation:))]
         fn did_commit(&self, web: &WKWebView, _nav: Option<&WKNavigation>) {
             // A new page: the old one's video and frames are gone.
-            crate::pip::web_gone(&self.ivars().key);
+            crate::pip::navigated(&self.ivars().key);
             self.report("load.commit", web_state(web));
         }
 
@@ -1440,8 +1440,8 @@ define_class!(
 
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn did_terminate(&self, _web: &WKWebView) {
-            // The page's process is gone, and with it any Picture in Picture.
-            crate::pip::web_gone(&self.ivars().key);
+            // The page's process is gone, and with it the video in the player.
+            crate::pip::navigated(&self.ivars().key);
             self.report("web.processTerminated", json!({}));
         }
     }

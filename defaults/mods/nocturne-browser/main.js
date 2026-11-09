@@ -7,8 +7,9 @@
 //   cmd+r    reload, also while the page has the keyboard
 //   cmd+[ / cmd+]   back / forward
 //   cmd+alt+i  the inspector (the </> button)
-//   ⧉        the page's video in picture in picture: the nocturne-pip player,
-//            a Herdr window over every tab and space (command nocturne-browser.pip)
+//   ⧉        the page's video in the nocturne-pip player, a Herdr window over
+//            every tab and space (command nocturne-browser.pip); the page goes
+//            with it, and comes back with ↩ or ✕ (or ⧉ again)
 //   ↗        the page in the system's default browser
 //   </>      Safari's Web Inspector for the page, in a pane split beside it
 //            (again: closes it). That pane is this mod with props
@@ -199,9 +200,11 @@ export default class Browser extends View {
       if (e.event === "load.finish" && this.page.href) { try { localStorage.setItem("url", this.page.href); } catch {} }
     }
     if (e.event === "load.error") { this.page = { ...this.page, loading: false }; this.error = d.message ?? "The page didn't load."; }
-    // A video went into picture in picture (the ⧉ button, or the site's own),
-    // or comes back into Herdr from its popped-out window: show it in the player.
+    // The page's video goes to the player (⧉), or comes back into Herdr from
+    // its popped-out window: the player shows it. Meanwhile the page is away.
     if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of } });
+    if (e.event === "pip.enter") this.away = true;
+    if (e.event === "pip.leave") this.away = false;
     if (e.event === "pip.start" && d.result === "none") this.error = "No video on this page.";
     if (e.event === "pip.start" && d.error) this.error = `Picture in picture: ${d.error}`;
   }
@@ -338,7 +341,9 @@ export default class Browser extends View {
       // The mod's children sit under the native view: seen while it loads,
       // or while a Herdr menu or dialog makes the view step aside.
       body = div().flex_1().min_h(0).relative().child(herdr.nativeView.new(ID, { kind: "web", url: this.start, persist: true, zoom: this.zoom, pip: true })
-        .child(this.blank(t, this.page.loading ? "Loading…" : "", this.page.href)));
+        .child(this.away
+          ? this.blank(t, "Playing in picture in picture", "↩ in the player brings it back here.")
+          : this.blank(t, this.page.loading ? "Loading…" : "", this.page.href)));
     }
     return v_flex().id("browser").size_full().bg(t.background).track_focus(this.handle)
       .on_mouse_down("left", () => this.claim())
