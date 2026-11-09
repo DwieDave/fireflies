@@ -54,14 +54,20 @@ const WATCH_SCRIPT: &str = r#"(() => {
 
 /// Page world: a site ending Picture in Picture itself says so first and
 /// waits, so the video is back in macOS's window before WebKit takes it home
-/// (taken out of it, WebKit leaves the page's video blank).
+/// (taken out of it, WebKit leaves the page's video blank). Starting it says
+/// so too: another video in Picture in Picture (this page's or another
+/// pane's) goes home first.
 const EXIT_SCRIPT: &str = r#"(() => {
-  const announce = () => new Promise((r) => { try { webkit.messageHandlers.herdrPipPage.postMessage("exiting"); } catch {} setTimeout(r, 350); });
+  const say = (what, ms) => new Promise((r) => { try { webkit.messageHandlers.herdrPipPage.postMessage(what); } catch {} setTimeout(r, ms); });
   const exit = Document.prototype.exitPictureInPicture;
-  if (exit) Document.prototype.exitPictureInPicture = async function () { await announce(); return exit.call(this); };
+  if (exit) Document.prototype.exitPictureInPicture = async function () { await say("exiting", 350); return exit.call(this); };
+  const request = HTMLVideoElement.prototype.requestPictureInPicture;
+  if (request) HTMLVideoElement.prototype.requestPictureInPicture = async function () { await say("entering", 120); return request.call(this); };
   const set = HTMLVideoElement.prototype.webkitSetPresentationMode;
   if (set) HTMLVideoElement.prototype.webkitSetPresentationMode = function (mode) {
-    if (mode !== "picture-in-picture" && this.webkitPresentationMode === "picture-in-picture") { announce().then(() => set.call(this, mode)); return; }
+    const pip = this.webkitPresentationMode === "picture-in-picture";
+    if (mode !== "picture-in-picture" && pip) { say("exiting", 350).then(() => set.call(this, mode)); return; }
+    if (mode === "picture-in-picture" && !pip) { say("entering", 120).then(() => set.call(this, mode)); return; }
     return set.call(this, mode);
   };
 })();"#;
@@ -130,6 +136,8 @@ struct Session {
     timer: Option<Retained<AnyObject>>,
     /// The popped-out window, while the video is out of Herdr.
     popped: Option<Popped>,
+    /// `pip.enter` went out for the video found.
+    announced: bool,
 }
 
 /// A `pip` view: whose video it shows and where.
@@ -144,6 +152,23 @@ thread_local! {
     static PLAYED: RefCell<HashMap<String, Retained<WKFrameInfo>>> = RefCell::new(HashMap::new());
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     static ATTACHED: RefCell<HashMap<String, Attached>> = RefCell::new(HashMap::new());
+    /// Video views of ended sessions, on their way home: never taken again.
+    static RETIRED: RefCell<Vec<Retained<NSView>>> = const { RefCell::new(Vec::new()) };
+}
+
+/// An ended session's video view: no session takes it again, and once
+/// WebKit's exit is done it leaves the (reused) system window, where WebKit
+/// would leave it.
+fn retire(video: Retained<NSView>) {
+    RETIRED.with(|r| r.borrow_mut().push(video.clone()));
+    after(RETURN_GRACE, move || {
+        video.removeFromSuperview();
+        RETIRED.with(|r| r.borrow_mut().retain(|v| !std::ptr::eq(&**v, &*video)));
+    });
+}
+
+fn retired(video: &NSView) -> bool {
+    RETIRED.with(|r| r.borrow().iter().any(|v| std::ptr::eq(&**v, video)))
 }
 
 /// Lets a `pip: true` web view's page use Picture in Picture and report it.
@@ -181,8 +206,8 @@ pub(crate) fn unconfigure(content: &WKUserContentController) {
 /// A message from a page script. `name`: the handler it came through.
 pub(crate) fn on_message(web_key: &str, generation: u64, name: &str, body: &str, frame: Retained<WKFrameInfo>) {
     let kind = if name == PAGE_HANDLER {
-        // The page world can post anything: only ever an exit announcement.
-        "exiting"
+        // The page world can post anything: only ever an announcement.
+        if body == "entering" { "entering" } else { "exiting" }
     } else {
         match serde_json::from_str::<Value>(body).ok().and_then(|v| v["type"].as_str().map(str::to_owned)).as_deref() {
             Some("play") => "play",
@@ -196,9 +221,10 @@ pub(crate) fn on_message(web_key: &str, generation: u64, name: &str, body: &str,
             PLAYED.with(|p| p.borrow_mut().insert(web_key.to_owned(), frame));
         }
         "enter" => {
+            // `pip.enter` goes out once the video is found (tick): without
+            // macOS's window or WebKit's view, nothing is taken over.
             PLAYED.with(|p| p.borrow_mut().insert(web_key.to_owned(), frame.clone()));
             begin(web_key, generation, frame);
-            emit_event(web_key, generation, "pip.enter", json!({ "of": web_key }));
         }
         "leave" => {
             finish(web_key);
@@ -207,6 +233,19 @@ pub(crate) fn on_message(web_key: &str, generation: u64, name: &str, body: &str,
         "exiting" => {
             let Some(mtm) = MainThreadMarker::new() else { return };
             with_session(web_key, |s| give_back(mtm, s));
+        }
+        "entering" => {
+            let Some(mtm) = MainThreadMarker::new() else { return };
+            let current = SESSION.with(|s| s.try_borrow().ok().and_then(|s| s.as_ref().map(|s| s.source.clone())));
+            match current {
+                // Another of this page's videos: WebKit swaps them; this one goes home first.
+                Some(c) if c == web_key => {
+                    with_session(web_key, |s| give_back(mtm, s));
+                }
+                // Another pane's: it ends.
+                Some(c) => end(mtm, &c, false),
+                None => {}
+            }
         }
         _ => {}
     }
@@ -219,8 +258,30 @@ pub(crate) fn start(mtm: MainThreadMarker, web_key: &str, generation: u64, web: 
         end(mtm, web_key, false);
         return Ok(json!({ "of": web_key, "active": false }));
     }
-    let frame = PLAYED.with(|p| p.borrow().get(web_key).cloned());
-    run(mtm, web, frame.as_deref(), PICK_SCRIPT, web_key, generation, "pip.start");
+    // Another pane's video goes home first (its exit takes a moment).
+    let other = SESSION.with(|s| s.try_borrow().ok().and_then(|s| s.as_ref().map(|s| s.source.clone())));
+    if let Some(o) = &other {
+        end(mtm, o, false);
+    }
+    let played = PLAYED.with(|p| p.borrow().get(web_key).cloned());
+    let web = Weak::from(web);
+    let k = web_key.to_owned();
+    let pick = move || {
+        let (Some(mtm), Some(web)) = (MainThreadMarker::new(), web.load()) else { return };
+        let (k2, web2, played) = (k.clone(), web.clone(), played.clone());
+        // The page's own video first, else the frame that last played one (an embedded player).
+        run_then(mtm, &web, None, PICK_SCRIPT, move |r| {
+            if r["result"] == "none"
+                && let (Some(frame), Some(mtm)) = (&played, MainThreadMarker::new())
+            {
+                let k3 = k2.clone();
+                run_then(mtm, &web2, Some(frame), PICK_SCRIPT, move |r| emit_event(&k3, generation, "pip.start", r));
+            } else {
+                emit_event(&k2, generation, "pip.start", r);
+            }
+        });
+    };
+    if other.is_some() { after(0.45, pick) } else { pick() }
     Ok(json!({ "of": web_key, "active": true }))
 }
 
@@ -291,14 +352,20 @@ fn begin(web_key: &str, generation: u64, frame: Retained<WKFrameInfo>) {
     // One at a time: another page's video goes home first.
     let other = SESSION.with(|s| s.borrow().as_ref().map(|s| s.source.clone())).filter(|o| o != web_key);
     if let Some(o) = other {
+        // Its video goes home (if not on its way already) and isn't taken again.
         end(mtm, &o, false);
-        finish(&o);
+        if let Some(old) = SESSION.with(|s| s.borrow_mut().take()) {
+            close(old, false);
+        }
     }
     let same = with_session(web_key, |s| {
-        // Another video of the same page: find its view again.
+        // Another video of the same page: find its view again (not the old one).
+        if let Some(v) = s.video.take() {
+            retire(v);
+        }
         s.frame = frame.clone();
-        s.video = None;
         s.returning = false;
+        s.announced = false;
         s.started = Instant::now();
     });
     if same.is_none() {
@@ -317,6 +384,7 @@ fn begin(web_key: &str, generation: u64, frame: Retained<WKFrameInfo>) {
                 started: Instant::now(),
                 timer: Some(timer),
                 popped: None,
+                announced: false,
             })
         });
     }
@@ -331,6 +399,13 @@ fn finish(web_key: &str) {
     }) else {
         return;
     };
+    close(s, true);
+}
+
+/// A session that ended: its timer and windows go, its players are told.
+/// `put_back`: its video goes back into the system window if it is still out.
+fn close(s: Session, put_back: bool) {
+    let web_key = s.source.as_str();
     if let Some(t) = &s.timer {
         let _: () = unsafe { msg_send![&**t, invalidate] };
     }
@@ -338,21 +413,15 @@ fn finish(web_key: &str) {
         p.panel.orderOut(None);
     }
     // An exit nobody announced: the video is still out; put it back anyway.
-    if let (Some(panel), Some(video)) = (&s.panel, &s.video)
+    if put_back
+        && let (Some(panel), Some(video)) = (&s.panel, &s.video)
         && let Some(content) = panel.contentView()
         && !is_in(video, &content)
     {
         put(video, &content);
     }
-    // WebKit leaves the view we gave back in its (reused) window: once its
-    // exit is done, take it out, unless a new session took it again.
     if let Some(video) = s.video.clone() {
-        after(RETURN_GRACE, move || {
-            let current = SESSION.with(|c| c.try_borrow().ok().and_then(|c| c.as_ref().and_then(|s| s.video.clone())));
-            if current.is_none_or(|v| !std::ptr::eq(&*v, &*video)) {
-                video.removeFromSuperview();
-            }
-        });
+        retire(video);
     }
     for (key, generation) in players_of(web_key) {
         emit_event(&key, generation, "pip.ended", json!({}));
@@ -407,6 +476,7 @@ fn give_back(_mtm: MainThreadMarker, s: &mut Session) {
 /// moment, until a player opens) hidden in the system window.
 fn tick() {
     let Some(mtm) = MainThreadMarker::new() else { return };
+    let mut announce = None;
     SESSION.with(|cell| {
         let Ok(mut guard) = cell.try_borrow_mut() else { return };
         let Some(s) = guard.as_mut() else { return };
@@ -419,6 +489,13 @@ fn tick() {
             if let Some((panel, video)) = find_panel_and_video(mtm) {
                 s.panel = Some(panel);
                 s.video = Some(video);
+            }
+        }
+        // Found: the page's mod opens a player, unless one shows it already.
+        if s.video.is_some() && !s.announced {
+            s.announced = true;
+            if s.popped.is_none() && holder(&s.source).is_none() {
+                announce = Some((s.source.clone(), s.generation));
             }
         }
         let Some(panel) = s.panel.clone() else { return };
@@ -454,6 +531,9 @@ fn tick() {
             }
         }
     });
+    if let Some((key, generation)) = announce {
+        emit_event(&key, generation, "pip.enter", json!({ "of": key }));
+    }
 }
 
 /// The view a player gave for `web_key`'s video.
@@ -497,7 +577,7 @@ fn find_panel_and_video(mtm: MainThreadMarker) -> Option<(Retained<NSWindow>, Re
 /// window is reused, and an earlier session's view may still be in it.
 fn find_video(view: &NSView) -> Option<Retained<NSView>> {
     for sub in view.subviews().iter().collect::<Vec<_>>().into_iter().rev() {
-        if class_is(&sub, c"WebVideoViewContainer") {
+        if class_is(&sub, c"WebVideoViewContainer") && !retired(&sub) {
             return Some(sub);
         }
         if let Some(v) = find_video(&sub) {
@@ -565,7 +645,11 @@ pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, args: &Valu
             let host = ATTACHED.with(|a| a.borrow().get(key).and_then(|p| p.host.load())).ok_or("this view shows nothing")?;
             let rect = screen_rect(&host).ok_or("this view is not on screen")?;
             let popped = Popped::new(mtm, &of, rect, &args["colors"]);
-            with_session(&of, |s| s.popped = Some(popped));
+            with_session(&of, |s| {
+                if let Some(old) = s.popped.replace(popped) {
+                    old.panel.orderOut(None);
+                }
+            });
             tick();
             Ok(Value::Null)
         }
