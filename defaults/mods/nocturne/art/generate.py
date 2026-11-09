@@ -83,6 +83,51 @@ for p in range(9):
     write(f"moon-{p}.svg", moon(p))
 
 
+# Hourglass: the usage section's short window. A glass outline and nine sand
+# levels (0: all run down, 8: a full top bulb), two masks so each gets its own
+# theme color. The sand settles at the neck of the top bulb and heaps up from
+# the floor of the bottom one; a grain falls through the neck while it runs.
+GLASS = [
+    "#########",
+    ".#.....#.",
+    ".#.....#.",
+    "..#...#..",
+    "...#.#...",
+    "...#.#...",
+    "...#.#...",
+    "..#...#..",
+    ".#.....#.",
+    ".#.....#.",
+    "#########",
+]
+
+
+def hourglass_glass():
+    return svg(9 * CELL, 11 * CELL, runs([[c == "#" for c in row] for row in GLASS]))
+
+
+def hourglass_sand(level):
+    def inside(rows):
+        # Each row's open cells, middle first, so a part-filled row heaps up.
+        out = []
+        for y in rows:
+            xs = [x for x in range(9) if GLASS[y][x] == "." and 0 < x < 8 and "#" in GLASS[y][:x] and "#" in GLASS[y][x:]]
+            out += [(x, y) for x in sorted(xs, key=lambda x: abs(x - 4))]
+        return out
+
+    top, bottom = inside([4, 3, 2, 1]), inside([9, 8, 7, 6])
+    n = round(level / 8 * len(top))
+    cells = set(top[:n]) | set(bottom[: len(bottom) - n])
+    if 0 < level < 8:
+        cells.add((4, 5))
+    return svg(9 * CELL, 11 * CELL, runs([[(x, y) in cells for x in range(9)] for y in range(11)]))
+
+
+write("hourglass-glass.svg", hourglass_glass())
+for p in range(9):
+    write(f"hourglass-{p}.svg", hourglass_sand(p))
+
+
 # Glow: a firefly's halo, solid core falling off to scattered dots.
 def glow(n=20):
     c = (n - 1) / 2
