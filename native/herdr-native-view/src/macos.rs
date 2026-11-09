@@ -25,7 +25,8 @@ use objc2_foundation::{
 use objc2_pdf_kit::{PDFDisplayMode, PDFDocument, PDFView, PDFViewPageChangedNotification};
 use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
 use objc2_web_kit::{
-    WKNavigation, WKNavigationAction, WKNavigationDelegate, WKUIDelegate, WKWebView,
+    WKNavigation, WKNavigationAction, WKNavigationDelegate, WKScriptMessage,
+    WKScriptMessageHandler, WKUIDelegate, WKUserContentController, WKWebView,
     WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
 };
 use serde_json::{Value, json};
@@ -441,6 +442,9 @@ fn make(
                     WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config);
                 let _: () = msg_send![&*view, setInspectable: true];
                 let delegate = WebDelegate::new(mtm, key, generation);
+                if spec.pip {
+                    crate::pip::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
+                }
                 view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 view.setUIDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 Ok((
@@ -954,6 +958,12 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                 }
                 // The key an `inspector` view takes as `of`; it opens the inspector.
                 ("web.inspect", Renderer::Web { .. }) => Ok(json!({ "of": key })),
+                ("web.pip", Renderer::Web { view, .. }) => {
+                    if !e.spec.pip {
+                        return Err("this page was opened without `pip: true`".into());
+                    }
+                    crate::pip::start(mtm, key, e.generation, view)
+                }
                 ("browser.back", Renderer::Web { view, .. }) => Ok(json!(view.goBack().is_some())),
                 ("browser.forward", Renderer::Web { view, .. }) => {
                     Ok(json!(view.goForward().is_some()))
@@ -1169,6 +1179,8 @@ pub fn dispose(key: &str) {
             #[cfg(feature = "chromium")]
             Renderer::Chromium(c) => c.close(),
             Renderer::Web { view, .. } => {
+                crate::pip::unconfigure(&view.configuration().userContentController());
+                crate::pip::web_gone(key);
                 view.stopLoading();
                 view.setNavigationDelegate(None);
                 view.setUIDelegate(None);
@@ -1416,6 +1428,20 @@ define_class!(
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn did_terminate(&self, _web: &WKWebView) {
             self.report("web.processTerminated", json!({}));
+        }
+    }
+
+    unsafe impl WKScriptMessageHandler for WebDelegate {
+        // The Picture in Picture page scripts (crate::pip).
+        #[unsafe(method(userContentController:didReceiveScriptMessage:))]
+        fn did_receive(&self, _controller: &WKUserContentController, message: &WKScriptMessage) {
+            unsafe {
+                let name = message.name().to_string();
+                let body = message.body();
+                let Some(body) = body.downcast_ref::<NSString>() else { return };
+                let i = self.ivars();
+                crate::pip::on_message(&i.key, i.generation.get(), &name, &body.to_string(), message.frameInfo());
+            }
         }
     }
 
