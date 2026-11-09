@@ -2193,27 +2193,42 @@ impl AppWindow {
         }
     }
 
-    /// Terminals shown here that another client resized to its own screen (an
-    /// `hc attach` from a phone that follows the focused agent): while this
-    /// window is the active one, the person is looking here, so the shown
-    /// terminals get this window's size back. Otherwise the other client keeps
-    /// its size. Without this, a TUI drew for the phone in a desktop pane until
-    /// the next keypress or mouse move here.
-    /// A size change the core reported for a terminal (from `watch_sizes`).
-    /// Another client resized one shown here while this window is active: hold
-    /// its screen and give it our size back at once; once the core is at our
-    /// size again, let it draw.
+    /// Whether this window takes its terminals' size back from other clients:
+    /// it's active and the person used it moments ago. Another client (an `hc
+    /// attach` from a phone over mosh) sets a terminal's size when it attaches,
+    /// resizes or types. Right after the person acts here, that's the phone
+    /// following the agent they switched to, so this window's size wins; while
+    /// they're away (on the phone, with this window still active), the phone's
+    /// size stays until they come back.
+    fn takes_sizes(&self) -> bool {
+        self.window_active && crate::terminal::person_here()
+    }
+
+    /// The person used this window (a key, a click, the mouse): if they were
+    /// away, shown terminals another client resized get this window's size back
+    /// now rather than at the next tick.
+    fn on_local_input(&mut self, cx: &mut Context<Self>) {
+        if crate::terminal::note_input() {
+            self.reclaim_sizes(cx);
+        }
+    }
+
+    /// A size change the core reported for a terminal (from the size watch).
+    /// Another client resized one shown here while the person is here (see
+    /// `takes_sizes`): hold its screen and give it our size back at once; once
+    /// the core is at our size again, let it draw.
     fn on_core_size(&mut self, address: &str, cols: u64, rows: u64, cx: &mut Context<Self>) {
-        if !self.window_active || !self.visible_addresses().iter().any(|a| a == address) {
+        let views: Vec<_> = self.terms.values().filter(|t| t.address == address).map(|t| t.view.clone()).collect();
+        if views.is_empty() {
             return;
         }
-        let views: Vec<_> = self.terms.values().filter(|t| t.address == address).map(|t| t.view.clone()).collect();
+        let take = self.takes_sizes() && self.visible_addresses().iter().any(|a| a == address);
         for view in views {
             let (c, r) = view.read(cx).dimensions();
             view.update(cx, |v, cx| {
                 if (cols, rows) == (u64::from(c), u64::from(r)) {
                     v.release_soon(cx);
-                } else {
+                } else if take {
                     v.hold(cx);
                     v.reclaim_size();
                 }
@@ -2221,20 +2236,29 @@ impl AppWindow {
         }
     }
 
-    fn reclaim_sizes(&self, cx: &App) {
-        if !self.window_active { return }
+    /// Terminals shown here that the core lists at another client's size get
+    /// this window's size back, while the person is here (`takes_sizes`).
+    /// Their screens are held until the program has redrawn for it.
+    fn reclaim_sizes(&self, cx: &mut Context<Self>) {
+        if !self.takes_sizes() { return }
         let visible: HashSet<String> = self.visible_addresses().into_iter().collect();
+        let mut taken = Vec::new();
         for t in self.terms.values() {
             if !visible.contains(&t.address) { continue }
             let Some(rec) = self.live.get(&t.address) else { continue };
             let core = (rec.get("cols").and_then(Value::as_u64), rec.get("rows").and_then(Value::as_u64));
-            let view = t.view.read(cx);
-            let (cols, rows) = view.dimensions();
+            let (cols, rows) = t.view.read(cx).dimensions();
             if let (Some(c), Some(r)) = core
                 && (c, r) != (u64::from(cols), u64::from(rows))
             {
-                view.reclaim_size();
+                taken.push(t.view.clone());
             }
+        }
+        for view in taken {
+            view.update(cx, |v, cx| {
+                v.hold(cx);
+                v.reclaim_size();
+            });
         }
     }
 
@@ -4351,6 +4375,8 @@ impl AppWindow {
             self.window_active = active;
             if active {
                 self.sync(window, cx);
+                // Coming to this window (a click, cmd-tab) is the person coming back.
+                crate::terminal::note_input();
                 self.reclaim_sizes(cx);
             } else {
                 self.looked.clear();
@@ -5472,14 +5498,22 @@ impl Render for AppWindow {
                     }
                 }
             }))
-            .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, _, cx| {
+            .capture_key_down(cx.listener(|this, ev: &KeyDownEvent, window, cx| {
+                this.on_local_input(cx);
+                // A key may show another tab: its terminals get our size back once shown.
+                cx.defer_in(window, |this, _, cx| this.reclaim_sizes(cx));
                 if ev.keystroke.key == "escape" && this.pane_drag.is_some() {
                     this.cancel_pane_drag(cx);
                     cx.stop_propagation();
                 }
             }))
-            .capture_any_mouse_down(cx.listener(|this, ev: &MouseDownEvent, _, _| this.pointer = ev.position))
+            .capture_any_mouse_down(cx.listener(|this, ev: &MouseDownEvent, window, cx| {
+                this.pointer = ev.position;
+                this.on_local_input(cx);
+                cx.defer_in(window, |this, _, cx| this.reclaim_sizes(cx));
+            }))
             .on_mouse_move(cx.listener(|this, ev: &MouseMoveEvent, window, cx| {
+                this.on_local_input(cx);
                 this.drag_window(ev, window);
                 if this.drag.is_none() {
                     return;

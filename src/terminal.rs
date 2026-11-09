@@ -155,6 +155,30 @@ const HOLD_MAX: Duration = Duration::from_millis(400);
 /// After the core is at our size again, the time a program gets to redraw for it.
 const HOLD_SETTLE: Duration = Duration::from_millis(60);
 
+/// How long after the person's last key, click, mouse move or scroll here they
+/// count as being at this computer (`person_here`).
+const PRESENCE: Duration = Duration::from_secs(5);
+
+thread_local! {
+    /// When the person last used this app here (`note_input`).
+    static LAST_INPUT: Cell<Option<Instant>> = const { Cell::new(None) };
+}
+
+/// The person used this app here just now: a key, a click, the mouse, a
+/// scroll. Returns whether they were away before (no input for `PRESENCE`).
+pub fn note_input() -> bool {
+    let away = !person_here();
+    LAST_INPUT.with(|t| t.set(Some(Instant::now())));
+    away
+}
+
+/// Whether the person used this app here in the last `PRESENCE`. The window
+/// being active isn't enough: it stays active while they're on their phone,
+/// attached to the same terminals.
+pub fn person_here() -> bool {
+    LAST_INPUT.with(|t| t.get()).is_some_and(|t| t.elapsed() < PRESENCE)
+}
+
 /// The window's frame number, counted where the window renders.
 static FRAME: AtomicU64 = AtomicU64::new(0);
 
@@ -702,6 +726,7 @@ impl TerminalView {
 
     fn send(&self, bytes: &[u8]) {
         self.typed_at.set(Some(Instant::now()));
+        note_input();
         let mut g = self.grid.borrow_mut();
         if let Some(ch) = g.channel
             && !bytes.is_empty()
@@ -943,6 +968,7 @@ impl TerminalView {
 
     fn scroll(&mut self, ev: &ScrollWheelEvent, _w: &mut Window, cx: &mut Context<Self>) {
         cx.stop_propagation();
+        note_input();
         let mut g = self.grid.borrow_mut();
         let steps = scroll_delta_steps(&mut self.scrolled, ev.delta, ev.touch_phase, g.cell, g.vt.cols, g.vt.rows);
         let n = steps.y.unsigned_abs() as usize;
