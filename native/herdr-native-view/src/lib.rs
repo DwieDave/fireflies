@@ -406,6 +406,12 @@ impl Spec {
         })
     }
 
+    /// The same web view on another address (the address bar): only the
+    /// source changes; its zoom and Picture in Picture stay.
+    pub fn navigated(&self, url: &str) -> Result<Spec, String> {
+        Ok(Spec { source: Source::Url(normalize_url(url)?), ..self.clone() })
+    }
+
     /// A short description for logs: never a full URL query or file content.
     pub fn redacted(&self) -> String {
         match &self.source {
@@ -746,6 +752,16 @@ mod tests {
         assert!(!Kind::Pip.allows("browser.navigate"));
         assert!(Kind::Web.allows("web.pip"));
         assert!(capabilities()["kinds"].as_array().unwrap().iter().any(|k| k["kind"] == "pip"));
+    }
+
+    #[test]
+    fn navigation_keeps_the_views_settings() {
+        let s = Spec::parse(&json!({ "kind": "web", "url": "https://a.b", "pip": true, "zoom": 1.5 })).unwrap();
+        let n = s.navigated("c.d").unwrap();
+        assert_eq!(n.source, Source::Url("https://c.d".into()));
+        assert!(n.pip);
+        assert_eq!(n.zoom, 1.5);
+        assert!(s.navigated("javascript:alert(1)").is_err());
     }
 
     #[test]
