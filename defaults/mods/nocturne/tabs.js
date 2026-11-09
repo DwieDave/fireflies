@@ -11,7 +11,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme } from "herdr";
-import { dither, pip } from "./kit.js";
+import { dither, pip, place } from "./kit.js";
 import { openNewMenu } from "./newmenu.js";
 import { menuHeight } from "./menu.js";
 import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
@@ -31,7 +31,7 @@ export default class Tabs {
   // Where the git button looks: the active space's folder, on its machine.
   target() {
     const space = spaces().find((s) => s.active);
-    return { folder: space?.folder || null, on: space?.machine ?? null };
+    return { folder: space ? place(space, panes()) : null, on: space?.machine ?? null };
   }
 
   poll(cx) {

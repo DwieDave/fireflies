@@ -29,7 +29,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, theme, notify } from "herdr";
-import { dither, pip, eyebrow, WORD, RANK } from "./kit.js";
+import { dither, pip, eyebrow, WORD, RANK, place } from "./kit.js";
 import { chip, field, confirm, check, working } from "./inline.js";
 
 const POLL = 4000;
@@ -68,12 +68,6 @@ async function inspect(w, on) {
     dirty: st.ok ? st.out.split("\n").filter(Boolean).length : 0,
     subs: kept ? Math.max(checkedOut, lines.length, 1) : checkedOut,
   };
-}
-
-/** Where a space is now: its first terminal's live folder, else where it was made. */
-function place(s, all) {
-  const tabs = new Set(s.tabs.map((c) => c.id));
-  return all.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder || null;
 }
 
 /** The deepest checkout holding a folder (worktrees can live inside the main one). */

@@ -21,6 +21,12 @@ export function dither(color, cell = 1) {
 /** Program keys with a dithered logo in art/logo-*.svg. */
 export const LOGO = { claude: "claude", "claude-code": "claude", opencode: "opencode", pi: "pi", codex: "codex" };
 
+/** Where a space is now: its first terminal's live folder, else where it was made. */
+export function place(s, all) {
+  const tabs = new Set(s.tabs.map((c) => c.id));
+  return all.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder || null;
+}
+
 export const WORD = { working: "working", blocked: "needs you", done: "done", idle: "resting" };
 
 /** Status order: what needs the person first. */
