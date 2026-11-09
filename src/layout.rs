@@ -377,7 +377,20 @@ pub struct Node {
     pub terminal_menu: Option<String>,
     /// Root only: the mod that shows notifications (default: `toast`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(alias = "toast_mod")]
     pub toast: Option<String>,
+    /// Root only: the mod that asks for a name (rename tab/space; default: `prompt`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prompt_mod: Option<String>,
+    /// Root only: the mod that asks before something destructive (default: `confirm`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_mod: Option<String>,
+    /// Root only: the mod that draws the command palette (default: the frame's `palette`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub palette_mod: Option<String>,
+    /// Root only: the mod that draws the bar over a peeked or floating terminal (default: `peek`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub peek_mod: Option<String>,
     /// Dragging this node moves the window; a double-click maximizes it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub window_drag: bool,
@@ -418,6 +431,10 @@ impl Node {
             preview: None,
             terminal_menu: None,
             toast: None,
+            prompt_mod: None,
+            confirm_mod: None,
+            palette_mod: None,
+            peek_mod: None,
             window_drag: false,
         }
     }
@@ -581,6 +598,11 @@ impl Node {
     /// Puts `new` beside `target` along `axis` (after it). Reuses the parent
     /// if it already runs along that axis, else wraps the target.
     pub fn split(&mut self, target: &str, axis: Axis, new: Node, container_id: String) -> bool {
+        self.split_at(target, axis, false, new, container_id)
+    }
+
+    /// `split`, with `before`: `new` goes before the target (left of / above it).
+    pub fn split_at(&mut self, target: &str, axis: Axis, before: bool, new: Node, container_id: String) -> bool {
         if let Some(parent) = self.parent_of(target).map(|p| p.id.clone())
             && let Some(p) = self.find_mut(&parent)
             && p.axis() == Some(axis)
@@ -598,16 +620,53 @@ impl Node {
             }
             let mut new = new;
             new.size = Some(Size::Weight { weight: share / 2.0 });
-            c.insert(i + 1, new);
+            c.insert(if before { i } else { i + 1 }, new);
             return true;
         }
         let Some(t) = self.find_mut(target) else { return false };
         let old = std::mem::replace(t, Node::new(container_id, Kind::Row { children: vec![] }));
         let mut old = old;
         let slot_size = old.size.take();
-        let mut wrapper = Node::container(t.id.clone(), axis, vec![old, new]);
+        let children = if before { vec![new, old] } else { vec![old, new] };
+        let mut wrapper = Node::container(t.id.clone(), axis, children);
         wrapper.size = slot_size;
         *t = wrapper;
+        true
+    }
+
+    /// Adds `new` along one edge of this container (a tab's root), spanning
+    /// it: the root turns to run along that edge's axis, its old contents
+    /// wrapped in `container_id` when they ran the other way. `new` keeps the
+    /// size it comes with (a fixed `px`); without one it takes an equal share.
+    pub fn add_at_edge(&mut self, edge: Edge, mut new: Node, container_id: String) -> bool {
+        let axis = if edge.vertical() { Axis::Row } else { Axis::Column };
+        let first = matches!(edge, Edge::Left | Edge::Top);
+        if !matches!(self.kind, Kind::Row { .. } | Kind::Column { .. }) {
+            return false;
+        }
+        let children = std::mem::take(self.children_mut().unwrap());
+        let children = if self.axis() == Some(axis) || children.len() <= 1 {
+            children
+        } else {
+            let old = self.axis().unwrap_or(Axis::Row);
+            vec![Node::container(container_id, old, children)]
+        };
+        if new.size.is_none() {
+            let weights: Vec<f32> = children.iter().filter_map(|n| match n.size {
+                Some(Size::Weight { weight }) => Some(weight),
+                None => Some(1.0),
+                Some(Size::Px { .. }) => None,
+            }).collect();
+            if !weights.is_empty() {
+                new.size = Some(Size::Weight { weight: weights.iter().sum::<f32>() / weights.len() as f32 });
+            }
+        }
+        let mut children = children;
+        if first { children.insert(0, new) } else { children.push(new) }
+        self.kind = match axis {
+            Axis::Row => Kind::Row { children },
+            Axis::Column => Kind::Column { children },
+        };
         true
     }
 

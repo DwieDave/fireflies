@@ -87,6 +87,10 @@ struct Grid {
     scale: f32,
     /// The cell in device pixels the local screen was sized with.
     vt_cell: (u32, u32),
+    /// Whether a paint has sized this screen yet.
+    fitted: bool,
+    /// This frame is the first that shows the screen again (see `paint_fit`).
+    just_shown: bool,
     /// The colors and device-pixel cell size the core was last told.
     told_display: Option<DisplayFacts>,
     /// Top-left of the cell grid in window coordinates, from the last paint.
@@ -112,6 +116,8 @@ struct Grid {
     painted: Vec<(Rc<Vec<vt::Cell>>, Vec<RowOp>, Option<usize>)>,
     /// Font size, cell size, font, loaded fonts and ligature setting used to draw.
     painted_with: (u32, Size<Pixels>, String, u64, bool),
+    /// This pane's own text size, a multiplier on the app's (`pane.font_bigger`).
+    font_zoom: f32,
 }
 
 pub struct TerminalView {
@@ -137,6 +143,14 @@ pub struct TerminalView {
     was_focused: bool,
     /// The window frame this terminal was last put on screen in (`FRAME`).
     shown_in: Cell<u64>,
+    /// Output changed the screen while it wasn't drawn: the window's cached
+    /// copy of this view is stale, so it is drawn afresh when shown again.
+    missed: Cell<bool>,
+    /// How many frames in a row this terminal has been on screen.
+    shown_streak: Cell<u32>,
+    /// While another client's size is being taken back (`hold`), output isn't
+    /// drawn: the window keeps showing the last good screen. Since when.
+    held: Cell<Option<Instant>>,
     /// When the person last typed here: output right after is shown at once.
     typed_at: Cell<Option<Instant>>,
     /// Scrolled this gesture, in lines, toward the next whole one.
@@ -159,6 +173,11 @@ thread_local! {
     /// Terminals with output waiting for the next tick of the output clock.
     static OUTPUT_CLOCK: RefCell<Vec<WeakEntity<TerminalView>>> = const { RefCell::new(Vec::new()) };
 }
+
+/// The longest a screen is held while its size is taken back (`hold`).
+const HOLD_MAX: Duration = Duration::from_millis(400);
+/// After the core is at our size again, the time a program gets to redraw for it.
+const HOLD_SETTLE: Duration = Duration::from_millis(60);
 
 /// The window's frame number, counted where the window renders.
 static FRAME: AtomicU64 = AtomicU64::new(0);
@@ -208,6 +227,25 @@ impl Grid {
         {
             self.core.facts(chan, &facts);
         }
+    }
+
+    /// Sizes the screen from a paint. The first frame that shows a tab again
+    /// lays its panes out at a placeholder size (54x52 cells where 158x42 is
+    /// right); passing that on resized the program twice, and TUIs (Claude
+    /// Code) were left half-drawn. So in that frame a different size waits: the
+    /// window draws again at once (`mark_shown` keeps the view uncached for a
+    /// few frames, so it is laid out anew), and the real size is taken there.
+    /// Returns whether a size is waiting.
+    fn paint_fit(&mut self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) -> bool {
+        let same = (cols, rows) == (self.vt.cols, self.vt.rows) && device_cell(cell, scale) == self.vt_cell;
+        if self.just_shown && self.fitted && !same {
+            self.just_shown = false;
+            return true;
+        }
+        self.just_shown = false;
+        self.fitted = true;
+        self.fit(cols, rows, cell, scale);
+        false
     }
 
     /// Sizes the screen to `cols` x `rows` of `cell` at `scale`; the program hears of a change.
@@ -279,6 +317,8 @@ impl TerminalView {
                 cell: size(px(9.0), px(18.0)),
                 scale: 1.0,
                 vt_cell: (9, 18),
+                fitted: false,
+                just_shown: false,
                 told_display: None,
                 origin: Point::default(),
                 buttons_down: Vec::new(),
@@ -291,10 +331,14 @@ impl TerminalView {
                 track: None,
                 painted: Vec::new(),
                 painted_with: (0, Size::default(), String::new(), 0, false),
+                font_zoom: 1.0,
             })),
             focus: cx.focus_handle(),
             was_focused: false,
             shown_in: Cell::new(0),
+            missed: Cell::new(false),
+            shown_streak: Cell::new(0),
+            held: Cell::new(None),
             typed_at: Cell::new(None),
             scrolled: point(0.0, 0.0),
             search_open: false,
@@ -468,7 +512,7 @@ impl TerminalView {
         }
     }
 
-    #[cfg(test)]
+    /// The screen's size in cells (`fit_hidden_tabs` checks its prediction with it).
     pub(crate) fn dimensions(&self) -> (u16, u16) {
         let grid = self.grid.borrow();
         (grid.vt.cols, grid.vt.rows)
@@ -496,6 +540,16 @@ impl TerminalView {
     fn find_field_focused(&self, window: &Window, cx: &App) -> bool {
         self.search_open
             && self.search_input.as_ref().is_some_and(|input| input.read(cx).focus_handle(cx).is_focused(window))
+    }
+
+    /// This pane's own text size (1: the app's); the grid refits on the next paint.
+    pub fn set_font_zoom(&mut self, font_zoom: f32, cx: &mut Context<Self>) {
+        let mut g = self.grid.borrow_mut();
+        if g.font_zoom != font_zoom {
+            g.font_zoom = font_zoom;
+            drop(g);
+            cx.notify();
+        }
     }
 
     pub fn detach(&self) {
@@ -570,8 +624,14 @@ impl TerminalView {
         // Output in a terminal nobody sees doesn't redraw the window; it's
         // drawn fresh when shown again. Nor does output that changed nothing
         // on screen (an agent spinning its title).
-        if self.shown_in.get() == FRAME.load(Ordering::Relaxed) && self.grid.borrow_mut().vt.shows_change() {
-            self.redraw_soon(cx);
+        if self.grid.borrow_mut().vt.shows_change() {
+            if self.held.get().is_some() {
+                // Drawn when the hold ends.
+            } else if self.shown_in.get() == FRAME.load(Ordering::Relaxed) {
+                self.redraw_soon(cx);
+            } else {
+                self.missed.set(true);
+            }
         }
         open
     }
@@ -603,8 +663,82 @@ impl TerminalView {
     }
 
     /// The window puts this terminal on screen in the frame it's building.
-    pub fn mark_shown(&self) {
-        self.shown_in.set(FRAME.load(Ordering::Relaxed));
+    /// Returns whether output changed it while it was off screen (its cached
+    /// drawing is stale then).
+    pub fn mark_shown(&self) -> bool {
+        let frame = FRAME.load(Ordering::Relaxed);
+        if self.shown_in.get() == frame {
+            // Shown twice in one frame: the first call decided.
+            return self.shown_streak.get() < 3;
+        }
+        let back = self.shown_in.get().wrapping_add(1) != frame;
+        if back {
+            self.shown_streak.set(0);
+            self.grid.borrow_mut().just_shown = true;
+        } else {
+            self.shown_streak.set(self.shown_streak.get().saturating_add(1));
+        }
+        self.shown_in.set(frame);
+        // Uncached while it comes back into view: a cached view keeps the layout
+        // of the frame that first showed it (a placeholder size), so it is laid
+        // out anew for a few frames, until the size it waited for is applied.
+        self.missed.replace(false) || self.shown_streak.get() < 3
+    }
+
+    /// Keeps showing the last drawn screen while another client's size is being
+    /// taken back: the program redraws for that size, then for ours, and the
+    /// window would show both. Ends when the core reports our size again
+    /// (`release_soon`), or after `HOLD_MAX` whatever happens.
+    pub fn hold(&self, cx: &mut Context<Self>) {
+        if self.held.get().is_some() {
+            return;
+        }
+        let since = Instant::now();
+        self.held.set(Some(since));
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(HOLD_MAX).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.held.get() == Some(since) {
+                    this.release(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    /// The core is at our size again: draw once the program has had a moment
+    /// to redraw for it.
+    pub fn release_soon(&self, cx: &mut Context<Self>) {
+        let Some(since) = self.held.get() else { return };
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(HOLD_SETTLE).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.held.get() == Some(since) {
+                    this.release(cx);
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn release(&self, cx: &mut Context<Self>) {
+        if self.held.take().is_some() {
+            cx.notify();
+        }
+    }
+
+    pub fn held(&self) -> bool {
+        self.held.get().is_some()
+    }
+
+    /// Tells the core this window's size for the terminal again, without a
+    /// change here: another client (an `hc attach` elsewhere, a phone over mosh)
+    /// resized it to its own screen, and the person is at this window.
+    pub fn reclaim_size(&self) {
+        let g = self.grid.borrow();
+        if let Some(chan) = g.channel {
+            g.core.resize(chan, g.vt.cols, g.vt.rows);
+        }
     }
 
     /// A hidden pane cannot render its focus loss.
@@ -1381,10 +1515,10 @@ fn is_icon(text: &str) -> bool {
 }
 
 /// Keep the configured font’s icon proportions; only fit bundled fallback glyphs.
-fn fallback_icon(text: &str, font: &Font, ts: &gpui::TextSystem) -> Option<IconGlyph> {
+fn fallback_icon(text: &str, font: &Font, fs: Pixels, ts: &gpui::TextSystem) -> Option<IconGlyph> {
     let c = text.chars().next().filter(|_| is_icon(text))?;
     let id = ts.resolve_font(font);
-    if ts.advance(id, px(crate::settings::font_size()), c).is_ok() {
+    if ts.advance(id, fs, c).is_ok() {
         return None;
     }
     icon_glyph(c)
@@ -1579,18 +1713,31 @@ struct CellMetrics {
     strike_thickness: Pixels,
 }
 
+/// The terminal font size at a pane's own multiplier (1: the app's).
+fn font_px(font_zoom: f32) -> Pixels {
+    px(crate::settings::font_size() * font_zoom)
+}
+
 fn cell_metrics(window: &Window) -> CellMetrics {
+    cell_metrics_at(window, font_px(1.0))
+}
+
+fn cell_metrics_at(window: &Window, fs: Pixels) -> CellMetrics {
     let ts = window.text_system();
     let id = ts.resolve_font(&cell_font(false, false));
-    let (fs, scale) = (crate::settings::font_size(), window.scale_factor());
-    // Asked for on every frame of every terminal; the answer only changes with the font, size or scale.
-    thread_local!(static LAST: Cell<Option<((FontId, u32, u32), CellMetrics)>> = const { Cell::new(None) });
+    let (fs, scale) = (f32::from(fs), window.scale_factor());
+    // Asked for on every frame of every terminal; the answer only changes with the font, size or scale
+    // (a few sizes at once when panes have their own text size).
+    thread_local!(static LAST: Cell<[Option<((FontId, u32, u32), CellMetrics)>; 4]> = const { Cell::new([None; 4]) });
     let key = (id, fs.to_bits(), scale.to_bits());
-    if let Some((_, metrics)) = LAST.get().filter(|(last, _)| *last == key) {
-        return metrics;
+    let mut last = LAST.get();
+    if let Some((_, metrics)) = last.iter().flatten().find(|(k, _)| *k == key) {
+        return *metrics;
     }
     let metrics = font_cell_metrics(ts, id, fs, scale);
-    LAST.set(Some((key, metrics)));
+    last.rotate_right(1);
+    last[0] = Some((key, metrics));
+    LAST.set(last);
     metrics
 }
 
@@ -1657,6 +1804,10 @@ pub fn cell_size(window: &Window) -> Size<Pixels> {
     cell_metrics(window).size
 }
 
+fn cell_size_at(window: &Window, fs: Pixels) -> Size<Pixels> {
+    cell_metrics_at(window, fs).size
+}
+
 fn paint_cell_text(line: &ShapedLine, origin: Point<Pixels>, metrics: CellMetrics, window: &mut Window, cx: &mut App) {
     let gpui_baseline = (metrics.size.height - line.ascent - line.descent) / 2.0 + line.ascent;
     let origin = origin + point(px(0.0), metrics.baseline - gpui_baseline);
@@ -1664,12 +1815,12 @@ fn paint_cell_text(line: &ShapedLine, origin: Point<Pixels>, metrics: CellMetric
 }
 
 // Force-width shaping moves glyph origins, but does not resize fallback glyphs.
-fn fallback_size(c: &vt::Cell, font: &Font, width: Pixels, ts: &gpui::WindowTextSystem) -> Option<Pixels> {
+fn fallback_size(c: &vt::Cell, font: &Font, width: Pixels, fs: Pixels, ts: &gpui::WindowTextSystem) -> Option<Pixels> {
     if c.wide || c.text.is_ascii() {
         return None;
     }
     let first = c.text.chars().next()?;
-    let size = px(crate::settings::font_size());
+    let size = fs;
     let primary = ts.resolve_font(font);
     if ts.advance(primary, size, first).is_ok() {
         return None;
@@ -1690,7 +1841,12 @@ enum RowOp {
 
 /// A row's drawing: its backgrounds, merged into runs of one color, then its
 /// text in runs of one style (wide characters, sprites and icons on their own).
+#[cfg(test)]
 fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: &mut Window) -> Vec<RowOp> {
+    row_ops_at(row, cell, cursor, font_px(1.0), window)
+}
+
+fn row_ops_at(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, fs: Pixels, window: &mut Window) -> Vec<RowOp> {
     crate::bench::count(&crate::bench::ROWS);
     let ligatures = crate::settings::get().font_ligatures;
     let mut ops = Vec::new();
@@ -1725,7 +1881,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             continue;
         }
         let mut text_font = cell_font(c.bold, c.italic);
-        if let Some(icon) = fallback_icon(&c.text, &text_font, window.text_system()) {
+        if let Some(icon) = fallback_icon(&c.text, &text_font, fs, window.text_system()) {
             // Fit missing icons from the bundled font by their outlines:
             // centered, as tall as fits, two cells wide when a space
             // follows (prompts, statuslines, file trees).
@@ -1744,7 +1900,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             ops.push(RowOp::Icon { x: start, offset: point(px(left), px(baseline)), font, glyph: GlyphId(icon.id), size, color });
             continue;
         }
-        let fitted_size = fallback_size(c, &text_font, cell.width, window.text_system());
+        let fitted_size = fallback_size(c, &text_font, cell.width, fs, window.text_system());
         let mut text = if c.text.is_empty() { " ".to_owned() } else { c.text.clone() };
         let mut positions = vec![(0, px(0.0))];
         // Shape the cursor cell separately, so its plain glyph doesn't cover a ligature.
@@ -1760,7 +1916,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
                     && d.underline == c.underline
                     && d.strike == c.strike;
                 // Bundled fallback icons are fitted separately from the text run.
-                if !same || cursor == Some(x) || (d.text.is_empty() && !d.underline && !d.strike) || crate::sprites::is_sprite(&d.text) || fallback_icon(&d.text, &text_font, window.text_system()).is_some() || fallback_size(d, &text_font, cell.width, window.text_system()).is_some() {
+                if !same || cursor == Some(x) || (d.text.is_empty() && !d.underline && !d.strike) || crate::sprites::is_sprite(&d.text) || fallback_icon(&d.text, &text_font, fs, window.text_system()).is_some() || fallback_size(d, &text_font, cell.width, fs, window.text_system()).is_some() {
                     break;
                 }
                 positions.push((text.len(), cell.width * (x - start) as f32));
@@ -1783,7 +1939,7 @@ fn row_ops(row: &[vt::Cell], cell: Size<Pixels>, cursor: Option<usize>, window: 
             strikethrough: None,
         };
         let width = cell.width * if c.wide { 2.0 } else { (x - start) as f32 };
-        let line = window.text_system().shape_line(text.into(), fitted_size.unwrap_or_else(|| px(crate::settings::font_size())), &[run], None)
+        let line = window.text_system().shape_line(text.into(), fitted_size.unwrap_or(fs), &[run], None)
             .with_cell_positions(&positions, width);
         ops.push(RowOp::Text { x: start, line });
         if c.underline || c.strike {
@@ -1810,7 +1966,8 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     crate::bench::count(&crate::bench::GRID);
     let mut g = grid.borrow_mut();
     let cell = g.cell;
-    let metrics = cell_metrics(window);
+    let fs = font_px(g.font_zoom);
+    let metrics = cell_metrics_at(window, fs);
     let (pad_x, pad_y) = pad();
     // Rows rarely fill the height exactly: split what's left above and below.
     let spare = (f32::from(bounds.size.height) - 2.0 * pad_y - f32::from(cell.height) * g.vt.rows as f32).max(0.0);
@@ -1872,7 +2029,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     // line rebuilds one row, not the whole screen.
     let ligatures = crate::settings::get().font_ligatures;
     let cursor = frame.cursor_cell.filter(|_| ligatures);
-    let with = (crate::settings::font_size().to_bits(), cell, crate::settings::terminal_font(), crate::settings::fonts_added(), ligatures);
+    let with = (f32::from(fs).to_bits(), cell, crate::settings::terminal_font(), crate::settings::fonts_added(), ligatures);
     // When every row changed (output scrolling), nothing is kept: the next
     // frame would find none of them the same.
     let mut painted = std::mem::take(&mut grid.borrow_mut().painted);
@@ -1883,7 +2040,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
     for (y, row) in frame.rows.iter().enumerate() {
         let column = cursor.filter(|(_, cy)| *cy as usize == y).map(|(x, _)| x as usize);
         if frame.all || painted.get(y).is_none_or(|(r, _, c)| !Rc::ptr_eq(r, row) || *c != column) {
-            let ops = row_ops(row, cell, column, window);
+            let ops = row_ops_at(row, cell, column, fs, window);
             if y < painted.len() {
                 painted[y] = (row.clone(), ops, column);
             } else {
@@ -1976,7 +2133,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
                         underline: None,
                         strikethrough: None,
                     };
-                    let line = window.text_system().shape_line(c.text.clone().into(), px(crate::settings::font_size()), &[run], None);
+                    let line = window.text_system().shape_line(c.text.clone().into(), fs, &[run], None);
                     paint_cell_text(&line, p, metrics, window, cx);
                 }
             }
@@ -2002,7 +2159,7 @@ fn paint_grid(bounds: Bounds<Pixels>, grid: &Rc<RefCell<Grid>>, focused: bool, w
             underline: None,
             strikethrough: None,
         };
-        let line = window.text_system().shape_line(text.into(), px(crate::settings::font_size()), &[run], None);
+        let line = window.text_system().shape_line(text.into(), fs, &[run], None);
         window.paint_quad(fill(snap_box(Bounds::new(p, size(line.width, cell.height))), hsla(frame.bg)));
         paint_cell_text(&line, p, metrics, window, cx);
         let underline = Bounds::new(p + point(px(0.0), metrics.underline), size(line.width, metrics.underline_thickness));
@@ -2120,7 +2277,7 @@ impl Render for TerminalView {
                 g.core.focus(ch, focused);
             }
         }
-        let cell = cell_size(window);
+        let cell = cell_size_at(window, font_px(self.grid.borrow().font_zoom));
         let hover = self.grid.borrow().hover;
         let found = hover.filter(|_| link_mods(&window.modifiers())).and_then(|pos| self.link_at(pos));
         let (link, spans) = found.unzip();
@@ -2256,7 +2413,9 @@ impl Render for TerminalView {
                 canvas(
                     move |bounds, window, _cx| {
                         let (cols, rows) = grid_size(bounds.size, cell);
-                        grid.borrow_mut().fit(cols, rows, cell, window.scale_factor());
+                        if grid.borrow_mut().paint_fit(cols, rows, cell, window.scale_factor()) {
+                            window.request_animation_frame();
+                        }
                     },
                     move |bounds, _, window, cx| {
                         paint_grid(bounds, &grid_paint, focused, window, cx);

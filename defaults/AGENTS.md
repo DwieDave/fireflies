@@ -274,7 +274,23 @@ Properties any node can have:
   `props()`: `{title, body, level, icon, action, timeout, overlay}` (`timeout`
   is optional). A mod that hands them to the system instead
   (`exec("notify-send", ...)`) closes itself at once
-  with `closeOverlay(props().overlay)`.
+  with `closeOverlay(props().overlay)`. The older name `"toast_mod"` (this fork) still works.
+- Root only: `"prompt_mod"`, `"confirm_mod"`, `"palette_mod"` (this fork) choose
+  the mods for the name prompt (rename tab/space), the confirm dialog (close a
+  space, ...) and the command palette, in place of the shipped `prompt`,
+  `confirm` and the frame's palette. Each gets the shipped one's props (prompt:
+  `title`, `value`, `hint`, `command`; confirm: `title`, `detail`, `command`;
+  palette: none) plus `dialog` (`"prompt"`, `"confirm"`, `"palette"`) and
+  `overlay`, keeps its size and spot, and opens with `frame: "none"`: the mod
+  draws its own border and background. Run `command.name` with `command.args`
+  (a prompt adds `name`) and close with `closeOverlay(props().overlay)`. An
+  unknown mod logs a warning and keeps the shipped one.
+- Root only: `"peek_mod"` (this fork) draws the 34 px bar over a peeked or
+  floating terminal in place of the shipped `peek`, with its props
+  (`terminal`, `float`, `views`, `overlay`) plus `dialog: "peek"`. Herdr still frames
+  the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls
+  and the switch between a float's views (`views`: their names, or null; run
+  `float.view {index}`; `terminals()`' `floating_view` says which one shows).
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
@@ -369,7 +385,7 @@ The tab block says how each pane of the shown tab is wrapped:
   pane has the keyboard; `gap` is the space between panes.
 - `header`: a mod drawn on each pane, one copy per pane, with
   `props().pane` and `props().terminal`. It reads its live facts from
-  `panes()` (title, folder, branch, agent status, focused, zoomed) and its
+  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom) and its
   buttons run pane commands with that pane (`pane.split`, `pane.zoom`,
   `pane.close`). `position`: `top` or `bottom`; `reveal: "hover"` shows it
   only while the pointer is on the pane, drawn over the terminal so the
@@ -566,10 +582,20 @@ The main ones:
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
   skip settled tabs).
-- Panes: `pane.split {direction: "right" | "down", pane?, argv? | mod?, props?}` (a new
-  terminal, or a mod pane), `pane.close {pane?}`,
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`,
-  `pane.swap {pane?, direction | target}`.
+- Panes: `pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}` (a new
+  terminal, or a mod pane; left/up put it before the pane, left of or above it; "auto"
+  alternates: below a pane whose parent split is side by side, right of one whose parent is
+  stacked, right of a lone pane; keys too: `"pane.split:auto"`),
+  `pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}`
+  (instead of `direction`: the new pane along that side of a whole tab, default the shown
+  one, spanning its full height or width; `px` fixes its width or height and the rest stays
+  flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`,
+  `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
+  terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
+  screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
+  `pane.float {pane?}` (its terminal floats over the tab: the pane goes as with `terminal.park`, the
+  terminal keeps running).
   `pane.go` prefers the most recently focused pane along the nearest edge in that
   direction; unvisited panes fall back to overlap, then top/left layout order.
   `pane.go` also reaches visible mods whose `mod.json` says `"focusable": true`, and
@@ -581,13 +607,37 @@ The main ones:
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and
-  `terminal.show` fail, as do `terminal.open`/`terminal.keep` with place right/down.
+  `terminal.show` fail, as do `terminal.open`/`terminal.keep` with place right/down/left/up/auto
+  and no `pane`.
   They never act on the terminal's source pane. An explicit `pane` still targets that
   model pane; composition edits belong to the mod (edit its layout instead).
-- Terminals: `terminal.open {argv?, folder?, place?, name?}` (`folder` sets the
-  starting directory for tabs and right/down splits, with or without `argv`), `terminal.kill {terminal}`,
-  `terminal.keep {terminal, place?}`, `terminal.park {terminal}`,
-  `terminal.peek {terminal}` (peek over the tab, with keep-as-tab and close),
+- Terminals: `terminal.open {argv?, folder?, place?, name?, pane?}` (place: "tab" (default),
+  "right" | "down" | "left" | "up" | "auto" of `pane` (default: the focused one; directions as
+  `pane.split`), or "float"; `folder` sets the starting directory for tabs and splits, with or
+  without `argv`), `terminal.kill {terminal}`,
+  `terminal.keep {terminal, place?, pane?}` (the same places, but no "float"), `terminal.park {terminal}`,
+  `terminal.peek {terminal, float?}` (peek over the tab, with keep-as-tab, dock and close;
+  `float: true` shows it as a floating terminal),
+  `terminal.open {place: "float"}` starts a terminal without a pane and floats it over the
+  shown tab (85% of it, room for lazygit). A float has one overlay, `terminal-peek` (one peek or
+  float at a time), with the `peek` bar: ↗ keep (a tab), ⇥ dock (`terminal.keep {terminal,
+  place: "right"}`: a split right of the focused pane), ⏻ end (`terminal.kill`) and ✕ (closes
+  the float; the terminal keeps running without a pane, so `terminal.peek {terminal, float: true}`
+  shows it again). Neither leaves a pane behind. `terminals()` marks the one floating now
+  `floating: true` (all others false), so a mod toggles with
+  `const f = terminals().find((t) => t.floating); f ? run("overlay.close", { id: "terminal-peek" }) : run("terminal.open", { argv: ["lazygit"], place: "float" })`.
+  A float that ends closes by itself.
+  Float views: `terminal.open {place: "float", view?: {mod, props?, name?}, show?: 0 | 1}` and
+  `terminal.peek {terminal, float: true, view?, show?}` give the float's body two children, the
+  terminal (0) and a block of mod `view.mod` with `view.props` (1), one shown at a time (a stack),
+  starting with `show` (default 0). `float.view {index: 0 | 1}` switches the open float and gives
+  the shown one the keyboard (the terminal, or the mod if its `mod.json` says `"focusable": true`;
+  it gets `"focus"` from `nextCommand()`). Both stay alive while hidden. `terminal.peek` with the
+  same view on the terminal floating now only switches to `show` (no reopen). `terminals()` gives
+  the floating one `floating_view` (the shown index; 0 for a float without a view) and
+  `float_views` (`[its program's name, view.name ?? view.mod]`; null without a view); every other
+  terminal has null for both. The bar's props get `views` (the same names, or null), and the
+  shipped bar shows a switch between them.
   `terminal.show {terminal?, pane?}`, `terminal.search` (screen and scrollback;
   find bar state stays with that terminal), `terminal.copy`, `terminal.paste` (copied
   files, such as Finder's or a clipboard manager's image, as if dropped; an image
@@ -620,6 +670,17 @@ The main ones:
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
+- Native views (this fork, interface native-view/0): `native.debug` (every native view's frame,
+  visibility, focus, content state and recent events), `native.call {key, action, args?}`
+  (one whitelisted action, key `<copy>:<id>`). A web view takes a `zoom` prop
+  (`herdr.nativeView.new(id, { kind: "web", url, zoom: 1.25 })`, WKWebView page zoom,
+  default 1, clamped to 0.25–5): applied on create, and a change to only `zoom` zooms the
+  page in place without reloading it.
+  Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
+  instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
+  A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
+  `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
+  shows Safari's Web Inspector for that page in its place.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;

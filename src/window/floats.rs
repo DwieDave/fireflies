@@ -209,6 +209,8 @@ impl AppWindow {
             .occlude()
             .on_hover(cx.listener(move |this, hovered: &bool, window, cx| this.float_hovered(&hover_id, *hovered, window, cx)))
             .on_mouse_down(MouseButton::Left, cx.listener(move |this, ev: &MouseDownEvent, _, _| this.float_press(&id, &owner_id, ev.position)))
+            // HUP: native views below keep rendering, with a hole here.
+            .when(!empty, |b| b.child(crate::native_view::cover_probe(f32::from(settings::z(12.0)))))
             .child(inner);
         if let Some(a) = self.float_anims.get(&f.id) {
             let left = 1.0 - spring(a.start.elapsed().as_secs_f32() * 1000.0 / SNAP_MS);
