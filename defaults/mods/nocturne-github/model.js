@@ -121,7 +121,8 @@ export function jobColumns(jobs, needs) {
   return cols.map((c) => c.sort((a, b) => a.i - b.i).map((x) => x.j));
 }
 
-const ANSI = /\x1b\[[0-9;?]*[A-Za-z]/g;
+// Color codes, real or as gh prints them without a terminal ("^[[36;1m").
+const ANSI = /(?:\x1b|\^\[)\[[0-9;?]*[A-Za-z]/g;
 const STAMP = /^(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)(\.\d+)?Z ?/;
 const sec = (v) => (v ? Math.floor(Date.parse(v) / 1000) : NaN);
 
