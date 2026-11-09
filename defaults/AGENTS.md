@@ -689,6 +689,18 @@ The main ones:
   draw underneath (seen while it launches). It needs the Accessibility permission
   (`app.permission`); a press on the app's window focuses the view's pane. Actions:
   `focus` / `app.activate` (the app gets the keyboard), `app.quit`, `state`.
+  Picture in Picture: a web view created with `pip: true` lets its page put a video in
+  Picture in Picture (any site; WebKit plays it). Its `web.pip` action toggles it for the
+  page's biggest (playing) video and returns `{ of }`; its events `pip.enter { of }` (also
+  when the site's own button starts it), `pip.leave` and `pip.popIn { of }` (the popped-out
+  window's ⇲). A native view `{ kind: "pip", of }` shows that video in its place (macOS's
+  own window stays hidden). Actions: `pip.toggle` (play/pause; event `pip.state { result }`),
+  `pip.back` (ends it, the page plays on, and the page's pane takes focus, across tabs and
+  spaces), `pip.close` (ends it, paused), `pip.popOut { colors: { background, foreground, dim,
+  border } }` (a square window above every app and space with ↩ ⇲ ❚❚ ✕; the view may go).
+  Event `pip.ended`: the video went back to its page. One video at a time.
+  Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
+  `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip`.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;

@@ -665,7 +665,7 @@ impl AppWindow {
         let presses = crate::native_view::presses();
         w._tasks.push(cx.spawn_in(window, async move |this, cx| {
             while let Ok(copy) = presses.recv().await {
-                if this.update(cx, |this, cx| this.native_view_pressed(copy, cx)).is_err() {
+                if this.update_in(cx, |this, window, cx| this.native_view_pressed(copy, window, cx)).is_err() {
                     break;
                 }
             }
@@ -4661,12 +4661,28 @@ impl AppWindow {
 
     /// A press on the native view of mod copy `copy`: its pane takes focus, as
     /// in render_slot's mouse handler (the keyboard stays with the page).
-    fn native_view_pressed(&mut self, copy: u64, cx: &mut Context<Self>) {
+    fn native_view_pressed(&mut self, copy: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(slot) = self.copies.iter().find(|(_, c)| c.id == copy).map(|(s, _)| s.clone()) else { return };
-        if self.model.tab_of(&slot).is_none() || self.focused_pane.as_deref() == Some(slot.as_str()) {
+        self.focus_pressed(slot, window, cx);
+    }
+
+    /// A press on a pane's native view: that pane takes focus, its tab and space show.
+    fn focus_pressed(&mut self, slot: String, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(tab) = self.model.tab_of(&slot).map(|t| t.id.clone()) else { return };
+        // Focused already, and shown: nothing to do. A pane still marked focused
+        // in a tab that was left needs its tab shown again.
+        let shown = self.model.active_tab().is_some_and(|t| t.id == tab);
+        if shown && self.focused_pane.as_deref() == Some(slot.as_str()) {
             return;
         }
         self.model.focus_pane(&slot);
+        // The keyboard leaves the terminal that had it (in a tab now hidden, it
+        // would take its tab back at the next frame): the pane's own terminal,
+        // else the window (the native view keeps AppKit's keyboard).
+        match self.pane_focus(&slot, cx) {
+            Some(f) => f.focus(window, cx),
+            None => self.focus.focus(window, cx),
+        }
         self.focused_pane = Some(slot);
         self.publish(cx);
         self.save();
@@ -6296,6 +6312,42 @@ mod tests {
         assert!(!pane_focused(cx), "hidden, the pane can't hold the keyboard");
         select("main", cx);
         assert!(pane_focused(cx));
+    }
+
+    #[test]
+    fn a_press_from_a_hidden_tabs_view_shows_its_tab() {
+        in_own_process("press_shows_hidden_tab");
+    }
+
+    /// A native view's press (e.g. picture in picture's "back") comes from a
+    /// pane in a tab that isn't shown: that tab shows, even though the pane
+    /// was the focused one when its tab was left.
+    #[gpui::test]
+    fn press_shows_hidden_tab(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("press_shows_hidden_tab") {
+            return;
+        }
+        let (view, cx) = open_window(cx, "unused", "", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            this.model.add_tab("sp1", crate::model::Tab::new("tb2", "", "p2", "t2"));
+            this.model.focus_pane("p2");
+            this.focused_pane = Some("p2".into());
+            this.model.select_tab("tb1");
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        // As in the app: the shown tab's terminal has the keyboard.
+        cx.update(|window, cx| view.update(cx, |this, cx| this.pane_focus("p1", cx).unwrap().focus(window, cx)));
+        cx.run_until_parked();
+        let active = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| view.read(cx).model.active_tab().map(|t| t.id.clone()));
+        assert_eq!(active(cx).as_deref(), Some("tb1"));
+        cx.update(|window, cx| view.update(cx, |this, cx| this.focus_pressed("p2".into(), window, cx)));
+        cx.run_until_parked();
+        assert_eq!(active(cx).as_deref(), Some("tb2"));
     }
 
     #[test]
