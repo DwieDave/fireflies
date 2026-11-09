@@ -31,6 +31,10 @@ same core, same mod API. On top of Herdr it adds:
   on PATH; the files pane uses `$EDITOR` (nvim gets one instance per tab).
   `main` and the other Herdr layouts are still there (cmd-shift-l).
 - **Branding**: Fireflies.app with its own icon (`assets/icons/fireflies`).
+- **Mods beside the binary**: besides the built-in default mods, the app installs
+  whole mod folders from `Fireflies.app/Contents/Resources/mods/` (replacing a
+  built-in one of the same name). A packager can ship the mods there and change
+  them without recompiling the app.
 
 ## Branches
 

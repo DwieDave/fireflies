@@ -78,7 +78,64 @@ pub fn write_workspace() -> std::io::Result<()> {
         std::fs::create_dir_all(file.parent().unwrap())?;
         std::fs::write(&file, bytes)?;
     }
-    sync_defaults(&mods_dir(), &dir.join("installed.json"), DEFAULT_MODS)
+    let shipped: Vec<(&str, &[u8])> = shipped_mods().iter().map(|(p, b)| (p.as_str(), b.as_slice())).collect();
+    sync_defaults(&mods_dir(), &dir.join("installed.json"), &shipped)
+}
+
+/// The default mods: the ones built into the binary, plus whole mod folders
+/// a packager puts in the app's resources (macOS: `Fireflies.app/Contents/
+/// Resources/mods/<name>/`), which replace a built-in one of the same name.
+/// They install and update the same way; shipping them beside the binary
+/// lets a mod change without rebuilding the app.
+fn shipped_mods() -> &'static [(String, Vec<u8>)] {
+    static SHIPPED: OnceLock<Vec<(String, Vec<u8>)>> = OnceLock::new();
+    SHIPPED.get_or_init(|| {
+        let bundled = resource_mods_dir().map(|dir| read_mod_folders(&dir)).unwrap_or_default();
+        merge_shipped(DEFAULT_MODS, bundled)
+    })
+}
+
+/// `Contents/Resources/mods` of the app bundle holding this binary, if it has one.
+fn resource_mods_dir() -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let dir = exe.parent()?.parent()?.join("Resources").join("mods");
+    dir.is_dir().then_some(dir)
+}
+
+/// Every file under each mod folder in `dir`, as `<mod>/<path>` (hidden ones skipped).
+fn read_mod_folders(dir: &Path) -> Vec<(String, Vec<u8>)> {
+    fn walk(root: &Path, dir: &Path, out: &mut Vec<(String, Vec<u8>)>) {
+        let mut entries: Vec<_> = std::fs::read_dir(dir).into_iter().flatten().flatten().map(|e| e.path()).collect();
+        entries.sort();
+        for path in entries {
+            if path.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.')) {
+                continue;
+            }
+            if path.is_dir() {
+                walk(root, &path, out);
+            } else if let (Ok(rel), Ok(bytes)) = (path.strip_prefix(root), std::fs::read(&path)) {
+                out.push((rel.to_string_lossy().replace('\\', "/"), bytes));
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(dir, dir, &mut out);
+    // Only files inside a mod folder, not loose ones at the top.
+    out.retain(|(p, _)| p.contains('/'));
+    out
+}
+
+/// The built-in mods with every mod named in `bundled` replaced by that one, whole.
+fn merge_shipped(built_in: &[(&str, &[u8])], bundled: Vec<(String, Vec<u8>)>) -> Vec<(String, Vec<u8>)> {
+    let name = |p: &str| p.split('/').next().unwrap_or_default().to_owned();
+    let replaced: std::collections::BTreeSet<String> = bundled.iter().map(|(p, _)| name(p)).collect();
+    let mut all: Vec<(String, Vec<u8>)> = built_in
+        .iter()
+        .filter(|(p, _)| !replaced.contains(&name(p)))
+        .map(|(p, b)| ((*p).to_owned(), b.to_vec()))
+        .collect();
+    all.extend(bundled);
+    all
 }
 
 static SYNC_NOTES: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
@@ -279,7 +336,7 @@ fn clone_mod_at(mods: &Path, name: &str, to: &str) -> std::io::Result<()> {
 pub fn kinds(names: &std::collections::BTreeSet<String>) -> (Vec<String>, usize, usize) {
     let text = std::fs::read_to_string(app_dir().join("installed.json")).unwrap_or_default();
     let installed: Installed = serde_json::from_str(&text).unwrap_or_default();
-    let shipped = |n: &str| DEFAULT_MODS.iter().any(|(p, _)| p.split('/').next() == Some(n));
+    let shipped = |n: &str| shipped_mods().iter().any(|(p, _)| p.split('/').next() == Some(n));
     let (mut builtin, mut edited, mut custom) = (Vec::new(), 0, 0);
     for name in names {
         if !shipped(name) {
@@ -1630,6 +1687,24 @@ mod tests {
         assert_eq!(read("b-edited/main.js"), "mine", "clones stay untouched");
         assert_eq!(read("d/notes.md"), "my notes", "a dropped default with an added file stays");
 
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn bundled_mod_folders_replace_built_in_ones_whole() {
+        let root = std::env::temp_dir().join(format!("herdr-app-bundled-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("b/bin")).unwrap();
+        std::fs::write(root.join("b/main.js"), "b2").unwrap();
+        std::fs::write(root.join("b/bin/tool"), "t").unwrap();
+        std::fs::write(root.join("b/.DS_Store"), "x").unwrap();
+        std::fs::write(root.join("loose.txt"), "x").unwrap();
+        let bundled = read_mod_folders(&root);
+        assert_eq!(bundled.iter().map(|(p, _)| p.as_str()).collect::<Vec<_>>(), ["b/bin/tool", "b/main.js"]);
+        let built_in: &[(&str, &[u8])] = &[("a/main.js", b"a1"), ("b/main.js", b"b1"), ("b/old.js", b"o")];
+        let all = merge_shipped(built_in, bundled);
+        let files: Vec<(&str, &[u8])> = all.iter().map(|(p, b)| (p.as_str(), b.as_slice())).collect();
+        assert_eq!(files, [("a/main.js", &b"a1"[..]), ("b/bin/tool", b"t"), ("b/main.js", b"b2")]);
         std::fs::remove_dir_all(&root).unwrap();
     }
 
