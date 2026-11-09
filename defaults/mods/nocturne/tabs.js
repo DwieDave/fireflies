@@ -11,7 +11,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme } from "herdr";
-import { dither, pip, place } from "./kit.js";
+import { dither, pip, place, givenName } from "./kit.js";
 import { openNewMenu } from "./newmenu.js";
 import { menuHeight } from "./menu.js";
 import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
@@ -88,7 +88,8 @@ export default class Tabs {
     const shown = (space?.tabs ?? []).filter((c) => !c.settled || c.active);
     const item = (c, i) => {
       const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
-      const name = c.named ? c.name : lead?.program?.agent ? lead.program.name : lead?.title || lead?.program?.name || c.name;
+      // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
+      const name = c.named ? c.name : givenName(lead?.terminal) ?? (lead?.program?.agent ? lead.program.name : lead?.title || lead?.program?.name || c.name);
       const prog = lead?.program;
       return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
         .text_size(11).text_color(c.active ? t.foreground : t.muted)

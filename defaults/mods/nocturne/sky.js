@@ -7,9 +7,10 @@
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
 //            done glows green, working drifts amber, idle rests in the grass;
-//            its tab's name leads (its space only when it's another one,
-//            awake ones add their status; resting ones keep to one line); double-click to
-//            rename the tab (esc: keep, empty: Herdr's name back);
+//            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
+//            its space only when it's another one, awake ones add their status;
+//            resting ones keep to one line); double-click to rename it
+//            (esc: keep, empty: the agent's name back);
 //            right-click for a menu: focus, rename, delete its tab (menu.js)
 //   clock    the time and date beside the moon
 //   fold    « at the top (or cmd-b / cmd-s) folds the sky into a rail: the
@@ -23,7 +24,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, agents, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, RANK, dither, pip, eyebrow, hash } from "./kit.js";
+import { ART, LOGO, WORD, RANK, dither, pip, eyebrow, hash, givenName, nameTerminal } from "./kit.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { menuHeight, NAME_AGENT, MOVE_PANE, MOVABLE_MODS } from "./menu.js";
@@ -33,9 +34,6 @@ import { toggleFiles } from "./files.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
-
-/** Someone named the agent's tab (an unnamed one is called by its position). */
-const tabNamed = (a) => Boolean(a.tab_name) && !/^\d+$/.test(a.tab_name);
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -139,8 +137,7 @@ export default class Sky {
     const a = list.find((x) => x.address === ask.address);
     if (!a || this.folded) return;
     this.naming = a.address;
-    this.namingTab = a.tab;
-    this.nameInput.set_value(tabNamed(a) ? a.tab_name : "");
+    this.nameInput.set_value(givenName(a.address) ?? "");
     this.nameInput.focus();
   }
 
@@ -227,21 +224,20 @@ export default class Sky {
       .child(label);
   }
 
-  // ---- naming agents: an agent goes by its tab's name, so naming one renames its tab
+  // ---- naming agents: an agent goes by its pane's name, kept on its terminal (kit.js NAME_LABEL)
 
   startNaming(a, cx) {
     this.naming = a.address;
-    this.namingTab = a.tab;
-    this.nameInput.set_value(tabNamed(a) ? a.tab_name : "");
+    this.nameInput.set_value(givenName(a.address) ?? "");
     this.nameInput.focus();
     cx.notify();
   }
 
   name(value, cx) {
-    const tab = this.naming ? this.namingTab : null;
+    const terminal = this.naming;
     this.naming = null;
     cx.notify();
-    if (tab) run("tab.rename", { id: tab, name: value });
+    if (terminal) nameTerminal(terminal, value);
   }
 
   header(t, list) {
@@ -346,12 +342,12 @@ export default class Sky {
           .child(dither(t.background, 1)))))
       // Done says so by shape too, not only by its green: a check on the mark.
       .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().top(22).left(22)));
-    // The tab's name leads (the agent's own when nobody named the tab). Only
+    // The pane's name leads (the agent's own when nobody named it). Only
     // what the halo doesn't already say follows: its space when that isn't
     // the shown one; awake ones add their status on a second line, resting
     // ones keep to one. The focused one stands in a moonlit path: a dithered band
     // behind its name that thins out in three steps, and only its name is bright.
-    const title = tabNamed(a) ? a.tab_name : a.program?.agent ? a.program.name : a.title || a.program?.name || a.address;
+    const title = givenName(a.address) ?? (a.program?.agent ? a.program.name : a.title || a.program?.name || a.address);
     const naming = this.naming === a.address;
     const resting = a.status === "idle" || lane < 32;
     const elsewhere = a.space_name && a.space !== this.shownSpace ? a.space_name : null;
