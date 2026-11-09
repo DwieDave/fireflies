@@ -753,6 +753,15 @@ pub fn zoom() -> f32 {
     get().zoom
 }
 
+/// A pane's own terminal font size multiplier (`pane.font_bigger` and co.), one
+/// step on from `from` in the same tenths as the app zoom (0 resets).
+pub fn next_font_zoom(from: f32, steps: i32) -> f32 {
+    if steps == 0 {
+        return 1.0;
+    }
+    ((from * 10.0).round() + steps as f32).clamp(ZOOM_MIN * 10.0, ZOOM_MAX * 10.0) / 10.0
+}
+
 /// A designed size in px, at the current zoom.
 pub fn z(v: f32) -> Pixels {
     px(v * zoom())

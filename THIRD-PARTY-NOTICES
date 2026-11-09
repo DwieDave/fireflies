@@ -11795,6 +11795,7 @@ Apache License 2.0 (Apache-2.0)
   ghostty-sys 0.0.0
   gpui-fps 0.7.1 — https://github.com/longbridge/gpui-kit/tree/main/crates/fps
   gpui-shell 0.7.1 — https://github.com/longbridge/gpui-kit
+  herdr-native-view 0.0.1
   accesskit 0.24.1 — https://github.com/AccessKit/accesskit
   accesskit_atspi_common 0.19.1 — https://github.com/AccessKit/accesskit
   accesskit_consumer 0.38.0 — https://github.com/AccessKit/accesskit
@@ -11849,7 +11850,12 @@ Apache License 2.0 (Apache-2.0)
   ndk-sys 0.6.0+11769913 — https://github.com/rust-mobile/ndk
   num-conv 0.2.2 — https://github.com/jhpratt/num-conv
   objc2-app-kit 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-av-foundation 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-av-kit 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-avf-audio 0.3.2 — https://github.com/madsmtm/objc2
   objc2-cloud-kit 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-core-audio-types 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-core-audio 0.3.2 — https://github.com/madsmtm/objc2
   objc2-core-data 0.3.2 — https://github.com/madsmtm/objc2
   objc2-core-foundation 0.3.2 — https://github.com/madsmtm/objc2
   objc2-core-graphics 0.3.2 — https://github.com/madsmtm/objc2
@@ -11858,11 +11864,19 @@ Apache License 2.0 (Apache-2.0)
   objc2-core-media 0.3.2 — https://github.com/madsmtm/objc2
   objc2-core-text 0.3.2 — https://github.com/madsmtm/objc2
   objc2-core-video 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-image-io 0.3.2 — https://github.com/madsmtm/objc2
   objc2-io-kit 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-javascript-core 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-media-toolbox 0.3.2 — https://github.com/madsmtm/objc2
   objc2-metal 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-pdf-kit 0.3.2 — https://github.com/madsmtm/objc2
   objc2-quartz-core 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-quick-look-ui 0.3.2 — https://github.com/madsmtm/objc2
   objc2-screen-capture-kit 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-security 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-uniform-type-identifiers 0.3.2 — https://github.com/madsmtm/objc2
   objc2-user-notifications 0.3.2 — https://github.com/madsmtm/objc2
+  objc2-web-kit 0.3.2 — https://github.com/madsmtm/objc2
   paste 1.0.15 — https://github.com/dtolnay/paste
   pathfinder_geometry 0.5.1 — https://github.com/servo/pathfinder
   pathfinder_simd 0.5.6 — https://github.com/servo/pathfinder

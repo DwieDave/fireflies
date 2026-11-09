@@ -178,6 +178,26 @@ impl AppWindow {
                 return;
             }
         }
+        // Trust the prediction only where it can be checked: every terminal on
+        // screen must be the size predicted for it. When one isn't (a layout the
+        // prediction gets wrong), sizing hidden tabs from it would squeeze their
+        // programs out of sight and resize them again when shown, which TUIs
+        // (Claude Code) draw half-broken; they keep their last real size instead.
+        if let Some(tab) = self.model.active_tab() {
+            for pane in tab.shown().panes() {
+                let Some(t) = self.terms.get(&pane.id) else { continue };
+                let view = t.view.read(cx);
+                if !view.on_screen_this_frame() { continue }
+                let Some(predicted) = self.shown_size(tab, &pane.id, window) else { continue };
+                let actual = view.dimensions();
+                if predicted != actual {
+                    if !self.hidden_fit_warned.replace(true) {
+                        tracing::warn!(pane = %pane.id, ?predicted, ?actual, "hidden tabs keep their size: the pane size prediction doesn't match this layout");
+                    }
+                    return;
+                }
+            }
+        }
         let scale = window.scale_factor();
         let active = self.model.active_tab().map(|t| t.id.clone());
         for tab in self.model.tabs().filter(|t| Some(&t.id) != active.as_ref()) {

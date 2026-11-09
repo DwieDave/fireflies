@@ -1,0 +1,50 @@
+#!/bin/bash
+# Builds Fireflies' app icon into assets/icons:
+#   Fireflies.icon/       Icon Composer bundle (generate.py; open it in Icon Composer to tweak)
+#   Fireflies.car         actool's asset catalog: the Liquid Glass icon, macOS 26+
+#                         (installed as Contents/Resources/Assets.car, CFBundleIconName Fireflies)
+#   Fireflies.icns        actool's flat fallback for earlier macOS (CFBundleIconFile)
+#   Fireflies.svg         the scene flat, for places that take a plain image
+#   fireflies-ui-icon.png the glass icon as macOS draws it, 1024 px (the setup window's icon)
+# Needs Xcode (actool) and Python 3. Commit the outputs: the app's build has no Xcode.
+set -euo pipefail
+
+[[ $(uname -s) == Darwin ]] || { echo 'build: needs macOS (actool)' >&2; exit 1; }
+here=$(cd "$(dirname "$0")" && pwd)
+icons=$(dirname "$here")
+work=$(mktemp -d)
+trap 'rm -rf "$work"' EXIT
+
+rm -rf "$icons/Fireflies.icon"
+python3 -I "$here/generate.py" "$icons"
+
+xcrun actool "$icons/Fireflies.icon" --compile "$work" --platform macosx \
+  --minimum-deployment-target 11.0 --app-icon Fireflies --include-all-app-icons \
+  --output-partial-info-plist "$work/partial.plist" >/dev/null
+cp "$work/Assets.car" "$icons/Fireflies.car"
+cp "$work/Fireflies.icns" "$icons/Fireflies.icns"
+
+# The UI icon: a throwaway app with the new catalog, drawn by the system. Its
+# path is new each run, since LaunchServices caches icons by path.
+app="$work/fireflies-icon-$(date +%s).app"
+mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
+cp "$work/Assets.car" "$work/Fireflies.icns" "$app/Contents/Resources/"
+printf '#!/bin/sh\n' > "$app/Contents/MacOS/icon"
+chmod +x "$app/Contents/MacOS/icon"
+cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+    <key>CFBundleExecutable</key><string>icon</string>
+    <key>CFBundleIdentifier</key><string>dev.fireflies.icon-render.$(basename "$app" .app)</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleIconFile</key><string>Fireflies</string>
+    <key>CFBundleIconName</key><string>Fireflies</string>
+</dict></plist>
+PLIST
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+"$lsregister" -f "$app"
+xcrun swiftc -O "$here/render.swift" -o "$work/render"
+"$work/render" "$app" "$icons/fireflies-ui-icon.png" 1024 dark
+"$lsregister" -u "$app" 2>/dev/null || true
+echo "build: wrote Fireflies.icon, Fireflies.car, Fireflies.icns, Fireflies.svg and fireflies-ui-icon.png"

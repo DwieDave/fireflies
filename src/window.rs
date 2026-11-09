@@ -266,7 +266,7 @@ struct Term {
 }
 
 enum TerminalChange {
-    Keep { space: String, tab: String, pane: String, name: String, target: Option<String>, axis: Axis },
+    Keep { space: String, tab: String, pane: String, name: String, target: Option<String>, dir: model::Direction },
     Park,
 }
 
@@ -301,6 +301,55 @@ impl OverlayKind {
     /// Dialogs and popups hold the keyboard while open (Esc closes them).
     fn modal_keys(self) -> bool {
         matches!(self, OverlayKind::Dialog | OverlayKind::Popup)
+    }
+}
+
+/// A float's second view (`terminal.open {place: "float", view}`): a mod
+/// shown in the float's body in place of the terminal (`float.view`).
+#[derive(Clone, Debug)]
+struct FloatView {
+    name: String,
+    props: Value,
+    /// What it's called (default: the mod's name).
+    label: Option<String>,
+    /// What the terminal is called, when the caller knows better than `terminals()` yet.
+    term: Option<String>,
+}
+
+impl FloatView {
+    /// `view: {mod, props?, name?}`; null or missing: none.
+    fn parse(v: Option<&Value>) -> Result<Option<FloatView>, String> {
+        let Some(v) = v.filter(|v| !v.is_null()) else { return Ok(None) };
+        let name = v.get("mod").and_then(Value::as_str).filter(|m| !m.is_empty()).ok_or("view is {mod, props?, name?}")?;
+        Ok(Some(FloatView {
+            name: name.to_owned(),
+            props: v.get("props").cloned().unwrap_or(Value::Null),
+            label: v.get("name").and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_owned),
+            term: None,
+        }))
+    }
+
+    fn same(&self, other: &FloatView) -> bool {
+        (&self.name, &self.props, &self.label) == (&other.name, &other.props, &other.label)
+    }
+}
+
+/// The floating terminal's views: which one shows, and what they're called.
+struct FloatViews {
+    view: FloatView,
+    names: [String; 2],
+    shown: usize,
+}
+
+/// The float's body: the terminal (view 0) and the mod (view 1), as a stack.
+const FLOAT_BODY: &str = "float-body";
+const FLOAT_CHILDREN: [&str; 2] = ["float-term", "float-view"];
+
+/// `show: 0 | 1` (default 0).
+fn float_show(a: &Value) -> Result<usize, String> {
+    match a.get("show").filter(|v| !v.is_null()) {
+        None => Ok(0),
+        Some(v) => v.as_u64().filter(|i| *i <= 1).map(|i| i as usize).ok_or_else(|| format!("show is 0 (the terminal) or 1 (the view), not {v}")),
     }
 }
 
@@ -358,6 +407,11 @@ pub struct AppWindow {
     /// Panes showing another terminal for now (pane → address), e.g. a sub-agent
     /// looked at in place of its parent. Not saved; the pane keeps its own.
     swapped: HashMap<String, String>,
+    /// The terminal floating over the tab (`terminal.open {place: "float"}`,
+    /// `pane.float`): shown in the `terminal-peek` overlay, without a pane.
+    floating: Option<String>,
+    /// The float's two views (`view`): its body a stack of the terminal and a mod.
+    float_views: Option<FloatViews>,
     float_drag: Option<floats::FloatDrag>,
     pane_drag: Option<pane_drag::PaneDrag>,
     pane_grip_hover: Option<String>,
@@ -381,6 +435,8 @@ pub struct AppWindow {
     seen: BTreeSet<String>,
     bounds: Rc<RefCell<HashMap<String, Bounds<Pixels>>>>,
     hidden_fit: pane_size::HiddenFit,
+    /// The hidden-tab size prediction disagreed with a pane on screen (logged once).
+    hidden_fit_warned: std::cell::Cell<bool>,
     drag: Option<Drag>,
     written_layout: String,
     /// The shown layout as its file has it; `chrome` is this plus the clicks
@@ -476,6 +532,8 @@ impl AppWindow {
             agent: None,
             agent_focused: None,
             swapped: HashMap::new(),
+            floating: None,
+            float_views: None,
             float_drag: None,
             pane_drag: None,
             pane_grip_hover: None,
@@ -493,6 +551,7 @@ impl AppWindow {
             seen,
             bounds: Default::default(),
             hidden_fit: Default::default(),
+            hidden_fit_warned: Default::default(),
             drag: None,
             written_layout: String::new(),
             file_chrome: default_layout("main"),
@@ -606,6 +665,45 @@ impl AppWindow {
                 }
             }));
         }
+        // Size changes, as they happen: the main loop reads the core's events
+        // twice a second, too late for a terminal another client just resized.
+        w._tasks.push(cx.spawn_in(window, async move |this, cx| {
+            loop {
+                let Ok(core) = this.update(cx, |this, _| this.core.clone()) else { break };
+                let sub = cx.background_executor().spawn({
+                    let core = core.clone();
+                    async move { core.subscribe() }
+                }).await;
+                let Ok((channel, events, _)) = sub else {
+                    cx.background_executor().timer(Duration::from_secs(2)).await;
+                    continue;
+                };
+                let mut pending = Vec::new();
+                while let Ok(crate::hc::Stream::Data(bytes)) = events.recv().await {
+                    core.credit(channel, bytes.len());
+                    pending.extend_from_slice(&bytes);
+                    let mut sizes = Vec::new();
+                    while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+                        let line: Vec<u8> = pending.drain(..=end).collect();
+                        let Ok(v) = serde_json::from_slice::<Value>(&line) else { continue };
+                        let p = v.get("params").unwrap_or(&v);
+                        if p.get("type").and_then(Value::as_str) != Some("size") { continue }
+                        let (Some(t), Some(c), Some(r)) = (
+                            p.get("terminal").and_then(Value::as_str),
+                            p.pointer("/data/cols").and_then(Value::as_u64),
+                            p.pointer("/data/rows").and_then(Value::as_u64),
+                        ) else { continue };
+                        sizes.push((t.to_owned(), c, r));
+                    }
+                    if !sizes.is_empty()
+                        && this.update(cx, |this, cx| for (t, c, r) in sizes { this.on_core_size(&t, c, r, cx) }).is_err()
+                    {
+                        return;
+                    }
+                }
+                cx.background_executor().timer(Duration::from_millis(500)).await;
+            }
+        }));
         w._tasks.push(cx.spawn_in(window, async move |this, cx| {
             while let Ok(req) = requests.recv().await {
                 if this.update_in(cx, |this, window, cx| this.handle(req, window, cx)).is_err() {
@@ -1277,8 +1375,9 @@ impl AppWindow {
             if let Some(c) = self.copies.get(&o.slot) {
                 out.insert(o.slot.clone(), c.inst.clone());
             }
+            // Inactive stack children too (a float's other view), like the layout's.
             if let Some(l) = &o.layout {
-                for n in l.visible_blocks() {
+                for n in l.walk() {
                     if let Some(Content::Mod { name, props }) = n.content() {
                         out.insert(n.id.clone(), inst(name, props));
                     }
@@ -1401,6 +1500,14 @@ impl AppWindow {
                 }
             }
         }
+        // An overlay's hidden terminal (a float showing its other view) stays attached too.
+        for n in self.overlays.iter().filter_map(|o| o.layout.as_ref()).flat_map(|l| l.terminals()) {
+            if let Some(a) = n.terminal()
+                && !terms.iter().any(|(id, _)| *id == n.id)
+            {
+                terms.push((n.id.clone(), a.to_owned()));
+            }
+        }
         let want_terms: HashSet<String> = terms.iter().map(|(id, _)| id.clone()).collect();
         for (id, address) in terms {
             if self.terms.get(&id).is_some_and(|t| t.address == address) {
@@ -1413,7 +1520,7 @@ impl AppWindow {
             self.tell_term(&view, &address, cx);
             let (block, addr) = (id.clone(), address.clone());
             let sub = cx.subscribe_in(&view, window, move |this, _, ev: &TerminalEvent, window, cx| match ev {
-                TerminalEvent::Peek(address) => this.peek_terminal(address, window, cx),
+                TerminalEvent::Peek(address) => this.peek_terminal(address, false, None, 0, window, cx),
                 TerminalEvent::TitleChanged => this.publish(cx),
                 TerminalEvent::Ended => this.terminal_ended(&block, window, cx),
                 TerminalEvent::ContextMenu(at) => {
@@ -1428,6 +1535,12 @@ impl AppWindow {
             if let Some(t) = self.terms.remove(&id) {
                 t.view.read(cx).detach();
             }
+        }
+        // Each pane's own text size (`pane.font_bigger`), also while it shows another terminal.
+        for (id, t) in &self.terms {
+            let pane = id.trim_end_matches(SWAP);
+            let zoom = self.model.tab_of(pane).and_then(|c| c.font_zoom.get(pane).copied()).unwrap_or(1.0);
+            t.view.update(cx, |v, cx| v.set_font_zoom(zoom, cx));
         }
 
         // A mod copy lives while its slot is in the layout, hidden or not (an
@@ -1475,6 +1588,11 @@ impl AppWindow {
         self.synced_model_pane = model_pane;
         self.focused_pane = focused.clone();
         let no_dialog = !self.overlays.iter().any(|o| o.kind.modal_keys());
+        // GPUI focus alone does not change AppKit's first responder. A browser
+        // page can keep receiving keys after a keyboard pane switch.
+        if pane_changed {
+            crate::native_view::release_keyboard(window);
+        }
         // The tab shown again (`layout.select` back from another stack child): its
         // focused pane gets the keyboard, which went to the window while it was hidden.
         let tab_shown = self.shows_tab();
@@ -1718,7 +1836,7 @@ impl AppWindow {
                     let zoomed = ctx.zoomed.as_deref() == Some(p.id.as_str());
                     // A mod pane: what it shows, no terminal.
                     if let Some(Content::Mod { name, .. }) = p.content() {
-                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "movable": self.pane_movable(&p.id) }));
+                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id) }));
                         continue;
                     }
                     let Some(addr) = p.terminal() else { continue };
@@ -1730,7 +1848,8 @@ impl AppWindow {
                         "pane": p.id, "terminal": addr, "tab": ctx.id, "title": title.clone().unwrap_or_default(),
                         "cwd": self.cwds.get(addr), "branch": m.folder_info.get(addr).and_then(|f| f.branch.clone()),
                         "status": m.status(addr), "app": a.and_then(|a| a.app.clone()), "program": self.program(addr),
-                        "focused": focused, "zoomed": zoomed, "movable": self.pane_movable(&p.id),
+                        "focused": focused, "zoomed": zoomed, "font_zoom": ctx.font_zoom.get(&p.id).copied().unwrap_or(1.0),
+                        "movable": self.pane_movable(&p.id),
                     }));
                     let Some(status) = m.status(addr) else { continue };
                     agents.push(json!({
@@ -1763,6 +1882,8 @@ impl AppWindow {
         changed |= mods::publish_spaces(Value::Array(spaces));
         changed |= mods::publish_agents(Value::Array(agents));
         changed |= mods::publish_panes(Value::Array(panes));
+        let (view, views) = self.float_marks(true);
+        changed |= mods::publish_floating(self.floating.as_deref(), view, views);
         changed |= mods::publish_focused(focused.unwrap_or(Value::Null));
         changed |= mods::publish_floats(self.float_placements());
         changed |= mods::publish_layout(&self.chrome);
@@ -2004,6 +2125,17 @@ impl AppWindow {
         });
     }
 
+    /// `terminals()`' `floating_view` and `float_views` for a terminal (floating or not).
+    fn float_marks(&self, floating: bool) -> (Value, Value) {
+        if !floating || self.floating.is_none() {
+            return (Value::Null, Value::Null);
+        }
+        match &self.float_views {
+            Some(f) => (json!(f.shown), json!(f.names)),
+            None => (json!(0), Value::Null),
+        }
+    }
+
     fn terminals_listed(&mut self, v: Value, window: &mut Window, cx: &mut Context<Self>) {
         let mut list = v.get("terminals").cloned().unwrap_or(Value::Array(vec![]));
         let mut live = HashMap::new();
@@ -2018,17 +2150,72 @@ impl AppWindow {
             if let Some(title) = obj.get("title").and_then(Value::as_str).map(|t| crate::terminal::shown_title(t).to_owned()) {
                 obj.insert("title".into(), title.into());
             }
+            let floating = self.floating.is_some() && obj.get("address").and_then(Value::as_str) == self.floating.as_deref();
+            obj.insert("floating".into(), floating.into());
+            let (view, views) = self.float_marks(floating);
+            obj.insert("floating_view".into(), view);
+            obj.insert("float_views".into(), views);
             if let Some(a) = obj.get("address").and_then(Value::as_str) {
                 live.insert(a.to_owned(), Value::Object(obj.clone()));
             }
         }
         self.live = live;
+        self.reclaim_sizes(cx);
         self.closing_terminals.retain(|addr, completed| !*completed || self.live.contains_key(addr));
         // A new sub-agent changes only this list; mods that show teams need to redraw.
         let terminals_changed = mods::publish_terminals(list);
+        // A floating terminal that ended takes its overlay with it.
+        if self.floating.as_ref().is_some_and(|a| !self.live.contains_key(a) && !self.just_born(a)) {
+            self.close_overlay("terminal-peek", window, cx);
+        }
         self.tend_terminals(true, window, cx);
         if terminals_changed {
             self.refresh_snapshot_mods(cx);
+        }
+    }
+
+    /// Terminals shown here that another client resized to its own screen (an
+    /// `hc attach` from a phone that follows the focused agent): while this
+    /// window is the active one, the person is looking here, so the shown
+    /// terminals get this window's size back. Otherwise the other client keeps
+    /// its size. Without this, a TUI drew for the phone in a desktop pane until
+    /// the next keypress or mouse move here.
+    /// A size change the core reported for a terminal (from `watch_sizes`).
+    /// Another client resized one shown here while this window is active: hold
+    /// its screen and give it our size back at once; once the core is at our
+    /// size again, let it draw.
+    fn on_core_size(&mut self, address: &str, cols: u64, rows: u64, cx: &mut Context<Self>) {
+        if !self.window_active || !self.visible_addresses().iter().any(|a| a == address) {
+            return;
+        }
+        let views: Vec<_> = self.terms.values().filter(|t| t.address == address).map(|t| t.view.clone()).collect();
+        for view in views {
+            let (c, r) = view.read(cx).dimensions();
+            view.update(cx, |v, cx| {
+                if (cols, rows) == (u64::from(c), u64::from(r)) {
+                    v.release_soon(cx);
+                } else {
+                    v.hold(cx);
+                    v.reclaim_size();
+                }
+            });
+        }
+    }
+
+    fn reclaim_sizes(&self, cx: &App) {
+        if !self.window_active { return }
+        let visible: HashSet<String> = self.visible_addresses().into_iter().collect();
+        for t in self.terms.values() {
+            if !visible.contains(&t.address) { continue }
+            let Some(rec) = self.live.get(&t.address) else { continue };
+            let core = (rec.get("cols").and_then(Value::as_u64), rec.get("rows").and_then(Value::as_u64));
+            let view = t.view.read(cx);
+            let (cols, rows) = view.dimensions();
+            if let (Some(c), Some(r)) = core
+                && (c, r) != (u64::from(cols), u64::from(rows))
+            {
+                view.reclaim_size();
+            }
         }
     }
 
@@ -2470,7 +2657,7 @@ impl AppWindow {
         Ok(json!({ "space": space, "tab": ctx, "pane": pane }))
     }
 
-    fn split(&mut self, pane: Option<String>, axis: Axis, argv: Option<Vec<String>>, folder: Option<String>, window: &Window) -> Result<Value, String> {
+    fn split(&mut self, pane: Option<String>, dir: model::Direction, argv: Option<Vec<String>>, folder: Option<String>, window: &Window) -> Result<Value, String> {
         let target = pane.or_else(|| self.model.focused_pane()).ok_or("no pane to split")?;
         let (Some(p), Some(c)) = (self.model.space_of(&target), self.model.tab_of(&target)) else { return Err(format!("no pane {target:?}")) };
         let (space, ctx, fallback) = (p.id.clone(), c.id.clone(), p.folder.clone());
@@ -2480,17 +2667,18 @@ impl AppWindow {
         // A split stays on the machine of the pane it splits (else its space's).
         let on = target_addr.and_then(|a| a.split_once('/').map(|(m, _)| m.to_owned())).or_else(|| self.machine_of(&space));
         let new = self.model.fresh_id_on("p", on.as_deref());
+        let (axis, before) = self.model.split_side(&target, dir);
         let mut root = self.model.tab(&ctx).expect("target tab").root.clone();
-        root.split(&target, axis, Node::block(new.clone(), Content::Terminal { terminal: String::new() }), "initial-size".into());
+        root.split_at(&target, axis, before, Node::block(new.clone(), Content::Terminal { terminal: String::new() }), "initial-size".into());
         let size = self.model.active_tab().filter(|tab| tab.id == ctx)
             .and_then(|_| self.initial_size(&root, &new, window));
         let (addr, _) = self.spawn(argv, cwd, follow, &space, &ctx, on.as_deref(), size, window)?;
-        self.model.split(&target, axis, &new, &addr);
+        self.model.split_toward(&target, dir, model::pane(&new, &addr));
         Ok(json!({ "pane": new, "terminal": addr }))
     }
 
     /// A mod as a pane beside the target (a viewer next to the shell).
-    fn split_mod(&mut self, pane: Option<String>, axis: Axis, name: String, props: Value) -> Result<Value, String> {
+    fn split_mod(&mut self, pane: Option<String>, dir: model::Direction, name: String, props: Value) -> Result<Value, String> {
         let target = pane.or_else(|| self.model.focused_pane()).ok_or("no pane to split")?;
         if self.model.tab_of(&target).is_none() {
             return Err(format!("no pane {target:?}"));
@@ -2501,8 +2689,43 @@ impl AppWindow {
         let machine = self.model.space_of(&target).and_then(|s| s.machine.clone());
         self.require_document(machine.as_deref())?;
         let new = self.model.fresh_id_on("p", machine.as_deref());
-        self.model.split_with(&target, axis, Node::block(new.clone(), Content::Mod { name, props }));
+        self.model.split_toward(&target, dir, Node::block(new.clone(), Content::Mod { name, props }));
         Ok(json!({ "pane": new }))
+    }
+
+    /// `pane.split {edge}`: a new pane along one edge of a whole tab (default:
+    /// the shown one), spanning it; `px` fixes its size. A terminal, or `mod`.
+    fn split_at_edge(&mut self, tab: Option<String>, edge: crate::layout::Edge, px: Option<f32>, a: &Value, window: &Window) -> Result<Value, String> {
+        let ctx = tab.or_else(|| self.model.active_tab().map(|c| c.id.clone())).ok_or("no tab to split")?;
+        let (Some(p), Some(c)) = (self.model.space_of(&ctx), self.model.tab(&ctx)) else { return Err(format!("no tab {ctx:?}")) };
+        let (space, root, fallback) = (p.id.clone(), c.root.clone(), p.folder.clone());
+        let here = c.focused_pane().and_then(|f| self.model.address_of(&f));
+        let on = self.machine_of(&space);
+        self.require_document(on.as_deref())?;
+        let new = self.model.fresh_id_on("p", on.as_deref());
+        let sized = |mut n: Node| {
+            n.size = px.map(|px| Span::Px { px });
+            n
+        };
+        if let Some(name) = Self::owned(a, "mod") {
+            if !self.folders.contains_key(&name) {
+                return Err(format!("no mod {name:?} in mods/"));
+            }
+            let props = a.get("props").cloned().unwrap_or(Value::Null);
+            self.model.split_edge(&ctx, edge, sized(Node::block(new.clone(), Content::Mod { name, props })));
+            return Ok(json!({ "pane": new, "tab": ctx }));
+        }
+        let folder = Self::owned(a, "folder");
+        let follow = folder.is_none();
+        let cwd = folder
+            .or_else(|| here.filter(|h| h.split_once('/').map(|(m, _)| m) == on.as_deref()).and_then(|h| self.cwds.get(&h).cloned()))
+            .unwrap_or(fallback);
+        let mut shown = root;
+        shown.add_at_edge(edge, sized(Node::block(new.clone(), Content::Terminal { terminal: String::new() })), "initial-size".into());
+        let size = self.model.active_tab().filter(|t| t.id == ctx).and_then(|_| self.initial_size(&shown, &new, window));
+        let (addr, _) = self.spawn(Self::argv(a), cwd, follow, &space, &ctx, on.as_deref(), size, window)?;
+        self.model.split_edge(&ctx, edge, sized(model::pane(&new, &addr)));
+        Ok(json!({ "pane": new, "tab": ctx, "terminal": addr }))
     }
 
     /// Ask only whether a missing terminal is closed. Core owns restarting it.
@@ -2540,31 +2763,64 @@ impl AppWindow {
         born.get(addr).is_some_and(|t| t.elapsed() < Duration::from_secs(5))
     }
 
+    /// `terminal.open {place: "float"}`: a terminal of the shown space's machine
+    /// without a pane (no `herdr.space` label, so nothing adopts it), floating
+    /// over the tab. Closing the float leaves it running; `terminal.keep` gives it a pane.
+    fn open_float(&mut self, argv: Option<Vec<String>>, folder: Option<String>, view: Option<FloatView>, show: usize, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        if let Some(v) = &view && !self.folders.contains_key(&v.name) {
+            return Err(format!("no mod {:?} in mods/", v.name));
+        }
+        if show == 1 && view.is_none() {
+            return Err("show 1 needs a view".into());
+        }
+        let space = self.model.active_space().map(|p| p.id.clone()).ok_or("no space yet: make one first (space.new)")?;
+        let on = self.machine_of(&space);
+        let here = self.model.focused_pane().and_then(|p| self.model.address_of(&p))
+            .filter(|a| a.split_once('/').map(|(m, _)| m) == on.as_deref())
+            .and_then(|a| self.cwds.get(&a).cloned());
+        let cwd = folder.or(here).unwrap_or_else(|| self.folder_for(&space));
+        self.require_document(on.as_deref())?;
+        let labels = json!({ "herdr.space": "", "herdr.tab": "", "herdr.seen": "0" });
+        // Not listed yet: its view names come from what it runs.
+        let view = view.map(|v| FloatView { term: Some(program_name(None, argv.as_deref().unwrap_or_default())), ..v });
+        let addr = self.core.run(argv.unwrap_or_default(), Some(cwd).filter(|c| !c.is_empty()), labels, on.as_deref(), None, crate::terminal::initial_display(window))
+            .map_err(|e| format!("cannot start a terminal: {e:#}"))?;
+        self.born.borrow_mut().insert(addr.clone(), Instant::now());
+        self.peek_terminal(&addr, true, view, show, window, cx);
+        Ok(json!({ "terminal": addr }))
+    }
+
     /// Gives a running terminal without a pane (a sub-agent, say) one in the
     /// shown space and focuses it; already in a pane: focuses that.
-    fn keep_terminal(&mut self, addr: &str, place: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+    fn keep_terminal(&mut self, addr: &str, place: &str, pane: Option<String>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
         if let Some(p) = self.model.pane_of(addr) {
             self.model.focus_pane(&p);
             return Ok(json!({ "pane": p }));
         }
         if !self.live.contains_key(addr) { return Err(format!("no running terminal {addr:?}")); }
         if self.changing_terminals.contains(addr) { return Err("This terminal already has a pane change in progress.".into()); }
-        let space = self.model.active_space().map(|p| p.id.clone()).ok_or("no space to keep it in")?;
+        // A split beside a pane (the given one, else the focused one); anything else: a new tab.
+        let dir = model::Direction::parse(place);
+        let target = dir.and_then(|_| pane.or_else(|| self.model.focused_pane()));
+        if let Some(t) = &target && self.model.tab_of(t).is_none() {
+            return Err(format!("no pane {t:?}"));
+        }
+        let space = target.as_deref().and_then(|t| self.model.space_of(t)).or_else(|| self.model.active_space())
+            .map(|p| p.id.clone()).ok_or("no space to keep it in")?;
         let machine = self.machine_of(&space);
         if addr.split_once('/').map(|(m, _)| m) != machine.as_deref() {
             return Err("A terminal's pane must stay on its own machine.".into());
         }
         self.require_document(machine.as_deref())?;
-        let target = matches!(place, "right" | "down").then(|| self.model.focused_pane()).flatten();
         let ctx = target.as_deref().and_then(|p| self.model.tab_of(p)).map(|t| t.id.clone())
             .unwrap_or_else(|| self.model.fresh_id_on("tb", machine.as_deref()));
         let pane = self.model.fresh_id_on("p", machine.as_deref());
         let name = self.live.get(addr).and_then(|r| r["name"].as_str()).filter(|s| !s.is_empty()).map(str::to_owned)
             .or_else(|| self.model.agents.get(addr).and_then(|a| a.app.as_deref()).map(crate::programs::name)).unwrap_or_else(|| addr.to_owned());
-        let (address, place) = (addr.to_owned(), place.to_owned());
+        let address = addr.to_owned();
         let reply = json!({"pending":true,"terminal":addr,"pane":pane,"tab":ctx});
         self.start_terminal_change(address, TerminalChange::Keep {
-            space, tab: ctx, pane, name, target, axis: if place == "right" { Axis::Row } else { Axis::Column },
+            space, tab: ctx, pane, name, target, dir: dir.unwrap_or(model::Direction::Right),
         }, window, cx);
         Ok(reply)
     }
@@ -2618,7 +2874,7 @@ impl AppWindow {
             return;
         }
         match change {
-            TerminalChange::Keep { space, tab, pane, name, target, axis } => {
+            TerminalChange::Keep { space, tab, pane, name, target, dir } => {
                 if !self.live.contains_key(&address) { return; }
                 if self.model.space(&space).is_none() {
                     if let Err(error) = self.park_terminal(&address, window, cx) {
@@ -2630,7 +2886,7 @@ impl AppWindow {
                     let destination = target.filter(|p| self.model.tab_of(p).is_some_and(|t| t.id == tab))
                         .or_else(|| self.model.tab(&tab).and_then(|t| t.root.panes().first().map(|p| p.id.clone())));
                     if let Some(target) = destination {
-                        self.model.split(&target, axis, &pane, &address);
+                        self.model.split_toward(&target, dir, model::pane(&pane, &address));
                     } else {
                         self.model.add_tab(&space, Tab::new(&tab, &name, &pane, &address));
                     }
@@ -2808,7 +3064,7 @@ impl AppWindow {
             args["machine"] = json!(machine);
         }
         if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
-            let node = ["id", "space", "pane"].into_iter().find_map(|k| Self::arg(&args, k));
+            let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
                 else if name == "terminal.park" { Self::arg(&args, "terminal").and_then(|a| a.split_once('/').map(|(m, _)| m)) }
@@ -2850,8 +3106,9 @@ impl AppWindow {
             self.close_overlay("rename", window, cx);
             return;
         }
-        let spec = json!({ "mod": "prompt", "kind": "dialog", "width": 380,
+        let mut spec = json!({ "mod": "prompt", "kind": "dialog", "width": 380,
             "props": { "title": title, "value": current.as_deref().unwrap_or(""), "hint": hint, "command": { "name": name, "args": args } } });
+        self.skin_dialog(&mut spec, self.chrome.prompt_mod.clone(), "prompt");
         self.open_overlay("rename".into(), spec, window, cx);
     }
 
@@ -2976,14 +3233,29 @@ impl AppWindow {
             }
             // ---- panes
             "pane.split" => {
-                let axis = match Self::arg(a, "direction") {
-                    Some("right") => Axis::Row,
-                    Some("down") => Axis::Column,
-                    other => return self.fail(format!("pane.split direction is \"right\" or \"down\", not {other:?}")),
-                };
-                let r = match Self::owned(a, "mod") {
-                    Some(name) => self.split_mod(Self::owned(a, "pane"), axis, name, a.get("props").cloned().unwrap_or(Value::Null)),
-                    None => self.split(Self::owned(a, "pane"), axis, Self::argv(a), None, window),
+                let r = if let Some(edge) = a.get("edge").filter(|e| !e.is_null()) {
+                    let Some(edge) = edge.as_str().and_then(split_edge) else {
+                        return self.fail(format!("pane.split edge is \"right\", \"left\", \"top\" or \"bottom\", not {edge}"));
+                    };
+                    let px = match a.get("px").filter(|p| !p.is_null()) {
+                        None => None,
+                        Some(p) => match p.as_f64().filter(|p| *p > 0.0) {
+                            Some(p) => Some(p as f32),
+                            None => return self.fail(format!("pane.split px is a number above 0, not {p}")),
+                        },
+                    };
+                    self.split_at_edge(Self::owned(a, "tab"), edge, px, a, window)
+                } else {
+                    let Some(dir) = Self::arg(a, "direction").and_then(model::Direction::parse) else {
+                        return self.fail(format!(
+                            "pane.split direction is \"right\", \"down\", \"left\", \"up\" or \"auto\" (or give edge), not {:?}",
+                            Self::arg(a, "direction")
+                        ));
+                    };
+                    match Self::owned(a, "mod") {
+                        Some(name) => self.split_mod(Self::owned(a, "pane"), dir, name, a.get("props").cloned().unwrap_or(Value::Null)),
+                        None => self.split(Self::owned(a, "pane"), dir, Self::argv(a), Self::owned(a, "folder"), window),
+                    }
                 };
                 self.answer(r);
             }
@@ -3009,6 +3281,36 @@ impl AppWindow {
                     && c.root.panes().len() > 1
                 {
                     c.zoomed = if c.zoomed.as_deref() == Some(pane.as_str()) { None } else { Some(pane) };
+                }
+            }
+            "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane") };
+                let Some(ctx) = self.model.tab_of(&pane).map(|c| c.id.clone()) else { return self.fail(format!("no pane {pane:?}")) };
+                let Some(c) = self.model.tab_mut(&ctx) else { return };
+                let steps = match name {
+                    "pane.font_bigger" => 1,
+                    "pane.font_smaller" => -1,
+                    _ => 0,
+                };
+                let zoom = settings::next_font_zoom(c.font_zoom.get(&pane).copied().unwrap_or(1.0), steps);
+                if zoom == 1.0 {
+                    c.font_zoom.remove(&pane);
+                } else {
+                    c.font_zoom.insert(pane, zoom);
+                }
+            }
+            "pane.float" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to float") };
+                if self.model.tab_of(&pane).is_none() {
+                    return self.fail(format!("no pane {pane:?}"));
+                }
+                let Some(addr) = self.model.address_of(&pane).filter(|a| self.live.contains_key(a)) else { return self.fail("only a running terminal's pane floats") };
+                match self.park_terminal(&addr, window, cx) {
+                    Ok(_) => {
+                        self.peek_terminal(&addr, true, None, 0, window, cx);
+                        self.answer(Ok(json!({ "pending": true, "terminal": addr })));
+                    }
+                    Err(e) => return self.fail(e),
                 }
             }
             "pane.focus" => {
@@ -3062,9 +3364,13 @@ impl AppWindow {
             // ---- terminals
             "terminal.open" => {
                 let argv = Self::argv(a);
-                let r = match Self::arg(a, "place").unwrap_or("tab") {
-                    "right" => self.split(None, Axis::Row, argv, Self::owned(a, "folder"), window),
-                    "down" => self.split(None, Axis::Column, argv, Self::owned(a, "folder"), window),
+                let place = Self::arg(a, "place").unwrap_or("tab");
+                let r = match place {
+                    _ if let Some(dir) = model::Direction::parse(place) => self.split(Self::owned(a, "pane"), dir, argv, Self::owned(a, "folder"), window),
+                    "float" => match (FloatView::parse(a.get("view")), float_show(a)) {
+                        (Ok(view), Ok(show)) => self.open_float(argv, Self::owned(a, "folder"), view, show, window, cx),
+                        (Err(e), _) | (_, Err(e)) => Err(format!("terminal.open: {e}")),
+                    },
                     _ => {
                         let name = Self::owned(a, "name")
                             .or_else(|| argv.as_ref().and_then(|v| v.first()).map(|p| p.rsplit('/').next().unwrap_or(p).to_owned()))
@@ -3075,7 +3381,7 @@ impl AppWindow {
                 self.answer(r);
             }
             "terminal.keep" => {
-                let r = self.keep_terminal(Self::arg(a, "terminal").unwrap_or_default(), Self::arg(a, "place").unwrap_or("tab"), window, cx);
+                let r = self.keep_terminal(Self::arg(a, "terminal").unwrap_or_default(), Self::arg(a, "place").unwrap_or("tab"), Self::owned(a, "pane"), window, cx);
                 self.answer(r);
             }
             "terminal.park" => {
@@ -3129,7 +3435,34 @@ impl AppWindow {
                 if !self.live.contains_key(t) {
                     return self.fail(format!("no running terminal {t:?}"));
                 }
-                self.peek_terminal(t, window, cx);
+                let float = a.get("float").and_then(Value::as_bool).unwrap_or(false);
+                let (view, show) = match (FloatView::parse(a.get("view")), float_show(a)) {
+                    (Ok(view), Ok(show)) => (view, show),
+                    (Err(e), _) | (_, Err(e)) => return self.fail(format!("terminal.peek: {e}")),
+                };
+                if let Some(v) = &view {
+                    if !float {
+                        return self.fail("terminal.peek: a view needs float: true");
+                    }
+                    if !self.folders.contains_key(&v.name) {
+                        return self.fail(format!("terminal.peek: no mod {:?} in mods/", v.name));
+                    }
+                }
+                if show == 1 && view.is_none() {
+                    return self.fail("terminal.peek: show 1 needs a view");
+                }
+                let t = t.to_owned();
+                self.peek_terminal(&t, float, view, show, window, cx);
+            }
+            "float.view" => {
+                let index = match a.get("index").and_then(Value::as_u64) {
+                    Some(i @ (0 | 1)) => i as usize,
+                    _ => return self.fail(format!("float.view index is 0 (the terminal) or 1 (the view), not {}", a.get("index").unwrap_or(&Value::Null))),
+                };
+                if self.float_views.is_none() {
+                    return self.fail("float.view: no float with a view is open");
+                }
+                self.show_float_view(index, window, cx);
             }
             "terminal.show" => {
                 let pane = Self::owned(a, "pane").or_else(|| self.model.focused_pane());
@@ -3299,6 +3632,14 @@ impl AppWindow {
                     return self.fail(format!("no stack {s:?} with a child {ch:?}"));
                 }
             }
+            // HUP: native view inspection and actions for the test harness.
+            "native.debug" => self.answer(Ok(crate::native_view::debug())),
+            "native.call" => {
+                let (Some(key), Some(action)) = (Self::arg(a, "key"), Self::arg(a, "action")) else { return self.fail("native.call needs key and action") };
+                let r = crate::native_view::call_key(&key, &action, a.get("args").unwrap_or(&Value::Null));
+                self.answer(r);
+                cx.notify();
+            }
             "mod.open" => {
                 let name = Self::arg(a, "name").unwrap_or_default();
                 let Some(f) = self.folders.get(name) else { return self.fail(format!("no mod folder {name:?}")) };
@@ -3333,7 +3674,8 @@ impl AppWindow {
                 if self.overlays.iter().any(|o| o.id == "palette") {
                     self.close_overlay("palette", window, cx);
                 } else {
-                    let spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+                    let mut spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+                    self.skin_dialog(&mut spec, self.chrome.palette_mod.clone(), "palette");
                     self.open_overlay("palette".into(), spec, window, cx);
                 }
                 return;
@@ -3466,6 +3808,7 @@ impl AppWindow {
         self.focused_block = Some(id.to_owned());
         self.sync(window, cx);
         if !self.overlays.iter().any(|o| o.kind.modal_keys()) {
+            crate::native_view::release_keyboard(window);
             self.focus.focus(window, cx);
             self.hand_keyboard();
         }
@@ -3498,9 +3841,26 @@ impl AppWindow {
     // ---- overlays ----------------------------------------------------------
 
     fn confirm(&mut self, title: &str, detail: &str, command: &str, args: Value, window: &mut Window, cx: &mut Context<Self>) {
-        let spec = json!({ "mod": "confirm", "kind": "dialog", "width": 380,
+        let mut spec = json!({ "mod": "confirm", "kind": "dialog", "width": 380,
             "props": { "title": title, "detail": detail, "command": { "name": command, "args": args } } });
+        self.skin_dialog(&mut spec, self.chrome.confirm_mod.clone(), "confirm");
         self.open_overlay(mods::new_overlay_id(), spec, window, cx);
+    }
+
+    /// The layout's `prompt_mod` / `confirm_mod` / `palette_mod`, like
+    /// `toast_mod`: that mod draws the overlay instead of the shipped one, with
+    /// no frame of Herdr's (it draws its own) and `dialog` (`"prompt"`,
+    /// `"confirm"`, `"palette"`) added to its props so one mod can play
+    /// several parts. An unknown mod logs a warning and keeps the shipped one.
+    fn skin_dialog(&self, spec: &mut Value, chosen: Option<String>, dialog: &str) {
+        let Some(name) = chosen else { return };
+        if !self.folders.contains_key(&name) {
+            tracing::warn!(mod_name = %name, dialog, "dialog mod not found; using the shipped one");
+            return;
+        }
+        spec["mod"] = json!(name);
+        spec["frame"] = json!("none");
+        spec["props"]["dialog"] = json!(dialog);
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3639,20 +3999,126 @@ impl AppWindow {
         cx.notify();
     }
 
-    fn peek_terminal(&mut self, address: &str, window: &mut Window, cx: &mut Context<Self>) {
+    /// A terminal over the tab with the `peek` bar on top. `float`: a floating
+    /// terminal (bigger, room for a full TUI), which `terminals()` marks `floating`.
+    /// A float's `view`: its body holds the terminal and that mod, showing `show`.
+    fn peek_terminal(&mut self, address: &str, float: bool, view: Option<FloatView>, show: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let view = view.filter(|_| float);
+        // Already floating with this view: only switch, no close and reopen.
+        if let Some(v) = &view
+            && self.floating.as_deref() == Some(address)
+            && self.float_views.as_ref().is_some_and(|f| f.view.same(v))
+        {
+            return self.show_float_view(show, window, cx);
+        }
         self.close_overlay("terminal-peek", window, cx);
+        let size = if float { 0.85 } else { 0.8 };
+        let names = view.as_ref().map(|v| {
+            let term = v.term.clone().unwrap_or_else(|| self.terminal_name(address));
+            [term, v.label.clone().unwrap_or_else(|| v.name.clone())]
+        });
+        let views = names.as_ref().map_or(Value::Null, |n| json!(n));
+        // The layout's `peek_mod` draws the bar instead of the shipped `peek`,
+        // with `dialog: "peek"` added to its props, like the dialog mods.
+        let bar = match self.chrome.peek_mod.clone() {
+            Some(name) if self.folders.contains_key(&name) => {
+                json!({ "mod": name, "props": { "terminal": address, "float": float, "views": views, "dialog": "peek" } })
+            }
+            Some(name) => {
+                tracing::warn!(mod_name = %name, "peek mod not found; using the shipped one");
+                json!({ "mod": "peek", "props": { "terminal": address, "float": float, "views": views } })
+            }
+            None => json!({ "mod": "peek", "props": { "terminal": address, "float": float, "views": views } }),
+        };
+        let show = if view.is_some() { show.min(1) } else { 0 };
+        let body = match &view {
+            Some(v) => json!({
+                "type": "stack",
+                "id": FLOAT_BODY,
+                "active": FLOAT_CHILDREN[show],
+                "children": [
+                    { "type": "block", "id": FLOAT_CHILDREN[0], "content": { "terminal": address } },
+                    { "type": "block", "id": FLOAT_CHILDREN[1], "content": { "mod": v.name, "props": v.props } }
+                ]
+            }),
+            None => json!({ "type": "block", "content": { "terminal": address } }),
+        };
         self.open_overlay("terminal-peek".into(), json!({
             "kind": "dialog",
-            "width": 0.8,
-            "height": 0.8,
+            "width": size,
+            "height": size,
             "layout": {
                 "type": "column",
                 "children": [
-                    { "type": "block", "size": { "px": 34 }, "content": { "mod": "peek", "props": { "terminal": address } } },
-                    { "type": "block", "content": { "terminal": address } }
+                    { "type": "block", "size": { "px": 34 }, "content": bar },
+                    body
                 ]
             }
         }), window, cx);
+        self.floating = float.then(|| address.to_owned());
+        self.float_views = view.zip(names).map(|(view, names)| FloatViews { view, names, shown: show });
+        if show == 1 {
+            self.focus_float_view(window, cx);
+        }
+        self.publish(cx);
+    }
+
+    /// `float.view {index}`: the float's body shows the terminal (0) or its view (1),
+    /// and the keyboard goes there.
+    fn show_float_view(&mut self, index: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(f) = self.float_views.as_mut() else { return };
+        f.shown = index.min(1);
+        let child = ov_id("terminal-peek", FLOAT_CHILDREN[f.shown]);
+        if let Some(l) = self.overlays.iter_mut().find(|o| o.id == "terminal-peek").and_then(|o| o.layout.as_mut()) {
+            l.select(&ov_id("terminal-peek", FLOAT_BODY), &child);
+        }
+        self.sync(window, cx);
+        self.focus_float_view(window, cx);
+        self.publish(cx);
+        cx.notify();
+    }
+
+    /// The keyboard to the float's shown view: its terminal, or its mod when
+    /// that mod's `mod.json` says `focusable` (else the float holds it).
+    fn focus_float_view(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        let Some(shown) = self.float_views.as_ref().map(|f| f.shown) else { return };
+        let block = ov_id("terminal-peek", FLOAT_CHILDREN[shown]);
+        if shown == 0 {
+            if let Some(t) = self.terms.get(&block) {
+                t.focus.focus(window, cx);
+            }
+            return;
+        }
+        if let Some(o) = self.overlays.iter().find(|o| o.id == "terminal-peek") {
+            o.focus.focus(window, cx);
+        }
+        if !self.focusable(&block) {
+            return;
+        }
+        // A copy that just started asks for commands a moment later.
+        cx.spawn_in(window, async move |this, cx| {
+            for _ in 0..40 {
+                let done = this.update(cx, |this, _| {
+                    let Some(copy) = this.copies.get(&block).map(|c| c.id) else { return true };
+                    this.float_views.as_ref().is_none_or(|f| f.shown != 1) || mods::send_command_to(copy, "focus")
+                });
+                if done.unwrap_or(true) {
+                    break;
+                }
+                cx.background_executor().timer(Duration::from_millis(25)).await;
+            }
+        })
+        .detach();
+    }
+
+    /// What a terminal is called in a float's views: its program's name.
+    fn terminal_name(&self, address: &str) -> String {
+        let rec = self.live.get(address);
+        rec.and_then(|r| r.pointer("/program/name")).and_then(Value::as_str).filter(|n| !n.is_empty()).map(str::to_owned).unwrap_or_else(|| {
+            let argv: Vec<String> = rec.and_then(|r| r.get("argv")).and_then(Value::as_array).into_iter().flatten()
+                .filter_map(|a| a.as_str().map(str::to_owned)).collect();
+            program_name(None, &argv)
+        })
     }
 
     /// Which copies are on screen, for `<mod>.<command>` (`mods::send_command`).
@@ -3672,6 +4138,10 @@ impl AppWindow {
     fn remove_overlay(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if let Some(i) = self.overlays.iter().position(|o| o.id == id) {
             let o = self.overlays.remove(i);
+            if o.id == "terminal-peek" {
+                self.floating = None;
+                self.float_views = None;
+            }
             if self.win_drag.as_ref().is_some_and(|d| d.id == o.id) {
                 self.win_drag = None;
             }
@@ -3862,6 +4332,7 @@ impl AppWindow {
             self.window_active = active;
             if active {
                 self.sync(window, cx);
+                self.reclaim_sizes(cx);
             } else {
                 self.looked.clear();
             }
@@ -4331,6 +4802,9 @@ impl AppWindow {
                 // Scroll, hover and cursor stop here, not on the pane behind.
                 .occlude()
                 .when(o.kind != OverlayKind::Window, |d| d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
+                // HUP: native views below keep rendering, with a hole here.
+                .relative()
+                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }))
                 .child(content);
             match o.kind {
                 OverlayKind::Window => out.push(self.render_window(o, body, viewport, cx)),
@@ -4340,6 +4814,7 @@ impl AppWindow {
                         .inset_0()
                         .bg(hsla(0.0, 0.0, 0.0, 0.35))
                         .occlude()
+                        .child(crate::native_view::dim_probe())
                         .flex()
                         .items_center()
                         .justify_center()
@@ -4476,7 +4951,12 @@ pub(crate) fn cached<V: Render>(view: &Entity<V>) -> AnyElement {
 }
 
 pub(crate) fn shown_terminal(view: &Entity<TerminalView>, cx: &App) -> AnyElement {
-    view.read(cx).mark_shown();
+    // Output that arrived while it was off screen didn't redraw it: draw it
+    // afresh this once, or the window keeps the screen it had when hidden.
+    // Not while held: the last drawn screen is the one to keep showing then.
+    if view.read(cx).mark_shown() && !view.read(cx).held() {
+        return view.clone().into_any_element();
+    }
     cached(view)
 }
 
@@ -4517,6 +4997,11 @@ fn position_popup(at: Point<Pixels>, body: Stateful<Div>) -> Anchored {
 }
 
 /// An overlay's blocks get ids of their own (`<overlay>/<id>`), and its mods learn the overlay.
+/// A node's id inside an overlay's layout (`overlay_layout`).
+fn ov_id(overlay: &str, id: &str) -> String {
+    format!("ov{overlay}/{id}")
+}
+
 fn overlay_layout(mut n: Node, overlay: &str) -> Node {
     fn walk(n: &mut Node, overlay: &str, seq: &mut usize) {
         *seq += 1;
@@ -4526,6 +5011,10 @@ fn overlay_layout(mut n: Node, overlay: &str) -> Node {
                 *props = json!({});
             }
             props["overlay"] = json!(overlay);
+        }
+        // A stack's shown child goes by its id, which gets the same prefix.
+        if let Kind::Stack { active: Some(a), .. } = &mut n.kind {
+            *a = ov_id(overlay, a);
         }
         for c in n.children_mut().into_iter().flatten() {
             walk(c, overlay, seq);
@@ -4638,11 +5127,29 @@ fn swap_by(args: &Value) -> Result<SwapBy<'_>, String> {
     }
 }
 
+/// `pane.split {edge}`: which side of the tab.
+fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
+    use crate::layout::Edge;
+    Some(match edge {
+        "right" => Edge::Right,
+        "left" => Edge::Left,
+        "top" => Edge::Top,
+        "bottom" => Edge::Bottom,
+        _ => return None,
+    })
+}
+
 fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
-        "pane.split" | "pane.close" | "pane.zoom" | "pane.swap" | "terminal.show" => AppWindow::arg(args, "pane").is_none(),
+        // An edge split goes by the tab, not a pane.
+        "pane.split" => AppWindow::arg(args, "pane").is_none() && args.get("edge").is_none_or(Value::is_null),
+        "pane.close" | "pane.zoom" | "pane.swap" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+            AppWindow::arg(args, "pane").is_none()
+        }
         "pane.go" => true,
-        "terminal.open" | "terminal.keep" => matches!(AppWindow::arg(args, "place"), Some("right" | "down")),
+        "terminal.open" | "terminal.keep" => {
+            AppWindow::arg(args, "pane").is_none() && AppWindow::arg(args, "place").and_then(model::Direction::parse).is_some()
+        }
         _ => false,
     }
 }
@@ -4789,6 +5296,11 @@ fn adoptable(record: &Value, space: &str, tab: Option<&str>, machine: Option<&st
     record["state"] == "live"
         && label == Some(crate::mirror::local(space, machine))
         && labeled_tab == tab.map(|t| crate::mirror::local(t, machine))
+}
+
+/// A program's name as `terminals()` gives it (`program.name`), else "shell".
+fn program_name(app: Option<&str>, argv: &[String]) -> String {
+    crate::programs::of(app, argv).get("name").and_then(Value::as_str).filter(|n| !n.is_empty()).unwrap_or("shell").to_owned()
 }
 
 fn program_of(report: &Value, argv: Option<&Value>) -> Value {
@@ -4963,6 +5475,18 @@ impl Render for AppWindow {
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
+            // HUP: native views follow their elements; overlays and floats above
+            // them cut holes (cover_probe), and they step aside while a pane is dragged.
+            .child(crate::native_view::frame_end(
+                self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
+                mods::shown_copies(),
+                self.copies
+                    .iter()
+                    .filter(|(slot, _)| slot.starts_with("overlay:") || slot.starts_with("float:") || self.overlays.iter().any(|o| o.layout.as_ref().is_some_and(|l| l.find(slot.as_str()).is_some())))
+                    .map(|(_, c)| c.id)
+                    .collect(),
+                self.pane_drag.is_some(),
+            ))
     }
 }
 
@@ -5320,6 +5844,34 @@ mod tests {
         root.terminal_menu = Some("personal-menu".into());
         let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
         assert_eq!(restored.terminal_menu.as_deref(), Some("personal-menu"));
+    }
+
+    #[test]
+    fn dialog_mods_are_root_layout_choices_that_roundtrip() {
+        let mut root = super::default_layout("main");
+        assert_eq!((root.prompt_mod.as_deref(), root.confirm_mod.as_deref(), root.palette_mod.as_deref()), (None, None, None));
+        let bare = serde_json::to_value(&root).unwrap();
+        assert!(bare.get("prompt_mod").is_none() && bare.get("confirm_mod").is_none() && bare.get("palette_mod").is_none());
+        root.prompt_mod = Some("my-prompt".into());
+        root.confirm_mod = Some("my-confirm".into());
+        root.palette_mod = Some("my-palette".into());
+        let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
+        assert_eq!(restored.prompt_mod.as_deref(), Some("my-prompt"));
+        assert_eq!(restored.confirm_mod.as_deref(), Some("my-confirm"));
+        assert_eq!(restored.palette_mod.as_deref(), Some("my-palette"));
+    }
+
+    #[test]
+    fn toast_mod_is_a_root_layout_choice_that_roundtrips() {
+        let mut root = super::default_layout("main");
+        assert_eq!(root.toast, None);
+        assert!(serde_json::to_value(&root).unwrap().get("toast").is_none());
+        root.toast = Some("personal-toast".into());
+        let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
+        assert_eq!(restored.toast.as_deref(), Some("personal-toast"));
+        // The fork's older name still reads.
+        let old: super::Node = serde_json::from_value(serde_json::json!({"id": "root", "type": "row", "children": [], "toast_mod": "personal-toast"})).unwrap();
+        assert_eq!(old.toast.as_deref(), Some("personal-toast"));
     }
 
     /// Runs `window::tests::<name>` alone in a test process of its own, on a
@@ -5854,6 +6406,32 @@ export default class SystemToast extends View {
     }
 
     #[test]
+    fn a_float_view_is_a_stack_child_and_show_picks_one() {
+        use serde_json::json;
+        let layout: crate::layout::Node = serde_json::from_value(json!({
+            "type": "stack", "id": super::FLOAT_BODY, "active": super::FLOAT_CHILDREN[1],
+            "children": [
+                { "type": "block", "id": super::FLOAT_CHILDREN[0], "content": { "terminal": "t1" } },
+                { "type": "block", "id": super::FLOAT_CHILDREN[1], "content": { "mod": "git", "props": {} } }
+            ]
+        })).unwrap();
+        // The shown child keeps pointing at its (prefixed) id.
+        let l = super::overlay_layout(layout, "terminal-peek");
+        assert_eq!(l.active_child().map(|n| n.id.as_str()), Some("ovterminal-peek/float-view"));
+        assert_eq!(super::ov_id("terminal-peek", super::FLOAT_CHILDREN[1]), "ovterminal-peek/float-view");
+        assert_eq!(super::float_show(&json!({})), Ok(0));
+        assert_eq!(super::float_show(&json!({"show": 1})), Ok(1));
+        assert!(super::float_show(&json!({"show": 2})).is_err());
+        let v = super::FloatView::parse(Some(&json!({"mod": "git", "props": {"a": 1}}))).unwrap().unwrap();
+        assert_eq!((v.name.as_str(), v.label.as_deref()), ("git", None));
+        assert!(super::FloatView::parse(Some(&json!({"props": {}}))).is_err());
+        assert!(super::FloatView::parse(None).unwrap().is_none());
+        let named = super::FloatView::parse(Some(&json!({"mod": "git", "props": {"a": 1}, "name": "Git"}))).unwrap().unwrap();
+        assert!(!v.same(&named));
+        assert!(v.same(&super::FloatView { term: Some("lazygit".into()), ..v.clone() }));
+    }
+
+    #[test]
     fn composition_commands_never_default_to_a_source_pane() {
         use serde_json::json;
         for name in ["pane.split", "pane.close", "pane.zoom", "pane.go", "pane.swap", "terminal.show"] {
@@ -5864,10 +6442,14 @@ export default class SystemToast extends View {
             assert!(!super::needs_model_pane(name, &json!({"pane": "explicit-pane"})), "{name}");
         }
         assert!(super::needs_model_pane("pane.go", &json!({"pane": "explicit-pane"})));
+        // An edge split goes by the tab.
+        assert!(!super::needs_model_pane("pane.split", &json!({"edge": "right"})));
         for name in ["terminal.open", "terminal.keep"] {
-            for place in ["right", "down"] {
+            for place in ["right", "down", "left", "up", "auto"] {
                 assert!(super::needs_model_pane(name, &json!({"place": place})), "{name} {place}");
+                assert!(!super::needs_model_pane(name, &json!({"place": place, "pane": "explicit-pane"})), "{name} {place}");
             }
+            assert!(!super::needs_model_pane(name, &json!({"place": "float"})), "{name}");
             assert!(!super::needs_model_pane(name, &json!({})), "{name}");
             assert!(!super::needs_model_pane(name, &json!({"place": "tab"})), "{name}");
         }

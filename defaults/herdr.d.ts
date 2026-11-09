@@ -55,13 +55,24 @@ export function playSound(sound: string): null;
  *   or {name?, space?, mod, props?} (a tab whose only pane is a mod),
  *   tab.close {id?}, tab.rename {id?, name}, tab.move {id, index}, tab.select {index | id},
  *   tab.next, tab.prev.
- * Panes: pane.split {direction: "right" | "down", pane?}, pane.close {pane?}, pane.zoom {pane?},
- *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target}.
- *   Pane menus get target { pane, terminal }.
- * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down"}, terminal.kill {terminal},
- *   terminal.keep {terminal, place?} (a running one without a pane, e.g. a sub-agent, gets one),
+ * Panes: pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}
+ *   (left/up: before the pane; auto: below a pane in a side-by-side split, right of one in a stacked
+ *   split or a lone pane), pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}
+ *   (a new pane along that side of a whole tab, default the shown one, spanning it; px: its fixed width
+ *   or height), pane.close {pane?}, pane.zoom {pane?},
+ *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
+ *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
+ *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target}. Pane menus get target { pane, terminal }.
+ * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?, view?, show?}
+ *   (pane: the one right/down/left/up/auto splits, default the focused one; "float": no pane, floating over the tab
+ *   in the "terminal-peek" overlay; closing it leaves it running), terminal.kill {terminal},
+ *   terminal.keep {terminal, place?, pane?} (a running one without a pane, e.g. a sub-agent, gets one; places as terminal.open but no float),
  *   terminal.park {terminal} (its pane goes, it keeps running; the menu's "Send back"),
- *   terminal.peek {terminal} (peek over the tab, with keep-as-tab and close),
+ *   terminal.peek {terminal, float?, view?, show?} (peek over the tab, with keep-as-tab, dock-right and close; float: as a float),
+ *   float views: terminal.open {place: "float", view?: {mod, props?, name?}, show?: 0 | 1} and terminal.peek {terminal,
+ *   float: true, view?, show?} make the float's body a stack of the terminal (0) and that mod (1), showing `show`
+ *   (default 0; peek with the same view on the one floating now only switches), float.view {index: 0 | 1} (switch the
+ *   open float and give the shown one the keyboard: the terminal, or the mod if its mod.json is focusable),
  *   terminal.show {terminal?, pane?} (shown in the pane for now, in place of its own), terminal.copy, terminal.paste,
  *   terminal.right_click {to: "program" | "menu", terminal?} (right-clicks to a program that takes the mouse; Shift: the menu).
  *   terminal.scroll {lines | pages | to: "top" | "bottom", terminal?} (Herdr's view of the history: negative goes up; pages may be fractional).
@@ -185,7 +196,7 @@ export function agents(): AgentInfo[];
 export interface PaneInfo {
   pane: string;
   /** null for a mod pane (`pane.split {mod}`): then `mod` names it, and only
-   *  pane, mod, tab, title, focused and zoomed are set. */
+   *  pane, mod, tab, title, focused, zoomed, font_zoom and movable are set. */
   terminal: string | null;
   mod?: string;
   tab: string;
@@ -200,6 +211,9 @@ export interface PaneInfo {
   program: Program;
   focused: boolean;
   zoomed: boolean;
+  /** This pane's terminal text size on top of the app's (pane.font_bigger/smaller/reset):
+   *  1 = the app's size, steps of 0.1 from 0.5 to 3. Always 1 for a mod pane. */
+  font_zoom: number;
   /** The app's top-center grip can rearrange this pane. False when zoomed or alone. */
   movable: boolean;
 }
@@ -214,16 +228,19 @@ export function panes(): PaneInfo[];
 export function setAgentOrder(addresses: string[]): null;
 
 /** Every core terminal as `hc ls --json` describes it (address, argv, name, template, parent,
- *  labels, state, ...), with `status` as a plain word, the agent's report in `report`, and
- *  `program` (see Program). Live. */
+ *  labels, state, ...), with `status` as a plain word, the agent's report in `report`,
+ *  `program` (see Program), and `floating`: true for the one floating over the tab now
+ *  (terminal.open {place: "float"}, pane.float), else false. The floating one also has
+ *  `floating_view: number` (the view its float shows: 0 the terminal, 1 its `view` mod; 0 without
+ *  one) and `float_views: string[] | null` ([its program's name, view.name ?? view.mod]; null
+ *  without a view); others have null for both. Live. */
 export function terminals(): any[];
 
 /** Actual terminal/pane focus. `space` and `tab` are the current window context.
  *  Clicking a visible layout terminal block, or pane.focus {terminal}, focuses that block:
  *  `terminal` and `cwd` describe it; `pane` and `shown` are null, not its source pane.
  *  Implicit pane split/close/zoom/go/swap and terminal.show fail in that case, as do
- *  terminal.open/keep with place right/down. An explicit pane id targets a model pane.
- *  A terminal in a window (openOverlay with a layout) that has the keyboard is reported
+ *  terminal.open/keep with place right/down/left/up/auto and no pane. An explicit pane id targets a model pane.
  *  the same way (`pane` and `shown` null); implicit pane commands still act on the
  *  focused pane under the window.
  *  pane.focus {terminal} prefers the first visible layout terminal block, then a model pane.
@@ -417,3 +434,31 @@ export function nextCommand(): Promise<string>;
  * Watch what you show, not a whole home folder (node_modules is a lot of events).
  */
 export function watchFolder(path: string): Promise<string[]>;
+
+/** HUP (Herdr Preview Dev, interface native-view/0): where a native view's content comes from.
+ *  Web: `url` (http/https; `localhost:3000` style input is normalized, never searched) or a local
+ *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
+ *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
+export interface NativeViewProps {
+  kind: "web" | "pdf" | "media" | "quicklook" | "inspector"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  /** Inspector only: the web view to inspect, the `of` its `web.inspect` action returned. */
+  of?: string;
+  /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
+   *  Changing only `zoom` zooms the page in place; it doesn't reload. */
+  zoom?: number;
+}
+/** HUP: a real macOS view (WKWebView, PDFView, AVPlayerView, QLPreviewView) placed where this element
+ *  is drawn, inside the window. Children draw underneath (shown while it loads or steps aside for a
+ *  pane drag). Herdr's menus, dialogs and windows above it cut a hole in it, so the page keeps
+ *  rendering around them and a dialog's backdrop dims it. Same id + same props keeps the view; new props load into it. Not on stock Herdr:
+ *  probe with `import * as herdr from "herdr"; if (herdr.nativeView) herdr.nativeView.new(id, props)`. */
+export const nativeView: { new: (id: string, props: NativeViewProps) => import("gpui-kit").NativeElement };
+/** HUP: `{ interface: "native-view/0", available, kinds: [{ kind, actions }] }`. */
+export function nativeViewCapabilities(): { interface: string; platform: string; available: boolean; kinds: { kind: string; actions: string[] }[] };
+/** HUP: one whitelisted action on this mod's view `id` (see capabilities), e.g. ("v", "pdf.goToPage", { page: 2 }),
+ *  ("v", "media.pause"), ("v", "browser.navigate", { url }), ("v", "state"). Throws on unknown actions. */
+export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;
+/** HUP: the next event from this mod's native views, as JSON text:
+ *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed …).
+ *  `generation` grows with every load, so drop events older than the view's current one. */
+export function nextNativeViewEvent(): Promise<string>;

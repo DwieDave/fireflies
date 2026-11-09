@@ -2578,12 +2578,137 @@ extern "C" fn reset_cursor_rects(this: &Object, _: Sel) {
         };
 
         let bounds = NSView::bounds(this as *const Object as id);
-        let _: () = msg_send![this, addCursorRect: bounds cursor: cursor];
+        // HERDR: a native view placed above this one (a WKWebView in a pane)
+        // sets its own cursor. A cursor rect under it would put this style
+        // back over the page, so leave its frame out.
+        let covered = views_above(this);
+        for rect in rect_minus(bounds, &covered) {
+            let _: () = msg_send![this, addCursorRect: rect cursor: cursor];
+        }
     }
 }
 
+/// HERDR: the frames, in `this` view's coordinates, of the visible siblings
+/// stacked above it.
+unsafe fn views_above(this: &Object) -> Vec<NSRect> {
+    unsafe {
+        let this = this as *const Object as id;
+        let superview: id = msg_send![this, superview];
+        if superview.is_null() {
+            return Vec::new();
+        }
+        let subviews: id = msg_send![superview, subviews];
+        let count: NSUInteger = msg_send![subviews, count];
+        let mut above = false;
+        let mut out = Vec::new();
+        for i in 0..count {
+            let view: id = msg_send![subviews, objectAtIndex: i];
+            if view == this {
+                above = true;
+                continue;
+            }
+            let hidden: BOOL = msg_send![view, isHiddenOrHasHiddenAncestor];
+            if !above || hidden == YES {
+                continue;
+            }
+            let frame: NSRect = msg_send![view, frame];
+            let local: NSRect = msg_send![this, convertRect: frame fromView: superview];
+            if local.size.width > 0.0 && local.size.height > 0.0 {
+                out.push(local);
+            }
+        }
+        out
+    }
+}
+
+/// HERDR: `base` with every rect in `cut` taken out, as non-overlapping rects.
+fn rect_minus(base: NSRect, cut: &[NSRect]) -> Vec<NSRect> {
+    let mut parts = vec![base];
+    for c in cut {
+        let (cx0, cy0, cx1, cy1) = (c.origin.x, c.origin.y, c.origin.x + c.size.width, c.origin.y + c.size.height);
+        let mut next = Vec::with_capacity(parts.len() + 3);
+        for r in parts {
+            let (x0, y0, x1, y1) = (r.origin.x, r.origin.y, r.origin.x + r.size.width, r.origin.y + r.size.height);
+            let (ix0, iy0, ix1, iy1) = (x0.max(cx0), y0.max(cy0), x1.min(cx1), y1.min(cy1));
+            if ix0 >= ix1 || iy0 >= iy1 {
+                next.push(r);
+                continue;
+            }
+            let mut push = |ax: f64, ay: f64, bx: f64, by: f64| {
+                if bx > ax && by > ay {
+                    next.push(NSRect::new(NSPoint::new(ax, ay), NSSize::new(bx - ax, by - ay)));
+                }
+            };
+            // Full-width strips below and above the cut, then the sides between.
+            push(x0, y0, x1, iy0);
+            push(x0, iy1, x1, y1);
+            push(x0, iy0, ix0, iy1);
+            push(ix1, iy0, x1, iy1);
+        }
+        parts = next;
+    }
+    parts
+}
+
 extern "C" fn handle_key_equivalent(this: &Object, _: Sel, native_event: id) -> BOOL {
+    // HERDR: while a native view placed beside this one (a WKWebView in a
+    // pane) holds the keyboard, the standard editing shortcuts are its: sent
+    // down the responder chain (there is no Edit menu to do it), before
+    // Herdr's own bindings (cmd-c is terminal.copy) can take them.
+    if let Some(action) = unsafe { native_edit_action(this, native_event) } {
+        unsafe {
+            let app: id = msg_send![class!(NSApplication), sharedApplication];
+            let _: BOOL = msg_send![app, sendAction: action to: nil from: nil];
+        }
+        return YES;
+    }
     handle_key_event(this, native_event, true)
+}
+
+/// HERDR: the editing action (select all, copy, paste, cut, undo, redo) for a
+/// key equivalent, when the window's first responder is a view outside `this`
+/// one; None otherwise, and for every other key.
+unsafe fn native_edit_action(this: &Object, event: id) -> Option<Sel> {
+    unsafe {
+        let me = this as *const Object as id;
+        let window: id = msg_send![me, window];
+        if window == nil {
+            return None;
+        }
+        let fr: id = msg_send![window, firstResponder];
+        if fr == nil || fr == me {
+            return None;
+        }
+        let is_view: BOOL = msg_send![fr, isKindOfClass: class!(NSView)];
+        let inside: BOOL = if is_view == YES { msg_send![fr, isDescendantOf: me] } else { YES };
+        if inside == YES {
+            return None;
+        }
+        let flags: NSUInteger = msg_send![event, modifierFlags];
+        const SHIFT: NSUInteger = 1 << 17;
+        const CONTROL: NSUInteger = 1 << 18;
+        const OPTION: NSUInteger = 1 << 19;
+        const COMMAND: NSUInteger = 1 << 20;
+        let mods = flags & (SHIFT | CONTROL | OPTION | COMMAND);
+        let chars: id = msg_send![event, charactersIgnoringModifiers];
+        if chars == nil {
+            return None;
+        }
+        let utf8: *const std::os::raw::c_char = msg_send![chars, UTF8String];
+        if utf8.is_null() {
+            return None;
+        }
+        let key = std::ffi::CStr::from_ptr(utf8).to_string_lossy().to_lowercase();
+        match (mods, key.as_str()) {
+            (COMMAND, "a") => Some(sel!(selectAll:)),
+            (COMMAND, "c") => Some(sel!(copy:)),
+            (COMMAND, "v") => Some(sel!(paste:)),
+            (COMMAND, "x") => Some(sel!(cut:)),
+            (COMMAND, "z") => Some(sel!(undo:)),
+            (m, "z") if m == COMMAND | SHIFT => Some(sel!(redo:)),
+            _ => None,
+        }
+    }
 }
 
 extern "C" fn handle_key_down(this: &Object, _: Sel, native_event: id) {
@@ -3975,5 +4100,18 @@ mod tests {
     #[test]
     fn display_id_for_screen_returns_none_for_null_screen() {
         assert_eq!(display_id_for_screen(nil), None);
+    }
+
+    #[test]
+    fn rect_minus_leaves_out_the_cut() {
+        let r = |x: f64, y: f64, w: f64, h: f64| NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
+        let area = |rs: &[NSRect]| rs.iter().map(|r| r.size.width * r.size.height).sum::<f64>();
+        let base = r(0.0, 0.0, 100.0, 100.0);
+        assert_eq!(area(&rect_minus(base, &[])), 10000.0);
+        assert_eq!(area(&rect_minus(base, &[r(10.0, 10.0, 20.0, 30.0)])), 10000.0 - 600.0);
+        assert_eq!(rect_minus(base, &[r(-5.0, -5.0, 200.0, 200.0)]).len(), 0);
+        assert_eq!(area(&rect_minus(base, &[r(200.0, 0.0, 10.0, 10.0)])), 10000.0);
+        // Two overlapping cuts take out their union, 75x100.
+        assert_eq!(area(&rect_minus(base, &[r(0.0, 0.0, 50.0, 100.0), r(25.0, 0.0, 50.0, 100.0)])), 2500.0);
     }
 }

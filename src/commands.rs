@@ -39,10 +39,11 @@ pub const COMMANDS: &[Command] = &[
     cmd("tab.close", &[opt("id"), opt("confirmed")], "Close a tab and end its terminals."),
     cmd("tab.rename", &[opt("id"), opt("name")], "Rename a tab (asks the person when no name; an empty name: called by its number again)."),
     cmd("tab.move", &[req("id"), req("index")], "Move a tab to a position in its space (1 = first)."),
-    cmd("pane.split", &[req("direction"), opt("pane"), opt("argv"), opt("mod"), opt("props")], "Split a pane (default: the focused one) \"right\" or \"down\" with a new terminal, or with a mod (`mod`, its `props`) beside it."),
+    cmd("pane.split", &[opt("direction"), opt("pane"), opt("argv"), opt("mod"), opt("props"), opt("folder"), opt("edge"), opt("px"), opt("tab")],
+        "Split a pane (default: the focused one) \"right\", \"down\", \"left\", \"up\" or \"auto\" (below a pane beside others, right of one stacked or alone) with a new terminal (in folder), or with a mod (`mod`, its `props`) beside it. Or edge (\"right\", \"left\", \"top\", \"bottom\") instead of direction: the new pane along that side of a whole tab (default: the shown one), px wide or tall if given."),
     cmd("pane.close", &[opt("pane")], "Close a pane and end its terminal."),
-    cmd("terminal.open", &[opt("argv"), opt("folder"), opt("place"), opt("name")], "Start a terminal: as a new tab (place \"tab\", default), or \"right\"/\"down\" of the focused pane."),
-    cmd("terminal.keep", &[req("terminal"), opt("place")], "Give a running terminal without a pane (a sub-agent) a pane: a new tab, or \"right\"/\"down\"."),
+    cmd("terminal.open", &[opt("argv"), opt("folder"), opt("place"), opt("name"), opt("pane"), opt("view"), opt("show")], "Start a terminal: as a new tab (place \"tab\", default), \"right\"/\"down\"/\"left\"/\"up\"/\"auto\" of a pane (default: the focused one), or \"float\": without a pane, floating over the tab (view {mod, props?, name?}: a second view in the float, a mod; show 0 or 1: which one shows first)."),
+    cmd("terminal.keep", &[req("terminal"), opt("place"), opt("pane")], "Give a running terminal without a pane (a sub-agent) a pane: a new tab, or \"right\"/\"down\"/\"left\"/\"up\"/\"auto\" of a pane (default: the focused one)."),
     cmd("terminal.park", &[req("terminal")], "Take a terminal's pane away and disable core keep; it keeps running (a sub-agent shows under its parent again)."),
     cmd("terminal.right_click", &[req("to"), opt("terminal")], "Where right-clicks in a terminal (default: the focused one) go when its program takes the mouse: \"program\" or \"menu\" (Herdr's, the default). Shift+right-click is always the menu."),
     cmd("terminal.pin", &[req("terminal"), req("pinned")], "Pin an agent to the top of the agent lists (pinned true) or unpin it (false). Pins are kept with the terminal, so every Herdr client shows them, and end with it."),
@@ -57,10 +58,15 @@ pub const COMMANDS: &[Command] = &[
     cmd("tab.next", &[], "Show the next tab."),
     cmd("tab.prev", &[], "Show the previous tab."),
     cmd("pane.zoom", &[opt("pane")], "Show only this pane of its tab, or all again."),
+    cmd("pane.font_bigger", &[opt("pane")], "Make this pane's terminal text bigger (default: the focused pane), on top of the app's zoom."),
+    cmd("pane.font_smaller", &[opt("pane")], "Make this pane's terminal text smaller (default: the focused pane)."),
+    cmd("pane.font_reset", &[opt("pane")], "Back to the app's terminal text size in this pane (default: the focused pane)."),
+    cmd("pane.float", &[opt("pane")], "Float a pane's terminal over the tab (default: the focused pane): its pane goes (as terminal.park), it keeps running."),
     cmd("pane.focus", &[opt("pane"), opt("terminal")], "Focus a pane (or the pane showing a terminal)."),
     cmd("pane.go", &[req("direction")], "Focus the pane or focusable mod to the \"left\", \"right\", \"up\" or \"down\"."),
     cmd("pane.swap", &[opt("direction"), opt("pane"), opt("target")], "Swap a pane (default: the focused one) with its neighbor in a direction, or with another pane of its tab (target). Give exactly one of direction or target."),
-    cmd("terminal.peek", &[req("terminal")], "Peek at a running terminal over the tab, with keep-as-tab and close controls."),
+    cmd("terminal.peek", &[req("terminal"), opt("float"), opt("view"), opt("show")], "Peek at a running terminal over the tab, with keep-as-tab, dock-right and close controls (float true: as a floating terminal, bigger; view and show as terminal.open's float; the one floating already just shows `show`)."),
+    cmd("float.view", &[req("index")], "Show the floating terminal's view 0 (the terminal) or 1 (its view's mod) and give it the keyboard (a mod only when its mod.json says focusable)."),
     cmd("terminal.show", &[opt("terminal"), opt("pane")], "Show a terminal in a pane for now, in place of its own (no terminal: back)."),
     cmd("terminal.copy", &[], "Copy the focused terminal's selection. With nothing selected, that key goes to the program."),
     cmd("terminal.scroll", &[opt("lines"), opt("pages"), opt("to"), opt("terminal")], "Scroll a terminal's view of its history (default: the focused one). Give exactly one of: lines (a whole number; negative goes up, toward history), pages (a number, fractions allowed; one page is the terminal's rows), to: \"top\" (oldest history) or \"bottom\" (the live screen). This scrolls Herdr's view, not the program."),
@@ -83,6 +89,9 @@ pub const COMMANDS: &[Command] = &[
     cmd("mod.open", &[req("name")], "Toggle a mod as the overlay its mod.json describes; calling again closes it."),
     cmd("overlay.close", &[opt("id")], "Close an overlay (default: the top dialog or popup)."),
     // The app.
+    // Native content views (native-view/0).
+    cmd("native.debug", &[], "Every native view: frame, visibility, focus, content state and recent events."),
+    cmd("native.call", &[req("key"), req("action"), opt("args")], "Run one whitelisted action on a native view (key: <copy>:<id>)."),
     cmd("app.help", &[], "Toggle the keys dialog."),
     cmd("app.welcome", &[], "Show the welcome again."),
     cmd("app.whats_new", &[], "Show what this release brought (it opens once by itself after an update)."),
@@ -219,6 +228,7 @@ mod tests {
         assert_eq!(names.len(), COMMANDS.len());
         assert_eq!(shorthand(find("tab.select").unwrap(), "3"), json!({ "index": 3 }));
         assert_eq!(shorthand(find("pane.split").unwrap(), "right"), json!({ "direction": "right" }));
+        assert_eq!(shorthand(find("pane.split").unwrap(), "auto"), json!({ "direction": "auto" }));
         let move_ = find("space.move").unwrap();
         assert_eq!(missing(move_, &json!({ "id": " ", "index": 1 })), Some("id"));
         assert_eq!(missing(move_, &json!({ "id": "sp1", "index": 1 })), None);

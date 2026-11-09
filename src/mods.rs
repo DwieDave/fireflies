@@ -561,7 +561,7 @@ pub struct Snapshot {
     pub spaces: Value,
     pub machines: Value,
     pub agents: Value,
-    /// Every pane: { pane, terminal, tab, title, cwd, branch, status, app, focused, zoomed }.
+    /// Every pane: { pane, terminal, tab, title, cwd, branch, status, app, focused, zoomed, font_zoom }.
     pub panes: Value,
     pub terminals: Value,
     pub focused: Value,
@@ -608,6 +608,34 @@ pub fn publish_panes(v: Value) -> bool {
 }
 pub fn publish_terminals(v: Value) -> bool {
     publish("terminals", |s| (std::mem::replace(&mut s.terminals, v.clone()), v))
+}
+/// Marks `terminals()` entries `floating`: the one shown floating over the tab (or
+/// none), with its `floating_view` (the view it shows) and `float_views` (their names).
+pub fn publish_floating(address: Option<&str>, view: Value, views: Value) -> bool {
+    let changed = SNAPSHOT.with(|s| {
+        let mut s = s.borrow_mut();
+        let mut changed = false;
+        for t in s.terminals.as_array_mut().into_iter().flatten() {
+            let floating = address.is_some() && t["address"].as_str() == address;
+            let marks = [
+                ("floating", Value::Bool(floating)),
+                ("floating_view", if floating { view.clone() } else { Value::Null }),
+                ("float_views", if floating { views.clone() } else { Value::Null }),
+            ];
+            let Some(o) = t.as_object_mut() else { continue };
+            for (k, v) in marks {
+                if o.get(k) != Some(&v) {
+                    o.insert(k.into(), v);
+                    changed = true;
+                }
+            }
+        }
+        changed
+    });
+    if changed {
+        REVISIONS.with_borrow_mut(|r| *r.entry("terminals").or_default() += 1);
+    }
+    changed
 }
 pub fn terminal_address(word: &str, source: &str) -> Option<String> {
     SNAPSHOT.with(|s| {
@@ -691,6 +719,11 @@ pub fn send_command_to(copy: u64, command: &str) -> bool {
         c.retain(|(_, _, tx)| !tx.is_closed());
         c.iter().any(|(id, _, tx)| *id == copy && tx.try_send(command.to_owned()).is_ok())
     })
+}
+
+/// HUP: the copies on screen now, for native views (src/native_view.rs).
+pub fn shown_copies() -> std::collections::HashSet<u64> {
+    SHOWN_COPIES.with(|s| s.borrow().clone())
 }
 
 /// The copies on screen now (`prepare_load` numbers them).
@@ -910,6 +943,9 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         commands.retain(|(_, _, tx)| !tx.is_closed());
         commands.push((copy, inst.name.clone(), cmd_tx));
     });
+    // HUP: native view events for this copy (nextNativeViewEvent).
+    let (native_tx, native_events) = async_channel::bounded::<String>(256);
+    crate::native_view::register_events(copy, native_tx);
     HostModule::new("herdr")
         .declarations(DECLARATIONS)
         .async_function("exec", |a| {
@@ -1106,6 +1142,24 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         .async_function("nextCommand", move |_| {
             let rx = commands.clone();
             Ok(async move { rx.recv().await.map(HostValue::Str).map_err(|_| HostError::new("herdr-app is shutting down")) })
+        })
+        // HUP: native content views (src/native_view.rs), interface native-view/0.
+        .component("nativeView", move |mut args, window, cx| {
+            let id = args.id().to_owned();
+            let props = from_host(args.props());
+            let children = args.take_children();
+            crate::native_view::element(copy, &id, props, children, window, cx)
+        })
+        .function("nativeViewCapabilities", |_| Ok(to_host(&crate::native_view::capabilities())))
+        .function("nativeViewCall", move |a| {
+            let id = a.string(0)?.to_owned();
+            let action = a.string(1)?.to_owned();
+            let args = a.get(2).map(from_host).unwrap_or(Value::Null);
+            crate::native_view::call(copy, &id, &action, &args).map(|v| to_host(&v)).map_err(HostError::new)
+        })
+        .async_function("nextNativeViewEvent", move |_| {
+            let rx = native_events.clone();
+            Ok(async move { rx.recv().await.map(HostValue::Str).map_err(|_| HostError::new("this view's mod was unloaded")) })
         })
 }
 
