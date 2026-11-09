@@ -1,8 +1,9 @@
-// Nocturne usage: how much of the night is left on the Claude account, in
+// Nocturne usage: how much of the night is left on the picked provider's
+// account (Claude or Codex, picked here or in the sidebar's usage section), in
 // the sky's dithered look (limits.js reads it). Opened from + new > Usage, or
 // a row of the sidebar's usage section.
 //
-//   the candle   the 5-hour window: the wax burns down as it's used, the
+//   the candle   the short (5-hour) window: the wax burns down as it's used, the
 //                flame flickers while any is left; out, it smokes and says
 //                when it's relit
 //   the moon     the weekly window: a full moon is a fresh week, it wanes
@@ -20,16 +21,21 @@
 // the pixel art stays crisp) where everything fits. Below 1x it scrolls.
 //
 // Keys (click the pane, or pane.go onto it):  r  read again now
+//                                             p  the next provider
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, nextCommand } from "herdr";
 import { ART, OWN, dither } from "./kit.js";
-import { lastUsage, usageNote, refreshUsage, asking } from "./limits.js";
+import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.js";
 
 const TICK = 30_000; // countdowns, and asking again once the answer is old
 const SESSION_MS = 5 * 3600_000;
 const WEEK_MS = 7 * 86400_000;
+/** A window's length as the card's small print: "5 h", "7 d". */
+function lengthName(length) {
+  return length < 86400_000 ? `${Math.round(length / 3600_000)} h` : `${Math.round(length / 86400_000)} d`;
+}
 const BAR = 34; // the toolbar
 const GAP = 12;
 const stop = (_e, cx) => cx.stop_propagation();
@@ -134,9 +140,18 @@ export default class Usage extends View {
   }
 
   key(e, cx) {
-    if (e.keystroke !== "r") return;
-    this.read(cx, true);
+    if (e.keystroke === "r") this.read(cx, true);
+    else if (e.keystroke === "p") {
+      const i = PROVIDERS.findIndex((p) => p.id === provider().id);
+      this.pick(PROVIDERS[(i + 1) % PROVIDERS.length].id, cx);
+    } else return;
     cx.stop_propagation();
+  }
+
+  /** Shows provider `id` here and in the sidebar, asking it if its answer is old. */
+  pick(id, cx) {
+    pickProvider(id);
+    this.read(cx);
   }
 
   /** Color for how much of a window is used. */
@@ -239,21 +254,23 @@ export default class Usage extends View {
 
   session(t, w, fit) {
     const { s, beside } = fit;
+    const length = w.length ?? SESSION_MS;
     const back = w.resets ? (left(w) === 0 ? `relit at ${clock(w.resets)}, in ${span(w.resets - Date.now())}` : `fresh candle in ${span(w.resets - Date.now())} · ${clock(w.resets)}`) : null;
-    return this.card(t, "candle", "tonight's candle", "5 h", this.candle(t, w, s),
-      this.figures(t, w, pick(left(w), CANDLE), back, s, !beside), this.path(t, "session", w, SESSION_MS, s), fit);
+    return this.card(t, "candle", "tonight's candle", lengthName(length), this.candle(t, w, s),
+      this.figures(t, w, pick(left(w), CANDLE), back, s, !beside), this.path(t, "session", w, length, s), fit);
   }
 
   week(t, w, scoped, fit) {
     const { s, beside } = fit;
+    const length = w.length ?? WEEK_MS;
     const k = Math.min(s, 2);
     const back = w.resets ? `full again ${day(w.resets)} · in ${span(w.resets - Date.now())}` : null;
     const below = scoped.length ? v_flex().gap(4 * k).children(scoped.map((x) => h_flex().gap(8 * k).items_center().text_size(small(k))
       .child(this.moon(t, x, k, true))
       .child(div().text_color(t.foreground).child(x.name))
       .child(div().min_w(0).truncate().text_color(t.dim).child(left(x) === 100 ? "a whole moon of its own" : `${left(x)}% of its own moon left`)))) : null;
-    return this.card(t, "moon", "this week's moon", "7 d", this.moon(t, w, s),
-      this.figures(t, w, pick(left(w), MOON), back, s, !beside), this.path(t, "week", w, WEEK_MS, s), fit, below);
+    return this.card(t, "moon", "this week's moon", lengthName(length), this.moon(t, w, s),
+      this.figures(t, w, pick(left(w), MOON), back, s, !beside), this.path(t, "week", w, length, s), fit, below);
   }
 
   /** The sheep in the meadow: grazing, drowsy, or asleep, with something to say. */
@@ -289,6 +306,7 @@ export default class Usage extends View {
       : d ? `read ${span(Date.now() - d.at)} ago` : "";
     return h_flex().id("us-toolbar").relative().h(BAR).flex_none().px(12).gap(8).items_center().text_size(11)
       .child(div().flex_none().text_color(t.ansi8).child("USAGE"))
+      .child(this.providers(t))
       .when(Boolean(d?.plan), (el) => el.child(div().flex_none().relative().px(6).h(20).flex().items_center().text_color(t.muted)
         .child(dither(t.ansi0, 1)).child(div().relative().child(d.plan))))
       .child(div().flex_1())
@@ -301,11 +319,26 @@ export default class Usage extends View {
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
+  /** The providers, the shown one lit: click one to show it (here and in the sidebar). */
+  providers(t) {
+    const on = provider().id;
+    return h_flex().flex_none().gap(2).items_center()
+      .children(PROVIDERS.map((p) => h_flex().id(`us-provider-${p.id}`).flex_none().px(6).h(20).gap(5).items_center()
+        .text_color(p.id === on ? t.foreground : t.ansi8)
+        .when(p.id === on, (el) => el.bg(t.ansi0))
+        .when(p.id !== on, (el) => el.hover((s) => s.text_color(t.muted).bg(t.ansi0)))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { cx.stop_propagation(); this.pick(p.id, cx); })
+        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).flex_none().text_color(p.id === on ? t.foreground : t.ansi8))
+        .child(div().child(p.name.toLowerCase()))));
+  }
+
   /** What to say when there's no answer to draw. */
   message(t, n) {
+    const who = provider();
     const [title, sub] = !n ? ["asking the moon how much night is left…", ""]
-      : n.state === "nologin" ? ["no Claude login on this machine", "sign in to Claude Code and the moon will know you"]
-      : n.state === "expired" ? ["the login is napping", "Claude Code wakes it the next time it runs; this pane only reads it"]
+      : n.state === "nologin" ? [`no ${who.name} login on this machine`, `sign in to ${who.agent} and the moon will know you`]
+      : n.state === "expired" ? ["the login is napping", `${who.agent} wakes it the next time it runs; this pane only reads it`]
       : n.state === "busy" ? ["the moon asked us to wait a moment", "trying again in a few minutes"]
       : ["couldn't reach the moon", n.message ?? ""];
     return v_flex().flex_1().items_center().justify_center().gap(6).px(16).pb(120).text_size(11)

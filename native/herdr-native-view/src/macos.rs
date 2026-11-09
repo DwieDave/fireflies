@@ -25,7 +25,8 @@ use objc2_foundation::{
 use objc2_pdf_kit::{PDFDisplayMode, PDFDocument, PDFView, PDFViewPageChangedNotification};
 use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
 use objc2_web_kit::{
-    WKNavigation, WKNavigationAction, WKNavigationDelegate, WKUIDelegate, WKWebView,
+    WKNavigation, WKNavigationAction, WKNavigationDelegate, WKScriptMessage,
+    WKScriptMessageHandler, WKUIDelegate, WKUserContentController, WKWebView,
     WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
 };
 use serde_json::{Value, json};
@@ -109,6 +110,10 @@ enum Renderer {
     /// an empty placeholder.
     App {
         key: String,
+    },
+    /// A page's Picture in Picture video (crate::pip) is moved into `view`.
+    Pip {
+        view: Retained<NSView>,
     },
 }
 
@@ -441,6 +446,9 @@ fn make(
                     WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config);
                 let _: () = msg_send![&*view, setInspectable: true];
                 let delegate = WebDelegate::new(mtm, key, generation);
+                if spec.pip {
+                    crate::pip::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
+                }
                 view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 view.setUIDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 Ok((
@@ -509,6 +517,11 @@ fn make(
                     },
                 ))
             }
+            Kind::Pip => {
+                // Holds the video while it shows here (crate::pip moves it in).
+                let view = NSView::initWithFrame(NSView::alloc(mtm), frame);
+                Ok((view.clone(), Renderer::Pip { view }))
+            }
             Kind::QuickLook => {
                 let view = QLPreviewView::initWithFrame_style(
                     QLPreviewView::alloc(mtm),
@@ -561,7 +574,7 @@ fn load(
                             &file_url(read_root),
                         );
                     }
-                    Source::Inspect(_) | Source::App(_) => return Err("a web view takes a `url` or `path`".into()),
+                    Source::Inspect(_) | Source::App(_) | Source::Pip(_) => return Err("a web view takes a `url` or `path`".into()),
                 }
                 Ok(None)
             }
@@ -591,6 +604,10 @@ fn load(
             }
             (Renderer::App { .. }, Source::App(a)) => {
                 crate::app::start(key, generation, a);
+                Ok(None)
+            }
+            (Renderer::Pip { view }, Source::Pip(of)) => {
+                crate::pip::attach(key, generation, of, view);
                 Ok(None)
             }
             (Renderer::QuickLook { view }, Source::File { path, .. }) => {
@@ -902,7 +919,7 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
         }
         _ => {}
     }
-    let mut reload: Option<Value> = None;
+    let mut reload: Option<Spec> = None;
     let out = VIEWS.with(|v| -> Result<Value, String> {
         let v = v.borrow();
         let e = &v[key];
@@ -914,9 +931,7 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                         .get("url")
                         .and_then(Value::as_str)
                         .ok_or("browser.navigate needs { url }")?;
-                    reload = Some(
-                        json!({ "kind": "chromium", "url": crate::normalize_chromium_url(url)? }),
-                    );
+                    reload = Some(Spec { source: Source::Url(crate::normalize_chromium_url(url)?), ..e.spec.clone() });
                     Ok(Value::Null)
                 }
                 #[cfg(feature = "chromium")]
@@ -930,6 +945,7 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                 (a, Renderer::Chromium(c)) if a.starts_with("browser.") => c.action(a, args),
                 ("focus" | "app.activate", Renderer::App { key }) => crate::app::activate(key),
                 ("app.quit", Renderer::App { key }) => crate::app::quit(key),
+                (a, Renderer::Pip { .. }) if a.starts_with("pip.") => crate::pip::action(mtm, key, a, args),
                 ("focus", _) => {
                     let w = e.view.window().ok_or("not in a window")?;
                     w.makeFirstResponder(Some(&e.inner));
@@ -942,17 +958,23 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                     }
                     Ok(Value::Null)
                 }
-                ("state", r) => Ok(entry_state(e, r)),
+                ("state", r) => Ok(entry_state(key, e, r)),
                 ("browser.navigate", Renderer::Web { .. }) => {
                     let url = args
                         .get("url")
                         .and_then(Value::as_str)
                         .ok_or("browser.navigate needs { url }")?;
-                    reload = Some(json!({ "kind": "web", "url": crate::normalize_url(url)? }));
+                    reload = Some(e.spec.navigated(url)?);
                     Ok(Value::Null)
                 }
                 // The key an `inspector` view takes as `of`; it opens the inspector.
                 ("web.inspect", Renderer::Web { .. }) => Ok(json!({ "of": key })),
+                ("web.pip", Renderer::Web { view, .. }) => {
+                    if !e.spec.pip {
+                        return Err("this page was opened without `pip: true`".into());
+                    }
+                    crate::pip::start(mtm, key, e.generation, view)
+                }
                 ("browser.back", Renderer::Web { view, .. }) => Ok(json!(view.goBack().is_some())),
                 ("browser.forward", Renderer::Web { view, .. }) => {
                     Ok(json!(view.goForward().is_some()))
@@ -1062,12 +1084,10 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
         // Navigation through the address bar is a new load (new generation) of
         // the same view. `spec_json` keeps the mod's props, so the mod's next
         // render doesn't see a change and reload its own URL over this one.
-        let mut spec = Spec::parse(&spec)?;
         let generation = VIEWS.with(|v| {
             let mut v = v.borrow_mut();
             let e = v.get_mut(key).ok_or("view is gone")?;
             e.generation += 1;
-            spec.zoom = e.spec.zoom;
             e.spec = spec;
             Ok::<u64, String>(e.generation)
         })?;
@@ -1077,7 +1097,7 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
     Ok(out)
 }
 
-fn entry_state(e: &Entry, r: &Renderer) -> Value {
+fn entry_state(key: &str, e: &Entry, r: &Renderer) -> Value {
     let content = match r {
         #[cfg(feature = "chromium")]
         Renderer::Chromium(c) => c.state(),
@@ -1091,6 +1111,7 @@ fn entry_state(e: &Entry, r: &Renderer) -> Value {
             json!({ "of": target, "adopted": window.borrow().is_some() })
         }
         Renderer::App { key } => crate::app::state(key),
+        Renderer::Pip { .. } => crate::pip::state(key),
     };
     let f = e.view.frame();
     let i = e.inner.frame();
@@ -1168,6 +1189,8 @@ pub fn dispose(key: &str) {
             #[cfg(feature = "chromium")]
             Renderer::Chromium(c) => c.close(),
             Renderer::Web { view, .. } => {
+                crate::pip::unconfigure(&view.configuration().userContentController());
+                crate::pip::web_gone(key);
                 view.stopLoading();
                 view.setNavigationDelegate(None);
                 view.setUIDelegate(None);
@@ -1187,6 +1210,7 @@ pub fn dispose(key: &str) {
             }
             Renderer::QuickLook { view } => view.close(),
             Renderer::App { key } => crate::app::stop(key),
+            Renderer::Pip { .. } => crate::pip::detach(key),
             Renderer::Inspector { inspector, .. } => {
                 // Closes WebKit's inspector, and with it its (hidden) window.
                 if let Some(i) = inspector.borrow().as_ref() {
@@ -1213,7 +1237,7 @@ pub fn debug() -> Value {
     let views: serde_json::Map<String, Value> = VIEWS.with(|v| {
         v.borrow()
             .iter()
-            .map(|(k, e)| (k.clone(), entry_state(e, &e.renderer)))
+            .map(|(k, e)| (k.clone(), entry_state(k, e, &e.renderer)))
             .collect()
     });
     json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()) })
@@ -1383,6 +1407,8 @@ define_class!(
 
         #[unsafe(method(webView:didCommitNavigation:))]
         fn did_commit(&self, web: &WKWebView, _nav: Option<&WKNavigation>) {
+            // A new page: the old one's video and frames are gone.
+            crate::pip::navigated(&self.ivars().key);
             self.report("load.commit", web_state(web));
         }
 
@@ -1414,7 +1440,23 @@ define_class!(
 
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn did_terminate(&self, _web: &WKWebView) {
+            // The page's process is gone, and with it the video in the player.
+            crate::pip::navigated(&self.ivars().key);
             self.report("web.processTerminated", json!({}));
+        }
+    }
+
+    unsafe impl WKScriptMessageHandler for WebDelegate {
+        // The Picture in Picture page scripts (crate::pip).
+        #[unsafe(method(userContentController:didReceiveScriptMessage:))]
+        fn did_receive(&self, _controller: &WKUserContentController, message: &WKScriptMessage) {
+            unsafe {
+                let name = message.name().to_string();
+                let body = message.body();
+                let Some(body) = body.downcast_ref::<NSString>() else { return };
+                let i = self.ivars();
+                crate::pip::on_message(&i.key, i.generation.get(), &name, &body.to_string(), message.frameInfo());
+            }
         }
     }
 

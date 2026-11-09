@@ -689,6 +689,21 @@ The main ones:
   draw underneath (seen while it launches). It needs the Accessibility permission
   (`app.permission`); a press on the app's window focuses the view's pane. Actions:
   `focus` / `app.activate` (the app gets the keyboard), `app.quit`, `state`.
+  Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
+  created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
+  biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
+  and sends `pip.enter { of }` (`pip.start { result | error }`: `"none"` when there is no video);
+  again: back. A native view `{ kind: "pip", of }` then takes the page's whole web view and
+  lifts the video into the page's top layer to fill it (an embedded player's iframe too); the
+  pane is left empty meanwhile (draw a placeholder; the page gets `pip.leave` when it's back).
+  Actions: `pip.toggle` (play/pause; event `pip.state { result }`), `pip.back` (the page goes
+  home playing on, and its pane takes focus, across tabs and spaces), `pip.close` (home,
+  paused), `pip.popOut { colors: { background, foreground, dim, border } }` (a square window
+  above every app and space with ↩ ⇲ ❚❚ ✕, whose ⇲ sends the page `pip.popIn { of }`; the
+  view may go). Event `pip.ended`: the page went home (also on a new page, a crash, a closed
+  pane, or the video leaving the page). One video at a time.
+  Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
+  `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip`.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
