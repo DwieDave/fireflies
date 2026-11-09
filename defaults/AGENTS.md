@@ -863,6 +863,8 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   main.js       the mod (required)
   mod.json    where it first appears: { "place": "right" | "left" | "top" | "bottom" | "none", "size": 320 }
   *.js, *.svg   more modules ("./ui.js"), its own icons
+  bin/          programs its terminals run (a shipped mod's are installed executable;
+                start one as `${appHome()}/mods/<name>/bin/<program>`)
 ```
 
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
