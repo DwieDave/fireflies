@@ -678,6 +678,14 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
+  A native view `{ kind: "app", path: "/Applications/Some.app", instance?, quitOnClose? }` shows
+  another application in the view's place: macOS can't embed another process's window, so
+  its real window is launched (or, `instance: "shared"`, the running one is used), then
+  moved and sized to the view's rect, kept just above Herdr's window (below it while an
+  overlay covers the view) and hidden with the app while the view is off screen. Children
+  draw underneath (seen while it launches). It needs the Accessibility permission
+  (`app.permission`); a press on the app's window focuses the view's pane. Actions:
+  `focus` / `app.activate` (the app gets the keyboard), `app.quit`, `state`.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
