@@ -1440,6 +1440,8 @@ define_class!(
 
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn did_terminate(&self, _web: &WKWebView) {
+            // The page's process is gone, and with it any Picture in Picture.
+            crate::pip::web_gone(&self.ivars().key);
             self.report("web.processTerminated", json!({}));
         }
     }

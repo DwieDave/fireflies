@@ -203,6 +203,7 @@ export default class Browser extends View {
     // or comes back into Herdr from its popped-out window: show it in the player.
     if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of } });
     if (e.event === "pip.start" && d.result === "none") this.error = "No video on this page.";
+    if (e.event === "pip.start" && d.error) this.error = `Picture in picture: ${d.error}`;
   }
 
   call(action, args) {
