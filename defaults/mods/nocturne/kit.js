@@ -2,7 +2,7 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
-import { settings, window as appWindow, terminals, hc } from "herdr";
+import { settings, window as appWindow, terminals, hc, home } from "herdr";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -40,6 +40,15 @@ export const LOGO = { claude: "claude", "claude-code": "claude", opencode: "open
 export function place(s, all) {
   const tabs = new Set(s.tabs.map((c) => c.id));
   return all.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder || null;
+}
+
+/** A space's folder: the one it's attached to (space.new folder, space.folder),
+ *  else where it is now (place). Its repo, GitHub and lazygit go by this. Home
+ *  holds no repo: a space attached there goes by where it is now too. */
+export function spaceFolder(s, all) {
+  if (!s) return null;
+  const mine = s.attached && s.folder && !(s.machine == null && s.folder.replace(/\/+$/, "") === home());
+  return (mine && s.folder) || place(s, all);
 }
 
 export const WORD = { working: "working", blocked: "needs you", done: "done", idle: "resting" };

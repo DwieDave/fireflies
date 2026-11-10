@@ -35,6 +35,10 @@ pub struct Space {
     /// terminal is (Herdr's way, `Model::space_name`).
     pub name: String,
     pub folder: String,
+    /// `folder` was chosen (space.new folder, space.folder): the space's repo is
+    /// there. Otherwise it is only where the space was made, and the space goes
+    /// by where its terminals are now.
+    pub attached: bool,
     /// The machine its terminals run on (`hc machine ls`); None: this one.
     pub machine: Option<String>,
     pub tabs: Vec<Tab>,
@@ -296,7 +300,7 @@ impl Model {
 
     pub fn add_space(&mut self, id: &str, name: &str, folder: &str, ctx: Tab) {
         let active = Some(ctx.id.clone());
-        self.spaces.push(Space { id: id.to_owned(), name: name.to_owned(), folder: folder.to_owned(), machine: None, tabs: vec![ctx], active });
+        self.spaces.push(Space { id: id.to_owned(), name: name.to_owned(), folder: folder.to_owned(), attached: false, machine: None, tabs: vec![ctx], active });
         self.recent.retain(|r| r.name != name);
         self.active = Some(id.to_owned());
     }
@@ -731,6 +735,7 @@ pub fn space_json(m: &Model, p: &Space, index: usize, branch: Option<&str>, home
         "name": m.space_name(p, home),
         "named": !p.name.is_empty(),
         "folder": p.folder,
+        "attached": p.attached,
         "machine": p.machine,
         "branch": branch,
         "active": m.active.as_deref() == Some(&p.id),

@@ -29,7 +29,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, theme, notify } from "herdr";
-import { dither, pip, eyebrow, WORD, RANK, place } from "./kit.js";
+import { dither, pip, eyebrow, WORD, RANK, spaceFolder } from "./kit.js";
 import { chip, field, confirm, check, working } from "./inline.js";
 
 const POLL = 4000;
@@ -114,7 +114,7 @@ export default class Worktrees {
 
   where() {
     const s = spaces().find((x) => x.active);
-    return s ? { folder: place(s, panes()), on: s.machine ?? null } : null;
+    return s ? { folder: spaceFolder(s, panes()), on: s.machine ?? null } : null;
   }
 
   // One read at a time, but never stuck behind one: a read that hasn't
@@ -168,7 +168,7 @@ export default class Worktrees {
     }
     for (const s of spaces()) {
       if ((s.machine ?? null) !== (this.repo?.on ?? null)) continue;
-      const w = owner(this.list, place(s, ps));
+      const w = owner(this.list, spaceFolder(s, ps));
       if (w) occ.get(w.path).spaces.push(s);
     }
     return occ;
