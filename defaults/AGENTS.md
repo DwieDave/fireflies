@@ -681,14 +681,8 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
-  A native view `{ kind: "app", path: "/Applications/Some.app", instance?, quitOnClose? }` shows
-  another application in the view's place: macOS can't embed another process's window, so
-  its real window is launched (or, `instance: "shared"`, the running one is used), then
-  moved and sized to the view's rect, kept just above Herdr's window (below it while an
-  overlay covers the view) and hidden with the app while the view is off screen. Children
-  draw underneath (seen while it launches). It needs the Accessibility permission
-  (`app.permission`); a press on the app's window focuses the view's pane. Actions:
-  `focus` / `app.activate` (the app gets the keyboard), `app.quit`, `state`.
+  (The `app` kind, another application's window kept over a view, was removed: it fought
+  window managers. Creating one fails with a load error.)
   Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
