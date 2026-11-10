@@ -4,6 +4,7 @@
 //          meadow where every agent is a firefly glowing in its status
 //   tabs   the tab strip along the horizon
 //   pane   a pane's header (the layout's pane header)
+//   parked a parked pane's chip under the tab (the layout's pane.parked look)
 //   worktrees  the worktree manager, as a pane (the tab strip opens it)
 //   new    the "+ new" menu, an overlay from the tab strip
 //   menu   right-click menus: a tab's, and a terminal's (the layout's terminal_menu)
@@ -22,13 +23,14 @@ import Peek from "./peek.js";
 import Sky from "./sky.js";
 import Tabs from "./tabs.js";
 import Header from "./header.js";
+import Parked from "./parked.js";
 import { WorktreesPanel } from "./worktrees.js";
 import NewMenu from "./newmenu.js";
 import Menu from "./menu.js";
 import Toast from "./toast.js";
 
 const ROLES = {
-  sky: Sky, tabs: Tabs, pane: Header, worktrees: WorktreesPanel, new: NewMenu, menu: Menu, toast: Toast,
+  sky: Sky, tabs: Tabs, pane: Header, parked: Parked, worktrees: WorktreesPanel, new: NewMenu, menu: Menu, toast: Toast,
   prompt: Prompt, confirm: Confirm, palette: Palette, peek: Peek,
 };
 

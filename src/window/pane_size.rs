@@ -153,7 +153,11 @@ impl AppWindow {
         // The absolute bounds canvas already excludes the context border (padding box).
         let (y, x) = padding(context);
         let size = inset(area, 2.0 * x * zoom, 2.0 * y * zoom);
-        let size = if parked { inset(size, 0.0, super::parking::PARK_ROW * zoom) } else { size };
+        let any_frame = match context.content() {
+            Some(Content::Context { pane, .. }) => pane.as_ref(),
+            _ => None,
+        };
+        let size = if parked { inset(size, 0.0, super::parking::row_height(any_frame) * zoom) } else { size };
         let size = pane_size(shown, size, pane, frame, focused, zoom)?;
         Some(crate::terminal::grid_size(size, crate::terminal::cell_size(window)))
     }

@@ -64,7 +64,17 @@
               },
               "radius": 0,
               "gap": 8,
-              "lone": true
+              "lone": true,
+              "parked": {
+                "content": {
+                  "mod": "nocturne",
+                  "props": {
+                    "role": "parked"
+                  }
+                },
+                "width": 200,
+                "height": 24
+              }
             }
           },
           "padding": [

@@ -406,6 +406,15 @@ The tab block says how each pane of the shown tab is wrapped:
   terminal never resizes. The shipped `pane` mod keeps its divider on the
   terminal-facing edge and reads the frame position from `layout()`.
 - `lone: true` frames a tab's only pane too (default: only when split).
+- `parked`: the chips of parked panes (`pane.park`) in the row under the tab.
+  Each chip is a small pane frame (this frame's background, border, radius;
+  `focus` while hovered), `gap` below the panes and apart, starting at their
+  left edge. `{ "content": { "mod": "…", "props": {} }, "width": 200, "height": 24 }`:
+  `content` draws in each chip, one copy per parked pane with
+  `props().pane` / `props().terminal` (default: the app writes the pane's
+  name and status), `width` (default: as wide as the name; a mod chip 180),
+  `height` (default: the header's, else 24). The app handles the pointer on
+  chips (click, drag); a chip mod only draws. Nocturne's is `role: "parked"`.
 - Each layout has its own, so one can stay bare while another makes
   every pane a card.
 

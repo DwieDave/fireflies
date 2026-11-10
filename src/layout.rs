@@ -267,6 +267,26 @@ pub struct PaneFrame {
     /// Frame a tab's only pane too (default: only when it's split).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub lone: bool,
+    /// How parked panes' chips look in the row under the tab (`pane.park`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parked: Option<ParkedLook>,
+}
+
+/// Parked panes' chips: each a small pane frame (the frame's background,
+/// border and radius), `gap` apart and `gap` below the panes. Without a mod
+/// the app writes the pane's name and status in it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ParkedLook {
+    /// A mod drawn in each chip, one copy per parked pane, with `props().pane`
+    /// and `props().terminal` (as a header's).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub content: Option<HeaderContent>,
+    /// Chip width in px (default: as wide as its name; a mod chip: 180).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub width: Option<f32>,
+    /// Chip height in px (default: the header's, else 24).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub height: Option<f32>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

@@ -426,6 +426,8 @@ pub struct AppWindow {
     float_drag: Option<floats::FloatDrag>,
     pane_drag: Option<pane_drag::PaneDrag>,
     pane_grip_hover: Option<String>,
+    /// The parking row chip under the pointer (parking.rs).
+    chip_hover: Option<String>,
     /// Each pane's top row the grip sits centered in: its top header, else a strip.
     pane_grip_rows: RefCell<HashMap<String, f32>>,
     /// A window (`kind: "window"` overlay) being pressed or dragged.
@@ -563,6 +565,7 @@ impl AppWindow {
             float_drag: None,
             pane_drag: None,
             pane_grip_hover: None,
+            chip_hover: None,
             pane_grip_rows: RefCell::default(),
             win_drag: None,
             float_anims: HashMap::new(),
@@ -1350,6 +1353,8 @@ impl AppWindow {
                     terms.push((format!("{}{SWAP}", n.id), a.clone()));
                 }
             }
+            // The parking row's chips, when the layout draws them with a mod.
+            mods.extend(self.chip_mods());
         }
         for o in &self.overlays {
             if let Some(c) = self.copies.get(&o.slot) {
