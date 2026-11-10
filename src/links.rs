@@ -96,19 +96,98 @@ pub fn resolve(link: &str, cwd: Option<&Path>) -> Option<Target> {
         PathBuf::from(link)
     };
     let full = if expanded.is_absolute() { expanded } else { cwd?.join(expanded) };
+    let full = full.to_str()?;
+    // A path with spaces takes the words after it too ("a/To Do.md and more"):
+    // the longest part ending before a space that names a file wins.
+    let mut candidate = full;
+    loop {
+        if let Some(found) = existing(candidate) {
+            return Some(Target::File(found));
+        }
+        candidate = candidate.rsplit_once(' ')?.0;
+    }
+}
+
+/// The file `path` names, as written, without a sentence's final period, or
+/// without `:42` / `:42:7` naming a place in it.
+fn existing(path: &str) -> Option<PathBuf> {
+    let full = Path::new(path);
     // Windows ignores a trailing period when checking whether a path exists.
     if !(cfg!(windows) && full.extension().is_some_and(|ext| ext.is_empty())) && full.exists() {
-        return Some(Target::File(full));
+        return Some(full.to_path_buf());
     }
-    // The period ending a sentence, or `:42` / `:42:7` naming a place in the file.
-    let mut bare = full.to_str()?.strip_suffix('.').unwrap_or(full.to_str()?);
+    let mut bare = path.strip_suffix('.').unwrap_or(path);
     for _ in 0..2 {
         match bare.rsplit_once(':') {
             Some((head, n)) if !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()) => bare = head,
             _ => break,
         }
     }
-    Path::new(bare).exists().then(|| Target::File(PathBuf::from(bare)))
+    Path::new(bare).exists().then(|| PathBuf::from(bare))
+}
+
+/// The local file a link names: a path, or a `file://` URL on this computer
+/// (percent-decoded, `#anchor` and `?query` dropped, `:42` trimmed as for paths).
+pub fn local_file(target: &Target) -> Option<PathBuf> {
+    match target {
+        Target::File(path) => Some(path.clone()),
+        Target::Url(url) => {
+            let rest = url.get(..5).filter(|s| s.eq_ignore_ascii_case("file:")).map(|_| &url[5..])?;
+            let rest = rest.split(['#', '?']).next()?;
+            // file:///x, file://localhost/x and file:/x; another host isn't this computer.
+            let path = match rest.strip_prefix("//") {
+                Some(hosted) => {
+                    let slash = hosted.find('/')?;
+                    let host = &hosted[..slash];
+                    if !(host.is_empty() || host.eq_ignore_ascii_case("localhost")) {
+                        return None;
+                    }
+                    &hosted[slash..]
+                }
+                None => rest,
+            };
+            let decoded = percent_decode(path)?;
+            // Windows: file:///C:/x names C:/x.
+            let decoded = if cfg!(windows) && decoded.get(2..3) == Some(":") { decoded[1..].to_owned() } else { decoded };
+            match resolve(&decoded, None)? {
+                Target::File(p) => Some(p),
+                Target::Url(_) => None,
+            }
+        }
+    }
+}
+
+/// A Markdown file (`.md`, `.markdown`) a link names, for the app's viewer.
+pub fn markdown(target: &Target) -> Option<PathBuf> {
+    local_file(target).filter(|p| is_markdown(p) && p.is_file())
+}
+
+/// A word the link pattern leaves alone (`README.md`, no slash) that names a
+/// Markdown file in the terminal's folder.
+pub fn bare_markdown(word: &str, cwd: Option<&Path>) -> Option<PathBuf> {
+    let path = cwd?.join(word);
+    (is_markdown(&path) && path.is_file()).then_some(path)
+}
+
+pub fn is_markdown(path: &Path) -> bool {
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
+}
+
+fn percent_decode(s: &str) -> Option<String> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' {
+            let hex = s.get(i + 1..i + 3)?;
+            out.push(u8::from_str_radix(hex, 16).ok()?);
+            i += 3;
+        } else {
+            out.push(bytes[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8(out).ok()
 }
 
 /// A web page: an absolute http(s) address with a host, the only links the
@@ -385,6 +464,43 @@ mod tests {
             std::fs::write(&dotted, "").unwrap();
             assert_eq!(resolve("src/main.rs.", Some(&dir)), Some(Target::File(dotted)));
         }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn markdown_links_name_existing_local_md_files() {
+        let dir = std::env::temp_dir().join(format!("herdr-md-links-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("docs/my notes")).unwrap();
+        let plan = dir.join("docs/plan.md");
+        let spaced = dir.join("docs/my notes/To Do.markdown");
+        std::fs::write(&plan, "# plan").unwrap();
+        std::fs::write(&spaced, "# todo").unwrap();
+        std::fs::write(dir.join("docs/main.rs"), "").unwrap();
+        let md = |link: &str, cwd: Option<&Path>| resolve(link, cwd).and_then(|t| markdown(&t));
+        // Plain, path:line, path:line:col, relative to the terminal's folder.
+        assert_eq!(md(plan.to_str().unwrap(), None), Some(plan.clone()));
+        assert_eq!(md("docs/plan.md", Some(&dir)), Some(plan.clone()));
+        assert_eq!(md("docs/plan.md:12", Some(&dir)), Some(plan.clone()));
+        assert_eq!(md("./docs/plan.md:12:3", Some(&dir)), Some(plan.clone()));
+        assert_eq!(md("docs/plan.md.", Some(&dir)), Some(plan.clone()));
+        assert_eq!(md("docs/main.rs", Some(&dir)), None);
+        assert_eq!(md("docs/gone.md", Some(&dir)), None);
+        // file:// URLs (OSC 8 links): percent-encoded spaces, localhost, an anchor.
+        let url = format!("file://{}", spaced.to_str().unwrap().replace(' ', "%20"));
+        assert_eq!(md(&url, None), Some(spaced.clone()));
+        assert_eq!(md(&format!("file://localhost{}#steps", plan.display()), None), Some(plan.clone()));
+        assert_eq!(md(&format!("file:{}", plan.display()), None), Some(plan.clone()));
+        assert_eq!(md(&format!("file://other-host{}", plan.display()), None), None);
+        assert_eq!(md("https://example.com/README.md", None), None);
+        // A path with spaces, as the terminal's link pattern finds it.
+        let text = format!("wrote {}/docs/my notes/To Do.markdown and more", dir.display());
+        let at = text.find("To Do").unwrap();
+        let found = &text[find(&text, at).unwrap()];
+        assert_eq!(md(found, None), Some(spaced.clone()));
+        // A bare name the pattern skips, in the terminal's folder.
+        assert_eq!(bare_markdown("plan.md", Some(&dir.join("docs"))), Some(plan.clone()));
+        assert_eq!(bare_markdown("main.rs", Some(&dir.join("docs"))), None);
+        assert_eq!(bare_markdown("plan.md", None), None);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

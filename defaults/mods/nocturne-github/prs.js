@@ -4,10 +4,11 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextView, TextareaState, Textarea } from "gpui-base";
+import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextareaState, Textarea } from "gpui-base";
 import { ghJson, ghRun, api, graphql } from "./gh.js";
 import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW } from "./model.js";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
+import { markdown } from "./markdown.js";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize } from "./kit.js";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
@@ -336,9 +337,7 @@ export default class Prs {
         div().id(`label-${i}`).relative().px(6).h(18).flex().items_center().text_size(10).text_color(t.foreground)
           .child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name))))))
       .child(div().relative().h(2).mt(4).child(dither(t.ansi0, 1)));
-    const md = (id, text) => div().text_size(12.5).text_color(t.foreground)
-      .child(TextView.markdown(id, text?.trim() ? text : "_No description._").selectable(true)
-        .on_link_click((url, cx) => this.app.openUrl(url, cx)));
+    const md = (id, text) => markdown(t, id, text?.trim() ? text : "_No description._", { onLink: (url, cx) => this.app.openUrl(url, cx) });
     const items = d ? this.timeline(d) : [];
     const card = (c, i) => {
       const [what, tone] = c.kind === "review" ? (REVIEW[c.state] ?? [String(c.state ?? "").toLowerCase().replace(/_/g, " "), null])

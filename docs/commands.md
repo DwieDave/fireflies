@@ -539,6 +539,15 @@ Close an overlay (default: the top dialog or popup).
 |---|---|
 | `id` | no |
 
+## `overlay.resizable`
+
+Change how a window resizes (min, aspect, chrome); a new aspect refits its height now.
+
+| Argument | Required |
+|---|---|
+| `id` | yes |
+| `resizable` | yes |
+
 ## `native.debug`
 
 Every native view: frame, visibility, focus, content state and recent events.
@@ -575,6 +584,18 @@ Open a web page (http or https) in a web pane beside the focused pane (in "app")
 |---|---|
 | `url` | yes |
 | `in` | no |
+
+## `markdown.open`
+
+Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default: the focused one), or the viewer already showing it there; anchor: a heading to scroll to; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+
+| Argument | Required |
+|---|---|
+| `path` | yes |
+| `anchor` | no |
+| `in` | no |
+| `pane` | no |
+| `on` | no |
 
 ## `app.whats_new`
 
