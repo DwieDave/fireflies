@@ -32,35 +32,54 @@ export async function repoOf(folder, on) {
   const top = await exec("git", ["rev-parse", "--show-toplevel"], { cwd: folder, on: on ?? undefined }).catch(() => null);
   if (!top || top.code !== 0) return null;
   const root = top.stdout.trim();
-  const r = await gh(["repo", "view", "--json", "nameWithOwner,defaultBranchRef,url"], { cwd: root, on });
+  // The repo and the branch at once: gh repo view is the slow one.
+  const [r, branch] = await Promise.all([
+    gh(["repo", "view", "--json", "nameWithOwner,defaultBranchRef,url"], { cwd: root, on }),
+    exec("git", ["branch", "--show-current"], { cwd: root, on: on ?? undefined }).catch(() => null),
+  ]);
   if (r.code !== 0) {
     if (/no git remotes|not a git|none of the git remotes|could not determine/i.test(r.stderr)) return null;
     throw new Error(why(r));
   }
   const j = JSON.parse(r.stdout);
-  const branch = await exec("git", ["branch", "--show-current"], { cwd: root, on: on ?? undefined }).catch(() => null);
   const [owner, name] = j.nameWithOwner.split("/");
   return { owner, name, full: j.nameWithOwner, root, on: on ?? null, url: j.url, base: j.defaultBranchRef?.name ?? null, branch: branch?.stdout.trim() || null };
 }
 
-/** A REST read: { data, changed } (changed false when GitHub said 304). */
-export async function api(repo, path, { fresh = false } = {}) {
+/** A REST read: { data, etag, changed } (changed false when GitHub said 304).
+ *  `prior` ({ etag, data }, e.g. from the window's cache) is what a 304 hands
+ *  back; without it the last answer kept here is. `slim` shrinks the answer
+ *  before it's kept (only what the window draws). `fresh` skips the ETag. */
+export async function api(repo, path, { fresh = false, prior = null, slim = null } = {}) {
   const key = `${repo.on ?? ""}|${path}`;
-  const kept = fresh ? null : cache.get(key);
+  const kept = fresh ? null : prior?.etag && prior.data != null ? prior : cache.get(key);
   const args = ["api", "-i", ...(kept?.etag ? ["-H", `If-None-Match: ${kept.etag}`] : []), path];
   const r = await gh(args, { cwd: repo.root, on: repo.on });
   const { status, etag, body } = parseHeaders(r.stdout);
-  if (status === 304 && kept) return { data: kept.data, changed: false };
+  if (status === 304 && kept) return { data: kept.data, etag: kept.etag, changed: false };
   if (status >= 200 && status < 300) {
-    const data = body ? JSON.parse(body) : null;
+    let data = body ? JSON.parse(body) : null;
+    if (slim && data != null) data = slim(data);
     cache.set(key, { etag, data });
-    return { data, changed: true };
+    return { data, etag, changed: true };
   }
   if (status) {
     let msg = `GitHub said ${status}`;
     try { msg = JSON.parse(body).message ?? msg; } catch { /* not JSON */ }
     throw new Error(status === 403 && /rate limit/i.test(msg) ? "GitHub's rate limit is used up for now; trying again shortly." : msg);
   }
+  throw new Error(why(r));
+}
+
+/** A GraphQL read (only the fields asked for): its `data`. */
+export async function graphql(repo, query, vars = {}) {
+  const args = ["api", "graphql", "-f", `query=${query}`];
+  for (const [k, v] of Object.entries(vars)) args.push(typeof v === "number" ? "-F" : "-f", `${k}=${v}`);
+  const r = await gh(args, { cwd: repo.root, on: repo.on });
+  let j = null;
+  try { j = JSON.parse(r.stdout || "null"); } catch { /* not JSON */ }
+  if (j?.data && !j.errors?.length) return j.data;
+  if (j?.errors?.length) throw new Error(j.errors[0].message ?? "GitHub didn't answer.");
   throw new Error(why(r));
 }
 

@@ -16,6 +16,12 @@
 // run, job or check is moving, every minute when all is still, never while
 // the window is closed. Reads carry ETags, so unchanged answers are free.
 //
+// Stale while revalidate: what the window last read of a repo (PRs, their
+// views, runs, jobs, workflow needs, and the ETags) is kept in
+// data/nocturne-github/cache.json (cache.js, store.js), so an opening shows
+// it at once and reads GitHub behind it; the bar says "updating…", then
+// "updated 2m ago". A failed read keeps what's shown and says so quietly.
+//
 // Opened by the nocturne mod's sky (nocturne.github) as an overlay window
 // with props { folder, on }; also works as a pane or tab (+ new > GitHub in
 // a new tab). `d` on a PR swaps the window for nocturne-diff on that PR, whose
@@ -27,6 +33,9 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import { repoOf } from "./gh.js";
+import { readAgo } from "./model.js";
+import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
+import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
@@ -34,6 +43,7 @@ import Actions from "./actions.js";
 export const WINDOW = "nocturne-github.window"; // { id, beat }: the open window, for the toggle
 const STATE = "nocturne-github.state";
 const BEAT = 4000;
+const SAVE_EVERY = 10000; // the cache is written at most this often
 const TABS = [["prs", "Pull requests"], ["actions", "Actions"]];
 
 /** The shown space's folder and machine (when opened without props). */
@@ -69,12 +79,17 @@ export default class GitHub extends View {
     this.next = 0; // when to read GitHub again
     this.busy = false;
     this.again = false;
-    this.readAt = 0;
+    this.loud = false; // the running read is worth showing ("updating…")
+    this.checked = false; // the cache was looked at
+    this.dirty = false; this.savedAt = 0; this.saving = null;
     this.handle = cx.focus_handle();
     this.handle.focus();
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer) this.handle.focus(); });
     this.beat();
+    // Opened before in this run: the cache is in memory, shown in the first frame.
+    const doc = store.peek();
+    if (doc) this.fromCache(doc);
     this.start(cx);
     cx.timer.every(1000, (cx) => this.tick(cx));
     cx.spawn(async (cx) => {
@@ -91,14 +106,42 @@ export default class GitHub extends View {
 
   // ---- life
 
+  /** Shows what the cache holds for this folder's repo, if anything. */
+  fromCache(doc) {
+    this.checked = true;
+    const e = this.folder ? lookup(doc, this.folder, this.on) : null;
+    if (!e?.repo?.full || this.repo) return false;
+    this.repo = { ...e.repo };
+    this.prs.hydrate(e.prs);
+    this.actions.hydrate(e.actions);
+    this.state = "ready";
+    return true;
+  }
+
   start(cx) {
     cx.spawn(async (cx) => {
+      if (!this.checked) {
+        try { this.fromCache(await store.load()); } catch { this.checked = true; }
+        cx.notify();
+      }
+      // A cached repo is read at once; where the folder's repo is now is asked meanwhile.
+      if (this.repo) this.refresh(cx, { all: true });
       try {
-        this.repo = await repoOf(this.folder, this.on);
-        this.state = this.repo ? "ready" : "norepo";
-        if (this.repo) this.refresh(cx, true);
+        const now = await repoOf(this.folder, this.on);
+        if (this.closed) return;
+        if (now && this.repo && repoKey(now) === repoKey(this.repo)) {
+          Object.assign(this.repo, now); // the same repo: its branch may have moved
+        } else {
+          this.repo = now;
+          this.prs.hydrate(null); this.actions.hydrate(null);
+          this.gen = (this.gen ?? 0) + 1; this.busy = false; // a read of the old repo is dropped
+          this.state = now ? "ready" : "norepo";
+          if (now) this.refresh(cx, { all: true });
+        }
       } catch (e) {
-        this.state = "error"; this.error = String(e?.message ?? e);
+        // Offline: a cached repo stays shown, the bar says so.
+        if (this.repo) this.stale = String(e?.message ?? e);
+        else { this.state = "error"; this.error = String(e?.message ?? e); }
       }
       cx.notify();
     });
@@ -117,37 +160,78 @@ export default class GitHub extends View {
     let redraw = false;
     if (this.note && Date.now() - this.note.at > 5000) { this.note = null; redraw = true; }
     if (this.state === "ready" && Date.now() >= this.next) this.refresh(cx);
+    if (this.dirty && !this.saving && Date.now() - this.savedAt >= SAVE_EVERY) this.persist();
+    // "updated 2m ago" changes once a minute.
+    const said = this.readWord();
+    if (said !== this.said) { this.said = said; redraw = true; }
     // Running things' timers tick once a second; a still window isn't redrawn.
     if (redraw || (this.state === "ready" && this.shown().interval() < 10000)) cx.notify();
   }
 
   shown() { return this.tab === "prs" ? this.prs : this.actions; }
 
-  /** Reads the shown tab now (force: past the ETags and timers). */
+  /** Reads the shown tab now. force (true, or { all, fresh }): all reads past the
+   *  timers, fresh past the ETags too (r, after an action). */
   refresh(cx, force = false) {
     if (!this.repo) return;
-    if (this.busy) { this.again = true; return; }
+    const opts = force === true ? { all: true, fresh: true } : force || {};
+    if (this.busy) { this.again = true; if (opts.all) this.againOpts = opts; return; }
     this.busy = true;
+    this.next = Infinity; // the tick doesn't queue another read behind this one
     const tab = this.shown();
+    // Worth a word in the bar: asked for, or what's shown is old (a cached opening).
+    const at = tab.readAt();
+    this.loud = Boolean(opts.all) || !at || Date.now() - at > Math.max(2 * tab.interval(), 30000);
     const gen = (this.gen = (this.gen ?? 0) + 1);
     cx.spawn(async (cx) => {
       try {
-        await tab.poll(force, cx);
+        await tab.warming;
+        await tab.poll(opts, cx);
+        if (gen !== this.gen) return;
         this.stale = "";
-        this.readAt = Date.now();
+        this.dirty = true;
       } catch (e) {
-        this.stale = String(e?.message ?? e);
+        if (gen === this.gen) this.stale = String(e?.message ?? e);
       } finally {
-        this.busy = false;
         if (!this.closed && gen === this.gen) {
+          this.busy = false; this.loud = false;
           // A failed read waits a little longer, so a dropped network doesn't spin.
           this.next = Date.now() + (this.stale ? Math.max(15000, tab.interval()) : tab.interval());
           this.save();
+          if (this.dirty && Date.now() - this.savedAt >= SAVE_EVERY) this.persist();
+          if (!this.stale) this.warm(cx);
           cx.notify();
-          if (this.again) { this.again = false; this.refresh(cx); }
+          if (this.again) { const o = this.againOpts ?? false; this.again = false; this.againOpts = null; this.refresh(cx, o); }
         }
       }
     });
+  }
+
+  /** Once the shown tab is read, the other one is read behind it, so switching shows fresh data. */
+  warm(cx) {
+    const other = this.tab === "prs" ? this.actions : this.prs;
+    if (this.warmed?.has(other) || other.warming) return;
+    (this.warmed ??= new Set()).add(other);
+    const repo = this.repo;
+    other.warming = (async () => {
+      try { await other.poll({}, null); if (this.repo === repo) this.dirty = true; } catch { /* the tab's own read says it */ }
+    })();
+    cx.spawn(async (cx) => { await other.warming; other.warming = null; if (!this.closed) cx.notify(); });
+  }
+
+  /** Writes what's shown to the cache (store.js), at most every SAVE_EVERY. */
+  persist() {
+    if (!this.repo || this.saving || this.state !== "ready") return this.saving;
+    this.dirty = false; this.savedAt = Date.now();
+    const entry = { ...entryFor(this.repo), repo: slimRepo(this.repo), prs: this.prs.snapshot(), actions: this.actions.snapshot() };
+    this.saving = store.save(this.folder, entry).catch(() => false).finally(() => { this.saving = null; });
+    return this.saving;
+  }
+
+  /** The bar's word for the shown data's age: "updated 2m ago". */
+  readWord() {
+    const at = this.state === "ready" ? this.shown().readAt() : 0;
+    return at ? `updated ${readAgo(at)}` : "";
   }
 
   /** Soon: a selection changed, its details want reading. */
@@ -167,11 +251,14 @@ export default class GitHub extends View {
 
   focusSelf() { this.handle.focus(); }
 
-  close() {
+  async close() {
     this.closed = true;
     this.save();
+    if (this.dirty) this.persist();
     const w = shared(WINDOW);
     if (this.overlay && w?.id === this.overlay) setShared(WINDOW, null);
+    // The last read goes to the cache (the app gives cleanup a quarter second).
+    await this.saving;
   }
 
   /** Opens a link like any mod's (a web pane beside the focused pane, or the
@@ -286,9 +373,15 @@ export default class GitHub extends View {
         .when(id === "actions" && runningRuns > 0, (el) => el.child(pip(t, "working", 6)))
         .when(id === "prs" && (this.prs.list?.length ?? 0) > 0, (el) => el.child(div().text_color(t.dim).child(String(this.prs.list.length)))),
       this.tab === id, (cx) => this.setTab(id, cx)));
-    const status = this.stale ? h_flex().gap(5).items_center().child(pip(t, "failed", 6)).child(div().text_color(t.blocked).truncate().max_w(260).child("offline · retrying"))
-      : live ? h_flex().gap(5).items_center().child(pip(t, "working", 6)).child(div().text_color(t.working).child("live"))
-      : this.readAt ? h_flex().gap(5).items_center().child(pip(t, "done", 6)).child(div().text_color(t.dim).child("quiet")) : div();
+    const said = this.readWord();
+    const word = (tone, color, text, breathe = false) => h_flex().gap(5).items_center()
+      .child(breathe ? div().loop("opacity", { from: 0.35, to: 1, period: 1100 }).child(pip(t, tone, 6)) : pip(t, tone, 6))
+      .child(div().text_color(color).truncate().max_w(260).child(text));
+    // Quiet: what's shown is never taken away; the bar only says how old it is.
+    const status = this.busy && this.loud ? word("working", t.dim, said ? `updating… · ${said.replace(/^updated /, "")}` : "updating…", true)
+      : this.stale ? word("failed", t.dim, said ? `couldn't update · ${said}` : "couldn't update")
+      : live ? word("working", t.working, "live")
+      : said ? word("done", t.dim, said) : div();
     // The bar is where the window drags from: presses on it aren't stopped.
     return h_flex().id("gh-head").relative().h(36).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
       .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
@@ -335,14 +428,16 @@ export default class GitHub extends View {
   render() {
     const t = theme();
     let body;
-    if (this.state === "loading") body = empty(t, "Finding the repo on GitHub…", this.folder ?? "", { moon: 3 });
+    // Before the cache was looked at (a few ms): nothing, rather than a flash of "Finding…".
+    if (this.state === "loading" && !this.checked) body = div().size_full();
+    else if (this.state === "loading") body = empty(t, "Finding the repo on GitHub…", this.folder ?? "", { moon: 3 });
     else if (this.state === "norepo") body = empty(t, "No GitHub repo here", `${this.folder ?? "This space has no folder"}: the window shows the GitHub repo of the shown space's folder.`, { moon: 0 });
     else if (this.state === "error") body = empty(t, "gh didn't answer", this.error, { moon: 1 });
     else body = this.shown().render(t, { width: this.size.width - 16, height: this.size.height - 70 });
     const note = this.note;
     const endResize = (cx) => { if (this.resizing) { this.resizing = null; this.save(); cx.notify(); } };
     const right = note ? div().text_color(note.tone === "failed" ? t.blocked : note.tone === "done" ? t.done : t.working).truncate().max_w(420).child(note.text)
-      : this.stale ? div().text_color(t.blocked).truncate().max_w(420).child(this.stale) : null;
+      : this.stale ? div().text_color(t.ansi8).truncate().max_w(420).child(this.stale) : null;
     return v_flex().id("nocturne-github").size_full().bg(t.background).border(1).border_color(t.ansi8)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
