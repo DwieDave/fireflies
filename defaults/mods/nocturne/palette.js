@@ -25,7 +25,7 @@ const ICONS = {
   Recent: "clock", Open: "layers", Tab: "square", Pane: "panel-right", Space: "folder", Layout: "sidebar",
   Terminal: "terminal", Agent: "layers", Window: "square", App: "settings",
 };
-const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
+const chrome = (n) => (n.includes("/") ? n : `mods/workspace-chrome/${n}.svg`);
 
 /** Nocturne's panels as palette entries: `go` runs them; `bind` is their key in keys.json's layout section. */
 function openEntries() {

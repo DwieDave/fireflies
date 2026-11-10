@@ -6,7 +6,8 @@
 //   usage    Claude's or Codex's 5-hour and weekly limits (usage.js), foldable,
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
-//            done glows green, working drifts amber, idle rests in the grass;
+//            working drifts amber, done glows green below them (kit.js
+//            agentRank), idle rests in the grass;
 //            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -14,14 +15,18 @@
 //            right-click for a menu: focus, rename, delete its tab (menu.js)
 //   clock    the time and date beside the moon
 //   fold    « at the top (or cmd-b / cmd-s) folds the sky into a rail: the
-//            moon, a letter per space, the fireflies' marks and the usage;
-//            » opens it again
+//            moon and the hour, a row per space (its first letters; the shown
+//            one on the dithered band with a blue edge, the status pip at the
+//            right edge), the fireflies' marks in the same order as open,
+//            and a meter per usage window; the » key under the hour opens it
+//            again. On macOS the rail is wide enough for the window buttons
+//            at any zoom.
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { spaces, agents, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay } from "herdr";
+import { spaces, agents, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay, settings, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, RANK, dither, pip, eyebrow, hash, givenName, nameTerminal } from "./kit.js";
+import { ART, LOGO, WORD, agentRank, dither, pip, eyebrow, hash, givenName, nameTerminal } from "./kit.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { menuHeight, NAME_AGENT } from "./menu.js";
@@ -75,10 +80,14 @@ const LAND = 1800;
 // Late enough for both resizes of a space switch to have landed.
 const REDRAW_DELAY = 700;
 
-// Folding: the rail's width (room for the macOS traffic lights) and where
-// the open width is remembered. Narrower than RAIL_BELOW draws the rail, so
-// dragging the edge in folds it too.
+// Folding: the rail's width and where the open width is remembered.
+// Narrower than RAIL_BELOW draws the rail, so dragging the edge in folds it
+// too. On macOS the window buttons sit at the layout's traffic_lights (16 pt
+// in, about 54 pt wide) in points, not zoomed: the rail gives them 16 pt on
+// the far side too, in layout px at the zoom it's folded at.
 const RAIL = 76;
+const LIGHTS_ROOM = 86;
+const railWidth = () => appWindow()?.platform === "macos" ? Math.max(RAIL, Math.ceil(LIGHTS_ROOM / (Number(settings()?.zoom) || 1))) : RAIL;
 const RAIL_BELOW = 160;
 const OPEN_WIDTH = "nocturne.sidebar";
 const OPEN_DEFAULT = 252;
@@ -181,7 +190,7 @@ export default class Sky {
 
   askFold() {
     const open = Math.max(RAIL_BELOW + 40, Number(shared(OPEN_WIDTH)) || OPEN_DEFAULT);
-    run("layout.resize", { id: "sidebar", px: this.want ? RAIL : open });
+    run("layout.resize", { id: "sidebar", px: this.want ? railWidth() : open });
   }
 
   /** Every SETTLE ms while a fold is landing: ask again if the width is wrong, then let the width rule. */
@@ -364,7 +373,7 @@ export default class Sky {
       .child(drift ? inner.loop("top", { from: 0, to: -6, period: 2300 + (h % 1100) }) : inner);
   }
 
-  // Awake fireflies (blocked, done, working) spread through the sky above
+  // Awake fireflies (blocked, working, done: agentRank) spread through the sky above
   // the grass; resting ones sit in a stack on the near ridge.
   meadow(t, list) {
     const { width: w, height: hgt } = this.field;
@@ -415,13 +424,47 @@ export default class Sky {
     });
   }
 
-  /** Folded: the moon, a letter per space (sidebar order), every firefly's mark. */
+  /** The rail's name for a space: its first letter, and the next one small ("Mo"). */
+  initials(name) {
+    const chars = String(name).match(/[\p{L}\p{N}]/gu) ?? [];
+    return chars.length ? chars[0].toUpperCase() + (chars[1] ?? "").toLowerCase() : "·";
+  }
+
+  /** The rail's » : a bordered key, filled and bright under the pointer. */
+  openKey(t) {
+    return div().id("fold").flex_none().w(28).h(20).flex().items_center().justify_center()
+      .border(1).border_color(t.ansi0).text_size(11).text_color(t.muted)
+      .hover((s) => s.text_color(t.foreground).bg(t.ansi0).border_color(t.ansi8))
+      .tooltip("Open the sidebar (⌘B)")
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { cx.stop_propagation(); this.fold(cx); })
+      .child("»");
+  }
+
+  /** A space's rail row: its initials, its status pip at the right edge; the
+   *  shown one on the dithered band with a blue edge (like a tile's foot). */
+  railSpace(t, s) {
+    // On the night's own ground, so no star lands beside a letter like a stray mark.
+    return h_flex().id(`rail-space-${s.id}`).relative().w_full().h(24).flex_none().pl(12).pr(10).items_center().text_size(11)
+      .bg(t.background).text_color(s.active ? t.foreground : t.muted)
+      .hover((st) => st.text_color(t.foreground).bg(t.ansi0 + "55"))
+      .tooltip(s.name)
+      .on_mouse_down("left", stop)
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.spaces.menu(s); })
+      .on_click(() => run("space.select", { id: s.id }))
+      .when(s.active, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .child(div().relative().flex_1().min_w(0).child(this.initials(s.name)))
+      .child(div().relative().child(pip(t, s.status)));
+  }
+
+  /** Folded: the moon and the hour, », a row per space (sidebar order), every firefly's mark, the usage. */
   rail(t, list) {
     const rows = this.spaces.rows().filter((r) => r.s);
     const flies = list.map((a) => {
       const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
       return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
         .hover((s) => s.bg(t.ansi0 + "55"))
+        .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
         .on_mouse_down("left", stop)
         .on_click(() => run("agent.focus", { terminal: a.address }))
         .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
@@ -430,30 +473,21 @@ export default class Sky {
         .child(div().relative().child(this.mark(a, color)))
         .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
     });
-    return v_flex().w_full().flex_1().min_h(0).pt(44).gap(10).items_center()
-      .child(v_flex().flex_none().items_center()
-        .child(svg(`${ART}/moon-${moonPhase(list)}.svg`).size(36).flex_none().text_color(t.ansi7))
-        .child(div().pt(2).text_size(11).text_color(t.foreground).child(this.clock.time))
-        .child(div().text_size(10).text_color(t.ansi8).child(this.clock.date.split(" ").slice(1).join(" "))))
-      .child(this.foldButton(t, "»"))
-      .child(v_flex().gap(2).items_center().flex_none().children(rows.map(({ s }) =>
-        div().id(`rail-space-${s.id}`).relative().w(32).h(22).flex_none().flex().items_center().justify_center().text_size(11)
-          .text_color(s.active ? t.foreground : t.muted).hover((st) => st.text_color(t.foreground))
-          .tooltip(s.name)
-          .on_mouse_down("left", stop)
-          .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.spaces.menu(s); })
-          .on_click(() => run("space.select", { id: s.id }))
-          .when(s.active, (el) => el.child(dither(t.ansi0, 1)))
-          .when(Boolean(s.status) && s.status !== "idle", (el) => el.child(div().absolute().top(2).right(2).child(pip(t, s.status, 4))))
-          .child(div().relative().child((s.name.match(/[A-Za-z0-9]/)?.[0] ?? "·").toUpperCase())))))
-      .child(div().w(24).h(2).flex_none().relative().child(dither(t.ansi8, 1)))
-      .child(v_flex().id("rail-flies").flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().children(flies))
+    const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
+    return v_flex().w_full().flex_1().min_h(0).pt(48).items_center()
+      .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date)
+        .child(svg(`${ART}/moon-${moonPhase(list)}.svg`).size(32).flex_none().text_color(t.ansi7))
+        .child(div().pt(4).text_size(11).text_color(t.foreground).child(this.clock.time)))
+      .child(div().pt(10).pb(14).flex_none().child(this.openKey(t)))
+      .child(v_flex().w_full().px(8).py(2).flex_none().bg(t.background).children(rows.map(({ s }) => this.railSpace(t, s))))
+      .child(div().py(12).flex_none().child(rule()))
+      .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().children(flies))
       .child(this.usage.rail(t));
   }
 
   render(cx) {
     const t = theme();
-    const list = [...agents()].sort((a, b) => (RANK[a.status] - RANK[b.status]) || (b.pinned - a.pinned));
+    const list = [...agents()].sort((a, b) => (agentRank(a) - agentRank(b)) || (b.pinned - a.pinned));
     setAgentOrder(list.map((a) => a.address));
     const sp = spaces();
     this.shownSpace = sp.find((s) => s.active)?.id ?? null;
@@ -464,8 +498,11 @@ export default class Sky {
       .on_size_change((size, cx) => { this.size = size; cx.notify(); });
     if (this.folded) {
       return sky
-        .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.55))
-        .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(0).left(0).text_color(t.ansi8).opacity(0.5))
+        // Fainter stars than open: here they'd sit between small controls.
+        .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.3))
+        // The hills rest on the usage, as open, never behind its numbers.
+        .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.background))
+        .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.ansi8).opacity(0.5))
         .child(this.rail(t, list));
     }
     // The usage section sits at the foot; the haze and hills rest on it.

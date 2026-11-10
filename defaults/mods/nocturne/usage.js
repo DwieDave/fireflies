@@ -8,6 +8,7 @@
 //   moon         the weekly window: the moon in the phase of what's left
 //   the plus     on each path: where the clock is in the window, so ahead or
 //                behind pace reads at a glance (as in the usage pane)
+//   the rail     (the folded sky) one small meter per window, nothing else
 //   folded       the eyebrow alone, with both numbers beside it; click it (or
 //                the chevron) to fold and open. Kept in shared(FOLDED).
 //   a row        click: the full usage pane (nocturne-usage) beside the
@@ -77,6 +78,7 @@ function pick(id, cx) {
 export class UsageSection {
   init(cx) {
     this.height = 0; // as last drawn, px
+    this.railHeight = 0; // the rail's, as last drawn
     // Ask when the shared answer is old (whichever copy is shown first asks);
     // the tick also keeps the countdowns and the clock's plus moving.
     const tick = (cx) => { cx.spawn(async () => { await refreshUsage(); }); cx.notify(); };
@@ -131,10 +133,10 @@ export class UsageSection {
     return svg(`${ART}/moon-${eighths(w)}.svg`).size(size).text_color(t.ansi7);
   }
 
-  /** The providers' logos; the picked one lit. `stack`: one above the other (the rail). */
-  switcher(t, stack = false) {
+  /** The providers' logos; the picked one lit. */
+  switcher(t) {
     const on = provider().id;
-    return (stack ? v_flex() : h_flex()).id("usage-providers").flex_none().gap(2).items_center()
+    return h_flex().id("usage-providers").flex_none().gap(2).items_center()
       .children(PROVIDERS.map((p) => div().id(`usage-provider-${p.id}`).p(2).flex_none()
         .tooltip(p.id === on ? `${p.name} usage` : `Show ${p.name} usage`)
         .when(p.id !== on, (el) => el.hover((s) => s.bg(t.ansi0)))
@@ -143,24 +145,29 @@ export class UsageSection {
         .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).text_color(p.id === on ? t.foreground : t.ansi8))));
   }
 
-  /** The folded rail's usage: the hourglass and the moon, each over what's left. Click: the usage pane. */
+  /** The folded rail's usage: one small meter per window (its name, what's
+   *  left, the path with the clock's plus). No art and no provider switch:
+   *  those live in the open sidebar; the tooltip names the provider. Click:
+   *  the usage pane. Its height lifts the rail's hills (sky.js). */
   rail(t) {
     const d = reading();
-    const cell = (id, mark, w, label) => v_flex().id(id).w(56).py(4).gap(2).flex_none().items_center()
+    const meter = (id, w, label) => v_flex().id(id).w_full().px(14).py(4).gap(3).flex_none()
       .hover((s) => s.bg(t.ansi0))
       .tooltip(`${provider().name} ${label}: ${left(w)}% left`)
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { cx.stop_propagation(); toggleUsage(); })
-      .child(div().h(22).flex().items_center().justify_center().child(mark))
-      .child(div().text_size(10).text_color(left(w) === 0 ? t.blocked : t.foreground).child(`${left(w)}%`))
-      .child(this.path(t, w, 36));
-    const top = v_flex().id("usage-rail").pb(10).gap(4).flex_none().items_center()
-      .child(div().w(24).h(2).mb(2).relative().child(dither(t.ansi8, 1)))
-      .child(this.switcher(t, true));
-    if (!d) return top.child(div().text_size(10).text_color(t.dim).child("usage …"));
-    return top
-      .when(Boolean(d.session), (el) => el.child(cell("usage-rail-5h", this.hourglass(t, d.session), d.session, windowName(d.session, "5h"))))
-      .when(Boolean(d.week), (el) => el.child(cell("usage-rail-wk", this.moon(t, d.week, 18), d.week, windowName(d.week, "week"))));
+      .child(h_flex().items_baseline().text_size(10)
+        .child(div().flex_none().text_color(t.ansi8).child(label.toUpperCase()))
+        .child(div().flex_1())
+        .child(div().flex_none().text_color(left(w) === 0 ? t.blocked : t.foreground).child(`${left(w)}%`)))
+      .child(this.path(t, w));
+    const box = v_flex().id("usage-rail").w_full().pt(2).pb(10).gap(2).flex_none().items_center()
+      .on_size_change((size, cx) => { if (size.height !== this.railHeight) { this.railHeight = size.height; cx.notify(); } })
+      .child(div().w(28).h(2).mb(6).relative().child(dither(t.ansi8, 1)));
+    if (!d) return box.child(div().py(4).text_size(10).text_color(t.dim).child("usage …"));
+    return box
+      .when(Boolean(d.session), (el) => el.child(meter("usage-rail-5h", d.session, windowName(d.session, "5h"))))
+      .when(Boolean(d.week), (el) => el.child(meter("usage-rail-wk", d.week, windowName(d.week, "week"))));
   }
 
   render(t) {

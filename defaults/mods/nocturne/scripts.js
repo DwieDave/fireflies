@@ -1,7 +1,8 @@
 // The script runner's corner of the tab strip (the deck itself is the
 // nocturne-scripts mod): ▶ and a little jar with one dithered cell per run in
 // its state's color (running ones breathe, ok green, failed red, stopped
-// grey). A click opens the deck under the pointer; stopping happens there.
+// grey). A click opens the deck hanging under ▶ (kit.js dropBelow), a
+// second closes it; stopping happens there.
 // cmd-shift-r (nocturne.scripts) opens the deck centered.
 //
 // A run is a labeled pane-less terminal (nocturne-scripts/runs.js); this file
@@ -12,7 +13,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { terminals, openOverlay, closeOverlay, shared, setShared, notify, hc, exec } from "herdr";
-import { ART, dither } from "./kit.js";
+import { ART, dither, dropBelow } from "./kit.js";
 import { here } from "./panels.js";
 
 const LABEL = "nocturne.script";
@@ -88,12 +89,12 @@ export function scriptsFolder() {
 }
 
 /** Opens the deck (focus: "pick" the filter, "runs" the running list), or closes it when open. */
-export function toggleDeck({ focus = "pick", centered = false, show = null, again = false } = {}) {
+export function toggleDeck({ focus = "pick", centered = false, show = null, again = false, at = null } = {}) {
   const open = deckOpen();
   if (open) { setShared(DECK, null); closeOverlay(open); if (!show && !again) return; }
   const { folder, on } = scriptsFolder();
   const id = openOverlay({ mod: "nocturne-scripts", kind: centered ? "dialog" : "popup", frame: "none",
-    width: DECK_W, height: DECK_H, props: { folder, on, focus, ...(show ? { show } : {}), ...(again ? { again } : {}) } });
+    width: DECK_W, height: DECK_H, ...(at && !centered ? { at } : {}), props: { folder, on, focus, ...(show ? { show } : {}), ...(again ? { again } : {}) } });
   setShared(DECK, { id, beat: Date.now() });
 }
 
@@ -174,7 +175,7 @@ export function scriptsControl(t, tool) {
   const more = list.length - CELLS;
   const tip = !list.length ? "Run a script" : [live ? `${live} running` : null, list.length - live ? `${list.length - live} ended` : null].filter(Boolean).join(" · ");
   return h_flex().flex_none().items_center()
-    .child(tool(t, "tab-scripts-run", open, list.length ? `Run a script · ${tip}` : "Run a script", () => toggleDeck(),
+    .child(tool(t, "tab-scripts-run", open, open ? null : list.length ? `Run a script · ${tip}` : "Run a script", (e) => toggleDeck({ at: dropBelow(e, DECK_W) }),
       icon("play", open ? t.accent : t.muted),
       ...(cells.length ? [h_flex().gap(2).items_center().children(cells)] : []),
       ...(more > 0 ? [div().text_size(10).text_color(t.dim).child(`+${more}`)] : [])));
