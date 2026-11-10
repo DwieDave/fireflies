@@ -104,9 +104,6 @@ impl Kind {
             "quicklook" => Ok(Kind::QuickLook),
             "inspector" => Ok(Kind::Inspector),
             "chromium" => Ok(Kind::Chromium),
-            // Removed: another app's window kept over the view fought window
-            // managers (AeroSpace) and flickered.
-            "app" => Err("native view kind `app` was removed".into()),
             "pip" => Ok(Kind::Pip),
             other => Err(format!(
                 "unknown native view kind `{other}` (web, pdf, media, quicklook, inspector, chromium, pip)"
@@ -659,13 +656,6 @@ mod tests {
         };
         assert_eq!(e.to_json()["id"], "left");
         assert_eq!(e.to_json()["generation"], 3);
-    }
-
-    #[test]
-    fn app_views_are_refused_with_a_reason() {
-        let e = Spec::parse(&json!({ "kind": "app", "path": "/Applications/Safari.app" })).unwrap_err();
-        assert!(e.contains("removed"), "{e}");
-        assert!(capabilities()["kinds"].as_array().unwrap().iter().all(|k| k["kind"] != "app"));
     }
 
     #[test]

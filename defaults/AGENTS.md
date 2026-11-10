@@ -678,8 +678,6 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
-  (The `app` kind, another application's window kept over a view, was removed: it fought
-  window managers. Creating one fails with a load error.)
   Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`

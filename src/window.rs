@@ -293,6 +293,8 @@ struct Copy {
     root: Option<Entity<ShellRoot>>,
     _watch: Option<Watcher>,
     error: Option<String>,
+    /// Its folder is gone (a removed or uninstalled mod): nothing to fix, only to close.
+    missing: bool,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -1780,8 +1782,9 @@ impl AppWindow {
     }
 
     fn load(&self, inst: Instance, window: &mut Window, cx: &mut Context<Self>) -> Copy {
-        let mut copy = Copy { inst, id: 0, root: None, _watch: None, error: None };
+        let mut copy = Copy { inst, id: 0, root: None, _watch: None, error: None, missing: false };
         let (Some(runtime), Some(folder)) = (&self.runtime, self.folders.get(&copy.inst.name)) else {
+            copy.missing = self.runtime.is_some();
             copy.error = Some(format!("no mod folder ~/.config/herdr-app/mods/{}", copy.inst.name));
             return copy;
         };
@@ -4718,14 +4721,18 @@ impl AppWindow {
                 // view that changed, so a spinner step would rebuild the mod).
                 .map(|d| if in_overlay { d.h_auto().min_h_0().flex().flex_col().child(root.clone()) } else { d.child(root.clone()) })
                 .into_any_element(),
-            Some(Copy { error, inst, .. }) => div()
+            Some(Copy { error, inst, missing, .. }) => div()
                 .id(SharedString::from(format!("err-{slot}")))
                 .size_full()
                 .p_2()
                 .text_xs()
                 .text_color(c("blocked"))
                 .overflow_y_scroll()
-                .child(format!("{} did not load:\n\n{}\n\nFix the files; Herdr retries on save.", inst.name, error.as_deref().unwrap_or("?")))
+                .child(if *missing {
+                    format!("The {} mod isn't installed (no folder ~/.config/herdr-app/mods/{}).\n\nClose this pane, or put the mod back.", inst.name, inst.name)
+                } else {
+                    format!("{} did not load:\n\n{}\n\nFix the files; Herdr retries on save.", inst.name, error.as_deref().unwrap_or("?"))
+                })
                 .into_any_element(),
             None => div().into_any_element(),
         }
