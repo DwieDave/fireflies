@@ -104,6 +104,9 @@ export function menuItems(t, p) {
   const parent = term?.parent && all.find((x) => x.address === term.parent);
   // Once right-clicks go to the program, Shift+right-click still opens this menu.
   const toProgram = term?.labels?.["herdr.right-click"] === "program";
+  // Parking needs another pane left in place.
+  const ps = panes(), mine = ps.find((p) => p.pane === tg.pane);
+  const parkable = !!mine && !mine.parked && ps.filter((p) => p.tab === mine.tab && !p.parked).length > 1;
   return [
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_PANE, { terminal: term.address, at: Date.now() }) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane: tg.pane }),
@@ -111,6 +114,7 @@ export function menuItems(t, p) {
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),
     ...(panes().filter((x) => x.tab === panes().find((y) => y.pane === tg.pane)?.tab).length > 1
       ? [{ id: "equalize", mark: svg("mods/nocturne-equalize-panes/equalize.svg").size(14).flex_none().text_color(t.accent), name: "Even out panes…", hint: "", go: () => openEqualize(tg.pane) }] : []),
+    ...(parkable ? [item(t, "park-pane", "archive", "Park pane", "pane.park", { pane: tg.pane })] : []),
     ...(term ? [toProgram
       ? item(t, "rc", "terminal", "Use Nocturne's right-click menu", "terminal.right_click", { terminal: term.address, to: "menu" })
       : item(t, "rc", "terminal", "Send right-clicks to the program", "terminal.right_click", { terminal: term.address, to: "program" })] : []),

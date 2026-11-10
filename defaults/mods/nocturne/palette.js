@@ -54,6 +54,8 @@ const NAMED = [
   ["pane.split", { direction: "down" }, "Pane", "Split down", "horizontal"],
   ["pane.close", {}, "Pane", "Close pane", "kill"],
   ["pane.zoom", {}, "Pane", "Zoom pane", "maximize fullscreen"],
+  ["pane.park", {}, "Pane", "Park pane", "minimize dock bottom chip hide"],
+  ["pane.unpark", {}, "Pane", "Unpark pane", "restore dock bottom chip show"],
   ...["left", "right", "up", "down"].map((d) => ["pane.go", { direction: d }, "Pane", `Focus pane ${d}`, "move go"]),
   ...["left", "right", "up", "down"].map((d) => ["pane.swap", { direction: d }, "Pane", `Swap pane ${d}`, "move"]),
   ["pane.equalize", { scope: "all" }, "Pane", "Even out all panes", "equalize balance same size grid"],

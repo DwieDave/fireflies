@@ -140,8 +140,8 @@ the highlighted line shows where it will land.
   terminal, and a program exiting closes its pane, even if Herdr was closed.
   Terminal panes are kept by their machine's core (`keep: true`). A lost
   terminal (core crash, reboot, logout) gets a shell in its last folder,
-  with the same address; its original command is never run again. Splits
-  and mod panes stay. An exited or killed terminal is closed, not restarted.
+  with the same address; its original command is never run again. Splits,
+  mod panes and parked panes stay. An exited or killed terminal is closed, not restarted.
   Focus, zoom, recent spaces, settled tabs and seen attention stay on this screen.
 - Every terminal is a core terminal. Herdr labels the ones it starts with
   `herdr.space=<id>` and `herdr.tab=<id>`. **A terminal with those
@@ -390,7 +390,7 @@ The tab block says how each pane of the shown tab is wrapped:
   pane has the keyboard; `gap` is the space between panes.
 - `header`: a mod drawn on each pane, one copy per pane, with
   `props().pane` and `props().terminal`. It reads its live facts from
-  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom) and its
+  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom, parked) and its
   buttons run pane commands with that pane (`pane.split`, `pane.zoom`,
   `pane.close`). `position`: `top` or `bottom`; `reveal: "hover"` shows it
   only while the pointer is on the pane, drawn over the terminal so the
@@ -601,6 +601,22 @@ The main ones:
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
   `pane.float {pane?}` (its terminal floats over the tab: the pane goes as with `terminal.park`, the
   terminal keeps running).
+  `pane.park {pane?, index?}` parks a pane (default: the focused one) in its tab's bottom row:
+  the pane leaves the arrangement and shows as a small chip (title and status dot) in a row
+  under the tab; its terminal keeps running and it stays the tab's (status, alerts, `ls`
+  under `parked`, `panes()` with `parked: true`, closing the tab ends it). A tab keeps one
+  pane in place. `index` (1 = first) puts the chip at that spot; on a parked pane it only
+  moves the chip. `pane.unpark {pane?, target?, edge?}` puts it back and focuses it (default:
+  the shown tab's last parked one): beside the pane it was parked from, or beside `target`
+  on `edge` ("right" | "left" | "top" | "bottom"); `target` without `edge` takes target's
+  place and parks target instead. Click a chip to unpark it; drag a chip along the row to
+  reorder, or onto a pane (edge or center, as pane dragging) to put it back there; drag a
+  pane's grip onto the bottom of the tab to park it. Focusing a parked pane
+  (`pane.focus`, `agent.focus`) unparks it. Closing the last pane in place brings the first
+  parked one back. Parked panes live in the machine's layout document, so they stay across
+  restarts and every screen shows them. Keys: `pane.park` cmd-shift-m (macOS) / ctrl-shift-m,
+  `pane.unpark` cmd-alt-shift-m / ctrl-alt-shift-m; the pane menu has "Park pane".
+  `terminal.park` is different: it takes a terminal out of every tab (no chip).
   `pane.go` prefers the most recently focused pane along the nearest edge in that
   direction; unvisited panes fall back to overlap, then top/left layout order.
   `pane.go` also reaches visible mods whose `mod.json` says `"focusable": true`, and
