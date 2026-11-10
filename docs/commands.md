@@ -82,7 +82,7 @@ Make a tab in a space (default: the selected one; name default: none, so it's ca
 
 ## `tab.close`
 
-Close a tab and end its terminals.
+Close a tab and end its terminals. While something runs there (an agent working or needing you, a program other than the shell in front) it asks the person first, and a script must pass confirmed: true.
 
 | Argument | Required |
 |---|---|

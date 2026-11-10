@@ -1873,6 +1873,16 @@ impl AppWindow {
     }
 
     /// How a terminal shows (`program` for mods): its agent, else what it runs.
+    /// What runs in a tab that closing it would end: a note per terminal
+    /// (`running_note`), placed and parked.
+    fn running_notes(&self, tab: &str) -> Vec<String> {
+        let Some(c) = self.model.tab(tab) else { return vec![] };
+        c.addresses().iter().filter_map(|addr| {
+            let rec = self.live.get(addr)?;
+            running_note(self.model.status(addr).or_else(|| rec["status"].as_str()), rec)
+        }).collect()
+    }
+
     fn program(&self, addr: &str) -> Value {
         let rec = self.live.get(addr).and_then(Value::as_object);
         program_of(rec.and_then(|r| r.get("report")).unwrap_or(&Value::Null), rec.and_then(running_argv))
@@ -3326,6 +3336,20 @@ impl AppWindow {
                     let mut args = json!({ "id": p.id });
                     args["confirmed"] = a.get("confirmed").cloned().unwrap_or(Value::Null);
                     return self.dispatch("space.close", &args, person, window, cx);
+                }
+                // Something still running there: the person says so first; a
+                // script passes confirmed. An idle tab just closes.
+                if a.get("confirmed").and_then(Value::as_bool) != Some(true) {
+                    let notes = self.running_notes(&id);
+                    if !notes.is_empty() {
+                        if !person {
+                            return self.fail(format!("tab.close ends what runs there ({}): pass confirmed: true", notes.join(", ")));
+                        }
+                        let name = self.model.space_of(&id).zip(self.model.tab(&id)).map(|(p, c)| model::Model::tab_name(p, c)).unwrap_or_default();
+                        let detail = format!("{name} \u{2014} {}. Closing the tab ends it.", notes.join(", "));
+                        self.confirm("Close tab?", &detail, "tab.close", json!({ "id": id, "confirmed": true }), window, cx);
+                        return;
+                    }
                 }
                 let (addrs, _) = self.model.remove_tab(&id);
                 self.kill(&addrs, cx);
@@ -5377,6 +5401,20 @@ struct FolderCheck {
 /// in repos, while the window is in front.
 const FOLDER_FALLBACK: Duration = Duration::from_secs(60);
 
+/// What keeps a terminal's tab from closing without a word: its agent
+/// working or waiting on the person, or a program other than the shell in
+/// front (an agent between turns, or a shell at its prompt, closes quietly).
+fn running_note(status: Option<&str>, rec: &Value) -> Option<String> {
+    let name = rec.pointer("/program/name").and_then(Value::as_str).filter(|n| !n.is_empty()).unwrap_or("a program");
+    match status {
+        Some("working") => return Some(format!("{name} is working")),
+        Some("blocked") => return Some(format!("{name} needs you")),
+        _ => {}
+    }
+    let flag = |k: &str| rec["program"][k].as_bool() == Some(true);
+    (rec.get("program").is_some_and(Value::is_object) && !flag("shell") && !flag("agent")).then(|| format!("{name} is running"))
+}
+
 /// An agent working, or a program other than the shell in front (an agent
 /// between turns isn't, even started from a shell).
 fn busy(rec: &Value) -> bool {
@@ -6923,6 +6961,21 @@ export default class SystemToast extends View {
         assert!(!super::busy(&rec("done", false, true)), "an agent started from a shell, its turn over");
         assert!(super::busy(&rec("", false, false)), "vim in front of the shell");
         assert!(!super::busy(&rec("", true, false)), "the shell's prompt");
+    }
+
+    #[test]
+    fn a_tab_asks_before_closing_only_while_something_runs_there() {
+        let rec = |name: &str, shell: bool, agent: bool| {
+            serde_json::json!({ "program": { "name": name, "shell": shell, "agent": agent } })
+        };
+        let note = |status, r: &serde_json::Value| super::running_note(status, r);
+        assert_eq!(note(Some("working"), &rec("claude", false, true)).as_deref(), Some("claude is working"));
+        assert_eq!(note(Some("blocked"), &rec("codex", false, true)).as_deref(), Some("codex needs you"));
+        assert_eq!(note(None, &rec("vim", false, false)).as_deref(), Some("vim is running"));
+        assert_eq!(note(Some("done"), &rec("claude", false, true)), None, "an agent between turns");
+        assert_eq!(note(Some("idle"), &rec("claude", false, true)), None);
+        assert_eq!(note(None, &rec("zsh", true, false)), None, "the shell at its prompt");
+        assert_eq!(note(None, &serde_json::json!({})), None, "nothing known about it");
     }
 
     #[test]
