@@ -37,7 +37,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("space.folder", &[req("folder"), opt("id")], "Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and lazygit panes use."),
     cmd("tab.new", &[opt("name"), opt("space"), opt("folder"), opt("argv"), opt("task"), opt("mod"), opt("props")],
         "Make a tab in a space (default: the selected one; name default: none, so it's called by its number) with a terminal in folder (default: the focused terminal's), optionally an agent (argv) and its first message (task); or with a mod as its only pane (`mod`, its `props`: a file, a board). With no space open, a person's new tab starts a space (as space.new)."),
-    cmd("tab.close", &[opt("id"), opt("confirmed")], "Close a tab and end its terminals."),
+    cmd("tab.close", &[opt("id"), opt("confirmed")], "Close a tab and end its terminals. While something runs there (an agent working or needing you, a program other than the shell in front) it asks the person first, and a script must pass confirmed: true."),
     cmd("tab.rename", &[opt("id"), opt("name")], "Rename a tab (asks the person when no name; an empty name: called by its number again)."),
     cmd("tab.move", &[req("id"), req("index")], "Move a tab to a position in its space (1 = first)."),
     cmd("pane.split", &[opt("direction"), opt("pane"), opt("argv"), opt("mod"), opt("props"), opt("folder"), opt("edge"), opt("px"), opt("tab")],
