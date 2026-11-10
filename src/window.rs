@@ -3375,10 +3375,9 @@ impl AppWindow {
                     let notes = self.running_notes(&id);
                     if !notes.is_empty() {
                         if !person {
-                            return self.fail(format!("tab.close ends what runs there ({}): pass confirmed: true", notes.join(", ")));
+                            return self.fail(format!("tab.close ends what runs there ({}): pass confirmed: true", running_summary(&notes)));
                         }
-                        let name = self.model.space_of(&id).zip(self.model.tab(&id)).map(|(p, c)| model::Model::tab_name(p, c)).unwrap_or_default();
-                        let detail = format!("{name} \u{2014} {}. Closing the tab ends it.", notes.join(", "));
+                        let detail = format!("{}\n\nClosing the tab ends {}.", running_summary(&notes), if notes.len() == 1 { "it" } else { "them" });
                         self.confirm("Close tab?", &detail, "tab.close", json!({ "id": id, "confirmed": true }), window, cx);
                         return;
                     }
@@ -5447,7 +5446,29 @@ fn running_note(status: Option<&str>, rec: &Value) -> Option<String> {
         _ => {}
     }
     let flag = |k: &str| rec["program"][k].as_bool() == Some(true);
-    (rec.get("program").is_some_and(Value::is_object) && !flag("shell") && !flag("agent")).then(|| format!("{name} is running"))
+    if !rec.get("program").is_some_and(Value::is_object) || flag("shell") || flag("agent") {
+        return None;
+    }
+    // A program in its own words: its command and first argument ("cargo build").
+    let mut argv = rec.pointer("/foreground/argv").or_else(|| rec.get("argv")).and_then(Value::as_array).into_iter().flatten().filter_map(Value::as_str);
+    let what = match argv.next().map(|w| w.rsplit('/').next().unwrap_or(w)) {
+        Some(cmd) => match argv.find(|w| !w.starts_with('-')) {
+            Some(arg) => format!("{cmd} {arg}"),
+            None => cmd.to_owned(),
+        },
+        None => name.to_owned(),
+    };
+    Some(format!("{what} running"))
+}
+
+/// A confirm's line of what runs: the first few notes, then how many more.
+fn running_summary(notes: &[String]) -> String {
+    const SHOWN: usize = 3;
+    let mut line = notes.iter().take(SHOWN).cloned().collect::<Vec<_>>().join(" \u{b7} ");
+    if notes.len() > SHOWN {
+        line.push_str(&format!(" \u{b7} +{} more", notes.len() - SHOWN));
+    }
+    line
 }
 
 /// An agent working, or a program other than the shell in front (an agent
@@ -7282,7 +7303,12 @@ export default class SystemToast extends View {
         let note = |status, r: &serde_json::Value| super::running_note(status, r);
         assert_eq!(note(Some("working"), &rec("claude", false, true)).as_deref(), Some("claude is working"));
         assert_eq!(note(Some("blocked"), &rec("codex", false, true)).as_deref(), Some("codex needs you"));
-        assert_eq!(note(None, &rec("vim", false, false)).as_deref(), Some("vim is running"));
+        assert_eq!(note(None, &rec("vim", false, false)).as_deref(), Some("vim running"));
+        let cargo = serde_json::json!({ "program": { "name": "cargo", "shell": false, "agent": false }, "foreground": { "argv": ["/usr/bin/cargo", "build", "--locked"] } });
+        assert_eq!(note(None, &cargo).as_deref(), Some("cargo build running"));
+        let notes: Vec<String> = ["claude is working", "cargo build running", "vim running", "codex needs you", "top running"].map(String::from).into();
+        assert_eq!(super::running_summary(&notes[..2]), "claude is working \u{b7} cargo build running");
+        assert_eq!(super::running_summary(&notes), "claude is working \u{b7} cargo build running \u{b7} vim running \u{b7} +2 more");
         assert_eq!(note(Some("done"), &rec("claude", false, true)), None, "an agent between turns");
         assert_eq!(note(Some("idle"), &rec("claude", false, true)), None);
         assert_eq!(note(None, &rec("zsh", true, false)), None, "the shell at its prompt");
