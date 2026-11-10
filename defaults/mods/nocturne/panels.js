@@ -78,8 +78,6 @@ export function panels() {
       pane: () => terminalPane(), tab: () => terminalTab() },
     { id: "web", name: "Web", icon: "monitor", key: "w", words: "browser page url",
       pane: () => modBeside("nocturne-browser", { slot: slot() }), tab: () => modTab("nocturne-browser", { slot: slot() }, "web") },
-    { id: "app", name: "App", icon: "square", key: "o", words: "application program window open launch",
-      pane: () => modBeside("nocturne-app", { slot: slot() }), tab: () => modTab("nocturne-app", { slot: slot() }, "app") },
     { id: "files", name: "Files", icon: "files", key: "f", words: "tree explorer folder", fixed: "edge", open: filesPane,
       pane: toggleFiles, tab: () => modTab("nocturne-files", { folder: h.folder, on: h.on }, "files") },
     { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => modPane("nocturne-agents"),
