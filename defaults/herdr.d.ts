@@ -135,6 +135,10 @@ export interface SpaceInfo {
   named: boolean;
   /** Where its new terminals start (on its machine; empty: that machine's home). */
   folder: string;
+  /** `folder` was chosen (space.new {folder}, space.folder): the space's repo is
+   *  there. Otherwise it's only where the space was made; go by its terminals'
+   *  live folders. */
+  attached: boolean;
   /** The machine it lives on (`hc machine ls`), null for this one. */
   machine: string | null;
   /** The git branch of the terminal it shows first, if any. */

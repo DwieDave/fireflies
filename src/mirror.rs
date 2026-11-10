@@ -18,6 +18,9 @@ pub struct SharedSpace {
     id: String,
     name: String,
     folder: String,
+    /// Saved only when set, so documents without it read as before.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    attached: bool,
     tabs: Vec<SharedTab>,
     /// Fields this build doesn't read, kept so a newer build's survive this one's write.
     #[serde(flatten)]
@@ -106,6 +109,7 @@ impl Document {
                     id: map(&s.id),
                     name: s.name.clone(),
                     folder: s.folder.clone(),
+                    attached: s.attached,
                     tabs: s
                         .tabs
                         .iter()
@@ -130,6 +134,7 @@ impl Document {
             id: map(&s.id),
             name: s.name.clone(),
             folder: s.folder.clone(),
+            attached: s.attached,
             machine: machine.map(str::to_owned),
             active: None,
             tabs: s
@@ -337,6 +342,21 @@ mod tests {
         assert_eq!(doc.spaces[0].tabs[0].name, "");
         assert!(doc.spaces[0].tabs[0].root.children().is_empty());
         assert_eq!(serde_json::from_value::<Document>(serde_json::json!({})).unwrap(), Document::default());
+    }
+    #[test]
+    fn attached_folders_round_trip_and_are_left_out_when_unset() {
+        let mut m = Model::default();
+        m.add_space("a", "", "/src/api", Tab::new("t1", "", "p1", "t1"));
+        m.add_space("b", "", "/src/web", Tab::new("t2", "", "p2", "t2"));
+        m.space_mut("a").unwrap().attached = true;
+        let doc = Document::capture(&m, None);
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json["spaces"][0]["attached"], true);
+        assert!(json["spaces"][1].get("attached").is_none());
+        let mut back = Model::default();
+        doc.replace(&mut back, None);
+        assert!(back.space("a").unwrap().attached);
+        assert!(!back.space("b").unwrap().attached);
     }
     #[test]
     fn machine_blocks_are_deterministic_and_moves_stay_inside_them() {

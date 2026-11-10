@@ -5,9 +5,11 @@ import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, Scrollbar } from "gpui-base";
 import { run, props, closeOverlay, theme, spaces, panes, exec, home } from "herdr";
 
-// Where a space is now: its first terminal's live folder, else where it was made.
+// A space's folder: the one it's attached to (space.folder; home holds no repo),
+// else where it is now: its first terminal's live folder, else where it was made.
 function place(s, all = panes()) {
   if (!s) return null;
+  if (s.attached && s.folder && !(s.machine == null && s.folder === home())) return s.folder;
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return all.find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder || null;
 }

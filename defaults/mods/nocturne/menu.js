@@ -6,14 +6,16 @@
 //   fly    a sidebar firefly's (sky.js opens it, props { tab: "fly", target: { id, address } }):
 //          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT)
 //   space  a sidebar space's (spaces.js opens it, props { tab: "space", target: { id } }):
-//          rename and delete happen inline in the sidebar, asked for through shared(EDIT_SPACE)
+//          rename, folder and delete happen inline in the sidebar, asked for through
+//          shared(EDIT_SPACE); "New worktree…" opens the worktree dialog on the space's folder
 //
 // A pane's menu can also move it: to another tab of its space, or a tab of its
 // own. The sidebar does the move (shared(MOVE_PANE); sky.js), since this menu
 // closes before a terminal's pane change finishes.
 
-import { theme, props, run, terminals, keys, setShared, spaces, panes } from "herdr";
+import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay } from "herdr";
 import { Popup, icon, popupHeight } from "./popup.js";
+import { spaceFolder } from "./kit.js";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
 function shortcut(name, args) {
@@ -31,7 +33,7 @@ export const NAME_AGENT = "nocturne.name-agent";
 /** shared() key: { terminal, at } asks that pane's header to start naming it. */
 export const NAME_PANE = "nocturne.name-pane";
 
-/** shared() key: { id, kind: "rename" | "delete", at } asks the sidebar to edit that space inline. */
+/** shared() key: { id, kind: "rename" | "folder" | "delete", at } asks the sidebar to edit that space inline. */
 export const EDIT_SPACE = "nocturne.edit-space";
 
 /** shared() key: { pane, terminal, mod, to (a tab id, or null: a new tab), at } asks the sidebar to move a pane. */
@@ -55,6 +57,14 @@ function moveItems(t, pane) {
   ];
 }
 
+/** The worktree dialog (the worktree mod) on a space's folder: a branch in its
+ *  own checkout, as a new space attached to it (indented under the repo's). */
+export function newWorktree(id) {
+  const s = spaces().find((x) => x.id === id);
+  if (!s) return;
+  openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { space: s.id, folder: spaceFolder(s, panes()), action: "new" } });
+}
+
 /** The rows for these props. */
 export function menuItems(t, p) {
   const tg = p?.target ?? {};
@@ -72,6 +82,8 @@ export function menuItems(t, p) {
       item(t, "select", "layers", "Show", "space.select", { id: tg.id }),
       item(t, "new", "plus", "New tab here", "tab.new", { space: tg.id }),
       { id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: edit("rename") },
+      { id: "folder", mark: icon(t, "folder"), name: "Change folder…", hint: "", go: edit("folder") },
+      { id: "worktree", mark: icon(t, "git-branch"), name: "New worktree…", hint: "", go: () => newWorktree(tg.id) },
       { rule: true },
       { id: "delete", mark: icon(t, "x", t.blocked), name: "Delete", hint: "", go: edit("delete") },
     ];

@@ -39,7 +39,8 @@ function here() {
   const tab = space?.tabs.find((c) => c.active)?.id ?? null;
   const f = focused();
   const pane = panes().find((p) => p.focused && p.tab === tab) ?? panes().find((p) => p.tab === tab && p.cwd);
-  return { folder: pane?.cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
+  // A space attached to a folder (space.folder) uses it over where its panes are.
+  return { folder: (space?.attached && space.folder) || pane?.cwd || f?.cwd || space?.folder || null, on: space?.machine ?? null };
 }
 
 export default class GitHub extends View {

@@ -5,10 +5,12 @@
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
-import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec } from "herdr";
+import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, home, pickFolder } from "herdr";
 
-// Where a space is now: its first terminal's live folder, else where it was made.
+// A space's folder: the one it's attached to (space.folder; home holds no repo),
+// else where it is now: its first terminal's live folder, else where it was made.
 function place(s) {
+  if (s.attached && s.folder && !(s.machine == null && s.folder === home())) return s.folder;
   const tabs = new Set((s.tabs ?? []).map((c) => c.id));
   return panes().find((p) => tabs.has(p.tab) && p.cwd)?.cwd || s.folder;
 }
@@ -63,6 +65,8 @@ function items(p, git) {
     case "space":
       return [
         ["Rename", "space.rename", { id: tg.id }],
+        // The system's folder picker is here only.
+        ...(spaces().find((s) => s.id === tg.id)?.machine ? [] : [["Change folder…", "space.folder", { id: tg.id }]]),
         ...(git ? [["New worktree", "worktree", { space: tg.id, action: "new" }], ["Open worktree", "worktree", { space: tg.id, action: "open" }]] : []),
         ...(git === "linked" ? [["Remove worktree", "worktree", { space: tg.id, action: "remove" }]] : []),
         ["Close", "space.close", { id: tg.id }],
@@ -80,7 +84,7 @@ function items(p, git) {
 }
 
 function menuIcon(command) {
-  const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? "panel-right" : command === "pane.zoom" ? "square" : "terminal";
+  const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "space.folder" ? "folder" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? "panel-right" : command === "pane.zoom" ? "square" : "terminal";
   return `mods/workspace-chrome/${name}.svg`;
 }
 
@@ -111,6 +115,14 @@ export default class Menu extends View {
   choose(i, cx) {
     const it = items(props(), this.git)[i];
     if (!it) return;
+    if (it[1] === "space.folder") {
+      // Open while the picker is up: the menu's copy is what waits for it.
+      return cx.spawn(async () => {
+        const folder = await pickFolder({ prompt: "Attach the space to" });
+        closeOverlay(props()?.overlay);
+        if (folder) run("space.folder", { id: it[2].id, folder });
+      });
+    }
     closeOverlay(props()?.overlay);
     if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
     else run(it[1], it[2]);

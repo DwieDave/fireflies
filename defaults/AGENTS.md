@@ -113,7 +113,14 @@ the highlighted line shows where it will land.
   `spaces()[i].named` says which. Where a space is now is its terminals'
   live folders (`panes()[i].cwd`), not the folder it was made in: new
   tabs start where its focused pane is, and the default mods take a
-  space's repo from its first terminal.
+  space's repo from its first terminal. A space made with a `folder`, or
+  given one later (`space.folder`; right-click a space > Change folder…),
+  is attached to it (`spaces()[i].attached`): the default mods and
+  Nocturne's GitHub, lazygit, git button and worktrees take its repo from
+  that folder instead (a space attached to home still goes by its terminals).
+  In the sidebars, spaces stay top level; only a space on a linked git
+  worktree is indented under its repo's main-checkout space. Right-click a
+  space > New worktree… checks out a branch in its own folder as such a space.
   If starting in an inherited folder fails, new spaces, tabs and splits retry in
   that machine's home. Explicit invalid folders still fail.
 - A **tab** is a piece of work in a space: its terminals and how they're
@@ -568,6 +575,7 @@ The main ones:
   terminals start in that machine's home unless folder, and its tabs and
   splits stay there; `spaces()` gives each space's `machine`, null here),
   `space.close {id?, confirmed?}`, `space.rename {id?, name}` ("": Herdr's name again),
+  `space.folder {folder, id?}` (attach a space to a folder; its open terminals stay where they are),
   `space.move {id, index}`, `space.select {index | id}`, `space.next`, `space.prev`.
   With no `argv`, the target core chooses that machine's default shell (PowerShell 7 when available on Windows).
 - Tabs: `tab.new {name?, space?, folder?, argv?, task?}` (argv: an
