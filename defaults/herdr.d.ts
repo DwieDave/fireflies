@@ -355,7 +355,8 @@ export interface OverlaySpec {
   props?: Record<string, unknown>;
   /** Blocks as in layouts/*.json (`{ terminal: "t7" }` blocks too), instead of `mod`. Its mods get
    *  `props().overlay`. Esc goes to its terminals (agents use it), so give it a way to close.
-   *  Closes itself when its terminal ends. */
+   *  Closes itself when its terminal ends. A terminal nothing else showed gets the size it had
+   *  before back when it closes (a small window doesn't leave it small). */
   layout?: unknown;
   /** dialog: centered, dims the window. popup: at `at` (default: the pointer).
    *  window: stays open until closed (no dimming, a click beside it doesn't close it, Esc goes to
