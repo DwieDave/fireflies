@@ -65,6 +65,8 @@ export function playSound(sound: string): null;
  *   or height), pane.close {pane?}, pane.zoom {pane?},
  *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
  *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
+ *   pane.park {pane?, index?} (a chip in its tab's bottom row, still running; index moves a parked chip, 1 = first),
+ *   pane.unpark {pane?, target?, edge?} (back where it was, or beside target; target without edge: in its place),
  *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target}. Pane menus get target { pane, terminal }.
  * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?, view?, show?}
  *   (pane: the one right/down/left/up/auto splits, default the focused one; "float": no pane, floating over the tab
@@ -111,7 +113,10 @@ export interface TabInfo {
   active: boolean;
   /** Most urgent agent status in it, or null. */
   status: Status | null;
+  /** Panes in its arrangement (parked ones not counted). */
   panes: number;
+  /** Panes parked in its bottom row (pane.park). */
+  parked: number;
   zoomed: boolean;
   /** Put away on this screen (tab.settle): lists hide it or fold it; it keeps running and comes back
    *  when shown or when an agent in it needs the person. */
@@ -219,6 +224,8 @@ export interface PaneInfo {
   font_zoom: number;
   /** The app's top-center grip can rearrange this pane. False when zoomed or alone. */
   movable: boolean;
+  /** Parked in its tab's bottom row (pane.park): not on screen, still running. */
+  parked: boolean;
 }
 
 /** Every pane in every tab. A pane header mod finds its own with
