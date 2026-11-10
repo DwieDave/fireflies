@@ -5,16 +5,39 @@
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
 // Click (or nocturne-notifications.open) opens the overview.
+//
+// The bell's block is as wide as the bell plus END: it ends where the panes
+// below end, with no blank after it. It sizes its own block (layout.resize)
+// when the bell grows or shrinks.
 
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { theme, terminals, nextCommand, shared, keys } from "herdr";
+import { theme, terminals, nextCommand, shared, keys, layout, run, settings } from "herdr";
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
 import { openOverview } from "./open.js";
 import { dither, pip, stop } from "./kit.js";
 
 const POLL = 1500;
+// Room after the bell, layout px: the main block's side padding, so its edge
+// lines up with the panes' right edge.
+const END = 8;
+
+/** This bell's layout block: the one showing nocturne-notifications as a bell. */
+function bellNode(n = layout()) {
+  if (!n || typeof n !== "object") return null;
+  if (n.content?.mod === "nocturne-notifications" && (n.content?.props?.role ?? "bell") === "bell") return n;
+  for (const c of n.children ?? []) { const f = bellNode(c); if (f) return f; }
+  return null;
+}
+
+/** Sizes the bell's block to `width` (drawn px, zoomed) plus END, when it isn't. */
+function fit(width) {
+  const node = bellNode();
+  if (!node?.id || !(width > 0)) return;
+  const px = Math.round(width / (Number(settings()?.zoom) || 1)) + END;
+  if (Math.abs((node.size?.px ?? 0) - px) >= 1) run("layout.resize", { id: node.id, px });
+}
 
 /** "⌘⇧A" for the key bound to open the overview, if any. */
 function shortcut() {
@@ -57,10 +80,11 @@ export default class Bell {
     const parts = [c.permission && `${c.permission} permission${c.permission > 1 ? "s" : ""}`, c.question && `${c.question} question${c.question > 1 ? "s" : ""}`, c.other && `${c.other} to look at`].filter(Boolean);
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
-    return h_flex().id("notify-bell").relative().size_full().pr(10).items_center().justify_start().bg(t.background)
+    return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("bell").relative().h(24).px(7).gap(6).items_center().text_size(11).cursor_pointer()
+      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).cursor_pointer()
+        .on_size_change((size) => fit(size.width))
         .hover((s) => s.bg(t.ansi0))
         .tooltip(tip)
         .on_mouse_down("left", stop)
