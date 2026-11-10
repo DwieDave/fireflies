@@ -992,6 +992,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.files",
         "nocturne.github",
         "nocturne.scripts",
+        "nocturne-notifications.open",
         "nocturne-browser.url",
         "nocturne-browser.reload",
         "nocturne-browser.back",

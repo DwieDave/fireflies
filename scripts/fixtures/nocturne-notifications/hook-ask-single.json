@@ -1,0 +1,25 @@
+{
+  "cwd": "/tmp/scratch/work",
+  "permission_mode": "default",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "What for lunch?",
+        "header": "Lunch",
+        "options": [
+          {
+            "label": "Pizza",
+            "description": "Choose pizza"
+          },
+          {
+            "label": "Salad",
+            "description": "Choose salad"
+          }
+        ],
+        "multiSelect": false
+      }
+    ]
+  }
+}
