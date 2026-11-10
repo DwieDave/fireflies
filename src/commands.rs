@@ -63,6 +63,8 @@ pub const COMMANDS: &[Command] = &[
     cmd("pane.font_smaller", &[opt("pane")], "Make this pane's terminal text smaller (default: the focused pane)."),
     cmd("pane.font_reset", &[opt("pane")], "Back to the app's terminal text size in this pane (default: the focused pane)."),
     cmd("pane.float", &[opt("pane")], "Float a pane's terminal over the tab (default: the focused pane): its pane goes (as terminal.park), it keeps running."),
+    cmd("pane.park", &[opt("pane"), opt("index")], "Park a pane in its tab's bottom row (default: the focused pane): out of the arrangement as a small chip, still running, kept across restarts. A tab keeps one pane in place. A parked pane with index: moves its chip to that spot in the row (1 = first). Unlike terminal.park, it stays in its tab."),
+    cmd("pane.unpark", &[opt("pane"), opt("target"), opt("edge")], "Put a parked pane back into its tab and focus it (default: the shown tab's last parked one): where it was parked from, or beside target (a pane of its tab) on edge \"right\", \"left\", \"top\" or \"bottom\"; target without edge: in target's place, target parked instead. Clicking its chip or focusing the pane brings it back too."),
     cmd("pane.focus", &[opt("pane"), opt("terminal")], "Focus a pane (or the pane showing a terminal)."),
     cmd("pane.go", &[req("direction")], "Focus the pane or focusable mod to the \"left\", \"right\", \"up\" or \"down\"."),
     cmd("pane.swap", &[opt("direction"), opt("pane"), opt("target")], "Swap a pane (default: the focused one) with its neighbor in a direction, or with another pane of its tab (target). Give exactly one of direction or target."),
