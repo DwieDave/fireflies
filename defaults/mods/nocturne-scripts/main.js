@@ -21,6 +21,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { closeOverlay, exec, hc, home, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
+import { FLAKE_SHOW, nixScripts } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
 
 const ART = "mods/nocturne/art";
@@ -30,6 +31,10 @@ const DECK = "nocturne-scripts.deck";
 const RECENT = "nocturne-scripts.recent";
 // What each folder had last time, shown at once while it's looked at again.
 const FOUND = "nocturne-scripts.found";
+// Each flake's last `nix flake show --json`: { "<machine>:<folder>": { at, show } }.
+const FLAKE = "nocturne-scripts.flake";
+// A flake evaluated this recently isn't evaluated again on the next open.
+const FLAKE_FRESH = 30000;
 
 const W = 420, H = 470;
 const HEAD = 36, SECTION = 24, ROW = 26, INPUT = 32, FOOT = 26, RUNS_SHOWN = 5;
@@ -97,17 +102,56 @@ export default class ScriptsDeck extends View {
     cx.spawn(async (cx) => {
       try {
         const r = await exec("sh", ["-c", PROBE], { cwd: this.folder, on: this.on, timeout: 15000 });
-        this.scripts = detect(parseProbe(r.stdout));
+        const probe = parseProbe(r.stdout);
+        this.sys = probe.sys;
+        this.base = detect(probe);
         this.failed = null;
-        const found = { ...(shared(FOUND) ?? {}) };
-        delete found[this.key];
-        // The last dozen folders, the newest last.
-        const keep = Object.entries(found).slice(-11);
-        setShared(FOUND, Object.fromEntries([...keep, [this.key, this.scripts]]));
+        this.merge();
+        if (probe.ls.has("flake.nix")) this.evalFlake(cx);
       } catch (e) {
         this.failed = String(e?.message ?? e);
       }
       this.looking = false;
+      cx.notify();
+    });
+  }
+
+  /** The folder's scripts and its flake's (the last evaluation), each group
+   *  together in the order it first shows up; kept for the next open. */
+  merge() {
+    const show = shared(FLAKE)?.[this.key]?.show;
+    const all = [...(this.base ?? []), ...(show ? nixScripts(show, this.sys) : [])];
+    // A group holding this machine's own configuration leads.
+    const groups = [...new Set(all.map((s) => s.group))];
+    const mine = new Set(all.filter((s) => s.here).map((s) => s.group));
+    const order = [...groups.filter((g) => mine.has(g)), ...groups.filter((g) => !mine.has(g))];
+    this.scripts = order.flatMap((g) => all.filter((s) => s.group === g));
+    const found = { ...(shared(FOUND) ?? {}) };
+    delete found[this.key];
+    // The last dozen folders, the newest last.
+    setShared(FOUND, Object.fromEntries([...Object.entries(found).slice(-11), [this.key, this.scripts]]));
+  }
+
+  /** `nix flake show` in the background: the picker shows the last result
+   *  meanwhile, and keeps it when nix is missing or the evaluation fails. */
+  evalFlake(cx) {
+    const last = shared(FLAKE)?.[this.key];
+    if (last && Date.now() - (last.at ?? 0) < FLAKE_FRESH) return;
+    this.nix = "evaluating";
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("nix", FLAKE_SHOW, { cwd: this.folder, on: this.on, timeout: 180000 });
+        const show = r.code === 0 ? JSON.parse(r.stdout) : null;
+        if (show) {
+          const all = { ...(shared(FLAKE) ?? {}) };
+          delete all[this.key];
+          setShared(FLAKE, Object.fromEntries([...Object.entries(all).slice(-11), [this.key, { at: Date.now(), show }]]));
+          this.nix = null;
+          this.merge();
+        } else this.nix = "failed";
+      } catch {
+        this.nix = "missing";
+      }
       cx.notify();
     });
   }
@@ -234,7 +278,9 @@ export default class ScriptsDeck extends View {
       .on_hover((h, cx) => { const k = h ? `r${i}` : this.hover === `r${i}` ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } })
       .on_click((_e, cx) => this.act("watch", r, cx)), t, on)
       .child(div().relative().w(8).flex_none().flex().items_center().child(this.pip(t, color, r.live)))
-      .child(div().relative().flex_1().min_w(0).truncate().child(r.name))
+      .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
+        .child(div().min_w(0).truncate().child(r.name))
+        .when(Boolean(r.admin), (el) => el.child(this.lock(t, on))))
       .when(Boolean(r.runner), (el) => el.child(div().relative().child(this.badge(t, r.runner, on))))
       .child(div().relative().w(58).flex_none().text_size(11).truncate().text_color(r.reason === "killed" ? t.dim : color).child(r.word))
       .child(div().relative().w(46).flex_none().text_size(11).text_color(t.dim).flex().justify_end().child(elapsed(r)))
@@ -268,10 +314,20 @@ export default class ScriptsDeck extends View {
       .on_hover((h, cx) => { if (h && this.cursor !== i) { this.cursor = i; cx.notify(); } })
       .on_click((e, cx) => this.go(s, Boolean(e?.modifiers?.shift), cx)), t, on)
       .child(div().relative().child(this.badge(t, s.runner, on, 52)))
-      .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
+      .child(h_flex().relative().flex_none().max_w(250).min_w(0).gap(6).items_center()
         .child(this.name(t, s.name, row.hits, on ? t.foreground : t.muted))
+        .when(Boolean(s.admin), (el) => el.child(this.lock(t, on)))
+        .when(Boolean(s.here), (el) => el.child(div().flex_none().text_size(10).text_color(t.accent)
+          .child(String(this.sys?.os).toLowerCase() === "darwin" ? "this mac" : "this machine")))
         .when(running, (el) => el.child(this.pip(t, t.working, true))))
-      .child(div().relative().flex_none().max_w(170).truncate().text_size(11).text_color(on ? t.muted : t.dim).child(aside(s)));
+      // The name comes first; what it runs takes the room that's left.
+      .child(h_flex().relative().flex_1().min_w(0).justify_end()
+        .child(div().min_w(0).truncate().text_size(11).text_color(on ? t.muted : t.dim).child(aside(s))));
+  }
+
+  /** Runs as root (asks for a password first): a small pixel lock. */
+  lock(t, on) {
+    return svg(`${ART}/lock.svg`).size(9).flex_none().text_color(on ? t.working : t.dim);
   }
 
   /** A key as a small square cap, then what it does (the palette's keycaps). */
@@ -310,7 +366,8 @@ export default class ScriptsDeck extends View {
           this.hint(t, "k-again", `${cmd}R`, "again")));
     }
     return bar
-      .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child("in the background")))
+      .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
+        .child(cur.row.s.admin === "osascript" ? "asks for a password first" : cur.row.s.admin ? "sudo asks in its terminal" : "in the background")))
       .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "run & watch")));
   }
 
@@ -363,7 +420,12 @@ export default class ScriptsDeck extends View {
     const all = runs(withEnded(terminals(), shared(ENDED)));
     const rows = this.scripts ? rank(this.scripts, this.query, this.recent()) : [];
     const items = [...all.map((r) => ({ kind: "run", r })), ...rows.map((row) => ({ kind: "script", row }))];
-    if (this.cursor < 0 || this.cursor >= items.length) this.cursor = rows.length ? all.length : Math.max(0, Math.min(this.cursor, items.length - 1));
+    // The cursor starts on the first script that needs no password: a stray
+    // enter shouldn't open an administrator dialog.
+    if (this.cursor < 0 || this.cursor >= items.length) {
+      const safe = rows.findIndex((r) => !r.s.admin);
+      this.cursor = rows.length ? all.length + Math.max(0, safe) : Math.max(0, Math.min(this.cursor, items.length - 1));
+    }
     // The run whose output shows keeps the cursor.
     if (this.output && !this.output.placed) {
       const i = all.findIndex((r) => r.address === this.output.r.address);
@@ -421,7 +483,8 @@ export default class ScriptsDeck extends View {
       .when(!this.output, (el) => el.child(h_flex().relative().h(INPUT).flex_none().mx(12).gap(8).items_center()
         .child(div().flex_none().text_size(12).text_color(t.accent).child("›"))
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
-        .child(div().flex_none().text_size(10).text_color(t.dim).child(this.looking && this.scripts ? "looking…" : rows.length ? `${rows.length}` : ""))
+        .child(div().flex_none().text_size(10).text_color(t.dim).child(this.nix === "evaluating" ? "nix…" : this.looking && this.scripts ? "looking…"
+          : this.nix === "failed" ? `nix eval failed · ${rows.length}` : rows.length ? `${rows.length}` : ""))
         .child(div().absolute().left(0).right(0).bottom(0).h(1).opacity(0.6).child(dither(t.ansi8, 1))))
       .child(rows.length
         ? div().id("scripts").relative().h(listH).flex_none().overflow_hidden().mt(4)
