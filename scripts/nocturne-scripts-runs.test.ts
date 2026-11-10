@@ -52,3 +52,12 @@ test("ended runs the strip kept come back when the core no longer lists them", a
   expect(withEnded(all, kept).map((t: any) => t.address)).toEqual(["t3", "t1"]);
   expect(runs(withEnded(all, kept)).find((r: any) => r.address === "t1").word).toBe("exit 2");
 });
+
+test("an admin run cancelled in its dialog reads cancelled; elsewhere 130 is just an exit", () => {
+  expect(word(false, 130, "exited", "osascript")).toBe("cancelled");
+  expect(word(false, 130, "exited", null)).toBe("exit 130");
+  const a = runArgs({ id: "nix-darwin\u0000switch h", name: "switch h", runner: "nix", cmd: "darwin-rebuild switch --flake '.#h'", admin: "osascript" }, "/etc/nix-darwin", null);
+  expect(a).toContain(`${LABEL}.admin=osascript`);
+  expect(a).toContain(`${LABEL}.cmd=darwin-rebuild switch --flake '.#h'`);
+  expect(a[a.length - 1]).toContain("osascript -e");
+});
