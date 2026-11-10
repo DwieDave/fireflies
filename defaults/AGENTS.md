@@ -305,6 +305,25 @@ Properties any node can have:
   the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls
   and the switch between a float's views (`views`: their names, or null; run
   `float.view {index}`; `terminals()`' `floating_view` says which one shows).
+- Root only: `"dialog_mods"` (this fork) maps Herdr's other screens to the mods
+  that draw them instead: `welcome`, `whats_new`, `help` (the keys), `worktree`,
+  `machine_add`, `update` (the update note, bottom right), and `prompt`,
+  `confirm`, `palette` (as the fields above, which win). Each gets the shipped
+  one's props plus `dialog` (that key) and opens with `frame: "none"`, wherever it
+  is opened from (the app, a key, or a mod's `openOverlay({mod: "worktree"})`).
+  A welcome records `setShared("frame.welcomed", "finished" | "skipped")`; a
+  what's new calls `presentUpdateNotes(versions)`. The update note gets
+  `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
+  slot it hides itself from. Settings and feedback stay the app's (they follow the
+  theme). Nocturne: `defaults/mods/nocturne/screens.js`.
+  `{"dialog_mods": {"welcome": "my-screens", "help": "my-screens"}}`
+- Root only: `"corners": "square"` (this fork) paints every corner in the window
+  square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
+  `rounded*` included. Default `"round"`: as each asks.
+- Root only: `"scrim"` (this fork): what dims the window behind a dialog,
+  `{"color": "#080808", "opacity": 0.85, "dither": true, "cell": 1}` (color: a
+  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px). Default:
+  black at 35%.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.

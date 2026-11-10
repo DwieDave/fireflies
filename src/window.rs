@@ -69,6 +69,18 @@ fn separator_line(row: bool, width: f32, color: Hsla, top: f32) -> Div {
         .when(!row, |d| d.h(px(width)).w_full())
 }
 
+/// The dim behind a dialog: the layout's `scrim`, else black at 35%. A
+/// dithered one counts device pixels (the checkerboard's cells are those).
+fn scrim(s: Option<&crate::layout::Scrim>, scale: f32) -> Background {
+    let Some(s) = s else { return hsla(0.0, 0.0, 0.0, 0.35).into() };
+    let color = c(&s.color).opacity(s.opacity.clamp(0.0, 1.0));
+    if s.dither {
+        gpui::checkerboard(color, (s.cell * settings::zoom() * scale).round().max(1.0))
+    } else {
+        color.into()
+    }
+}
+
 fn c(name: &str) -> Hsla {
     settings::color_or_literal(name)
 }
@@ -1356,6 +1368,11 @@ impl AppWindow {
             // The parking row's chips, when the layout draws them with a mod.
             mods.extend(self.chip_mods());
         }
+        if let Some(name) = self.update_note_mod()
+            && let Some(props) = self.update_note()
+        {
+            mods.push((UPDATE_NOTE.to_owned(), Instance { name: name.clone(), props }));
+        }
         for o in &self.overlays {
             if let Some(c) = self.copies.get(&o.slot) {
                 mods.push((o.slot.clone(), c.inst.clone()));
@@ -1416,6 +1433,11 @@ impl AppWindow {
                     out.insert(slot, i);
                 }
             }
+        }
+        if let Some(name) = self.update_note_mod()
+            && let Some(props) = self.update_note()
+        {
+            out.insert(UPDATE_NOTE.to_owned(), Instance { name: name.clone(), props });
         }
         for o in &self.overlays {
             if let Some(c) = self.copies.get(&o.slot) {
@@ -4119,7 +4141,7 @@ impl AppWindow {
     /// `"confirm"`, `"palette"`) added to its props so one mod can play
     /// several parts. An unknown mod logs a warning and keeps the shipped one.
     fn skin_dialog(&self, spec: &mut Value, chosen: Option<String>, dialog: &str) {
-        let Some(name) = chosen else { return };
+        let Some(name) = chosen.or_else(|| self.chrome.dialog_mods.get(dialog).cloned()) else { return };
         if !self.folders.contains_key(&name) {
             tracing::warn!(mod_name = %name, dialog, "dialog mod not found; using the shipped one");
             return;
@@ -4157,7 +4179,13 @@ impl AppWindow {
         }
     }
 
-    fn open_overlay(&mut self, id: String, spec: Value, window: &mut Window, cx: &mut Context<Self>) {
+    fn open_overlay(&mut self, id: String, mut spec: Value, window: &mut Window, cx: &mut Context<Self>) {
+        // The app's own screen stays one when the layout's mod draws it.
+        let app_screen = spec.get("mod").and_then(Value::as_str).is_some_and(|m| m.starts_with("frame-"));
+        if let Some(screen) = spec.get("mod").and_then(Value::as_str).and_then(dialog_screen) {
+            let chosen = self.chrome.dialog_mods.get(screen).cloned();
+            self.skin_dialog(&mut spec, chosen, screen);
+        }
         let kind = match spec.get("kind").and_then(Value::as_str) {
             Some("popup") => OverlayKind::Popup,
             Some("toast") => OverlayKind::Toast,
@@ -4243,7 +4271,7 @@ impl AppWindow {
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
             place,
             key: key.clone(),
-            frame: spec.get("mod").and_then(Value::as_str).is_some_and(|m| m.starts_with("frame-")),
+            frame: app_screen,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -4574,6 +4602,10 @@ impl AppWindow {
         if ready != self.update_ready {
             self.update_ready = ready;
             cx.notify();
+        }
+        // A layout's update note is a mod copy: made (or ended) by a sync.
+        if self.update_note_mod().is_some() && self.copies.contains_key(UPDATE_NOTE) != self.update_note().is_some() {
+            self.sync(window, cx);
         }
         // The settings screen shows versions and progress: redraw mods when they move.
         let status = crate::update::status().to_string();
@@ -5083,7 +5115,7 @@ impl AppWindow {
         }
     }
 
-    fn render_overlays(&self, viewport: Size<Pixels>, cx: &mut Context<Self>) -> Vec<AnyElement> {
+    fn render_overlays(&self, viewport: Size<Pixels>, scale: f32, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
         let mut toast_y = 16.0;
         // Drawn last, so it stays clickable over an open dialog.
@@ -5127,7 +5159,7 @@ impl AppWindow {
                     div()
                         .absolute()
                         .inset_0()
-                        .bg(hsla(0.0, 0.0, 0.0, 0.35))
+                        .bg(scrim(self.chrome.scrim.as_ref(), scale))
                         .occlude()
                         .child(crate::native_view::dim_probe())
                         .flex()
@@ -5176,6 +5208,9 @@ impl AppWindow {
 }
 
 const UPDATE_PILL_HEIGHT: f32 = 34.0;
+/// A layout mod's update note: its slot and width (it is as tall as the pill).
+const UPDATE_NOTE: &str = "update-note";
+const UPDATE_NOTE_WIDTH: f32 = 460.0;
 
 impl AppWindow {
     /// "Herdr 0.2.0 is ready · Restart": the frame's, so no layout or mod can hide it.
@@ -5191,7 +5226,32 @@ impl AppWindow {
         }
     }
 
+    /// The layout's mod for the update note (`dialog_mods.update`), when it has one.
+    fn update_note_mod(&self) -> Option<&String> {
+        self.chrome.dialog_mods.get("update").filter(|m| self.folders.contains_key(*m))
+    }
+
+    /// What the update note says now, as the props a layout's mod gets:
+    /// `{label, restart, success, dismissal}` (restart: a new app is ready,
+    /// app.update starts it; success: this start updated it). None: no note.
+    fn update_note(&self) -> Option<Value> {
+        let app_version = crate::update::ready();
+        let success = self.update_ready.is_none() && self.update_success;
+        let label = self.update_ready.clone().or_else(|| success.then(|| format!("Updated to {}", env!("CARGO_PKG_VERSION"))))?;
+        let dismissal = app_version.clone().map(|v| format!("app:{v}")).unwrap_or_else(|| label.clone());
+        if self.update_dismissed.as_ref() == Some(&dismissal) { return None; }
+        Some(json!({ "dialog": "update", "label": label, "restart": app_version.is_some(), "success": success, "dismissal": dismissal }))
+    }
+
     fn render_update_pill(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        // The layout's mod draws it (it dismisses itself): its copy, bottom right.
+        if self.update_note_mod().is_some() {
+            self.update_note()?;
+            let root = self.copies.get(UPDATE_NOTE)?.root.clone()?;
+            return Some(div().absolute().right(settings::z(16.0)).bottom(settings::z(16.0))
+                .w(settings::z(UPDATE_NOTE_WIDTH)).h(settings::z(UPDATE_PILL_HEIGHT))
+                .child(cached(&root)).into_any_element());
+        }
         let app_version = crate::update::ready();
         let app_ready = app_version.is_some();
         let success = self.update_ready.is_none() && self.update_success;
@@ -5524,6 +5584,20 @@ fn mod_overlay(dir: &std::path::Path) -> Value {
     meta.get("overlay").cloned().filter(Value::is_object).unwrap_or_else(|| json!({}))
 }
 
+/// The shipped screens a layout's `dialog_mods` can draw instead, opened by
+/// their mod's name (by the app or by any mod): the screen's key there.
+/// The prompt, confirm and palette are chosen where they open (`skin_dialog`).
+fn dialog_screen(shipped: &str) -> Option<&'static str> {
+    Some(match shipped {
+        "frame-welcome" => "welcome",
+        "frame-whatsnew" => "whats_new",
+        "help" => "help",
+        "worktree" => "worktree",
+        "machine-add" => "machine_add",
+        _ => return None,
+    })
+}
+
 fn terminal_menu_spec(name: &str, defaults: &Value, tab: &str, target: Value) -> Value {
     json!({ "mod": name, "kind": "popup",
         "width": defaults.get("width").and_then(Value::as_f64).unwrap_or(220.0),
@@ -5702,6 +5776,7 @@ impl Render for AppWindow {
         crate::bench::frame_start();
         crate::terminal::next_frame();
         window.set_rem_size(px(settings::ui_font_size()));
+        gpui::set_square_corners(self.chrome.corners == Some(crate::layout::CornerStyle::Square));
         // A terminal the person clicked into becomes the focused pane.
         let clicked = self
             .terms
@@ -5734,7 +5809,7 @@ impl Render for AppWindow {
         let focused = self.focused_path(window, cx);
         let tree = self.render_node(&self.chrome, &focused, None, cx);
         let tree = self.window_frame(tree, window, cx);
-        let overlays = self.render_overlays(window.viewport_size(), cx);
+        let overlays = self.render_overlays(window.viewport_size(), window.scale_factor(), cx);
         let tracker = self.float_tracker(cx);
         let win_tracker = self.window_tracker(cx);
         let pane_drag = self.pane_drag_layer(cx);
@@ -7179,10 +7254,41 @@ export default class SystemToast extends View {
         }).collect();
         mods.extend([&nocturne.toast, &nocturne.prompt_mod, &nocturne.confirm_mod, &nocturne.palette_mod, &nocturne.peek_mod, &nocturne.terminal_menu].into_iter().flatten().cloned());
         assert!(mods.len() > 6, "{mods:?}");
+        // Its own screens, square corners and a dithered dim; the others keep Herdr's.
+        for screen in ["welcome", "whats_new", "help", "update"] {
+            assert!(nocturne.dialog_mods.contains_key(screen), "nocturne draws no {screen}");
+        }
+        mods.extend(nocturne.dialog_mods.values().cloned());
+        assert_eq!(nocturne.corners, Some(crate::layout::CornerStyle::Square));
+        assert!(nocturne.scrim.as_ref().is_some_and(|s| s.dither));
+        for other in ["main", "terminals", "win98"] {
+            let l = super::default_layout(other);
+            assert!(l.corners.is_none() && l.scrim.is_none() && l.dialog_mods.is_empty(), "{other}");
+        }
         let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods");
         for m in mods {
             assert!(shipped.join(&m).join("main.js").is_file(), "nocturne names {m:?}, which doesn't ship");
         }
+    }
+
+    #[test]
+    fn the_layouts_dialog_mods_draw_the_shipped_screens_they_name() {
+        assert_eq!(super::dialog_screen("frame-welcome"), Some("welcome"));
+        assert_eq!(super::dialog_screen("frame-whatsnew"), Some("whats_new"));
+        assert_eq!(super::dialog_screen("machine-add"), Some("machine_add"));
+        assert_eq!(super::dialog_screen("worktree"), Some("worktree"));
+        assert_eq!(super::dialog_screen("help"), Some("help"));
+        // Settings and feedback stay the app's; the prompt, confirm and palette are chosen where they open.
+        for kept in ["frame-settings", "frame-feedback", "prompt", "confirm", "frame-palette", "nocturne"] {
+            assert_eq!(super::dialog_screen(kept), None, "{kept}");
+        }
+        let root: super::Node = serde_json::from_value(serde_json::json!({
+            "id": "root", "type": "row", "children": [],
+            "dialog_mods": { "welcome": "mine" }, "corners": "square", "scrim": { "dither": true }
+        })).unwrap();
+        assert_eq!(root.dialog_mods.get("welcome").map(String::as_str), Some("mine"));
+        let scrim = root.scrim.unwrap();
+        assert_eq!((scrim.color.as_str(), scrim.opacity, scrim.cell), ("#000000", 0.35, 1.0));
     }
 
     #[test]
