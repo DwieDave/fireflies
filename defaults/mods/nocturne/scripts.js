@@ -115,7 +115,7 @@ export const lastFailed = () => lastFailedRun()?.address ?? null;
 // ../nocturne-scripts/nix.js APP_MANAGEMENT: a mod can't import another's).
 const APP_MANAGEMENT = {
   match: "permission denied when trying to update apps",
-  hint: "Grant Herdr Core App Management in System Settings > Privacy & Security, then run it again",
+  hint: "Herdr Core needs App Management (System Settings > Privacy & Security). If it is already on, remove it and add it again",
   open: `open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles'; open -R "$HOME/.local/share/herdr-core/active/Herdr Core.app"`,
 };
 
@@ -146,11 +146,11 @@ export function tellFailures(list) {
   for (const r of fresh) keep[r.address] = 1;
   setShared(TOLD, keep);
   for (const r of fresh) {
-    // An admin run whose password dialog was cancelled (nocturne-scripts/nix.js CANCELLED).
+    // An admin run cancelled at its password prompt (nocturne-scripts/nix.js CANCELLED).
     const cancelled = r.admin && r.code === 130;
     if (!cancelled && r.plan) {
       needsAppManagement(r).then((grant) => notify(grant
-        ? { title: "Herdr Core needs App Management", body: `${r.name} · click to grant it`, level: "error", action: { name: "nocturne.scripts-grant" } }
+        ? { title: "Herdr Core needs App Management", body: `${r.name} · click to open the setting`, level: "error", action: { name: "nocturne.scripts-grant" } }
         : { title: `${r.name} failed · exit ${r.code}`, body: "click to see its output", level: "error", action: { name: "nocturne.scripts-failed" } }));
       continue;
     }

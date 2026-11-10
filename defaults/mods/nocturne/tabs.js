@@ -20,6 +20,7 @@ import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
 import { filesPane, toggleFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns } from "./scripts.js";
 import { runJobs, pendingJobs } from "./jobs.js";
+import { watchPrompts } from "./prompt.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
@@ -34,6 +35,8 @@ export default class Tabs {
     // The deck's queued jobs (jobs.js) run here, on the render queueing them
     // causes; the timer catches any that render missed.
     cx.timer.every(1500, () => { runJobs(); trackRuns().then(() => tellFailures(scriptRuns())); });
+    // A switch's sudo prompt gets its small window (prompt.js); it reads only while one runs.
+    cx.timer.every(700, () => { watchPrompts(); });
   }
 
   // Where the git button looks: the active space's folder, on its machine.

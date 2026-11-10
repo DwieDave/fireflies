@@ -27,6 +27,9 @@ import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, res
 const ART = "mods/nocturne/art";
 // The tab strip's note that the deck is open (../nocturne/scripts.js DECK).
 const DECK = "nocturne-scripts.deck";
+// The switch password windows ../nocturne/prompt.js opens, by run: this copy
+// is the bar of one when props has { password: address, name }.
+const PROMPTS = "nocturne-scripts.prompts";
 // The last scripts run per folder, newest first: { "<machine>:<folder>": [id] }.
 const RECENT = "nocturne-scripts.recent";
 // What each folder had last time, shown at once while it's looked at again.
@@ -67,6 +70,7 @@ function aside(s) {
 export default class ScriptsDeck extends View {
   init(_p, cx) {
     const p = props() ?? {};
+    if (p.password) { this.bar = { address: p.password, name: p.name ?? "switch" }; return; }
     this.folder = p.folder ?? null;
     this.on = p.on ?? null;
     this.key = `${this.on ?? ""}:${this.folder ?? ""}`;
@@ -250,7 +254,7 @@ export default class ScriptsDeck extends View {
     return v_flex().id("grant").h(h).flex_none().mx(12).mt(6).px(10).py(6).gap(4)
       .border(1).border_color(t.blocked)
       .child(h_flex().h(22).flex_none().gap(8).items_center()
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child("App Management needed"))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child("Couldn't update Nix Apps"))
         .child(div().id("grant-open").flex_none().h(22).px(8).flex().items_center().text_size(11)
           .bg(t.ansi0).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.ansi8))
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -388,7 +392,7 @@ export default class ScriptsDeck extends View {
     }
     return bar
       .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
-        .child(cur.row.s.admin === "osascript" ? "asks for a password first" : cur.row.s.admin ? "sudo asks in its terminal" : "in the background")))
+        .child(cur.row.s.admin ? "asks for your password" : "in the background")))
       .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "run & watch")));
   }
 
@@ -436,13 +440,32 @@ export default class ScriptsDeck extends View {
     cx.notify();
   }
 
+  /** The bar of a switch's password window (../nocturne/prompt.js): its name,
+   *  and cancel, which presses ctrl-c in the run (it ends "cancelled"). */
+  passwordBar(t) {
+    const { address, name } = this.bar;
+    const cancel = () => {
+      setShared(PROMPTS, { ...(shared(PROMPTS) ?? {}), [address]: { closed: true } });
+      hc(["keys", address, "ctrl+c"]).catch(() => null);
+      closeOverlay(props()?.overlay);
+    };
+    return h_flex().id("pw-bar").size_full().px(12).gap(8).items_center().text_size(12)
+      .child(svg(`${ART}/lock.svg`).size(9).flex_none().text_color(t.working))
+      .child(div().flex_none().text_color(t.foreground).child(name))
+      .child(div().flex_none().text_color(t.dim).child("· password"))
+      .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
+      .child(div().flex_none().text_size(11).text_color(t.dim).child("enter activates"))
+      .child(this.action(t, "pw-cancel", "cancel", t.blocked, cancel));
+  }
+
   render() {
     const t = theme();
+    if (this.bar) return this.passwordBar(t);
     const all = runs(withEnded(terminals(), shared(ENDED)));
     const rows = this.scripts ? rank(this.scripts, this.query, this.recent()) : [];
     const items = [...all.map((r) => ({ kind: "run", r })), ...rows.map((row) => ({ kind: "script", row }))];
     // The cursor starts on the first script that needs no password: a stray
-    // enter shouldn't open an administrator dialog.
+    // enter shouldn't ask for one.
     if (this.cursor < 0 || this.cursor >= items.length) {
       const safe = rows.findIndex((r) => !r.s.admin);
       this.cursor = rows.length ? all.length + Math.max(0, safe) : Math.max(0, Math.min(this.cursor, items.length - 1));
