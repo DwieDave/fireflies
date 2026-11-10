@@ -90,13 +90,27 @@ If `shared.json` is invalid, Herdr logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
 `herdr-app check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
-runs, jobs; the last 8 repos, under 768 KB, never tokens) in
+runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
 `data/nocturne-github/cache.json`: it shows that at once when opened and reads
 GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`) switches to the parent and back.
+Its third tab, Projects (`3`, or `nocturne-github.projects` in keys.json), is
+a GitHub Projects board: the projects linked to the repo (and its parent, for
+a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
+sort, column field and group-by swimlanes), `/` a filter in GitHub's syntax
+(`assignee:@me label:bug status:Ready is:open repo:name -label:x no:assignee`,
+field names like `priority:P1`, `sprint:@current`, `estimate:>2`, words).
+`h j k l` move, `m` or space carries a card (`hjkl`, `enter` drops, `esc` puts
+it back), `e` edits fields, `a` adds a draft, `i` makes a draft an issue,
+`x` archives, `enter` docks the card's detail, `o` opens it on GitHub, `-`
+folds a column, `z` a swimlane, `w` sets a column's limit. Edits show at once
+and roll back if GitHub refuses them. GitHub's API keeps no column limits or
+hidden columns, so limits and folds are Herdr's, per project, in shared state
+`nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
+`project` (`gh auth refresh -s project`); the tab says which is missing.
 
 ## The model: spaces, tabs, terminals
 
