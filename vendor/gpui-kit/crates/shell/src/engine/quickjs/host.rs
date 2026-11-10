@@ -46,7 +46,7 @@ use rquickjs::{
 use serde_json::Value as Json;
 
 use crate::{
-    capability::{Access, Capabilities, CapabilityError, Grant, is_openable_url},
+    capability::{Access, Capabilities, CapabilityError, Grant, is_link},
     policy::Policy,
     scope,
     storage::{Storage, persist},
@@ -111,10 +111,10 @@ pub fn install(_ctx: &Ctx<'_>, module: &Object<'_>) -> JsResult<()> {
 /// The rule itself is [`is_openable_url`], shared with `href` and the
 /// `TextView` default link handler.
 fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
-    if !is_openable_url(&url) {
+    if !is_link(&url) {
         return Err(Exception::throw_type(
             &ctx,
-            "cx.open_url(url) expects an absolute HTTP(S) URL with a host",
+            "cx.open_url(url) expects an absolute HTTP(S) URL with a host, or a file: URL",
         ));
     }
     with_app(&ctx, "cx.open_url(url)", move |app| crate::capability::open_url(&url, app))

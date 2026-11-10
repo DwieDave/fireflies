@@ -24,7 +24,7 @@ const MODS = {
   "nocturne-agents": ["Agents", "layers"], "nocturne-browser": ["Web", "monitor"],
   "nocturne-diff": ["Diff", "git-compare"], "nocturne-files": ["Files", "files"],
   "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
-  "nocturne-markdown": ["Markdown", "file-text"],
+  "nocturne-markdown": ["Markdown", "file-text"], "nocturne-image": ["Image", "image"],
   nocturne: ["Worktrees", "git-branch"],
 };
 // Terminal programs with a fitting chrome icon; any other terminal gets "terminal".
@@ -43,14 +43,16 @@ export function mark(t, p) {
 /** What a pane is called: the name a person gave its terminal, its mod's
  *  name, its agent's or shell's, its title, its program's. */
 export function paneName(p) {
-  return givenName(p.terminal) ?? markdownName(p) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
+  return givenName(p.terminal) ?? viewerName(p) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
 }
 
-/** A Markdown viewer goes by the file it shows (it notes that by slot in shared state). */
-function markdownName(p) {
-  if (p.mod !== "nocturne-markdown") return null;
+/** A file viewer (Markdown, image) goes by the file it shows (it notes that by
+ *  slot in shared `<mod>.titles`). */
+const VIEWERS = new Set(["nocturne-markdown", "nocturne-image"]);
+function viewerName(p) {
+  if (!VIEWERS.has(p.mod)) return null;
   const slot = p.props?.slot;
-  return (slot && shared("nocturne-markdown.titles")?.[slot]) || String(p.props?.path ?? "").split("/").pop() || null;
+  return (slot && shared(`${p.mod}.titles`)?.[slot]) || String(p.props?.path ?? "").split("/").pop() || null;
 }
 
 export function folder(cwd) {

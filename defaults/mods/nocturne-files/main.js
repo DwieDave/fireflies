@@ -11,11 +11,12 @@
 // so later picks open in that same nvim instead of a new pane.
 //
 // Click a file: edit it (a Markdown file: read it in the Markdown viewer,
-// nocturne-markdown; alt-click edits it as text). Click a folder: fold it;
+// nocturne-markdown, alt-click edits it as text; a picture: the image viewer,
+// nocturne-image, alt-click opens the system's app). Click a folder: fold it;
 // click it again quickly: edit the folder. Keys while it has focus:
 //   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
-//   enter          open a file, fold a folder    e  edit what's selected (as text)
+//   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
 //   -              root one folder up            .  root at the selected folder
 //   gg / G         top / bottom                  r  refresh
 
@@ -28,8 +29,15 @@ const PER_FOLDER = 500, TOTAL = 5000;
 const EDIT = "nocturne-edit";
 /** The editor wrapper: the one this mod ships, here; another machine's own. */
 const editTool = (on) => (on ? EDIT : `${appHome()}/mods/nocturne-files/bin/${EDIT}`);
+/** Files the app has a viewer for, by type: the command that opens one there,
+ *  and what the other way (alt-click, `e`) does instead. */
+const VIEWERS = [
+  { test: /\.(md|markdown)$/i, open: "markdown.open", other: "edit" },
+  { test: /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf])$/i, open: "image.open", other: "system" },
+];
+export const viewerFor = (name) => VIEWERS.find((v) => v.test.test(name)) ?? null;
 /** Markdown files open in the viewer (markdown.open), not the editor. */
-export const isMarkdown = (name) => /\.(md|markdown)$/i.test(name);
+export const isMarkdown = (name) => viewerFor(name)?.open === "markdown.open";
 const isEdit = (argv0) => argv0 === EDIT || Boolean(argv0?.endsWith(`/${EDIT}`));
 // Git status letter → theme color.
 const MARK = { A: "ansi2", M: "ansi3", D: "ansi1", U: "ansi1" };
@@ -202,14 +210,19 @@ export default class Files extends View {
     });
   }
 
-  /** Opens a file: Markdown in the viewer, beside this tab's editor or its
-   *  first other pane (else this one); anything else (or `asText`) in the editor. */
-  openFile(path, cx, asText) {
-    if (asText || !isMarkdown(path)) return this.edit(path, cx);
+  /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
+   *  viewer, beside this tab's editor or its first other pane (else this one);
+   *  anything else in the editor. `other` (alt-click, `e`): Markdown as text in
+   *  the editor, a picture in the system's app. */
+  openFile(path, cx, other) {
+    const viewer = viewerFor(path);
+    const abs = `${this.root}/${path}`, on = this.on ? { on: this.on } : {};
+    if (!viewer || (other && viewer.other === "edit")) return this.edit(path, cx);
+    if (other) return run(viewer.open, { path: abs, in: "system", ...on });
     const { tab, pane } = this.editorPane();
     const beside = pane ?? panes().find((p) => p.tab === tab && p.mod !== "nocturne-files" && !p.parked)
       ?? panes().find((p) => p.tab === tab && p.mod === "nocturne-files");
-    run("markdown.open", { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    run(viewer.open, { path: abs, ...(beside ? { pane: beside.pane } : {}), ...on });
   }
 
   // ---- input
@@ -253,7 +266,7 @@ export default class Files extends View {
       if (row.dir && this.folders.has(row.path)) this.toggle(row.path, cx);
       else if (row.depth > 0) this.select(rows, rows.findIndex((r) => r.path === parent(row.path)));
     } else if (k === "enter" && row) row.dir ? this.toggle(row.path, cx) : this.openFile(row.path, cx);
-    else if (k === "e") this.edit(row?.path ?? "", cx);
+    else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "-") { const from = this.root; this.reroot(parent(this.root), cx); this.pendingSel = from; }
     else if (k === "." && row) {
       const into = row.dir ? row.path : row.path.includes("/") ? parent(row.path) : "";
