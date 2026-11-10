@@ -12,11 +12,34 @@ export const stop = (_e, cx) => cx.stop_propagation();
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
+/** The app's zoom: lengths a script writes are drawn this much bigger, while
+ *  sizes (on_size_change) and pointer positions come back as drawn. */
+export function zoom() {
+  const z = Number(settings()?.zoom);
+  return z > 0 ? z : 1;
+}
+
+/** A drawn length (a measured size, a pointer move) in the px scripts write. */
+export const unzoom = (v) => v / zoom();
+
+/** A measured { width, height } in the px scripts write. */
+export const unzoomSize = (size) => ({ width: unzoom(size.width), height: unzoom(size.height) });
+
+/** The 6px gap between two panels, dragged to resize them: `axis` "x" for
+ *  side by side, "y" for stacked; `onDown(e, cx)` starts the drag. */
+export function splitter(t, id, axis, dragging, onDown) {
+  const line = div().absolute().when(axis === "x", (el) => el.top(0).bottom(0).left(2).w(2)).when(axis === "y", (el) => el.left(0).right(0).top(2).h(2));
+  return div().id(id).relative().flex_none()
+    .when(axis === "x", (el) => el.w(6).h_full().cursor_col_resize()).when(axis === "y", (el) => el.h(6).w_full().cursor_row_resize())
+    .hover((s) => s.bg(t.ansi0))
+    .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onDown(e, cx); cx.notify(); })
+    .when(dragging, (el) => el.child(line.bg(t.accent)));
+}
+
 /** A layer filling its parent with a 50% checker dither, in `cell`-px squares (Retina on macOS). */
 export function dither(color, cell = 1) {
-  const zoom = Number(settings()?.zoom) || 1;
   const dpr = appWindow()?.platform === "macos" ? 2 : 1;
-  return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
+  return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 
 /** A tone (model.js) -> its theme color. */
