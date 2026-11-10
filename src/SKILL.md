@@ -53,6 +53,11 @@ fitted (png, jpg, gif, webp, svg, heic, ...). It shows the file again when you
 overwrite it, so open it once and keep saving to the same path. Cmd/Ctrl-click
 on an image path in terminal output does the same.
 
+When the person wants to keep an eye on an agent (an orchestrator, say),
+`herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the
+top of the sidebar's agent list (`false` unpins). The pin stays with the
+terminal and ends with it.
+
 For a remote space:
 
 ```sh

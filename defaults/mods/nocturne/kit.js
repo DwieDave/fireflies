@@ -2,7 +2,8 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
-import { settings, window as appWindow, terminals, hc, home } from "herdr";
+import { settings, window as appWindow, terminals, hc, home, run, agents, focused } from "herdr";
+import { AT_LABEL, isPinned, sortAgents, moveInJar } from "./pins.js";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -45,6 +46,31 @@ export function givenName(terminal) {
 export function nameTerminal(terminal, name) {
   return hc(["label", terminal, `${NAME_LABEL}=${name.trim()}`]).catch(() => {});
 }
+
+/** A terminal's labels (an address), {} if it's gone. */
+export const labelsOf = (terminal) => terminals().find((x) => x.address === terminal)?.labels ?? {};
+
+/** Pinned to the jar at the top of the sky (pins.js: Herdr's herdr.pinned label). */
+export const pinned = (terminal) => isPinned(labelsOf(terminal));
+
+/** Pins a terminal's agent to the top of the sky, or unpins it: Herdr's
+ *  terminal.pin, and the time it joined the jar (its order there). */
+export function pin(terminal, on = !pinned(terminal)) {
+  if (!terminal) return;
+  run("terminal.pin", { terminal, pinned: on });
+  hc(["label", terminal, `${AT_LABEL}=${on ? Date.now() : ""}`]).catch(() => {});
+}
+
+/** The sidebar's agent order (pins.js sortAgents): { pinned, rest, all }. */
+export const sortedAgents = () => sortAgents([...agents()], agentRank, labelsOf);
+
+/** Moves a pinned agent one step up (-1) or down (+1) in the jar. */
+export function movePin(terminal, dir) {
+  for (const [t, kv] of moveInJar(sortedAgents().pinned, terminal, dir, Date.now())) hc(["label", t, kv]).catch(() => {});
+}
+
+/** The focused pane's terminal (keys and the palette pin it). */
+export const focusedTerminal = () => focused()?.terminal ?? null;
 
 /** Program keys with a dithered logo in art/logo-*.svg. */
 export const LOGO = { claude: "claude", "claude-code": "claude", opencode: "opencode", pi: "pi", codex: "codex" };
