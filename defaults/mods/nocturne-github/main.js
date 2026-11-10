@@ -20,10 +20,12 @@
 // with props { folder, on }; also works as a pane or tab (+ new > GitHub in
 // a new tab). `d` on a PR swaps the window for nocturne-diff on that PR, whose
 // esc brings this window back where it was (its state is in shared(STATE)).
+// A link opened from the floating window (o, a check, a link in a PR) opens
+// in a web pane beside the pane underneath and closes the window.
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify } from "herdr";
+import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import { repoOf } from "./gh.js";
 import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
 import Prs from "./prs.js";
@@ -170,6 +172,18 @@ export default class GitHub extends View {
     this.save();
     const w = shared(WINDOW);
     if (this.overlay && w?.id === this.overlay) setShared(WINDOW, null);
+  }
+
+  /** Opens a link like any mod's (a web pane beside the focused pane, or the
+   *  system's browser per `links`). From the floating window, a link that opens
+   *  in a web pane closes the window, so the page isn't hidden under it; the
+   *  pane goes beside the one the window floated over. */
+  openUrl(url, cx) {
+    if (!url) return;
+    const inApp = settings()?.links !== "system" && appWindow()?.platform === "macos" && /^https?:/i.test(url);
+    if (!this.overlay || !inApp) return cx.open_url(url);
+    run("app.open_url", { url, in: "app" });
+    this.closeWindow();
   }
 
   closeWindow() {
