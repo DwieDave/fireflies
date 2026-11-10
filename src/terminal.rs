@@ -44,6 +44,8 @@ enum LinkTarget {
 
 pub enum TerminalEvent {
     Peek(String),
+    /// A web link was clicked: the window decides where it opens (settings `links`).
+    OpenUrl(String),
     TitleChanged,
     /// The program ended.
     Ended,
@@ -2123,6 +2125,7 @@ impl Render for TerminalView {
                     && let Some((target, _)) = this.link_at(ev.position)
                 {
                     match target {
+                        LinkTarget::External(links::Target::Url(url)) if links::is_web(&url) => cx.emit(TerminalEvent::OpenUrl(url)),
                         LinkTarget::External(target) => links::open(&target),
                         LinkTarget::Terminal(address) => cx.emit(TerminalEvent::Peek(address)),
                     }
