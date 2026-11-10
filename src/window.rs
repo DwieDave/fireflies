@@ -6681,7 +6681,7 @@ mod tests {
         let restored: super::Node = serde_json::from_value(serde_json::to_value(&root).unwrap()).unwrap();
         assert_eq!(restored.toast.as_deref(), Some("personal-toast"));
         // The fork's older name still reads.
-        let old: super::Node = serde_json::from_value(serde_json::json!({"id": "root", "type": "row", "toast_mod": "personal-toast"})).unwrap();
+        let old: super::Node = serde_json::from_value(serde_json::json!({"id": "root", "type": "row", "children": [], "toast_mod": "personal-toast"})).unwrap();
         assert_eq!(old.toast.as_deref(), Some("personal-toast"));
     }
 
