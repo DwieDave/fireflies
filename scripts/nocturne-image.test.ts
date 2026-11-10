@@ -295,7 +295,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   expect(call(pic, "left")).toEqual([(800 - 1600 * scale) / 2]);
   // The bar: name, facts, place in the folder, zoom.
   const text = walk(tree).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
-  expect(text).toEqual(expect.arrayContaining(["IMG", "b.png", "1600 × 1200 · PNG · 2.0 KB", "2/3", `fit ${Math.round(scale * 100)}%`, "turn", "checker", "files", "open", "copy"]));
+  expect(text).toEqual(expect.arrayContaining(["IMG", "b.png", "1600 × 1200 · PNG · 2.0 KB", "2/3", `${Math.round(scale * 100)}%`, "fit", "100%", "turn", "checker", "files", "open", "copy"]));
 
   view.key({ key: "1", modifiers: {} }, cx);
   expect([view.view.scale, view.view.fit]).toEqual([1, false]);
@@ -330,6 +330,44 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   view.title();
   expect(world.shared["nocturne-image.titles"]).toEqual({ s1: "b.png" });
   expect(world.shared["nocturne-image.paths"]).toEqual({ s1: "/shots/b.png" });
+});
+
+test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
+  const { default: ImageView } = await load("nocturne-image/main.js", logic);
+  const view: any = Object.create(ImageView.prototype);
+  Object.assign(view, {
+    path: "/shots/s.png", on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
+    names: [], info: { format: "png", width: 3752, height: 2078, bytes: 2048 },
+    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-image/1-2048.png", view: null, gen: 1,
+  });
+  view.draw = () => {};
+  const cx = { notify() {}, stop_propagation() {} };
+  const label = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string")).join("");
+  const chips = () => {
+    const els = walk(view.render()).filter((e) => call(e, "on_click"));
+    return Object.fromEntries(els.map((e) => [label(e), e]));
+  };
+  const click = (name: string) => {
+    const chip = chips()[name];
+    expect(chip).toBeDefined();
+    call(chip, "on_click")[0]({}, cx);
+  };
+  const fit = fitScale(view.img(), view.port);
+  // Fitted: "100%" goes to 100%, "fit" keeps it fitted (not the other way round).
+  view.render();
+  click("fit");
+  expect([view.view.fit, view.view.scale]).toEqual([true, fit]);
+  click("100%");
+  expect([view.view.fit, view.view.scale]).toEqual([false, 1]);
+  // At 100% the same two chips, same labels (nothing moves under the pointer).
+  expect(Object.keys(chips())).toEqual(expect.arrayContaining(["fit", "100%"]));
+  click("100%");
+  expect([view.view.fit, view.view.scale]).toEqual([false, 1]);
+  click("fit");
+  expect([view.view.fit, view.view.scale]).toEqual([true, fit]);
+  // The scale itself is shown next to them.
+  const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
+  expect(text).toContain(percent(fit));
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {

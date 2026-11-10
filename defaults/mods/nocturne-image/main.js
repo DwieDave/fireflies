@@ -450,7 +450,11 @@ export default class ImageView extends View {
         .child(div().flex_none().text_color(t.dim).child(index >= 0 ? `${index + 1}/${this.names.length}` : `${this.names.length}`))
         .child(this.chip(t, "img-next", "›", (cx) => this.go(1, cx))))
       .when(Boolean(v) && this.ready(), (el) => el
-        .child(this.chip(t, "img-zoom", v.fit ? `fit ${percent(v.scale)}` : percent(v.scale), (cx) => (v.fit ? this.actual(cx) : this.fit(cx)), !v.fit))
+        // The scale, then two chips that each do what they say: one toggle labelled
+        // by its state ("fit 21%" zooming to 100%) read backwards and moved under the pointer.
+        .when(w >= 400, (e2) => e2.child(div().flex_none().text_color(t.dim).child(percent(v.scale))))
+        .child(this.chip(t, "img-fit", "fit", (cx) => this.fit(cx), v.fit))
+        .child(this.chip(t, "img-actual", "100%", (cx) => this.actual(cx), !v.fit && Math.abs(v.scale - 1) < 1e-9))
         .when(w >= 380, (e2) => e2.child(this.chip(t, "img-turn", this.note ?? (v.rot ? `turn ${v.rot * 90}°` : "turn"), (cx) => this.turn(1, cx), Boolean(v.rot))))
         .when(w >= 460, (e2) => e2.child(this.chip(t, "img-bg", this.checker ? "checker" : "dark", () => { this.checker = !this.checker; }, false))))
       .when(Boolean(this.path), (el) => el
