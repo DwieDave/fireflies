@@ -246,3 +246,53 @@ export function rollupTone(rows) {
   for (const t of ["failed", "working", "queued", "done", "stopped", "skipped"]) if (tones.has(t)) return t;
   return null;
 }
+
+// ---- the pull request list, in one GraphQL read of only the fields its rows
+// show: gh pr list --json statusCheckRollup reads every check of every PR
+// (100 contexts each); a row only needs the rollup's state.
+
+const ROW_FIELDS = "number title isDraft headRefName additions deletions reviewDecision updatedAt author { login } labels(first: 8) { nodes { name color } } commits(last: 1) { nodes { commit { statusCheckRollup { state } } } }";
+export const PR_LIMIT = 60;
+
+/** The query and variables for a filter's open PRs, newest first (as gh pr list orders them). */
+export function prListQuery(filter, full, limit = PR_LIMIT) {
+  const [owner, name] = String(full ?? "").split("/");
+  if (filter === "mine" || filter === "review") {
+    const who = filter === "mine" ? "author:@me" : "review-requested:@me";
+    return {
+      query: `query($q: String!, $n: Int!) { search(query: $q, type: ISSUE, first: $n) { nodes { ... on PullRequest { ${ROW_FIELDS} } } } }`,
+      vars: { q: `repo:${full} is:pr is:open ${who} sort:created-desc`, n: limit },
+    };
+  }
+  return {
+    query: `query($owner: String!, $name: String!, $n: Int!) { repository(owner: $owner, name: $name) { pullRequests(states: OPEN, first: $n, orderBy: { field: CREATED_AT, direction: DESC }) { nodes { ${ROW_FIELDS} } } } }`,
+    vars: { owner, name, n: limit },
+  };
+}
+
+/** The rows of a prListQuery answer: { number, title, ..., rollup } (rollup: SUCCESS, FAILURE, PENDING, ...). */
+export function prRows(data) {
+  const nodes = data?.search?.nodes ?? data?.repository?.pullRequests?.nodes ?? [];
+  return nodes.filter((n) => n && n.number != null).map((n) => ({
+    number: n.number, title: n.title, isDraft: Boolean(n.isDraft), headRefName: n.headRefName ?? null,
+    additions: n.additions ?? 0, deletions: n.deletions ?? 0, reviewDecision: n.reviewDecision ?? null, updatedAt: n.updatedAt ?? null,
+    author: n.author ? { login: n.author.login } : null,
+    labels: (n.labels?.nodes ?? []).map((l) => ({ name: l.name, color: l.color })),
+    rollup: n.commits?.nodes?.[0]?.commit?.statusCheckRollup?.state ?? null,
+  }));
+}
+
+const ROLLUP = { SUCCESS: "done", FAILURE: "failed", ERROR: "failed", PENDING: "working", EXPECTED: "queued" };
+/** A list row's tone: from the PR's checks once its view was read, else its rollup's state. */
+export function rowTone(p) {
+  if (p?.tone !== undefined) return p.tone;
+  if (Array.isArray(p?.statusCheckRollup)) return rollupTone(checkRows(p.statusCheckRollup));
+  return ROLLUP[p?.rollup] ?? null;
+}
+
+/** "just now", "2m ago", "3h ago": when the shown data was read. */
+export function readAgo(at, now = Date.now()) {
+  if (!at) return "";
+  const a = ago(new Date(at).toISOString(), now);
+  return a === "now" ? "just now" : `${a} ago`;
+}
