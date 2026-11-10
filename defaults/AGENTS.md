@@ -751,8 +751,11 @@ The main ones:
   leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
   `nocturne-pip` player, a resizable `kind: "window"` overlay with key `nocturne-pip`. While
-  the video is out, the browser pane is parked (its tab settled when it is the tab's only
-  pane) and comes back when the video goes home or into a pane. The player's bar: ↩ « ❚❚ »
+  the video is out, the browser pane is parked and comes back when the video goes home or
+  into a pane. When it is its tab's only pane, the whole tab is settled instead, after
+  showing the tab shown before it (else its neighbor; the only tab of its space: the space
+  shown before); ↩ and ✕ show the tab again, into a pane puts it back in the tab bar. The
+  only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
   shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Herdr)
   ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). Commands

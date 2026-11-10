@@ -10,8 +10,12 @@
 //   ⧉        the page's video in the nocturne-pip player, a Herdr window over
 //            every tab and space (command nocturne-browser.pip); the page goes
 //            with it, and comes back with ↩ or ✕ (or ⧉ again). Meanwhile this
-//            pane is parked (its tab settled, when it is the tab's only pane),
-//            and shown again when the video comes back or goes into a pane.
+//            pane is parked, and shown again when the video comes back or goes
+//            into a pane. The tab's only pane: the whole tab is put away
+//            (settled) and the tab shown before it shows; ↩ or ✕ shows the tab
+//            again, into a pane only brings it back to the tab bar. The only
+//            tab of its space: the space shown before it shows; the only tab
+//            of the only space stays.
 //   ↗        the page in the system's default browser
 //   </>      Safari's Web Inspector for the page, in a pane split beside it
 //            (again: closes it). That pane is this mod with props
@@ -31,7 +35,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, openOverlay, window as appWindow } from "herdr";
+import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, window as appWindow } from "herdr";
 
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
@@ -107,6 +111,11 @@ export default class Browser extends View {
     this.input.on("blur", (_e, cx) => { if (this.start) { this.editing = false; cx.notify(); } });
     this.editing = !this.start;
     if (this.editing) cx.timer.after(150, () => this.input.focus());
+    // The tabs shown lately (newest last, `{ space, tab }`): picture in picture
+    // puts this tab away and shows the one before. Polled gently: a mod isn't
+    // told when another tab shows.
+    this.seen = [];
+    cx.timer.every(500, () => this.noteShown());
     if (available()) {
       cx.spawn(async (cx) => {
         for (;;) {
@@ -210,12 +219,12 @@ export default class Browser extends View {
     // its popped-out window: the player shows it. Meanwhile the page is away.
     if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of } });
     if (e.event === "pip.enter") { this.away = true; this.pipOf = d.of; this.hide(); }
-    if (e.event === "pip.leave") { this.away = false; this.unhide(); }
+    if (e.event === "pip.leave") { this.away = false; this.unhide(true); }
     // The video went into a pane (not a parked chip): the page shows again.
     if (e.event === "pip.moved") {
       cx.timer.after(400, () => {
         const n = shared(PIP_PANE);
-        if (n?.of === this.pipOf && !n.park && panes().some((x) => x.pane === n.pane)) this.unhide();
+        if (n?.of === this.pipOf && !n.park && panes().some((x) => x.pane === n.pane)) this.unhide(false);
       });
     }
     if (e.event === "pip.start" && d.result === "none") this.error = "No video on this page.";
@@ -226,8 +235,35 @@ export default class Browser extends View {
     try { return herdr.nativeViewCall(ID, action, args ?? {}); } catch (err) { this.error = String(err?.message ?? err); return null; }
   }
 
-  /** While the video is in the player, this pane is out of the way: parked,
-   *  or, the tab's only pane, its tab settled (Nocturne lists no settled tab). */
+  noteShown() {
+    const f = focused();
+    if (!f?.tab || this.seen.at(-1)?.tab === f.tab) return;
+    this.seen = [...this.seen.filter((x) => x.tab !== f.tab), { space: f.space, tab: f.tab }].slice(-8);
+  }
+
+  /** Where to go when tab `away` (of space `space`) is put away: the tab shown
+   *  before it, else its neighbor; the only tab of its space: the space shown
+   *  before (its tab), else another space. Null: nowhere else to go. */
+  elsewhere(away, space) {
+    const all = spaces();
+    const tabOf = (id) => all.flatMap((s) => (s.tabs ?? []).map((c) => ({ ...c, space: s.id }))).find((c) => c.id === id);
+    const open = (c) => c && c.id !== away && !c.settled;
+    const here = all.find((s) => s.id === space)?.tabs ?? [];
+    const before = [...this.seen].reverse().map((x) => tabOf(x.tab)).filter(open);
+    const sameSpace = before.find((c) => c.space === space);
+    if (sameSpace) return sameSpace.id;
+    const i = here.findIndex((c) => c.id === away);
+    const near = [...here.slice(i + 1), ...here.slice(0, Math.max(0, i)).reverse()].find(open);
+    if (near) return near.id;
+    if (before[0]) return before[0].id;
+    const other = all.find((s) => s.id !== space && (s.tabs ?? []).some(open));
+    return other ? ((other.tabs ?? []).find((c) => c.active && open(c)) ?? (other.tabs ?? []).find(open)).id : null;
+  }
+
+  /** While the video is in the player, this pane is out of the way: parked;
+   *  the tab's only pane, its whole tab put away (settled: Nocturne lists no
+   *  settled tab but the shown one, so another tab shows first). The only tab
+   *  of the only space stays as it is: there's nothing else to show. */
   hide() {
     if (this.hidden) return;
     const me = this.ownPane();
@@ -236,20 +272,32 @@ export default class Browser extends View {
     if (placed.length > 1) {
       this.hidden = { pane: me.pane };
       run("pane.park", { pane: me.pane });
-    } else {
-      const tab = spaces().flatMap((s) => s.tabs ?? []).find((c) => c.id === me.tab);
-      if (!tab || tab.settled) return;
-      this.hidden = { tab: me.tab };
-      run("tab.settle", { id: me.tab });
+      return;
     }
+    const space = spaces().find((s) => (s.tabs ?? []).some((c) => c.id === me.tab));
+    const tab = space?.tabs.find((c) => c.id === me.tab);
+    if (!tab || tab.settled) return;
+    const shown = space.active && tab.active;
+    const to = shown ? this.elsewhere(me.tab, space.id) : null;
+    if (shown && !to) return;
+    // Show another first: settling the shown tab would keep it on the tab bar.
+    if (to) run("tab.select", { id: to });
+    this.hidden = { tab: me.tab };
+    run("tab.settle", { id: me.tab });
   }
 
-  /** Undoes `hide`, unless the person brought it back already. */
-  unhide() {
+  /** Undoes `hide`, unless the person brought it back already. `show`: the
+   *  tab shows again (↩, ✕), else it is only back in the tab bar (into a pane). */
+  unhide(show) {
     const h = this.hidden;
     this.hidden = null;
     if (h?.pane && panes().find((x) => x.pane === h.pane)?.parked) run("pane.unpark", { pane: h.pane });
-    if (h?.tab && spaces().flatMap((s) => s.tabs ?? []).find((c) => c.id === h.tab)?.settled) run("tab.unsettle", { id: h.tab });
+    if (!h?.tab) return;
+    const tab = spaces().flatMap((s) => s.tabs ?? []).find((c) => c.id === h.tab);
+    if (!tab) return;
+    // tab.select shows it and takes it out of the settled ones.
+    if (show) run("tab.select", { id: h.tab });
+    else if (tab.settled) run("tab.unsettle", { id: h.tab });
   }
 
   go(text, cx) {
