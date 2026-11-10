@@ -15,7 +15,7 @@ The default app home is `~/.config/herdr-app`, including on macOS and Windows (u
 `XDG_CONFIG_HOME` changes the config root. `HERDR_APP_HOME` selects an app home directly and takes precedence.
 
 This folder holds your settings, keys, layouts, mods, generated agent guide and API types.
-It also holds mod data, shared state, window positions, this screen's focus and zoom, update notes and cached media, and telemetry while enabled.
+It also holds mod data, shared state, window positions, this screen's focus and zoom, update notes and cached media.
 Mods may store sensitive data here. Herdr does not encrypt this folder.
 The [installed guide's file map](../defaults/AGENTS.md#the-files) explains the files.
 
@@ -44,25 +44,11 @@ Do not assume every download is notarized or signed.
 
 ## Telemetry
 
-Usage telemetry is **on by default**. Release builds send a small daily report to `https://telemetry.herdr.dev/v1/report` with a random install ID.
-Reports include app and core versions, OS and architecture, bucketed usage time and counts, known agent names, built-in layout names, mod counts, app command names, and fixed event counters.
-Custom layout names become `custom`; custom mod names are not sent.
-Terminal text, prompts, file contents, folder paths and free-text names are not included.
+Herdr collects and sends no usage data: no reports, no install ID.
+Earlier versions kept an install ID and unsent reports in a `telemetry` folder in the app home; Herdr deletes it on start.
+A `telemetry` key left in `settings.json` is ignored.
 
-Turn it off in **Settings → Privacy**. That page also lets you inspect the report.
-Or set this field in your existing `settings.json`:
-
-```json
-{
-  "telemetry": false
-}
-```
-
-Turning it off deletes the local install ID and unsent reports. It cannot recall reports already sent.
-For one run, set `DO_NOT_TRACK=1` or `HERDR_TELEMETRY=0`. CI environments disable collection too.
-Ordinary source builds collect locally while enabled but do not send, unless pointed at a test endpoint with `HERDR_TELEMETRY_URL`.
-
-Telemetry being off does not stop update checks, mod network requests or feedback you choose to send.
-Feedback is drafted for you to review and send, not sent silently.
+On its own, Herdr only goes online for update checks (release info, notes and their media); mods and web panes make their own requests.
+Feedback is not uploaded by Herdr: Send feedback opens a prefilled GitHub issue that you review and submit on GitHub.
 
 [Back to Herdr](../README.md)

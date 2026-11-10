@@ -89,7 +89,7 @@ Installed releases check for updates in the background and download a new app be
 Settings → Updates shows what is available. What's New opens after an update; you can open it again from the command palette.
 Builds from source do not update themselves.
 
-Usage telemetry is on by default in releases. Turn it off in Settings → Privacy.
+Herdr collects no usage data.
 Mods are trusted code, not sandboxed extensions. Read [security and privacy](docs/security.md) before installing someone else's mod.
 
 ## For agents

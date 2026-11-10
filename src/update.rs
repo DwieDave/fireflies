@@ -176,7 +176,6 @@ pub fn start() {
                     }
                     Err(e) => {
                         tracing::warn!("update check: {e}");
-                        crate::telemetry::count("app_update_failed");
                         wait = RETRY;
                         succeeded = false;
                     }
@@ -254,11 +253,9 @@ pub fn update_core() {
             Ok(now) => {
                 c.version = Some(now.trim_start_matches("hc ").to_owned());
                 c.ready = None;
-                crate::telemetry::count("core_update_ok");
             }
             Err(e) => {
                 c.error = Some(e);
-                crate::telemetry::count("core_update_failed");
             }
         }
     });
