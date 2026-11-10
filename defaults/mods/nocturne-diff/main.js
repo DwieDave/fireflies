@@ -4,7 +4,7 @@
 // base. Tests, config, assets and docs can be hidden to leave the business
 // code. In wide panes the file list's edge drags.
 // Opened from the Nocturne tab strip with props { folder, on }. With
-// { pr } (the GitHub window's `d`) it starts on a third scope, that pull
+// { pr, repo } (the GitHub window's `d`) it starts on a third scope, that pull
 // request's diff from `gh pr diff`; with { back } too it sits in the GitHub
 // window's place, and esc puts that window back.
 //
@@ -47,6 +47,7 @@ export default class Diff extends View {
     this.folder = pr.folder;
     this.on = pr.on ?? null;
     this.pr = pr.pr ?? null; // a pull request number: the "pr" scope
+    this.prRepo = pr.repo ?? null; // "owner/name" of that PR's repo (the GitHub window's)
     this.back = pr.back ?? null; // { mod, props }: the window to put back on esc
     this.overlay = pr.overlay ?? null;
     this.scope = this.pr ? "pr" : "work";
@@ -89,7 +90,7 @@ export default class Diff extends View {
       try {
         this.repo = this.repo ?? (this.folder ? await repo(this.folder, this.on) : null);
         if (!this.repo) { this.state = "norepo"; return; }
-        const { files, since } = this.scope === "pr" ? await prChanges(this.repo, this.pr) : await changes(this.repo, this.scope);
+        const { files, since } = this.scope === "pr" ? await prChanges(this.repo, this.pr, this.prRepo) : await changes(this.repo, this.scope);
         for (const f of files) f.kind = kind(f);
         this.files = files; this.since = since;
         this.state = "ready";
