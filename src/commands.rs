@@ -103,7 +103,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("app.welcome", &[], "Show the welcome again."),
     cmd("app.open_url", &[req("url"), opt("in")], "Open a web page (http or https) in a web pane beside the focused pane (in \"app\") or the system's browser (in \"system\"); default: settings.json links."),
     cmd("app.whats_new", &[], "Show what this release brought (it opens once by itself after an update)."),
-    cmd("app.feedback", &[opt("message"), opt("from")], "Draft feedback for the person to review and send (from: person or agent)."),
+    cmd("app.feedback", &[opt("message"), opt("from")], "Draft feedback as a GitHub issue for the person to review, open and submit there (from: person or agent)."),
     cmd("app.palette", &[], "Toggle the command palette: every command by name, with its key; calling again closes it."),
     cmd("app.settings", &[opt("section")], "Open the settings (section: look, alerts, updates)."),
     cmd("app.check_updates", &[], "Look for a newer Herdr and herdr-core now."),

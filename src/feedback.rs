@@ -1,197 +1,159 @@
-//! Explicit, person-reviewed beta feedback. No usage-data consent or install id.
-//! Screenshots are what the person pastes or picks, each shown before sending.
-use serde_json::{Value, json};
-use std::path::PathBuf;
+//! Feedback goes to GitHub issues: a new-issue page prefilled with the
+//! person's words and the versions, opened for them to read, add screenshots
+//! and submit there. Herdr itself uploads nothing.
 
-pub const MAX_IMAGES: usize = 3;
-const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+/// Where new issues are filed.
+pub const ISSUES: &str = "https://github.com/DwieDave/fireflies/issues/new";
+/// GitHub refuses longer new-issue links (about 8 KB); keep a margin.
+const MAX_URL: usize = 7500;
+const MAX_TITLE: usize = 80;
+const SHORTENED: &str = "\n\n[shortened to fit in a link]";
 
-const ENDPOINT: &str = "https://telemetry.herdr.dev/v1/feedback";
-
-fn endpoint() -> Option<String> {
-    std::env::var("HERDR_FEEDBACK_URL").ok().filter(|u| !u.is_empty())
-        .or_else(|| option_env!("HERDR_APP_RELEASE").map(|_| ENDPOINT.to_owned()))
+/// What the page is prefilled with.
+#[derive(Debug, PartialEq)]
+pub struct Issue {
+    pub title: String,
+    pub body: String,
+    pub url: String,
 }
 
-pub fn draft(message: &str, email: &str, images: usize, from: &str, layout: &str) -> Value {
-    json!({
-        "v": 1,
-        "from": if from == "agent" { "agent" } else { "person" },
-        "message": message.trim(),
-        "email": if email.trim().is_empty() { None } else { Some(email.trim()) },
-        "app": {
-            "version": env!("CARGO_PKG_VERSION"),
-            "os": std::env::consts::OS,
-            "arch": std::env::consts::ARCH,
-            "channel": "stable",
-        },
-        "core": { "version": crate::update::core().version.as_deref().map(crate::telemetry::version) },
-        "layout": if crate::window::shipped_layouts().contains(&layout) { layout } else { "other" },
-        "images": images,
-    })
-}
-
-/// Where the form keeps the screenshots it shows (its data folder: `image()` reads from the app home).
-fn shots_dir() -> PathBuf { crate::mods::app_dir().join("data").join("frame-feedback") }
-
-fn sniff(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(b"\x89PNG\r\n\x1a\n") { Some("png") }
-    else if bytes.starts_with(&[0xff, 0xd8, 0xff]) { Some("jpg") }
-    else { None }
-}
-
-/// Keeps a pasted or picked image for the form: PNG or JPEG as is, any other
-/// image as PNG. Returns its path from the app home.
-pub fn attach(bytes: &[u8]) -> Result<String, String> {
-    let (bytes, ext) = match sniff(bytes) {
-        Some(ext) => (bytes.to_vec(), ext),
-        None => {
-            let img = image::load_from_memory(bytes).map_err(|_| "That isn't an image Herdr can read.".to_owned())?;
-            let mut png = std::io::Cursor::new(Vec::new());
-            img.write_to(&mut png, image::ImageFormat::Png).map_err(|_| "Couldn't convert that image.".to_owned())?;
-            (png.into_inner(), "png")
-        }
-    };
-    if bytes.len() > MAX_IMAGE_BYTES { return Err("That image is over 5 MB.".into()); }
-    let dir = shots_dir();
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or_default();
-    let name = format!("shot-{stamp}.{ext}");
-    std::fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
-    Ok(format!("data/frame-feedback/{name}"))
-}
-
-/// Picker and external drops share the same conversion and size limits.
-pub fn attach_files(paths: &[PathBuf]) -> Vec<Value> {
-    paths.iter().take(MAX_IMAGES).map(|p| {
-        match std::fs::read(p) {
-            Ok(bytes) => match attach(&bytes) {
-                Ok(path) => json!({ "path": path }),
-                Err(error) => json!({ "error": error }),
-            },
-            Err(_) => json!({ "error": "Couldn't read that file." }),
-        }
-    }).collect()
-}
-
-/// Drops the form's screenshots (a new form starts empty; a sent one is done with them).
-pub fn clear_shots() {
-    let Ok(entries) = std::fs::read_dir(shots_dir()) else { return };
-    for e in entries.flatten() {
-        if e.file_name().to_string_lossy().starts_with("shot-") { let _ = std::fs::remove_file(e.path()); }
-    }
-}
-
-/// A path `attach` returned, checked again before it leaves the machine.
-fn shot_file(rel: &str) -> Result<PathBuf, String> {
-    let name = rel.strip_prefix("data/frame-feedback/").filter(|n| n.starts_with("shot-") && !n.contains(['/', '\\']))
-        .ok_or("Unknown screenshot.")?;
-    let path = shots_dir().join(name);
-    let bytes = std::fs::read(&path).map_err(|_| "A screenshot is gone. Remove it and add it again.".to_owned())?;
-    if bytes.len() > MAX_IMAGE_BYTES || sniff(&bytes).is_none() { return Err("A screenshot isn't a PNG or JPEG under 5 MB.".into()); }
-    Ok(path)
-}
-
-pub fn available() -> bool { endpoint().is_some() }
-
-fn validate(body: &Value) -> Result<(), String> {
-    let message = body["message"].as_str().unwrap_or_default();
-    if message.is_empty() { return Err("Write a message first.".into()); }
-    if message.encode_utf16().count() > 4000 { return Err("Keep the message to 4000 characters.".into()); }
-    if let Some(email) = body["email"].as_str() {
-        let valid = email.split_once('@').is_some_and(|(local, domain)| {
-            !local.is_empty() && domain.split_once('.').is_some_and(|(a, b)| !a.is_empty() && !b.is_empty())
-                && !domain.contains('@')
-        });
-        if email.len() > 254 || !valid || email.chars().any(char::is_whitespace) {
-            return Err("Enter a plain email address, or leave it blank.".into());
-        }
-    }
-    Ok(())
-}
-
-pub async fn send(body: Value, shots: Vec<String>) -> Result<(), String> {
-    validate(&body)?;
-    if shots.len() > MAX_IMAGES || body["images"].as_u64() != Some(shots.len() as u64) {
-        return Err("Up to 3 screenshots.".into());
-    }
-    let files = shots.iter().map(|s| shot_file(s)).collect::<Result<Vec<_>, _>>()?;
-    let url = endpoint().ok_or("This build was made from source and doesn't send feedback. Use a release build.")?;
-    let (tx, rx) = async_channel::bounded(1);
-    std::thread::spawn(move || {
-        let result = post(&url, &body.to_string(), &files);
-        if result.is_ok() { clear_shots(); }
-        let _ = tx.send_blocking(result);
+/// A release version (`0.2.0`, `0.2.0-rc.1`), else `other`: never a free string.
+pub(crate) fn release_version(v: &str) -> String {
+    let v = v.trim().trim_start_matches("hc ").trim_start_matches('v');
+    let number = |s: &str| !s.is_empty() && s.len() <= 4 && s.bytes().all(|b| b.is_ascii_digit());
+    let (core, pre) = v.split_once('-').map_or((v, None), |(c, p)| (c, Some(p)));
+    let parts: Vec<&str> = core.split('.').collect();
+    let pre_ok = pre.is_none_or(|p| {
+        let (label, n) = p.split_once('.').map_or((p, None), |(l, n)| (l, Some(n)));
+        matches!(label, "alpha" | "beta" | "rc" | "preview") && n.is_none_or(number)
     });
-    rx.recv().await.map_err(|_| "The feedback request was lost.".to_owned())?
+    if parts.len() == 3 && parts.iter().all(|p| number(p)) && pre_ok { v.to_owned() } else { "other".into() }
 }
 
-/// Text alone goes as JSON (what every version sends); with screenshots, as a
-/// form: the same JSON in `feedback`, each image in `image`.
-fn post(url: &str, body: &str, files: &[PathBuf]) -> Result<(), String> {
-    use std::io::Write;
-    use std::process::Stdio;
-    let null = if cfg!(windows) { "NUL" } else { "/dev/null" };
-    let network = || "Couldn't reach the feedback server. Check your connection and try again.".to_owned();
-    let mut args: Vec<String> = ["-sS", "--max-time", "60", "-X", "POST"].map(String::from).to_vec();
-    if files.is_empty() {
-        args.extend(["-H", "content-type: application/json", "--data-binary", "@-"].map(String::from));
-    } else {
-        args.extend(["-F".into(), "feedback=<-;type=application/json".into()]);
-        for f in files {
-            let kind = if f.extension().is_some_and(|e| e == "png") { "image/png" } else { "image/jpeg" };
-            args.extend(["-F".into(), format!("image=@{};type={kind}", f.display())]);
+/// Percent-encodes everything but RFC 3986's unreserved characters.
+fn encode(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for b in text.bytes() {
+        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
+            out.push(b as char);
+        } else {
+            out.push_str(&format!("%{b:02X}"));
         }
     }
-    args.extend(["-o", null, "-w", "%{http_code}", url].map(String::from));
-    let mut child = crate::spawn::command(crate::update::system("curl"))
-        .args(&args)
-        .stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::null()).spawn().map_err(|_| network())?;
-    if child.stdin.take().ok_or_else(network)?.write_all(body.as_bytes()).is_err() {
-        let _ = child.kill();
-        let _ = child.wait();
-        return Err(network());
+    out
+}
+
+fn encoded_len(text: &str) -> usize {
+    text.bytes().map(|b| if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') { 1 } else { 3 }).sum()
+}
+
+fn footer(from: &str, core: Option<&str>) -> String {
+    let mut f = String::from("\n\n---\n");
+    if from == "agent" {
+        f.push_str("_Drafted by an agent._\n");
     }
-    let out = child.wait_with_output().map_err(|_| network())?;
-    if !out.status.success() { return Err(network()); }
-    match String::from_utf8_lossy(&out.stdout).trim() {
-        "204" => Ok(()),
-        "429" => Err("Too many, try in a minute.".into()),
-        "503" => Err("Not taking feedback right now. Try again later.".into()),
-        "400" => Err("The server couldn't accept this feedback. Check the message and email.".into()),
-        "413" => Err("The feedback is too large. Shorten the message or remove a screenshot.".into()),
-        _ => Err("The feedback server returned an unexpected answer. Try again later.".into()),
+    f.push_str(&format!("- Herdr: {}\n", env!("CARGO_PKG_VERSION")));
+    f.push_str(&format!("- herdr-core: {}\n", core.map(release_version).unwrap_or_else(|| "unknown".into())));
+    f.push_str(&format!("- OS: {} {}\n", std::env::consts::OS, std::env::consts::ARCH));
+    f.push_str("\nScreenshots help: paste or drop them into this issue.");
+    f
+}
+
+/// The new-issue page for `message`. The title is `title`, else the
+/// message's first line; a long message is cut to keep the link working.
+pub fn issue(title: &str, message: &str, from: &str, core: Option<&str>) -> Issue {
+    let message = message.trim();
+    let title = Some(title.trim()).filter(|t| !t.is_empty()).or_else(|| message.lines().next().map(str::trim)).unwrap_or_default();
+    let title: String = match title.char_indices().nth(MAX_TITLE) {
+        Some((i, _)) => format!("{}…", title[..i].trim_end()),
+        None => title.to_owned(),
+    };
+    let footer = footer(from, core);
+    let head = format!("{ISSUES}?title={}&body=", encode(&title));
+    let room = MAX_URL.saturating_sub(head.len() + encoded_len(&footer));
+    let mut kept = message.len();
+    if encoded_len(message) > room {
+        let room = room.saturating_sub(encoded_len(SHORTENED));
+        let mut used = 0;
+        kept = 0;
+        for (i, c) in message.char_indices() {
+            used += encoded_len(c.encode_utf8(&mut [0; 4]));
+            if used > room {
+                break;
+            }
+            kept = i + c.len_utf8();
+        }
     }
+    let shortened = if kept < message.len() { SHORTENED } else { "" };
+    let body = format!("{}{shortened}{footer}", &message[..kept]);
+    let url = format!("{head}{}", encode(&body));
+    Issue { title, body, url }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[test]
-    fn payload_is_text_only_and_custom_layouts_are_hidden() {
-        let body = draft("  broken  ", "  ", 2, "agent", "private-layout");
-        assert_eq!(body["message"], "broken");
-        assert_eq!(body["email"], Value::Null);
-        assert_eq!(body["from"], "agent");
-        assert_eq!(body["layout"], "other");
-        assert_eq!(body["images"], 2);
-        assert_eq!(body.as_object().unwrap().len(), 8);
-        assert!(body.get("install").is_none());
-        assert_eq!(draft("ok", "a@b.c", 0, "person", "main")["layout"], "main");
-    }
-    #[test]
-    fn invalid_message_and_email_are_explained() {
-        for (message, email) in [("", ""), (&"x".repeat(4001), ""), ("ok", "bad"), ("ok", "a b@c.d")] {
-            assert!(validate(&draft(message, email, 0, "person", "main")).is_err());
+
+    fn decode(text: &str) -> String {
+        let bytes = text.as_bytes();
+        let mut out = Vec::new();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'%' {
+                out.push(u8::from_str_radix(&text[i + 1..i + 3], 16).unwrap());
+                i += 3;
+            } else {
+                out.push(bytes[i]);
+                i += 1;
+            }
         }
-        assert!(validate(&draft("ok", "a@b.c", 0, "person", "main")).is_ok());
+        String::from_utf8(out).unwrap()
     }
+
     #[test]
-    fn only_png_and_jpeg_leave_as_they_are() {
-        assert_eq!(sniff(b"\x89PNG\r\n\x1a\nrest"), Some("png"));
-        assert_eq!(sniff(&[0xff, 0xd8, 0xff, 0xe0]), Some("jpg"));
-        assert_eq!(sniff(b"GIF89a"), None);
-        assert!(shot_file("data/frame-feedback/../../settings.json").is_err());
-        assert!(shot_file("/etc/passwd").is_err());
+    fn the_page_holds_the_message_and_versions() {
+        let i = issue("", "  Tabs flicker\nwhen I resize & drag  ", "agent", Some("hc 0.4.2"));
+        assert_eq!(i.title, "Tabs flicker");
+        assert!(i.body.starts_with("Tabs flicker\nwhen I resize & drag\n\n---\n"), "{}", i.body);
+        for part in ["Drafted by an agent", concat!("- Herdr: ", env!("CARGO_PKG_VERSION")), "- herdr-core: 0.4.2", std::env::consts::OS, "Screenshots"] {
+            assert!(i.body.contains(part), "{part}: {}", i.body);
+        }
+        let (head, query) = i.url.split_once('?').unwrap();
+        assert_eq!(head, ISSUES);
+        let (title, body) = query.strip_prefix("title=").unwrap().split_once("&body=").unwrap();
+        assert_eq!((decode(title), decode(body)), (i.title.clone(), i.body.clone()));
+        assert_eq!(i.url.matches('&').count(), 1);
+        assert!(!i.url.contains([' ', '\n', '#']), "{}", i.url);
+    }
+
+    #[test]
+    fn a_given_title_wins_and_long_titles_are_cut() {
+        assert_eq!(issue("Crash on quit", "details", "person", None).title, "Crash on quit");
+        assert!(issue("", "details", "person", None).body.contains("- herdr-core: unknown"));
+        assert!(!issue("", "details", "person", None).body.contains("agent"));
+        let long = issue(&"t".repeat(200), "x", "person", None).title;
+        assert_eq!(long.chars().count(), MAX_TITLE + 1);
+    }
+
+    #[test]
+    fn long_messages_are_shortened_to_fit_a_link() {
+        for c in ["a", "ü", "😀", "a &"] {
+            let i = issue("", &c.repeat(20_000), "person", Some("0.1.0"));
+            assert!(i.url.len() <= MAX_URL, "{c}: {}", i.url.len());
+            assert!(i.body.contains("[shortened to fit in a link]") && i.body.contains("- OS:"), "{c}");
+        }
+        let short = issue("", "fine", "person", None);
+        assert!(!short.body.contains("shortened"));
+    }
+
+    #[test]
+    fn versions_are_releases_or_other() {
+        assert_eq!(release_version("0.2.0"), "0.2.0");
+        assert_eq!(release_version("hc 0.1.5"), "0.1.5");
+        assert_eq!(release_version("0.2.0-rc.1"), "0.2.0-rc.1");
+        assert_eq!(release_version("0.2.0-my/secret path"), "other");
+        assert_eq!(release_version("hc 0.1.5-acmeclient"), "other");
+        assert_eq!(release_version("0.1.5-rc.x"), "other");
+        assert_eq!(release_version("dev"), "other");
     }
 }
