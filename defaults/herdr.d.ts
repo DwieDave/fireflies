@@ -94,7 +94,7 @@ export function playSound(sound: string): null;
  *   Shipped layouts/mods are replaced at start; edits move to <name>-edited.
  *   Herdr (main) inherits settings; Herdr 98 and Terminals bring their own look. Clone to change shipped looks beyond theme picks.
  *   layout.reset {name?} resets a shipped layout and its clicks.
- * App: mod.open {name}, overlay.close {id?}, app.help, app.reset, app.theme {name}, app.zoom_in|zoom_out|zoom_reset.
+ * App: mod.open {name}, overlay.close {id?}, overlay.resizable {id, resizable}, app.help, app.reset, app.theme {name}, app.zoom_in|zoom_out|zoom_reset.
  * Mods: "<mod>.<command>" delivers <command> to that mod's nextCommand().
  */
 export function run(name: string, args?: Record<string, unknown>): null;
@@ -399,7 +399,8 @@ export interface OverlaySpec {
   keep?: boolean;
   /** A window people resize by its edges and corners: never below `min` (px, default 120×80)
    *  nor bigger than the app window, keeping `aspect` (width / height) once `chrome` (px taken
-   *  by a bar or border, width and height) is taken off. With `key`, its size is remembered. */
+   *  by a bar or border, width and height) is taken off. With `key`, its size is remembered.
+   *  `run("overlay.resizable", { id, resizable })` changes it while open (a new aspect refits it). */
   resizable?: boolean | { min?: [number, number]; aspect?: number; chrome?: [number, number] };
   /** px, or up to 1: a share of the window. */
   width?: number;

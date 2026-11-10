@@ -769,17 +769,20 @@ The main ones:
   (draw a placeholder; the page gets `pip.leave` when it's back). Actions: `pip.toggle`
   (play/pause), `pip.seek { by }` (seconds, back when negative), `pip.mute { muted? }`
   (sound off/on; without `muted`, the other way round), `pip.sync` (nothing): each answers
-  with event `pip.state { result: "playing" | "paused", muted }`. `pip.back` (the page goes
+  with event `pip.state { result: "playing" | "paused", muted, width, height }` (the video's
+  own size, for its real shape). While lifted, the video's own controls are hidden. `pip.back` (the page goes
   home playing on, and its pane takes focus, across tabs and spaces, out of a chip too),
   `pip.close` (home, paused), `pip.popOut { colors: { background, foreground, dim, border } }`
   (a square, resizable window above every app and space, in the screen's bottom right
-  corner, with ↩ ⇲ « ❚❚ » sound ✕, whose ⇲ sends the page `pip.popIn { of }`; the view may
-  go). The newest `pip` view of a page holds its video: when another takes it (a pane, out
+  corner, with the Nocturne player's bar in its order, ↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕, keeping the
+  video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn { of, then }` (`then`:
+  null, `"pane"` or `"park"`, for the player to go on with); the view may go). The newest `pip` view of a page holds its video: when another takes it (a pane, out
   of Herdr), the old one and the page get `pip.moved` (the page's with `{ popped }`). Event
   `pip.ended`: the page went home (also on a new page, a crash, a closed pane, or the video
   leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
-  `nocturne-pip` player, a resizable `kind: "window"` overlay with key `nocturne-pip`. While
+  `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip` that resizes in
+  its video's real shape (`overlay.resizable` once `pip.state` gives the size). While
   the video is out, the browser pane is parked and comes back when the video goes home or
   into a pane. When it is its tab's only pane, the whole tab is settled instead, after
   showing the tab shown before it (else its neighbor; the only tab of its space: the space
@@ -787,10 +790,12 @@ The main ones:
   only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
   shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Herdr)
-  ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). Commands
+  ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). The
+  control under the pointer shows its name in the bar's title (tooltips would be drawn under
+  the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
   `.close`; Nocturne's palette lists them while the player window is open.
-- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
+- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`,
@@ -1180,7 +1185,9 @@ All of it is in `herdr.d.ts`. In short:
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
-  border) is taken off; a keyed one remembers its size. A video player:
+  border) is taken off; a keyed one remembers its size (refit to its aspect when it opens).
+  `overlay.resizable {id, resizable}` changes that while it is open; a new aspect refits its
+  height at its width now (a player learning its video's real shape). A video player:
   `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
   A window can hold a layout, terminals too: a terminal keeps its presses
   (selecting text), so give it a mod block to drag by, a title bar:

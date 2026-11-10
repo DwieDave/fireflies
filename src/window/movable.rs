@@ -261,6 +261,34 @@ impl AppWindow {
             .collect()
     }
 
+    /// `overlay.resizable`: how a window resizes from now on; with an aspect,
+    /// it takes that shape at its width now (a video's real one, once known).
+    pub(super) fn window_resizable(&mut self, id: &str, spec: Option<&Value>, room: Size<Pixels>) -> Result<(), String> {
+        let measured = self.bounds.borrow().get(&format!("overlay:{id}")).copied();
+        let o = self.overlays.iter_mut().find(|o| o.id == id && o.kind == OverlayKind::Window).ok_or_else(|| format!("no window {id:?}"))?;
+        o.resize = Resize::parse(spec);
+        let (Some(r), Some(b)) = (o.resize, measured) else { return Ok(()) };
+        if r.aspect.is_none() {
+            return Ok(());
+        }
+        let zoom = f32::from(settings::z(1.0));
+        let (_, _, w, h) = r.resized(
+            (0.0, 0.0, f32::from(b.size.width), f32::from(b.size.height)),
+            [false, false, true, false],
+            (0.0, 0.0),
+            (f32::from(room.width), f32::from(room.height)),
+            zoom,
+        );
+        o.size = size((w / zoom).max(1.01), (h / zoom).max(1.01));
+        o.fit = false;
+        // Stays where it is (a centered one would move by half the change).
+        o.place.get_or_insert(b.origin);
+        if let Some(k) = &o.key {
+            remember_size(k, o.size);
+        }
+        Ok(())
+    }
+
     fn resize_press(&mut self, id: &str, edges: [bool; 4], at: Point<Pixels>, room: Size<Pixels>, cx: &mut Context<Self>) {
         let Some(b) = self.bounds.borrow().get(&format!("overlay:{id}")).copied() else { return };
         self.win_drag = Some(WinDrag { id: id.to_owned(), grab: at - b.origin, down: at, pointer: at, moving: false, resize: Some((edges, b)), room });
@@ -398,6 +426,13 @@ mod resize_tests {
         assert_eq!((w, h, x + w, y + h), (500.0, 270.0, 410.0, 230.0));
         // The bottom edge sets the width.
         assert_eq!(r.resized((0.0, 0.0, 400.0, 220.0), [false, false, false, true], (0.0, 50.0), ROOM, 1.0).2, 500.0);
+    }
+
+    #[test]
+    fn a_new_aspect_refits_the_height_at_the_same_width() {
+        // As overlay.resizable and a remembered size do: no drag, the width leads.
+        let r = Resize { min: (240.0, 158.0), aspect: Some(4.0 / 3.0), chrome: (2.0, 24.0) };
+        assert_eq!(r.resized((0.0, 0.0, 386.0, 238.0), [false, false, true, false], (0.0, 0.0), ROOM, 1.0), (0.0, 0.0, 386.0, 312.0));
     }
 
     #[test]
