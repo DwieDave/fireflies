@@ -221,7 +221,7 @@ export default class Actions {
     else if (k === "b") this.showRuns(this.filter ? null : this.app.repo?.branch ? { branch: this.app.repo.branch, label: this.app.repo.branch } : null, cx);
     else if (k === "o" && r) {
       const j = f !== "runs" ? this.job() : null;
-      cx.open_url(j?.html_url ?? r.html_url);
+      this.app.openUrl(j?.html_url ?? r.html_url, cx);
     } else return false;
     return true;
   }
