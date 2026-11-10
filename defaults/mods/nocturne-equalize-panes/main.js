@@ -3,6 +3,8 @@
 //   ▦  All panes     every row and column of the tab gets an even share
 //   ▥  This row      the panes side by side with this one
 //   ▤  This column   the panes stacked with it
+//   ▦  As a grid     every pane of the tab rearranged into an even grid
+//                    (nocturne.gridify; Nocturne's sky runs it)
 //
 // Each is pane.equalize {scope, pane}; fixed widths (a px size) stay. The
 // row under the cursor sits on a dithered band with a blue edge, like
@@ -50,7 +52,7 @@ export default class EqualizePanes extends View {
   pick(row) {
     if (!row || row.off) return;
     this.close();
-    run("pane.equalize", row.args);
+    run(row.command, row.args);
   }
 
   render() {

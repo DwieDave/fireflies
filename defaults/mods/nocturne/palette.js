@@ -44,6 +44,8 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/nocturne-equalize-panes/grid.svg", bind: "nocturne.gridify",
+    title: "Gridify panes", words: "grid tile arrange rearrange even out equalize layout", go: () => run("nocturne.gridify") });
   // The picture in picture player (nocturne-pip), while its window is open.
   if (shared("nocturne-pip.player")) {
     for (const [cmd, icon, title, words] of [
@@ -76,9 +78,9 @@ const NAMED = [
   ["pane.unpark", {}, "Pane", "Unpark pane", "restore dock bottom chip show"],
   ...["left", "right", "up", "down"].map((d) => ["pane.go", { direction: d }, "Pane", `Focus pane ${d}`, "move go"]),
   ...["left", "right", "up", "down"].map((d) => ["pane.swap", { direction: d }, "Pane", `Swap pane ${d}`, "move"]),
-  ["pane.equalize", { scope: "all" }, "Pane", "Even out all panes", "equalize balance same size grid"],
-  ["pane.equalize", { scope: "row" }, "Pane", "Even out this row", "equalize balance same width side by side"],
-  ["pane.equalize", { scope: "column" }, "Pane", "Even out this column", "equalize balance same height stacked"],
+  ["pane.equalize", { scope: "all" }, "Pane", "Equalize panes", "even out balance same size grid all"],
+  ["pane.equalize", { scope: "row" }, "Pane", "Equalize this row", "even out balance same width side by side"],
+  ["pane.equalize", { scope: "column" }, "Pane", "Equalize this column", "even out balance same height stacked"],
   ["space.new", {}, "Space", "New space", "workspace"],
   ["space.rename", {}, "Space", "Rename space", "workspace"],
   ["space.close", {}, "Space", "Close space", "workspace kill"],
