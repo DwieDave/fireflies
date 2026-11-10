@@ -782,8 +782,15 @@ The main ones:
   nearest column; none: an error). Siblings keep their total weight; fixed `px` sizes stay.
   Replies `{ok, changed}`; saved like any layout change. Keys: `"pane.equalize:row"`.
   Nocturne's pane header ▦ button and pane menu open the `nocturne-equalize-panes` popup
-  (all / row / column); its palette has Even out all panes / this row / this column, and
-  cmd-alt-e (macOS) evens all.
+  (all / row / column / as a grid); its palette has Equalize panes / this row / this column,
+  and cmd-alt-e (macOS) evens all.
+  Nocturne's `nocturne.gridify` (palette "Gridify panes", cmd-alt-g on macOS, the pane
+  header's grid button with three or more panes, the popup's "As a grid") rearranges every
+  placed pane of the shown tab into an even grid: ceil(sqrt(n)) columns, rows filled left to
+  right in the tab's pane order, a short last row stretched, then equalized. Terminals and
+  mods keep running, parked panes stay parked, focus stays. It moves the panes through a
+  holding tab with `pane.move` (which can't move a pane inside its own tab), so the tab
+  strip shows a "⧉ gridify" tab for a moment.
   `pane.swap {direction}` uses geometry only. Focus history lasts until the window closes.
   `pane.swap {target}` trades the places of `pane` (default: the focused one) and
   `target`, another pane of the same tab; give `direction` or `target`, not both.

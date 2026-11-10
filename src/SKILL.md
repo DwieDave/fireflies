@@ -113,6 +113,14 @@ it). Fixed px sizes stay. A 3x2 grid: split, then equalize all:
 herdr-app do pane.equalize '{"scope":"all"}'
 ```
 
+In the Nocturne layout, `nocturne.gridify` rearranges the shown tab's placed
+panes into an even grid (about square, in their order) and equalizes it; the
+terminals keep running:
+
+```sh
+herdr-app do nocturne.gridify
+```
+
 `pane.park {pane?, index?}` moves a pane out of the arrangement into a chip
 row at the bottom of its tab; it keeps running and stays in the tab (`ls`
 lists it under the tab's `parked`; a mod pane keeps running too). A tab keeps one pane in place.

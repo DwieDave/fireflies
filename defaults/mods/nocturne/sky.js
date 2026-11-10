@@ -7,7 +7,8 @@
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
 //            working drifts amber, done glows green below them (kit.js
-//            agentRank), idle rests in the grass;
+//            agentRank), idle rests in the grass; how each flies and
+//            glows is flight.js;
 //            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -36,6 +37,8 @@ import { toggleFiles } from "./files.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
+import { gridify } from "./gridify.js";
+import { calm, flash, dust, fly as flyPath } from "./flight.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 
@@ -111,7 +114,8 @@ export default class Sky {
     // on that run's output; nocturne.scripts-again runs the folder's last
     // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
     // that Herdr Core's missing App Management stopped, opens that setting),
-    // nocturne.new (cmd-n) the "+ new" menu.
+    // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
+    // the shown tab's panes into an even grid (gridify.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -127,6 +131,7 @@ export default class Sky {
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "scripts-grant") grantAppManagement();
+        else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
         cx.notify();
       }
@@ -273,7 +278,7 @@ export default class Sky {
    *  by folding: a clip anchored at their base shortens and grows, so the tips
    *  dip behind it, pixels kept whole. Resting ones hold them still. */
   wings(a, h, color, landing) {
-    const beat = landing ? FLAP.working : FLAP[a.status];
+    const beat = calm() ? null : landing ? FLAP.working : FLAP[a.status];
     // Roots on the mark's shoulders: the mark sits at 12..28, its body's top edge near 15.
     // The mark's own color: one creature, not a sprite with a costume.
     const clip = div().absolute().left(8).top(10).w(25).h(8).overflow_hidden()
@@ -302,21 +307,20 @@ export default class Sky {
   firefly(t, a, y, lane, w) {
     const h = hash(a.address);
     const x = 6; // the halo's edge lines up with the eyebrow; every mark in one column
-    const drift = a.status === "working" && this.naming !== a.address;
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
     const glow = svg(`${ART}/glow.svg`).w(40).h(40).absolute().top(0).left(0).text_color(color);
     const landing = this.landing?.get(a.address);
+    const still = calm();
     // Landing: the last awake glow and mark fade out over the resting mark
     // (a loop's first half, removed once it's out).
     const fade = (el) => el.loop("opacity", { from: 1, to: 0, period: LAND * 2, easing: "ease-out" });
-    const halo = landing ? fade(glow.text_color(landing.color))
-      : a.status === "working" ? glow.loop("opacity", { from: 0.35, to: 1, period: 1500 + (h % 900) })
-      : a.status === "blocked" ? glow.loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })
-      : a.status === "done" ? glow : null;
+    // Every firefly glows in its own rhythm (flight.js): working ones flash,
+    // blocked ones fast and bright, done ones breathe dimly, resting ones blink faintly.
+    const halo = landing ? fade(glow.text_color(landing.color)) : flash(glow, a.status, h);
     // The firefly's body is its agent's mark, on a dark plate so the halo's
-    // dots don't run into it. Resting ones have no halo, only the dim mark.
-    const fly = div().relative().size(40).flex_none()
-      .when(Boolean(halo), (el) => el.child(halo).child(div().absolute().top(10).left(10).size(20).bg(t.background)))
+    // dots don't run into it.
+    const body0 = div().relative().size(40).flex_none()
+      .child(halo).child(div().absolute().top(10).left(10).size(20).bg(t.background))
       .child(this.wings(a, h, color, landing))
       .child(div().absolute().top(12).left(12).size(16).overflow_hidden()
         .child(this.mark(a, color))
@@ -324,11 +328,15 @@ export default class Sky {
         // Alive: a band of night-colored dither sweeps across the mark. Over
         // the plate it vanishes, so only the mark's own pixels darken, like a
         // scanline over a sprite. Working sweeps slowly, blocked fast.
-        .when(SWEEP[a.status] != null, (el) => el.child(div().absolute().top(0).h(16).w(6)
+        .when(SWEEP[a.status] != null && !still, (el) => el.child(div().absolute().top(0).h(16).w(6)
           .loop("left", { from: -6, to: 16, period: SWEEP[a.status] + (h % 400), easing: "linear" })
           .child(dither(t.background, 1)))))
       // Done says so by shape too, not only by its green: a check on the mark.
       .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().top(22).left(22)));
+    // Only the firefly flies (flight.js), in its slot, leaving dust; its name stays put.
+    const fly = div().relative().size(40).flex_none()
+      .children(dust(a.status, h, () => div().child(dither(color, 1))))
+      .child(flyPath(body0, a.status, h, this.naming === a.address || Boolean(landing)));
     // The pane's name leads (the agent's own when nobody named it). Only
     // what the halo doesn't already say follows: its space when that isn't
     // the shown one; awake ones add their status on a second line, resting
@@ -363,14 +371,13 @@ export default class Sky {
     const step = (o) => div().flex_1().h_full().relative().opacity(o).child(dither(t.ansi0, 1));
     const path = h_flex().absolute().top(4).bottom(4).left(x + 36).right(0).gap(2)
       .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
-    // Working fireflies also bob: a layer inside the lane rises and falls a
-    // little, so the lane itself can fly to a new spot (to rest, say).
-    const inner = div().absolute().top(0).left(0).w(w).h(lane)
-      .child(drift ? body.loop("left", { from: x, to: x + 4 + (h % 3), period: 5200 + (h % 2400) }) : body);
+    // The lane holds still (only the firefly in it flies), so it can move to
+    // a new spot (to rest, say) on its own transition.
+    const inner = div().absolute().top(0).left(0).w(w).h(lane).child(body);
     return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
       .transition("top", { duration: LAND, easing: "ease-in-out" })
       .when(a.focused, (el) => el.child(path))
-      .child(drift ? inner.loop("top", { from: 0, to: -6, period: 2300 + (h % 1100) }) : inner);
+      .child(inner);
   }
 
   // Awake fireflies (blocked, working, done: agentRank) spread through the sky above
@@ -457,22 +464,31 @@ export default class Sky {
       .child(div().relative().child(pip(t, s.status)));
   }
 
+  /** A firefly on the rail: its mark in a 32 px cell, glowing in its rhythm
+   *  (flight.js); a working one rises and falls a pixel or two. */
+  railFly(t, a) {
+    const h = hash(a.address);
+    const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
+    const awake = a.status !== "idle";
+    const mark = div().relative().child(this.mark(a, color));
+    return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
+      .hover((s) => s.bg(t.ansi0 + "55"))
+      .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
+      .on_mouse_down("left", stop)
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
+      .on_click(() => run("agent.focus", { terminal: a.address }))
+      .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
+      .when(awake, (el) => el
+        .child(flash(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color), a.status, h))
+        .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
+      .child(a.status === "working" && !calm() ? mark.loop("top", { from: -1, to: 1, period: 1900 + (h % 700) }) : mark)
+      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
+  }
+
   /** Folded: the moon and the hour, », a row per space (sidebar order), every firefly's mark, the usage. */
   rail(t, list) {
     const rows = this.spaces.rows().filter((r) => r.s);
-    const flies = list.map((a) => {
-      const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
-      return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
-        .hover((s) => s.bg(t.ansi0 + "55"))
-        .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
-        .on_mouse_down("left", stop)
-        .on_click(() => run("agent.focus", { terminal: a.address }))
-        .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
-        .when(a.status === "blocked", (el) => el.child(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color)
-          .loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })))
-        .child(div().relative().child(this.mark(a, color)))
-        .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
-    });
+    const flies = list.map((a) => this.railFly(t, a));
     const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
     return v_flex().w_full().flex_1().min_h(0).pt(48).items_center()
       .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date)
