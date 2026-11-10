@@ -4,11 +4,11 @@
 //   j / k, [ / ]      the next / previous request
 //   up / down         the permission's options (as its terminal lists them)
 //   enter, 1-9        answer with that option; a question block: answer it
-//                     (the question dialog); other: go to the agent
+//                     (the question dialog); needs a look: go to the agent
 //   tab / shift-tab   "yes, but…" / "no, but…": a line that goes with the
 //                     answer, as the agent's next instruction (enter sends)
 //   p / g             peek at its terminal / go to it
-//   x                 put a finished or failed one away
+//   x                 put an error away
 //   esc               close (from the note's line: back to the options)
 
 import { div, image } from "gpui-kit";
@@ -20,7 +20,7 @@ import { answer } from "./drive.js";
 import { openAsk, forget, followCommands } from "./open.js";
 import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit.js";
 
-const TITLE = { permission: "Permissions", question: "Questions", other: "Other" };
+const TITLE = { permission: "Permissions", question: "Questions", other: "Needs a look" };
 const KIND_COLOR = { yes: "done", always: "accent", auto: "working", no: "blocked" };
 const HOOK_DOC = "Claude Code's hook: see ~/.config/herdr-app/AGENTS.md, Notifications";
 
@@ -143,7 +143,7 @@ export default class Overview {
       if (i >= 0) { this.cursor = i; this.answerWith(cx, { option: Number(k) }); }
     } else if (k === "p" && it) this.peek(it);
     else if (k === "g" && it) this.goTo(it);
-    else if (k === "x" && it?.type === "other" && it.status !== "blocked") dismiss(it.id);
+    else if (k === "x" && it?.type === "other" && it.status === "error") dismiss(it.id);
     else handled = false;
     if (handled) { cx.stop_propagation(); cx.notify(); }
   }
@@ -167,7 +167,8 @@ export default class Overview {
       .child(div().flex_1().text_size(12).child("Waiting on you"))
       .child(div().text_color(t.dim).child("esc"))
       .child(horizon(t));
-    const groups = TYPES.map((k) => {
+    // "Needs a look" only when something does: no empty header.
+    const groups = TYPES.filter((k) => k !== "other" || g[k].length).map((k) => {
       const color = t[TYPE_COLOR[k]];
       const n = g[k].length;
       const urgent = k !== "other";
@@ -187,7 +188,7 @@ export default class Overview {
 
   entry(t, x, on) {
     const second = x.type === "other"
-      ? div().truncate().text_color(x.status === "error" ? t.ansi1 : x.status === "done" ? t.done : t.muted).child(summary(x))
+      ? div().truncate().text_color(x.status === "error" ? t.ansi1 : t.working).child(summary(x))
       : div().truncate().text_color(t.dim).child(summary(x));
     return v_flex().id(`entry-${x.id}`).relative().h(42).px(12).pl(14).justify_center().gap(3).flex_none().cursor_pointer()
       .hover((s) => s.bg(t.hover ?? t.ansi0))
@@ -204,7 +205,7 @@ export default class Overview {
 
   main(t, it) {
     if (!it) return this.empty(t);
-    const color = t[it.type === "other" ? (it.status === "error" ? "ansi1" : it.status === "done" ? "done" : "working") : TYPE_COLOR[it.type]];
+    const color = t[it.type === "other" ? (it.status === "error" ? "ansi1" : "working") : TYPE_COLOR[it.type]];
     const place = where(it);
     const sub = [it.program, place, it.since && `${it.type === "other" && it.status !== "blocked" ? "" : "waiting "}${age(it.since)}`].filter(Boolean).join(" · ");
     const hero = h_flex().relative().px(20).pt(18).pb(14).gap(14).items_start().flex_none()
@@ -326,20 +327,20 @@ export default class Overview {
   }
 
   other(t, it) {
-    const words = it.status === "done" ? "It finished while you were elsewhere." : it.status === "error" ? (it.msg || "It stopped with an error.") : (it.msg || "It waits for your input.");
+    const words = it.status === "error" ? (it.msg || "It stopped with an error.") : (it.msg || "It waits for your input.");
     return v_flex()
       .child(div().mx(20).text_color(it.status === "error" ? t.ansi1 : t.muted).child(words))
       .child(this.screenTail(t, it))
       .child(h_flex().mx(20).mt(14).gap(6)
         .child(button(t, "ov-goto", "go to ↵", t.accent, true, () => this.goTo(it)))
-        .when(it.status !== "blocked", (el) => el.child(button(t, "ov-dismiss", "x put away", t.muted, false, () => dismiss(it.id)))));
+        .when(it.status === "error", (el) => el.child(button(t, "ov-dismiss", "x put away", t.muted, false, () => dismiss(it.id)))));
   }
 
   empty(t) {
     return v_flex().flex_1().h_full().items_center().justify_center().gap(10).px(40)
       .child(image("mods/nocturne/art/fireflies.svg").size(48))
       .child(div().text_size(12).text_color(t.foreground).child("Nothing waits on you"))
-      .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and finished work from every agent, in every space and machine, gather here."))
+      .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and agents that need a look, from every agent in every space and machine, gather here."))
       .child(div().text_color(t.dim).max_w(380).child(`For Claude Code's exact requests and its questions: ${HOOK_DOC}.`));
   }
 

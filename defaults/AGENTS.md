@@ -210,10 +210,12 @@ the highlighted line shows where it will land.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip counts what waits
-  (permissions and questions in a pink chip, finished or failed agents as a
+  (permissions and questions in a pink chip, agents that need a look as a
   dim `+n`); it or cmd-shift-a (`nocturne-notifications.open`) opens the
-  overview: Permissions, Questions and Other (finished, error, waiting for
-  input), each with the agent, its space / tab and how long it has waited.
+  overview: Permissions, Questions and, when there are any, Needs a look (an
+  error, or waiting for input that is neither), each with the agent, its
+  space / tab and how long it has waited. Finished agents aren't listed: the
+  sidebar and Herdr's toast tell about them.
   A permission shows the exact tool call and the options its terminal lists;
   answer with one (↑↓ enter, or its number), or with "yes, but…" / "no, but…"
   (tab / shift-tab): a line sent with the answer as the agent's next
@@ -224,7 +226,7 @@ the highlighted line shows where it will land.
   screen is read again before every key: a request that changed or went away
   is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
-  x puts a finished one away. The overview and the question dialog also take
+  x puts an error away. The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
   `down`, `enter`, `space`, `tab`, `back`, `yes-but`, `no-but`, `peek`,
   `goto`, `put-away`, `close`, `1`…`9`. Claude Code's exact requests and its

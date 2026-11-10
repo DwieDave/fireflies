@@ -438,6 +438,12 @@ test("dialog: esc stops typing first, then closes", () => {
 const T = (address: string, report: any, extra: any = {}) => ({ address, labels: { "herdr.space": "s1" }, state: "live", status: report?.state ?? null, report, status_ms: 1000, program: { key: "claude", name: "Claude Code" }, ...extra });
 const AG = (address: string, space_name: string, tab_name: string) => ({ address, space: "s1", space_name, tab: "c1", tab_name, tab_index: 1, app: "claude-code", program: { name: "Claude Code" } });
 
+test("items: finished agents alone make no items", () => {
+  const items = collect({ terminals: [T("t1", { app: "claude-code", state: "done" }), T("t2", { app: "pi", state: "done" })] });
+  expect(items).toEqual([]);
+  expect(counts(items)).toEqual({ permission: 0, question: 0, other: 0, needs: 0 });
+});
+
 test("items: types from the adapter, else from herdr-core's kind; grouped and counted", () => {
   const terminals = [
     T("t1", { app: "claude-code", state: "blocked", kind: "permission", msg: "approve Bash: mkdir" }),
@@ -453,8 +459,9 @@ test("items: types from the adapter, else from herdr-core's kind; grouped and co
   const g = group(items);
   expect(g.permission.map((i: any) => i.address)).toEqual(["t1", "vps/t3"]);
   expect(g.question.map((i: any) => i.address)).toEqual(["t2"]);
-  expect(g.other.map((i: any) => [i.address, i.status])).toEqual([["t4", "done"], ["t5", "error"], ["t7", "blocked"]]);
-  expect(counts(items)).toEqual({ permission: 2, question: 1, other: 3, needs: 3 });
+  // A finished agent (t4) isn't an item: the sidebar and Herdr's toast tell about it.
+  expect(g.other.map((i: any) => [i.address, i.status])).toEqual([["t5", "error"], ["t7", "blocked"]]);
+  expect(counts(items)).toEqual({ permission: 2, question: 1, other: 2, needs: 3 });
   const t1 = g.permission[0];
   expect([t1.spaceName, t1.tabName, t1.answerable, t1.request.line]).toEqual(["fireflies", "fix login", true, "mkdir -p tmpdir && touch tmpdir/a.txt"]);
   expect(headline(t1)).toBe("wants to run a command");
@@ -463,8 +470,8 @@ test("items: types from the adapter, else from herdr-core's kind; grouped and co
   expect(headline(g.question[0])).toBe("asks 3 questions");
 });
 
-test("items: a sub-agent goes by its parent's place; dismissed finished ones go", () => {
-  const terminals = [T("t1", { app: "claude-code", state: "working" }), T("t9", { app: "claude-code", state: "done" }, { parent: "t1" })];
+test("items: a sub-agent goes by its parent's place; errors put away go", () => {
+  const terminals = [T("t1", { app: "claude-code", state: "working" }), T("t9", { app: "claude-code", state: "error", msg: "API overloaded" }, { parent: "t1" })];
   const items = collect({ terminals, agents: [AG("t1", "fireflies", "fix login")] });
   expect(items[0].spaceName).toBe("fireflies");
   expect(collect({ terminals, agents: [], dismissed: { [items[0].id]: true } })).toEqual([]);

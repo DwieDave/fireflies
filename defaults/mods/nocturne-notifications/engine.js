@@ -8,7 +8,7 @@ import { collect, adapterOf, statusOf, splitAddress } from "./model.js";
 
 export const ITEMS = "nocturne-notifications.items";
 export const OPEN = "nocturne-notifications.open"; // { terminal, at }: what the overview opens on
-export const DISMISSED = "nocturne-notifications.dismissed"; // { [item id]: true }: finished ones put away
+export const DISMISSED = "nocturne-notifications.dismissed"; // { [item id]: true }: errors put away
 
 /** The name a person gave a terminal (Nocturne's rename label), by address. */
 function givenNames(list) {
@@ -85,7 +85,7 @@ export class Engine {
     this.busy = true;
     try {
       const list = terminals().filter((t) => t?.state !== "finished");
-      const waiting = list.filter((t) => ["blocked", "done", "error"].includes(statusOf(t)));
+      const waiting = list.filter((t) => ["blocked", "error"].includes(statusOf(t)));
       const live = new Set(waiting.map((t) => t.address));
       for (const a of Object.keys(this.info)) if (!live.has(a)) delete this.info[a];
       const began = this.since(list);
@@ -94,7 +94,7 @@ export class Engine {
       for (const t of waiting) {
         const since = began[t.address];
         const had = this.info[t.address];
-        // Finished or failed: read once for its last lines. Waiting: every time.
+        // Failed: read once for its last lines. Waiting: every time.
         if (statusOf(t) !== "blocked" && had?.since === since) continue;
         const screen = await readScreen(t.address);
         this.info[t.address] = { screen, record: records[t.address] ?? null, since, read: Date.now() };
@@ -118,7 +118,7 @@ export class Engine {
 /** The items as last published. */
 export const items = () => (Array.isArray(shared(ITEMS)) ? shared(ITEMS) : []);
 
-/** Puts a finished item away (it isn't asking anything). */
+/** Puts an error away (it isn't asking anything). */
 export function dismiss(id) {
   const d = { ...(shared(DISMISSED) ?? {}) };
   d[id] = true;
