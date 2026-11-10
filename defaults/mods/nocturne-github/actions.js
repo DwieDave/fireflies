@@ -13,6 +13,7 @@ import { api, ghRun, fileAt } from "./gh.js";
 import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.js";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
+import { slimRun, slimJob, newest, LIMITS } from "./cache.js";
 
 const ROW = 38, STEP = 24, LINE = 18;
 const PANELS = ["runs", "graph", "steps", "log"];
@@ -26,7 +27,11 @@ export default class Actions {
     this.stepSel = null; // step number
     this.focus = "runs";
     this.runs = null;
+    this.runsAt = 0;
+    this.runsTag = null; // the runs list's ETag
+    this.runsCache = {}; // branch ("" all) -> { list, etag, at }: each list's last answer
     this.jobs = new Map(); // run id -> jobs
+    this.jobTags = new Map(); // run id -> { etag, at }
     this.needs = new Map(); // `${path}@${sha}` -> Map
     this.logs = new Map(); // job id -> Map(step -> lines) | { error }
     this.logBusy = new Set();
@@ -41,6 +46,40 @@ export default class Actions {
   }
 
   save() { return { filter: this.filter, sel: this.sel, jobSel: this.jobSel, sizes: this.sizes }; }
+
+  branchKey() { return this.filter?.branch ?? ""; }
+
+  /** Shows what an earlier opening read (cache.js entry.actions), until GitHub answers. */
+  hydrate(c) {
+    this.runsCache = {};
+    for (const [b, l] of Object.entries(c?.runs ?? {})) if (Array.isArray(l?.list)) this.runsCache[b] = { list: l.list, etag: l.etag ?? null, at: l.at ?? 0 };
+    this.useRuns();
+    this.jobs = new Map(); this.jobTags = new Map();
+    for (const [id, j] of Object.entries(c?.jobs ?? {})) if (Array.isArray(j?.jobs)) { this.jobs.set(Number(id), j.jobs); this.jobTags.set(Number(id), { etag: j.etag ?? null, at: j.at ?? 0 }); }
+    this.needs = new Map(Object.entries(c?.needs ?? {}).filter(([, n]) => Array.isArray(n?.jobs)).map(([k, n]) => [k, new Map(n.jobs)]));
+    this.needsAt = new Map(Object.entries(c?.needs ?? {}).map(([k, n]) => [k, n?.at ?? 0]));
+    if (this.runs && (this.sel == null || !this.list().some((r) => r.id === this.sel))) this.sel = this.list()[0]?.id ?? null;
+  }
+
+  /** The shown branch's cached runs (or none yet). */
+  useRuns() {
+    const l = this.runsCache[this.branchKey()];
+    this.runs = l?.list ?? null; this.runsTag = l?.etag ?? null; this.runsAt = l?.at ?? 0;
+  }
+
+  /** What's worth keeping for the next opening (slim: only what's drawn). */
+  snapshot() {
+    const runs = {};
+    for (const [b, l] of Object.entries(this.runsCache)) runs[b] = { list: l.list, etag: l.etag, at: l.at };
+    const jobs = {};
+    for (const [id, list] of this.jobs) jobs[id] = { jobs: list, etag: this.jobTags.get(id)?.etag ?? null, at: this.jobTags.get(id)?.at ?? 0 };
+    const needs = {};
+    for (const [k, m] of this.needs) needs[k] = { jobs: [...m], at: this.needsAt?.get(k) ?? 0 };
+    return { runs: newest(runs, LIMITS.runs), jobs: newest(jobs, LIMITS.jobs), needs: newest(needs, LIMITS.needs) };
+  }
+
+  /** When the shown list was read (0: never). */
+  readAt() { return this.runsAt; }
 
   // ---- data
 
@@ -74,33 +113,62 @@ export default class Actions {
 
   live() { return this.interval() < 10000; }
 
-  async poll(force, cx) {
+  /** Reads the runs, then the selected run's jobs (and its workflow, at once).
+   *  all: past the timers; fresh: past the ETags. */
+  async poll({ fresh = false } = {}, cx) {
     const repo = this.app.repo;
     if (!repo) return;
-    const q = this.filter?.branch ? `&branch=${encodeURIComponent(this.filter.branch)}` : "";
-    const { data } = await api(repo, `repos/${repo.full}/actions/runs?per_page=40${q}`, { fresh: force });
-    this.runs = data?.workflow_runs ?? [];
-    for (const id of this.extra.keys()) {
-      const r = (await api(repo, `repos/${repo.full}/actions/runs/${id}`).catch(() => null))?.data;
-      if (r) this.extra.set(id, r);
-    }
+    const branch = this.branchKey();
+    const q = branch ? `&branch=${encodeURIComponent(branch)}` : "";
+    const kept = this.runsCache[branch];
+    // The selected run's jobs are read with the list when the cache already knows the run.
+    const early = this.run();
+    const jobs = early ? this.pollRun(fresh, cx, early) : null;
+    jobs?.catch(() => {});
+    const [{ data, etag }] = await Promise.all([
+      api(repo, `repos/${repo.full}/actions/runs?per_page=40${q}`, { fresh, prior: kept?.etag ? { etag: kept.etag, data: kept.list } : null, slim: (d) => (d?.workflow_runs ?? []).map(slimRun) }),
+      ...[...this.extra.keys()].map((id) => api(repo, `repos/${repo.full}/actions/runs/${id}`, { slim: slimRun }).then((r) => { if (r.data) this.extra.set(id, r.data); }).catch(() => null)),
+    ]);
+    if (this.app.repo !== repo || this.branchKey() !== branch) return;
+    this.runsCache[branch] = { list: data ?? [], etag, at: Date.now() };
+    this.useRuns();
     if (this.sel == null || !this.list().some((r) => r.id === this.sel)) this.sel = this.list()[0]?.id ?? null;
-    await this.pollRun(force, cx);
+    cx?.notify();
+    await jobs;
+    if (this.run() && this.run() !== early && this.run().id !== early?.id) await this.pollRun(fresh, cx, this.run());
+    else if (early && this.run()) this.pickJob();
   }
 
-  async pollRun(force, cx) {
-    const repo = this.app.repo, r = this.run();
+  async pollRun(fresh, cx, r = this.run()) {
+    const repo = this.app.repo;
     if (!repo || !r) return;
-    const { data } = await api(repo, `repos/${repo.full}/actions/runs/${r.id}/jobs?per_page=100&filter=latest`, { fresh: force });
-    this.jobs.set(r.id, data?.jobs ?? []);
     const key = `${r.path}@${r.head_sha}`;
-    if (r.path && !this.needs.has(key)) {
-      const yaml = await fileAt(repo, r.path.replace(/@.*$/, ""), r.head_sha);
-      this.needs.set(key, yaml ? needsFromWorkflow(yaml) : new Map());
+    const tag = this.jobTags.get(r.id), had = this.jobs.get(r.id);
+    const workflow = r.path && !this.needs.has(key) ? fileAt(repo, r.path.replace(/@.*$/, ""), r.head_sha) : null;
+    const [{ data, etag }, yaml] = await Promise.all([
+      api(repo, `repos/${repo.full}/actions/runs/${r.id}/jobs?per_page=100&filter=latest`, { fresh, prior: tag?.etag && had ? { etag: tag.etag, data: had } : null, slim: (d) => (d?.jobs ?? []).map(slimJob) }),
+      workflow,
+    ]);
+    if (this.app.repo !== repo) return;
+    this.jobs.set(r.id, data ?? []);
+    this.jobTags.set(r.id, { etag, at: Date.now() });
+    if (this.jobs.size > LIMITS.jobs * 2) {
+      const keep = new Set([...this.jobTags].sort((a, b) => b[1].at - a[1].at).slice(0, LIMITS.jobs).map(([id]) => id));
+      for (const id of this.jobs.keys()) if (!keep.has(id)) { this.jobs.delete(id); this.jobTags.delete(id); }
     }
-    const jobs = this.jobs.get(r.id);
+    if (workflow) {
+      this.needs.set(key, yaml ? needsFromWorkflow(yaml) : new Map());
+      (this.needsAt ??= new Map()).set(key, Date.now());
+    }
+    if (r.id === this.run()?.id) this.pickJob(cx);
+  }
+
+  /** Keeps a job selected in the shown run, and its log coming. */
+  pickJob(cx) {
+    const jobs = this.jobsOf(this.run());
+    if (!jobs) return;
     if (!jobs.some((j) => j.id === this.jobSel)) this.jobSel = (jobs.find((j) => j.status === "in_progress") ?? jobs.find((j) => j.conclusion === "failure") ?? jobs[0])?.id ?? null;
-    this.loadLog(cx);
+    if (cx) this.loadLog(cx);
   }
 
   /** The selected job's log, once it's finished (kept: a finished log doesn't change). */
@@ -134,7 +202,8 @@ export default class Actions {
   }
 
   showRuns(filter, cx) {
-    this.filter = filter; this.runs = null; this.sel = null; this.focus = "runs";
+    this.filter = filter; this.sel = null; this.focus = "runs";
+    this.useRuns();
     this.app.refresh(cx, true);
   }
 

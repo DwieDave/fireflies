@@ -5,12 +5,13 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextView, TextareaState, Textarea } from "gpui-base";
-import { ghJson, ghRun, api } from "./gh.js";
-import { checkRows, rollupTone, ago, duration, SLOW } from "./model.js";
+import { ghJson, ghRun, api, graphql } from "./gh.js";
+import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW } from "./model.js";
+import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize } from "./kit.js";
 
-const LIST = "number,title,author,isDraft,headRefName,baseRefName,additions,deletions,reviewDecision,statusCheckRollup,updatedAt,labels";
-const VIEW = "number,title,body,author,state,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles,mergeable";
+// What the right panel draws (no state, no mergeable: GitHub computes those slowly).
+const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
 const FILTERS = ["all", "mine", "review"];
 const FILTER_WORD = { all: "open", mine: "mine", review: "to review" };
 const FILTER_ARGS = { all: [], mine: ["--author", "@me"], review: ["--search", "review-requested:@me"] };
@@ -29,7 +30,8 @@ export default class Prs {
     this.focus = "list";
     this.list = null;
     this.listAt = 0;
-    this.details = new Map(); // number -> { pr, review: [], at }
+    this.lists = {}; // filter -> { list, at }: each filter's last list (cached between openings)
+    this.details = new Map(); // number -> { pr, review: [], reviewTag, at }
     this.checkSel = 0;
     this.scrollY = 0;
     this.contentH = 0;
@@ -41,6 +43,28 @@ export default class Prs {
   }
 
   save() { return { filter: this.filter, sel: this.sel, sizes: this.sizes }; }
+
+  /** Shows what an earlier opening read (cache.js entry.prs), until GitHub answers. */
+  hydrate(c) {
+    this.lists = {};
+    for (const [f, l] of Object.entries(c?.lists ?? {})) if (FILTERS.includes(f) && Array.isArray(l?.list)) this.lists[f] = { list: l.list, at: l.at ?? 0 };
+    this.details = new Map(Object.entries(c?.details ?? {}).map(([n, d]) => [Number(n), { pr: d.pr, review: d.review ?? [], reviewTag: d.reviewTag ?? null, at: d.at ?? 0 }]));
+    const l = this.lists[this.filter];
+    this.list = l?.list ?? null; this.listAt = l?.at ?? 0;
+    if (this.list && (this.sel == null || !this.list.some((p) => p.number === this.sel))) this.sel = this.list[0]?.number ?? null;
+  }
+
+  /** What's worth keeping for the next opening (slim: only what's drawn). */
+  snapshot() {
+    const lists = {};
+    for (const [f, l] of Object.entries(this.lists)) lists[f] = { list: l.list.map(slimPrRow), at: l.at };
+    const details = {};
+    for (const [n, d] of this.details) if (d.pr) details[n] = { pr: slimPr(d.pr), review: (d.review ?? []).map(slimReviewComment), reviewTag: d.reviewTag ?? null, at: d.at };
+    return { lists, details: newest(details, LIMITS.details) };
+  }
+
+  /** When the shown list was read (0: never). */
+  readAt() { return this.listAt; }
 
   // ---- data
 
@@ -54,26 +78,63 @@ export default class Prs {
     return live ? CHECKS_LIVE : SLOW;
   }
 
-  async poll(force) {
+  /** Reads GitHub: the list, and the shown PR's view beside it (both at once).
+   *  all: past the timers; fresh: past the ETags. */
+  async poll({ all = false, fresh = false } = {}, cx) {
     const repo = this.app.repo;
     if (!repo) return;
-    const now = Date.now();
-    if (force || !this.list || now - this.listAt >= SLOW) {
-      this.list = await ghJson(repo, ["pr", "list", "--json", LIST, "--limit", "60", ...FILTER_ARGS[this.filter]]);
-      this.listAt = Date.now();
-      if (this.sel == null || !this.list.some((p) => p.number === this.sel)) this.sel = this.list[0]?.number ?? null;
+    const now = Date.now(), filter = this.filter;
+    const list = all || !this.list || now - this.listAt >= SLOW ? this.readList(repo, filter) : null;
+    // The PR shown now (a cached list's) is read while the list is.
+    const first = this.current();
+    const view = first && this.wantsDetail(first, all, now) ? this.readDetail(repo, first, fresh) : null;
+    view?.catch(() => {}); // awaited below; not unhandled if the list fails first
+    if (list) {
+      const rows = await list;
+      if (this.filter !== filter || this.app.repo !== repo) return;
+      this.lists[filter] = { list: rows, at: Date.now() };
+      this.list = rows; this.listAt = this.lists[filter].at;
+      if (this.sel == null || !rows.some((p) => p.number === this.sel)) this.sel = rows[0]?.number ?? null;
+      this.follow();
+      cx?.notify();
     }
+    await view;
     const p = this.current();
-    if (!p) return;
+    if (p && p !== first && p.number !== first?.number && this.wantsDetail(p, all, now)) await this.readDetail(repo, p, fresh);
+    this.follow();
+  }
+
+  wantsDetail(p, all, now) {
     const d = this.details.get(p.number);
-    if (force || !d || now - d.at >= this.interval() - 500) {
-      const [pr, review] = await Promise.all([
-        ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW]),
-        api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`).then((r) => r.data ?? []).catch(() => d?.review ?? []),
-      ]);
-      this.details.set(p.number, { pr, review, at: Date.now() });
-      // The list's row follows what the view read.
-      Object.assign(p, { statusCheckRollup: pr.statusCheckRollup, reviewDecision: pr.reviewDecision, title: pr.title });
+    return all || !d || now - d.at >= this.interval() - 500;
+  }
+
+  async readList(repo, filter) {
+    const { query, vars } = prListQuery(filter, repo.full);
+    return prRows(await graphql(repo, query, vars));
+  }
+
+  async readDetail(repo, p, fresh) {
+    const d = this.details.get(p.number);
+    const [pr, review] = await Promise.all([
+      ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW]),
+      api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`, { fresh, prior: d?.reviewTag ? { etag: d.reviewTag, data: d.review } : null, slim: (a) => (a ?? []).map(slimReviewComment) })
+        .catch(() => ({ data: d?.review ?? [], etag: d?.reviewTag ?? null })),
+    ]);
+    if (this.app.repo !== repo) return;
+    this.details.set(p.number, { pr, review: review.data ?? [], reviewTag: review.etag ?? null, at: Date.now() });
+    if (this.details.size > LIMITS.details * 2) {
+      const keep = new Set(Object.keys(newest(Object.fromEntries(this.details), LIMITS.details)).map(Number));
+      for (const n of this.details.keys()) if (!keep.has(n)) this.details.delete(n);
+    }
+  }
+
+  /** The list's rows follow what their PR's view read (checks, review, title). */
+  follow() {
+    for (const p of this.list ?? []) {
+      const d = this.details.get(p.number);
+      if (!d?.pr || d.at < this.listAt - 1000) continue;
+      Object.assign(p, { tone: rollupTone(checkRows(d.pr.statusCheckRollup)), reviewDecision: d.pr.reviewDecision, title: d.pr.title });
     }
   }
 
@@ -108,7 +169,9 @@ export default class Prs {
 
   cycleFilter(cx) {
     this.filter = FILTERS[(FILTERS.indexOf(this.filter) + 1) % FILTERS.length];
-    this.list = null; this.sel = null;
+    const l = this.lists[this.filter];
+    this.list = l?.list ?? null; this.listAt = l?.at ?? 0; this.sel = null;
+    if (this.list) this.sel = this.list[0]?.number ?? null;
     this.app.refresh(cx, true);
   }
 
@@ -196,7 +259,7 @@ export default class Prs {
   // ---- drawing
 
   prRow(t, p, sel, active) {
-    const tone = rollupTone(checkRows(p.statusCheckRollup));
+    const tone = rowTone(p);
     const [rev, revTone] = REVIEW[p.reviewDecision] ?? [null, null];
     return v_flex().id(`pr-${p.number}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none()
       .hover((s) => s.bg(t.ansi0 + "55"))
@@ -318,8 +381,7 @@ export default class Prs {
       // A thin dithered thumb shows where you are.
       .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3).top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
         .child(dither(active ? t.accent : t.ansi8, 1))));
-    const when = d ? ago(new Date(d.at).toISOString()) : null;
-    const right = !d ? "reading…" : when === "now" ? "read just now" : `read ${when} ago`;
+    const right = !d ? "reading…" : `read ${readAgo(d.at)}`;
     return panel(t, "pr-main", "Pull request", active, view, { right }).flex_1().h_full();
   }
 
