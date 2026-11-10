@@ -1,0 +1,27 @@
+{
+  "cwd": "/tmp/scratch/work",
+  "permission_mode": "default",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "mkdir -p tmpdir && touch tmpdir/a.txt",
+    "description": "Create tmpdir and touch a.txt inside it"
+  },
+  "permission_suggestions": [
+    {
+      "type": "addRules",
+      "rules": [
+        {
+          "toolName": "Bash",
+          "ruleContent": "mkdir -p tmpdir"
+        },
+        {
+          "toolName": "Bash",
+          "ruleContent": "touch tmpdir/a.txt"
+        }
+      ],
+      "behavior": "allow",
+      "destination": "localSettings"
+    }
+  ]
+}

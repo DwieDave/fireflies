@@ -1,0 +1,63 @@
+{
+  "cwd": "/tmp/scratch/work",
+  "permission_mode": "default",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "AskUserQuestion",
+  "tool_input": {
+    "questions": [
+      {
+        "question": "Which color?",
+        "header": "Color",
+        "options": [
+          {
+            "label": "Red",
+            "description": "Choose red"
+          },
+          {
+            "label": "Green",
+            "description": "Choose green"
+          },
+          {
+            "label": "Blue",
+            "description": "Choose blue"
+          }
+        ],
+        "multiSelect": false
+      },
+      {
+        "question": "Which pets do you like?",
+        "header": "Pets",
+        "options": [
+          {
+            "label": "Cats",
+            "description": "Choose cats"
+          },
+          {
+            "label": "Dogs",
+            "description": "Choose dogs"
+          },
+          {
+            "label": "Fish",
+            "description": "Choose fish"
+          }
+        ],
+        "multiSelect": true
+      },
+      {
+        "question": "Which size?",
+        "header": "Size",
+        "options": [
+          {
+            "label": "Small",
+            "description": "Choose small"
+          },
+          {
+            "label": "Large",
+            "description": "Choose large"
+          }
+        ],
+        "multiSelect": false
+      }
+    ]
+  }
+}

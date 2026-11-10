@@ -1,0 +1,17 @@
+{
+  "cwd": "/tmp/scratch/work",
+  "permission_mode": "default",
+  "hook_event_name": "PermissionRequest",
+  "tool_name": "Write",
+  "tool_input": {
+    "file_path": "/tmp/scratch/work/notes.md",
+    "content": "hello notes\n"
+  },
+  "permission_suggestions": [
+    {
+      "type": "setMode",
+      "mode": "acceptEdits",
+      "destination": "session"
+    }
+  ]
+}
