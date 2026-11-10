@@ -167,6 +167,18 @@ the highlighted line shows where it will land.
   mapped; otherwise they stay as the core reported them. They belong to their
   parent's tab without a pane; the `agents` mod shows them,
   `terminal.peek` opens one, `terminal.keep` gives one a pane.
+- **Scripts** (Nocturne's script runner, the `nocturne-scripts` mod): the
+  tab strip's ▶ (cmd-shift-r, `nocturne.scripts`) lists what the space's folder
+  (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
+  npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
+  scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
+  executables in `scripts/` and `bin/`. A picked script runs in a pane-less
+  terminal (`hc run --bg --no-parent`); ■ stops it; the deck watches (floats it),
+  restarts, stops and dismisses runs, and shows an ended run's output; a failure
+  toasts. A run is any terminal labeled `nocturne.script=<id>` (with
+  `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
+  that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
+  nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
   Ctrl-click (Cmd-click on macOS) a live terminal address in terminal text to
   peek at it. Bare addresses refer to the machine of the terminal showing them;
   use `machine/address` for another machine. Names and non-live addresses aren't links.

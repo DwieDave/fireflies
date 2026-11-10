@@ -52,6 +52,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-nocturne-keys.macos.json"),
     // With cmd-shift-g, before pane.park / pane.unpark / pane.equalize keys.
     include_str!("keys/shipped/fireflies-github-keys.macos.json"),
+    // With park and equalize, before cmd-shift-r opened the script runner.
+    include_str!("keys/shipped/fireflies-park-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
