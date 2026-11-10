@@ -1,0 +1,34 @@
+{
+ "data": {
+  "node": {
+   "__typename": "Issue",
+   "body": "With a tab hidden by its space, `j`/`k` lands on the next visible tab but the focus ring stays on the hidden one.\n\n**Expected:** the ring follows.",
+   "url": "https://github.com/DwieDave/fireflies/issues/226",
+   "createdAt": "2026-11-07T09:00:00Z",
+   "author": {
+    "login": "DwieDave"
+   },
+   "comments": {
+    "totalCount": 2,
+    "nodes": [
+     {
+      "author": {
+       "login": "ogulcancelik"
+      },
+      "body": "Same with the palette open.",
+      "createdAt": "2026-11-08T09:00:00Z",
+      "url": "https://github.com/DwieDave/fireflies/issues/226#issuecomment-1"
+     },
+     {
+      "author": {
+       "login": "DwieDave"
+      },
+      "body": "Looking at it in `sidebar.js`.",
+      "createdAt": "2026-11-09T09:00:00Z",
+      "url": "https://github.com/DwieDave/fireflies/issues/226#issuecomment-2"
+     }
+    ]
+   }
+  }
+ }
+}
