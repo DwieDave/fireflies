@@ -2,8 +2,8 @@
 //
 //   nothing waits   a dim pip
 //   requests wait   a blinking pink pip and how many permissions and
-//                   questions wait, in a filled chip; finished / failed
-//                   agents as a dim "+n" beside it
+//                   questions wait, in a filled chip; agents that need a
+//                   look (an error, waiting for input) as a dim "+n" beside it
 // Click (or nocturne-notifications.open) opens the overview.
 
 import { div } from "gpui-kit";
@@ -54,7 +54,7 @@ export default class Bell {
     const sig = terminals().map((x) => `${x.address}:${x.report?.state ?? x.status}:${x.status_ms ?? ""}`).join(",");
     if (sig !== this.seen) { this.seen = sig; this.refresh(cx); }
     const c = counts(items());
-    const parts = [c.permission && `${c.permission} permission${c.permission > 1 ? "s" : ""}`, c.question && `${c.question} question${c.question > 1 ? "s" : ""}`, c.other && `${c.other} other`].filter(Boolean);
+    const parts = [c.permission && `${c.permission} permission${c.permission > 1 ? "s" : ""}`, c.question && `${c.question} question${c.question > 1 ? "s" : ""}`, c.other && `${c.other} to look at`].filter(Boolean);
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
     return h_flex().id("notify-bell").relative().size_full().pl(2).pr(10).items_center().justify_end().bg(t.background)
@@ -68,7 +68,7 @@ export default class Bell {
         .when(c.needs > 0, (el) => el
           .child(pip(t.blocked, 6, true))
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))
-        .when(c.needs === 0, (el) => el.child(pip(c.other ? t.done : t.ansi0, 6)))
+        .when(c.needs === 0, (el) => el.child(pip(c.other ? t.working : t.ansi0, 6)))
         .when(c.other > 0, (el) => el.child(div().text_color(t.dim).child(c.needs > 0 ? `+${c.other}` : String(c.other)))));
   }
 }

@@ -32,8 +32,8 @@ export function logo(key, color, size = 12) {
 /** The 2 px dithered line under a header. */
 export const horizon = (t, color) => div().absolute().left(0).right(0).bottom(0).h(2).child(dither(color ?? t.ansi0, 1));
 
-/** Each type's color: what needs the person blinks in blocked pink; questions are the moon's blue. */
-export const TYPE_COLOR = { permission: "blocked", question: "accent", other: "done" };
+/** Each type's color: permissions in blocked pink, questions the moon's blue, what needs a look amber. */
+export const TYPE_COLOR = { permission: "blocked", question: "accent", other: "working" };
 
 /** A square button: `strong` outlines in its color and fills on hover; the other is a quiet chip. */
 export function button(t, id, label, color, strong, action, { off = false } = {}) {

@@ -1,7 +1,7 @@
 // Everything agents need from the person, as items, from any agent:
 //
 //   sources   herdr-core's status of every terminal (terminals(): blocked,
-//             done, error, with the agent's own report { kind, msg }), placed
+//             error, with the agent's own report { kind, msg }), placed
 //             by agents() (space, tab); plus an adapter's details where the
 //             agent offers them (the screen, a hook record).
 //   adapters  one per agent family: { id, handles(terminal), describe(screen,
@@ -12,8 +12,9 @@
 //             words for what it waits on and the end of its screen, with
 //             peek and go to. To add Codex, pi, opencode: write
 //             <agent>.js with describe/step and list it in ADAPTERS.
-//   types     "permission", "question", "other" (finished, error, waiting
-//             for input): the overview's three groups.
+//   types     "permission", "question", "other" (an error, or waiting for
+//             input that is neither): the overview's groups. A finished agent
+//             isn't one: the sidebar and Herdr's own toast tell about it.
 //
 // Pure: no herdr imports (scripts/nocturne-notifications.test.ts).
 
@@ -75,7 +76,7 @@ export function typeOf(status, kind, described) {
     if (kind === "permission" || kind === "question") return kind;
     return "other";
   }
-  if (status === "done" || status === "error") return "other";
+  if (status === "error") return "other";
   return null;
 }
 
@@ -93,7 +94,7 @@ export function collect({ terminals = [], agents = [], info = {}, names = {}, di
   for (const t of terminals) {
     if (!t?.address || t.state === "finished") continue;
     const status = statusOf(t);
-    if (status !== "blocked" && status !== "done" && status !== "error") continue;
+    if (status !== "blocked" && status !== "error") continue;
     const adapter = adapterOf(t);
     const got = info[t.address] ?? {};
     const request = got.screen != null && status === "blocked" ? adapter.describe(got.screen, got.record ?? null) : null;
@@ -172,7 +173,6 @@ export function headline(it) {
     const n = r?.questions?.length ?? 0;
     return n > 1 ? `asks ${n} questions` : "asks a question";
   }
-  if (it.status === "done") return "finished";
   if (it.status === "error") return "stopped with an error";
   return "waits for you";
 }
@@ -190,7 +190,6 @@ export function summary(it) {
   if (r?.type === "permission") return [r.tool, r.line].filter(Boolean).join(" · ");
   if (r?.type === "question") return r.questions.map((q) => q.header || q.question).join(", ");
   if (it.msg) return it.msg;
-  if (it.status === "done") return "finished";
   if (it.status === "error") return "error";
   return "needs input";
 }
