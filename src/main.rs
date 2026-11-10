@@ -23,6 +23,7 @@ mod macos_check;
 mod mods;
 mod native_view;
 mod mod_files;
+mod agent_command;
 mod process_cwd;
 mod programs;
 mod remote_shell;

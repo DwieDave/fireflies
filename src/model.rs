@@ -75,6 +75,12 @@ pub struct Agent {
     pub seq: u64,
     /// When the state last changed, ms since the epoch (0: not since the app started).
     pub since: u64,
+    /// The 7501 report's message (what it's doing now), if any.
+    pub msg: Option<String>,
+    /// When its current step began: the word or the message last changed, ms.
+    pub step: u64,
+    /// Working, and the step is a shell command still running (`agent_command`).
+    pub command: bool,
 }
 
 #[derive(Default)]
@@ -549,7 +555,24 @@ impl Model {
         self.seq += 1;
         a.seq = self.seq;
         a.since = now_ms();
+        a.step = a.since;
         true
+    }
+
+    /// A new 7501 message starts a new step (see `Agent::step`).
+    pub fn set_msg(&mut self, address: &str, msg: Option<String>) {
+        let Some(a) = self.agents.get_mut(address) else { return };
+        if a.msg != msg {
+            a.msg = msg;
+            a.step = now_ms();
+        }
+    }
+
+    /// Whether the agent waits on a command now; true if that changed.
+    pub fn set_command(&mut self, address: &str, command: bool) -> bool {
+        let Some(a) = self.agents.get_mut(address) else { return false };
+        let command = command && a.word.as_deref() == Some("working");
+        std::mem::replace(&mut a.command, command) != command
     }
 
     /// Herdr's attention rule for a change of 7501 word: needing you always
@@ -1101,5 +1124,23 @@ mod tests {
         assert_eq!(m.active.as_deref(), Some("p1"));
         assert_eq!(m.focused_pane().as_deref(), Some("x1"));
         assert_eq!(m.active_tab().map(|c| addresses(c.shown())).unwrap_or_default(), ["t1"]);
+    }
+
+    #[test]
+    fn a_command_is_only_while_working_and_a_new_message_is_a_new_step() {
+        let mut m = Model::default();
+        m.set_word("t1", Some("working".into()), None, false);
+        m.agents.get_mut("t1").unwrap().step = 1;
+        m.set_msg("t1", Some("Running cargo test".into()));
+        assert!(m.agents["t1"].step > 1);
+        let step = m.agents["t1"].step;
+        m.set_msg("t1", Some("Running cargo test".into()));
+        assert_eq!(m.agents["t1"].step, step);
+        assert!(m.set_command("t1", true));
+        assert!(!m.set_command("t1", true));
+        assert_eq!(m.status("t1"), Some("working"));
+        m.set_word("t1", Some("idle".into()), None, false);
+        assert!(m.set_command("t1", true));
+        assert!(!m.agents["t1"].command);
     }
 }
