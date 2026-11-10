@@ -442,7 +442,9 @@ fn make(
                 let delegate = WebDelegate::new(mtm, key, generation);
                 if spec.pip {
                     crate::pip::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
+                    crate::page::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
                 }
+                observe_location(&view, &delegate, true);
                 view.setNavigationDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 view.setUIDelegate(Some(ProtocolObject::from_ref(&*delegate)));
                 Ok((
@@ -1067,7 +1069,11 @@ fn entry_state(key: &str, e: &Entry, r: &Renderer) -> Value {
     let content = match r {
         #[cfg(feature = "chromium")]
         Renderer::Chromium(c) => c.state(),
-        Renderer::Web { view, .. } => web_state(view),
+        Renderer::Web { view, .. } => {
+            let mut s = web_state(view);
+            s["video"] = json!(crate::page::has_video(key));
+            s
+        }
         Renderer::Pdf { view, .. } => pdf_state(view),
         Renderer::Media { player, .. } => media_state(player.as_deref()),
         Renderer::QuickLook { view } => {
@@ -1153,9 +1159,11 @@ pub fn dispose(key: &str) {
         match &e.renderer {
             #[cfg(feature = "chromium")]
             Renderer::Chromium(c) => c.close(),
-            Renderer::Web { view, .. } => {
+            Renderer::Web { view, delegate } => {
+                observe_location(view, delegate, false);
                 crate::pip::unconfigure(&view.configuration().userContentController());
                 crate::pip::web_gone(key);
+                crate::page::web_gone(key);
                 view.stopLoading();
                 view.setNavigationDelegate(None);
                 view.setUIDelegate(None);
@@ -1351,6 +1359,28 @@ fn install_key_monitor() {
 pub struct WebIvars {
     key: String,
     generation: Cell<u64>,
+    /// The address and history state `web.location` last reported.
+    location: RefCell<Option<(Option<String>, bool, bool)>>,
+}
+
+/// What the address bar follows: the URL changes on every navigation,
+/// including the ones the navigation delegate never hears of (pushState,
+/// replaceState, fragment changes, back/forward within a page).
+const LOCATION_KEYS: [&str; 3] = ["URL", "canGoBack", "canGoForward"];
+
+/// Starts (`on`) or stops key-value observing the web view's location.
+fn observe_location(view: &WKWebView, delegate: &WebDelegate, on: bool) {
+    for k in LOCATION_KEYS {
+        let k = NSString::from_str(k);
+        unsafe {
+            if on {
+                let none = std::ptr::null_mut::<c_void>();
+                let _: () = msg_send![view, addObserver: delegate, forKeyPath: &*k, options: 0usize, context: none];
+            } else {
+                let _: () = msg_send![view, removeObserver: delegate, forKeyPath: &*k];
+            }
+        }
+    }
 }
 
 define_class!(
@@ -1372,6 +1402,7 @@ define_class!(
         fn did_commit(&self, web: &WKWebView, _nav: Option<&WKNavigation>) {
             // A new page: the old one's video and frames are gone.
             crate::pip::navigated(&self.ivars().key);
+            crate::page::navigated(&self.ivars().key, self.ivars().generation.get());
             self.report("load.commit", web_state(web));
         }
 
@@ -1405,7 +1436,24 @@ define_class!(
         fn did_terminate(&self, _web: &WKWebView) {
             // The page's process is gone, and with it the video in the player.
             crate::pip::navigated(&self.ivars().key);
+            crate::page::navigated(&self.ivars().key, self.ivars().generation.get());
             self.report("web.processTerminated", json!({}));
+        }
+    }
+
+    // Key-value observing of the web view (`observe_location`).
+    impl WebDelegate {
+        #[unsafe(method(observeValueForKeyPath:ofObject:change:context:))]
+        fn observe_value(
+            &self,
+            _path: Option<&NSString>,
+            object: Option<&AnyObject>,
+            _change: Option<&AnyObject>,
+            _context: *mut c_void,
+        ) {
+            if let Some(web) = object.and_then(|o| o.downcast_ref::<WKWebView>()) {
+                self.location(web);
+            }
         }
     }
 
@@ -1418,6 +1466,10 @@ define_class!(
                 let body = message.body();
                 let Some(body) = body.downcast_ref::<NSString>() else { return };
                 let i = self.ivars();
+                if name == crate::page::HANDLER {
+                    crate::page::on_message(&i.key, i.generation.get(), &body.to_string());
+                    return;
+                }
                 crate::pip::on_message(&i.key, i.generation.get(), &name, &body.to_string(), message.frameInfo());
             }
         }
@@ -1451,8 +1503,25 @@ impl WebDelegate {
         let this = Self::alloc(mtm).set_ivars(WebIvars {
             key: key.to_owned(),
             generation: Cell::new(generation),
+            location: RefCell::new(None),
         });
         unsafe { msg_send![super(this), init] }
+    }
+
+    /// `web.location`: the page's address or history changed (also within a page).
+    fn location(&self, web: &WKWebView) {
+        let now = unsafe {
+            (
+                web.URL().and_then(|u| u.absoluteString()).map(|s| s.to_string()),
+                web.canGoBack(),
+                web.canGoForward(),
+            )
+        };
+        if self.ivars().location.borrow().as_ref() == Some(&now) {
+            return;
+        }
+        *self.ivars().location.borrow_mut() = Some(now);
+        self.report("web.location", web_state(web));
     }
 
     fn report(&self, name: &'static str, data: Value) {
