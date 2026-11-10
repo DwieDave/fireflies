@@ -176,7 +176,14 @@ the highlighted line shows where it will land.
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
-  executables in `scripts/` and `bin/`. A picked script runs in a pane-less
+  executables in `scripts/` and `bin/`. A flake gets `nix flake check` / `update`
+  at once and its outputs from `nix flake show --json` (in the background,
+  cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
+  checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
+  configurations, this machine's (its LocalHostName / hostname) first. A switch
+  that needs root shows a lock: on a Mac it asks through the system's password
+  dialog (osascript, administrator privileges), on Linux through sudo in its
+  terminal; a cancelled dialog ends the run as "cancelled". A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`); ■ stops it; the deck watches (floats it),
   restarts, stops and dismisses runs, and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with

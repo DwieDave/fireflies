@@ -17,9 +17,14 @@
 //   composer.json    scripts (not its pre-/post- event hooks)
 //   go.mod           run, test, build, and each cmd/<name>
 //   scripts/, bin/   executable files
+//   flake.nix        nix flake check / update here; its outputs and system
+//                    configurations come from nix.js (an evaluation, in the
+//                    background)
 //
 // A script: { id, runner, group, name, cmd, hint? }. `cmd` is one shell line
 // for `hc run`; `id` stays the same between looks (recents go by it).
+
+import { nixStatic } from "./nix.js";
 
 /** Manifests the probe reads, at most 256 KiB each. */
 export const MANIFESTS = [
@@ -32,6 +37,8 @@ export const MANIFESTS = [
  *  each opened by a line "\u001e<name>" (a record separator). */
 export const PROBE = [
   `printf '\\036ls\\n'; ls -1A 2>/dev/null`,
+  // Who and where: this host's name (a Mac's LocalHostName), the user, the OS and CPU.
+  `printf '\\036sys\\n'; (scutil --get LocalHostName 2>/dev/null || hostname -s 2>/dev/null || hostname); id -un; uname -s; uname -m`,
   `printf '\\036exec\\n'; for d in scripts bin; do [ -d "$d" ] && find "$d" -maxdepth 1 \\( -type f -o -type l \\) -perm -u+x 2>/dev/null; done`,
   `printf '\\036examples\\n'; [ -d examples ] && ls -1 examples 2>/dev/null`,
   `printf '\\036cmd\\n'; [ -d cmd ] && for d in cmd/*/; do [ -d "$d" ] && echo "$d"; done`,
@@ -41,7 +48,7 @@ export const PROBE = [
 
 /** Splits the probe's output into { ls: Set, exec: [], examples: [], cmd: [], files: { name: text } }. */
 export function parseProbe(out) {
-  const res = { ls: new Set(), exec: [], examples: [], cmd: [], files: {} };
+  const res = { ls: new Set(), exec: [], examples: [], cmd: [], files: {}, sys: {} };
   for (const part of String(out ?? "").split("\u001e").slice(1)) {
     const nl = part.indexOf("\n");
     const head = nl < 0 ? part : part.slice(0, nl);
@@ -50,6 +57,7 @@ export function parseProbe(out) {
     if (head === "ls") res.ls = new Set(lines());
     else if (head === "exec") res.exec = lines();
     else if (head === "examples") res.examples = lines();
+    else if (head === "sys") { const [host, user, os, arch] = lines(); res.sys = { host: host ?? null, user: user ?? null, os: os ?? null, arch: arch ?? null }; }
     else if (head === "cmd") res.cmd = lines().map((l) => l.replace(/\/+$/, ""));
     else if (head.startsWith("file ")) res.files[head.slice(5)] = body;
   }
@@ -226,6 +234,7 @@ export function detect(probe) {
     push(probe.cmd.map((d) => d.replace(/^cmd\//, "")).filter(Boolean)
       .map((n) => ({ runner: "go", group: "go.mod", name: `run ${n}`, cmd: `go run ./cmd/${q(n)}` })));
   }
+  if (ls.has("flake.nix")) push(nixStatic());
   for (const f of probe.exec) {
     const path = f.replace(/^\.\//, "");
     const dir = path.split("/")[0];
