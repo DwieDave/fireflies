@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import {
-  tone, pollEvery, FAST, SLOW, parseHeaders, needsFromWorkflow, jobColumns, splitLog, logLine, duration, ago, checkRows, rollupTone,
+  tone, pollEvery, FAST, SLOW, parseHeaders, needsFromWorkflow, jobColumns, jobParents, splitLog, logLine, duration, ago, checkRows, rollupTone,
 } from "../defaults/mods/nocturne-github/model.js";
 
 test("tone maps GitHub states to the window's colors", () => {
@@ -78,6 +78,56 @@ test("lays jobs out in columns by needs, matrix and templated names included", (
   ];
   const cols = jobColumns(jobs, needsFromWorkflow(CI)).map((c) => c.map((j) => j.name));
   expect(cols).toEqual([["platform-tests (linux, ubuntu)", "platform-tests (mac, macos)"], ["test"], ["Mac DMG"], ["Publish ubuntu"]]);
+});
+
+// 4-space indents, a reusable workflow's jobs ("caller / job"), names with
+// expressions in the middle, and jobs that haven't run yet.
+const DEPLOY = `name: Build and Publish
+on: push
+jobs:
+    detect:
+        name: Detect changed services
+        runs-on: x
+    gitops-prod:
+        name: Update GitOps manifests
+        needs: detect
+        if: github.ref == 'refs/heads/main'
+    build-web:
+        name: Build web
+        needs: [detect]
+        uses: ./.github/workflows/build.yml
+    gitops-preview:
+        name: Update GitOps manifests (\${{ inputs.env }} preview)
+        needs:
+            - build-web
+    deploy-preview:
+        name: Deploy PR preview environment
+        needs: build-web
+`;
+
+const ran = (id: number, name: string, status = "completed", conclusion: string | null = "success") => ({ id, name, status, conclusion, started_at: null, completed_at: null });
+
+test("reads needs at any indent", () => {
+  const n = needsFromWorkflow(DEPLOY);
+  expect([...n.keys()]).toEqual(["detect", "gitops-prod", "build-web", "gitops-preview", "deploy-preview"]);
+  expect(n.get("gitops-prod")!.needs).toEqual(["detect"]);
+  expect(n.get("build-web")).toEqual({ name: "Build web", needs: ["detect"] });
+  expect(n.get("gitops-preview")!.needs).toEqual(["build-web"]);
+  expect(n.get("deploy-preview")!.needs).toEqual(["build-web"]);
+});
+
+test("every job links to the jobs it needs, including ones that haven't run", () => {
+  const jobs = [
+    ran(1, "Detect changed services"), ran(2, "Update GitOps manifests", "completed", "skipped"),
+    ran(3, "Build web / build"), ran(4, "Update GitOps manifests (staging preview)", "queued", null),
+    ran(5, "Deploy PR preview environment", "pending", null),
+  ];
+  const needs = needsFromWorkflow(DEPLOY);
+  expect(jobColumns(jobs, needs).map((c) => c.map((j) => j.id))).toEqual([[1], [2, 3], [4, 5]]);
+  const parents = jobParents(jobs, needs)!;
+  expect(Object.fromEntries(parents)).toEqual({ 1: [], 2: [1], 3: [1], 4: [3], 5: [3] });
+  expect(jobParents(jobs, new Map())).toBeNull();
+  expect(jobParents([ran(9, "unknown")], needs)).toBeNull();
 });
 
 test("without a workflow, jobs fall into waves by time; queued ones stay in the open wave", () => {

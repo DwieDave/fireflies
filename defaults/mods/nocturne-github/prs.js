@@ -7,7 +7,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextView, TextareaState, Textarea } from "gpui-base";
 import { ghJson, ghRun, api } from "./gh.js";
 import { checkRows, rollupTone, ago, duration, SLOW } from "./model.js";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow } from "./kit.js";
+import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize } from "./kit.js";
 
 const LIST = "number,title,author,isDraft,headRefName,baseRefName,additions,deletions,reviewDecision,statusCheckRollup,updatedAt,labels";
 const VIEW = "number,title,body,author,state,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles,mergeable";
@@ -37,9 +37,10 @@ export default class Prs {
     this.listScroll = VirtualListScrollHandle.new();
     this.composer = null; // TextareaState while writing a comment
     this.error = "";
+    this.sizes = { ...(kept.sizes ?? {}) }; // dragged splitters: left (width), top (height, narrow), checks (height)
   }
 
-  save() { return { filter: this.filter, sel: this.sel }; }
+  save() { return { filter: this.filter, sel: this.sel, sizes: this.sizes }; }
 
   // ---- data
 
@@ -101,7 +102,7 @@ export default class Prs {
   }
 
   scroll(dy) {
-    const max = Math.max(0, this.contentH - this.viewH + 24);
+    const max = Math.max(0, this.contentH - this.viewH);
     this.scrollY = Math.max(0, Math.min(max, this.scrollY + dy));
   }
 
@@ -244,7 +245,7 @@ export default class Prs {
         .child(div().relative().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : t.muted).child(c.workflow ? `${c.workflow} / ${c.name}` : c.name))
         .child(div().relative().flex_none().text_color(c.tone === "working" ? t.working : t.dim).child(c.started ? duration(c.started, c.ended) : TONE_WORD[c.tone] ?? ""));
     });
-    const h = Math.min(checks.length, 8) * CHECK_ROW + 26;
+    const h = this.checksH ?? Math.min(checks.length, 8) * CHECK_ROW + 26;
     return panel(t, "pr-checks", "Checks", active,
       div().id("checks-body").size_full().overflow_y_scroll().pt(2).children(rows),
       { right: `${passed}/${checks.length} passed` }).h(h).flex_none();
@@ -288,7 +289,10 @@ export default class Prs {
         .when(Boolean(c.body?.trim()), (el) => el.child(md(`c-md-${i}`, c.body)));
     };
     const content = v_flex().absolute().left(0).right(0).top(-this.scrollY).px(16).py(12)
-      .on_size_change((size, cx) => { if (Math.abs(size.height - this.contentH) > 1) { this.contentH = size.height; cx.notify(); } })
+      .on_size_change((size, cx) => {
+        const h = unzoom(size.height);
+        if (Math.abs(h - this.contentH) > 1) { this.contentH = h; this.scroll(0); cx.notify(); }
+      })
       .child(head)
       .child(md(`body-${pr.number}`, d ? pr.body : "_Reading…_"))
       .when(items.length > 0, (el) => el.child(h_flex().pt(18).pb(4).gap(8).items_center()
@@ -303,8 +307,11 @@ export default class Prs {
     const max = Math.max(1, this.contentH - this.viewH);
     const shown = Math.min(1, this.viewH / Math.max(1, this.contentH));
     const view = div().id("pr-view").relative().size_full().overflow_hidden()
-      .on_size_change((size, cx) => { if (Math.abs(size.height - this.viewH) > 1) { this.viewH = size.height; cx.notify(); } })
-      .on_scroll_wheel((e, cx) => { this.scroll(-(e.delta?.y ?? 0)); cx.notify(); })
+      .on_size_change((size, cx) => {
+        const h = unzoom(size.height);
+        if (Math.abs(h - this.viewH) > 1) { this.viewH = h; this.scroll(0); cx.notify(); }
+      })
+      .on_scroll_wheel((e, cx) => { this.scroll(-unzoom(e.delta?.y ?? 0)); cx.notify(); })
       .on_mouse_down("left", (_e, cx) => { this.focus = "main"; cx.stop_propagation(); })
       .child(content)
       // A thin dithered thumb shows where you are.
@@ -316,14 +323,31 @@ export default class Prs {
   }
 
   render(t, size) {
-    const wide = size.width >= 820;
-    const left = v_flex().gap(6).min_h(0).h_full()
-      .when(wide, (el) => el.w(Math.round(Math.min(460, Math.max(300, size.width * 0.38)))))
+    const app = this.app, wide = size.width >= 820;
+    const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
+    const lw = clamp(this.sizes.left ?? Math.min(460, Math.max(300, size.width * 0.38)), 220, size.width - 320);
+    const th = clamp(this.sizes.top ?? size.height * 0.45, 120, size.height - 140);
+    const leftH = wide ? size.height : th;
+    this.checksH = this.sizes.checks ? clamp(this.sizes.checks, 60, leftH - 100) : null;
+    const checks = this.checksPanel(t);
+    const left = v_flex().min_h(0).h_full()
+      .when(wide, (el) => el.w(lw))
       .when(!wide, (el) => el.w_full())
       .child(this.listPanel(t))
-      .children([this.checksPanel(t)].filter(Boolean));
-    if (!wide) return v_flex().size_full().gap(6).child(left.h(Math.round(size.height * 0.45)).flex_none()).child(this.mainPanel(t));
-    return h_flex().size_full().gap(6).child(left.flex_none()).child(this.mainPanel(t));
+      .when(Boolean(checks), (el) => el
+        .child(splitter(t, "pr-split-checks", "y", app.dragged("checks"), (e) => app.resize(e, "checks", "y", this.checksH ?? Math.min(this.checks().length, 8) * CHECK_ROW + 26,
+          (v) => { this.sizes.checks = v; }, { min: 60, max: leftH - 100, sign: -1 })))
+        .child(checks));
+    if (!wide) {
+      return v_flex().size_full()
+        .child(left.h(th).flex_none())
+        .child(splitter(t, "pr-split-top", "y", app.dragged("top"), (e) => app.resize(e, "top", "y", th, (v) => { this.sizes.top = v; }, { min: 120, max: size.height - 140 })))
+        .child(this.mainPanel(t));
+    }
+    return h_flex().size_full()
+      .child(left.flex_none())
+      .child(splitter(t, "pr-split-left", "x", app.dragged("left"), (e) => app.resize(e, "left", "x", lw, (v) => { this.sizes.left = v; }, { min: 220, max: size.width - 320 })))
+      .child(this.mainPanel(t));
   }
 }
 
