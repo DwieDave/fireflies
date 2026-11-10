@@ -584,7 +584,7 @@ No arguments.
 
 ## `app.feedback`
 
-Draft feedback for the person to review and send (from: person or agent).
+Draft feedback as a GitHub issue for the person to review, open and submit there (from: person or agent).
 
 | Argument | Required |
 |---|---|

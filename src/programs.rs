@@ -192,27 +192,6 @@ pub fn name(app: &str) -> String {
     TABLE.with(|t| find(&t.borrow(), app).map(|(key, e)| e.name.clone().unwrap_or_else(|| key.to_owned()))).unwrap_or_else(|| app.to_owned())
 }
 
-/// An agent's 7501 `app` as a name Herdr ships (`claude` for `claude-code`),
-/// else `other` (`unknown` when it gave none): never the person's own words.
-pub fn agent_name(app: Option<&str>) -> String {
-    static NAMES: std::sync::OnceLock<BTreeMap<String, String>> = std::sync::OnceLock::new();
-    let names = NAMES.get_or_init(|| {
-        let table: Table = serde_json::from_str(BUILT_IN).expect("defaults/programs.json");
-        let mut names = BTreeMap::new();
-        for (key, e) in table.programs {
-            for alias in &e.also {
-                names.insert(alias.to_lowercase(), key.clone());
-            }
-            names.insert(key.to_lowercase(), key);
-        }
-        names
-    });
-    match app.map(str::trim).filter(|a| !a.is_empty()) {
-        None => "unknown".into(),
-        Some(a) => names.get(&a.to_lowercase()).cloned().unwrap_or_else(|| "other".into()),
-    }
-}
-
 fn base(s: &str) -> &str {
     let s = s.rsplit(['/', '\\']).next().unwrap_or(s);
     let s = s.trim_start_matches('-');

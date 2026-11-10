@@ -99,10 +99,13 @@ pub fn client(args: &[String]) -> i32 {
     let mut stream = match UnixStream::connect(socket()) {
         Ok(s) => s,
         Err(_) if args.first().is_some_and(|v| v == "feedback") => {
-            let body = crate::feedback::draft(&args[1], "", 0, "agent", "other");
-            println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
-            eprintln!("Herdr must be open to review and send this feedback. Nothing was sent; core version and layout will reflect the open window.");
-            return 1;
+            // No window to review it in: GitHub's new-issue page is the review.
+            let core = crate::core_bin::find(None).and_then(|bin| crate::core_bin::version(&bin));
+            let issue = crate::feedback::issue("", &args[1], "agent", core.as_deref());
+            println!("{}", issue.url);
+            crate::links::open(&crate::links::Target::Url(issue.url));
+            eprintln!("Herdr isn't open: opened a prefilled GitHub issue in the browser. Nothing is filed until the person submits it there.");
+            return 0;
         }
         Err(e) => return fail(&format!("no Herdr window at {}: {e}", socket().display())),
     };

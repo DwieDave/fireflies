@@ -337,33 +337,10 @@ export function updates(): {
 /** Record only spotlight versions actually shown expanded, never collapsed headlines. */
 export function presentUpdateNotes(versions: string[]): null;
 
-/** Anonymous usage data (one report per day, never terminal content). `enabled`: collecting now;
- *  `setting`: settings.json's `telemetry`; `off_because`: an env var that turns it off for this run
- *  (DO_NOT_TRACK, HERDR_TELEMETRY, CI); `sends`: false for a build from source (it never sends).
- *  `draft`: today's report so far; `queued`: finished days waiting to go, exactly as they'll be
- *  sent; `last_sent`: the last one the server took (`at`: unix seconds). Null until it starts. */
-export function telemetry(): {
-  enabled: boolean;
-  setting: boolean;
-  off_because: string | null;
-  sends: boolean;
-  endpoint: string;
-  draft: Record<string, unknown> | null;
-  queued: Record<string, unknown>[];
-  last_sent: { at: number; report: Record<string, unknown> } | null;
-} | null;
-
-/** The explicit feedback draft. Sending is restricted to the app-owned feedback frame. */
-export function feedbackPreview(message: string, email: string, images?: number): { body: import("gpui-kit").HostValue; available: boolean };
-/** The clipboard's image, kept for the form (`path` for `image()`); null when it holds none. Frame-only. */
-export function feedbackPasteImage(): { path: string } | { error: string } | null;
-/** Picks image files (at most 3), each kept like a pasted one. Frame-only. */
-export function feedbackPickImages(): Promise<({ path: string } | { error: string })[]>;
-/** Attaches dropped image paths (at most 3), using the picker's conversion and limits. Frame-only. */
-export function feedbackAttachImages(paths: string[]): ({ path: string } | { error: string })[];
-/** Drops the form's kept screenshots. Frame-only. */
-export function feedbackClearImages(): null;
-export function sendFeedback(body: import("gpui-kit").HostValue, images?: string[]): Promise<string | null>;
+/** The feedback form's GitHub issue: `title` (the given one, else the message's first line),
+ *  `body` (the message plus app, herdr-core and OS versions) and `url`, the prefilled
+ *  new-issue page (cut to fit a link). Nothing is sent: open `url` with `app.open_url`. */
+export function feedbackIssue(title: string, message: string): { title: string; body: string; url: string };
 
 /** What the app runs with: the shown layout's look (theme name, fonts, sizes, terminal
  *  padding and opacity) with the person's zoom and sounds. */
