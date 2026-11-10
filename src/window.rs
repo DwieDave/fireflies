@@ -400,6 +400,10 @@ struct Overlay {
     key: Option<String>,
     /// A window people can resize by its edges (`resizable`).
     resize: Option<movable::Resize>,
+    /// Its terminal blocks that nothing else showed when it opened, and the
+    /// size each had then (block, address, cols, rows): given back as it
+    /// closes, so a small window doesn't leave its terminal small.
+    sizes: Vec<(String, String, u16, u16)>,
     /// The app's own screen (a `frame-` mod: What's new, the welcome): only
     /// its own close ends it, never a layout switch.
     frame: bool,
@@ -4278,6 +4282,15 @@ impl AppWindow {
             self.copies.insert(slot.clone(), copy);
         }
         let first_term = layout.as_ref().and_then(|l| l.visible_blocks().into_iter().find(|n| matches!(n.content(), Some(Content::Terminal { .. }))).map(|n| n.id.clone()));
+        let shown = self.visible_addresses();
+        let sizes = layout.as_ref().map(|l| l.visible_blocks().into_iter().filter_map(|n| match n.content() {
+            Some(Content::Terminal { terminal }) if !shown.contains(terminal) => {
+                let rec = self.live.get(terminal)?;
+                let dim = |k: &str| rec.get(k).and_then(Value::as_u64).and_then(|v| u16::try_from(v).ok()).filter(|v| *v > 0);
+                Some((n.id.clone(), terminal.clone(), dim("cols")?, dim("rows")?))
+            }
+            _ => None,
+        }).collect()).unwrap_or_default();
         let has_layout = layout.is_some();
         self.overlays.push(Overlay {
             id,
@@ -4295,6 +4308,7 @@ impl AppWindow {
             place,
             key: key.clone(),
             resize,
+            sizes,
             frame: app_screen,
         });
         if let Some(k) = &key {
@@ -4465,6 +4479,18 @@ impl AppWindow {
             }
             self.bounds.borrow_mut().remove(&o.slot);
             self.remove_copy(&o.slot, window, cx);
+            // Its terminals that nothing else shows get their size from before
+            // it back, ahead of its views going (the next sync drops them).
+            if !o.sizes.is_empty() {
+                let shown = self.visible_addresses();
+                for (block, address, cols, rows) in &o.sizes {
+                    if !shown.contains(address)
+                        && let Some(t) = self.terms.get(block)
+                    {
+                        t.view.read(cx).give_back_size(*cols, *rows);
+                    }
+                }
+            }
             if o.layout.is_some() {
                 self.sync(window, cx);
             } else {
@@ -7115,6 +7141,43 @@ export default class Probe extends View {
         cx.simulate_keystrokes("/ escape escape escape");
         assert_eq!(ran(cx), vec![]);
         assert!(!deck_open(cx));
+    }
+
+    /// A small window showing a terminal (a switch's password prompt) shrinks
+    /// it; closing the window gives back the size it had before, unless
+    /// something else shows it (that viewer keeps sizing it).
+    #[test]
+    fn an_overlay_gives_its_terminals_their_size_back() {
+        in_own_process("overlay_sizes");
+    }
+
+    #[gpui::test]
+    fn overlay_sizes(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("overlay_sizes") {
+            return;
+        }
+        let (view, cx) = open_window(cx, "unused", "", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            this.sync(window, cx);
+            this.live.insert("t1".into(), json!({ "address": "t1", "cols": 120, "rows": 40 }));
+            this.live.insert("t9".into(), json!({ "address": "t9", "cols": 200, "rows": 120 }));
+            let small = |t: &str| json!({ "kind": "dialog", "width": 440, "height": 92, "layout": { "type": "column", "children": [
+                { "type": "block", "content": { "terminal": t } }
+            ] } });
+            this.open_overlay("pw".into(), small("t9"), window, cx);
+            let o = this.overlays.iter().find(|o| o.id == "pw").unwrap();
+            assert_eq!(o.sizes.iter().map(|(_, a, c, r)| (a.as_str(), *c, *r)).collect::<Vec<_>>(), vec![("t9", 200, 120)]);
+            assert!(o.sizes.iter().all(|(b, ..)| this.terms.contains_key(b)), "recorded by the block its view lives under");
+            this.close_overlay("pw", window, cx);
+            assert!(!this.overlays.iter().any(|o| o.id == "pw"));
+            // A terminal its pane shows: the pane sizes it, nothing to give back.
+            this.open_overlay("pw2".into(), small("t1"), window, cx);
+            assert!(this.overlays.iter().find(|o| o.id == "pw2").unwrap().sizes.is_empty());
+        }));
     }
 
     include!("window/pane_size_tests.rs");
