@@ -729,11 +729,16 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
+  A web view sends `web.location` (its state: `href`, `canGoBack`, …) whenever its address or
+  history changes, also within a page (links in single-page apps, pushState, #fragments), so an
+  address bar can follow it; `load.*` alone misses those.
   Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
   and sends `pip.enter { of }` (`pip.start { result | error }`: `"none"` when there is no video);
-  again: back. A native view `{ kind: "pip", of }` then takes the page's whole web view and
+  again: back. Such a page also sends `web.video { present }` when it gains its first or loses its
+  last `<video>` (any frame; `state` has `video`), e.g. to show a PiP button only then.
+  A native view `{ kind: "pip", of }` then takes the page's whole web view and
   lifts the video into the page's top layer to fill it (an embedded player's iframe too); the
   pane is left empty meanwhile (draw a placeholder; the page gets `pip.leave` when it's back).
   Actions: `pip.toggle` (play/pause; event `pip.state { result }`), `pip.back` (the page goes

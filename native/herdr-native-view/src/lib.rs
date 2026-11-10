@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 pub mod macos;
 #[cfg(target_os = "macos")]
 mod pip;
+#[cfg(target_os = "macos")]
+mod page;
 
 
 

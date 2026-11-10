@@ -7,7 +7,8 @@
 //   cmd+r    reload, also while the page has the keyboard
 //   cmd+[ / cmd+]   back / forward
 //   cmd+alt+i  the inspector (the </> button)
-//   ⧉        the page's video in the nocturne-pip player, a Herdr window over
+//   ⧉        (only while the page has a <video>)
+//            the page's video in the nocturne-pip player, a Herdr window over
 //            every tab and space (command nocturne-browser.pip); the page goes
 //            with it, and comes back with ↩ or ✕ (or ⧉ again)
 //   ↗        the page in the system's default browser
@@ -94,6 +95,8 @@ export default class Browser extends View {
     try { this.zoom = Number(localStorage.getItem("zoom")) || 0.9; } catch {}
     this.page = { href: this.start, title: null, loading: false, progress: 0, canGoBack: false, canGoForward: false };
     this.error = null;
+    // The page has a <video> (event web.video): ⧉ shows only then.
+    this.video = false;
     this.barW = 600;
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "address or search" });
@@ -194,11 +197,15 @@ export default class Browser extends View {
     if (e.event === "web.inspectKey") this.inspector(cx);
     // ⌘R while the page has the keyboard: reload (or stop, while it loads).
     if (e.event === "web.reloadKey") this.command("reload");
-    if (e.event?.startsWith("load.") && e.event !== "load.error") {
+    // web.location: the address changed without a load too (links in
+    // single-page apps, pushState, #fragments, back/forward within a page).
+    if ((e.event?.startsWith("load.") && e.event !== "load.error") || e.event === "web.location") {
       this.page = { ...this.page, ...d, href: d.href ?? d.url ?? this.page.href };
       if (e.event === "load.start") this.error = null;
-      if (e.event === "load.finish" && this.page.href) { try { localStorage.setItem("url", this.page.href); } catch {} }
+      if ((e.event === "load.finish" || e.event === "web.location") && this.page.href) { try { localStorage.setItem("url", this.page.href); } catch {} }
     }
+    // ⧉ shows while the page has a <video> (it comes and goes with the page).
+    if (e.event === "web.video") this.video = Boolean(d.present);
     if (e.event === "load.error") { this.page = { ...this.page, loading: false }; this.error = d.message ?? "The page didn't load."; }
     // The page's video goes to the player (⧉), or comes back into Herdr from
     // its popped-out window: the player shows it. Meanwhile the page is away.
@@ -309,7 +316,7 @@ export default class Browser extends View {
         .on_click((_e, cx) => { this.command("zoom_reset"); cx.notify(); })
         .child(`${Math.round(this.zoom * 100)}%`))
       .child(this.icon(t, "zoom-in", "plus", this.zoom < 3, () => this.command("zoom_in")))
-      .child(this.icon(t, "pip", "picture-in-picture", Boolean(this.start && available()), () => this.command("pip")))
+      .when(Boolean(this.start && available() && (this.video || this.away)), (el) => el.child(this.icon(t, "pip", "picture-in-picture", true, () => this.command("pip"))))
       .child(this.icon(t, "inspect", "code", Boolean(this.start && available()), (cx) => this.inspector(cx), { focus: true }))
       .child(this.icon(t, "external", "external-link", Boolean(this.start && p.href), (cx) => this.external(cx)))
       // Loading: a dithered line along the bar's foot, as far as the page has come.
