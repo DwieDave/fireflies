@@ -32,31 +32,34 @@ export function parseHeaders(text) {
 }
 
 /** The `jobs:` of a workflow file: key -> { name, needs }. A tiny reader for
- *  the shapes GitHub accepts (`needs: a`, `needs: [a, b]`, a block list);
- *  anything it can't read is left out (the graph then falls back to timing). */
+ *  the shapes GitHub accepts (`needs: a`, `needs: [a, b]`, a block list), at
+ *  any indent; anything it can't read is left out (the graph then falls back
+ *  to timing). */
 export function needsFromWorkflow(yaml) {
   const out = new Map();
   const lines = String(yaml ?? "").split(/\r?\n/);
   const start = lines.findIndex((l) => /^jobs:\s*(#.*)?$/.test(l));
   if (start < 0) return out;
-  let indent = null, job = null, list = false;
-  const clean = (v) => v.replace(/#.*$/, "").trim().replace(/^["']|["']$/g, "");
+  // indent: the job keys'; prop: the current job's keys' (2 or 4 deeper, whatever the file uses).
+  let indent = null, prop = null, job = null, list = false;
+  const clean = (v) => v.replace(/\s#.*$/, "").trim().replace(/^["']|["']$/g, "");
   for (const line of lines.slice(start + 1)) {
     if (!line.trim() || /^\s*#/.test(line)) continue;
     const pad = line.length - line.trimStart().length;
     if (pad === 0) break; // the next top-level key
     indent ??= pad;
-    if (pad === indent) {
-      const m = /^\s*([A-Za-z0-9_-]+):\s*(#.*)?$/.exec(line);
-      job = m ? { name: null, needs: [] } : null;
-      if (m) out.set(m[1], job);
-      list = false;
+    if (pad <= indent) {
+      const m = /^\s*["']?([A-Za-z0-9_-]+)["']?:\s*(#.*)?$/.exec(line);
+      job = m && pad === indent ? { name: null, needs: [] } : null;
+      if (job) out.set(m[1], job);
+      prop = null; list = false;
       continue;
     }
     if (!job) continue;
-    if (pad === indent + 2 || (list && pad <= indent + 2)) list = false;
+    prop ??= pad;
+    if (pad <= prop) list = false;
     const kv = /^\s*(name|needs):\s*(.*)$/.exec(line);
-    if (pad === indent + 2 && kv) {
+    if (pad === prop && kv) {
       const v = clean(kv[2]);
       if (kv[1] === "name") job.name = v || null;
       else if (v.startsWith("[")) job.needs = v.slice(1, v.lastIndexOf("]")).split(",").map(clean).filter(Boolean);
@@ -64,7 +67,7 @@ export function needsFromWorkflow(yaml) {
       else list = true;
       continue;
     }
-    if (list && pad > indent + 2) {
+    if (list && pad > prop) {
       const item = /^\s*-\s*(.+)$/.exec(line);
       if (item) job.needs.push(clean(item[1]));
     }
@@ -72,18 +75,39 @@ export function needsFromWorkflow(yaml) {
   return out;
 }
 
-/** Which workflow job an API job is: its key, by `name:` or key, a matrix's " (…)" aside. */
-function keyOf(job, needs) {
+/** A `name:` as a test of the shown name: `${{ … }}` matches anything. */
+function nameTest(name) {
+  if (!name.includes("${{")) return (s) => s === name;
+  const re = new RegExp(`^${name.split(/\$\{\{.*?\}\}/).map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`);
+  return (s) => re.test(s);
+}
+
+/** Which workflow job an API job is: its key, by `name:` or key. The shown
+ *  name may carry a matrix's " (…)" and, for a reusable workflow's jobs, the
+ *  caller's name before " / ". The fullest form that matches any job wins,
+ *  so "Deploy (prod)" finds `name: Deploy (${{ env }})` before `name: Deploy`. */
+export function keyOf(job, needs) {
   const shown = String(job.name ?? "");
-  const bare = shown.replace(/ \(.*\)$/, "");
-  for (const [key, j] of needs) {
-    const name = j.name ?? key;
-    if (name === shown || name === bare || key === shown || key === bare) return key;
-    // `name: Build ${{ matrix.os }}`: its fixed start.
-    const fixed = name.split("${{")[0].trim();
-    if (fixed && name.includes("${{") && shown.startsWith(fixed)) return key;
-  }
+  const caller = shown.split(" / ")[0];
+  const tries = [...new Set([shown, caller, shown.replace(/ \(.*\)$/, ""), caller.replace(/ \(.*\)$/, "")])];
+  const tests = [...needs].map(([key, j]) => [key, nameTest(j.name ?? key)]);
+  for (const s of tries) for (const [key, test] of tests) if (s === key || test(s)) return key;
   return null;
+}
+
+/** Which jobs each job waits for, by `needs:`: job id -> parent job ids
+ *  ([] for a first job). null when the workflow's needs aren't known (the
+ *  columns then come from timing, and each column follows the one before). */
+export function jobParents(jobs, needs) {
+  if (!needs?.size) return null;
+  const list = [...(jobs ?? [])];
+  const keys = list.map((j) => keyOf(j, needs));
+  if (!keys.some(Boolean)) return null;
+  const byKey = new Map();
+  list.forEach((j, i) => { if (keys[i]) (byKey.get(keys[i]) ?? byKey.set(keys[i], []).get(keys[i])).push(j.id); });
+  const out = new Map();
+  list.forEach((j, i) => out.set(j.id, keys[i] ? (needs.get(keys[i])?.needs ?? []).flatMap((k) => byKey.get(k) ?? []) : []));
+  return out;
 }
 
 /** The jobs in columns, left to right: by `needs:` when the workflow says,

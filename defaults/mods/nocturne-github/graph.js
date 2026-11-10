@@ -3,7 +3,8 @@
 // nocturne-agents' graph (its dithered elbow lines, the pulse running into
 // what works, breathing stripes; copied, since mods can't share files),
 // and each job carries a strip of its steps, one dithered cell per step in
-// its color, so a run's progress reads at a glance.
+// its color, so a run's progress reads at a glance. Lines follow each job's
+// own `needs:` (model.js jobParents) when the workflow is known.
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -27,24 +28,26 @@ export function layout(cols) {
 
 const seg = (color, x, y, w, h) => div().absolute().left(x).top(y).w(Math.max(1, w)).h(Math.max(1, h)).child(dither(color, 1));
 
-/** Lines from one column (or the run) into the next, through a bus at the gap's middle. */
-function edges(t, from, to) {
-  if (!to.length) return [];
+/** The lines into one job from what it waits for (`parents`: nodes, or the
+ *  run), through a bus in the gap before the job's column. A line into a job
+ *  that hasn't run (queued, skipped) is dim but there. */
+function edgesInto(t, n, parents) {
+  if (!parents.length) return [];
   const out = [];
-  const right = from[0].x + from[0].w;
-  const mid = right + Math.round(GAP_X / 2);
-  const ys = [...from, ...to].map((n) => n.y + Math.round(NH / 2));
+  const mid = n.x - Math.round(GAP_X / 2);
+  const cy = n.y + Math.round(NH / 2);
+  const ys = [cy, ...parents.map((p) => p.y + Math.round(NH / 2))];
   const top = Math.min(...ys), bottom = Math.max(...ys);
-  const live = to.some((n) => n.tone === "working");
-  out.push(seg(live ? t.working : t.ansi8, mid - 1, top - 1, 2, bottom - top + 2));
-  for (const n of from) out.push(seg(n.tone === "done" ? t.ansi8 : toneColor(t, n.tone === "working" ? "working" : "stopped"), right, n.y + Math.round(NH / 2) - 1, mid - right, 2));
-  for (const n of to) {
-    const cy = n.y + Math.round(NH / 2);
-    const color = toneColor(t, n.tone);
-    out.push(seg(n.tone === "queued" || n.tone === "skipped" ? t.ansi0 : n.tone === "working" ? color : t.ansi8, mid, cy - 1, n.x - mid, 2));
-    if (n.tone === "working") {
-      out.push(div().absolute().top(cy - 2).w(6).h(4).bg(color).loop("left", { from: mid, to: n.x - 6, period: 1000, easing: "linear" }));
-    }
+  const idle = n.tone === "queued" || n.tone === "skipped" || n.tone === "stopped";
+  const into = n.tone === "working" ? t.working : idle ? t.dim : t.ansi8;
+  if (bottom > top) out.push(seg(into, mid - 1, top - 1, 2, bottom - top + 2));
+  for (const p of parents) {
+    const right = p.x + p.w;
+    out.push(seg(p.tone === "done" ? t.ansi8 : p.tone === "working" ? t.working : t.dim, right, p.y + Math.round(NH / 2) - 1, mid - right, 2));
+  }
+  out.push(seg(into, mid, cy - 1, n.x - mid, 2));
+  if (n.tone === "working") {
+    out.push(div().absolute().top(cy - 2).w(6).h(4).bg(t.working).loop("left", { from: mid, to: n.x - 6, period: 1000, easing: "linear" }));
   }
   return out;
 }
@@ -97,13 +100,22 @@ function runNode(t, r, x, y) {
       .child(div().text_size(10).text_color(t.dim).truncate().child(`#${r.run_number} · ${r.event} · ${duration(r.run_started_at, k === "working" || k === "queued" ? null : r.updated_at)}`)));
 }
 
-/** The canvas: lines under nodes. `sel` is the selected job id. */
-export function canvas(t, run, cols, sel, focused, onPick, panX, panY) {
+/** The canvas: lines under nodes. `sel` is the selected job id; `parents`
+ *  (model.js jobParents) says which jobs each waits for, or null: then each
+ *  column follows the whole column before it. */
+export function canvas(t, run, cols, parents, sel, focused, onPick, panX, panY) {
   const g = layout(cols);
   const byCol = cols.map((_, ci) => g.nodes.filter((n) => n.col === ci));
+  const byId = new Map(g.nodes.map((n) => [n.job.id, n]));
   for (const n of g.nodes) { n.tone = tone(n.job.status, n.job.conclusion); n.w = NW; }
   const runN = { ...g.run, w: RW, tone: tone(run.status, run.conclusion) };
-  const lines = byCol.flatMap((c, ci) => edges(t, ci === 0 ? [runN] : byCol[ci - 1], c));
+  const from = (n) => {
+    if (!parents) return n.col === 0 ? [runN] : byCol[n.col - 1];
+    // Only what sits left of the job (a job waiting on its own column can't be drawn).
+    const ps = (parents.get(n.job.id) ?? []).map((id) => byId.get(id)).filter((p) => p && p.col < n.col);
+    return ps.length ? ps : n.col === 0 ? [runN] : [];
+  };
+  const lines = g.nodes.flatMap((n) => edgesInto(t, n, from(n)));
   const el = div().id("run-canvas").absolute().left(panX).top(panY).w(g.width).h(g.height)
     .children(lines)
     .child(runNode(t, run, g.run.x, g.run.y))
