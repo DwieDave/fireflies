@@ -46,7 +46,13 @@ function title(tab, l) {
   const telling = live && live !== prog && !path && !live.includes("@") && live.toLowerCase() !== l?.program?.key;
   return (tab.name === prog || !tab.named) && telling ? live : tab.name;
 }
-const RANK = { blocked: 4, done: 3, working: 2, idle: 1 };
+// "command": working, but waiting on a shell command it started (a build, `hc wait`).
+// It sorts between working and sleeping (done, idle) agents.
+const RANK = { blocked: 5, done: 4, working: 3, command: 2, idle: 1 };
+const shownStatus = (a) => (a.status === "working" && a.command ? "command" : a.status);
+const asleep = (s) => s === "done" || s === "idle";
+// A command's color is working's; the theme has no color of its own for it.
+const colorOf = (t, s) => (s === "command" ? t.working : t[s]);
 // A sub-agent without a pane isn't in agents(): its raw word, error counting as
 // blocked. It's never done: it reports to its parent, and the parent's done is the news.
 const kidStatus = (k, listed) => {
@@ -58,8 +64,8 @@ const SORTS = [
   { id: "grouped", label: "Grouped by space", icon: "layers" },
 ];
 const sortOf = () => SORTS.find((s) => s.id === shared("agents.sort")) ?? SORTS[0];
-const SECTION = { 4: "Needs you", 3: "Done", 2: "Working", 1: "Idle" };
-const SECTION_STATUS = { 4: "blocked", 3: "done", 2: "working" };
+const SECTION = { 5: "Needs you", 4: "Done", 3: "Working", 2: "Running commands", 1: "Idle" };
+const SECTION_STATUS = { 5: "blocked", 4: "done", 3: "working", 2: "command" };
 
 function duration(ms) {
   const m = Math.floor(ms / 60000);
@@ -204,6 +210,8 @@ export default class Agents extends View {
   status(t, a, compact = false) {
     const color = t[a.status] ?? t.dim;
     if (a.status === "working") return svg("mods/workspace-chrome/spinner.svg").size(12).mx(1).flex_none().text_color(t.working).spin(900);
+    // Waiting on a command: a dotted ring turning slowly, calmer than working's spinner.
+    if (a.status === "command") return svg("mods/agents/command.svg").size(12).mx(1).flex_none().text_color(t.working).spin(3200);
     if (a.status === "blocked" && compact) return div().size(14).flex_none().rounded(4).bg(t.blocked + "26").text_size(10.5).font_bold().text_color(t.blocked).flex().items_center().justify_center().child("!");
     if (a.status === "blocked") return div().flex_none().px(6).h(18).rounded(5).bg(t.blocked + "26").text_size(10.5).font_semibold().text_color(t.blocked).flex().items_center().child("Needs you");
     // Idle: a ring; done: a dot.
@@ -217,12 +225,14 @@ export default class Agents extends View {
     const collapsed = narrow();
     const sort = sortOf();
     let list = agents();
+    const now = Date.now();
+    // Time in a state counts working and its commands as one.
+    this.track(list, now);
+    list = list.map((a) => ({ ...a, status: shownStatus(a) }));
     this.listed = new Map(list.map((a) => [a.address, a.status]));
     const all = terminals();
     this.migratePins(all);
     const shown = focused()?.agent;
-    const now = Date.now();
-    this.track(list, now);
     // A kept sub-agent (one with a pane) is in agents() too: where a tree shows
     // it, it gets no row of its own, unless it's pinned.
     const nested = new Set(collapsed ? [] : list.flatMap((a) => this.tree(all, a.address).map((s) => s.t.address)));
@@ -236,6 +246,8 @@ export default class Agents extends View {
     const pinned = list.filter((a) => a.pinned);
     const rest = list.filter((a) => !a.pinned);
     list = [...pinned, ...rest];
+    // The rail lists awake agents first, sleeping (done, idle) ones at the bottom.
+    if (collapsed) list = [...list.filter((a) => !asleep(a.status)), ...list.filter((a) => asleep(a.status))];
     setAgentOrder(list.map((a) => a.address));
 
     const withKids = (a, i) => {
@@ -259,7 +271,7 @@ export default class Agents extends View {
         .items_center()
         .rounded(4)
         .text_size(11)
-        .text_color(open ? t.dim : (t[top] ?? t.dim))
+        .text_color(open ? t.dim : (colorOf(t, top) ?? t.dim))
         .cursor_pointer()
         .hover((s) => s.bg(t.hover).text_color(t.foreground))
         .on_click((_e, cx) => {
@@ -395,7 +407,7 @@ export default class Agents extends View {
           open ? this.folded.add(g.id) : this.folded.delete(g.id);
           cx.notify();
         })
-        .child(div().truncate().text_color(t[g.status] ?? t.dim).child(g.label))
+        .child(div().truncate().text_color(colorOf(t, g.status) ?? t.dim).child(g.label))
         .when(byPriority || !open, (el) => el.child(div().text_color(t.dim).child(String(g.members.length))))
         .child(div().flex_1())
         .when(!open, (el) => el

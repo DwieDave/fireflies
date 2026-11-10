@@ -192,6 +192,10 @@ export interface AgentInfo {
   /** Pinned with `terminal.pin`, on any Herdr client. */
   pinned: boolean;
   focused: boolean;
+  /** Working, but waiting on a shell command it started (a long build, `hc wait`):
+   *  a shell under its process that began with its current step. Only for agents on
+   *  this machine (macOS, Linux); false elsewhere. */
+  command: boolean;
 }
 
 /** Terminals whose program reports a status (agents), in space, tab, pane order. Live. */
