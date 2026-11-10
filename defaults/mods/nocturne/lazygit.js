@@ -11,7 +11,7 @@
 // opens the same float on its diff view (nocturne-diff).
 
 import { spaces, panes, terminals, run, exec, appHome } from "herdr";
-import { place } from "./kit.js";
+import { spaceFolder } from "./kit.js";
 
 /** How to start Nocturne's lazygit: the wrapper this mod ships, here; on
  *  another machine (`on`) whatever it has on its PATH. */
@@ -41,7 +41,7 @@ export function lazygitOpen(view) {
 /** The float's views: lazygit (0) and the diff of the same folder (1). */
 const views = (folder, on) => ({ mod: "nocturne-diff", props: { folder, on }, name: "diff" });
 
-/** Floats lazygit over the tab, in the active space's folder, showing `show`
+/** Floats lazygit over the tab, in the active space's folder (kit.js spaceFolder), showing `show`
  *  (0 lazygit, 1 the diff; the float's bar switches between them). Again on
  *  the view it shows: closes it; on the other view: switches to it. A float
  *  hidden with the bar's ✕ (still running, no pane) in that folder is shown
@@ -55,7 +55,7 @@ export function toggleLazygit(show = 0) {
     return run("float.view", { index: show });
   }
   const space = spaces().find((s) => s.active);
-  const folder = (space && place(space, panes())) || undefined;
+  const folder = spaceFolder(space, panes()) || undefined;
   const view = views(folder ?? null, space?.machine ?? null);
   const held = new Set(panes().map((p) => p.terminal));
   const hidden = terminals().find((x) => isLazygit(x) && !held.has(x.address) && (x.cwd ?? folder) === folder);
