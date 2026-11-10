@@ -3,14 +3,14 @@
 //
 //   head     ▶ Scripts and the folder they come from: the space's own
 //            folder, else the focused pane's (props { folder, on })
-//   running  every run (runs.js), running first: a pip in its state's color,
-//            name, runner, running / ok / exit N / stopped, how long; the row
+//   runs     every run (runs.js), running first, a pip and a count per
+//            state in the header; each row a pip in its state's color, name, runner, running / ok / exit N / stopped, how long; the row
 //            under the cursor or pointer shows watch, ↻ (again) and ■ (stop)
 //            or ✕ (dismiss a finished one)
 //   filter   type to fuzzy-match; ↑↓ move through runs and scripts alike
 //   scripts  what the folder can run (detect.js), grouped by manifest with
 //            the runner as a badge; the last ones run here come first
-//   foot     what enter does
+//   foot     what the cursor is on and its keys, as caps
 //
 // Enter runs a script in the background (a terminal with no pane) and closes
 // the deck; shift-enter runs it and floats its terminal to watch. On a run:
@@ -173,11 +173,10 @@ export default class ScriptsDeck extends View {
   outputView(t, h) {
     const { r, lines, back } = this.output;
     const LINE = 15;
-    const shown = Math.max(1, Math.floor((h - SECTION - 8) / LINE));
+    const shown = Math.max(1, Math.floor((h - SECTION - 12) / LINE));
     const all = lines ?? ["reading…"];
     const end = Math.max(0, all.length - back);
     const view = all.slice(Math.max(0, end - shown), end);
-    const color = t[TONE[tone(r)]];
     return v_flex().id("output").h(h).flex_none()
       .on_scroll_wheel((e, cx) => {
         const step = Math.round(-e.delta.y / LINE);
@@ -188,10 +187,9 @@ export default class ScriptsDeck extends View {
       .child(h_flex().h(SECTION).flex_none().px(12).pt(6).gap(8).items_center().text_size(11)
         .child(this.action(t, "out-back", "‹ back", null, (cx) => { this.output = null; cx.notify(); }))
         .child(div().flex_none().text_color(t.foreground).child(r.name))
-        .child(div().flex_none().text_color(color).child(r.word))
         .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
         .child(div().flex_none().text_color(t.dim).child(back ? `${back} lines up` : "the end")))
-      .child(v_flex().flex_1().min_h(0).overflow_hidden().px(12).pt(6).justify_end()
+      .child(v_flex().flex_1().min_h(0).overflow_hidden().px(12).pt(6).pb(6).justify_end()
         .children(view.map((l, i) => div().id(`ol-${i}`).h(LINE).flex_none().text_size(11).text_color(t.muted).truncate()
           .child(l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/ /g, "\u00a0") || "\u00a0"))));
   }
@@ -212,7 +210,7 @@ export default class ScriptsDeck extends View {
     return h_flex().h(SECTION).flex_none().px(12).pt(6).gap(8).items_center()
       .child(eyebrow(t, label))
       .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
-      .when(Boolean(aside), (el) => el.child(div().flex_none().text_size(10).text_color(t.dim).child(aside)));
+      .when(Boolean(aside), (el) => el.child(typeof aside === "string" ? div().flex_none().text_size(10).text_color(t.dim).child(aside) : aside));
   }
 
   /** The row under the cursor: a dithered band and a blue edge, like Nocturne's menus. */
@@ -276,18 +274,53 @@ export default class ScriptsDeck extends View {
       .child(div().relative().flex_none().max_w(170).truncate().text_size(11).text_color(on ? t.muted : t.dim).child(aside(s)));
   }
 
+  /** A key as a small square cap, then what it does (the palette's keycaps). */
+  hint(t, id, key, what) {
+    return h_flex().id(id).flex_none().gap(4).items_center()
+      .child(div().h(15).px(4).flex().items_center().border(1).border_color(t.ansi0).text_size(10).text_color(t.muted).child(key))
+      .child(div().text_size(10).text_color(t.dim).child(what));
+  }
+
+  /** The bar along the bottom: what the cursor is on, quietly, and the keys
+   *  that act on it as caps. Never the raw shell line: that's what the
+   *  script row's own aside is for. */
   foot(t, cur) {
     const mac = appWindow()?.platform === "macos";
-    const mod = mac ? "⌘" : "ctrl-";
-    const [say, aside] = !cur ? [this.folder ? "" : "open a space or a folder first", ""]
-      : this.output ? [`${this.output.r.cmd}`, "esc back"]
-      : cur.kind === "run" ? [`${cur.r.name}: enter ${cur.r.live ? "watches" : "shows its output"}`, cur.r.live ? `${mod}⌫ stop · ${mod}r again` : `${mod}⌫ dismiss · ${mod}r again`]
-      : [`${cur.row.s.cmd}, in the background`, "⇧ watch it"];
-    return h_flex().relative().h(FOOT).flex_none().px(12).gap(6).items_center().text_size(11)
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .child(div().flex_none().text_color(t.accent).child("↳"))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(say))
-      .child(div().flex_none().text_color(t.dim).child(aside));
+    const cmd = mac ? "⌘" : "ctrl";
+    const bar = h_flex().relative().h(FOOT).flex_none().px(12).gap(10).items_center().text_size(11)
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
+    const left = (...kids) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids);
+    const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps);
+    if (this.output) {
+      const r = this.output.r;
+      return bar
+        .child(left(div().flex_none().text_color(t.accent).child("↳"),
+          this.badge(t, r.runner || "run", false),
+          div().flex_none().text_color(t[TONE[tone(r)]]).child(r.word),
+          div().flex_none().text_color(t.dim).child(`after ${elapsed(r)}`)))
+        .child(keys(this.hint(t, "k-esc", "esc", "back")));
+    }
+    if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(this.folder ? "" : "no folder here")));
+    if (cur.kind === "run") {
+      const r = cur.r;
+      return bar
+        .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child(r.name)))
+        .child(keys(this.hint(t, "k-enter", "enter", r.live ? "watch" : "output"),
+          this.hint(t, "k-stop", `${cmd}⌫`, r.live ? "stop" : "dismiss"),
+          this.hint(t, "k-again", `${cmd}R`, "again")));
+    }
+    return bar
+      .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child("in the background")))
+      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "run & watch")));
+  }
+
+  /** The runs header's aside: a pip and a count for each state there is. */
+  tally(t, all) {
+    const n = (k) => all.filter((r) => tone(r) === k).length;
+    const parts = [["running", n("running")], ["failed", n("failed")], ["ok", n("ok")], ["stopped", n("stopped")]].filter(([, c]) => c);
+    return h_flex().flex_none().gap(8).items_center().children(parts.map(([k, c]) => h_flex().id(`tally-${k}`).gap(4).items_center()
+      .child(this.pip(t, t[TONE[k]], false))
+      .child(div().text_size(10).text_color(k === "running" ? t.muted : t.dim).child(String(c)))));
   }
 
   empty(t) {
@@ -341,7 +374,6 @@ export default class ScriptsDeck extends View {
     const runningIds = new Set(all.filter((r) => r.live && r.folder === this.folder).map((r) => r.id));
 
     // The runs: up to RUNS_SHOWN rows tall; the rest scroll.
-    const live = all.filter((r) => r.live).length;
     const runsH = all.length ? SECTION + Math.min(all.length, RUNS_SHOWN) * ROW + 4 : 0;
     const listH = H - 2 - HEAD - runsH - INPUT - FOOT - 4;
 
@@ -381,7 +413,7 @@ export default class ScriptsDeck extends View {
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).flex().justify_end().child(short(this.folder) + (this.on ? ` on ${this.on}` : "")))
         .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
       .when(all.length > 0, (el) => el
-        .child(this.section(t, "running", live ? `${live} of ${all.length}` : `${all.length} ended`))
+        .child(this.section(t, "runs", this.tally(t, all)))
         .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll()
           .children(all.map((r, i) => this.runRow(t, r, i, this.cursor === i))))
         .child(div().h(4).flex_none()))
