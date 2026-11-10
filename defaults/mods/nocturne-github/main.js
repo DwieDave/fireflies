@@ -5,9 +5,10 @@
 //
 //   1 2 [ ]     Pull requests / Actions
 //   r           read everything again now
+//   p           a fork: its parent repo, and back (the header's "fork of …")
 //   drag        the gaps between panels resize them (kept per tab)
 //
-// keys.json can bind nocturne-github.prs / .actions / .refresh / .diff (to a shown window).
+// keys.json can bind nocturne-github.prs / .actions / .refresh / .diff / .fork (to a shown window).
 //   ?           every key        esc q  close the window (from its top level)
 //
 // Everything goes through the gh CLI (gh.js): its login, no token here.
@@ -32,8 +33,9 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
-import { repoOf } from "./gh.js";
+import { repoOf, viewRepo } from "./gh.js";
 import { readAgo } from "./model.js";
+import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
@@ -97,6 +99,7 @@ export default class GitHub extends View {
         const c = String(await nextCommand()).replace(/^nocturne-github\./, "");
         if (c === "focus") this.handle.focus();
         else if (c === "refresh") this.refresh(cx, true);
+        else if (c === "fork") this.switchFork(cx);
         else if (c === "prs" || c === "actions") this.setTab(c, cx);
         else if (c === "diff" && this.repo && this.prs.current()) this.openDiff(this.prs.current().number);
         cx.notify();
@@ -129,14 +132,14 @@ export default class GitHub extends View {
       try {
         const now = await repoOf(this.folder, this.on);
         if (this.closed) return;
-        if (now && this.repo && repoKey(now) === repoKey(this.repo)) {
+        // The folder's fork, shown as its parent last time (p): the parent stays.
+        const onParent = now && this.repo?.child === now.full && this.repo.full === now.parent && this.repo.on === now.on;
+        if (onParent) {
+          this.repo.branch = now.branch;
+        } else if (now && this.repo && repoKey(now) === repoKey(this.repo)) {
           Object.assign(this.repo, now); // the same repo: its branch may have moved
         } else {
-          this.repo = now;
-          this.prs.hydrate(null); this.actions.hydrate(null);
-          this.gen = (this.gen ?? 0) + 1; this.busy = false; // a read of the old repo is dropped
-          this.state = now ? "ready" : "norepo";
-          if (now) this.refresh(cx, { all: true });
+          this.show(now, cx);
         }
       } catch (e) {
         // Offline: a cached repo stays shown, the bar says so.
@@ -144,6 +147,44 @@ export default class GitHub extends View {
         else { this.state = "error"; this.error = String(e?.message ?? e); }
       }
       cx.notify();
+    });
+  }
+
+  /** Shows another repo (or none), with what the cache holds of it (`cached`): what was shown of the old one goes. */
+  show(repo, cx, cached = null) {
+    this.repo = repo;
+    this.prs.hydrate(cached?.prs ?? null); this.actions.hydrate(cached?.actions ?? null);
+    this.warmed = null;
+    this.gen = (this.gen ?? 0) + 1; this.busy = false; // a read of the old repo is dropped
+    this.stale = "";
+    this.state = repo ? "ready" : "norepo";
+    if (repo) this.refresh(cx, { all: true });
+  }
+
+  /** p: a fork's parent, or back to the fork. The choice is kept per folder (in the cache). */
+  switchFork(cx) {
+    const r = this.repo;
+    const to = r?.parent ? { full: r.parent, host: r.host, child: r.full } : r?.child ? { full: r.child, host: r.host, child: null } : null;
+    if (!to || this.switching) return;
+    this.switching = true;
+    this.note = { text: `Opening ${to.full}…`, tone: "working", at: Date.now() };
+    cx.spawn(async (cx) => {
+      try {
+        const next = await viewRepo(to, { root: r.root, on: r.on, branch: r.branch });
+        if (this.closed || this.repo !== r) return;
+        if (!next) throw new Error(`${to.full} isn't on GitHub.`);
+        next.child = to.child;
+        if (to.child) next.parent = null; // from the parent, p goes back to the fork, not up again
+        this.note = null;
+        // From the cache when this folder showed it before.
+        this.show(next, cx, store.peek()?.repos?.[repoKey(next)] ?? null);
+        this.dirty = true;
+      } catch (e) {
+        this.note = { text: String(e?.message ?? e), tone: "failed", at: Date.now() };
+      } finally {
+        this.switching = false;
+        cx.notify();
+      }
     });
   }
 
@@ -291,7 +332,7 @@ export default class GitHub extends View {
 
   /** The PR's diff in nocturne-diff: in this window's place (esc comes back), or beside it as a pane. */
   openDiff(number) {
-    const diff = { folder: this.repo.root, on: this.on, pr: number };
+    const diff = { folder: this.repo.root, on: this.on, pr: number, repo: slug(this.repo) };
     this.save();
     if (this.overlay) {
       const back = { mod: "nocturne-github", props: { folder: this.folder, on: this.on, tab: "prs" } };
@@ -352,6 +393,7 @@ export default class GitHub extends View {
     else if (k === "2") this.setTab("actions", cx);
     else if (k === "[" || k === "]") this.setTab(this.tab === "prs" ? "actions" : "prs", cx);
     else if (k === "?") this.help = true;
+    else if (k === "p" && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
     else if (k === "r" && !m.control) this.refresh(cx, true);
     else if (this.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
     else if (k === "escape" || k === "q") this.closeWindow();
@@ -394,6 +436,8 @@ export default class GitHub extends View {
         .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
         .child(div().text_color(t.foreground).child("GITHUB")))
       .child(div().relative().flex_none().max_w(320).truncate().text_color(t.muted).child(where))
+      .when(Boolean(this.repo?.parent || this.repo?.child), (el) => el.child(chip(t, "gh-fork",
+        this.repo.parent ? `fork of ${this.repo.parent}` : `‹ ${this.repo.child}`, false, (cx) => this.switchFork(cx), t.dim)))
       .when(Boolean(this.repo?.branch), (el) => el.child(div().relative().flex_none().text_color(t.ansi5).child(this.repo.branch)))
       .child(h_flex().relative().flex_none().gap(2).children(tabs))
       .child(div().flex_1())
@@ -403,7 +447,9 @@ export default class GitHub extends View {
   }
 
   helpPanel(t) {
-    const all = [["1 2 [ ]", "pull requests / actions"], ["r", "read again now"], ["?", "these keys"], ["esc q", "close (from the top)"]];
+    const all = [["1 2 [ ]", "pull requests / actions"], ["r", "read again now"],
+      ...(this.repo?.parent ? [["p", `the parent, ${this.repo.parent}`]] : this.repo?.child ? [["p", `back to the fork, ${this.repo.child}`]] : []),
+      ["?", "these keys"], ["esc q", "close (from the top)"]];
     const tab = this.tab === "prs" ? Prs.help() : Actions.help();
     const col = (title, list) => v_flex().gap(3).min_w(260)
       .child(div().pb(4).text_color(t.ansi8).child(title))

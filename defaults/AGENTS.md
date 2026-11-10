@@ -93,6 +93,10 @@ Nocturne's GitHub window keeps what it last read of each repo (pull requests,
 runs, jobs; the last 8 repos, under 768 KB, never tokens) in
 `data/nocturne-github/cache.json`: it shows that at once when opened and reads
 GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
+The window picks the folder's repo from its git remotes, not gh's guess: gh's
+default if set (`gh repo set-default`), else the remote the current branch
+pushes to or tracks, else `origin`, else the others. In a fork, the header's
+"fork of owner/name" (or `p`) switches to the parent and back.
 
 ## The model: spaces, tabs, terminals
 

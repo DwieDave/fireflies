@@ -8,7 +8,8 @@
 // budget (fit), the least recently opened repos go first (prune), and
 // nothing that looks like a credential is ever written (scrub).
 
-export const VERSION = 1;
+// 2: the repo is picked from the folder's remotes (remotes.js); v1 could hold a fork's parent for it.
+export const VERSION = 2;
 // readTextFile/writeTextFile stop at 1 MiB; stay well under it.
 export const MAX_BYTES = 768 * 1024;
 export const LIMITS = { repos: 8, details: 16, jobs: 10, needs: 12, lists: 3, runs: 4 };
@@ -48,7 +49,9 @@ const pick = (o, keys) => {
 const login = (a) => (a ? { login: a.login ?? null } : null);
 
 export function slimRepo(r) {
-  return r ? { owner: r.owner, name: r.name, full: r.full, root: r.root, on: r.on ?? null, url: scrubUrl(r.url), base: r.base ?? null, branch: r.branch ?? null } : null;
+  if (!r) return null;
+  // parent: the repo this one forks; child: the fork the window came from (p switched to the parent).
+  return { owner: r.owner, name: r.name, full: r.full, host: r.host ?? "github.com", root: r.root, on: r.on ?? null, url: scrubUrl(r.url), base: r.base ?? null, branch: r.branch ?? null, parent: r.parent ?? null, child: r.child ?? null };
 }
 
 /** A pull request's row in the list. */

@@ -55,9 +55,11 @@ export async function changes(r, scope) {
   return { files, since };
 }
 
-/** A pull request's changes, from `gh pr diff` (no checkout: works for any PR). */
-export async function prChanges(r, pr) {
-  const d = await exec("gh", ["pr", "diff", String(pr), "--color=never"], { cwd: r.root, on: r.on, timeout: 60000 });
+/** A pull request's changes, from `gh pr diff` (no checkout: works for any PR).
+ *  `repo` ("owner/name", from the GitHub window) names the PR's repo, so a fork
+ *  isn't mistaken for its parent; without it gh picks from the folder's remotes. */
+export async function prChanges(r, pr, repo = null) {
+  const d = await exec("gh", ["pr", "diff", String(pr), "--color=never", ...(repo ? ["-R", repo] : [])], { cwd: r.root, on: r.on, timeout: 60000 });
   if (d.code !== 0) throw new Error(d.stderr.trim().split("\n").pop() || `gh pr diff ${pr} failed`);
   const files = parse(d.stdout);
   files.sort((a, b) => a.path.localeCompare(b.path));
