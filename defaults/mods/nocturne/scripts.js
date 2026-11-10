@@ -11,7 +11,7 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { terminals, openOverlay, closeOverlay, shared, setShared, notify, hc } from "herdr";
+import { terminals, openOverlay, closeOverlay, shared, setShared, notify, hc, exec } from "herdr";
 import { ART, dither } from "./kit.js";
 import { here } from "./panels.js";
 
@@ -72,10 +72,11 @@ export async function trackRuns() {
   } finally { checking = false; }
 }
 
-/** Every run: { address, name, live, code, reason, started }, the running ones first. */
+/** Every run: { address, name, admin, plan, on, live, code, reason, started }, the running ones first. */
 export function scriptRuns() {
   return scriptTerminals()
-    .map((t) => ({ address: t.address, name: t.labels[`${LABEL}.name`] || t.labels[LABEL], admin: t.labels[`${LABEL}.admin`] || null, live: t.state !== "finished",
+    .map((t) => ({ address: t.address, name: t.labels[`${LABEL}.name`] || t.labels[LABEL], admin: t.labels[`${LABEL}.admin`] || null,
+      plan: t.labels[`${LABEL}.plan`] || null, on: String(t.address).includes("/") ? String(t.address).slice(0, String(t.address).lastIndexOf("/")) : null, live: t.state !== "finished",
       code: typeof t.exit_code === "number" ? t.exit_code : null, reason: t.reason ?? null, started: t.created_ms ?? 0, ended: t.finished_ms ?? 0 }))
     .sort((a, b) => Number(b.live) - Number(a.live) || a.started - b.started);
 }
@@ -105,10 +106,30 @@ export function deckOpen() {
 
 const tone = (r) => (r.live ? "working" : r.reason === "killed" ? "idle" : r.code === 0 ? "done" : "blocked");
 
-/** The newest failed run's address, for the toast's click (nocturne.scripts-failed). */
-export function lastFailed() {
-  return scriptRuns().filter((r) => !r.live && r.reason !== "killed" && r.code != null && r.code !== 0)
-    .sort((a, b) => b.ended - a.ended)[0]?.address ?? null;
+/** The newest failed run, and its address for the toast's click (nocturne.scripts-failed). */
+const lastFailedRun = () => scriptRuns().filter((r) => !r.live && r.reason !== "killed" && r.code != null && r.code !== 0)
+  .sort((a, b) => b.ended - a.ended)[0] ?? null;
+export const lastFailed = () => lastFailedRun()?.address ?? null;
+
+// A nix-darwin switch fails when Herdr Core lacks App Management (a copy of
+// ../nocturne-scripts/nix.js APP_MANAGEMENT: a mod can't import another's).
+const APP_MANAGEMENT = {
+  match: "permission denied when trying to update apps",
+  hint: "Grant Herdr Core App Management in System Settings > Privacy & Security, then run it again",
+  open: `open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles'; open -R "$HOME/.local/share/herdr-core/active/Herdr Core.app"`,
+};
+
+/** The toast's click for that failure (nocturne.scripts-grant): opens the
+ *  setting and shows Herdr Core in Finder, on the machine the run was on. */
+export function grantAppManagement() {
+  exec("sh", ["-c", APP_MANAGEMENT.open], { on: lastFailedRun()?.on ?? null }).catch(() => null);
+}
+
+/** A failed nix-darwin switch's output says Herdr Core lacks App Management. */
+async function needsAppManagement(r) {
+  if (!String(r.plan ?? "").startsWith("darwin-rebuild:")) return false;
+  const res = await hc(["read", r.address, "--lines", "300"]).catch(() => null);
+  return res?.code === 0 && res.stdout.includes(APP_MANAGEMENT.match);
 }
 
 /** One toast per failed run (killed ones aren't failures). */
@@ -127,6 +148,12 @@ export function tellFailures(list) {
   for (const r of fresh) {
     // An admin run whose password dialog was cancelled (nocturne-scripts/nix.js CANCELLED).
     const cancelled = r.admin && r.code === 130;
+    if (!cancelled && r.plan) {
+      needsAppManagement(r).then((grant) => notify(grant
+        ? { title: "Herdr Core needs App Management", body: `${r.name} · click to grant it`, level: "error", action: { name: "nocturne.scripts-grant" } }
+        : { title: `${r.name} failed · exit ${r.code}`, body: "click to see its output", level: "error", action: { name: "nocturne.scripts-failed" } }));
+      continue;
+    }
     notify({ title: cancelled ? `${r.name} cancelled` : `${r.name} failed · exit ${r.code}`,
       body: cancelled ? "no password given" : "click to see its output", level: cancelled ? "warning" : "error",
       action: { name: "nocturne.scripts-failed" } });

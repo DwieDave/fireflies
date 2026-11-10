@@ -21,7 +21,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { closeOverlay, exec, hc, home, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
-import { FLAKE_SHOW, nixScripts, oldId } from "./nix.js";
+import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
 
 const ART = "mods/nocturne/art";
@@ -213,15 +213,16 @@ export default class ScriptsDeck extends View {
       if (this.output?.r.address !== r.address) return;
       const text = res?.code === 0 ? res.stdout : null;
       this.output.lines = text == null ? ["(its output is gone)"] : text.replace(/\s+$/, "").split("\n");
+      this.output.grant = needsAppManagement(r, text);
       cx.notify();
     });
   }
 
   /** The output panel: the run's state, then its lines, the last ones at the bottom. */
   outputView(t, h) {
-    const { r, lines, back } = this.output;
-    const LINE = 15;
-    const shown = Math.max(1, Math.floor((h - SECTION - 12) / LINE));
+    const { r, lines, back, grant } = this.output;
+    const LINE = 15, HINT = 88;
+    const shown = Math.max(1, Math.floor((h - SECTION - 12 - (grant ? HINT : 0)) / LINE));
     const all = lines ?? ["reading…"];
     const end = Math.max(0, all.length - back);
     const view = all.slice(Math.max(0, end - shown), end);
@@ -237,9 +238,25 @@ export default class ScriptsDeck extends View {
         .child(div().flex_none().text_color(t.foreground).child(r.name))
         .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
         .child(div().flex_none().text_color(t.dim).child(back ? `${back} lines up` : "the end")))
+      .when(Boolean(grant), (el) => el.child(this.grantHint(t, r, HINT)))
       .child(v_flex().flex_1().min_h(0).overflow_hidden().px(12).pt(6).pb(6).justify_end()
         .children(view.map((l, i) => div().id(`ol-${i}`).h(LINE).flex_none().text_size(11).text_color(t.muted).truncate()
           .child(l.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "").replace(/ /g, "\u00a0") || "\u00a0"))));
+  }
+
+  /** Why a nix-darwin switch couldn't update its apps, and the way to fix it
+   *  (nix.js APP_MANAGEMENT): open the setting and show Herdr Core in Finder. */
+  grantHint(t, r, h) {
+    return v_flex().id("grant").h(h).flex_none().mx(12).mt(6).px(10).py(6).gap(4)
+      .border(1).border_color(t.blocked)
+      .child(h_flex().h(22).flex_none().gap(8).items_center()
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child("App Management needed"))
+        .child(div().id("grant-open").flex_none().h(22).px(8).flex().items_center().text_size(11)
+          .bg(t.ansi0).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.ansi8))
+          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+          .on_click((_e, cx) => { cx.stop_propagation(); exec("sh", ["-c", APP_MANAGEMENT.open], { on: r.on }).catch(() => null); })
+          .child("Open settings")))
+      .child(div().text_size(11).line_height("15px").text_color(t.foreground).child(`${APP_MANAGEMENT.hint}.`));
   }
 
   // ---- parts

@@ -182,3 +182,20 @@ export function shellLine(cmd, admin, plan) {
   if (admin === "sudo") return `sudo ${cmd}`;
   return cmd;
 }
+
+// nix-darwin's activation touches /Applications/Nix Apps/*.app to check it
+// may update them. macOS asks that of whoever owns the process: for a run,
+// Herdr Core (the core holds terminals, not the app). Without its App
+// Management permission the touch is denied, and since root under osascript
+// isn't in the desktop session, nix-darwin blames SSH / Full Disk Access.
+// ../nocturne/scripts.js keeps a copy for the failure toast.
+export const APP_MANAGEMENT = {
+  match: "permission denied when trying to update apps",
+  hint: "Grant Herdr Core App Management in System Settings > Privacy & Security, then run it again",
+  // Opens the setting and shows the core's bundle in Finder, to drag into its list.
+  open: `open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles'; open -R "$HOME/.local/share/herdr-core/active/Herdr Core.app"`,
+};
+
+/** A nix-darwin switch that failed because Herdr Core lacks App Management. */
+export const needsAppManagement = (r, text) =>
+  String(r?.plan ?? "").startsWith("darwin-rebuild:") && String(text ?? "").includes(APP_MANAGEMENT.match);
