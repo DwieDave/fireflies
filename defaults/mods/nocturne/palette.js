@@ -39,6 +39,19 @@ function openEntries() {
   }
   out.push({ name: "nocturne", args: { fold: true }, group: "Open", icon: "sidebar", bind: "nocturne.fold",
     title: "Fold or open the sidebar", words: "toggle sidebar sky rail collapse hide", go: () => run("nocturne.fold") });
+  // The picture in picture player (nocturne-pip), while its window is open.
+  if (shared("nocturne-pip.player")) {
+    for (const [cmd, icon, title, words] of [
+      ["pane", "panel-right", "Picture in picture into a pane", "pip video player pane split beside dock"],
+      ["park", "archive", "Park picture in picture", "pip video player chip hide minimize"],
+      ["toggle", "square", "Picture in picture: play / pause", "pip video player pause resume"],
+      ["mute", "square", "Picture in picture: sound off / on", "pip video player mute unmute volume audio"],
+      ["rewind", "chevron-left", "Picture in picture: back 10 seconds", "pip video player skip rewind seek"],
+      ["forward", "chevron-right", "Picture in picture: on 10 seconds", "pip video player skip forward seek"],
+    ]) {
+      out.push({ name: `nocturne-pip.${cmd}`, args: {}, group: "Open", icon, title, words, go: () => run(`nocturne-pip.${cmd}`) });
+    }
+  }
   return out;
 }
 

@@ -399,6 +399,10 @@ export interface OverlaySpec {
   /** With `key`: the window also reopens on the next start (and when its layout shows again),
    *  until it's closed. Only the window comes back: a mod keeps its own state (`shared`). */
   keep?: boolean;
+  /** A window people resize by its edges and corners: never below `min` (px, default 120×80)
+   *  nor bigger than the app window, keeping `aspect` (width / height) once `chrome` (px taken
+   *  by a bar or border, width and height) is taken off. With `key`, its size is remembered. */
+  resizable?: boolean | { min?: [number, number]; aspect?: number; chrome?: [number, number] };
   /** px, or up to 1: a share of the window. */
   width?: number;
   height?: number;

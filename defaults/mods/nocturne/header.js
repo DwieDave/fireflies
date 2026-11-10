@@ -23,7 +23,8 @@ import { openEqualize } from "./equalize.js";
 const MODS = {
   "nocturne-agents": ["Agents", "layers"], "nocturne-browser": ["Web", "monitor"],
   "nocturne-diff": ["Diff", "git-compare"], "nocturne-files": ["Files", "files"],
-  "nocturne-usage": ["Usage", "clock"], nocturne: ["Worktrees", "git-branch"],
+  "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
+  nocturne: ["Worktrees", "git-branch"],
 };
 // Terminal programs with a fitting chrome icon; any other terminal gets "terminal".
 const PROGRAMS = { nvim: "file-text", vim: "file-text", hx: "file-text", htop: "server", btop: "server" };

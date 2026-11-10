@@ -54,17 +54,27 @@ const PICK_SCRIPT: &str = r#"
   return "found";
 "#;
 
-/// What the lift does to the page, while it lasts.
-const LIFT_CSS: &str = "html[data-herdr-pip-on] { overflow: hidden !important; } \
-[data-herdr-pip]:popover-open, [data-herdr-pip-frame]:popover-open { position: fixed !important; inset: 0 !important; \
+/// What the lift does to the page, while it lasts: the page itself goes
+/// invisible and black, only the lifted element shows, filling the view. The
+/// fill holds in the top layer (a popover), and also when the page keeps it
+/// out of there for a moment.
+const LIFT_CSS: &str = "html[data-herdr-pip-on], html[data-herdr-pip-on] body { overflow: hidden !important; \
+background: #000 !important; } \
+html[data-herdr-pip-on] body { visibility: hidden !important; } \
+html[data-herdr-pip-on] [data-herdr-pip], html[data-herdr-pip-on] [data-herdr-pip-frame] { position: fixed !important; \
+inset: 0 !important; z-index: 2147483647 !important; \
 width: 100vw !important; height: 100vh !important; max-width: none !important; max-height: none !important; \
 min-width: 0 !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; border: 0 !important; \
-transform: none !important; object-fit: contain !important; background: #000 !important; opacity: 1 !important; \
-visibility: visible !important; display: block !important; } \
+transform: none !important; translate: none !important; scale: none !important; rotate: none !important; \
+clip-path: none !important; filter: none !important; object-fit: contain !important; background: #000 !important; \
+opacity: 1 !important; visibility: visible !important; display: block !important; } \
 [data-herdr-pip]::backdrop, [data-herdr-pip-frame]::backdrop { background: #000; }";
 
 /// Lifts the element marked `attr` (the video, or in the main frame the
-/// iframe holding it) into the top layer, filling the view.
+/// iframe holding it) into the top layer, filling the view. Pages move their
+/// player around (YouTube does when the view's width changes its layout, as
+/// moving into the player does), which takes it out of the top layer: a
+/// watch puts it back. A video gone for good ends the session (`lost`).
 fn lift_script(attr: &str) -> String {
     format!(
         r#"const el = document.querySelector("[{attr}]");
@@ -74,13 +84,37 @@ fn lift_script(attr: &str) -> String {
     (document.head || document.documentElement).appendChild(s);
   }}
   document.documentElement.setAttribute("data-herdr-pip-on", "");
+  // The page's own fullscreen would sit above the lift.
+  try {{
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
+  }} catch {{}}
   if (!el.hasAttribute("data-herdr-pip-was")) el.setAttribute("data-herdr-pip-was", el.getAttribute("popover") ?? "-");
-  el.popover = "manual";
-  try {{ if (!el.matches(":popover-open")) el.showPopover(); }} catch {{}}
-  // The video went (the page replaced its player): say so once.
-  if (el.tagName === "VIDEO" && !window.__herdrPipWatch) window.__herdrPipWatch = setInterval(() => {{
-    if (!el.isConnected) {{ clearInterval(window.__herdrPipWatch); window.__herdrPipWatch = null; try {{ webkit.messageHandlers.herdrPip.postMessage(JSON.stringify({{ type: "lost" }})); }} catch {{}} }}
-  }}, 500);
+  const show = () => {{
+    if (!el.isConnected || !document.documentElement.hasAttribute("data-herdr-pip-on")) return;
+    // The style may be gone with a page's head rewrite.
+    if (!document.getElementById("herdr-pip-style")) {{
+      const s = document.createElement("style"); s.id = "herdr-pip-style"; s.textContent = {css};
+      (document.head || document.documentElement).appendChild(s);
+    }}
+    if (el.getAttribute("popover") !== "manual") el.popover = "manual";
+    try {{ if (!el.matches(":popover-open")) el.showPopover(); }} catch {{}}
+  }};
+  show();
+  if (window.__herdrPipWatch) clearInterval(window.__herdrPipWatch);
+  if (window.__herdrPipToggle) window.__herdrPipToggle.el.removeEventListener("toggle", window.__herdrPipToggle.fn);
+  const fn = (e) => {{ if (e.newState === "closed") setTimeout(show, 0); }};
+  el.addEventListener("toggle", fn);
+  window.__herdrPipToggle = {{ el, fn }};
+  let gone = 0;
+  window.__herdrPipWatch = setInterval(() => {{
+    if (el.isConnected) {{ gone = 0; show(); return; }}
+    // Out of the page for 2 s: replaced, not moved.
+    if (el.tagName === "VIDEO" && ++gone >= 8) {{
+      clearInterval(window.__herdrPipWatch); window.__herdrPipWatch = null;
+      try {{ webkit.messageHandlers.herdrPip.postMessage(JSON.stringify({{ type: "lost" }})); }} catch {{}}
+    }}
+  }}, 250);
   return "lifted";"#,
         css = serde_json::to_string(LIFT_CSS).unwrap()
     )
@@ -91,6 +125,8 @@ fn unlift_script(pause: bool) -> String {
     format!(
         r#"const pause = {pause};
   if (window.__herdrPipWatch) {{ clearInterval(window.__herdrPipWatch); window.__herdrPipWatch = null; }}
+  if (window.__herdrPipToggle) {{ window.__herdrPipToggle.el.removeEventListener("toggle", window.__herdrPipToggle.fn); window.__herdrPipToggle = null; }}
+  document.documentElement.removeAttribute("data-herdr-pip-on");
   for (const el of document.querySelectorAll("[data-herdr-pip], [data-herdr-pip-frame]")) {{
     try {{ el.hidePopover(); }} catch {{}}
     const was = el.getAttribute("data-herdr-pip-was");
@@ -98,7 +134,6 @@ fn unlift_script(pause: bool) -> String {
     el.removeAttribute("data-herdr-pip-was");
     if (pause && el.tagName === "VIDEO") el.pause();
   }}
-  document.documentElement.removeAttribute("data-herdr-pip-on");
   document.getElementById("herdr-pip-style")?.remove();
   return "done";"#
     )
@@ -118,12 +153,64 @@ fn mark_frame_script(url: &str) -> String {
     )
 }
 
-const TOGGLE_SCRIPT: &str = r#"
-  const v = document.querySelector("[data-herdr-pip]");
+/// What a player does to the video (`pip.toggle`, `pip.seek`, `pip.mute`, `pip.sync`).
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Media {
+    Toggle,
+    /// Seconds on (back when negative).
+    Seek(f64),
+    /// Sound off (true) or on; None: the other way round.
+    Mute(Option<bool>),
+    /// Nothing: only how it is.
+    Sync,
+}
+
+impl Media {
+    fn parse(action: &str, args: &Value) -> Result<Media, String> {
+        Ok(match action {
+            "pip.toggle" => Media::Toggle,
+            "pip.seek" => Media::Seek(seek_by(args)?),
+            "pip.mute" => Media::Mute(args.get("muted").and_then(Value::as_bool)),
+            "pip.sync" => Media::Sync,
+            a => return Err(format!("`{a}` is not a media action")),
+        })
+    }
+
+    /// The fixed script: does it, then says `{ result: "playing" | "paused", muted }`.
+    fn script(self) -> String {
+        let act = match self {
+            Media::Toggle => "if (v.paused) { try { await v.play(); } catch {} } else v.pause();".to_owned(),
+            Media::Seek(by) => format!(
+                "const t = Math.max(0, v.currentTime + ({by})); v.currentTime = Number.isFinite(v.duration) ? Math.min(v.duration, t) : t;"
+            ),
+            Media::Mute(m) => {
+                let to = m.map_or("!(v.muted || v.volume === 0)".to_owned(), |m| m.to_string());
+                format!("const m = {to}; v.muted = m; if (!m && v.volume === 0) v.volume = 1;")
+            }
+            Media::Sync => String::new(),
+        };
+        format!(
+            r#"const v = document.querySelector("[data-herdr-pip]");
   if (!v) return "none";
-  if (v.paused) { try { await v.play(); } catch {} } else v.pause();
-  return v.paused ? "paused" : "playing";
-"#;
+  {act}
+  return JSON.stringify({{ result: v.paused ? "paused" : "playing", muted: v.muted || v.volume === 0 }});"#
+        )
+    }
+}
+
+/// A media script's answer as an event's data: `{ result, muted }`, or as it came.
+fn media_state(r: Value) -> Value {
+    r["result"].as_str().and_then(|s| serde_json::from_str::<Value>(s).ok()).filter(Value::is_object).unwrap_or(r)
+}
+
+/// The seconds `pip.seek` takes: finite, at most an hour either way.
+fn seek_by(args: &Value) -> Result<f64, String> {
+    args.get("by")
+        .and_then(Value::as_f64)
+        .filter(|b| b.is_finite())
+        .map(|b| b.clamp(-3600.0, 3600.0))
+        .ok_or_else(|| "pip.seek needs { by: seconds }".into())
+}
 
 /// The one video in the player.
 struct Session {
@@ -146,6 +233,8 @@ struct Attached {
     of: String,
     generation: u64,
     host: Weak<NSView>,
+    /// When it attached: the newest player of a page holds its video.
+    seq: u64,
 }
 
 thread_local! {
@@ -153,6 +242,7 @@ thread_local! {
     static PLAYED: RefCell<HashMap<String, Retained<WKFrameInfo>>> = RefCell::new(HashMap::new());
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     static ATTACHED: RefCell<HashMap<String, Attached>> = RefCell::new(HashMap::new());
+    static SEQ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
 
 /// Lets a `pip: true` web view's page report the frames that play videos.
@@ -386,22 +476,45 @@ fn place(web_key: &str) {
     let todo = with_session(web_key, |s| {
         let holder = s.popped.as_ref().map(|p| p.host.clone()).or_else(|| holder(&s.source))?;
         let web = s.web.load()?;
-        if !is_in(&web, &holder) {
+        let from = unsafe { web.superview() };
+        let moved = !is_in(&web, &holder);
+        if moved {
             put(&web, &holder);
         }
         let lift = !s.lifted;
         s.lifted = true;
-        Some((web, s.frame.clone(), lift))
+        Some((web, s.frame.clone(), lift, moved.then_some(from).flatten(), s.generation))
     })
     .flatten();
-    if let Some((web, frame, true)) = todo {
+    let Some((web, frame, lift, from, generation)) = todo else { return };
+    if lift {
         set_lift(mtm, &web, frame.as_deref(), true, false);
+    }
+    // The player it left (popped into a pane, or out of Herdr) can go; the
+    // page hears where its video is now.
+    if let Some(from) = from {
+        let left: Vec<(String, u64)> = ATTACHED.with(|a| {
+            a.borrow()
+                .iter()
+                .filter(|(_, p)| p.of == web_key && p.host.load().is_some_and(|h| std::ptr::eq(&*h, &*from)))
+                .map(|(k, p)| (k.clone(), p.generation))
+                .collect()
+        });
+        for (key, g) in left {
+            emit_event(&key, g, "pip.moved", json!({}));
+        }
+        emit_event(web_key, generation, "pip.moved", json!({ "popped": with_session(web_key, |s| s.popped.is_some()).unwrap_or(false) }));
     }
 }
 
-/// The view a player gave for `web_key`'s video.
+/// The view the newest player gave for `web_key`'s video.
 fn holder(web_key: &str) -> Option<Retained<NSView>> {
-    ATTACHED.with(|a| a.borrow().values().filter(|p| p.of == web_key).find_map(|p| p.host.load()))
+    ATTACHED.with(|a| {
+        let a = a.borrow();
+        let mut players: Vec<&Attached> = a.values().filter(|p| p.of == web_key).collect();
+        players.sort_by_key(|p| std::cmp::Reverse(p.seq));
+        players.into_iter().find_map(|p| p.host.load())
+    })
 }
 
 fn players_of(web_key: &str) -> Vec<(String, u64)> {
@@ -423,8 +536,12 @@ fn is_in(view: &NSView, holder: &NSView) -> bool {
 
 /// A `pip` view shows `of`'s video in `host` (from its load).
 pub(crate) fn attach(key: &str, generation: u64, of: &str, host: &NSView) {
+    let seq = SEQ.with(|s| {
+        s.set(s.get() + 1);
+        s.get()
+    });
     ATTACHED.with(|a| {
-        a.borrow_mut().insert(key.to_owned(), Attached { of: of.to_owned(), generation, host: Weak::from(host) })
+        a.borrow_mut().insert(key.to_owned(), Attached { of: of.to_owned(), generation, host: Weak::from(host), seq })
     });
     // Back into Herdr: the popped-out window goes.
     if let Some(Some(p)) = with_session(of, |s| s.popped.take()) {
@@ -454,11 +571,12 @@ pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, args: &Valu
         return Err("nothing of this page is in the player".into());
     }
     match action {
-        "pip.toggle" => {
+        "pip.toggle" | "pip.seek" | "pip.mute" | "pip.sync" => {
+            let media = Media::parse(action, args)?;
             let (web, frame) = with_session(&of, |s| (s.web.load(), s.frame.clone())).ok_or("gone")?;
             let web = web.ok_or("the page is gone")?;
             let k = key.to_owned();
-            run_then(mtm, &web, frame.as_deref(), TOGGLE_SCRIPT, move |r| emit_event(&k, generation, "pip.state", r));
+            run_then(mtm, &web, frame.as_deref(), &media.script(), move |r| emit_event(&k, generation, "pip.state", media_state(r)));
             Ok(Value::Null)
         }
         "pip.back" => {
@@ -471,14 +589,17 @@ pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, args: &Valu
         }
         "pip.popOut" => {
             let host = ATTACHED.with(|a| a.borrow().get(key).and_then(|p| p.host.load())).ok_or("this view shows nothing")?;
-            let rect = screen_rect(&host).ok_or("this view is not on screen")?;
+            let rect = corner(&host).ok_or("this view is not on screen")?;
             let popped = Popped::new(mtm, &of, rect, &args["colors"]);
+            let target = popped.target.clone();
             with_session(&of, |s| {
                 if let Some(old) = s.popped.replace(popped) {
                     old.panel.orderOut(None);
                 }
             });
             place(&of);
+            // Its buttons start as the video is.
+            target.media(Media::Sync);
             Ok(Value::Null)
         }
         a => Err(format!("`{a}` is unavailable right now")),
@@ -514,6 +635,7 @@ struct Popped {
 pub struct PopIvars {
     source: String,
     play: RefCell<Option<Retained<NSButton>>>,
+    mute: RefCell<Option<Retained<NSButton>>>,
     colors: RefCell<Colors>,
 }
 
@@ -556,15 +678,22 @@ define_class!(
 
         #[unsafe(method(toggle:))]
         fn toggle(&self, _sender: Option<&AnyObject>) {
-            let Some(mtm) = MainThreadMarker::new() else { return };
-            let k = self.ivars().source.clone();
-            let Some((Some(web), frame)) = with_session(&k, |s| (s.web.load(), s.frame.clone())) else { return };
-            run_then(mtm, &web, frame.as_deref(), TOGGLE_SCRIPT, move |r| {
-                let me = with_session(&k, |s| s.popped.as_ref().map(|p| p.target.clone())).flatten();
-                if let Some(me) = me {
-                    me.show_playing(r["result"] == "playing");
-                }
-            });
+            self.media(Media::Toggle);
+        }
+
+        #[unsafe(method(rewind:))]
+        fn rewind(&self, _sender: Option<&AnyObject>) {
+            self.media(Media::Seek(-10.0));
+        }
+
+        #[unsafe(method(forward:))]
+        fn forward(&self, _sender: Option<&AnyObject>) {
+            self.media(Media::Seek(10.0));
+        }
+
+        #[unsafe(method(mute:))]
+        fn mute(&self, _sender: Option<&AnyObject>) {
+            self.media(Media::Mute(None));
         }
 
         #[unsafe(method(close:))]
@@ -576,10 +705,27 @@ define_class!(
 );
 
 impl PopTarget {
-    fn show_playing(&self, playing: bool) {
+    /// Does `m` to the video; the buttons then show how it is.
+    fn media(&self, m: Media) {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let k = self.ivars().source.clone();
+        let Some((Some(web), frame)) = with_session(&k, |s| (s.web.load(), s.frame.clone())) else { return };
+        run_then(mtm, &web, frame.as_deref(), &m.script(), move |r| {
+            let r = media_state(r);
+            let me = with_session(&k, |s| s.popped.as_ref().map(|p| p.target.clone())).flatten();
+            if let Some(me) = me {
+                me.show(r["result"] == "playing", r["muted"] == true);
+            }
+        });
+    }
+
+    fn show(&self, playing: bool, muted: bool) {
+        let c = self.ivars().colors.borrow().clone();
         if let Some(b) = self.ivars().play.borrow().as_ref() {
-            let c = self.ivars().colors.borrow().clone();
             set_title(b, if playing { "❚❚" } else { "▶" }, &c.foreground);
+        }
+        if let Some(b) = self.ivars().mute.borrow().as_ref() {
+            set_title(b, if muted { "◁×" } else { "◁)" }, &c.foreground);
         }
     }
 }
@@ -621,12 +767,23 @@ impl Popped {
         let title = NSTextField::labelWithString(&NSString::from_str("picture in picture"), mtm);
         title.setFont(Some(&font()));
         title.setTextColor(Some(&colors.dim));
-        title.setFrame(NSRect::new(NSPoint::new(8.0, 3.0), NSSize::new(160.0, 15.0)));
-        bar.addSubview(&title);
         let target = PopTarget::new(mtm, source, colors.clone());
-        let buttons = [("↩", sel!(back:)), ("⇲", sel!(home:)), ("❚❚", sel!(toggle:)), ("✕", sel!(close:))];
+        let buttons = [
+            ("↩", sel!(back:), "Back to the page"),
+            ("⇲", sel!(home:), "Back into Herdr"),
+            ("«", sel!(rewind:), "Back 10 seconds"),
+            ("❚❚", sel!(toggle:), "Play / pause"),
+            ("»", sel!(forward:), "On 10 seconds"),
+            ("◁)", sel!(mute:), "Sound off / on"),
+            ("✕", sel!(close:), "Close (the video stops)"),
+        ];
         let mut x = w - 2.0 - 24.0 * buttons.len() as f64 - 4.0;
-        for (label, action) in buttons {
+        // The title up to the buttons, cut short (… ) when the window is narrow.
+        title.setFrame(NSRect::new(NSPoint::new(8.0, 3.0), NSSize::new((x - 12.0).max(0.0), 15.0)));
+        title.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
+        title.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
+        bar.addSubview(&title);
+        for (label, action, tip) in buttons {
             let b = NSButton::initWithFrame(NSButton::alloc(mtm), NSRect::new(NSPoint::new(x, 0.0), NSSize::new(24.0, BAR - 1.0)));
             b.setBordered(false);
             set_title(&b, label, &colors.foreground);
@@ -635,12 +792,17 @@ impl Popped {
                 b.setAction(Some(action));
             }
             b.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            b.setToolTip(Some(&NSString::from_str(tip)));
             bar.addSubview(&b);
             if label == "❚❚" {
                 *target.ivars().play.borrow_mut() = Some(b.clone());
             }
+            if label == "◁)" {
+                *target.ivars().mute.borrow_mut() = Some(b.clone());
+            }
             x += 24.0;
         }
+        panel.setContentMinSize(NSSize::new(240.0, 135.0 + BAR));
         panel.orderFrontRegardless();
         Popped { panel, host, target }
     }
@@ -648,7 +810,7 @@ impl Popped {
 
 impl PopTarget {
     fn new(mtm: MainThreadMarker, source: &str, colors: Colors) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(PopIvars { source: source.to_owned(), play: RefCell::new(None), colors: RefCell::new(colors) });
+        let this = Self::alloc(mtm).set_ivars(PopIvars { source: source.to_owned(), play: RefCell::new(None), mute: RefCell::new(None), colors: RefCell::new(colors) });
         unsafe { msg_send![super(this), init] }
     }
 }
@@ -713,6 +875,18 @@ fn set_title(b: &NSButton, text: &str, color: &NSColor) {
     b.setAttributedTitle(&s);
 }
 
+/// Where the popped-out window goes: the player's size, in the bottom right
+/// corner of its screen (in place, it would look as if nothing happened).
+fn corner(view: &NSView) -> Option<NSRect> {
+    let rect = screen_rect(view)?;
+    let Some(screen) = view.window().and_then(|w| w.screen()) else { return Some(rect) };
+    let area = screen.visibleFrame();
+    const MARGIN: f64 = 16.0;
+    let x = area.origin.x + area.size.width - rect.size.width - MARGIN;
+    let y = area.origin.y + MARGIN;
+    Some(NSRect::new(NSPoint::new(x.max(area.origin.x), y), rect.size))
+}
+
 /// A view's rectangle in screen points.
 fn screen_rect(view: &NSView) -> Option<NSRect> {
     let window = view.window()?;
@@ -722,7 +896,30 @@ fn screen_rect(view: &NSView) -> Option<NSRect> {
 
 #[cfg(test)]
 mod tests {
-    use super::hex;
+    use super::{Media, hex, media_state, seek_by};
+    use serde_json::json;
+
+    #[test]
+    fn media_actions_are_fixed_scripts_that_report_play_and_sound() {
+        assert_eq!(Media::parse("pip.mute", &json!({})), Ok(Media::Mute(None)));
+        assert_eq!(Media::parse("pip.mute", &json!({ "muted": true })), Ok(Media::Mute(Some(true))));
+        assert_eq!(Media::parse("pip.seek", &json!({ "by": 10 })), Ok(Media::Seek(10.0)));
+        assert!(Media::parse("pip.seek", &json!({})).is_err());
+        for m in [Media::Toggle, Media::Seek(-10.0), Media::Mute(None), Media::Mute(Some(false)), Media::Sync] {
+            assert!(m.script().contains("muted: v.muted"), "{m:?}");
+        }
+        let r = media_state(json!({ "result": r#"{"result":"paused","muted":true}"# }));
+        assert_eq!((r["result"].as_str(), r["muted"].as_bool()), (Some("paused"), Some(true)));
+        assert_eq!(media_state(json!({ "result": "none" }))["result"], "none");
+    }
+
+    #[test]
+    fn seek_takes_finite_seconds_within_an_hour() {
+        assert_eq!(seek_by(&json!({ "by": -10 })), Ok(-10.0));
+        assert_eq!(seek_by(&json!({ "by": 1e9 })), Ok(3600.0));
+        assert!(seek_by(&json!({})).is_err());
+        assert!(seek_by(&json!({ "by": "10; alert(1)" })).is_err());
+    }
 
     #[test]
     fn theme_colors_parse_as_hex() {

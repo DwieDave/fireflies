@@ -9,7 +9,9 @@
 //   cmd+alt+i  the inspector (the </> button)
 //   ⧉        the page's video in the nocturne-pip player, a Herdr window over
 //            every tab and space (command nocturne-browser.pip); the page goes
-//            with it, and comes back with ↩ or ✕ (or ⧉ again)
+//            with it, and comes back with ↩ or ✕ (or ⧉ again). Meanwhile this
+//            pane is parked (its tab settled, when it is the tab's only pane),
+//            and shown again when the video comes back or goes into a pane.
 //   ↗        the page in the system's default browser
 //   </>      Safari's Web Inspector for the page, in a pane split beside it
 //            (again: closes it). That pane is this mod with props
@@ -29,7 +31,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, nextCommand, shared, setShared, run, panes, openOverlay, window as appWindow } from "herdr";
+import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, openOverlay, window as appWindow } from "herdr";
 
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
@@ -40,7 +42,11 @@ const ACTIVE = "nocturne-browser.active";
 const INSPECTORS = "nocturne-browser.inspectors";
 const INSPECTOR = "inspector";
 // The picture in picture player: one window, whichever page's video it shows.
-const PLAYER = { mod: "nocturne-pip", kind: "window", key: "nocturne-pip", frame: "none", width: 384, height: 238 };
+// The picture in picture player window (as nocturne-pip opens it): 16:9 under its bar, resizable.
+const PLAYER = { mod: "nocturne-pip", kind: "window", key: "nocturne-pip", frame: "none", width: 384, height: 238,
+  resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } };
+// The pane the player put the video in (nocturne-pip): { of, pane, park }.
+const PIP_PANE = "nocturne-pip.pane";
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 function dither(color, cell = 1) {
@@ -203,14 +209,47 @@ export default class Browser extends View {
     // The page's video goes to the player (⧉), or comes back into Herdr from
     // its popped-out window: the player shows it. Meanwhile the page is away.
     if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of } });
-    if (e.event === "pip.enter") this.away = true;
-    if (e.event === "pip.leave") this.away = false;
+    if (e.event === "pip.enter") { this.away = true; this.pipOf = d.of; this.hide(); }
+    if (e.event === "pip.leave") { this.away = false; this.unhide(); }
+    // The video went into a pane (not a parked chip): the page shows again.
+    if (e.event === "pip.moved") {
+      cx.timer.after(400, () => {
+        const n = shared(PIP_PANE);
+        if (n?.of === this.pipOf && !n.park && panes().some((x) => x.pane === n.pane)) this.unhide();
+      });
+    }
     if (e.event === "pip.start" && d.result === "none") this.error = "No video on this page.";
     if (e.event === "pip.start" && d.error) this.error = `Picture in picture: ${d.error}`;
   }
 
   call(action, args) {
     try { return herdr.nativeViewCall(ID, action, args ?? {}); } catch (err) { this.error = String(err?.message ?? err); return null; }
+  }
+
+  /** While the video is in the player, this pane is out of the way: parked,
+   *  or, the tab's only pane, its tab settled (Nocturne lists no settled tab). */
+  hide() {
+    if (this.hidden) return;
+    const me = this.ownPane();
+    if (!me || me.parked) return;
+    const placed = panes().filter((x) => x.tab === me.tab && !x.parked);
+    if (placed.length > 1) {
+      this.hidden = { pane: me.pane };
+      run("pane.park", { pane: me.pane });
+    } else {
+      const tab = spaces().flatMap((s) => s.tabs ?? []).find((c) => c.id === me.tab);
+      if (!tab || tab.settled) return;
+      this.hidden = { tab: me.tab };
+      run("tab.settle", { id: me.tab });
+    }
+  }
+
+  /** Undoes `hide`, unless the person brought it back already. */
+  unhide() {
+    const h = this.hidden;
+    this.hidden = null;
+    if (h?.pane && panes().find((x) => x.pane === h.pane)?.parked) run("pane.unpark", { pane: h.pane });
+    if (h?.tab && spaces().flatMap((s) => s.tabs ?? []).find((c) => c.id === h.tab)?.settled) run("tab.unsettle", { id: h.tab });
   }
 
   go(text, cx) {
@@ -309,7 +348,8 @@ export default class Browser extends View {
         .on_click((_e, cx) => { this.command("zoom_reset"); cx.notify(); })
         .child(`${Math.round(this.zoom * 100)}%`))
       .child(this.icon(t, "zoom-in", "plus", this.zoom < 3, () => this.command("zoom_in")))
-      .child(this.icon(t, "pip", "picture-in-picture", Boolean(this.start && available()), () => this.command("pip")))
+      // focus: the press focuses this pane first, so the pane hidden for the player is this one.
+      .child(this.icon(t, "pip", "picture-in-picture", Boolean(this.start && available()), () => this.command("pip"), { focus: true }))
       .child(this.icon(t, "inspect", "code", Boolean(this.start && available()), (cx) => this.inspector(cx), { focus: true }))
       .child(this.icon(t, "external", "external-link", Boolean(this.start && p.href), (cx) => this.external(cx)))
       // Loading: a dithered line along the bar's foot, as far as the page has come.

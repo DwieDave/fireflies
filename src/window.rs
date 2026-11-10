@@ -386,6 +386,8 @@ struct Overlay {
     /// A window: where its top left is (None: centered) and its name (`key`).
     place: Option<Point<Pixels>>,
     key: Option<String>,
+    /// A window people can resize by its edges (`resizable`).
+    resize: Option<movable::Resize>,
     /// The app's own screen (a `frame-` mod: What's new, the welcome): only
     /// its own close ends it, never a layout switch.
     frame: bool,
@@ -1416,6 +1418,13 @@ impl AppWindow {
                     out.insert(slot, i);
                 }
             }
+            // Parked mod panes stay alive too (a web page keeps playing), as
+            // their terminals keep running.
+            for p in &c.parked {
+                if let Some(Content::Mod { name, props }) = p.pane.content() {
+                    out.insert(p.pane.id.clone(), inst(name, props));
+                }
+            }
         }
         for o in &self.overlays {
             if let Some(c) = self.copies.get(&o.slot) {
@@ -1437,7 +1446,7 @@ impl AppWindow {
     /// tab) and overlays stay.
     fn drop_layout_copies(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let gone: Vec<_> = self.copies.keys().filter(|s| {
-            self.model.tab_of(s).is_none() && !self.overlays.iter().any(|o| o.slot == **s || o.layout.as_ref().is_some_and(|l| l.find(s).is_some()))
+            self.model.tab_holding(s).is_none() && !self.overlays.iter().any(|o| o.slot == **s || o.layout.as_ref().is_some_and(|l| l.find(s).is_some()))
         }).cloned().collect();
         for slot in gone {
             self.remove_copy(&slot, window, cx);
@@ -4142,8 +4151,12 @@ impl AppWindow {
         }
         props["overlay"] = json!(id);
         let num = |k: &str, d: f32| spec.get(k).and_then(Value::as_f64).map_or(d, |v| v as f32);
+        let resize = (kind == OverlayKind::Window).then(|| movable::Resize::parse(spec.get("resizable"))).flatten();
+        let resized = resize.and(key.as_deref()).and_then(movable::size_of);
         let size = match kind {
             OverlayKind::Toast => size(340.0, num("height", 72.0)),
+            // A size it was resized to before, under its key.
+            OverlayKind::Window if resized.is_some() => resized.unwrap(),
             // No size: as big as its content (0 = unset).
             OverlayKind::Window => size(num("width", 0.0), num("height", 0.0)),
             // No height: as tall as the content, up to most of the window.
@@ -4154,7 +4167,7 @@ impl AppWindow {
             _ => self.pointer,
         };
         let top = (spec.get("at").and_then(Value::as_str) == Some("top")).then(|| num("offset", 0.0));
-        let fit = layout.is_none() && (kind == OverlayKind::Popup || (matches!(kind, OverlayKind::Dialog | OverlayKind::Window) && spec.get("height").is_none()));
+        let fit = layout.is_none() && resized.is_none() && (kind == OverlayKind::Popup || (matches!(kind, OverlayKind::Dialog | OverlayKind::Window) && spec.get("height").is_none()));
         if kind == OverlayKind::Window && place.is_none() && spec.get("at").is_some_and(|v| v.get("x").is_some()) {
             place = Some(at);
         }
@@ -4195,6 +4208,7 @@ impl AppWindow {
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
             place,
             key: key.clone(),
+            resize,
             frame: spec.get("mod").and_then(Value::as_str).is_some_and(|m| m.starts_with("frame-")),
         });
         if let Some(k) = &key {
@@ -4847,7 +4861,8 @@ impl AppWindow {
 
     /// A press on a pane's native view: that pane takes focus, its tab and space show.
     fn focus_pressed(&mut self, slot: String, window: &mut Window, cx: &mut Context<Self>) {
-        let Some(tab) = self.model.tab_of(&slot).map(|t| t.id.clone()) else { return };
+        // A parked pane too: focusing it unparks it (Model::focus_pane).
+        let Some(tab) = self.model.tab_holding(&slot).map(|t| t.id.clone()) else { return };
         // Focused already, and shown: nothing to do. A pane still marked focused
         // in a tab that was left needs its tab shown again.
         let shown = self.model.active_tab().is_some_and(|t| t.id == tab);
@@ -6564,6 +6579,45 @@ mod tests {
         cx.update(|window, cx| view.update(cx, |this, cx| this.focus_pressed("p2".into(), window, cx)));
         cx.run_until_parked();
         assert_eq!(active(cx).as_deref(), Some("tb2"));
+    }
+
+    #[test]
+    fn a_parked_mod_pane_keeps_running_and_a_press_on_it_unparks_it() {
+        in_own_process("parked_mod_lives");
+    }
+
+    /// A mod pane parked as a chip keeps its copy (a web page plays on); a
+    /// press on its native view (picture in picture's "back") unparks it.
+    #[gpui::test]
+    fn parked_mod_lives(cx: &mut gpui::TestAppContext) {
+        use crate::layout::{Axis, Content, Node};
+        use serde_json::json;
+        if !running_alone("parked_mod_lives") {
+            return;
+        }
+        let (view, cx) = open_window(cx, "probe", "import { View, div } from \"gpui-kit\"; export default class P extends View { render() { return div(); } }", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            let block = Node::block("pm", Content::Mod { name: "probe".into(), props: json!({}) });
+            assert!(this.model.split_with("p1", Axis::Row, block));
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        let copy = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| view.read(cx).copies.get("pm").map(|c| c.id));
+        let first = copy(cx);
+        assert!(first.is_some(), "the shown mod pane has a copy");
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.park_pane("pm", None).unwrap();
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        assert_eq!(copy(cx), first, "parked, the same copy runs on");
+        cx.update(|window, cx| view.update(cx, |this, cx| this.focus_pressed("pm".into(), window, cx)));
+        cx.run_until_parked();
+        assert!(cx.update(|_, cx| view.read(cx).model.parked_tab_of("pm").is_none()), "a press unparks it");
+        assert_eq!(copy(cx), first);
     }
 
     #[test]
