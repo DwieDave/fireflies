@@ -1,0 +1,95 @@
+{
+ "data": {
+  "viewer": {
+   "login": "DwieDave"
+  },
+  "repository": {
+   "id": "R_fireflies",
+   "nameWithOwner": "DwieDave/fireflies",
+   "projectsV2": {
+    "nodes": [
+     {
+      "id": "PVT_kwHOAAAAAc4A0001",
+      "number": 3,
+      "title": "Fireflies roadmap",
+      "url": "https://github.com/users/DwieDave/projects/3",
+      "closed": false,
+      "shortDescription": "",
+      "updatedAt": "2026-11-09T10:00:00Z",
+      "owner": {
+       "__typename": "User",
+       "login": "DwieDave"
+      }
+     }
+    ]
+   },
+   "owner": {
+    "__typename": "User",
+    "login": "DwieDave",
+    "projectsV2": {
+     "nodes": [
+      {
+       "id": "PVT_kwHOAAAAAc4A0001",
+       "number": 3,
+       "title": "Fireflies roadmap",
+       "url": "https://github.com/users/DwieDave/projects/3",
+       "closed": false,
+       "shortDescription": "",
+       "updatedAt": "2026-11-09T10:00:00Z",
+       "owner": {
+        "__typename": "User",
+        "login": "DwieDave"
+       }
+      },
+      {
+       "id": "PVT_kwHOAAAAAc4A0002",
+       "number": 1,
+       "title": "Reading list",
+       "url": "https://github.com/users/DwieDave/projects/1",
+       "closed": false,
+       "shortDescription": "",
+       "updatedAt": "2026-11-09T10:00:00Z",
+       "owner": {
+        "__typename": "User",
+        "login": "DwieDave"
+       }
+      },
+      {
+       "id": "PVT_kwHOAAAAAc4A0003",
+       "number": 2,
+       "title": "Old ideas",
+       "url": "https://github.com/users/DwieDave/projects/2",
+       "closed": true,
+       "shortDescription": "",
+       "updatedAt": "2026-11-09T10:00:00Z",
+       "owner": {
+        "__typename": "User",
+        "login": "DwieDave"
+       }
+      }
+     ]
+    }
+   }
+  },
+  "parent": {
+   "nameWithOwner": "herdrdev/herdr-app",
+   "projectsV2": {
+    "nodes": [
+     {
+      "id": "PVT_kwDOBBBBBc4B0001",
+      "number": 1,
+      "title": "Herdr 2",
+      "url": "https://github.com/orgs/herdrdev/projects/1",
+      "closed": false,
+      "shortDescription": "",
+      "updatedAt": "2026-11-09T10:00:00Z",
+      "owner": {
+       "__typename": "Organization",
+       "login": "herdrdev"
+      }
+     }
+    ]
+   }
+  }
+ }
+}

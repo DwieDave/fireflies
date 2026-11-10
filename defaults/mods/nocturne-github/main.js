@@ -1,14 +1,15 @@
 // Nocturne GitHub: a floating window over the tab (cmd-shift-g, or
 // "+ new" > GitHub) with the space's repo on GitHub: its pull requests
-// (prs.js) and its Actions (actions.js), in Nocturne's 1-bit night look,
+// (prs.js), its Actions (actions.js) and its GitHub Projects boards
+// (projects.js), in Nocturne's 1-bit night look,
 // moved through lazygit's way (hjkl, panels, a key bar; ? lists every key).
 //
-//   1 2 [ ]     Pull requests / Actions
+//   1 2 3 [ ]   Pull requests / Actions / Projects
 //   r           read everything again now
-//   p           a fork: its parent repo, and back (the header's "fork of …")
+//   p           a fork: its parent repo, and back (the header's "fork of …"; on Projects, p picks the project)
 //   drag        the gaps between panels resize them (kept per tab)
 //
-// keys.json can bind nocturne-github.prs / .actions / .refresh / .diff / .fork (to a shown window).
+// keys.json can bind nocturne-github.prs / .actions / .projects / .refresh / .diff / .fork (to a shown window).
 //   ?           every key        esc q  close the window (from its top level)
 //
 // Everything goes through the gh CLI (gh.js): its login, no token here.
@@ -41,12 +42,13 @@ import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
+import Projects from "./projects.js";
 
 export const WINDOW = "nocturne-github.window"; // { id, beat }: the open window, for the toggle
 const STATE = "nocturne-github.state";
 const BEAT = 4000;
 const SAVE_EVERY = 10000; // the cache is written at most this often
-const TABS = [["prs", "Pull requests"], ["actions", "Actions"]];
+const TABS = [["prs", "Pull requests"], ["actions", "Actions"], ["projects", "Projects"]];
 
 /** The shown space's folder and machine (when opened without props). */
 function here() {
@@ -69,6 +71,7 @@ export default class GitHub extends View {
     this.tab = pr.tab ?? (same ? kept.tab : null) ?? "prs";
     this.prs = new Prs(this, same ? kept.prs : {});
     this.actions = new Actions(this, same ? kept.actions : {});
+    this.projects = new Projects(this, same ? kept.projects : {});
     this.repo = null;
     this.state = "loading"; // loading | norepo | error | ready
     this.error = "";
@@ -100,7 +103,7 @@ export default class GitHub extends View {
         if (c === "focus") this.handle.focus();
         else if (c === "refresh") this.refresh(cx, true);
         else if (c === "fork") this.switchFork(cx);
-        else if (c === "prs" || c === "actions") this.setTab(c, cx);
+        else if (c === "prs" || c === "actions" || c === "projects") this.setTab(c, cx);
         else if (c === "diff" && this.repo && this.prs.current()) this.openDiff(this.prs.current().number);
         cx.notify();
       }
@@ -117,6 +120,7 @@ export default class GitHub extends View {
     this.repo = { ...e.repo };
     this.prs.hydrate(e.prs);
     this.actions.hydrate(e.actions);
+    this.projects.hydrate(e.projects);
     this.state = "ready";
     return true;
   }
@@ -153,7 +157,7 @@ export default class GitHub extends View {
   /** Shows another repo (or none), with what the cache holds of it (`cached`): what was shown of the old one goes. */
   show(repo, cx, cached = null) {
     this.repo = repo;
-    this.prs.hydrate(cached?.prs ?? null); this.actions.hydrate(cached?.actions ?? null);
+    this.prs.hydrate(cached?.prs ?? null); this.actions.hydrate(cached?.actions ?? null); this.projects.hydrate(cached?.projects ?? null);
     this.warmed = null;
     this.gen = (this.gen ?? 0) + 1; this.busy = false; // a read of the old repo is dropped
     this.stale = "";
@@ -209,7 +213,7 @@ export default class GitHub extends View {
     if (redraw || (this.state === "ready" && this.shown().interval() < 10000)) cx.notify();
   }
 
-  shown() { return this.tab === "prs" ? this.prs : this.actions; }
+  shown() { return this.tab === "prs" ? this.prs : this.tab === "projects" ? this.projects : this.actions; }
 
   /** Reads the shown tab now. force (true, or { all, fresh }): all reads past the
    *  timers, fresh past the ETags too (r, after an action). */
@@ -264,7 +268,7 @@ export default class GitHub extends View {
   persist() {
     if (!this.repo || this.saving || this.state !== "ready") return this.saving;
     this.dirty = false; this.savedAt = Date.now();
-    const entry = { ...entryFor(this.repo), repo: slimRepo(this.repo), prs: this.prs.snapshot(), actions: this.actions.snapshot() };
+    const entry = { ...entryFor(this.repo), repo: slimRepo(this.repo), prs: this.prs.snapshot(), actions: this.actions.snapshot(), projects: this.projects.snapshot() };
     this.saving = store.save(this.folder, entry).catch(() => false).finally(() => { this.saving = null; });
     return this.saving;
   }
@@ -287,7 +291,7 @@ export default class GitHub extends View {
   }
 
   save() {
-    setShared(STATE, { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save() });
+    setShared(STATE, { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() });
   }
 
   focusSelf() { this.handle.focus(); }
@@ -389,11 +393,11 @@ export default class GitHub extends View {
       if (k === "escape" || k === "?" || k === "q") this.help = false;
       cx.stop_propagation(); cx.notify(); return;
     }
-    if (k === "1") this.setTab("prs", cx);
-    else if (k === "2") this.setTab("actions", cx);
-    else if (k === "[" || k === "]") this.setTab(this.tab === "prs" ? "actions" : "prs", cx);
+    const ids = TABS.map(([id]) => id);
+    if (k === "1" || k === "2" || k === "3") this.setTab(ids[Number(k) - 1], cx);
+    else if (k === "[" || k === "]") this.setTab(ids[(ids.indexOf(this.tab) + (k === "]" ? 1 : ids.length - 1)) % ids.length], cx);
     else if (k === "?") this.help = true;
-    else if (k === "p" && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
+    else if (k === "p" && this.tab !== "projects" && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
     else if (k === "r" && !m.control) this.refresh(cx, true);
     else if (this.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
     else if (k === "escape" || k === "q") this.closeWindow();
@@ -447,10 +451,11 @@ export default class GitHub extends View {
   }
 
   helpPanel(t) {
-    const all = [["1 2 [ ]", "pull requests / actions"], ["r", "read again now"],
-      ...(this.repo?.parent ? [["p", `the parent, ${this.repo.parent}`]] : this.repo?.child ? [["p", `back to the fork, ${this.repo.child}`]] : []),
+    const fork = this.tab === "projects" ? "(header chip)" : "p";
+    const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],
+      ...(this.repo?.parent ? [[fork, `the parent, ${this.repo.parent}`]] : this.repo?.child ? [[fork, `back to the fork, ${this.repo.child}`]] : []),
       ["?", "these keys"], ["esc q", "close (from the top)"]];
-    const tab = this.tab === "prs" ? Prs.help() : Actions.help();
+    const tab = this.tab === "prs" ? Prs.help() : this.tab === "projects" ? Projects.help() : Actions.help();
     const col = (title, list) => v_flex().gap(3).min_w(260)
       .child(div().pb(4).text_color(t.ansi8).child(title))
       .children(list.map(([k, what], i) => h_flex().id(`help-${title}-${i}`).gap(12)
@@ -459,7 +464,7 @@ export default class GitHub extends View {
     return div().id("gh-help").absolute().inset_0().bg(t.background + "f2").p(20).text_size(11)
       .on_mouse_down("left", stop)
       .child(h_flex().gap(40).items_start()
-        .child(col(this.tab === "prs" ? "PULL REQUESTS" : "ACTIONS", tab))
+        .child(col({ prs: "PULL REQUESTS", actions: "ACTIONS", projects: "PROJECTS" }[this.tab], tab))
         .child(col("WINDOW", all)));
   }
 
