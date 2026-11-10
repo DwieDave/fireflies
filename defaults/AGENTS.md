@@ -226,7 +226,8 @@ the highlighted line shows where it will land.
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip counts what waits
   (permissions and questions in a pink chip, agents that need a look as a
-  dim `+n`); it or cmd-shift-a (`nocturne-notifications.open`) opens the
+  dim `+n`) and sizes its own block (`layout.resize`) to fit, ending where
+  the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
   overview: Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
   space / tab and how long it has waited. Finished agents aren't listed: the
