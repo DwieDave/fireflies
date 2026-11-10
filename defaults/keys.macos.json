@@ -81,6 +81,7 @@
     "cmd-d": "pane.split:auto",
     "cmd-g": "nocturne.lazygit",
     "cmd-shift-g": "nocturne.github",
+    "cmd-shift-r": "nocturne.scripts",
     "cmd-e": "nocturne.files",
     "cmd-alt-=": "pane.font_bigger",
     "cmd-alt--": "pane.font_smaller",

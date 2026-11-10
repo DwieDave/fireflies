@@ -925,6 +925,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.lazygit",
         "nocturne.files",
         "nocturne.github",
+        "nocturne.scripts",
         "nocturne-browser.url",
         "nocturne-browser.reload",
         "nocturne-browser.back",

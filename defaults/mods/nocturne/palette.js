@@ -12,6 +12,7 @@ import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win } from "herdr";
 import { dither, eyebrow } from "./kit.js";
 import { panels } from "./panels.js";
+import { toggleDeck } from "./scripts.js";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -39,6 +40,8 @@ function openEntries() {
   }
   out.push({ name: "nocturne", args: { fold: true }, group: "Open", icon: "sidebar", bind: "nocturne.fold",
     title: "Fold or open the sidebar", words: "toggle sidebar sky rail collapse hide", go: () => run("nocturne.fold") });
+  out.push({ name: "nocturne", args: { scripts: true }, group: "Open", icon: "terminal", bind: "nocturne.scripts",
+    title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   // The picture in picture player (nocturne-pip), while its window is open.
   if (shared("nocturne-pip.player")) {
     for (const [cmd, icon, title, words] of [
