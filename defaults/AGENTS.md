@@ -174,7 +174,8 @@ the highlighted line shows where it will land.
   parent's tab without a pane; the `agents` mod shows them,
   `terminal.peek` opens one, `terminal.keep` gives one a pane.
 - **Scripts** (Nocturne's script runner, the `nocturne-scripts` mod): the
-  tab strip's ▶ (cmd-shift-r, `nocturne.scripts`; `nocturne.scripts-again` runs
+  tab strip's ▶ (its deck hangs under it, like "+ new"'s menu; a second click
+  closes either; cmd-shift-r, `nocturne.scripts`; `nocturne.scripts-again` runs
   the folder's last script again) lists what the space's folder
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
@@ -571,6 +572,9 @@ Sidebar on the right: swap the two children of `root`. No sidebar: set
 Narrower than 160px, the sidebar mods draw a compact rail; folding resizes
 `sidebar` to 44 (76 on macOS, room for the traffic lights). On macOS,
 the tabs also leave room for the window buttons when the sidebar is narrower.
+Nocturne's sky folds the same way (cmd-b, `nocturne.fold`) to a rail as wide as
+the window buttons need at the person's zoom; it and the open sky list agents
+needs you, working, running a command, done, resting.
 
 ### Layouts and mods other people made
 

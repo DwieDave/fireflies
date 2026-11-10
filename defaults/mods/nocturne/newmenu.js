@@ -1,12 +1,13 @@
 // The "+ new" menu ({ role: "new" }, an overlay from the tab strip).
 //
-//   landing   the switch at the top says where new things go: beside the
-//             focused pane, or a tab of their own. Its little picture shows
+//   landing   the switch at the top says where new things go: a pane beside
+//             the focused one, or a tab of their own. Its little picture shows
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (panels.js): terminal, web, files, agents,
-//             usage, worktrees, lazygit, diff. Lazygit and the diff float and
-//             files runs down the tab's edge when "beside" is picked; open
+//             usage, worktrees, lazygit, diff, github, in fixed columns (a short
+//             last row keeps them). Lazygit, the diff and GitHub float and
+//             files runs down the tab's edge when "pane" is picked; open
 //             ones say so with a corner mark and close on a second pick.
 //   agents    every installed agent, started at the landing spot
 //   space     a new space, or a worktree (made or opened)
@@ -90,19 +91,23 @@ function items(agents) {
   ];
 }
 
-/** Opens the menu, or closes it when it's open: under the pointer from the
- *  tab strip's "+ new", dead center from a key (cmd-n), where the pointer
- *  could be anywhere. A dialog also takes the keyboard, so esc and the
- *  menu's keys reach it. */
-export function openNewMenu({ centered = false } = {}) {
+/** Opens the menu, or closes it when it's open: hanging under the tab
+ *  strip's "+ new" (`at`, kit.js dropBelow; else under the pointer), dead
+ *  center from a key (cmd-n), where the pointer could be anywhere. A dialog
+ *  also takes the keyboard, so esc and the menu's keys reach it. */
+export function openNewMenu({ centered = false, at = null } = {}) {
   const open = shared(OPEN);
   if (open) {
     setShared(OPEN, null);
     closeOverlay(open);
     return;
   }
-  setShared(OPEN, openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width: WIDTH, height: newMenuHeight(), props: { role: "new" } }));
+  setShared(OPEN, openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width: WIDTH, height: newMenuHeight(),
+    ...(at && !centered ? { at } : {}), props: { role: "new" } }));
 }
+
+/** The menu is open (the strip lights "+ new" and drops its tooltip). */
+export const newMenuOpen = () => Boolean(shared(OPEN));
 
 /** How tall the menu is for the agents it last found on the shown space's machine. */
 export function newMenuHeight() {
@@ -178,7 +183,7 @@ export default class NewMenu {
       if (x.p.fixed === "float") return `${name} floats over the tab`;
       if (x.p.fixed === "edge") return `${name} along the tab's right edge`;
     }
-    return `${name} beside the focused pane`;
+    return `${name} in a new pane`;
   }
 
   // ---- parts
@@ -212,7 +217,7 @@ export default class NewMenu {
         .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
         .child(div().relative().child(label));
     };
-    return h_flex().flex_none().items_center().child(opt("pane", "beside")).child(opt("tab", "new tab"));
+    return h_flex().flex_none().items_center().child(opt("pane", "pane")).child(opt("tab", "new tab"));
   }
 
   head(t, dest) {
@@ -253,7 +258,7 @@ export default class NewMenu {
         .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : fixed ?? ""))
         .child(div().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(x.key)))
       .child(v_flex().relative().flex_1().items_center().justify_center().gap(5)
-        .child(svg(chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.ansi8 : on || open ? t.accent : t.dim))
+        .child(svg(x.p.icon.includes("/") ? x.p.icon : chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.ansi8 : on || open ? t.accent : t.dim))
         .child(div().max_w_full().truncate().text_size(11).text_color(color).child(on && open ? "close" : x.p.name)));
   }
 
@@ -323,7 +328,9 @@ export default class NewMenu {
       const slice = tiles.slice(i, i + COLS);
       grid.push(h_flex().id(`nm-grid-${i}`).gap(GAP).w_full()
         .children(slice.map((x) => this.tile(t, x, x === current, live, dest)))
-        .children(Array.from({ length: COLS - slice.length }, (_, j) => div().id(`nm-pad-${i}-${j}`).flex_1())));
+        // A short last row keeps the columns: each pad is a tile's box (its
+        // padding and border count toward a flex_1 item's width), left empty.
+        .children(Array.from({ length: COLS - slice.length }, (_, j) => div().id(`nm-pad-${i}-${j}`).flex_1().min_w(0).h(TILE_H).px(5).border(1).border_color(t.background))));
     }
     const ags = all.filter((x) => x.kind === "agent");
     const rows = all.filter((x) => x.kind === "row");
