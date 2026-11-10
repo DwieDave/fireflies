@@ -95,6 +95,10 @@ export const WORD = { working: "working", blocked: "needs you", done: "done", id
 /** Status order: what needs the person first, then what's busy, then what's at rest. */
 export const RANK = { blocked: 0, working: 1, done: 2, idle: 3 };
 
+/** At rest: done or resting. Both sidebars set these on the ground by the
+ *  hills, below the awake ones (needs you, working, running a command). */
+export const atRest = (a) => a.status === "idle" || a.status === "done";
+
 /** An agent's place in every list: needs you, working, running a command it
  *  started (working, but waiting on a shell), done, resting. */
 export const agentRank = (a) => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status] ?? 3);

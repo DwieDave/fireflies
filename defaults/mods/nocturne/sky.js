@@ -32,7 +32,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay, settings, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal } from "./kit.js";
+import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal } from "./kit.js";
 import { stamps } from "./pins.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
@@ -98,6 +98,12 @@ const RAIL = 76;
 const LIGHTS_ROOM = 86;
 const railWidth = () => appWindow()?.platform === "macos" ? Math.max(RAIL, Math.ceil(LIGHTS_ROOM / (Number(settings()?.zoom) || 1))) : RAIL;
 const RAIL_BELOW = 160;
+// The rail's ground (railGround): how far above the usage the stack ends (on
+// the near ridge), how many at rest stand in one column before they pair
+// up, and how many cells it shows at most (the last becomes "+n").
+const RAIL_RIDGE = 74;
+const RAIL_GROUND_ONE = 4;
+const RAIL_GROUND_MAX = 8;
 const OPEN_WIDTH = "nocturne.sidebar";
 const OPEN_DEFAULT = 252;
 // How long a fold gets to land before its width is checked (ms).
@@ -484,8 +490,9 @@ export default class Sky {
     }
   }
 
-  // Awake fireflies (blocked, working, done: agentRank) spread through the sky above
-  // the grass; resting ones sit in a stack on the near ridge.
+  // Awake fireflies (blocked, working, running a command) spread through the
+  // sky above the grass; those at rest (done, then resting: kit.js atRest)
+  // sit in a stack on the near ridge, as on the rail.
   // Pinned ones (pins.js) live in a glass jar at the top, in the order
   // pinned; the rest keep this order below it. Lanes are placed in one space,
   // so a firefly being pinned flies up into the jar (and back out).
@@ -495,8 +502,8 @@ export default class Sky {
     const w = this.field.width / zoom, hgt = this.field.height / zoom;
     const inJar = new Set(jarred.map((a) => a.address));
     const free = list.filter((a) => !inJar.has(a.address));
-    const awake = free.filter((a) => a.status !== "idle");
-    const resting = free.filter((a) => a.status === "idle");
+    const awake = free.filter((a) => !atRest(a));
+    const resting = free.filter(atRest);
     const ground = hgt - 96; // above the far ridge (hills-rim), so labels stay on clear sky
     let lane = 40, restLane = 28;
     const laneOf = (a) => (a.status === "idle" ? restLane : lane);
@@ -597,12 +604,13 @@ export default class Sky {
 
   /** A firefly on the rail: its mark in a 32 px cell, glowing in its rhythm
    *  (flight.js); a working one rises and falls a pixel or two. */
-  railFly(t, a) {
+  railFly(t, a, size = 32) {
     const h = hash(a.address);
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
     const awake = a.status !== "idle";
     const mark = div().relative().child(this.mark(a, color));
-    return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
+    const plate = (size - 16) / 2;
+    return div().id(`rail-fly-${a.address}`).relative().size(size).flex_none().flex().items_center().justify_center()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
       .on_mouse_down("left", stop)
@@ -610,17 +618,44 @@ export default class Sky {
       .on_click(() => run("agent.focus", { terminal: a.address }))
       .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
       .when(awake, (el) => el
-        .child(flash(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color), a.status, h))
-        .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
+        .child(flash(svg(`${ART}/glow.svg`).size(size).absolute().top(0).left(0).text_color(color), a.status, h))
+        .child(div().absolute().top(plate).left(plate).size(16).bg(t.background)))
       .child(a.status === "working" && !calm() ? mark.loop("top", { from: -1, to: 1, period: 1900 + (h % 700) }) : mark)
-      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
+      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(size > 28 ? 2 : 0).right(size > 28 ? 2 : 0)));
+  }
+
+  /** The rail's ground: fireflies at rest (done, then resting) stacked at its
+   *  foot on the hills, as the open sky's are. Crowded: smaller cells, two
+   *  abreast, then a count. Always above the usage, never behind it. */
+  railGround(t, resting) {
+    if (!resting.length) return null;
+    const pairs = resting.length > RAIL_GROUND_ONE;
+    const cell = pairs ? 28 : 30;
+    const room = pairs ? RAIL_GROUND_MAX : resting.length;
+    const shown = resting.length > room ? resting.slice(0, room - 1) : resting;
+    const more = resting.length - shown.length;
+    // The count takes the last cell, so the stack keeps its shape above the hills.
+    const marks = [...shown.map((a) => this.railFly(t, a, cell)),
+      ...(more > 0 ? [div().id("rail-ground-more").size(cell).flex_none().flex().items_center().justify_center()
+        .text_size(10).text_color(t.ansi8).hover((s) => s.text_color(t.foreground).bg(t.ansi0 + "55"))
+        .tooltip(`${more} more at rest`)
+        .on_mouse_down("left", stop).on_click(() => run("agent.next"))
+        .child(`+${more}`)] : [])];
+    const body = pairs
+      ? v_flex().gap(2).items_center().children(Array.from({ length: Math.ceil(marks.length / 2) }, (_, i) =>
+        h_flex().gap(2).children(marks.slice(i * 2, i * 2 + 2))))
+      : v_flex().gap(1).items_center().children(marks);
+    return v_flex().id("rail-ground").w_full().flex_none().items_center().pt(6).pb(RAIL_RIDGE).child(body);
   }
 
   /** Folded: the moon and the hour, », a row per space (sidebar order), every firefly's mark, the usage. */
   rail(t, list, jarred = []) {
     const rows = this.spaces.rows().filter((r) => r.s);
     const inJar = new Set(jarred.map((a) => a.address));
-    const flies = list.filter((a) => !inJar.has(a.address)).map((a) => this.railFly(t, a));
+    const free = list.filter((a) => !inJar.has(a.address));
+    // Awake ones under the jar at the top; those at rest on the ground at the foot (railGround).
+    const flies = free.filter((a) => !atRest(a)).map((a) => this.railFly(t, a));
+    const ground = this.railGround(t, free.filter(atRest));
     // The pinned ones' marks in a small jar of their own, resting ones lit a little.
     const jar = jarred.length ? v_flex().id("rail-jar").relative().w(48).flex_none().items_center().pt(BODY + 2).pb(4).gap(2).mb(6)
       .child(this.glass(t, jarred, RAIL_NECK))
@@ -637,6 +672,7 @@ export default class Sky {
       .child(v_flex().w_full().px(8).py(2).flex_none().bg(t.background).children(rows.map(({ s }) => this.railSpace(t, s))))
       .child(div().py(12).flex_none().child(rule()))
       .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().when(Boolean(jar), (el) => el.child(jar)).children(flies))
+      .when(Boolean(ground), (el) => el.child(ground))
       .child(this.usage.rail(t));
   }
 
