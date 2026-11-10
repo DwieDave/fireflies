@@ -395,6 +395,9 @@ pub struct Person {
     pub pane_scrollbars: bool,
     /// Minimum terminal text contrast ratio; 1 leaves program colors unchanged.
     pub minimum_contrast: f32,
+    /// Where web links open: a web pane in the app, or the system's browser.
+    #[serde(skip_serializing_if = "Links::is_app")]
+    pub links: Links,
     /// macOS Option sends Alt shortcuts, or follows the keyboard layout.
     #[serde(skip_serializing_if = "OptionAsAlt::is_auto")]
     pub option_as_alt: OptionAsAlt,
@@ -439,6 +442,23 @@ impl OptionAsAlt {
     }
 }
 
+/// Where http(s) links go when clicked (terminals, mods, notes).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Links {
+    /// A web pane beside the focused one, where the app has one (macOS).
+    #[default]
+    App,
+    /// The system's default browser.
+    System,
+}
+
+impl Links {
+    fn is_app(&self) -> bool {
+        *self == Links::App
+    }
+}
+
 fn is_true(b: &bool) -> bool {
     *b
 }
@@ -457,6 +477,7 @@ impl Default for Person {
             clipboard_write: true,
             pane_scrollbars: true,
             minimum_contrast: 1.0,
+            links: Links::App,
             option_as_alt: OptionAsAlt::Auto,
             appearance: Appearance::System,
             theme: None,
@@ -494,6 +515,7 @@ pub struct Settings {
     pub terminal_opacity: f32,
     pub clipboard_write: bool,
     pub minimum_contrast: f32,
+    pub links: Links,
     pub option_as_alt: OptionAsAlt,
     pub sounds: Sounds,
 }
@@ -536,6 +558,7 @@ impl Default for Settings {
             terminal_opacity: 1.0,
             clipboard_write: true,
             minimum_contrast: 1.0,
+            links: Links::App,
             option_as_alt: OptionAsAlt::Auto,
             sounds: Sounds::default(),
         }
@@ -575,6 +598,7 @@ impl Settings {
             sounds: person.sounds.clone(),
             clipboard_write: person.clipboard_write,
             minimum_contrast: person.minimum_contrast,
+            links: person.links,
             option_as_alt: person.option_as_alt,
         }
     }
@@ -918,6 +942,15 @@ mod tests {
     }
 
     #[test]
+    fn links_open_in_the_app_unless_set_to_system() {
+        assert_eq!(Person::default().links, Links::App);
+        assert!(serde_json::to_value(Person::default()).unwrap().get("links").is_none());
+        let system: Person = serde_json::from_str(r#"{"links":"system"}"#).unwrap();
+        assert_eq!(Settings::compose(&system, &crate::layout::Look::default(), true).links, Links::System);
+        assert_eq!(serde_json::to_value(system).unwrap()["links"], "system");
+    }
+
+    #[test]
     fn program_clipboard_writes_default_on_and_can_be_disabled() {
         let default: Person = serde_json::from_str("{}").unwrap();
         assert!(default.clipboard_write);
@@ -951,7 +984,7 @@ mod tests {
     /// settings.json key.
     #[test]
     fn the_guide_explains_every_setting() {
-        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), telemetry: false, clipboard_write: false, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), ..Person::default() };
+        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), telemetry: false, clipboard_write: false, links: Links::System, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), ..Person::default() };
         let keys: Vec<String> = serde_json::to_value(&all).unwrap().as_object().unwrap().keys().cloned().collect();
         let guide = include_str!("../defaults/AGENTS.md");
         let section = guide.split("## The person").nth(1).and_then(|s| s.split("\n## ").next()).unwrap_or_default();

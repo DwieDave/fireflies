@@ -21,6 +21,22 @@ pub(crate) fn is_openable_url(url: &str) -> bool {
     })
 }
 
+/// Where a script's links go: `Link.href`, `cx.open_url` and `TextView` links,
+/// after [`is_openable_url`]. An embedder sets it to keep pages in the app (its
+/// own browser view, say); without it they go to [`gpui::App::open_url`].
+#[derive(Clone)]
+pub struct UrlOpener(pub std::rc::Rc<dyn Fn(&str, &mut gpui::App)>);
+
+impl gpui::Global for UrlOpener {}
+
+/// Opens an already checked URL through the embedder's [`UrlOpener`], else the system's.
+pub(crate) fn open_url(url: &str, cx: &mut gpui::App) {
+    match cx.try_global::<UrlOpener>().cloned() {
+        Some(UrlOpener(open)) => open(url, cx),
+        None => cx.open_url(url),
+    }
+}
+
 /// A capability grant. Every field is private so adding a capability later is
 /// not a breaking change for embedders.
 #[derive(Clone, Debug, Default)]

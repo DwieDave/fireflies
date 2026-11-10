@@ -1131,7 +1131,7 @@ fn materialize_component(
                         gpui::ClickEvent::Touch(click) => !click.long_press,
                     };
                     if activate && is_openable_url(url) {
-                        cx.open_url(url);
+                        crate::capability::open_url(url, cx);
                     }
                 });
             }
@@ -1218,7 +1218,7 @@ fn materialize_component(
             if let Some(href) = behavior.href.clone() {
                 link = link
                     .href(href)
-                    .open_with(|href, _, _, cx| cx.open_url(href));
+                    .open_with(|href, _, _, cx| crate::capability::open_url(href, cx));
             }
             if let Some(callback) = behavior.on_click {
                 let runtime = Rc::downgrade(runtime);
