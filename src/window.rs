@@ -17,6 +17,7 @@ use crate::model::{self, Tab, Model};
 use crate::mods::{self, Found, Instance, Request};
 use crate::settings;
 use crate::layout_sync;
+use crate::links::Viewer;
 use crate::terminal::{TerminalEvent, TerminalView, scroll_target};
 use gpui::prelude::FluentBuilder as _;
 use gpui::*;
@@ -1597,9 +1598,10 @@ impl AppWindow {
                         tracing::warn!("cannot open {url}: {e}");
                     }
                 }
-                TerminalEvent::OpenMarkdown(path) => {
+                TerminalEvent::OpenFile(path) => {
+                    let Some(viewer) = Viewer::of(path) else { return };
                     let path = path.to_string_lossy().into_owned();
-                    if let Err(e) = this.open_markdown(&path, Some(block.trim_end_matches(SWAP).to_owned()), None, None, None, window, cx) {
+                    if let Err(e) = this.open_viewer(viewer, &path, Some(block.trim_end_matches(SWAP).to_owned()), None, None, Value::Null, window, cx) {
                         tracing::warn!("cannot open {path}: {e}");
                     }
                 }
@@ -2811,7 +2813,12 @@ impl AppWindow {
     /// A web link (a terminal's, a mod's, `app.open_url`): a web pane beside
     /// `pane` (default: the focused one; with none, a tab of its own) when the
     /// app has one and `links` (or `place`) says "app"; else the system's browser.
+    /// A link to a local file a viewer shows (a mod's `cx.open_url("/a/shot.png")`,
+    /// a `file://` link) opens in that viewer instead.
     fn open_link(&mut self, url: &str, pane: Option<String>, place: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        if let Some((viewer, path)) = crate::links::resolve(url, None).as_ref().and_then(crate::links::viewable) {
+            return self.open_viewer(viewer, &path.to_string_lossy(), pane, place, None, Value::Null, window, cx);
+        }
         // The web pane is a native view: macOS only, and only with its mod installed.
         let web_pane = crate::native_view::capabilities()["available"] == json!(true) && self.folders.contains_key(WEB_MOD);
         let system = || {
@@ -2836,11 +2843,15 @@ impl AppWindow {
         Ok(r)
     }
 
-    /// A Markdown file (a terminal's link, `markdown.open`): the viewer mod beside
-    /// `pane` (default: the focused one; with none, a tab of its own), or the
-    /// viewer in that tab already opened on it; the system's app with `in`
-    /// "system" or without the viewer. A relative path is the pane's folder's.
-    fn open_markdown(&mut self, path: &str, pane: Option<String>, place: Option<&str>, on: Option<&str>, anchor: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+    /// A file one of the app's viewers shows (`links::Viewer`: a terminal's or a
+    /// mod's link, `markdown.open`, `image.open`): that viewer mod beside `pane`
+    /// (default: the focused one; with none, a tab of its own), or the viewer in
+    /// that tab already showing it; the system's app with `in` "system" or
+    /// without the viewer. A relative path is the pane's folder's. `extra`: more
+    /// props for the viewer (Markdown's `anchor`).
+    #[allow(clippy::too_many_arguments)]
+    fn open_viewer(&mut self, viewer: Viewer, path: &str, pane: Option<String>, place: Option<&str>, on: Option<&str>, extra: Value, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        let viewer_mod = viewer.mod_name();
         let pane = pane.filter(|p| self.model.tab_of(p).is_some()).or_else(|| self.model.focused_pane());
         let on = on.filter(|m| !m.is_empty());
         let path = match path.trim() {
@@ -2863,14 +2874,19 @@ impl AppWindow {
             Some("system") => return Err("in \"system\" opens files on this computer only".into()),
             Some(other) => return Err(format!("in is \"app\" or \"system\", not {other:?}")),
         }
-        if !self.folders.contains_key(MARKDOWN_MOD) {
-            return if on.is_none() { system(&path) } else { Err(format!("no mod {MARKDOWN_MOD:?} in mods/")) };
+        if !self.folders.contains_key(viewer_mod) {
+            return if on.is_none() { system(&path) } else { Err(format!("no mod {viewer_mod:?} in mods/")) };
         }
-        // Clicking the same link again shows the viewer already open on it.
+        // Clicking the same link again shows the viewer already open on it: the
+        // file a viewer shows now (it notes that by slot in shared `<mod>.paths`,
+        // having moved on from the one it opened with), else its props' file.
+        let now = crate::mods::shared(&format!("{viewer_mod}.paths"));
         let shown = pane.as_ref().and_then(|p| self.model.tab_of(p)).and_then(|tab| {
-            tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props })
-                if name == MARKDOWN_MOD && props.get("path").and_then(Value::as_str) == Some(path.as_str())
-                    && props.get("on").and_then(Value::as_str) == on)).map(|n| n.id.clone())
+            tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props }) if name == viewer_mod && {
+                let showing = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot)?.as_str())
+                    .or_else(|| props.get("path").and_then(Value::as_str));
+                showing == Some(path.as_str()) && props.get("on").and_then(Value::as_str) == on
+            })).map(|n| n.id.clone())
         });
         if let Some(id) = shown {
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
@@ -2880,12 +2896,12 @@ impl AppWindow {
             };
         }
         let mut props = json!({ "path": path, "on": on, "slot": web_slot() });
-        if let Some(anchor) = anchor.filter(|a| !a.is_empty()) {
-            props["anchor"] = json!(anchor.trim_start_matches('#').to_lowercase());
+        if let (Some(props), Value::Object(extra)) = (props.as_object_mut(), extra) {
+            props.extend(extra);
         }
         let r = match pane {
-            Some(pane) => self.run_as("pane.split", json!({ "direction": "auto", "pane": pane, "mod": MARKDOWN_MOD, "props": props }), false, window, cx),
-            None => self.run_as("tab.new", json!({ "name": "markdown", "mod": MARKDOWN_MOD, "props": props }), false, window, cx),
+            Some(pane) => self.run_as("pane.split", json!({ "direction": "auto", "pane": pane, "mod": viewer_mod, "props": props }), false, window, cx),
+            None => self.run_as("tab.new", json!({ "name": viewer.tab_name(), "mod": viewer_mod, "props": props }), false, window, cx),
         };
         if let Some(e) = r.get("error") {
             return Err(e.as_str().map_or_else(|| e.to_string(), str::to_owned));
@@ -4039,9 +4055,14 @@ impl AppWindow {
                 self.answer(r);
                 return;
             }
-            "markdown.open" => {
+            "markdown.open" | "image.open" => {
+                let viewer = if name == "image.open" { Viewer::Image } else { Viewer::Markdown };
                 let path = Self::owned(a, "path").unwrap_or_default();
-                let r = self.open_markdown(&path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), Self::arg(a, "anchor"), window, cx);
+                let extra = match Self::arg(a, "anchor").filter(|a| !a.is_empty() && viewer == Viewer::Markdown) {
+                    Some(anchor) => json!({ "anchor": anchor.trim_start_matches('#').to_lowercase() }),
+                    None => Value::Null,
+                };
+                let r = self.open_viewer(viewer, &path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), extra, window, cx);
                 self.answer(r);
                 return;
             }
@@ -5672,8 +5693,6 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 
 /// The mod a web link opens in (`open_link`).
 const WEB_MOD: &str = "nocturne-browser";
-/// The mod a Markdown file opens in (`open_markdown`).
-const MARKDOWN_MOD: &str = "nocturne-markdown";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
 /// browser: `place` ("app" | "system") over the `links` setting, and never in

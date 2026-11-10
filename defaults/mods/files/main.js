@@ -1,5 +1,6 @@
 // A lazy file browser for the focused pane's folder, with bounded read-only previews.
-// Markdown files open in the Markdown viewer instead (alt-click: the text preview).
+// Markdown files open in the Markdown viewer instead (alt-click: the text preview),
+// pictures in the image viewer (alt-click: the system's app).
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Editor, EditorState } from "gpui-base";
 import { spaces, panes, focused, exec, readTextFile, watchFolder, theme, settings, window, run } from "herdr";
@@ -128,11 +129,17 @@ export default class Files extends View {
     cx.notify();
   }
 
-  /** A Markdown file opens in the Markdown viewer beside the focused pane (markdown.open);
-   *  alt-click, and every other file, previews it here as text. */
-  pick(path, cx, asText) {
-    if (!asText && /\.(md|markdown)$/i.test(path)) {
-      run("markdown.open", { path: `${this.root}/${path}`, ...(this.on ? { on: this.on } : {}) });
+  /** A file the app has a viewer for opens there beside the focused pane: Markdown
+   *  (markdown.open; alt-click previews it here as text), a picture (image.open;
+   *  alt-click: the system's app). Every other file previews here as text. */
+  pick(path, cx, other) {
+    const abs = `${this.root}/${path}`, on = this.on ? { on: this.on } : {};
+    if (/\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf])$/i.test(path)) {
+      run("image.open", { path: abs, ...(other ? { in: "system" } : {}), ...on });
+      return;
+    }
+    if (!other && /\.(md|markdown)$/i.test(path)) {
+      run("markdown.open", { path: abs, ...on });
       return;
     }
     this.show(path, cx);

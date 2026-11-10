@@ -69,8 +69,9 @@ pub enum TerminalEvent {
     Peek(String),
     /// A web link was clicked: the window decides where it opens (settings `links`).
     OpenUrl(String),
-    /// A link to a local Markdown file was clicked: the window's viewer opens it.
-    OpenMarkdown(PathBuf),
+    /// A link to a local file one of the app's viewers shows (`links::Viewer`:
+    /// Markdown, images) was clicked: the window opens it in that viewer.
+    OpenFile(PathBuf),
     TitleChanged,
     /// The program ended.
     Ended,
@@ -1142,8 +1143,8 @@ impl TerminalView {
                 return None;
             }
             let range = links::word(text, at)?;
-            // `README.md`: no slash, so the pattern skips it; a Markdown file here counts.
-            if let Some(path) = links::bare_markdown(&text[range.clone()], self.cwd.as_deref()) {
+            // `README.md`, `shot.png`: no slash, so the pattern skips it; a file a viewer shows counts.
+            if let Some(path) = links::bare_viewable(&text[range.clone()], self.cwd.as_deref()) {
                 target = Some(LinkTarget::External(links::Target::File(path)));
                 return Some(range);
             }
@@ -2400,8 +2401,8 @@ impl Render for TerminalView {
                 {
                     match target {
                         LinkTarget::External(links::Target::Url(url)) if links::is_web(&url) => cx.emit(TerminalEvent::OpenUrl(url)),
-                        LinkTarget::External(target) => match links::markdown(&target) {
-                            Some(path) => cx.emit(TerminalEvent::OpenMarkdown(path)),
+                        LinkTarget::External(target) => match links::viewable(&target) {
+                            Some((_, path)) => cx.emit(TerminalEvent::OpenFile(path)),
                             None => links::open(&target),
                         },
                         LinkTarget::Terminal(address) => cx.emit(TerminalEvent::Peek(address)),
@@ -3037,7 +3038,7 @@ mod tests {
     }
 
     #[gpui::test]
-    fn clicking_a_markdown_link_asks_the_window_for_its_viewer(cx: &mut gpui::TestAppContext) {
+    fn clicking_a_viewable_file_link_asks_the_window_for_its_viewer(cx: &mut gpui::TestAppContext) {
         use gpui::*;
         use std::{cell::RefCell, rc::Rc};
 
@@ -3054,13 +3055,17 @@ mod tests {
         std::fs::write(dir.join("README.md"), "# readme").unwrap();
         std::fs::write(dir.join("docs/my notes/To Do.md"), "# todo").unwrap();
         std::fs::write(dir.join("main.rs"), "").unwrap();
+        std::fs::write(dir.join("docs/shot.png"), "").unwrap();
+        std::fs::write(dir.join("logo.svg"), "").unwrap();
+        std::fs::write(dir.join("docs/my notes/Screen Shot.heic"), "").unwrap();
         let osc8 = format!("file://{}", dir.join("docs/my notes/To Do.md").display()).replace(' ', "%20");
-        let screen = format!("see docs/plan.md:3 now\r\nREADME.md\r\n\x1b]8;;{osc8}\x1b\\the todo\x1b]8;;\x1b\\\r\nmain.rs\r\n");
+        let osc8_image = format!("file://{}", dir.join("docs/my notes/Screen Shot.heic").display()).replace(' ', "%20");
+        let screen = format!("see docs/plan.md:3 now\r\nREADME.md\r\n\x1b]8;;{osc8}\x1b\\the todo\x1b]8;;\x1b\\\r\nmain.rs\r\nat docs/shot.png:4\r\nlogo.svg\r\n\x1b]8;;{osc8_image}\x1b\\a shot\x1b]8;;\x1b\\\r\n");
 
         cx.update(gpui_base::init);
         let cwd = dir.clone();
         let (root, cx) = cx.add_window_view(|_, cx| Root(cx.new(|cx| {
-            let mut terminal = super::TerminalView::attach(crate::hc::offline(), "t1".into(), (40, 6), cx);
+            let mut terminal = super::TerminalView::attach(crate::hc::offline(), "t1".into(), (40, 9), cx);
             terminal.grid.borrow_mut().vt.write(screen.as_bytes());
             terminal.cwd = Some(cwd);
             terminal
@@ -3071,7 +3076,7 @@ mod tests {
         let seen = opened.clone();
         cx.update(|_, app| {
             app.subscribe(&term, move |_, ev: &super::TerminalEvent, _| {
-                if let super::TerminalEvent::OpenMarkdown(path) = ev {
+                if let super::TerminalEvent::OpenFile(path) = ev {
                     seen.borrow_mut().push(path.clone());
                 }
             }).detach();
@@ -3091,7 +3096,10 @@ mod tests {
         assert_eq!(click(6.0, 0.0), Some(dir.join("docs/plan.md")), "a relative path:line");
         assert_eq!(click(2.0, 1.0), Some(dir.join("README.md")), "a bare name in the terminal's folder");
         assert_eq!(click(3.0, 2.0), Some(dir.join("docs/my notes/To Do.md")), "an OSC 8 file:// link with spaces");
-        assert_eq!(click(2.0, 3.0), None, "not Markdown: not the viewer");
+        assert_eq!(click(2.0, 3.0), None, "no viewer for it: not the viewer");
+        assert_eq!(click(6.0, 4.0), Some(dir.join("docs/shot.png")), "an image, relative, path:line ignored");
+        assert_eq!(click(2.0, 5.0), Some(dir.join("logo.svg")), "a bare image name in the terminal's folder");
+        assert_eq!(click(2.0, 6.0), Some(dir.join("docs/my notes/Screen Shot.heic")), "an OSC 8 image link with spaces");
         assert_eq!(click(0.0, 0.0), None, "no link");
         std::fs::remove_dir_all(dir).unwrap();
     }
