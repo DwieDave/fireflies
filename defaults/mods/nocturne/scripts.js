@@ -88,12 +88,12 @@ export function scriptsFolder() {
 }
 
 /** Opens the deck (focus: "pick" the filter, "runs" the running list), or closes it when open. */
-export function toggleDeck({ focus = "pick", centered = false, show = null } = {}) {
+export function toggleDeck({ focus = "pick", centered = false, show = null, again = false } = {}) {
   const open = deckOpen();
-  if (open) { setShared(DECK, null); closeOverlay(open); if (!show) return; }
+  if (open) { setShared(DECK, null); closeOverlay(open); if (!show && !again) return; }
   const { folder, on } = scriptsFolder();
   const id = openOverlay({ mod: "nocturne-scripts", kind: centered ? "dialog" : "popup", frame: "none",
-    width: DECK_W, height: DECK_H, props: { folder, on, focus, ...(show ? { show } : {}) } });
+    width: DECK_W, height: DECK_H, props: { folder, on, focus, ...(show ? { show } : {}), ...(again ? { again } : {}) } });
   setShared(DECK, { id, beat: Date.now() });
 }
 

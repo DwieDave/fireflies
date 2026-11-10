@@ -21,6 +21,11 @@
 
 export const FLAKE_SHOW = ["flake", "show", "--json", "--no-write-lock-file"];
 
+/** A script's id: its group and name. It goes on its terminal as a label, so
+ *  it's plain text; ids from before kept a NUL between them (oldId). */
+export const scriptId = (group, name) => `${group}#${name}`;
+export const oldId = (id) => String(id).replace(/\u0000/g, "#");
+
 /** A dialog the person cancels makes the run exit with this; it reads "cancelled". */
 export const CANCELLED = 130;
 
@@ -76,7 +81,7 @@ export function nixScripts(json, sys = {}) {
   if (mac) systems("darwinConfigurations", "nix-darwin", "darwin-rebuild", "osascript", false);
   if (linux) systems("nixosConfigurations", "nixos", "nixos-rebuild", "sudo", false);
   systems("homeConfigurations", "home-manager", "home-manager", null, true);
-  return list.map((s) => ({ runner: r, ...s, id: `${s.group}\u0000${s.name}` }));
+  return list.map((s) => ({ runner: r, ...s, id: scriptId(s.group, s.name) }));
 }
 
 /** What every flake can do, before (or without) an evaluation. */
@@ -84,7 +89,7 @@ export function nixStatic() {
   return [
     { runner: "nix", group: "flake.nix", name: "flake check", cmd: "nix flake check" },
     { runner: "nix", group: "flake.nix", name: "flake update", cmd: "nix flake update" },
-  ].map((s) => ({ ...s, id: `${s.group}\u0000${s.name}` }));
+  ].map((s) => ({ ...s, id: scriptId(s.group, s.name) }));
 }
 
 // The AppleScript: the command, PATH, folder and log file come in as argv,

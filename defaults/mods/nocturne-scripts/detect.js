@@ -24,7 +24,7 @@
 // A script: { id, runner, group, name, cmd, hint? }. `cmd` is one shell line
 // for `hc run`; `id` stays the same between looks (recents go by it).
 
-import { nixStatic } from "./nix.js";
+import { nixStatic, scriptId } from "./nix.js";
 
 /** Manifests the probe reads, at most 256 KiB each. */
 export const MANIFESTS = [
@@ -242,7 +242,7 @@ export function detect(probe) {
   }
   // A recipe written once per platform ([unix] / [windows]) is one script.
   const seen = new Set();
-  return out.map((s) => ({ ...s, id: `${s.group}\u0000${s.name}` })).filter((s) => !seen.has(s.id) && seen.add(s.id));
+  return out.map((s) => ({ ...s, id: scriptId(s.group, s.name) })).filter((s) => !seen.has(s.id) && seen.add(s.id));
 }
 
 /** Fuzzy score of `q` in `text` (the palette's), with the matched positions; null: no match. */

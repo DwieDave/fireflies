@@ -42,6 +42,8 @@ function openEntries() {
     title: "Fold or open the sidebar", words: "toggle sidebar sky rail collapse hide", go: () => run("nocturne.fold") });
   out.push({ name: "nocturne", args: { scripts: true }, group: "Open", icon: "terminal", bind: "nocturne.scripts",
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
+  out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
+    title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
   // The picture in picture player (nocturne-pip), while its window is open.
   if (shared("nocturne-pip.player")) {
     for (const [cmd, icon, title, words] of [

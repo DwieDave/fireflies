@@ -17,7 +17,7 @@
 // ../nocturne/scripts.js reads the same labels for the tab strip (a mod can't
 // import another mod's files).
 
-import { hc, run, shared, setShared } from "herdr";
+import { run, shared, setShared } from "herdr";
 import { shellLine, CANCELLED } from "./nix.js";
 
 export const LABEL = "nocturne.script";
@@ -79,7 +79,8 @@ export function elapsed(r, now = Date.now()) {
 /** The arguments to `hc run` for a script in a folder (on a machine). One
  *  shell line, as `hc run "cd app && bun test"` takes it. */
 export function runArgs(s, folder, on) {
-  const label = (k, v) => ["--label", `${k}=${String(v ?? "").replace(/\n/g, " ")}`];
+  // A label is one argv word: hc can't take a NUL in one, nor should a newline sit in it.
+  const label = (k, v) => ["--label", `${k}=${String(v ?? "").replace(/[\u0000-\u001f\u007f]/g, " ")}`];
   return [
     "run", "--bg", "--no-parent", "--no-notify", "--json",
     ...(on ? ["--on", on] : []),
@@ -93,35 +94,49 @@ export function runArgs(s, folder, on) {
   ];
 }
 
-/** Starts a script; resolves with its terminal's address, or throws why not. */
-export async function start(s, folder, on) {
-  const r = await hc(runArgs(s, folder, on));
-  if (r.code !== 0) throw new Error((r.stderr || r.stdout || "hc run failed").trim().split("\n").pop());
-  let address = null;
-  try { address = JSON.parse(r.stdout).address ?? null; } catch { /* started, address unknown */ }
-  // A short script can end before the strip ever sees it live: follow it from here.
-  if (address) setShared(TRACK, { ...(shared(TRACK) ?? {}), [address]: Date.now() });
-  return address;
+// The deck doesn't run `hc` itself: it closes as soon as a script is picked,
+// and a closed overlay's tasks go with it. It queues jobs in shared(JOBS)
+// for the tab strip, which outlives it (../nocturne/jobs.js runs them).
+export const JOBS = "nocturne-scripts.jobs";
+
+/** Queues a job: { name, watch?, steps: [{ hc, start? }] }. */
+export function enqueue(job) {
+  const jobs = Array.isArray(shared(JOBS)) ? shared(JOBS) : [];
+  setShared(JOBS, [...jobs, { at: Date.now(), ...job }]);
+}
+
+/** Starts a script (in the background; `look`: floated to watch). */
+export function start(s, folder, on, look = false) {
+  enqueue({ name: s.name, watch: Boolean(look), steps: [{ hc: runArgs(s, folder, on), start: true }] });
 }
 
 /** Floats its terminal over the tab, to watch it or type into it. */
 export const watch = (r) => run("terminal.peek", { terminal: r.address, float: true });
 
 /** Ends a running script (its terminal shows "stopped"). */
-export const stop = (r) => hc(["kill", r.address]).catch(() => null);
+export const stop = (r) => enqueue({ name: r.name, steps: [{ hc: ["kill", r.address] }] });
 
-/** Forgets a finished run (its terminal goes with it). */
-export async function dismiss(r) {
+/** Forgets what the strip kept about a run. */
+function forget(r) {
   const ended = { ...(shared(ENDED) ?? {}) };
   if (ended[r.address]) { delete ended[r.address]; setShared(ENDED, ended); }
   const tracked = { ...(shared(TRACK) ?? {}) };
   if (tracked[r.address]) { delete tracked[r.address]; setShared(TRACK, tracked); }
-  await hc(["rm", r.address]).catch(() => null);
+}
+
+/** Forgets a finished run (its terminal goes with it). */
+export function dismiss(r) {
+  forget(r);
+  enqueue({ name: r.name, steps: [{ hc: ["rm", r.address] }] });
 }
 
 /** Runs it again in the same folder: the old run goes, a new one starts. */
-export async function restart(r) {
-  if (r.live) await stop(r);
-  await dismiss(r);
-  return start({ id: r.id, name: r.name, runner: r.runner, cmd: r.cmd, admin: r.admin }, r.folder, r.on);
+export function restart(r) {
+  forget(r);
+  const s = { id: r.id, name: r.name, runner: r.runner, cmd: r.cmd, admin: r.admin };
+  enqueue({ name: r.name, steps: [
+    ...(r.live ? [{ hc: ["kill", r.address] }] : []),
+    { hc: ["rm", r.address] },
+    { hc: runArgs(s, r.folder, r.on), start: true },
+  ] });
 }
