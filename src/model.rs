@@ -122,6 +122,15 @@ pub struct Model {
     pub folder_info: HashMap<String, FolderInfo>,
 }
 
+/// Where `pane.move` takes a pane (`Model::move_to_tab`).
+#[derive(Clone, Debug, PartialEq)]
+pub enum MoveInto {
+    /// Into an existing tab: beside `target` on `edge`, else beside its focused pane.
+    Tab { tab: String, target: Option<String>, edge: Option<Edge> },
+    /// As the only pane of a new tab (`tab`, its id) in `space`.
+    New { space: String, tab: String, name: String },
+}
+
 /// Where a split puts the new pane beside its target (`pane.split {direction}`,
 /// `terminal.open {place}`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -468,6 +477,83 @@ impl Model {
         tab.root = root;
         tab.focus(source);
         true
+    }
+
+    /// Moves a pane (placed or parked; a terminal or a mod) out of its tab into
+    /// another one, keeping its id and terminal, and focuses it there. `into`:
+    /// beside `target` (a pane of that tab) on `edge`, else beside the tab's
+    /// focused pane (as `pane.split` auto); `New`: as the only pane of a new
+    /// tab in a space. The tab it leaves closes when it was its last pane (and
+    /// its space when that was the last tab). Returns the tab it landed in.
+    pub fn move_to_tab(&mut self, pane_id: &str, into: MoveInto) -> Result<String, String> {
+        let from = self.tab_holding(pane_id).ok_or_else(|| format!("no pane {pane_id:?}"))?;
+        let from_id = from.id.clone();
+        let mut node = from.root.find(pane_id).filter(|n| n.is_pane()).cloned()
+            .or_else(|| from.parked.iter().find(|p| p.pane.id == pane_id).map(|p| p.pane.clone()))
+            .ok_or_else(|| format!("{pane_id:?} is not a pane"))?;
+        let from_machine = self.space_of(&from_id).and_then(|s| s.machine.clone());
+        node.size = None;
+        let zoom = from.font_zoom.get(pane_id).copied();
+        match &into {
+            MoveInto::Tab { tab, target, .. } => {
+                if *tab == from_id {
+                    return Err("the pane is in that tab already (pane.swap or a drag moves it inside its tab)".into());
+                }
+                let dest = self.tab(tab).ok_or_else(|| format!("no tab {tab:?}"))?;
+                if let Some(t) = target && !dest.root.find(t).is_some_and(Node::is_pane) {
+                    return Err(format!("target {t:?} is not a placed pane of tab {tab:?}"));
+                }
+                if self.space_of(tab).and_then(|s| s.machine.clone()) != from_machine {
+                    return Err("A terminal's pane must stay on its own machine.".into());
+                }
+            }
+            MoveInto::New { space, .. } => {
+                let s = self.space(space).ok_or_else(|| format!("no space {space:?}"))?;
+                if s.machine != from_machine {
+                    return Err("A terminal's pane must stay on its own machine.".into());
+                }
+                if from.root.panes().len() + from.parked.len() == 1 && self.space_of(&from_id).is_some_and(|s| s.id == *space) {
+                    return Err("the pane is its tab's only one already".into());
+                }
+            }
+        }
+        // Out of its tab, as a close would (focus goes back, a parked pane
+        // fills an empty arrangement, an empty tab closes), but nothing ends.
+        self.remove_pane(pane_id);
+        let landed = match into {
+            MoveInto::Tab { tab, target, edge } => {
+                let target = target.or_else(|| {
+                    let t = self.tab(&tab)?;
+                    t.focused.clone().filter(|f| t.root.find(f).is_some_and(Node::is_pane)).or_else(|| t.root.panes().first().map(|p| p.id.clone()))
+                });
+                let placed = match (target, edge) {
+                    (Some(target), Some(edge)) => {
+                        let axis = if matches!(edge, Edge::Left | Edge::Right) { Axis::Row } else { Axis::Column };
+                        self.split_at(&target, axis, matches!(edge, Edge::Left | Edge::Top), node)
+                    }
+                    (Some(target), None) => self.split_toward(&target, Direction::Auto, node),
+                    // A tab of parked panes only can't be: it keeps one in place.
+                    (None, _) => false,
+                };
+                if !placed {
+                    return Err(format!("could not place the pane in tab {tab:?}"));
+                }
+                tab
+            }
+            MoveInto::New { space, tab, name } => {
+                // The space may have closed with the pane's old tab: none to add to.
+                if self.space(&space).is_none() {
+                    return Err(format!("no space {space:?}"));
+                }
+                self.add_tab(&space, Tab::with_pane(&tab, &name, node));
+                tab
+            }
+        };
+        if let Some(z) = zoom && let Some(t) = self.tab_mut(&landed) {
+            t.font_zoom.insert(pane_id.to_owned(), z);
+        }
+        self.focus_pane(pane_id);
+        Ok(landed)
     }
 
     pub fn swap_panes(&mut self, pane: &str, target: &str) -> Result<(), String> {
@@ -1205,6 +1291,73 @@ mod tests {
         m.select_tab("c1");
         m.focus_pane("x1");
         m
+    }
+
+    #[test]
+    fn a_lone_pane_moves_into_a_grid_tab_and_its_empty_tab_closes() {
+        let mut m = three_panes_and_another_tab();
+        let into = MoveInto::Tab { tab: "c1".into(), target: None, edge: None };
+        assert_eq!(m.move_to_tab("x4", into), Ok("c1".into()));
+        assert!(m.tab("c2").is_none(), "its tab, left empty, closes");
+        assert_eq!(m.address_of("x4").as_deref(), Some("t4"));
+        assert_eq!(m.tab_of("x4").unwrap().id, "c1");
+        assert_eq!(m.focused_pane().as_deref(), Some("x4"));
+        assert_eq!(m.active_tab().unwrap().id, "c1");
+    }
+
+    #[test]
+    fn a_moved_pane_lands_beside_its_target_on_the_edge_asked() {
+        use crate::layout::Edge;
+        let mut m = three_panes_and_another_tab();
+        let into = MoveInto::Tab { tab: "c2".into(), target: Some("x4".into()), edge: Some(Edge::Left) };
+        assert_eq!(m.move_to_tab("x2", into), Ok("c2".into()));
+        assert_eq!(pane_order(&m, "c2"), ["x2", "x4"]);
+        assert_eq!(pane_order(&m, "c1"), ["x1", "x3"]);
+        assert_eq!(m.tab("c1").unwrap().focused.as_deref(), Some("x1"));
+    }
+
+    #[test]
+    fn a_pane_moves_to_a_tab_of_another_space_and_the_emptied_space_closes() {
+        let mut m = three_panes_and_another_tab();
+        m.add_space("p2", "pip", "/src/pip", Tab::new("c9", "pip-fixes", "x9", "t9"));
+        let into = MoveInto::Tab { tab: "c1".into(), target: None, edge: None };
+        assert_eq!(m.move_to_tab("x9", into), Ok("c1".into()));
+        assert!(m.space("p2").is_none());
+        assert_eq!(m.active_space().unwrap().id, "p1");
+        assert_eq!(pane_order(&m, "c1").len(), 4);
+    }
+
+    #[test]
+    fn a_parked_pane_moves_and_a_new_tab_takes_one() {
+        let mut m = three_panes_and_another_tab();
+        m.park_pane("x3", None).unwrap();
+        let into = MoveInto::Tab { tab: "c2".into(), target: None, edge: None };
+        assert_eq!(m.move_to_tab("x3", into), Ok("c2".into()));
+        assert!(m.tab("c1").unwrap().parked.is_empty());
+        let new = MoveInto::New { space: "p1".into(), tab: "c7".into(), name: "".into() };
+        assert_eq!(m.move_to_tab("x2", new), Ok("c7".into()));
+        assert_eq!(pane_order(&m, "c7"), ["x2"]);
+        assert_eq!(m.address_of("x2").as_deref(), Some("t2"));
+    }
+
+    #[test]
+    fn moves_that_cannot_be_leave_the_model_alone() {
+        let mut m = three_panes_and_another_tab();
+        let before = format!("{:?}", m.spaces);
+        let same = MoveInto::Tab { tab: "c1".into(), target: None, edge: None };
+        assert!(m.move_to_tab("x1", same).is_err());
+        let missing = MoveInto::Tab { tab: "nope".into(), target: None, edge: None };
+        assert!(m.move_to_tab("x1", missing).is_err());
+        let bad_target = MoveInto::Tab { tab: "c2".into(), target: Some("x1".into()), edge: None };
+        assert!(m.move_to_tab("x1", bad_target).is_err());
+        let lone = MoveInto::New { space: "p1".into(), tab: "c7".into(), name: "".into() };
+        assert!(m.move_to_tab("x4", lone).is_err());
+        m.add_space("p2", "remote", "/", Tab::new("r1", "", "y1", "box/t1"));
+        m.spaces.last_mut().unwrap().machine = Some("box".into());
+        let across = MoveInto::Tab { tab: "r1".into(), target: None, edge: None };
+        assert!(m.move_to_tab("x1", across).is_err());
+        m.remove_space("p2");
+        assert_eq!(format!("{:?}", m.spaces), before);
     }
 
     fn pane_order(m: &Model, tab: &str) -> Vec<String> {

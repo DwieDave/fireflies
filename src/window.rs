@@ -3208,7 +3208,7 @@ impl AppWindow {
             if !args.is_object() { args = json!({}); }
             args["machine"] = json!(machine);
         }
-        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.folder" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.equalize" | "pane.park" | "pane.unpark" | "terminal.keep" | "terminal.park") {
+        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.folder" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.move" | "pane.equalize" | "pane.park" | "pane.unpark" | "terminal.keep" | "terminal.park") {
             let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
@@ -3508,6 +3508,54 @@ impl AppWindow {
                 self.focused_pane = None;
                 self.agent = self.model.address_of(&pane);
                 self.answer(Ok(json!({ "pane": pane })));
+            }
+            "pane.move" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to move") };
+                let Some(space) = self.model.space_of(&pane).map(|s| (s.id.clone(), s.machine.clone())) else { return self.fail(format!("no pane {pane:?}")) };
+                let edge = match Self::arg(a, "edge") {
+                    None => None,
+                    Some(e) => match split_edge(e) {
+                        Some(e) => Some(e),
+                        None => return self.fail(format!("pane.move edge is \"right\", \"left\", \"top\" or \"bottom\", not {e:?}")),
+                    },
+                };
+                let target = Self::owned(a, "target");
+                let into = match (Self::owned(a, "tab"), target) {
+                    (Some(tab), target) => model::MoveInto::Tab { tab, target, edge },
+                    // A target names its tab.
+                    (None, Some(t)) => match self.model.tab_of(&t) {
+                        Some(tab) => model::MoveInto::Tab { tab: tab.id.clone(), target: Some(t), edge },
+                        None => return self.fail(format!("no pane {t:?}")),
+                    },
+                    (None, None) => {
+                        let space = Self::owned(a, "space").unwrap_or(space.0);
+                        let machine = self.model.space(&space).and_then(|s| s.machine.clone());
+                        let name = Self::owned(a, "name").unwrap_or_default();
+                        model::MoveInto::New { tab: self.model.fresh_id_on("tb", machine.as_deref()), space, name }
+                    }
+                };
+                let tab = match self.model.move_to_tab(&pane, into) {
+                    Ok(tab) => tab,
+                    Err(e) => return self.fail(e),
+                };
+                // The terminal's labels say where it lives (a restart or
+                // another client places it by them): its new tab now.
+                if let Some(addr) = self.model.address_of(&pane)
+                    && let Some(space) = self.model.space_of(&tab).map(|s| s.id.clone())
+                {
+                    let machine = addr.split_once('/').map(|(m, _)| m.to_owned());
+                    let labels = json!({ "herdr.space": crate::mirror::local(&space, machine.as_deref()), "herdr.tab": crate::mirror::local(&tab, machine.as_deref()) });
+                    let core = self.core.clone();
+                    cx.background_executor().spawn(async move {
+                        if let Err(e) = core.call("terminal.label", json!({ "terminal": addr, "labels": labels })) {
+                            tracing::warn!("pane.move label: {e:#}");
+                        }
+                    }).detach();
+                }
+                self.focused_block = None;
+                self.focused_pane = None;
+                self.agent = self.model.address_of(&pane);
+                self.answer(Ok(json!({ "pane": pane, "tab": tab })));
             }
             "pane.focus" => {
                 if Self::arg(a, "pane").is_none()

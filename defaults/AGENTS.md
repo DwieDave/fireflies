@@ -614,7 +614,7 @@ The main ones:
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
   flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.equalize {scope?, pane?}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
@@ -652,6 +652,11 @@ The main ones:
   `pane.swap {target}` trades the places of `pane` (default: the focused one) and
   `target`, another pane of the same tab; give `direction` or `target`, not both.
   A swap moves panes, not focus: the focused pane stays focused in its new place.
+  `pane.move {tab}` takes a pane (placed or parked, a terminal or a mod; the only one
+  of its tab too) to another tab in any space on its machine, beside `target` on `edge`
+  or beside that tab's focused pane; no tab or target: a new tab of its own (`name`, in
+  `space`). Its terminal keeps running; the tab it leaves closes when emptied. The pane
+  menus (shipped and Nocturne's, and a firefly's) list "Move to …" for every tab.
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and
