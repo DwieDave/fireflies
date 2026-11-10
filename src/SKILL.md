@@ -47,6 +47,12 @@ pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It
 re-renders by itself when you edit the file, so open it once. They can also
 Cmd/Ctrl-click a `.md` path in terminal output.
 
+To show them a picture (a screenshot you took, a chart you drew), `herdr-app
+do image.open --path /abs/path/shot.png` opens it beside the focused pane,
+fitted (png, jpg, gif, webp, svg, heic, ...). It shows the file again when you
+overwrite it, so open it once and keep saving to the same path. Cmd/Ctrl-click
+on an image path in terminal output does the same.
+
 For a remote space:
 
 ```sh

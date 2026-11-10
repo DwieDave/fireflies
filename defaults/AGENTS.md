@@ -248,7 +248,10 @@ the highlighted line shows where it will land.
   terminal, or click a link in a mod (`cx.open_url`, `Link` `href`, the update
   notes): an http(s) page opens in a new web pane (`nocturne-browser`) split
   beside that terminal's pane (else the focused one; no pane: a tab of its own).
-  Other schemes (mailto:, file:, ssh:, ...) and files go to the system. Without
+  Other schemes (mailto:, file:, ssh:, ...) and files go to the system; a file
+  one of the app's viewers shows (below) opens in that viewer instead, also
+  from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
+  `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
   pages open in the system's browser.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
@@ -263,6 +266,25 @@ the highlighted line shows where it will land.
   (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
   edit ($EDITOR in a terminal beside), files. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
+- **Images**: the same goes for pictures (`.png`, `.jpg` / `.jpeg`, `.gif`,
+  `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`, `.svg`, `.avif`, `.heic` / `.heif`):
+  a link to one in a terminal (any of the forms above, a bare `shot.png` in the
+  terminal's folder too; `path:42` is ignored) opens it in the image viewer
+  (`nocturne-image`) beside that pane, or shows the viewer already on it. The
+  files panes open a picked picture there (alt-click, or `e` in Nocturne's
+  files pane: the system's app); so do image links and drawn images in the
+  Markdown viewer. `image.open {path, in?, pane?, on?}` does it from a mod or an
+  agent; web image URLs stay web pages. It fits the pane; `+` / `-` zoom, `0`
+  fit, `1` 100%, `h j k l` / arrows / drag pan (scroll pans, Cmd/Ctrl-scroll
+  zooms at the pointer), `r` / `R` turn, `b` checker / dark background, `n` `]`
+  / `p` `[` the next / previous picture in its folder (← → too while it fits),
+  `o` the system's app, `y` copy the path, `f` files. Animated GIF and WebP
+  play. HEIC and AVIF are converted to a PNG copy in `cache/nocturne-image`
+  (macOS: sips, qlmanage; Linux: heif-convert, avifdec, ImageMagick or ffmpeg,
+  else it says what to install); the original is only read. It shows the file
+  again when it changes on disk. Commands for the shown viewers:
+  `nocturne-image.zoom_in`, `.zoom_out`, `.fit`, `.actual`, `.next`, `.prev`,
+  `.rotate`, `.background`, `.reload`.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
@@ -893,6 +915,7 @@ The main ones:
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a
   heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
   machine the file is on; the reply says `opened` and the absolute `path`),
+  `image.open {path, in?, pane?, on?}` (the same for a picture, in the image viewer),
   `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Herdr sends nothing itself), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).

@@ -21,6 +21,19 @@ pub(crate) fn is_openable_url(url: &str) -> bool {
     })
 }
 
+/// HERDR: a `file:` link, which only an embedder's [`UrlOpener`] takes (Herdr
+/// opens local files in its own viewers); without one it goes nowhere, never
+/// to the system's handler for the file.
+pub(crate) fn is_file_link(url: &str) -> bool {
+    reqwest::Url::parse(url).is_ok_and(|parsed| parsed.scheme() == "file")
+}
+
+/// What `Link.href`, `cx.open_url` and `TextView` links accept: a web page, or
+/// (HERDR) a `file:` link for the embedder.
+pub(crate) fn is_link(url: &str) -> bool {
+    is_openable_url(url) || is_file_link(url)
+}
+
 /// Where a script's links go: `Link.href`, `cx.open_url` and `TextView` links,
 /// after [`is_openable_url`]. An embedder sets it to keep pages in the app (its
 /// own browser view, say); without it they go to [`gpui::App::open_url`].
@@ -33,7 +46,8 @@ impl gpui::Global for UrlOpener {}
 pub(crate) fn open_url(url: &str, cx: &mut gpui::App) {
     match cx.try_global::<UrlOpener>().cloned() {
         Some(UrlOpener(open)) => open(url, cx),
-        None => cx.open_url(url),
+        None if is_openable_url(url) => cx.open_url(url),
+        None => {}
     }
 }
 

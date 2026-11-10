@@ -139,7 +139,6 @@ mod components;
 mod text_view;
 
 use crate::{
-    capability::is_openable_url,
     engine::ShellRuntime,
     scroll::Scrollable,
     snapshot::RenderSnapshot,
@@ -1130,7 +1129,7 @@ fn materialize_component(
                         gpui::ClickEvent::Keyboard(_) => true,
                         gpui::ClickEvent::Touch(click) => !click.long_press,
                     };
-                    if activate && is_openable_url(url) {
+                    if activate && crate::capability::is_link(url) {
                         crate::capability::open_url(url, cx);
                     }
                 });
