@@ -157,20 +157,63 @@ pub fn local_file(target: &Target) -> Option<PathBuf> {
     }
 }
 
-/// A Markdown file (`.md`, `.markdown`) a link names, for the app's viewer.
-pub fn markdown(target: &Target) -> Option<PathBuf> {
-    local_file(target).filter(|p| is_markdown(p) && p.is_file())
+/// The app's own viewers, chosen by what a file is: a link to such a file (a
+/// terminal's, a mod's) opens in the viewer instead of the system's app.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Viewer {
+    /// `nocturne-markdown`: `.md`, `.markdown`.
+    Markdown,
+    /// `nocturne-image`: pictures (the viewer converts what it can't draw).
+    Image,
 }
 
-/// A word the link pattern leaves alone (`README.md`, no slash) that names a
-/// Markdown file in the terminal's folder.
-pub fn bare_markdown(word: &str, cwd: Option<&Path>) -> Option<PathBuf> {
+const MARKDOWN_EXTS: &[&str] = &["md", "markdown"];
+const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic", "heif"];
+
+impl Viewer {
+    pub const ALL: [Viewer; 2] = [Viewer::Markdown, Viewer::Image];
+
+    /// The viewer for a file, by its extension.
+    pub fn of(path: &Path) -> Option<Viewer> {
+        let ext = path.extension()?.to_str()?.to_ascii_lowercase();
+        Viewer::ALL.into_iter().find(|v| v.extensions().contains(&ext.as_str()))
+    }
+
+    pub fn extensions(self) -> &'static [&'static str] {
+        match self {
+            Viewer::Markdown => MARKDOWN_EXTS,
+            Viewer::Image => IMAGE_EXTS,
+        }
+    }
+
+    /// The mod that shows it.
+    pub fn mod_name(self) -> &'static str {
+        match self {
+            Viewer::Markdown => "nocturne-markdown",
+            Viewer::Image => "nocturne-image",
+        }
+    }
+
+    /// The name of a tab opened for it when there is no pane to open it beside.
+    pub fn tab_name(self) -> &'static str {
+        match self {
+            Viewer::Markdown => "markdown",
+            Viewer::Image => "image",
+        }
+    }
+}
+
+/// A file a link names that one of the app's viewers shows.
+pub fn viewable(target: &Target) -> Option<(Viewer, PathBuf)> {
+    let path = local_file(target).filter(|p| p.is_file())?;
+    Some((Viewer::of(&path)?, path))
+}
+
+/// A word the link pattern leaves alone (`README.md`, `shot.png`: no slash)
+/// that names a file in the terminal's folder one of the viewers shows.
+pub fn bare_viewable(word: &str, cwd: Option<&Path>) -> Option<PathBuf> {
     let path = cwd?.join(word);
-    (is_markdown(&path) && path.is_file()).then_some(path)
-}
-
-pub fn is_markdown(path: &Path) -> bool {
-    path.extension().and_then(|e| e.to_str()).is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"))
+    (Viewer::of(&path).is_some() && path.is_file()).then_some(path)
 }
 
 fn percent_decode(s: &str) -> Option<String> {
@@ -476,7 +519,7 @@ mod tests {
         std::fs::write(&plan, "# plan").unwrap();
         std::fs::write(&spaced, "# todo").unwrap();
         std::fs::write(dir.join("docs/main.rs"), "").unwrap();
-        let md = |link: &str, cwd: Option<&Path>| resolve(link, cwd).and_then(|t| markdown(&t));
+        let md = |link: &str, cwd: Option<&Path>| resolve(link, cwd).and_then(|t| viewable(&t)).filter(|(v, _)| *v == Viewer::Markdown).map(|(_, p)| p);
         // Plain, path:line, path:line:col, relative to the terminal's folder.
         assert_eq!(md(plan.to_str().unwrap(), None), Some(plan.clone()));
         assert_eq!(md("docs/plan.md", Some(&dir)), Some(plan.clone()));
@@ -498,9 +541,52 @@ mod tests {
         let found = &text[find(&text, at).unwrap()];
         assert_eq!(md(found, None), Some(spaced.clone()));
         // A bare name the pattern skips, in the terminal's folder.
-        assert_eq!(bare_markdown("plan.md", Some(&dir.join("docs"))), Some(plan.clone()));
-        assert_eq!(bare_markdown("main.rs", Some(&dir.join("docs"))), None);
-        assert_eq!(bare_markdown("plan.md", None), None);
+        assert_eq!(bare_viewable("plan.md", Some(&dir.join("docs"))), Some(plan.clone()));
+        assert_eq!(bare_viewable("main.rs", Some(&dir.join("docs"))), None);
+        assert_eq!(bare_viewable("plan.md", None), None);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn files_go_to_the_viewer_for_their_type() {
+        let dir = std::env::temp_dir().join(format!("herdr-viewer-links-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("shots/my shots")).unwrap();
+        let png = dir.join("shots/a.png");
+        let spaced = dir.join("shots/my shots/Screen Shot 1.JPEG");
+        for f in [&png, &spaced] {
+            std::fs::write(f, "").unwrap();
+        }
+        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp", "notes.md", "main.rs"] {
+            std::fs::write(dir.join("shots").join(name), "").unwrap();
+        }
+        let view = |link: &str, cwd: Option<&Path>| resolve(link, cwd).and_then(|t| viewable(&t));
+        let image = |p: &PathBuf| Some((Viewer::Image, p.clone()));
+        // Plain, relative to the terminal's folder, path:line ignored, a trailing period.
+        assert_eq!(view(png.to_str().unwrap(), None), image(&png));
+        assert_eq!(view("shots/a.png", Some(&dir)), image(&png));
+        assert_eq!(view("./shots/a.png:12", Some(&dir)), image(&png));
+        assert_eq!(view("shots/a.png.", Some(&dir)), image(&png));
+        // file:// (OSC 8) with percent-encoded spaces; upper-case extensions.
+        let url = format!("file://{}", spaced.to_str().unwrap().replace(' ', "%20"));
+        assert_eq!(view(&url, None), image(&spaced));
+        // A path with spaces, as the terminal's link pattern finds it.
+        let text = format!("saved {}/shots/my shots/Screen Shot 1.JPEG and done", dir.display());
+        let found = &text[find(&text, text.find("Screen").unwrap()).unwrap()];
+        assert_eq!(view(found, None), image(&spaced));
+        // Every image type the viewer takes; Markdown still goes to its own viewer.
+        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp"] {
+            assert_eq!(view(&format!("shots/{name}"), Some(&dir)).map(|(v, _)| v), Some(Viewer::Image), "{name}");
+        }
+        assert_eq!(view("shots/notes.md", Some(&dir)).map(|(v, _)| v), Some(Viewer::Markdown));
+        assert_eq!(view("shots/main.rs", Some(&dir)), None);
+        assert_eq!(view("shots/gone.png", Some(&dir)), None);
+        assert_eq!(view("shots", Some(&dir)), None, "a folder is no picture");
+        // Web images stay web pages.
+        assert_eq!(view("https://example.com/a.png", None), None);
+        // A bare name in the terminal's folder.
+        assert_eq!(bare_viewable("a.png", Some(&dir.join("shots"))), Some(png.clone()));
+        assert_eq!(bare_viewable("main.rs", Some(&dir.join("shots"))), None);
+        assert_eq!(Viewer::Image.mod_name(), "nocturne-image");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

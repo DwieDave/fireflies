@@ -1016,7 +1016,9 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      * It takes an absolute `http`/`https` URL with a host and refuses
      * everything else. That guard is not about the address bar: without it this
      * is a way to hand an arbitrary URI to whichever handler the desktop
-     * registered for its scheme.
+     * registered for its scheme. (Herdr) A `file:` URL goes only to the
+     * embedder's `UrlOpener` (Herdr opens Markdown and pictures in its own
+     * viewers), never to the system's handler.
      */
     open_url(url: string): void;
 

@@ -4,7 +4,8 @@
 // `markdown.open {path}` command. Props: { path, on?, slot }.
 //
 // Readable width, headings, code, tables, task lists, images next to the
-// file (copied into the app's cache so they can be drawn), links: web pages
+// file (copied into the app's cache so they can be drawn; a click opens one in
+// the image viewer, nocturne-image, as do links to pictures), links: web pages
 // open as the app opens them (settings `links`), other .md files open here
 // (‹ goes back), #anchors scroll to their heading, other files go to the
 // system. It reads the file again whenever it changes on disk (agents edit
@@ -28,10 +29,14 @@ import { follow, dirname, basename, join, tilde } from "./paths.js";
 const MOD = "nocturne-markdown";
 // Each viewer's shown file by slot, for its pane header (nocturne/header.js).
 const TITLES = "nocturne-markdown.titles";
+// ... and its path, for the app to find the viewer showing a file (`markdown.open`).
+const PATHS = "nocturne-markdown.paths";
 const ART = "mods/nocturne/art";
 // Local images are copied here (under the app's folder, where image() reads).
 const IMAGES = "cache/nocturne-markdown";
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
+// Links to these open in the image viewer.
+const PICTURE = /\.(png|jpe?g|gif|svg|webp|bmp|ico|tiff?|avif|hei[cf])$/i;
 const WIDTH = 780;
 // Images are drawn at most this tall.
 const IMAGE_H = 360;
@@ -155,6 +160,11 @@ export default class Markdown extends View {
     const live = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.props?.slot).filter(Boolean));
     const was = shared(TITLES) ?? {};
     const name = this.path ? basename(this.path) : "Markdown";
+    // Its path too, so clicking a link to the file it moved on to finds this viewer.
+    const paths = shared(PATHS) ?? {};
+    if (paths[this.slot] !== this.path || Object.keys(paths).some((k) => !live.has(k) && k !== this.slot)) {
+      setShared(PATHS, { ...Object.fromEntries(Object.entries(paths).filter(([k]) => live.has(k))), [this.slot]: this.path });
+    }
     if (was[this.slot] === name && Object.keys(was).every((k) => live.has(k) || k === this.slot)) return;
     const next = Object.fromEntries(Object.entries(was).filter(([k]) => live.has(k)));
     next[this.slot] = name;
@@ -176,11 +186,18 @@ export default class Markdown extends View {
       if (to.path === this.path) { if (to.anchor) this.scrollTo(to.anchor); }
       else { this.history.push({ path: this.path, scrollY: this.scrollY }); this.open(to.path, cx, to.anchor); }
     } else if (to.kind === "web") run("app.open_url", { url: to.url });
+    else if (to.kind === "file" && PICTURE.test(to.path)) this.showImage(to.path);
     else if (!this.on) {
       const opener = appWindow()?.platform === "windows" ? null : appWindow()?.platform === "macos" ? "open" : "xdg-open";
       if (opener) exec(opener, [to.kind === "file" ? to.path : to.url]).catch(() => null);
     }
     cx.notify();
+  }
+
+  /** A picture in the image viewer (nocturne-image), beside this viewer. */
+  showImage(path) {
+    const me = this.pane();
+    run("image.open", { path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
   back(cx) {
@@ -292,7 +309,9 @@ export default class Markdown extends View {
       const local = isLocalSource(img.src);
       const abs = local ? join(dirname(this.path), decodeURI(img.src.split(/[?#]/)[0])) : null;
       const name = abs ? this.images.get(abs) : null;
-      if (name) return image(`${IMAGES}/${name}`).id(`md-img-${i}-${j}`).max_w_full().max_h(IMAGE_H);
+      // A click shows it whole in the image viewer.
+      if (name) return div().id(`md-imgbox-${i}-${j}`).flex().cursor_pointer().on_click((_e, cx) => { cx.stop_propagation(); this.showImage(abs); })
+        .child(image(`${IMAGES}/${name}`).id(`md-img-${i}-${j}`).max_w_full().max_h(IMAGE_H));
       const label = name === undefined && local && !this.on ? "loading…" : img.alt || img.src;
       return markdown(t, `md-imgalt-${i}-${j}`, `[▧ ${label.replace(/[[\]]/g, "")}](${img.src})`, { onLink: (url, cx) => this.link(url, cx) })
         .text_color(t.muted);

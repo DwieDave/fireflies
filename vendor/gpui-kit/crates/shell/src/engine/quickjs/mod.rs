@@ -39,7 +39,6 @@ use smallvec::SmallVec;
 use crate::{
     ArgumentDescriptor, ArgumentSchema, ComponentArgument, ComponentCallbackArgument,
     ComponentCallbackValue, ComponentDataValue, ComponentPayload, FrozenComponentRegistry,
-    capability::is_openable_url,
     dependencies::{GitDependencyStore, MaterializedDependency},
     entities::{EntityHandle, EntityStore},
     host_modules::HostValue,
@@ -8532,10 +8531,10 @@ impl ShellRuntime {
                     let Some(target) = bridged.first().and_then(|value| value.as_str().ok()) else {
                         return Err(Exception::throw_type(ctx, "href(url) expects a string"));
                     };
-                    if !is_openable_url(target) {
+                    if !crate::capability::is_link(target) {
                         return Err(Exception::throw_type(
                             ctx,
-                            "href(url) expects an absolute HTTP(S) URL with a host",
+                            "href(url) expects an absolute HTTP(S) URL with a host, or a file: URL",
                         ));
                     }
                 }

@@ -597,6 +597,17 @@ Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default:
 | `pane` | no |
 | `on` | no |
 
+## `image.open`
+
+Open an image (png, jpg, gif, webp, svg, heic, ...) in the viewer (nocturne-image) beside the pane (default: the focused one), or the viewer already showing it there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+
+| Argument | Required |
+|---|---|
+| `path` | yes |
+| `in` | no |
+| `pane` | no |
+| `on` | no |
+
 ## `app.whats_new`
 
 Show what this release brought (it opens once by itself after an update).
