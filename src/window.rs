@@ -2662,6 +2662,7 @@ impl AppWindow {
         self.model.add_space(&space, name.trim(), &folder, Tab::new(&ctx, ctx_name, &pane, &addr));
         if let Some(p) = self.model.space_mut(&space) {
             p.machine = machine;
+            p.attached = !follow;
         }
         Ok(json!({ "space": space, "tab": ctx, "terminal": addr }))
     }
@@ -3106,7 +3107,7 @@ impl AppWindow {
             if !args.is_object() { args = json!({}); }
             args["machine"] = json!(machine);
         }
-        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
+        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.folder" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
             let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
@@ -3184,6 +3185,13 @@ impl AppWindow {
                 let Some(name) = Self::arg(a, "name") else { return self.fail("space.rename needs name (empty: automatic)") };
                 let Some(p) = self.model.space_mut(&id) else { return self.fail(format!("no space {id:?}")) };
                 p.name = name.trim().to_owned();
+            }
+            "space.folder" => {
+                let Some(id) = Self::owned(a, "id").or_else(|| self.model.active.clone()) else { return self.fail("no space to attach") };
+                let Some(folder) = Self::arg(a, "folder").map(str::trim).filter(|f| !f.is_empty()) else { return self.fail("space.folder needs folder") };
+                let Some(p) = self.model.space_mut(&id) else { return self.fail(format!("no space {id:?}")) };
+                p.folder = folder.to_owned();
+                p.attached = true;
             }
             "space.move" => {
                 let (Some(id), Some(i)) = (Self::arg(a, "id"), a.get("index").and_then(Value::as_u64)) else { return self.fail("space.move needs id and index") };
@@ -4330,7 +4338,7 @@ impl AppWindow {
                         json!({ "id": c.id, "name": Model::tab_name(p, c), "active": Some(&c.id) == active.as_ref(), "settled": c.settled.is_some(), "terminals": terms })
                     })
                     .collect();
-                json!({ "id": p.id, "name": m.space_name(p, &home()), "folder": p.folder, "machine": p.machine, "active": m.active.as_deref() == Some(&p.id), "tabs": tabs })
+                json!({ "id": p.id, "name": m.space_name(p, &home()), "folder": p.folder, "attached": p.attached, "machine": p.machine, "active": m.active.as_deref() == Some(&p.id), "tabs": tabs })
             })
             .collect();
         json!({ "spaces": spaces, "recent": m.recent })

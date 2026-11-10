@@ -21,6 +21,8 @@ export function toggleGithub() {
   const open = githubOpen();
   if (open) { closeOverlay(open); setShared(WINDOW, null); return; }
   const h = here();
-  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { folder: h.folder, on: h.on } });
+  // A space attached to a folder shows that repo; otherwise the focused pane's.
+  const folder = (h.space?.attached && h.space.folder) || h.folder;
+  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { folder, on: h.on } });
   setShared(WINDOW, { id, beat: Date.now() });
 }
