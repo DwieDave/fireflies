@@ -161,6 +161,44 @@ const PREVIOUS_THEMES: &[(&str, &str)] = &[
   }
 }
 "##),
+    ("moonfly", r##"{
+  "ansi": [
+    "#323437",
+    "#ff5d5d",
+    "#8cc85f",
+    "#e3c78a",
+    "#80a0ff",
+    "#cf87e8",
+    "#79dac8",
+    "#c6c6c6",
+    "#949494",
+    "#ff5189",
+    "#36c692",
+    "#c6c684",
+    "#74b2ff",
+    "#ae81ff",
+    "#85dc85",
+    "#e4e4e4"
+  ],
+  "background": "#080808",
+  "colors": {
+    "accent": "#80a0ff",
+    "accent_foreground": "#080808",
+    "blocked": "#ff5189",
+    "dim": "#5F6D6D",
+    "done": "#8cc85f",
+    "foreground": "#c6c6c6",
+    "muted": "#949494",
+    "ring": "#80a0ff",
+    "solid": "#80a0ff",
+    "solid_foreground": "#080808",
+    "working": "#e3c78a"
+  },
+  "cursor": "#8e8e8e",
+  "foreground": "#bdbdbd",
+  "selection": "#323437"
+}
+"##),
 ];
 
 pub fn install_themes() {
@@ -227,7 +265,7 @@ fn shipped_theme_upgrades_preserve_personal_edits() {
         std::fs::write(&path, previous).unwrap();
         install_theme(&path, name, current);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), current);
-        let edited = previous.replace("#abb2bf", "#abcdef").replace("#c0c0c0", "#abcdef");
+        let edited = previous.replace("#abb2bf", "#abcdef").replace("#c0c0c0", "#abcdef").replace("#80a0ff", "#abcdef");
         std::fs::write(&path, &edited).unwrap();
         install_theme(&path, name, current);
         assert_eq!(std::fs::read_to_string(&path).unwrap(), edited);

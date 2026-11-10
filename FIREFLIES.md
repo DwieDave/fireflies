@@ -9,7 +9,9 @@ same core, same mod API. On top of Herdr it adds:
   `nextNativeViewEvent` in `defaults/herdr.d.ts`; `native/herdr-native-view`.
 - **Layout roles** for the dialogs Herdr draws: `prompt_mod`, `confirm_mod`,
   `palette_mod`, `peek_mod` (and upstream's `toast`, which also reads the fork's
-  older `toast_mod`). See `defaults/AGENTS.md`.
+  older `toast_mod`), `dialog_mods` for the welcome, what's new, keys, worktree,
+  add-machine and update note, plus `corners: "square"` and a `scrim`. See
+  `defaults/AGENTS.md`.
 - **Panes**: `pane.split` left/up/auto and along a tab's edge, per-pane font
   zoom, floating terminals with a second view (`terminal.open {place: "float"}`).
 - **Nocturne**, the layout a first start shows: a 1-bit night meadow in the
