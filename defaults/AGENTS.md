@@ -590,7 +590,7 @@ The main ones:
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
   flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.equalize {scope?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
@@ -600,6 +600,14 @@ The main ones:
   direction; unvisited panes fall back to overlap, then top/left layout order.
   `pane.go` also reaches visible mods whose `mod.json` says `"focusable": true`, and
   starts from that mod while it holds the keyboard.
+  `pane.equalize {scope?, pane?}` gives panes even shares of their tab (default: the focused
+  pane's): `scope` `"all"` (default) evens every row and column at every level, `"row"` the
+  panes side by side with `pane` (its nearest row), `"column"` the panes stacked with it (its
+  nearest column; none: an error). Siblings keep their total weight; fixed `px` sizes stay.
+  Replies `{ok, changed}`; saved like any layout change. Keys: `"pane.equalize:row"`.
+  Nocturne's pane header ▦ button and pane menu open the `nocturne-equalize-panes` popup
+  (all / row / column); its palette has Even out all panes / this row / this column, and
+  cmd-alt-e (macOS) evens all.
   `pane.swap {direction}` uses geometry only. Focus history lasts until the window closes.
   `pane.swap {target}` trades the places of `pane` (default: the focused one) and
   `target`, another pane of the same tab; give `direction` or `target`, not both.

@@ -3152,7 +3152,7 @@ impl AppWindow {
             if !args.is_object() { args = json!({}); }
             args["machine"] = json!(machine);
         }
-        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
+        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.equalize" | "terminal.keep" | "terminal.park") {
             let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
@@ -3448,6 +3448,21 @@ impl AppWindow {
                 };
                 if let Err(e) = r {
                     return self.fail(e);
+                }
+            }
+            "pane.equalize" => {
+                let scope = match a.get("scope").filter(|v| !v.is_null()) {
+                    Some(v) if !v.is_string() => Err(format!("pane.equalize scope must be a string, not {v}")),
+                    v => crate::equalize::Scope::parse(v.and_then(Value::as_str)),
+                };
+                let scope = match scope {
+                    Ok(scope) => scope,
+                    Err(e) => return self.fail(e),
+                };
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to equalize") };
+                match self.model.equalize(&pane, scope) {
+                    Ok(changed) => self.answer(Ok(json!({ "ok": true, "changed": changed }))),
+                    Err(e) => return self.fail(e),
                 }
             }
             // ---- terminals
@@ -5271,7 +5286,7 @@ fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
         // An edge split goes by the tab, not a pane.
         "pane.split" => AppWindow::arg(args, "pane").is_none() && args.get("edge").is_none_or(Value::is_null),
-        "pane.close" | "pane.zoom" | "pane.swap" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+        "pane.close" | "pane.zoom" | "pane.swap" | "pane.equalize" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
             AppWindow::arg(args, "pane").is_none()
         }
         "pane.go" => true,
