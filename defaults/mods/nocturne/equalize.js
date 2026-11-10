@@ -6,5 +6,5 @@ import { openOverlay } from "herdr";
 
 /** Opens the popup (at the pointer) for a pane; without one, the focused pane. */
 export function openEqualize(pane) {
-  openOverlay({ mod: "nocturne-equalize-panes", kind: "popup", frame: "none", width: 230, height: 134, props: pane ? { pane } : {} });
+  openOverlay({ mod: "nocturne-equalize-panes", kind: "popup", frame: "none", width: 230, height: 160, props: pane ? { pane } : {} });
 }

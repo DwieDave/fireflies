@@ -7,7 +7,8 @@
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
 //            working drifts amber, done glows green below them (kit.js
-//            agentRank), idle rests in the grass;
+//            agentRank), idle rests in the grass; how each flies and
+//            glows is flight.js;
 //            pinned ones (pins.js) sit above them all in a glass jar at
 //            the top, in the order pinned, status and all; the glass
 //            glints when one flies in and breathes red while one needs you;
@@ -42,6 +43,8 @@ import { toggleFiles } from "./files.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
+import { gridify } from "./gridify.js";
+import { calm, flash, dust, fly as flyPath } from "./flight.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 
@@ -103,7 +106,14 @@ const SETTLE = 350;
 // The jar of pinned fireflies (pins.js) at the top of the sky: where its
 // first lane starts under the lid, the glass under its last, the clear sky
 // before the next firefly (layout px).
-const JAR = { at: 4, top: 16, bottom: 10, gap: 10 };
+const JAR = { at: 4, top: 26, bottom: 10, gap: 10 };
+// The jar's side margins in the open sky (equal both sides), and how far its
+// fireflies' lanes sit in from the sidebar's edges (inside the 2 px walls).
+const JAR_SIDE = 8, JAR_INSET = JAR_SIDE + 2;
+// How far the neck sits in from the body's walls: in the open sky, on the rail.
+const NECK = 22, RAIL_NECK = 11;
+// Where the body's walls begin, under the lid, neck and shoulders.
+const BODY = 16;
 // How long the glass glints after a firefly flies in (ms): as long as the flight.
 const GLINT = 1800;
 
@@ -124,7 +134,8 @@ export default class Sky {
     // on that run's output; nocturne.scripts-again runs the folder's last
     // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
     // that Herdr Core's missing App Management stopped, opens that setting),
-    // nocturne.new (cmd-n) the "+ new" menu.
+    // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
+    // the shown tab's panes into an even grid (gridify.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -140,6 +151,7 @@ export default class Sky {
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "scripts-grant") grantAppManagement();
+        else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
         else if (c === "pin") pin(focusedTerminal());
         else if (c === "pin-up") movePin(focusedTerminal(), -1);
@@ -289,7 +301,7 @@ export default class Sky {
    *  by folding: a clip anchored at their base shortens and grows, so the tips
    *  dip behind it, pixels kept whole. Resting ones hold them still. */
   wings(a, h, color, landing) {
-    const beat = landing ? FLAP.working : FLAP[a.status];
+    const beat = calm() ? null : landing ? FLAP.working : FLAP[a.status];
     // Roots on the mark's shoulders: the mark sits at 12..28, its body's top edge near 15.
     // The mark's own color: one creature, not a sprite with a costume.
     const clip = div().absolute().left(8).top(10).w(25).h(8).overflow_hidden()
@@ -318,21 +330,20 @@ export default class Sky {
   firefly(t, a, y, lane, w) {
     const h = hash(a.address);
     const x = 6; // the halo's edge lines up with the eyebrow; every mark in one column
-    const drift = a.status === "working" && this.naming !== a.address;
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
     const glow = svg(`${ART}/glow.svg`).w(40).h(40).absolute().top(0).left(0).text_color(color);
     const landing = this.landing?.get(a.address);
+    const still = calm();
     // Landing: the last awake glow and mark fade out over the resting mark
     // (a loop's first half, removed once it's out).
     const fade = (el) => el.loop("opacity", { from: 1, to: 0, period: LAND * 2, easing: "ease-out" });
-    const halo = landing ? fade(glow.text_color(landing.color))
-      : a.status === "working" ? glow.loop("opacity", { from: 0.35, to: 1, period: 1500 + (h % 900) })
-      : a.status === "blocked" ? glow.loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })
-      : a.status === "done" ? glow : null;
+    // Every firefly glows in its own rhythm (flight.js): working ones flash,
+    // blocked ones fast and bright, done ones breathe dimly, resting ones blink faintly.
+    const halo = landing ? fade(glow.text_color(landing.color)) : flash(glow, a.status, h);
     // The firefly's body is its agent's mark, on a dark plate so the halo's
-    // dots don't run into it. Resting ones have no halo, only the dim mark.
-    const fly = div().relative().size(40).flex_none()
-      .when(Boolean(halo), (el) => el.child(halo).child(div().absolute().top(10).left(10).size(20).bg(t.background)))
+    // dots don't run into it.
+    const body0 = div().relative().size(40).flex_none()
+      .child(halo).child(div().absolute().top(10).left(10).size(20).bg(t.background))
       .child(this.wings(a, h, color, landing))
       .child(div().absolute().top(12).left(12).size(16).overflow_hidden()
         .child(this.mark(a, color))
@@ -340,11 +351,15 @@ export default class Sky {
         // Alive: a band of night-colored dither sweeps across the mark. Over
         // the plate it vanishes, so only the mark's own pixels darken, like a
         // scanline over a sprite. Working sweeps slowly, blocked fast.
-        .when(SWEEP[a.status] != null, (el) => el.child(div().absolute().top(0).h(16).w(6)
+        .when(SWEEP[a.status] != null && !still, (el) => el.child(div().absolute().top(0).h(16).w(6)
           .loop("left", { from: -6, to: 16, period: SWEEP[a.status] + (h % 400), easing: "linear" })
           .child(dither(t.background, 1)))))
       // Done says so by shape too, not only by its green: a check on the mark.
       .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().top(22).left(22)));
+    // Only the firefly flies (flight.js), in its slot, leaving dust; its name stays put.
+    const fly = div().relative().size(40).flex_none()
+      .children(dust(a.status, h, () => div().child(dither(color, 1))))
+      .child(flyPath(body0, a.status, h, this.naming === a.address || Boolean(landing)));
     // The pane's name leads (the agent's own when nobody named it). Only
     // what the halo doesn't already say follows: its space when that isn't
     // the shown one; awake ones add their status on a second line, resting
@@ -379,14 +394,13 @@ export default class Sky {
     const step = (o) => div().flex_1().h_full().relative().opacity(o).child(dither(t.ansi0, 1));
     const path = h_flex().absolute().top(4).bottom(4).left(x + 36).right(0).gap(2)
       .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
-    // Working fireflies also bob: a layer inside the lane rises and falls a
-    // little, so the lane itself can fly to a new spot (to rest, say).
-    const inner = div().absolute().top(0).left(0).w(w).h(lane)
-      .child(drift ? body.loop("left", { from: x, to: x + 4 + (h % 3), period: 5200 + (h % 2400) }) : body);
+    // The lane holds still (only the firefly in it flies), so it can move to
+    // a new spot (to rest, say) on its own transition.
+    const inner = div().absolute().top(0).left(0).w(w).h(lane).child(body);
     return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
       .transition("top", { duration: LAND, easing: "ease-in-out" })
       .when(a.focused, (el) => el.child(path))
-      .child(drift ? inner.loop("top", { from: 0, to: -6, period: 2300 + (h % 1100) }) : inner);
+      .child(inner);
   }
 
   /**
@@ -395,28 +409,41 @@ export default class Sky {
    * When a pinned firefly needs you the glass breathes in its color, slower
    * than the firefly's own blink; just after one flies in, it glints.
    */
-  glass(t, jarred) {
+  glass(t, jarred, n = NECK) {
     const needs = jarred.some((a) => a.status === "blocked");
     const tone = needs ? t.blocked : t.ansi8;
     const strip = (el) => el.absolute().child(dither(tone, 1));
+    // A mason jar, symmetric around its middle, square pixels only: a screw
+    // band lid wider than the neck, the neck, shoulders stepping out in two
+    // stairs, then the body's walls and base. `n`: the neck's inset.
+    const half = Math.round(n / 2);
+    // The same piece on the left and, mirrored, on the right (`side(el, x)` places it x in).
+    const pair = (mk) => ["left", "right"].map((side) => mk((el, x) => el[side](x)));
     const frame = div().absolute().top(0).left(0).size_full()
-      // A mason jar's outline: a lid narrower than the body, a short neck, stepped shoulders.
-      .child(div().absolute().top(0).left(10).right(10).h(4).bg(tone)) // the lid
-      .child(strip(div().top(4).left(12).w(2).h(4))).child(strip(div().top(4).right(12).w(2).h(4))) // the neck
-      .child(strip(div().top(8).left(0).w(14).h(2))).child(strip(div().top(8).right(0).w(14).h(2))) // the shoulders
-      .child(strip(div().top(8).bottom(0).left(0).w(2))).child(strip(div().top(8).bottom(0).right(0).w(2)))
-      .child(strip(div().bottom(0).left(0).right(0).h(2)));
+      .child(div().absolute().top(0).left(n - 4).right(n - 4).h(4).bg(tone)) // the lid
+      .child(strip(div().top(4).left(n - 4).right(n - 4).h(2)).opacity(0.6)) // its band
+      .children(pair((side) => strip(side(div().top(6).w(2).h(6), n)))) // the neck
+      .children(pair((side) => strip(side(div().top(12).w(n - half + 2).h(2), half)))) // upper shoulders
+      .children(pair((side) => strip(side(div().top(14).w(half + 2).h(2), 0)))) // lower shoulders
+      .children(pair((side) => strip(side(div().top(BODY).bottom(0).w(2), 0)))) // the walls
+      .child(strip(div().bottom(0).left(0).right(0).h(2))); // the base
     const glinting = (this.glintUntil ?? 0) > Date.now();
+    // The glass: the body and the neck, faintly moonlit (or red while one needs you).
+    const fill = (c, o) => [
+      div().absolute().top(BODY).left(2).right(2).bottom(2).opacity(o).child(dither(c, 1)),
+      div().absolute().top(6).left(n + 2).right(n + 2).h(6).opacity(o).child(dither(c, 1)),
+      div().absolute().top(12).left(half + 2).right(half + 2).h(4).opacity(o).child(dither(c, 1)),
+    ];
     return div().absolute().top(0).left(0).size_full()
-      .child(div().absolute().top(10).left(2).right(2).bottom(2).opacity(needs ? 0.16 : 0.1).child(dither(needs ? t.blocked : t.ansi4, 1)))
-      .when(glinting, (el) => el.child(div().absolute().top(10).left(2).right(2).bottom(2)
-        .loop("opacity", { from: 0.35, to: 0, period: GLINT * 2, easing: "ease-out" }).child(dither(t.foreground, 1))))
+      .children(fill(needs ? t.blocked : t.ansi4, needs ? 0.16 : 0.1))
+      .when(glinting, (el) => el.child(div().absolute().top(0).left(0).size_full()
+        .loop("opacity", { from: 0.35, to: 0, period: GLINT * 2, easing: "ease-out" }).children(fill(t.foreground, 1))))
       .child(needs ? frame.loop("opacity", { from: 0.5, to: 1, period: 2400 }) : frame.opacity(0.85));
   }
 
   /** The jar in the open sky, behind its fireflies' lanes. */
   jar(t, jarred, h, w) {
-    return div().id("jar").absolute().top(JAR.at).left(2).w(w - 10).h(h - JAR.at).child(this.glass(t, jarred));
+    return div().id("jar").absolute().top(JAR.at).left(JAR_SIDE).w(w - 2 * JAR_SIDE).h(h - JAR.at).child(this.glass(t, jarred));
   }
 
   /** Inside the jar even a resting firefly glows a little: a soft halo
@@ -425,7 +452,7 @@ export default class Sky {
     // Not while it flies in (its plate would wait there before it), nor while landing.
     if (a.status !== "idle" || this.landing?.has(a.address) || this.arriving?.has(a.address)) return div();
     const top = y + Math.round((lane - 40) / 2);
-    return div().id(`jar-glow-${a.address}`).absolute().left(6).top(top).size(40)
+    return div().id(`jar-glow-${a.address}`).absolute().left(JAR_INSET + 6).top(top).size(40)
       .transition("top", { duration: LAND, easing: "ease-in-out" })
       .child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(40).text_color(t.muted).opacity(0.45))
       .child(div().absolute().top(10).left(10).size(20).bg(t.background));
@@ -463,7 +490,9 @@ export default class Sky {
   // pinned; the rest keep this order below it. Lanes are placed in one space,
   // so a firefly being pinned flies up into the jar (and back out).
   meadow(t, list, jarred = []) {
-    const { width: w, height: hgt } = this.field;
+    // Measured sizes come back as drawn (zoomed); lengths here are layout px.
+    const zoom = Number(settings()?.zoom) || 1;
+    const w = this.field.width / zoom, hgt = this.field.height / zoom;
     const inJar = new Set(jarred.map((a) => a.address));
     const free = list.filter((a) => !inJar.has(a.address));
     const awake = free.filter((a) => a.status !== "idle");
@@ -505,7 +534,10 @@ export default class Sky {
     return div().id("meadow").relative().flex_1().min_h(0).w_full()
       .on_size_change((size, cx) => { this.field = size; cx.notify(); })
       .when(jarH > 0, (el) => el.child(this.jar(t, jarred, jarH, w)).children(jarLanes.map(([a, y, l]) => this.jarGlow(t, a, y, l))))
-      .children(placed.map(([a, y, l]) => this.firefly(t, a, y, l, w)))
+      // The jar's lanes sit inside its walls, the same margin on both sides.
+      .children(placed.map(([a, y, l]) => inJar.has(a.address)
+        ? this.firefly(t, a, y, l, w - 2 * JAR_INSET).left(JAR_INSET)
+        : this.firefly(t, a, y, l, w)))
       .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(placed.length ? placed.at(-1)[1] + placed.at(-1)[2] : 8)
         .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop).on_click(() => run("agent.next"))
@@ -563,9 +595,13 @@ export default class Sky {
       .child(div().relative().child(pip(t, s.status)));
   }
 
-  /** A firefly's mark on the rail, 32 px: its status color, blocked blinks, done checked. */
+  /** A firefly on the rail: its mark in a 32 px cell, glowing in its rhythm
+   *  (flight.js); a working one rises and falls a pixel or two. */
   railFly(t, a) {
+    const h = hash(a.address);
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
+    const awake = a.status !== "idle";
+    const mark = div().relative().child(this.mark(a, color));
     return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
@@ -573,9 +609,10 @@ export default class Sky {
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
       .on_click(() => run("agent.focus", { terminal: a.address }))
       .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
-      .when(a.status === "blocked", (el) => el.child(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color)
-        .loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })))
-      .child(div().relative().child(this.mark(a, color)))
+      .when(awake, (el) => el
+        .child(flash(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color), a.status, h))
+        .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
+      .child(a.status === "working" && !calm() ? mark.loop("top", { from: -1, to: 1, period: 1900 + (h % 700) }) : mark)
       .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
   }
 
@@ -585,8 +622,8 @@ export default class Sky {
     const inJar = new Set(jarred.map((a) => a.address));
     const flies = list.filter((a) => !inJar.has(a.address)).map((a) => this.railFly(t, a));
     // The pinned ones' marks in a small jar of their own, resting ones lit a little.
-    const jar = jarred.length ? v_flex().id("rail-jar").relative().w(44).flex_none().items_center().pt(10).pb(4).gap(2).mb(6)
-      .child(this.glass(t, jarred))
+    const jar = jarred.length ? v_flex().id("rail-jar").relative().w(48).flex_none().items_center().pt(BODY + 2).pb(4).gap(2).mb(6)
+      .child(this.glass(t, jarred, RAIL_NECK))
       .children(jarred.map((a) => div().relative().size(32).flex_none()
         .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
           .child(div().absolute().top(8).left(8).size(16).bg(t.background)))

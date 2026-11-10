@@ -1,5 +1,5 @@
 // What the GitHub window keeps between openings: the last pull requests,
-// PR details, runs, jobs and workflow needs it read, per repo, so a window
+// PR details, runs, jobs, workflow needs and project boards it read, per repo, so a window
 // shows them at once and reads GitHub again behind them (store.js writes it
 // to the app's data folder). Plain functions over plain JSON: no herdr
 // imports, so scripts/ tests it.
@@ -12,7 +12,7 @@
 export const VERSION = 2;
 // readTextFile/writeTextFile stop at 1 MiB; stay well under it.
 export const MAX_BYTES = 768 * 1024;
-export const LIMITS = { repos: 8, details: 16, jobs: 10, needs: 12, lists: 3, runs: 4 };
+export const LIMITS = { repos: 8, details: 16, jobs: 10, needs: 12, lists: 3, runs: 4, boards: 3 };
 
 /** An empty cache document. */
 export const blank = () => ({ v: VERSION, folders: {}, repos: {} });
@@ -36,7 +36,7 @@ export function lookup(doc, folder, on) {
 }
 
 /** A fresh entry for a repo. */
-export const entryFor = (repo) => ({ at: 0, repo: slimRepo(repo), prs: { lists: {}, details: {} }, actions: { runs: {}, jobs: {}, needs: {} } });
+export const entryFor = (repo) => ({ at: 0, repo: slimRepo(repo), prs: { lists: {}, details: {} }, actions: { runs: {}, jobs: {}, needs: {} }, projects: { list: null, boards: {} } });
 
 // ---- slim: only the fields the window shows
 
@@ -129,6 +129,8 @@ export function prune(doc, limits = LIMITS) {
   for (const e of Object.values(repos)) {
     e.prs = { lists: newest(e.prs?.lists, limits.lists), details: newest(e.prs?.details, limits.details) };
     e.actions = { runs: newest(e.actions?.runs, limits.runs), jobs: newest(e.actions?.jobs, limits.jobs), needs: newest(e.actions?.needs, limits.needs) };
+    // Projects (projects.js): the picker's list and the last boards opened.
+    if (e.projects) e.projects = { list: e.projects.list ?? null, boards: newest(e.projects.boards, limits.boards) };
   }
   const folders = {};
   for (const [f, k] of Object.entries(doc.folders ?? {})) if (repos[k]) folders[f] = k;
@@ -144,7 +146,7 @@ export function fit(doc, max = MAX_BYTES, keep = null) {
   const pieces = [];
   for (const [k, e] of Object.entries(d.repos)) {
     if (k !== keep) pieces.push({ at: e.at ?? 0, drop: () => { delete d.repos[k]; } });
-    for (const [part, sub] of [["prs", "details"], ["prs", "lists"], ["actions", "jobs"], ["actions", "needs"], ["actions", "runs"]]) {
+    for (const [part, sub] of [["prs", "details"], ["projects", "boards"], ["prs", "lists"], ["actions", "jobs"], ["actions", "needs"], ["actions", "runs"]]) {
       for (const [id, x] of Object.entries(e[part]?.[sub] ?? {})) pieces.push({ at: x?.at ?? 0, drop: () => { delete e[part][sub][id]; } });
     }
   }

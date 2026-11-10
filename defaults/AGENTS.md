@@ -90,13 +90,27 @@ If `shared.json` is invalid, Herdr logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
 `herdr-app check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
-runs, jobs; the last 8 repos, under 768 KB, never tokens) in
+runs, jobs, project boards; the last 8 repos, under 768 KB, never tokens) in
 `data/nocturne-github/cache.json`: it shows that at once when opened and reads
 GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`) switches to the parent and back.
+Its third tab, Projects (`3`, or `nocturne-github.projects` in keys.json), is
+a GitHub Projects board: the projects linked to the repo (and its parent, for
+a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
+sort, column field and group-by swimlanes), `/` a filter in GitHub's syntax
+(`assignee:@me label:bug status:Ready is:open repo:name -label:x no:assignee`,
+field names like `priority:P1`, `sprint:@current`, `estimate:>2`, words).
+`h j k l` move, `m` or space carries a card (`hjkl`, `enter` drops, `esc` puts
+it back), `e` edits fields, `a` adds a draft, `i` makes a draft an issue,
+`x` archives, `enter` docks the card's detail, `o` opens it on GitHub, `-`
+folds a column, `z` a swimlane, `w` sets a column's limit. Edits show at once
+and roll back if GitHub refuses them. GitHub's API keeps no column limits or
+hidden columns, so limits and folds are Herdr's, per project, in shared state
+`nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
+`project` (`gh auth refresh -s project`); the tab says which is missing.
 
 ## The model: spaces, tabs, terminals
 
@@ -789,8 +803,15 @@ The main ones:
   nearest column; none: an error). Siblings keep their total weight; fixed `px` sizes stay.
   Replies `{ok, changed}`; saved like any layout change. Keys: `"pane.equalize:row"`.
   Nocturne's pane header ▦ button and pane menu open the `nocturne-equalize-panes` popup
-  (all / row / column); its palette has Even out all panes / this row / this column, and
-  cmd-alt-e (macOS) evens all.
+  (all / row / column / as a grid); its palette has Equalize panes / this row / this column,
+  and cmd-alt-e (macOS) evens all.
+  Nocturne's `nocturne.gridify` (palette "Gridify panes", cmd-alt-g on macOS, the pane
+  header's grid button with three or more panes, the popup's "As a grid") rearranges every
+  placed pane of the shown tab into an even grid: ceil(sqrt(n)) columns, rows filled left to
+  right in the tab's pane order, a short last row stretched, then equalized. Terminals and
+  mods keep running, parked panes stay parked, focus stays. It moves the panes through a
+  holding tab with `pane.move` (which can't move a pane inside its own tab), so the tab
+  strip shows a "⧉ gridify" tab for a moment.
   `pane.swap {direction}` uses geometry only. Focus history lasts until the window closes.
   `pane.swap {target}` trades the places of `pane` (default: the focused one) and
   `target`, another pane of the same tab; give `direction` or `target`, not both.

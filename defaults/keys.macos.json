@@ -88,7 +88,8 @@
     "cmd-alt-=": "pane.font_bigger",
     "cmd-alt--": "pane.font_smaller",
     "cmd-alt-0": "pane.font_reset",
-    "cmd-alt-e": "pane.equalize:all"
+    "cmd-alt-e": "pane.equalize:all",
+    "cmd-alt-g": "nocturne.gridify"
   },
   "mod:nocturne-browser": {
     "cmd-p": "nocturne-browser.url",
