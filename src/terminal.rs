@@ -780,6 +780,16 @@ impl TerminalView {
         }
     }
 
+    /// Tells the core a size for the terminal without changing this view: the
+    /// size it had before this view showed it, as the view goes
+    /// (`AppWindow::remove_overlay`).
+    pub fn give_back_size(&self, cols: u16, rows: u16) {
+        let g = self.grid.borrow();
+        if let Some(chan) = g.channel {
+            g.core.resize(chan, cols, rows);
+        }
+    }
+
     /// Sizes a terminal that isn't on screen as its pane would be (`AppWindow::fit_hidden_tabs`).
     pub fn fit(&self, cols: u16, rows: u16, cell: Size<Pixels>, scale: f32) {
         self.grid.borrow_mut().fit(cols, rows, cell, scale);
