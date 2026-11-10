@@ -202,6 +202,18 @@ the highlighted line shows where it will land.
   Other schemes (mailto:, file:, ssh:, ...) and files go to the system. Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
   pages open in the system's browser.
+- **Markdown files**: a link to an existing `.md` / `.markdown` file in a
+  terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
+  the terminal's folder, or a bare `README.md` there) opens it rendered in the
+  Markdown viewer (`nocturne-markdown`) beside that pane; clicking it again
+  shows the viewer already open on it. The files panes do the same for a picked
+  `.md` (alt-click, or `e` in Nocturne's files pane: as text in the editor).
+  `markdown.open {path, anchor?, in?, pane?, on?}` does it from a mod or an agent.
+  The viewer re-reads the file when it changes on disk, keeping its scroll;
+  web links in it follow `links`, relative `.md` links open in the same viewer
+  (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
+  edit ($EDITOR in a terminal beside), files. Commands for the shown viewers:
+  `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
@@ -443,7 +455,7 @@ The tab block says how each pane of the shown tab is wrapped:
   pane has the keyboard; `gap` is the space between panes.
 - `header`: a mod drawn on each pane, one copy per pane, with
   `props().pane` and `props().terminal`. It reads its live facts from
-  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom, parked) and its
+  `panes()` (title, folder, branch, agent status, focused, zoomed, font_zoom, parked; a mod pane's `props`) and its
   buttons run pane commands with that pane (`pane.split`, `pane.zoom`,
   `pane.close`). `position`: `top` or `bottom`; `reveal: "hover"` shows it
   only while the pointer is on the pane, drawn over the terminal so the
@@ -829,6 +841,10 @@ The main ones:
   never one a package manager owns), `app.welcome`, `app.whats_new`,
   `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
   `"system"` the system's browser; default: the `links` setting; the reply says `opened`),
+  `markdown.open {path, anchor?, in?, pane?, on?}` (a Markdown file rendered in the viewer beside
+  `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a
+  heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
+  machine the file is on; the reply says `opened` and the absolute `path`),
   `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Herdr sends nothing itself), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).

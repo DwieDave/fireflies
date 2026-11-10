@@ -102,6 +102,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("app.help", &[], "Toggle the keys dialog."),
     cmd("app.welcome", &[], "Show the welcome again."),
     cmd("app.open_url", &[req("url"), opt("in")], "Open a web page (http or https) in a web pane beside the focused pane (in \"app\") or the system's browser (in \"system\"); default: settings.json links."),
+    cmd("markdown.open", &[req("path"), opt("anchor"), opt("in"), opt("pane"), opt("on")], "Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default: the focused one), or the viewer already showing it there; anchor: a heading to scroll to; in \"system\": the system's app. A relative path is the pane's folder's; on: the machine the file is on."),
     cmd("app.whats_new", &[], "Show what this release brought (it opens once by itself after an update)."),
     cmd("app.feedback", &[opt("message"), opt("from")], "Draft feedback as a GitHub issue for the person to review, open and submit there (from: person or agent)."),
     cmd("app.palette", &[], "Toggle the command palette: every command by name, with its key; calling again closes it."),

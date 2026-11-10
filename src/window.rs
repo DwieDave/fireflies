@@ -1593,6 +1593,12 @@ impl AppWindow {
                         tracing::warn!("cannot open {url}: {e}");
                     }
                 }
+                TerminalEvent::OpenMarkdown(path) => {
+                    let path = path.to_string_lossy().into_owned();
+                    if let Err(e) = this.open_markdown(&path, Some(block.trim_end_matches(SWAP).to_owned()), None, None, None, window, cx) {
+                        tracing::warn!("cannot open {path}: {e}");
+                    }
+                }
                 TerminalEvent::TitleChanged => this.publish(cx),
                 TerminalEvent::Ended => this.terminal_ended(&block, window, cx),
                 TerminalEvent::ContextMenu(at) => {
@@ -1919,8 +1925,8 @@ impl AppWindow {
                     let focused = m.active.as_deref() == Some(pr.id.as_str()) && focused_pane.as_deref() == Some(p.id.as_str());
                     let zoomed = ctx.zoomed.as_deref() == Some(p.id.as_str());
                     // A mod pane: what it shows, no terminal.
-                    if let Some(Content::Mod { name, .. }) = p.content() {
-                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id), "parked": parked }));
+                    if let Some(Content::Mod { name, props }) = p.content() {
+                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "props": props, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id), "parked": parked }));
                         continue;
                     }
                     let Some(addr) = p.terminal() else { continue };
@@ -2823,6 +2829,66 @@ impl AppWindow {
         }
         let mut r = r;
         r["opened"] = json!("app");
+        Ok(r)
+    }
+
+    /// A Markdown file (a terminal's link, `markdown.open`): the viewer mod beside
+    /// `pane` (default: the focused one; with none, a tab of its own), or the
+    /// viewer in that tab already opened on it; the system's app with `in`
+    /// "system" or without the viewer. A relative path is the pane's folder's.
+    fn open_markdown(&mut self, path: &str, pane: Option<String>, place: Option<&str>, on: Option<&str>, anchor: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        let pane = pane.filter(|p| self.model.tab_of(p).is_some()).or_else(|| self.model.focused_pane());
+        let on = on.filter(|m| !m.is_empty());
+        let path = match path.trim() {
+            "" => return Err("path is required".into()),
+            p if p.starts_with("~/") => format!("{}/{}", home(), &p[2..]),
+            p if std::path::Path::new(p).is_absolute() || on.is_some() => p.to_owned(),
+            p => {
+                let cwd = pane.as_ref().and_then(|id| self.terms.get(id)).and_then(|t| t.view.read(cx).cwd.clone())
+                    .ok_or_else(|| format!("{p:?} is relative and the pane has no folder: give an absolute path"))?;
+                cwd.join(p).to_string_lossy().into_owned()
+            }
+        };
+        let system = |path: &str| {
+            crate::links::open(&crate::links::Target::File(path.into()));
+            Ok(json!({ "opened": "system", "path": path }))
+        };
+        match place {
+            None | Some("app") => {}
+            Some("system") if on.is_none() => return system(&path),
+            Some("system") => return Err("in \"system\" opens files on this computer only".into()),
+            Some(other) => return Err(format!("in is \"app\" or \"system\", not {other:?}")),
+        }
+        if !self.folders.contains_key(MARKDOWN_MOD) {
+            return if on.is_none() { system(&path) } else { Err(format!("no mod {MARKDOWN_MOD:?} in mods/")) };
+        }
+        // Clicking the same link again shows the viewer already open on it.
+        let shown = pane.as_ref().and_then(|p| self.model.tab_of(p)).and_then(|tab| {
+            tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props })
+                if name == MARKDOWN_MOD && props.get("path").and_then(Value::as_str) == Some(path.as_str())
+                    && props.get("on").and_then(Value::as_str) == on)).map(|n| n.id.clone())
+        });
+        if let Some(id) = shown {
+            let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
+            return match r.get("error") {
+                Some(e) => Err(e.to_string()),
+                None => Ok(json!({ "pane": id, "opened": "app", "path": path })),
+            };
+        }
+        let mut props = json!({ "path": path, "on": on, "slot": web_slot() });
+        if let Some(anchor) = anchor.filter(|a| !a.is_empty()) {
+            props["anchor"] = json!(anchor.trim_start_matches('#').to_lowercase());
+        }
+        let r = match pane {
+            Some(pane) => self.run_as("pane.split", json!({ "direction": "auto", "pane": pane, "mod": MARKDOWN_MOD, "props": props }), false, window, cx),
+            None => self.run_as("tab.new", json!({ "name": "markdown", "mod": MARKDOWN_MOD, "props": props }), false, window, cx),
+        };
+        if let Some(e) = r.get("error") {
+            return Err(e.as_str().map_or_else(|| e.to_string(), str::to_owned));
+        }
+        let mut r = r;
+        r["opened"] = json!("app");
+        r["path"] = json!(path);
         Ok(r)
     }
 
@@ -3966,6 +4032,12 @@ impl AppWindow {
             "app.open_url" => {
                 let url = Self::owned(a, "url").unwrap_or_default();
                 let r = self.open_link(&url, None, Self::arg(a, "in"), window, cx);
+                self.answer(r);
+                return;
+            }
+            "markdown.open" => {
+                let path = Self::owned(a, "path").unwrap_or_default();
+                let r = self.open_markdown(&path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), Self::arg(a, "anchor"), window, cx);
                 self.answer(r);
                 return;
             }
@@ -5574,6 +5646,8 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 
 /// The mod a web link opens in (`open_link`).
 const WEB_MOD: &str = "nocturne-browser";
+/// The mod a Markdown file opens in (`open_markdown`).
+const MARKDOWN_MOD: &str = "nocturne-markdown";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
 /// browser: `place` ("app" | "system") over the `links` setting, and never in

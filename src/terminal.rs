@@ -69,6 +69,8 @@ pub enum TerminalEvent {
     Peek(String),
     /// A web link was clicked: the window decides where it opens (settings `links`).
     OpenUrl(String),
+    /// A link to a local Markdown file was clicked: the window's viewer opens it.
+    OpenMarkdown(PathBuf),
     TitleChanged,
     /// The program ended.
     Ended,
@@ -1130,6 +1132,11 @@ impl TerminalView {
                 return None;
             }
             let range = links::word(text, at)?;
+            // `README.md`: no slash, so the pattern skips it; a Markdown file here counts.
+            if let Some(path) = links::bare_markdown(&text[range.clone()], self.cwd.as_deref()) {
+                target = Some(LinkTarget::External(links::Target::File(path)));
+                return Some(range);
+            }
             let address = crate::mods::terminal_address(&text[range.clone()], &self.address)?;
             target = Some(LinkTarget::Terminal(address));
             Some(range)
@@ -2383,7 +2390,10 @@ impl Render for TerminalView {
                 {
                     match target {
                         LinkTarget::External(links::Target::Url(url)) if links::is_web(&url) => cx.emit(TerminalEvent::OpenUrl(url)),
-                        LinkTarget::External(target) => links::open(&target),
+                        LinkTarget::External(target) => match links::markdown(&target) {
+                            Some(path) => cx.emit(TerminalEvent::OpenMarkdown(path)),
+                            None => links::open(&target),
+                        },
                         LinkTarget::Terminal(address) => cx.emit(TerminalEvent::Peek(address)),
                     }
                     return;
@@ -3014,6 +3024,66 @@ mod tests {
         cx.simulate_keystrokes("x y z");
         cx.run_until_parked();
         root.read_with(cx, |root, cx| assert_eq!(root.0.read(cx).search_query, "xyz"));
+    }
+
+    #[gpui::test]
+    fn clicking_a_markdown_link_asks_the_window_for_its_viewer(cx: &mut gpui::TestAppContext) {
+        use gpui::*;
+        use std::{cell::RefCell, rc::Rc};
+
+        struct Root(Entity<super::TerminalView>);
+        impl Render for Root {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div().size_full().child(self.0.clone())
+            }
+        }
+
+        let dir = std::env::temp_dir().join(format!("herdr-md-click-{}", std::process::id()));
+        std::fs::create_dir_all(dir.join("docs/my notes")).unwrap();
+        std::fs::write(dir.join("docs/plan.md"), "# plan").unwrap();
+        std::fs::write(dir.join("README.md"), "# readme").unwrap();
+        std::fs::write(dir.join("docs/my notes/To Do.md"), "# todo").unwrap();
+        std::fs::write(dir.join("main.rs"), "").unwrap();
+        let osc8 = format!("file://{}", dir.join("docs/my notes/To Do.md").display()).replace(' ', "%20");
+        let screen = format!("see docs/plan.md:3 now\r\nREADME.md\r\n\x1b]8;;{osc8}\x1b\\the todo\x1b]8;;\x1b\\\r\nmain.rs\r\n");
+
+        cx.update(gpui_base::init);
+        let cwd = dir.clone();
+        let (root, cx) = cx.add_window_view(|_, cx| Root(cx.new(|cx| {
+            let mut terminal = super::TerminalView::attach(crate::hc::offline(), "t1".into(), (40, 6), cx);
+            terminal.grid.borrow_mut().vt.write(screen.as_bytes());
+            terminal.cwd = Some(cwd);
+            terminal
+        })));
+        cx.run_until_parked();
+        let term = root.read_with(cx, |root, _| root.0.clone());
+        let opened = Rc::new(RefCell::new(Vec::new()));
+        let seen = opened.clone();
+        cx.update(|_, app| {
+            app.subscribe(&term, move |_, ev: &super::TerminalEvent, _| {
+                if let super::TerminalEvent::OpenMarkdown(path) = ev {
+                    seen.borrow_mut().push(path.clone());
+                }
+            }).detach();
+        });
+        let link_key = if cfg!(target_os = "macos") { Modifiers::command() } else { Modifiers::control() };
+        let mut click = |col: f32, row: f32| {
+            let at = term.read_with(cx, |t, _| {
+                let g = t.grid.borrow();
+                point(g.origin.x + g.cell.width * (col + 0.5), g.origin.y + g.cell.height * (row + 0.5))
+            });
+            cx.simulate_mouse_move(at, None, link_key);
+            cx.simulate_mouse_down(at, MouseButton::Left, link_key);
+            cx.simulate_mouse_up(at, MouseButton::Left, link_key);
+            cx.run_until_parked();
+            opened.borrow_mut().pop()
+        };
+        assert_eq!(click(6.0, 0.0), Some(dir.join("docs/plan.md")), "a relative path:line");
+        assert_eq!(click(2.0, 1.0), Some(dir.join("README.md")), "a bare name in the terminal's folder");
+        assert_eq!(click(3.0, 2.0), Some(dir.join("docs/my notes/To Do.md")), "an OSC 8 file:// link with spaces");
+        assert_eq!(click(2.0, 3.0), None, "not Markdown: not the viewer");
+        assert_eq!(click(0.0, 0.0), None, "no link");
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[gpui::test]

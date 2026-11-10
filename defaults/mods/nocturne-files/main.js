@@ -10,11 +10,12 @@
 // terminal pane beside this one. With nvim it listens on a socket per tab,
 // so later picks open in that same nvim instead of a new pane.
 //
-// Click a file: edit it. Click a folder: fold it; click it again quickly:
-// edit the folder. Keys while it has focus:
-//   j / k  ↓ ↑     move                 l →  unfold, or edit a file
+// Click a file: edit it (a Markdown file: read it in the Markdown viewer,
+// nocturne-markdown; alt-click edits it as text). Click a folder: fold it;
+// click it again quickly: edit the folder. Keys while it has focus:
+//   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
-//   enter          edit a file, fold a folder    e  edit what's selected
+//   enter          open a file, fold a folder    e  edit what's selected (as text)
 //   -              root one folder up            .  root at the selected folder
 //   gg / G         top / bottom                  r  refresh
 
@@ -27,6 +28,8 @@ const PER_FOLDER = 500, TOTAL = 5000;
 const EDIT = "nocturne-edit";
 /** The editor wrapper: the one this mod ships, here; another machine's own. */
 const editTool = (on) => (on ? EDIT : `${appHome()}/mods/nocturne-files/bin/${EDIT}`);
+/** Markdown files open in the viewer (markdown.open), not the editor. */
+export const isMarkdown = (name) => /\.(md|markdown)$/i.test(name);
 const isEdit = (argv0) => argv0 === EDIT || Boolean(argv0?.endsWith(`/${EDIT}`));
 // Git status letter → theme color.
 const MARK = { A: "ansi2", M: "ansi3", D: "ansi1", U: "ansi1" };
@@ -199,6 +202,16 @@ export default class Files extends View {
     });
   }
 
+  /** Opens a file: Markdown in the viewer, beside this tab's editor or its
+   *  first other pane (else this one); anything else (or `asText`) in the editor. */
+  openFile(path, cx, asText) {
+    if (asText || !isMarkdown(path)) return this.edit(path, cx);
+    const { tab, pane } = this.editorPane();
+    const beside = pane ?? panes().find((p) => p.tab === tab && p.mod !== "nocturne-files" && !p.parked)
+      ?? panes().find((p) => p.tab === tab && p.mod === "nocturne-files");
+    run("markdown.open", { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+  }
+
   // ---- input
 
   select(rows, i) {
@@ -215,7 +228,7 @@ export default class Files extends View {
     this.lastClick = { path, at: now };
     this.sel = path;
     this.handle.focus();
-    if (!row.dir) this.edit(path, cx);
+    if (!row.dir) this.openFile(path, cx, this.alt);
     else if (again) { this.toggle(path, cx); this.edit(path, cx); } // undo the first click's fold
     else this.toggle(path, cx);
     cx.notify();
@@ -233,13 +246,13 @@ export default class Files extends View {
       if (Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; this.select(rows, 0); }
       else this.gAt = Date.now();
     } else if ((k === "l" || k === "right") && row) {
-      if (!row.dir) this.edit(row.path, cx);
+      if (!row.dir) this.openFile(row.path, cx);
       else if (!this.folders.has(row.path)) this.toggle(row.path, cx);
       else this.select(rows, i + 1);
     } else if ((k === "h" || k === "left") && row) {
       if (row.dir && this.folders.has(row.path)) this.toggle(row.path, cx);
       else if (row.depth > 0) this.select(rows, rows.findIndex((r) => r.path === parent(row.path)));
-    } else if (k === "enter" && row) row.dir ? this.toggle(row.path, cx) : this.edit(row.path, cx);
+    } else if (k === "enter" && row) row.dir ? this.toggle(row.path, cx) : this.openFile(row.path, cx);
     else if (k === "e") this.edit(row?.path ?? "", cx);
     else if (k === "-") { const from = this.root; this.reroot(parent(this.root), cx); this.pendingSel = from; }
     else if (k === "." && row) {
@@ -325,7 +338,8 @@ export default class Files extends View {
       .child(Scrollbar.vertical("nf-rows").absolute().inset_0());
     return v_flex().id("nocturne-files").size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .on_mouse_down("left", () => this.handle.focus())
+      // A row's click comes after this: alt-click opens a Markdown file as text.
+      .on_mouse_down("left", (e) => { this.alt = Boolean(e?.modifiers?.alt); this.handle.focus(); })
       .on_size_change((size, cx) => { if (Math.abs(size.width - (this.width ?? 0)) > 1) { this.width = size.width; cx.notify(); } })
       .child(this.toolbar(t, rows, w))
       .child(body)
