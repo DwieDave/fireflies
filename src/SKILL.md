@@ -75,6 +75,15 @@ the same tab. Give `direction` or `target`, not both. Focus stays with the same 
 herdr-app do pane.swap '{"pane":"p12","target":"p14"}'
 ```
 
+`pane.equalize {scope?, pane?}` evens out pane sizes in `pane`'s tab (default:
+the focused one): `scope` `"all"` (default: every row and column, every level),
+`"row"` (the panes side by side with it) or `"column"` (the panes stacked with
+it). Fixed px sizes stay. A 3x2 grid: split, then equalize all:
+
+```sh
+herdr-app do pane.equalize '{"scope":"all"}'
+```
+
 `terminal.search` opens a find bar in the focused terminal. It searches that
 terminal's screen and scrollback; Enter and Shift-Enter move between matches,
 Escape closes the bar while its find field has focus, and each terminal keeps its own query (reopening selects it, so typing replaces it).

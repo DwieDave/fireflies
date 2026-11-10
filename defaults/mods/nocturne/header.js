@@ -1,6 +1,7 @@
 // A pane's header: name and folder, then a dithered band that fills the
 // rest; the band turns moonfly blue on the pane with the keyboard. Hover
-// shows text size (− / +, the % resets), float, split, zoom and close; a
+// shows text size (− / +, the % resets), float, split, even out (▦, with
+// more than one pane: equalize.js), zoom and close; a
 // right-click opens the pane's menu (menu.js: rename, split, zoom, move to
 // another tab or a new one, close). Props from the app: { pane, terminal }.
 // A terminal pane goes by the name a person gave it (kit.js givenName), else
@@ -16,6 +17,7 @@ import { menuHeight, NAME_PANE } from "./menu.js";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal } from "./kit.js";
 import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
+import { openEqualize } from "./equalize.js";
 
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
 const MODS = {
@@ -166,6 +168,10 @@ export default class Header {
         .child(this.button(t, `h-f-${pane}`, chrome("square"), "pane.float", { pane })))
       .child(this.button(t, `h-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
       .child(this.button(t, `h-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
+      .when(panes().filter((x) => x.tab === p.tab).length > 1, (el) => el.child(div().id(`h-eq-${pane}`).p(3).flex_none().text_color(t.dim)
+        .hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => { cx.stop_propagation(); openEqualize(pane); })
+        .child(svg("mods/nocturne-equalize-panes/equalize.svg").size(12))))
       .child(this.button(t, `h-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
       .child(this.button(t, `h-x-${pane}`, "close", "pane.close", { pane })));
   }
