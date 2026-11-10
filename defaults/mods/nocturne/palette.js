@@ -9,8 +9,8 @@
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win } from "herdr";
-import { dither, eyebrow } from "./kit.js";
+import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win, agents } from "herdr";
+import { dither, eyebrow, focusedTerminal, pinned, pin } from "./kit.js";
 import { panels } from "./panels.js";
 import { toggleDeck } from "./scripts.js";
 
@@ -44,6 +44,13 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  // Pinning the focused pane's agent to the top of the sky (kit.js pin; Herdr's terminal.pin).
+  const here = focusedTerminal();
+  if (here && agents().some((a) => a.address === here)) {
+    const on = pinned(here);
+    out.push({ name: "nocturne", args: { pin: true }, group: "Agent", icon: on ? "pin-off" : "pin", bind: "nocturne.pin",
+      title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top jar sidebar fireflies watch orchestrator", go: () => pin(here, !on) });
+  }
   // The picture in picture player (nocturne-pip), while its window is open.
   if (shared("nocturne-pip.player")) {
     for (const [cmd, icon, title, words] of [

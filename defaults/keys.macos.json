@@ -84,6 +84,7 @@
     "cmd-shift-r": "nocturne.scripts",
     "cmd-shift-a": "nocturne-notifications.open",
     "cmd-e": "nocturne.files",
+    "cmd-alt-p": "nocturne.pin",
     "cmd-alt-=": "pane.font_bigger",
     "cmd-alt--": "pane.font_smaller",
     "cmd-alt-0": "pane.font_reset",

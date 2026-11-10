@@ -56,6 +56,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-park-keys.macos.json"),
     // With cmd-shift-r, before cmd-shift-a opened the notifications overview.
     include_str!("keys/shipped/fireflies-scripts-keys.macos.json"),
+    // With cmd-shift-a, before cmd-alt-p pinned the focused agent.
+    include_str!("keys/shipped/fireflies-notifications-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

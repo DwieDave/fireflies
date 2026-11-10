@@ -14,10 +14,10 @@
 // or a tab of its own.
 
 import { svg } from "gpui-kit";
-import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay } from "herdr";
+import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, agents } from "herdr";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
-import { spaceFolder } from "./kit.js";
+import { ART, spaceFolder, pinned, pin, movePin, sortedAgents } from "./kit.js";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
 function shortcut(name, args) {
@@ -62,6 +62,24 @@ export function moveItems(t, pane) {
   ];
 }
 
+/** The layout:nocturne key for a Nocturne command ("nocturne.pin"), as keys.json spells it. */
+function layoutKey(action) {
+  return keys().find((b) => b.section === "layout:nocturne" && b.action === action)?.keys ?? "";
+}
+
+/** "Pin to the top" / "Unpin" for a terminal's agent, and moving it in the
+ *  jar (pins.js) while there's a neighbor to swap with. */
+export function pinItems(t, terminal) {
+  if (!terminal) return [];
+  if (!pinned(terminal)) return [{ id: "pin", mark: icon(t, "pin"), name: "Pin to the top", hint: layoutKey("nocturne.pin"), go: () => pin(terminal, true) }];
+  const jar = sortedAgents().pinned, i = jar.findIndex((a) => a.address === terminal);
+  return [
+    { id: "unpin", mark: icon(t, "pin-off"), name: "Unpin", hint: layoutKey("nocturne.pin"), go: () => pin(terminal, false) },
+    ...(i > 0 ? [{ id: "pin-up", mark: svg(`${ART}/chevron-up.svg`).size(14).flex_none().text_color(t.accent), name: "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(terminal, -1) }] : []),
+    ...(i >= 0 && i < jar.length - 1 ? [{ id: "pin-down", mark: icon(t, "chevron-down"), name: "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(terminal, 1) }] : []),
+  ];
+}
+
 /** The worktree dialog (the worktree mod) on a space's folder: a branch in its
  *  own checkout, as a new space attached to it (indented under the repo's). */
 export function newWorktree(id) {
@@ -83,6 +101,7 @@ export function menuItems(t, p) {
     return [
       item(t, "focus", "terminal", "Focus", "agent.focus", { terminal: tg.address }),
       { id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_AGENT, { address: tg.address, at: Date.now() }) },
+      ...pinItems(t, tg.address),
       ...(mine ? moveItems(t, mine.pane) : []),
       ...(mine ? [{ rule: true }, item(t, "close", "x", alone ? "Close pane & tab" : "Close pane", "pane.close", { pane: mine.pane }, t.blocked)] : []),
     ];
@@ -118,6 +137,8 @@ export function menuItems(t, p) {
   const parkable = !!mine && !mine.parked && ps.filter((p) => p.tab === mine.tab && !p.parked).length > 1;
   return [
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_PANE, { terminal: term.address, at: Date.now() }) }] : []),
+    // An agent's pane: pin it to the top of the sky too.
+    ...(term && agents().some((a) => a.address === term.address) ? pinItems(t, term.address) : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane: tg.pane }),
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane: tg.pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),

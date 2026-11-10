@@ -8,6 +8,11 @@
 //   meadow   every agent is a firefly: blocked blinks red at the top,
 //            working drifts amber, done glows green below them (kit.js
 //            agentRank), idle rests in the grass;
+//            pinned ones (pins.js) sit above them all in a glass jar at
+//            the top, in the order pinned, status and all; the glass
+//            glints when one flies in and breathes red while one needs you;
+//            nocturne.pin (cmd-alt-p) pins the focused pane's agent,
+//            nocturne.pin-up / pin-down move it in the jar;
 //            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -24,9 +29,10 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { spaces, agents, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay, settings, window as appWindow } from "herdr";
+import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay, settings, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, agentRank, dither, pip, eyebrow, hash, givenName, nameTerminal } from "./kit.js";
+import { ART, LOGO, WORD, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal } from "./kit.js";
+import { stamps } from "./pins.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { menuHeight, NAME_AGENT } from "./menu.js";
@@ -94,6 +100,13 @@ const OPEN_DEFAULT = 252;
 // How long a fold gets to land before its width is checked (ms).
 const SETTLE = 350;
 
+// The jar of pinned fireflies (pins.js) at the top of the sky: where its
+// first lane starts under the lid, the glass under its last, the clear sky
+// before the next firefly (layout px).
+const JAR = { at: 4, top: 16, bottom: 10, gap: 10 };
+// How long the glass glints after a firefly flies in (ms): as long as the flight.
+const GLINT = 1800;
+
 export default class Sky {
   init(_props, cx) {
     // No "+ new" menu outlives a restart or a layout switch: forget one.
@@ -128,6 +141,9 @@ export default class Sky {
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "scripts-grant") grantAppManagement();
         else if (c === "new") openNewMenu({ centered: true });
+        else if (c === "pin") pin(focusedTerminal());
+        else if (c === "pin-up") movePin(focusedTerminal(), -1);
+        else if (c === "pin-down") movePin(focusedTerminal(), 1);
         cx.notify();
       }
     });
@@ -373,34 +389,124 @@ export default class Sky {
       .child(drift ? inner.loop("top", { from: 0, to: -6, period: 2300 + (h % 1100) }) : inner);
   }
 
+  /**
+   * The jar's glass, filling its (relative) parent: a lid, a neck, 2 px
+   * dithered walls and a faint moonlit fill, square like everything here.
+   * When a pinned firefly needs you the glass breathes in its color, slower
+   * than the firefly's own blink; just after one flies in, it glints.
+   */
+  glass(t, jarred) {
+    const needs = jarred.some((a) => a.status === "blocked");
+    const tone = needs ? t.blocked : t.ansi8;
+    const strip = (el) => el.absolute().child(dither(tone, 1));
+    const frame = div().absolute().top(0).left(0).size_full()
+      // A mason jar's outline: a lid narrower than the body, a short neck, stepped shoulders.
+      .child(div().absolute().top(0).left(10).right(10).h(4).bg(tone)) // the lid
+      .child(strip(div().top(4).left(12).w(2).h(4))).child(strip(div().top(4).right(12).w(2).h(4))) // the neck
+      .child(strip(div().top(8).left(0).w(14).h(2))).child(strip(div().top(8).right(0).w(14).h(2))) // the shoulders
+      .child(strip(div().top(8).bottom(0).left(0).w(2))).child(strip(div().top(8).bottom(0).right(0).w(2)))
+      .child(strip(div().bottom(0).left(0).right(0).h(2)));
+    const glinting = (this.glintUntil ?? 0) > Date.now();
+    return div().absolute().top(0).left(0).size_full()
+      .child(div().absolute().top(10).left(2).right(2).bottom(2).opacity(needs ? 0.16 : 0.1).child(dither(needs ? t.blocked : t.ansi4, 1)))
+      .when(glinting, (el) => el.child(div().absolute().top(10).left(2).right(2).bottom(2)
+        .loop("opacity", { from: 0.35, to: 0, period: GLINT * 2, easing: "ease-out" }).child(dither(t.foreground, 1))))
+      .child(needs ? frame.loop("opacity", { from: 0.5, to: 1, period: 2400 }) : frame.opacity(0.85));
+  }
+
+  /** The jar in the open sky, behind its fireflies' lanes. */
+  jar(t, jarred, h, w) {
+    return div().id("jar").absolute().top(JAR.at).left(2).w(w - 10).h(h - JAR.at).child(this.glass(t, jarred));
+  }
+
+  /** Inside the jar even a resting firefly glows a little: a soft halo
+   *  behind its lane (awake ones have their own), on the dark plate. */
+  jarGlow(t, a, y, lane) {
+    // Not while it flies in (its plate would wait there before it), nor while landing.
+    if (a.status !== "idle" || this.landing?.has(a.address) || this.arriving?.has(a.address)) return div();
+    const top = y + Math.round((lane - 40) / 2);
+    return div().id(`jar-glow-${a.address}`).absolute().left(6).top(top).size(40)
+      .transition("top", { duration: LAND, easing: "ease-in-out" })
+      .child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(40).text_color(t.muted).opacity(0.45))
+      .child(div().absolute().top(10).left(10).size(20).bg(t.background));
+  }
+
+  /** Notes fireflies that just flew into the jar: its glass glints for GLINT ms. */
+  glint(jarred, cx) {
+    const now = new Set(jarred.map((a) => a.address));
+    const fresh = this.jarSeen ? jarred.filter((a) => !this.jarSeen.has(a.address)) : [];
+    if (Date.now() >= (this.glintUntil ?? 0)) this.arriving = null;
+    if (fresh.length) {
+      this.glintUntil = Date.now() + GLINT;
+      this.arriving = new Set([...(this.arriving ?? []), ...fresh.map((a) => a.address)]);
+      cx.timer.after(GLINT + 50, (cx) => cx.notify?.());
+    }
+    this.jarSeen = now;
+  }
+
+  /** Pins made elsewhere get their place in the jar; an unpin's leftover time goes (pins.js stamps). Once per value. */
+  stamp() {
+    const now = Date.now();
+    this.stamped ??= new Map();
+    for (const [k, v] of this.stamped) if (now - v > 5000) this.stamped.delete(k);
+    for (const [terminal, kv] of stamps(terminals(), now)) {
+      const key = `${terminal} ${kv.replace(/=.*/, "")}`;
+      if (this.stamped.has(key)) continue;
+      this.stamped.set(key, now);
+      hc(["label", terminal, kv]).catch(() => {});
+    }
+  }
+
   // Awake fireflies (blocked, working, done: agentRank) spread through the sky above
   // the grass; resting ones sit in a stack on the near ridge.
-  meadow(t, list) {
+  // Pinned ones (pins.js) live in a glass jar at the top, in the order
+  // pinned; the rest keep this order below it. Lanes are placed in one space,
+  // so a firefly being pinned flies up into the jar (and back out).
+  meadow(t, list, jarred = []) {
     const { width: w, height: hgt } = this.field;
-    const awake = list.filter((a) => a.status !== "idle");
-    const resting = list.filter((a) => a.status === "idle");
+    const inJar = new Set(jarred.map((a) => a.address));
+    const free = list.filter((a) => !inJar.has(a.address));
+    const awake = free.filter((a) => a.status !== "idle");
+    const resting = free.filter((a) => a.status === "idle");
     const ground = hgt - 96; // above the far ridge (hills-rim), so labels stay on clear sky
     let lane = 40, restLane = 28;
-    const need = awake.length * lane + resting.length * restLane + 16;
+    const laneOf = (a) => (a.status === "idle" ? restLane : lane);
+    const jarNeed = jarred.length ? JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + JAR.bottom : 0;
+    const need = jarNeed + awake.length * lane + resting.length * restLane + 16;
     let placed = [];
     let more = 0;
+    let jarH = 0;
     if (need <= ground) {
-      // Room to spare: awake ones spread out, the rest settle on the ground.
+      // Room to spare: the jar on top, awake ones spread out under it, the
+      // rest settle on the ground.
+      let y = JAR.top;
+      for (const a of jarred) { placed.push([a, y, laneOf(a)]); y += laneOf(a); }
+      jarH = jarred.length ? y + JAR.bottom : 0;
+      const top = jarH ? jarH + JAR.gap : 8;
       const restTop = ground - resting.length * restLane;
-      const step = awake.length ? Math.min(46, (restTop - 8) / awake.length) : 0;
-      awake.forEach((a, i) => placed.push([a, Math.round(8 + i * step), lane]));
+      const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;
+      awake.forEach((a, i) => placed.push([a, Math.round(top + i * step), lane]));
       resting.forEach((a, i) => placed.push([a, restTop + i * restLane, restLane]));
     } else {
-      // Crowded: one tight list, then a count.
+      // Crowded: one tight list (the jar's first), then a count.
       lane = 24;
-      const fit = Math.max(1, Math.floor((ground - 8) / lane) - 1);
-      list.slice(0, fit).forEach((a, i) => placed.push([a, 8 + i * lane, lane]));
-      more = list.length - fit;
+      const fit = Math.max(1, Math.floor((ground - 8 - (jarred.length ? JAR.top + JAR.bottom + JAR.gap - 8 : 0)) / lane) - 1);
+      const shown = [...jarred, ...free].slice(0, fit);
+      let y = jarred.length ? JAR.top : 8;
+      shown.forEach((a, i) => {
+        if (i === jarred.length && jarred.length) { jarH = y + JAR.bottom; y = jarH + JAR.gap; }
+        placed.push([a, y, lane]);
+        y += lane;
+      });
+      if (jarred.length && !jarH) jarH = y + JAR.bottom;
+      more = list.length - shown.length;
     }
+    const jarLanes = placed.filter(([a]) => inJar.has(a.address));
     return div().id("meadow").relative().flex_1().min_h(0).w_full()
       .on_size_change((size, cx) => { this.field = size; cx.notify(); })
+      .when(jarH > 0, (el) => el.child(this.jar(t, jarred, jarH, w)).children(jarLanes.map(([a, y, l]) => this.jarGlow(t, a, y, l))))
       .children(placed.map(([a, y, l]) => this.firefly(t, a, y, l, w)))
-      .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(8 + placed.length * lane)
+      .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(placed.length ? placed.at(-1)[1] + placed.at(-1)[2] : 8)
         .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop).on_click(() => run("agent.next"))
         .child(`+${more} more in the grass`)));
@@ -457,22 +563,34 @@ export default class Sky {
       .child(div().relative().child(pip(t, s.status)));
   }
 
+  /** A firefly's mark on the rail, 32 px: its status color, blocked blinks, done checked. */
+  railFly(t, a) {
+    const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
+    return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
+      .hover((s) => s.bg(t.ansi0 + "55"))
+      .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
+      .on_mouse_down("left", stop)
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
+      .on_click(() => run("agent.focus", { terminal: a.address }))
+      .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
+      .when(a.status === "blocked", (el) => el.child(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color)
+        .loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })))
+      .child(div().relative().child(this.mark(a, color)))
+      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
+  }
+
   /** Folded: the moon and the hour, », a row per space (sidebar order), every firefly's mark, the usage. */
-  rail(t, list) {
+  rail(t, list, jarred = []) {
     const rows = this.spaces.rows().filter((r) => r.s);
-    const flies = list.map((a) => {
-      const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
-      return div().id(`rail-fly-${a.address}`).relative().size(32).flex_none().flex().items_center().justify_center()
-        .hover((s) => s.bg(t.ansi0 + "55"))
-        .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
-        .on_mouse_down("left", stop)
-        .on_click(() => run("agent.focus", { terminal: a.address }))
-        .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
-        .when(a.status === "blocked", (el) => el.child(svg(`${ART}/glow.svg`).size(32).absolute().top(0).left(0).text_color(color)
-          .loop("opacity", { from: 0.1, to: 1, period: 650, easing: "linear" })))
-        .child(div().relative().child(this.mark(a, color)))
-        .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(2).right(2)));
-    });
+    const inJar = new Set(jarred.map((a) => a.address));
+    const flies = list.filter((a) => !inJar.has(a.address)).map((a) => this.railFly(t, a));
+    // The pinned ones' marks in a small jar of their own, resting ones lit a little.
+    const jar = jarred.length ? v_flex().id("rail-jar").relative().w(44).flex_none().items_center().pt(10).pb(4).gap(2).mb(6)
+      .child(this.glass(t, jarred))
+      .children(jarred.map((a) => div().relative().size(32).flex_none()
+        .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
+          .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
+        .child(div().absolute().top(0).left(0).child(this.railFly(t, a))))) : null;
     const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
     return v_flex().w_full().flex_1().min_h(0).pt(48).items_center()
       .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date)
@@ -481,14 +599,17 @@ export default class Sky {
       .child(div().pt(10).pb(14).flex_none().child(this.openKey(t)))
       .child(v_flex().w_full().px(8).py(2).flex_none().bg(t.background).children(rows.map(({ s }) => this.railSpace(t, s))))
       .child(div().py(12).flex_none().child(rule()))
-      .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().children(flies))
+      .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().when(Boolean(jar), (el) => el.child(jar)).children(flies))
       .child(this.usage.rail(t));
   }
 
   render(cx) {
     const t = theme();
-    const list = [...agents()].sort((a, b) => (agentRank(a) - agentRank(b)) || (b.pinned - a.pinned));
+    // Pinned agents first, in the order pinned (pins.js), then by status (kit.js agentRank).
+    const { pinned: jarred, all: list } = sortedAgents();
     setAgentOrder(list.map((a) => a.address));
+    this.stamp();
+    this.glint(jarred, cx);
     const sp = spaces();
     this.shownSpace = sp.find((s) => s.active)?.id ?? null;
     this.redraw(cx, sp);
@@ -503,7 +624,7 @@ export default class Sky {
         // The hills rest on the usage, as open, never behind its numbers.
         .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.background))
         .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.ansi8).opacity(0.5))
-        .child(this.rail(t, list));
+        .child(this.rail(t, list, jarred));
     }
     // The usage section sits at the foot; the haze and hills rest on it.
     const lift = this.usage.height;
@@ -517,7 +638,7 @@ export default class Sky {
       .child(this.header(t, list))
       .child(this.spaces.render(t))
       .child(div().px(16).pt(8).flex_none().child(eyebrow(t, "fireflies")))
-      .child((this.land(t, list, cx), this.meadow(t, list)))
+      .child((this.land(t, list, cx), this.meadow(t, list, jarred)))
       .child(this.usage.render(t));
   }
 }
