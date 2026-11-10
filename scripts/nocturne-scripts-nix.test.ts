@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flakeOutputs, nixScripts, nixStatic, nixSystem, adminLine, shellLine, sq, ADMIN_SCRIPT, CANCELLED } from "../defaults/mods/nocturne-scripts/nix.js";
+import { flakeOutputs, nixScripts, nixStatic, nixSystem, adminLine, shellLine, switchPlan, attrName, sq, ADMIN_SCRIPT, CANCELLED } from "../defaults/mods/nocturne-scripts/nix.js";
 import { detect, parseProbe } from "../defaults/mods/nocturne-scripts/detect.js";
 
 // `nix flake show --json`, classic shape.
@@ -132,7 +132,7 @@ const FAKE = `#!/bin/sh
 : > "$FAKE_LOG"
 while [ "$1" = "-e" ]; do printf '%s\\n' "$2" >> "$FAKE_LOG"; shift 2; done
 if [ -n "$FAKE_CANCEL" ]; then echo "execution error: User canceled. (-128)" >&2; exit 1; fi
-PATH="$2" sh -c 'cd "$1" && { eval "$2" ; } >> "$3" 2>&1; echo $? > "$3.code"' _ "$3" "$1" "$4"
+PATH="$2" ARG="$5" ARGUSER="$6" sh -c 'cd "$1" && { eval "$2" ; } >> "$3" 2>&1; echo $? > "$3.code"' _ "$3" "$1" "$4"
 `;
 
 function fakeRun(cmd: string, env: Record<string, string> = {}) {
@@ -178,6 +178,7 @@ test("cancelling the dialog is its own exit, not a crash", () => {
 test("shellLine wraps only admin runs", () => {
   expect(shellLine("nix build", null)).toBe("nix build");
   expect(shellLine("nixos-rebuild switch --flake '.#a'", "sudo")).toBe("sudo nixos-rebuild switch --flake '.#a'");
+  expect(shellLine("darwin-rebuild switch --flake '.#h'", "osascript", "darwin-rebuild:h")).toContain("build --no-link --print-out-paths");
   expect(shellLine("x", "osascript")).toContain("osascript -e");
 });
 
@@ -188,4 +189,120 @@ test.skipIf(process.platform !== "darwin")("the AppleScript compiles (osacompile
     expect(r.stderr.toString()).toBe("");
     expect(r.exitCode).toBe(0);
   } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+// ---- a switch in two steps: build as the person, then activate as root.
+// Everything here is a fake on PATH: nix, nix-env, sudo, osascript and the
+// built system's activate scripts only write down that they ran.
+
+function toolchain(opts: { buildFails?: boolean; cancel?: boolean; activateCode?: number; deprecatedUser?: boolean } = {}) {
+  const dir = mkdtempSync(join(tmpdir(), "nix-switch-"));
+  const bin = join(dir, "bin"), sys = join(dir, "store", "abc-darwin-system");
+  Bun.spawnSync(["mkdir", "-p", bin, sys]);
+  const rec = join(dir, "record.txt");
+  const put = (path: string, text: string) => { writeFileSync(path, text); chmodSync(path, 0o755); };
+  put(join(bin, "osascript"), FAKE);
+  put(join(bin, "nix"), `#!/bin/sh\necho "nix $*" >> ${sq(rec)}\necho "evaluating... building..." >&2\n${opts.buildFails ? "echo 'error: build failed' >&2; exit 1" : `echo ${sq(sys)}`}\n`);
+  put(join(bin, "nix-env"), `#!/bin/sh\necho "nix-env $*" >> ${sq(rec)}\n`);
+  put(join(bin, "sudo"), `#!/bin/sh\necho "sudo $*" >> ${sq(rec)}\nwhile [ $# -gt 0 ]; do case "$1" in --) shift; break ;; -*) shift ;; *) break ;; esac; done\nexec "$@"\n`);
+  put(join(sys, "activate"), `#!/bin/sh\necho "activate as $(id -un)" >> ${sq(rec)}\nexit ${opts.activateCode ?? 0}\n`);
+  put(join(sys, "activate-user"), `#!/bin/sh\n${opts.deprecatedUser ? "# nix-darwin: deprecated\n" : ""}echo "activate-user" >> ${sq(rec)}\n`);
+  put(join(sys, "bin-placeholder"), "");
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, TMPDIR: dir, FAKE_LOG: join(dir, "script.txt"), ...(opts.cancel ? { FAKE_CANCEL: "1" } : {}) };
+  const go = (line: string) => {
+    const r = Bun.spawnSync(["sh", "-c", line], { cwd: dir, env });
+    return { code: r.exitCode, out: r.stdout.toString() + r.stderr.toString(), rec: existsSync(rec) ? readFileSync(rec, "utf8").trim().split("\n") : [], asked: existsSync(join(dir, "script.txt")) };
+  };
+  return { dir, sys, go, done: () => rmSync(dir, { recursive: true, force: true }) };
+}
+
+const user = Bun.spawnSync(["id", "-un"]).stdout.toString().trim();
+
+test("darwin switch: builds as the person, then the dialog activates only the built system", () => {
+  const t = toolchain();
+  try {
+    const r = t.go(switchPlan("darwin-rebuild:homelab", "osascript")!);
+    expect(r.code).toBe(0);
+    expect(r.rec).toEqual([
+      `nix --extra-experimental-features nix-command flakes build --no-link --print-out-paths -- .#darwinConfigurations.homelab.system`,
+      `nix-env -p /nix/var/nix/profiles/system --set ${t.sys}`,
+      `sudo --user=${user} --set-home -- ${t.sys}/activate-user`,
+      "activate-user",
+      `activate as ${user}`,
+    ]);
+    // The build's log streamed first, then the password was asked for.
+    expect(r.out.indexOf("building the system configuration")).toBeLessThan(r.out.indexOf("asking for an administrator"));
+    expect(r.out).toContain("evaluating... building...");
+    expect(r.out).toContain(`built ${t.sys}`);
+    expect(r.asked).toBe(true);
+  } finally { t.done(); }
+});
+
+test("a failed build never asks for a password", () => {
+  const t = toolchain({ buildFails: true });
+  try {
+    const r = t.go(switchPlan("darwin-rebuild:homelab", "osascript")!);
+    expect(r.code).toBe(1);
+    expect(r.asked).toBe(false);
+    expect(r.rec.some((l) => l.startsWith("nix-env"))).toBe(false);
+    expect(r.out).toContain("error: build failed");
+  } finally { t.done(); }
+});
+
+test("activation's own exit code is the run's; a cancelled dialog activates nothing", () => {
+  let t = toolchain({ activateCode: 5 });
+  try { expect(t.go(switchPlan("darwin-rebuild:homelab", "osascript")!).code).toBe(5); } finally { t.done(); }
+  t = toolchain({ cancel: true });
+  try {
+    const r = t.go(switchPlan("darwin-rebuild:homelab", "osascript")!);
+    expect(r.code).toBe(CANCELLED);
+    expect(r.rec.some((l) => l.startsWith("nix-env") || l.startsWith("activate"))).toBe(false);
+  } finally { t.done(); }
+});
+
+test("a deprecated activate-user is left alone, as darwin-rebuild does", () => {
+  const t = toolchain({ deprecatedUser: true });
+  try {
+    const r = t.go(switchPlan("darwin-rebuild:homelab", "osascript")!);
+    expect(r.code).toBe(0);
+    expect(r.rec.some((l) => l === "activate-user")).toBe(false);
+    expect(r.rec[r.rec.length - 1]).toBe(`activate as ${user}`);
+  } finally { t.done(); }
+});
+
+test("nixos switch: build as the person, sudo only for the profile and switch-to-configuration", () => {
+  const t = toolchain();
+  try {
+    Bun.spawnSync(["mkdir", "-p", join(t.sys, "bin")]);
+    writeFileSync(join(t.sys, "bin", "switch-to-configuration"), `#!/bin/sh\necho "switch-to-configuration $1" >> ${sq(join(t.dir, "record.txt"))}\n`);
+    chmodSync(join(t.sys, "bin", "switch-to-configuration"), 0o755);
+    const r = t.go(switchPlan("nixos-rebuild:vps", "sudo")!);
+    expect(r.code).toBe(0);
+    expect(r.rec[0]).toBe("nix --extra-experimental-features nix-command flakes build --no-link --print-out-paths -- .#nixosConfigurations.vps.config.system.build.toplevel");
+    expect(r.rec.slice(1)).toEqual([
+      `sudo sh -c nix-env -p /nix/var/nix/profiles/system --set "$1" && "$1/bin/switch-to-configuration" switch _ ${t.sys}`,
+      `nix-env -p /nix/var/nix/profiles/system --set ${t.sys}`,
+      "switch-to-configuration switch",
+    ]);
+    expect(r.asked).toBe(false);
+  } finally { t.done(); }
+});
+
+test("configuration names reach nix as one attribute, never as shell", () => {
+  expect(attrName("homelab")).toBe("homelab");
+  expect(attrName("my.host")).toBe('"my.host"');
+  const t = toolchain({ buildFails: true });
+  try {
+    const evil = `x";touch PWNED;"$(touch PWNED2)`;
+    t.go(switchPlan(`darwin-rebuild:${evil}`, "osascript")!);
+    const rec = readFileSync(join(t.dir, "record.txt"), "utf8");
+    expect(rec).toContain(`.#darwinConfigurations."x\\";touch PWNED;\\"\\$(touch PWNED2)".system`);
+    expect(existsSync(join(t.dir, "PWNED"))).toBe(false);
+    expect(existsSync(join(t.dir, "PWNED2"))).toBe(false);
+  } finally { t.done(); }
+});
+
+test("a switch remembers its plan, so restarting it builds and activates again", async () => {
+  const s = nixScripts({ darwinConfigurations: { homelab: { type: "unknown" } } }, MAC).find((x: any) => x.name === "switch homelab");
+  expect(s).toMatchObject({ admin: "osascript", plan: "darwin-rebuild:homelab", cmd: "darwin-rebuild switch --flake '.#homelab'" });
 });
