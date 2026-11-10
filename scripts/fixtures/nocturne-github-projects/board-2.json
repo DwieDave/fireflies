@@ -1,0 +1,352 @@
+{
+ "data": {
+  "node": {
+   "id": "PVT_kwHOAAAAAc4A0001",
+   "items": {
+    "totalCount": 15,
+    "pageInfo": {
+     "hasNextPage": false,
+     "endCursor": null
+    },
+    "nodes": [
+     {
+      "id": "PVTI_010",
+      "databaseId": 9010,
+      "type": "ISSUE",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "o_ready",
+         "name": "Ready",
+         "field": {
+          "id": "F_status"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "p1",
+         "name": "P1",
+         "field": {
+          "id": "F_prio"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "s_xl",
+         "name": "XL",
+         "field": {
+          "id": "F_size"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldIterationValue",
+         "iterationId": "it5",
+         "title": "Sprint 5",
+         "startDate": "2026-11-24",
+         "duration": 14,
+         "field": {
+          "id": "F_sprint"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldNumberValue",
+         "number": 8,
+         "field": {
+          "id": "F_est"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Projects tab in the GitHub window",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "Issue",
+       "id": "I_244",
+       "number": 244,
+       "title": "Projects tab in the GitHub window",
+       "state": "OPEN",
+       "url": "https://github.com/DwieDave/fireflies/issues/244",
+       "repository": {
+        "nameWithOwner": "DwieDave/fireflies"
+       },
+       "assignees": {
+        "nodes": [
+         {
+          "id": "U_dave",
+          "login": "DwieDave"
+         }
+        ]
+       },
+       "labels": {
+        "nodes": []
+       },
+       "milestone": {
+        "title": "2.1"
+       }
+      }
+     },
+     {
+      "id": "PVTI_011",
+      "databaseId": 9011,
+      "type": "ISSUE",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "o_review",
+         "name": "In review",
+         "field": {
+          "id": "F_status"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "p3",
+         "name": "P3",
+         "field": {
+          "id": "F_prio"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldIterationValue",
+         "iterationId": "it5",
+         "title": "Sprint 5",
+         "startDate": "2026-11-24",
+         "duration": 14,
+         "field": {
+          "id": "F_sprint"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Spotlight on Linux only",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "Issue",
+       "id": "I_238",
+       "number": 238,
+       "title": "Spotlight on Linux only",
+       "state": "OPEN",
+       "url": "https://github.com/DwieDave/fireflies/issues/238",
+       "repository": {
+        "nameWithOwner": "DwieDave/fireflies"
+       },
+       "assignees": {
+        "nodes": []
+       },
+       "labels": {
+        "nodes": [
+         {
+          "id": "L_gfi",
+          "name": "good first issue",
+          "color": "7057ff"
+         }
+        ]
+       },
+       "milestone": null
+      }
+     },
+     {
+      "id": "PVTI_012",
+      "databaseId": 9012,
+      "type": "DRAFT_ISSUE",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "o_ready",
+         "name": "Ready",
+         "field": {
+          "id": "F_status"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldIterationValue",
+         "iterationId": "it5",
+         "title": "Sprint 5",
+         "startDate": "2026-11-24",
+         "duration": 14,
+         "field": {
+          "id": "F_sprint"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Remember the board's scroll",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "DraftIssue",
+       "id": "DI_12",
+       "title": "Remember the board's scroll",
+       "assignees": {
+        "nodes": []
+       }
+      }
+     },
+     {
+      "id": "PVTI_013",
+      "databaseId": 9013,
+      "type": "ISSUE",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "o_done",
+         "name": "Done",
+         "field": {
+          "id": "F_status"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldIterationValue",
+         "iterationId": "it2",
+         "title": "Sprint 2",
+         "startDate": "2026-10-13",
+         "duration": 14,
+         "field": {
+          "id": "F_sprint"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Old crash on wake",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "Issue",
+       "id": "I_150",
+       "number": 150,
+       "title": "Old crash on wake",
+       "state": "CLOSED",
+       "url": "https://github.com/DwieDave/fireflies/issues/150",
+       "repository": {
+        "nameWithOwner": "DwieDave/fireflies"
+       },
+       "assignees": {
+        "nodes": [
+         {
+          "id": "U_can",
+          "login": "ogulcancelik"
+         }
+        ]
+       },
+       "labels": {
+        "nodes": [
+         {
+          "id": "L_bug",
+          "name": "bug",
+          "color": "d73a4a"
+         }
+        ]
+       },
+       "milestone": null
+      }
+     },
+     {
+      "id": "PVTI_014",
+      "databaseId": 9014,
+      "type": "PULL_REQUEST",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldSingleSelectValue",
+         "optionId": "o_done",
+         "name": "Done",
+         "field": {
+          "id": "F_status"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldIterationValue",
+         "iterationId": "it3",
+         "title": "Sprint 3",
+         "startDate": "2026-10-27",
+         "duration": 14,
+         "field": {
+          "id": "F_sprint"
+         }
+        },
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Ship the nocturne layout",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "PullRequest",
+       "id": "PR_160",
+       "number": 160,
+       "title": "Ship the nocturne layout",
+       "state": "MERGED",
+       "isDraft": false,
+       "url": "https://github.com/DwieDave/fireflies/pull/160",
+       "repository": {
+        "nameWithOwner": "DwieDave/fireflies"
+       },
+       "assignees": {
+        "nodes": []
+       },
+       "labels": {
+        "nodes": []
+       },
+       "milestone": null
+      }
+     },
+     {
+      "id": "PVTI_015",
+      "databaseId": 9015,
+      "type": "DRAFT_ISSUE",
+      "isArchived": false,
+      "fieldValues": {
+       "nodes": [
+        {
+         "__typename": "ProjectV2ItemFieldTextValue",
+         "text": "Untriaged idea",
+         "field": {
+          "id": "F_title"
+         }
+        }
+       ]
+      },
+      "content": {
+       "__typename": "DraftIssue",
+       "id": "DI_15",
+       "title": "Untriaged idea",
+       "assignees": {
+        "nodes": []
+       }
+      }
+     }
+    ]
+   }
+  }
+ }
+}

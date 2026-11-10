@@ -1,0 +1,46 @@
+{
+ "data": {
+  "repository": {
+   "labels": {
+    "nodes": [
+     {
+      "id": "L_bug",
+      "name": "bug",
+      "color": "d73a4a"
+     },
+     {
+      "id": "L_enh",
+      "name": "enhancement",
+      "color": "a2eeef"
+     },
+     {
+      "id": "L_side",
+      "name": "sidebar",
+      "color": "0075ca"
+     },
+     {
+      "id": "L_gfi",
+      "name": "good first issue",
+      "color": "7057ff"
+     }
+    ]
+   },
+   "assignableUsers": {
+    "nodes": [
+     {
+      "id": "U_dave",
+      "login": "DwieDave"
+     },
+     {
+      "id": "U_can",
+      "login": "ogulcancelik"
+     },
+     {
+      "id": "U_cg",
+      "login": "cg-night"
+     }
+    ]
+   }
+  }
+ }
+}

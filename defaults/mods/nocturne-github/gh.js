@@ -95,14 +95,16 @@ export async function api(repo, path, { fresh = false, prior = null, slim = null
   throw new Error(why(r));
 }
 
-/** A GraphQL read (only the fields asked for): its `data`. */
-export async function graphql(repo, query, vars = {}) {
+/** A GraphQL read (only the fields asked for): its `data`. `partial`: data that
+ *  came back beside errors (one owner GitHub won't show, say) is used, unless a scope is missing. */
+export async function graphql(repo, query, vars = {}, { partial = false } = {}) {
   const args = ["api", "graphql", ...hostArgs(repo), "-f", `query=${query}`];
   for (const [k, v] of Object.entries(vars)) args.push(typeof v === "number" ? "-F" : "-f", `${k}=${v}`);
   const r = await gh(args, { cwd: repo.root, on: repo.on });
   let j = null;
   try { j = JSON.parse(r.stdout || "null"); } catch { /* not JSON */ }
   if (j?.data && !j.errors?.length) return j.data;
+  if (partial && j?.data && !j.errors.some((e) => e?.type === "INSUFFICIENT_SCOPES")) return j.data;
   if (j?.errors?.length) throw new Error(j.errors[0].message ?? "GitHub didn't answer.");
   throw new Error(why(r));
 }
