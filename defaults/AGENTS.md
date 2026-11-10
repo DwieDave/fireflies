@@ -1045,7 +1045,8 @@ All of it is in `herdr.d.ts`. In short:
   machine, branch), `machines()` (name, null for this computer; layout:
   `loading`, `ready`, or `unavailable` on this connection; loading ends on
   the first read even if it fails, and offline machines are unavailable),
-  `agents()` (status, app, space, tab, pinned, focused; "done" turns "idle"
+  `agents()` (status, app, space, tab, pinned, focused, command: working but
+  waiting on a shell command it started; "done" turns "idle"
   once someone looks at it on any Herdr client), `terminals()`
   (every core terminal), `focused()`, `layout()`, `theme()` (every color by
   name: background (the terminals', cards), canvas (behind cards), chrome

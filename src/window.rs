@@ -1896,7 +1896,7 @@ impl AppWindow {
                         "address": addr, "pane": p.id, "space": pr.id, "space_name": m.space_name(pr, &home),
                         "tab": ctx.id, "tab_index": ci + 1, "tab_name": Model::tab_name(pr, ctx),
                         "status": status, "app": a.and_then(|a| a.app.clone()), "program": self.program(addr), "title": title.unwrap_or_default(),
-                        "seq": a.map(|a| a.seq).unwrap_or(0),
+                        "seq": a.map(|a| a.seq).unwrap_or(0), "command": a.is_some_and(|a| a.command),
                         "pinned": self.live.get(addr).and_then(|r| r.pointer("/labels/herdr.pinned")).and_then(Value::as_str).is_some_and(|v| !v.is_empty()),
                         "focused": m.active.as_deref() == Some(pr.id.as_str()) && focused_pane.as_deref() == Some(p.id.as_str()),
                     }));
@@ -2293,6 +2293,7 @@ impl AppWindow {
         let mut changed = self.reconcile(window, cx);
         let visible: HashSet<String> = self.visible_addresses().into_iter().collect();
         let mut alerts = Vec::new();
+        let mut commands = false;
         for (addr, rec) in &self.live {
             let word = rec.get("status").and_then(Value::as_str).map(str::to_owned);
             let app = rec.get("report").and_then(|r| r.get("app")).and_then(Value::as_str).filter(|s| !s.is_empty()).map(str::to_owned);
@@ -2306,6 +2307,16 @@ impl AppWindow {
             let turn = rec.get("turn").and_then(Value::as_u64).unwrap_or(0);
             let label = rec.pointer("/labels/herdr.seen").and_then(Value::as_str).and_then(|s| s.parse::<u64>().ok());
             changed |= self.model.set_turn(addr, turn, label.max(self.written_seen.get(addr).copied()));
+            // Working on a shell command it started (only this machine's processes can be seen).
+            let msg = rec.pointer("/report/msg").and_then(Value::as_str).map(str::to_owned);
+            self.model.set_msg(addr, msg);
+            let step = self.model.agents.get(addr).filter(|a| a.word.as_deref() == Some("working")).map(|a| a.step);
+            let pid = rec.pointer("/foreground/pid").or_else(|| rec.get("pid")).and_then(Value::as_u64);
+            let command = match (step, pid) {
+                (Some(step), Some(pid)) if !addr.contains('/') => crate::agent_command::running(pid, step, model::now_ms()),
+                _ => false,
+            };
+            commands |= self.model.set_command(addr, command);
         }
         self.written_seen.retain(|a, _| self.live.contains_key(a));
         changed |= self.share_seen(cx);
@@ -2325,7 +2336,7 @@ impl AppWindow {
         self.listed_once = true;
         if changed {
             self.sync(window, cx);
-        } else if listed {
+        } else if listed || commands {
             self.publish(cx);
         }
     }
