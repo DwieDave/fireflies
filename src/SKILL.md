@@ -181,8 +181,10 @@ capture or permissions. It needs a running window that has drawn a frame;
 
 ## Problems and safety
 
-If Herdr misbehaves, `herdr-app feedback "<what happened>"` drafts a report.
-The person reviews and sends it; it does not silently send feedback.
+If Herdr misbehaves, `herdr-app feedback "<what happened>"` drafts a GitHub issue.
+With Herdr open, the person reviews it in a window and opens it on GitHub; without, the
+prefilled issue page opens in the browser and its link is printed. Nothing is filed
+until the person submits it on GitHub.
 
 Never experiment with pointer/key automation on the person's real display.
 When developing the app on Linux, its `scripts/sandbox` provides an isolated

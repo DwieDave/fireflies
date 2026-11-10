@@ -33,7 +33,6 @@ mod setup;
 mod sound;
 mod spawn;
 mod sprites;
-mod telemetry;
 mod feedback;
 mod terminal;
 mod update;
@@ -51,7 +50,7 @@ Usage:
   herdr-app                        open the window
   herdr-app ls                     spaces, their tabs and terminals, in the open window
   herdr-app do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
-  herdr-app feedback <text>        draft feedback for the person to review and send
+  herdr-app feedback <text>        draft a GitHub issue for the person to review and submit
   herdr-app commands               every command, its arguments, what it does
   herdr-app status                 what the window shows, and any errors
   herdr-app shot [file.png]        save the last window frame (default: herdr-shot.png)
@@ -124,7 +123,6 @@ fn main() {
         return;
     }
 
-    telemetry::clock();
     // A first start sizes the app to the screen and the system's text size.
     let fresh = !settings::path().exists();
     // The core people installed; without one, the setup screen installs it.
@@ -150,8 +148,11 @@ fn main() {
         update::after_update();
     }
     update::start();
-    telemetry::start(settings::telemetry_setting(&person));
     bench::start();
+    // Usage data and uploaded feedback are gone: drop what earlier versions
+    // kept for them (install id, unsent reports, feedback screenshots).
+    let _ = std::fs::remove_dir_all(mods::app_dir().join("telemetry"));
+    let _ = std::fs::remove_dir_all(mods::app_dir().join("data").join("frame-feedback"));
     if let Err(e) = mods::write_workspace() {
         eprintln!("herdr-app: cannot write {}: {e}", mods::app_dir().display());
     }
@@ -181,7 +182,6 @@ fn main() {
                     }
                 }
                 mods::finish_shared();
-                telemetry::quit();
                 update::apply();
                 async {}
             })

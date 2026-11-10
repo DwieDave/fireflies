@@ -330,26 +330,6 @@ fn clone_mod_at(mods: &Path, name: &str, to: &str) -> std::io::Result<()> {
     result
 }
 
-/// Mods in use by kind, for telemetry: the shipped ones as shipped (by
-/// name), how many shipped ones were edited, how many are the person's own
-/// (never their names).
-pub fn kinds(names: &std::collections::BTreeSet<String>) -> (Vec<String>, usize, usize) {
-    let text = std::fs::read_to_string(app_dir().join("installed.json")).unwrap_or_default();
-    let installed: Installed = serde_json::from_str(&text).unwrap_or_default();
-    let shipped = |n: &str| shipped_mods().iter().any(|(p, _)| p.split('/').next() == Some(n));
-    let (mut builtin, mut edited, mut custom) = (Vec::new(), 0, 0);
-    for name in names {
-        if !shipped(name) {
-            custom += 1;
-        } else if installed.get(name).is_some_and(|files| as_shipped(&mods_dir().join(name), files)) {
-            builtin.push(name.clone());
-        } else {
-            edited += 1;
-        }
-    }
-    (builtin, edited, custom)
-}
-
 /// Exactly as installed: every file unchanged and none added.
 fn as_shipped(dir: &Path, files: &Files) -> bool {
     fn walk(root: &Path, dir: &Path, out: &mut Vec<String>) {
@@ -993,9 +973,7 @@ fn module(inst: Instance, copy: u64) -> HostModule {
         copies.insert(copy, Rc::downgrade(&reads));
     });
     let props = inst.props.clone();
-    let feedback_frame = inst.name == "frame-feedback";
     let feedback_from = inst.props.get("from").and_then(Value::as_str).unwrap_or("person").to_owned();
-    let feedback_layout = inst.props.get("layout").and_then(Value::as_str).unwrap_or("other").to_owned();
     let (cmd_tx, commands) = async_channel::unbounded::<String>();
     COMMANDS.with_borrow_mut(|commands| {
         commands.retain(|(_, _, tx)| !tx.is_closed());
@@ -1031,40 +1009,10 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             crate::update_notes::presented(&strings(a.get(0)));
             Ok(HostValue::Null)
         })
-        .function("telemetry", |_| Ok(to_host(&crate::telemetry::status())))
-        .function("feedbackPreview", move |a| {
-            let images = a.get(2).and_then(|v| match v { HostValue::Number(n) => Some(*n as usize), _ => None }).unwrap_or(0);
-            let body = crate::feedback::draft(a.string(0)?, a.string(1)?, images, &feedback_from, &feedback_layout);
-            Ok(to_host(&json!({ "body": body, "available": crate::feedback::available() })))
-        })
-        .function("feedbackPasteImage", move |_| {
-            if !feedback_frame { return Err(HostError::new("feedback screenshots are frame-only")); }
-            let bytes = gpui_shell::with_current_app(|cx| {
-                cx.read_from_clipboard()?.entries().iter().find_map(|e| match e {
-                    gpui::ClipboardEntry::Image(i) => Some(i.bytes.clone()),
-                    _ => None,
-                })
-            }).flatten();
-            Ok(match bytes {
-                None => HostValue::Null,
-                Some(b) => to_host(&match crate::feedback::attach(&b) { Ok(path) => json!({ "path": path }), Err(e) => json!({ "error": e }) }),
-            })
-        })
-        .function("feedbackAttachImages", move |a| {
-            if !feedback_frame { return Err(HostError::new("feedback screenshots are frame-only")); }
-            let paths = strings(a.get(0)).into_iter().map(std::path::PathBuf::from).collect::<Vec<_>>();
-            Ok(to_host(&json!(crate::feedback::attach_files(&paths))))
-        })
-        .async_function("feedbackPickImages", move |_| {
-            if !feedback_frame { return Err(HostError::new("feedback screenshots are frame-only")); }
-            let picked = gpui_shell::with_current_app(|cx| cx.prompt_for_paths(gpui::PathPromptOptions {
-                files: true, directories: false, multiple: true, prompt: Some("Add".into()),
-            })).ok_or_else(|| HostError::new("no window to pick from"))?;
-            Ok(async move {
-                let paths = picked.await.ok().and_then(Result::ok).flatten().unwrap_or_default();
-                let out = crate::feedback::attach_files(&paths);
-                Ok(to_host(&Value::Array(out)))
-            })
+        .function("feedbackIssue", move |a| {
+            let core = crate::update::core().version;
+            let i = crate::feedback::issue(a.string(0)?, a.string(1)?, &feedback_from, core.as_deref());
+            Ok(to_host(&json!({ "title": i.title, "body": i.body, "url": i.url })))
         })
         .async_function("knownAgents", |a| {
             let on = opt_str(a.get(0), "on");
@@ -1098,22 +1046,6 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             Ok(async move {
                 let path = picked.await.ok().and_then(Result::ok).flatten().and_then(|p| p.into_iter().next());
                 Ok(path.map(|p| HostValue::Str(p.to_string_lossy().into_owned())).unwrap_or(HostValue::Null))
-            })
-        })
-        .function("feedbackClearImages", move |_| {
-            if feedback_frame { crate::feedback::clear_shots(); }
-            Ok(HostValue::Null)
-        })
-        .async_function("sendFeedback", move |a| {
-            if !feedback_frame { return Err(HostError::new("sending feedback is frame-only")); }
-            let body = from_host(a.value(0)?);
-            let shots: Vec<String> = from_host(a.value(1).unwrap_or(&HostValue::Null)).as_array()
-                .map(|l| l.iter().filter_map(|v| v.as_str().map(str::to_owned)).collect()).unwrap_or_default();
-            Ok(async move {
-                Ok(match crate::feedback::send(body, shots).await {
-                    Ok(()) => HostValue::Null,
-                    Err(why) => HostValue::Str(why),
-                })
             })
         })
         .function("themes", |_| {
