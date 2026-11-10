@@ -8,8 +8,8 @@
 //   nocturne.script.runner
 //   nocturne.script.cmd
 //   nocturne.script.folder
-//   nocturne.script.admin   how it gets root: "osascript" (the macOS password
-//                           dialog) or "sudo"; none for most (nix.js shellLine)
+//   nocturne.script.admin   "sudo" when it runs as root, asking for the password
+//                           in its terminal ("osascript" from before: sudo too)
 //   nocturne.script.plan    a nix switch: "darwin-rebuild:<name>" / "nixos-rebuild:<name>",
 //                           built as the person, activated as root (nix.js switchPlan)
 //
@@ -59,7 +59,7 @@ export function runs(all) {
     .sort((a, b) => Number(b.live) - Number(a.live) || (b.started ?? 0) - (a.started ?? 0));
 }
 
-/** The state in words: running, ok, exit N, stopped, cancelled (an admin dialog). */
+/** The state in words: running, ok, exit N, stopped, cancelled (an admin run's ctrl-c). */
 export function word(live, code, reason, admin) {
   if (live) return "running";
   if (reason === "killed") return "stopped";

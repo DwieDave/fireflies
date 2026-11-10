@@ -29,7 +29,7 @@ import { toggleLazygit } from "./lazygit.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
 import { toggleGithub } from "./github.js";
-import { toggleDeck, lastFailed } from "./scripts.js";
+import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -100,7 +100,9 @@ export default class Sky {
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
     // on that run's output; nocturne.scripts-again runs the folder's last
-    // script again), nocturne.new (cmd-n) the "+ new" menu.
+    // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
+    // that Herdr Core's missing App Management stopped, opens that setting),
+    // nocturne.new (cmd-n) the "+ new" menu.
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -115,6 +117,7 @@ export default class Sky {
         else if (c === "scripts") toggleDeck({ centered: true });
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
+        else if (c === "scripts-grant") grantAppManagement();
         else if (c === "new") openNewMenu({ centered: true });
         cx.notify();
       }

@@ -11,9 +11,10 @@
 //
 // This machine's configuration (its LocalHostName / hostname; user@host or
 // user for home-manager) comes first, marked. A switch that needs root is
-// `admin`: on a Mac it goes through the system's password / Touch ID dialog
-// (adminLine: osascript "do shell script … with administrator privileges"),
-// elsewhere through sudo in its terminal. Builds stay unprivileged.
+// `admin: "sudo"`: it builds as the person, then activates through sudo in
+// the run's own terminal (switchPlan), with a prompt the tab strip knows
+// (SUDO_PROMPT): ../nocturne/prompt.js shows that line in a small window to
+// type the password into. Builds stay unprivileged.
 //
 // Both shapes of `nix flake show --json` are read: the classic one
 // ({ packages: { <system>: { x: { type } } } }) and the inventory one newer
@@ -26,7 +27,7 @@ export const FLAKE_SHOW = ["flake", "show", "--json", "--no-write-lock-file"];
 export const scriptId = (group, name) => `${group}#${name}`;
 export const oldId = (id) => String(id).replace(/\u0000/g, "#");
 
-/** A dialog the person cancels makes the run exit with this; it reads "cancelled". */
+/** A password prompt the person cancels (ctrl-c) makes the run exit with this; it reads "cancelled". */
 export const CANCELLED = 130;
 
 /** Shell-quotes one word: 'it''s' style, so nothing in it is ever code. */
@@ -79,7 +80,7 @@ export function nixScripts(json, sys = {}) {
       list.push({ group, name: `build ${n}`, cmd: `${tool} build --flake ${ref(n)}`, ...(mine ? { here: true } : {}) });
     }
   };
-  if (mac) systems("darwinConfigurations", "nix-darwin", "darwin-rebuild", "osascript", false);
+  if (mac) systems("darwinConfigurations", "nix-darwin", "darwin-rebuild", "sudo", false);
   if (linux) systems("nixosConfigurations", "nixos", "nixos-rebuild", "sudo", false);
   systems("homeConfigurations", "home-manager", "home-manager", null, true);
   return list.map((s) => ({ runner: r, ...s, id: scriptId(s.group, s.name) }));
@@ -93,49 +94,33 @@ export function nixStatic() {
   ].map((s) => ({ ...s, id: scriptId(s.group, s.name) }));
 }
 
-// The AppleScript: the command, PATH, folder and log file, then the store
-// path and the user (ARG, ARGUSER) come in as argv, never spliced into the
-// script; each value reaches the root shell through `quoted form of`, and the
-// command itself is a fixed shell line we wrote (it reads "$ARG").
-// The root shell appends everything to the log and writes the exit code
-// beside it, so `do shell script` itself only fails when the dialog does.
-export const ADMIN_SCRIPT = [
-  "on run argv",
-  'do shell script "export PATH=" & quoted form of (item 2 of argv) & " ARG=" & quoted form of (item 5 of argv) & " ARGUSER=" & quoted form of (item 6 of argv) & "; cd " & quoted form of (item 3 of argv) & " && { " & (item 1 of argv) & " ; } >> " & quoted form of (item 4 of argv) & " 2>&1; echo $? > " & quoted form of ((item 4 of argv) & ".code") with administrator privileges',
-  "end run",
-];
-
-/** The shell line that runs `cmd` as root through the macOS password dialog,
- *  with $ARG (a store path the line built before) and $ARGUSER (who asked)
- *  set for it: the run's terminal tails the log, so output streams; it exits
- *  with the command's own code, or CANCELLED when the dialog is cancelled. */
-export function adminLine(cmd, what = cmd) {
-  const script = ADMIN_SCRIPT.map((l) => `-e ${sq(l)}`).join(" ");
-  return [
-    `C=${sq(cmd)}`,
-    `L=$(mktemp "\${TMPDIR:-/tmp}/nocturne-admin.XXXXXX") || exit 1`,
-    `echo ${sq(`asking for an administrator's password to ${what}`)}`,
-    `tail -n +1 -f "$L" & T=$!`,
-    `osascript ${script} "$C" "$PATH" "$PWD" "$L" "\${ARG:-}" "$(id -un)" 2>"$L.err"`,
-    `R=$?`,
-    `sleep 0.3; kill $T 2>/dev/null`,
-    `if [ $R -ne 0 ]; then if grep -q -- "-128" "$L.err"; then echo "cancelled: no password given"; rm -f "$L" "$L.err"; exit ${CANCELLED}; fi; cat "$L.err" >&2; rm -f "$L" "$L.err"; exit $R; fi`,
-    `R=$(cat "$L.code" 2>/dev/null || echo 1)`,
-    `rm -f "$L" "$L.code" "$L.err"`,
-    `exit $R`,
-  ].join("; ");
-}
+/** sudo's prompt in a switch's terminal: the tab strip watches for it
+ *  (../nocturne/prompt.js keeps a copy) to show it in a small window. */
+export const SUDO_PROMPT = "password to activate (sudo): ";
 
 const NIX = `nix --extra-experimental-features ${sq("nix-command flakes")}`;
 const PROFILE = "/nix/var/nix/profiles/system";
 
-/** What root does with a built nix-darwin system, as darwin-rebuild switch
- *  does after its build: point the system profile at it, run the legacy
- *  activate-user as the person (unless it says it's deprecated), activate. */
-export const DARWIN_ACTIVATE = `nix-env -p ${PROFILE} --set "$ARG" && if [ -x "$ARG/activate-user" ] && ! grep -q '^# nix-darwin: deprecated$' "$ARG/activate-user"; then sudo --user="$ARGUSER" --set-home -- "$ARG/activate-user"; fi && "$ARG/activate"`;
+/** What root does with a built nix-darwin system ($1; $2 the person), as
+ *  darwin-rebuild switch does after its build: point the system profile at
+ *  it, run the legacy activate-user as the person (unless it says it's
+ *  deprecated), activate. */
+export const DARWIN_ACTIVATE = `nix-env -p ${PROFILE} --set "$1" && if [ -x "$1/activate-user" ] && ! grep -q '^# nix-darwin: deprecated$' "$1/activate-user"; then sudo --user="$2" --set-home -- "$1/activate-user"; fi && "$1/activate"`;
 
 /** The same for NixOS, as nixos-rebuild switch does: the profile, then switch-to-configuration. */
 export const NIXOS_ACTIVATE = `nix-env -p ${PROFILE} --set "$1" && "$1/bin/switch-to-configuration" switch`;
+
+/** Runs `script` as root through sudo in this terminal, the built system
+ *  ($ARG) and the person as its arguments, never spliced in. It exits with
+ *  the script's code (sudo's own, 1, after three wrong passwords); ctrl-c,
+ *  at the prompt or later, ends it as CANCELLED. sudo reads the password
+ *  from the terminal itself: nothing else ever sees it. */
+export function activateStep(script) {
+  return [
+    `trap 'echo; echo cancelled; exit ${CANCELLED}' INT`,
+    `sudo -p ${sq(SUDO_PROMPT)} -- sh -c ${sq(script)} _ "$ARG" "$(id -un)"`,
+  ].join("; ");
+}
 
 /** One attribute name in a nix attribute path: bare when plain, else in
  *  double quotes ("my.host" stays one name, not two). */
@@ -156,29 +141,39 @@ export function buildStep(attr) {
 
 /** A switch, in two steps: build as the person (evaluating a flake the
  *  person owns: as root, git refuses another user's repository), then
- *  activate the result with root, through the password dialog (osascript)
- *  or sudo. `plan`: "darwin-rebuild:<name>" or "nixos-rebuild:<name>". */
-export function switchPlan(plan, admin) {
+ *  activate the result as root through sudo in the same terminal. That
+ *  terminal is in the person's desktop session, so macOS credits Herdr
+ *  Core's permissions (App Management) to nix-darwin's activation.
+ *  `plan`: "darwin-rebuild:<name>" or "nixos-rebuild:<name>". */
+export function switchPlan(plan) {
   const at = String(plan).indexOf(":");
   const tool = String(plan).slice(0, at), name = String(plan).slice(at + 1);
-  if (tool === "darwin-rebuild") {
-    const build = buildStep(`darwinConfigurations.${attrName(name)}.system`);
-    return admin === "osascript" ? `${build}; ${adminLine(DARWIN_ACTIVATE, "activate it")}`
-      : `${build}; sudo env ARG="$ARG" ARGUSER="$(id -un)" sh -c ${sq(DARWIN_ACTIVATE)}`;
-  }
-  if (tool === "nixos-rebuild") {
-    const build = buildStep(`nixosConfigurations.${attrName(name)}.config.system.build.toplevel`);
-    return admin === "osascript" ? `${build}; ${adminLine(NIXOS_ACTIVATE.replace(/\$1/g, "$ARG"), "activate it")}`
-      : `${build}; sudo sh -c ${sq(NIXOS_ACTIVATE)} _ "$ARG"`;
-  }
+  if (tool === "darwin-rebuild") return `${buildStep(`darwinConfigurations.${attrName(name)}.system`)}; ${activateStep(DARWIN_ACTIVATE)}`;
+  if (tool === "nixos-rebuild") return `${buildStep(`nixosConfigurations.${attrName(name)}.config.system.build.toplevel`)}; ${activateStep(NIXOS_ACTIVATE)}`;
   return null;
 }
 
-/** The line a script runs as: its command; a switch's two steps; or wrapped to get root. */
+/** The line a script runs as: its command; a switch's two steps; or with sudo
+ *  in front ("osascript", from runs before, is sudo too). */
 export function shellLine(cmd, admin, plan) {
-  const planned = plan && admin ? switchPlan(plan, admin) : null;
+  const planned = plan && admin ? switchPlan(plan) : null;
   if (planned) return planned;
-  if (admin === "osascript") return adminLine(cmd);
-  if (admin === "sudo") return `sudo ${cmd}`;
-  return cmd;
+  return admin ? `sudo ${cmd}` : cmd;
 }
+
+// nix-darwin's activation touches /Applications/Nix Apps/*.app to check it
+// may update them, which macOS allows only with App Management for whoever
+// owns the process: for a run, Herdr Core (the core holds terminals, not the
+// app). Activated through sudo in the run's terminal, that's credited; if it
+// still fails, the permission is off or stale (an updated core is a new
+// binary to macOS). ../nocturne/scripts.js keeps a copy for the failure toast.
+export const APP_MANAGEMENT = {
+  match: "permission denied when trying to update apps",
+  hint: "Herdr Core needs App Management (System Settings > Privacy & Security). If it is already on, remove it and add it again",
+  // Opens the setting and shows the core's bundle in Finder, to drag into its list.
+  open: `open 'x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles'; open -R "$HOME/.local/share/herdr-core/active/Herdr Core.app"`,
+};
+
+/** A nix-darwin switch that failed because Herdr Core lacks App Management. */
+export const needsAppManagement = (r, text) =>
+  String(r?.plan ?? "").startsWith("darwin-rebuild:") && String(text ?? "").includes(APP_MANAGEMENT.match);

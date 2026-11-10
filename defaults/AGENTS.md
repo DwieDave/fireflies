@@ -179,15 +179,26 @@ the highlighted line shows where it will land.
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
-  executables in `scripts/` and `bin/`. A flake gets `nix flake check` / `update`
+  executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
+  j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
+  leaves the filter, esc closes). A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
   configurations, this machine's (its LocalHostName / hostname) first. A switch
   that needs root shows a lock: it builds as you first (a flake evaluated as root
-  fails git's ownership check), then only activates the built system as root, on
-  a Mac through the system's password dialog (osascript, administrator
-  privileges), on Linux through sudo in its terminal; a cancelled dialog ends the run as "cancelled". A picked script runs in a pane-less
+  fails git's ownership check), then activates the built system through `sudo` in
+  the run's own terminal (in your desktop session, so macOS credits Herdr Core's
+  permissions). When sudo asks, a small window shows its prompt over that
+  terminal ("switch homelab · password"): type the password there; it closes once
+  sudo takes it, stays for "Sorry, try again.", and its cancel (or ctrl-c) ends the
+  run as "cancelled". A run you already float keeps its float (type there); with Touch ID
+  for sudo, its own dialog asks, and a cached sudo doesn't ask. If nix-darwin still says "permission denied when trying to
+  update apps", Herdr Core lacks App Management (the core runs the terminals, not
+  Herdr): the toast and output say so, with a button that opens System Settings >
+  Privacy & Security > App Management and shows
+  `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; if it's on already,
+  remove it and add it again. A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
   restarts, stops and dismisses runs, and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
