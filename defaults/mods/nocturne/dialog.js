@@ -92,7 +92,7 @@ export class Confirm {
     const t = theme();
     const p = props() ?? {};
     // Destructive: a red edge down the left, like the sidebar's inline confirms.
-    return frame(t, "nocturne-confirm").size_full().relative().track_focus(this.handle)
+    return frame(t, "nocturne-confirm").relative().track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.key === "enter") this.yes();
         else if (e.key === "escape") this.close();
@@ -101,8 +101,9 @@ export class Confirm {
       })
       .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.blocked))
       .child(titleRow(t, p.title ?? "Are you sure?"))
-      .child(div().id("confirm-detail").flex_1().min_h(0).px(14).pt(10).overflow_y_scrollbar()
-        .text_size(11).text_color(t.muted).child(p.detail ?? ""))
+      // As tall as its words (the dialog fits its content), scrolling past 240 px.
+      .child(div().id("confirm-detail").max_h(240).px(14).pt(10).overflow_y_scrollbar()
+        .text_size(11).line_height("17px").text_color(t.muted).child(p.detail ?? ""))
       .child(h_flex().px(14).pb(12).pt(6).gap(6).justify_end()
         .child(button(t, "cf-keep", "keep", t.muted, false, () => this.close()))
         .child(button(t, "cf-go", "confirm", t.blocked, true, () => this.yes())));

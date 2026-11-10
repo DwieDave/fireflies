@@ -23,6 +23,20 @@ async function checkout(folder, on) {
   return common.stdout.trim() === `${top.stdout.trim()}/.git` ? "main" : "linked";
 }
 
+// "Move to …": the other tabs on the pane's machine (pane.move), then a tab of its own.
+function moveTo(mine, all_panes) {
+  const all = spaces();
+  const space = all.find((s) => s.tabs.some((c) => c.id === mine.tab));
+  const machine = space?.machine ?? null;
+  const tabs = all.filter((s) => (s.machine ?? null) === machine)
+    .flatMap((s) => s.tabs.filter((c) => c.id !== mine.tab && !c.settled).map((c) => [s.id === space?.id ? c.name : `${s.name} / ${c.name}`, c.id]));
+  const alone = all_panes.filter((pane) => pane.tab === mine.tab).length === 1;
+  return [
+    ...tabs.map(([name, tab]) => [`Move to ${name}`, "pane.move", { pane: mine.pane, tab }]),
+    ...(alone ? [] : [["Move to a new tab", "pane.move", { pane: mine.pane }]]),
+  ];
+}
+
 function items(p, git) {
   p = p ?? {};
   const tg = p.target ?? {};
@@ -58,6 +72,7 @@ function items(p, git) {
             ]
           : []),
         ...(parent ? [[`Send back to ${parent.name || parent.address}`, "terminal.park", { terminal: term.address }]] : []),
+        ...(inTab ? moveTo(mine, all_panes) : []),
         ...(inTab ? [["Close pane", "pane.close", { pane: tg.pane }]] : []),
       ];
     }
@@ -89,7 +104,7 @@ function items(p, git) {
 }
 
 function menuIcon(command) {
-  const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "space.folder" ? "folder" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? "panel-right" : command === "pane.zoom" ? "square" : "terminal";
+  const name = command.endsWith(".close") ? "x" : command.endsWith(".rename") ? "square-pen" : command.endsWith(".new") ? "plus" : command === "worktree" ? "git-branch" : command === "space.folder" ? "folder" : command === "app.help" ? "terminal" : command === "app.theme" ? "settings" : command === "pane.split" ? "panel-right" : command === "pane.zoom" ? "square" : command === "pane.move" ? "layers" : "terminal";
   return `mods/workspace-chrome/${name}.svg`;
 }
 
@@ -141,6 +156,8 @@ export default class Menu extends View {
       .track_focus(this.handle)
       .w_full()
       .min_h(0)
+      .max_h_full()
+      .overflow_y_scroll()
       .p(5)
       .bg(t.popover)
       .text_size(12.8)

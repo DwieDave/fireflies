@@ -303,6 +303,25 @@ Properties any node can have:
   the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls
   and the switch between a float's views (`views`: their names, or null; run
   `float.view {index}`; `terminals()`' `floating_view` says which one shows).
+- Root only: `"dialog_mods"` (this fork) maps Herdr's other screens to the mods
+  that draw them instead: `welcome`, `whats_new`, `help` (the keys), `worktree`,
+  `machine_add`, `update` (the update note, bottom right), and `prompt`,
+  `confirm`, `palette` (as the fields above, which win). Each gets the shipped
+  one's props plus `dialog` (that key) and opens with `frame: "none"`, wherever it
+  is opened from (the app, a key, or a mod's `openOverlay({mod: "worktree"})`).
+  A welcome records `setShared("frame.welcomed", "finished" | "skipped")`; a
+  what's new calls `presentUpdateNotes(versions)`. The update note gets
+  `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
+  slot it hides itself from. Settings and feedback stay the app's (they follow the
+  theme). Nocturne: `defaults/mods/nocturne/screens.js`.
+  `{"dialog_mods": {"welcome": "my-screens", "help": "my-screens"}}`
+- Root only: `"corners": "square"` (this fork) paints every corner in the window
+  square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
+  `rounded*` included. Default `"round"`: as each asks.
+- Root only: `"scrim"` (this fork): what dims the window behind a dialog,
+  `{"color": "#080808", "opacity": 0.85, "dither": true, "cell": 1}` (color: a
+  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px). Default:
+  black at 35%.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
@@ -598,7 +617,10 @@ The main ones:
   toast with its exit code and last output lines. Or `tab.new {name?, space?, mod,
   props?}` for a tab whose only pane is a mod (a file, a board; split a shell
   in beside it like any tab), `tab.close {id?, confirmed?}` (closing the last tab
-  closes its space and asks first unless confirmed),
+  closes its space and asks first unless confirmed; a tab where something runs, an
+  agent working or needing you or a program other than the shell in front, asks the
+  person first however it is closed (keys, menus, middle-click, a mod's `run`), and
+  from a script fails unless confirmed; an idle tab just closes),
   `tab.rename {id?, name}` ("": its number again), `tab.move {id, index}`,
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
@@ -611,7 +633,7 @@ The main ones:
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
   flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.equalize {scope?, pane?}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
@@ -649,6 +671,11 @@ The main ones:
   `pane.swap {target}` trades the places of `pane` (default: the focused one) and
   `target`, another pane of the same tab; give `direction` or `target`, not both.
   A swap moves panes, not focus: the focused pane stays focused in its new place.
+  `pane.move {tab}` takes a pane (placed or parked, a terminal or a mod; the only one
+  of its tab too) to another tab in any space on its machine, beside `target` on `edge`
+  or beside that tab's focused pane; no tab or target: a new tab of its own (`name`, in
+  `space`). Its terminal keeps running; the tab it leaves closes when emptied. The pane
+  menus (shipped and Nocturne's, and a firefly's) list "Move to …" for every tab.
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and

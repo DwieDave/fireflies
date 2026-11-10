@@ -411,9 +411,55 @@ pub struct Node {
     /// Root only: the mod that draws the bar over a peeked or floating terminal (default: `peek`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peek_mod: Option<String>,
+    /// Root only: the mods that draw Herdr's other screens instead of the
+    /// shipped ones, by screen: `welcome`, `whats_new`, `help` (the keys),
+    /// `worktree`, `machine_add`, `update` (the update note), and `prompt`,
+    /// `confirm`, `palette` (as `prompt_mod` / `confirm_mod` / `palette_mod`).
+    /// Each opens with the shipped one's props plus `dialog` (the screen's name).
+    #[serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub dialog_mods: std::collections::BTreeMap<String, String>,
+    /// Root only: `"square"` paints every corner of the window square (dialogs,
+    /// menus, buttons, inputs, scrollbars, mods' own), whatever radius they ask
+    /// for; `"round"` (default) as asked.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corners: Option<CornerStyle>,
+    /// Root only: what dims the window behind a dialog (default: black at 35%).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scrim: Option<Scrim>,
     /// Dragging this node moves the window; a double-click maximizes it.
     #[serde(default, skip_serializing_if = "is_false")]
     pub window_drag: bool,
+}
+
+/// What dims the window behind a dialog (`"scrim"` on the root): `color` (a
+/// theme color's name or `#rrggbb`) at `opacity`; `dither`: a 1-bit
+/// checkerboard of it instead, every other pixel (`cell` px squares).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Scrim {
+    #[serde(default = "scrim_color")]
+    pub color: String,
+    #[serde(default = "scrim_opacity")]
+    pub opacity: f32,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub dither: bool,
+    #[serde(default = "one")]
+    pub cell: f32,
+}
+
+fn scrim_color() -> String {
+    "#000000".into()
+}
+
+fn scrim_opacity() -> f32 {
+    0.35
+}
+
+/// A layout's corners (`"corners"` on the root).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum CornerStyle {
+    Round,
+    Square,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -455,6 +501,9 @@ impl Node {
             confirm_mod: None,
             palette_mod: None,
             peek_mod: None,
+            dialog_mods: std::collections::BTreeMap::new(),
+            corners: None,
+            scrim: None,
             window_drag: false,
         }
     }

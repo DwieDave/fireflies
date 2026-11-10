@@ -4,14 +4,14 @@
 //          Herdr opens it with props { tab: "pane", target: { pane, terminal } };
 //          renaming happens inline in the pane's header, asked for through shared(NAME_PANE)
 //   fly    a sidebar firefly's (sky.js opens it, props { tab: "fly", target: { id, address } }):
-//          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT)
+//          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT);
+//          moving and closing act on the agent's pane, not its whole tab
 //   space  a sidebar space's (spaces.js opens it, props { tab: "space", target: { id } }):
 //          rename, folder and delete happen inline in the sidebar, asked for through
 //          shared(EDIT_SPACE); "New worktree…" opens the worktree dialog on the space's folder
 //
-// A pane's menu can also move it: to another tab of its space, or a tab of its
-// own. The sidebar does the move (shared(MOVE_PANE); sky.js), since this menu
-// closes before a terminal's pane change finishes.
+// A pane's menu can also move it (pane.move): to any other tab on its machine,
+// or a tab of its own.
 
 import { svg } from "gpui-kit";
 import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay } from "herdr";
@@ -38,24 +38,27 @@ export const NAME_PANE = "nocturne.name-pane";
 /** shared() key: { id, kind: "rename" | "folder" | "delete", at } asks the sidebar to edit that space inline. */
 export const EDIT_SPACE = "nocturne.edit-space";
 
-/** shared() key: { pane, terminal, mod, to (a tab id, or null: a new tab), at } asks the sidebar to move a pane. */
-export const MOVE_PANE = "nocturne.move-pane";
-
-/** Mod panes that can be moved: made again from the same props elsewhere ({} for all of these). */
-export const MOVABLE_MODS = { "nocturne-agents": {}, "nocturne-usage": {}, nocturne: { role: "worktrees" } };
-
-/** "Move to …" rows for a pane: the other tabs in its space, then a new tab. */
-function moveItems(t, pane) {
-  const p = panes().find((x) => x.pane === pane);
-  if (!p || (!p.terminal && !(p.mod in MOVABLE_MODS))) return [];
-  const space = spaces().find((s) => s.tabs.some((c) => c.id === p.tab));
-  const alone = panes().filter((x) => x.tab === p.tab).length === 1;
-  const ask = (to) => () => setShared(MOVE_PANE, { pane: p.pane, terminal: p.terminal, mod: p.mod ?? null, to, at: Date.now() });
-  const others = (space?.tabs ?? []).filter((c) => c.id !== p.tab && !c.settled);
+/** "Move to …" rows for a pane: the other tabs of its space, then the tabs of
+ *  the other spaces on its machine (pane.move: any pane, the only one of its
+ *  tab too, a parked one too), then a tab of its own. */
+export function moveItems(t, pane) {
+  const ps = panes();
+  const p = ps.find((x) => x.pane === pane);
+  if (!p) return [];
+  const all = spaces();
+  const space = all.find((s) => s.tabs.some((c) => c.id === p.tab));
+  const alone = ps.filter((x) => x.tab === p.tab).length === 1;
+  const go = (args) => () => run("pane.move", { pane: p.pane, ...args });
+  const tabName = (c) => (c.named ? c.name : `tab ${c.index}`);
+  const here = (space?.tabs ?? []).filter((c) => c.id !== p.tab && !c.settled)
+    .map((c) => ({ id: `move-${c.id}`, mark: icon(t, "panel-right"), name: `Move to ${tabName(c)}`, hint: String(c.index), go: go({ tab: c.id }) }));
+  const there = all.filter((s) => s.id !== space?.id && (s.machine ?? null) === (space?.machine ?? null))
+    .flatMap((s) => s.tabs.filter((c) => !c.settled).map((c) => ({ id: `move-${c.id}`, mark: icon(t, "layers"), name: `Move to ${s.name} / ${tabName(c)}`, hint: "", go: go({ tab: c.id }) })));
   return [
     { rule: true },
-    ...others.slice(0, 3).map((c) => ({ id: `move-${c.id}`, mark: icon(t, "panel-right"), name: `Move to ${c.named ? c.name : `tab ${c.index}`}`, hint: String(c.index), go: ask(c.id) })),
-    ...(alone ? [] : [{ id: "move-new", mark: icon(t, "plus"), name: "Move to a new tab", hint: "", go: ask(null) }]),
+    ...here,
+    ...there,
+    ...(alone ? [] : [{ id: "move-new", mark: icon(t, "plus"), name: "Move to a new tab", hint: "", go: go({}) }]),
   ];
 }
 
@@ -71,11 +74,17 @@ export function newWorktree(id) {
 export function menuItems(t, p) {
   const tg = p?.target ?? {};
   if (p?.tab === "fly") {
+    // Closing an agent closes its pane, not the tab around it; a pane alone
+    // in its tab takes the tab with it, and the row says so. A sub-agent
+    // without a pane of its own has none to close.
+    const ps = panes();
+    const mine = ps.find((x) => x.terminal === tg.address);
+    const alone = !!mine && ps.filter((x) => x.tab === mine.tab).length === 1;
     return [
       item(t, "focus", "terminal", "Focus", "agent.focus", { terminal: tg.address }),
       { id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_AGENT, { address: tg.address, at: Date.now() }) },
-      { rule: true },
-      item(t, "close", "x", "Delete tab", "tab.close", { id: tg.id }, t.blocked),
+      ...(mine ? moveItems(t, mine.pane) : []),
+      ...(mine ? [{ rule: true }, item(t, "close", "x", alone ? "Close pane & tab" : "Close pane", "pane.close", { pane: mine.pane }, t.blocked)] : []),
     ];
   }
   if (p?.tab === "space") {
