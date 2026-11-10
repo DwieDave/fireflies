@@ -34,10 +34,11 @@ const ID = "pip";
 const BAR = 22;
 const MOD = "nocturne-pip";
 const ICONS = "mods/nocturne-pip/icons";
-// The window, as nocturne-browser opens it too: 16:9 under a 22 px bar in a
-// 1 px border, resizable keeping that shape.
-const WINDOW = { mod: MOD, kind: "window", key: MOD, frame: "none", width: 384, height: 238,
-  resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } };
+// How the window resizes: the video's shape (16:9 until the video says) under
+// a 22 px bar in a 1 px border.
+const RESIZE = { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] };
+// The window, as nocturne-browser opens it too.
+const WINDOW = { mod: MOD, kind: "window", key: MOD, frame: "none", width: 384, height: 238, resizable: RESIZE };
 // The pane a ◧ or ⤓ made: { of, pane, park }, so that pane can find itself (a mod isn't told
 // its pane id), and the page's browser knows whether the video went into a pane or a chip.
 const PANE = "nocturne-pip.pane";
@@ -89,6 +90,10 @@ export default class Pip extends View {
     this.muted = false;
     this.error = null;
     this.width = 384;
+    // The control under the pointer: its name shows in the title (a tooltip
+    // would be drawn under the video, a native view).
+    this.hover = null;
+    this.aspect = null;
     this.inPane = Boolean(props()?.pane);
     this.parks = Boolean(props()?.park);
     if (!available()) return;
@@ -104,12 +109,16 @@ export default class Pip extends View {
         if (e.event === "pip.state" && e.data?.result && e.data.result !== "none") {
           this.playing = e.data.result === "playing";
           if (typeof e.data.muted === "boolean") this.muted = e.data.muted;
+          this.shape(e.data.width, e.data.height);
         }
         cx.notify();
       }
     });
     // How the video is (playing, sound), once the view holds it.
     cx.timer.after(500, () => { try { herdr.nativeViewCall(ID, "pip.sync", {}); } catch {} });
+    // Popped back in by the window out of Herdr's ◧ or ⤓: on into a pane or a chip.
+    const then = props()?.then;
+    if (!this.inPane && (then === "pane" || then === "park")) cx.timer.after(400, () => this.command(then));
     if (this.inPane) {
       // A pane from an earlier run (it is saved with its tab): no video comes.
       cx.timer.after(1500, () => { if (!this.state()) this.leave(); });
@@ -136,6 +145,15 @@ export default class Pip extends View {
     else if (c === "out") this.popOut();
     else if (c === "pane" && !this.inPane) this.intoPane(false);
     else if (c === "park" && !this.parks) this.park();
+  }
+
+  /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
+  shape(w, h) {
+    if (this.inPane || !(w > 0 && h > 0)) return;
+    const aspect = w / h;
+    if (this.aspect && Math.abs(this.aspect - aspect) < 0.001) return;
+    this.aspect = aspect;
+    run("overlay.resizable", { id: props()?.overlay, resizable: { ...RESIZE, aspect } });
   }
 
   /** ⤓: a pane parks itself; the window goes into a pane that does. */
@@ -204,7 +222,7 @@ export default class Pip extends View {
   /** Out of Herdr: the popped-out window takes the video, this player goes. */
   popOut() {
     const t = theme();
-    this.call("pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border } });
+    this.call("pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0 } });
     if (!this.error) this.leave();
   }
 
@@ -238,22 +256,31 @@ export default class Pip extends View {
     return c.icon ? svg(`${ICONS}/${val(c.icon, s)}.svg`).size(12).text_color(color) : div().text_color(color).child(val(c.glyph, s));
   }
 
+  /** Under the pointer: bright on the hover color, its `name` in the title. */
+  hovers(el, id, name) {
+    return el.on_hover((h, cx) => {
+      if (h) this.hover = { id, name };
+      else if (this.hover?.id === id) this.hover = null;
+      cx.notify();
+    });
+  }
+
   button(t, c) {
     const s = { playing: this.playing, muted: this.muted };
-    return div().id(`pip-${c.id}`).flex_none().w(BAR).h_full().flex().items_center().justify_center().text_color(t.dim)
-      .hover((st) => st.text_color(t.foreground).bg(t.ansi0))
-      .tooltip(val(c.name, s))
+    const on = this.hover?.id === c.id;
+    return this.hovers(div().id(`pip-${c.id}`).flex_none().w(BAR).h_full().flex().items_center().justify_center()
+      .when(on, (el) => el.bg(t.ansi0)), c.id, val(c.name, s))
       // A press on a button isn't a drag of the window.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.command(c.id); cx.notify(); })
-      .child(this.mark(c, t.dim, s));
+      .child(this.mark(c, on ? t.foreground : t.dim, s));
   }
 
   /** ⋯: the controls that didn't fit, as a popup under the pointer. */
   more(t, ids) {
-    return div().id("pip-more").flex_none().w(BAR).h_full().flex().items_center().justify_center().text_color(t.dim)
-      .hover((st) => st.text_color(t.foreground).bg(t.ansi0))
-      .tooltip("More")
+    const on = this.hover?.id === "more";
+    return this.hovers(div().id("pip-more").flex_none().w(BAR).h_full().flex().items_center().justify_center()
+      .text_color(on ? t.foreground : t.dim).when(on, (el) => el.bg(t.ansi0)), "more", "More")
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.openMore(ids); })
       .child("⋯");
@@ -271,7 +298,8 @@ export default class Pip extends View {
     if (more.length) items.splice(items.length - 1, 0, this.more(t, more.map((c) => c.id)));
     return h_flex().id("pip-bar").h(BAR).flex_none().pl(8).items_center().text_size(11).bg(t.background)
       .border_b(1).border_color(t.border)
-      .child(div().flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : t.dim).child(this.error ?? "picture in picture"))
+      .child(div().flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : this.hover ? t.foreground : t.dim)
+        .child(this.error ?? this.hover?.name ?? "picture in picture"))
       .children(items);
   }
 

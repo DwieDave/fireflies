@@ -3967,6 +3967,13 @@ impl AppWindow {
                     self.open_overlay(id, spec, window, cx);
                 }
             }
+            "overlay.resizable" => {
+                let Some(id) = Self::owned(a, "id") else { return self.fail("overlay.resizable needs id") };
+                if let Err(e) = self.window_resizable(&id, a.get("resizable"), window.viewport_size()) {
+                    return self.fail(e);
+                }
+                cx.notify();
+            }
             "overlay.close" => {
                 let id = Self::owned(a, "id").or_else(|| self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.id.clone()));
                 if let Some(id) = id {
@@ -4251,7 +4258,14 @@ impl AppWindow {
         props["overlay"] = json!(id);
         let num = |k: &str, d: f32| spec.get(k).and_then(Value::as_f64).map_or(d, |v| v as f32);
         let resize = (kind == OverlayKind::Window).then(|| movable::Resize::parse(spec.get("resizable"))).flatten();
-        let resized = resize.and(key.as_deref()).and_then(movable::size_of);
+        // A size it was resized to before, in the shape it keeps now (design px).
+        let resized = resize.and(key.as_deref()).and_then(movable::size_of).map(|s| match resize {
+            Some(r) if r.aspect.is_some() => {
+                let (_, _, w, h) = r.resized((0.0, 0.0, s.width, s.height), [false, false, true, false], (0.0, 0.0), (f32::MAX, f32::MAX), 1.0);
+                size(w, h)
+            }
+            _ => s,
+        });
         let size = match kind {
             OverlayKind::Toast => size(340.0, num("height", 72.0)),
             // A size it was resized to before, under its key.

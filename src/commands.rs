@@ -94,6 +94,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("layout.reset", &[opt("name")], "Reset a shipped layout and its clicks (the old file is kept aside)."),
     cmd("mod.open", &[req("name")], "Toggle a mod as the overlay its mod.json describes; calling again closes it."),
     cmd("overlay.close", &[opt("id")], "Close an overlay (default: the top dialog or popup)."),
+    cmd("overlay.resizable", &[req("id"), req("resizable")], "Change how a window resizes (min, aspect, chrome); a new aspect refits its height now."),
     // The app.
     // Native content views (native-view/0).
     cmd("native.debug", &[], "Every native view: frame, visibility, focus, content state and recent events."),

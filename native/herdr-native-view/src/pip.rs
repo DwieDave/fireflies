@@ -15,15 +15,15 @@ use block2::RcBlock;
 use objc2::rc::{Retained, Weak};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::runtime::{NSObject, NSObjectProtocol};
-use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSBackingStoreType, NSBox, NSBoxType, NSButton, NSColor, NSTitlePosition,
-    NSFloatingWindowLevel, NSFont, NSFontAttributeName, NSForegroundColorAttributeName, NSPanel,
-    NSTextField, NSView, NSWindowCollectionBehavior, NSWindowStyleMask,
+    NSApplication, NSAutoresizingMaskOptions, NSBackingStoreType, NSBox, NSBoxType, NSButton, NSCellImagePosition, NSColor,
+    NSControl, NSEvent, NSFloatingWindowLevel, NSFont, NSFontAttributeName, NSForegroundColorAttributeName, NSImage,
+    NSPanel, NSResponder, NSTextField, NSTitlePosition, NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindow,
+    NSWindowCollectionBehavior, NSWindowDelegate, NSWindowStyleMask,
 };
 use objc2_foundation::{
-    NSAttributedString, NSAttributedStringKey, NSDictionary, NSError, NSPoint, NSRect,
-    NSSize, NSString,
+    NSAttributedString, NSAttributedStringKey, NSData, NSDictionary, NSError, NSPoint, NSRect, NSSize, NSString,
 };
 use objc2_web_kit::{
     WKContentWorld, WKFrameInfo, WKScriptMessageHandler, WKUserContentController, WKUserScript,
@@ -90,6 +90,8 @@ fn lift_script(attr: &str) -> String {
     else if (document.webkitFullscreenElement) document.webkitExitFullscreen();
   }} catch {{}}
   if (!el.hasAttribute("data-herdr-pip-was")) el.setAttribute("data-herdr-pip-was", el.getAttribute("popover") ?? "-");
+  // Just the video: its own controls (the player has them) go while lifted.
+  if (el.tagName === "VIDEO" && el.controls) {{ el.setAttribute("data-herdr-pip-controls", ""); el.controls = false; }}
   const show = () => {{
     if (!el.isConnected || !document.documentElement.hasAttribute("data-herdr-pip-on")) return;
     // The style may be gone with a page's head rewrite.
@@ -132,6 +134,7 @@ fn unlift_script(pause: bool) -> String {
     const was = el.getAttribute("data-herdr-pip-was");
     if (was === "-" || was === null) el.removeAttribute("popover"); else el.setAttribute("popover", was);
     el.removeAttribute("data-herdr-pip-was");
+    if (el.hasAttribute("data-herdr-pip-controls")) {{ el.removeAttribute("data-herdr-pip-controls"); el.controls = true; }}
     if (pause && el.tagName === "VIDEO") el.pause();
   }}
   document.getElementById("herdr-pip-style")?.remove();
@@ -144,7 +147,11 @@ fn mark_frame_script(url: &str) -> String {
     format!(
         r#"const want = new URL({url});
   const same = (src) => {{ try {{ const u = new URL(src, location.href); return u.origin === want.origin && u.pathname === want.pathname; }} catch {{ return false; }} }};
-  const f = [...document.querySelectorAll("iframe")].find((f) => same(f.src));
+  // The one holding the marked video (same origin: its document is readable),
+  // else by its address (never about:blank, which many iframes have).
+  const holds = (f) => {{ try {{ return Boolean(f.contentDocument?.querySelector("[data-herdr-pip]")); }} catch {{ return false; }} }};
+  const all = [...document.querySelectorAll("iframe")];
+  const f = all.find(holds) ?? (want.protocol === "about:" ? undefined : all.find((f) => f.src && same(f.src)));
   if (!f) return "none";
   for (const o of document.querySelectorAll("[data-herdr-pip-frame]")) o.removeAttribute("data-herdr-pip-frame");
   f.setAttribute("data-herdr-pip-frame", "");
@@ -193,7 +200,7 @@ impl Media {
             r#"const v = document.querySelector("[data-herdr-pip]");
   if (!v) return "none";
   {act}
-  return JSON.stringify({{ result: v.paused ? "paused" : "playing", muted: v.muted || v.volume === 0 }});"#
+  return JSON.stringify({{ result: v.paused ? "paused" : "playing", muted: v.muted || v.volume === 0, width: v.videoWidth, height: v.videoHeight }});"#
         )
     }
 }
@@ -623,9 +630,18 @@ pub(crate) fn state(key: &str) -> Value {
 // ---- popped out: a square window above every app
 
 const BAR: f64 = 22.0;
+/// The window's 1 px border, and the bar: what isn't video.
+const CHROME_W: f64 = 2.0;
+const CHROME_H: f64 = BAR + 2.0;
+/// The title keeps this much before the buttons (as the Herdr player's bar).
+const TITLE_MIN: f64 = 70.0;
+const TITLE: &str = "picture in picture";
+const VOLUME_SVG: &str = include_str!("../../../defaults/mods/nocturne-pip/icons/volume.svg");
+const VOLUME_X_SVG: &str = include_str!("../../../defaults/mods/nocturne-pip/icons/volume-x.svg");
 
-/// The popped-out player: the video under a 22 px bar (back to the page,
-/// back into Herdr, play/pause, close), Nocturne's colors, square corners.
+/// The popped-out player: the video under the Herdr player's bar, the same
+/// controls in the same order (↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕; ⇲ in the place of ⇱),
+/// Nocturne's colors, square corners. It resizes keeping the video's shape.
 struct Popped {
     panel: Retained<NSPanel>,
     host: Retained<NSView>,
@@ -634,9 +650,10 @@ struct Popped {
 
 pub struct PopIvars {
     source: String,
-    play: RefCell<Option<Retained<NSButton>>>,
-    mute: RefCell<Option<Retained<NSButton>>>,
-    colors: RefCell<Colors>,
+    buttons: RefCell<Vec<Retained<PipButton>>>,
+    title: RefCell<Option<Retained<NSTextField>>>,
+    /// The video's width / height (0: not known yet).
+    aspect: std::cell::Cell<f64>,
 }
 
 #[derive(Clone)]
@@ -645,6 +662,101 @@ struct Colors {
     foreground: Retained<NSColor>,
     dim: Retained<NSColor>,
     border: Retained<NSColor>,
+    hover: Retained<NSColor>,
+}
+
+/// One control of the bar, as the Herdr player draws it: a glyph or an icon,
+/// dim; hovered: bright on the hover color, its name in the bar's title.
+pub struct ButtonIvars {
+    id: &'static str,
+    name: RefCell<String>,
+    glyph: RefCell<String>,
+    icon: RefCell<Option<Retained<NSImage>>>,
+    hovered: std::cell::Cell<bool>,
+    back: Retained<NSBox>,
+    colors: Colors,
+    title: Weak<NSTextField>,
+}
+
+define_class!(
+    // SAFETY: NSButton may be subclassed; only mouse tracking is added; no Drop impl.
+    #[unsafe(super(NSButton, NSControl, NSView, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = ButtonIvars]
+    struct PipButton;
+
+    impl PipButton {
+        #[unsafe(method(mouseEntered:))]
+        fn mouse_entered(&self, _event: &NSEvent) {
+            self.ivars().hovered.set(true);
+            self.refresh();
+        }
+
+        #[unsafe(method(mouseExited:))]
+        fn mouse_exited(&self, _event: &NSEvent) {
+            self.ivars().hovered.set(false);
+            self.refresh();
+        }
+    }
+);
+
+impl PipButton {
+    fn new(mtm: MainThreadMarker, frame: NSRect, id: &'static str, back: Retained<NSBox>, colors: Colors, title: &NSTextField) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(ButtonIvars {
+            id,
+            name: RefCell::new(String::new()),
+            glyph: RefCell::new(String::new()),
+            icon: RefCell::new(None),
+            hovered: std::cell::Cell::new(false),
+            back,
+            colors,
+            title: Weak::from(title),
+        });
+        let this: Retained<Self> = unsafe { msg_send![super(this), initWithFrame: frame] };
+        this.setBordered(false);
+        let opts = NSTrackingAreaOptions::MouseEnteredAndExited | NSTrackingAreaOptions::ActiveAlways | NSTrackingAreaOptions::InVisibleRect;
+        let area = unsafe { NSTrackingArea::initWithRect_options_owner_userInfo(NSTrackingArea::alloc(), NSRect::ZERO, opts, Some(&this), None) };
+        this.addTrackingArea(&area);
+        this
+    }
+
+    /// Its glyph (or icon) and name now.
+    fn set(&self, glyph: &str, icon: Option<Retained<NSImage>>, name: &str) {
+        *self.ivars().glyph.borrow_mut() = glyph.to_owned();
+        *self.ivars().icon.borrow_mut() = icon;
+        *self.ivars().name.borrow_mut() = name.to_owned();
+        self.refresh();
+    }
+
+    fn refresh(&self) {
+        let i = self.ivars();
+        let on = i.hovered.get();
+        let color = if on { &i.colors.foreground } else { &i.colors.dim };
+        i.back.setHidden(!on);
+        match i.icon.borrow().as_ref() {
+            Some(img) => {
+                self.setTitle(&NSString::from_str(""));
+                self.setImage(Some(img));
+                self.setImagePosition(NSCellImagePosition::ImageOnly);
+                self.setContentTintColor(Some(color));
+            }
+            None => {
+                self.setImage(None);
+                set_title(self, &i.glyph.borrow(), color);
+            }
+        }
+        // Its name where the title is, as the Herdr player does (a tooltip would
+        // be drawn under the video there).
+        if let Some(t) = i.title.load() {
+            if on {
+                t.setStringValue(&NSString::from_str(&i.name.borrow()));
+                t.setTextColor(Some(&i.colors.foreground));
+            } else {
+                t.setStringValue(&NSString::from_str(TITLE));
+                t.setTextColor(Some(&i.colors.dim));
+            }
+        }
+    }
 }
 
 define_class!(
@@ -656,85 +768,122 @@ define_class!(
 
     unsafe impl NSObjectProtocol for PopTarget {}
 
-    impl PopTarget {
-        #[unsafe(method(back:))]
-        fn back(&self, _sender: Option<&AnyObject>) {
-            let Some(mtm) = MainThreadMarker::new() else { return };
-            back(mtm, &self.ivars().source.clone());
-            #[allow(deprecated)]
-            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+    unsafe impl NSWindowDelegate for PopTarget {
+        /// Resizing (any edge or corner) keeps the video's shape.
+        #[unsafe(method(windowWillResize:toSize:))]
+        fn window_will_resize(&self, sender: &NSWindow, to: NSSize) -> NSSize {
+            let now = sender.frame().size;
+            fit_aspect(self.ivars().aspect.get(), now, to)
         }
+    }
 
-        #[unsafe(method(home:))]
-        fn home(&self, _sender: Option<&AnyObject>) {
+    impl PopTarget {
+        #[unsafe(method(press:))]
+        fn press(&self, sender: Option<&AnyObject>) {
+            let Some(id) = sender.and_then(|s| s.downcast_ref::<PipButton>()).map(|b| b.ivars().id) else { return };
             let Some(mtm) = MainThreadMarker::new() else { return };
             let k = self.ivars().source.clone();
-            let g = with_session(&k, |s| s.generation).unwrap_or(0);
-            // The page's mod opens a player in Herdr again; it takes the video.
-            emit_event(&k, g, "pip.popIn", json!({ "of": k }));
-            #[allow(deprecated)]
-            NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
-        }
-
-        #[unsafe(method(toggle:))]
-        fn toggle(&self, _sender: Option<&AnyObject>) {
-            self.media(Media::Toggle);
-        }
-
-        #[unsafe(method(rewind:))]
-        fn rewind(&self, _sender: Option<&AnyObject>) {
-            self.media(Media::Seek(-10.0));
-        }
-
-        #[unsafe(method(forward:))]
-        fn forward(&self, _sender: Option<&AnyObject>) {
-            self.media(Media::Seek(10.0));
-        }
-
-        #[unsafe(method(mute:))]
-        fn mute(&self, _sender: Option<&AnyObject>) {
-            self.media(Media::Mute(None));
-        }
-
-        #[unsafe(method(close:))]
-        fn close(&self, _sender: Option<&AnyObject>) {
-            let Some(mtm) = MainThreadMarker::new() else { return };
-            end(mtm, &self.ivars().source.clone(), false);
+            match id {
+                "back" => {
+                    back(mtm, &k);
+                    #[allow(deprecated)]
+                    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+                }
+                "rewind" => self.media(Media::Seek(-10.0)),
+                "toggle" => self.media(Media::Toggle),
+                "forward" => self.media(Media::Seek(10.0)),
+                "mute" => self.media(Media::Mute(None)),
+                // Back into Herdr (as a window, or then into a pane or a chip):
+                // the page's mod opens a player again; it takes the video.
+                "home" | "pane" | "park" => {
+                    let g = with_session(&k, |s| s.generation).unwrap_or(0);
+                    let then = if id == "home" { Value::Null } else { json!(id) };
+                    emit_event(&k, g, "pip.popIn", json!({ "of": k, "then": then }));
+                    #[allow(deprecated)]
+                    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+                }
+                "close" => end(mtm, &k, false),
+                _ => {}
+            }
         }
     }
 );
 
+/// The size a resize to `to` (from `now`) ends at, keeping the video's
+/// `aspect` (width / height; 0: any) under the bar: the side moved most
+/// leads. Never under `MIN_W` wide.
+fn fit_aspect(aspect: f64, now: NSSize, to: NSSize) -> NSSize {
+    let w = to.width.max(MIN_W);
+    if aspect <= 0.0 {
+        return NSSize::new(w, to.height);
+    }
+    let by_width = (w - now.width).abs() / now.width.max(1.0) >= (to.height - now.height).abs() / now.height.max(1.0);
+    if by_width {
+        NSSize::new(w, (w - CHROME_W) / aspect + CHROME_H)
+    } else {
+        let w = ((to.height - CHROME_H) * aspect + CHROME_W).max(MIN_W);
+        NSSize::new(w, (w - CHROME_W) / aspect + CHROME_H)
+    }
+}
+
+/// Room for the title's minimum and every control.
+const MIN_W: f64 = 8.0 + TITLE_MIN + BAR * 9.0 + CHROME_W;
+
 impl PopTarget {
-    /// Does `m` to the video; the buttons then show how it is.
+    /// Does `m` to the video; the buttons then show how it is, and the
+    /// window takes the video's shape.
     fn media(&self, m: Media) {
         let Some(mtm) = MainThreadMarker::new() else { return };
         let k = self.ivars().source.clone();
         let Some((Some(web), frame)) = with_session(&k, |s| (s.web.load(), s.frame.clone())) else { return };
         run_then(mtm, &web, frame.as_deref(), &m.script(), move |r| {
             let r = media_state(r);
-            let me = with_session(&k, |s| s.popped.as_ref().map(|p| p.target.clone())).flatten();
-            if let Some(me) = me {
+            let me = with_session(&k, |s| s.popped.as_ref().map(|p| (p.target.clone(), p.panel.clone()))).flatten();
+            if let Some((me, panel)) = me {
                 me.show(r["result"] == "playing", r["muted"] == true);
+                let (w, h) = (r["width"].as_f64().unwrap_or(0.0), r["height"].as_f64().unwrap_or(0.0));
+                if w > 0.0 && h > 0.0 && (me.ivars().aspect.get() - w / h).abs() > 0.001 {
+                    me.ivars().aspect.set(w / h);
+                    // Its width stays, the height follows; the top edge stays put.
+                    let f = panel.frame();
+                    let size = fit_aspect(w / h, f.size, f.size);
+                    let top = f.origin.y + f.size.height;
+                    panel.setFrame_display(NSRect::new(NSPoint::new(f.origin.x, top - size.height), size), true);
+                }
             }
         });
     }
 
+    fn button(&self, id: &str) -> Option<Retained<PipButton>> {
+        self.ivars().buttons.borrow().iter().find(|b| b.ivars().id == id).cloned()
+    }
+
     fn show(&self, playing: bool, muted: bool) {
-        let c = self.ivars().colors.borrow().clone();
-        if let Some(b) = self.ivars().play.borrow().as_ref() {
-            set_title(b, if playing { "❚❚" } else { "▶" }, &c.foreground);
+        if let Some(b) = self.button("toggle") {
+            b.set(if playing { "❚❚" } else { "▶" }, None, if playing { "Pause" } else { "Play" });
         }
-        if let Some(b) = self.ivars().mute.borrow().as_ref() {
-            set_title(b, if muted { "◁×" } else { "◁)" }, &c.foreground);
+        if let Some(b) = self.button("mute") {
+            b.set("", icon(if muted { VOLUME_X_SVG } else { VOLUME_SVG }), if muted { "Sound on" } else { "Sound off" });
         }
     }
 }
 
+/// One of the player's Lucide icons, 12 pt, tinted like text.
+fn icon(svg: &str) -> Option<Retained<NSImage>> {
+    let data = NSData::with_bytes(svg.as_bytes());
+    let img = NSImage::initWithData(NSImage::alloc(), &data)?;
+    img.setSize(NSSize::new(12.0, 12.0));
+    img.setTemplate(true);
+    Some(img)
+}
+
 impl Popped {
-    /// `rect`: the Herdr player's video on screen; the window adds its bar above.
+    /// `rect`: the Herdr player's video on screen; the window adds the bar
+    /// and border around it.
     fn new(mtm: MainThreadMarker, source: &str, rect: NSRect, colors: &Value) -> Popped {
         let colors = Colors::parse(colors);
-        let frame = NSRect::new(rect.origin, NSSize::new(rect.size.width, rect.size.height + BAR));
+        let size = NSSize::new((rect.size.width + CHROME_W).max(MIN_W), rect.size.height + CHROME_H);
+        let frame = NSRect::new(rect.origin, size);
         let style = NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable;
         let panel = NSPanel::initWithContentRect_styleMask_backing_defer(NSPanel::alloc(mtm), frame, style, NSBackingStoreType::Buffered, false);
         unsafe { panel.setReleasedWhenClosed(false) };
@@ -744,79 +893,86 @@ impl Popped {
         panel.setHasShadow(false);
         panel.setHidesOnDeactivate(false);
         panel.setBackgroundColor(Some(&colors.background));
-        let w = frame.size.width;
-        let h = frame.size.height;
-        let content = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), frame.size));
+        let (w, h) = (size.width, size.height);
+        let content = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(0.0, 0.0), size));
         panel.setContentView(Some(&content));
         let sizing = NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable;
         // The frame: a 1 px square border around the background.
-        let frame_box = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), frame.size), &colors.background, Some(&colors.border));
+        let frame_box = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), size), &colors.background, Some(&colors.border));
         frame_box.setAutoresizingMask(sizing);
         content.addSubview(&frame_box);
         // The video, inside the border, under the bar.
-        let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - 2.0, h - BAR - 1.0)));
+        let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - CHROME_W, h - CHROME_H)));
         host.setAutoresizingMask(sizing);
         content.addSubview(&host);
-        // The bar: a dim title, then the buttons on the right.
-        let bar = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, h - BAR), NSSize::new(w - 2.0, BAR - 1.0)));
+        // The bar (22 px with its rule, as in Herdr): the title, then the controls flush right.
+        let bar = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, h - 1.0 - BAR), NSSize::new(w - CHROME_W, BAR)));
         bar.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin);
         content.addSubview(&bar);
-        let rule = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w - 2.0, 1.0)), &colors.border, None);
+        let rule = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w - CHROME_W, 1.0)), &colors.border, None);
         rule.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         bar.addSubview(&rule);
-        let title = NSTextField::labelWithString(&NSString::from_str("picture in picture"), mtm);
+        let title = NSTextField::labelWithString(&NSString::from_str(TITLE), mtm);
         title.setFont(Some(&font()));
         title.setTextColor(Some(&colors.dim));
-        let target = PopTarget::new(mtm, source, colors.clone());
-        let buttons = [
-            ("↩", sel!(back:), "Back to the page"),
-            ("⇲", sel!(home:), "Back into Herdr"),
-            ("«", sel!(rewind:), "Back 10 seconds"),
-            ("❚❚", sel!(toggle:), "Play / pause"),
-            ("»", sel!(forward:), "On 10 seconds"),
-            ("◁)", sel!(mute:), "Sound off / on"),
-            ("✕", sel!(close:), "Close (the video stops)"),
+        let target = PopTarget::new(mtm, source);
+        let controls: [(&'static str, &str, Option<&str>, &str); 9] = [
+            ("back", "↩", None, "Back to the page"),
+            ("rewind", "«", None, "Back 10 seconds"),
+            ("toggle", "❚❚", None, "Pause"),
+            ("forward", "»", None, "On 10 seconds"),
+            ("mute", "", Some(VOLUME_SVG), "Sound off"),
+            ("pane", "◧", None, "Into a pane"),
+            ("park", "⤓", None, "Park as a chip"),
+            ("home", "⇲", None, "Back into Herdr"),
+            ("close", "✕", None, "Close"),
         ];
-        let mut x = w - 2.0 - 24.0 * buttons.len() as f64 - 4.0;
-        // The title up to the buttons, cut short (… ) when the window is narrow.
+        let inner = w - CHROME_W;
+        let mut x = inner - BAR * controls.len() as f64;
+        // The title up to the controls, cut short (…) when the window is narrow.
         title.setFrame(NSRect::new(NSPoint::new(8.0, 3.0), NSSize::new((x - 12.0).max(0.0), 15.0)));
         title.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         title.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
         bar.addSubview(&title);
-        for (label, action, tip) in buttons {
-            let b = NSButton::initWithFrame(NSButton::alloc(mtm), NSRect::new(NSPoint::new(x, 0.0), NSSize::new(24.0, BAR - 1.0)));
-            b.setBordered(false);
-            set_title(&b, label, &colors.foreground);
+        for (id, glyph, svg, name) in controls {
+            let cell = NSRect::new(NSPoint::new(x, 1.0), NSSize::new(BAR, BAR - 1.0));
+            let back = flat_box(mtm, cell, &colors.hover, None);
+            back.setHidden(true);
+            back.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            bar.addSubview(&back);
+            let b = PipButton::new(mtm, cell, id, back, colors.clone(), &title);
+            b.set(glyph, svg.and_then(icon), name);
             unsafe {
                 b.setTarget(Some(&target));
-                b.setAction(Some(action));
+                b.setAction(Some(sel!(press:)));
             }
             b.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
-            b.setToolTip(Some(&NSString::from_str(tip)));
             bar.addSubview(&b);
-            if label == "❚❚" {
-                *target.ivars().play.borrow_mut() = Some(b.clone());
-            }
-            if label == "◁)" {
-                *target.ivars().mute.borrow_mut() = Some(b.clone());
-            }
-            x += 24.0;
+            target.ivars().buttons.borrow_mut().push(b);
+            x += BAR;
         }
-        panel.setContentMinSize(NSSize::new(240.0, 135.0 + BAR));
+        *target.ivars().title.borrow_mut() = Some(title);
+        panel.setDelegate(Some(ProtocolObject::from_ref(&*target)));
+        panel.setContentMinSize(NSSize::new(MIN_W, 100.0));
         panel.orderFrontRegardless();
         Popped { panel, host, target }
     }
 }
 
 impl PopTarget {
-    fn new(mtm: MainThreadMarker, source: &str, colors: Colors) -> Retained<Self> {
-        let this = Self::alloc(mtm).set_ivars(PopIvars { source: source.to_owned(), play: RefCell::new(None), mute: RefCell::new(None), colors: RefCell::new(colors) });
+    fn new(mtm: MainThreadMarker, source: &str) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(PopIvars {
+            source: source.to_owned(),
+            buttons: RefCell::new(Vec::new()),
+            title: RefCell::new(None),
+            aspect: std::cell::Cell::new(0.0),
+        });
         unsafe { msg_send![super(this), init] }
     }
 }
 
 impl Colors {
-    /// `{ background, foreground, dim, border }` as `#rrggbb[aa]`; Nocturne's dark defaults.
+    /// `{ background, foreground, dim, border, hover }` as `#rrggbb[aa]`; Nocturne's dark defaults.
     fn parse(v: &Value) -> Colors {
         let get = |k: &str, d: &str| color(v.get(k).and_then(Value::as_str).and_then(hex).unwrap_or_else(|| hex(d).unwrap()));
         Colors {
@@ -824,6 +980,7 @@ impl Colors {
             foreground: get("foreground", "#d6d6d6"),
             dim: get("dim", "#6b6b6b"),
             border: get("border", "#2a2a2e"),
+            hover: get("hover", "#1c1c20"),
         }
     }
 }
@@ -896,7 +1053,22 @@ fn screen_rect(view: &NSView) -> Option<NSRect> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Media, hex, media_state, seek_by};
+    use super::{CHROME_H, CHROME_W, MIN_W, Media, fit_aspect, hex, media_state, seek_by};
+    use objc2_foundation::NSSize;
+
+    #[test]
+    fn the_popped_window_keeps_the_videos_shape_from_any_edge() {
+        let now = NSSize::new(400.0, 300.0);
+        // Wider by its right edge: as much taller as a 4:3 video needs.
+        let s = fit_aspect(4.0 / 3.0, now, NSSize::new(482.0, 300.0));
+        assert_eq!((s.width, s.height), (482.0, 360.0 + CHROME_H));
+        // Taller by its bottom edge: wider to match.
+        let s = fit_aspect(4.0 / 3.0, now, NSSize::new(400.0, 300.0 + 60.0));
+        assert!(((s.width - CHROME_W) / (s.height - CHROME_H) - 4.0 / 3.0).abs() < 1e-9);
+        // Never narrower than its controls need; unknown shape: as dragged.
+        assert_eq!(fit_aspect(16.0 / 9.0, now, NSSize::new(100.0, 100.0)).width, MIN_W);
+        assert_eq!(fit_aspect(0.0, now, NSSize::new(500.0, 333.0)).height, 333.0);
+    }
     use serde_json::json;
 
     #[test]
@@ -908,6 +1080,7 @@ mod tests {
         for m in [Media::Toggle, Media::Seek(-10.0), Media::Mute(None), Media::Mute(Some(false)), Media::Sync] {
             assert!(m.script().contains("muted: v.muted"), "{m:?}");
         }
+        assert!(Media::Sync.script().contains("width: v.videoWidth, height: v.videoHeight"));
         let r = media_state(json!({ "result": r#"{"result":"paused","muted":true}"# }));
         assert_eq!((r["result"].as_str(), r["muted"].as_bool()), (Some("paused"), Some(true)));
         assert_eq!(media_state(json!({ "result": "none" }))["result"], "none");
