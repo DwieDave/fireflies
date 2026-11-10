@@ -23,18 +23,39 @@
       "type": "column",
       "children": [
         {
-          "id": "tabs",
-          "type": "block",
-          "content": {
-            "mod": "nocturne",
-            "props": {
-              "role": "tabs"
-            }
-          },
+          "id": "tab-row",
+          "type": "row",
           "size": {
             "px": 36
           },
-          "window_drag": true
+          "resizable": false,
+          "children": [
+            {
+              "id": "tabs",
+              "type": "block",
+              "content": {
+                "mod": "nocturne",
+                "props": {
+                  "role": "tabs"
+                }
+              },
+              "window_drag": true
+            },
+            {
+              "id": "notify",
+              "type": "block",
+              "content": {
+                "mod": "nocturne-notifications",
+                "props": {
+                  "role": "bell"
+                }
+              },
+              "size": {
+                "px": 64
+              },
+              "window_drag": true
+            }
+          ]
         },
         {
           "id": "main",

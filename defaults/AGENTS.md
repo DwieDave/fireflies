@@ -190,6 +190,40 @@ the highlighted line shows where it will land.
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
+- **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
+  for everything agents need from the person, from every agent, space and
+  machine. The bell at the right of Nocturne's tab strip counts what waits
+  (permissions and questions in a pink chip, finished or failed agents as a
+  dim `+n`); it or cmd-shift-a (`nocturne-notifications.open`) opens the
+  overview: Permissions, Questions and Other (finished, error, waiting for
+  input), each with the agent, its space / tab and how long it has waited.
+  A permission shows the exact tool call and the options its terminal lists;
+  answer with one (↑↓ enter, or its number), or with "yes, but…" / "no, but…"
+  (tab / shift-tab): a line sent with the answer as the agent's next
+  instruction. A question block opens a dialog like Claude Code's
+  AskUserQuestion (j/k or ↑↓, enter / space, typed "other" answers, tab /
+  shift-tab between questions, a review that submits all of them). Answers go
+  into the agent's terminal as keys, the way a person answers there, and the
+  screen is read again before every key: a request that changed or went away
+  is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
+  says what the agent asks and opens it here. p peeks, g goes to the agent;
+  x puts a finished one away. The overview and the question dialog also take
+  `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
+  `down`, `enter`, `space`, `tab`, `back`, `yes-but`, `no-but`, `peek`,
+  `goto`, `put-away`, `close`, `1`…`9`. Claude Code's exact requests and its
+  questions come from its PermissionRequest hook, which only records them and
+  never answers (it prints nothing; outside a herdr-core terminal it does
+  nothing). Turn it on in `~/.claude/settings.json` (on each machine its
+  agents run on; elsewhere, copy the script there):
+  ```json
+  { "hooks": { "PermissionRequest": [ { "hooks": [ { "type": "command",
+    "command": "~/.config/herdr-app/mods/nocturne-notifications/bin/claude-hook", "timeout": 5 } ] } ] } }
+  ```
+  It writes `${XDG_STATE_HOME:-~/.local/state}/herdr-app/notify/<terminal>.claude.json`.
+  Without it, and for other agents (Codex, pi, opencode, ...), a request shows
+  herdr-core's words for it and the end of the agent's screen, with peek and
+  go to; an agent family gets exact answers by an adapter in the mod's
+  `model.js` (`describe` the request from its screen, `step` the keys).
   Ctrl-click (Cmd-click on macOS) a live terminal address in terminal text to
   peek at it. Bare addresses refer to the machine of the terminal showing them;
   use `machine/address` for another machine. Names and non-live addresses aren't links.
