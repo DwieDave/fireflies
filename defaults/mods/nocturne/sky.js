@@ -99,7 +99,8 @@ export default class Sky {
     // the files pane (files.js), nocturne.github (cmd-shift-g) the GitHub
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
-    // on that run's output), nocturne.new (cmd-n) the "+ new" menu.
+    // on that run's output; nocturne.scripts-again runs the folder's last
+    // script again), nocturne.new (cmd-n) the "+ new" menu.
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -112,6 +113,7 @@ export default class Sky {
         else if (c === "files") toggleFiles();
         else if (c === "github") toggleGithub();
         else if (c === "scripts") toggleDeck({ centered: true });
+        else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "new") openNewMenu({ centered: true });
         cx.notify();
