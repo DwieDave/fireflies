@@ -74,7 +74,8 @@ export function nixScripts(json, sys = {}) {
     const all = names(out[output]).sort((a, b) => Number(here(b, home)) - Number(here(a, home)));
     for (const n of all) {
       const mine = here(n, home);
-      list.push({ group, name: `switch ${n}`, cmd: `${tool} switch --flake ${ref(n)}`, ...(admin ? { admin } : {}), ...(mine ? { here: true } : {}) });
+      // A switch builds as the person first, then only activates with root (switchPlan).
+      list.push({ group, name: `switch ${n}`, cmd: `${tool} switch --flake ${ref(n)}`, ...(admin ? { admin, plan: `${tool}:${n}` } : {}), ...(mine ? { here: true } : {}) });
       list.push({ group, name: `build ${n}`, cmd: `${tool} build --flake ${ref(n)}`, ...(mine ? { here: true } : {}) });
     }
   };
@@ -92,28 +93,30 @@ export function nixStatic() {
   ].map((s) => ({ ...s, id: scriptId(s.group, s.name) }));
 }
 
-// The AppleScript: the command, PATH, folder and log file come in as argv,
-// never spliced into the script, and each goes to the root shell through
-// `quoted form of`; the command itself is already a shell line we built.
+// The AppleScript: the command, PATH, folder and log file, then the store
+// path and the user (ARG, ARGUSER) come in as argv, never spliced into the
+// script; each value reaches the root shell through `quoted form of`, and the
+// command itself is a fixed shell line we wrote (it reads "$ARG").
 // The root shell appends everything to the log and writes the exit code
 // beside it, so `do shell script` itself only fails when the dialog does.
 export const ADMIN_SCRIPT = [
   "on run argv",
-  'do shell script "export PATH=" & quoted form of (item 2 of argv) & "; cd " & quoted form of (item 3 of argv) & " && { " & (item 1 of argv) & " ; } >> " & quoted form of (item 4 of argv) & " 2>&1; echo $? > " & quoted form of ((item 4 of argv) & ".code") with administrator privileges',
+  'do shell script "export PATH=" & quoted form of (item 2 of argv) & " ARG=" & quoted form of (item 5 of argv) & " ARGUSER=" & quoted form of (item 6 of argv) & "; cd " & quoted form of (item 3 of argv) & " && { " & (item 1 of argv) & " ; } >> " & quoted form of (item 4 of argv) & " 2>&1; echo $? > " & quoted form of ((item 4 of argv) & ".code") with administrator privileges',
   "end run",
 ];
 
-/** The shell line that runs `cmd` as root through the macOS password dialog:
- *  the run's terminal tails the log, so output streams; it exits with the
- *  command's own code, or CANCELLED when the person cancels the dialog. */
-export function adminLine(cmd) {
+/** The shell line that runs `cmd` as root through the macOS password dialog,
+ *  with $ARG (a store path the line built before) and $ARGUSER (who asked)
+ *  set for it: the run's terminal tails the log, so output streams; it exits
+ *  with the command's own code, or CANCELLED when the dialog is cancelled. */
+export function adminLine(cmd, what = cmd) {
   const script = ADMIN_SCRIPT.map((l) => `-e ${sq(l)}`).join(" ");
   return [
     `C=${sq(cmd)}`,
     `L=$(mktemp "\${TMPDIR:-/tmp}/nocturne-admin.XXXXXX") || exit 1`,
-    `echo "asking for an administrator's password to run: $C"`,
+    `echo ${sq(`asking for an administrator's password to ${what}`)}`,
     `tail -n +1 -f "$L" & T=$!`,
-    `osascript ${script} "$C" "$PATH" "$PWD" "$L" 2>"$L.err"`,
+    `osascript ${script} "$C" "$PATH" "$PWD" "$L" "\${ARG:-}" "$(id -un)" 2>"$L.err"`,
     `R=$?`,
     `sleep 0.3; kill $T 2>/dev/null`,
     `if [ $R -ne 0 ]; then if grep -q -- "-128" "$L.err"; then echo "cancelled: no password given"; rm -f "$L" "$L.err"; exit ${CANCELLED}; fi; cat "$L.err" >&2; rm -f "$L" "$L.err"; exit $R; fi`,
@@ -123,8 +126,58 @@ export function adminLine(cmd) {
   ].join("; ");
 }
 
-/** The line a script runs as: its command, or wrapped to get root. */
-export function shellLine(cmd, admin) {
+const NIX = `nix --extra-experimental-features ${sq("nix-command flakes")}`;
+const PROFILE = "/nix/var/nix/profiles/system";
+
+/** What root does with a built nix-darwin system, as darwin-rebuild switch
+ *  does after its build: point the system profile at it, run the legacy
+ *  activate-user as the person (unless it says it's deprecated), activate. */
+export const DARWIN_ACTIVATE = `nix-env -p ${PROFILE} --set "$ARG" && if [ -x "$ARG/activate-user" ] && ! grep -q '^# nix-darwin: deprecated$' "$ARG/activate-user"; then sudo --user="$ARGUSER" --set-home -- "$ARG/activate-user"; fi && "$ARG/activate"`;
+
+/** The same for NixOS, as nixos-rebuild switch does: the profile, then switch-to-configuration. */
+export const NIXOS_ACTIVATE = `nix-env -p ${PROFILE} --set "$1" && "$1/bin/switch-to-configuration" switch`;
+
+/** One attribute name in a nix attribute path: bare when plain, else in
+ *  double quotes ("my.host" stays one name, not two). */
+export const attrName = (n) => (/^[A-Za-z_][\w'-]*$/.test(n) ? n : `"${String(n).replace(/["\\$]/g, "\\$&")}"`);
+
+/** Builds `attr` of the flake here as the person (its log streams to the
+ *  terminal) and leaves the store path in $ARG; a failed build ends the run
+ *  with the build's code, before anything asks for a password. */
+export function buildStep(attr) {
+  return [
+    `echo "building the system configuration..."`,
+    `ARG=$(${NIX} build --no-link --print-out-paths -- ${ref(attr)}) || exit $?`,
+    `ARG=$(printf '%s\\n' "$ARG" | tail -n 1)`,
+    `[ -d "$ARG" ] || { echo "the build gave no system to activate"; exit 1; }`,
+    `echo "built $ARG"`,
+  ].join("; ");
+}
+
+/** A switch, in two steps: build as the person (evaluating a flake the
+ *  person owns: as root, git refuses another user's repository), then
+ *  activate the result with root, through the password dialog (osascript)
+ *  or sudo. `plan`: "darwin-rebuild:<name>" or "nixos-rebuild:<name>". */
+export function switchPlan(plan, admin) {
+  const at = String(plan).indexOf(":");
+  const tool = String(plan).slice(0, at), name = String(plan).slice(at + 1);
+  if (tool === "darwin-rebuild") {
+    const build = buildStep(`darwinConfigurations.${attrName(name)}.system`);
+    return admin === "osascript" ? `${build}; ${adminLine(DARWIN_ACTIVATE, "activate it")}`
+      : `${build}; sudo env ARG="$ARG" ARGUSER="$(id -un)" sh -c ${sq(DARWIN_ACTIVATE)}`;
+  }
+  if (tool === "nixos-rebuild") {
+    const build = buildStep(`nixosConfigurations.${attrName(name)}.config.system.build.toplevel`);
+    return admin === "osascript" ? `${build}; ${adminLine(NIXOS_ACTIVATE.replace(/\$1/g, "$ARG"), "activate it")}`
+      : `${build}; sudo sh -c ${sq(NIXOS_ACTIVATE)} _ "$ARG"`;
+  }
+  return null;
+}
+
+/** The line a script runs as: its command; a switch's two steps; or wrapped to get root. */
+export function shellLine(cmd, admin, plan) {
+  const planned = plan && admin ? switchPlan(plan, admin) : null;
+  if (planned) return planned;
   if (admin === "osascript") return adminLine(cmd);
   if (admin === "sudo") return `sudo ${cmd}`;
   return cmd;

@@ -1,6 +1,6 @@
 // The tab strip: tabs sit on a dithered horizon line; the shown one is
 // underlined in a blue checker. Right of the tabs, icons only:
-//   scripts ▶, a jar of runs, ■: the script runner (scripts.js); runs the
+//   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
 //           deck's queued jobs (jobs.js)
 //   files   the files pane down the tab's right edge (files.js); lit while open
 //   git     one button for the repo: the changed files and how far the branch

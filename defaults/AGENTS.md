@@ -176,10 +176,11 @@ the highlighted line shows where it will land.
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
   configurations, this machine's (its LocalHostName / hostname) first. A switch
-  that needs root shows a lock: on a Mac it asks through the system's password
-  dialog (osascript, administrator privileges), on Linux through sudo in its
-  terminal; a cancelled dialog ends the run as "cancelled". A picked script runs in a pane-less
-  terminal (`hc run --bg --no-parent`); ■ stops it; the deck watches (floats it),
+  that needs root shows a lock: it builds as you first (a flake evaluated as root
+  fails git's ownership check), then only activates the built system as root, on
+  a Mac through the system's password dialog (osascript, administrator
+  privileges), on Linux through sudo in its terminal; a cancelled dialog ends the run as "cancelled". A picked script runs in a pane-less
+  terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
   restarts, stops and dismisses runs, and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start

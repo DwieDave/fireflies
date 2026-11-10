@@ -1,8 +1,7 @@
 // The script runner's corner of the tab strip (the deck itself is the
-// nocturne-scripts mod): ▶, a little jar with one dithered cell per run in
+// nocturne-scripts mod): ▶ and a little jar with one dithered cell per run in
 // its state's color (running ones breathe, ok green, failed red, stopped
-// grey), then ■. ▶ and the jar open the deck under the pointer; ■ stops the
-// only running script at once and opens the deck when several run.
+// grey). A click opens the deck under the pointer; stopping happens there.
 // cmd-shift-r (nocturne.scripts) opens the deck centered.
 //
 // A run is a labeled pane-less terminal (nocturne-scripts/runs.js); this file
@@ -104,13 +103,6 @@ export function deckOpen() {
   return d?.id && Date.now() - (d.beat ?? 0) < 4000 ? d.id : null;
 }
 
-/** ■: the only running script stops; with several, the deck opens on them. */
-export function stopScripts() {
-  const live = scriptRuns().filter((r) => r.live);
-  if (live.length === 1) return hc(["kill", live[0].address]).catch(() => null);
-  if (live.length > 1) toggleDeck({ focus: "runs" });
-}
-
 const tone = (r) => (r.live ? "working" : r.reason === "killed" ? "idle" : r.code === 0 ? "done" : "blocked");
 
 /** The newest failed run's address, for the toast's click (nocturne.scripts-failed). */
@@ -141,7 +133,7 @@ export function tellFailures(list) {
   }
 }
 
-/** The strip's control: ▶, the jar, ■. `tool` is the strip's icon button. */
+/** The strip's control: ▶ and the jar. `tool` is the strip's icon button. */
 export function scriptsControl(t, tool) {
   const list = scriptRuns();
   const live = list.filter((r) => r.live).length;
@@ -158,7 +150,5 @@ export function scriptsControl(t, tool) {
     .child(tool(t, "tab-scripts-run", open, list.length ? `Run a script · ${tip}` : "Run a script", () => toggleDeck(),
       icon("play", open ? t.accent : t.muted),
       ...(cells.length ? [h_flex().gap(2).items_center().children(cells)] : []),
-      ...(more > 0 ? [div().text_size(10).text_color(t.dim).child(`+${more}`)] : [])))
-    .child(tool(t, "tab-scripts-stop", false, !live ? "Nothing running" : live === 1 ? "Stop the running script" : `Stop… (${live} running)`, () => stopScripts(),
-      icon("stop", live ? t.muted : t.ansi0)));
+      ...(more > 0 ? [div().text_size(10).text_color(t.dim).child(`+${more}`)] : [])));
 }
