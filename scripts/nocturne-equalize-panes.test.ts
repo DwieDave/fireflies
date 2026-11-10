@@ -1,9 +1,10 @@
 import { test, expect } from "bun:test";
 import { SCOPES, rows, shortcut } from "../defaults/mods/nocturne-equalize-panes/scopes.js";
 
-test("each row runs pane.equalize with its scope and the popup's pane", () => {
-  expect(rows("p3", 4).map((r) => r.args)).toEqual([
-    { scope: "all", pane: "p3" }, { scope: "row", pane: "p3" }, { scope: "column", pane: "p3" },
+test("each row runs pane.equalize with its scope and the popup's pane; the grid row gridifies", () => {
+  expect(rows("p3", 4).map((r) => [r.command, r.args])).toEqual([
+    ["pane.equalize", { scope: "all", pane: "p3" }], ["pane.equalize", { scope: "row", pane: "p3" }],
+    ["pane.equalize", { scope: "column", pane: "p3" }], ["nocturne.gridify", {}],
   ]);
   expect(rows(null, 2)[1].args).toEqual({ scope: "row" });
 });
@@ -27,4 +28,8 @@ test("shortcuts: bare pane.equalize counts as all; terminal-only bindings don't 
   expect(shortcut([{ section: "global", keys: "f9", action: "pane.equalize" }], "all")).toBe("f9");
   expect(shortcut(bound, "row")).toBe("");
   expect(shortcut(bound, "column")).toBe("ctrl-shift-c");
+});
+
+test("the grid row shows gridify's key", () => {
+  expect(shortcut([{ section: "layout:nocturne", keys: "cmd-alt-g", action: "nocturne.gridify" }], "grid")).toBe("cmd-alt-g");
 });

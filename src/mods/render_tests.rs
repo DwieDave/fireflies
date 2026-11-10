@@ -927,6 +927,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.files",
         "nocturne.github",
         "nocturne.scripts",
+        "nocturne.gridify",
         "nocturne-notifications.open",
         "nocturne-browser.url",
         "nocturne-browser.reload",
