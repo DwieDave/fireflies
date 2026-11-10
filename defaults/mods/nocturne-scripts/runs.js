@@ -8,6 +8,8 @@
 //   nocturne.script.runner
 //   nocturne.script.cmd
 //   nocturne.script.folder
+//   nocturne.script.admin   how it gets root: "osascript" (the macOS password
+//                           dialog) or "sudo"; none for most (nix.js shellLine)
 //
 // A finished run keeps its terminal (and its output) until it's dismissed
 // (`hc rm`) or restarted. Watching floats the terminal over the tab
@@ -16,6 +18,7 @@
 // import another mod's files).
 
 import { hc, run, shared, setShared } from "herdr";
+import { shellLine, CANCELLED } from "./nix.js";
 
 export const LABEL = "nocturne.script";
 // Ended runs' records, kept by the tab strip (../nocturne/scripts.js ENDED),
@@ -46,16 +49,18 @@ export function runs(all) {
         on: at > 0 ? String(t.address).slice(0, at) : null,
         live, code, reason: t.reason ?? null,
         started: t.created_ms ?? null, ended: t.finished_ms ?? null,
-        word: word(live, code, t.reason),
+        admin: l[`${LABEL}.admin`] || null,
+        word: word(live, code, t.reason, l[`${LABEL}.admin`]),
       };
     })
     .sort((a, b) => Number(b.live) - Number(a.live) || (b.started ?? 0) - (a.started ?? 0));
 }
 
-/** The state in words: running, ok, exit N, stopped. */
-export function word(live, code, reason) {
+/** The state in words: running, ok, exit N, stopped, cancelled (an admin dialog). */
+export function word(live, code, reason, admin) {
   if (live) return "running";
   if (reason === "killed") return "stopped";
+  if (admin && code === CANCELLED) return "cancelled";
   if (code === 0) return "ok";
   return code == null ? "ended" : `exit ${code}`;
 }
@@ -83,7 +88,8 @@ export function runArgs(s, folder, on) {
     ...label(`${LABEL}.cmd`, s.cmd), ...(folder ? label(`${LABEL}.folder`, folder) : []),
     // Nocturne's name for a terminal: the float's bar says "dev", not "sh".
     ...label("nocturne.name", s.name),
-    "--", s.cmd,
+    ...(s.admin ? label(`${LABEL}.admin`, s.admin) : []),
+    "--", shellLine(s.cmd, s.admin),
   ];
 }
 
@@ -117,5 +123,5 @@ export async function dismiss(r) {
 export async function restart(r) {
   if (r.live) await stop(r);
   await dismiss(r);
-  return start({ id: r.id, name: r.name, runner: r.runner, cmd: r.cmd }, r.folder, r.on);
+  return start({ id: r.id, name: r.name, runner: r.runner, cmd: r.cmd, admin: r.admin }, r.folder, r.on);
 }

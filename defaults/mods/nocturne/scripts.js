@@ -76,7 +76,7 @@ export async function trackRuns() {
 /** Every run: { address, name, live, code, reason, started }, the running ones first. */
 export function scriptRuns() {
   return scriptTerminals()
-    .map((t) => ({ address: t.address, name: t.labels[`${LABEL}.name`] || t.labels[LABEL], live: t.state !== "finished",
+    .map((t) => ({ address: t.address, name: t.labels[`${LABEL}.name`] || t.labels[LABEL], admin: t.labels[`${LABEL}.admin`] || null, live: t.state !== "finished",
       code: typeof t.exit_code === "number" ? t.exit_code : null, reason: t.reason ?? null, started: t.created_ms ?? 0, ended: t.finished_ms ?? 0 }))
     .sort((a, b) => Number(b.live) - Number(a.live) || a.started - b.started);
 }
@@ -133,7 +133,10 @@ export function tellFailures(list) {
   for (const r of fresh) keep[r.address] = 1;
   setShared(TOLD, keep);
   for (const r of fresh) {
-    notify({ title: `${r.name} failed · exit ${r.code}`, body: "click to see its output", level: "error",
+    // An admin run whose password dialog was cancelled (nocturne-scripts/nix.js CANCELLED).
+    const cancelled = r.admin && r.code === 130;
+    notify({ title: cancelled ? `${r.name} cancelled` : `${r.name} failed · exit ${r.code}`,
+      body: cancelled ? "no password given" : "click to see its output", level: cancelled ? "warning" : "error",
       action: { name: "nocturne.scripts-failed" } });
   }
 }
