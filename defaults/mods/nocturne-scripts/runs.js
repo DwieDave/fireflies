@@ -10,6 +10,8 @@
 //   nocturne.script.folder
 //   nocturne.script.admin   how it gets root: "osascript" (the macOS password
 //                           dialog) or "sudo"; none for most (nix.js shellLine)
+//   nocturne.script.plan    a nix switch: "darwin-rebuild:<name>" / "nixos-rebuild:<name>",
+//                           built as the person, activated as root (nix.js switchPlan)
 //
 // A finished run keeps its terminal (and its output) until it's dismissed
 // (`hc rm`) or restarted. Watching floats the terminal over the tab
@@ -50,6 +52,7 @@ export function runs(all) {
         live, code, reason: t.reason ?? null,
         started: t.created_ms ?? null, ended: t.finished_ms ?? null,
         admin: l[`${LABEL}.admin`] || null,
+        plan: l[`${LABEL}.plan`] || null,
         word: word(live, code, t.reason, l[`${LABEL}.admin`]),
       };
     })
@@ -90,7 +93,8 @@ export function runArgs(s, folder, on) {
     // Nocturne's name for a terminal: the float's bar says "dev", not "sh".
     ...label("nocturne.name", s.name),
     ...(s.admin ? label(`${LABEL}.admin`, s.admin) : []),
-    "--", shellLine(s.cmd, s.admin),
+    ...(s.plan ? label(`${LABEL}.plan`, s.plan) : []),
+    "--", shellLine(s.cmd, s.admin, s.plan),
   ];
 }
 
@@ -133,7 +137,7 @@ export function dismiss(r) {
 /** Runs it again in the same folder: the old run goes, a new one starts. */
 export function restart(r) {
   forget(r);
-  const s = { id: r.id, name: r.name, runner: r.runner, cmd: r.cmd, admin: r.admin };
+  const s = { id: r.id, name: r.name, runner: r.runner, cmd: r.cmd, admin: r.admin, plan: r.plan };
   enqueue({ name: r.name, steps: [
     ...(r.live ? [{ hc: ["kill", r.address] }] : []),
     { hc: ["rm", r.address] },
