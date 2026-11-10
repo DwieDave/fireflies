@@ -68,6 +68,7 @@ export function playSound(sound: string): null;
  *   pane.park {pane?, index?} (a chip in its tab's bottom row, still running; index moves a parked chip, 1 = first),
  *   pane.unpark {pane?, target?, edge?} (back where it was, or beside target; target without edge: in its place),
  *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target},
+ *   pane.move {pane?, tab? | target?, edge?, space?, name?} (to another tab on its machine, or a new tab; keeps running),
  *   pane.equalize {scope?: "all" | "row" | "column", pane?} (even shares: every row and column of the tab, or the
  *   pane's nearest row or column; fixed px sizes stay). Pane menus get target { pane, terminal }.
  * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?, view?, show?}
