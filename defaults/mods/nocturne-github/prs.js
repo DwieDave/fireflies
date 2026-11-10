@@ -115,7 +115,7 @@ export default class Prs {
   openCheck(c, cx) {
     if (!c) return;
     if (c.runId) this.app.showRun(c.runId, c.jobId, cx);
-    else if (c.url) cx.open_url(c.url);
+    else if (c.url) this.app.openUrl(c.url, cx);
   }
 
   /** Keys while this tab shows; true when one was used. */
@@ -147,7 +147,7 @@ export default class Prs {
     else if (k === "d" && p) this.app.openDiff(p.number);
     else if (k === "c" && p) this.startComment(cx);
     else if (k === "C" && p) this.app.ask(`Check out #${p.number} (${p.headRefName}) in ${this.app.repo.root}?`, () => this.checkout(p, cx));
-    else if (k === "o" && p) this.app.act(ghRun(this.app.repo, ["pr", "view", String(p.number), "--web"]), null, cx);
+    else if (k === "o" && p) this.app.openUrl(this.detail()?.pr?.url ?? `${this.app.repo.url}/pull/${p.number}`, cx);
     else if (k === "a" && p) this.app.showRuns({ branch: p.headRefName, label: `#${p.number}` }, cx);
     else return false;
     return true;
@@ -274,7 +274,8 @@ export default class Prs {
           .child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name))))))
       .child(div().relative().h(2).mt(4).child(dither(t.ansi0, 1)));
     const md = (id, text) => div().text_size(12.5).text_color(t.foreground)
-      .child(TextView.markdown(id, text?.trim() ? text : "_No description._").selectable(true));
+      .child(TextView.markdown(id, text?.trim() ? text : "_No description._").selectable(true)
+        .on_link_click((url, cx) => this.app.openUrl(url, cx)));
     const items = d ? this.timeline(d) : [];
     const card = (c, i) => {
       const [what, tone] = c.kind === "review" ? (REVIEW[c.state] ?? [String(c.state ?? "").toLowerCase().replace(/_/g, " "), null])
