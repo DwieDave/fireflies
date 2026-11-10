@@ -179,6 +179,9 @@ impl Kind {
                 "state",
                 "dispose",
                 "pip.toggle",
+                "pip.seek",
+                "pip.mute",
+                "pip.sync",
                 "pip.back",
                 "pip.close",
                 "pip.popOut",
@@ -665,7 +668,7 @@ mod tests {
         assert_eq!(s.redacted(), "pip");
         assert!(Spec::parse(&json!({ "kind": "pip" })).is_err());
         assert!(Spec::parse(&json!({ "kind": "pip", "of": "" })).is_err());
-        assert!(Kind::Pip.allows("pip.back") && Kind::Pip.allows("pip.popOut"));
+        assert!(Kind::Pip.allows("pip.back") && Kind::Pip.allows("pip.popOut") && Kind::Pip.allows("pip.seek"));
         assert!(!Kind::Pip.allows("browser.navigate"));
         assert!(Kind::Web.allows("web.pip"));
         assert!(capabilities()["kinds"].as_array().unwrap().iter().any(|k| k["kind"] == "pip"));

@@ -621,7 +621,7 @@ The main ones:
   the pane leaves the arrangement and shows as a small chip (title and status dot) in a row
   under the tab; its terminal keeps running and it stays the tab's (status, alerts, `ls`
   under `parked`, `panes()` with `parked: true`, closing the tab ends it). A tab keeps one
-  pane in place. `index` (1 = first) puts the chip at that spot; on a parked pane it only
+  pane in place. A parked mod pane keeps running too (a web page plays on). `index` (1 = first) puts the chip at that spot; on a parked pane it only
   moves the chip. `pane.unpark {pane?, target?, edge?}` puts it back and focuses it (default:
   the shown tab's last parked one): beside the pane it was parked from, or beside `target`
   on `edge` ("right" | "left" | "top" | "bottom"); `target` without `edge` takes target's
@@ -726,21 +726,35 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
-  Picture in picture (no macOS Picture in Picture; nothing shows outside Herdr): a web view
+  Picture in picture (no macOS Picture in Picture): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
   and sends `pip.enter { of }` (`pip.start { result | error }`: `"none"` when there is no video);
   again: back. A native view `{ kind: "pip", of }` then takes the page's whole web view and
-  lifts the video into the page's top layer to fill it (an embedded player's iframe too); the
-  pane is left empty meanwhile (draw a placeholder; the page gets `pip.leave` when it's back).
-  Actions: `pip.toggle` (play/pause; event `pip.state { result }`), `pip.back` (the page goes
-  home playing on, and its pane takes focus, across tabs and spaces), `pip.close` (home,
-  paused), `pip.popOut { colors: { background, foreground, dim, border } }` (a square window
-  above every app and space with ↩ ⇲ ❚❚ ✕, whose ⇲ sends the page `pip.popIn { of }`; the
-  view may go). Event `pip.ended`: the page went home (also on a new page, a crash, a closed
-  pane, or the video leaving the page). One video at a time.
+  lifts the video into the page's top layer to fill it, with the rest of the page hidden, in
+  any of the site's layouts (a site moving its player, as YouTube does when the width
+  changes, is followed; an embedded player's iframe too); the pane is left empty meanwhile
+  (draw a placeholder; the page gets `pip.leave` when it's back). Actions: `pip.toggle`
+  (play/pause), `pip.seek { by }` (seconds, back when negative), `pip.mute { muted? }`
+  (sound off/on; without `muted`, the other way round), `pip.sync` (nothing): each answers
+  with event `pip.state { result: "playing" | "paused", muted }`. `pip.back` (the page goes
+  home playing on, and its pane takes focus, across tabs and spaces, out of a chip too),
+  `pip.close` (home, paused), `pip.popOut { colors: { background, foreground, dim, border } }`
+  (a square, resizable window above every app and space, in the screen's bottom right
+  corner, with ↩ ⇲ « ❚❚ » sound ✕, whose ⇲ sends the page `pip.popIn { of }`; the view may
+  go). The newest `pip` view of a page holds its video: when another takes it (a pane, out
+  of Herdr), the old one and the page get `pip.moved` (the page's with `{ popped }`). Event
+  `pip.ended`: the page went home (also on a new page, a crash, a closed pane, or the video
+  leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
-  `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip`.
+  `nocturne-pip` player, a resizable `kind: "window"` overlay with key `nocturne-pip`. While
+  the video is out, the browser pane is parked (its tab settled when it is the tab's only
+  pane) and comes back when the video goes home or into a pane. The player's bar: ↩ « ❚❚ »
+  sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
+  shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Herdr)
+  ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). Commands
+  `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
+  `.close`; Nocturne's palette lists them while the player window is open.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
@@ -1128,6 +1142,11 @@ All of it is in `herdr.d.ts`. In short:
   or centered. `key: "name"` remembers its spot (opening that key again
   replaces it); `keep: true` with a key reopens it on the next start. A
   layout switch closes windows; kept ones come back with their layout.
+  `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
+  its edges and corners (grips just outside it): never below `min` (default 120×80) nor
+  bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
+  border) is taken off; a keyed one remembers its size. A video player:
+  `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
   A window can hold a layout, terminals too: a terminal keeps its presses
   (selecting text), so give it a mod block to drag by, a title bar:
   `openOverlay({ kind: "window", key: "t7", width: 600, height: 400, layout: { type: "column", children: [{ type: "block", size: { px: 28 }, content: { mod: "my-titlebar" } }, { type: "block", content: { terminal: "t7" } }] } })`.

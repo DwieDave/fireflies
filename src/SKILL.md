@@ -93,7 +93,7 @@ herdr-app do pane.equalize '{"scope":"all"}'
 
 `pane.park {pane?, index?}` moves a pane out of the arrangement into a chip
 row at the bottom of its tab; it keeps running and stays in the tab (`ls`
-lists it under the tab's `parked`). A tab keeps one pane in place.
+lists it under the tab's `parked`; a mod pane keeps running too). A tab keeps one pane in place.
 `pane.unpark {pane?, target?, edge?}` puts it back where it was, or beside
 `target` on `edge`. Park only when asked; it changes what the person sees:
 
