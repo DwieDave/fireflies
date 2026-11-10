@@ -65,7 +65,9 @@ export function playSound(sound: string): null;
  *   or height), pane.close {pane?}, pane.zoom {pane?},
  *   pane.font_bigger|font_smaller|font_reset {pane?} (that pane's terminal text size, see PaneInfo.font_zoom),
  *   pane.float {pane?} (its terminal floats over the tab; the pane goes, as terminal.park),
- *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target}. Pane menus get target { pane, terminal }.
+ *   pane.focus {pane | terminal}, pane.go {direction}, pane.swap {pane?, direction | target},
+ *   pane.equalize {scope?: "all" | "row" | "column", pane?} (even shares: every row and column of the tab, or the
+ *   pane's nearest row or column; fixed px sizes stay). Pane menus get target { pane, terminal }.
  * Terminals: terminal.open {argv?, folder?, place?: "tab" | "right" | "down" | "left" | "up" | "auto" | "float", pane?, view?, show?}
  *   (pane: the one right/down/left/up/auto splits, default the focused one; "float": no pane, floating over the tab
  *   in the "terminal-peek" overlay; closing it leaves it running), terminal.kill {terminal},
