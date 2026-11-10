@@ -21,7 +21,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { closeOverlay, exec, hc, home, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
-import { FLAKE_SHOW, nixScripts } from "./nix.js";
+import { FLAKE_SHOW, nixScripts, oldId } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
 
 const ART = "mods/nocturne/art";
@@ -76,6 +76,8 @@ export default class ScriptsDeck extends View {
     this.query = "";
     this.cursor = p.focus === "runs" ? 0 : -1; // -1: the first script, once there are any
     this.output = null; // an ended run's output, shown in place of the scripts
+    // Opened by nocturne.scripts-again: runs this folder's last script once it's found.
+    this.again = Boolean(p.again);
     // Opened from a failure's toast: straight to that run's output.
     const shown = p.show && runs(withEnded(terminals(), shared(ENDED))).find((r) => r.address === p.show);
     if (shown && !shown.live) this.showOutput(shown, cx);
@@ -108,12 +110,22 @@ export default class ScriptsDeck extends View {
         this.failed = null;
         this.merge();
         if (probe.ls.has("flake.nix")) this.evalFlake(cx);
+        this.runAgain(cx);
       } catch (e) {
         this.failed = String(e?.message ?? e);
       }
       this.looking = false;
       cx.notify();
     });
+  }
+
+  /** nocturne.scripts-again: the last script picked here, picked again. */
+  runAgain(cx) {
+    if (!this.again) return;
+    this.again = false;
+    const s = this.scripts?.find((x) => x.id === this.recent()[0]);
+    if (s) this.go(s, false, cx);
+    else notify({ title: "nothing to run again", body: `no script picked in ${short(this.folder)} yet`, level: "info" });
   }
 
   /** The folder's scripts and its flake's (the last evaluation), each group
@@ -167,37 +179,29 @@ export default class ScriptsDeck extends View {
   }
 
   recent() {
-    return shared(RECENT)?.[this.key] ?? [];
+    return (shared(RECENT)?.[this.key] ?? []).map(oldId);
   }
 
   /** Runs a script in the background; `look`: float its terminal too. */
-  go(s, look, cx) {
+  /** Runs a script in the background; `look`: float its terminal too. The
+   *  strip does the starting (runs.js start queues it), so the deck can close
+   *  at once without taking the start with it. */
+  go(s, look) {
     const ids = [s.id, ...this.recent().filter((x) => x !== s.id)].slice(0, 20);
     setShared(RECENT, { ...(shared(RECENT) ?? {}), [this.key]: ids });
+    start(s, this.folder, this.on, look);
     this.dismissDeck();
-    const folder = this.folder, on = this.on;
-    cx.spawn(async () => {
-      try {
-        const address = await start(s, folder, on);
-        if (look && address) watch({ address });
-      } catch (e) {
-        notify({ title: `couldn't start ${s.name}`, body: String(e?.message ?? e), level: "error" });
-      }
-    });
   }
 
   act(what, r, cx) {
     // A run that ended has no terminal to float: its output shows here instead.
     if (what === "watch" && !r.live) return this.showOutput(r, cx);
     if (what === "watch") { this.dismissDeck(); return watch(r); }
-    cx.spawn(async (cx) => {
-      if (what === "stop") await stop(r);
-      else if (what === "dismiss") await dismiss(r);
-      else if (what === "again") {
-        try { await restart(r); } catch (e) { notify({ title: `couldn't restart ${r.name}`, body: String(e?.message ?? e), level: "error" }); }
-      }
-      cx.notify();
-    });
+    // Queued for the strip (runs.js), like a start: closing the deck can't cut them short.
+    if (what === "stop") stop(r);
+    else if (what === "dismiss") dismiss(r);
+    else if (what === "again") restart(r);
+    cx.notify();
   }
 
   /** Shows an ended run's last output lines in place of the scripts (esc: back). */

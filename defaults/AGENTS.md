@@ -172,7 +172,8 @@ the highlighted line shows where it will land.
   parent's tab without a pane; the `agents` mod shows them,
   `terminal.peek` opens one, `terminal.keep` gives one a pane.
 - **Scripts** (Nocturne's script runner, the `nocturne-scripts` mod): the
-  tab strip's ▶ (cmd-shift-r, `nocturne.scripts`) lists what the space's folder
+  tab strip's ▶ (cmd-shift-r, `nocturne.scripts`; `nocturne.scripts-again` runs
+  the folder's last script again) lists what the space's folder
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and

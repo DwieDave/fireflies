@@ -1,6 +1,7 @@
 // The tab strip: tabs sit on a dithered horizon line; the shown one is
 // underlined in a blue checker. Right of the tabs, icons only:
-//   scripts ▶, a jar of runs, ■: the script runner (scripts.js)
+//   scripts ▶, a jar of runs, ■: the script runner (scripts.js); runs the
+//           deck's queued jobs (jobs.js)
 //   files   the files pane down the tab's right edge (files.js); lit while open
 //   git     one button for the repo: the changed files and how far the branch
 //           is ahead / behind its upstream; a plain git mark when there's
@@ -18,6 +19,7 @@ import { menuHeight } from "./menu.js";
 import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
 import { filesPane, toggleFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns } from "./scripts.js";
+import { runJobs, pendingJobs } from "./jobs.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
@@ -29,7 +31,9 @@ export default class Tabs {
     this.poll(cx);
     cx.timer.every(5000, (cx) => this.poll(cx));
     // Scripts that failed since the last look get a toast.
-    cx.timer.every(1500, () => { trackRuns().then(() => tellFailures(scriptRuns())); });
+    // The deck's queued jobs (jobs.js) run here, on the render queueing them
+    // causes; the timer catches any that render missed.
+    cx.timer.every(1500, () => { runJobs(); trackRuns().then(() => tellFailures(scriptRuns())); });
   }
 
   // Where the git button looks: the active space's folder, on its machine.
@@ -87,6 +91,7 @@ export default class Tabs {
   }
 
   render() {
+    if (pendingJobs()) runJobs();
     const t = theme();
     const space = spaces().find((s) => s.active);
     const shown = (space?.tabs ?? []).filter((c) => !c.settled || c.active);

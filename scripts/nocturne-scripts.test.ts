@@ -98,7 +98,7 @@ test("the probe runs in sh and finds this repo's scripts", async () => {
 });
 
 test("rank: recents first without a query, best name match with one", () => {
-  const s = (group: string, name: string) => ({ id: `${group}\u0000${name}`, group, name, runner: "just", cmd: `just ${name}` });
+  const s = (group: string, name: string) => ({ id: `${group}#${name}`, group, name, runner: "just", cmd: `just ${name}` });
   const all = [s("justfile", "build"), s("justfile", "test"), s("justfile", "docs-check")];
   const rows = rank(all, "", [all[1].id]);
   expect(rows.map((r: any) => [r.head, r.s.name])).toEqual([["recent", "test"], ["justfile", "build"], ["justfile", "docs-check"]]);
