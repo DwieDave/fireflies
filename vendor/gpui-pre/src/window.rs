@@ -43,6 +43,19 @@ use refineable::Refineable;
 use scheduler::Instant;
 use slotmap::SlotMap;
 use smallvec::SmallVec;
+static SQUARE_CORNERS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Paints every quad, shadow and image with square corners, whatever radius
+/// the element asked for (a look that has no rounded corners anywhere).
+pub fn set_square_corners(on: bool) {
+    SQUARE_CORNERS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// Whether [`set_square_corners`] is on.
+pub fn square_corners() -> bool {
+    SQUARE_CORNERS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 use std::{
     any::{Any, TypeId},
     borrow::Cow,
@@ -4496,6 +4509,11 @@ impl Window {
         result
     }
 
+    /// The corners to paint: none at all while [`set_square_corners`] is on.
+    fn painted_corners(corner_radii: Corners<Pixels>) -> Corners<Pixels> {
+        if square_corners() { Corners::default() } else { corner_radii }
+    }
+
     /// Paint the drop (non-inset) shadows from `shadows` into the scene at the current
     /// z-index. Inset shadows are skipped; paint those with [`Self::paint_inset_shadows`]
     /// after the element's background so they layer on top of the fill.
@@ -4513,6 +4531,7 @@ impl Window {
         let content_mask = self.snapped_content_mask();
         let opacity = self.element_opacity();
         let element_bounds = self.cover_bounds(bounds);
+        let corner_radii = Self::painted_corners(corner_radii);
         let element_corner_radii = corner_radii.scale(scale_factor);
         for shadow in shadows {
             if shadow.inset {
@@ -4549,6 +4568,7 @@ impl Window {
         let content_mask = self.snapped_content_mask();
         let opacity = self.element_opacity();
         let element_bounds = self.cover_bounds(bounds);
+        let corner_radii = Self::painted_corners(corner_radii);
         let element_corner_radii = corner_radii.scale(scale_factor);
         for shadow in shadows {
             if !shadow.inset {
@@ -4639,7 +4659,7 @@ impl Window {
             content_mask: self.snapped_content_mask(),
             background: quad.background.opacity(opacity),
             border_color: quad.border_color.opacity(opacity),
-            corner_radii: quad.corner_radii.scale(self.scale_factor()),
+            corner_radii: Self::painted_corners(quad.corner_radii).scale(self.scale_factor()),
             border_widths: snapped_border_widths,
             border_style: quad.border_style,
         };
@@ -5112,7 +5132,7 @@ impl Window {
         };
 
         let content_mask = self.snapped_content_mask();
-        let corner_radii = corner_radii
+        let corner_radii = Self::painted_corners(corner_radii)
             .clamp_radii_for_quad_size(visible_bounds.size)
             .scale(self.scale_factor());
         let opacity = self.element_opacity();

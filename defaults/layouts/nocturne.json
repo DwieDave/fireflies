@@ -108,5 +108,17 @@
   "prompt_mod": "nocturne",
   "confirm_mod": "nocturne",
   "palette_mod": "nocturne",
-  "peek_mod": "nocturne"
+  "peek_mod": "nocturne",
+  "dialog_mods": {
+    "welcome": "nocturne",
+    "whats_new": "nocturne",
+    "help": "nocturne",
+    "update": "nocturne"
+  },
+  "corners": "square",
+  "scrim": {
+    "color": "#080808",
+    "opacity": 0.85,
+    "dither": true
+  }
 }

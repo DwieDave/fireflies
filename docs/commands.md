@@ -57,6 +57,15 @@ Move a space to a position (1 = first).
 | `id` | yes |
 | `index` | yes |
 
+## `space.folder`
+
+Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and lazygit panes use.
+
+| Argument | Required |
+|---|---|
+| `folder` | yes |
+| `id` | no |
+
 ## `tab.new`
 
 Make a tab in a space (default: the selected one; name default: none, so it's called by its number) with a terminal in folder (default: the focused terminal's), optionally an agent (argv) and its first message (task); or with a mod as its only pane (`mod`, its `props`: a file, a board). With no space open, a person's new tab starts a space (as space.new).
@@ -73,7 +82,7 @@ Make a tab in a space (default: the selected one; name default: none, so it's ca
 
 ## `tab.close`
 
-Close a tab and end its terminals.
+Close a tab and end its terminals. While something runs there (an agent working or needing you, a program other than the shell in front) it asks the person first, and a script must pass confirmed: true.
 
 | Argument | Required |
 |---|---|
@@ -278,6 +287,25 @@ Float a pane's terminal over the tab (default: the focused pane): its pane goes 
 |---|---|
 | `pane` | no |
 
+## `pane.park`
+
+Park a pane in its tab's bottom row (default: the focused pane): out of the arrangement as a small chip, still running, kept across restarts. A tab keeps one pane in place. A parked pane with index: moves its chip to that spot in the row (1 = first). Unlike terminal.park, it stays in its tab.
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+| `index` | no |
+
+## `pane.unpark`
+
+Put a parked pane back into its tab and focus it (default: the shown tab's last parked one): where it was parked from, or beside target (a pane of its tab) on edge "right", "left", "top" or "bottom"; target without edge: in target's place, target parked instead. Clicking its chip or focusing the pane brings it back too.
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+| `target` | no |
+| `edge` | no |
+
 ## `pane.focus`
 
 Focus a pane (or the pane showing a terminal).
@@ -304,6 +332,28 @@ Swap a pane (default: the focused one) with its neighbor in a direction, or with
 | `direction` | no |
 | `pane` | no |
 | `target` | no |
+
+## `pane.move`
+
+Move a pane (default: the focused one; a terminal keeps running, a parked one too) to another tab, any space on its machine: tab (an id), beside target (a pane there; target alone names its tab) on edge "right", "left", "top" or "bottom", else beside that tab's focused pane. No tab or target: its own new tab (name) in space (default: its space). The tab it leaves closes when it was its last pane. Then shows it there.
+
+| Argument | Required |
+|---|---|
+| `pane` | no |
+| `tab` | no |
+| `target` | no |
+| `edge` | no |
+| `space` | no |
+| `name` | no |
+
+## `pane.equalize`
+
+Give panes even shares of their tab (default: the focused pane's): scope "all" (default: every row and column), "row" (the panes side by side with this one) or "column" (the panes stacked with it). Fixed px sizes stay.
+
+| Argument | Required |
+|---|---|
+| `scope` | no |
+| `pane` | no |
 
 ## `terminal.peek`
 
@@ -516,6 +566,15 @@ No arguments.
 Show the welcome again.
 
 No arguments.
+
+## `app.open_url`
+
+Open a web page (http or https) in a web pane beside the focused pane (in "app") or the system's browser (in "system"); default: settings.json links.
+
+| Argument | Required |
+|---|---|
+| `url` | yes |
+| `in` | no |
 
 ## `app.whats_new`
 

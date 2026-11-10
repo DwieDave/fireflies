@@ -16,9 +16,6 @@
 //   fold    « at the top (or cmd-b / cmd-s) folds the sky into a rail: the
 //            moon, a letter per space, the fireflies' marks and the usage;
 //            » opens it again
-//   moves   a pane's menu asks here (shared(MOVE_PANE)) to move it to another
-//            tab or a new one: a terminal's pane is parked, then kept there
-//            once the park has landed; a mod pane is made again there
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
@@ -27,7 +24,7 @@ import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, RANK, dither, pip, eyebrow, hash, givenName, nameTerminal } from "./kit.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
-import { menuHeight, NAME_AGENT, MOVE_PANE, MOVABLE_MODS } from "./menu.js";
+import { menuHeight, NAME_AGENT } from "./menu.js";
 import { toggleLazygit } from "./lazygit.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
@@ -144,42 +141,10 @@ export default class Sky {
     this.nameInput.focus();
   }
 
-  /** Moves a pane the pane menu asked about, once per request. */
-  movePane(cx) {
-    const ask = shared(MOVE_PANE);
-    if (!ask || ask.at === this.moveAsked) return;
-    this.moveAsked = ask.at;
-    const p = panes().find((x) => x.pane === ask.pane);
-    if (!p) return;
-    const space = spaces().find((s) => s.tabs.some((c) => c.id === p.tab));
-    const into = () => (ask.to ? panes().find((x) => x.tab === ask.to) : null);
-    if (!p.terminal) {
-      const props = MOVABLE_MODS[p.mod];
-      if (!props) return;
-      run("pane.close", { pane: p.pane });
-      const there = into();
-      if (there) { run("pane.split", { direction: "auto", pane: there.pane, mod: p.mod, props }); run("tab.select", { id: ask.to }); }
-      else run("tab.new", { ...(space ? { space: space.id } : {}), name: p.title, mod: p.mod, props });
-      return;
-    }
-    // A terminal: its pane goes (it keeps running), then it gets one there.
-    // Park finishes in the background; keep refuses while it's pending.
-    const terminal = p.terminal;
-    run("terminal.park", { terminal });
-    let tries = 0;
-    const land = (cx) => {
-      if (panes().some((x) => x.terminal === terminal) && tries++ < 60) return cx.timer.after(50, land);
-      const there = into();
-      if (there) { run("terminal.keep", { terminal, place: "auto", pane: there.pane }); run("tab.select", { id: ask.to }); }
-      else run("terminal.keep", { terminal, place: "tab" });
-    };
-    cx.timer.after(50, land);
-  }
-
-  /** A firefly's right-click menu: focus, rename, delete its tab. */
+  /** A firefly's right-click menu: focus, rename, move or close its pane. */
   flyMenu(a) {
     const props = { role: "menu", tab: "fly", target: { id: a.tab, address: a.address } };
-    openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 220, height: menuHeight(props), props });
+    openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 280, height: Math.min(520, menuHeight(props)), props });
   }
 
   /** Folded: what was last asked for while a fold settles, else what the width says
@@ -485,7 +450,6 @@ export default class Sky {
     this.redraw(cx, sp);
     this.answerNaming(list);
     this.spaces.answer(this.folded, cx);
-    this.movePane(cx);
     const sky = v_flex().id("sky").relative().size_full().overflow_hidden().bg(t.background)
       .on_size_change((size, cx) => { this.size = size; cx.notify(); });
     if (this.folded) {

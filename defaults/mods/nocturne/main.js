@@ -14,6 +14,8 @@
 //   palette  the command palette (palette.js; the layout's palette_mod)
 //   peek     the bar over a floating or peeked terminal (peek.js; the
 //          layout's peek_mod, fork-only)
+//   welcome, whats_new, help, update  Herdr's welcome, release notes, keys
+//          and update note (screens.js; the layout's dialog_mods, fork-only)
 
 import { View, div } from "gpui-kit";
 import { props } from "herdr";
@@ -28,10 +30,12 @@ import { WorktreesPanel } from "./worktrees.js";
 import NewMenu from "./newmenu.js";
 import Menu from "./menu.js";
 import Toast from "./toast.js";
+import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";
 
 const ROLES = {
   sky: Sky, tabs: Tabs, pane: Header, parked: Parked, worktrees: WorktreesPanel, new: NewMenu, menu: Menu, toast: Toast,
   prompt: Prompt, confirm: Confirm, palette: Palette, peek: Peek,
+  welcome: Welcome, whats_new: WhatsNew, help: Keys, update: UpdateNote,
 };
 
 export default class Nocturne extends View {

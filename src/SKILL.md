@@ -82,6 +82,16 @@ the same tab. Give `direction` or `target`, not both. Focus stays with the same 
 herdr-app do pane.swap '{"pane":"p12","target":"p14"}'
 ```
 
+`pane.move {pane?, tab? | target?, edge?, space?, name?}` takes a pane
+(default: the focused one; its terminal keeps running) to another tab, in any
+space on its machine: beside `target` (a pane there) on `edge`, else beside that
+tab's focused pane. Neither: its own new tab (`name`) in `space` (default: its
+own). The tab it leaves closes when it was its last pane:
+
+```sh
+herdr-app do pane.move '{"pane":"p12","tab":"tb3"}'
+```
+
 `pane.equalize {scope?, pane?}` evens out pane sizes in `pane`'s tab (default:
 the focused one): `scope` `"all"` (default: every row and column, every level),
 `"row"` (the panes side by side with it) or `"column"` (the panes stacked with
