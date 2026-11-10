@@ -38,6 +38,12 @@ export function mark(t, p) {
   return svg(path).size(11).flex_none().text_color(color);
 }
 
+/** What a pane is called: the name a person gave its terminal, its mod's
+ *  name, its agent's or shell's, its title, its program's. */
+export function paneName(p) {
+  return givenName(p.terminal) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
+}
+
 export function folder(cwd) {
   if (!cwd) return "";
   const h = home();
@@ -182,7 +188,7 @@ export default class Header {
     if (!p) return div();
     if (isLazygit(p)) return this.buttons(t, this.lazygit(t, p), p);
     this.answerNaming(p);
-    const name = givenName(p.terminal) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || "shell");
+    const name = paneName(p);
     const st = p.status;
     const label = this.naming && p.terminal
       ? h_flex().min_w(60).w(200).child(field(t, `name-${p.pane}`, this.nameInput, (cx) => { this.naming = false; cx.notify(); }))
