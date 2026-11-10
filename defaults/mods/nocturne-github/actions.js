@@ -10,8 +10,8 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { settings } from "herdr";
 import { api, ghRun, fileAt } from "./gh.js";
-import { tone, pollEvery, duration, ago, jobColumns, needsFromWorkflow, splitLog, logLine } from "./model.js";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop } from "./kit.js";
+import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.js";
+import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
 
 const ROW = 38, STEP = 24, LINE = 18;
@@ -35,10 +35,12 @@ export default class Actions {
     this.logScroll = VirtualListScrollHandle.new();
     this.logAt = 0;
     this.graphSize = { width: 600, height: 240 };
-    this.pan = null;
+    this.pan = null; // { x, y } once dragged or scrolled
+    this.drag = null; // { x, y, from } while the graph is dragged
+    this.sizes = { ...(kept.sizes ?? {}) }; // dragged splitters: runs (width), runsH (height, narrow), graph (height), steps (width)
   }
 
-  save() { return { filter: this.filter, sel: this.sel, jobSel: this.jobSel }; }
+  save() { return { filter: this.filter, sel: this.sel, jobSel: this.jobSel, sizes: this.sizes }; }
 
   // ---- data
 
@@ -57,6 +59,12 @@ export default class Actions {
     const r = this.run(), jobs = this.jobsOf(r);
     if (!r || !jobs) return [];
     return jobColumns(jobs, this.needs.get(`${r.path}@${r.head_sha}`) ?? null);
+  }
+
+  /** Which jobs each job waits for (null: unknown, columns follow each other). */
+  parents() {
+    const r = this.run(), jobs = this.jobsOf(r);
+    return r && jobs ? jobParents(jobs, this.needs.get(`${r.path}@${r.head_sha}`) ?? null) : null;
   }
 
   /** Runs and the selected run's jobs: what's moving decides the pace. */
@@ -239,6 +247,7 @@ export default class Actions {
       ["enter tab", "in / next panel"], ["esc", "back out"], ["J K", "page the log"], ["g G", "first / last"],
       ["w", "next running run"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
       ["X", "cancel the run"], ["o", "in the browser"], ["r", "refresh now"],
+      ["drag scroll", "move the graph (double-click: back)"],
     ];
   }
 
@@ -290,12 +299,31 @@ export default class Actions {
     if (n && g.width > W) px = Math.min(0, Math.max(W - g.width, Math.round(W / 2 - (n.x + NW / 2))));
     if (n && g.height > H) py = Math.min(0, Math.max(H - g.height, Math.round(H / 2 - (n.y + NH / 2))));
     if (this.pan) { px = this.pan.x; py = this.pan.y; }
-    const c = canvas(t, r, cols, this.jobSel, active, (node, cx) => { this.focus = "graph"; this.jobSel = node.job.id; this.stepSel = null; this.loadLog(cx); this.app.focusSelf(); cx.notify(); }, px, py);
+    const c = canvas(t, r, cols, this.parents(), this.jobSel, active, (node, cx) => { this.focus = "graph"; this.jobSel = node.job.id; this.stepSel = null; this.loadLog(cx); this.app.focusSelf(); cx.notify(); }, px, py);
     const k = tone(r.status, r.conclusion);
+    // Drag the sky (or scroll) to move the graph; double-click it to bring the selected job back.
+    const end = (cx) => { if (this.drag) { this.drag = null; cx.notify(); } };
     const body = div().id("graph-view").relative().size_full().overflow_hidden()
-      .on_size_change((size, cx) => { if (Math.abs(size.width - W) > 1 || Math.abs(size.height - H) > 1) { this.graphSize = size; cx.notify(); } })
-      .on_scroll_wheel((e, cx) => { this.pan = { x: Math.round(px + (e.delta?.x ?? 0)), y: Math.round(py + (e.delta?.y ?? 0)) }; cx.notify(); })
-      .on_mouse_down("left", (_e, cx) => { this.focus = "graph"; cx.stop_propagation(); })
+      .when(Boolean(this.drag), (el) => el.cursor_grabbing()).when(!this.drag, (el) => el.cursor_grab())
+      .on_size_change((drawn, cx) => {
+        const size = unzoomSize(drawn);
+        if (Math.abs(size.width - W) > 1 || Math.abs(size.height - H) > 1) { this.graphSize = size; cx.notify(); }
+      })
+      .on_scroll_wheel((e, cx) => { this.pan = { x: Math.round(px + unzoom(e.delta?.x ?? 0)), y: Math.round(py + unzoom(e.delta?.y ?? 0)) }; cx.notify(); })
+      .on_mouse_down("left", (e, cx) => {
+        this.focus = "graph"; this.app.focusSelf(); cx.stop_propagation();
+        if (e.click_count === 2) { this.pan = null; this.drag = null; return cx.notify(); }
+        this.drag = { x: e.position.x, y: e.position.y, from: { x: px, y: py } };
+        cx.notify();
+      })
+      .on_mouse_move((e, cx) => {
+        const d = this.drag;
+        if (!d) return;
+        this.pan = { x: Math.round(d.from.x + unzoom(e.position.x - d.x)), y: Math.round(d.from.y + unzoom(e.position.y - d.y)) };
+        cx.notify();
+      })
+      .on_mouse_up("left", (_e, cx) => end(cx))
+      .on_hover((h, cx) => { if (!h) end(cx); })
       .child(c.el);
     const right = `${TONE_WORD[k] ?? ""} · ${duration(r.run_started_at, k === "working" || k === "queued" ? null : r.updated_at)}`;
     return panel(t, "graph", title, active, body, { right });
@@ -354,14 +382,31 @@ export default class Actions {
   }
 
   render(t, size) {
-    const wide = size.width >= 820;
+    const app = this.app, wide = size.width >= 820;
+    const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
+    const rw = clamp(this.sizes.runs ?? Math.min(400, Math.max(280, size.width * 0.3)), 200, size.width - 420);
+    const rh = clamp(this.sizes.runsH ?? size.height * 0.3, 100, size.height - 260);
+    const rightW = wide ? size.width - rw - 6 : size.width;
+    const rightH = wide ? size.height : size.height - rh - 6;
+    const gh = clamp(this.sizes.graph ?? Math.max(170, Math.min(rightH * 0.42, 340)), 100, rightH - 120);
+    const sw = clamp(this.sizes.steps ?? Math.max(240, Math.min(360, size.width * 0.3)), 160, rightW - 200);
     const runs = this.runsPanel(t);
-    const right = v_flex().flex_1().min_w(0).min_h(0).h_full().gap(6)
-      .child(this.graphPanel(t).h(Math.round(Math.max(170, Math.min(size.height * 0.42, 340)))).flex_none())
-      .child(h_flex().flex_1().min_h(0).gap(6)
-        .child(this.stepsPanel(t).w(Math.round(Math.max(240, Math.min(360, size.width * 0.3)))).flex_none().h_full())
+    const right = v_flex().flex_1().min_w(0).min_h(0).h_full()
+      .child(this.graphPanel(t).h(gh).flex_none())
+      .child(splitter(t, "act-split-graph", "y", app.dragged("graph"), (e) => app.resize(e, "graph", "y", gh, (v) => { this.sizes.graph = v; }, { min: 100, max: rightH - 120 })))
+      .child(h_flex().flex_1().min_h(0)
+        .child(this.stepsPanel(t).w(sw).flex_none().h_full())
+        .child(splitter(t, "act-split-steps", "x", app.dragged("steps"), (e) => app.resize(e, "steps", "x", sw, (v) => { this.sizes.steps = v; }, { min: 160, max: rightW - 200 })))
         .child(this.logPanel(t).flex_1().h_full()));
-    if (!wide) return v_flex().size_full().gap(6).child(runs.h(Math.round(size.height * 0.3)).flex_none()).child(right);
-    return h_flex().size_full().gap(6).child(runs.w(Math.round(Math.min(400, Math.max(280, size.width * 0.3)))).flex_none().h_full()).child(right);
+    if (!wide) {
+      return v_flex().size_full()
+        .child(runs.h(rh).flex_none())
+        .child(splitter(t, "act-split-runs-h", "y", app.dragged("runsH"), (e) => app.resize(e, "runsH", "y", rh, (v) => { this.sizes.runsH = v; }, { min: 100, max: size.height - 260 })))
+        .child(right);
+    }
+    return h_flex().size_full()
+      .child(runs.w(rw).flex_none().h_full())
+      .child(splitter(t, "act-split-runs", "x", app.dragged("runs"), (e) => app.resize(e, "runs", "x", rw, (v) => { this.sizes.runs = v; }, { min: 200, max: size.width - 420 })))
+      .child(right);
   }
 }

@@ -5,6 +5,7 @@
 //
 //   1 2 [ ]     Pull requests / Actions
 //   r           read everything again now
+//   drag        the gaps between panels resize them (kept per tab)
 //
 // keys.json can bind nocturne-github.prs / .actions / .refresh / .diff (to a shown window).
 //   ?           every key        esc q  close the window (from its top level)
@@ -24,7 +25,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify } from "herdr";
 import { repoOf } from "./gh.js";
-import { dither, chip, hints, empty, stop, pip, ART } from "./kit.js";
+import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 
@@ -61,6 +62,7 @@ export default class GitHub extends View {
     this.note = null; // { text, tone, at }
     this.help = false;
     this.size = { width: 1000, height: 700 };
+    this.resizing = null; // { key, axis, at, from, set, min, max, sign } while a splitter is dragged
     this.next = 0; // when to read GitHub again
     this.busy = false;
     this.again = false;
@@ -198,6 +200,14 @@ export default class GitHub extends View {
     }
   }
 
+  /** Starts dragging a splitter: the panel was `from` px; `set(px)` takes its
+   *  new size within min..max (sign -1: the panel grows as the pointer moves back). */
+  resize(e, key, axis, from, set, { min = 120, max = 4000, sign = 1 } = {}) {
+    this.resizing = { key, axis, at: axis === "x" ? e.position.x : e.position.y, from, set, min, max: Math.max(min, max), sign };
+  }
+
+  dragged(key) { return this.resizing?.key === key; }
+
   ask(text, go) { this.confirm = { text, go }; }
 
   /** Runs a gh action; says how it went, then reads again soon. */
@@ -315,14 +325,26 @@ export default class GitHub extends View {
     else if (this.state === "error") body = empty(t, "gh didn't answer", this.error, { moon: 1 });
     else body = this.shown().render(t, { width: this.size.width - 16, height: this.size.height - 70 });
     const note = this.note;
+    const endResize = (cx) => { if (this.resizing) { this.resizing = null; this.save(); cx.notify(); } };
     const right = note ? div().text_color(note.tone === "failed" ? t.blocked : note.tone === "done" ? t.done : t.working).truncate().max_w(420).child(note.text)
       : this.stale ? div().text_color(t.blocked).truncate().max_w(420).child(this.stale) : null;
     return v_flex().id("nocturne-github").size_full().bg(t.background).border(1).border_color(t.ansi8)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .on_size_change((size, cx) => {
+      .on_size_change((drawn, cx) => {
+        const size = unzoomSize(drawn);
         if (Math.abs(size.width - this.size.width) > 1 || Math.abs(size.height - this.size.height) > 1) { this.size = size; cx.notify(); }
       })
+      .when(Boolean(this.resizing), (el) => el.when(this.resizing.axis === "x", (e2) => e2.cursor_col_resize()).when(this.resizing.axis === "y", (e2) => e2.cursor_row_resize()))
+      .on_mouse_move((e, cx) => {
+        const r = this.resizing;
+        if (!r) return;
+        const moved = unzoom((r.axis === "x" ? e.position.x : e.position.y) - r.at) * r.sign;
+        r.set(Math.round(Math.min(r.max, Math.max(r.min, r.from + moved))));
+        cx.notify();
+      })
+      .on_mouse_up("left", (_e, cx) => endResize(cx))
+      .on_hover((h, cx) => { if (!h) endResize(cx); })
       .child(this.header(t))
       .child(div().id("gh-body").relative().flex_1().min_h(0).p(8)
         .on_mouse_down("left", (_e, cx) => { this.handle.focus(); cx.stop_propagation(); })
