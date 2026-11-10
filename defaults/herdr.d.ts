@@ -485,5 +485,8 @@ export function nativeViewCapabilities(): { interface: string; platform: string;
 export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;
 /** HUP: the next event from this mod's native views, as JSON text:
  *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed, …).
+ *  Web: `web.location` (the page state, as in load.*) whenever the address or back/forward state changes,
+ *  also without a load (pushState, #fragments); `web.video { present }` (`pip: true` views) when the
+ *  page gains its first or loses its last `<video>`, in any frame.
  *  `generation` grows with every load, so drop events older than the view's current one. */
 export function nextNativeViewEvent(): Promise<string>;
