@@ -613,7 +613,8 @@ Narrower than 160px, the sidebar mods draw a compact rail; folding resizes
 the tabs also leave room for the window buttons when the sidebar is narrower.
 Nocturne's sky folds the same way (cmd-b, `nocturne.fold`) to a rail as wide as
 the window buttons need at the person's zoom; it and the open sky list agents
-needs you, working, running a command, done, resting. Pinned agents
+needs you, working, running a command, done, resting; the done and resting ones
+sit on the ground above the hills (the rail pairs them up when crowded). Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
