@@ -18,6 +18,19 @@ export function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
 
+/** Where a drop-down opened by a press on a tab-strip button goes: its top
+ *  on the strip's horizon (the row is 36 px, the button 24 centered in it),
+ *  its right edge on the button's, so it hangs under the button without
+ *  covering it (a second press then lands on the button and closes it).
+ *  `width`: the drop-down's, in layout px. Null when the press has no bounds. */
+export function dropBelow(e, width) {
+  const b = e?.bounds, l = e?.local_position;
+  if (!b || !l || !e.position) return null;
+  const zoom = Number(settings()?.zoom) || 1;
+  const left = e.position.x - l.x, top = e.position.y - l.y;
+  return { x: Math.round(Math.max(8, left + b.width - width * zoom)), y: Math.round(top + b.height + 6 * zoom) };
+}
+
 /** The label holding the name a person gave a pane's terminal (the pane menu's
  *  and a firefly's "Rename"). It lives on the terminal, so the name follows it
  *  to another pane or tab, and ends with it. */
@@ -53,8 +66,12 @@ export function spaceFolder(s, all) {
 
 export const WORD = { working: "working", blocked: "needs you", done: "done", idle: "resting" };
 
-/** Status order: what needs the person first. */
-export const RANK = { blocked: 0, done: 1, working: 2, idle: 3 };
+/** Status order: what needs the person first, then what's busy, then what's at rest. */
+export const RANK = { blocked: 0, working: 1, done: 2, idle: 3 };
+
+/** An agent's place in every list: needs you, working, running a command it
+ *  started (working, but waiting on a shell), done, resting. */
+export const agentRank = (a) => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status] ?? 3);
 
 /** A small dithered diamond in the status color; working breathes, blocked blinks. */
 export function pip(t, status, size = 6) {

@@ -10,6 +10,7 @@
 // instead (the menus say "Close …").
 
 import { spaces, panes, focused, run } from "herdr";
+import { ART } from "./kit.js";
 import { filesPane, toggleFiles } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
 import { lazygitOpen, toggleLazygit, toggleDiff, lazygitArgv } from "./lazygit.js";
@@ -66,7 +67,7 @@ function toggleBeside(mod, props) {
 }
 
 /**
- * The panels, in menu order. Each: { id, name, icon (workspace-chrome), key,
+ * The panels, in menu order. Each: { id, name, icon (a workspace-chrome name, or an svg path), key,
  *   open() (shown in this tab: the pane / float), fixed? ("float" | "edge"),
  *   pane(), tab() } — `pane` toggles where a panel lives once per tab.
  */
@@ -90,7 +91,7 @@ export function panels() {
       pane: () => toggleLazygit(), tab: () => terminalTab(lazygitArgv(h.on), "lazygit") },
     { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review", fixed: "float", open: () => lazygitOpen(1),
       pane: () => toggleDiff(), tab: () => modTab("nocturne-diff", { folder: h.folder, on: h.on }, "diff") },
-    { id: "github", name: "GitHub", icon: "git-branch", key: "h", words: "pull requests prs actions ci runs checks workflows", fixed: "float", open: () => Boolean(githubOpen()),
+    { id: "github", name: "GitHub", icon: `${ART}/github.svg`, key: "h", words: "pull requests prs actions ci runs checks workflows", fixed: "float", open: () => Boolean(githubOpen()),
       pane: () => toggleGithub(), tab: () => modTab("nocturne-github", { folder: h.folder, on: h.on }, "github") },
   ];
 }

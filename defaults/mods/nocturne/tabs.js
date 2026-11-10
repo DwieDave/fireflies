@@ -9,12 +9,15 @@
 //           (lazygit.js) on its diff when there are changes, else on lazygit;
 //           again closes it.
 //   + new   the Nocturne new menu (newmenu.js)
+// The drop-downs (+ new, the script deck) hang under their button, right
+// edges lined up (kit.js dropBelow); a second press closes them. A rule like
+// the ones between the groups closes the strip before the bell's block.
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { spaces, panes, run, openOverlay, theme } from "herdr";
-import { dither, pip, spaceFolder, givenName } from "./kit.js";
-import { openNewMenu } from "./newmenu.js";
+import { dither, pip, spaceFolder, givenName, dropBelow } from "./kit.js";
+import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { menuHeight } from "./menu.js";
 import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
 import { filesPane, toggleFiles } from "./files.js";
@@ -22,7 +25,6 @@ import { scriptsControl, scriptRuns, tellFailures, trackRuns } from "./scripts.j
 import { runJobs, pendingJobs } from "./jobs.js";
 import { watchPrompts } from "./prompt.js";
 
-const stop = (_e, cx) => cx.stop_propagation();
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 
 export default class Tabs {
@@ -58,14 +60,16 @@ export default class Tabs {
     });
   }
 
-  /** A square icon button on the strip; `on`: its panel is open (a dithered band, a blue foot). */
+  /** A square icon button on the strip; `on`: its panel is open (a dithered band, a blue foot).
+   *  `action` gets the press's event, for a drop-down to hang under the button
+   *  (dropBelow). No `tip`: no tooltip (one over an open drop-down would sit on it). */
   tool(t, id, on, tip, action, ...kids) {
     return h_flex().id(id).relative().flex_none().h(24).px(7).gap(5).items_center().text_size(11)
       .text_color(on ? t.foreground : t.muted)
       .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-      .tooltip(tip)
-      .on_mouse_down("left", stop)
-      .on_click(() => action())
+      .when(Boolean(tip), (el) => el.tooltip(tip))
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = e; })
+      .on_click(() => action(this.press))
       .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
       .children(kids.map((k) => k.relative()));
   }
@@ -91,6 +95,13 @@ export default class Tabs {
       ...(g?.changed ? [num(String(g.changed), t.ansi3)] : []),
       ...(g?.ahead ? [num(`↑${g.ahead}`, t.ansi4)] : []),
       ...(g?.behind ? [num(`↓${g.behind}`, t.ansi5)] : []));
+  }
+
+  /** "+ new": its menu hangs under it; lit (the open look) while it's open. */
+  newButton(t) {
+    const open = newMenuOpen();
+    return this.tool(t, "tab-new", open, open ? null : "New (⌘N)", (e) => openNewMenu({ at: dropBelow(e, NEW_W) }),
+      div().text_color(open ? t.foreground : t.muted).child("+ new"));
   }
 
   render() {
@@ -122,7 +133,8 @@ export default class Tabs {
         .child(pip(t, c.status))
         .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))));
     };
-    return h_flex().id("tabs").relative().size_full().min_w(0).pl(4).pr(8).items_center().bg(t.background)
+    const rule = () => div().w(1).h(14).mx(4).flex_none().bg(t.ansi0);
+    return h_flex().id("tabs").relative().size_full().min_w(0).pl(4).pr(0).items_center().bg(t.background)
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel((e) => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       // The horizon: a 2 px dithered line the tabs stand on.
@@ -130,15 +142,11 @@ export default class Tabs {
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().overflow_x_scrollbar().children(shown.map(item)))
       .child(h_flex().flex_none().gap(2).items_center()
         .child(scriptsControl(t, (...a) => this.tool(...a)))
-        .child(div().w(1).h(14).mx(4).bg(t.ansi0))
+        .child(rule())
         .child(this.filesButton(t))
         .child(this.gitButton(t))
-        .child(div().w(1).h(14).mx(4).bg(t.ansi0))
-        .child(div().id("tab-new").flex_none().h(24).px(8).flex().items_center().text_size(11).text_color(t.muted)
-          .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-          .on_mouse_down("left", stop)
-          .tooltip("New (⌘N)")
-          .on_click(() => openNewMenu())
-          .child("+ new")));
+        .child(rule())
+        .child(this.newButton(t))
+        .child(rule()));
   }
 }

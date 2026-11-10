@@ -57,7 +57,7 @@ export default class Bell {
     const parts = [c.permission && `${c.permission} permission${c.permission > 1 ? "s" : ""}`, c.question && `${c.question} question${c.question > 1 ? "s" : ""}`, c.other && `${c.other} to look at`].filter(Boolean);
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
-    return h_flex().id("notify-bell").relative().size_full().pl(2).pr(10).items_center().justify_end().bg(t.background)
+    return h_flex().id("notify-bell").relative().size_full().pr(10).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .child(h_flex().id("bell").relative().h(24).px(7).gap(6).items_center().text_size(11).cursor_pointer()
