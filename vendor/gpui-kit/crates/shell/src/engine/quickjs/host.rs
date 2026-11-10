@@ -117,7 +117,7 @@ fn open_url(ctx: Ctx<'_>, url: String) -> JsResult<()> {
             "cx.open_url(url) expects an absolute HTTP(S) URL with a host",
         ));
     }
-    with_app(&ctx, "cx.open_url(url)", move |app| app.open_url(&url))
+    with_app(&ctx, "cx.open_url(url)", move |app| crate::capability::open_url(&url, app))
 }
 
 // -- Filesystem ------------------------------------------------------------

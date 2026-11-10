@@ -29,7 +29,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, nextCommand, shared, setShared, exec, run, panes, openOverlay, window as appWindow } from "herdr";
+import { props, theme, settings, nextCommand, shared, setShared, run, panes, openOverlay, window as appWindow } from "herdr";
 
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
@@ -228,8 +228,8 @@ export default class Browser extends View {
   external(cx) {
     const url = this.page.href;
     if (!url) return;
-    try { cx.open_url(url); } // http(s) only
-    catch { exec("open", [url]).catch((err) => { this.error = String(err?.message ?? err); }); }
+    // cx.open_url would come back here as a new web pane (settings `links`).
+    run("app.open_url", { url, in: "system" });
   }
 
   edit() {

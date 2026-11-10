@@ -111,6 +111,14 @@ pub fn resolve(link: &str, cwd: Option<&Path>) -> Option<Target> {
     Path::new(bare).exists().then(|| Target::File(PathBuf::from(bare)))
 }
 
+/// A web page: an absolute http(s) address with a host, the only links the
+/// app may keep for its own web pane (everything else goes to the system).
+pub fn is_web(url: &str) -> bool {
+    let Some((scheme, rest)) = url.split_once("://") else { return false };
+    matches!(scheme.to_ascii_lowercase().as_str(), "http" | "https")
+        && rest.split(['/', '?', '#']).next().is_some_and(|host| !host.is_empty() && !host.contains(char::is_whitespace))
+}
+
 /// Hands the target to the system's default handler.
 pub fn open(target: &Target) {
     let arg = match target {
@@ -280,6 +288,16 @@ mod tests {
             let range = find(&text, text.find(url).unwrap()).unwrap();
             assert_eq!(&text[range.clone()], url);
             assert_eq!(resolve(&text[range], None), Some(Target::Url(url.into())));
+        }
+    }
+
+    #[test]
+    fn only_http_addresses_with_a_host_are_web_pages() {
+        for url in ["https://a.com", "http://localhost:3000/x", "HTTPS://A.COM/?q=1", "http://[::1]:8000/"] {
+            assert!(is_web(url), "{url}");
+        }
+        for url in ["mailto:a@b.com", "file:///tmp/x", "ssh://host", "https://", "https:///x", "http:/a.com", "a.com", "tel:+1"] {
+            assert!(!is_web(url), "{url}");
         }
     }
 

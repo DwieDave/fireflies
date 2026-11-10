@@ -161,6 +161,13 @@ the highlighted line shows where it will land.
   Ctrl-click (Cmd-click on macOS) a live terminal address in terminal text to
   peek at it. Bare addresses refer to the machine of the terminal showing them;
   use `machine/address` for another machine. Names and non-live addresses aren't links.
+- **Links**: Ctrl-click (Cmd-click on macOS) a URL or OSC 8 hyperlink in a
+  terminal, or click a link in a mod (`cx.open_url`, `Link` `href`, the update
+  notes): an http(s) page opens in a new web pane (`nocturne-browser`) split
+  beside that terminal's pane (else the focused one; no pane: a tab of its own).
+  Other schemes (mailto:, file:, ssh:, ...) and files go to the system. Without
+  the web pane (only macOS has one) or with `links: "system"` in settings.json,
+  pages open in the system's browser.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
@@ -704,7 +711,10 @@ The main ones:
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `machines`, `alerts`, `updates`, `privacy`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
-  never one a package manager owns), `app.welcome`, `app.whats_new`, `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window, where the person can paste up to 3 screenshots; never sends until the person clicks Send), `app.reset`,
+  never one a package manager owns), `app.welcome`, `app.whats_new`,
+  `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
+  `"system"` the system's browser; default: the `links` setting; the reply says `opened`),
+  `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window, where the person can paste up to 3 screenshots; never sends until the person clicks Send), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).
   Add machine lists all named ssh-config hosts in a scrollable list. Machines
@@ -798,6 +808,9 @@ What's about the user, never a look:
   apps' links alone. Disk-image and translocated launches don't create it.
   Finder launches load the login shell's PATH, with the usual install
   folders as a fallback.
+- `links`: `"app"` (default) opens web links in a web pane in Herdr (macOS,
+  the `nocturne-browser` mod), `"system"` in the system's default browser
+  (see Links above). Other schemes always go to the system. Applies at once.
 - `option_as_alt`: macOS only, `"auto"` (default), `"on"`, `"off"`, `"left"`, or `"right"`.
   Available in Settings → Keyboard.
   `"auto"` sends Option as Alt on US, US International, ABC and ABC-India;
@@ -1065,6 +1078,9 @@ All of it is in `herdr.d.ts`. In short:
   Terminal copy/paste and implicit right-click routing follow the focused block.
 - Floating: `placement()` (null unless this copy floats).
 - Act: `run(command, args)`.
+- Links: `cx.open_url(url)` and a `Link`'s `href` open like a clicked
+  terminal link (a web pane, or the system's browser per `links`). For the
+  system's browser always: `run("app.open_url", { url, in: "system" })`.
 - Overlays: `openOverlay({ mod, props, kind: "dialog" | "popup" | "window", width, height, at, frame })`
   returns an id; the mod gets `props().overlay` and closes itself with
   `closeOverlay(id)`; Esc closes the top dialog or popup. `frame: "none"`

@@ -94,6 +94,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("native.call", &[req("key"), req("action"), opt("args")], "Run one whitelisted action on a native view (key: <copy>:<id>)."),
     cmd("app.help", &[], "Toggle the keys dialog."),
     cmd("app.welcome", &[], "Show the welcome again."),
+    cmd("app.open_url", &[req("url"), opt("in")], "Open a web page (http or https) in a web pane beside the focused pane (in \"app\") or the system's browser (in \"system\"); default: settings.json links."),
     cmd("app.whats_new", &[], "Show what this release brought (it opens once by itself after an update)."),
     cmd("app.feedback", &[opt("message"), opt("from")], "Draft feedback for the person to review and send (from: person or agent)."),
     cmd("app.palette", &[], "Toggle the command palette: every command by name, with its key; calling again closes it."),
