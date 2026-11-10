@@ -181,7 +181,14 @@ the highlighted line shows where it will land.
   that needs root shows a lock: it builds as you first (a flake evaluated as root
   fails git's ownership check), then only activates the built system as root, on
   a Mac through the system's password dialog (osascript, administrator
-  privileges), on Linux through sudo in its terminal; a cancelled dialog ends the run as "cancelled". A picked script runs in a pane-less
+  privileges), on Linux through sudo in its terminal; a cancelled dialog ends the run as "cancelled".
+  nix-darwin's activation updates apps in `/Applications/Nix Apps`, which macOS
+  allows only with App Management for Herdr Core (the core runs the terminals,
+  not Herdr): when a switch fails with "permission denied when trying to update
+  apps", its toast and output say so, and their button opens System Settings >
+  Privacy & Security > App Management and shows
+  `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; add it, then run
+  the switch again. A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
   restarts, stops and dismisses runs, and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with

@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flakeOutputs, nixScripts, nixStatic, nixSystem, adminLine, shellLine, switchPlan, attrName, sq, ADMIN_SCRIPT, CANCELLED } from "../defaults/mods/nocturne-scripts/nix.js";
+import { flakeOutputs, nixScripts, nixStatic, nixSystem, adminLine, shellLine, switchPlan, attrName, sq, ADMIN_SCRIPT, CANCELLED, APP_MANAGEMENT, needsAppManagement } from "../defaults/mods/nocturne-scripts/nix.js";
 import { detect, parseProbe } from "../defaults/mods/nocturne-scripts/detect.js";
 
 // `nix flake show --json`, classic shape.
@@ -305,4 +305,37 @@ test("configuration names reach nix as one attribute, never as shell", () => {
 test("a switch remembers its plan, so restarting it builds and activates again", async () => {
   const s = nixScripts({ darwinConfigurations: { homelab: { type: "unknown" } } }, MAC).find((x: any) => x.name === "switch homelab");
   expect(s).toMatchObject({ admin: "osascript", plan: "darwin-rebuild:homelab", cmd: "darwin-rebuild switch --flake '.#homelab'" });
+});
+
+// nix-darwin's activate (checkAppManagementPermission) prints this when it can't touch /Applications/Nix Apps.
+const DENIED = "error: permission denied when trying to update apps over SSH, aborting activation\nApps could not be updated, as SSH sessions are not allowed to update apps...";
+
+test("a darwin switch denied App Management is recognized, nothing else is", () => {
+  expect(needsAppManagement({ plan: "darwin-rebuild:homelab" }, `building...\n${DENIED}`)).toBe(true);
+  expect(needsAppManagement({ plan: "darwin-rebuild:homelab" }, "error: builder failed")).toBe(false);
+  expect(needsAppManagement({ plan: "nixos-rebuild:box" }, DENIED)).toBe(false);
+  expect(needsAppManagement({ plan: null }, DENIED)).toBe(false);
+  expect(needsAppManagement(null, null)).toBe(false);
+});
+
+test("the strip's copy of APP_MANAGEMENT matches the deck's", () => {
+  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/scripts.js"), "utf8");
+  for (const v of [APP_MANAGEMENT.match, APP_MANAGEMENT.hint, APP_MANAGEMENT.open]) expect(src).toContain(v);
+});
+
+test("opening the setting opens App Management and reveals Herdr Core in Finder", () => {
+  const dir = mkdtempSync(join(tmpdir(), "nocturne-open-"));
+  try {
+    const log = join(dir, "open.log");
+    writeFileSync(join(dir, "open"), `#!/bin/sh\nfor a in "$@"; do printf '%s|' "$a"; done >> ${sq(log)}; echo >> ${sq(log)}\n`);
+    chmodSync(join(dir, "open"), 0o755);
+    const r = Bun.spawnSync(["/bin/sh", "-c", APP_MANAGEMENT.open], { env: { PATH: `${dir}:/usr/bin:/bin`, HOME: "/Users/me" } });
+    expect(r.exitCode).toBe(0);
+    expect(readFileSync(log, "utf8").trim().split("\n")).toEqual([
+      "x-apple.systempreferences:com.apple.preference.security?Privacy_AppBundles|",
+      "-R|/Users/me/.local/share/herdr-core/active/Herdr Core.app|",
+    ]);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
