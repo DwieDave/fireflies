@@ -39,6 +39,8 @@ const SHIPPED_KEYS: &[&str] = &[
     include_str!("keys/shipped/v0.1.4-keys.json"),
     include_str!("keys/shipped/v0.1.5-keys.json"),
     include_str!("keys/shipped/v0.1.12-keys.json"),
+    // Fireflies' keys before pane.park / pane.unpark.
+    include_str!("keys/shipped/fireflies-1-keys.json"),
 ];
 #[cfg(any(target_os = "macos", test))]
 const SHIPPED_MACOS_KEYS: &[&str] = &[
@@ -48,6 +50,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/v0.1.14-keys.macos.json"),
     // Fireflies' first Nocturne keys, before cmd-shift-g opened the GitHub window.
     include_str!("keys/shipped/fireflies-nocturne-keys.macos.json"),
+    // With cmd-shift-g, before pane.park / pane.unpark / pane.equalize keys.
+    include_str!("keys/shipped/fireflies-github-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
