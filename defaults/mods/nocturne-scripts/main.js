@@ -12,13 +12,18 @@
 //            the runner as a badge; the last ones run here come first
 //   foot     what the cursor is on and its keys, as caps
 //
-// Enter runs a script in the background (a terminal with no pane) and closes
-// the deck; shift-enter runs it and floats its terminal to watch. On a run:
-// enter watches, cmd/ctrl-backspace stops (or dismisses), cmd/ctrl-r runs it
-// again. Esc closes. props.focus "runs" starts the cursor on the runs.
+// The list has the keyboard (the deck's own focus handle) from the moment it
+// opens: up/down or j/k move, enter runs a script in the background (a
+// terminal with no pane) and closes the deck, shift-enter runs it and floats
+// its terminal to watch. On a run: enter watches, cmd/ctrl-backspace stops
+// (or dismisses), cmd/ctrl-r runs it again. "/" goes to the filter (only "/":
+// letters are the list's keys); there up/down still move and enter runs, and
+// esc clears the filter, then gives the keyboard back to the list. Esc on the
+// list closes (an ended run's output: back first). props.focus "runs" starts
+// the cursor on the runs.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input } from "gpui-base";
+import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, hc, home, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
 import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
@@ -30,6 +35,9 @@ const DECK = "nocturne-scripts.deck";
 // The switch password windows ../nocturne/prompt.js opens, by run: this copy
 // is the bar of one when props has { password: address, name }.
 const PROMPTS = "nocturne-scripts.prompts";
+// The deck's key context and its esc (init).
+const CONTEXT = "NocturneScriptsDeck";
+const ESCAPE = "nocturne_scripts_escape";
 // The last scripts run per folder, newest first: { "<machine>:<folder>": [id] }.
 const RECENT = "nocturne-scripts.recent";
 // What each folder had last time, shown at once while it's looked at again.
@@ -87,10 +95,23 @@ export default class ScriptsDeck extends View {
     if (shown && !shown.live) this.showOutput(shown, cx);
     this.hover = null;
     this.scroll = 0;
-    this.input = InputState.new({ placeholder: "filter scripts" });
-    this.input.on("change", (_e, cx) => { this.query = this.input.value(); this.cursor = -1; this.scroll = 0; cx.notify(); });
-    this.input.focus();
-    for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.input.focus());
+    // The filter is typed through the deck's own key handler ("/" starts it),
+    // not a text input: an input's own bindings take up, down, enter and esc
+    // before any handler around it sees them.
+    this.typing = false;
+    // The deck has the keyboard, again a moment later in case the overlay's
+    // frame took it back while the deck loaded.
+    this.handle = cx.focus_handle();
+    this.handle.focus();
+    for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.handle.focus());
+    // Esc is the overlay's (it closes it) before any key handler sees it:
+    // bound to an action in the deck's key context, it's the deck's.
+    if (!ScriptsDeck.bound) {
+      try {
+        cx.bind_keys([{ keystroke: "escape", action: ESCAPE, context: CONTEXT }]);
+        ScriptsDeck.bound = true;
+      } catch { /* esc then closes the deck, as the overlay's */ }
+    }
     this.beat();
     // Elapsed times tick; the strip learns the deck is still open.
     cx.timer.every(1000, (cx) => { this.beat(); if (runs(withEnded(terminals(), shared(ENDED))).some((r) => r.live)) cx.notify(); });
@@ -301,7 +322,7 @@ export default class ScriptsDeck extends View {
     return this.band(h_flex().id(`run-${i}`).relative().h(ROW).flex_none().px(12).gap(8).items_center().text_size(12)
       .text_color(on ? t.foreground : r.live ? t.muted : t.dim)
       .on_hover((h, cx) => { const k = h ? `r${i}` : this.hover === `r${i}` ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } })
-      .on_click((_e, cx) => this.act("watch", r, cx)), t, on)
+      .on_click((_e, cx) => { this.cursor = i; this.act("watch", r, cx); }), t, on)
       .child(div().relative().w(8).flex_none().flex().items_center().child(this.pip(t, color, r.live)))
       .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
         .child(div().min_w(0).truncate().child(r.name))
@@ -336,8 +357,10 @@ export default class ScriptsDeck extends View {
   scriptRow(t, row, i, on, running) {
     const s = row.s;
     return this.band(h_flex().id(`sc-${i}`).relative().h(ROW).flex_none().px(12).gap(10).items_center().text_size(12)
-      .on_hover((h, cx) => { if (h && this.cursor !== i) { this.cursor = i; cx.notify(); } })
-      .on_click((e, cx) => this.go(s, Boolean(e?.modifiers?.shift), cx)), t, on)
+      // Only a pointer that moved takes the cursor: one resting where the deck
+      // opened would otherwise steal it from the keys.
+      .on_hover((h, cx) => { if (h && this.moved && this.cursor !== i) { this.cursor = i; cx.notify(); } })
+      .on_click((e, cx) => { if (!this.gone) { this.gone = true; this.go(s, Boolean(e?.modifiers?.shift), cx); } }), t, on)
       .child(div().relative().child(this.badge(t, s.runner, on, 52)))
       .child(h_flex().relative().flex_none().max_w(250).min_w(0).gap(6).items_center()
         .child(this.name(t, s.name, row.hits, on ? t.foreground : t.muted))
@@ -381,6 +404,11 @@ export default class ScriptsDeck extends View {
           div().flex_none().text_color(t.dim).child(`after ${elapsed(r)}`)))
         .child(keys(this.hint(t, "k-esc", "esc", "back")));
     }
+    if (this.typing) {
+      return bar
+        .child(left(div().flex_none().text_color(t.accent).child("/"), div().min_w(0).truncate().text_color(t.muted).child(this.query ? `filtering "${this.query}"` : "type to filter")))
+        .child(keys(this.hint(t, "k-enter", "enter", cur?.kind === "run" ? "watch" : "run"), this.hint(t, "k-esc", "esc", this.query ? "clear" : "list")));
+    }
     if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(this.folder ? "" : "no folder here")));
     if (cur.kind === "run") {
       const r = cur.r;
@@ -393,7 +421,7 @@ export default class ScriptsDeck extends View {
     return bar
       .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
         .child(cur.row.s.admin ? "asks for your password" : "in the background")))
-      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "run & watch")));
+      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "& watch"), this.hint(t, "k-filter", "/", "filter")));
   }
 
   /** The runs header's aside: a pip and a count for each state there is. */
@@ -414,30 +442,59 @@ export default class ScriptsDeck extends View {
     return div().px(12).py(12).text_size(11).text_color(t.dim).child(say);
   }
 
-  key(e, cx, items) {
+  /** Enter (shift: and watch) on the cursor's item. */
+  enter(shift, cx) {
+    const cur = this.items?.[this.cursor];
+    if (!cur || this.gone) return;
+    if (cur.kind === "run") return this.act("watch", cur.r, cx);
+    this.gone = true;
+    this.go(cur.row.s, shift, cx);
+  }
+
+  /** Esc, one step at a time: the filter's text, the filter, an ended run's
+   *  output, then the deck. */
+  escape(cx) {
+    if (this.typing && this.query) this.filter("");
+    else if (this.typing) this.typing = false;
+    else if (this.output) this.output = null;
+    else return this.dismissDeck();
+    cx.notify();
+  }
+
+  /** The filter changed: the cursor starts over on what matches. */
+  filter(q) {
+    this.query = q;
+    this.cursor = -1;
+    this.scroll = 0;
+  }
+
+  // Not `key`: that's the folder's cache key (init), and a method by that
+  // name was shadowed by it, so no key ever reached here.
+  onKey(e, cx, items) {
     const m = e.modifiers ?? {};
     const k = String(e.key ?? "").toLowerCase();
     const n = items.length;
     const cur = items[this.cursor];
     const cmd = m.platform || m.control;
-    if (k === "escape") {
-      cx.stop_propagation();
-      if (this.output) { this.output = null; return cx.notify(); }
-      return this.dismissDeck();
+    const move = (d) => { if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + d)); };
+    const done = () => { cx.stop_propagation(); cx.notify(); };
+    if (k === "down" || k === "up") return move(k === "down" ? 1 : -1), done();
+    if (k === "enter") return cx.stop_propagation(), this.enter(Boolean(m.shift), cx);
+    if (this.typing) {
+      if (k === "backspace") { this.filter(cmd || m.alt ? "" : [...this.query].slice(0, -1).join("")); return done(); }
+      const ch = e.key_char;
+      if (!cmd && typeof ch === "string" && ch.length && !/[\u0000-\u001f\u007f]/.test(ch)) { this.filter(this.query + ch); return done(); }
+      return;
     }
-    if (k === "down" || k === "up") {
-      if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + (k === "down" ? 1 : -1)));
-    } else if (k === "enter") {
-      if (!cur) return;
-      cx.stop_propagation();
-      return cur.kind === "run" ? this.act("watch", cur.r, cx) : this.go(cur.row.s, Boolean(m.shift), cx);
-    } else if (cmd && k === "backspace" && cur?.kind === "run") {
-      this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
-    } else if (cmd && k === "r" && cur?.kind === "run") {
-      this.act("again", cur.r, cx);
-    } else return;
-    cx.stop_propagation();
-    cx.notify();
+    if (k === "escape") return cx.stop_propagation(), this.escape(cx);
+    if (cmd && k === "backspace" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
+    else if (cmd && k === "r" && cur?.kind === "run") this.act("again", cur.r, cx);
+    else if (cmd || m.alt) return;
+    else if (k === "j") move(1);
+    else if (k === "k") move(-1);
+    else if (k === "/" || e.key_char === "/") { this.output = null; this.typing = true; }
+    else return;
+    done();
   }
 
   /** The bar of a switch's password window (../nocturne/prompt.js): its name,
@@ -476,6 +533,7 @@ export default class ScriptsDeck extends View {
       if (i >= 0) this.cursor = i;
       this.output.placed = true;
     }
+    this.items = items;
     const cur = items[this.cursor];
     const runningIds = new Set(all.filter((r) => r.live && r.folder === this.folder).map((r) => r.id));
 
@@ -512,7 +570,13 @@ export default class ScriptsDeck extends View {
     });
 
     return v_flex().id("nocturne-scripts").size_full().bg(t.background).border(1).border_color(t.ansi0)
-      .on_key_down((e, cx) => this.key(e, cx, items))
+      .track_focus(this.handle)
+      .key_context(CONTEXT)
+      .on_action(ESCAPE, (_e, cx) => this.escape(cx))
+      // A click anywhere in it (a row too) leaves the keyboard here.
+      .on_mouse_down("left", () => this.handle.focus())
+      .on_mouse_move(() => { this.moved = true; })
+      .on_key_down((e, cx) => this.onKey(e, cx, items))
       .child(h_flex().relative().h(HEAD).flex_none().px(12).gap(10).items_center()
         .child(svg(`${ART}/play.svg`).size(9).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(12).text_color(t.foreground).child("Scripts"))
@@ -525,8 +589,12 @@ export default class ScriptsDeck extends View {
         .child(div().h(4).flex_none()))
       .when(Boolean(this.output), (el) => el.child(this.outputView(t, INPUT + 4 + listH)))
       .when(!this.output, (el) => el.child(h_flex().relative().h(INPUT).flex_none().mx(12).gap(8).items_center()
-        .child(div().flex_none().text_size(12).text_color(t.accent).child("›"))
-        .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground))
+        .on_mouse_down("left", (_e, cx) => { this.typing = true; cx.notify(); })
+        .child(div().flex_none().text_size(12).text_color(this.typing ? t.accent : t.dim).child("/"))
+        .child(h_flex().flex_1().min_w(0).h_full().items_center().text_size(12)
+          .when(Boolean(this.query), (el) => el.child(div().flex_none().text_color(t.foreground).child(this.query.replace(/ /g, "\u00a0"))))
+          .when(this.typing, (el) => el.child(div().flex_none().w(1).h(14).bg(t.accent).loop("opacity", { from: 0, to: 1, period: 1000 })))
+          .when(!this.query && !this.typing, (el) => el.child(div().text_color(t.dim).child("filter"))))
         .child(div().flex_none().text_size(10).text_color(t.dim).child(this.nix === "evaluating" ? "nix…" : this.looking && this.scripts ? "looking…"
           : this.nix === "failed" ? `nix eval failed · ${rows.length}` : rows.length ? `${rows.length}` : ""))
         .child(div().absolute().left(0).right(0).bottom(0).h(1).opacity(0.6).child(dither(t.ansi8, 1))))

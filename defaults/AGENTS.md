@@ -173,7 +173,9 @@ the highlighted line shows where it will land.
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
-  executables in `scripts/` and `bin/`. A flake gets `nix flake check` / `update`
+  executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
+  j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
+  leaves the filter, esc closes). A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager

@@ -7016,6 +7016,107 @@ export default class Probe extends View {
         }
     }
 
+    /// The script runner's deck (defaults/mods/nocturne-scripts) owns the
+    /// keyboard from the moment it opens: real keystrokes through the window,
+    /// what the deck queued for the tab strip (`nocturne-scripts.jobs`) says
+    /// which script they ran.
+    #[test]
+    fn the_scripts_deck_list_has_the_keyboard() {
+        in_own_process("scripts_deck_keys");
+    }
+
+    #[gpui::test]
+    fn scripts_deck_keys(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("scripts_deck_keys") {
+            return;
+        }
+        cx.update(gpui_base::init);
+        let (view, cx) = open_window(cx, "nocturne-scripts", include_str!("../defaults/mods/nocturne-scripts/main.js"), json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        let folder = crate::mods::app_dir().join("mods/nocturne-scripts");
+        for (name, text) in [
+            ("detect.js", include_str!("../defaults/mods/nocturne-scripts/detect.js")),
+            ("nix.js", include_str!("../defaults/mods/nocturne-scripts/nix.js")),
+            ("runs.js", include_str!("../defaults/mods/nocturne-scripts/runs.js")),
+        ] {
+            std::fs::write(folder.join(name), text).unwrap();
+        }
+        // What the deck found here before (no folder: nothing to look at again).
+        let script = |name: &str| json!({ "runner": "just", "group": "justfile", "name": name, "cmd": format!("just {name}"), "id": format!("justfile#{name}") });
+        crate::mods::set_shared("nocturne-scripts.found".into(), json!({ ":": [script("build"), script("test"), script("lint"), script("deploy")] }));
+        let open = |cx: &mut gpui::VisualTestContext| {
+            crate::mods::set_shared("nocturne-scripts.jobs".into(), json!([]));
+            crate::mods::set_shared("nocturne-scripts.recent".into(), json!({}));
+            cx.update(|window, cx| view.update(cx, |this, cx| {
+                this.open_overlay("deck".into(), json!({ "mod": "nocturne-scripts", "kind": "dialog", "width": 420, "height": 470, "props": {} }), window, cx);
+            }));
+            cx.run_until_parked();
+            // One frame drawn, as the window does (the deck's key handlers are
+            // in it), and no clock advanced: the keys work right away.
+            cx.update(|window, cx| window.draw(cx).clear(cx));
+            cx.update(|window, _| window.activate_window());
+        };
+        let ran = |cx: &mut gpui::VisualTestContext| {
+            cx.run_until_parked();
+            let jobs = crate::mods::shared("nocturne-scripts.jobs").unwrap_or(json!([]));
+            jobs.as_array().unwrap().iter().map(|j| (j["name"].as_str().unwrap_or("").to_owned(), j["watch"].as_bool().unwrap_or(false))).collect::<Vec<_>>()
+        };
+        let deck_open = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == "deck"));
+
+        // Right after it opens: down, enter. The second script runs; the deck closes.
+        open(cx);
+        cx.simulate_keystrokes("down enter");
+        assert_eq!(ran(cx), vec![("test".to_owned(), false)]);
+        assert!(!deck_open(cx));
+
+        // j/k move too; shift-enter runs and watches.
+        open(cx);
+        cx.simulate_keystrokes("j j k shift-enter");
+        assert_eq!(ran(cx), vec![("test".to_owned(), true)]);
+
+        // "/" goes to the filter (without typing itself there); enter runs the match.
+        open(cx);
+        cx.simulate_keystrokes("/ d e p enter");
+        assert_eq!(ran(cx), vec![("deploy".to_owned(), false)]);
+
+        // Letters on the list are its keys, not a filter: "d" alone runs nothing.
+        open(cx);
+        cx.simulate_keystrokes("d e p");
+        assert_eq!(ran(cx), vec![]);
+        assert!(deck_open(cx));
+        cx.simulate_keystrokes("escape");
+        assert!(!deck_open(cx), "esc on the list closes");
+
+        // In the filter, k is a letter (nothing has one); up/down still move.
+        open(cx);
+        cx.simulate_keystrokes("/ k down enter");
+        assert_eq!(ran(cx), vec![], "nothing matches k");
+        assert!(deck_open(cx));
+        // Esc clears the filter, esc again gives the list the keyboard.
+        cx.simulate_keystrokes("escape escape");
+        assert!(deck_open(cx));
+        cx.simulate_keystrokes("j enter");
+        assert_eq!(ran(cx), vec![("test".to_owned(), false)], "back on the list, with the filter cleared");
+
+        // Backspace takes back a letter.
+        open(cx);
+        cx.simulate_keystrokes("/ x backspace l i n enter");
+        assert_eq!(ran(cx), vec![("lint".to_owned(), false)]);
+
+        // Up/down in the filter move through what matches.
+        open(cx);
+        cx.simulate_keystrokes("/ t down up down enter");
+        assert_eq!(ran(cx).len(), 1);
+
+        // A third esc closes.
+        open(cx);
+        cx.simulate_keystrokes("/ escape escape escape");
+        assert_eq!(ran(cx), vec![]);
+        assert!(!deck_open(cx));
+    }
+
     include!("window/pane_size_tests.rs");
     include!("window/drag_tests.rs");
 
