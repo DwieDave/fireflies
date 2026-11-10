@@ -89,6 +89,10 @@ Shared state is saved atomically in the background, with the latest change winni
 If `shared.json` is invalid, Herdr logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
 `herdr-app check` uses empty shared state in memory and leaves this file untouched.
+Nocturne's GitHub window keeps what it last read of each repo (pull requests,
+runs, jobs; the last 8 repos, under 768 KB, never tokens) in
+`data/nocturne-github/cache.json`: it shows that at once when opened and reads
+GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
 
 ## The model: spaces, tabs, terminals
 
