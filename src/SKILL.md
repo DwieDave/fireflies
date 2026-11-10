@@ -75,6 +75,17 @@ the same tab. Give `direction` or `target`, not both. Focus stays with the same 
 herdr-app do pane.swap '{"pane":"p12","target":"p14"}'
 ```
 
+`pane.park {pane?, index?}` moves a pane out of the arrangement into a chip
+row at the bottom of its tab; it keeps running and stays in the tab (`ls`
+lists it under the tab's `parked`). A tab keeps one pane in place.
+`pane.unpark {pane?, target?, edge?}` puts it back where it was, or beside
+`target` on `edge`. Park only when asked; it changes what the person sees:
+
+```sh
+herdr-app do pane.park --pane p12
+herdr-app do pane.unpark '{"pane":"p12","target":"p14","edge":"bottom"}'
+```
+
 `terminal.search` opens a find bar in the focused terminal. It searches that
 terminal's screen and scrollback; Enter and Shift-Enter move between matches,
 Escape closes the bar while its find field has focus, and each terminal keeps its own query (reopening selects it, so typing replaces it).

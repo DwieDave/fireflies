@@ -34,7 +34,11 @@ function items(p, git) {
       const toProgram = term?.labels?.["herdr.right-click"] === "program";
       // A terminal shown outside a tab (a layout terminal block, a window) has
       // no pane to split, zoom or close: its pane is the block's id.
-      const inTab = panes().some((pane) => pane.pane === tg.pane);
+      const all_panes = panes();
+      const mine = all_panes.find((pane) => pane.pane === tg.pane);
+      const inTab = !!mine;
+      // Parking needs another pane left in place.
+      const parkable = inTab && !mine.parked && all_panes.filter((pane) => pane.tab === mine.tab && !pane.parked).length > 1;
       return [
         ...(inTab
           ? [
@@ -43,6 +47,7 @@ function items(p, git) {
               ["Zoom", "pane.zoom", { pane: tg.pane }],
             ]
           : []),
+        ...(parkable ? [["Park pane", "pane.park", { pane: tg.pane }]] : []),
         ...(term
           ? [
               toProgram

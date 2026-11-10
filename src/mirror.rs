@@ -1,7 +1,7 @@
 //! Machine-owned layout documents and this screen's private view.
 use crate::{
     layout::{Content, Kind, Node},
-    model::{Agent, Model, Recent, Space, Tab},
+    model::{Agent, Model, Parked, Recent, Space, Tab},
 };
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -35,6 +35,21 @@ struct SharedTab {
     /// Fields this build doesn't read, kept so a newer build's survive this one's write.
     #[serde(flatten)]
     rest: serde_json::Map<String, serde_json::Value>,
+    /// Panes parked in the tab's bottom row (`pane.park`), in its order.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    parked: Vec<Parked>,
+}
+
+fn map_parked(parked: &[Parked], map: &impl Fn(&str) -> String) -> Vec<Parked> {
+    parked
+        .iter()
+        .map(|p| {
+            let mut p = p.clone();
+            map_node(&mut p.pane, map);
+            p.near = p.near.as_deref().map(map);
+            p
+        })
+        .collect()
 }
 
 fn empty_root() -> Node {
@@ -112,7 +127,7 @@ impl Document {
                         .map(|t| {
                             let mut root = t.root.clone();
                             map_node(&mut root, &map);
-                            SharedTab { id: map(&t.id), name: t.name.clone(), root, rest: t.rest.clone() }
+                            SharedTab { id: map(&t.id), name: t.name.clone(), root, parked: map_parked(&t.parked, &map), rest: t.rest.clone() }
                         })
                         .collect(),
                     rest: s.rest.clone(),
@@ -138,7 +153,18 @@ impl Document {
                 .map(|t| {
                     let mut root = t.root.clone();
                     map_node(&mut root, &map);
-                    Tab { id: map(&t.id), name: t.name.clone(), root, focused: None, before: vec![], zoomed: None, font_zoom: BTreeMap::new(), settled: None, rest: t.rest.clone() }
+                    Tab {
+                        id: map(&t.id),
+                        name: t.name.clone(),
+                        root,
+                        focused: None,
+                        before: vec![],
+                        zoomed: None,
+                        font_zoom: BTreeMap::new(),
+                        settled: None,
+                        parked: map_parked(&t.parked, &map),
+                        rest: t.rest.clone(),
+                    }
                 })
                 .collect(),
             rest: s.rest.clone(),
@@ -235,6 +261,27 @@ mod tests {
         let mut m = Model::default();
         m.add_space("s", "work", "/work", Tab::new("t", "task", "p", "t1"));
         m
+    }
+    #[test]
+    fn parked_panes_are_shared_and_qualified_per_machine() {
+        let mut m = model();
+        m.split("p", Axis::Row, "p2", "t2");
+        m.park_pane("p2", None).unwrap();
+        let doc = Document::capture(&m, None);
+        let json = serde_json::to_value(&doc).unwrap();
+        assert_eq!(json["spaces"][0]["tabs"][0]["parked"][0]["pane"]["content"]["terminal"], "t2");
+        assert_eq!(json["spaces"][0]["tabs"][0]["parked"][0]["near"], "p");
+        // Without parked panes the document looks as before.
+        let plain = serde_json::to_value(Document::capture(&model(), None)).unwrap();
+        assert!(plain["spaces"][0]["tabs"][0].get("parked").is_none());
+        let mut other = Model::default();
+        doc.replace(&mut other, Some("mac"));
+        let tab = other.tab("mac/t").unwrap();
+        assert_eq!(tab.parked[0].pane.id, "mac/p2");
+        assert_eq!(tab.parked[0].pane.terminal(), Some("mac/t2"));
+        assert_eq!(tab.parked[0].near.as_deref(), Some("mac/p"));
+        assert_eq!(other.pane_of("mac/t2").as_deref(), Some("mac/p2"));
+        assert_eq!(Document::capture(&other, Some("mac")), doc);
     }
     #[test]
     fn focus_zoom_and_settle_are_private() {

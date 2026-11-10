@@ -8,6 +8,7 @@ use crate::hc::Core;
 mod floats;
 mod movable;
 mod pane_drag;
+mod parking;
 mod pane_size;
 mod titlebar;
 
@@ -883,7 +884,7 @@ impl AppWindow {
             agents: agents.iter().map(|a| a.app.clone()).collect(),
             spaces: m.spaces.len(),
             tabs: m.spaces.iter().map(|p| p.tabs.len()).sum(),
-            terminals: m.spaces.iter().flat_map(|p| &p.tabs).map(|c| model::addresses(&c.root).len()).sum(),
+            terminals: m.spaces.iter().flat_map(|p| &p.tabs).map(|c| c.addresses().len()).sum(),
             layout: self.layout_name.clone(),
             mods: self.visible().1.into_iter().map(|(_, i)| i.name).collect(),
             theme: settings::get().theme.clone(),
@@ -1299,7 +1300,7 @@ impl AppWindow {
             // An agent block with an agent outside every tab gets its own view.
             if matches!(n.content(), Some(Content::Agent { .. }))
                 && let Some(addr) = self.shown_agent()
-                && self.model.pane_of(&addr).is_none()
+                && self.model.placed_pane_of(&addr).is_none()
             {
                 terms.push((n.id.clone(), addr));
             }
@@ -1469,7 +1470,7 @@ impl AppWindow {
 
     /// The terminal view showing `addr` in an agent block: its pane's, or the block's own.
     fn agent_view(&self, block: &str, addr: &str) -> Option<&Term> {
-        self.model.pane_of(addr).and_then(|p| self.terms.get(&p)).or_else(|| self.terms.get(block).filter(|t| t.address == addr))
+        self.model.placed_pane_of(addr).and_then(|p| self.terms.get(&p)).or_else(|| self.terms.get(block).filter(|t| t.address == addr))
     }
 
     /// What's on screen now, for done-vs-seen.
@@ -1868,12 +1869,13 @@ impl AppWindow {
         let mut panes = Vec::new();
         for pr in &m.spaces {
             for (ci, ctx) in pr.tabs.iter().enumerate() {
-                for p in ctx.root.panes() {
+                // Parked panes too (`parked`: in the tab's bottom row), after the placed ones.
+                for (p, parked) in ctx.root.panes().into_iter().map(|p| (p, false)).chain(ctx.parked.iter().map(|p| (&p.pane, true))) {
                     let focused = m.active.as_deref() == Some(pr.id.as_str()) && focused_pane.as_deref() == Some(p.id.as_str());
                     let zoomed = ctx.zoomed.as_deref() == Some(p.id.as_str());
                     // A mod pane: what it shows, no terminal.
                     if let Some(Content::Mod { name, .. }) = p.content() {
-                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id) }));
+                        panes.push(json!({ "pane": p.id, "terminal": null, "mod": name, "tab": ctx.id, "title": name, "focused": focused, "zoomed": zoomed, "font_zoom": 1.0, "movable": self.pane_movable(&p.id), "parked": parked }));
                         continue;
                     }
                     let Some(addr) = p.terminal() else { continue };
@@ -1886,7 +1888,7 @@ impl AppWindow {
                         "cwd": self.cwds.get(addr), "branch": m.folder_info.get(addr).and_then(|f| f.branch.clone()),
                         "status": m.status(addr), "app": a.and_then(|a| a.app.clone()), "program": self.program(addr),
                         "focused": focused, "zoomed": zoomed, "font_zoom": ctx.font_zoom.get(&p.id).copied().unwrap_or(1.0),
-                        "movable": self.pane_movable(&p.id),
+                        "movable": self.pane_movable(&p.id), "parked": parked,
                     }));
                     let Some(status) = m.status(addr) else { continue };
                     agents.push(json!({
@@ -1942,7 +1944,7 @@ impl AppWindow {
         for p in &m.spaces {
             let name = m.space_name(p, &home);
             for c in &p.tabs {
-                for a in model::addresses(&c.root) {
+                for a in c.addresses() {
                     want.insert(a, format!("{name} / {}", Model::tab_name(p, c)));
                 }
             }
@@ -2335,7 +2337,7 @@ impl AppWindow {
             crate::sound::play(if alert == model::Alert::Blocked { "blocked" } else { "done" });
         }
         // Needing the person brings a settled tab back.
-        if let Some(ctx) = self.model.pane_of(&self.root_agent(addr)).and_then(|p| self.model.tab_of(&p)).map(|c| c.id.clone())
+        if let Some(ctx) = self.model.pane_of(&self.root_agent(addr)).and_then(|p| self.model.tab_holding(&p)).map(|c| c.id.clone())
             && self.model.unsettle(&ctx)
         {
             self.save();
@@ -2353,7 +2355,7 @@ impl AppWindow {
         // A sub-agent lives where its top agent does.
         let home = self.root_agent(addr);
         let place = self.model.pane_of(&home).and_then(|pane| {
-            let (p, c) = (self.model.space_of(&pane)?, self.model.tab_of(&pane)?);
+            let (p, c) = (self.model.space_of(&pane)?, self.model.tab_holding(&pane)?);
             Some(format!("{} / {}", self.model.space_name(p, &self::home()), Model::tab_name(p, c)))
         });
         let (title, level) = match alert {
@@ -2376,7 +2378,7 @@ impl AppWindow {
         if QUITTING.load(std::sync::atomic::Ordering::SeqCst) {
             return false;
         }
-        let missing = self.model.tabs().flat_map(|c| c.root.terminals()).chain(self.chrome.terminals())
+        let missing = self.model.tabs().flat_map(|c| c.root.terminals().into_iter().chain(c.parked.iter().map(|p| &p.pane))).chain(self.chrome.terminals())
             .filter_map(|n| n.terminal().filter(|a| !self.live.contains_key(*a) && !self.just_born(a)).map(|a| (n.id.clone(), a.to_owned())))
             .collect::<Vec<_>>();
         if !missing.is_empty() && !self.checking_closed {
@@ -3138,7 +3140,7 @@ impl AppWindow {
             if !args.is_object() { args = json!({}); }
             args["machine"] = json!(machine);
         }
-        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "terminal.keep" | "terminal.park") {
+        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.park" | "pane.unpark" | "terminal.keep" | "terminal.park") {
             let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
@@ -3336,11 +3338,17 @@ impl AppWindow {
             }
             "pane.close" => {
                 let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to close") };
+                if self.model.parked_tab_of(&pane).is_some() {
+                    let addr = self.model.address_of(&pane);
+                    self.model.remove_pane(&pane);
+                    self.kill(&addr.into_iter().collect::<Vec<_>>(), cx);
+                    return self.sync(window, cx);
+                }
                 let Some(c) = self.model.tab_of(&pane) else { return self.fail(format!("no pane {pane:?}")) };
                 if c.root.find(&pane).is_some_and(|n| !n.closable()) {
                     return;
                 }
-                if c.root.panes().len() == 1 {
+                if c.root.panes().len() == 1 && c.parked.is_empty() {
                     let id = c.id.clone();
                     return self.dispatch("tab.close", &json!({ "id": id }), person, window, cx);
                 }
@@ -3388,6 +3396,44 @@ impl AppWindow {
                     Err(e) => return self.fail(e),
                 }
             }
+            "pane.park" => {
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to park") };
+                let index = match a.get("index").filter(|v| !v.is_null()) {
+                    None => None,
+                    Some(v) => match v.as_u64().filter(|i| *i >= 1) {
+                        Some(i) => Some(i as usize - 1),
+                        None => return self.fail(format!("pane.park index is a position from 1, not {v}")),
+                    },
+                };
+                if let Err(e) = self.model.park_pane(&pane, index) {
+                    return self.fail(e);
+                }
+                self.swapped.remove(&pane);
+                self.focused_pane = None;
+                self.answer(Ok(json!({ "pane": pane })));
+            }
+            "pane.unpark" => {
+                let pane = Self::owned(a, "pane").or_else(|| self.model.active_tab().and_then(|t| t.parked.last()).map(|p| p.pane.id.clone()));
+                let Some(pane) = pane else { return self.fail("no parked pane") };
+                let edge = match Self::arg(a, "edge") {
+                    None => None,
+                    Some(e) => match split_edge(e) {
+                        Some(e) => Some(e),
+                        None => return self.fail(format!("pane.unpark edge is \"right\", \"left\", \"top\" or \"bottom\", not {e:?}")),
+                    },
+                };
+                let target = Self::owned(a, "target");
+                if edge.is_some() && target.is_none() {
+                    return self.fail("pane.unpark edge needs target");
+                }
+                if let Err(e) = self.model.unpark_pane(&pane, target.as_deref().map(|t| (t, edge))) {
+                    return self.fail(e);
+                }
+                self.focused_block = None;
+                self.focused_pane = None;
+                self.agent = self.model.address_of(&pane);
+                self.answer(Ok(json!({ "pane": pane })));
+            }
             "pane.focus" => {
                 if Self::arg(a, "pane").is_none()
                     && let Some(terminal) = Self::arg(a, "terminal")
@@ -3405,7 +3451,8 @@ impl AppWindow {
                     return;
                 }
                 let pane = Self::owned(a, "pane").or_else(|| Self::arg(a, "terminal").and_then(|t| self.model.pane_of(t)));
-                let Some(p) = pane.filter(|p| self.model.tab_of(p).is_some()) else { return self.fail("no such pane") };
+                // A parked pane comes back (Model::focus_pane).
+                let Some(p) = pane.filter(|p| self.model.tab_holding(p).is_some()) else { return self.fail("no such pane") };
                 self.focused_block = None;
                 self.model.focus_pane(&p);
                 self.focused_pane = None;
@@ -4359,7 +4406,14 @@ impl AppWindow {
                     .iter()
                     .map(|c| {
                         let terms: Vec<Value> = c.root.terminals().iter().filter_map(|n| Some(terminal(&n.id, n.terminal()?))).collect();
-                        json!({ "id": c.id, "name": Model::tab_name(p, c), "active": Some(&c.id) == active.as_ref(), "settled": c.settled.is_some(), "terminals": terms })
+                        // Parked panes (pane.park): terminals and mods, in the row's order.
+                        let parked: Vec<Value> = c.parked.iter().map(|pk| match pk.pane.terminal() {
+                            Some(addr) => terminal(&pk.pane.id, addr),
+                            None => json!({ "pane": pk.pane.id, "mod": match pk.pane.content() { Some(Content::Mod { name, .. }) => Some(name.clone()), _ => None } }),
+                        }).collect();
+                        let mut tab = json!({ "id": c.id, "name": Model::tab_name(p, c), "active": Some(&c.id) == active.as_ref(), "settled": c.settled.is_some(), "terminals": terms });
+                        if !parked.is_empty() { tab["parked"] = Value::Array(parked); }
+                        tab
                     })
                     .collect();
                 json!({ "id": p.id, "name": m.space_name(p, &home()), "folder": p.folder, "machine": p.machine, "active": m.active.as_deref() == Some(&p.id), "tabs": tabs })
@@ -4668,7 +4722,10 @@ impl AppWindow {
                     .into_any_element(),
             },
             Content::Context { .. } => match self.model.active_tab() {
-                Some(c) => self.render_node(c.shown(), focused, self.pane_frame(), cx),
+                Some(c) => {
+                    let body = self.render_node(c.shown(), focused, self.pane_frame(), cx);
+                    self.with_parking_row(c, body, cx)
+                }
                 None if self.documents.get("").is_some_and(|s| s.layout() == "loading") => div().size_full().into_any_element(),
                 None => {
                     let key = crate::keys::listing().into_iter().find(|(_, _, a)| a == "space.new").map(|(_, k, _)| format!(" ({k})"));
@@ -5253,7 +5310,7 @@ fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
         // An edge split goes by the tab, not a pane.
         "pane.split" => AppWindow::arg(args, "pane").is_none() && args.get("edge").is_none_or(Value::is_null),
-        "pane.close" | "pane.zoom" | "pane.swap" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+        "pane.close" | "pane.zoom" | "pane.swap" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "pane.park" | "terminal.show" => {
             AppWindow::arg(args, "pane").is_none()
         }
         "pane.go" => true,

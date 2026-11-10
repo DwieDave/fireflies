@@ -56,6 +56,8 @@
     "ctrl-shift-w": "tab.close",
     "ctrl-shift-x": "pane.close",
     "ctrl-shift-z": "pane.zoom",
+    "ctrl-shift-m": "pane.park",
+    "ctrl-alt-shift-m": "pane.unpark",
     "ctrl-shift-l": "layout.switch",
     "f2": "tab.rename",
     "shift-f2": "space.rename"

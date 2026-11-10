@@ -22,6 +22,8 @@
     "cmd-shift-d": "pane.split:down",
     "cmd-shift-w": "pane.close",
     "cmd-shift-enter": "pane.zoom",
+    "cmd-shift-m": "pane.park",
+    "cmd-alt-shift-m": "pane.unpark",
     "cmd-alt-left": "pane.go:left",
     "cmd-alt-right": "pane.go:right",
     "cmd-alt-up": "pane.go:up",

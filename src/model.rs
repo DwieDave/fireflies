@@ -28,6 +28,21 @@ pub struct Tab {
     /// Fields of its document entry this build doesn't read (a newer build's),
     /// written back as they were.
     pub rest: serde_json::Map<String, serde_json::Value>,
+    /// Panes parked in the tab's bottom row (`pane.park`), in the row's
+    /// order: out of the arrangement, still running.
+    pub parked: Vec<Parked>,
+}
+
+/// A pane parked in its tab's bottom row: out of the arrangement (its
+/// terminal keeps running), back in place with `pane.unpark`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Parked {
+    pub pane: Node,
+    /// What it sat beside when parked, and on which side of it: where it goes back.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub near: Option<String>,
+    #[serde(default)]
+    pub side: Edge,
 }
 
 /// A place to work, plus the folder its new terminals start in.
@@ -151,6 +166,29 @@ impl Tab {
             font_zoom: BTreeMap::new(),
             settled: None,
             rest: Default::default(),
+            parked: Vec::new(),
+        }
+    }
+
+    /// Every terminal the tab holds: its arrangement's, then its parked ones.
+    pub fn addresses(&self) -> Vec<String> {
+        let mut out = addresses(&self.root);
+        out.extend(self.parked.iter().filter_map(|p| p.pane.terminal().map(str::to_owned)));
+        out
+    }
+
+    /// Where a parked pane sits in the bottom row.
+    pub fn parked_index(&self, pane: &str) -> Option<usize> {
+        self.parked.iter().position(|p| p.pane.id == pane)
+    }
+
+    /// After `pane` left the arrangement: focus goes back to the pane focused
+    /// before it that's still here, else the first.
+    fn refocus_without(&mut self, pane: &str) {
+        let here: Vec<String> = self.root.panes().iter().map(|n| n.id.clone()).collect();
+        self.before.retain(|p| p != pane && here.contains(p));
+        if self.focused.as_deref() == Some(pane) || self.focused.is_none() {
+            self.focused = self.before.pop().or_else(|| here.first().cloned());
         }
     }
 
@@ -261,7 +299,21 @@ impl Model {
 
     /// The space holding a tab or a node inside one.
     pub fn space_of(&self, node: &str) -> Option<&Space> {
-        self.spaces.iter().find(|p| p.tabs.iter().any(|c| c.id == node || c.root.find(node).is_some()))
+        self.spaces.iter().find(|p| p.tabs.iter().any(|c| c.id == node || c.root.find(node).is_some() || c.parked_index(node).is_some()))
+    }
+
+    /// The tab holding a pane, placed or parked.
+    pub fn tab_holding(&self, pane: &str) -> Option<&Tab> {
+        self.tabs().find(|c| c.root.find(pane).is_some() || c.parked_index(pane).is_some())
+    }
+
+    /// The tab a pane is parked in.
+    pub fn parked_tab_of(&self, pane: &str) -> Option<&Tab> {
+        self.tabs().find(|c| c.parked_index(pane).is_some())
+    }
+
+    fn parked_tab_of_mut(&mut self, pane: &str) -> Option<&mut Tab> {
+        self.spaces.iter_mut().flat_map(|p| p.tabs.iter_mut()).find(|c| c.parked_index(pane).is_some())
     }
 
     /// The tab holding a node (pane, container).
@@ -429,12 +481,26 @@ impl Model {
 
     /// Removes a pane. Returns what else closed: the tab, and the space if it was its last.
     pub fn remove_pane(&mut self, pane_id: &str) -> (bool, bool) {
+        if let Some(c) = self.parked_tab_of_mut(pane_id) {
+            c.parked.retain(|p| p.pane.id != pane_id);
+            c.font_zoom.remove(pane_id);
+            return (false, false);
+        }
         let Some(c) = self.tab_of_mut(pane_id) else { return (false, false) };
         c.root.remove(pane_id);
         if c.zoomed.as_deref() == Some(pane_id) {
             c.zoomed = None;
         }
         c.font_zoom.remove(pane_id);
+        // The arrangement's last pane gone: the first parked one takes its place.
+        if c.root.panes().is_empty() && !c.parked.is_empty() {
+            let mut back = c.parked.remove(0).pane;
+            back.size = None;
+            if let Some(children) = c.root.children_mut() {
+                children.clear();
+                children.push(back);
+            }
+        }
         if !c.root.panes().is_empty() {
             c.before.retain(|p| p != pane_id);
             if c.focused.as_deref() == Some(pane_id) {
@@ -465,7 +531,7 @@ impl Model {
             let id = p.id.clone();
             self.remove_space(&id);
         }
-        (addresses(&removed.root), closed)
+        (removed.addresses(), closed)
     }
 
     /// Removes a space (remembered in `recent`). Returns its terminal addresses.
@@ -479,7 +545,7 @@ impl Model {
         if was_active {
             self.active = self.spaces.get(pi).or(self.spaces.last()).map(|p| p.id.clone());
         }
-        p.tabs.iter().flat_map(|c| addresses(&c.root)).collect()
+        p.tabs.iter().flat_map(Tab::addresses).collect()
     }
 
     /// The focused pane of the selected space's selected tab.
@@ -518,24 +584,127 @@ impl Model {
 
     /// Focuses a pane anywhere: selects its space and tab.
     pub fn focus_pane(&mut self, pane_id: &str) -> bool {
+        // Focusing a parked pane brings it back.
+        if self.parked_tab_of(pane_id).is_some() && self.unpark_pane(pane_id, None).is_err() {
+            return false;
+        }
         let Some(c) = self.tab_of_mut(pane_id) else { return false };
         c.focus(pane_id);
         let ctx = c.id.clone();
         self.select_tab(&ctx)
     }
 
-    /// The address shown in a pane block.
+    /// The address shown in a pane block (placed or parked).
     pub fn address_of(&self, pane_id: &str) -> Option<String> {
-        self.tabs().find_map(|c| c.root.find(pane_id)).and_then(|n| n.terminal()).map(str::to_owned)
+        self.tabs()
+            .find_map(|c| c.root.find(pane_id).or_else(|| c.parked.iter().map(|p| &p.pane).find(|p| p.id == pane_id)))
+            .and_then(|n| n.terminal())
+            .map(str::to_owned)
     }
 
+    /// The pane holding a terminal, placed or parked.
     pub fn pane_of(&self, address: &str) -> Option<String> {
+        self.placed_pane_of(address).or_else(|| {
+            self.tabs().flat_map(|c| &c.parked).find(|p| p.pane.terminal() == Some(address)).map(|p| p.pane.id.clone())
+        })
+    }
+
+    /// The pane showing a terminal in its tab's arrangement (not parked).
+    pub fn placed_pane_of(&self, address: &str) -> Option<String> {
         self.tabs().flat_map(|c| c.root.terminals()).find(|n| n.terminal() == Some(address)).map(|n| n.id.clone())
     }
 
-    /// Every terminal in every tab, in space → tab → pane order.
+    /// Every terminal in every tab, in space → tab → pane order (parked ones last in their tab).
     pub fn all_addresses(&self) -> Vec<String> {
-        self.tabs().flat_map(|c| addresses(&c.root)).collect()
+        self.tabs().flat_map(Tab::addresses).collect()
+    }
+
+    /// Parks a pane in its tab's bottom row (at `index`, default the end), or
+    /// moves a parked one there. A tab keeps one pane in its arrangement.
+    pub fn park_pane(&mut self, pane: &str, index: Option<usize>) -> Result<(), String> {
+        if let Some(c) = self.parked_tab_of_mut(pane) {
+            let i = c.parked_index(pane).unwrap();
+            let p = c.parked.remove(i);
+            let at = index.unwrap_or(c.parked.len()).min(c.parked.len());
+            c.parked.insert(at, p);
+            return Ok(());
+        }
+        let c = self.tab_of_mut(pane).ok_or_else(|| format!("no pane {pane:?}"))?;
+        if !c.root.find(pane).is_some_and(Node::is_pane) {
+            return Err(format!("{pane:?} is not a pane"));
+        }
+        if c.root.panes().len() < 2 {
+            return Err("A tab keeps one pane in place: split it first, or float the pane (pane.float).".into());
+        }
+        let (near, side) = park_spot(&c.root, pane);
+        let mut node = c.root.remove(pane).unwrap();
+        node.size = None;
+        if c.zoomed.as_deref() == Some(pane) {
+            c.zoomed = None;
+        }
+        c.refocus_without(pane);
+        let at = index.unwrap_or(c.parked.len()).min(c.parked.len());
+        c.parked.insert(at, Parked { pane: node, near, side });
+        Ok(())
+    }
+
+    /// Puts a parked pane back into its tab and focuses it: beside `to` (a
+    /// pane of that tab) on `edge`, or in its place with no edge (`to` is
+    /// parked in its stead), or by default where it was parked from.
+    pub fn unpark_pane(&mut self, pane: &str, to: Option<(&str, Option<Edge>)>) -> Result<(), String> {
+        let machine = self.space_of(pane).and_then(|s| s.machine.clone());
+        let container = self.fresh_id_on("s", machine.as_deref());
+        let c = self.parked_tab_of_mut(pane).ok_or_else(|| format!("no parked pane {pane:?}"))?;
+        if let Some((target, _)) = to
+            && !c.root.find(target).is_some_and(Node::is_pane)
+        {
+            return Err(format!("no pane {target:?} in the parked pane's tab"));
+        }
+        let i = c.parked_index(pane).unwrap();
+        let parked = c.parked.remove(i);
+        let mut node = parked.pane.clone();
+        node.size = None;
+        match to {
+            Some((target, None)) => {
+                // In the target's place; the target takes the parked one's spot in the row.
+                let slot = c.root.find_mut(target).unwrap();
+                node.size = slot.size.take();
+                let mut out = std::mem::replace(slot, node);
+                out.size = None;
+                c.parked.insert(i, Parked { pane: out, near: Some(pane.to_owned()), side: Edge::Right });
+                if c.zoomed.as_deref() == Some(target) {
+                    c.zoomed = None;
+                }
+                c.before.retain(|p| p != target);
+                if c.focused.as_deref() == Some(target) {
+                    c.focused = None;
+                }
+            }
+            _ => {
+                let (target, side) = match to {
+                    Some((t, Some(e))) => (t.to_owned(), e),
+                    _ => {
+                        let near = parked.near.clone().filter(|n| *n != c.root.id && c.root.find(n).is_some());
+                        let fallback = || c.focused_pane().unwrap_or_else(|| c.root.id.clone());
+                        (near.unwrap_or_else(fallback), parked.side)
+                    }
+                };
+                let axis = if side.vertical() { Axis::Row } else { Axis::Column };
+                let before = matches!(side, Edge::Left | Edge::Top);
+                if target == c.root.id {
+                    // An empty arrangement: just put it back.
+                    if let Some(children) = c.root.children_mut() {
+                        children.push(node);
+                    }
+                } else if !c.root.split_at(&target, axis, before, node, container) {
+                    c.parked.insert(i, parked);
+                    return Err(format!("cannot put {pane:?} back beside {target:?}"));
+                }
+            }
+        }
+        c.zoomed = None;
+        c.focus(pane);
+        Ok(())
     }
 
     /// Applies a status word from core (Herdr's seen rules).
@@ -618,12 +787,12 @@ impl Model {
 
     /// When something in a tab last changed state, ms (None: nothing since the app started).
     pub fn changed_at(&self, c: &Tab) -> Option<u64> {
-        addresses(&c.root).iter().filter_map(|a| self.agents.get(a)).map(|a| a.since).filter(|t| *t > 0).max()
+        c.addresses().iter().filter_map(|a| self.agents.get(a)).map(|a| a.since).filter(|t| *t > 0).max()
     }
 
     /// Since when an agent in a tab has been working, ms (the earliest, if several).
     pub fn working_since(&self, c: &Tab) -> Option<u64> {
-        addresses(&c.root)
+        c.addresses()
             .iter()
             .filter_map(|a| self.agents.get(a))
             .filter(|a| a.word.as_deref() == Some("working") && a.since > 0)
@@ -663,6 +832,21 @@ pub fn now_ms() -> u64 {
     std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
 }
 
+/// Where a pane being parked goes back: the sibling it sat beside, and its
+/// side of it (after the one before it, else before the one after it).
+fn park_spot(root: &Node, pane: &str) -> (Option<String>, Edge) {
+    let Some(parent) = root.parent_of(pane) else { return (None, Edge::Right) };
+    let children = parent.children();
+    let i = children.iter().position(|n| n.id == pane).unwrap_or(0);
+    let column = parent.axis() == Some(Axis::Column);
+    let (after, before) = if column { (Edge::Bottom, Edge::Top) } else { (Edge::Right, Edge::Left) };
+    match (i.checked_sub(1).and_then(|j| children.get(j)), children.get(i + 1)) {
+        (Some(prev), _) => (Some(prev.id.clone()), after),
+        (None, Some(next)) => (Some(next.id.clone()), before),
+        _ => (None, Edge::Right),
+    }
+}
+
 pub fn addresses(node: &Node) -> Vec<String> {
     node.terminals().iter().filter_map(|n| n.terminal().map(str::to_owned)).collect()
 }
@@ -689,8 +873,9 @@ pub fn space_json(m: &Model, p: &Space, index: usize, branch: Option<&str>, home
                 "name": Model::tab_name(p, c),
                 "named": !c.name.is_empty(),
                 "active": Some(&c.id) == active.as_ref(),
-                "status": m.rollup(&addresses(&c.root)),
+                "status": m.rollup(&c.addresses()),
                 "panes": c.root.panes().len(),
+                "parked": c.parked.len(),
                 "zoomed": c.zoomed.is_some(),
                 "settled": c.settled.is_some(),
                 "settled_at": c.settled,
@@ -699,7 +884,7 @@ pub fn space_json(m: &Model, p: &Space, index: usize, branch: Option<&str>, home
             })
         })
         .collect();
-    let all: Vec<String> = p.tabs.iter().flat_map(|c| addresses(&c.root)).collect();
+    let all: Vec<String> = p.tabs.iter().flat_map(Tab::addresses).collect();
     json!({
         "id": p.id,
         "index": index + 1,
@@ -808,6 +993,93 @@ mod tests {
         // Opening it again takes it off the recent list.
         m.add_space("p4", "web", "/src/web", Tab::new("c4", "x", "x4", "t4"));
         assert!(m.recent.is_empty());
+    }
+
+    #[test]
+    fn parking_takes_a_pane_out_and_unparking_puts_it_back_where_it_was() {
+        let mut m = model_with_one();
+        m.split("x1", Axis::Row, "x2", "t2");
+        m.split("x2", Axis::Column, "x3", "t3");
+        let before = m.tab("c1").unwrap().root.clone();
+        assert!(m.park_pane("x3", None).is_ok());
+        let c = m.tab("c1").unwrap();
+        assert!(c.root.find("x3").is_none());
+        assert_eq!(c.parked.iter().map(|p| p.pane.id.as_str()).collect::<Vec<_>>(), ["x3"]);
+        assert_eq!((c.parked[0].near.as_deref(), c.parked[0].side), (Some("x2"), Edge::Bottom));
+        // Still the tab's: its terminal, its status, closing the tab ends it.
+        assert_eq!(m.pane_of("t3").as_deref(), Some("x3"));
+        assert_eq!(m.placed_pane_of("t3"), None);
+        assert_eq!(m.address_of("x3").as_deref(), Some("t3"));
+        assert_eq!(m.tab_holding("x3").map(|t| t.id.as_str()), Some("c1"));
+        assert_eq!(m.space_of("x3").map(|s| s.id.as_str()), Some("p1"));
+        assert!(m.all_addresses().contains(&"t3".to_owned()));
+        // Focus left it for a pane still in place.
+        assert_ne!(m.focused_pane().as_deref(), Some("x3"));
+        assert!(m.unpark_pane("x3", None).is_ok());
+        let c = m.tab("c1").unwrap();
+        assert!(c.parked.is_empty());
+        assert_eq!(c.focused.as_deref(), Some("x3"));
+        let ids = |n: &Node| n.panes().iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&c.root), ids(&before));
+        assert_eq!(c.root.parent_of("x3").and_then(Node::axis), Some(Axis::Column));
+    }
+
+    #[test]
+    fn the_parking_row_reorders_and_a_tab_keeps_one_pane_in_place() {
+        let mut m = model_with_one();
+        m.split("x1", Axis::Row, "x2", "t2");
+        m.split("x2", Axis::Row, "x3", "t3");
+        m.park_pane("x2", None).unwrap();
+        m.park_pane("x3", Some(0)).unwrap();
+        let order = |m: &Model| m.tab("c1").unwrap().parked.iter().map(|p| p.pane.id.clone()).collect::<Vec<_>>();
+        assert_eq!(order(&m), ["x3", "x2"]);
+        m.park_pane("x3", Some(9)).unwrap();
+        assert_eq!(order(&m), ["x2", "x3"]);
+        assert!(m.park_pane("x1", None).is_err());
+        assert!(m.park_pane("nope", None).is_err());
+        // Focusing a parked pane brings it back.
+        assert!(m.focus_pane("x2"));
+        assert_eq!(order(&m), ["x3"]);
+        assert_eq!(m.focused_pane().as_deref(), Some("x2"));
+    }
+
+    #[test]
+    fn unparking_onto_a_pane_takes_its_side_or_its_place() {
+        let mut m = model_with_one();
+        m.split("x1", Axis::Row, "x2", "t2");
+        m.split("x2", Axis::Row, "x3", "t3");
+        m.park_pane("x3", None).unwrap();
+        m.unpark_pane("x3", Some(("x1", Some(Edge::Left)))).unwrap();
+        let ids = |m: &Model| m.tab("c1").unwrap().root.panes().iter().map(|p| p.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&m), ["x3", "x1", "x2"]);
+        m.park_pane("x3", None).unwrap();
+        // No edge: it takes the target's place and the target is parked instead.
+        m.unpark_pane("x3", Some(("x2", None))).unwrap();
+        assert_eq!(ids(&m), ["x1", "x3"]);
+        assert_eq!(m.tab("c1").unwrap().parked[0].pane.id, "x2");
+        assert!(m.unpark_pane("x2", Some(("nope", None))).is_err());
+        assert_eq!(m.tab("c1").unwrap().parked.len(), 1);
+    }
+
+    #[test]
+    fn closing_parked_panes_and_the_last_placed_one() {
+        let mut m = model_with_one();
+        m.split("x1", Axis::Row, "x2", "t2");
+        m.split("x2", Axis::Row, "x3", "t3");
+        m.park_pane("x2", None).unwrap();
+        m.park_pane("x3", None).unwrap();
+        assert_eq!(m.remove_pane("x3"), (false, false));
+        assert_eq!(m.address_of("x3"), None);
+        // The last placed pane gone: a parked one comes back rather than the tab closing.
+        assert_eq!(m.remove_pane("x1"), (false, false));
+        let c = m.tab("c1").unwrap();
+        assert_eq!(c.root.panes().iter().map(|p| p.id.as_str()).collect::<Vec<_>>(), ["x2"]);
+        assert!(c.parked.is_empty());
+        assert_eq!(m.focused_pane().as_deref(), Some("x2"));
+        // Closing the tab ends parked terminals too.
+        m.split("x2", Axis::Row, "x4", "t4");
+        m.park_pane("x4", None).unwrap();
+        assert_eq!(m.remove_tab("c1").0, ["t2", "t4"]);
     }
 
     #[test]
