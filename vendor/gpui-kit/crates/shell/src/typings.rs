@@ -1005,7 +1005,8 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     theme(): import("gpui-base").Theme;
 
     /**
-     * Hands a URL to whatever the system opens URLs with. `App::open_url`.
+     * Hands a URL to whatever the system opens URLs with (`App::open_url`),
+     * or to the embedder's `UrlOpener` when it set one.
      *
      * `Link`'s `href` without the element, for the case where the address is
      * not known until something has already happened — the end of a device

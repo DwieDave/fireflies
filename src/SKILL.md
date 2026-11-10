@@ -37,6 +37,10 @@ herdr-app do pane.split --direction right --pane p12
 herdr-app do agent.focus --terminal t7
 ```
 
+To show the person a web page, `herdr-app do app.open_url --url https://...`
+opens it in a web pane beside the focused one (or the system's browser, per
+their `links` setting).
+
 For a remote space:
 
 ```sh

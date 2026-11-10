@@ -531,6 +531,21 @@ impl AppWindow {
             runtime.set_source_revision_provider(events.revision_provider());
         }
         mods::note_fonts(cx);
+        // Mods' links (`cx.open_url`, `Link.href`, notes) open like a terminal's.
+        let (links_to, handle) = (cx.weak_entity(), window.window_handle());
+        cx.set_global(gpui_shell::UrlOpener(Rc::new(move |url: &str, cx: &mut App| {
+            let (to, url) = (links_to.clone(), url.to_owned());
+            // Never inside the click's own update of this window.
+            cx.defer(move |cx| {
+                let _ = handle.update(cx, |_, window, cx| {
+                    to.update(cx, |this, cx| {
+                        if let Err(e) = this.open_link(&url, None, None, window, cx) {
+                            tracing::warn!("cannot open {url}: {e}");
+                        }
+                    })
+                });
+            });
+        })));
         let seen = std::fs::read_to_string(file("seen.json")).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
         let mut w = AppWindow {
             core,
@@ -1558,6 +1573,11 @@ impl AppWindow {
             let (block, addr) = (id.clone(), address.clone());
             let sub = cx.subscribe_in(&view, window, move |this, _, ev: &TerminalEvent, window, cx| match ev {
                 TerminalEvent::Peek(address) => this.peek_terminal(address, false, None, 0, window, cx),
+                TerminalEvent::OpenUrl(url) => {
+                    if let Err(e) = this.open_link(url, Some(block.trim_end_matches(SWAP).to_owned()), None, window, cx) {
+                        tracing::warn!("cannot open {url}: {e}");
+                    }
+                }
                 TerminalEvent::TitleChanged => this.publish(cx),
                 TerminalEvent::Ended => this.terminal_ended(&block, window, cx),
                 TerminalEvent::ContextMenu(at) => {
@@ -2739,6 +2759,34 @@ impl AppWindow {
     }
 
     /// A mod as a pane beside the target (a viewer next to the shell).
+    /// A web link (a terminal's, a mod's, `app.open_url`): a web pane beside
+    /// `pane` (default: the focused one; with none, a tab of its own) when the
+    /// app has one and `links` (or `place`) says "app"; else the system's browser.
+    fn open_link(&mut self, url: &str, pane: Option<String>, place: Option<&str>, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
+        // The web pane is a native view: macOS only, and only with its mod installed.
+        let web_pane = crate::native_view::capabilities()["available"] == json!(true) && self.folders.contains_key(WEB_MOD);
+        let system = || {
+            crate::links::open(&crate::links::Target::Url(url.to_owned()));
+            Ok(json!({ "opened": "system" }))
+        };
+        if !link_in_app(url, place, settings::get().links, web_pane)? {
+            return system();
+        }
+        let props = json!({ "url": url, "slot": web_slot() });
+        let pane = pane.filter(|p| self.model.tab_of(p).is_some()).or_else(|| self.model.focused_pane());
+        let r = match pane {
+            Some(pane) => self.run_as("pane.split", json!({ "direction": "auto", "pane": pane, "mod": WEB_MOD, "props": props }), false, window, cx),
+            None => self.run_as("tab.new", json!({ "name": "web", "mod": WEB_MOD, "props": props }), false, window, cx),
+        };
+        if let Some(e) = r.get("error") {
+            tracing::warn!("no web pane for {url} ({e}); the system's browser opens it");
+            return system();
+        }
+        let mut r = r;
+        r["opened"] = json!("app");
+        Ok(r)
+    }
+
     fn split_mod(&mut self, pane: Option<String>, dir: model::Direction, name: String, props: Value) -> Result<Value, String> {
         let target = pane.or_else(|| self.model.focused_pane()).ok_or("no pane to split")?;
         if self.model.tab_of(&target).is_none() {
@@ -3742,6 +3790,12 @@ impl AppWindow {
             }
             "app.whats_new" => {
                 self.open_whats_new(true, window, cx);
+                return;
+            }
+            "app.open_url" => {
+                let url = Self::owned(a, "url").unwrap_or_default();
+                let r = self.open_link(&url, None, Self::arg(a, "in"), window, cx);
+                self.answer(r);
                 return;
             }
             "app.palette" => {
@@ -5247,6 +5301,31 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
         "bottom" => Edge::Bottom,
         _ => return None,
     })
+}
+
+/// The mod a web link opens in (`open_link`).
+const WEB_MOD: &str = "nocturne-browser";
+
+/// Whether a web link opens in the app's web pane (true) or the system's
+/// browser: `place` ("app" | "system") over the `links` setting, and never in
+/// the app without a web pane. Not a web page: an error.
+fn link_in_app(url: &str, place: Option<&str>, links: settings::Links, web_pane: bool) -> Result<bool, String> {
+    if !crate::links::is_web(url) {
+        return Err(format!("not a web address (http or https with a host): {url:?}"));
+    }
+    let in_app = match place {
+        None => links == settings::Links::App,
+        Some("app") => true,
+        Some("system") => false,
+        Some(other) => return Err(format!("in is \"app\" or \"system\", not {other:?}")),
+    };
+    Ok(in_app && web_pane)
+}
+
+/// Each web pane's own `slot`, so its page and zoom are kept apart from the others'.
+fn web_slot() -> String {
+    let nanos = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_nanos());
+    format!("link-{nanos:x}")
 }
 
 fn needs_model_pane(name: &str, args: &Value) -> bool {
@@ -6885,6 +6964,22 @@ export default class SystemToast extends View {
         }
         for name in ["pane.focus", "terminal.copy", "terminal.paste", "terminal.paste_image", "terminal.right_click"] {
             assert!(!super::needs_model_pane(name, &json!({})), "{name}");
+        }
+    }
+
+    #[test]
+    fn web_links_open_in_the_app_unless_told_otherwise() {
+        use crate::settings::Links::{App, System};
+        let url = "https://example.com/x";
+        assert_eq!(super::link_in_app(url, None, App, true), Ok(true));
+        assert_eq!(super::link_in_app(url, None, System, true), Ok(false));
+        assert_eq!(super::link_in_app(url, Some("app"), System, true), Ok(true));
+        assert_eq!(super::link_in_app(url, Some("system"), App, true), Ok(false));
+        // No web pane (not macOS, or the mod is gone): the system's browser.
+        assert_eq!(super::link_in_app(url, Some("app"), App, false), Ok(false));
+        assert!(super::link_in_app(url, Some("tab"), App, true).is_err());
+        for other in ["mailto:a@b.com", "file:///etc/hosts", "javascript:alert(1)", "https://"] {
+            assert!(super::link_in_app(other, None, App, true).is_err(), "{other}");
         }
     }
 
