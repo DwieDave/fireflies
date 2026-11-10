@@ -426,6 +426,15 @@ impl Model {
         Ok(())
     }
 
+    /// `pane.equalize`: even shares in `pane`'s tab (all, or its row or column).
+    pub fn equalize(&mut self, pane: &str, scope: crate::equalize::Scope) -> Result<bool, String> {
+        let Some(c) = self.tab_of_mut(pane) else { return Err(format!("no pane {pane:?}")) };
+        c.root.equalize(pane, scope).ok_or_else(|| {
+            let axis = if scope == crate::equalize::Scope::Row { "row (no panes side by side)" } else { "column (no panes stacked)" };
+            format!("pane {pane:?} is in no {axis}")
+        })
+    }
+
     /// Removes a pane. Returns what else closed: the tab, and the space if it was its last.
     pub fn remove_pane(&mut self, pane_id: &str) -> (bool, bool) {
         let Some(c) = self.tab_of_mut(pane_id) else { return (false, false) };
@@ -928,6 +937,20 @@ mod tests {
         assert_eq!(m.swap_panes("x2", "x3"), Ok(()));
         assert_eq!(pane_order(&m, "c1"), ["x2", "x3", "x1"]);
         assert_eq!(m.focused_pane().as_deref(), Some("x1"));
+    }
+
+    #[test]
+    fn equalizing_evens_a_tab_after_halving_splits() {
+        use crate::equalize::Scope;
+        use crate::layout::Size;
+        let mut m = three_panes_and_another_tab();
+        let weights = |m: &Model| m.tab("c1").unwrap().root.panes().iter().map(|n| n.size).collect::<Vec<_>>();
+        assert_ne!(weights(&m)[0], weights(&m)[2]);
+        assert_eq!(m.equalize("x2", Scope::Row), Ok(true));
+        let w = weights(&m);
+        assert!(w.iter().all(|s| matches!(s, Some(Size::Weight { .. })) && *s == w[0]), "{w:?}");
+        assert_eq!(m.equalize("x2", Scope::Column), Err("pane \"x2\" is in no column (no panes stacked)".into()));
+        assert_eq!(m.equalize("nope", Scope::All), Err("no pane \"nope\"".into()));
     }
 
     #[test]

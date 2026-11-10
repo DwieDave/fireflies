@@ -5,6 +5,7 @@ mod bench;
 mod commands;
 mod control;
 mod core_bin;
+mod equalize;
 mod files;
 mod hc;
 mod keys;
