@@ -1,6 +1,6 @@
 // The bell: a quiet mark in the tab strip, and the engine behind it.
 //
-//   nothing waits   a dim pip
+//   nothing waits   a dim "N" (for notifications, lettered as the rail's spaces)
 //   requests wait   a blinking pink pip and how many permissions and
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
@@ -83,16 +83,17 @@ export default class Bell {
     return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).cursor_pointer()
+      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(t.muted).cursor_pointer()
         .on_size_change((size) => fit(size.width))
-        .hover((s) => s.bg(t.ansi0))
+        .hover((s) => s.bg(t.ansi0).text_color(t.foreground))
         .tooltip(tip)
         .on_mouse_down("left", stop)
         .on_click(() => openOverview())
         .when(c.needs > 0, (el) => el
           .child(pip(t.blocked, 6, true))
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))
-        .when(c.needs === 0, (el) => el.child(pip(c.other ? t.working : t.ansi0, 6)))
+        .when(c.needs === 0 && c.other > 0, (el) => el.child(pip(t.working, 6)))
+        .when(c.needs === 0 && !c.other, (el) => el.child(div().child("N")))
         .when(c.other > 0, (el) => el.child(div().text_color(t.dim).child(c.needs > 0 ? `+${c.other}` : String(c.other)))));
   }
 }

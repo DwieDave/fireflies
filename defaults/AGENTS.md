@@ -226,7 +226,7 @@ the highlighted line shows where it will land.
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip counts what waits
   (permissions and questions in a pink chip, agents that need a look as a
-  dim `+n`) and sizes its own block (`layout.resize`) to fit, ending where
+  dim `+n`; a dim "N" when nothing waits) and sizes its own block (`layout.resize`) to fit, ending where
   the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
   overview: Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
@@ -793,7 +793,8 @@ The main ones:
   (`pane.focus`, `agent.focus`) unparks it. Closing the last pane in place brings the first
   parked one back. Parked panes live in the machine's layout document, so they stay across
   restarts and every screen shows them. Keys: `pane.park` cmd-shift-m (macOS) / ctrl-shift-m,
-  `pane.unpark` cmd-alt-shift-m / ctrl-alt-shift-m; the pane menu has "Park pane".
+  `pane.unpark` cmd-alt-shift-m / ctrl-alt-shift-m; the pane menu has "Park pane", and Nocturne's pane header a park
+  button before zoom (hidden on the tab's last pane in place).
   `terminal.park` is different: it takes a terminal out of every tab (no chip).
   `pane.go` prefers the most recently focused pane along the nearest edge in that
   direction; unvisited panes fall back to overlap, then top/left layout order.

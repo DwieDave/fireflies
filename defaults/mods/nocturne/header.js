@@ -2,7 +2,8 @@
 // rest; the band turns moonfly blue on the pane with the keyboard. Hover
 // shows text size (− / +, the % resets), float, split, even out (▦, with
 // more than one pane: equalize.js), gridify (with more than two:
-// gridify.js), zoom and close; a
+// gridify.js), park (pane.park, while another pane stays in place), zoom
+// and close; a
 // right-click opens the pane's menu (menu.js: rename, split, zoom, move to
 // another tab or a new one, close). Props from the app: { pane, terminal }.
 // A terminal pane goes by the name a person gave it (kit.js givenName), else
@@ -19,7 +20,7 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, InputState } from "gpui-base";
-import { panes, spaces, props, run, theme, home, openOverlay, shared } from "herdr";
+import { panes, spaces, props, run, theme, home, openOverlay, shared, keys } from "herdr";
 import { menuHeight, NAME_PANE } from "./menu.js";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal } from "./kit.js";
 import { field } from "./inline.js";
@@ -36,6 +37,18 @@ const MODS = {
 };
 // Header widths (px) at which parts give way.
 const FOLDER_MIN = 260, WORD_MIN = 240, FULL_MIN = 380, SOME_MIN = 200;
+
+/** "⌘⇧M" for the key bound to a command, if any. */
+function keyLabel(action) {
+  const k = keys().find((b) => b.section === "global" && b.action === action)?.keys;
+  if (!k) return "";
+  return k.replace(/cmd-/g, "⌘").replace(/shift-/g, "⇧").replace(/alt-/g, "⌥").replace(/ctrl-/g, "⌃").toUpperCase();
+}
+
+/** Parking needs another pane left in place (as the pane menu's "Park pane"). */
+export function parkable(p, all = panes()) {
+  return !p.parked && all.filter((x) => x.tab === p.tab && !x.parked).length > 1;
+}
 
 // Terminal programs with a fitting chrome icon; any other terminal gets "terminal".
 const PROGRAMS = { nvim: "file-text", vim: "file-text", hx: "file-text", htop: "server", btop: "server" };
@@ -134,10 +147,11 @@ export default class Header {
     if (p.terminal && ask.terminal === p.terminal) this.startNaming(p);
   }
 
-  button(t, id, icon, command, args) {
+  button(t, id, icon, command, args, tip) {
     const path = icon.includes("/") ? icon : `mods/pane/${icon}.svg`;
     return div().id(id).p(3).flex_none().text_color(t.dim)
       .hover((s) => s.text_color(t.foreground))
+      .when(Boolean(tip), (el) => el.tooltip(tip))
       .on_click((_e, cx) => { cx.stop_propagation(); run(command, args); })
       .child(svg(path).size(12));
   }
@@ -197,7 +211,7 @@ export default class Header {
           .child(this.button(t, `h-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
           .child(this.button(t, `h-x-${pane}`, "close", "pane.close", { pane })))
         .child(div().id(`h-more-${pane}`).p(3).flex_none().text_color(t.dim).hover((s) => s.text_color(t.foreground))
-          .tooltip("More: split, even out, move, close")
+          .tooltip(parkable(p) ? "More: split, even out, park, move, close" : "More: split, even out, move, close")
           .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
           .on_click((_e, cx) => { cx.stop_propagation(); this.menu(p); })
           .child(svg(`${ART}/more.svg`).size(12))))
@@ -217,6 +231,8 @@ export default class Header {
         .tooltip("Gridify panes")
         .on_click((_e, cx) => { cx.stop_propagation(); run("nocturne.gridify"); })
         .child(svg("mods/nocturne-equalize-panes/grid.svg").size(12))))
+      .when(parkable(p), (el) => el.child(this.button(t, `h-p-${pane}`, chrome("archive"), "pane.park", { pane },
+        `Park pane${keyLabel("pane.park") ? ` (${keyLabel("pane.park")})` : ""}`)))
       .child(this.button(t, `h-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
       .child(this.button(t, `h-x-${pane}`, "close", "pane.close", { pane })));
   }
