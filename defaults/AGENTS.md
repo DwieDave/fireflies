@@ -931,7 +931,7 @@ at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
 unpin from a firefly's or an agent pane's right-click menu (open sky and
 rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Toasts by key:
+`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move it in the jar. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
@@ -950,7 +950,7 @@ cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
 cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
 ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
-`"cmd-ctrl-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
+`"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
 the control's menu, r renames, esc/q go back to the pane, ? lists every key
 of the row the cursor is on (the strip's, the header's, the parked chips').
@@ -1141,7 +1141,7 @@ The main ones:
   (a pane holding an agent, whatever its status, or a mod pane holding unsaved work, an
   editor's, asks the person first, parked ones too; a script passes `confirmed`; a shell
   or another program closes without a word, so tool panes toggle quietly),
-  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`,
+  `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`, `pane.resize {direction, step?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
   screen's view like zoom; `panes()` `font_zoom`, 1 = the app's size),
@@ -1176,6 +1176,15 @@ The main ones:
   Nocturne's pane header ▦ button and pane menu open the `nocturne-equalize-panes` popup
   (all / row / column / as a grid); its palette has Equalize panes / this row / this column,
   and cmd-alt-e (macOS) evens all.
+  `pane.resize {direction, step?, pane?}` moves a pane's divider one step (default: the
+  focused pane, a mod pane too): `"left"` / `"right"` move the nearest side-by-side split
+  around it, `"up"` / `"down"` the nearest stacked one, also in nested splits. With a
+  neighbor on that side the pane grows that way; at the tab's edge its other divider moves
+  that way instead, so it shrinks (as tmux and vim do). `step` is a share of the tab's width
+  or height (default 0.05: ten steps cross half the tab). Stored like a divider drag (weights,
+  or the px of a px side; kept across restarts, zoom and parking), with the drag's minimum
+  (24 px a side, a pane's own `min` / `max`). A zoomed tab, one pane, or no split that way:
+  `{ok, changed: false}`. Keys: cmd-ctrl-left / right / up / down on macOS (`"pane.resize:left"`, ...). Palette: Resize pane left / right / up / down.
   Nocturne's `nocturne.gridify` (palette "Gridify panes", cmd-alt-g on macOS, the pane
   header's grid button with three or more panes, the popup's "As a grid") rearranges every
   placed pane of the shown tab into an even grid: ceil(sqrt(n)) columns, rows filled left to

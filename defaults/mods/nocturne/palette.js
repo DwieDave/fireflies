@@ -296,6 +296,7 @@ const NAMED = [
   ["pane.unpark", {}, "Pane", "Unpark pane", "restore dock bottom chip show"],
   ...["left", "right", "up", "down"].map((d) => ["pane.go", { direction: d }, "Pane", `Focus pane ${d}`, "move go"]),
   ...["left", "right", "up", "down"].map((d) => ["pane.swap", { direction: d }, "Pane", `Swap pane ${d}`, "move"]),
+  ...["left", "right", "up", "down"].map((d) => ["pane.resize", { direction: d }, "Pane", `Resize pane ${d}`, "size grow shrink bigger smaller wider narrower taller shorter divider step"]),
   ["pane.equalize", { scope: "all" }, "Pane", "Equalize panes", "even out balance same size grid all"],
   ["pane.equalize", { scope: "row" }, "Pane", "Equalize this row", "even out balance same width side by side"],
   ["pane.equalize", { scope: "column" }, "Pane", "Equalize this column", "even out balance same height stacked"],

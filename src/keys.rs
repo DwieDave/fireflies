@@ -70,6 +70,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-keyboard-keys.macos.json"),
     // With cmd-shift-v for the markdown preview, before cmd-k ? opened the editor's key list.
     include_str!("keys/shipped/fireflies-preview-keys.macos.json"),
+    // With cmd-k ? for the editor's key list, before cmd-ctrl-arrows resized panes, cmd-alt-shift-[ / ] moved a pinned
+    // agent in the jar, and cmd-alt-r / cmd-alt-shift-r renamed the tab / space in place of f2 / shift-f2.
+    include_str!("keys/shipped/fireflies-keylist-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

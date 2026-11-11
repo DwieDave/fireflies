@@ -584,6 +584,16 @@ impl Model {
         })
     }
 
+    /// `pane.resize`: moves `pane`'s divider one `step` toward `dir`
+    /// (crate::pane_resize). A zoomed tab shows one pane: nothing moves.
+    pub fn resize_pane(&mut self, pane: &str, dir: crate::pane_resize::Direction, step: f32, length: impl Fn(&str) -> Option<f32>) -> Result<bool, String> {
+        let Some(c) = self.tab_of_mut(pane).filter(|c| c.root.find(pane).is_some_and(Node::is_pane)) else { return Err(format!("no pane {pane:?}")) };
+        if c.zoomed.is_some() {
+            return Ok(false);
+        }
+        crate::pane_resize::resize(&mut c.root, pane, dir, step, length)
+    }
+
     /// Removes a pane. Returns what else closed: the tab, and the space if it was its last.
     pub fn remove_pane(&mut self, pane_id: &str) -> (bool, bool) {
         if let Some(c) = self.parked_tab_of_mut(pane_id) {
@@ -1388,6 +1398,27 @@ mod tests {
         assert!(w.iter().all(|s| matches!(s, Some(Size::Weight { .. })) && *s == w[0]), "{w:?}");
         assert_eq!(m.equalize("x2", Scope::Column), Err("pane \"x2\" is in no column (no panes stacked)".into()));
         assert_eq!(m.equalize("nope", Scope::All), Err("no pane \"nope\"".into()));
+    }
+
+    #[test]
+    fn resizing_moves_a_divider_but_not_in_a_zoomed_or_one_pane_tab() {
+        use crate::pane_resize::{Direction, STEP};
+        let mut m = three_panes_and_another_tab();
+        let sizes = |m: &Model| m.tab("c1").unwrap().root.panes().iter().map(|n| n.size).collect::<Vec<_>>();
+        let drawn = |_: &str| Some(300.0);
+        let before = sizes(&m);
+        // Zoomed: one pane shows, nothing moves.
+        m.tab_mut("c1").unwrap().zoomed = Some("x2".into());
+        assert_eq!(m.resize_pane("x2", Direction::Right, STEP, drawn), Ok(false));
+        assert_eq!(sizes(&m), before);
+        m.tab_mut("c1").unwrap().zoomed = None;
+        assert_eq!(m.resize_pane("x2", Direction::Right, STEP, drawn), Ok(true));
+        assert_ne!(sizes(&m), before);
+        // No stacked split: up does nothing.
+        assert_eq!(m.resize_pane("x2", Direction::Up, STEP, drawn), Ok(false));
+        // One pane in its tab.
+        assert_eq!(m.resize_pane("x4", Direction::Left, STEP, drawn), Ok(false));
+        assert_eq!(m.resize_pane("nope", Direction::Left, STEP, drawn), Err("no pane \"nope\"".into()));
     }
 
     #[test]

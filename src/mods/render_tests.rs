@@ -1010,6 +1010,8 @@ fn shipped_layouts_and_keys() {
         "nocturne.gridify",
         "nocturne-notifications.open",
         "nocturne.pin",
+        "nocturne.pin-up",
+        "nocturne.pin-down",
         "nocturne.picker",
         "nocturne.grep",
         "nocturne-editor.save",

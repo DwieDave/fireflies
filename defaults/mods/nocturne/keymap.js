@@ -68,6 +68,7 @@ const WORDS = {
   "pane.go": (d) => ({ left: "Focus the pane to the left (from the leftmost: the sidebar)", right: "Focus the pane to the right",
     up: "Focus the pane above (from the top: the tab strip)", down: "Focus the pane below" })[d] ?? `Focus the pane ${d}`,
   "pane.swap": (d) => `Swap the pane with the one ${PLACE[d] ?? d}`,
+  "pane.resize": (d) => `Resize the pane: its divider a step ${d}`,
   "pane.font_bigger": "Bigger text in this pane",
   "pane.font_smaller": "Smaller text in this pane",
   "pane.font_reset": "This pane's text back to the app's size",

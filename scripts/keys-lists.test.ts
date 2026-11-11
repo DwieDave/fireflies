@@ -349,6 +349,13 @@ test("keys dialog: every binding in the shipped keys files has a plain-words lab
   }
 });
 
+test("keys dialog: pane.resize has plain words in every direction before its keys ship", () => {
+  for (const d of ["left", "right", "up", "down"]) {
+    expect(keymap.hasWords(`pane.resize:${d}`)).toBe(true);
+    expect(keymap.keyLabel(`pane.resize:${d}`)).toBe(`Resize the pane: its divider a step ${d}`);
+  }
+});
+
 test("keys dialog: a map in groups; keyboard focus is its own and opens into each block's keys", () => {
   const all = [...shipped("keys.macos.json"), { section: "global", keys: "ctrl-alt-shift-escape", action: "app.reset" }];
   const list = keymap.rows(all);
