@@ -48,6 +48,8 @@ test:
     bun test scripts/nocturne-github-projects-tab.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/nocturne-git-view.test.ts
+    # Nocturne's palette through its real imports, herdr and gpui stand-ins.
+    bun test scripts/nocturne-palette.test.ts
     cargo test --locked
 
 docs-generate: build
