@@ -1250,6 +1250,24 @@ test("drag and drop: a row onto a folder, a set onto the root; refused drops sta
     await settle();
     expect([await exists(pjoin(box.root, "guide.txt")), await exists(pjoin(box.root, "main.rs"))]).toEqual([true, true]);
     view.refresh(cx); await settle(); view.render(cx);
+    // A set partly in the target: the label and the hint count what moves; the one there stays.
+    await writeFile(pjoin(box.root, "src", "keep.rs"), "k\n");
+    view.refresh(cx); await settle(); view.render(cx);
+    view.marked = new Set(["guide.txt", "main.rs", "src/keep.rs"]);
+    m.down("guide.txt");
+    m.move("src");
+    expect([view.drag.ok, view.drag.moving]).toEqual([true, ["guide.txt", "main.rs"]]);
+    const drawn = words(view.render(cx)).join(" ");
+    expect(drawn).toContain("Drop: 2 items into src/ (1 already there)");
+    expect(drawn).toContain("2 items");
+    m.up("src");
+    await settle();
+    expect([await exists(pjoin(box.root, "src", "guide.txt")), await exists(pjoin(box.root, "src", "main.rs")), await exists(pjoin(box.root, "src", "keep.rs"))]).toEqual([true, true, true]);
+    expect(view.msg.text).toBe(`Moved 2 items to ${pjoin(box.root, "src")}`);
+    // Back to the root for what follows.
+    view.moveSet([pjoin(box.root, "src", "guide.txt"), pjoin(box.root, "src", "main.rs")], box.root, cx);
+    await settle();
+    view.refresh(cx); await settle(); view.render(cx);
     // Refused: src into its own subfolder, src onto itself, docs where it already is; nothing moves.
     m.down("src");
     m.move("src/sub");

@@ -1084,6 +1084,8 @@ export default class Files extends View {
     if (into == null) { d.ok = false; d.why = null; return; }
     d.why = dropRefusal(d.paths.map((p) => this.abs(p)), this.abs(into));
     d.ok = !d.why;
+    // What a drop here really moves: the rows already in the target stay.
+    d.moving = d.paths.filter((p) => dirOf(p) !== into);
     if (into && !hit.row.head && !this.folders.has(into)) {
       cx?.timer?.after(UNFOLD, (cx) => { if (this.drag?.into === into && !this.folders.has(into)) { this.toggle(into, cx); cx.notify(); } });
     }
@@ -1576,7 +1578,7 @@ export default class Files extends View {
       const d = this.drag;
       return line().child(div().text_color(d.ok ? t.foreground : t.dim)
         .child(d.into == null ? `Drop on a folder, or below the rows for ${tilde(this.root)} · esc cancels`
-          : d.ok ? `Drop: ${d.paths.length === 1 ? `“${base(d.paths[0])}”` : `${d.paths.length} items`} into ${d.into ? `${base(d.into)}/` : tilde(this.root)}`
+          : d.ok ? `Drop: ${this.dragLabel(d)} into ${d.into ? `${base(d.into)}/` : tilde(this.root)}${d.moving.length < d.paths.length ? ` (${d.paths.length - d.moving.length} already there)` : ""}`
           : d.why));
     }
     if (this.ask) {
@@ -1722,13 +1724,19 @@ export default class Files extends View {
       .when(Boolean(this.drag), (el) => el.child(this.ghost(t)));
   }
 
+  /** What a drag carries, as said: the name, or how many (over a target: how many it would move). */
+  dragLabel(d) {
+    const list = d.ok && d.moving ? d.moving : d.paths;
+    return list.length === 1 ? `“${base(list[0])}”` : `${list.length} items`;
+  }
+
   /** The dragged rows' label at the pointer: the name, or how many. */
   ghost(t) {
-    const d = this.drag, n = d.paths.length;
+    const d = this.drag, list = d.ok && d.moving ? d.moving : d.paths, n = list.length;
     const x = Math.min(d.at.x + 14, Math.max(0, this.size.width - 160)), y = d.at.y + 10;
     return h_flex().id("nf-ghost").absolute().left(x).top(y).max_w(200).h(20).px(8).gap(6).items_center().text_size(11)
       .bg(t.background).border_1().border_color(d.ok ? t.accent : t.ansi8)
-      .child(svg(`mods/files/${n === 1 && !this.shown().find((r) => r.path === d.paths[0])?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
-      .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(d.paths[0]) : `${n} items`));
+      .child(svg(`mods/files/${n === 1 && !this.shown().find((r) => r.path === list[0])?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
+      .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(list[0]) : `${n} items`));
   }
 }
