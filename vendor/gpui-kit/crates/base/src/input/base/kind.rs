@@ -181,6 +181,11 @@ pub trait InputModeKind: sealed::Sealed + Sized + 'static {
     ) {
     }
 
+    // HERDR: per-row notes drawn after a line's text and as a gutter mark.
+    fn line_notes(_state: &InputBaseState<Self>) -> Option<&super::LineNotes> {
+        None
+    }
+
     /// The range highlighted while Cmd-hovering a symbol, with its style.
     fn hover_definition_style(
         _state: &InputBaseState<Self>,
@@ -359,6 +364,10 @@ pub struct EditorExtras {
     pub(crate) hover_popover: Option<HoverPopoverState>,
     pub(crate) hover_definition: HoverDefinition,
     pub(crate) context_menu_task: Task<anyhow::Result<()>>,
+    // HERDR: see `EditorState::set_line_notes`.
+    pub(crate) line_notes: super::LineNotes,
+    // HERDR: the word last reported in an `InputEvent::Hover`.
+    pub(crate) hover_word: Option<std::ops::Range<usize>>,
 }
 
 impl Default for EditorExtras {
@@ -372,6 +381,8 @@ impl Default for EditorExtras {
             hover_popover: None,
             hover_definition: HoverDefinition::default(),
             context_menu_task: Task::ready(Ok(())),
+            line_notes: Default::default(),
+            hover_word: None,
         }
     }
 }

@@ -511,6 +511,23 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
+    // HERDR: the editor's methods past value/set_value, one JSON call each.
+    let call_editor = runtime.clone();
+    globals.set(
+        "__editor_call",
+        Func::from(
+            move |ctx: Ctx<'_>, handle: EntityHandle, name: String, args: String| -> JsResult<String> {
+                let state = live_editor(&ctx, &call_editor, handle)?;
+                let args: serde_json::Value = serde_json::from_str(&args)
+                    .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))?;
+                let out = scope::with_current(|window, cx| editor_call(&state, &name, &args, window, cx))
+                    .ok_or_else(|| needs_call(&ctx, &format!("{name}()")))?
+                    .map_err(|error| Exception::throw_type(&ctx, &error))?;
+                Ok(out.map(|v| v.to_string()).unwrap_or_default())
+            },
+        ),
+    )?;
+
     let discard_editor = runtime.clone();
     globals.set(
         "__editor_release",
@@ -1827,4 +1844,203 @@ fn needs_call(ctx: &Ctx<'_>, what: &str) -> rquickjs::Error {
         ctx,
         &format!("{what} needs a live host call; call it from render or an event handler"),
     )
+}
+
+
+// HERDR: what `__editor_call` does. Positions are LSP's: zero-based lines and
+// UTF-16 columns, as `{ line, col }`.
+fn editor_call(
+    state: &gpui::Entity<gpui_base::input::EditorState>,
+    name: &str,
+    args: &serde_json::Value,
+    window: &mut gpui::Window,
+    cx: &mut gpui::App,
+) -> Result<Option<serde_json::Value>, String> {
+    use gpui_base::input::{
+        Diagnostic, DiagnosticSeverity, LineNote, LineNotes, Position, RopeExt as _, TabSize,
+    };
+    use serde_json::{Value, json};
+
+    fn pos(v: &Value) -> Result<Position, String> {
+        let n = |k: &str| v.get(k).and_then(Value::as_u64).ok_or_else(|| format!("a position needs a number `{k}`"));
+        Ok(Position::new(n("line")? as u32, n("col")? as u32))
+    }
+    fn pos_json(p: Position) -> Value {
+        json!({ "line": p.line, "col": p.character })
+    }
+    fn color(v: Option<&Value>) -> Result<Option<gpui::Hsla>, String> {
+        match v.and_then(Value::as_str) {
+            None => Ok(None),
+            Some(s) => crate::value::Bridged::Str(s.to_owned()).as_color().map(Some).map_err(|e| e.to_string()),
+        }
+    }
+    fn find_state(s: &gpui_base::input::EditorState) -> Value {
+        let session = s.search_session();
+        json!({
+            "query": session.query,
+            "count": session.matcher.len(),
+            "current": session.matcher.current(),
+            "active": session.is_active(),
+        })
+    }
+
+    let out = match name {
+        "cursor" => Some(pos_json(state.read(cx).cursor_position())),
+        "selection" => {
+            let s = state.read(cx);
+            let r = s.selected_range();
+            Some(json!({
+                "start": pos_json(s.text().offset_to_position(r.start)),
+                "end": pos_json(s.text().offset_to_position(r.end)),
+                "text": s.selected_text().to_string(),
+            }))
+        }
+        "set_cursor" => {
+            let start = pos(args)?;
+            let end = match args.get("end") {
+                Some(v) if !v.is_null() => Some(pos(v)?),
+                _ => None,
+            };
+            state.update(cx, |s, cx| {
+                let a = s.text().position_to_offset(&start);
+                match end {
+                    Some(end) => {
+                        let b = s.text().position_to_offset(&end);
+                        s.set_selected_range(a.min(b)..a.max(b), cx);
+                    }
+                    None => s.set_cursor_position(start, window, cx),
+                }
+                s.reveal_offset(a, cx);
+            });
+            None
+        }
+        "find" => {
+            let query = args.get("query").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let case_insensitive = !args.get("case_sensitive").and_then(Value::as_bool).unwrap_or(false);
+            Some(state.update(cx, |s, cx| {
+                s.set_search_query(query, case_insensitive, cx);
+                find_state(s)
+            }))
+        }
+        "find_next" | "find_prev" => Some(state.update(cx, |s, cx| {
+            let found = if name == "find_next" { s.next_search_match(cx) } else { s.previous_search_match(cx) };
+            if let Some(r) = found {
+                s.set_selected_range(r, cx);
+            }
+            find_state(s)
+        })),
+        "find_state" => Some(find_state(state.read(cx))),
+        "find_close" => {
+            state.update(cx, |s, cx| s.close_search(cx));
+            None
+        }
+        "replace" => {
+            let text = args.get("text").and_then(Value::as_str).unwrap_or_default().to_owned();
+            let all = args.get("all").and_then(Value::as_bool).unwrap_or(false);
+            Some(state.update(cx, |s, cx| {
+                if all {
+                    s.replace_all_search_matches(&text, window, cx);
+                } else {
+                    s.replace_current_search_match(&text, window, cx);
+                }
+                find_state(s)
+            }))
+        }
+        "edit" => {
+            let list = args.as_array().ok_or("edit takes a list of { start, end, text }")?;
+            let mut edits = Vec::with_capacity(list.len());
+            for e in list {
+                edits.push(gpui_base::input::LspTextEdit {
+                    range: gpui_base::input::LspRange::new(pos(e.get("start").ok_or("an edit needs `start`")?)?, pos(e.get("end").ok_or("an edit needs `end`")?)?),
+                    new_text: e.get("text").and_then(Value::as_str).unwrap_or_default().to_owned(),
+                });
+            }
+            // Last first, so earlier edits' positions stay valid.
+            edits.sort_by(|a, b| (b.range.start.line, b.range.start.character).cmp(&(a.range.start.line, a.range.start.character)));
+            state.update(cx, |s, cx| s.apply_lsp_edits(&edits, window, cx));
+            None
+        }
+        "set_diagnostics" => {
+            let list = args.as_array().ok_or("set_diagnostics takes a list")?;
+            let mut diagnostics = Vec::with_capacity(list.len());
+            for d in list {
+                let start = pos(d)?;
+                let end = Position::new(
+                    d.get("end_line").and_then(Value::as_u64).map_or(start.line, |v| v as u32),
+                    d.get("end_col").and_then(Value::as_u64).map_or(start.character + 1, |v| v as u32),
+                );
+                let severity = match d.get("severity").and_then(Value::as_str) {
+                    Some("error") => DiagnosticSeverity::Error,
+                    Some("warning") => DiagnosticSeverity::Warning,
+                    Some("info") => DiagnosticSeverity::Info,
+                    _ => DiagnosticSeverity::Hint,
+                };
+                let mut diagnostic = Diagnostic::new(start..end, d.get("message").and_then(Value::as_str).unwrap_or_default().to_owned()).with_severity(severity);
+                if let Some(code) = d.get("code").and_then(|c| c.as_str().map(str::to_owned).or_else(|| c.as_i64().map(|n| n.to_string()))) {
+                    diagnostic = diagnostic.with_code(code);
+                }
+                if let Some(source) = d.get("source").and_then(Value::as_str) {
+                    diagnostic = diagnostic.with_source(source.to_owned());
+                }
+                diagnostics.push(diagnostic);
+            }
+            state.update(cx, |s, cx| {
+                if let Some(set) = s.diagnostics_mut() {
+                    set.clear();
+                    set.extend(diagnostics);
+                }
+                cx.notify();
+            });
+            None
+        }
+        "set_line_notes" => {
+            let list = args.as_array().ok_or("set_line_notes takes a list")?;
+            let mut notes = LineNotes::new();
+            for n in list {
+                let line = n.get("line").and_then(Value::as_u64).ok_or("a line note needs a number `line`")? as usize;
+                notes.insert(line, LineNote {
+                    text: n.get("text").and_then(Value::as_str).unwrap_or_default().to_owned().into(),
+                    color: color(n.get("color"))?.unwrap_or(gpui::hsla(0., 0., 0.6, 1.)),
+                    mark: color(n.get("mark"))?,
+                });
+            }
+            state.update(cx, |s, cx| s.set_line_notes(notes, cx));
+            None
+        }
+        "set_tab_size" => {
+            let size = args.get("size").and_then(Value::as_u64).filter(|n| (1..=16).contains(n)).ok_or("tab size is 1 to 16")? as usize;
+            let hard_tabs = args.get("hard_tabs").and_then(Value::as_bool).unwrap_or(false);
+            state.update(cx, |s, cx| s.set_tab_size(TabSize { tab_size: size, hard_tabs }, cx));
+            None
+        }
+        "set_soft_wrap" => {
+            let wrap = args.as_bool().unwrap_or(false);
+            state.update(cx, |s, cx| s.set_soft_wrap(wrap, window, cx));
+            None
+        }
+        "set_readonly" => {
+            let readonly = args.as_bool().unwrap_or(false);
+            state.update(cx, |s, cx| s.set_readonly(readonly, cx));
+            None
+        }
+        "set_language" => {
+            let language = args.as_str().unwrap_or_default().to_owned();
+            state.update(cx, |s, cx| s.set_highlighter(language, cx));
+            None
+        }
+        "focus" => {
+            state.update(cx, |s, cx| s.focus(window, cx));
+            None
+        }
+        "undo" => {
+            state.update(cx, |s, cx| s.undo_edit(window, cx));
+            None
+        }
+        "redo" => {
+            state.update(cx, |s, cx| s.redo_edit(window, cx));
+            None
+        }
+        other => return Err(format!("EditorState has no method `{other}`")),
+    };
+    Ok(out)
 }

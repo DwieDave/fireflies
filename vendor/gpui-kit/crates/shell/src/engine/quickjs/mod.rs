@@ -3907,6 +3907,20 @@ impl ShellRuntime {
                     payload.set("secondary", *secondary)?;
                     payload.set("shift", *shift)?;
                 }
+                // HERDR: the word under the pointer (code editors without a hover provider).
+                InputEvent::Hover { word, position, bounds } => {
+                    payload.set("hovering", word.is_some())?;
+                    if let Some(p) = position {
+                        payload.set("line", p.line)?;
+                        payload.set("col", p.character)?;
+                    }
+                    if let Some(b) = bounds {
+                        payload.set("x", f32::from(b.origin.x))?;
+                        payload.set("y", f32::from(b.origin.y))?;
+                        payload.set("width", f32::from(b.size.width))?;
+                        payload.set("height", f32::from(b.size.height))?;
+                    }
+                }
                 InputEvent::Change | InputEvent::Focus | InputEvent::Blur | InputEvent::PasteWithoutText => {}
             }
             handler.call::<_, ()>((
@@ -5623,6 +5637,35 @@ globalThis.__gpui = (() => {
 
   globalThis.__diagnostics = false;
 
+  // HERDR: a code editor's methods past value/set_value, one native call each.
+  const editorCalls = (handle) => {
+    const call = (name, args) => {
+      const out = __editor_call(handle, name, JSON.stringify(args ?? null));
+      return out === "" ? undefined : JSON.parse(out);
+    };
+    return {
+      cursor: () => call("cursor"),
+      selection: () => call("selection"),
+      set_cursor: (line, col, end) => call("set_cursor", { line, col, end: end ?? null }),
+      find: (query, options) => call("find", { query: String(query), case_sensitive: !!options?.case_sensitive }),
+      find_next: () => call("find_next"),
+      find_prev: () => call("find_prev"),
+      find_state: () => call("find_state"),
+      find_close: () => call("find_close"),
+      replace: (text, all) => call("replace", { text: String(text), all: !!all }),
+      edit: (edits) => call("edit", edits),
+      set_diagnostics: (list) => call("set_diagnostics", list ?? []),
+      set_line_notes: (list) => call("set_line_notes", list ?? []),
+      set_tab_size: (size, hard_tabs) => call("set_tab_size", { size, hard_tabs: !!hard_tabs }),
+      set_soft_wrap: (wrap) => call("set_soft_wrap", !!wrap),
+      set_readonly: (readonly) => call("set_readonly", !!readonly),
+      set_language: (language) => call("set_language", String(language)),
+      focus: () => call("focus"),
+      undo: () => call("undo"),
+      redo: () => call("redo"),
+    };
+  };
+
   const element = (id) => {
     const object = Object.create(globalThis.__diagnostics ? diagnostic : methods);
     object.__id = id;
@@ -7110,6 +7153,8 @@ globalThis.__gpui = (() => {
           set_value: (value) => __editor_set_value(handle, String(value)),
           on: (event, handler) => __editor_on(handle, String(event), handler),
           release: () => __editor_release(handle),
+          // HERDR: the editor's caret, selection, find, notes and edits.
+          ...editorCalls(handle),
         };
       },
     },
