@@ -64,6 +64,8 @@ test:
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
     bun test scripts/hint-bars.test.ts
+    # The strip's drop-downs (script runner, + new, bell) toggle by press and by key, with stand-ins that record handlers.
+    bun test scripts/nocturne-drop-toggle.test.ts
     cargo test --locked
 
 docs-generate: build

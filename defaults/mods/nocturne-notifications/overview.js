@@ -1,5 +1,6 @@
 // The overview: every request, grouped down the left (permissions,
-// questions, other), the selected one in full on the right.
+// questions, other), the selected one in full on the right. A drop-down
+// under the bell (open.js), as tall as what it shows.
 //
 //   j / k, [ / ]      the next / previous request
 //   up / down         the permission's options (as its terminal lists them)
@@ -19,7 +20,7 @@ import { theme, props, closeOverlay, run, nextCommand } from "herdr";
 import { items, dismiss } from "./engine.js";
 import { group, age, headline, summary, where, TYPES } from "./model.js";
 import { answer } from "./drive.js";
-import { openAsk, forget, followCommands } from "./open.js";
+import { openAsk, forget, followCommands, overviewBeat, BEAT } from "./open.js";
 import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit.js";
 
 /** What ? lists, ? keys last. */
@@ -44,6 +45,8 @@ export default class Overview {
     this.handle.focus();
     followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.but ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.but ? this.input.focus() : this.handle.focus()));
+    // The bell learns the drop-down is still open (open.js overviewOpen).
+    cx.timer.every(BEAT, () => overviewBeat(props()?.overlay));
   }
 
   closing() { forget("overview", props()?.overlay); }
@@ -347,7 +350,7 @@ export default class Overview {
   }
 
   empty(t) {
-    return v_flex().flex_1().h_full().items_center().justify_center().gap(10).px(40)
+    return v_flex().flex_1().h_full().items_center().justify_center().gap(10).px(40).py(36)
       .child(image("mods/nocturne/art/fireflies.svg").size(48))
       .child(div().text_size(12).text_color(t.foreground).child("Nothing waits on you"))
       .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and agents that need a look, from every agent in every space and machine, gather here."))

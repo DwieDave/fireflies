@@ -4,10 +4,11 @@
 //   bell      the quiet indicator in the tab strip (the nocturne layout's
 //             "notify" block): how many requests wait, in the needs-you
 //             color; click (or cmd-shift-a, nocturne-notifications.open)
-//             opens the overview. It also runs the engine (engine.js): it
+//             opens the overview under it, or closes it. It also runs the engine (engine.js): it
 //             reads waiting agents' screens and hook records and keeps the
 //             items in shared state for everything else here.
-//   overview  every request, grouped: permissions, questions, other
+//   overview  a drop-down under the bell (open.js), every request,
+//             grouped: permissions, questions, other
 //             (finished, errors, waiting for input); one at a time in full
 //             on the right, answered from there (overview.js)
 //   ask       a block of questions answered like Claude Code's
