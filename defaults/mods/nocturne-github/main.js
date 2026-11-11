@@ -600,6 +600,6 @@ export default class GitHub extends View {
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(Boolean(this.picker), (el) => el.child(this.pickerPanel(t))))
       .when(Boolean(this.confirm), (el) => el.child(this.confirmBar(t)))
-      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
+      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"], ["?", "keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"], ["?", "keys"]], right));
   }
 }

@@ -89,7 +89,8 @@ export const deckKeys = (cmd) => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
   ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
   ["w", "watch the run"], [`x ${cmd}⌫`, "stop the run · dismiss an ended one"], [`R ${cmd}R`, "run it again"],
-  ["output", "j k pgup pgdn g G scroll · o settings · esc ⌫ h ← back"], ["q esc", "close"], [`? ${CHORD}`, "keys (the filter: cmd-k ?)"],
+  ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
+  ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
 ];
 
 export default class ScriptsDeck extends View {

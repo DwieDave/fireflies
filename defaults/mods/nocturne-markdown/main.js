@@ -63,7 +63,7 @@ const stop = (_e, cx) => cx.stop_propagation();
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
 // What `?` lists.
 // Every key key() takes, ? keys last.
-export const KEYS = [["j k  ↑ ↓", "scroll"], ["d u  space", "half a page down / up"], ["ctrl-d ctrl-u  pgdn pgup", "half a page down / up"],
+export const KEYS = [["j k  ↑ ↓", "scroll"], ["d u  ctrl-d ctrl-u", "half a page down / up"], ["space  pgdn pgup", "half a page down · down / up"],
   ["gg G  home end", "top / bottom"], ["tab ⇧tab", "links"], ["enter", "follow"], ["] [", "headings"], ["h ←  ⌫", "back"],
   ["r", "raw"], ["e", "edit"], ["f", "files"], ["y", "copy path"], ["esc", "off the link · keys away"], ["?", "keys"]];
 
