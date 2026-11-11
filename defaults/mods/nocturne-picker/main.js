@@ -20,7 +20,7 @@ import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syn
 
 const ROW = 28, LINE = 24, HEAD = 26;
 const FILES_LIMIT = 80, GREP_LIMIT = 400;
-const PREVIEW_MIN = 980; // the overlay's width from which the preview shows
+const PREVIEW_MIN = 860; // the overlay's width from which the preview shows
 const GIT = { M: "ansi3", A: "ansi2", U: "ansi5", D: "ansi1", R: "ansi4", "!": "ansi9" };
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
