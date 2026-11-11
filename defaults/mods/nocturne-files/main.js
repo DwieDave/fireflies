@@ -36,8 +36,22 @@
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   o              a folder in a new files pane  y  copy the path
 //   m              the right-click menu          q  close
+//   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
+//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens)
+//   R              rename: the name in an input, its stem selected; a path in it moves the item
+//   x / P          cut the row / paste it in the selected folder (beside a selected file; the root with none)
+//   d              delete: asks first (y or enter; anything else keeps it); the machine's trash, else permanently
 //   ?              the keys, under the filter line (its ? chip too; ? or esc hides them)
 //   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
+//
+// File operations run as one `sh -c` (logic.js OPS) on the pane's machine,
+// paths as their own arguments: nothing is overwritten (a target that exists
+// is refused), the root can't be renamed, cut or deleted, a folder can't go
+// into itself. Every one is in the right-click menu too (the empty space's:
+// new file / folder, paste, in the root). While a name's input or the delete
+// question is open, keys go to it. What's cut is shared (`nocturne-files.cut`):
+// P in any files pane on that machine pastes it. Rows can't be dragged: a mod
+// can't tell which row a press started on (no per-row handlers in a virtual list).
 //
 // The keyboard: a copy takes it when its pane is the focused one as it opens
 // (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
@@ -46,7 +60,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -73,6 +87,10 @@ const ICONS = "mods/workspace-chrome";
 const FILTERS = `${MOD}.filters`, TITLES = `${MOD}.titles`, PATHS = `${MOD}.paths`;
 /** The pane the keyboard came from into the panel (set by nocturne/files.js). */
 const FROM = `${MOD}.from`;
+/** What `x` cut, for `P` in any files pane: { abs, on, dir, name }. */
+const CUT = `${MOD}.cut`;
+/** The list's key for the new file's or folder's input row. */
+const DRAFT = "\u0000draft";
 const HITS = 200, MENU_ROW = 20;
 const zoom = () => Number(settings()?.zoom) || 1;
 
@@ -114,6 +132,13 @@ export default class Files extends View {
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
     this.input.on("submit", (_e, cx) => { this.enter(cx); cx.notify(); });
+    // The name a new file or folder gets, or a rename's: an input row in the tree.
+    this.draft = null; this.ask = null; this.msg = null;
+    this.nameInput = InputState.new({ placeholder: "name" });
+    this.nameInput.on("focus", (_e, cx) => { this.naming = true; this.selectStem(); cx.notify(); });
+    this.nameInput.on("blur", (_e, cx) => { if (this.naming && this.draft && !this.draft.busy) this.endDraft(cx, false); this.naming = false; cx.notify(); });
+    this.nameInput.on("change", (_e, cx) => { if (this.msg?.draft) this.msg = null; cx.notify(); });
+    this.nameInput.on("submit", (_e, cx) => { this.commitDraft(cx); cx.notify(); });
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
     this.nav = newNav();
@@ -501,8 +526,7 @@ export default class Files extends View {
   // ---- the menu
 
   openMenu(row, cx) {
-    let items = menuItems(row, { pane: this.alone });
-    if (!row.path) items = items.filter((x) => x.act !== "toggle" && x.act !== "root");
+    let items = menuItems(row, { pane: this.alone, clip: Boolean(this.clip()) });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -522,6 +546,12 @@ export default class Files extends View {
     else if (act === "terminal") this.terminalEdit(p, cx);
     else if (act === "copy") this.copy(p, cx);
     else if (act === "close") this.closePane();
+    else if (act === "new-file") this.startDraft("file", row, cx);
+    else if (act === "new-folder") this.startDraft("folder", row, cx);
+    else if (act === "rename") this.startRename(row, cx);
+    else if (act === "cut") this.cutRow(row, cx);
+    else if (act === "paste") this.paste(row, cx);
+    else if (act === "delete") this.askDelete(row, cx);
   }
 
   menuKey(e, cx) {
@@ -539,6 +569,230 @@ export default class Files extends View {
     }
     cx.stop_propagation();
     cx.notify();
+  }
+
+  // ---- file operations: new, rename / move, cut / paste, delete
+
+  /** A line in the hint line until the next key (an error in red). */
+  say(text, cx, { error = true, draft = false } = {}) {
+    const at = Date.now();
+    this.msg = { text, error, draft, at };
+    cx?.timer?.after(8000, (cx) => { if (this.msg?.at === at) { this.msg = null; cx.notify(); } });
+  }
+
+  /** Runs one of OPS's operations on this pane's machine: true when it worked;
+   *  otherwise the reason is said in the pane and the tree is listed again. */
+  async fileOp(args, name, cx) {
+    let r;
+    try { r = await exec("sh", ["-c", OPS, "files-op", ...args], { on: this.on }); }
+    catch (e) { r = { code: -1, stderr: String(e?.message ?? e) }; }
+    if (r.code === 0) return true;
+    this.say(r.code === 3 ? `“${name}” already exists` : r.code === 4 ? `“${name}” isn't there anymore`
+      : r.code === 5 ? `“${name}” couldn't go to the Trash` : cleanError(r.stderr), cx, { draft: r.code === 3 });
+    this.refresh(cx);
+    return false;
+  }
+
+  /** The machine's trash tool ("" where there is none: deletes are permanent), asked once. */
+  async trashTool() {
+    if (this.trash == null) {
+      const r = await exec("sh", ["-c", PROBE, "files-trash-probe"], { on: this.on }).catch(() => null);
+      this.trash = r?.code === 0 ? r.stdout.trim() : "";
+    }
+    return this.trash;
+  }
+
+  abs(rel) { return join(this.root, rel); }
+
+  /** Shows `abs` once the tree is listed again: its folders unfold, the
+   *  selection lands on it. Outside the root, or hidden by a filter: said. */
+  landOn(abs, cx, done) {
+    // From the search's hits: the search ends, the result shows in the tree.
+    if (this.query) this.clearSearch(cx);
+    const rel = relTo(this.root, abs);
+    if (rel == null) this.say(`${done} ${tilde(abs)}`, cx, { error: false });
+    else if (rel && !lists(rel, this.filters, this.ignored)) this.say(`${done} “${base(rel)}”: ${isHidden(rel) ? "dotfiles are hidden (H)" : "ignored files are hidden (I)"}`, cx, { error: false });
+    else if (rel) {
+      for (const p of parentsOf(rel)) this.folders.add(p);
+      this.want = rel;
+    }
+    this.refresh(cx);
+    return rel;
+  }
+
+  /** a / A: an input row for the new file's or folder's name, in the
+   *  selected folder (unfolded), beside the selected file, or in the root. */
+  startDraft(kind, row, cx) {
+    if (this.query) this.clearSearch(cx);
+    let dir = "", after = null;
+    if (row?.path) {
+      dir = row.dir ? row.path : dirOf(row.path);
+      after = row.path;
+      for (const p of parentsOf(row.path)) if (!this.folders.has(p)) this.toggle(p, cx);
+      if (row.dir && !this.folders.has(row.path)) this.toggle(row.path, cx);
+    }
+    this.draft = { kind, dir, after };
+    this.msg = null;
+    this.nameInput.set_value("");
+    this.nameInput.focus();
+    cx?.notify();
+  }
+
+  /** R: the row's name in the input, its stem selected. */
+  startRename(row, cx) {
+    if (!row?.path) return this.say("The tree's root can't be renamed", cx);
+    const name = base(row.path);
+    this.draft = { kind: "rename", path: row.path, dir: row.dir, name };
+    this.sel = row.path;
+    this.msg = null;
+    this.nameInput.set_value(name);
+    this.nameInput.focus();
+    this.selectStem();
+    cx?.notify();
+  }
+
+  selectStem() {
+    const d = this.draft;
+    if (d?.kind === "rename" && this.nameInput.value() === d.name) this.nameInput.set_selected_range?.(stemRange(d.name, d.dir));
+  }
+
+  /** Closes the input; the keyboard back on the tree. */
+  endDraft(cx, focus = true) {
+    this.draft = null;
+    if (this.msg?.draft) this.msg = null;
+    if (focus) this.handle.focus();
+    cx?.notify();
+  }
+
+  /** Enter in the input: creates, or renames / moves. A refusal or a failure
+   *  leaves the input open to fix the name. */
+  commitDraft(cx) {
+    const d = this.draft;
+    if (!d || d.busy) return;
+    const typed = this.nameInput.value(), at = this.on ? null : home();
+    if (d.kind === "rename") {
+      const src = this.abs(d.path), t = renameTarget(src, typed, at);
+      if (t.error) return this.say(t.error, cx, { draft: true });
+      if (t.abs === src) return this.endDraft(cx);
+      return this.move(src, t.abs, d.path, cx, "Moved to");
+    }
+    const r = resolveName(this.abs(d.dir), typed, at);
+    if (r.error) return this.say(r.error, cx, { draft: true });
+    const folder = d.kind === "folder" || r.folder;
+    d.busy = true;
+    cx.spawn(async (cx) => {
+      const ok = await this.fileOp([folder ? "folder" : "file", r.abs], base(r.abs), cx);
+      d.busy = false;
+      if (ok && this.draft === d) this.endDraft(cx);
+      if (ok) {
+        const rel = this.landOn(r.abs, cx, "Made");
+        // A new file opens as enter on it would.
+        if (!folder && rel) this.openFile(rel, cx);
+      }
+      cx.notify();
+    });
+  }
+
+  /** Moves `src` to `dst` (absolute; `rel`: src in the tree). Unfolded folders
+   *  under it stay unfolded where it lands; a cut of it is used up. */
+  move(src, dst, rel, cx, done) {
+    const why = moveRefusal(src, dst, this.root);
+    if (why) return this.say(why, cx, { draft: Boolean(this.draft) });
+    const d = this.draft;
+    if (d) d.busy = true;
+    cx.spawn(async (cx) => {
+      const ok = await this.fileOp(["move", src, dst], base(dst), cx);
+      if (d) d.busy = false;
+      if (ok && d && this.draft === d) this.endDraft(cx);
+      if (ok) {
+        const to = relTo(this.root, dst);
+        if (rel != null) {
+          this.folders = movedFolders(this.folders, rel, to || null);
+          for (const k of [...this.entries.keys()]) if (k === rel || k.startsWith(`${rel}/`)) this.entries.delete(k);
+        }
+        const c = this.clip();
+        if (c && (c.abs === src || c.abs.startsWith(`${src}/`))) setShared(CUT, null);
+        this.landOn(dst, cx, done);
+      }
+      cx.notify();
+    });
+  }
+
+  /** What's cut on this pane's machine, or null. */
+  clip() {
+    const c = shared(CUT);
+    return c && (c.on ?? null) === (this.on ?? null) ? c : null;
+  }
+
+  /** x: cuts the row for P (again on the same row: uncut). */
+  cutRow(row, cx) {
+    if (!row?.path) return this.say("The tree's root can't be moved", cx);
+    const abs = this.abs(row.path);
+    if (this.clip()?.abs === abs) { setShared(CUT, null); return; }
+    setShared(CUT, { abs, on: this.on ?? null, dir: Boolean(row.dir), name: base(row.path) });
+    this.say(`Cut “${base(row.path)}”: P pastes it in the selected folder`, cx, { error: false });
+  }
+
+  /** P: moves what's cut into the selected folder (beside a selected file; the root with none). */
+  paste(row, cx) {
+    const c = shared(CUT);
+    if (!c) return this.say("Nothing is cut: x cuts a row", cx);
+    if ((c.on ?? null) !== (this.on ?? null)) return this.say("It was cut on another machine", cx);
+    const into = this.abs(!row?.path ? "" : row.dir ? row.path : dirOf(row.path));
+    this.move(c.abs, join(into, c.name), relTo(this.root, c.abs), cx, "Moved to");
+  }
+
+  /** d: asks first (the item named, a folder's contents, trash or permanently). */
+  askDelete(row, cx) {
+    if (!row?.path) return this.say("The tree's root can't be deleted", cx);
+    const path = row.path;
+    cx.spawn(async (cx) => {
+      const trash = await this.trashTool();
+      this.ask = { path, dir: Boolean(row.dir), name: base(path), trash };
+      this.sel = path;
+      cx.notify();
+    });
+  }
+
+  /** The delete question's keys: y or enter deletes, anything else keeps it. */
+  askKey(e, cx) {
+    const a = this.ask, k = e.key, m = e.modifiers ?? {};
+    this.ask = null;
+    if (!m.platform && !m.control && !m.alt && (k === "enter" || k === "y")) this.remove(a, cx);
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  remove(a, cx) {
+    const next = neighbour(this.shown(), a.path), abs = this.abs(a.path);
+    cx.spawn(async (cx) => {
+      if (await this.fileOp(["delete", a.trash, abs], a.name, cx)) {
+        this.folders = movedFolders(this.folders, a.path, null);
+        for (const k of [...this.entries.keys()]) if (k === a.path || k.startsWith(`${a.path}/`)) this.entries.delete(k);
+        const c = this.clip();
+        if (c && (c.abs === abs || c.abs.startsWith(`${abs}/`))) setShared(CUT, null);
+        this.want = next;
+        // From the search's hits: they're looked up again without it.
+        if (this.query.trim()) this.search(cx);
+        this.say(a.trash ? `Moved “${a.name}” to the Trash` : `Deleted “${a.name}”`, cx, { error: false });
+        this.refresh(cx);
+      }
+      cx.notify();
+    });
+  }
+
+  /** The rows with the new name's input row where it will appear. */
+  withDraft(rows) {
+    const d = this.draft;
+    if (!d || d.kind === "rename") return rows;
+    let at = 0;
+    if (d.after != null) {
+      const i = rows.findIndex((r) => r.path === d.after);
+      at = i >= 0 ? i + 1 : d.dir ? rows.findIndex((r) => r.path === d.dir) + 1 : 0;
+    }
+    const folder = d.kind === "folder" || this.nameInput.value().endsWith("/");
+    const row = { path: DRAFT, name: "", dir: folder, depth: d.dir ? d.dir.split("/").length : 0, draft: true };
+    return [...rows.slice(0, at), row, ...rows.slice(at)];
   }
 
   // ---- input
@@ -559,6 +813,8 @@ export default class Files extends View {
   }
 
   pick(path, cx) {
+    // A click in the name's input row places the caret; it doesn't open the row.
+    if (path === DRAFT || (this.draft?.kind === "rename" && this.draft.path === path)) return;
     const rows = this.shown(), row = rows.find((r) => r.path === path);
     if (!row) return;
     const now = Date.now(), again = this.lastClick?.path === path && now - this.lastClick.at < 400;
@@ -574,7 +830,17 @@ export default class Files extends View {
 
   key(e, cx) {
     if (this.menu) return this.menuKey(e, cx);
+    if (this.ask) return this.askKey(e, cx);
     const k = e.key, m = e.modifiers ?? {};
+    if (this.draft) {
+      // Typing goes to the name; esc gives up (enter is the input's submit).
+      if (k !== "escape") return;
+      this.endDraft(cx);
+      cx.stop_propagation();
+      cx.notify();
+      return;
+    }
+    if (this.msg && !this.typing) this.msg = null;
     if (this.typing) {
       // Typing goes to the filter; these steer the hits (enter is the input's submit).
       if (k === "escape") this.clearSearch(cx);
@@ -597,6 +863,11 @@ export default class Files extends View {
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     if (low === "h" && upper) this.setFilter("hidden", cx);
     else if (low === "i" && upper) this.setFilter("ignored", cx);
+    else if (low === "a") this.startDraft(upper ? "folder" : "file", row ?? null, cx);
+    else if (low === "r" && upper) this.startRename(row, cx);
+    else if (low === "p" && upper) this.paste(row ?? null, cx);
+    else if (k === "x") this.cutRow(row, cx);
+    else if (k === "d") this.askDelete(row, cx);
     else if (k === "/") this.input.focus();
     else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.closePane(); else this.leave(); }
     else if (k === "q") this.closePane();
@@ -725,10 +996,14 @@ export default class Files extends View {
   }
 
   row(t, r, focused) {
-    const sel = r.path === this.sel, open = r.dir && this.folders.has(r.path);
-    const mark = r.hit ? r.git && MARK[r.git] ? r.git : null : this.marks[`${this.root}/${r.path}`];
+    // The name's input (a new item's row, or the row being renamed) in place of the name.
+    const editing = r.draft || (this.draft?.kind === "rename" && this.draft.path === r.path);
+    const sel = editing || (r.path === this.sel && !this.draft), open = r.dir && this.folders.has(r.path);
+    const clip = this.clip(), cut = !r.draft && clip?.abs === this.abs(r.path);
+    const doomed = this.ask?.path === r.path;
+    const mark = cut ? "cut" : r.hit ? r.git && MARK[r.git] ? r.git : null : this.marks[`${this.root}/${r.path}`];
     const hidden = r.name.startsWith(".");
-    const color = sel ? t.foreground : mark && mark !== "•" ? t[MARK[mark]] : hidden || r.ignored ? t.dim : r.dir ? t.foreground : t.muted;
+    const color = doomed ? t.ansi1 : cut ? t.dim : sel ? t.foreground : mark && mark !== "•" ? t[MARK[mark]] : hidden || r.ignored ? t.dim : r.dir ? t.foreground : t.muted;
     return h_flex().id(`nf-${r.path}`).relative().h(ROW).w_full().pl(8 + r.depth * 14).pr(10).gap(6).items_center()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .when(sel, (el) => el.child(dither(focused ? t.ansi0 : t.ansi0 + "88", 1))
@@ -738,9 +1013,11 @@ export default class Files extends View {
       .child(r.head ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
       .child(svg(`mods/files/${r.dir ? "folder" : "file"}.svg`).relative().size(12).flex_none()
         .text_color(r.dir ? (open ? t.accent : t.ansi4) : t.dim))
-      .child(r.hit ? this.matched(t, `nf-m-${r.path}`, r.name, r.ranges, color)
+      .child(editing ? Input.new(this.nameInput).flex_1().min_w(0).h(ROW).text_size(12).text_color(t.foreground)
+        : r.hit ? this.matched(t, `nf-m-${r.path}`, r.name, r.ranges, cut ? t.dim : color)
         : div().relative().flex_1().min_w(0).truncate().text_color(r.head ? t.dim : color).child(r.name))
-      .when(Boolean(mark), (el) => el.child(div().relative().flex_none().w(8).text_color(mark === "•" ? t.ansi3 : t[MARK[mark]]).child(mark)));
+      .when(Boolean(mark) && !editing, (el) => el.child(div().relative().flex_none().when(mark !== "cut", (el) => el.w(8))
+        .text_color(mark === "•" || mark === "cut" ? t.ansi3 : t[MARK[mark]]).child(mark)));
   }
 
   menuBox(t) {
@@ -770,6 +1047,46 @@ export default class Files extends View {
         .child(edge("top")).child(edge("bottom")));
   }
 
+  /** A key and what it does in the hint line, clickable. */
+  hintKey(t, id, key, label, action) {
+    return h_flex().id(id).relative().flex_none().gap(4).items_center()
+      .hover((s) => s.bg(t.ansi0 + "55"))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { action(cx); cx.notify(); })
+      .child(div().text_color(t.accent).child(key))
+      .child(div().text_color(t.muted).child(label));
+  }
+
+  /** The hint line at the bottom: the delete question, the name input's keys,
+   *  what an operation said, else the copy, search and listing notes. */
+  footer(t, searching) {
+    const line = () => v_flex().id("nf-foot").flex_none().px(10).py(4).gap(3).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0);
+    const keys = (...ks) => h_flex().flex_wrap().gap_x(12).gap_y(2).children(ks);
+    if (this.ask) {
+      const a = this.ask;
+      return line()
+        .child(div().text_color(a.trash ? t.foreground : t.ansi1).child(deleteQuestion(a.name, a.dir, Boolean(a.trash))))
+        .child(keys(
+          this.hintKey(t, "nf-ask-yes", "y", a.trash ? "move to the Trash" : "delete", (cx) => { this.ask = null; this.remove(a, cx); }),
+          this.hintKey(t, "nf-ask-no", "esc", "keep it", () => { this.ask = null; })));
+    }
+    if (this.draft) {
+      const d = this.draft, rename = d.kind === "rename";
+      const where = rename ? "" : ` in ${d.dir ? `${base(d.dir)}/` : tilde(this.root)}`;
+      const what = rename ? `Rename “${d.name}”: a path moves it` : `New ${d.kind}${where}${d.kind === "file" ? ": end with / for a folder" : ""}`;
+      return line()
+        .when(Boolean(this.msg), (el) => el.child(div().text_color(this.msg.error ? t.ansi1 : t.foreground).child(this.msg.text)))
+        .child(div().text_color(t.foreground).child(what))
+        .child(keys(
+          this.hintKey(t, "nf-draft-ok", "enter", rename ? "rename" : "create", (cx) => this.commitDraft(cx)),
+          this.hintKey(t, "nf-draft-no", "esc", "cancel", (cx) => this.endDraft(cx))));
+    }
+    const text = this.msg ? this.msg.text : this.copied ? "path copied" : searching && this.note ? this.note
+      : this.limited ? `Listing cut at ${PER_FOLDER} per folder, ${TOTAL} in all` : null;
+    if (!text) return null;
+    return line().child(div().text_color(this.msg?.error ? t.ansi1 : t.dim).child(text));
+  }
+
   empty(t, title, hint) {
     return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(16).text_size(11)
       .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
@@ -788,28 +1105,39 @@ export default class Files extends View {
     }
     if (this.want) { const i = rows.findIndex((r) => r.path === this.want); if (i >= 0) { this.want = null; this.select(rows, i); } }
     if (this.sel && !this.want && !rows.some((r) => r.path === this.sel)) this.sel = null;
-    const focused = this.handle.is_focused() || this.typing;
+    const focused = this.handle.is_focused() || this.typing || this.naming;
+    // The new item's input row where it will appear, put on screen once.
+    const list = this.withDraft(rows);
+    if (this.draft && !this.draft.shown) {
+      const i = list.findIndex((r) => r.draft || r.path === this.draft.path);
+      if (i >= 0) { this.draft.shown = true; this.scroll.scroll_to_item(i); }
+    }
     const w = this.size.width;
     const searching = Boolean(this.query.trim());
     let body;
     if (searching && this.hits && !rows.length) body = this.empty(t, "No files match", this.note ?? `“${this.query.trim()}” under ${tilde(this.root)}`);
     else if (searching && !this.hits) body = this.empty(t, "Searching…", null);
-    else if (this.error && !rows.length) body = this.empty(t, "Can't read this folder", this.error);
-    else if (!rows.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root));
+    else if (this.error && !list.length) body = this.empty(t, "Can't read this folder", this.error);
+    else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root));
     else body = div().id("nf-tree").relative().flex_1().min_h(0).py(4).text_size(12)
-      .child(v_virtual_list("nf-rows", rows.length, ROW, (i) => rows[i].path,
-        (range) => rows.slice(range.start, range.end).map((r) => this.row(t, r, focused)))
+      .child(v_virtual_list("nf-rows", list.length, ROW, (i) => list[i].path,
+        (range) => list.slice(range.start, range.end).map((r) => this.row(t, r, focused)))
         .on_item_click((path, cx) => this.pick(path, cx))
         // The pane's own right press comes after this and opens the menu for the row.
         .on_item_secondary_click((path) => { this.pressed = rows.find((r) => r.path === path) ?? null; })
         .size_full().track_scroll(this.scroll))
       .child(Scrollbar.vertical("nf-rows").absolute().inset_0());
-    const foot = this.copied ? "path copied" : searching && this.note ? this.note
-      : this.limited ? `Listing cut at ${PER_FOLDER} per folder, ${TOTAL} in all` : null;
+    const foot = this.footer(t, searching);
     return v_flex().id("nocturne-files").relative().size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       // A row's click comes after this: alt-click opens a Markdown file as text.
-      .on_mouse_down("left", (e) => { this.alt = Boolean(e?.modifiers?.alt); this.handle.focus(); })
+      .on_mouse_down("left", (e, cx) => {
+        this.alt = Boolean(e?.modifiers?.alt);
+        // A click in the name's input keeps it (a click on another row ends it: pick).
+        if (!this.draft) this.handle.focus();
+        // A click elsewhere keeps what the delete question was about.
+        if (this.ask) { this.ask = null; cx?.notify(); }
+      })
       .on_mouse_down("right", (e, cx) => {
         if (e?.local_position) this.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
         const row = this.pressed ?? { path: "", name: this.root, dir: true };
@@ -825,7 +1153,7 @@ export default class Files extends View {
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
       .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(body)
-      .when(Boolean(foot), (el) => el.child(div().flex_none().px(10).py(4).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0).child(foot)))
+      .when(Boolean(foot), (el) => el.child(foot))
       .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)));
   }
 }

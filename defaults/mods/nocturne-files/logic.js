@@ -3,8 +3,8 @@
 // right-click menu and how Neovim opens a file or folder. main.js draws.
 
 export const parent = (p) => p.replace(/\/[^/]+$/, "") || "/";
-const base = (p) => p.slice(p.lastIndexOf("/") + 1);
-const dirOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
+export const base = (p) => p.slice(p.lastIndexOf("/") + 1);
+export const dirOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 
 /** settings.json `files`: what a new pane lists (both, unless set). */
 export function filterDefaults(settings) {
@@ -84,14 +84,16 @@ export function nvimLaunch(abs, dir) {
 }
 
 /** The right-click menu for a row: [{ key, label, act }], `act` naming the
- *  pane's action. Folders and files differ; `pane`: a pane of its own (it
- *  closes). */
-export function menuItems(row, { pane = false } = {}) {
+ *  pane's action. Folders and files differ; the root (empty space, `path` "")
+ *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
+ *  (it closes); `clip`: something is cut (paste shows). */
+export function menuItems(row, { pane = false, clip = false } = {}) {
+  const root = row.dir && !row.path;
   const items = row.dir
     ? [
-        { key: "enter", label: "Fold / unfold", act: "toggle" },
+        ...(root ? [] : [{ key: "enter", label: "Fold / unfold", act: "toggle" }]),
         { key: "o", label: "Open in a new files pane", act: "pane" },
-        { key: ".", label: "Root the tree here", act: "root" },
+        ...(root ? [] : [{ key: ".", label: "Root the tree here", act: "root" }]),
         { key: "e", label: "Open in $EDITOR", act: "edit" },
         { key: "v", label: "Open in Neovim", act: "nvim" },
       ]
@@ -101,10 +103,154 @@ export function menuItems(row, { pane = false } = {}) {
         { key: "E", label: "Open in $EDITOR", act: "terminal" },
         { key: "v", label: "Open in Neovim", act: "nvim" },
       ];
+  const where = root ? "" : row.dir ? " in it" : " beside it";
+  items.push({ key: "a", label: `New file${where}`, act: "new-file" }, { key: "A", label: `New folder${where}`, act: "new-folder" });
+  if (!root) items.push({ key: "R", label: "Rename / move", act: "rename" }, { key: "x", label: "Cut", act: "cut" });
+  if (clip) items.push({ key: "P", label: row.dir ? (root ? "Paste here" : "Paste in it") : "Paste beside it", act: "paste" });
+  if (!root) items.push({ key: "d", label: "Delete…", act: "delete" });
   items.push({ key: "y", label: "Copy path", act: "copy" });
   if (pane) items.push({ key: "q", label: "Close this pane", act: "close" });
   return items;
 }
+
+// ---- file operations: names, paths, the shell that does them
+
+/** `a/b` under `dir` (absolute); the root "/" without a double slash. */
+export const join = (dir, name) => (name ? (dir === "/" ? `/${name}` : `${dir}/${name}`) : dir);
+
+/** `abs` relative to `root`: "" for the root itself, null outside it. */
+export function relTo(root, abs) {
+  if (abs === root) return "";
+  const pre = root === "/" ? "/" : `${root}/`;
+  return abs.startsWith(pre) ? abs.slice(pre.length) : null;
+}
+
+/** Where a typed name points, from the folder `dir` (absolute): a relative
+ *  path, an absolute one, or `~/…` (`home`; null on another machine). `.` and
+ *  `..` steps resolve; a trailing `/` makes it a folder. { abs, folder } or
+ *  { error }. */
+export function resolveName(dir, typed, home) {
+  const text = String(typed ?? "");
+  if (!text.trim()) return { error: "Type a name" };
+  let start = dir;
+  let rest = text;
+  if (text.startsWith("/")) start = "/";
+  else if (text === "~" || text.startsWith("~/")) {
+    if (!home) return { error: "~ is this Mac's home: type the path" };
+    start = home; rest = text.slice(1);
+  }
+  const parts = start.split("/").filter(Boolean);
+  for (const s of rest.split("/")) {
+    if (s === "..") parts.pop();
+    else if (s && s !== ".") parts.push(s);
+  }
+  const last = text.split("/").filter(Boolean).pop() ?? "";
+  if (!parts.length || last === "." || last === "..") return { error: `“${text}” isn't a name` };
+  return { abs: `/${parts.join("/")}`, folder: text.endsWith("/") };
+}
+
+/** What a rename's text resolves to for `src` (absolute): a name or path
+ *  from its folder; ending in `/`, into that folder under its own name. */
+export function renameTarget(src, typed, home) {
+  const r = resolveName(parent(src), typed, home);
+  if (r.error) return r;
+  return { abs: r.folder ? join(r.abs, base(src)) : r.abs };
+}
+
+/** Why moving `src` to `dst` (both absolute) isn't allowed, or null. */
+export function moveRefusal(src, dst, root) {
+  if (src === root) return "The tree's root can't be moved";
+  if (dst === src) return "It's already there";
+  if (dst.startsWith(`${src}/`)) return "A folder can't go into itself";
+  return null;
+}
+
+/** The part of a name a rename selects: the stem, not the extension
+ *  (`.env`, `Makefile`, a folder: all of it). UTF-16 offsets, as the input takes. */
+export function stemRange(name, dir = false) {
+  const dot = name.lastIndexOf(".");
+  return { start: 0, end: dir || dot <= 0 ? name.length : dot };
+}
+
+/** The question before a delete: the item named, a folder's contents too,
+ *  "permanently" where the machine has no trash. */
+export function deleteQuestion(name, dir, trash) {
+  const what = dir ? `“${name}/” and everything in it` : `“${name}”`;
+  return trash ? `Move ${what} to the Trash?` : `Delete ${what} permanently?`;
+}
+
+/** The row to select once `path` is deleted: the next one past it (and what
+ *  it held), else the one before. */
+export function neighbour(rows, path) {
+  const i = rows.findIndex((r) => r.path === path);
+  if (i < 0) return null;
+  const inside = (r) => r.path === path || r.path.startsWith(`${path}/`);
+  const next = rows.slice(i + 1).find((r) => !inside(r) && !r.head);
+  if (next) return next.path;
+  for (let j = i - 1; j >= 0; j--) if (!rows[j].head) return rows[j].path;
+  return null;
+}
+
+/** Unfolded folders (relative paths) after `from` moved to `to` (null: out of the tree). */
+export function movedFolders(folders, from, to) {
+  const out = new Set();
+  for (const f of folders) {
+    if (f !== from && !f.startsWith(`${from}/`)) out.add(f);
+    else if (to != null) out.add(to + f.slice(from.length));
+  }
+  return out;
+}
+
+/** The folders to unfold so `rel` shows (its parents). */
+export function parentsOf(rel) {
+  const parts = rel.split("/");
+  return parts.slice(0, -1).map((_, i) => parts.slice(0, i + 1).join("/"));
+}
+
+/** A failed command's stderr as one line: macOS's trash wraps its reason in
+ *  an NSError dump; the shell's "sh: line 1:" goes. */
+export function cleanError(stderr) {
+  const s = String(stderr ?? "").trim();
+  const ns = s.match(/Code=\d+ "(.+?)" UserInfo/);
+  if (ns) return ns[1];
+  const line = s.split("\n").filter(Boolean).pop() ?? "";
+  return line.replace(/^(sh|files-op): (line \d+: )?/, "") || "It didn't work";
+}
+
+/** The machine's trash, run as `sh -c PROBE files-trash-probe`: its path
+ *  (macOS's /usr/bin/trash; gio or trash-cli's trash-put elsewhere), or
+ *  nothing (deletes are permanent there). */
+export const PROBE = `if [ "$(uname)" = Darwin ]; then [ -x /usr/bin/trash ] && echo /usr/bin/trash; exit 0; fi
+command -v gio >/dev/null 2>&1 && gio trash --help >/dev/null 2>&1 && { command -v gio; exit 0; }
+command -v trash-put 2>/dev/null; exit 0`;
+
+/** Every operation, as `sh -c OPS files-op <op> <paths…>` (paths absolute,
+ *  each its own argument; -- before them, except macOS's trash, which
+ *  takes no options marker and trashes a file named "--" instead).
+ *  Exit 3: the target exists; 4: the source is gone; 5: the trash left it.
+ *  Nothing is overwritten: new files with noclobber, moves with mv -n and a
+ *  check that the source went. */
+export const OPS = `op=$1; shift
+gone() { [ ! -e "$1" ] && [ ! -L "$1" ]; }
+up() { mkdir -p -- "$(dirname -- "$1")"; }
+case $op in
+file) gone "$1" || exit 3; up "$1" && (set -C; : > "$1") ;;
+folder) gone "$1" || exit 3; up "$1" && mkdir -- "$1" ;;
+move) gone "$1" && exit 4
+  if [ "$1" -ef "$2" ]; then mv -- "$1" "$2"; exit; fi
+  gone "$2" || exit 3
+  up "$2" && mv -n -- "$1" "$2" || exit
+  gone "$1" || exit 3 ;;
+delete) gone "$2" && exit 4
+  case \${1##*/} in
+  trash) "$1" "$2" || exit ;;
+  gio) "$1" trash -- "$2" || exit ;;
+  trash-put) "$1" -- "$2" || exit ;;
+  *) rm -r -- "$2" </dev/null || exit ;;
+  esac
+  gone "$2" || exit 5 ;;
+*) echo "unknown operation $op" >&2; exit 2 ;;
+esac`;
 
 /** `text` cut into [piece, matched] runs by `ranges`, for drawing the matched characters apart. */
 export function marks(text, ranges) {
@@ -162,7 +308,8 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
  *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
-  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
+  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
+  ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
   ["r", "refresh"], ["esc", "clear the filter · leave"], ["q", "close"], ["?", "keys"]];
 /** The ? chip's width on the filter line (px). */
