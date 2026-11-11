@@ -77,7 +77,8 @@ const nativeHerdr = {
   },
   nextNativeViewEvent: () => new Promise(() => {}),
 };
-const logic = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
+const keyLogic = await load("nocturne-preview/keys.js");
+const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
 const { kindOf, sniffKind, route, rasterArgv, pageCount, duration, siblings, tag, noun, previewable } = kinds;
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
 
@@ -188,4 +189,25 @@ test("Linux: fonts and media say why not and offer the system's app", async () =
   commands.length = 0;
   view.key({ key: "o", modifiers: {} }, { notify() {}, stop_propagation() {} });
   expect(commands).toEqual([["preview.open", { path: "/v/demo.mp4", in: "system" }]]);
+});
+
+test("a clip by keys: seek, back to the start, sound; Esc in the player gives the keys back", async () => {
+  const clip = await nativeView({ path: "/v/demo.mov", kind: "video", how: { how: "native", view: "media" }, local: "/v/demo.mov", info: { bytes: 1 }, media: { duration: 187 } });
+  const cx = { notify() {}, stop_propagation() {} };
+  calls.length = 0;
+  clip.key({ key: "right", modifiers: {} }, cx);
+  clip.key({ key: "left", modifiers: { shift: true } }, cx);
+  clip.key({ key: "0", key_char: "0", modifiers: {} }, cx);
+  clip.key({ key: "m", key_char: "m", modifiers: {} }, cx);
+  clip.key({ key: "k", key_char: "k", modifiers: {} }, cx);
+  expect(calls.filter(([, a]) => a !== "state").map(([, a, args]) => [a, args])).toEqual([
+    ["media.seek", { time: 5 }], ["media.seek", { time: 0 }], ["media.seek", { time: 0 }], ["media.setMuted", { muted: true }], ["media.play", {}],
+  ]);
+  let focused = 0;
+  clip.handle = { focus() { focused++; }, is_focused: () => false };
+  clip.nativeEvent({ id: "preview-media", event: "view.escapeKey", data: {} }, {});
+  expect(focused).toBe(1);
+  // Another view's escape isn't this preview's.
+  clip.nativeEvent({ id: "web", event: "view.escapeKey", data: {} }, {});
+  expect(focused).toBe(1);
 });
