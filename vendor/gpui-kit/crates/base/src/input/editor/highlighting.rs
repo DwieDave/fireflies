@@ -141,6 +141,13 @@ impl InputEditorStyle {
 
         let foreground = or(self.foreground, colors.foreground);
         let mut selection = self.selection;
+        // HERDR: the palette's own selection colour first (it is painted under
+        // the glyphs); its accent, see-through, only when it has none. The
+        // accent alone made Herdr's inputs select invisibly (its accent is a
+        // theme's hover tone, nearly the background).
+        if unset(selection) {
+            selection = colors.selection;
+        }
         if unset(selection) {
             selection = colors.accent;
             // A selection must not hide the glyphs it selects.
@@ -219,8 +226,34 @@ mod tests {
 
     #[test]
     fn a_selection_stays_translucent_enough_to_read_through() {
-        let resolved = InputEditorStyle::default().resolved(&dark());
+        // A palette without a selection colour: the accent, see-through.
+        let mut tokens = dark();
+        tokens.colors.selection = hsla(0., 0., 0., 0.);
+        let resolved = InputEditorStyle::default().resolved(&tokens);
         assert_eq!(resolved.selection.a, 0.4);
+        assert_eq!(resolved.selection.h, tokens.colors.accent.h);
+    }
+
+    /// HERDR: the palette's own selection colour is the selection, not its
+    /// accent. Herdr maps a theme's hover onto `accent` and its selection onto
+    /// `selection`; with moonfly the accent (#1c1c1c) at 40% over #080808 made
+    /// every plain input's selection invisible ("selecting doesn't work").
+    #[test]
+    fn the_palettes_selection_colour_is_the_selection() {
+        let mut tokens = dark();
+        tokens.colors.background = rgb_hsla(0x080808);
+        tokens.colors.accent = rgb_hsla(0x1c1c1c);
+        tokens.colors.selection = rgb_hsla(0x323437);
+        let resolved = InputEditorStyle::default().resolved(&tokens);
+        assert_eq!(resolved.selection, tokens.colors.selection);
+        // And a projected selection still wins.
+        let chosen = hsla(0.6, 0.6, 0.6, 0.4);
+        let style = InputEditorStyle { selection: chosen, ..Default::default() };
+        assert_eq!(style.resolved(&tokens).selection, chosen);
+    }
+
+    fn rgb_hsla(hex: u32) -> gpui::Hsla {
+        gpui::Hsla::from(gpui::rgb(hex))
     }
 
     #[test]

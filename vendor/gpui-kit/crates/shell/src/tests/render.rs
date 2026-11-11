@@ -268,6 +268,60 @@ fn mount_text_view_link(
     (view, context)
 }
 
+/// HERDR: Nocturne's web pane address field, as the mod draws it: a root that
+/// tracks its own focus handle, a wrapper that stops the press, the Input
+/// inside, and editing that ends when the field blurs. A press, drag and
+/// release must select (cmd-c copies the part), a double click a word, and
+/// the field must not blur meanwhile (the blur writes "blurred").
+#[gpui::test]
+fn an_address_field_in_a_focus_tracking_root_keeps_its_drag_selection(cx: &mut TestAppContext) {
+    use gpui::{ClipboardItem, Modifiers, MouseButton};
+
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { h_flex, v_flex, InputState, Input } from "gpui-base";
+export default class Bar extends View {
+  init(_p, cx) {
+    this.handle = cx.focus_handle();
+    this.input = InputState.new({ value: "https://example.com/some/path" });
+    this.editing = true;
+    this.input.on("blur", (_e, cx) => { this.editing = false; cx.write_to_clipboard("blurred"); cx.notify(); });
+    this.input.focus();
+  }
+  render() {
+    return v_flex().id("browser").size_full().track_focus(this.handle)
+      .on_mouse_down("left", () => {})
+      .child(h_flex().id("bar").h(32).w(400).px(6).items_center()
+        .child(this.editing
+          ? div().id("address-edit").flex_1().h(22).px(6).flex().items_center()
+            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+            .child(Input.new(this.input).w_full().text_size(11))
+          : div().id("address").flex_1().h(22).child("not editing")));
+  }
+}
+"#;
+    let (_view, mut context) = mount_text_view_link(cx, source);
+    context.write_to_clipboard(ClipboardItem::new_string("start".into()));
+    let none = Modifiers::default();
+    let (from, to) = (point(px(60.), px(16.)), point(px(150.), px(16.)));
+    context.simulate_mouse_down(from, MouseButton::Left, none);
+    context.simulate_mouse_move(to, MouseButton::Left, none);
+    context.simulate_mouse_up(to, MouseButton::Left, none);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let after_drag = context.read_from_clipboard().and_then(|c| c.text());
+    assert_eq!(after_drag.as_deref(), Some("start"), "the field blurred during the drag");
+    context.simulate_keystrokes("cmd-c");
+    let copied = context.read_from_clipboard().and_then(|c| c.text()).unwrap_or_default();
+    assert!(
+        !copied.is_empty() && copied != "start" && copied != "https://example.com/some/path" && "https://example.com/some/path".contains(&copied),
+        "a drag selects part of the address, copied {copied:?}"
+    );
+    // shift-right extends what the drag selected by one.
+    context.simulate_keystrokes("shift-right cmd-c");
+    let extended = context.read_from_clipboard().and_then(|c| c.text()).unwrap_or_default();
+    assert_eq!(extended.len(), copied.len() + 1, "shift-right extends: {copied:?} -> {extended:?}");
+}
+
 #[gpui::test]
 fn text_view_default_links_follow_shell_url_rules(cx: &mut TestAppContext) {
     use gpui::MouseButton;
