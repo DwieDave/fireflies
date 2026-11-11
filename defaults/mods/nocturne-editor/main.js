@@ -426,8 +426,11 @@ export default class EditorPane extends View {
   /** The card for a place: its problems now, the server's hover when it answers. */
   showCard(line, col, at, cx, level = 0) {
     const here = diagnosticsAt(this.problems, line, col);
-    const card = { line, col, at, problems: here, parts: [], level, more: false, keyboard: !at, waiting: this.server?.id != null };
-    this.card = here.length || card.waiting ? card : null;
+    const card = { line, col, at, problems: here, parts: [], level, more: false, keyboard: !at, waiting: this.server?.id != null, note: null };
+    // Asked for (cmd-i, `at` null) with no server to ask: say why, and what to
+    // do (logic.js serverNote). The pointer's passive hover stays quiet.
+    if (!card.waiting && card.keyboard) card.note = this.serverNote();
+    this.card = here.length || card.waiting || card.note ? card : null;
     cx.notify();
     if (!card.waiting) return;
     const verbosity = this.lang === "typescript" || this.lang === "tsx" || this.lang === "javascript" ? { verbosityLevel: level } : {};
@@ -436,9 +439,23 @@ export default class EditorPane extends View {
       card.waiting = false;
       card.parts = hoverParts(h?.contents);
       card.more = !!h?.canIncreaseVerbosityLevel;
-      if (!card.parts.length && !card.problems.length) this.card = null;
+      // Nothing here: asked for, the card says so; passing over, it goes.
+      if (!card.parts.length && !card.problems.length) {
+        if (card.keyboard) card.note = this.serverNote(true); else this.card = null;
+      }
       cx.notify();
-    }, () => { if (this.card === card) { card.waiting = false; if (!card.problems.length) this.card = null; cx.notify(); } });
+    }, (e) => {
+      if (this.card !== card) return;
+      card.waiting = false;
+      if (card.keyboard && !card.problems.length) card.note = { text: `${this.server?.name ?? "The language server"} didn't answer${e?.message ? `: ${e.message}` : "."}`, fix: null };
+      else if (!card.problems.length) this.card = null;
+      cx.notify();
+    });
+  }
+
+  /** Why the hover has nothing (logic.js serverNote), the paths as ~. */
+  serverNote(empty = false) {
+    return serverNote(this.server, this.lang, { empty, tilde: (p) => tilde(p, home()) });
   }
 
   /** TypeScript's expandable hover: one level more (1) or less (-1). */
@@ -1138,6 +1155,10 @@ export default class EditorPane extends View {
           .child(div().text_color(sevColor[d.severity]).child(d.severity))
           .child(div().child([d.code, d.source].filter(Boolean).join(" · "))))))
       .when(c.waiting, (el) => el.child(div().px(12).py(8).text_color(t.dim).child("asking the language server…")))
+      // No answer to give: what's the case, and what to do about it.
+      .when(Boolean(c.note), (el) => el.child(v_flex().id("card-note").px(12).py(8).gap(4)
+        .child(div().text_color(t.foreground).child(c.note.text))
+        .when(Boolean(c.note.fix), (e2) => e2.child(div().text_color(t.dim).child(c.note.fix)))))
       .child(div().id("card-parts").max_h(Math.max(120, Math.min(360, this.size.height - top - HINTS - 120))).overflow_y_scrollbar().child(v_flex().children(parts)))
       .when(c.parts.length > 0, (el) => el.child(h_flex().h(24).flex_none().px(12).gap(12).items_center().border_t(1).border_color(t.ansi0).text_size(10).text_color(t.dim)
         .child(div().child(this.server?.name ?? ""))
