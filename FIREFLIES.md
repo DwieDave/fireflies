@@ -57,3 +57,15 @@ merges stay small.
 `scripts/install-fork-macos` builds and installs it (Rust 1.95, Zig 0.16).
 With Nix, build it from source with crane, as `modules/herdr-app.nix` in
 [dwiedave/config](https://github.com/dwiedave/config) does.
+
+## Development shell
+
+`flake.nix` is a shell with the language servers for this repository:
+rust-analyzer (with cargo, rustc and the standard library's sources), the
+TypeScript language server for the mods and scripts, nixd and taplo. It holds
+language tooling only; the build's toolchain stays as it is. nix-darwin takes
+this repository with `flake = false`, so the file doesn't change that build.
+`.envrc` loads it with direnv: run `direnv allow` once in the checkout. Then
+terminals with direnv's hook, and Fireflies' editor (it looks a language
+server up through the workspace's `.envrc`), get the servers:
+`nix develop -c rust-analyzer --version` shows they're there.
