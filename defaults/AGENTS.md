@@ -96,7 +96,9 @@ GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
-"fork of owner/name" (or `p`) switches to the parent and back.
+"fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
+`L` lists the links in the shown pull request or open card (j/k, enter opens
+one); `tab` / `shift-tab` walk the panels; `?` lists every key.
 Its third tab, Projects (`3`, or `nocturne-github.projects` in keys.json), is
 a GitHub Projects board: the projects linked to the repo (and its parent, for
 a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
@@ -223,7 +225,9 @@ the highlighted line shows where it will land.
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
   executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
-  leaves the filter, esc closes). A flake gets `nix flake check` / `update`
+  leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
+  shift-tab the next group; on a run `w` watches, `x` stops, `R` runs it again;
+  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
@@ -1093,8 +1097,10 @@ The main ones:
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
-  `.close`; Nocturne's palette lists them while the player window is open.
-- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
+  `.close`; Nocturne's palette lists them while the player window is open. With the
+  keyboard (`overlay.focus`, or a press on its bar; its border lights up): space / k,
+  j / l (← →), m, b, p, z, o, x / q, and esc gives the keyboard back to the pane.
+- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `overlay.focus {dir?, id?}` (`overlay.focus:prev` in keys.json) and `overlay.move {id?, dx?, dy?, dw?, dh?}` (a window by keyboard, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `editor`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`,
@@ -1521,7 +1527,13 @@ All of it is in `herdr.d.ts`. In short:
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
   border) is taken off; a keyed one remembers its size (refit to its aspect when it opens).
   `overlay.resizable {id, resizable}` changes that while it is open; a new aspect refits its
-  height at its width now (a player learning its video's real shape). A video player:
+  height at its width now (a player learning its video's real shape).
+  By keyboard: `overlay.focus` gives the next window the keyboard and brings it to the
+  front (`dir: "prev"` the one before, in the order they opened; past the last, or
+  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). A mod gets
+  `focus` from `nextCommand()`: take the keyboard then (`handle.focus()`), and show it.
+  `overlay.move {dx, dy}` moves the window holding the keyboard (else the top one) and
+  `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag. A video player:
   `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
   A window can hold a layout, terminals too: a terminal keeps its presses
   (selecting text), so give it a mod block to drag by, a title bar:

@@ -31,7 +31,7 @@ export default class AskDialog {
     });
     this.handle = cx.focus_handle();
     this.handle.focus();
-    followCommands(cx, nextCommand, (e, cx) => this.key(e, cx));
+    followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
   }
 

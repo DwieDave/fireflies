@@ -6,7 +6,8 @@
 //
 //   1 2 3 [ ]   Pull requests / Actions / Projects
 //   r           read everything again now
-//   p           a fork: its parent repo, and back (the header's "fork of …"; on Projects, p picks the project)
+//   p F         a fork: its parent repo, and back (the header's "fork of …"; on Projects only F: p picks the project)
+//   L           the links in the shown PR or card, as a list (j/k, enter opens one)
 //   drag        the gaps between panels resize them (kept per tab)
 //
 // keys.json can bind nocturne-github.prs / .actions / .projects / .refresh / .diff / .fork (to a shown window).
@@ -40,7 +41,7 @@ import { readAgo } from "./model.js";
 import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
-import { dither, chip, hints, empty, stop, pip, ART, unzoom, unzoomSize } from "./kit.js";
+import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize } from "./kit.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -80,6 +81,7 @@ export default class GitHub extends View {
     this.confirm = null; // { text, go }
     this.note = null; // { text, tone, at }
     this.help = false;
+    this.picker = null; // { title, rows: [{ label, sub, go(cx) }], at }: L's list of links
     this.size = { width: 1000, height: 700 };
     this.resizing = null; // { key, axis, at, from, set, min, max, sign } while a splitter is dragged
     this.next = 0; // when to read GitHub again
@@ -390,6 +392,10 @@ export default class GitHub extends View {
       return;
     }
     if ((m.platform || m.alt) && k !== "enter") return;
+    if (this.picker) {
+      if (this.pickerKey(k, cx) !== false) { cx.stop_propagation(); cx.notify(); }
+      return;
+    }
     if (this.help) {
       if (k === "escape" || k === "?" || k === "q") this.help = false;
       cx.stop_propagation(); cx.notify(); return;
@@ -398,13 +404,34 @@ export default class GitHub extends View {
     if (k === "1" || k === "2" || k === "3") this.setTab(ids[Number(k) - 1], cx);
     else if (k === "[" || k === "]") this.setTab(ids[(ids.indexOf(this.tab) + (k === "]" ? 1 : ids.length - 1)) % ids.length], cx);
     else if (k === "?") this.help = true;
-    else if (k === "p" && this.tab !== "projects" && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
+    else if (((k === "p" && this.tab !== "projects") || k === "F") && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
+    else if (k === "L" && this.state === "ready" && this.shown().links) this.pickLink();
     else if (k === "r" && !m.control) this.refresh(cx, true);
     else if (this.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
     else if (k === "escape" || k === "q") this.closeWindow();
     else return;
     cx.stop_propagation();
     cx.notify();
+  }
+
+  /** L: the shown PR's (or card's) links as a list: j/k, enter opens one, esc closes. */
+  pickLink() {
+    const links = this.shown().links();
+    if (!links.length) { this.note = { text: "No links in what's shown.", tone: "working", at: Date.now() }; return; }
+    this.picker = { title: "LINKS", at: 0, rows: links.map((l) => ({ label: l.label, sub: l.label === l.url ? "" : l.url, go: (cx) => this.openUrl(l.url, cx) })) };
+  }
+
+  /** Keys while the picker is open: it keeps them all. */
+  pickerKey(k, cx) {
+    const p = this.picker, n = p.rows.length;
+    if (k === "escape" || k === "q") this.picker = null;
+    else if (k === "j" || k === "down" || (k === "tab")) p.at = Math.min(n - 1, p.at + 1);
+    else if (k === "k" || k === "up") p.at = Math.max(0, p.at - 1);
+    else if (k === "g" || k === "home") p.at = 0;
+    else if (k === "G" || k === "end") p.at = n - 1;
+    else if (k === "enter" || k === "o") { const r = p.rows[p.at]; this.picker = null; r?.go(cx); }
+    else if (/^[1-9]$/.test(k) && Number(k) <= n) { const r = p.rows[Number(k) - 1]; this.picker = null; r.go(cx); }
+    return true;
   }
 
   // ---- drawing
@@ -452,7 +479,7 @@ export default class GitHub extends View {
   }
 
   helpPanel(t) {
-    const fork = this.tab === "projects" ? "(header chip)" : "p";
+    const fork = this.tab === "projects" ? "F" : "p F";
     const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],
       ...(this.repo?.parent ? [[fork, `the parent, ${this.repo.parent}`]] : this.repo?.child ? [[fork, `back to the fork, ${this.repo.child}`]] : []),
       ["?", "these keys"], ["esc q", "close (from the top)"]];
@@ -467,6 +494,25 @@ export default class GitHub extends View {
       .child(h_flex().gap(40).items_start()
         .child(col({ prs: "PULL REQUESTS", actions: "ACTIONS", projects: "PROJECTS" }[this.tab], tab))
         .child(col("WINDOW", all)));
+  }
+
+  pickerPanel(t) {
+    const p = this.picker;
+    const rows = p.rows.map((r, i) => h_flex().id(`pick-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
+      .hover((s) => s.bg(t.ansi0 + "55"))
+      .when(i === p.at, (el) => el.children(band(t, true)))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { this.picker = null; r.go(cx); cx.notify(); })
+      .child(div().relative().w(14).flex_none().text_color(i === p.at ? t.accent : t.dim).child(i < 9 ? String(i + 1) : ""))
+      .child(v_flex().relative().flex_1().min_w(0)
+        .child(div().truncate().text_color(i === p.at ? t.foreground : t.muted).child(r.label))
+        .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub)))));
+    return div().id("gh-picker").absolute().inset_0().bg(t.background + "cc").flex().items_center().justify_center().text_size(12)
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.picker = null; cx.notify(); })
+      .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
+        .on_mouse_down("left", stop)
+        .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).child(p.title))
+        .children(rows));
   }
 
   confirmBar(t) {
@@ -511,8 +557,9 @@ export default class GitHub extends View {
       .child(div().id("gh-body").relative().flex_1().min_h(0).p(8)
         .on_mouse_down("left", (_e, cx) => { this.handle.focus(); cx.stop_propagation(); })
         .child(body)
-        .when(this.help, (el) => el.child(this.helpPanel(t))))
+        .when(this.help, (el) => el.child(this.helpPanel(t)))
+        .when(Boolean(this.picker), (el) => el.child(this.pickerPanel(t))))
       .when(Boolean(this.confirm), (el) => el.child(this.confirmBar(t)))
-      .child(hints(t, this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
+      .child(hints(t, this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
   }
 }
