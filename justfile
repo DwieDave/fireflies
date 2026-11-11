@@ -64,6 +64,8 @@ test:
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
     bun test scripts/hint-bars.test.ts
+    # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
+    bun test scripts/nocturne-tab-drag.test.ts
     cargo test --locked
 
 docs-generate: build

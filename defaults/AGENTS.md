@@ -894,6 +894,14 @@ rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
+Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
+lifts where it is and a blue stake stands in the gap it will drop into: the
+half of the tab under the pointer picks before or after it, the strip past the
+last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
+drops nothing. Two blue corner ticks mark what's shown: the shown space on the
+folded rail, the focused agent in the sky (around its name, over its moonlit
+path) and on the rail.
+
 ### Layouts and mods other people made
 
 People share layouts at herdr.dev/layouts and mods at herdr.dev/mods. Each
