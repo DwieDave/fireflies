@@ -1,6 +1,6 @@
 # Fireflies: orchestrating agents
 
-Fireflies is David's fork of the Herdr desktop app (origin `DwieDave/fireflies`,
+Fireflies is Developer's fork of the Herdr desktop app (origin `DwieDave/fireflies`,
 upstream `herdrdev/herdr-app`). AGENTS.md holds the project's rules; this file
 is how *you*, the **orchestrator**, develop it: agents do the work in their own
 worktrees, you brief, review, merge, and ship.
@@ -18,7 +18,7 @@ worktrees, you brief, review, merge, and ship.
    [.claude/agent-brief.md](.claude/agent-brief.md) (the rules block every
    brief carries) and put the task above it: area, exact scope, what's already
    ruled out, files to read, parallel agents and which files they own.
-3. **Launch** it as a tab in David's fireflies space, then label it:
+3. **Launch** it as a tab in Developer's fireflies space, then label it:
    ```sh
    T=$(herdr-app do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude","--model","claude-opus-5-5","--effort","high",$b],folder:"'$W'"}')" | jq -r .terminal)
    ~/.local/bin/hc label $T nocturne.name=<name>
@@ -26,16 +26,16 @@ worktrees, you brief, review, merge, and ship.
    Agents run on Opus 5.5 at high effort (the `--model` and `--effort` above).
    `hc` is at `~/.local/bin/hc` (not on the Bash tool's PATH). Without
    `space`, the tab lands in whatever space is focused. Then start its
-   watcher (Notify David).
+   watcher (Notify Developer).
 4. **Follow-ups** go to a live agent with `hc send <t> "<task>"`; check it's
    alive first (`hc get <t>`). A finished agent's worktree can host a new one.
 
 Design work: the brief asks for **2 concepts** (images/HTML via /impeccable,
 look locked to the nocturne style) sent back first; the agent builds its pick
-unless David answers within ~10 minutes. Relay both concepts to David with
+unless Developer answers within ~10 minutes. Relay both concepts to Developer with
 your read on them.
 
-## Notify David
+## Notify Developer
 
 Push to his phone with the `pushover` skill on two events:
 
@@ -44,7 +44,7 @@ Push to his phone with the `pushover` skill on two events:
   delivered in a line, and what happens next (merge and build running, or the
   decision he owes).
 - **An agent is blocked**: its status is `blocked` (a permission prompt or a
-  question on its screen), or its report asks something only David can
+  question on its screen), or its report asks something only Developer can
   answer. Read its screen first (`hc read --lines 0 <t>`); the push names the
   agent and quotes what it asks.
 
@@ -64,8 +64,8 @@ It ends when the agent leaves `working` and prints why: `blocked` (push);
 ## Review and merge
 
 Reports arrive as `<hc from="tNN">`. An agent that reports success is merged
-right away: David's go-ahead for the merge loop is standing. First **look**:
-open the agent's screenshots and check them against what David asked; send
+right away: Developer's go-ahead for the merge loop is standing. First **look**:
+open the agent's screenshots and check them against what Developer asked; send
 back anything off (clipped text, leftover F-keys, wrong state) instead of
 merging.
 
@@ -85,7 +85,7 @@ The merge loop, in `/Volumes/data/coding/fireflies-wt/integrate` (branch
 4. Ship: in the main checkout `git merge --ff-only integrate && git push origin main`;
    in `/private/etc/nix-darwin`: `nix flake update herdr-app` and
    `nix build --no-link --print-out-paths .#darwinConfigurations.$(scutil --get LocalHostName).system`.
-5. Tell David: what changed in his words, what was verified and what wasn't,
+5. Tell Developer: what changed in his words, what was verified and what wasn't,
    then `! sudo darwin-rebuild switch --flake /private/etc/nix-darwin` and
    restart Fireflies. He commits the nix-darwin changes himself.
 
@@ -102,26 +102,28 @@ Batch several merges before one nix build when agents finish close together.
   argument objects belong in a user's own keys.json. New mod commands bound in
   shipped keys go in the whitelist in `src/mods/render_tests.rs`
   (`shipped_layouts_and_keys`).
-- No function keys: David's keyboard makes them awkward.
+- No function keys: Developer's keyboard makes them awkward.
 
 ## Upstream and core
 
 - Rebase onto upstream in a dedicated agent's worktree; keep our core
   changes unless an upstream change fully replaces one. Main gets rewritten
-  only with David's yes: tag the old head, `--force-with-lease`.
+  only with Developer's yes: tag the old head, `--force-with-lease`.
 - Every change to `src/`, `vendor/` or `native/` is flagged for Can's review
   with the three AGENTS.md questions; collect them in your reports.
 - Fork decisions stay: no telemetry; feedback opens a GitHub issue on DwieDave/fireflies.
 
 ## Housekeeping
 
+- **Naming**: everything committed (code, comments, tests, docs, commit
+  messages) and every brief calls the person `Developer`.
 - **Cleanup**: a worktree goes when its branch is on main (or, after a
   rebase, on the tagged old main) and no live agent sits in it
   (`hc ls | jq '.terminals[] | select(.state=="live") | .cwd'`). Look at
   untracked files before `git worktree remove --force`.
-- David's screen recordings arrive as scrawl captures: the agent opens
+- Developer's screen recordings arrive as scrawl captures: the agent opens
   `contact-sheet.png` and `frames/` before changing anything; pass the
   capture path on unchanged.
 - `ls` is aliased to eza and can hang in big git trees; use `/bin/ls`.
-- Never touch David's running app or core; demo or inspect his session only
+- Never touch Developer's running app or core; demo or inspect his session only
   through `herdr-app do` / `hc` commands he asked for.

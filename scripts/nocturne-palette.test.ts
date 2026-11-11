@@ -131,7 +131,7 @@ test("the file picker and grep are entries with their keys", () => {
   expect(keyOf(editorKeys, keys, true)).toBe("⌘K ?");
 });
 
-test("typing what David typed finds the picker and grep near the top", () => {
+test("typing what Developer typed finds the picker and grep near the top", () => {
   reset();
   state.commands = CORE;
   const top = (q: string) => open(q).rows().slice(0, 3).map((r: any) => r.e.name);

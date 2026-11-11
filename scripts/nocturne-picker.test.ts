@@ -60,7 +60,7 @@ test("a grep line's colored runs split where its matches start and end", () => {
 });
 
 test("the preview takes the larger share of a wide picker, and drops out of a narrow one", () => {
-  // David's window: about 2000 wide at 0.9, the picker 90% of it.
+  // Developer's window: about 2000 wide at 0.9, the picker 90% of it.
   const w = 1980;
   expect(previewWidth(w)).toBeGreaterThan(w * 0.55);
   expect(w - previewWidth(w)).toBeGreaterThanOrEqual(LIST_MIN);

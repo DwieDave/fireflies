@@ -256,7 +256,7 @@ export function age(unix, now = Date.now() / 1000) {
   return `${Math.floor(s / (86400 * 365))}y`;
 }
 
-/** Initials for the author column: "David Stahl-Gruber" -> "DS". */
+/** Initials for the author column: "Developer Stahl-Gruber" -> "DS". */
 export function initials(name) {
   const words = String(name ?? "").split(/[\s._]+/).filter(Boolean);
   if (!words.length) return "?";
