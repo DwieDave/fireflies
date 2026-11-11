@@ -335,7 +335,16 @@ export class Form {
         .child(div().flex_1())
         .when(Boolean(this.spec.footer), (el) => el.child(this.spec.footer(t))));
     return div().id("form-view").relative().size_full().overflow_hidden()
-      .on_size_change((s, cx) => { const h = unzoom(s.height); if (Math.abs(h - this.viewH) > 1) { this.viewH = h; cx.notify(); } })
+      .on_size_change((s, cx) => {
+        const h = unzoom(s.height);
+        if (Math.abs(h - this.viewH) > 1) {
+          this.viewH = h;
+          // Scrolled before the panel's height was known: keep the focused stop in view, scrolling no further than the form needs.
+          this.scrollY = 0;
+          this.reveal();
+          cx.notify();
+        }
+      })
       .on_scroll_wheel((e, cx) => {
         const end = this.place(this.fields.length).y + 80;
         this.scrollY = Math.max(0, Math.min(Math.max(0, end - this.viewH), this.scrollY - unzoom(e.delta?.y ?? 0)));
