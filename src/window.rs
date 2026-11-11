@@ -3410,7 +3410,7 @@ impl AppWindow {
             if !args.is_object() { args = json!({}); }
             args["machine"] = json!(machine);
         }
-        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.folder" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.move" | "pane.equalize" | "pane.park" | "pane.unpark" | "terminal.keep" | "terminal.park") {
+        if matches!(name, "space.new" | "space.close" | "space.rename" | "space.folder" | "space.move" | "tab.new" | "tab.close" | "tab.rename" | "tab.move" | "pane.split" | "pane.close" | "pane.swap" | "pane.move" | "pane.equalize" | "pane.resize" | "pane.park" | "pane.unpark" | "terminal.keep" | "terminal.park") {
             let node = ["id", "space", "pane", "tab"].into_iter().find_map(|k| Self::arg(&args, k));
             let target = node.and_then(|id| self.model.space(id).or_else(|| self.model.space_of(id))).or_else(|| self.model.active_space());
             let machine = if name == "space.new" { Self::arg(&args, "machine") }
@@ -3859,6 +3859,34 @@ impl AppWindow {
                 };
                 let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to equalize") };
                 match self.model.equalize(&pane, scope) {
+                    Ok(changed) => self.answer(Ok(json!({ "ok": true, "changed": changed }))),
+                    Err(e) => return self.fail(e),
+                }
+            }
+            "pane.resize" => {
+                let dir = match a.get("direction") {
+                    Some(v) if !v.is_string() => Err(format!("pane.resize direction must be a string, not {v}")),
+                    v => crate::pane_resize::Direction::parse(v.and_then(Value::as_str)),
+                };
+                let dir = match dir {
+                    Ok(dir) => dir,
+                    Err(e) => return self.fail(e),
+                };
+                let step = match a.get("step").filter(|v| !v.is_null()) {
+                    None => crate::pane_resize::STEP,
+                    Some(v) => match v.as_f64().filter(|s| *s > 0.0 && *s <= 1.0) {
+                        Some(s) => s as f32,
+                        None => return self.fail(format!("pane.resize step is a share of the tab above 0 and up to 1, not {v}")),
+                    },
+                };
+                let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to resize") };
+                // Lengths as last drawn, designed (unzoomed) like the sizes they become.
+                let (bounds, zoom) = (self.bounds.clone(), settings::zoom());
+                let length = |id: &str| bounds.borrow().get(id).map(|b| f32::from(match dir.axis() {
+                    Axis::Row => b.size.width,
+                    Axis::Column => b.size.height,
+                }) / zoom);
+                match self.model.resize_pane(&pane, dir, step, length) {
                     Ok(changed) => self.answer(Ok(json!({ "ok": true, "changed": changed }))),
                     Err(e) => return self.fail(e),
                 }
@@ -5418,34 +5446,13 @@ impl AppWindow {
         let zoom = settings::zoom();
         let (la, lb, start, p) = (la / zoom, lb / zoom, start / zoom, p / zoom);
         let total = la + lb;
-        // Squeezed and zero-size siblings cannot both keep the drag minimum.
-        if total <= 48.0 { return; }
-        let mut new_a = (p - start).clamp(24.0, total - 24.0);
-        if let Some(min) = a.min {
-            new_a = new_a.max(min);
-        }
-        if let Some(max) = a.max {
-            new_a = new_a.min(max);
-        }
-        let new_a = new_a.min(total - 24.0);
-        let (a_id, b_id) = (a.id.clone(), b.id.clone());
-        let (sa, sb) = (a.size, b.size);
+        let Some(new_a) = crate::pane_resize::clamp(a, total, p - start) else { return };
+        let sizes = crate::pane_resize::sizes(a, b, total, new_a);
         let Some(parent) = self.find_node_mut(&container) else { return };
         let Some(children) = parent.children_mut() else { return };
-        let set = |children: &mut Vec<Node>, id: &str, s: Span| {
+        for (id, s) in sizes {
             if let Some(n) = children.iter_mut().find(|n| n.id == id) {
                 n.size = Some(s);
-            }
-        };
-        match (sa, sb) {
-            (Some(Span::Px { .. }), _) => set(children, &a_id, Span::Px { px: new_a.round() }),
-            (_, Some(Span::Px { .. })) => set(children, &b_id, Span::Px { px: (total - new_a).round() }),
-            _ => {
-                let wa = match sa { Some(Span::Weight { weight }) => weight, _ => 1.0 };
-                let wb = match sb { Some(Span::Weight { weight }) => weight, _ => 1.0 };
-                let sum = wa + wb;
-                set(children, &a_id, Span::Weight { weight: sum * new_a / total });
-                set(children, &b_id, Span::Weight { weight: sum * (total - new_a) / total });
             }
         }
     }
@@ -5981,7 +5988,7 @@ fn needs_model_pane(name: &str, args: &Value) -> bool {
     match name {
         // An edge split goes by the tab, not a pane.
         "pane.split" => AppWindow::arg(args, "pane").is_none() && args.get("edge").is_none_or(Value::is_null),
-        "pane.close" | "pane.zoom" | "pane.swap" | "pane.equalize" | "pane.park" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
+        "pane.close" | "pane.zoom" | "pane.swap" | "pane.equalize" | "pane.resize" | "pane.park" | "pane.font_bigger" | "pane.font_smaller" | "pane.font_reset" | "pane.float" | "terminal.show" => {
             AppWindow::arg(args, "pane").is_none()
         }
         "pane.go" => true,
