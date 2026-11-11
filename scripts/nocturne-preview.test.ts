@@ -88,7 +88,7 @@ test("pictures are told apart by extension, any case", () => {
   expect(extension("/a.b/c")).toBe("");
 });
 
-test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click / e the other way", async () => {
+test("nocturne-files: Markdown to its viewer, pictures to the preview (a double click), alt-double-click / e the other way", async () => {
   const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
@@ -104,7 +104,9 @@ test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click
   const cx = { notify() {}, stop_propagation() {} };
   commands.length = 0;
   view.pick("shots/Screen Shot.png", cx);
+  view.pick("shots/Screen Shot.png", cx);
   view.alt = true;
+  view.pick("shots/Screen Shot.png", cx);
   view.pick("shots/Screen Shot.png", cx);
   view.alt = false;
   view.sel = "shots/Screen Shot.png";
@@ -117,6 +119,7 @@ test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click
     ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
   ]);
   expect(edits).toEqual([]);
+  view.pick("main.rs", cx);
   view.pick("main.rs", cx);
   expect(edits).toEqual(["main.rs"]);
 });
@@ -302,7 +305,7 @@ test("the wrapper SVG turns a picture (and its EXIF orientation) and draws vecto
 // ---- the view
 
 test("the viewer: a fitted picture, keys zoom, pan, step through the folder and toggle the background", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   const focus = { focus() {}, is_focused: () => true };
   Object.assign(view, {
@@ -360,7 +363,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     path: "/shots/s.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
@@ -398,7 +401,7 @@ test("the bar's fit and 100% do what they say, in either state, and stay put", a
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, { path: "/x/a.heic", kind: "image", how: { how: "image" }, handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -407,7 +410,7 @@ test("the viewer says what's wrong instead of a picture", async () => {
 });
 
 test("the bar by keys: tab rings its controls in order, enter presses one, ? lists the keys, esc backs out", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,

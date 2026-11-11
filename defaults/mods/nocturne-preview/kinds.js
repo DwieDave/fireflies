@@ -18,11 +18,11 @@ export const KINDS = {
 /** The bar's tag for a kind (a table's is its format: CSV, TSV). */
 export function tag(kind, path) {
   if (kind === "table") return extension(path) === "tsv" ? "TSV" : "CSV";
-  return { image: "IMG", pdf: "PDF", sqlite: "DB", diff: extension(path) === "patch" ? "PATCH" : "DIFF", font: "FONT", video: "VIDEO", audio: "AUDIO" }[kind] ?? "FILE";
+  return { image: "IMG", pdf: "PDF", sqlite: "DB", diff: extension(path) === "patch" ? "PATCH" : "DIFF", font: "FONT", video: "VIDEO", audio: "AUDIO", markdown: "MD", text: "TEXT" }[kind] ?? "FILE";
 }
 
 /** What a kind is called in a sentence ("Can't preview this PDF"). */
-export const noun = (kind) => ({ image: "picture", pdf: "PDF", table: "table", sqlite: "database", diff: "patch", font: "font", video: "video", audio: "recording" }[kind] ?? "file");
+export const noun = (kind) => ({ image: "picture", pdf: "PDF", table: "table", sqlite: "database", diff: "patch", font: "font", video: "video", audio: "recording", markdown: "Markdown file" }[kind] ?? "file");
 
 /** The lower-case extension of a path ("" without one). */
 export function extension(path) {
@@ -37,6 +37,12 @@ export function kindOf(path) {
   if (!ext) return null;
   for (const [kind, exts] of Object.entries(KINDS)) if (exts.includes(ext)) return kind;
   return null;
+}
+
+/** What the files pane's preview split makes of a path: the preview's kind,
+ *  else "markdown", else "text" (read as text; a binary one says so). */
+export function lookKind(path) {
+  return kindOf(path) ?? (/\.(md|markdown|mdx)$/i.test(String(path ?? "")) ? "markdown" : "text");
 }
 
 /** Whether the preview opens a path. */
@@ -154,3 +160,96 @@ export function fileSize(bytes) {
 
 /** "1 204 330": thin groups of three, as the bar writes counts. */
 export const count = (n) => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+
+// ---- text in the editor's colors (as nocturne-editor/logic.js and nocturne-picker)
+
+/** The moonfly roles a tree-sitter capture name colors with, from the theme. */
+export function syntaxColors(t) {
+  return {
+    keyword: t.ansi5, "keyword.operator": t.ansi9, conditional: t.ansi5, repeat: t.ansi5, include: t.ansi5,
+    function: t.ansi12, "function.builtin": t.ansi4, "function.macro": t.ansi13, constructor: t.ansi10,
+    type: t.ansi10, "type.builtin": t.ansi10, tag: t.ansi10, attribute: t.ansi13, namespace: t.ansi6, module: t.ansi6,
+    string: t.ansi11, "string.escape": t.ansi9, "string.special": t.ansi3, "string.regex": t.ansi3, character: t.ansi11, escape: t.ansi9,
+    number: t.ansi3, float: t.ansi3, boolean: t.ansi3, constant: t.ansi3, "constant.builtin": t.ansi3,
+    comment: t.ansi8, "comment.documentation": t.ansi8,
+    property: t.ansi6, field: t.ansi6, label: t.ansi3, operator: t.ansi9,
+    "variable.builtin": t.ansi4, "variable.parameter": t.foreground, embedded: t.foreground,
+    "text.title": t.ansi4, "text.literal": t.ansi11, "text.uri": t.ansi6, "text.reference": t.ansi12, "text.emphasis": t.ansi5, "text.strong": t.ansi5,
+    "punctuation.special": t.ansi9,
+  };
+}
+
+/** The color for a capture name: its own, else its root's, else null. */
+export function colorOf(colors, name) {
+  if (colors[name]) return colors[name];
+  const parts = String(name).split(".");
+  for (let i = parts.length - 1; i > 0; i--) {
+    const c = colors[parts.slice(0, i).join(".")];
+    if (c) return c;
+  }
+  return null;
+}
+
+/** Where each line starts in `text` (offsets), one more for the end. */
+export function lineStarts(text) {
+  const out = [0];
+  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) out.push(i + 1);
+  return out;
+}
+
+/** Line `n` (0-based) of `text` as [piece, color|null] runs, from the whole
+ *  text's highlight spans ([start, end, name], ordered): only the spans that
+ *  touch it are looked at. Tabs as two spaces. */
+export function lineRuns(text, starts, spans, n, colors) {
+  const from = starts[n], to = n + 1 < starts.length ? starts[n + 1] - 1 : text.length;
+  const line = text.slice(from, to);
+  // The first span ending after the line's start.
+  let lo = 0, hi = spans.length;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (spans[mid][1] <= from) lo = mid + 1; else hi = mid; }
+  const out = [];
+  let at = 0;
+  for (let i = lo; i < spans.length && spans[i][0] < to; i++) {
+    const s = Math.max(0, spans[i][0] - from), e = Math.min(line.length, spans[i][1] - from);
+    if (e <= at) continue;
+    if (s > at) out.push([line.slice(at, s), null]);
+    out.push([line.slice(Math.max(s, at), e), colorOf(colors, spans[i][2])]);
+    at = e;
+  }
+  if (at < line.length) out.push([line.slice(at), null]);
+  return out.map(([piece, color]) => [piece.replace(/\t/g, "  ").replace(/\r$/, ""), color]);
+}
+
+// ---- soft wrap (the files pane's narrow preview)
+
+/** Where each line's wrapped rows start at `cols` characters a row (tabs
+ *  count two, as lineRuns draws them); the last entry is the row count. */
+export function wrapRows(text, starts, cols) {
+  const at = [0];
+  for (let n = 0; n < starts.length; n++) {
+    const from = starts[n], to = n + 1 < starts.length ? starts[n + 1] - 1 : text.length;
+    let len = to - from;
+    for (let i = from; i < to; i++) if (text.charCodeAt(i) === 9) len++;
+    at.push(at[n] + Math.max(1, Math.ceil(len / cols)));
+  }
+  return at;
+}
+
+/** The line a wrapped row belongs to, and which of its rows it is: [line, k]. */
+export function rowLine(at, row) {
+  let lo = 0, hi = at.length - 2;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (at[mid] <= row) lo = mid; else hi = mid - 1; }
+  return [lo, row - at[lo]];
+}
+
+/** The [piece, color] runs of characters [from, to) of a line's runs. */
+export function sliceRuns(runs, from, to) {
+  const out = [];
+  let at = 0;
+  for (const [piece, color] of runs) {
+    const end = at + piece.length;
+    if (end > from && at < to) out.push([piece.slice(Math.max(0, from - at), Math.min(piece.length, to - at)), color]);
+    at = end;
+    if (at >= to) break;
+  }
+  return out;
+}

@@ -159,7 +159,7 @@ test("path helpers", () => {
   expect(tilde("/homework/y.md", "/home/me")).toBe("/homework/y.md");
 });
 
-test("nocturne-files opens Markdown in the viewer beside the editor; alt-click and e open it as text", async () => {
+test("nocturne-files opens Markdown in the viewer beside the editor on a double click; alt-double-click and e open it as text", async () => {
   const { default: Files, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
@@ -172,13 +172,18 @@ test("nocturne-files opens Markdown in the viewer beside the editor; alt-click a
   const cx = { notify() {}, stop_propagation() {} };
 
   commands.length = 0;
+  // A click selects; the second one, quickly, opens.
+  view.pick("docs/My Plan.md", cx);
+  expect(commands).toEqual([]);
   view.pick("docs/My Plan.md", cx);
   expect(commands).toEqual([["markdown.open", { path: "/repo/docs/My Plan.md", pane: "p1" }]]);
   expect(edits).toEqual([]);
 
   view.alt = true;
   view.pick("docs/My Plan.md", cx);
+  view.pick("docs/My Plan.md", cx);
   view.alt = false;
+  view.pick("main.rs", cx);
   view.pick("main.rs", cx);
   view.sel = "docs/My Plan.md";
   view.key({ key: "e" }, cx);
