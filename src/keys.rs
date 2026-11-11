@@ -276,25 +276,37 @@ pub fn parse(text: &str) -> Result<Vec<KeyBinding>, String> {
     if problems.is_empty() { Ok(out) } else { Err(problems.join("; ")) }
 }
 
-/// The UI kit's own keys (text editing in inputs, lists): bound at its init,
-/// kept across every reload of keys.json.
-struct KitKeys(Vec<KeyBinding>);
-impl gpui::Global for KitKeys {}
+/// What the keymap held before the first install (the UI kit's own keys:
+/// text editing in inputs, lists), and how many bindings each install adds
+/// after them (keys.json's and the reserved ones). Everything bound later (a
+/// mod's `cx.bind_keys`, a kit widget binding its keys when first made)
+/// follows them, so a reload of keys.json can keep it.
+struct Installed {
+    kit: Vec<KeyBinding>,
+    ours: usize,
+}
+impl gpui::Global for Installed {}
 
-/// Restores kit bindings, installs user bindings, then adds reserved bindings.
+/// Installs keys.json's bindings in place of the last ones: the kit's first,
+/// then these and the reserved ones, then every binding made since the last
+/// install (mods' tab bindings live on through a reload).
 pub fn install(bindings: Vec<KeyBinding>, cx: &mut App) {
-    if !cx.has_global::<KitKeys>() {
-        let kit = cx.key_bindings().borrow().bindings().cloned().collect();
-        cx.set_global(KitKeys(kit));
-    }
-    let kit = cx.global::<KitKeys>().0.clone();
-    cx.clear_key_bindings();
-    cx.bind_keys(kit);
-    cx.bind_keys(bindings);
-    cx.bind_keys([
+    let now: Vec<KeyBinding> = cx.key_bindings().borrow().bindings().cloned().collect();
+    let (kit, later) = match cx.try_global::<Installed>() {
+        Some(i) => (i.kit.clone(), now.into_iter().skip(i.kit.len() + i.ours).collect::<Vec<_>>()),
+        None => (now, Vec::new()),
+    };
+    let reserved = [
         KeyBinding::new(ESCAPE_HATCH, ShellAction::new("app.reset"), None),
         KeyBinding::new("escape", ShellAction::new("overlay.close"), Some("Overlay")),
-    ]);
+    ];
+    let ours = bindings.len() + reserved.len();
+    cx.clear_key_bindings();
+    cx.bind_keys(kit.clone());
+    cx.bind_keys(bindings);
+    cx.bind_keys(reserved);
+    cx.bind_keys(later);
+    cx.set_global(Installed { kit, ours });
 }
 
 #[cfg(test)]
@@ -483,6 +495,39 @@ mod tests {
         assert_eq!(runs("cmd-[", &window).as_deref(), Some("agent.prev"));
         assert_eq!(runs("cmd-]", &window).as_deref(), Some("agent.next"));
         assert_eq!(runs("cmd-l", &window), None);
+        // The editor pane likewise (it takes the keyboard on `focus`): cmd-s saves, not Nocturne's fold.
+        let editor = [&window[..], &["Mod mod = nocturne-editor"]].concat();
+        assert_eq!(runs("cmd-s", &editor).as_deref(), Some("nocturne-editor.save"));
+        assert_eq!(runs("cmd-s", &window).as_deref(), Some("nocturne.fold"));
+    }
+
+    /// keys.json edited while the app runs: each reload replaces its bindings,
+    /// while a mod's own (`cx.bind_keys`: the web pane's tab, the picker's, the
+    /// forms') and the kit's stay bound, once each.
+    #[gpui::test]
+    fn a_mods_bindings_survive_a_keys_json_reload(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            // The kit's, bound at its init, before the first install.
+            cx.bind_keys([gpui::KeyBinding::new("up", super::ShellAction::new("kit::up"), Some("Input"))]);
+            super::install(super::parse(r#"{"global":{"cmd-t":"tab.new"}}"#).unwrap(), cx);
+            // A mod binds tab in its own key context (once: it keeps no copy to bind again).
+            cx.bind_keys([gpui::KeyBinding::new("tab", super::ShellAction::new("nocturne_browser::tab"), Some("NocturneBrowser"))]);
+            for edited in [r#"{"global":{"cmd-t":"tab.new","cmd-y":"space.new"}}"#, r#"{"global":{"cmd-y":"tab.new"}}"#] {
+                super::install(super::parse(edited).unwrap(), cx);
+            }
+            let keymap = cx.key_bindings();
+            let keymap = keymap.borrow();
+            let runs = |chord: &str, at: &str| {
+                let (bindings, _) = keymap.bindings_for_input(&[gpui::Keystroke::parse(chord).unwrap()], &[gpui::KeyContext::parse(at).unwrap()]);
+                bindings.iter().map(|b| b.action().as_any().downcast_ref::<super::ShellAction>().unwrap().id().to_owned()).collect::<Vec<_>>()
+            };
+            assert_eq!(runs("tab", "NocturneBrowser"), ["nocturne_browser::tab"], "the mod's tab, once");
+            assert_eq!(runs("up", "Input"), ["kit::up"]);
+            assert_eq!(runs("cmd-y", "Herdr"), ["tab.new"], "the last keys.json's");
+            assert!(runs("cmd-t", "Herdr").is_empty(), "an earlier keys.json's are gone");
+            // kit, keys.json's one, the two reserved, the mod's.
+            assert_eq!(keymap.bindings().count(), 5);
+        });
     }
 
     #[test]

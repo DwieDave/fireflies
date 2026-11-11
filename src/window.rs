@@ -1740,9 +1740,12 @@ impl AppWindow {
         } else if pane_changed {
             // Outside an agent view, the agent shown later follows the focused pane.
             self.agent = None;
-            // A mod pane takes the keyboard on a click; until then the window holds
-            // it, so another tab's terminal can't keep it (and pull its tab back).
-            if no_dialog {
+            // The focused pane takes the keyboard however the focus came (a tab
+            // or space switch, agent.next, a pane closing, the start): a terminal,
+            // or a focusable mod pane (its copy gets `focus`). Any other mod pane
+            // takes it on a click; until then the window holds it, so another
+            // tab's terminal can't keep it (and pull its tab back).
+            if no_dialog && !focused.as_deref().is_some_and(|p| self.hand_mod_pane(p, window, cx)) {
                 focused.and_then(|p| self.pane_focus(&p, cx)).unwrap_or_else(|| self.focus.clone()).focus(window, cx);
             }
         } else if revealed {
@@ -1872,15 +1875,34 @@ impl AppWindow {
 
     /// Gives the focused pane the keyboard, unless something other than the
     /// window holds it: a dialog, a mod block, an input.
-    fn refocus_pane(&self, window: &mut Window, cx: &mut App) {
+    fn refocus_pane(&mut self, window: &mut Window, cx: &mut App) {
         let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
         let window_holds_keys = window.focused(cx).is_none() || self.focus.is_focused(window);
         if dialog || self.focused_block.is_some() || !window_holds_keys {
             return;
         }
+        if let Some(p) = self.focused_pane.clone()
+            && self.hand_mod_pane(&p, window, cx)
+        {
+            return;
+        }
         if let Some(f) = self.focused_pane.as_ref().and_then(|p| self.pane_focus(p, cx)) {
             f.focus(window, cx);
         }
+    }
+
+    /// A shown pane whose mod is focusable takes the keyboard, as `pane.go`
+    /// gives it: the window holds GPUI's until its copy focuses itself on
+    /// `focus`, and it stays the block with the keyboard (`focus` again after a
+    /// popup over it). False for any other pane.
+    fn hand_mod_pane(&mut self, pane: &str, window: &mut Window, cx: &mut App) -> bool {
+        if self.model.tab_of(pane).is_none() || !self.focusable(pane) || !self.mod_block_shown(pane) {
+            return false;
+        }
+        self.focused_block = Some(pane.to_owned());
+        self.focus.focus(window, cx);
+        self.hand_keyboard();
+        true
     }
 
     fn pane_focus(&self, pane: &str, cx: &App) -> Option<FocusHandle> {
@@ -7238,6 +7260,79 @@ mod tests {
         cx.run_until_parked();
         assert_eq!(focus_count(), 2);
         assert_eq!(state(cx), (Some("pp".into()), None), "nor is the web pane the block with the keyboard any more");
+    }
+
+    #[test]
+    fn a_focusable_mod_pane_takes_the_keyboard_however_the_focus_comes() {
+        in_own_process("mod_pane_takes_keyboard");
+    }
+
+    /// A focusable mod pane focused without a click or `pane.go` (a tab
+    /// switch, a pane closing, the start) takes the keyboard as a terminal does:
+    /// its copy gets `focus` and it is the block with the keyboard, so its own
+    /// keys.json section applies. Not while a dialog holds the keys; a terminal
+    /// pane focused next takes it back.
+    #[gpui::test]
+    fn mod_pane_takes_keyboard(cx: &mut gpui::TestAppContext) {
+        use crate::layout::{Axis, Content, Node};
+        use serde_json::json;
+        if !running_alone("mod_pane_takes_keyboard") {
+            return;
+        }
+        let web = crate::mods::app_dir().join("mods/web");
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(web.join("mod.json"), r#"{ "place": "none", "focusable": true }"#).unwrap();
+        std::fs::write(web.join("main.js"), "import { View, div } from \"gpui-kit\"; import { nextCommand, props, shared, setShared } from \"herdr\";
+            export default class W extends View {
+              init(_p, cx) { const k = `focus.${props().n}`; cx.spawn(async () => { for (;;) { const c = await nextCommand(); if (c === \"focus\") setShared(k, (shared(k) ?? 0) + 1); } }); }
+              render() { return div(); } }").unwrap();
+        let (view, cx) = open_window(cx, "plain", "import { View, div } from \"gpui-kit\"; export default class P extends View { render() { return div(); } }", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        let count = |n: u64| crate::mods::shared(&format!("focus.{n}")).and_then(|v| v.as_u64()).unwrap_or(0);
+        let state = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| { let w = view.read(cx); (w.focused_pane.clone(), w.focused_block.clone()) });
+        let web_pane = |n: u64| Node::block(&format!("w{n}"), Content::Mod { name: "web".into(), props: json!({ "n": n }) });
+        // The start: tab 2 shown, its web pane focused.
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            this.model.add_tab("sp1", crate::model::Tab::new("tb2", "", "p2", "t2"));
+            assert!(this.model.split_with("p2", Axis::Row, web_pane(2)));
+            assert!(this.model.split_with("p1", Axis::Row, web_pane(1)));
+            assert!(this.model.split_with("p1", Axis::Column, Node::block("pp", Content::Mod { name: "plain".into(), props: json!({}) })));
+            this.model.focus_pane("w1");
+            this.model.select_tab("tb2");
+            this.model.focus_pane("w2");
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        assert_eq!((count(2), state(cx)), (1, (Some("w2".into()), Some("w2".into()))), "at the start");
+        // A tab switch onto tab 1, whose focused pane is its web pane.
+        let select = |tab: &str, cx: &mut gpui::VisualTestContext| {
+            cx.update(|window, cx| view.update(cx, |this, cx| this.run("tab.select", json!({ "id": tab }), window, cx)));
+            cx.run_until_parked();
+        };
+        select("tb1", cx);
+        assert_eq!((count(1), state(cx)), (1, (Some("w1".into()), Some("w1".into()))), "after a tab switch");
+        select("tb2", cx);
+        assert_eq!(count(2), 2, "and back");
+        // A terminal focused next: it has the keyboard, the web pane is no longer the block.
+        cx.update(|window, cx| view.update(cx, |this, cx| { this.model.focus_pane("p2"); this.sync(window, cx); }));
+        cx.run_until_parked();
+        assert_eq!(state(cx), (Some("p2".into()), None));
+        assert!(cx.update(|window, cx| view.read(cx).pane_focus("p2", cx).unwrap().is_focused(window)));
+        // The terminal closes: the focus falls to the web pane, which takes the keyboard.
+        cx.update(|window, cx| view.update(cx, |this, cx| { this.model.remove_pane("p2"); this.sync(window, cx); }));
+        cx.run_until_parked();
+        assert_eq!((count(2), state(cx)), (3, (Some("w2".into()), Some("w2".into()))), "after a pane closed");
+        // A dialog open: the switch leaves the keys with it.
+        cx.update(|window, cx| view.update(cx, |this, cx| this.open_overlay("d".into(), json!({ "kind": "dialog" }), window, cx)));
+        cx.run_until_parked();
+        select("tb1", cx);
+        assert_eq!(count(1), 1, "not under a dialog");
+        // A mod that isn't focusable: the window holds the keys.
+        cx.update(|window, cx| view.update(cx, |this, cx| { this.close_overlay("d", window, cx); this.model.focus_pane("pp"); this.sync(window, cx); }));
+        cx.run_until_parked();
+        assert_eq!(state(cx), (Some("pp".into()), None));
     }
 
     #[test]

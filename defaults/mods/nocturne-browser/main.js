@@ -186,8 +186,10 @@ export default class Browser extends View {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-browser\./, "");
         // "focus" comes to this copy alone (pane.go); the rest to every shown copy.
-        // A press into the page sends it too: the page keeps AppKit's keyboard.
-        if (c === "focus") { this.claim(); this.handle.focus(); }
+        // Sent too on a press into the page (it keeps AppKit's keyboard) and when
+        // the window focuses this pane any other way (a tab switch, agent.next).
+        // A blank pane: the address field it types into keeps the keyboard.
+        if (c === "focus") { this.claim(); if (this.editing && !this.start) this.input.focus(); else this.handle.focus(); }
         else if (this.mine()) this.command(c, cx);
         cx.notify();
       }

@@ -53,7 +53,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
   const names: string[] = [];
   const body = source
-    .replace(/^import .*;\n/gm, "")
+    .replace(/^import [^;]*;\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
   const queue: string[] = [];
@@ -448,4 +448,24 @@ test("the player by keys, and j / k in its ⋯ menu", async () => {
     k("left", { modifiers: { platform: true } })])
     .toEqual(["toggle", "toggle", "rewind", "forward", "mute", "back", "pane", "park", "out", "close", null, null]);
   expect([menuMove("j", 0, 3), menuMove("k", 0, 3), menuMove("down", 2, 3), menuMove("enter", 1, 3)]).toEqual([1, 2, 0, null]);
+});
+
+test("focus that comes by key (a tab switch, agent.next, a pane closing): the web pane's bar and the editor take the keyboard", async () => {
+  // src/window.rs sync sends `focus` to a focusable mod pane however the focus
+  // came (window::tests::mod_pane_takes_keyboard); keys::tests::the_web_panes_section…
+  // proves the section then wins (cmd-l, cmd-r here, cmd-s in the editor).
+  reset();
+  const { view, send } = await webPane({ slot: "b1", url: "https://a.example" });
+  app.store["nocturne-browser.active"] = "other";
+  await send("focus");
+  expect([view.handle.focused, app.store["nocturne-browser.active"]]).toEqual([1, "b1"]);
+  // A blank pane: the address it types into keeps the keyboard.
+  const blank = await webPane({ slot: "b2" });
+  await blank.send("focus");
+  expect([blank.view.handle.focused, blank.view.input.focused]).toEqual([0, 1]);
+  // The editor: its text takes it, so mod:nocturne-editor (cmd-s) applies.
+  const { mod } = await load("nocturne-editor/main.js");
+  let editorFocused = 0;
+  mod.default.prototype.command.call({ editor: { focus: () => { editorFocused++; } } }, "focus", {});
+  expect(editorFocused).toBe(1);
 });
