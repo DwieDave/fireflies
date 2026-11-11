@@ -544,10 +544,39 @@ the highlighted line shows where it will land.
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
   (`nocturne.grep`) searches every file's text as you type, lines grouped by
   file. Both are fff's (`findFiles`, `grep`): git-ignored files stay out, the
-  folder's index stays warm while it's used. tab switches mode, ↑↓ pick, enter
-  opens in the editor (grep: at the line), ctrl-r regex, ctrl-t fuzzy lines,
-  esc closes; a wide window shows the picked file around the line. Pressing
-  the same key again closes it.
+  folder's index stays warm while it's used. It covers most of the window: the
+  list beside a preview of the picked file around the line, about two thirds
+  wide and as tall as the picker (narrow windows drop the preview). tab or
+  shift-tab switches mode keeping the query, and so does the other mode's key
+  while it's open (cmd-shift-f in files, cmd-p in grep; each chip at the top
+  right names its key); the same key again closes it. ↑↓ or ctrl-p / ctrl-n
+  pick, pgup / pgdn page, enter opens in the editor (grep: at the line),
+  ctrl-r regex, ctrl-t fuzzy lines, esc closes. The hint bar lists every key.
+  A `query` prop starts the box with text. Tab is the base's focus key: a mod
+  that wants it binds it to an action in its own `key_context` (`cx.bind_keys`),
+  as the picker does; an `on_key_down` alone never hears it.
+- **The command palette** (`app.palette`, cmd-shift-p) lists every command a
+  person can run without pointing at something, each row with the key that
+  runs it now (a key a layout or the focused pane takes for something else
+  isn't shown on the row it shadows). Commands for what's focused or waiting
+  show only then: terminal ones on a terminal; pin, right-clicks to the
+  program, Send back to the parent for the focused agent or sub-agent; Move
+  this pane to a new tab beside another pane; Restart into / Update
+  herdr-core once an update waits. Commands that need an id, index, path or
+  URL (`tab.select`, `pane.focus`, `editor.open`, ...) stay out: the
+  palette's `OUT` list names each with its reason, and a test fails when a
+  command, a shipped key's action or a Nocturne mod command is neither in it
+  nor in the palette. Nocturne's palette (its `palette_mod`) adds its own:
+  Find a file… and Grep the project… (`nocturne.picker`, `nocturne.grep`),
+  New… (the + new menu), the panels, Start <agent> (beside or in a tab), New
+  worktree…, Notifications, the keyboard to the sidebar / tab strip / pane
+  header, the toast's action, and while it's focused the focused pane's own
+  commands (an editor's save, find, go to line, problems, vim...; a web
+  pane's address, reload, back, inspect...; the Markdown viewer's, the
+  preview's, the agents graph's, usage's), and the git and GitHub windows'
+  while they're open. A mod opening Nocturne's palette itself
+  (`openOverlay({ mod: "nocturne", props: { dialog: "palette", query } })`)
+  may hand it a search to start from.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
