@@ -296,3 +296,30 @@ export function colorRuns(text, spans, colors) {
   if (at < text.length) out.push([text.slice(at), null]);
   return out;
 }
+
+/** The hint bar along the editor's foot: { mode (find / replace / line, or
+ *  null), vim (on), vimMode, server (a language server answers), markdown,
+ *  view (split / preview / text) }. The keys entry ends it: space ? in vim's
+ *  normal mode, cmd-k ? otherwise; a find or go-to-line prompt keeps its own. */
+export function hintList({ mode = null, vim = false, vimMode = "normal", server = false, markdown = false, view = "split" } = {}) {
+  if (mode === "line") return [["enter", "go"], ["esc", "close"]];
+  if (mode) return [["enter", "next"], ["shift-enter", "prev"], ...(mode === "replace" ? [["cmd-enter", "replace all"]] : []), ["esc", "close"]];
+  if (vim && vimMode === "insert") return [["esc", "normal"], ["cmd-s", "save"], ["cmd-p", "files"], ["cmd-k ?", "keys"]];
+  const list = vim
+    ? [[":", "ex"], ["space", "leader"], ["/", "search"], ["]d", "problem"], ...(server ? [["gd", "definition"], ["K", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]]
+    : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(server ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
+  if (markdown) list.splice(Math.min(list.length, 3), 0, view === "preview" ? ["e", "text"] : [vim ? "space m p" : "cmd-shift-v", "preview"]);
+  return [...list, vim ? ["space ?", "keys"] : ["cmd-k ?", "keys"]];
+}
+
+/** What the keys entry lists (vim: the pane's vim is on), its own key last. */
+export function editorKeys(vim) {
+  const app = [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-alt-f", "replace"], ["cmd-l ctrl-g", "go to line"], ["cmd-k n / p", "next / prev problem"],
+    ["cmd-k m", "problems"], ["cmd-k d", "definition"], ["cmd-i", "hover"], ["ctrl-= ctrl--", "hover more / less"], ["cmd-r", "reload"],
+    ["cmd-k v", "vim on / off"], ["cmd-shift-v", "Markdown preview"], ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
+  if (!vim) return [...app, ["cmd-k ?", "keys"]];
+  return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],
+    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
+    ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space d", "problems"], ["space m p", "Markdown preview"],
+    ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
+}

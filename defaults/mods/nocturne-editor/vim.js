@@ -37,6 +37,7 @@ export const LEADER = {
   c: { name: "code", a: ["code-action", "code action"], f: ["format", "format"] },
   r: { name: "refactor", n: ["rename", "rename"] },
   g: { name: "go", d: ["definition", "definition"], r: ["references", "references"] },
+  "?": ["keys", "keys"],
   m: { name: "markdown", p: ["preview", "preview: split / only / text"], s: ["preview-split", "preview beside"], v: ["preview-only", "preview only"], t: ["preview-text", "text only"] },
 };
 

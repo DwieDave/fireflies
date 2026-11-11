@@ -4,7 +4,7 @@ import { test, expect } from "bun:test";
 // servers and roots, diagnostics, hovers, go to line, colors.
 import {
   languageSettings, serverCandidates, languageId, rootScript, pickRoot, uri, pathOf, diagnostics, lineNotes, counts,
-  diagnosticsAt, nextProblem, hoverParts, splitMarkdown, parseGoto, firstLocation, firstLine, tilde, syntaxColors, colorOf, colorRuns,
+  diagnosticsAt, nextProblem, hintList, editorKeys, hoverParts, splitMarkdown, parseGoto, firstLocation, firstLine, tilde, syntaxColors, colorOf, colorRuns,
 } from "../defaults/mods/nocturne-editor/logic.js";
 
 test("a language's settings: its own over the top level over its convention over the defaults", () => {
@@ -135,4 +135,22 @@ test("moonfly colors come from the theme, dotted names fall back to their root",
   expect(colorOf(c, "function.method.call")).toBe(t.ansi12);
   expect(colorOf(c, "punctuation.bracket")).toBeNull();
   expect(colorRuns("fn main()", [[0, 2, "keyword"], [3, 7, "function"]], c)).toEqual([["fn", t.ansi5], [" ", null], ["main", t.ansi12], ["()", null]]);
+});
+
+test("the hint bar ends with its keys entry: space ? in vim's normal mode, cmd-k ? without vim", () => {
+  const vim = hintList({ vim: true, vimMode: "normal", server: true, markdown: true });
+  expect(vim.at(-1)).toEqual(["space ?", "keys"]);
+  expect(vim.filter(([k]) => k.endsWith("?"))).toHaveLength(1);
+  const plain = hintList({ vim: false, markdown: true, view: "split" });
+  expect(plain.at(-1)).toEqual(["cmd-k ?", "keys"]);
+  expect(plain.map(([k]) => k)).toContain("cmd-shift-v");
+  expect(hintList({ vim: false, markdown: true, view: "preview" }).at(-1)).toEqual(["cmd-k ?", "keys"]);
+  // Insert mode (the leader isn't a key there) and the find / go-to-line prompts keep their own short bars.
+  expect(hintList({ vim: true, vimMode: "insert" }).map(([k]) => k)).toEqual(["esc", "cmd-s", "cmd-p", "cmd-k ?"]);
+  expect(hintList({ mode: "line" })).toEqual([["enter", "go"], ["esc", "close"]]);
+  // The list it opens: what each way of typing offers, its own entry last.
+  expect(editorKeys(true).at(-1)).toEqual(["space ?", "keys"]);
+  expect(editorKeys(true).map(([k]) => k)).toEqual(expect.arrayContaining(["gd gr K", "space f f", ":w :q :wq"]));
+  expect(editorKeys(false).at(-1)).toEqual(["cmd-k ?", "keys"]);
+  expect(editorKeys(false).map(([k]) => k)).toEqual(expect.arrayContaining(["cmd-s", "cmd-k v"]));
 });

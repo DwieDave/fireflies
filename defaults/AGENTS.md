@@ -454,7 +454,8 @@ the highlighted line shows where it will land.
   the problems drawer, cmd-k d definition (another file opens in its own
   editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
-  Markdown preview (below). **Vim** is on by
+  Markdown preview (below), `nocturne-editor.keys` (space ? in vim; the hint
+  bar's last entry, clickable) every key over the hint bar, esc hides it. **Vim** is on by
   default (settings.json `editor.vim`, Settings → Editor). The bar's `vim`
   chip, cmd-k v and `:novim` switch it for that pane only; the pane keeps its
   choice, panes never switched follow the default. The bar shows the mode (NORMAL,
@@ -476,7 +477,7 @@ the highlighted line shows where it will land.
   references, K hover, ]d / [d next / previous problem. The **leader** (space;
   settings.json `editor.leader`) opens a which-key popup of the keys after it:
   `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
-  `h` hover, `cf` format, `gd` definition, `gr` references (`ca` code action and
+  `h` hover, `cf` format, `?` the keys, `gd` definition, `gr` references (`ca` code action and
   `rn` rename are listed, not done yet), `mp` the Markdown preview's next
   view, `ms` / `mv` / `mt` split / preview only / text only. cmd combinations
   stay the app's in every mode.

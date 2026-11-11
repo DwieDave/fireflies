@@ -36,7 +36,8 @@
 // cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
 // cmd-alt-f replace, cmd-l go to line, cmd-k n / cmd-k p next / previous
 // problem, cmd-k m problems, cmd-k d definition, cmd-i hover, ctrl-= / ctrl--
-// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
+// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-k ? (vim:
+// space ?) the keys over the hint bar, whose last entry it is, cmd-shift-v the
 // Markdown preview. Without vim:
 // cmd-z / cmd-shift-z undo / redo, ctrl-g go to line.
 
@@ -49,7 +50,7 @@ import {
 } from "herdr";
 import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
-  diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns,
+  diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
@@ -580,6 +581,7 @@ export default class EditorPane extends View {
       case "format": return this.formatNow(cx);
       case "code-action": case "rename": return this.say(`${name}: not here yet`);
       case "vim": return this.toggleVim(cx);
+      case "keys": return this.command("keys", cx);
       case "preview": case "preview-split": case "preview-only": case "preview-text": return this.command(name, cx);
       case "set": return this.say(`:set ${arg ?? ""}: only :novim is known`);
       case "write": return this.say("E: :w <file> isn't supported; :w saves this file", true);
@@ -626,6 +628,7 @@ export default class EditorPane extends View {
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
     if (c === "vim") return this.toggleVim(cx);
+    if (c === "keys") { this.keysShown = !this.keysShown; return; }
     if (c === "preview") return this.setView(VIEWS[(VIEWS.indexOf(this.view) + 1) % VIEWS.length], cx);
     if (c === "preview-split") return this.setView("split", cx);
     if (c === "preview-only") return this.setView("preview", cx);
@@ -809,6 +812,7 @@ export default class EditorPane extends View {
         if (e.keystroke === "escape") {
           if (this.mode) { this.closeFind(cx); cx.stop_propagation(); }
           else if (this.card) { this.card = null; cx.notify(); cx.stop_propagation(); }
+          else if (this.keysShown) { this.keysShown = false; cx.notify(); }
         }
       })
       .child(this.bar(t))
@@ -817,6 +821,7 @@ export default class EditorPane extends View {
       .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
       .child(this.body(t, code))
       .when(this.drawer, (el) => el.child(this.drawerView(t)))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(this.hints(t))
       .when(!!this.card, (el) => el.child(this.cardView(t, code)))
       .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)));
@@ -990,15 +995,20 @@ export default class EditorPane extends View {
   }
 
   hints(t) {
-    const list = this.mode === "line" ? [["enter", "go"], ["esc", "close"]]
-      : this.mode ? [["enter", "next"], ["shift-enter", "prev"], ...(this.mode === "replace" ? [["cmd-enter", "replace all"]] : []), ["esc", "close"]]
-      : this.vimOn() && this.vim.mode === "insert" ? [["esc", "normal"], ["cmd-s", "save"], ["cmd-p", "files"]]
-      : this.vimOn() ? [[":", "ex"], ["space", "leader"], ["/", "search"], ["]d", "problem"], ...(this.server?.id != null ? [["gd", "definition"], ["K", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]]
-      : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(this.server?.id != null ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
-    if (this.markdown && !this.mode) list.splice(Math.min(list.length, 3), 0, this.view === "preview" ? ["e", "text"] : [this.vimOn() ? "space m p" : "cmd-shift-v", "preview"]);
+    const list = hintList({ mode: this.mode, vim: this.vimOn(), vimMode: this.vim.mode, server: this.server?.id != null, markdown: this.markdown, view: this.view });
     return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
       .children(list.map(([k, what], i) => h_flex().id(`editor-hint-${i}`).flex_none().gap(4)
+        // The keys entry (the last) also opens the list by click.
+        .when(what === "keys", (el) => el.cursor_pointer().on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); }))
+        .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
+  }
+
+  /** The keys entry (space ? / cmd-k ?): every key, over the hint bar. */
+  keysStrip(t) {
+    return h_flex().id("editor-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(14).gap_y(2).items_center()
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .children(editorKeys(this.vimOn()).map(([k, what], i) => h_flex().id(`editor-key-${i}`).flex_none().gap(4)
         .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
   }
 

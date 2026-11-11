@@ -337,6 +337,13 @@ describe("modes, leader, keys", () => {
     expect(token({ key: "escape", modifiers: {} })).toBe("<esc>");
     expect(token({ key: "space", key_char: " ", modifiers: {} })).toBe(" ");
   });
+  test("space ? lists the editor's keys (? alone stays the backward search)", () => {
+    const vim = createVim();
+    const doc = { text: "a", cursor: { line: 0, col: 0 } };
+    expect((feed(vim, " ", doc) as any).which.map((w: any) => w.key)).toContain("?");
+    expect((feed(vim, "?", doc) as any).commands).toEqual(["keys"]);
+    expect((feed(vim, "?", doc) as any).ex).toBe("?");
+  });
   test("the leader walks its map and shows the next keys", () => {
     const vim = createVim();
     const doc = { text: "a", cursor: { line: 0, col: 0 } };
