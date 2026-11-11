@@ -10,14 +10,23 @@ worktrees, you brief, review, merge, and ship.
 1. **Worktree** (always on `/Volumes/data`, never inside the repo):
    ```sh
    W=/Volumes/data/coding/fireflies-wt/<name>
-   git worktree add -b feat/<name> $W main
+   git worktree add -b feat/<name> $W integrate
    git -C $W submodule update --init --reference ~/Documents/personal/coding/fireflies/vendor/ghostty
    cp -cR /Volumes/data/coding/fireflies-wt/integrate/target $W/target   # APFS clone, seeds the build
    ```
+   `integrate` holds what is merged and not shipped yet. An agent that needs
+   another's work merges `integrate`; tell it when that work lands.
 2. **Brief**: write it to your scratchpad (`$SCRATCH`) as `<name>.md`. Start from
    [.claude/agent-brief.md](.claude/agent-brief.md) (the rules block every
    brief carries) and put the task above it: area, exact scope, what's already
    ruled out, files to read, parallel agents and which files they own.
+   - Quote Developer's words, then give your reading of them, marked as yours.
+   - What you traced in the code goes in as leads to check.
+   - An image he pasted: copy it to `/Volumes/data/coding/fireflies-wt/refs/`
+     and give that path.
+   - Two agents that have to meet (one writes a record, the other reads it)
+     get the same contract in both briefs: the key and its shape.
+   - End the task with a "Done means" list: the tests, the screenshots, the docs.
 3. **Launch** it as a tab in Developer's fireflies space, then label it:
    ```sh
    T=$(herdr-app do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude","--model","claude-opus-5-5","--effort","high",$b],folder:"'$W'"}')" | jq -r .terminal)
@@ -26,14 +35,21 @@ worktrees, you brief, review, merge, and ship.
    Agents run on Opus 5.5 at high effort (the `--model` and `--effort` above).
    `hc` is at `~/.local/bin/hc` (not on the Bash tool's PATH). Without
    `space`, the tab lands in whatever space is focused. Then start its
-   watcher (Notify Developer).
+   watcher (Notify Developer), and tell Developer every choice the brief made
+   for him, so he can overrule it while the agent is early.
 4. **Follow-ups** go to a live agent with `hc send <t> "<task>"`; check it's
-   alive first (`hc get <t>`). A finished agent's worktree can host a new one.
+   alive first (`hc get <t>`). Each carries his words quoted and an item
+   number, one commit per item. An agent with a long list reports finished
+   items in batches, so they merge while it works on. Tell it when files it was
+   told to leave change hands. A new area, or faults its author and you both
+   missed, get a fresh agent with his complaint quoted; a finished agent's
+   worktree can host it.
 
 Design work: the brief asks for **2 concepts** (images/HTML via /impeccable,
 look locked to the nocturne style) sent back first; the agent builds its pick
 unless Developer answers within ~10 minutes. Relay both concepts to Developer with
-your read on them.
+your read on them. Other UI work asks for a **first look**: a screenshot as soon
+as it draws, passed on to him while the agent carries on.
 
 ## Notify Developer
 
@@ -50,8 +66,8 @@ Push to his phone with the `pushover` skill on two events:
 
 Agent tabs aren't your children, so hc tells you nothing when one stops or
 blocks. A **watcher** per agent does: run it as a background command once the
-launch check shows `working`, and again after each follow-up to an agent that
-had stopped.
+agent shows `working`, after its launch and after each follow-up to an agent
+that had stopped (its status stays `done` for a few seconds after the send).
 
 ```sh
 T=<t>; while s=$(~/.local/bin/hc get $T | jq -r 'if .state != "live" then "exited" else .status.state // "working" end'); [ "$s" = working ]; do ~/.local/bin/hc wait $T --timeout 600 >/dev/null 2>&1; done; echo "$T $s"
@@ -67,7 +83,10 @@ Reports arrive as `<hc from="tNN">`. An agent that reports success is merged
 right away: Developer's go-ahead for the merge loop is standing. First **look**:
 open the agent's screenshots and check them against what Developer asked; send
 back anything off (clipped text, leftover F-keys, wrong state) instead of
-merging.
+merging. For whatever opens (a card, a menu, a dialog): does it open at the
+caret or pointer, and do the shots show it closing? Read the diff where a shot
+can't show the risk: deletes and moves of his files, native code. The report's
+"not verified" lines are his to try by hand; keep them for step 5.
 
 The merge loop, in `/Volumes/data/coding/fireflies-wt/integrate` (branch
 `integrate`):
@@ -77,19 +96,30 @@ The merge loop, in `/Volumes/data/coding/fireflies-wt/integrate` (branch
    - justfile `bun test` lines: union (keep every line and its comment).
    - Two agents implementing the same thing differently (keys, commands,
      handlers): `git merge --abort` and send it back to one agent to merge
-     main and reconcile into one implementation, keeping both test suites.
-   - A branch that started before big merges: ask its agent to merge main.
-3. Every test, muted: each `bun test` line from the justfile (`grep '^    bun test' justfile`, strip comments, eval) and
-   `PATH=/nix/store/mskva5g8bqz7mym9a70ablndnl1ag8jm-zig-0.16.0/bin:$PATH cargo test --locked`.
+     `integrate` and reconcile into one implementation, keeping both test suites.
+   - A branch that started before big merges: ask its agent to merge `integrate`.
+3. Every test, muted (`HERDR_APP_NO_SOUND=1`), as one background command with
+   a log: each `bun test` and `cargo test` line of the justfile
+   (`grep -E '^    (bun|cargo) test' justfile`, strip comments, eval), with
+   `PATH=/nix/store/mskva5g8bqz7mym9a70ablndnl1ag8jm-zig-0.16.0/bin:$PATH`.
    **Green** on all of them is the bar.
 4. Ship: in the main checkout `git merge --ff-only integrate && git push origin main`;
    in `/private/etc/nix-darwin`: `nix flake update herdr-app` and
    `nix build --no-link --print-out-paths .#darwinConfigurations.$(scutil --get LocalHostName).system`.
-5. Tell Developer: what changed in his words, what was verified and what wasn't,
-   then `! sudo darwin-rebuild switch --flake /private/etc/nix-darwin` and
-   restart Fireflies. He commits the nix-darwin changes himself.
+5. Tell Developer: what changed in his words, what was verified, the list of
+   what only his hands and eyes can check (a real pointer, native views, the
+   reports' "not verified"), the changes for Can, then
+   `! sudo darwin-rebuild switch --flake /private/etc/nix-darwin` and
+   restart Fireflies. He commits the nix-darwin changes himself; the build
+   takes in whatever else is uncommitted there, so name those files.
 
-Batch several merges before one nix build when agents finish close together.
+Steps 1 to 3 run for each agent as it reports. Steps 4 and 5 run once, when the
+last working agent is merged: one push, one build, one `darwin-rebuild` for him.
+
+Local main moves at ship. A commit he needs in his checkout at once (this file,
+.gitignore) is fast-forwarded there right away. What main has is no longer
+reworded: resetting main is his to run
+(`! git -C ~/Documents/personal/coding/fireflies reset --hard integrate`).
 
 ## Keys
 
