@@ -145,7 +145,7 @@ test("next / previous file from a row", () => {
 });
 
 test("the view: colored rows as the diff pane draws them, file heads with counts; } jumps files", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   const patch = parse(GIT);
   patch.starts = fileStarts(patch.rows);

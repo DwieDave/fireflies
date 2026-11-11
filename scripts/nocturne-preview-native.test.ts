@@ -133,7 +133,7 @@ test("next / previous stays with the same kind (audio and video together)", () =
 });
 
 async function nativeView(extra: Record<string, any>) {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 900, height: 600 }, names: [], copied: 0, gen: 1,

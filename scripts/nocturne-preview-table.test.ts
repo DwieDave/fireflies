@@ -156,7 +156,7 @@ test("SQLite: names quoted, tables read from sqlite3's CSV, errors in plain word
 
 /** A preview showing `grid`, in an 800 × 600 pane. */
 async function tableView(rows: string[][], extra: Record<string, any> = {}) {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     path: "/data/people.csv", kind: "table", how: { how: "table" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true },

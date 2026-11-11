@@ -302,7 +302,7 @@ test("the wrapper SVG turns a picture (and its EXIF orientation) and draws vecto
 // ---- the view
 
 test("the viewer: a fitted picture, keys zoom, pan, step through the folder and toggle the background", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   const focus = { focus() {}, is_focused: () => true };
   Object.assign(view, {
@@ -360,7 +360,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     path: "/shots/s.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
@@ -398,7 +398,7 @@ test("the bar's fit and 100% do what they say, in either state, and stay put", a
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, { path: "/x/a.heic", kind: "image", how: { how: "image" }, handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -407,7 +407,7 @@ test("the viewer says what's wrong instead of a picture", async () => {
 });
 
 test("the bar by keys: tab rings its controls in order, enter presses one, ? lists the keys, esc backs out", async () => {
-  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const { default: PreviewView } = await load("nocturne-preview/viewer.js", logic);
   const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
     path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,
