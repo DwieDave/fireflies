@@ -21462,6 +21462,10 @@ declare module "gpui-base" {
     set_value(value: string): void;
     on(event: "change" | "submit" | "focus" | "blur" | "paste_other", handler: (event: InputEvent, cx: Context) => void): boolean;
     on(event: "hover", handler: (event: EditorHoverEvent, cx: Context) => void): boolean;
+    /** Every keystroke while this editor has the keyboard, before the editor, its bindings and
+     *  the app's keys see it; return true to take it (nothing else sees it, nothing is typed).
+     *  For a modal scheme (vim); return false for text in insert mode, so IME keeps working. */
+    on(event: "key", handler: (event: KeyEvent, cx: Context) => boolean): boolean;
     release(): boolean;
     /** The caret. */
     cursor(): EditorPosition;
@@ -21494,6 +21498,10 @@ declare module "gpui-base" {
     focus(): void;
     undo(): void;
     redo(): void;
+    /** The caret's look: "bar" (default), "block" or "underline" (vim's modes). */
+    set_cursor_shape(shape: "bar" | "block" | "underline"): void;
+    /** Replaces the selections (several: one caret each, typing goes to all). */
+    set_selections(list: { start: EditorPosition; end: EditorPosition }[]): void;
   }
   export const EditorState: {
     new: (options?: {
@@ -22300,7 +22308,10 @@ declare module "herdr" {
   /** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
    *  or when the server exits. */
   export function lspRequest(id: number, method: string, params?: any): Promise<any>;
-  /** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). */
+  /** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). Open
+   *  documents are counted per mod copy: the server hears `didOpen` once (a later copy's becomes a
+   *  `didChange` with its text, and that copy gets the file's last `publishDiagnostics` at once) and
+   *  `didClose` when the last copy closes the file or goes. */
   export function lspNotify(id: number, method: string, params?: any): void;
   /** The next notification the server sent this copy: `{ method, params }`
    *  (`textDocument/publishDiagnostics`, `$/progress`, `window/logMessage`, ...). `$/exit` with

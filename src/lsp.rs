@@ -549,17 +549,6 @@ pub fn sessions() -> Value {
     Value::Array(SESSIONS.lock().unwrap().iter().map(|s| s.info()).collect())
 }
 
-/// Stops every server (app quit).
-pub fn stop_all() {
-    let sessions: Vec<Arc<Session>> = std::mem::take(&mut *SESSIONS.lock().unwrap());
-    for s in sessions {
-        let _ = s.notify("exit", Value::Null);
-        if let Some(child) = s.child.lock().unwrap().as_mut() {
-            let _ = child.kill();
-        }
-    }
-}
-
 /// Drops a copy's sessions when its module goes.
 pub struct CopyGuard(pub u64);
 

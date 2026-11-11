@@ -220,8 +220,6 @@ const PREVIEW_EXTS: &[&str] = &[
 const PREVIEW_MACOS_EXTS: &[&str] = &["ttf", "otf", "ttc", "woff", "woff2", "mp4", "m4v", "mov", "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "caf"];
 
 impl Viewer {
-    pub const ALL: [Viewer; 3] = [Viewer::Markdown, Viewer::Preview, Viewer::Editor];
-
     /// The viewer for a file, by its extension (the editor also by name).
     pub fn of(path: &Path) -> Option<Viewer> {
         let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();

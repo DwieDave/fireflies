@@ -350,12 +350,36 @@ the highlighted line shows where it will land.
   outside while edited says so (reload theirs / keep mine), a clean one
   reloads by itself, keeping the caret. Closing an edited editor's pane or tab
   asks first (`setUnsaved`). Keys while it has focus (keys.json
-  `mod:nocturne-editor`, macOS): cmd-s save, cmd-f find (enter / shift-enter,
-  Aa, esc), cmd-alt-f replace (cmd-enter: all), ctrl-g / cmd-l go to line
-  (`42`, `42:7`), f8 / shift-f8 next / previous problem, cmd-shift-m the
-  problems drawer, f12 definition (another file opens in its own editor),
-  cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level deeper /
-  shallower, cmd-r reload. Resting the pointer on a word shows the hover card:
+  `mod:nocturne-editor`, macOS; no function keys): cmd-s save, cmd-f find
+  (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
+  to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
+  the problems drawer, cmd-k d definition (another file opens in its own
+  editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
+  deeper / shallower, cmd-r reload, cmd-k v vim on / off. **Vim** is on by
+  default; the bar's `vim` chip (or cmd-k v, `:novim`) turns it off for every
+  editor (remembered; on again the same way). The bar shows the mode (NORMAL,
+  INSERT, VISUAL, V-LINE, V-BLOCK, REPLACE), the keys typed so far and
+  `rec @a` while recording; the caret is a block in normal and visual mode, a
+  bar in insert, an underline in replace. It has normal, insert, replace and
+  visual (char, line, block) modes; counts; operators d c y > < g~ gu gU ~ with
+  motions (h j k l w W b B e E ge gE 0 ^ $ gg G { } % f F t T ; , H-less
+  scrolling ctrl-d ctrl-u ctrl-f ctrl-b) and text objects (iw aw iW aW i" a"
+  i' a' i` a` i( a( ib i[ i{ iB i< it at ip ap); x X s S r R J gJ o O i a I A
+  D C Y p P ctrl-a ctrl-x; registers "a-"z ("A appends), "0, "-, "1-"9, "_
+  and "+ (yanks and deletes also go to the system clipboard; p takes another
+  app's copy); `.`; macros q / @ / @@; marks m / ` / '; search / ? n N * #;
+  undo u and redo ctrl-r; the ex line drawn under the bar: `:w` `:q` `:q!`
+  `:wq` `:x` `:e` `:e!` `:e <file>` `:<line>` `:s/a/b/g` `:%s/(\w+)/[\1]/g`
+  (JS regex; `&`, `\1`), `:'<,'>d`, `:d` `:y` `:j`, `:noh`, `:novim`. Typing in
+  insert mode stays the editor's (IME, auto-pairs, indentation): vim reads what
+  was typed back from the text for `.` and macros. gd definition, gr
+  references, K hover, ]d / [d next / previous problem. The **leader** (space;
+  settings.json `editor.leader`) opens a which-key popup of the keys after it:
+  `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
+  `h` hover, `cf` format, `gd` definition, `gr` references (`ca` code action and
+  `rn` rename are listed, not done yet). cmd combinations stay the app's in
+  every mode.
+  Resting the pointer on a word shows the hover card:
   the server's signature and docs, and every problem there with its whole
   message (multi-line type errors included), code and source. TypeScript and
   JavaScript (typescript-language-server 5.3+ with TypeScript 5.9+) expand the
@@ -372,7 +396,7 @@ the highlighted line shows where it will land.
   machine open without a language server. Commands for the shown editors:
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
-  `.hover-less`, `.reload`.
+  `.hover-less`, `.reload`, `.vim`.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
@@ -1167,6 +1191,8 @@ What's about the user, never a look:
   and prints it formatted), `format_on_save` (off unless set), `server` (the
   language server's argv, or `false` for none) and `server_settings` (what the
   server gets as `workspace/configuration` and `initializationOptions`).
+  At the top only, `leader`: vim's leader key (`"space"`, default; `"comma"`; or
+  a character).
   Without `server`, a language uses the first built-in server found on PATH;
   none is ever installed. Changes apply to editors opened afterwards.
   ```json
@@ -1474,7 +1500,9 @@ All of it is in `herdr.d.ts`. In short:
   and root, initialized for you), `lspRequest`, `lspNotify`, `lspNextMessage` (diagnostics and
   other notifications), `lspRelease`; documents and their sync are yours. A code editor's
   `EditorState` moves its caret, finds, edits, underlines problems (`set_diagnostics`), writes
-  notes after lines (`set_line_notes`) and reports the word under the pointer (`on("hover")`).
+  notes after lines (`set_line_notes`), reports the word under the pointer (`on("hover")`),
+  gets every keystroke first and may take it (`on("key")`, a modal scheme's), shapes its caret
+  (`set_cursor_shape`) and sets several selections (`set_selections`).
   `setUnsaved(note)`: closing this copy's pane or tab asks the person first.
 - `notify({ ..., action: { name, args } })`: the toast runs the command when clicked.
 - This copy: `props()`, `shared(key)` / `setShared(key, value)` (every mod

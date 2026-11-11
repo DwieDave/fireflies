@@ -20,16 +20,20 @@
 // it says so); a change on disk reloads a clean file and offers a choice to
 // an edited one. Closing an edited editor asks first.
 //
-// Keys while it has focus (keys.json `mod:nocturne-editor`): cmd-s save,
-// cmd-f find (enter / shift-enter next / previous, esc closes), cmd-alt-f
-// replace, ctrl-g / cmd-l go to line, f8 / shift-f8 next / previous problem,
-// cmd-shift-m problems, f12 definition, cmd-i hover, ctrl-= / ctrl--
-// hover type more / less, cmd-r reload. cmd-z / cmd-shift-z undo / redo.
+// Vim (vim.js) is on unless the pane's "vim" chip, `:novim`, or cmd-k v turns
+// it off (remembered for every editor). Its leader is space (settings.json
+// editor.leader): a which-key popup lists the keys after it.
+// Keys while it has focus (keys.json `mod:nocturne-editor`), vim on or off:
+// cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
+// cmd-alt-f replace, cmd-l go to line, cmd-k n / cmd-k p next / previous
+// problem, cmd-k m problems, cmd-k d definition, cmd-i hover, ctrl-= / ctrl--
+// hover type more / less, cmd-r reload, cmd-k v vim on / off. Without vim:
+// cmd-z / cmd-shift-z undo / redo, ctrl-g go to line.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, EditorState, Editor, InputState, Input, TextView } from "gpui-base";
 import {
-  props, theme, settings, run, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, exec,
+  props, theme, settings, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, exec,
   home, appHome, languageOf, highlight, lspStart, lspRequest, lspNotify, lspNextMessage, lspRelease, setUnsaved, notify,
   window as appWindow,
 } from "herdr";
@@ -37,12 +41,15 @@ import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns,
 } from "./logic.js";
+import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 
 const MOD = "nocturne-editor";
 // Each editor's file name by slot, for its pane header (nocturne/header.js).
 const TITLES = "nocturne-editor.titles";
 // The app asks an editor already on a file to go somewhere (`editor.open` with a line).
 const GOTO = "nocturne-editor.goto";
+// Vim on (default) or off, for every editor.
+const VIM_ON = "nocturne-editor.vim";
 const POLL = 4000; // a file on another machine can't be watched
 const CHANGE_DELAY = 200; // ms of quiet before the server hears about an edit
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
@@ -62,6 +69,17 @@ const found = new Map();
 async function onPath(program) {
   if (!found.has(program)) found.set(program, exec("sh", ["-c", 'command -v "$1" >/dev/null 2>&1', "which", program]).then((r) => r.code === 0, () => false));
   return found.get(program);
+}
+
+/** One edit taking `a` to `b`: the span between their common start and end. */
+function diff(a, b) {
+  if (a === b) return null;
+  let s = 0;
+  while (s < a.length && s < b.length && a[s] === b[s]) s++;
+  let e = 0;
+  while (e < a.length - s && e < b.length - s && a[a.length - 1 - e] === b[b.length - 1 - e]) e++;
+  const pos = (text, o) => { const before = text.slice(0, o).split("\n"); return { line: before.length - 1, col: before[before.length - 1].length }; };
+  return { start: pos(a, s), end: pos(a, a.length - e), text: b.slice(s, b.length - e) };
 }
 
 export default class EditorPane extends View {
@@ -90,6 +108,13 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.handle = cx.focus_handle();
+    // Vim: on unless turned off in a pane (remembered in shared VIM_ON).
+    const leader = String(settings()?.editor?.leader ?? "space");
+    this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
+    this.which = null; // the leader's next keys
+    this.pending = ""; // keys typed toward a command
+    this.text = ""; // the text as last read from the editor (vim reads it)
+    this.searchMark = null;
 
     const t = theme();
     this.colors = syntaxColors(t);
@@ -98,6 +123,9 @@ export default class EditorPane extends View {
       line_numbers: true, folding: true, soft_wrap: !!this.opts.soft_wrap, syntax: this.colors,
     });
     this.editor.set_tab_size(this.opts.tab_size, this.opts.insert_spaces === false);
+    this.vim.indent = this.opts.insert_spaces === false ? "\t" : " ".repeat(this.opts.tab_size);
+    this.editor.on("key", (e, cx) => this.vimKey(e, cx));
+    this.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
     this.editor.on("change", (_e, cx) => this.changed(cx));
     this.editor.on("hover", (e, cx) => this.hovered(e, cx));
     this.findInput = InputState.new({ placeholder: "find" });
@@ -148,6 +176,7 @@ export default class EditorPane extends View {
         const at = this.editor.cursor();
         this.saved = text;
         this.editor.set_value(text);
+        this.text = text;
         this.editor.set_cursor(at.line, at.col);
         this.say("reloaded: it changed on disk");
         this.didChange(cx, true);
@@ -157,6 +186,7 @@ export default class EditorPane extends View {
       if (error) { this.state = "error"; this.error = error; cx.notify(); return; }
       if (text == null) { this.state = "missing"; this.saved = null; this.editor.set_value(""); }
       else { this.state = "ready"; this.saved = text; this.editor.set_value(text); }
+      this.text = text ?? "";
       this.dirty = false; this.conflict = false;
       setUnsaved(null);
       this.title();
@@ -180,7 +210,8 @@ export default class EditorPane extends View {
   }
 
   changed(cx) {
-    const dirty = this.editor.value() !== (this.saved ?? "");
+    this.text = this.editor.value();
+    const dirty = this.text !== (this.saved ?? "");
     if (dirty !== this.dirty) {
       this.dirty = dirty;
       setUnsaved(dirty ? `${basename(this.path)}: unsaved changes` : null);
@@ -410,6 +441,117 @@ export default class EditorPane extends View {
     cx.notify();
   }
 
+  // ---- vim
+
+  vimOn() { return shared(VIM_ON) !== false; }
+
+  toggleVim(cx) {
+    const on = !this.vimOn();
+    setShared(VIM_ON, on);
+    this.vim.mode = "normal"; this.vim.keys = []; this.vim.ex = null; this.vim.pendingLeader = null;
+    this.which = null; this.pending = "";
+    this.editor.set_cursor_shape(on ? SHAPE.normal : "bar");
+    this.say(on ? "vim on" : "vim off");
+    cx.notify();
+  }
+
+  /** A keystroke, before the editor sees it: vim's, or the editor's (false). */
+  vimKey(e, cx) {
+    if (!this.vimOn() || this.state === "loading" || this.mode) return false;
+    const k = token(e);
+    if (k == null) return false;
+    const doc = this.doc(cx);
+    const r = feed(this.vim, k, doc);
+    if (!r.taken) return false;
+    this.vimApply(r, doc, cx);
+    if (r.replay) {
+      const now = this.doc(cx);
+      this.vimApply(play(this.vim, r.replay.keys, now, r.replay.times), now, cx);
+    }
+    cx.notify();
+    return true;
+  }
+
+  doc(cx) {
+    if (!this.text && this.state === "ready") this.text = this.editor.value();
+    const lines = Math.max(4, Math.floor((this.size.height - BAR - HINTS) / 20 / 2));
+    let clipboard = null;
+    try { clipboard = cx.read_from_clipboard() ?? null; } catch { /* no clipboard */ }
+    return { text: this.text, cursor: this.editor.cursor(), clipboard, page: lines };
+  }
+
+  /** What vim decided: one undoable edit for all its edits, the caret,
+   *  selections, the mode's caret shape, the clipboard, commands. */
+  vimApply(r, doc, cx) {
+    if (r.edits?.length) {
+      const after = applyEdits(doc.text, r.edits);
+      const d = diff(doc.text, after);
+      if (d) this.editor.edit([d]);
+      this.text = after;
+    }
+    if (r.multi) this.editor.set_selections(r.multi.map((p) => ({ start: p, end: p })));
+    else if (r.selections) this.editor.set_selections(r.selections.map((s) => (s.head === "start" ? { start: s.end, end: s.start } : s)));
+    else if (r.cursor) this.editor.set_cursor(r.cursor.line, r.cursor.col);
+    if (r.mode) this.editor.set_cursor_shape(SHAPE[r.mode] ?? "block");
+    if (r.clipboard) cx.write_to_clipboard(r.clipboard.text);
+    if (r.which !== undefined) this.which = r.which;
+    if (r.pending !== undefined) this.pending = r.pending;
+    if (r.message) this.say(r.message, /^E\d/.test(r.message) || r.message.startsWith("not found"));
+    if (r.search) { this.searchMark = r.search; this.find = this.editor.find(r.search.replace(/\\[<>]/g, ""), {}); }
+    for (const c of r.commands ?? []) this.vimCommand(c, cx);
+  }
+
+  vimCommand(c, cx) {
+    const [name, arg] = c.includes(":") ? [c.slice(0, c.indexOf(":")), c.slice(c.indexOf(":") + 1)] : [c, null];
+    const me = () => panes().find((p) => p.mod === MOD && p.props?.slot === this.slot);
+    switch (name) {
+      case "save": return this.save(cx);
+      case "save-quit": return this.save(cx).then(() => { if (!this.dirty) run("pane.close", { ...(me() ? { pane: me().pane } : {}) }); });
+      case "quit": if (this.dirty) return this.say("E37: unsaved changes (:q! discards them)", true); return run("pane.close", { ...(me() ? { pane: me().pane } : {}) });
+      case "quit!": setUnsaved(null); this.dirty = false; return run("pane.close", { ...(me() ? { pane: me().pane } : {}), confirmed: true });
+      case "reload": if (this.dirty) return this.say("E37: unsaved changes (:e! discards them)", true); return this.load(cx, null, false);
+      case "reload!": this.dirty = false; return this.load(cx, null, false);
+      case "edit": return run("editor.open", { path: arg.startsWith("/") ? arg : `${dirname(this.path)}/${arg}` });
+      case "undo": return this.editor.undo();
+      case "redo": return this.editor.redo();
+      case "nohlsearch": this.editor.find_close(); this.searchMark = null; return;
+      case "definition": case "next-problem": case "prev-problem": case "hover": case "problems":
+        return this.command(name === "problems" ? "problems" : name, cx);
+      case "references": return this.references(cx);
+      case "picker": return run("nocturne.picker");
+      case "grep": return run("nocturne.grep");
+      case "files-pane": return run("nocturne.files");
+      case "format": return this.formatNow(cx);
+      case "code-action": case "rename": return this.say(`${name}: not here yet`);
+      case "vim": return this.toggleVim(cx);
+      case "set": return this.say(`:set ${arg ?? ""}: only :novim is known`);
+      case "write": return this.say("E: :w <file> isn't supported; :w saves this file", true);
+      default: return;
+    }
+  }
+
+  async references(cx) {
+    let list = null;
+    try { list = await this.request("textDocument/references", { context: { includeDeclaration: false } }); } catch (e) { return this.say(String(e?.message ?? e), true); }
+    if (!list?.length) { this.say("no references"); cx.notify(); return; }
+    this.say(`${list.length} reference${list.length === 1 ? "" : "s"}: going to the first`);
+    const loc = firstLocation(list);
+    if (loc.path === this.path) this.goto(loc.line, loc.col, cx);
+    else run("editor.open", { path: loc.path, line: loc.line + 1, col: loc.col + 1 });
+    cx.notify();
+  }
+
+  async formatNow(cx) {
+    if (this.opts.format) { await this.format(this.editor.value(), cx); cx.notify(); return; }
+    if (this.server?.id == null) return this.say("no formatter: settings.json editor format");
+    try {
+      const edits = await lspRequest(this.server.id, "textDocument/formatting", { textDocument: { uri: uri(this.path) }, options: { tabSize: this.opts.tab_size, insertSpaces: this.opts.insert_spaces !== false } });
+      if (edits?.length) this.editor.edit(edits.map((e) => ({ start: { line: e.range.start.line, col: e.range.start.character }, end: { line: e.range.end.line, col: e.range.end.character }, text: e.newText })));
+      this.say("formatted");
+    } catch (e) { this.say(String(e?.message ?? e), true); }
+    cx.notify();
+  }
+
   // ---- commands (keys.json mod:nocturne-editor)
 
   command(c, cx) {
@@ -426,6 +568,7 @@ export default class EditorPane extends View {
     if (c === "hover-more") return this.hoverLevel(1, cx);
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
+    if (c === "vim") return this.toggleVim(cx);
   }
 
   async close() {
@@ -463,10 +606,12 @@ export default class EditorPane extends View {
       .child(this.bar(t))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
+      .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
       .child(this.body(t, code))
       .when(this.drawer, (el) => el.child(this.drawerView(t)))
       .child(this.hints(t))
-      .when(!!this.card, (el) => el.child(this.cardView(t, code)));
+      .when(!!this.card, (el) => el.child(this.cardView(t, code)))
+      .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)));
   }
 
   bar(t) {
@@ -481,7 +626,13 @@ export default class EditorPane extends View {
     const s = this.server;
     const server = s?.status === "ready" ? [t.ansi2, s.name] : s?.status === "starting" ? [t.ansi3, `${s.name}…`] : s?.status === "exited" ? [t.ansi1, `${s.name ?? "server"} stopped`] : null;
     const msg = this.message && Date.now() - this.message.at < 4000 ? this.message : null;
+    const vim = this.vimOn();
+    const modeColor = { normal: t.accent, insert: t.ansi2, replace: t.ansi1, visual: t.ansi5, vline: t.ansi5, vblock: t.ansi5 }[this.vim.mode] ?? t.accent;
     return h_flex().id("editor-bar").h(BAR).flex_none().px(12).gap(10).items_center().border_b(1).border_color(t.ansi0)
+      .when(vim, (el) => el.child(div().id("bar-mode").relative().flex_none().h(18).px(6).flex().items_center()
+        .child(div().absolute().inset_0().opacity(0.3).child(dither(modeColor, 1)))
+        .child(div().relative().text_color(modeColor).child(MODE_NAME[this.vim.mode] ?? "NORMAL"))))
+      .when(vim && !!this.vim.recording, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`rec @${this.vim.recording.reg}`)))
       .child(div().relative().size(8).flex_none().border(1).border_color(this.dirty ? t.ansi3 : t.ansi0)
         .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))))
       .child(div().flex_none().text_color(t.foreground).child(basename(this.path) || "untitled"))
@@ -493,7 +644,42 @@ export default class EditorPane extends View {
         .child(div().size(6).bg(server[0])).child(server[1])))
       .when(!narrow, (el) => el.child(h_flex().flex_none().h(18).px(6).items_center().border(1).border_color(t.ansi0).text_color(t.muted)
         .child(`${this.lang} · ${this.opts.insert_spaces === false ? "tab" : `${this.opts.tab_size} sp`}`)))
-      .when(!!at, (el) => el.child(div().flex_none().text_color(t.dim).child(`${at.line + 1}:${at.col + 1}`)));
+      .when(vim && !!this.pending, (el) => el.child(div().flex_none().text_color(t.foreground).child(this.pending)))
+      .when(!!at, (el) => el.child(div().flex_none().text_color(t.dim).child(`${at.line + 1}:${at.col + 1}`)))
+      .child(div().id("bar-vim").flex_none().h(18).px(6).flex().items_center().border(1).border_color(vim ? t.accent : t.ansi0)
+        .text_color(vim ? t.accent : t.dim).hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => this.toggleVim(cx)).child("vim"));
+  }
+
+  /** Vim's ex line (`:`, `/`, `?`), under the bar. */
+  exLine(t, code) {
+    const ex = this.vim.ex ?? "";
+    const lead = ex.startsWith("/") || ex.startsWith("?") ? ex[0] : ":";
+    const body = lead === ":" ? ex : ex.slice(1);
+    return h_flex().id("editor-ex").relative().h(FIND).flex_none().px(12).gap(2).items_center().font_family(code).text_size(12.5)
+      .child(div().flex_none().text_color(t.accent).child(lead))
+      .child(div().flex_none().text_color(t.foreground).child(body))
+      .child(div().w(7).h(15).flex_none().bg(t.foreground))
+      .child(div().flex_1())
+      .child(h_flex().flex_none().gap(4).font_family(settings()?.ui_font_family || "Geist").text_size(11).child(div().text_color(t.accent).child("enter")).child(div().text_color(t.dim).child("run")))
+      .child(h_flex().flex_none().gap(4).font_family(settings()?.ui_font_family || "Geist").text_size(11).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("cancel")))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+  }
+
+  /** The leader's next keys, which-key style, bottom right over the text. */
+  whichView(t) {
+    const list = this.which ?? [];
+    const cols = list.length > 6 ? 2 : 1;
+    const rows = Math.ceil(list.length / cols);
+    return v_flex().id("editor-which").absolute().right(12).bottom(HINTS + 8).bg(t.background).border(1).border_color(t.ansi0).shadow_lg()
+      .child(h_flex().relative().h(24).px(12).gap(10).items_center()
+        .child(div().text_color(t.accent).child(this.pending ? `leader ${this.pending}` : "leader"))
+        .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().text_color(t.dim).child("esc")))
+      .child(h_flex().px(12).pb(8).gap(18).children(Array.from({ length: cols }, (_, c) => v_flex().gap(2).children(
+        list.slice(c * rows, (c + 1) * rows).map((w, i) => h_flex().id(`which-${c}-${i}`).gap(10)
+          .child(div().w(36).text_color(t.accent).child(w.key))
+          .child(div().text_color(w.label.startsWith("+") ? t.ansi5 : t.foreground).child(w.label)))))));
   }
 
   conflictLine(t) {
@@ -568,7 +754,7 @@ export default class EditorPane extends View {
         .child(div().text_color(t.foreground).child("PROBLEMS"))
         .child(div().text_color(t.dim).child(`${this.problems.length}`))
         .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.ansi8, 1)))
-        .child(h_flex().gap(4).child(div().text_color(t.accent).child("f8")).child(div().text_color(t.dim).child("next"))))
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child(this.vimOn() ? "]d" : "cmd-k n")).child(div().text_color(t.dim).child("next"))))
       .child(empty
         ? div().px(12).py(8).text_color(t.dim).child(s?.status === "ready" ? "No problems." : s?.note ?? (s?.status === "starting" ? "The language server is starting…" : "No language server for this file."))
         : div().id("problems-list").flex_1().min_h(0).overflow_y_scrollbar().children(this.problems.map((d, i) => {
@@ -588,7 +774,9 @@ export default class EditorPane extends View {
   hints(t) {
     const list = this.mode === "line" ? [["enter", "go"], ["esc", "close"]]
       : this.mode ? [["enter", "next"], ["shift-enter", "prev"], ...(this.mode === "replace" ? [["cmd-enter", "replace all"]] : []), ["esc", "close"]]
-      : [["cmd-s", "save"], ["cmd-f", "find"], ["ctrl-g", "line"], ["f8", "problem"], ...(this.server?.id != null ? [["f12", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
+      : this.vimOn() && this.vim.mode === "insert" ? [["esc", "normal"], ["cmd-s", "save"], ["cmd-p", "files"]]
+      : this.vimOn() ? [[":", "ex"], ["space", "leader"], ["/", "search"], ["]d", "problem"], ...(this.server?.id != null ? [["gd", "definition"], ["K", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]]
+      : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(this.server?.id != null ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
     return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
       .children(list.map(([k, what], i) => h_flex().id(`editor-hint-${i}`).flex_none().gap(4)
@@ -652,6 +840,6 @@ export default class EditorPane extends View {
           .child(div().child(`type depth ${c.level}`))
           .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx))))
         .child(div().flex_1())
-        .child(h_flex().gap(4).child(div().text_color(t.accent).child("f12")).child(div().child("definition")))));
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child(this.vimOn() ? "gd" : "cmd-k d")).child(div().child("definition")))));
   }
 }
