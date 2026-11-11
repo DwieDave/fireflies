@@ -5236,9 +5236,19 @@ impl AppWindow {
 
     /// A press on the native view of mod copy `copy`: its pane takes focus, as
     /// in render_slot's mouse handler (the keyboard stays with the page).
+    /// A focusable mod also gets GPUI's keyboard (`focus`, as `pane.go` gives
+    /// it): the page keeps the keys it types, while the cmd chords it leaves
+    /// come back through GPUI to the mod's own keys.json section
+    /// (`mod:<name>`), not the window's.
     fn native_view_pressed(&mut self, copy: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(slot) = self.copies.iter().find(|(_, c)| c.id == copy).map(|(s, _)| s.clone()) else { return };
-        self.focus_pressed(slot, window, cx);
+        self.focus_pressed(slot.clone(), window, cx);
+        let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
+        if !dialog && self.model.tab_of(&slot).is_some() && self.focusable(&slot) {
+            // Kept as the block with the keyboard: it gets `focus` back after a popup over it.
+            self.focused_block = Some(slot);
+            self.hand_keyboard();
+        }
     }
 
     /// A press on a pane's native view: that pane takes focus, its tab and space show.
@@ -5252,6 +5262,10 @@ impl AppWindow {
             return;
         }
         self.model.focus_pane(&slot);
+        // A block that had the keyboard (`pane.go`) has it no more.
+        if self.focused_block.as_deref().is_some_and(|b| b != slot) {
+            self.focused_block = None;
+        }
         // The keyboard leaves the terminal that had it (in a tab now hidden, it
         // would take its tab back at the next frame): the pane's own terminal,
         // else the window (the native view keeps AppKit's keyboard).
@@ -5279,6 +5293,10 @@ impl AppWindow {
                     d.on_any_mouse_down(cx.listener(move |this, _, _, cx| {
                         if this.focused_pane.as_deref() != Some(id.as_str()) {
                             this.model.focus_pane(&id);
+                            // A block that had the keyboard (`pane.go`) has it no more.
+                            if this.focused_block.as_deref().is_some_and(|b| b != id) {
+                                this.focused_block = None;
+                            }
                             this.focused_pane = Some(id.clone());
                             this.publish(cx);
                             this.save();
@@ -7167,6 +7185,59 @@ mod tests {
         cx.run_until_parked();
         assert!(cx.update(|_, cx| view.read(cx).model.parked_tab_of("pm").is_none()), "a press unparks it");
         assert_eq!(copy(cx), first);
+    }
+
+    #[test]
+    fn a_press_on_a_focusable_mods_view_gives_the_mod_the_keyboard() {
+        in_own_process("press_hands_keyboard");
+    }
+
+    /// A press on a web page's native view: the page keeps AppKit's keyboard,
+    /// and the mod gets GPUI's (`focus`), so its own keys.json section applies
+    /// to the chords the page leaves. Each press again (the window may have
+    /// taken GPUI's keyboard back since, the pane still focused); a mod that
+    /// isn't focusable gets nothing.
+    #[gpui::test]
+    fn press_hands_keyboard(cx: &mut gpui::TestAppContext) {
+        use crate::layout::{Axis, Content, Node};
+        use serde_json::json;
+        if !running_alone("press_hands_keyboard") {
+            return;
+        }
+        let web = crate::mods::app_dir().join("mods/web");
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(web.join("mod.json"), r#"{ "place": "none", "focusable": true }"#).unwrap();
+        std::fs::write(web.join("main.js"), "import { View, div } from \"gpui-kit\"; import { nextCommand, shared, setShared } from \"herdr\";
+            export default class W extends View {
+              init(_p, cx) { cx.spawn(async () => { for (;;) { const c = await nextCommand(); if (c === \"focus\") setShared(\"web.focus\", (shared(\"web.focus\") ?? 0) + 1); } }); }
+              render() { return div(); } }").unwrap();
+        let (view, cx) = open_window(cx, "plain", "import { View, div } from \"gpui-kit\"; export default class P extends View { render() { return div(); } }", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            assert!(this.model.split_with("p1", Axis::Row, Node::block("pw", Content::Mod { name: "web".into(), props: json!({}) })));
+            assert!(this.model.split_with("p1", Axis::Column, Node::block("pp", Content::Mod { name: "plain".into(), props: json!({}) })));
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        let copy = |slot: &str, cx: &mut gpui::VisualTestContext| cx.update(|_, cx| view.read(cx).copies.get(slot).map(|c| c.id).unwrap());
+        let focus_count = || crate::mods::shared("web.focus").and_then(|v| v.as_u64()).unwrap_or(0);
+        let (web_copy, plain_copy) = (copy("pw", cx), copy("pp", cx));
+        cx.update(|window, cx| view.update(cx, |this, cx| this.native_view_pressed(web_copy, window, cx)));
+        cx.run_until_parked();
+        assert_eq!(focus_count(), 1, "the focusable mod got the keyboard");
+        let state = |cx: &mut gpui::VisualTestContext| cx.update(|_, cx| { let w = view.read(cx); (w.focused_pane.clone(), w.focused_block.clone()) });
+        assert_eq!(state(cx), (Some("pw".into()), Some("pw".into())));
+        // Pressed again while focused: the keyboard again.
+        cx.update(|window, cx| view.update(cx, |this, cx| this.native_view_pressed(web_copy, window, cx)));
+        cx.run_until_parked();
+        assert_eq!(focus_count(), 2);
+        // A mod without "focusable": its pane is focused, the window keeps GPUI's keyboard.
+        cx.update(|window, cx| view.update(cx, |this, cx| this.native_view_pressed(plain_copy, window, cx)));
+        cx.run_until_parked();
+        assert_eq!(focus_count(), 2);
+        assert_eq!(state(cx), (Some("pp".into()), None), "nor is the web pane the block with the keyboard any more");
     }
 
     #[test]

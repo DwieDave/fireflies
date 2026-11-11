@@ -360,12 +360,19 @@ the highlighted line shows where it will land.
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
   pages open in the system's browser. The web pane's bar, while it has the
-  keyboard (`pane.go`, or Cmd-Esc in the page): Enter / `i` into the page, `o`
-  / `/` the address (also Cmd-L), `H` `L` back / forward, `r` reload, `+ - 0`
-  zoom, `p` picture in picture, `d` the inspector, `O` the system's browser,
-  Tab / Shift-Tab its buttons (Enter presses), `?` the keys. Cmd-Esc in any
-  native view (page, PDF, player) gives the keyboard back to its pane; in a
-  PDF, the player and Quick Look plain Esc does too.
+  keyboard (`pane.go`, a click on the bar, Cmd-Esc in the page, or opened as
+  the focused pane): Enter / `i` into the page, `o` / `/` the address, `H` `L`
+  back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
+  inspector, `O` the system's browser, Tab / Shift-Tab its buttons (Enter
+  presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
+  Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
+  Cmd-Alt-I the inspector) applies in the bar, the address field, the page
+  (after a click into it, or Enter from the bar) and its inspector pane, over
+  Nocturne's and the global keys (Cmd-P is not the picker there, Cmd-[ / Cmd-]
+  not agents), and only in the focused web pane. Enter in the address goes
+  and puts the keyboard into the page; Esc leaves the address the same way.
+  Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
+  its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
   terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
   the terminal's folder, or a bare `README.md` there) opens it rendered in the
@@ -1541,7 +1548,9 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`
-  again after a popup over it closes. `layout.focus {id}` gives a layout block the
+  again after a popup over it closes, and on every click into its native view (a
+  web page): the view keeps the keys it types, while the chords it leaves come
+  back to the mod's keys.json section (`mod:<name>`). `layout.focus {id}` gives a layout block the
   keyboard the same way, and `pane.focus {pane}` a mod pane; `focused().block` names the layout block that has it (else null).
   Leave with `run("pane.go", {direction})` or `run("pane.focus", {pane})`.
   Without this opt-in, navigation and clicks stay unchanged.

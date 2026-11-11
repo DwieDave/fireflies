@@ -31,8 +31,22 @@
 //
 // Several can be open, in one tab or many: each pane is its own mod copy
 // (its own view, events and localStorage, when its props carry a `slot`).
-// `nocturne-browser.<cmd>` reaches every shown copy, so only the one last
-// focused or clicked acts on it.
+// `nocturne-browser.<cmd>` reaches every shown copy, so only one acts on it:
+// the focused pane's (found by its `slot`; an inspector pane's is its page's),
+// else the one last focused or clicked (a command from the palette or an agent).
+//
+// Where the keys go (keys.json's mod:nocturne-browser applies while GPUI's
+// keyboard is inside this mod):
+//   the bar     the bar keys above, and the mod's section, over the layout's
+//               (cmd-p is the address here, not the picker; cmd-[ / cmd-] are
+//               history, not agents)
+//   the address the field's own keys; the section's chords; esc into the page
+//   the page    a click into it gives this mod GPUI's keyboard too (focus), so
+//               the chords the page leaves come back to the section; ⌘R / ⌥⌘I /
+//               ⌘esc are taken before the page sees them (the native view's
+//               web.reloadKey / web.inspectKey / view.escapeKey)
+// Tab never reaches an on_key_down (GPUI's root binds it to moving focus): the
+// root binds tab / shift-tab in its own key context and hands them to key().
 // Logins persist: the view keeps its own WebKit store (persist: true), never
 // Safari's or Chrome's. A new pane starts on a blank sky with the address
 // field focused, so nothing loads until you type.
@@ -55,8 +69,13 @@ export const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"]
   ["tab ⇧tab", "buttons (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 /** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
-// The copy that last had the keyboard or a click: it alone takes broadcast commands.
+// The copy that last had the keyboard or a click: it takes broadcast commands
+// while no web pane is focused.
 const ACTIVE = "nocturne-browser.active";
+// Tab and shift-tab, bound in the browser's own key context (see the top).
+const CONTEXT = "NocturneBrowser", TAB = "nocturne_browser::tab", TAB_BACK = "nocturne_browser::tab_back";
+/** The key event a bound tab stands for. */
+const tabEvent = (shift) => ({ key: "tab", keystroke: shift ? "shift-tab" : "tab", key_char: null, modifiers: { shift, control: false, alt: false, platform: false, function: false } });
 // The open inspector panes: { [web view key]: pane id }, one per page.
 const INSPECTORS = "nocturne-browser.inspectors";
 const INSPECTOR = "inspector";
@@ -118,7 +137,15 @@ export default class Browser extends View {
       });
       return;
     }
+    // A slot from the props names this copy's pane too (panes() carries its props).
+    this.ownSlot = Boolean(pr.slot);
     this.slot = pr.slot ? String(pr.slot) : Math.random().toString(36).slice(2);
+    if (!Browser.bound) {
+      try {
+        cx.bind_keys([{ keystroke: "tab", action: TAB, context: CONTEXT }, { keystroke: "shift-tab", action: TAB_BACK, context: CONTEXT }]);
+        Browser.bound = true;
+      } catch { /* key() still takes a tab that reaches it */ }
+    }
     let saved = null;
     try { saved = localStorage.getItem("url"); } catch {}
     // The page the view is created on. Later pages go through navigate
@@ -138,6 +165,8 @@ export default class Browser extends View {
     this.input.on("blur", (_e, cx) => { if (this.start) { this.editing = false; cx.notify(); } });
     this.editing = !this.start;
     if (this.editing) cx.timer.after(150, () => this.input.focus());
+    // Opened as the focused pane (a link beside a terminal): the bar takes the keyboard.
+    else for (const ms of [0, 120, 400]) cx.timer.after(ms, () => { if (this.ownSlot && this.isFocusedPane() && !this.handle.is_focused?.() && !this.editing) { this.claim(); this.handle.focus(); } });
     // The tabs shown lately (newest last, `{ space, tab }`): picture in picture
     // puts this tab away and shows the one before. Polled gently: a mod isn't
     // told when another tab shows.
@@ -157,6 +186,7 @@ export default class Browser extends View {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-browser\./, "");
         // "focus" comes to this copy alone (pane.go); the rest to every shown copy.
+        // A press into the page sends it too: the page keeps AppKit's keyboard.
         if (c === "focus") { this.claim(); this.handle.focus(); }
         else if (this.mine()) this.command(c, cx);
         cx.notify();
@@ -172,9 +202,30 @@ export default class Browser extends View {
     if (shared(ACTIVE) !== this.slot) setShared(ACTIVE, this.slot);
   }
 
+  /** Whether a broadcast command is this copy's: the focused pane's page, else
+   *  the copy last focused or clicked (focused: a terminal, the palette's caller). */
   mine() {
+    const f = focused()?.pane;
+    const pane = f ? panes().find((x) => x.pane === f && x.mod === "nocturne-browser") : null;
+    if (pane?.props?.inspect != null) return String(pane.props.inspect) === this.viewKey();
+    if (pane?.props?.slot != null) return String(pane.props.slot) === this.slot;
+    // A web pane without a slot: not one of the panes that have theirs.
+    if (pane && this.ownSlot) return false;
     const a = shared(ACTIVE);
     return a == null || a === this.slot;
+  }
+
+  /** This copy's web view key (an inspector pane's props name it), once it has one. */
+  viewKey() {
+    if (this.of || !this.start || !available()) return this.of ?? null;
+    try { this.of = herdr.nativeViewCall(ID, "web.inspect", {})?.of ?? null; } catch { this.of = null; }
+    return this.of;
+  }
+
+  /** This copy's pane is the window's focused one. */
+  isFocusedPane() {
+    const mine = this.ownPane();
+    return Boolean(mine && focused()?.pane === mine.pane);
   }
 
   async close() {
@@ -204,7 +255,8 @@ export default class Browser extends View {
    *  the focused browser pane (a click on the bar focuses it), else the only
    *  browser in the shown tab. */
   ownPane() {
-    const all = panes().filter((x) => x.mod === "nocturne-browser");
+    const all = panes().filter((x) => x.mod === "nocturne-browser" && x.props?.inspect == null);
+    if (this.ownSlot) return all.find((x) => String(x.props?.slot) === this.slot) ?? null;
     const focused = all.find((x) => x.focused);
     if (focused) return focused;
     const tab = panes().find((x) => x.focused)?.tab;
@@ -339,10 +391,30 @@ export default class Browser extends View {
     if (!url) return;
     this.editing = false;
     this.error = null;
-    if (!this.start) this.start = url; // the view is created on it
+    const first = !this.start;
+    if (first) this.start = url; // the view is created on it
     else this.call("browser.navigate", { url });
     this.page = { ...this.page, href: url, loading: true, progress: 0.05 };
+    // The keyboard into the page, as a browser does (the first page's view
+    // comes with the next frame); the mod keeps GPUI's, for its chords.
+    this.handle?.focus();
+    if (first) cx?.timer?.after(300, () => this.focusPage());
+    else this.focusPage();
     cx?.notify();
+  }
+
+  /** The page takes AppKit's keyboard (quietly: no view yet is no error). */
+  focusPage() {
+    if (!this.start || !available()) return;
+    try { herdr.nativeViewCall(ID, "focus", {}); } catch {}
+  }
+
+  /** Out of the address field without going: the page has the keyboard
+   *  again (a blank pane: the bar), the mod GPUI's. */
+  leaveAddress() {
+    this.editing = false;
+    this.handle?.focus();
+    this.focusPage();
   }
 
   /** The page in the system's default browser. */
@@ -365,10 +437,12 @@ export default class Browser extends View {
     if (c === "keys") this.keysShown = !this.keysShown;
     else if (c === "url") this.edit();
     else if (c === "inspect") { if (this.start) this.inspector(cx); }
+    // Nothing open yet: no page to move (a call would only say there's no view).
+    else if ((c === "reload" || c === "back" || c === "forward" || c === "web") && !(this.start && available())) return;
     else if (c === "reload") this.call(this.page.loading ? "browser.stop" : "browser.reload");
     else if (c === "back") this.call("browser.back");
     else if (c === "forward") this.call("browser.forward");
-    else if (c === "web") this.call("focus");
+    else if (c === "web") { this.ring = null; this.call("focus"); }
     else if (c === "pip") { if (this.start) this.call("web.pip"); }
     else if (c === "zoom_in" || c === "zoom_out" || c === "zoom_reset") {
       const z = c === "zoom_reset" ? 0.9 : this.zoom + (c === "zoom_in" ? 0.1 : -0.1);
@@ -381,7 +455,7 @@ export default class Browser extends View {
     this.claim();
     const k = e.keystroke;
     if (k === "cmd-p" || k === "cmd-l") this.command("url");
-    else if (k === "escape" && this.editing && this.start) { this.editing = false; this.call("focus"); }
+    else if (k === "escape" && this.editing) this.leaveAddress();
     else if (k === "cmd-r") this.command("reload");
     else if (k === "cmd-[") this.command("back");
     else if (k === "cmd-]") this.command("forward");
@@ -547,6 +621,9 @@ export default class Browser extends View {
           : this.blank(t, this.page.loading ? "Loading…" : "", this.page.href)));
     }
     return v_flex().id("browser").size_full().bg(t.background).track_focus(this.handle)
+      .key_context(CONTEXT)
+      .on_action(TAB, (_e, cx) => this.key(tabEvent(false), cx))
+      .on_action(TAB_BACK, (_e, cx) => this.key(tabEvent(true), cx))
       .on_mouse_down("left", () => this.claim())
       .on_key_down((e, cx) => this.key(e, cx))
       .child(this.bar(t))

@@ -194,7 +194,9 @@ those files or the generated guide. The app rewrites them on start.
 - Mods live in `mods/<name>/` with `main.js` and optional `mod.json`.
   They are trusted JavaScript with command and network access.
   `"focusable": true` in `mod.json` lets `pane.go` move onto a copy; it receives
-  `"focus"` from `nextCommand()` and focuses its own keyboard handle.
+  `"focus"` from `nextCommand()` and focuses its own keyboard handle. A click
+  into the copy's native view (a web page) sends it too, so the mod's keys.json
+  section applies to the chords the page doesn't take.
   `layout.focus {id}` does the same for a layout block by id; `focused().block`
   names the block holding the keyboard.
 - Shipped mods belong to Herdr: duplicate with `mod.clone` before editing.

@@ -450,6 +450,41 @@ mod tests {
         assert_eq!(crate::commands::shorthand(crate::commands::find("tab.select").unwrap(), "3"), json!({"index":3}));
     }
 
+    /// Which shipped binding a chord runs where the keyboard is: the web pane's
+    /// section (`mod:nocturne-browser`) over Nocturne's and the global ones
+    /// while GPUI's keyboard is inside the pane (its bar, its address field,
+    /// its page after a press: src/window.rs hands it `focus`), the layout's
+    /// and the global ones when the window holds it.
+    #[test]
+    fn the_web_panes_section_shadows_the_layout_and_global_keys_inside_it() {
+        let keymap = gpui::Keymap::new(super::parse(include_str!("../defaults/keys.macos.json")).unwrap());
+        let stack = |contexts: &[&str]| contexts.iter().map(|c| gpui::KeyContext::parse(c).unwrap()).collect::<Vec<_>>();
+        let window = ["ShellRoot", "Herdr layout = nocturne"];
+        let pane = [&window[..], &["Mod mod = nocturne-browser"]].concat();
+        let bar = [&pane[..], &["NocturneBrowser"]].concat();
+        let address = [&bar[..], &["Input"]].concat();
+        let runs = |chord: &str, at: &[&str]| {
+            let (bindings, _) = keymap.bindings_for_input(&[gpui::Keystroke::parse(chord).unwrap()], &stack(at));
+            bindings.first().and_then(|b| b.action().as_any().downcast_ref::<super::ShellAction>().map(|a| a.id().to_owned()))
+        };
+        for at in [&pane[..], &bar[..], &address[..]] {
+            assert_eq!(runs("cmd-p", at).as_deref(), Some("nocturne-browser.url"), "{at:?}");
+            assert_eq!(runs("cmd-l", at).as_deref(), Some("nocturne-browser.url"));
+            assert_eq!(runs("cmd-r", at).as_deref(), Some("nocturne-browser.reload"));
+            assert_eq!(runs("cmd-[", at).as_deref(), Some("nocturne-browser.back"));
+            assert_eq!(runs("cmd-]", at).as_deref(), Some("nocturne-browser.forward"));
+            assert_eq!(runs("cmd-alt-i", at).as_deref(), Some("nocturne-browser.inspect"));
+            // The app's other keys still work inside it.
+            assert_eq!(runs("cmd-t", at).as_deref(), Some("tab.new"));
+            assert_eq!(runs("cmd-shift-p", at).as_deref(), Some("app.palette"));
+        }
+        // The window holding the keys (a pane focused without a click): Nocturne's and the app's.
+        assert_eq!(runs("cmd-p", &window).as_deref(), Some("nocturne.picker"));
+        assert_eq!(runs("cmd-[", &window).as_deref(), Some("agent.prev"));
+        assert_eq!(runs("cmd-]", &window).as_deref(), Some("agent.next"));
+        assert_eq!(runs("cmd-l", &window), None);
+    }
+
     #[test]
     fn shipped_keys_load() {
         for keys in [include_str!("../defaults/keys.json"), include_str!("../defaults/keys.macos.json")] {
