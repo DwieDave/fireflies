@@ -54,8 +54,9 @@ export function working(t, id, text) {
  *   options extra elements (checkboxes)
  *   go      { label, action }   keep: cancel
  *   busy    a step's words while it runs: buttons give way to `working`
+ *   at      the button with the keyboard ("go" | "keep"): drawn focused
  */
-export function confirm(t, id, { title, facts = [], options = [], go, keep, keepLabel = "keep", busy }) {
+export function confirm(t, id, { title, facts = [], options = [], go, keep, keepLabel = "keep", busy, at = null }) {
   return v_flex().id(id).mx(10).my(3).px(8).py(6).gap(4).text_size(11)
     .bg(t.ansi0 + "66").border_l(2).border_color(t.blocked)
     .on_mouse_down("left", stop)
@@ -65,10 +66,11 @@ export function confirm(t, id, { title, facts = [], options = [], go, keep, keep
       .children(options)
       .child(h_flex().pt(2).gap(6).items_center()
         .child(div().id(`${id}-go`).flex_none().h(20).px(8).flex().items_center().border(1).border_color(t.blocked).text_color(t.blocked)
+          .when(at === "go", (el) => el.bg(t.blocked).text_color(t.background))
           .hover((s) => s.bg(t.blocked).text_color(t.background))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); go.action(cx); })
           .child(go.label))
-        .child(chip(t, `${id}-keep`, keepLabel, keep))))
+        .child(chip(t, `${id}-keep`, keepLabel, keep).when(at === "keep", (el) => el.text_color(t.foreground).bg(t.ansi0).child(div().absolute().inset_0().border(1).border_color(t.accent))))))
     .when(Boolean(busy), (el) => el.child(working(t, `${id}-busy`, busy)));
 }

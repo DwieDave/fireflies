@@ -145,6 +145,7 @@ export default class Sky {
     this.navAt = 0;
     this.navList = [];
     this.spaces.onDone = () => this.refocus();
+    this.spaces.focusHost = () => this.handle.focus(); // an inline form's chip has the keyboard
     this.usage = new UsageSection();
     this.usage.init(cx);
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
@@ -369,7 +370,7 @@ export default class Sky {
   key(e, cx) {
     if (this.spaces.confirmKey(e, cx)) { cx.stop_propagation(); return cx.notify(); }
     // A field inside (a name, a folder) has the keyboard: its keys are its own.
-    if (this.naming || (this.spaces.mode && this.spaces.mode.kind !== "delete")) return;
+    if (this.naming || this.spaces.mode) return;
     const verb = keyVerb(e, SIDEBAR_KEYS);
     if (!verb) return;
     cx.stop_propagation();
