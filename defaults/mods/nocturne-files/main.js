@@ -455,8 +455,9 @@ export default class Files extends View {
     cx.timer.after(1400, (cx) => { if (this.copied === at) { this.copied = 0; cx.notify(); } });
   }
 
-  /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from. */
-  close() {
+  /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from.
+   *  Not close(): Herdr calls that as cleanup once the pane is gone. */
+  closePane() {
     const me = this.me() ?? (this.alone ? null : this.panel());
     if (!me) return;
     const from = shared(FROM), had = focused()?.pane === me.pane;
@@ -518,7 +519,7 @@ export default class Files extends View {
     else if (act === "other") viewerFor(p)?.other === "system" ? this.openFile(p, cx, true) : this.edit(p, cx);
     else if (act === "terminal") this.terminalEdit(p, cx);
     else if (act === "copy") this.copy(p, cx);
-    else if (act === "close") this.close();
+    else if (act === "close") this.closePane();
   }
 
   menuKey(e, cx) {
@@ -592,8 +593,8 @@ export default class Files extends View {
     if (low === "h" && upper) this.setFilter("hidden", cx);
     else if (low === "i" && upper) this.setFilter("ignored", cx);
     else if (k === "/") this.input.focus();
-    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else this.leave(); }
-    else if (k === "q") this.close();
+    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.closePane(); else this.leave(); }
+    else if (k === "q") this.closePane();
     else if (k === "[" || k === "backspace") this.back(cx);
     else if (k === "]") this.forward(cx);
     else if (k === "j" || k === "down") this.select(rows, i + 1);
@@ -656,7 +657,7 @@ export default class Files extends View {
       .when(fit.close, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
         .text_color(t.muted).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop)
-        .on_click(() => this.close())
+        .on_click(() => this.closePane())
         .child(svg(`${ICONS}/x.svg`).size(12))))
       // The keyboard is here: the rule under the toolbar lights up.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : t.ansi0, 1)));

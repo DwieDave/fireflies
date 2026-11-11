@@ -1516,7 +1516,10 @@ Rules:
   `run("terminal.kill", { terminal: address })`: those go out before the event
   loop stops; other commands may not run. An `exec` already started keeps
   running; don't start new long-lived work in `close`. This is best-effort,
-  not a guarantee after a crash or forced termination.
+  not a guarantee after a crash or forced termination. The pane is already
+  gone when `close` runs (`panes()` may still list it): don't name the
+  mod's own "close this pane" action `close`, or it closes the pane twice
+  and the person sees "pane.close failed".
 - Use `theme()` colors so the mod follows the user's theme.
 - **Animate natively, never with a timer.** Every redraw of a mod redraws
   the whole window, so `cx.timer.every(90, () => cx.notify())` for a

@@ -58,6 +58,8 @@ test:
     bun test scripts/nocturne-palette.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.
     bun test scripts/nocturne-picker-view.test.ts
+    # No mod's cleanup hook (an exported View's close()) closes its pane again.
+    bun test scripts/mod-close-hook.test.ts
     cargo test --locked
 
 docs-generate: build

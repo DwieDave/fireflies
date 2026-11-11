@@ -469,3 +469,22 @@ test("drawn at 280 px with filters on, the header has no long labels; at 120 onl
   expect(narrow).not.toContain(".*");
   expect(narrow).not.toContain("edit");
 });
+
+test("Herdr's cleanup call when the pane goes closes nothing more (it used to close the pane a second time: 'no pane' toast)", () => {
+  // Herdr calls close() on the copy while its last panes() still lists the pane.
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  world.shared = { "nocturne-files.from": "p1" };
+  world.focused = { pane: "pp" };
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pp", tab: "t1", mod: "nocturne-files", props: { folder: "/repo" } }];
+  const panel = pane({ folder: "/repo" }, TREE);
+  world.panes.push({ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } });
+  const own = pane({ path: "/repo", slot: "s1" }, TREE);
+  commands.length = 0;
+  panel.close?.(cx);
+  own.close?.(cx);
+  expect(commands).toEqual([]);
+  // q still closes it, once.
+  own.key({ key: "q" }, cx);
+  expect(commands).toEqual([["pane.close", { pane: "pf" }]]);
+  world.focused = null;
+});
