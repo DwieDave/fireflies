@@ -25,7 +25,8 @@ worktrees, you brief, review, merge, and ship.
    ```
    Agents run on Opus 5.5 at high effort (the `--model` and `--effort` above).
    `hc` is at `~/.local/bin/hc` (not on the Bash tool's PATH). Without
-   `space`, the tab lands in whatever space is focused.
+   `space`, the tab lands in whatever space is focused. Then start its
+   watcher (Notify David).
 4. **Follow-ups** go to a live agent with `hc send <t> "<task>"`; check it's
    alive first (`hc get <t>`). A finished agent's worktree can host a new one.
 
@@ -33,6 +34,32 @@ Design work: the brief asks for **2 concepts** (images/HTML via /impeccable,
 look locked to the nocturne style) sent back first; the agent builds its pick
 unless David answers within ~10 minutes. Relay both concepts to David with
 your read on them.
+
+## Notify David
+
+Push to his phone with the `pushover` skill on two events:
+
+- **All agents done**: the last working agent has stopped. One push for the
+  batch, once you have read the last report: which agents finished, what each
+  delivered in a line, and what happens next (merge and build running, or the
+  decision he owes).
+- **An agent is blocked**: its status is `blocked` (a permission prompt or a
+  question on its screen), or its report asks something only David can
+  answer. Read its screen first (`hc read --lines 0 <t>`); the push names the
+  agent and quotes what it asks.
+
+Agent tabs aren't your children, so hc tells you nothing when one stops or
+blocks. A **watcher** per agent does: run it as a background command once the
+launch check shows `working`, and again after each follow-up to an agent that
+had stopped.
+
+```sh
+T=<t>; while s=$(~/.local/bin/hc get $T | jq -r 'if .state != "live" then "exited" else .status.state // "working" end'); [ "$s" = working ]; do ~/.local/bin/hc wait $T --timeout 600 >/dev/null 2>&1; done; echo "$T $s"
+```
+
+It ends when the agent leaves `working` and prints why: `blocked` (push);
+`error` (read the screen, push if a nudge from you doesn't clear it); `done`,
+`idle` or `exited` (that agent stopped: push if it was the last one working).
 
 ## Review and merge
 
