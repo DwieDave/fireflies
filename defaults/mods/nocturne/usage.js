@@ -17,7 +17,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, shared, setShared } from "herdr";
-import { ART, dither, eyebrow } from "./kit.js";
+import { ART, dither, eyebrow, navRow, navRing } from "./kit.js";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.js";
 
 const FOLDED = "nocturne.usageFolded";
@@ -105,14 +105,16 @@ export class UsageSection {
   }
 
   /** One window: its mark, the numbers, the path, when it comes back. */
-  row(t, id, mark, label, w, back) {
+  row(t, id, mark, label, w, back, nav) {
     const r = left(w);
+    const on = nav?.(id, "usage", { go: () => toggleUsage() }) ?? false;
     return h_flex().id(id).relative().px(16).py(4).gap(10).items_center()
+      .map((el) => navRow(t, el, on))
       .hover((s) => s.bg(t.ansi0))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { cx.stop_propagation(); toggleUsage(); })
-      .child(div().w(20).h(22).flex_none().flex().items_center().justify_center().child(mark))
-      .child(v_flex().flex_1().min_w(0).gap(2)
+      .child(div().relative().w(20).h(22).flex_none().flex().items_center().justify_center().child(mark))
+      .child(v_flex().relative().flex_1().min_w(0).gap(2)
         .child(h_flex().gap(6).items_baseline().text_size(11)
           .child(div().flex_none().text_color(t.ansi8).child(label))
           .child(div().flex_1())
@@ -134,10 +136,11 @@ export class UsageSection {
   }
 
   /** The providers' logos; the picked one lit. */
-  switcher(t) {
+  switcher(t, nav) {
     const on = provider().id;
     return h_flex().id("usage-providers").flex_none().gap(2).items_center()
-      .children(PROVIDERS.map((p) => div().id(`usage-provider-${p.id}`).p(2).flex_none()
+      .children(PROVIDERS.map((p) => div().id(`usage-provider-${p.id}`).relative().p(2).flex_none()
+        .map((el) => navRing(t, el, nav?.(`usage-provider-${p.id}`, "usage", { go: (cx) => pick(p.id, cx) }) ?? false))
         .tooltip(p.id === on ? `${p.name} usage` : `Show ${p.name} usage`)
         .when(p.id !== on, (el) => el.hover((s) => s.bg(t.ansi0)))
         .on_mouse_down("left", stop)
@@ -149,9 +152,10 @@ export class UsageSection {
    *  left, the path with the clock's plus). No art and no provider switch:
    *  those live in the open sidebar; the tooltip names the provider. Click:
    *  the usage pane. Its height lifts the rail's hills (sky.js). */
-  rail(t) {
+  rail(t, nav) {
     const d = reading();
-    const meter = (id, w, label) => v_flex().id(id).w_full().px(14).py(4).gap(3).flex_none()
+    const meter = (id, w, label) => v_flex().id(id).relative().w_full().px(14).py(4).gap(3).flex_none()
+      .map((el) => navRing(t, el, nav?.(id, "usage", { go: () => toggleUsage() }) ?? false))
       .hover((s) => s.bg(t.ansi0))
       .tooltip(`${provider().name} ${label}: ${left(w)}% left`)
       .on_mouse_down("left", stop)
@@ -170,19 +174,22 @@ export class UsageSection {
       .when(Boolean(d.week), (el) => el.child(meter("usage-rail-wk", d.week, windowName(d.week, "week"))));
   }
 
-  render(t) {
+  /** `nav` (sky.js): registers a control with the keyboard's cursor, true while it's on it. */
+  render(t, nav) {
     const d = reading(), note = usageNote(), who = provider();
     const folded = this.folded;
+    const foldOn = nav?.("usage-fold", "usage", { go: () => setShared(FOLDED, !folded) }) ?? false;
     const nums = d ? [d.session, d.week].filter(Boolean).map((w) => `${left(w)}%`).join(" · ") : "";
     const head = h_flex().id("usage-head").px(16).pb(4).gap(6).items_center()
-      .child(h_flex().id("usage-fold").flex_1().gap(6).items_center()
+      .child(h_flex().id("usage-fold").relative().flex_1().gap(6).items_center()
+        .map((el) => navRing(t, el, foldOn))
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => { cx.stop_propagation(); setShared(FOLDED, !folded); })
         .child(div().flex_none().child(eyebrow(t, "usage")))
         .child(div().flex_none().text_size(11).text_color(t.dim).child(folded ? "▸" : "▾"))
         .child(div().flex_1())
         .when(folded && Boolean(nums), (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(nums))))
-      .child(this.switcher(t));
+      .child(this.switcher(t, nav));
     // Its height lifts the sky's hills (sky.js), so the landscape rests on it.
     const box = v_flex().id("usage").pt(4).pb(8).flex_none().child(head)
       .on_size_change((size, cx) => { if (size.height !== this.height) { this.height = size.height; cx.notify(); } });
@@ -195,8 +202,8 @@ export class UsageSection {
     const s = d.session, wk = d.week;
     return box
       .when(Boolean(s), (el) => el.child(this.row(t, "usage-5h", this.hourglass(t, s), windowName(s, "5h"), s,
-        s.resets ? (left(s) === 0 ? `turned at ${clock(s.resets)}` : `fresh in ${span(s.resets - now)}`) : null)))
+        s.resets ? (left(s) === 0 ? `turned at ${clock(s.resets)}` : `fresh in ${span(s.resets - now)}`) : null, nav)))
       .when(Boolean(wk), (el) => el.child(this.row(t, "usage-wk", this.moon(t, wk, 20), windowName(wk, "week"), wk,
-        wk.resets ? `full ${DAYS[new Date(wk.resets).getDay()]} ${clock(wk.resets)} · in ${span(wk.resets - now)}` : null)));
+        wk.resets ? `full ${DAYS[new Date(wk.resets).getDay()]} ${clock(wk.resets)} · in ${span(wk.resets - now)}` : null, nav)));
   }
 }

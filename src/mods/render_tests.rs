@@ -1030,6 +1030,11 @@ fn shipped_layouts_and_keys() {
         "nocturne-browser.back",
         "nocturne-browser.forward",
         "nocturne-browser.inspect",
+        "nocturne.sidebar",
+        "nocturne.tabstrip",
+        "nocturne.header",
+        "nocturne.toast",
+        "nocturne.toast-close",
     ];
     for text in [
         include_str!("../../defaults/keys.json"),

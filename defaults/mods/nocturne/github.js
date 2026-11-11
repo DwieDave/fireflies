@@ -23,6 +23,6 @@ export function toggleGithub() {
   const h = here();
   // A space attached to a folder shows that repo; otherwise the focused pane's.
   const folder = (h.space?.attached && h.space.folder) || h.folder;
-  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { folder, on: h.on } });
+  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", scrim: true, width: 0.85, height: 0.85, resizable: { min: [520, 360] }, props: { folder, on: h.on } });
   setShared(WINDOW, { id, beat: Date.now() });
 }

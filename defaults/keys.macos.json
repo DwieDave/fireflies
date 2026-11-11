@@ -70,7 +70,9 @@
     "alt-backspace": "send:\u0017",
     "cmd-left": "send:\u0001",
     "cmd-right": "send:\u0005",
-    "cmd-backspace": "send:\u0015"
+    "cmd-backspace": "send:\u0015",
+    "ctrl-`": "overlay.focus",
+    "ctrl-shift-`": "overlay.focus:prev"
   },
   "layout:nocturne": {
     "cmd-alt-]": "nocturne.next",
@@ -91,7 +93,12 @@
     "cmd-alt-e": "pane.equalize:all",
     "cmd-alt-g": "nocturne.gridify",
     "cmd-p": "nocturne.picker",
-    "cmd-shift-f": "nocturne.grep"
+    "cmd-shift-f": "nocturne.grep",
+    "cmd-alt-s": "nocturne.sidebar",
+    "cmd-alt-t": "nocturne.tabstrip",
+    "cmd-alt-.": "nocturne.header",
+    "cmd-alt-n": "nocturne.toast",
+    "cmd-alt-shift-n": "nocturne.toast-close"
   },
   "mod:nocturne-editor": {
     "cmd-s": "nocturne-editor.save",

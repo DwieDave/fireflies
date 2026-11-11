@@ -259,7 +259,7 @@ export default class Actions {
     const list = this.list(), r = this.run(), i = list.indexOf(r);
     const at = PANELS.indexOf(this.focus);
     const f = this.focus;
-    if (k === "tab") this.focus = PANELS[(at + 1) % PANELS.length];
+    if (k === "tab") this.focus = PANELS[(at + (e.modifiers?.shift ? PANELS.length - 1 : 1)) % PANELS.length];
     else if (k === "escape" && f !== "runs") this.focus = PANELS[at - 1];
     else if (f === "runs" && (k === "j" || k === "down")) this.selectRun(i + 1, cx);
     else if (f === "runs" && (k === "k" || k === "up")) this.selectRun(i - 1, cx);
@@ -313,7 +313,7 @@ export default class Actions {
   static help() {
     return [
       ["j k", "move: runs, steps; scroll the log"], ["h l ← →", "out / in: runs → jobs → steps → log"], ["hjkl (jobs)", "move through the graph"],
-      ["enter tab", "in / next panel"], ["esc", "back out"], ["J K", "page the log"], ["g G", "first / last"],
+      ["enter tab ⇧tab", "in / next / previous panel"], ["esc", "back out"], ["J K", "page the log"], ["g G", "first / last"],
       ["w", "next running run"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
       ["X", "cancel the run"], ["o", "in the browser"], ["r", "refresh now"],
       ["drag scroll", "move the graph (double-click: back)"],

@@ -29,17 +29,23 @@
 //   h ←            fold, or go to the parent row
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
 //   E              edit it in $EDITOR (a terminal beside)
+//   p              its viewer (preview, Markdown) v  Neovim beside
 //   -              root one folder up            .  root at the selected folder
+//   [ / ]          back / forward through the folders rooted at (also alt-← / alt-→, ctrl-o / ctrl-i, backspace)
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
-//   v              Neovim beside                 o  a folder in a new files pane
-//   y              copy the path                 m  the right-click menu
-//   q / esc        close (a pane of its own)
+//   o              a folder in a new files pane  y  copy the path
+//   m              the right-click menu          q  close
+//   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
+//
+// The keyboard: a copy takes it when its pane is the focused one as it opens
+// (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
+// cmd-e on an open panel (nocturne/files.js focusFiles: "take-panel").
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { props, theme, settings, exec, run, panes, spaces, terminals, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } from "./logic.js";
+import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -64,6 +70,8 @@ const ART = "mods/nocturne/art";
 const MOD = "nocturne-files";
 const ICONS = "mods/workspace-chrome";
 const FILTERS = `${MOD}.filters`, TITLES = `${MOD}.titles`, PATHS = `${MOD}.paths`;
+/** The pane the keyboard came from into the panel (set by nocturne/files.js). */
+const FROM = `${MOD}.from`;
 const HITS = 200, MENU_ROW = 20;
 const zoom = () => Number(settings()?.zoom) || 1;
 
@@ -107,16 +115,76 @@ export default class Files extends View {
     this.input.on("submit", (_e, cx) => { this.enter(cx); cx.notify(); });
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
+    this.nav = newNav();
     this.reroot(pr.path || pr.folder || home(), cx);
+    // Opened as the focused pane (cmd-e, files.open): the keyboard comes here,
+    // which the app leaves with the window for a mod pane. Again a little
+    // later, as the editor does, in case the window took it back meanwhile.
+    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing) this.takeKeys(cx); });
     // Remote folders can't be watched: poll those instead.
     cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
       for (;;) {
-        const c = await nextCommand();
-        if (c === "focus") this.handle.focus();
+        const c = String(await nextCommand()).replace(`${MOD}.`, "");
+        if (c === "focus" || (c === "take-panel" && !this.alone && this.isFocusedPane())) this.takeKeys(cx);
         cx.notify();
       }
     });
+  }
+
+  // ---- the keyboard
+
+  /** This copy's pane is the app's focused one. */
+  isFocusedPane() {
+    const mine = this.me() ?? (this.alone ? null : this.panel());
+    return Boolean(mine && focused()?.pane === mine.pane);
+  }
+
+  /** The panel in the shown tab (a pane without a path of its own). */
+  panel() {
+    const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    return panes().find((p) => p.mod === MOD && p.tab === tab && !p.props?.path) ?? null;
+  }
+
+  /** Takes the keyboard, with a row picked so j / k start somewhere. */
+  takeKeys(cx) {
+    this.handle.focus();
+    if (!this.sel) { const rows = this.shown(); if (rows.length) this.select(rows, 0); }
+    cx?.notify();
+  }
+
+  /** esc in the panel: the keyboard back to the pane it came from (else the pane to the left). */
+  leave() {
+    const from = shared(FROM), mine = this.me() ?? this.panel();
+    if (from && from !== mine?.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+    else run("pane.go", { direction: "left" });
+  }
+
+  // ---- the folders visited
+
+  /** Roots the tree at `folder`, remembered for back. */
+  go(folder, cx) {
+    const step = navGo(this.nav, this.root, folder);
+    if (!step) return;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
+  }
+
+  /** Back: the folder before (with none, the parent); the folder left is picked there. */
+  back(cx) {
+    const step = navBack(this.nav, this.root);
+    if (!step) return;
+    const from = this.root;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
+    this.pendingSel = from;
+  }
+
+  forward(cx) {
+    const step = navForward(this.nav, this.root);
+    if (!step) return;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
   }
 
   // ---- the tree
@@ -387,9 +455,18 @@ export default class Files extends View {
     cx.timer.after(1400, (cx) => { if (this.copied === at) { this.copied = 0; cx.notify(); } });
   }
 
+  /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from. */
   close() {
-    const me = this.me();
-    if (me) run("pane.close", { pane: me.pane });
+    const me = this.me() ?? (this.alone ? null : this.panel());
+    if (!me) return;
+    const from = shared(FROM), had = focused()?.pane === me.pane;
+    run("pane.close", { pane: me.pane });
+    if (!this.alone && had && from && from !== me.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+  }
+
+  /** p: a file in the app's viewer for it (the preview, Markdown); others in the editor. */
+  preview(row, cx) {
+    if (row && !row.dir && !row.head) this.openFile(row.path, cx);
   }
 
   /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
@@ -434,7 +511,7 @@ export default class Files extends View {
     const p = row.path;
     if (act === "toggle") row.head ? this.reveal(p, cx) : this.toggle(p, cx);
     else if (act === "pane") this.openPane(p);
-    else if (act === "root") this.reroot(p ? `${this.root}/${p}` : this.root, cx);
+    else if (act === "root") this.go(p ? `${this.root}/${p}` : this.root, cx);
     else if (act === "edit") this.edit(p, cx);
     else if (act === "nvim") this.nvim(row);
     else if (act === "open") this.openFile(p, cx);
@@ -506,14 +583,19 @@ export default class Files extends View {
       cx.notify();
       return;
     }
+    // Back and forward, the browser's and vim's jump list's way too.
+    if ((m.alt && k === "left") || (m.control && k === "o")) { this.back(cx); cx.stop_propagation(); cx.notify(); return; }
+    if ((m.alt && k === "right") || (m.control && k === "i")) { this.forward(cx); cx.stop_propagation(); cx.notify(); return; }
     if (m.platform || m.control || m.alt) return;
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     if (low === "h" && upper) this.setFilter("hidden", cx);
     else if (low === "i" && upper) this.setFilter("ignored", cx);
     else if (k === "/") this.input.focus();
-    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else return; }
-    else if (k === "q" && this.alone) this.close();
+    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else this.leave(); }
+    else if (k === "q") this.close();
+    else if (k === "[" || k === "backspace") this.back(cx);
+    else if (k === "]") this.forward(cx);
     else if (k === "j" || k === "down") this.select(rows, i + 1);
     else if (k === "k" || k === "up") this.select(rows, i < 0 ? 0 : i - 1);
     else if (low === "g" && upper) { this.select(rows, rows.length - 1); this.gAt = 0; }
@@ -532,13 +614,14 @@ export default class Files extends View {
     else if (k === "E" || (low === "e" && m.shift)) this.terminalEdit(row?.path ?? "", cx);
     else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "v") this.nvim(row ?? null);
+    else if (k === "p") this.preview(row, cx);
     else if (k === "o") this.openPane(row?.dir ? row.path : "");
     else if (k === "y") this.copy(row?.path ?? "", cx);
     else if (k === "m") this.openMenu(row ?? { path: "", name: this.root, dir: true }, cx);
-    else if (k === "-") { const from = this.root; this.reroot(parent(this.root), cx); this.pendingSel = from; }
+    else if (k === "-") { const from = this.root; this.go(parent(this.root), cx); this.pendingSel = from; }
     else if (k === "." && row) {
       const into = row.dir ? row.path : row.path.includes("/") ? parent(row.path) : "";
-      if (into) this.reroot(`${this.root}/${into}`, cx);
+      if (into) this.go(`${this.root}/${into}`, cx);
     }
     else if (k === "r") this.refresh(cx);
     else return;
@@ -548,32 +631,35 @@ export default class Files extends View {
 
   // ---- parts
 
-  chip(t, id, label, action) {
+  chip(t, id, label, action, on = true) {
     return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
-      .text_color(t.muted).hover((s) => s.text_color(t.foreground))
+      .text_color(on ? t.muted : t.ansi0).when(on, (el) => el.hover((s) => s.text_color(t.foreground)))
       .on_mouse_down("left", stop)
-      .on_click((_e, cx) => { action(cx); cx.notify(); })
+      .on_click((_e, cx) => { if (on) action(cx); cx.notify(); })
       .child(div().relative().child(label));
   }
 
-  toolbar(t, w) {
+  toolbar(t, w, focused) {
     const changed = Object.values(this.marks).filter((m) => m !== "•").length;
     const name = this.root === "/" ? "/" : this.root.split("/").pop();
-    return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
-      .when(w >= 300, (el) => el.child(div().flex_none().text_color(t.ansi8).child("FILES")))
-      .child(this.chip(t, "nf-up", "‹", (cx) => this.key({ key: "-" }, cx)))
+    const fit = toolbarFit(w, { alone: this.alone, branch: this.branch, changed, name });
+    return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
+      .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(focused ? t.accent : t.ansi8).child("FILES")))
+      .child(this.chip(t, "nf-back", "‹", (cx) => this.back(cx), this.root !== "/" || this.nav.past.length > 0))
+      .child(this.chip(t, "nf-forward", "›", (cx) => this.forward(cx), this.nav.future.length > 0))
       .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
-        .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(name))
-        .when(w >= 360, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))
-      .when(Boolean(this.branch) && w >= 260, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(this.branch)))
-      .when(changed > 0, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
-      .child(this.chip(t, "nf-edit", "edit", (cx) => this.edit("", cx)))
-      .when(this.alone, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
+        .child(div().flex_shrink(1).min_w(fit.name).truncate().text_color(t.foreground).child(name))
+        .when(fit.path, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))
+      .when(fit.branch, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(this.branch)))
+      .when(fit.changed, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
+      .when(fit.edit, (el) => el.child(this.chip(t, "nf-edit", "edit", (cx) => this.edit("", cx))))
+      .when(fit.close, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
         .text_color(t.muted).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop)
         .on_click(() => this.close())
         .child(svg(`${ICONS}/x.svg`).size(12))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      // The keyboard is here: the rule under the toolbar lights up.
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : t.ansi0, 1)));
   }
 
   /** A filter's switch: an open eye while that kind is listed; a shut one,
@@ -584,7 +670,7 @@ export default class Files extends View {
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => action(cx))
       .child(svg(on ? `${ICONS}/eye.svg` : `mods/${MOD}/eye-off.svg`).relative().size(11).flex_none().text_color(on ? t.dim : t.ansi3))
-      .child(div().relative().text_color(t.muted).when(!on, (el) => el.line_through()).child(label))
+      .when(Boolean(label), (el) => el.child(div().relative().text_color(t.muted).when(!on, (el) => el.line_through()).child(label)))
       .when(!on && cut > 0, (el) => el.child(div().relative().text_color(t.ansi3).child(String(cut))));
   }
 
@@ -592,18 +678,22 @@ export default class Files extends View {
   lens(t, w, found) {
     const live = this.typing || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
-    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11)
+    const searching = Boolean(this.query.trim());
+    // What fits this width: the placeholder shortens, then the switches' labels.
+    const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
+    const [hLabel, iLabel] = fit.labels;
+    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
       .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
-      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center()
+      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.input.focus(); })
         .child(live
-          ? Input.new(this.input).flex_1().h_full().text_size(11).text_color(t.foreground)
-          : h_flex().gap(5).text_color(t.dim)
-            .child(div().text_color(t.accent).child("/"))
-            .child(div().truncate().child(w >= 240 ? "filter files" : "filter"))))
-      .when(Boolean(this.query.trim()), (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", w >= 250 ? "dotfiles" : ".*", this.filters.hidden, cut.hidden, (cx) => this.setFilter("hidden", cx)))
-      .child(this.filterChip(t, "nf-ignored", w >= 250 ? "ignored" : "ign", this.filters.ignored, cut.ignored, (cx) => this.setFilter("ignored", cx)))
+          ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
+          : h_flex().min_w(0).gap(5).text_color(t.dim)
+            .child(div().flex_none().text_color(t.accent).child("/"))
+            .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
+      .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
+      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
+      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
@@ -710,7 +800,7 @@ export default class Files extends View {
         const s = { width: size.width / zoom(), height: size.height / zoom() };
         if (Math.abs(s.width - this.size.width) > 1 || Math.abs(s.height - this.size.height) > 1) { this.size = s; cx.notify(); }
       })
-      .child(this.toolbar(t, w))
+      .child(this.toolbar(t, w, focused))
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
       .child(body)
       .when(Boolean(foot), (el) => el.child(div().flex_none().px(10).py(4).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0).child(foot)))

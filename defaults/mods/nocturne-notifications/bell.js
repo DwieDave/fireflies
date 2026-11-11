@@ -4,7 +4,9 @@
 //   requests wait   a blinking pink pip and how many permissions and
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
-// Click (or nocturne-notifications.open) opens the overview.
+// Click (or nocturne-notifications.open) opens the overview. Nocturne's tab
+// strip walks to it with the keyboard (its row's last control): a blue ring
+// while its cursor is here (shared CHROME), enter opens the overview.
 //
 // The bell's block is as wide as the bell plus END: it ends where the panes
 // below end, with no blank after it. It sizes its own block (layout.resize)
@@ -22,6 +24,8 @@ const POLL = 1500;
 // Room after the bell, layout px: the main block's side padding, so its edge
 // lines up with the panes' right edge.
 const END = 8;
+// Nocturne's keyboard cursor outside its tab strip (nocturne/nav.js CURSOR).
+const CHROME = "nocturne.chrome";
 
 /** This bell's layout block: the one showing nocturne-notifications as a bell. */
 function bellNode(n = layout()) {
@@ -80,6 +84,7 @@ export default class Bell {
     const parts = [c.permission && `${c.permission} permission${c.permission > 1 ? "s" : ""}`, c.question && `${c.question} question${c.question > 1 ? "s" : ""}`, c.other && `${c.other} to look at`].filter(Boolean);
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
+    const ring = shared(CHROME)?.region === "bell";
     return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
@@ -94,6 +99,7 @@ export default class Bell {
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))
         .when(c.needs === 0 && c.other > 0, (el) => el.child(pip(t.working, 6)))
         .when(c.needs === 0 && !c.other, (el) => el.child(div().child("N")))
-        .when(c.other > 0, (el) => el.child(div().text_color(t.dim).child(c.needs > 0 ? `+${c.other}` : String(c.other)))));
+        .when(c.other > 0, (el) => el.child(div().text_color(t.dim).child(c.needs > 0 ? `+${c.other}` : String(c.other))))
+        .when(ring, (el) => el.text_color(t.foreground).child(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent))));
   }
 }

@@ -96,7 +96,9 @@ GitHub behind it. Deleting the file only makes the next opening wait for GitHub.
 The window picks the folder's repo from its git remotes, not gh's guess: gh's
 default if set (`gh repo set-default`), else the remote the current branch
 pushes to or tracks, else `origin`, else the others. In a fork, the header's
-"fork of owner/name" (or `p`) switches to the parent and back.
+"fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
+`L` lists the links in the shown pull request or open card (j/k, enter opens
+one); `tab` / `shift-tab` walk the panels; `?` lists every key.
 Its third tab, Projects (`3`, or `nocturne-github.projects` in keys.json), is
 a GitHub Projects board: the projects linked to the repo (and its parent, for
 a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
@@ -223,7 +225,9 @@ the highlighted line shows where it will land.
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
   executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
-  leaves the filter, esc closes). A flake gets `nix flake check` / `update`
+  leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
+  shift-tab the next group; on a run `w` watches, `x` stops, `R` runs it again;
+  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
@@ -297,7 +301,13 @@ the highlighted line shows where it will land.
   from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
-  pages open in the system's browser.
+  pages open in the system's browser. The web pane's bar, while it has the
+  keyboard (`pane.go`, or Cmd-Esc in the page): Enter / `i` into the page, `o`
+  / `/` the address (also Cmd-L), `H` `L` back / forward, `r` reload, `+ - 0`
+  zoom, `p` picture in picture, `d` the inspector, `O` the system's browser,
+  Tab / Shift-Tab its buttons (Enter presses), `?` the keys. Cmd-Esc in any
+  native view (page, PDF, player) gives the keyboard back to its pane; in a
+  PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
   terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
   the terminal's folder, or a bare `README.md` there) opens it rendered in the
@@ -321,7 +331,11 @@ the highlighted line shows where it will land.
   front matter as a YAML block. Ticking a task box writes `[x]` into the file
   (local files). A formula or diagram that can't be drawn shows its source and
   why. Its bar: raw / rendered,
-  edit (the editor beside; another machine's file: $EDITOR in a terminal), files. Commands for the shown viewers:
+  edit (the editor beside; another machine's file: $EDITOR in a terminal), files.
+  Keys: `j k` scroll, `d u` half pages, `gg G`, Tab / Shift-Tab the next /
+  previous link or picture (its block marked, where it goes at the foot),
+  Enter follows, `] [` headings, `h` back, `r` raw, `e` edit, `f` files, `y`
+  copy the path, `?` the keys, Esc lets go. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
 - **Previews**: the same goes for files you look at but don't edit: pictures
   (`.png`, `.jpg` / `.jpeg`, `.gif`, `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`,
@@ -360,11 +374,14 @@ the highlighted line shows where it will land.
   - patches (git's, `diff -u`'s, `git format-patch` mails): colored per file as
     the diff pane colors them; `}` / `{` next / previous file.
   - fonts: Quick Look's specimen. Audio and video: the system's player (it
-    never plays by itself; Space plays / pauses while the preview has focus).
+    never plays by itself; while the preview has focus Space / `k` plays /
+    pauses, ← → 5 s, with Shift 30 s, `0` the start, `m` sound). Esc in the
+    PDF view, the player or Quick Look gives the keys back to the preview.
   The bar: kind, name, facts (size, pages, rows, length), the place among the
   folder's files of the same kind (`n` `]` / `p` `[` next / previous; ← → too
   for a fitted picture), the kind's controls, files (`f`), open (`o`, the
-  system's app), copy (`y`, the path). What it can't show says why and offers
+  system's app), copy (`y`, the path), `?` (the keys, under the bar); Tab /
+  Shift-Tab ring the bar's controls (Enter presses one). What it can't show says why and offers
   the system's app. The original is only read (pictures, PDFs and fonts are
   drawn from a copy in its cache) and it shows the file again when it changes
   on disk. Commands for the shown previews: `nocturne-preview.zoom_in`,
@@ -450,16 +467,24 @@ the highlighted line shows where it will land.
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`.
-- **Files panes** (Nocturne's `nocturne-files`): cmd-e (`nocturne.files`) and
-  "+ new" > Files toggle the panel down the tab's right edge at the focused
-  pane's folder. A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a
+- **Files panes** (Nocturne's `nocturne-files`): "+ new" > Files and the tab
+  strip's button toggle the panel down the tab's right edge at the focused
+  pane's folder; cmd-e (`nocturne.files`) is the keyboard's way: it opens the
+  panel with the keyboard in it, moves the keyboard into an open one, and
+  closes it when pressed inside, the keyboard back in the pane it came from
+  (esc in the panel goes back there and leaves it open; `q` closes it). A
+  files pane that opens as the focused pane takes the keyboard; `pane.go`
+  reaches every files pane; `nocturne-files.take-panel` hands an open panel
+  the keyboard (cmd-e sends it after `pane.focus`). A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a
   bare `ls` name in a terminal, a mod's `file:` link) opens a files pane of its
   own rooted there, split beside that pane (clicking it again shows the one
   already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
-  with `q` / `esc`. Every files pane: `j k h l` / arrows, enter, `e` / `E` edit,
-  `-` / `.` reroot, `r` refresh; `/` filters as you type (fff's fuzzy
+  with `q` / `esc`. Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
+  `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`
+  (alt-← / alt-→, ctrl-o / ctrl-i, backspace; the toolbar's ‹ ›) back and
+  forward through the folders rooted at (back with none goes up), `r` refresh; `/` filters as you type (fff's fuzzy
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
@@ -617,7 +642,11 @@ Properties any node can have:
   what's new calls `presentUpdateNotes(versions)`. The update note gets
   `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
   slot it hides itself from. Settings and feedback stay the app's (they follow the
-  theme). Nocturne: `defaults/mods/nocturne/screens.js`.
+  theme). Nocturne: `defaults/mods/nocturne/screens.js`. Nocturne's dialogs,
+  menus and screens take the keyboard when they open and give it back when they
+  close: tab / ← → between a dialog's field and buttons (the focused one lit),
+  ↑↓ / j k (ctrl-n / ctrl-p in a list with a search field) move, enter / space
+  press, esc closes; a confirm also takes y / n. Keep that when drawing your own.
   `{"dialog_mods": {"welcome": "my-screens", "help": "my-screens"}}`
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
@@ -797,8 +826,28 @@ at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
 unpin from a firefly's or an agent pane's right-click menu (open sky and
 rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Scripts:
+`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Toasts by key:
+`nocturne.toast` does what the newest toast on screen says (as a click would),
+`nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
+
+Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
+(`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
+and cmd-alt-up from a top pane the tab strip; `nocturne.sidebar`,
+`nocturne.tabstrip` and `nocturne.header` (the focused pane's header controls)
+go straight there and, pressed again, back (macOS: cmd-alt-s, cmd-alt-t,
+cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
+cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
+ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
+(`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
+`"cmd-ctrl-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
+cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
+the control's menu, r renames, esc/q go back to the pane, ? lists every key.
+The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
+d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
+rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
+focused pane's header (name, text size, float, splits, even out, gridify,
+park, zoom, close, ⋯); the shown tab's parked chips (enter unparks).
 
 ### Layouts and mods other people made
 
@@ -1063,7 +1112,8 @@ The main ones:
   programs such as yazi; partial images and scrolling follow the placeholder cells.
 - Agents: `agent.next`, `agent.prev`, `agent.focus {terminal}`.
 - Layout: `layout.switch {name?}`, `layout.toggle {id}`, `layout.show {id}`, `layout.hide {id}`,
-  `layout.resize {id, px | weight}`, `layout.select {stack, child}`, `layout.set {layout}`
+  `layout.resize {id, px | weight}`, `layout.focus {id}` (the keyboard to a shown block whose
+  mod is focusable, as `pane.go` gives it), `layout.select {stack, child}`, `layout.set {layout}`
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
@@ -1119,8 +1169,11 @@ The main ones:
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
-  `.close`; Nocturne's palette lists them while the player window is open.
-- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
+  `.close`; Nocturne's palette lists them while the player window is open. Keys while the
+  player has the keyboard (`overlay.focus`, or a click on it; its bar's edge turns blue):
+  Space / `k`, ← → (`h l`), `m`, `b`, `p` pane, `P` park, `o` out, `x` / `q` close; esc
+  gives the keyboard back to the pane.
+- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `overlay.focus {dir?, id?}` (`overlay.focus:prev` in keys.json) and `overlay.move {id?, dx?, dy?, dw?, dh?}` (a window by keyboard, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `editor`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`,
@@ -1177,6 +1230,12 @@ What's about the user, never a look:
 ```json
 { "zoom": 1, "sounds": { "enabled": true } }
 ```
+
+The Settings window (`app.settings`) works by keyboard too: its section rail
+is one stop (↑↓ / j k, or 1-6 from anywhere), tab / shift-tab and ↑↓ / j k
+walk the page's controls (a ring marks the one with the keyboard), enter /
+space press it, ← → / h l step a stepper or a choice, esc closes an open font
+list or a machine's rename first.
 
 - `zoom` scales the whole app: terminals, mods, the layout's px sizes
   (0.5 to 3; the zoom keys change it). Write sizes as designed at zoom 1.
@@ -1344,7 +1403,9 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`
-  again after a popup over it closes. Leave with `run("pane.go", {direction})`.
+  again after a popup over it closes. `layout.focus {id}` gives a layout block the
+  keyboard the same way, and `pane.focus {pane}` a mod pane; `focused().block` names the layout block that has it (else null).
+  Leave with `run("pane.go", {direction})` or `run("pane.focus", {pane})`.
   Without this opt-in, navigation and clicks stay unchanged.
 
 - The first time Herdr sees a folder, it docks one copy per `mod.json` into
@@ -1542,12 +1603,20 @@ All of it is in `herdr.d.ts`. In short:
   or centered. `key: "name"` remembers its spot (opening that key again
   replaces it); `keep: true` with a key reopens it on the next start. A
   layout switch closes windows; kept ones come back with their layout.
+  `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
+  window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
   border) is taken off; a keyed one remembers its size (refit to its aspect when it opens).
   `overlay.resizable {id, resizable}` changes that while it is open; a new aspect refits its
-  height at its width now (a player learning its video's real shape). A video player:
+  height at its width now (a player learning its video's real shape).
+  By keyboard: `overlay.focus` gives the next window the keyboard and brings it to the
+  front (`dir: "prev"` the one before, in the order they opened; past the last, or
+  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). A mod gets
+  `focus` from `nextCommand()`: take the keyboard then (`handle.focus()`), and show it.
+  `overlay.move {dx, dy}` moves the window holding the keyboard (else the top one) and
+  `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag. A video player:
   `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
   A window can hold a layout, terminals too: a terminal keeps its presses
   (selecting text), so give it a mod block to drag by, a title bar:

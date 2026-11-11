@@ -24,7 +24,7 @@ export function toggleGit({ review = false } = {}) {
   if (open) { closeOverlay(open); setShared(WINDOW, null); return; }
   const h = here();
   const folder = (h.space?.attached && h.space.folder) || h.folder;
-  const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", width: 0.88, height: 0.88, resizable: { min: [420, 300] },
+  const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] },
     props: { folder, on: h.on, ...(review ? { review: true } : {}) } });
   setShared(WINDOW, { id, beat: Date.now(), folder });
 }

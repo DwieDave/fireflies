@@ -130,3 +130,27 @@ export function colorRuns(text, spans, colors) {
   if (at < text.length) out.push([text.slice(at), null]);
   return out;
 }
+
+/** A grep line's colored runs split where a match starts or ends:
+ *  [piece, color, hit]. `runs` from colorRuns, `ranges` the match's. */
+export function lineRuns(runs, ranges) {
+  const hits = new Set();
+  for (const [s, e] of ranges) for (let k = s; k < e; k++) hits.add(k);
+  const out = [];
+  let at = 0;
+  for (const [piece, color] of runs) {
+    let start = 0;
+    for (let k = 1; k <= piece.length; k++) {
+      if (k === piece.length || hits.has(at + k) !== hits.has(at + start)) {
+        out.push([piece.slice(start, k), color, hits.has(at + start)]);
+        start = k;
+      }
+    }
+    at += piece.length;
+  }
+  return out;
+}
+
+/** How long typing must pause before the picker searches (ms): grep reads
+ *  every file, so it waits a little longer than the file list. */
+export const PAUSE = { files: 40, grep: 120 };

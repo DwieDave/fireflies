@@ -18,7 +18,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared } from "herdr";
 import { graphql } from "./gh.js";
-import { readAgo, ago, SLOW } from "./model.js";
+import { readAgo, ago, SLOW, linksIn } from "./model.js";
 import { repoKey, newest, LIMITS } from "./cache.js";
 import { markdown } from "./markdown.js";
 import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";
@@ -393,7 +393,7 @@ export default class Projects {
     if (this.focus === "detail") {
       if (k === "j" || k === "down") { this.scroll(60); return true; }
       if (k === "k" || k === "up") { this.scroll(-60); return true; }
-      if (k === "h" || k === "left" || k === "tab") { this.focus = "board"; return true; }
+      if (k === "h" || k === "left" || k === "tab") { this.focus = "board"; return true; } // shift-tab too
       if (k === "escape") { this.focus = "board"; this.detailOpen = false; return true; }
     }
     if (dir) this.select(lay, step(this.grid(lay), a, dir, this.foldedCols(lay)), cx);
@@ -417,6 +417,13 @@ export default class Projects {
     else if (k === "escape" && this.filterText) { this.filter.set_value(""); this.filterText = ""; this.keepSel(); }
     else return false;
     return true;
+  }
+
+  /** L: the links in the open card's detail (its body and comments). */
+  links() {
+    const b = this.board(), item = this.detailOpen && b ? this.current(this.lay(b)) : null;
+    const d = item?.content.id ? this.details.get(item.content.id)?.d : null;
+    return d ? linksIn([d.body, ...(d.comments ?? []).map((c) => c.body)]) : [];
   }
 
   typingKey(k, e, cx) {
@@ -619,7 +626,7 @@ export default class Projects {
       ["h l ← →", "column"], ["j k ↓ ↑ g G", "card / first / last"], ["enter", "the card's detail (again: into it)"], ["space m", "carry it: hjkl moves, enter drops, esc puts back"],
       ["e", "edit its fields"], ["a", "add a draft to the column"], ["i", "make the draft an issue"], ["x", "archive (asks)"],
       ["/", "filter: assignee: label: status: is: repo: no: words"], ["v", "the project's views"], ["p", "projects (repo's, owner's)"],
-      ["-", "fold the column"], ["z", "fold the swimlane"], ["w", "the column's limit"], ["o", "on GitHub"], ["r", "refresh"],
+      ["-", "fold the column"], ["z", "fold the swimlane"], ["w", "the column's limit"], ["L", "a link in the open card"], ["o", "on GitHub"], ["r", "refresh"],
     ];
   }
 

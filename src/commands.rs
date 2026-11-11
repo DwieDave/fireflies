@@ -89,11 +89,14 @@ pub const COMMANDS: &[Command] = &[
     cmd("layout.toggle", &[req("id")], "Hide or show a layout node."),
     cmd("layout.show", &[req("id")], "Show a layout node."),
     cmd("layout.hide", &[req("id")], "Hide a layout node."),
+    cmd("layout.focus", &[req("id")], "Give the keyboard to a shown layout block whose mod.json says \"focusable\": true (it gets \"focus\" from nextCommand(); pane.go leaves it)."),
     cmd("layout.resize", &[req("id"), opt("px"), opt("weight")], "Size a layout node."),
     cmd("layout.select", &[req("stack"), req("child")], "Show one child of a stack."),
     cmd("layout.reset", &[opt("name")], "Reset a shipped layout and its clicks (the old file is kept aside)."),
     cmd("mod.open", &[req("name")], "Toggle a mod as the overlay its mod.json describes; calling again closes it."),
     cmd("overlay.close", &[opt("id")], "Close an overlay (default: the top dialog or popup)."),
+    cmd("overlay.focus", &[opt("dir"), opt("id")], "Give a window (kind \"window\": GitHub, Git, a floating terminal) the keyboard and bring it to the front: id, or the next one (dir \"next\", default) or \"prev\" in the order they opened; past the last, or dir \"none\", the keyboard goes back to the pane."),
+    cmd("overlay.move", &[opt("id"), opt("dx"), opt("dy"), opt("dw"), opt("dh")], "Move a window by dx/dy px and, when it resizes, size it by dw/dh (its right and bottom edges, within its limits). Default: the window holding the keyboard, else the top one. Kept like a drag."),
     cmd("overlay.resizable", &[req("id"), req("resizable")], "Change how a window resizes (min, aspect, chrome); a new aspect refits its height now."),
     // The app.
     // Native content views (native-view/0).

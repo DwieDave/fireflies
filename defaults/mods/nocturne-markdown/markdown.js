@@ -410,7 +410,8 @@ export class MarkdownDoc {
 
   /** The scrolling document. `o`: { onLink(url, cx), onTask(line, cx),
    *  image(src) -> { abs, name } (name: undefined while copying, null: can't),
-   *  onImage(abs), dither(color), focused, size, maxWidth, unzoom(px), notify(cx) }. */
+   *  onImage(abs), dither(color), focused, size, maxWidth, unzoom(px), notify(cx),
+   *  chosen: a block's key to mark (the keyboard's link) }. */
   render(t, o) {
     const { tops, total } = this.tops();
     const lo = this.scrollY - this.viewH * OVERDRAW, hi = this.scrollY + this.viewH * (1 + OVERDRAW);
@@ -430,7 +431,8 @@ export class MarkdownDoc {
       .child(h_flex().absolute().left(0).right(0).top(first - this.scrollY).justify_center()
         .child(v_flex().w_full().max_w(o.maxWidth ?? 780).px(24).gap(GAP).children(shown.map((i) => {
           const p = this.parts[i];
-          return div().id(`${this.prefix}-${p.key}`).on_size_change((size, cx) => { if (this.measured(p.key, o.unzoom(size.height))) o.notify(cx); })
+          return div().id(`${this.prefix}-${p.key}`).relative().on_size_change((size, cx) => { if (this.measured(p.key, o.unzoom(size.height))) o.notify(cx); })
+            .when(p.key === o.chosen, (el) => el.child(div().absolute().left(-12).top(0).bottom(0).w(2).bg(t.accent)))
             .child(this.part(t, p, o));
         }))))
       .when(frac < 1, (el) => el.child(div().absolute().right(1).w(3)

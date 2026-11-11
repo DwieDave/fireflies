@@ -43,11 +43,21 @@ build:
     cargo build --locked
 
 test:
-    bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/nocturne-github.test.ts scripts/nocturne-github-graph.test.ts scripts/nocturne-github-cache.test.ts scripts/nocturne-github-remotes.test.ts scripts/nocturne-equalize-panes.test.ts scripts/nocturne-scripts.test.ts scripts/nocturne-scripts-runs.test.ts scripts/nocturne-scripts-nix.test.ts scripts/nocturne-markdown.test.ts scripts/nocturne-notifications.test.ts scripts/nocturne-preview.test.ts scripts/nocturne-preview-table.test.ts scripts/nocturne-preview-diff.test.ts scripts/nocturne-preview-native.test.ts scripts/nocturne-github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/nocturne-git.test.ts scripts/nocturne-editor.test.ts scripts/nocturne-picker.test.ts scripts/nocturne-vim.test.ts scripts/nocturne-files.test.ts
+    bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/nocturne-github.test.ts scripts/nocturne-github-graph.test.ts scripts/nocturne-github-cache.test.ts scripts/nocturne-github-remotes.test.ts scripts/nocturne-equalize-panes.test.ts scripts/nocturne-scripts.test.ts scripts/nocturne-scripts-runs.test.ts scripts/nocturne-scripts-nix.test.ts scripts/nocturne-markdown.test.ts scripts/nocturne-notifications.test.ts scripts/nocturne-preview.test.ts scripts/nocturne-preview-table.test.ts scripts/nocturne-preview-diff.test.ts scripts/nocturne-preview-native.test.ts scripts/nocturne-github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/nocturne-git.test.ts scripts/nocturne-editor.test.ts scripts/nocturne-picker.test.ts scripts/nocturne-vim.test.ts scripts/nocturne-files.test.ts scripts/nocturne-browser.test.ts
     # Its own process: it stands in for "herdr" (mock.module is process-wide).
     bun test scripts/nocturne-github-projects-tab.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/nocturne-git-view.test.ts
+    # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
+    bun test scripts/nocturne-chrome-keys.test.ts
+    # The floating tool windows' keys, with herdr and gpui stand-ins.
+    bun test scripts/nocturne-windows-keys.test.ts
+    # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.
+    bun test scripts/dialogs-keys.test.ts
+    # Nocturne's palette through its real imports, herdr and gpui stand-ins.
+    bun test scripts/nocturne-palette.test.ts
+    # The picker's render cost and typing, herdr and gpui stand-ins.
+    bun test scripts/nocturne-picker-view.test.ts
     cargo test --locked
 
 docs-generate: build

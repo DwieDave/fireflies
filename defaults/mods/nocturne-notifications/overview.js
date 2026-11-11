@@ -9,7 +9,8 @@
 //                     answer, as the agent's next instruction (enter sends)
 //   p / g             peek at its terminal / go to it
 //   x                 put an error away
-//   esc               close (from the note's line: back to the options)
+//   up / down         on a question or a needs-a-look: the next / previous request
+//   esc q             close (from the note's line: back to the options)
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
@@ -36,7 +37,7 @@ export default class Overview {
     this.input.on("submit", (_e, cx) => this.answerWith(cx, { amend: this.input.value() }));
     this.handle = cx.focus_handle();
     this.handle.focus();
-    followCommands(cx, nextCommand, (e, cx) => this.key(e, cx));
+    followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.but ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.but ? this.input.focus() : this.handle.focus()));
   }
 
@@ -127,13 +128,14 @@ export default class Overview {
     }
     if (m.control || m.platform || m.alt) return;
     let handled = true;
-    if (k === "escape") this.close();
+    if (k === "escape" || k === "q") this.close();
     else if (k === "j" || k === "]") this.select(list, 1);
     else if (k === "k" || k === "[") this.select(list, -1);
     else if ((k === "down" || k === "up") && it?.type === "permission" && it.answerable) {
       const n = it.request.options.length;
       this.cursor = (this.cursor + (k === "down" ? 1 : -1) + n) % n;
-    } else if (k === "tab" && it) this.openBut(m.shift ? "no" : "yes", it);
+    } else if (k === "down" || k === "up") this.select(list, k === "down" ? 1 : -1);
+    else if (k === "tab" && it) this.openBut(m.shift ? "no" : "yes", it);
     else if (k === "enter" && it) {
       if (it.type === "permission" && it.answerable) this.answerWith(cx);
       else if (it.type === "question" && it.answerable) openAsk(it);
@@ -352,6 +354,9 @@ export default class Overview {
       .child(hint("j k", "requests"))
       .when(it?.type === "permission" && it.answerable, (el) => el.child(hint("↑↓", "choose")).child(hint("1-9", "answer")).child(hint("⇥", "but…")))
       .when(it?.type === "question" && it.answerable, (el) => el.child(hint("↵", "answer")))
+      .when(it?.type === "other", (el) => el.child(hint("↵", "go to")).when(it.status === "error", (e2) => e2.child(hint("x", "put away"))))
+      .when(Boolean(it), (el) => el.child(hint("p", "peek")).when(it?.type !== "other", (e2) => e2.child(hint("g", "go to"))))
+      .child(hint("esc", "close"))
       .child(div().flex_1())
       .when(Boolean(note), (el) => el.child(div().max_w(320).truncate().text_color(note.bad ? t.blocked : t.done).child(note.bad ? "not sent" : note.text)))
       .when(!note && this.busy?.id === it?.id, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)));

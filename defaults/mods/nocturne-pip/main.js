@@ -16,6 +16,12 @@
 //   ✕    close: the video goes back to its page, paused (nocturne-pip.close)
 //   ⋯    when the bar is too narrow for them all: the rest, as a menu.
 //        Play/pause and close always stay on the bar.
+// Keys while it has the keyboard (overlay.focus to the window, pane.go to its
+// pane, a click on it; its bar's edge turns blue meanwhile):
+//   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
+//   p  into a pane   P  park   o  out of Herdr   x q  close
+//   esc  (the window) the keyboard back to the pane (overlay.focus none)
+// The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close.
 //
 // Opened by nocturne-browser (`openOverlay` WINDOW below, props { of: the
 // browser's web view key }). As a pane (◧): props { of, pane: true }; the pane
@@ -82,10 +88,27 @@ export function fit(controls, width) {
   return { shown: controls.filter((c) => keep.has(c.id)), more: controls.filter((c) => !keep.has(c.id)) };
 }
 
+/** The player's control for a key event, or null. "unfocus": esc, the keyboard back to the pane. */
+export function keyControl(e) {
+  const m = e?.modifiers ?? {};
+  if (m.platform || m.control || m.alt) return null;
+  const c = e?.key_char;
+  const k = typeof c === "string" && c.length === 1 && c.trim() ? c : String(e?.key ?? "");
+  return { space: "toggle", k: "toggle", left: "rewind", h: "rewind", right: "forward", l: "forward", m: "mute", b: "back",
+    p: "pane", P: "park", o: "out", x: "close", q: "close", escape: "unfocus" }[k] ?? null;
+}
+
+/** The ⋯ menu's cursor after a key (null: not a moving key). */
+export function menuMove(k, at, n) {
+  const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
+  return d && n ? (at + d + n) % n : null;
+}
+
 export default class Pip extends View {
   init(_p, cx) {
     this.menu = props()?.menu ?? null;
     if (this.menu) return this.initMenu(cx);
+    this.handle = cx.focus_handle();
     this.playing = true;
     this.muted = false;
     this.error = null;
@@ -128,10 +151,20 @@ export default class Pip extends View {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-pip\./, "");
-        this.command(c);
+        if (c === "focus") this.handle.focus();
+        else this.command(c);
         cx.notify();
       }
     });
+  }
+
+  key(e, cx) {
+    const c = keyControl(e);
+    if (!c || ((c === "pane" || c === "unfocus") && this.inPane) || (c === "park" && this.parks)) return;
+    if (c === "unfocus") run("overlay.focus", { dir: "none" });
+    else this.command(c);
+    cx.stop_propagation();
+    cx.notify();
   }
 
   command(c) {
@@ -296,8 +329,9 @@ export default class Pip extends View {
     const items = shown.map((c) => this.button(t, c));
     // The ⋯ goes before ✕, the last on the bar.
     if (more.length) items.splice(items.length - 1, 0, this.more(t, more.map((c) => c.id)));
+    // The bar's edge turns blue while the player has the keyboard.
     return h_flex().id("pip-bar").h(BAR).flex_none().pl(8).items_center().text_size(11).bg(t.background)
-      .border_b(1).border_color(t.border)
+      .border_b(1).border_color(this.handle?.is_focused?.() ? t.accent : t.border)
       .child(div().flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : this.hover ? t.foreground : t.dim)
         .child(this.error ?? this.hover?.name ?? "picture in picture"))
       .children(items);
@@ -311,6 +345,8 @@ export default class Pip extends View {
       ? herdr.nativeView.new(ID, { kind: "pip", of }).child(div().size_full().bg("#000000"))
       : div().size_full().flex().items_center().justify_center().text_size(11).text_color(t.dim).child("Picture in picture needs native views (macOS).");
     return v_flex().id("pip").size_full().bg(t.background).when(!this.inPane, (el) => el.border(1).border_color(t.border))
+      .when(Boolean(this.handle), (el) => el.track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+        .on_mouse_down("left", () => this.handle.focus()))
       .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) >= 1) { this.width = size.width; cx.notify(); } })
       .child(this.bar(t))
       .child(div().flex_1().min_h(0).relative().child(body));
@@ -349,12 +385,13 @@ export default class Pip extends View {
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
         const k = e.key;
-        if (k === "down" || k === "up") {
-          this.cursor = (this.cursor + (k === "down" ? 1 : -1) + items.length) % Math.max(1, items.length);
+        const to = menuMove(k, this.cursor, items.length);
+        if (to != null) {
+          this.cursor = to;
           return cx.notify();
         }
         if (k === "enter" && items[this.cursor]) return this.pick(items[this.cursor]);
-        if (k === "escape") closeOverlay(props()?.overlay);
+        if (k === "escape" || k === "q") closeOverlay(props()?.overlay);
       })
       .children(items.map(row));
   }

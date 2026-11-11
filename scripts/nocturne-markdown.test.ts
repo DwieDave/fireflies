@@ -44,12 +44,12 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import [\s\S]*? from "[^"]+";\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: globalThis.window };
+  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
 const md = await load("nocturne-markdown/markdown.js");
-const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc } = md;
+const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
 const { follow, join, dirname, basename, tilde } = await load("nocturne-markdown/paths.js");
 
 test("the GitHub window, the viewer and the editor ship the same markdown.js (and the editor the viewer's paths.js)", async () => {
@@ -331,4 +331,98 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   view.command("preview-only", cx);
   expect(view.view).toBe("split");
   expect(seen.at(-1)).toBe("the preview is for Markdown files");
+});
+
+// ---- the viewer by keys
+
+const walk = (el: any): any[] => (el && typeof el === "object" && Array.isArray(el.nodes) ? [el, ...el.nodes.flatMap(walk)] : []);
+
+const linkLogic = await load("nocturne-markdown/links.js");
+const { linksOf, documentLinks, nextLink, nextHeading } = linkLogic;
+
+test("links in reading order: inline, reference, autolinks, bare addresses; none in code", () => {
+  const text = [
+    "See [the guide](docs/guide.md \"Guide\") and [**bold** ref][r], then <https://a.example/x>.",
+    "Bare https://b.example/y. and www.c.example, `[not](code.md)`, ![pic](p.png), [short].",
+    "```", "[fenced](no.md)", "```",
+    "[r]: https://ref.example", "[short]: #top",
+  ].join("\n");
+  expect(linksOf(text)).toEqual([
+    { text: "the guide", href: "docs/guide.md" },
+    { text: "bold ref", href: "https://ref.example" },
+    { text: "https://a.example/x", href: "https://a.example/x" },
+    { text: "https://b.example/y", href: "https://b.example/y" },
+    { text: "www.c.example", href: "https://www.c.example" },
+    { text: "short", href: "#top" },
+  ]);
+  // [x] without a definition is text (a task box, a citation).
+  expect(linksOf("- [x] done [nothing]")).toEqual([]);
+});
+
+test("document links carry their block (tasks, callouts and footnotes too); tab starts from the blocks in view and wraps; headings step", () => {
+  const parts = blocks("# A\n[one](1.md)\n\n![shot](s.png)\n\n## B\n[two](2.md) [three](#a)");
+  const links = documentLinks(parts);
+  expect(links.map((l: any) => [l.text, l.part, Boolean(l.image)])).toEqual([["one", 1, false], ["shot", 2, true], ["two", 4, false], ["three", 4, false]]);
+  expect([nextLink(links, null, 1, 0), nextLink(links, null, 1, 2), nextLink(links, null, -1, 1), nextLink(links, 3, 1), nextLink(links, 0, -1), nextLink([], null, 1)]).toEqual([0, 1, 0, 0, 3, null]);
+  expect([nextHeading(parts, 0, 1), nextHeading(parts, 4, -1), nextHeading(parts, 3, 1)]).toEqual([3, 3, null]);
+  const more = documentLinks(blocks("- [ ] see [a](a.md)\n\n> [!NOTE]\n> [b](b.md)\n\nx[^n]\n\n[^n]: [c](c.md)"));
+  expect(more.map((l: any) => l.href)).toEqual(["a.md", "b.md", "#fn-n", "c.md"]);
+});
+
+test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
+  const { default: Markdown } = await load("nocturne-markdown/main.js", { ...md, follow, dirname, basename, join, tilde, ...linkLogic, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+  const view: any = Object.create(Markdown.prototype);
+  const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
+  const doc = new MarkdownDoc("md");
+  doc.setText(text);
+  doc.parts.forEach((p: any, i: number) => doc.heights.set(p.key, [30, 70, 200, 30, 70][i]));
+  doc.viewH = 150;
+  const rawDoc = new MarkdownDoc("md-raw");
+  rawDoc.setText(fenced(text));
+  world.panes = [];
+  Object.assign(view, {
+    path: "/d/a.md", on: null, slot: "m1", handle: { focus() {}, is_focused: () => true }, raw: false, history: [], images: new Map(),
+    text, error: null, doc, rawDoc, links: documentLinks(doc.parts), sel: null, width: 700, gen: 1,
+  });
+  const opened: string[] = [];
+  view.open = (p: string) => { opened.push(p); view.sel = null; };
+  let clip = "";
+  const cx = { notify() {}, stop_propagation() {}, write_to_clipboard: (s: string) => { clip = s; } };
+  const key = (k: string, extra: any = {}) => view.key({ key: k, modifiers: {}, ...extra }, cx);
+  commands.length = 0;
+  key("tab");
+  expect(view.sel).toBe(0);
+  const strings = (el: any) => walk(el).flatMap((e: any) => e.nodes.filter((n: any) => typeof n === "string"));
+  expect(strings(view.render())).toEqual(expect.arrayContaining(["enter", "next", "next.md", "1/3"]));
+  key("tab");
+  expect(view.sel).toBe(1);
+  // The picture's block is lower down: it scrolls into view.
+  expect(doc.scrollY).toBeGreaterThan(0);
+  key("enter");
+  expect(commands.at(-1)).toEqual(["preview.open", { path: "/d/shot.png" }]);
+  // Nothing chosen: shift-tab starts from the last link in view.
+  key("tab", { modifiers: { shift: true } });
+  expect(view.sel).toBe(1);
+  key("escape");
+  expect(view.sel).toBe(null);
+  key("tab", { modifiers: { shift: true } });
+  key("tab", { modifiers: { shift: true } });
+  expect(view.sel).toBe(0);
+  key("enter");
+  expect(opened).toEqual(["/d/next.md"]);
+  // ] goes to the next heading.
+  doc.scrollY = 0;
+  key("]", { key_char: "]" });
+  expect(doc.scrollY).toBeGreaterThan(200);
+  key("[", { key_char: "[" });
+  // The first heading, where an #anchor puts it.
+  expect(doc.scrollY).toBe(12);
+  key("f");
+  expect(commands.at(-1)).toEqual(["pane.split", { edge: "right", px: 280, mod: "nocturne-files", props: { folder: "/d", on: null } }]);
+  key("y");
+  expect(clip).toBe("/d/a.md");
+  key("/", { key_char: "?", modifiers: { shift: true } });
+  expect(strings(view.render())).toEqual(expect.arrayContaining(["tab ⇧tab", "links", "] [", "headings"]));
+  key("escape");
+  expect(view.keysShown).toBe(false);
 });

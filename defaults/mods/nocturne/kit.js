@@ -123,3 +123,16 @@ export function hash(s) {
   for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
   return h >>> 0;
 }
+
+// ---- the keyboard cursor (nav.js): one look across the chrome
+
+/** On a row (a space, a firefly, a usage window): the popup's current-row
+ *  look, a dithered band with a blue edge. `el` must be relative. */
+export function navRow(t, el, on) {
+  return on ? el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : el;
+}
+
+/** On a button or a chip: a square blue ring around it. `el` must be relative. */
+export function navRing(t, el, on) {
+  return on ? el.child(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent)) : el;
+}

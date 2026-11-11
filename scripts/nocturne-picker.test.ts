@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 
 // The picker's decisions (defaults/mods/nocturne-picker/logic.js).
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around } from "../defaults/mods/nocturne-picker/logic.js";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, lineRuns } from "../defaults/mods/nocturne-picker/logic.js";
 
 test("matched characters are marked, ranges in any order and overlapping", () => {
   expect(marks("picker.rs", [[0, 1], [3, 4], [7, 9]])).toEqual([["p", true], ["ic", false], ["k", true], ["er.", false], ["rs", true]]);
@@ -50,4 +50,11 @@ test("the preview shows the lines around the line, more below", () => {
   const end = around(text, 100, 24);
   expect(end.lines[end.lines.length - 1]).toBe("l100");
   expect(around("one", 5, 24)).toEqual({ from: 1, lines: ["one"] });
+});
+
+test("a grep line's colored runs split where its matches start and end", () => {
+  expect(lineRuns([["let ", "kw"], ["needle", null], [" = 1", null]], [[2, 8]])).toEqual([
+    ["le", "kw", false], ["t ", "kw", true], ["need", null, true], ["le", null, false], [" = 1", null, false],
+  ]);
+  expect(lineRuns([["abc", null]], [])).toEqual([["abc", null, false]]);
 });

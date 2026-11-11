@@ -12,18 +12,28 @@
 // The drop-downs (+ new, the script deck) hang under their button, right
 // edges lined up (kit.js dropBelow); a second press closes them. A rule like
 // the ones between the groups closes the strip before the bell's block.
+//
+// Keys: the strip takes the keyboard from pane.go (cmd-alt-up from a top
+// pane), nocturne.tabstrip or nocturne.header (layout.focus). Its cursor
+// walks three rows (nav.js STRIP_KEYS; ? lists them): the tabs, the buttons
+// and the bell; the focused pane's header (header.js headerControls); the
+// shown tab's parked chips. j / ↓ past the last row, esc or q: back to the
+// pane; h / ← past the first tab: the sidebar. The header, the chips and the
+// bell draw the cursor from shared(nav.js CURSOR).
 
 import { div, svg, image } from "gpui-kit";
-import { h_flex } from "gpui-base";
-import { spaces, panes, run, openOverlay, theme } from "herdr";
-import { dither, pip, spaceFolder, givenName, dropBelow } from "./kit.js";
+import { h_flex, ScrollHandle } from "gpui-base";
+import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
+import { dither, pip, spaceFolder, givenName, dropBelow, navRing } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
-import { menuHeight } from "./menu.js";
+import { openMenu, openKeys } from "./menu.js";
+import { headerControls, paneMenu, renamePane } from "./header.js";
+import { CURSOR, STRIP_KEYS, STRIP_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
 import { gitState } from "./lazygit.js";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
-import { filesPane, toggleFiles } from "./files.js";
-import { scriptsControl, scriptRuns, tellFailures, trackRuns } from "./scripts.js";
+import { filesPane, toggleFiles, focusFiles } from "./files.js";
+import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
 import { runJobs, pendingJobs } from "./jobs.js";
 import { watchPrompts } from "./prompt.js";
 
@@ -41,7 +51,167 @@ export default class Tabs {
     cx.timer.every(1500, () => { runJobs(); trackRuns().then(() => tellFailures(scriptRuns())); });
     // A switch's sudo prompt gets its small window (prompt.js); it reads only while one runs.
     cx.timer.every(700, () => { watchPrompts(); });
+    // The keyboard (nav.js): the row and control the cursor is on, the rows as last drawn.
+    this.handle = cx.focus_handle();
+    this.scroll = ScrollHandle.new();
+    this.row = "tabs";
+    this.cursor = null;
+    this.rows = { tabs: [], head: [], parked: [] };
+    // "focus" from Herdr (pane.go, layout.focus, a popup over the strip closed);
+    // nocturne.tabstrip / nocturne.header (keys.json): into the strip on that
+    // row, or back out. Every nocturne.* command reaches every copy: the sky
+    // takes its own.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const c = String(await nextCommand()).replace(/^nocturne\./, "");
+        if (c === "focus") this.takeKeys();
+        else if (c === "tabstrip") this.toggleKeys("tabs");
+        else if (c === "header") this.toggleKeys("head");
+        else continue;
+        cx.notify();
+      }
+    });
   }
+
+  // ---- the keyboard (nav.js)
+
+  /** The strip's layout block (the one showing nocturne as the tabs). */
+  get block() { return blockOf(layout(), "tabs"); }
+
+  /** The strip has the keyboard (pane.go or layout.focus gave it the block). */
+  get navOn() { const b = this.block; return Boolean(b) && focused()?.block === b; }
+
+  /** The rows with something in them, top to bottom. */
+  liveRows() { return ["tabs", "head", "parked"].filter((r) => this.rows[r].length); }
+
+  /** The cursor's control (an item of its row). */
+  item() { return this.rows[this.row]?.find((x) => x.id === this.cursor) ?? null; }
+
+  /** Puts the cursor on `row` (its `id`, else where it was, else the row's natural start). */
+  place(row, id) {
+    const items = this.rows[row] ?? [];
+    if (!items.length) return;
+    this.row = row;
+    const start = row === "tabs" ? items.find((x) => x.active)?.id : row === "head" ? items.find((x) => x.id !== "name")?.id : null;
+    this.cursor = items.some((x) => x.id === id) ? id : items.some((x) => x.id === this.cursor) ? this.cursor : start ?? items[0].id;
+  }
+
+  /** "focus": the keyboard is the strip's. */
+  takeKeys() {
+    this.handle.focus();
+    this.place(this.want ?? this.row, this.want ? null : this.cursor);
+    if (!this.item()) this.place("tabs");
+    this.want = null;
+  }
+
+  /** nocturne.tabstrip / nocturne.header: in on that row; pressed again there, back to the pane. */
+  toggleKeys(row) {
+    if (this.navOn) {
+      if (this.row === row) return this.back();
+      return this.place(row, null);
+    }
+    const b = this.block;
+    if (!b) return;
+    this.want = row;
+    if (row !== this.row) this.cursor = null;
+    run("layout.focus", { id: b });
+  }
+
+  /** Back to the pane (pane.focus clears the block). */
+  back() {
+    const pane = focused()?.pane;
+    if (pane) run("pane.focus", { pane });
+    else run("pane.go", { direction: "down" });
+  }
+
+  /** The rows' controls, as the strip, the header and the chips draw them. */
+  collect(space, shown) {
+    const tabOf = (c) => ({
+      id: `tab:${c.id}`, active: c.active,
+      go: () => (c.active ? this.back() : run("tab.select", { id: c.id })),
+      menu: () => openMenu({ tab: "tab", target: { id: c.id, space: space.id } }, { centered: true }),
+      rename: () => run("tab.rename", { id: c.id }),
+      close: () => run("tab.close", { id: c.id }),
+      "move-left": () => { if (c.index > 1) run("tab.move", { id: c.id, index: c.index - 1 }); },
+      "move-right": () => { if (c.index < space.tabs.length) run("tab.move", { id: c.id, index: c.index + 1 }); },
+    });
+    const gitMenu = () => openMenu({ tab: "git" }, { centered: true });
+    const tools = [
+      { id: "tab-scripts-run", go: () => toggleDeck({ centered: true }) },
+      // As cmd-e: the panel with the keyboard in it (opened if need be); in it, closed.
+      { id: "tab-files", go: () => focusFiles() },
+      { id: "tab-git", go: () => toggleGit(), menu: gitMenu },
+      { id: "tab-git-more", go: gitMenu, menu: gitMenu },
+      { id: "tab-new", go: () => openNewMenu({ centered: true }) },
+      ...(hasMod(layout(), "nocturne-notifications") ? [{ id: "bell", go: () => run("nocturne-notifications.open") }] : []),
+    ];
+    const all = panes();
+    const fp = all.find((p) => p.focused && !p.parked);
+    const head = fp ? headerControls(fp, all).map((c) => ({
+      id: c.id, go: c.go, menu: () => paneMenu(fp, true), rename: () => renamePane(fp), close: () => run("pane.close", { pane: fp.pane }),
+    })) : [];
+    const tab = space?.tabs.find((c) => c.active)?.id;
+    const parked = all.filter((p) => p.tab === tab && p.parked).map((p) => ({
+      id: `park:${p.pane}`, pane: p.pane,
+      go: () => run("pane.unpark", { pane: p.pane }), menu: () => paneMenu(p, true), close: () => run("pane.close", { pane: p.pane }),
+    }));
+    this.rows = { tabs: [...(space ? shown.map(tabOf) : []), ...tools], head, parked };
+  }
+
+  /** A key while the strip has the keyboard. */
+  key(e, cx) {
+    const verb = keyVerb(e, STRIP_KEYS);
+    if (!verb) return;
+    cx.stop_propagation();
+    const items = this.rows[this.row] ?? [];
+    const item = this.item();
+    const rows = this.liveRows();
+    const r = rows.indexOf(this.row);
+    switch (verb) {
+      case "left":
+        if (this.row === "tabs" && items[0]?.id === this.cursor) return run("pane.go", { direction: "left" });
+        this.cursor = move(items, this.cursor, -1); break;
+      case "right": this.cursor = move(items, this.cursor, 1); break;
+      case "first": this.cursor = items[0]?.id ?? null; break;
+      case "last": this.cursor = items.at(-1)?.id ?? null; break;
+      case "down": if (r < 0 || r >= rows.length - 1) return this.back(); this.place(rows[r + 1]); break;
+      case "up": if (r > 0) this.place(rows[r - 1]); break;
+      case "next": case "prev": {
+        const flat = rows.flatMap((row) => this.rows[row].map((x) => ({ row, id: x.id })));
+        const i = flat.findIndex((x) => x.row === this.row && x.id === this.cursor);
+        const n = flat[(i + (verb === "next" ? 1 : -1) + flat.length) % flat.length];
+        if (n) { this.row = n.row; this.cursor = n.id; }
+        break;
+      }
+      case "back": return this.back();
+      case "help": return openKeys("tab strip keys", STRIP_HELP);
+      case "new": { const sp = spaces().find((s) => s.active); run("tab.new", sp ? { space: sp.id } : {}); return; }
+      default:
+        if (/^n[1-9]$/.test(verb)) return run("tab.select", { index: Number(verb.slice(1)) });
+        item?.[verb]?.(cx);
+    }
+    this.reveal();
+    cx.notify();
+  }
+
+  /** Scrolls the strip to the tab under the cursor. */
+  reveal() {
+    if (this.row !== "tabs") return;
+    const i = this.rows.tabs.filter((x) => x.id.startsWith("tab:")).findIndex((x) => x.id === this.cursor);
+    if (i >= 0) this.scroll.scroll_to_item(i);
+  }
+
+  /** Where the cursor is for the header, the chips and the bell (shared CURSOR), only when it changes. */
+  tell(on) {
+    const want = !on ? null
+      : this.row === "head" ? { region: "head", pane: panes().find((p) => p.focused && !p.parked)?.pane ?? null, item: this.cursor }
+      : this.row === "parked" ? { region: "parked", pane: this.item()?.pane ?? null, item: this.cursor }
+      : this.cursor === "bell" ? { region: "bell", item: "bell" } : null;
+    if (JSON.stringify(want) !== JSON.stringify(shared(CURSOR) ?? null)) setShared(CURSOR, want);
+  }
+
+  /** Is the cursor on this control of the strip's own row? */
+  at(id) { return this.navOn && this.row === "tabs" && this.cursor === id; }
 
   // Where the git button looks: the active space's folder, on its machine.
   target() {
@@ -73,7 +243,8 @@ export default class Tabs {
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = e; })
       .on_click(() => action(this.press))
       .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
-      .children(kids.map((k) => k.relative()));
+      .children(kids.map((k) => k.relative()))
+      .map((el) => navRing(t, el, this.at(id)));
   }
 
   filesButton(t) {
@@ -91,10 +262,7 @@ export default class Tabs {
       : [g.changed ? `${g.changed} changed` : "clean", g.ahead ? `${g.ahead} ahead` : null, g.behind ? `${g.behind} behind` : null]
         .filter(Boolean).join(" · ") + (g.branch ? ` on ${g.branch}` : "") + " · Git (⌘G)";
     const num = (s, c) => div().flex_none().text_color(c).child(s);
-    const menu = (e) => {
-      const props = { role: "menu", tab: "git" };
-      openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 220, height: menuHeight(props), ...(dropBelow(e, 220) ? { at: dropBelow(e, 220) } : {}), props });
-    };
+    const menu = (e) => openMenu({ tab: "git" }, { at: dropBelow(e, 220) });
     const github = Boolean(githubOpen());
     return h_flex().id("tab-git-group").flex_none().items_center()
       .on_mouse_down("right", (e, cx) => { cx.stop_propagation(); menu(e); })
@@ -118,6 +286,10 @@ export default class Tabs {
     const t = theme();
     const space = spaces().find((s) => s.active);
     const shown = (space?.tabs ?? []).filter((c) => !c.settled || c.active);
+    const on = this.navOn;
+    this.collect(space, shown);
+    if (on && !this.item()) this.place(this.liveRows().includes(this.row) ? this.row : "tabs");
+    this.tell(on);
     const item = (c, i) => {
       const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
       // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
@@ -134,21 +306,26 @@ export default class Tabs {
         })
         // Middle click closes the tab, as in a browser.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })
-        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); const props = { role: "menu", tab: "tab", target: { id: c.id, space: space.id } };
-          openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 220, height: menuHeight(props), props }); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openMenu({ tab: "tab", target: { id: c.id, space: space.id } }); })
         .child(div().text_color(c.active ? t.accent : t.dim).child(String(c.index)))
         .when(Boolean(prog?.icon), (el) => el.child(prog.tint ? svg(prog.icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(prog.icon).size(12)))
         .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
         .child(pip(t, c.status))
-        .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))));
+        .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
+        .map((el) => navRing(t, el, this.at(`tab:${c.id}`)));
     };
     const rule = () => div().w(1).h(14).mx(4).flex_none().bg(t.ansi0);
     return h_flex().id("tabs").relative().size_full().min_w(0).pl(4).pr(0).items_center().bg(t.background)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_up("left", () => { this.pressed = null; })
       .on_scroll_wheel((e) => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       // The horizon: a 2 px dithered line the tabs stand on.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().overflow_x_scrollbar().children(shown.map(item)))
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)))
+      // While the strip has the keyboard: which row its cursor is on, and ? for the keys.
+      .when(on, (el) => el.child(div().flex_none().px(6).text_size(11).text_color(t.dim)
+        .child(this.row === "head" ? "pane ←→ ⏎ · ? keys" : this.row === "parked" ? "parked ⏎ · ? keys" : "? keys")))
       .child(h_flex().flex_none().gap(2).items_center()
         .child(scriptsControl(t, (...a) => this.tool(...a)))
         .child(rule())
