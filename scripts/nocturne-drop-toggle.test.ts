@@ -81,7 +81,7 @@ const VIEWPORT = { width: 1600, height: 1000 };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch(() => {}); }, notify() {}, stop_propagation() {},
-  focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} },
+  focus_handle: () => ({ focus() {}, is_focused: () => true }), new: () => ({ set_props() {} }), timer: { every() {}, after() {} },
 };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 /** A command, to every copy waiting for one. */

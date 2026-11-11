@@ -27,6 +27,8 @@
 //            and a meter per usage window; the » key under the hour opens it
 //            again. On macOS the rail is wide enough for the window buttons
 //            at any zoom.
+//   glow     the pointer carries a firefly's light over the sky and the rail
+//            (glow.js): a nested view, so following it never redraws the sky
 //   keys     the sidebar takes the keyboard from pane.go (cmd-alt-left from
 //            the leftmost pane) or nocturne.sidebar (layout.focus): a cursor
 //            walks every control (nav.js SIDEBAR_KEYS; ? lists them), the

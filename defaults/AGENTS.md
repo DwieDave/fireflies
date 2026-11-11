@@ -927,6 +927,11 @@ rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
+While the pointer is over the sky (open or folded) it carries a firefly's
+light: a faint dithered halo in the theme's ansi11 that trails it, lights the
+stars, haze and grass near it, breathes, and fades when the pointer leaves;
+it holds still when the window isn't in front or the system asks for less
+motion (nocturne's `glow.js`, a nested view, so it never redraws the sky).
 
 Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
 (`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
@@ -1669,6 +1674,12 @@ Rules:
   `.transition(...)` for changes: they run without your script and stop
   when not shown. Timers are for data (a clock, a fetch), and only as often
   as what they show changes.
+- **Something that follows the pointer** (a highlight, a glow): make it a
+  nested view, `this.glow = cx.new(GlowClass, props)` in `init`, mounted with
+  `.child(this.glow)`, and feed it from `.on_mouse_move((e, cx) => …)` with
+  `this.glow.set_props({ x, y })`: only that view is rebuilt, not yours. Skip
+  moves that change nothing, and draw nothing once it's out of sight (a loop
+  at opacity 0 still runs). Nocturne's sidebar glow (`glow.js`) does this.
 
 ### UI
 

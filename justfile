@@ -76,6 +76,8 @@ test:
     bun test scripts/keys-lists.test.ts
     # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
     bun test scripts/nocturne-tab-drag.test.ts
+    # The pointer's firefly glow over nocturne's sidebar: placed by the sky's real mouse handlers, calm and leave, only its own view rebuilt.
+    bun test scripts/nocturne-fireglow.test.ts
     cargo test --locked
 
 docs-generate: build

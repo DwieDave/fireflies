@@ -1,10 +1,9 @@
 // The pointer's own firefly (sky.js): while the pointer is over the sidebar,
 // open or folded, it carries a firefly's light. A wide faint dithered halo
 // (art/lantern.svg) around a heart, a four-point twinkle like the brightest
-// stars, at the pointer's tip, in the theme's ansi11, a firefly's
-// yellow-green that no status uses; within its inner
-// reach the night's own pixels (stars, haze, the grass rim) light up in that
-// color, in two square steps. It sits behind every name, plate and tick and
+// stars, at the pointer's tip, in the theme's ansi11, a firefly's yellow-green
+// that no status uses; within its inner reach the night's own pixels (stars,
+// haze, the grass rim) light up in that color, in two square steps. It sits behind every name, plate and tick and
 // above the backdrop, so text stays on top of it.
 //
 //   moves    trails the pointer by TRAIL ms, as a firefly drifts after it
@@ -24,15 +23,14 @@ import { ART } from "./kit.js";
 
 // The halo's half-width (lantern.svg is 112 px), the lit night's two steps
 // (half-width, opacity). Readable first: the halo's dots stay darker than
-// the sky's dimmest words, so only the heart is bright, and it's 6 px, its
-// middle on the pointer's tip, under the arrow.
+// the sky's dimmest words, so only the heart is bright, and it's 6 px with
+// its middle on the pointer's tip, under the arrow.
 const R = 56;
 const LIT = [[40, 0.35], [24, 0.7]];
 // The trail; how long it takes to fade out once the pointer leaves (ms).
 const TRAIL = { duration: 180, easing: "ease-out" };
 const FADE = 360;
-// The halo breathes (period, ms; opacity there and back), its dots always
-// darker than the sky's dimmest words; the heart flashes.
+// The halo breathes (opacity there and back, period in ms); the heart flashes.
 const BREATHE = { from: 0.24, to: 0.4, period: 2600, easing: "ease-in-out" };
 const FLASH = { from: 0.15, to: 1, period: 1900, easing: "ease-in" };
 // Calm: held at these.
