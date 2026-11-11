@@ -8,7 +8,8 @@
 //
 // Each is pane.equalize {scope, pane}; fixed widths (a px size) stay. The
 // row under the cursor sits on a dithered band with a blue edge, like
-// Nocturne's menus. a / r / c / g pick, ↑/↓ (j/k) move, Enter runs, Esc closes.
+// Nocturne's menus. a / r / c / g pick, ↑/↓ (j / k, tab) move, Enter or
+// Space runs, Esc closes.
 //
 // Opened by the nocturne pane header's ▦ button and the pane menu's
 // "Even out panes…" (props { pane, overlay }); without a pane it works on the
@@ -81,13 +82,14 @@ export default class EqualizePanes extends View {
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
         if (e.modifiers.control || e.modifiers.platform || e.modifiers.alt) return;
-        const k = e.key;
-        const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
-        if (d && live.length) {
-          this.cursor = (this.cursor + d + live.length) % live.length;
+        const k = e.key, shift = e.modifiers.shift;
+        const down = k === "down" || k === "j" || (k === "tab" && !shift), up = k === "up" || k === "k" || (k === "tab" && shift);
+        if ((down || up) && live.length) {
+          this.cursor = (this.cursor + (down ? 1 : -1) + live.length) % live.length;
+          cx.stop_propagation();
           return cx.notify();
         }
-        if (k === "enter") return this.pick(current);
+        if (k === "enter" || k === "space") return this.pick(current);
         if (k === "escape") return this.close();
         this.pick(live.find((r) => r.key === k));
       })

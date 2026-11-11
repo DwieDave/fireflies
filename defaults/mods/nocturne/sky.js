@@ -45,6 +45,7 @@ import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { gridify } from "./gridify.js";
+import { toastKey } from "./toast.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -144,7 +145,9 @@ export default class Sky {
     // that Herdr Core's missing App Management stopped, opens that setting),
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
-    // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js).
+    // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
+    // nocturne.toast runs the newest toast's action, nocturne.toast-close
+    // dismisses it (toast.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -168,6 +171,7 @@ export default class Sky {
         else if (c === "pin") pin(focusedTerminal());
         else if (c === "pin-up") movePin(focusedTerminal(), -1);
         else if (c === "pin-down") movePin(focusedTerminal(), 1);
+        else if (c === "toast" || c === "toast-close") toastKey(c);
         cx.notify();
       }
     });

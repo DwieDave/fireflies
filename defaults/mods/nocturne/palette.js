@@ -2,7 +2,7 @@
 // DwieDave fork): the shipped palette's commands, fuzzy ranking and recents,
 // drawn square and 1-bit like popup.js. The row under the cursor sits on a
 // dithered band with a blue edge; groups are eyebrows; keys are plain glyphs.
-// Enter runs, ↑/↓ (page up/down) move, Esc closes. Places (spaces, tabs) stay
+// Enter runs, ↑/↓ (ctrl-n/p, ctrl-j/k, page up/down) move, Esc closes. Places (spaces, tabs) stay
 // in the picker.
 // The "Open" group holds Nocturne's own panels (panels.js): each beside the
 // focused pane (or where it always goes) and in a new tab, plus the sidebar fold.
@@ -349,11 +349,11 @@ export default class Palette {
     return v_flex().id("nocturne-palette").track_focus(this.handle).w_full().min_h(0)
       .bg(t.background).border(1).border_color(t.ansi0)
       .on_key_down((e, cx) => {
-        const k = e.key;
-        if (k === "escape") return this.close();
+        const k = e.key, ctrl = e.modifiers?.control && !e.modifiers?.platform && !e.modifiers?.alt;
+        if (k === "escape") { cx.stop_propagation(); return this.close(); }
         // Stops at the ends: wrapping jumps out of sight.
-        if (k === "down") this.at = Math.min(this.at + 1, rows.length - 1);
-        else if (k === "up") this.at = Math.max(this.at - 1, 0);
+        if (k === "down" || (ctrl && (k === "n" || k === "j"))) this.at = Math.min(this.at + 1, rows.length - 1);
+        else if (k === "up" || (ctrl && (k === "p" || k === "k"))) this.at = Math.max(this.at - 1, 0);
         else if (k === "pagedown") this.at = Math.min(this.at + SHOWN, rows.length - 1);
         else if (k === "pageup") this.at = Math.max(this.at - SHOWN, 0);
         else return;
@@ -384,7 +384,7 @@ export default class Palette {
           .child(div().text_color(t.dim).child("Spaces and tabs are in the picker (⌘P).")))
       .child(h_flex().relative().h(26).mt(4).flex_none().px(16).gap(14).items_center().text_size(10)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(hint("↑↓", "move")).child(hint("enter", "run")).child(hint("esc", "close"))
+        .child(hint("↑↓ ctrl-n/p", "move")).child(hint("enter", "run")).child(hint("esc", "close"))
         .child(div().flex_1())
         .child(div().text_color(t.dim).child("type to filter")));
   }

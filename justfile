@@ -50,6 +50,8 @@ test:
     bun test scripts/nocturne-git-view.test.ts
     # The floating tool windows' keys, with herdr and gpui stand-ins.
     bun test scripts/nocturne-windows-keys.test.ts
+    # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.
+    bun test scripts/dialogs-keys.test.ts
     cargo test --locked
 
 docs-generate: build

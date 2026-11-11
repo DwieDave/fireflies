@@ -1,6 +1,6 @@
 // Go to a tab. Drops from the Terminals layout's space chip (popup, at: "top"). Spaces with
 // something that needs you come first, quiet spaces (no agent running)
-// fold into "earlier". Type to filter, ↑/↓ and Enter to go, ctrl+d to close
+// fold into "earlier". Type to filter, ↑/↓ (ctrl+n/p) and Enter to go, ctrl+d to close
 // a tab, Esc to leave. Last rows: new work (a tab here, a space on this
 // computer or on each connected machine).
 
@@ -234,10 +234,10 @@ export default class Picker extends View {
       .bg(t.popover)
       .text_size(13)
       .on_key_down((e, cx) => {
-        const k = e.key;
+        const k = e.key, ctrl = e.modifiers?.control && !e.modifiers?.platform && !e.modifiers?.alt;
         if (k === "escape") return this.close();
-        if (k === "down") this.at = (this.at + 1) % pickable.length;
-        else if (k === "up") this.at = (this.at + pickable.length - 1) % pickable.length;
+        if (k === "down" || (ctrl && k === "n")) this.at = (this.at + 1) % pickable.length;
+        else if (k === "up" || (ctrl && k === "p")) this.at = (this.at + pickable.length - 1) % pickable.length;
         else if (k === "d" && e.modifiers.control) {
           if (sel?.kind === "ctx") {
             this.close();
