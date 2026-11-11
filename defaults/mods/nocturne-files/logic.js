@@ -311,10 +311,11 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
   ["space", "preview on / off"], ["J K", "scroll the preview"], ["< >", "preview smaller / bigger"],
+  ["t", "mark · unmark"], ["V", "mark a range (V ends)"], ["⇧↑ ⇧↓", "mark while moving"],
   ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
-  ["r", "refresh"], ["esc", "clear the filter · leave"], ["q", "close"], ["?", "keys"]];
+  ["r", "refresh"], ["esc", "unmark · clear filter · leave"], ["q", "close"], ["?", "keys"]];
 /** "? keys" on the filter line (keyhelp.js), px: 4 + "?" + 4 + "keys" + 4 at 7 px a character. */
 const KEYS_CHIP = 47;
 
@@ -422,3 +423,77 @@ export function folderFacts(entries) {
   const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
   return entries.length ? `${n(dirs, "folder", "folders")} · ${n(files, "file", "files")}` : "empty";
 }
+
+// ---- several rows: marks, sets, drag and drop, the changes record
+
+/** The paths of `rows` from index `a` to `b` (either order), search folder lines left out. */
+export function rangePaths(rows, a, b) {
+  const [from, to] = a <= b ? [a, b] : [b, a];
+  return rows.slice(Math.max(0, from), to + 1).filter((r) => !r.head && !r.draft).map((r) => r.path);
+}
+
+/** The paths a set acts on: one under another one in the set goes with it
+ *  (a marked folder covers what's inside it), the root never. */
+export function topLevel(paths) {
+  const all = [...new Set(paths)].filter(Boolean);
+  return all.filter((p) => !all.some((q) => q !== p && p.startsWith(`${q}/`)));
+}
+
+/** The delete question for several items: the count, the first few names, trash or permanently. */
+export function deleteManyQuestion(items, trash) {
+  const names = items.slice(0, 3).map((x) => `“${x.name}${x.dir ? "/" : ""}”`).join(", ");
+  const more = items.length > 3 ? ` and ${items.length - 3} more` : "";
+  return `${trash ? "Move" : "Delete"} ${items.length} items (${names}${more})${trash ? " to the Trash" : " permanently"}?`;
+}
+
+/** Why `items` (absolute paths) can't be dropped into `into`, or null. Items
+ *  already in it are left where they are; all of them there is a refusal. */
+export function dropRefusal(items, into) {
+  if (!items.length) return "Nothing to move";
+  if (items.some((p) => p === into)) return "A folder can't go into itself";
+  if (items.some((p) => into.startsWith(`${p}/`))) return "A folder can't go into its own folder";
+  if (items.every((p) => parent(p) === into)) return "It's already there";
+  return null;
+}
+
+/** The shared record of renames, moves and deletes (`nocturne.files.changes`)
+ *  with `entries` ({ from, to }) appended: newest last, at most 50, each with
+ *  an `id` one past the last and the machine and time. */
+export const CHANGES_MAX = 50;
+export function withChanges(list, entries, on, at) {
+  const out = Array.isArray(list) ? [...list] : [];
+  let id = out.length ? Number(out[out.length - 1].id) || 0 : 0;
+  for (const e of entries) out.push({ id: ++id, from: e.from, to: e.to ?? null, on: on ?? null, at });
+  return out.slice(-CHANGES_MAX);
+}
+
+/** What's cut, as a list ({ abs, dir, name } each), from shared `nocturne-files.cut`
+ *  (a set now, a single item before). */
+export function cutItems(c) {
+  if (!c) return [];
+  if (Array.isArray(c.items)) return c.items;
+  return c.abs ? [{ abs: c.abs, dir: Boolean(c.dir), name: c.name ?? base(c.abs) }] : [];
+}
+
+/** The right-click menu for a set of `n` marked rows: what acts on all of
+ *  them first, then the clicked row's own entries that act on it alone. */
+export function setMenuItems(row, n, { pane = false, clip = false, look = false } = {}) {
+  const own = menuItems(row, { pane, clip: false, look }).filter((x) => !["delete", "cut", "copy", "paste", "rename", "new-file", "new-folder"].includes(x.act));
+  return [
+    { key: "d", label: `Delete ${n} items…`, act: "delete-set" },
+    { key: "x", label: `Cut ${n} items`, act: "cut-set" },
+    { key: "y", label: `Copy ${n} paths`, act: "copy-set" },
+    ...(clip ? [{ key: "P", label: row.dir ? "Paste in it" : "Paste beside it", act: "paste" }] : []),
+    { key: "esc", label: "Unmark all", act: "unmark" },
+    ...own,
+  ];
+}
+
+/** The tree's geometry for the pointer: rows start TREE_TOP px below the
+ *  pane's top (toolbar, filter line, the list's padding), ROW px each. */
+export const TREE_TOP = 34 + 26 + 4;
+export const ROW_H = 22;
+
+/** The index of the row under `y` (pane px) with the list scrolled `scrolled`
+ *  px down: -1 above the rows. */
+export const rowIndexAt = (y, scrolled) => Math.floor((y - TREE_TOP + scrolled) / ROW_H);

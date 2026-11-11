@@ -26,7 +26,10 @@
 // picture, PDF, table, patch, font or clip: the preview, nocturne-preview,
 // alt-double-click opens the system's app, or edits a table or patch). Click a
 // folder: fold it; double-click it: edit the folder in $EDITOR (the fold its
-// first click made is undone). Keys while it has focus:
+// first click made is undone). cmd-click marks or unmarks a row; shift-click
+// marks every row from the last clicked one. Drag a row (or, pressed on a
+// marked one, every marked row) onto a folder or below the rows (the root).
+// Keys while it has focus:
 //   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
@@ -44,7 +47,9 @@
 //   x / P          cut the row / paste it in the selected folder (beside a selected file; the root with none)
 //   d              delete: asks first (y or enter; anything else keeps it); the machine's trash, else permanently
 //   ?              the keys, under the filter line (its ? chip too; ? or esc hides them)
-//   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
+//   t              mark / unmark the row and step down   V  mark a range while moving (V again ends it)
+//   shift-↓ ↑      mark while moving
+//   esc            the marks first; else a pane of its own: close; the panel: back to the pane the keyboard came from
 //   space          the preview split on / off (the toolbar's split icon and the menu too)
 //   J / K          scroll the preview (half a view; a PDF: a page), the keyboard stays here
 //   < / >          the preview smaller / bigger (or drag the divider)
@@ -69,9 +74,24 @@
 // is refused), the root can't be renamed, cut or deleted, a folder can't go
 // into itself. Every one is in the right-click menu too (the empty space's:
 // new file / folder, paste, in the root). While a name's input or the delete
-// question is open, keys go to it. What's cut is shared (`nocturne-files.cut`):
-// P in any files pane on that machine pastes it. Rows can't be dragged: a mod
-// can't tell which row a press started on (no per-row handlers in a virtual list).
+// question is open, keys go to it. What's cut is shared (`nocturne-files.cut`,
+// { on, items }): P in any files pane on that machine pastes it.
+//
+// Several rows: with marks, d, x, P, y and the menu on a marked row act on all
+// of them (one delete question with the count and the first names; a marked
+// folder covers what's in it); rename, open, edit and the viewers act on the
+// keyboard's row. Each is tried, what failed is listed after with its reason.
+// The hint line counts the marks; the preview follows the keyboard's row.
+// A drag: the pane's own press, move and release, the row under the pointer
+// found from the list's scroll offset (rows are ROW px); the target folder
+// lights while a drop there is allowed (not into itself, its own folder or
+// where it is), unfolds after resting UNFOLD ms, the list scrolls near its
+// edges; esc, leaving the pane or a release elsewhere cancels; a press that
+// doesn't move is a click.
+//
+// Every rename, move and delete that worked goes into shared
+// `nocturne.files.changes` ([{ id, from, to, on, at }], newest last, 50 at
+// most; a delete's `to` is null; a folder is one entry): editors follow it.
 //
 // Commands (keys.json, the palette, `herdr-app do nocturne-files.<c>`, to the
 // focused files pane): keys (the ? overview), look (the preview split on / off).
@@ -84,7 +104,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import * as herdr from "herdr";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -127,6 +147,11 @@ const DRAFT = "\u0000draft";
 const HITS = 200, MENU_ROW = 20;
 /** Two clicks on a row this close (ms) are a double click. */
 const DOUBLE = 400;
+/** Renames, moves and deletes done here, for the editors to follow (logic.js withChanges). */
+const CHANGES = "nocturne.files.changes";
+/** A press that moves this far (px) is a drag; a folder under a drag unfolds
+ *  after resting this long (ms); this close to the list's edge it scrolls. */
+const SLOP = 4, UNFOLD = 700, EDGE = 18;
 const zoom = () => Number(settings()?.zoom) || 1;
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
@@ -175,6 +200,9 @@ export default class Files extends View {
     this.nameInput.on("change", (_e, cx) => { if (this.msg?.draft) this.msg = null; cx.notify(); });
     this.nameInput.on("submit", (_e, cx) => { this.commitDraft(cx); cx.notify(); });
     this.scroll = VirtualListScrollHandle.new();
+    // Several rows: the marked ones (paths), the row a shift-click or a range
+    // starts from, the range being marked (V, shift-↑↓), a row being dragged.
+    this.marked = new Set(); this.anchor = null; this.range = null; this.drag = null; this.press = null;
     this.handle = cx.focus_handle();
     this.nav = newNav();
     // The preview split: on or off and its shares, kept per pane like the filters.
@@ -262,6 +290,7 @@ export default class Files extends View {
     this.gen = (this.gen ?? 0) + 1;
     this.entries = new Map(); this.folders = new Set(); this.pending = new Set();
     this.marks = {}; this.ignored = new Set(); this.error = null; this.limited = false; this.sel = null;
+    this.marked = new Set(); this.range = null; this.anchor = null;
     this.watched = null;
     if (this.query) this.clearSearch(cx);
     this.refresh(cx);
@@ -606,9 +635,21 @@ export default class Files extends View {
     run("files.open", { path: path ? `${this.root}/${path}` : this.root, ...(beside ? { pane: beside.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
+  /** y with marks: every marked path, one a line. */
+  copySet(cx) {
+    const rows = this.setOf(this.shown().find((r) => r.path === this.sel) ?? null);
+    const paths = rows.map((r) => this.abs(r.path)).map((a) => (this.on ? `${this.on}:${a}` : a));
+    cx.write_to_clipboard(paths.join("\n"));
+    this.copiedText = `${paths.length} paths copied`;
+    const at = this.copied = Date.now();
+    cx.timer.after(1400, (cx) => { if (this.copied === at) { this.copied = 0; cx.notify(); } });
+  }
+
   copy(path, cx) {
+    if (this.marked?.size && (!path || this.marked?.has(path) || path === this.sel)) return this.copySet(cx);
     const abs = path ? `${this.root}/${path}` : this.root;
     cx.write_to_clipboard(this.on ? `${this.on}:${abs}` : abs);
+    this.copiedText = null;
     const at = this.copied = Date.now();
     cx.timer.after(1400, (cx) => { if (this.copied === at) { this.copied = 0; cx.notify(); } });
   }
@@ -657,7 +698,10 @@ export default class Files extends View {
   // ---- the menu
 
   openMenu(row, cx) {
-    let items = menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on });
+    // On a marked row (with others marked): the set's entries first.
+    const set = row.path && this.marked?.has(row.path) ? this.setOf(row) : [];
+    let items = set.length > 1 ? setMenuItems(row, set.length, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on })
+      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -684,6 +728,10 @@ export default class Files extends View {
     else if (act === "paste") this.paste(row, cx);
     else if (act === "delete") this.askDelete(row, cx);
     else if (act === "look") this.toggleLook(cx);
+    else if (act === "delete-set") this.askDelete(row, cx);
+    else if (act === "cut-set") this.cutRow(row, cx);
+    else if (act === "copy-set") this.copySet(cx);
+    else if (act === "unmark") this.unmark();
   }
 
   menuKey(e, cx) {
@@ -715,14 +763,41 @@ export default class Files extends View {
   /** Runs one of OPS's operations on this pane's machine: true when it worked;
    *  otherwise the reason is said in the pane and the tree is listed again. */
   async fileOp(args, name, cx) {
-    let r;
-    try { r = await exec("sh", ["-c", OPS, "files-op", ...args], { on: this.on }); }
-    catch (e) { r = { code: -1, stderr: String(e?.message ?? e) }; }
+    const r = await this.runOp(args);
     if (r.code === 0) return true;
-    this.say(r.code === 3 ? `“${name}” already exists` : r.code === 4 ? `“${name}” isn't there anymore`
-      : r.code === 5 ? `“${name}” couldn't go to the Trash` : cleanError(r.stderr), cx, { draft: r.code === 3 });
+    this.say(this.why(r, name), cx, { draft: r.code === 3 });
     this.refresh(cx);
     return false;
+  }
+
+  /** One of OPS's operations on this pane's machine: its exit code and stderr. */
+  async runOp(args) {
+    try { return await exec("sh", ["-c", OPS, "files-op", ...args], { on: this.on }); }
+    catch (e) { return { code: -1, stderr: String(e?.message ?? e) }; }
+  }
+
+  /** Why an operation on `name` failed, in a line. */
+  why(r, name) {
+    return r.code === 3 ? `“${name}” already exists` : r.code === 4 ? `“${name}” isn't there anymore`
+      : r.code === 5 ? `“${name}” couldn't go to the Trash` : cleanError(r.stderr);
+  }
+
+  /** Renames, moves and deletes that worked ({ from, to } absolute; `to`
+   *  null for a delete; a folder once, with its own paths), appended to the
+   *  shared record the editors follow. */
+  recordChanges(entries) {
+    if (entries.length) setShared(CHANGES, withChanges(shared(CHANGES), entries, this.on, Date.now()));
+  }
+
+  /** After `rel` moved to `to` (relative, or null: out of the tree or
+   *  deleted): its unfolded folders follow it, its listings go, a cut of it is used up. */
+  forget(rel, to, abs) {
+    if (rel != null) {
+      this.folders = movedFolders(this.folders, rel, to);
+      for (const k of [...this.entries.keys()]) if (k === rel || k.startsWith(`${rel}/`)) this.entries.delete(k);
+    }
+    const left = cutItems(this.clip()).filter((c) => c.abs !== abs && !c.abs.startsWith(`${abs}/`));
+    if (this.clip() && left.length !== cutItems(this.clip()).length) setShared(CUT, left.length ? { on: this.on ?? null, items: left } : null);
   }
 
   /** The machine's trash tool ("" where there is none: deletes are permanent), asked once. */
@@ -837,13 +912,8 @@ export default class Files extends View {
       if (d) d.busy = false;
       if (ok && d && this.draft === d) this.endDraft(cx);
       if (ok) {
-        const to = relTo(this.root, dst);
-        if (rel != null) {
-          this.folders = movedFolders(this.folders, rel, to || null);
-          for (const k of [...this.entries.keys()]) if (k === rel || k.startsWith(`${rel}/`)) this.entries.delete(k);
-        }
-        const c = this.clip();
-        if (c && (c.abs === src || c.abs.startsWith(`${src}/`))) setShared(CUT, null);
+        this.recordChanges([{ from: src, to: dst }]);
+        this.forget(rel, relTo(this.root, dst) || null, src);
         this.landOn(dst, cx, done);
       }
       cx.notify();
@@ -856,32 +926,226 @@ export default class Files extends View {
     return c && (c.on ?? null) === (this.on ?? null) ? c : null;
   }
 
-  /** x: cuts the row for P (again on the same row: uncut). */
+  /** Whether `abs` is cut (on this machine). */
+  isCut(abs) { return cutItems(this.clip()).some((c) => c.abs === abs); }
+
+  /** x: cuts the row for P (again on the same row: uncut); with marks, all of them. */
   cutRow(row, cx) {
+    const set = this.setOf(row);
+    if (set.length > 1) {
+      const items = set.map((r) => ({ abs: this.abs(r.path), dir: Boolean(r.dir), name: base(r.path) }));
+      setShared(CUT, { on: this.on ?? null, items });
+      return this.say(`Cut ${items.length} items: P pastes them in the selected folder`, cx, { error: false });
+    }
     if (!row?.path) return this.say("The tree's root can't be moved", cx);
     const abs = this.abs(row.path);
-    if (this.clip()?.abs === abs) { setShared(CUT, null); return; }
-    setShared(CUT, { abs, on: this.on ?? null, dir: Boolean(row.dir), name: base(row.path) });
+    if (this.isCut(abs) && cutItems(this.clip()).length === 1) { setShared(CUT, null); return; }
+    setShared(CUT, { on: this.on ?? null, items: [{ abs, dir: Boolean(row.dir), name: base(row.path) }] });
     this.say(`Cut “${base(row.path)}”: P pastes it in the selected folder`, cx, { error: false });
   }
 
   /** P: moves what's cut into the selected folder (beside a selected file; the root with none). */
   paste(row, cx) {
-    const c = shared(CUT);
-    if (!c) return this.say("Nothing is cut: x cuts a row", cx);
+    const c = shared(CUT), items = cutItems(c);
+    if (!items.length) return this.say("Nothing is cut: x cuts a row", cx);
     if ((c.on ?? null) !== (this.on ?? null)) return this.say("It was cut on another machine", cx);
     const into = this.abs(!row?.path ? "" : row.dir ? row.path : dirOf(row.path));
-    this.move(c.abs, join(into, c.name), relTo(this.root, c.abs), cx, "Moved to");
+    if (items.length === 1) return this.move(items[0].abs, join(into, items[0].name), relTo(this.root, items[0].abs), cx, "Moved to");
+    this.moveSet(items.map((x) => x.abs), into, cx);
   }
 
-  /** d: asks first (the item named, a folder's contents, trash or permanently). */
+  /** d: asks first (the item named, a folder's contents, trash or permanently);
+   *  with marks, once for all of them (the count and the first names). */
   askDelete(row, cx) {
-    if (!row?.path) return this.say("The tree's root can't be deleted", cx);
-    const path = row.path;
+    const set = this.setOf(row);
+    if (set.length <= 1 && !row?.path) return this.say("The tree's root can't be deleted", cx);
     cx.spawn(async (cx) => {
       const trash = await this.trashTool();
-      this.ask = { path, dir: Boolean(row.dir), name: base(path), trash };
-      this.sel = path;
+      if (set.length > 1) this.ask = { set: set.map((r) => ({ path: r.path, dir: Boolean(r.dir), name: base(r.path) })), trash };
+      else {
+        const path = row.path;
+        this.ask = { path, dir: Boolean(row.dir), name: base(path), trash };
+        this.sel = path;
+      }
+      cx.notify();
+    });
+  }
+
+  // ---- several rows at once
+
+  /** The marked rows in the tree's order (none: []). */
+  markedRows() {
+    if (!this.marked?.size) return [];
+    return this.shown().filter((r) => this.marked?.has(r.path) && !r.head && !r.draft);
+  }
+
+  /** The rows an action on `row` covers: every marked one (a folder's
+   *  contents go with it) when there are marks and `row` is one of them or the
+   *  keyboard's; else `row` alone. */
+  setOf(row) {
+    const marked = this.markedRows();
+    if (!marked.length || (row?.path && !this.marked?.has(row.path) && row.path !== this.sel)) return row?.path ? [row] : [];
+    const keep = new Set(topLevel(marked.map((r) => r.path)));
+    return marked.filter((r) => keep.has(r.path));
+  }
+
+  /** t, cmd-click: marks or unmarks a row. */
+  markToggle(path) {
+    if (!path || path === DRAFT) return;
+    const next = new Set(this.marked);
+    next.has(path) ? next.delete(path) : next.add(path);
+    this.marked = next;
+    this.anchor = path;
+  }
+
+  /** Marks the rows from the range's start to the keyboard's row (the marks before it kept). */
+  markRange(to) {
+    const r = this.range, rows = this.shown();
+    if (!r) return;
+    const a = rows.findIndex((x) => x.path === r.anchor), b = rows.findIndex((x) => x.path === to);
+    if (a < 0 || b < 0) return;
+    this.marked = new Set([...r.base, ...rangePaths(rows, a, b)]);
+  }
+
+  /** esc: the marks and a range go. */
+  unmark() {
+    this.marked = new Set(); this.range = null;
+  }
+
+  /** Moves the set (absolute paths) into `into`, each tried; what failed is
+   *  said afterwards with its reason. Nothing is overwritten. */
+  moveSet(paths, into, cx) {
+    const items = topLevel(paths).filter((p) => parent(p) !== into);
+    const why = dropRefusal(topLevel(paths), into);
+    if (why) return this.say(why, cx);
+    this.runSet(items.map((abs) => ({ abs, args: ["move", abs, join(into, base(abs))], to: join(into, base(abs)) })), cx, (n) => `Moved ${n} ${n === 1 ? "item" : "items"} to ${tilde(into)}`);
+  }
+
+  // ---- drag and drop
+
+  /** Where the rows are in the pane (px): under the header, left of a preview at the right, above one at the bottom. */
+  treeBox() {
+    const g = this.geo ?? {};
+    return {
+      top: TREE_TOP - 4,
+      bottom: this.size.height - (g.side === "bottom" && g.px != null ? g.px + DIVIDER : 0),
+      right: this.size.width - (g.side === "right" && g.px != null ? g.px + DIVIDER : 0),
+    };
+  }
+
+  /** What's under the pointer `at` (pane px): a row ({ row }), the empty
+   *  space below the rows ({ root }), or nothing. Rows are ROW_H px each,
+   *  from the list's scroll offset (VirtualListScrollHandle.offset). */
+  hitAt(at) {
+    const box = this.treeBox();
+    if (!at || this.keysShown || at.y < box.top || at.y > box.bottom || at.x > box.right) return null;
+    const list = this.listed ?? [];
+    const scrolled = -(this.scroll.offset?.()?.y ?? 0) / zoom();
+    const i = rowIndexAt(at.y, scrolled);
+    if (i >= 0 && i < list.length) return { row: list[i] };
+    return i >= list.length ? { root: true } : null;
+  }
+
+  /** A left press (no cmd / shift / alt) on a row: a drag starts once it moves SLOP px. */
+  pressAt(e) {
+    this.press = null;
+    const m = e?.modifiers ?? {};
+    if (m.platform || m.shift || m.alt || this.draft || this.typing || !e?.local_position || !this.scroll.offset) return;
+    const at = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
+    const hit = this.hitAt(at);
+    if (hit?.row && hit.row.path !== DRAFT && !hit.row.head) this.press = { path: hit.row.path, at };
+  }
+
+  /** The pointer moved with the button held: the drag starts, or aims. A
+   *  press on a marked row drags every marked row. */
+  dragMove(at, cx) {
+    if (!this.press) return;
+    if (!this.drag) {
+      if (Math.hypot(at.x - this.press.at.x, at.y - this.press.at.y) < SLOP) return;
+      const p = this.press.path;
+      const paths = this.marked?.has(p) ? topLevel(this.markedRows().map((r) => r.path)) : [p];
+      this.drag = { paths, into: null, ok: false, why: null, at };
+      this.menu = null;
+    }
+    this.drag.at = at;
+    this.aim(this.hitAt(at), cx);
+    this.edgeScroll(at, cx);
+    cx.notify();
+  }
+
+  /** The drop target under the pointer: a folder row, or the root below the
+   *  rows; lit when the drop is allowed (dropRefusal). A closed folder
+   *  unfolds after resting UNFOLD ms under it. */
+  aim(hit, cx) {
+    const d = this.drag;
+    const into = hit?.root ? "" : hit?.row?.dir ? hit.row.path : null;
+    if (into === d.into) return;
+    d.into = into;
+    if (into == null) { d.ok = false; d.why = null; return; }
+    d.why = dropRefusal(d.paths.map((p) => this.abs(p)), this.abs(into));
+    d.ok = !d.why;
+    if (into && !hit.row.head && !this.folders.has(into)) {
+      cx?.timer?.after(UNFOLD, (cx) => { if (this.drag?.into === into && !this.folders.has(into)) { this.toggle(into, cx); cx.notify(); } });
+    }
+  }
+
+  /** Near the rows' top or bottom edge, the list scrolls a row at a time while the drag stays there. */
+  edgeScroll(at, cx) {
+    const box = this.treeBox();
+    const dir = at.y < box.top + EDGE ? -1 : at.y > box.bottom - EDGE ? 1 : 0;
+    if (dir === (this.edging ?? 0)) return;
+    this.edging = dir;
+    if (!dir) return;
+    const step = (cx) => {
+      if (!this.drag || this.edging !== dir) return;
+      const list = this.listed ?? [], scrolled = -(this.scroll.offset?.()?.y ?? 0) / zoom();
+      const first = Math.floor(scrolled / ROW_H), shown = Math.max(1, Math.floor((box.bottom - box.top) / ROW_H) - 1);
+      const to = dir < 0 ? first - 1 : first + shown;
+      if (to >= 0 && to < list.length) this.scroll.scroll_to_item(to);
+      this.aim(this.hitAt(this.drag.at), cx);
+      cx.notify();
+      cx.timer.after(90, step);
+    };
+    step(cx);
+  }
+
+  /** The release: an allowed drop moves the dragged rows into the target; anything else cancels. */
+  dragEnd(cx) {
+    const d = this.drag;
+    this.press = null;
+    if (!d) return false;
+    this.cancelDrag();
+    if (!d.ok) return true;
+    const into = this.abs(d.into);
+    if (d.paths.length === 1) {
+      const src = this.abs(d.paths[0]);
+      this.move(src, join(into, base(src)), d.paths[0], cx, "Moved to");
+    } else this.moveSet(d.paths.map((p) => this.abs(p)), into, cx);
+    return true;
+  }
+
+  /** esc, the pointer leaving the pane, a release where nothing takes it: the drag ends, nothing moves. */
+  cancelDrag() {
+    this.drag = null; this.press = null; this.edging = 0;
+  }
+
+  /** Runs the set's operations one by one: what worked is recorded and
+   *  forgotten in the tree; failures are listed once all are tried. */
+  runSet(ops, cx, said) {
+    cx.spawn(async (cx) => {
+      const done = [], failed = [];
+      for (const op of ops) {
+        const r = await this.runOp(op.args);
+        if (r.code === 0) done.push(op);
+        else failed.push(`“${base(op.abs)}”: ${this.why(r, base(op.abs)).replace(/^“[^”]*” /, "")}`);
+      }
+      this.recordChanges(done.map((op) => ({ from: op.abs, to: op.to })));
+      for (const op of done) this.forget(relTo(this.root, op.abs), op.to ? relTo(this.root, op.to) || null : null, op.abs);
+      this.unmark();
+      const ok = said(done.length);
+      this.say(failed.length ? `${ok}; ${failed.length} failed: ${failed.join(" · ")}` : ok, cx, { error: failed.length > 0 });
+      if (this.query.trim()) this.search(cx);
+      this.refresh(cx);
       cx.notify();
     });
   }
@@ -896,13 +1160,16 @@ export default class Files extends View {
   }
 
   remove(a, cx) {
+    if (a.set) {
+      const verb = a.trash ? "Moved" : "Deleted", where = a.trash ? " to the Trash" : "";
+      return this.runSet(a.set.map((x) => ({ abs: this.abs(x.path), args: ["delete", a.trash, this.abs(x.path)], to: null })), cx,
+        (n) => `${verb} ${n} ${n === 1 ? "item" : "items"}${where}`);
+    }
     const next = neighbour(this.shown(), a.path), abs = this.abs(a.path);
     cx.spawn(async (cx) => {
       if (await this.fileOp(["delete", a.trash, abs], a.name, cx)) {
-        this.folders = movedFolders(this.folders, a.path, null);
-        for (const k of [...this.entries.keys()]) if (k === a.path || k.startsWith(`${a.path}/`)) this.entries.delete(k);
-        const c = this.clip();
-        if (c && (c.abs === abs || c.abs.startsWith(`${abs}/`))) setShared(CUT, null);
+        this.recordChanges([{ from: abs, to: null }]);
+        this.forget(a.path, null, abs);
         this.want = next;
         // From the search's hits: they're looked up again without it.
         if (this.query.trim()) this.search(cx);
@@ -951,8 +1218,30 @@ export default class Files extends View {
   pick(path, cx) {
     // A click in the name's input row places the caret; it doesn't open the row.
     if (path === DRAFT || (this.draft?.kind === "rename" && this.draft.path === path)) return;
+    // The release that ends a drag isn't a click.
+    if (this.drag || this.dropped) { this.dropped = false; return; }
     const rows = this.shown(), row = rows.find((r) => r.path === path);
     if (!row) return;
+    const mods = this.mods ?? {};
+    // cmd-click: the row joins or leaves the marks (the keyboard's row too, the
+    // first time, as a selection grows in Finder); shift-click: every row from
+    // the last clicked one to this one.
+    if ((mods.platform || mods.shift) && !row.head) {
+      if (mods.shift) {
+        const a = rows.findIndex((r) => r.path === (this.anchor ?? this.sel)), b = rows.indexOf(row);
+        this.marked = new Set(rangePaths(rows, a < 0 ? b : a, b));
+      } else {
+        if (!this.marked?.size && this.sel && this.sel !== path && rows.some((r) => r.path === this.sel && !r.head)) this.marked = new Set([this.sel]);
+        this.markToggle(path);
+      }
+      this.sel = path; this.lastClick = null; this.range = null;
+      this.handle.focus();
+      cx.notify();
+      return;
+    }
+    // A plain click: one row, the marks go.
+    if (this.marked?.size) this.unmark();
+    this.anchor = path;
     const now = Date.now(), again = this.lastClick?.path === path && now - this.lastClick.at < DOUBLE;
     // A double click is used up: a third click selects again.
     this.lastClick = again ? null : { path, at: now };
@@ -969,6 +1258,11 @@ export default class Files extends View {
     if (this.menu) return this.menuKey(e, cx);
     if (this.ask) return this.askKey(e, cx);
     const k = e.key, m = e.modifiers ?? {};
+    // A drag: esc cancels it, other keys wait.
+    if (this.drag) {
+      if (k === "escape") this.cancelDrag();
+      cx.stop_propagation(); cx.notify(); return;
+    }
     if (this.draft) {
       // Typing goes to the name; esc gives up (enter is the input's submit).
       if (k !== "escape") return;
@@ -1002,7 +1296,23 @@ export default class Files extends View {
     }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
-    if (k === "space") this.toggleLook(cx);
+    // A move ends a shift-range; in V's range it grows the range.
+    const moved = (to) => { this.select(rows, to); if (this.range) this.markRange(this.sel); };
+    if (this.range?.shift && !m.shift && ["j", "k", "down", "up"].includes(k)) this.range = null;
+    if (k === "escape" && (this.marked?.size || this.range)) this.unmark();
+    else if (m.shift && (k === "down" || k === "up") && row) {
+      // shift-↑↓: marks while moving, from where it started.
+      if (!this.range) this.range = { anchor: row.path, base: new Set(this.marked), shift: true };
+      moved(k === "down" ? i + 1 : i - 1);
+      this.markRange(this.sel);
+    }
+    else if (low === "v" && upper) {
+      // V: a range from here, as vim's line-wise visual mode; V again keeps the marks and ends it.
+      if (this.range) this.range = null;
+      else if (row) { this.range = { anchor: row.path, base: new Set(this.marked) }; this.markRange(row.path); }
+    }
+    else if (k === "t" && row && !row.head) { this.markToggle(row.path); this.select(rows, i + 1); }
+    else if (k === "space") this.toggleLook(cx);
     else if (low === "j" && upper) this.scrollLook(1);
     else if (low === "k" && upper) this.scrollLook(-1);
     else if (k === "<" || (k === "," && m.shift)) this.resizeLook(-1);
@@ -1019,11 +1329,11 @@ export default class Files extends View {
     else if (k === "q") this.closePane();
     else if (k === "[" || k === "backspace") this.back(cx);
     else if (k === "]") this.forward(cx);
-    else if (k === "j" || k === "down") this.select(rows, i + 1);
-    else if (k === "k" || k === "up") this.select(rows, i < 0 ? 0 : i - 1);
-    else if (low === "g" && upper) { this.select(rows, rows.length - 1); this.gAt = 0; }
+    else if (k === "j" || k === "down") moved(i + 1);
+    else if (k === "k" || k === "up") moved(i < 0 ? 0 : i - 1);
+    else if (low === "g" && upper) { moved(rows.length - 1); this.gAt = 0; }
     else if (k === "g") {
-      if (Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; this.select(rows, 0); }
+      if (Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; moved(0); }
       else this.gAt = Date.now();
     } else if ((k === "l" || k === "right" || k === "enter") && row?.head) this.reveal(row.path, cx);
     else if ((k === "l" || k === "right") && row) {
@@ -1191,15 +1501,23 @@ export default class Files extends View {
     // The name's input (a new item's row, or the row being renamed) in place of the name.
     const editing = r.draft || (this.draft?.kind === "rename" && this.draft.path === r.path);
     const sel = editing || (r.path === this.sel && !this.draft), open = r.dir && this.folders.has(r.path);
-    const clip = this.clip(), cut = !r.draft && clip?.abs === this.abs(r.path);
-    const doomed = this.ask?.path === r.path;
+    const cut = !r.draft && this.isCut(this.abs(r.path));
+    const doomed = this.ask?.path === r.path || Boolean(this.ask?.set?.some((x) => x.path === r.path));
+    // Marked (t, cmd-click, a range); dragged; the folder a drop would land in.
+    const marked = this.marked?.has(r.path), dragged = Boolean(this.drag?.paths.includes(r.path));
+    const target = Boolean(this.drag?.ok) && this.drag.into === r.path && r.path !== "";
     const mark = cut ? "cut" : r.hit ? r.git && MARK[r.git] ? r.git : null : this.marks[`${this.root}/${r.path}`];
     const hidden = r.name.startsWith(".");
     const color = doomed ? t.ansi1 : cut ? t.dim : sel ? t.foreground : mark && mark !== "•" ? t[MARK[mark]] : hidden || r.ignored ? t.dim : r.dir ? t.foreground : t.muted;
     return h_flex().id(`nf-${r.path}`).relative().h(ROW).w_full().pl(8 + r.depth * 14).pr(10).gap(6).items_center()
       .hover((s) => s.bg(t.ansi0 + "55"))
+      // A marked row: a light accent dither and a dotted accent edge on the left.
+      .when(marked && !sel, (el) => el.child(dither(t.accent + "30", 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).child(dither(t.accent, 1))))
       .when(sel, (el) => el.child(dither(focused ? t.ansi0 : t.ansi0 + "88", 1))
+        .when(marked, (el) => el.child(dither(t.accent + "30", 1)))
         .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(focused ? t.accent : t.ansi8)))
+      // The folder a drop goes into: framed in the accent.
+      .when(target, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)).child(dither(t.accent + "40", 1)))
       // Indent guides: one dotted rule per level.
       .children(Array.from({ length: r.depth }, (_, d) => div().absolute().top(0).bottom(0).left(14 + d * 14).w(1).opacity(0.5).child(dither(t.ansi0, 1))))
       .child(r.head ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
@@ -1207,7 +1525,7 @@ export default class Files extends View {
         .text_color(r.dir ? (open ? t.accent : t.ansi4) : t.dim))
       .child(editing ? Input.new(this.nameInput).flex_1().min_w(0).h(ROW).text_size(12).text_color(t.foreground)
         : r.hit ? this.matched(t, `nf-m-${r.path}`, r.name, r.ranges, cut ? t.dim : color)
-        : div().relative().flex_1().min_w(0).truncate().text_color(r.head ? t.dim : color).child(r.name))
+        : div().relative().flex_1().min_w(0).truncate().text_color(r.head || dragged ? t.dim : marked ? t.accent : color).child(r.name))
       .when(Boolean(mark) && !editing, (el) => el.child(div().relative().flex_none().when(mark !== "cut", (el) => el.w(8))
         .text_color(mark === "•" || mark === "cut" ? t.ansi3 : t[MARK[mark]]).child(mark)));
   }
@@ -1254,10 +1572,17 @@ export default class Files extends View {
   footer(t, searching) {
     const line = () => v_flex().id("nf-foot").flex_none().px(10).py(4).gap(3).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0);
     const keys = (...ks) => h_flex().flex_wrap().gap_x(12).gap_y(2).children(ks);
+    if (this.drag) {
+      const d = this.drag;
+      return line().child(div().text_color(d.ok ? t.foreground : t.dim)
+        .child(d.into == null ? `Drop on a folder, or below the rows for ${tilde(this.root)} · esc cancels`
+          : d.ok ? `Drop: ${d.paths.length === 1 ? `“${base(d.paths[0])}”` : `${d.paths.length} items`} into ${d.into ? `${base(d.into)}/` : tilde(this.root)}`
+          : d.why));
+    }
     if (this.ask) {
       const a = this.ask;
       return line()
-        .child(div().text_color(a.trash ? t.foreground : t.ansi1).child(deleteQuestion(a.name, a.dir, Boolean(a.trash))))
+        .child(div().text_color(a.trash ? t.foreground : t.ansi1).child(a.set ? deleteManyQuestion(a.set, Boolean(a.trash)) : deleteQuestion(a.name, a.dir, Boolean(a.trash))))
         .child(keys(
           this.hintKey(t, "nf-ask-yes", "y", a.trash ? "move to the Trash" : "delete", (cx) => { this.ask = null; this.remove(a, cx); }),
           this.hintKey(t, "nf-ask-no", "esc", "keep it", () => { this.ask = null; })));
@@ -1273,8 +1598,19 @@ export default class Files extends View {
           this.hintKey(t, "nf-draft-ok", "enter", rename ? "rename" : "create", (cx) => this.commitDraft(cx)),
           this.hintKey(t, "nf-draft-no", "esc", "cancel", (cx) => this.endDraft(cx))));
     }
-    const text = this.msg ? this.msg.text : this.copied ? "path copied" : searching && this.note ? this.note
+    const text = this.msg ? this.msg.text : this.copied ? this.copiedText ?? "path copied" : searching && this.note ? this.note
       : this.limited ? `Listing cut at ${PER_FOLDER} per folder, ${TOTAL} in all` : null;
+    // Marks: how many, and what acts on them.
+    if (!text && this.marked?.size) {
+      const n = this.marked?.size;
+      return line()
+        .child(div().text_color(t.accent).child(`${n} marked${this.range ? " · marking a range (V ends)" : ""}`))
+        .child(keys(
+          this.hintKey(t, "nf-set-d", "d", "delete", (cx) => this.askDelete(this.markedRows()[0], cx)),
+          this.hintKey(t, "nf-set-x", "x", "cut", (cx) => this.cutRow(this.markedRows()[0], cx)),
+          this.hintKey(t, "nf-set-y", "y", "copy paths", (cx) => this.copySet(cx)),
+          this.hintKey(t, "nf-set-esc", "esc", "unmark", () => this.unmark())));
+    }
     if (!text) return null;
     return line().child(div().text_color(this.msg?.error ? t.ansi1 : t.dim).child(text));
   }
@@ -1299,7 +1635,12 @@ export default class Files extends View {
     if (this.sel && !this.want && !rows.some((r) => r.path === this.sel)) this.sel = null;
     const focused = this.handle.is_focused() || this.typing || this.naming;
     // The new item's input row where it will appear, put on screen once.
-    const list = this.withDraft(rows);
+    const list = this.listed = this.withDraft(rows);
+    // Marks on rows no longer shown (folded away, filtered out, gone) drop out.
+    if (this.marked?.size && !this.drag) {
+      const shownNow = new Set(rows.map((r) => r.path));
+      if ([...this.marked].some((p) => !shownNow.has(p))) this.marked = new Set([...this.marked].filter((p) => shownNow.has(p)));
+    }
     if (this.draft && !this.draft.shown) {
       const i = list.findIndex((r) => r.draft || r.path === this.draft.path);
       if (i >= 0) { this.draft.shown = true; this.scroll.scroll_to_item(i); }
@@ -1312,6 +1653,8 @@ export default class Files extends View {
     else if (this.error && !list.length) body = this.empty(t, "Can't read this folder", this.error);
     else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root));
     else body = div().id("nf-tree").relative().flex_1().min_h(0).py(4).text_size(12)
+      // A drop below the rows goes into the root: the list framed in the accent.
+      .when(Boolean(this.drag?.ok) && this.drag.into === "", (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .child(v_virtual_list("nf-rows", list.length, ROW, (i) => list[i].path,
         (range) => list.slice(range.start, range.end).map((r) => this.row(t, r, focused)))
         .on_item_click((path, cx) => this.pick(path, cx))
@@ -1324,6 +1667,7 @@ export default class Files extends View {
     const side = this.lookState.on && this.look ? (this.side = lookSide(this.size, this.side)) : null;
     const px = side ? lookSize(this.size, side, this.dragged ?? this.lookState[side]) : null;
     if (px != null) this.follow(cx);
+    this.geo = { side, px };
     // A native view (PDF, clip, font) would cover the menu: set aside while it's open.
     const aside = Boolean(this.menu) && px != null;
     if (aside !== Boolean(this.aside)) { this.aside = aside; cx?.timer?.after(0, () => this.natives("setVisible", { visible: !aside })); }
@@ -1342,6 +1686,9 @@ export default class Files extends View {
       .on_mouse_down("left", (e, cx) => {
         if (endDrag()) cx?.notify();
         this.alt = Boolean(e?.modifiers?.alt);
+        // A row's click comes after this: cmd and shift mark rather than open.
+        this.mods = e?.modifiers ?? {};
+        this.pressAt(e);
         // A click in the name's input keeps it (a click on another row ends it: pick).
         if (!this.draft) this.handle.focus();
         // A click elsewhere keeps what the delete question was about.
@@ -1357,9 +1704,11 @@ export default class Files extends View {
         if (e.local_position) this.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
         // The divider follows the pointer while it's held.
         if (this.dragging && e.local_position) { const f = dragShare(this.size, this.dragging, this.mouse); if (f != null && f !== this.dragged) { this.dragged = f; cx.notify(); } }
+        // A row held and moved: dragged.
+        else if (this.press && e.local_position) this.dragMove(this.mouse, cx);
       })
-      .on_mouse_up("left", (_e, cx) => { if (endDrag()) cx.notify(); })
-      .on_hover((over, cx) => { if (!over && endDrag()) cx.notify(); })
+      .on_mouse_up("left", (_e, cx) => { if (endDrag() | this.dragEnd(cx)) cx.notify(); })
+      .on_hover((over, cx) => { if (!over && (endDrag() | Boolean(this.drag))) { this.cancelDrag(); cx.notify(); } })
       .on_size_change((size, cx) => {
         const s = { width: size.width / zoom(), height: size.height / zoom() };
         if (Math.abs(s.width - this.size.width) > 1 || Math.abs(s.height - this.size.height) > 1) { this.size = s; cx.notify(); }
@@ -1368,6 +1717,18 @@ export default class Files extends View {
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
       .when(px == null, (el) => el.child(area).when(Boolean(foot), (el) => el.child(foot)))
       .when(px != null, (el) => el.child(this.split(t, side, px, area, foot)))
-      .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)));
+      .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)))
+      // What's dragged, beside the pointer.
+      .when(Boolean(this.drag), (el) => el.child(this.ghost(t)));
+  }
+
+  /** The dragged rows' label at the pointer: the name, or how many. */
+  ghost(t) {
+    const d = this.drag, n = d.paths.length;
+    const x = Math.min(d.at.x + 14, Math.max(0, this.size.width - 160)), y = d.at.y + 10;
+    return h_flex().id("nf-ghost").absolute().left(x).top(y).max_w(200).h(20).px(8).gap(6).items_center().text_size(11)
+      .bg(t.background).border_1().border_color(d.ok ? t.accent : t.ansi8)
+      .child(svg(`mods/files/${n === 1 && !this.shown().find((r) => r.path === d.paths[0])?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
+      .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(d.paths[0]) : `${n} items`));
   }
 }
