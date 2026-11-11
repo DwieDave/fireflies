@@ -1398,6 +1398,23 @@ mod tests {
         assert!(error.to_string().contains("0.03 s"), "{error}");
     }
 
+    /// Mods' inputs select in the theme's selection colour (gpui-base takes the
+    /// palette's `selection`, which apply_theme fills from the theme), not in
+    /// its accent: that is the theme's hover tone, nearly the background
+    /// (moonfly: #1c1c1c at 40% over #080808), and every plain input selected
+    /// invisibly.
+    #[gpui::test]
+    fn mods_inputs_select_in_the_themes_selection_colour(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            cx.set_global(gpui_base::Theme::default());
+            apply_theme(cx);
+            let tokens = &gpui_base::Theme::global(cx).tokens;
+            let resolved = gpui_base::input::InputEditorStyle::default().resolved(tokens);
+            assert_eq!(resolved.selection, crate::settings::color("selection"));
+            assert_ne!(resolved.selection, tokens.colors.accent.opacity(0.4));
+        });
+    }
+
     #[test]
     fn live_reads_ignore_unread_inputs_and_keep_pending_changes() {
         let mut revisions = HashMap::new();
