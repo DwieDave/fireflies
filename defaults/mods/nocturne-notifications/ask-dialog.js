@@ -13,6 +13,7 @@ import { reviewText } from "./claude.js";
 import { answer } from "./drive.js";
 import { forget, followCommands } from "./open.js";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.js";
+import { bindTab, tabActions } from "./form-keys.js";
 
 export default class AskDialog {
   init(p, cx) {
@@ -30,6 +31,7 @@ export default class AskDialog {
       cx.notify();
     });
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
@@ -94,7 +96,8 @@ export default class AskDialog {
     const it = this.item;
     const frame = v_flex().id("notify-ask").relative().size_full().bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
       .track_focus(this.handle)
-      .on_key_down((e, cx) => this.key(e, cx));
+      .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)));
     const head = h_flex().relative().h(34).flex_none().px(14).gap(10).items_center()
       .child(logo(it?.logo ?? "claude", t.foreground, 12))
       .child(div().flex_1().min_w(0).truncate().text_size(12).child(it ? `${it.name} asks` : "Questions"))

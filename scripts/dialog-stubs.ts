@@ -8,6 +8,7 @@ import { mock } from "bun:test";
 export class Element {
   nodes: any[] = [];
   calls: Record<string, any[]> = {};
+  actions: Record<string, any> = {}; // every on_action handler, by action name
   constructor() {
     const proxy: Element = new Proxy(this, {
       get: (target, key: string) => key in target ? (target as any)[key] : (...args: any[]) => {
@@ -15,6 +16,7 @@ export class Element {
         else if (key === "children") target.nodes.push(...args[0]);
         else if (key === "when") { if (args[0]) return args[1](proxy) ?? proxy; }
         else if (key === "map") return args[0](proxy) ?? proxy;
+        else if (key === "on_action") { target.actions[args[0]] = args[1]; target.calls[key] = args; }
         else target.calls[key] = args;
         return proxy;
       },
@@ -101,7 +103,7 @@ export function cx() {
   c.timer = { after() {}, every() {} };
   c.spawn = () => {};
   c.write_to_clipboard = (s: string) => { c.clipboard = s; };
-  c.bind_keys = () => {};
+  c.bind_keys = (b: any[]) => { (globalThis as any).boundKeys = [...((globalThis as any).boundKeys ?? []), ...b]; return b.length; };
   return c;
 }
 
@@ -112,6 +114,14 @@ export function key(name: string) {
   const has = (m: string) => parts.includes(m);
   return { key: k, keystroke: name, key_char: k.length === 1 ? k : null,
     modifiers: { shift: has("shift"), control: has("ctrl"), alt: has("alt"), platform: has("cmd") } };
+}
+
+/** A bound action on the root of a render (form-keys.js binds tab / shift-tab to some). */
+export function act(root: any, name: string, c = cx()) {
+  const f = root.actions?.[name];
+  if (!f) throw new Error(`no ${name} action on the root (has ${Object.keys(root.actions ?? {}).join(", ")})`);
+  f({}, c);
+  return c;
 }
 
 /** The root's key handler of a render. */

@@ -95,9 +95,17 @@ export class Form {
     f.input.on("change", (_e, cx) => {
       const v = f.input.value();
       if (v === f.value) return;
+      f.before = f.value; // cmd-enter's new line is taken back (below)
       f.value = v; f.touched = true;
       delete this.errors[f.id];
       f.onChange?.(v, cx);
+      cx?.notify?.();
+    });
+    // The body eats cmd-enter as a new line and says so: take it back and review.
+    if (f.kind === "area") f.input.on("submit", (e, cx) => {
+      if (!e?.secondary) return;
+      if (f.before != null) { f.value = f.before; f.input.set_value(String(f.before)); }
+      this.review(cx);
       cx?.notify?.();
     });
     return f.input;

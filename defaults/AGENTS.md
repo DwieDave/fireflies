@@ -1468,7 +1468,13 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   to }`, `"submit"`, `"cancel"`, `"press"`, `"step"`, `"flip"`, `"open"`,
   `"type"`: let the input have it), `formHints()` is the hint line, `ring()`
   the focus ring; stops are `{ id, kind: "text" | "area" | "choice" |
-  "multi" | "toggle" | "button", submit? }` in tab order.
+  "multi" | "toggle" | "button", submit? }` in tab order. Tab never reaches
+  an `on_key_down` (key bindings run first and the root binds tab to move the
+  focus): call `bindTab(cx)` in `init` and wrap the root that tracks your
+  focus handle, above the inputs, in `tabActions(el, (e, cx) => this.key(e,
+  cx))`; tab and shift-tab then reach your handler as key events. A
+  multi-line field types cmd-enter as a new line and fires `submit` with
+  `secondary`: listen for that to submit from it.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`

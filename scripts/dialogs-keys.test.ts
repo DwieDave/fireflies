@@ -2,7 +2,7 @@
 // screens and the other dialogs, through their own render and key handlers
 // (dialog-stubs.ts stands in for herdr and gpui). Its own bun process.
 import { test, expect, beforeEach } from "bun:test";
-import { state, find, ringed, cx, press, texts } from "./dialog-stubs.ts";
+import { state, find, ringed, cx, press, texts, act } from "./dialog-stubs.ts";
 
 const Settings = (await import("../defaults/frame/settings/main.js")).default;
 
@@ -54,6 +54,18 @@ test("settings: tab walks the page's controls in order and wraps through the rai
   expect(s.zone).toBe("nav");
   press(root, "shift-tab");
   expect([s.zone, s.focus]).toEqual(["body", "st-feedback"]);
+});
+
+test("settings: tab arrives as the Form context's bound action (the root binds tab to move the focus)", () => {
+  const s = settings("editor");
+  const root = s.render(cx());
+  expect(root.calls.key_context).toEqual(["Form"]);
+  act(root, "form::tab");
+  expect([s.zone, s.focus]).toEqual(["body", "st-vim-on"]);
+  act(root, "form::tab_back");
+  expect(s.zone).toBe("nav"); // back past the first control: the rail
+  act(root, "form::tab_back");
+  expect([s.zone, s.focus]).toEqual(["body", "st-feedback"]); // and around
 });
 
 test("settings: enter presses the focused control, ← goes back to the rail", () => {

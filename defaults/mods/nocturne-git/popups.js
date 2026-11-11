@@ -95,6 +95,10 @@ export class Popups {
     const input = InputState.new({ placeholder: "summary", value: summary ?? "" });
     const desc = TextareaState.new({ placeholder: "description (optional)", value: rest.join("\n").replace(/^\n+/, ""), rows: 6 });
     input.on("submit", (_e, cx) => this.submit(cx));
+    // The description eats cmd-enter as a new line and says so: take it back and commit.
+    let before = desc.value(), now = before;
+    desc.on("change", () => { before = now; now = desc.value(); });
+    desc.on("submit", (e, cx) => { if (!e?.secondary) return; desc.set_value(before); this.submit(cx); });
     this.top = { kind: "commit", title, input, desc, ok, at: 0, draft };
     this.focusLater(input);
   }

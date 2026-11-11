@@ -7,7 +7,7 @@
 // window's forms have their own file (nocturne-github-forms.test.ts).
 import { test, expect, beforeEach } from "bun:test";
 import { readFileSync, readdirSync, existsSync } from "fs";
-import { state, find, cx, press, key, texts } from "./dialog-stubs.ts";
+import { state, find, cx, press, key, texts, act } from "./dialog-stubs.ts";
 
 const root = new URL("../defaults/", import.meta.url).pathname;
 const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.js");
@@ -29,7 +29,8 @@ beforeEach(() => {
 
 test("one helper: every mod with a form ships the same form-keys.js", () => {
   const copies = [
-    "mods/nocturne", "mods/nocturne-github", "mods/nocturne-git", "mods/nocturne-editor", "mods/machine-add", "frame/feedback",
+    "mods/nocturne", "mods/nocturne-github", "mods/nocturne-git", "mods/nocturne-editor", "mods/nocturne-notifications",
+    "mods/machine-add", "frame/feedback", "frame/settings",
   ].map((d) => `${root}${d}/form-keys.js`);
   const canon = readFileSync(copies[0], "utf8");
   for (const c of copies) expect([c, readFileSync(c, "utf8") === canon]).toEqual([c, true]);
@@ -37,6 +38,36 @@ test("one helper: every mod with a form ships the same form-keys.js", () => {
   for (const kind of ["mods", "frame"]) for (const d of readdirSync(`${root}${kind}`)) {
     const f = `${root}${kind}/${d}/form-keys.js`;
     if (existsSync(f)) expect(copies).toContain(f);
+  }
+});
+
+// GPUI runs key bindings before on_key_down and the root binds tab to move
+// the focus, so a form's tab arrives only as an action bound in its own
+// context. Each form's root carries that context and hands the action to its
+// key handler; each binds the keys once from init.
+const ROOTS: [string, string][] = [
+  ["mods/nocturne-github/main.js", "this.key(e, cx)"], ["mods/nocturne-git/main.js", "this.key(e, cx)"],
+  ["mods/nocturne/sky.js", "this.key(e, cx)"], ["mods/nocturne/dialog.js", "this.key(e, cx)"],
+  ["mods/nocturne-notifications/ask-dialog.js", "this.key(e, cx)"], ["mods/nocturne-editor/main.js", "this.findKey(e, cx)"],
+  ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
+];
+
+test("tab is bound: shift-tab and tab become the forms' actions in the Form context", async () => {
+  const keys = await import("../defaults/mods/machine-add/form-keys.js");
+  (globalThis as any).boundKeys = [];
+  keys.bindTab(cx());
+  keys.bindTab(cx()); // once is enough: the keymap is the app's
+  expect((globalThis as any).boundKeys).toEqual([
+    { keystroke: "tab", action: "form::tab", context: "Form" },
+    { keystroke: "shift-tab", action: "form::tab_back", context: "Form" },
+  ]);
+});
+
+test("every form's root takes the bound tab and hands it to its key handler; init binds it", () => {
+  for (const [file, call] of ROOTS) {
+    const src = readFileSync(`${root}${file}`, "utf8");
+    expect([file, src.includes(`.on_key_down((e, cx) => ${call})\n      .map((el) => tabActions(el, (e, cx) => ${call}))`)]).toEqual([file, true]);
+    expect([file, /this\.handle = cx\.focus_handle\(\);\n\s+bindTab\(cx\);/.test(src)]).toEqual([file, true]);
   }
 });
 
@@ -435,4 +466,69 @@ test("editor find: without replace the chips end at ›, then back to the field"
   const c = cx();
   ed.findKey(key("a"), c);
   expect(c.stopped).toBe(0); // typing in the field
+});
+
+// ---- the bound tab, end to end through the roots' actions
+
+test("bound tab: the prompt and confirm dialogs move by the action, both ways", () => {
+  state.props = { overlay: "p", title: "rename", value: "old", command: { name: "tab.rename", args: { id: 1 } } };
+  const p: any = new Prompt();
+  p.init({}, cx());
+  let r = p.render();
+  expect(r.calls.key_context).toEqual(["Form"]);
+  act(r, "form::tab");
+  expect(p.at).toBe("cancel");
+  act(r, "form::tab"); act(r, "form::tab");
+  expect(p.at).toBe("input"); // wraps
+  act(r, "form::tab_back");
+  expect(p.at).toBe("save");
+  state.props = { overlay: "c", title: "close?", command: { name: "tab.close", args: { id: 2 } } };
+  const c: any = new Confirm();
+  c.init({}, cx());
+  r = c.render();
+  act(r, "form::tab_back");
+  expect(c.at).toBe("keep");
+  act(r, "form::tab");
+  expect(c.at).toBe("go");
+});
+
+test("bound tab: feedback and machine-add walk their stops by the action", () => {
+  state.props = { overlay: "fb" };
+  const f: any = new Feedback();
+  f.init({}, cx());
+  let r = f.render(cx());
+  act(r, "form::tab"); act(r, "form::tab");
+  expect(f.at).toBe(2);
+  act(r, "form::tab_back"); act(r, "form::tab_back"); act(r, "form::tab_back");
+  expect(f.at).toBe(3); // wrapped back past the title
+  state.props = { overlay: "ma" };
+  const m: any = new MachineAdd();
+  m.init({}, cx());
+  r = m.render();
+  act(r, "form::tab");
+  expect(m.stop).toBe("add");
+  act(r, "form::tab_back"); act(r, "form::tab_back");
+  expect(m.stop).toBe("close");
+});
+
+test("cmd-enter in a multi-line field: the new line it typed is taken back, and the form submits", () => {
+  const { pops } = gitView();
+  const made: string[] = [];
+  pops.commit({ title: "Commit", ok: (m: string) => made.push(m) });
+  const p = pops.top;
+  p.input.set_value("feat: y");
+  p.desc.set_value("body"); p.desc.handlers.change?.({}, cx());
+  p.desc.set_value("bo\ndy"); p.desc.handlers.change?.({}, cx()); // the textarea's cmd-enter new line
+  p.desc.handlers.submit({ secondary: true }, cx());
+  expect(made).toEqual(["feat: y\n\nbody"]);
+  state.props = { overlay: "fb" };
+  const f: any = new Feedback();
+  f.init({}, cx());
+  f.message.set_value("It broke"); f.message.handlers.change?.({}, cx());
+  f.message.set_value("It broke\n"); f.message.handlers.change?.({}, cx());
+  f.message.handlers.submit({ secondary: false }, cx()); // a plain enter: a new line, nothing else
+  expect(state.runs).toEqual([]);
+  f.message.handlers.submit({ secondary: true }, cx());
+  expect(f.message.value()).toBe("It broke");
+  expect(state.runs.length).toBe(1);
 });

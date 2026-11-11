@@ -1,7 +1,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { theme, props, closeOverlay, feedbackIssue, run, window as appWindow } from "herdr";
-import { formKey, formHints, submitKey, ring } from "./form-keys.js";
+import { formKey, formHints, submitKey, ring, bindTab, tabActions } from "./form-keys.js";
 
 // Feedback is a GitHub issue: this drafts it, GitHub's page (opened like any
 // link) is where the person adds screenshots and submits. Nothing is sent from here.
@@ -24,11 +24,15 @@ export default class Feedback extends View {
     this.title = InputState.new({ placeholder: "Title (optional: the message's first line)" });
     this.message = TextareaState.new({ value: props()?.message ?? "", placeholder: "What happened? What did you expect?", rows: 4 });
     this.title.on("change", (_e, cx) => cx.notify());
-    this.message.on("change", (_e, cx) => cx.notify());
+    // The message eats cmd-enter as a new line and says so: take it back and open the issue.
+    let before = this.message.value(), now = before;
+    this.message.on("change", (_e, cx) => { before = now; now = this.message.value(); cx.notify(); });
+    this.message.on("submit", (e, cx) => { if (!e?.secondary) return; this.message.set_value(before); now = before; this.submit(); cx?.notify?.(); });
     // A click into a field moves the keyboard's stop with it.
     this.title.on("focus", (_e, cx) => { this.at = 0; cx?.notify?.(); });
     this.message.on("focus", (_e, cx) => { this.at = 1; cx?.notify?.(); });
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.at = 0; // the stop with the keyboard (STOPS)
     this.title.focus();
     // The overlay takes focus once it's shown; take it back.
@@ -83,6 +87,7 @@ export default class Feedback extends View {
     const hints = formHints(STOPS, this.at, { mac: this.mac, submit: "open on GitHub", cancel: "close" });
     return v_flex().id("feedback").track_focus(this.handle).w_full().min_h(0).h(600).bg(t.popover)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       // The title drags the window; everything below keeps its presses (selecting text).
       .child(div().flex_none().px(24).py(18).cursor_grab().text_size(19).font_semibold().text_color(t.foreground).child("Send feedback"))
       .child(v_flex().id("feedback-body").on_mouse_down("left", (_e, cx) => cx.stop_propagation()).flex_1().flex_shrink(1).min_h(0).overflow_y_scrollbar().px(24).gap(10)

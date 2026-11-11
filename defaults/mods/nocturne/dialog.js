@@ -18,7 +18,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { run, props, closeOverlay, theme, window as appWindow } from "herdr";
 import { dither } from "./kit.js";
-import { formKey, formHints } from "./form-keys.js";
+import { formKey, formHints, bindTab, tabActions } from "./form-keys.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const cap = (s) => (s ?? "").replace(/^./, (c) => c.toUpperCase());
@@ -70,6 +70,7 @@ export class Prompt {
     // The overlay takes focus once it's shown; take it back.
     cx.timer.after(600, () => { if (this.at === "input") this.input.focus(); });
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.at = "input"; // the keyboard's: "input" | "cancel" | "save"
   }
 
@@ -106,6 +107,7 @@ export class Prompt {
     const p = props() ?? {};
     return frame(t, "nocturne-prompt").track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .child(titleRow(t, cap(p.title)))
       .child(v_flex().px(14).pt(12).pb(12).gap(6)
         .child(div().h(26).px(6).flex().items_center().border(1).border_color(this.at === "input" ? t.accent : t.ansi0).bg(t.background)
@@ -122,6 +124,7 @@ export class Prompt {
 export class Confirm {
   init(_props, cx) {
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     // The overlay takes focus once it's shown; take it back.
     cx.timer.after(600, () => this.handle.focus());
@@ -158,6 +161,7 @@ export class Confirm {
     // Destructive: a red edge down the left, like the sidebar's inline confirms.
     return frame(t, "nocturne-confirm").relative().track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.blocked))
       .child(titleRow(t, p.title ?? "Are you sure?"))
       // As tall as its words (the dialog fits its content), scrolling past 240 px.

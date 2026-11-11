@@ -22,10 +22,45 @@
 //
 // formKey() says what a key does; the form does it. formHints() is the hint
 // line naming these keys, ring() the focus ring the focused stop wears.
+//
+// Tab never reaches an on_key_down: GPUI runs key bindings first, and the
+// root binds tab / shift-tab to move the focus. So a form binds them in its
+// own key context (bindTab(cx) once, from init) and its root element, at or
+// above both its focus handle and its inputs, takes them as actions
+// (tabActions(el, key)) that hand its key handler the tab it never heard. A
+// multi-line field eats cmd-enter as a new line and says so through its
+// "submit" event with `secondary`: a form listens for that too.
 
 import { div } from "gpui-kit";
 
 const LIST = new Set(["choice", "multi"]);
+
+/** The key context forms bind tab in, and the actions it becomes. */
+export const FORM_CONTEXT = "Form";
+export const TAB = "form::tab", TAB_BACK = "form::tab_back";
+
+let bound = false;
+/** Binds tab / shift-tab inside forms (the keymap is the app's: once is enough). Not from render. */
+export function bindTab(cx) {
+  if (bound) return;
+  try {
+    cx.bind_keys([
+      { keystroke: "tab", action: TAB, context: FORM_CONTEXT },
+      { keystroke: "shift-tab", action: TAB_BACK, context: FORM_CONTEXT },
+    ]);
+    bound = true;
+  } catch { /* the key handler still tries */ }
+}
+
+/** The key event a bound tab stands for. */
+export const tabEvent = (shift) => ({ key: "tab", keystroke: shift ? "shift-tab" : "tab", key_char: null, modifiers: { shift, control: false, alt: false, platform: false, function: false } });
+
+/** A form's root: the context tab is bound in, its actions handed to `key(event, cx)` as the tab key. */
+export function tabActions(el, key) {
+  return el.key_context(FORM_CONTEXT)
+    .on_action(TAB, (_e, cx) => key(tabEvent(false), cx))
+    .on_action(TAB_BACK, (_e, cx) => key(tabEvent(true), cx));
+}
 
 /** The submit chord's name: ⌘enter on macOS, ctrl-enter elsewhere. */
 export const chord = (mac) => (mac ? "⌘enter" : "ctrl-enter");

@@ -457,3 +457,19 @@ test("run workflow: ← → step the workflow's choices, tab wraps through Run a
   expect(actions.form).toBeNull();
   expect(world.writes).toEqual([]);
 });
+
+test("cmd-enter in the body (the textarea types a new line and says submit): the line is taken back, the form reviews", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  form.go(2); type("T");
+  form.go(3); type("Body");
+  type("Bo\ndy"); // what the textarea's cmd-enter did
+  focusedInput!.handlers.submit({ secondary: true }, cx);
+  expect(form.value("body")).toBe("Body");
+  expect(form.stage).toBe("confirm");
+  expect(world.writes).toEqual([]);
+});

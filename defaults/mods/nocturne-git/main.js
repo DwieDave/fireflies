@@ -46,6 +46,7 @@ import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./pa
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
+import { bindTab, tabActions } from "./form-keys.js";
 import * as WT from "./worktrees.js";
 import { Review } from "./review.js";
 import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
@@ -138,6 +139,7 @@ export default class GitView extends View {
     if (this.wtIntent) { this.panel = "files"; this.tabOf.files = "worktrees"; this.mode = "normal"; }
     if (this.show) { this.mode = "normal"; this.showLog = false; if (this.show.kind !== "review") this.focus = "main"; }
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.popups.open && !this.filtering) this.handle.focus(); });
     this.beat();
@@ -1688,6 +1690,7 @@ export default class GitView extends View {
       .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.ansi8))
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
         if (Math.abs(size.width - this.size.width) > 1 || Math.abs(size.height - this.size.height) > 1) { this.size = size; cx.notify(); }

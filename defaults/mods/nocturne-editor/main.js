@@ -55,7 +55,7 @@ import {
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
-import { formKey } from "./form-keys.js";
+import { formKey, bindTab, tabActions } from "./form-keys.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -138,6 +138,7 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     // Vim: the pane's own switch, else settings.json editor.vim (default on).
     const leader = String(settings()?.editor?.leader ?? "space");
     this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
@@ -968,6 +969,7 @@ export default class EditorPane extends View {
     return v_flex().id("editor-find").relative().flex_none()
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.findKey(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.findKey(e, cx)))
       .child(h_flex().h(FIND).px(12).gap(10).items_center()
         .child(div().flex_none().text_color(t.accent).child(line ? "line" : "find"))
         .child(div().w(line ? 160 : 240).flex_none().h(20).border_b(1).border_color(t.accent)
