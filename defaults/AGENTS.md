@@ -113,6 +113,28 @@ and roll back if GitHub refuses them. GitHub's API keeps no column limits or
 hidden columns, so limits and folds are Herdr's, per project, in shared state
 `nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
 `project` (`gh auth refresh -s project`); the tab says which is missing.
+It also writes, always after a last step that shows the exact commands
+(enter or `y` sends, esc goes back; nothing runs before it). `n` on Pull
+requests (or its "+ new", a right-click on the list, the palette's "GitHub:
+new pull request…", `nocturne.github-pr` in keys.json) opens a new pull
+request: base (the default branch) and head (the current branch) picked
+from lists, title and body filled like `gh pr create --fill` (the body from
+the repo's pull request template when it has one), draft, reviewers,
+assignees, labels, milestone; beside it the commits and files it will hold.
+A head that isn't on GitHub, or is ahead of it, gets a "push first" toggle
+(`git push --set-upstream`). It runs `gh pr create` and selects the new
+pull request. `O` on a branch in the git window's branches panel opens it on
+that branch (the branch goes through shared `nocturne-github.create`). `n`
+on Actions (its "run workflow", a right-click, "GitHub: run a workflow…",
+`nocturne.github-run`) runs a workflow by hand: only workflows with a
+`workflow_dispatch` trigger, a branch or tag, and the inputs that ref's file
+declares (text, number, a list for `choice` and `environment`, a toggle for
+`boolean`; defaults filled, required ones checked). It runs
+`gh workflow run <file> --ref <ref> -f name=value…`, then waits for the run
+and selects it. In a form, tab / shift-tab walk the fields, space flips a
+toggle or opens a list (typing filters it), enter reviews (ctrl-enter from
+the body), esc cancels. With the window open, `nocturne-github.new-pr` and
+`nocturne-github.run-workflow` do the same.
 
 Nocturne's git window (`mods/nocturne-git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs

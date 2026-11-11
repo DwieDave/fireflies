@@ -9,8 +9,10 @@
 //   p F         a fork: its parent repo, and back (the header's "fork of …"; on Projects only F: p picks the project)
 //   L           the links in the shown PR or card, as a list (j/k, enter opens one)
 //   drag        the gaps between panels resize them (kept per tab)
+//   n           a new pull request (Pull requests) / run a workflow by hand (Actions):
+//               a form (form.js; prForm.js, dispatchForm.js) whose last step shows the exact commands
 //
-// keys.json can bind nocturne-github.prs / .actions / .projects / .refresh / .diff / .fork (to a shown window).
+// keys.json can bind nocturne-github.prs / .actions / .projects / .refresh / .diff / .fork / .new-pr / .run-workflow (to a shown window).
 //   ?           every key        esc q  close the window (from its top level)
 //
 // Everything goes through the gh CLI (gh.js): its login, no token here.
@@ -47,6 +49,10 @@ import Actions from "./actions.js";
 import Projects from "./projects.js";
 
 export const WINDOW = "nocturne-github.window"; // { id, beat }: the open window, for the toggle
+// { folder, on, head, at }: the git window's branch for a new pull request (its branches panel),
+// read when nocturne-github.new-pr arrives or the window opens with create "pr".
+export const CREATE = "nocturne-github.create";
+const CREATE_FRESH = 30000;
 const STATE = "nocturne-github.state";
 const BEAT = 4000;
 const SAVE_EVERY = 10000; // the cache is written at most this often
@@ -71,6 +77,10 @@ export default class GitHub extends View {
     const kept = shared(STATE) ?? {};
     const same = kept.folder === this.folder;
     this.tab = pr.tab ?? (same ? kept.tab : null) ?? "prs";
+    // Opened to write (nocturne's githubForm): the form, once the repo is known. Only a fresh ask:
+    // the same props come back when the window is restored or reloaded, and must not open it again.
+    const ask = (pr.create === "pr" || pr.create === "workflow") && Date.now() - (pr.at ?? 0) < CREATE_FRESH;
+    this.wantForm = ask ? pr.create : null;
     this.prs = new Prs(this, same ? kept.prs : {});
     this.actions = new Actions(this, same ? kept.actions : {});
     this.projects = new Projects(this, same ? kept.projects : {});
@@ -93,7 +103,7 @@ export default class GitHub extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
-    if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer) this.handle.focus(); });
+    if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer && !this.shown().form) this.handle.focus(); });
     this.beat();
     // Opened before in this run: the cache is in memory, shown in the first frame.
     const doc = store.peek();
@@ -108,6 +118,8 @@ export default class GitHub extends View {
         else if (c === "fork") this.switchFork(cx);
         else if (c === "prs" || c === "actions" || c === "projects") this.setTab(c, cx);
         else if (c === "diff" && this.repo && this.prs.current()) this.openDiff(this.prs.current().number);
+        else if (c === "new-pr") { this.wantForm = "pr"; this.openForm(cx); }
+        else if (c === "run-workflow") { this.wantForm = "workflow"; this.openForm(cx); }
         cx.notify();
       }
     });
@@ -153,6 +165,8 @@ export default class GitHub extends View {
         if (this.repo) this.stale = String(e?.message ?? e);
         else { this.state = "error"; this.error = String(e?.message ?? e); }
       }
+      this.located = true; // the folder's branch is known now (a cached one may be old)
+      this.openForm(cx);
       cx.notify();
     });
   }
@@ -202,8 +216,28 @@ export default class GitHub extends View {
     setShared(WINDOW, { id: this.overlay, beat: this.beatAt });
   }
 
+  /** A form asked for (props, a command) once the repo is known: a new pull request (with the git window's branch, if it just asked) or a workflow to run. */
+  openForm(cx) {
+    if (!this.wantForm || this.state !== "ready" || !this.repo || !this.located) return;
+    const what = this.wantForm;
+    this.wantForm = null;
+    this.help = false; this.picker = null;
+    if (what === "pr") {
+      const req = shared(CREATE);
+      const mine = req && Date.now() - (req.at ?? 0) < CREATE_FRESH && (!req.folder || !this.repo.root || req.folder.startsWith(this.repo.root) || this.repo.root.startsWith(req.folder));
+      if (req) setShared(CREATE, null);
+      this.tab = "prs";
+      this.prs.newPr(cx, { head: mine ? req.head ?? null : null });
+    } else {
+      this.tab = "actions";
+      this.actions.runWorkflow(cx);
+    }
+    cx.notify();
+  }
+
   tick(cx) {
     if (this.closed) return;
+    if (this.wantForm) this.openForm(cx);
     if (Date.now() - (this.beatAt ?? 0) >= BEAT) this.beat();
     let redraw = false;
     if (this.note && Date.now() - this.note.at > 5000) { this.note = null; redraw = true; }
@@ -386,6 +420,11 @@ export default class GitHub extends View {
       cx.stop_propagation(); cx.notify(); return;
     }
     const tab = this.shown();
+    if (tab.form) {
+      const used = tab.form.key(k, e, cx);
+      if (used === true) { cx.stop_propagation(); cx.notify(); }
+      return;
+    }
     if (tab.composer) {
       const used = tab.key(k, e, cx);
       if (used === true) { cx.stop_propagation(); cx.notify(); }
@@ -560,6 +599,6 @@ export default class GitHub extends View {
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(Boolean(this.picker), (el) => el.child(this.pickerPanel(t))))
       .when(Boolean(this.confirm), (el) => el.child(this.confirmBar(t)))
-      .child(hints(t, this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
+      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
   }
 }
