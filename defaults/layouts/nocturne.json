@@ -47,11 +47,26 @@
               "content": {
                 "mod": "nocturne-notifications",
                 "props": {
-                  "role": "bell"
+                  "role": "bell",
+                  "end": 0
                 }
               },
               "size": {
-                "px": 28
+                "px": 20
+              },
+              "window_drag": true
+            },
+            {
+              "id": "new",
+              "type": "block",
+              "content": {
+                "mod": "nocturne",
+                "props": {
+                  "role": "newbutton"
+                }
+              },
+              "size": {
+                "px": 61
               },
               "window_drag": true
             }

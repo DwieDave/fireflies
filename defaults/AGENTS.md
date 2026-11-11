@@ -311,11 +311,11 @@ the highlighted line shows where it will land.
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
-  machine. The bell at the right of Nocturne's tab strip (a 9 px pixel bell,
+  machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
   muted like the strip's tools when nothing waits) counts what waits: the
   bell turns pink beside a pink chip for permissions and questions; agents
-  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit, ending where
-  the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
+  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit (props `end`:
+  the room after it, 8 px unless a block follows); it or cmd-shift-a (`nocturne-notifications.open`) opens the
   overview, hanging under the bell like the scripts deck under ▶ (as wide as
   the window allows, up to 880, and as tall as what it shows), and closes it
   again; the bell is lit while it's open. A toast's click opens it on that
@@ -1090,7 +1090,7 @@ each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
 The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
-rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
+rows are the tabs (x close, H/L move, 1-9), its buttons, the bell and "+ new"; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
@@ -1123,8 +1123,12 @@ the open sidebar, its initials on the folded rail), the focused agent in the sky
 in the jar too; its name stands in the moonlit path) and on the rail.
 
 Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
-files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), "+ new", then
-the bell. "+ new" (cmd-n, `nocturne.new`) drops a menu under it: where new
+files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
+then "+ new", the last control at the window's right edge (a block of its
+own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
+layout without it gets "+ new" in the strip before the bell). The strip's
+keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
+the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels in four columns (Terminal t, Web w, Files f, Agents a, Usage
 u; the panels that float over the tab, Git, its diff, worktrees and GitHub,

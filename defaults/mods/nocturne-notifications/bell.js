@@ -15,11 +15,12 @@
 //
 // The bell's block is as wide as the bell plus END: it ends where the panes
 // below end, with no blank after it. It sizes its own block (layout.resize)
-// when the bell grows or shrinks.
+// when the bell grows or shrinks. Nocturne's layout puts "+ new" after it
+// (props.end 0: that block keeps the room at the end).
 
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { theme, terminals, nextCommand, shared, keys, layout, run, settings } from "herdr";
+import { theme, terminals, nextCommand, shared, keys, layout, run, settings, props } from "herdr";
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
 import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.js";
@@ -27,8 +28,9 @@ import { ART, dither, stop } from "./kit.js";
 
 const POLL = 1500;
 // Room after the bell, layout px: the main block's side padding, so its edge
-// lines up with the panes' right edge.
+// lines up with the panes' right edge; props.end when a block follows.
 const END = 8;
+const end = () => { const e = Number(props()?.end); return Number.isFinite(e) && e >= 0 ? e : END; };
 // Nocturne's keyboard cursor outside its tab strip (nocturne/nav.js CURSOR).
 const CHROME = "nocturne.chrome";
 
@@ -44,7 +46,7 @@ function bellNode(n = layout()) {
 function fit(width) {
   const node = bellNode();
   if (!node?.id || !(width > 0)) return;
-  const px = Math.round(width / (Number(settings()?.zoom) || 1)) + END;
+  const px = Math.round(width / (Number(settings()?.zoom) || 1)) + end();
   if (Math.abs((node.size?.px ?? 0) - px) >= 1) run("layout.resize", { id: node.id, px });
 }
 
@@ -104,7 +106,7 @@ export default class Bell {
     const open = Boolean(overviewOpen());
     // Where a drop-down opened by a key goes (open.js overviewPlace).
     try { noteWindow(window.viewport_size?.()); } catch { /* not drawing: the last size stays */ }
-    return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
+    return h_flex().id("notify-bell").relative().size_full().pr(end()).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(open ? t.foreground : t.muted).cursor_pointer()

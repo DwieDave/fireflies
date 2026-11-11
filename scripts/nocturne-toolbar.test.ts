@@ -161,3 +161,130 @@ test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys 
   expect(ids["nm-wt-new"]).toBeTruthy();
   expect(ids["nm-wt-open"]).toBeTruthy();
 });
+
+// ---- 2. "+ new" last, right of the bell
+
+const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
+const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
+const { default: Nocturne } = await import("../defaults/mods/nocturne/main.js");
+const shipped = JSON.parse(readFileSync(new URL("../defaults/layouts/nocturne.json", import.meta.url), "utf8"));
+
+function strip() {
+  const s: any = new Tabs();
+  s.init({ role: "tabs" }, cx);
+  ids = {};
+  s.render(cx);
+  return s;
+}
+function newButton() {
+  propsNow = { role: "newbutton" };
+  const b: any = new NewButton();
+  b.init({ role: "newbutton" }, cx);
+  ids = {};
+  b.render(cx);
+  return b;
+}
+
+test("the shipped nocturne layout: the tab row is the strip, the bell, then \"+ new\" (the bell leaves the end room to it)", () => {
+  const row = shipped.children[1].children[0];
+  expect(row.id).toBe("tab-row");
+  expect(row.children.map((c: any) => c.content.props.role)).toEqual(["tabs", "bell", "newbutton"]);
+  expect(row.children[1].content.props.end).toBe(0);
+  expect(row.children[2]).toMatchObject({ id: "new", content: { mod: "nocturne" }, window_drag: true });
+  // The nocturne mod has the role.
+  propsNow = { role: "newbutton" };
+  const n: any = new Nocturne();
+  n.init({ role: "newbutton" }, cx);
+  expect(n.role).toBeInstanceOf(NewButton);
+});
+
+test("the tools row, left to right: run, files, git, git's menu, bell, + new; the strip itself no longer draws + new", () => {
+  const s = strip();
+  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab-scripts-run", "tab-files", "tab-git", "tab-git-more", "bell", "tab-new"]);
+  expect(ids["tab-new"]).toBeUndefined();
+  expect(ids["tab-git-more"]).toBeTruthy();
+  // The keyboard's next from the bell is + new, and its enter opens the menu centered.
+  s.row = "tabs"; s.cursor = "bell";
+  s.key({ key: "right", modifiers: {} }, cx);
+  expect(s.cursor).toBe("tab-new");
+  s.item().go();
+  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "new" } });
+});
+
+test("a layout without the + new block (an edited older copy): the strip draws + new before the bell, as before", () => {
+  LAYOUT = layoutWith([{ ...bellBlock, content: { mod: "nocturne-notifications", props: { role: "bell" } } }]);
+  const s = strip();
+  expect(s.rows.tabs.map((x: any) => x.id).slice(-2)).toEqual(["tab-new", "bell"]);
+  expect(ids["tab-new"]).toBeTruthy();
+  // A hidden block counts as none.
+  LAYOUT = layoutWith([bellBlock, { ...newBlock, hidden: true }]);
+  expect(strip().rows.tabs.map((x: any) => x.id).slice(-2)).toEqual(["tab-new", "bell"]);
+});
+
+test("+ new's block: the strip's cursor on it draws its ring there (shared CURSOR, region new)", () => {
+  const s = strip();
+  s.row = "tabs"; s.cursor = "tab-new";
+  s.tell(true);
+  expect(sharedState["nocturne.chrome"]).toEqual({ region: "new", item: "tab-new" });
+  newButton();
+  const ring = (id: string) => ids[id].kids.some((k: any) => (k.calls?.border_color ?? []).some(([c]: any) => c === "accent"));
+  expect(ring("tab-new")).toBe(true);
+  sharedState["nocturne.chrome"] = { region: "bell", item: "bell" };
+  newButton();
+  expect(ring("tab-new")).toBe(false);
+});
+
+test("+ new's block sizes itself to its rule and button plus the 8 px end; the bell before it keeps none", () => {
+  newButton();
+  ids["new-tools"].on.size({ width: 53 * 0.9, height: 24 });
+  expect(ran.at(-1)).toEqual(["layout.resize", { id: "new", px: 53 + 8 }]);
+  // The block ends with the end room.
+  expect(ids["new-block"].calls.pr[0][0]).toBe(8);
+  // The bell, followed by it: no room after the bell.
+  propsNow = { role: "bell", end: 0 };
+  const b: any = new Bell();
+  b.init({ role: "bell" }, cx);
+  ids = {};
+  b.render(cx);
+  expect(ids["notify-bell"].calls.pr[0][0]).toBe(0);
+});
+
+/** A press on "+ new" at the window's right edge (its right 8 px in, at zoom 0.9), in a window `width` wide. */
+function pressNew(width: number) {
+  const z = 0.9, w = 46 * z;
+  const right = width - 8 * z;
+  const e = { position: { x: right - w + 10, y: 18 }, local_position: { x: 10, y: 6 }, bounds: { width: w, height: 24 * z } };
+  newButton();
+  ids["tab-new"].on["down:left"](e, cx);
+  ids["tab-new"].on.click({}, cx);
+  return { right, z };
+}
+
+for (const width of [700, 1600, 2560]) {
+  test(`+ new's menu hangs under it, its right edge on the button's, inside a ${width} px window`, () => {
+    const { right, z } = pressNew(width);
+    const o = overlays.at(-1);
+    expect(o).toMatchObject({ mod: "nocturne", kind: "popup", width: NEW_W, props: { role: "new" } });
+    expect(o.at.x).toBe(Math.round(right - NEW_W * z));
+    expect(o.at.x).toBeGreaterThanOrEqual(8);
+    expect(o.at.x + NEW_W * z).toBeLessThanOrEqual(width - 8 * z + 0.5);
+    // Its top just under the button (the strip's horizon).
+    expect(o.at.y).toBe(Math.round(18 - 6 + 24 * z + 6 * z));
+  });
+}
+
+test("+ new's menu in a window narrower than the menu stays 8 px in from the left", () => {
+  pressNew(300);
+  expect(overlays.at(-1).at.x).toBe(8);
+});
+
+test("+ new is lit while its menu is open and a second press closes it", () => {
+  pressNew(1600);
+  newButton();
+  expect(ids["tab-new"].kids.some((k: any) => k?.tag === "dither")).toBe(true);
+  expect(newmenu.newMenuOpen()).toBe(true);
+  // The press on a lit button: the menu closes (the popup's backdrop), and the click keeps it closed.
+  ids["tab-new"].on["down:left"]({}, cx);
+  ids["tab-new"].on.click({}, cx);
+  expect(newmenu.newMenuOpen()).toBe(false);
+});

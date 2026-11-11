@@ -1,6 +1,6 @@
 // Keyboard navigation of Nocturne's chrome: the sidebar (sky.js) and the tab
 // strip (tabs.js, which also walks the focused pane's header, the parked chips
-// and the bell). Both are layout blocks the keyboard reaches with pane.go
+// the bell and "+ new"). Both are layout blocks the keyboard reaches with pane.go
 // (cmd-alt-arrows) or layout.focus (nocturne.sidebar / nocturne.tabstrip /
 // nocturne.header); focused().block then names the block that has it.
 //
@@ -8,7 +8,7 @@
 // (move, moveSection, moveRow) and acts on the verb itself.
 
 /** shared() key: where the tab strip's cursor is when it's outside the strip,
- *  so that copy draws the ring: { region: "head" | "parked" | "bell", pane?, item }. */
+ *  so that copy draws the ring: { region: "head" | "parked" | "bell" | "new", pane?, item }. */
 export const CURSOR = "nocturne.chrome";
 
 /** The layout block showing nocturne with `role` (sky, tabs), from layout(). */
