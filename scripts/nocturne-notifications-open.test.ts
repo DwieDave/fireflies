@@ -40,6 +40,7 @@ mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () 
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
 const { default: Overview } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const notif = await import("../defaults/mods/nocturne-notifications/open.js");
 const { ITEMS } = await import("../defaults/mods/nocturne-notifications/engine.js");
 
 const cx: any = { focus_handle: () => ({ focus() {}, is_focused: () => true }), spawn() {}, notify() {}, stop_propagation() {}, timer: { after() {}, every() {} } };
@@ -92,8 +93,9 @@ for (const [name, items] of [["with a request", [permission]], ["empty", []]] as
     const frames = [frame(v), frame(v), frame(v)];
     const settled = frames.at(-1)!;
     expect(settled.seen).toBe(true);
-    // Settled below the popup's most: it is as tall as what it shows.
-    expect(settled.height).toBeLessThan(580);
+    // With a request: the popup's most, all the room it has. Empty: as tall as its note.
+    if (items.length) expect(settled.height).toBe(580);
+    else expect(settled.height).toBeLessThan(580);
     expect(frames[1]).toEqual(settled);
     const seen = frames.filter((f) => f.seen);
     expect(seen[0]).toEqual(settled);
@@ -111,4 +113,41 @@ test("overview: a request coming in while it's open changes its height, seen (no
   const next = [frame(v), frame(v)];
   expect(next.every((f) => f.seen)).toBe(true);
   expect(next[1].height).not.toBe(empty.height);
+});
+
+// ---- how tall: the room below the strip, up to OVERVIEW_H
+
+/** Under the bell in a window `height` drawn px tall (zoom 0.9): its spec. */
+function underBell(height: number) {
+  notif.noteWindow({ width: 1600, height });
+  // The bell: its top at 6, 24 layout px tall.
+  const z = 0.9;
+  return notif.overviewPlace({ position: { x: 1500, y: 12 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 * z } });
+}
+
+test("the overview's height: a small window's room below the strip, a laptop's most, a tall window's cap", () => {
+  const z = 0.9;
+  const top = 6 + 24 * z + 6 * z;
+  // Small (500 px): the room below the strip, 8 px from the window's bottom.
+  const small = underBell(500);
+  expect(small.at.y).toBe(Math.round(top));
+  expect(small.height).toBe(Math.floor((500 - Math.round(top) - 8) / z));
+  // A laptop's (1000 px): all the room below the strip, most of the window.
+  const normal = underBell(1000);
+  expect(normal.height).toBe(notif.OVERVIEW_H);
+  expect(normal.height * z).toBeGreaterThan(0.8 * 1000);
+  expect(Math.round(top) + normal.height * z).toBeLessThanOrEqual(1000 - 8);
+  // Tall (1600 px): no taller than the cap.
+  expect(underBell(1600).height).toBe(notif.OVERVIEW_H);
+  // A tiny window: still 160 at the least.
+  expect(underBell(150).height).toBe(160);
+});
+
+test("the overview is taller than it was: with a request it fills the popup's most, whatever it shows", () => {
+  sharedState[ITEMS] = [permission];
+  const v: any = new Overview();
+  v.init({}, cx);
+  frame(v); frame(v);
+  expect(frame(v).height).toBe(580);
+  expect(notif.OVERVIEW_H).toBeGreaterThan(580);
 });

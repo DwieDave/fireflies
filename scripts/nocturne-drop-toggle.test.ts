@@ -351,25 +351,23 @@ test("a note of an open center left by a restart doesn't swallow a press", () =>
   expect(shown()).toHaveLength(1);
 });
 
-test("the center is as tall as what it shows (as its parts measure), up to the popup's most", () => {
+test("the center with a request is the popup's most; with nothing waiting, as tall as its note (as it measures)", () => {
   const o: any = Object.create(Overview.prototype);
   o.sizes = {};
   propsNow = { overlay: "o1", most: 500 };
   const it = { id: "x" };
-  // Not measured yet: the most.
+  // A request: the most, measured or not, short or long.
   expect(o.height(it)).toBe(500);
   const cx1: any = { notify() {} };
   o.measure("list")({ height: 90 * 0.9 }, cx1);
   o.measure("top")({ height: 80 * 0.9 }, cx1);
   o.measure("detail")({ height: 120 * 0.9 }, cx1);
-  // The request (top, detail, its padding) is taller than the list (head, entries, padding); the key bar under both.
-  expect(o.height(it)).toBe(80 + 120 + 12 + 30);
-  o.measure("list")({ height: 400 * 0.9 }, cx1);
-  expect(o.height(it)).toBe(34 + 400 + 8 + 30);
+  expect(o.height(it)).toBe(500);
   o.measure("detail")({ height: 2000 }, cx1);
   expect(o.height(it)).toBe(500);
-  // Nothing waits: the empty note.
+  // Nothing waits: the most until the note measures, then the note and the key bar.
   o.sizes = { list: 70 };
+  expect(o.height(null)).toBe(500);
   o.measure("empty")({ height: 200 * 0.9 }, cx1);
   expect(o.height(null)).toBe(200 + 30);
 });

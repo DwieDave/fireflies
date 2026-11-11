@@ -317,7 +317,8 @@ the highlighted line shows where it will land.
   that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit (props `end`:
   the room after it, 8 px unless a block follows); it or cmd-shift-a (`nocturne-notifications.open`) opens the
   overview, hanging under the bell like the scripts deck under ▶ (as wide as
-  the window allows, up to 880, and as tall as what it shows), and closes it
+  the window allows, up to 880; with a request as tall as the room below the
+  strip, up to 900, with nothing waiting only as tall as its note), and closes it
   again; the bell is lit while it's open. A toast's click opens it on that
   agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its

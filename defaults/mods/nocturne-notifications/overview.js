@@ -1,9 +1,12 @@
 // The overview: every request, grouped down the left (permissions,
 // questions, other), the selected one in full on the right. A drop-down
-// under the bell (open.js), as tall as what it shows: it measures its parts
-// (on_size_change) and sets its own height, up to the popup's most
-// (props.most). A popup is as tall as its content, and a scroll area has
-// none of its own, so without that the list and the request would be nothing.
+// under the bell (open.js). With a request it is the popup's most
+// (props.most: the room below the strip, up to open.js OVERVIEW_H), so the
+// list and the request have room; with nothing waiting, as tall as its note.
+// It sets its own height: a popup is as tall as its content, and a scroll
+// area has none of its own, so without that the list and the request would
+// be nothing. It measures its parts (on_size_change) for the empty note and
+// the key bar.
 //
 //   j / k, [ / ]      the next / previous request
 //   up / down         the permission's options (as its terminal lists them)
@@ -191,13 +194,15 @@ export default class Overview {
     return this.seen;
   }
 
-  /** Its height (layout px): the taller of the list and the request (or the
-   *  empty note) as they measured, and the key bar under both (with the ?
-   *  list when open), up to the popup's most; the most until they have. */
+  /** Its height (layout px): with a request, the popup's most (all the room
+   *  it has). With nothing waiting, the taller of the list and the empty note
+   *  as they measured, and the key bar under both (with the ? list when
+   *  open), up to the most; the most until they have. */
   height(it) {
     const most = Number(props()?.most) || OVERVIEW_H;
+    if (it) return most;
     const m = this.sizes;
-    const main = !it ? m.empty : m.top == null || m.detail == null ? null : m.top + m.detail + 12;
+    const main = m.empty;
     if (m.list == null || main == null) return most;
     const bar = 30;
     // With its keys open, tall enough for them (keyhelp.js: a 26 px head, 20 px rows).

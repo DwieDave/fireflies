@@ -4,10 +4,12 @@
 import { openOverlay, closeOverlay, shared, setShared, settings } from "herdr";
 
 const SHOWN = "nocturne-notifications.shown"; // { overview?: id, beat?: ms, ask?: id }
-// The overview at its biggest (layout px); smaller in a small window, and
-// only as tall as what it shows.
+// The overview at its biggest (layout px): 880 wide, 900 tall (810 drawn px
+// at zoom 0.9: most of a laptop's window). Smaller in a small window: as tall
+// as the room below the strip. With a request it takes all of that height;
+// with nothing waiting, only its note's.
 export const OVERVIEW_W = 880;
-export const OVERVIEW_H = 580;
+export const OVERVIEW_H = 900;
 // The tab strip's row (layout px): the drop-down's top sits on its horizon.
 const ROW = 36;
 // Far right: the popup snaps back inside the window, its right edge 8 px in.
