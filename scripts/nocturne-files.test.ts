@@ -352,3 +352,45 @@ test("the pane's keys: [ ] and alt-arrows go back and forward, - and . are remem
   expect(view.root).toBe("/repo");
 });
 
+test("the header fits every width from the narrowest panel up: nothing overlaps, labels shorten first", () => {
+  const { lensFit, toolbarFit, CH } = logic;
+  const cut = { hidden: 12, ignored: 3 };
+  let last = "";
+  for (let w = 140; w <= 900; w += 2) {
+    const fit = lensFit(w, { cut, count: 120 });
+    // Its estimate fits the width (CH px a character at size 11).
+    const chip = (label: string, n: number) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (fit.cuts && n ? 4 + String(n).length * CH : 0);
+    const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
+    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...(fit.count ? [3 * CH] : [])];
+    expect(16 + parts.reduce((a: number, b: number) => a + b, 0) + 6 * (parts.length - 1)).toBeLessThanOrEqual(w);
+    last = fit.chips;
+  }
+  expect(last).toBe("full");
+  // The panel's 280 px (the screenshot's overlap): short labels, the whole placeholder or most of it.
+  expect(lensFit(280, { cut }).chips).toBe("short");
+  expect(lensFit(400, {}).labels).toEqual(["dotfiles", "ignored"]);
+  expect(lensFit(150, { cut }).chips).toBe("icon");
+  // The toolbar drops its extras before the name gets too small.
+  const narrow = toolbarFit(160, { branch: "main", changed: 3, name: "fireflies" });
+  expect(narrow).toEqual({ close: false, changed: true, edit: false, branch: false, eyebrow: false, path: false, name: 56 });
+  expect(toolbarFit(280, { branch: "main", changed: 0, name: "fireflies" })).toMatchObject({ edit: true, branch: true });
+  expect(toolbarFit(600, { branch: "main", changed: 3, name: "fireflies", alone: true })).toEqual({ close: true, changed: true, edit: true, branch: true, eyebrow: true, path: true, name: 56 });
+  // A pane squeezed to ~110 px keeps some of its name; its close button (the pane header has one) goes first.
+  const tight = toolbarFit(110, { alone: true, name: "defaults" });
+  expect(tight.close).toBe(false);
+  expect(tight.name).toBeGreaterThanOrEqual(3 * CH);
+});
+
+test("drawn at 280 px with filters on, the header has no long labels; at 120 only the eyes", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/repo", slot: "s1" } }];
+  const view = pane({ folder: "/repo", slot: "s1" }, TREE);
+  view.filters = { hidden: false, ignored: true };
+  const words = () => walk(view.render()).flatMap((e: any) => e.nodes).filter((n: any) => typeof n === "string");
+  view.size = { width: 280, height: 600 };
+  expect(words()).not.toContain("dotfiles");
+  expect(words()).toEqual(expect.arrayContaining([".*", "ign", "‹", "›"]));
+  view.size = { width: 120, height: 600 };
+  const narrow = words();
+  expect(narrow).not.toContain(".*");
+  expect(narrow).not.toContain("edit");
+});

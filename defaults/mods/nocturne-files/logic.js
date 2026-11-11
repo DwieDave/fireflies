@@ -150,3 +150,55 @@ export function navForward(nav, root) {
   return { to: nav.future[nav.future.length - 1], nav: { past: [...nav.past, root], future: nav.future.slice(0, -1) } };
 }
 
+// ---- the header in any width
+
+/** About how wide a character is at the header's size 11 (logical px). */
+export const CH = 7;
+const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
+
+/** The filter line's parts that fit `w`, richest first: the input's
+ *  placeholder ("filter files", "filter" or only the /) and the two switches'
+ *  labels ("full": dotfiles / ignored, "short": .* / ign, "icon": the eye
+ *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
+export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {}) {
+  const LABELS = { full: ["dotfiles", "ignored"], short: [".*", "ign"], icon: ["", ""] };
+  const variants = [
+    ["filter files", "full", true], ["filter files", "short", true], ["filter", "short", true],
+    ["", "short", true], ["", "icon", true], ["", "icon", false],
+  ];
+  for (const [find, chips, cuts] of variants) {
+    const fit = { find, chips, cuts, count: count != null };
+    if (lensWidth(fit, LABELS[chips], cut, count) <= w) return { ...fit, labels: LABELS[chips] };
+  }
+  return { find: "", chips: "icon", cuts: false, count: false, labels: LABELS.icon };
+}
+
+/** How wide the filter line is with `fit` (logical px). */
+function lensWidth(fit, [h, i], cut, count) {
+  const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
+  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0)];
+  if (fit.count) parts.push(String(count).length * CH);
+  return 16 + parts.reduce((a, b) => a + b, 0) + 6 * (parts.length - 1);
+}
+
+/** The toolbar's parts that fit `w`: back, forward and the folder's name
+ *  always (`name`: the px it keeps, up to NAME, before it truncates); then, as
+ *  room allows, the close button (a pane of its own: its header has one too),
+ *  the changed count, the edit button, the branch, the FILES eyebrow and the
+ *  folder's parent path. */
+export const NAME = 56;
+export function toolbarFit(w, { alone = false, branch = null, changed = 0, name = "" } = {}) {
+  const fit = { close: false, changed: false, edit: false, branch: false, eyebrow: false, path: false, name: 0 };
+  const want = Math.min(NAME, name.length * CH);
+  fit.name = Math.max(Math.min(want, 3 * CH), Math.min(want, w - 20 - 19 - 19 - 8 * 2));
+  let used = 20 + 19 + 19 + want, n = 3;
+  const room = (px) => used + px + 8 * n <= w;
+  const take = (key, px) => { if (room(px)) { fit[key] = true; used += px; n++; } };
+  if (alone) take("close", 20);
+  if (changed > 0) take("changed", (String(changed).length + 1) * CH);
+  take("edit", 12 + 4 * CH);
+  if (branch) take("branch", Math.min(140, branch.length * CH));
+  take("eyebrow", 5 * CH);
+  take("path", 80);
+  return fit;
+}

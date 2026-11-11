@@ -40,7 +40,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -593,17 +593,18 @@ export default class Files extends View {
   toolbar(t, w) {
     const changed = Object.values(this.marks).filter((m) => m !== "•").length;
     const name = this.root === "/" ? "/" : this.root.split("/").pop();
-    return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
-      .when(w >= 300, (el) => el.child(div().flex_none().text_color(t.ansi8).child("FILES")))
+    const fit = toolbarFit(w, { alone: this.alone, branch: this.branch, changed, name });
+    return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
+      .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(t.ansi8).child("FILES")))
       .child(this.chip(t, "nf-back", "‹", (cx) => this.back(cx), this.root !== "/" || this.nav.past.length > 0))
       .child(this.chip(t, "nf-forward", "›", (cx) => this.forward(cx), this.nav.future.length > 0))
       .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
-        .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(name))
-        .when(w >= 360, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))
-      .when(Boolean(this.branch) && w >= 260, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(this.branch)))
-      .when(changed > 0, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
-      .child(this.chip(t, "nf-edit", "edit", (cx) => this.edit("", cx)))
-      .when(this.alone, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
+        .child(div().flex_shrink(1).min_w(fit.name).truncate().text_color(t.foreground).child(name))
+        .when(fit.path, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))
+      .when(fit.branch, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(this.branch)))
+      .when(fit.changed, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
+      .when(fit.edit, (el) => el.child(this.chip(t, "nf-edit", "edit", (cx) => this.edit("", cx))))
+      .when(fit.close, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
         .text_color(t.muted).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop)
         .on_click(() => this.close())
@@ -619,7 +620,7 @@ export default class Files extends View {
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => action(cx))
       .child(svg(on ? `${ICONS}/eye.svg` : `mods/${MOD}/eye-off.svg`).relative().size(11).flex_none().text_color(on ? t.dim : t.ansi3))
-      .child(div().relative().text_color(t.muted).when(!on, (el) => el.line_through()).child(label))
+      .when(Boolean(label), (el) => el.child(div().relative().text_color(t.muted).when(!on, (el) => el.line_through()).child(label)))
       .when(!on && cut > 0, (el) => el.child(div().relative().text_color(t.ansi3).child(String(cut))));
   }
 
@@ -627,18 +628,22 @@ export default class Files extends View {
   lens(t, w, found) {
     const live = this.typing || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
-    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11)
+    const searching = Boolean(this.query.trim());
+    // What fits this width: the placeholder shortens, then the switches' labels.
+    const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
+    const [hLabel, iLabel] = fit.labels;
+    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
       .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
-      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center()
+      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.input.focus(); })
         .child(live
-          ? Input.new(this.input).flex_1().h_full().text_size(11).text_color(t.foreground)
-          : h_flex().gap(5).text_color(t.dim)
-            .child(div().text_color(t.accent).child("/"))
-            .child(div().truncate().child(w >= 240 ? "filter files" : "filter"))))
-      .when(Boolean(this.query.trim()), (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", w >= 250 ? "dotfiles" : ".*", this.filters.hidden, cut.hidden, (cx) => this.setFilter("hidden", cx)))
-      .child(this.filterChip(t, "nf-ignored", w >= 250 ? "ignored" : "ign", this.filters.ignored, cut.ignored, (cx) => this.setFilter("ignored", cx)))
+          ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
+          : h_flex().min_w(0).gap(5).text_color(t.dim)
+            .child(div().flex_none().text_color(t.accent).child("/"))
+            .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
+      .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
+      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
+      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
