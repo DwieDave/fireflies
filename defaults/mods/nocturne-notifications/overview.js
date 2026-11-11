@@ -428,7 +428,7 @@ export default class Overview {
    *  measured last (layout px): the least needed first (BAR_DROP). `note`: a
    *  note or a busy word sits before ? keys. */
   barDrop(note) {
-    const m = this.sizes;
+    const m = this.sizes ?? {};
     const out = new Set();
     if (m.bar == null || !this.barHints) return out;
     const hints = this.barHints.filter((h) => m[`hint:${h}`] != null);
