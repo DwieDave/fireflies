@@ -3172,6 +3172,8 @@ const BASE: &str = r#"  /** A row. */
     set_value(value: string): void;
     on(event: "change" | "submit" | "focus" | "blur" | "paste_other", handler: (event: InputEvent, cx: Context) => void): boolean;
     on(event: "hover", handler: (event: EditorHoverEvent, cx: Context) => void): boolean;
+    /** The text scrolled up or down (wheel, caret, `scroll_to_line`): `top_line()` says where. */
+    on(event: "scroll", handler: (event: InputEvent, cx: Context) => void): boolean;
     /** Every keystroke while this editor has the keyboard, before the editor, its bindings and
      *  the app's keys see it; return true to take it (nothing else sees it, nothing is typed).
      *  For a modal scheme (vim); return false for text in insert mode, so IME keeps working. */
@@ -3212,6 +3214,10 @@ const BASE: &str = r#"  /** A row. */
     set_cursor_shape(shape: "bar" | "block" | "underline"): void;
     /** Replaces the selections (several: one caret each, typing goes to all). */
     set_selections(list: { start: EditorPosition; end: EditorPosition }[]): void;
+    /** The line at the top of the view, fractional (2.5: halfway down line 2); null before it's drawn. */
+    top_line(): number | null;
+    /** Scrolls so the (fractional) line is at the top. */
+    scroll_to_line(line: number): void;
   }
   export const EditorState: {
     new: (options?: {

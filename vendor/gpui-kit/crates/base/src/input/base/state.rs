@@ -141,6 +141,9 @@ pub enum InputEvent {
         /// Where the word is drawn, in window coordinates, if laid out.
         bounds: Option<Bounds<Pixels>>,
     },
+    // HERDR: the text scrolled vertically (by the wheel, a caret move, a call),
+    // so an owner can follow it (a Markdown preview beside the editor).
+    Scroll,
 }
 
 pub(super) const CONTEXT: &str = "Input";
@@ -2640,9 +2643,40 @@ impl<M: InputModeKind> InputBaseState<M> {
             self.text_align,
         );
         if self.scroll_handle.offset() != offset {
+            let moved_y = self.scroll_handle.offset().y != offset.y;
             self.scroll_handle.set_offset(offset);
+            if moved_y {
+                cx.emit(InputEvent::Scroll);
+            }
             cx.notify();
         }
+    }
+
+    // HERDR: the buffer line at the top of the view, fractional (2.5 is
+    // halfway down line 2, wrapped rows counted), for a preview to follow.
+    pub fn top_line(&self) -> Option<f64> {
+        let line_height = f32::from(self.last_layout.as_ref()?.line_height);
+        if line_height <= 0. {
+            return None;
+        }
+        let rows = (-f32::from(self.scroll_handle.offset().y) / line_height).max(0.) as f64;
+        let row = rows.floor() as usize;
+        let line = self.display_map.display_row_to_buffer_line(row);
+        let range = self.display_map.buffer_line_to_display_row_range(line).unwrap_or(row..row + 1);
+        let len = range.len().max(1) as f64;
+        Some(line as f64 + ((rows - range.start as f64) / len).clamp(0., 1.))
+    }
+
+    // HERDR: scrolls so that the fractional buffer `line` is at the top.
+    pub fn scroll_to_line(&mut self, line: f64, cx: &mut Context<Self>) {
+        let Some(line_height) = self.last_layout.as_ref().map(|l| l.line_height) else { return };
+        let whole = line.max(0.).floor() as usize;
+        let last = self.display_map.buffer_line_count().saturating_sub(1);
+        let whole = whole.min(last);
+        let Some(range) = self.display_map.buffer_line_to_display_row_range(whole) else { return };
+        let rows = range.start as f64 + (line.max(0.) - whole as f64).clamp(0., 1.) * range.len().max(1) as f64;
+        let x = self.scroll_handle.offset().x;
+        self.update_scroll_offset(Some(point(x, -line_height * rows as f32)), cx);
     }
 
     /// Scroll to make the given offset visible.

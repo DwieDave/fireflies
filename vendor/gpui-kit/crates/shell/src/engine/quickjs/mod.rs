@@ -3981,7 +3981,7 @@ impl ShellRuntime {
                         payload.set("height", f32::from(b.size.height))?;
                     }
                 }
-                InputEvent::Change | InputEvent::Focus | InputEvent::Blur | InputEvent::PasteWithoutText => {}
+                InputEvent::Change | InputEvent::Focus | InputEvent::Blur | InputEvent::PasteWithoutText | InputEvent::Scroll => {}
             }
             handler.call::<_, ()>((
                 payload,
@@ -5725,6 +5725,8 @@ globalThis.__gpui = (() => {
       set_selections: (list) => call("set_selections", list ?? []),
       undo: () => call("undo"),
       redo: () => call("redo"),
+      top_line: () => call("top_line") ?? null,
+      scroll_to_line: (line) => call("scroll_to_line", Number(line) || 0),
     };
   };
 

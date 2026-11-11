@@ -1294,6 +1294,8 @@ pub enum InputEventName {
     PasteOther,
     // HERDR: a code editor's pointer resting on a word, or leaving it.
     Hover,
+    // HERDR: a code editor's text scrolled up or down.
+    Scroll,
 }
 
 impl InputEventName {
@@ -1305,11 +1307,12 @@ impl InputEventName {
             "blur" => Some(Self::Blur),
             "paste_other" => Some(Self::PasteOther),
             "hover" => Some(Self::Hover),
+            "scroll" => Some(Self::Scroll),
             _ => None,
         }
     }
 
-    pub const NAMES: &'static [&'static str] = &["change", "submit", "focus", "blur", "paste_other", "hover"];
+    pub const NAMES: &'static [&'static str] = &["change", "submit", "focus", "blur", "paste_other", "hover", "scroll"];
 
     fn matches(self, event: &InputEvent) -> bool {
         matches!(
@@ -1320,6 +1323,7 @@ impl InputEventName {
                 | (Self::Blur, InputEvent::Blur)
                 | (Self::PasteOther, InputEvent::PasteWithoutText)
                 | (Self::Hover, InputEvent::Hover { .. })
+                | (Self::Scroll, InputEvent::Scroll)
         )
     }
 }

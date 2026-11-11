@@ -1911,6 +1911,12 @@ fn editor_call(
 
     let out = match name {
         "cursor" => Some(pos_json(state.read(cx).cursor_position())),
+        "top_line" => Some(state.read(cx).top_line().map_or(Value::Null, |l| json!(l))),
+        "scroll_to_line" => {
+            let line = args.as_f64().unwrap_or(0.);
+            state.update(cx, |s, cx| s.scroll_to_line(line, cx));
+            None
+        }
         "selection" => {
             let s = state.read(cx);
             let r = s.selected_range();
