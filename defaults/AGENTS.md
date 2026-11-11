@@ -1133,7 +1133,7 @@ layout without it gets "+ new" in the strip before the bell). The strip's
 keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
 the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
-grid of panels in four columns (Terminal t, Web w, Files f, Agents a, Usage
+row of five panels (Terminal t, Web w, Files f, Agents a, Usage
 u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
 open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9), then New space, New worktree… and Open worktree….

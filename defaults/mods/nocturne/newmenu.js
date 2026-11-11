@@ -5,7 +5,8 @@
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
-//             usage, in fixed columns (a short last row keeps them). The
+//             usage, in one row of five (COLS; a short last row would keep
+//             the columns). The
 //             panels that float over the tab (worktrees, Git, its diff,
 //             GitHub) aren't here: the strip's git button and its ▾, their
 //             keys and the palette open them. Files runs down the tab's edge
@@ -30,9 +31,11 @@ const KNOWN = "new-menu.agents";
 // Where new things land: "pane" or "tab".
 const DEST = "nocturne.newDest";
 
-export const WIDTH = 352;
+// Wide enough for five tiles in a row with "Terminal" whole in one: each
+// (WIDTH - 2 PAD - 4 GAP) / 5 = 70 px, 58 inside its padding and border.
+export const WIDTH = 392;
 const PAD = 12;
-const COLS = 4;
+const COLS = 5;
 const GAP = 4;
 const TILE_H = 64;
 const ROW = 26;

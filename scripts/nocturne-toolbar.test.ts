@@ -111,9 +111,9 @@ function menuGrid() {
   return { m, rows, letters };
 }
 
-test("+ new menu: no tile floats over the tab; the rest in 4 columns, in order, the short row padded", () => {
+test("+ new menu: no tile floats over the tab; the five others in one row, in order, none alone on a row", () => {
   const { rows, letters } = menuGrid();
-  expect(rows).toEqual([["terminal", "web", "files", "agents"], ["usage", "pad", "pad", "pad"]]);
+  expect(rows).toEqual([["terminal", "web", "files", "agents", "usage"]]);
   // Each keeps its letter.
   expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u" });
   // Nothing on a tile says "float"; files still says it runs down the edge.
@@ -123,11 +123,30 @@ test("+ new menu: no tile floats over the tab; the rest in 4 columns, in order, 
   expect(menuPanels().every((p: any) => p.fixed !== "float")).toBe(true);
 });
 
-test("+ new menu: its height has room for the two rows of tiles it shows", () => {
+test("+ new menu: its height has room for the one row of tiles it shows", () => {
   sharedState["new-menu.agents"] = { "": [] };
   const h = newmenu.newMenuHeight();
-  // head, section, 2 rows of 64 and a gap, section, one agent row, section, 3 rows, padding, foot, border.
-  expect(h).toBe(44 + 24 + 2 * 64 + 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
+  // head, section, a row of 64, section, one agent row, section, 3 rows, padding, foot, border.
+  expect(h).toBe(44 + 24 + 64 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
+});
+
+test("+ new menu: each of the five tiles is wide enough for its name (Terminal, 8 letters, ~56 px at 11 px)", () => {
+  // The grid's room: the menu less its padding, less four gaps; then each tile's own padding and border.
+  const inside = (NEW_W - 2 * 12 - 4 * 4) / 5 - 2 * 5 - 2;
+  expect(inside).toBeGreaterThanOrEqual(56);
+});
+
+test("+ new menu: ← → walk the row, ↓ from a tile leaves the grid for the agents", () => {
+  const { m } = menuGrid();
+  const kx: any = { stop_propagation() {}, notify() {} };
+  const live = [0, 1, 2, 3, 4].map((i) => ({ kind: "tile", id: `t${i}` })).concat([{ kind: "agent", id: "a1" } as any]);
+  m.cursor = 0;
+  for (let i = 1; i <= 4; i++) { m.key({ key: "right", modifiers: {} }, kx, live); expect(m.cursor).toBe(i); }
+  m.cursor = 2;
+  m.key({ key: "down", modifiers: {} }, kx, live);
+  expect(m.cursor).toBe(5);
+  m.key({ key: "up", modifiers: {} }, kx, live);
+  expect(m.cursor).toBe(4);
 });
 
 test("+ new menu: the floating panels' letters pick nothing there (g l d h)", () => {
