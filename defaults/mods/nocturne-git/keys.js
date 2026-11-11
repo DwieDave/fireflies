@@ -104,10 +104,17 @@ export const BINDINGS = [
   ["review", ["r"], "refresh", "Refresh", ""],
 
   // worktrees
-  ["worktrees", ["space"], "worktree-switch", "Open as a space", "bar menu"],
-  ["worktrees", ["n"], "worktree-new", "New worktree", "bar menu"],
-  ["worktrees", ["d"], "worktree-remove", "Remove", "bar menu danger"],
-  ["worktrees", ["o"], "open", "Open folder", "menu"],
+  ["worktrees", ["space"], "worktree-switch", "Switch to it (its space, or a new one)", "bar menu"],
+  ["worktrees", ["enter"], "worktree-here", "Look at it here (this window on it)", "bar menu"],
+  ["worktrees", ["n"], "worktree-new", "New worktree…", "bar menu"],
+  ["worktrees", ["d"], "worktree-remove", "Remove…", "bar menu danger"],
+  ["worktrees", ["o"], "worktree-open-menu", "Open in…", "bar menu"],
+  ["worktrees", ["R"], "worktree-rename", "Rename its branch", "menu"],
+  ["worktrees", ["ctrl-o"], "worktree-copy-path", "Copy path", "menu"],
+  ["worktrees", ["M"], "worktree-pick-merged", "Pick the merged ones", "menu"],
+  ["worktrees", ["U"], "worktree-pick-unused", "Pick the unused ones (no space, no agent)", "menu"],
+  ["worktrees", ["A"], "worktree-pick-all", "Pick all / none", "menu"],
+  ["worktrees", ["X"], "worktree-prune", "Prune stale ones (folder gone)", "menu"],
 
   // local branches
   ["branches", ["space"], "checkout", "Checkout", "bar menu"],
@@ -127,7 +134,7 @@ export const BINDINGS = [
   ["branches", ["s"], "sort-menu", "Sort order…", "menu"],
   ["branches", ["o"], "pr-create", "Create pull request", "menu"],
   ["branches", ["G"], "pr-open", "Open pull request in browser", "menu"],
-  ["branches", ["w"], "worktree-new", "New worktree", "menu"],
+  ["branches", ["w"], "worktree-of", "New worktree for this branch", "menu"],
   ["branches", ["ctrl-o"], "copy-name", "Copy name", "menu"],
   ["branches", ["enter"], "view-commits", "View commits", "bar menu"],
 
@@ -147,6 +154,7 @@ export const BINDINGS = [
   ["remoteBranches", ["u"], "set-upstream", "Set as upstream", "menu"],
   ["remoteBranches", ["g"], "reset-menu-ref", "Reset to this…", "menu"],
   ["remoteBranches", ["ctrl-o"], "copy-name", "Copy name", "menu"],
+  ["remoteBranches", ["w"], "worktree-of", "New worktree for it (a local branch)", "menu"],
   ["remoteBranches", ["enter"], "view-commits", "View commits", "bar menu"],
 
   // tags
@@ -156,6 +164,7 @@ export const BINDINGS = [
   ["tags", ["P"], "tag-push", "Push tag", "bar menu"],
   ["tags", ["g"], "reset-menu-ref", "Reset to this…", "menu"],
   ["tags", ["ctrl-o"], "copy-name", "Copy name", "menu"],
+  ["tags", ["w"], "worktree-of", "New worktree from this tag", "menu"],
   ["tags", ["enter"], "view-commits", "View commits", "bar menu"],
 
   // commits
@@ -185,7 +194,7 @@ export const BINDINGS = [
   ["commits", ["ctrl-o"], "copy-hash", "Copy hash", "menu"],
   ["commits", ["y"], "copy-menu", "Copy attribute…", "menu"],
   ["commits", ["o"], "open-commit-browser", "Open in browser", "menu"],
-  ["commits", ["w"], "worktree-new", "New worktree", "menu"],
+  ["commits", ["w"], "worktree-of", "New worktree from this commit", "menu"],
   ["commits", ["*"], "select-branch-commits", "Select this branch's commits", ""],
   ["commits", ["ctrl-l"], "log-options", "Log options…", "menu"],
 

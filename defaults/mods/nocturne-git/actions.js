@@ -187,26 +187,65 @@ const ACTIONS = {
   "review-hide": (v) => v.review.hideMenu(),
   "review-open": (v) => v.focusMain(),
 
-  // ---- worktrees
-  "worktree-switch": (v) => {
+  // ---- worktrees (worktrees.js does the git and spaces work)
+  "worktree-switch": (v) => { const w = it(v); if (w) v.goToWorktree(w); },
+  "worktree-here": (v) => {
     const w = it(v);
     if (!w) return;
-    herdrRun("space.new", { folder: w.path, ...(v.on ? { machine: v.on } : {}) });
+    if (w.prunable) return v.error("Its folder is gone: X prunes it.");
+    if (w.path === v.git.root) return v.note("This window is on it already");
+    v.switchRepo(w.path);
   },
-  "worktree-new": (v) => {
-    const ref = refOf(v) ?? v.data.status?.head;
-    v.prompt({
-      title: "New worktree: folder", value: `../${v.git.name}-${String(ref ?? "work").replace(/[^\w.-]+/g, "-").slice(0, 30)}`,
-      ok: (path) => v.prompt({
-        title: "New branch in it (empty: check out the ref)", value: "",
-        ok: (b) => git(v, "New worktree", ["worktree", "add", ...(b.trim() ? ["-b", b.trim()] : []), path, ...(ref ? [ref] : [])]),
-      }),
+  "worktree-new": (v) => v.newWorktree(),
+  "worktree-of": (v) => {
+    const x = it(v);
+    if (!x) return;
+    if (x.hash || x.kind === "tag" || v.ctx() === "tags") return v.newWorktree({ base: x.hash ?? x.name, label: x.hash ? x.hash.slice(0, 7) : x.name });
+    if (x.remote && x.branch) {
+      // A remote branch: a local branch of the same name that tracks it.
+      const local = v.data.branches.find((b) => b.name === x.branch);
+      return local ? v.newWorktree({ value: x.branch }) : v.newWorktree({ value: x.branch, base: x.name, label: x.name, track: true });
+    }
+    const taken = v.data.worktrees.find((w) => w.branch === x.name);
+    if (taken) return v.error(`${x.name} is checked out in ${v.tilde(taken.path)} already: space there goes to it.`);
+    v.newWorktree({ value: x.name, now: true });
+  },
+  "worktree-remove": (v) => v.removeWorktrees(),
+  "worktree-open-menu": (v) => {
+    const w = it(v);
+    if (!w) return;
+    const on = v.on ? { on: v.on } : {};
+    v.menu({
+      title: `Open ${v.tilde(w.path)}`,
+      items: [
+        { key: "f", label: "In a files pane", go: () => herdrRun("files.open", { path: w.path, ...on }) },
+        { key: "e", label: "In the editor ($EDITOR, a floating terminal)", go: () => v.editIn(w.path) },
+        { key: "t", label: "A terminal tab there, in this space", go: () => herdrRun("tab.new", { folder: w.path }) },
+        { key: "o", label: "In the system's file manager", go: () => herdrRun("files.open", { path: w.path, in: "system", ...on }) },
+      ],
     });
   },
-  "worktree-remove": (v) => {
+  "worktree-rename": (v) => {
     const w = it(v);
-    if (!w || w.path === v.git.root) return v.error("This is the worktree you're in.");
-    v.ask({ title: "Remove worktree", text: `Remove ${w.path}? Its folder is deleted.`, danger: true, go: () => git(v, "Remove worktree", ["worktree", "remove", w.path]) });
+    if (!w?.branch) return v.error("A detached checkout has no branch to rename.");
+    v.prompt({ title: `Rename branch ${w.branch}`, value: w.branch, ok: (name) => { if (name.trim() && name.trim() !== w.branch) git(v, "Rename branch", ["branch", "-m", w.branch, name.trim()]); } });
+  },
+  "worktree-copy-path": (v, cx) => { const w = it(v); if (w) v.copy(w.path, cx); },
+  "worktree-pick-all": (v) => {
+    const all = v.data.worktrees.filter((w) => !w.main);
+    v.wtPicked = v.wtPicked.size ? new Set() : new Set(all.map((w) => w.path));
+  },
+  "worktree-pick-unused": (v) => {
+    const occ = v.occupancy();
+    v.wtPicked = new Set(v.data.worktrees.filter((w) => !w.main && !occ.get(w.path)?.spaces.length && !occ.get(w.path)?.agents.length).map((w) => w.path));
+    v.note(v.wtPicked.size ? `${v.wtPicked.size} unused picked: d removes them, esc lets go` : "Every worktree has a space or an agent");
+  },
+  "worktree-pick-merged": (v) => v.pickMergedWorktrees(),
+  "worktree-prune": (v) => {
+    const stale = v.data.worktrees.filter((w) => w.prunable);
+    if (!stale.length) return v.note("Nothing to prune: every worktree's folder is there");
+    v.ask({ title: "Prune worktrees", text: `Forget ${stale.length} worktree${stale.length === 1 ? "" : "s"} whose folder is gone?`, lines: stale.map((w) => [v.tilde(w.path), "dim"]),
+      go: () => git(v, "Prune worktrees", ["worktree", "prune"]) });
   },
 
   // ---- branches
