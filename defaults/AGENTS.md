@@ -1516,6 +1516,8 @@ All of it is in `herdr.d.ts`. In short:
   or centered. `key: "name"` remembers its spot (opening that key again
   replaces it); `keep: true` with a key reopens it on the next start. A
   layout switch closes windows; kept ones come back with their layout.
+  `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
+  window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
