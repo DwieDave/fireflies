@@ -53,14 +53,17 @@ const layoutWith = (row: any[]) => ({
 });
 let LAYOUT: any = layoutWith([bellBlock, newBlock]);
 let FOCUSED: any = { space: "s1", tab: "t1", pane: "p1", terminal: "a/1" };
+const PANES0 = [{ pane: "p1", tab: "t1", terminal: "a/1", focused: true, cwd: "/home/a" }];
+let PANES: any[] = PANES0;
+let AGENTS: any[] = [];
 const herdr: Record<string, any> = {
   agents: () => [], appHome: () => "/tmp/app", closeOverlay: () => {}, commands: () => [],
   exec: async () => ({ code: 1, stdout: "", stderr: "" }), focused: () => FOCUSED,
   hc: async () => ({ code: 1, stdout: "" }), home: () => "/home/a", keys: () => [{ section: "global", action: "space.new", keys: "cmd-shift-n" }],
-  knownAgents: async () => [], layout: () => LAYOUT, layouts: () => ["nocturne"],
+  knownAgents: async () => AGENTS, layout: () => LAYOUT, layouts: () => ["nocturne"],
   nextCommand: () => new Promise<string>((r) => waiting.push(r)),
   notify: () => {}, openOverlay: (spec: any) => { const id = `o${overlays.length + 1}`; overlays.push({ ...spec, id }); return id; },
-  panes: () => [{ pane: "p1", tab: "t1", terminal: "a/1", focused: true, cwd: "/home/a" }], pickFolder: async () => null,
+  panes: () => PANES, pickFolder: async () => null,
   presentUpdateNotes: () => {}, props: () => propsNow, run: (name: string, args: any) => { ran.push([name, args]); return null; },
   setAgentOrder: () => {}, setShared: (k: string, v: unknown) => { sharedState[k] = v; }, settings: () => ({ zoom: 0.9 }),
   shared: (k: string) => sharedState[k] ?? null,
@@ -93,6 +96,7 @@ beforeEach(() => {
   sharedState = {}; overlays = []; ran = []; waiting = []; ids = {}; propsNow = null;
   LAYOUT = layoutWith([bellBlock, newBlock]);
   FOCUSED = { space: "s1", tab: "t1", pane: "p1", terminal: "a/1" };
+  PANES = PANES0; AGENTS = [];
 });
 
 // ---- 1. the menu's tiles
@@ -393,16 +397,17 @@ test("+ new > Files with \"new tab\": a files pane in a tab of its own; shift (f
 test("+ new > Files: no corner mark or \"close\" while the docked panel is open, and the footer says where it opens", () => {
   // The docked panel open in the shown tab.
   const docked = { pane: "p9", tab: "t1", mod: "nocturne-files", props: { folder: "/home/a" } };
-  const was = herdr.panes;
-  herdr.panes = () => [...was(), docked];
-  try {
+  PANES = [...PANES0, docked];
+  {
     const { m } = menuGrid();
     const files = liveTiles().find((x: any) => x.id === "files");
     expect(words(ids["nm-files"])).not.toContain("open");
     expect(words(ids["nm-files"])).not.toContain("close");
     expect(m.say(files, "pane")).toBe("files in a new pane");
     expect(m.say(files, "tab")).toBe("files in a new tab");
-  } finally { herdr.panes = was; }
+    // The docked panel does count as open for the palette's Files (panels.js), the strip's button's.
+    expect(panels().find((p: any) => p.id === "files").open()).toBeTruthy();
+  }
 });
 
 test("the toolbar's files button and cmd-e (nocturne.files) still toggle the docked panel", async () => {
@@ -420,4 +425,108 @@ test("the toolbar's files button and cmd-e (nocturne.files) still toggle the doc
   await new Promise((r) => setTimeout(r, 0));
   expect(ran.filter(DOCK)).toHaveLength(1);
   void s;
+});
+
+// ---- 7. agents that aren't installed: hidden behind one row
+
+const INSTALLED = [
+  { key: "claude", name: "Claude Code", run: ["claude"], installed: true },
+  { key: "codex", name: "Codex", run: ["codex"], installed: true },
+  { key: "pi", name: "Pi", run: ["pi"], installed: true },
+];
+const MISSING_AGENTS = [
+  { key: "cursor", name: "Cursor", run: ["cursor-agent"], installed: false },
+  { key: "copilot", name: "Copilot", run: ["copilot"], installed: false },
+];
+
+/** The menu with these agents found, drawn after its search: the agent section's rows, as [id, words]. */
+async function agentSection(agents: any[]) {
+  AGENTS = agents;
+  sharedState["new-menu.agents"] = { "": agents };
+  const { m } = menuGrid();
+  await new Promise((r) => setTimeout(r, 0));
+  return { m, draw: () => { ids = {}; m.render(cx); return agentIds(); } };
+}
+const agentIds = () => Object.keys(ids).filter((id) => /^nm-agents?-/.test(id)).map((id) => id.slice(3));
+/** The live items in cursor order, as the menu's key handler gets them. */
+function liveOf(m: any) {
+  let live: any[] = [];
+  const kx: any = { stop_propagation() {}, notify() {} };
+  const key = m.key.bind(m);
+  m.key = (e: any, c: any, l: any) => { live = l; return key(e, c, l); };
+  ids = {}; m.render(cx);
+  ids["nocturne-new"].calls.on_key_down[0][0]({ key: "f13", modifiers: {} }, kx);
+  m.key = key;
+  return live;
+}
+
+test("not installed agents: hidden by default, behind a dim row with their count; the installed ones numbered 1-3", async () => {
+  const { m, draw } = await agentSection([...INSTALLED, ...MISSING_AGENTS]);
+  expect(draw()).toEqual(["agent-claude", "agent-codex", "agent-pi", "agents-missing"]);
+  expect(words(ids["nm-agents-missing"])).toEqual(expect.arrayContaining(["2 not installed", "show"]));
+  expect(["claude", "codex", "pi"].map((k) => words(ids[`nm-agent-${k}`]).at(-1))).toEqual(["1", "2", "3"]);
+  // The menu is as tall as the rows it shows: three agents and the row.
+  expect(ids["nocturne-new"].calls.h[0][0]).toBe(newmenu.menuHeight([...INSTALLED, ...MISSING_AGENTS], false));
+  void m;
+});
+
+test("not installed agents: enter on the row shows them (the numbers stay), again hides them; the cursor stays on the row", async () => {
+  const { m, draw } = await agentSection([...INSTALLED, ...MISSING_AGENTS]);
+  const kx: any = { stop_propagation() {}, notify() {} };
+  let live = liveOf(m);
+  m.cursor = live.findIndex((x: any) => x.id === "agents-missing");
+  expect(m.say(live[m.cursor], "pane")).toBe("shows 2 not installed");
+  m.key({ key: "enter", modifiers: {} }, kx, live);
+  // The menu stays open; nothing ran.
+  expect(ran).toEqual([]);
+  expect(sharedState["nocturne.newShowMissing"]).toBe(true);
+  expect(draw()).toEqual(["agent-claude", "agent-codex", "agent-pi", "agent-cursor", "agent-copilot", "agents-missing"]);
+  expect(words(ids["nm-agent-cursor"])).toContain("not installed");
+  expect(words(ids["nm-agents-missing"])).toEqual(expect.arrayContaining(["2 not installed", "hide"]));
+  expect(["claude", "codex", "pi"].map((k) => words(ids[`nm-agent-${k}`]).at(-1))).toEqual(["1", "2", "3"]);
+  live = liveOf(m);
+  expect(live[m.cursor].id).toBe("agents-missing");
+  expect(m.say(live[m.cursor], "pane")).toBe("hides 2 not installed");
+  // Taller by the two rows.
+  expect(ids["nocturne-new"].calls.h[0][0]).toBe(newmenu.menuHeight([...INSTALLED, ...MISSING_AGENTS], false) + 2 * 26);
+  m.key({ key: "enter", modifiers: {} }, kx, live);
+  expect(sharedState["nocturne.newShowMissing"]).toBe(false);
+  expect(draw()).toEqual(["agent-claude", "agent-codex", "agent-pi", "agents-missing"]);
+  // The numbers still pick the same agents.
+  m.key({ key: "3", key_char: "3", modifiers: {} }, kx, liveOf(m));
+  expect(ran.at(-1)).toEqual(["terminal.open", expect.objectContaining({ argv: ["pi"] })]);
+});
+
+test("not installed agents: a click on the row shows them and another hides them", async () => {
+  const { draw } = await agentSection([...INSTALLED, ...MISSING_AGENTS]);
+  draw();
+  ids["nm-agents-missing"].on.click({ modifiers: {} }, cx);
+  expect(draw()).toContain("agent-copilot");
+  ids["nm-agents-missing"].on.click({ modifiers: {} }, cx);
+  expect(draw()).not.toContain("agent-copilot");
+  expect(ran).toEqual([]);
+});
+
+test("not installed agents: shown stays shown in the next menu (remembered), and hidden stays hidden", async () => {
+  sharedState["nocturne.newShowMissing"] = true;
+  let s = await agentSection([...INSTALLED, ...MISSING_AGENTS]);
+  expect(s.draw()).toContain("agent-cursor");
+  sharedState["nocturne.newShowMissing"] = false;
+  s = await agentSection([...INSTALLED, ...MISSING_AGENTS]);
+  expect(s.draw()).not.toContain("agent-cursor");
+});
+
+test("not installed agents: with every agent installed there's no row", async () => {
+  const { draw } = await agentSection(INSTALLED);
+  expect(draw()).toEqual(["agent-claude", "agent-codex", "agent-pi"]);
+  expect(ids["nm-agents-missing"]).toBeUndefined();
+});
+
+test("+ new popup: opened with room to grow (it sets its own height), centered without a height", () => {
+  newmenu.openNewMenu({ at: { x: 100, y: 30 } });
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", height: 640 });
+  newmenu.openNewMenu();
+  newmenu.openNewMenu({ centered: true });
+  expect(overlays.at(-1).kind).toBe("dialog");
+  expect(overlays.at(-1).height).toBeUndefined();
 });

@@ -1138,7 +1138,10 @@ grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its 
 the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
 u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
 open from the git button, its ▾, their keys and the palette instead), every
-installed agent (1-9), then New space, New worktree… and Open worktree….
+installed agent (1-9; the ones that aren't installed hide behind a dim
+"2 not installed · show" row: enter or a click shows them, again hides them,
+remembered in shared `nocturne.newShowMissing`; the numbers never move), then
+New space, New worktree… and Open worktree….
 
 ### Layouts and mods other people made
 
