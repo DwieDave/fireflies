@@ -273,12 +273,15 @@ export default class Header {
     return el.children(shown.map((c) => this.control(t, p, c, at === c.id)));
   }
 
-  render() {
+  render(cx) {
     const t = theme();
     const p = this.target();
     if (!p) return div();
     if (isLazygit(p)) return this.buttons(t, this.lazygit(t, p), p);
-    this.answerNaming(p);
+    // The pane menu's Rename is answered just after this render, from a task:
+    // a render can't start the field and draw again (sky.js does the same).
+    const ask = shared(NAME_PANE);
+    if (ask && ask.at !== this.nameAsked) cx?.timer?.after(0, (cx) => { this.answerNaming(this.target() ?? p); cx.notify?.(); });
     const name = paneName(p);
     const st = p.status;
     const label = this.naming && p.terminal

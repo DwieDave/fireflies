@@ -45,7 +45,7 @@ import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 
 export { GLOW_SQUARE };
-import { NAME_AGENT, openMenu, openKeys } from "./menu.js";
+import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.js";
 import { keysHint } from "./keyhelp.js";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
 import { toggleGit, openWorktrees } from "./git.js";
@@ -236,8 +236,12 @@ export default class Sky {
     });
   }
 
-  /** Starts naming the agent a firefly menu asked about, once per request. */
-  answerNaming(list) {
+  /** A menu's ask ({ at }) this view hasn't answered yet. */
+  asked(ask, answered) { return Boolean(ask) && ask.at !== answered; }
+
+  /** Starts naming the agent a firefly menu asked about, once per request
+   *  (from a task, never a render: see render). */
+  answerNaming(list, cx) {
     const ask = shared(NAME_AGENT);
     if (!ask || ask.at === this.nameAsked) return;
     this.nameAsked = ask.at;
@@ -246,6 +250,7 @@ export default class Sky {
     this.naming = a.address;
     this.nameInput.set_value(givenName(a.address) ?? "");
     this.nameInput.focus();
+    cx?.notify?.();
   }
 
   /** The pointer moved over the sky (or left it, `local` null): the glow
@@ -963,8 +968,13 @@ export default class Sky {
     const sp = spaces();
     this.shownSpace = sp.find((s) => s.active)?.id ?? null;
     this.redraw(cx, sp);
-    this.answerNaming(list);
-    this.spaces.answer(this.folded, cx);
+    // A menu's ask (rename an agent, edit or delete a space) is answered just
+    // after this render, from a task: answering starts a field, focuses it
+    // and draws again (cx.notify), which a render can't do (GPUI refuses it,
+    // and the sidebar showed "could not be re-rendered" for a frame).
+    if (this.asked(shared(NAME_AGENT), this.nameAsked) || this.asked(shared(EDIT_SPACE), this.spaces.editAsked)) {
+      cx.timer.after(0, (cx) => { this.answerNaming(list, cx); this.spaces.answer(this.folded, cx); });
+    }
     const sky = v_flex().id("sky").relative().size_full().overflow_hidden().bg(t.background)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))

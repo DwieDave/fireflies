@@ -1739,6 +1739,12 @@ Rules:
   `this.glow.set_props({ x, y })`: only that view is rebuilt, not yours. Skip
   moves that change nothing, and draw nothing once it's out of sight (a loop
   at opacity 0 still runs). Nocturne's sidebar glow (`glow.js`) does this.
+- **Acting on something `render()` reads** (a request another copy left in
+  `shared()`, say "rename this"): render can't change state that needs a new
+  frame, `cx.notify()` there throws ("not allowed during the `render`
+  phase") and the view shows "could not be re-rendered". Note it in render and
+  act from a task: `cx.timer.after(0, (cx) => { …; cx.notify(); })`, once per
+  request. Nocturne's sidebar and pane header answer their menus' asks so.
 
 ### UI
 
