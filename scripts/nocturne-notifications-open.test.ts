@@ -7,9 +7,11 @@
 import { test, expect, mock, beforeEach } from "bun:test";
 
 let sharedState: Record<string, unknown> = {};
+let specs: any[] = [];
+let propsNow: any = { overlay: "o1", most: 580 };
 mock.module("herdr", () => ({
-  closeOverlay: () => null, openOverlay: () => "o9", run: () => null, nextCommand: () => new Promise(() => {}),
-  props: () => ({ overlay: "o1", most: 580 }), settings: () => ({ zoom: 0.9 }), theme: () => theme,
+  closeOverlay: () => null, openOverlay: (spec: any) => { specs.push(spec); return "o9"; }, run: () => null, nextCommand: () => new Promise(() => {}),
+  props: () => propsNow, settings: () => ({ zoom: 0.9 }), theme: () => theme,
   shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; return null; },
   window: () => ({ platform: "macos" }), terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), exec: async () => ({ code: 1, stdout: "" }),
 }));
@@ -83,7 +85,7 @@ const permission = {
   request: { type: "permission", tool: "Bash", line: "ls -la", options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "No", kind: "no" }], canAmend: true },
 };
 
-beforeEach(() => { sharedState = {}; });
+beforeEach(() => { sharedState = {}; specs = []; propsNow = { overlay: "o1", most: 580 }; });
 
 for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
   test(`overview ${name}: the first frame seen has the height and key bar it settles at`, () => {
@@ -151,3 +153,31 @@ test("the overview is taller than it was: with a request it fills the popup's mo
   expect(frame(v).height).toBe(580);
   expect(notif.OVERVIEW_H).toBeGreaterThan(580);
 });
+
+// ---- opened by a key (centered) or by a press on the bell (under it)
+
+const BELL_PRESS = { position: { x: 1500, y: 12 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 * 0.9 } };
+
+for (const [how, press] of [["by a key: centered", null], ["by a click on the bell: under it", BELL_PRESS]] as const) {
+  for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
+    test(`overview opened ${how}, ${name}: its first frame seen is the settled one`, () => {
+      notif.noteWindow({ width: 1600, height: 1000 });
+      sharedState[ITEMS] = items;
+      notif.openOverview(null, press);
+      const spec = specs.at(-1);
+      if (press) expect(spec).toMatchObject({ kind: "popup", at: { x: expect.any(Number), y: expect.any(Number) } });
+      else { expect(spec.kind).toBe("dialog"); expect(spec.at).toBeUndefined(); expect(spec.height).toBeUndefined(); }
+      propsNow = { overlay: "o9", ...spec.props };
+      const v: any = new Overview();
+      v.init(spec.props, cx);
+      const frames = [frame(v), frame(v), frame(v)];
+      const settled = frames.at(-1)!;
+      expect(frames.filter((f) => f.seen)[0]).toEqual(settled);
+      if (items.length) expect(settled.height).toBe(spec.props.most);
+      else expect(settled.height).toBeLessThan(spec.props.most);
+      // The taller size, both ways: under the bell, the room below the strip; centered, 85% of the window.
+      expect(spec.props.most).toBe(Math.min(notif.OVERVIEW_H, press ? notif.OVERVIEW_H : Math.floor(1000 * 0.85 / 0.9)));
+      expect(spec.props.most).toBeGreaterThan(580);
+    });
+  }
+}

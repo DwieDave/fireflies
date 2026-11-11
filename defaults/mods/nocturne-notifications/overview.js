@@ -1,6 +1,6 @@
 // The overview: every request, grouped down the left (permissions,
 // questions, other), the selected one in full on the right. A drop-down
-// under the bell (open.js). With a request it is the popup's most
+// under the bell, or centered from a key (open.js). With a request it is the popup's most
 // (props.most: the room below the strip, up to open.js OVERVIEW_H), so the
 // list and the request have room; with nothing waiting, as tall as its note.
 // It sets its own height: a popup is as tall as its content, and a scroll

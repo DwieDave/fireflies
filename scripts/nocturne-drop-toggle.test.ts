@@ -234,15 +234,15 @@ test("+ new by key (nocturne.new, cmd-n): opens the menu, closes it, opens it", 
 
 // ---- the bell
 
-test("bell, before any press on it: a key hangs the center at the window's right (the popup snaps 8 px in, at the bell's edge), on the strip's horizon", () => {
+test("bell, by key: the center opens centered, as the script runner's deck (a dialog with no spot, as tall as its content, up to 85% of the window)", () => {
   const b = bell();
   b.draw();
   notif.toggleOverview();
   const o = shown()[0];
-  expect(o).toMatchObject({ kind: "popup", props: { role: "overview" } });
-  expect(o.at.x).toBe(notif.FAR_RIGHT);
-  expect(o.at.y).toBe(Math.round(36 * 0.9));
-  expect(o.props.most).toBe(o.height);
+  expect(o).toMatchObject({ kind: "dialog", width: notif.OVERVIEW_W, props: { role: "overview" } });
+  expect(o.at).toBeUndefined();
+  expect(o.height).toBeUndefined();
+  expect(o.props.most).toBe(Math.min(notif.OVERVIEW_H, Math.floor(1000 * 0.85 / 0.9)));
 });
 
 for (const early of [true, false]) {
@@ -280,26 +280,35 @@ test("bell: the drop-down's top is on the strip's horizon and its right edge on 
   VIEWPORT.width = 700; VIEWPORT.height = 400;
   try {
     b.draw();
-    const s = notif.overviewPlace();
+    const s = notif.overviewPlace({ position: { x: 600, y: 18 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 } });
     expect(s.width * z).toBeLessThanOrEqual(700 - 16);
     expect(s.at.y + s.height * z).toBeLessThanOrEqual(400 - 8 + 1);
     expect(s.at.x).toBeGreaterThanOrEqual(8);
+    // Centered (no press): no taller than the dialog's most, 85% of the window.
+    const c = notif.overviewPlace();
+    expect(c.centered).toBe(true);
+    expect(c.height * z).toBeLessThanOrEqual(400 * 0.85);
   } finally { VIEWPORT.width = 1600; VIEWPORT.height = 1000; }
 });
 
-test("bell by key (nocturne-notifications.open, cmd-shift-a; the strip's enter): opens under the bell, closes, opens", async () => {
+test("bell by key (nocturne-notifications.open, cmd-shift-a; the strip's enter): opens centered, closes, opens", async () => {
   const b = bell();
   b.draw();
+  // A press on the bell before: the key still centers it.
+  press("bell");
+  b.draw();
+  press("bell");
+  expect(shown()).toHaveLength(0);
+  const before = overlays.length;
   await tick();
   for (const n of [1, 0, 1]) {
     send("nocturne-notifications.open");
     await tick();
     expect(shown()).toHaveLength(n);
   }
-  expect(overlays.every((o) => o.kind === "popup" && o.props.role === "overview")).toBe(true);
-  // Far right (the popup snaps inside the window), on the horizon the last press on the bell found.
-  expect(overlays[0].at.x).toBe(notif.FAR_RIGHT);
-  expect(overlays[0].at.y).toBe(Math.round(12 + 24 + 6 * 0.9));
+  const byKey = overlays.slice(before);
+  expect(byKey).toHaveLength(2);
+  expect(byKey.every((o) => o.kind === "dialog" && o.props.role === "overview" && o.at === undefined)).toBe(true);
 });
 
 test("the strip's keyboard walk: enter on the bell toggles the notification center", async () => {
@@ -324,7 +333,7 @@ test("bell: a toast's request opens the center on its terminal, and retargets an
   send("nocturne-notifications.open");
   await tick();
   expect(shown()).toHaveLength(1);
-  expect(shown()[0]).toMatchObject({ kind: "popup", props: { role: "overview", terminal: "m/3" } });
+  expect(shown()[0]).toMatchObject({ kind: "dialog", props: { role: "overview", terminal: "m/3" } });
   sharedState["nocturne-notifications.open"] = { terminal: "m/4", at: Date.now() + 1 };
   send("nocturne-notifications.open");
   await tick();
@@ -337,7 +346,7 @@ test("bell: a toast's request opens the center on its terminal, and retargets an
 });
 
 test("the question dialog still opens centered, from the drop-down too", () => {
-  notif.toggleOverview();
+  notif.toggleOverview({ press: { position: { x: 1500, y: 18 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 } } });
   expect(shown()[0].kind).toBe("popup");
   notif.openAsk({ address: "m/1", request: { questions: [{ question: "Which?", options: [{ label: "a" }, { label: "b" }] }] } });
   expect(shown()).toHaveLength(1);

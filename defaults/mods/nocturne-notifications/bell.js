@@ -6,8 +6,9 @@
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
 //   a look only     the bell in the working yellow and a dim count
-// Click (or nocturne-notifications.open) opens the overview, hanging under
-// the bell like the script runner's deck under ▶; again closes it, and the
+// Click opens the overview, hanging under the bell like the script runner's
+// deck under ▶; nocturne-notifications.open (a key, the palette, a toast)
+// opens it centered, as cmd-shift-r the deck. Again closes it, and the
 // bell is lit (a dithered band, a blue foot) while it's open. A toast's
 // request for one terminal opens it on that one. Nocturne's tab strip walks
 // to it with the keyboard (its row's last control): a blue ring while its
@@ -104,7 +105,7 @@ export default class Bell {
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
     const ring = shared(CHROME)?.region === "bell";
     const open = Boolean(overviewOpen());
-    // Where a drop-down opened by a key goes (open.js overviewPlace).
+    // How big the overview can be (open.js overviewPlace).
     try { noteWindow(window.viewport_size?.()); } catch { /* not drawing: the last size stays */ }
     return h_flex().id("notify-bell").relative().size_full().pr(end()).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.

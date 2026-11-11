@@ -315,12 +315,14 @@ the highlighted line shows where it will land.
   muted like the strip's tools when nothing waits) counts what waits: the
   bell turns pink beside a pink chip for permissions and questions; agents
   that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit (props `end`:
-  the room after it, 8 px unless a block follows); it or cmd-shift-a (`nocturne-notifications.open`) opens the
-  overview, hanging under the bell like the scripts deck under ▶ (as wide as
+  the room after it, 8 px unless a block follows); a click on it opens the
+  overview hanging under the bell like the scripts deck under ▶ (as wide as
   the window allows, up to 880; with a request as tall as the room below the
-  strip, up to 900, with nothing waiting only as tall as its note), and closes it
-  again; the bell is lit while it's open. A toast's click opens it on that
-  agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
+  strip, up to 900, with nothing waiting only as tall as its note); cmd-shift-a
+  (`nocturne-notifications.open`: a key, the palette, the strip's enter on the
+  bell) opens it centered, as cmd-shift-r the deck (up to 85% of the window's
+  height). Either closes it again; the bell is lit while it's open. A toast's
+  click opens it centered on that agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
   space / tab and how long it has waited. Finished agents aren't listed: the
   sidebar and Herdr's toast tell about them.
