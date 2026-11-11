@@ -202,6 +202,24 @@ test("overview: q closes, up / down move between requests that have no options",
   expect(closed).toEqual(["n1"]);
 });
 
+test("overview: ? shows its keys, ? or esc hides them (esc then closes)", () => {
+  propsNow = { overlay: "n1" };
+  const o: any = new Overview();
+  o.init({}, cx);
+  o.list = () => [{ id: "a", type: "other", status: "blocked" }];
+  o.sel = "a";
+  o.key(key("/", { shift: true }, "?"), cx);
+  expect(o.keysShown).toBe(true);
+  o.key(key("/", { shift: true }, "?"), cx);
+  expect(o.keysShown).toBe(false);
+  o.key(key("/", { shift: true }, "?"), cx);
+  o.key(key("escape"), cx);
+  expect(o.keysShown).toBe(false);
+  expect(closed).toEqual([]);
+  o.key(key("escape"), cx);
+  expect(closed).toEqual(["n1"]);
+});
+
 // ---- picture in picture (the rest of its keys: nocturne-browser.test.ts)
 
 const { keyControl } = await import("../defaults/mods/nocturne-pip/main.js");

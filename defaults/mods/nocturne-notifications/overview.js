@@ -11,6 +11,7 @@
 //   x                 put an error away
 //   up / down         on a question or a needs-a-look: the next / previous request
 //   esc q             close (from the note's line: back to the options)
+//   ?                 these keys, over the key bar (? or esc hides them)
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
@@ -20,6 +21,10 @@ import { group, age, headline, summary, where, TYPES } from "./model.js";
 import { answer } from "./drive.js";
 import { openAsk, forget, followCommands } from "./open.js";
 import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit.js";
+
+/** What ? lists, ? keys last. */
+export const KEYS = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
+  ["p", "peek"], ["g", "go to"], ["x", "put an error away"], ["esc q", "close"], ["?", "keys"]];
 
 const TITLE = { permission: "Permissions", question: "Questions", other: "Needs a look" };
 const KIND_COLOR = { yes: "done", always: "accent", auto: "working", no: "blocked" };
@@ -128,7 +133,9 @@ export default class Overview {
     }
     if (m.control || m.platform || m.alt) return;
     let handled = true;
-    if (k === "escape" || k === "q") this.close();
+    if (e.key_char === "?" || k === "?") this.keysShown = !this.keysShown;
+    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    else if (k === "escape" || k === "q") this.close();
     else if (k === "j" || k === "]") this.select(list, 1);
     else if (k === "k" || k === "[") this.select(list, -1);
     else if ((k === "down" || k === "up") && it?.type === "permission" && it.answerable) {
@@ -228,6 +235,7 @@ export default class Overview {
         .child(div().pt(3).child(pip(t.blocked, 6)))
         .child(div().flex_1().min_w(0).text_color(t.blocked).child(`Not sent. ${note}`))))
       .child(v_flex().id("notify-detail").flex_1().min_h(0).overflow_y_scrollbar().pb(12).child(body))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(this.footer(t, it));
   }
 
@@ -359,6 +367,17 @@ export default class Overview {
       .child(hint("esc", "close"))
       .child(div().flex_1())
       .when(Boolean(note), (el) => el.child(div().max_w(320).truncate().text_color(note.bad ? t.blocked : t.done).child(note.bad ? "not sent" : note.text)))
-      .when(!note && this.busy?.id === it?.id, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)));
+      .when(!note && this.busy?.id === it?.id, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)))
+      // ? keys: the bar's last item, after the note.
+      .child(h_flex().id("ov-keys").gap(5).items_center().flex_none().cursor_pointer()
+        .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
+        .child(kbd(t, "?")).child(div().text_color(this.keysShown ? t.foreground : t.dim).child("keys")));
+  }
+
+  /** `?`: every key, over the key bar. */
+  keysStrip(t) {
+    return h_flex().relative().flex_none().flex_wrap().px(20).py(6).gap_x(14).gap_y(4).items_center()
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .children(KEYS.map(([k, w]) => h_flex().gap(5).items_center().flex_none().child(kbd(t, k)).child(div().text_color(t.dim).child(w))));
   }
 }

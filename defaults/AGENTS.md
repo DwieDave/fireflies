@@ -312,7 +312,7 @@ the highlighted line shows where it will land.
   screen is read again before every key: a request that changed or went away
   is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
-  x puts an error away. The overview and the question dialog also take
+  x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
   `down`, `enter`, `space`, `tab`, `back`, `yes-but`, `no-but`, `peek`,
   `goto`, `put-away`, `close`, `1`…`9`. Claude Code's exact requests and its

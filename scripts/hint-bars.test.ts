@@ -78,3 +78,17 @@ test("sidebar: its hint line ends with ?", () => {
   const words = texts((Object.create(Sky.prototype) as any).hints(theme));
   expect(words.join(" ").trim().endsWith("?")).toBe(true);
 });
+
+const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/nocturne-notifications/overview.js");
+
+test("notifications overview: ? keys ends its key bar, after the sent / not sent note; its key list ends with ? too", () => {
+  const o: any = Object.create(Overview.prototype);
+  const it = { id: "a", type: "other", status: "error" };
+  o.note = { id: "a", text: "sent" };
+  expect(texts(o.footer(theme, it)).slice(-3)).toEqual(["sent", "?", "keys"]);
+  o.note = null;
+  expect(texts(o.footer(theme, it)).slice(-2)).toEqual(["?", "keys"]);
+  expect(OVERVIEW_KEYS.at(-1)[0]).toBe("?");
+  o.keysShown = true;
+  expect(texts(o.keysStrip(theme))).toEqual(OVERVIEW_KEYS.flat());
+});
