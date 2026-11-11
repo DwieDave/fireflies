@@ -21,6 +21,7 @@ mock.module("herdr", () => ({
   grep: (_root: string, q: string) => { calls.grep.push(q); return answers[`g:${q}`] ?? { matches: [], files: 0 }; },
   readTextFile: async () => "a\nb\n", highlight: () => { calls.highlight++; return []; }, languageOf: () => null,
   home: () => "/home/me", window: () => ({ platform: "macos" }),
+  shared: () => null, keys: () => [], nextCommand: () => new Promise(() => {}),
 }));
 mock.module("gpui-kit", () => ({ div: () => el, View: class {}, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 const lists: { n: number; sizes: any; key: (i: number) => string }[] = [];
@@ -44,7 +45,7 @@ let now = 0;
 const work: Promise<unknown>[] = [];
 const cx: any = {
   spawn: (f: Function) => { work.push(Promise.resolve(f(cx))); },
-  notify() {}, stop_propagation() {},
+  notify() {}, stop_propagation() {}, bind_keys: () => 2,
   timer: { after: (ms: number, f: Function) => { timers.push({ at: now + ms, f }); } },
 };
 // Lets every answer that is in arrive (a slow one stays pending).

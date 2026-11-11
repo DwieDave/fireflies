@@ -3,11 +3,14 @@
 // order, word starts and runs rank higher. Empty: recent first, then every
 // group. Choices are entries of their own ("Layout: Zen"); commands that need
 // a name ask for it. Enter runs, ↑/↓ move, Esc closes.
+// Every app command is an entry or in OUT with the reason it stays out
+// (scripts/palette-commands.test.ts holds that line); a layout's own mod
+// commands belong in its palette_mod (Nocturne's: mods/nocturne/palette.js).
 // The app's own mod: rewritten from the binary on every start.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win } from "herdr";
+import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win, focused, panes, terminals, agents, updates, layout, spaces, pickFolder } from "herdr";
 
 // The list keeps one height while you move: rows and group titles have fixed
 // heights, and the window shows as many as fit in LIST_H.
@@ -31,8 +34,18 @@ const NAMED = [
   ["pane.split", { direction: "down" }, "Pane", "Split down", "horizontal"],
   ["pane.close", {}, "Pane", "Close pane", "kill"],
   ["pane.zoom", {}, "Pane", "Zoom pane", "maximize fullscreen"],
+  ["pane.park", {}, "Pane", "Park pane", "minimize dock bottom chip hide"],
+  ["pane.unpark", {}, "Pane", "Unpark pane", "restore dock bottom chip show"],
   ...["left", "right", "up", "down"].map((d) => ["pane.go", { direction: d }, "Pane", `Focus pane ${d}`, "move go"]),
   ...["left", "right", "up", "down"].map((d) => ["pane.swap", { direction: d }, "Pane", `Swap pane ${d}`, "move"]),
+  ["pane.equalize", { scope: "all" }, "Pane", "Equalize panes", "even out balance same size grid all"],
+  ["pane.equalize", { scope: "row" }, "Pane", "Equalize this row", "even out balance same width side by side"],
+  ["pane.equalize", { scope: "column" }, "Pane", "Equalize this column", "even out balance same height stacked"],
+  ["pane.float", {}, "Pane", "Float this pane over the tab", "floating overlay detach popup"],
+  ["pane.font_bigger", {}, "Pane", "Bigger text in this pane", "font size zoom larger terminal"],
+  ["pane.font_smaller", {}, "Pane", "Smaller text in this pane", "font size zoom terminal"],
+  ["pane.font_reset", {}, "Pane", "Pane text back to normal size", "font size zoom reset terminal"],
+  ["tab.settle", {}, "Tab", "Put this tab away", "settle hide keep running background out of the list"],
   ["space.new", {}, "Space", "New space", "workspace"],
   ["space.rename", {}, "Space", "Rename space", "workspace"],
   ["space.close", {}, "Space", "Close space", "workspace kill"],
@@ -45,12 +58,23 @@ const NAMED = [
   ["terminal.open", {}, "Terminal", "New terminal", "shell"],
   ["terminal.copy", {}, "Terminal", "Copy", "clipboard"],
   ["terminal.paste", {}, "Terminal", "Paste", "clipboard"],
+  ["terminal.paste_image", {}, "Terminal", "Paste the clipboard image", "clipboard picture screenshot file ctrl-v"],
+  ["terminal.search", {}, "Terminal", "Find in the terminal…", "search scrollback history text"],
+  ["terminal.scroll", { to: "top" }, "Terminal", "Scroll to the top of the history", "scrollback oldest start beginning"],
+  ["terminal.scroll", { to: "bottom" }, "Terminal", "Scroll back to the live screen", "scrollback bottom end newest"],
   ["agent.next", {}, "Agent", "Next agent", ""],
   ["agent.prev", {}, "Agent", "Previous agent", ""],
   ["window.minimize", {}, "Window", "Minimize window", ""],
   ["window.maximize", {}, "Window", "Maximize window", "restore"],
   ["window.close", {}, "Window", "Close window", "quit"],
+  ["overlay.focus", {}, "Window", "Next window", "focus cycle floating terminal keyboard front"],
+  ["overlay.focus", { dir: "prev" }, "Window", "Previous window", "focus cycle floating terminal keyboard front"],
   ["app.settings", {}, "App", "Settings", "preferences options config look font theme sound"],
+  ["app.settings", { section: "look" }, "App", "Settings: look", "preferences theme font size colors appearance"],
+  ["app.settings", { section: "alerts" }, "App", "Settings: alerts", "preferences sounds notifications"],
+  ["app.settings", { section: "editor" }, "App", "Settings: editor", "preferences vim tabs indent lsp"],
+  ["app.settings", { section: "machines" }, "App", "Settings: machines", "preferences ssh remote hosts servers"],
+  ["app.settings", { section: "updates" }, "App", "Settings: updates", "preferences version release"],
   ["app.help", {}, "App", "Keys", "keybindings shortcuts help"],
   ["app.welcome", {}, "App", "Welcome", "intro start onboarding"],
   ["app.whats_new", {}, "App", "What's new", "release changes news update"],
@@ -58,31 +82,118 @@ const NAMED = [
   ["app.zoom_in", {}, "App", "Zoom in", "bigger font size"],
   ["app.zoom_out", {}, "App", "Zoom out", "smaller font size"],
   ["app.zoom_reset", {}, "App", "Reset zoom", "font size"],
+  ["app.feedback", {}, "App", "Send feedback…", "bug report issue github idea problem"],
+  ["app.hide", {}, "App", "Hide Herdr", "macos minimize away"],
+  ["app.hide_others", {}, "App", "Hide other apps", "macos"],
+  ["app.show_all", {}, "App", "Show all apps", "macos unhide"],
   ["app.quit", {}, "App", "Quit Herdr", "exit"],
   ...["graphite", "ink", "moss", "atom-one-dark"].map((n) => ["app.theme", { name: n }, "App", `Theme: ${n.replace(/-/g, " ")}`, "colors look"]),
 ];
 
-// Commands that act on something you point at (ids, terminals): not for a list.
-const HIDDEN = new Set([
-  "space.move", "tab.move", "space.select", "tab.select", "pane.focus", "terminal.keep",
-  "terminal.park", "terminal.kill", "terminal.show", "agent.focus", "layout.set", "layout.toggle",
-  "layout.show", "layout.hide", "layout.resize", "layout.select", "mod.open", "overlay.close",
-  "tab.settle", "tab.unsettle",
-  "app.palette", "app.hide", "app.hide_others", "app.show_all", "app.theme", "app.settings",
-]);
+// Commands that stay out of the list, each with why: most act on something
+// you point at (ids, indexes, paths). A whole name covers its `name:value` keys too.
+export const OUT = {
+  "space.select": "a place: spaces are in the picker (ctrl-1..9 pick by position)",
+  "tab.select": "a place: tabs are in the picker (cmd-1..9 pick by position)",
+  "space.move": "needs a space id and a position: drag it in the sidebar",
+  "tab.move": "needs a tab id and a position: drag it in the tab bar",
+  "pane.focus": "needs a pane: Focus pane left/right/up/down, or click it",
+  "agent.focus": "needs an agent: the agents list and the picker",
+  "terminal.keep": "needs a terminal without a pane (a sub-agent): the agents list",
+  "terminal.show": "needs a terminal: the agents list",
+  "terminal.peek": "needs a terminal: the agents list",
+  "terminal.kill": "needs a terminal: Close pane ends the focused one",
+  "float.view": "needs a view index: the floating terminal's own tabs",
+  "layout.set": "needs a whole layout tree (agents and mods write it)",
+  "layout.show": "needs a layout node id",
+  "layout.hide": "needs a layout node id",
+  "layout.resize": "needs a layout node id and a size: drag the divider",
+  "layout.select": "needs a stack and a child id",
+  "layout.focus": "needs a layout block id",
+  "mod.open": "needs a mod name; the picker's is Go to space or tab…",
+  "overlay.close": "closes the top dialog: esc does it, and the palette is the top dialog until it runs",
+  "overlay.move": "needs how far to move: drag the window",
+  "overlay.resizable": "needs a window id and its sizing (mods set it)",
+  "native.debug": "a report for agents (herdr-app do native.debug): nothing to see from a list",
+  "native.call": "needs a native view key and an action (mods call it)",
+  "app.palette": "the palette itself",
+  "app.theme": "needs a theme name: the Theme: … rows, and Settings: look",
+  "app.open_url": "needs a URL (links open it)",
+  "editor.open": "needs a path (a layout's file picker opens files: Nocturne's Find a file…)",
+  "markdown.open": "needs a path (a layout's file picker opens files)",
+  "preview.open": "needs a path (a layout's file picker opens files)",
+  "image.open": "needs a path (the old name of preview.open)",
+  "files.open": "needs a path (Nocturne's palette opens the focused folder's)",
+  "tab.unsettle": "needs a put-away tab: showing it from the picker brings it back",
+};
 
 function titleOf(name) {
   const [noun, verb] = name.split(".");
   return { group: noun.charAt(0).toUpperCase() + noun.slice(1), title: `${verb.replace(/_/g, " ")} ${noun}`.replace(/^./, (c) => c.toUpperCase()) };
 }
 
+/** A layout node by id, anywhere in the shown layout. */
+function hasNode(node, id) {
+  if (!node || typeof node !== "object") return false;
+  if (node.id === id) return true;
+  return Object.values(node).some((v) => (Array.isArray(v) ? v.some((c) => hasNode(c, id)) : v && typeof v === "object" && hasNode(v, id)));
+}
+
+// Core commands for what's focused or waiting now: only stateEntries adds them.
+const STATE = new Set(["pane.move", "terminal.right_click", "terminal.park", "terminal.pin", "layout.toggle", "space.folder",
+  "app.update", "app.update_core", "app.check_updates"]);
+
+/** The focused pane and terminal, the shown space and layout, an update. */
+function stateEntries() {
+  const out = [];
+  const f = focused();
+  const ps = panes(), mine = f?.pane ? ps.find((p) => p.pane === f.pane) : null;
+  if (mine && ps.filter((p) => p.tab === mine.tab).length > 1) {
+    out.push({ name: "pane.move", args: {}, group: "Pane", title: "Move this pane to a new tab", words: "pane move tab own detach break out" });
+  }
+  const all = terminals(), term = f?.terminal ? all.find((x) => x.address === f.terminal) : null;
+  if (term) {
+    const toProgram = term.labels?.["herdr.right-click"] === "program";
+    out.push({ name: "terminal.right_click", args: { to: toProgram ? "menu" : "program", terminal: term.address }, group: "Terminal",
+      title: toProgram ? "Right-clicks open the menu" : "Send right-clicks to the program", words: "mouse right click menu program tmux vim" });
+    const parent = term.parent && all.find((x) => x.address === term.parent);
+    if (parent) out.push({ name: "terminal.park", args: { terminal: term.address }, group: "Agent",
+      title: `Send back to ${parent.name || parent.address}`, words: "sub-agent subagent parent park return pane" });
+    const agent = agents().find((a) => a.address === term.address);
+    if (agent) {
+      const on = Boolean(agent.pinned);
+      out.push({ name: "terminal.pin", args: { terminal: term.address, pinned: !on }, group: "Agent",
+        title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top agents list" });
+    }
+  }
+  if (hasNode(layout(), "sidebar")) {
+    out.push({ name: "layout.toggle", args: { id: "sidebar" }, group: "Layout", title: "Show or hide the sidebar", words: "toggle sidebar collapse hide" });
+  }
+  const space = spaces().find((s) => s.active);
+  if (space && !space.machine) {
+    out.push({ name: "space.folder", args: { id: space.id }, group: "Space", title: "Change this space's folder…", words: "space folder directory attach repo cwd",
+      go: async () => { const folder = await pickFolder({ prompt: "The space's folder" }); if (folder) run("space.folder", { id: space.id, folder }); } });
+  }
+  const u = updates();
+  if (u?.app?.ready) out.push({ name: "app.update", args: {}, group: "App", title: `Restart into ${u.app.ready}`, words: "update upgrade new version restart" });
+  if (u?.core?.ready && !u.core.managed) out.push({ name: "app.update_core", args: {}, group: "App", title: `Update herdr-core to ${u.core.ready}`, words: "update upgrade core terminals keep running" });
+  if (u?.checks !== false) out.push({ name: "app.check_updates", args: {}, group: "App", title: "Check for updates", words: "update upgrade new version release" });
+  return out;
+}
+
+// Commands that need a terminal focused (they fail on a mod pane).
+const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.paste_image", "terminal.search", "terminal.scroll",
+  "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
+const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
+
 // Every entry for the state we're in now.
 function entries() {
   const known = new Set(commands().map((c) => c.name));
   const mac = win()?.platform === "macos";
-  const list = NAMED.filter(([n]) => known.has(n))
-    .filter(([n]) => !(mac && n.startsWith("window.")))
-    .map(([name, args, group, title, words]) => ({ name, args, group, title, words }));
+  const terminal = Boolean(focused()?.terminal);
+  const list = [...NAMED.filter(([n]) => known.has(n))
+    .filter(([n]) => !(mac && n.startsWith("window.")) && (mac || !MAC_ONLY.has(n)) && (terminal || !NEEDS_TERMINAL.has(n)))
+    .map(([name, args, group, title, words]) => ({ name, args, group, title, words })), ...stateEntries().filter((e) => known.has(e.name))];
   for (const l of layouts()) {
     const t = { main: "Herdr", terminals: "Terminals", win98: "Herdr 98" }[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
     list.push({ name: "layout.switch", args: { name: l }, group: "Layout", title: `Layout: ${t}`, words: `look ${l}` });
@@ -90,17 +201,18 @@ function entries() {
   // Anything new in the app shows up too, until it gets a better name here.
   const named = new Set(NAMED.map(([n]) => n));
   for (const c of commands()) {
-    if (named.has(c.name) || HIDDEN.has(c.name) || c.args.some((a) => a.required && a.name !== "name")) continue;
+    if (named.has(c.name) || c.name in OUT || STATE.has(c.name) || c.args.some((a) => a.required && a.name !== "name")) continue;
     list.push({ name: c.name, args: {}, ...titleOf(c.name), words: c.about });
   }
   return list.map((e) => ({ ...e, id: `${e.name}:${JSON.stringify(e.args)}` }));
 }
 
-// The key bound to an entry: `name` or `name:value` in keys.json.
-function keyOf(e, bound) {
+// The key bound to an entry: `name` or `name:value` in keys.json, global or
+// (for the terminal's commands) the terminal section.
+export function keyOf(e, bound) {
   const v = Object.values(e.args)[0];
   const want = v === undefined ? e.name : `${e.name}:${v}`;
-  const k = bound.find((b) => b.section === "global" && b.action === want);
+  const k = bound.find((b) => b.section === "global" && b.action === want) ?? bound.find((b) => b.section === "terminal" && b.action === want);
   return k ? k.keys : null;
 }
 
@@ -152,6 +264,7 @@ export default class Palette extends View {
     this.recent = [e.id, ...this.recent.filter((r) => r !== e.id)].slice(0, 20);
     localStorage.setItem("recent", JSON.stringify(this.recent));
     this.close();
+    if (e.go) return e.go();
     if (e.name === "mod.clone") {
       openOverlay({ mod: "prompt", kind: "dialog", width: 380, props: {
         title: "Duplicate mod", hint: "Mod to copy; creates <name>-copy",

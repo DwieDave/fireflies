@@ -9,6 +9,8 @@
 //           (git.js, nocturne-git); again closes it. Its ▾ (or a right-click)
 //           drops a menu: Git, Diff (Git's review) and GitHub.
 //   + new   the Nocturne new menu (newmenu.js)
+// Drag a tab along the strip to move it (tabdrag.js): it lifts where it is
+// and a stake marks the gap it drops into; leaving the strip drops nothing.
 // The drop-downs (+ new, the script deck) hang under their button, right
 // edges lined up (kit.js dropBelow); a second press closes them. A rule like
 // the ones between the groups closes the strip before the bell's block.
@@ -36,12 +38,15 @@ import { filesPane, toggleFiles, focusFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
 import { runJobs, pendingJobs } from "./jobs.js";
 import { watchPrompts } from "./prompt.js";
+import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
 
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 
 export default class Tabs {
   init(_props, cx) {
-    this.pressed = null;
+    this.pressed = null; // { id, x }: the tab a left press went down on, and where
+    this.drag = null; // { id, gap }: the tab being dragged and the gap it's over (tabdrag.js)
+    this.order = []; // the active space's tab ids, as last drawn
     this.git = null; // gitState() of the active space's folder, null outside a repo
     this.poll(cx);
     cx.timer.every(5000, (cx) => this.poll(cx));
@@ -213,6 +218,41 @@ export default class Tabs {
   /** Is the cursor on this control of the strip's own row? */
   at(id) { return this.navOn && this.row === "tabs" && this.cursor === id; }
 
+  // ---- dragging a tab (tabdrag.js)
+
+  /** The pointer moved over a gap while a press is down: past DRAG_START it's
+   *  a drag, and the gap it's over is where the stake stands. */
+  dragOver(gap, e, cx) {
+    const p = this.pressed;
+    if (!p) return;
+    if (!this.drag) {
+      if (Math.abs(e.position.x - p.x) < DRAG_START) return;
+      this.drag = { id: p.id, gap: null };
+    }
+    if (this.drag.gap?.id === gap.id && this.drag.gap?.after === gap.after) return;
+    this.drag.gap = gap;
+    cx.notify();
+  }
+
+  /** The press let go in the strip: a drag drops where its stake stands. */
+  drop(cx) {
+    const d = this.drag;
+    this.drag = null;
+    this.pressed = null;
+    if (!d) return;
+    const index = dropIndex(this.order, d.id, d.gap);
+    if (index != null) run("tab.move", { id: d.id, index });
+    cx.notify();
+  }
+
+  /** The pointer left the strip: the drag ends where it started. */
+  cancelDrag(cx) {
+    const dragging = Boolean(this.drag);
+    this.drag = null;
+    this.pressed = null;
+    if (dragging) cx.notify();
+  }
+
   // Where the git button looks: the active space's folder, on its machine.
   target() {
     const space = spaces().find((s) => s.active);
@@ -295,39 +335,51 @@ export default class Tabs {
     this.collect(space, shown);
     if (on && !this.item()) this.place(this.liveRows().includes(this.row) ? this.row : "tabs");
     this.tell(on);
-    const item = (c, i) => {
+    this.order = (space?.tabs ?? []).map((c) => c.id);
+    const drag = this.drag;
+    const at = drag ? stakeAt(this.order, shown.map((c) => c.id), drag.id, dropIndex(this.order, drag.id, drag.gap)) : null;
+    const item = (c) => {
       const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
       // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
       const name = c.named ? c.name : givenName(lead?.terminal) ?? (lead?.program?.agent ? lead.program.name : lead?.title || lead?.program?.name || c.name);
       const prog = lead?.program;
+      const lifted = drag?.id === c.id;
       return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
-        .text_size(11).text_color(c.active ? t.foreground : t.muted)
+        .text_size(11).text_color(c.active || lifted ? t.foreground : t.muted)
         .hover((s) => s.text_color(t.foreground))
-        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = i; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
-        .on_mouse_up("left", () => {
-          const from = this.pressed; this.pressed = null;
-          if (from !== null && from !== i) run("tab.move", { id: shown[from].id, index: space.tabs.findIndex((x) => x.id === c.id) + 1 });
-          else run("tab.select", { id: c.id });
-        })
+        // Dragged: lifted where it is, behind its words.
+        .when(lifted, (el) => el.children(lift(t)))
+        .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.pressed = { id: c.id, x: e.position.x }; if (e.click_count === 2) run("tab.rename", { id: c.id }); })
+        .on_mouse_move((e, cx) => this.dragOver(gapAt(c.id, e.local_position.x, e.bounds.width), e, cx))
+        // A click (no drag) shows the tab; a drag drops in the strip's mouse up.
+        .on_mouse_up("left", () => { if (!this.drag && this.pressed?.id === c.id) run("tab.select", { id: c.id }); })
         // Middle click closes the tab, as in a browser.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); run("tab.close", { id: c.id }); })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); openMenu({ tab: "tab", target: { id: c.id, space: space.id } }); })
-        .child(div().text_color(c.active ? t.accent : t.dim).child(String(c.index)))
+        .child(div().text_color(c.active || lifted ? t.accent : t.dim).child(String(c.index)))
         .when(Boolean(prog?.icon), (el) => el.child(prog.tint ? svg(prog.icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(prog.icon).size(12)))
         .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
         .child(pip(t, c.status))
         .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
-        .map((el) => navRing(t, el, this.at(`tab:${c.id}`)));
+        .map((el) => navRing(t, el, this.at(`tab:${c.id}`)))
+        .when(at?.before === c.id, (el) => el.child(stake(t)));
     };
+    // Past the last tab: the gap at the end, at least wide enough to aim at.
+    const end = div().id("tab-end").relative().flex_1().min_w(24).h_full()
+      .on_mouse_move((e, cx) => this.dragOver({ id: null, after: false }, e, cx))
+      .when(Boolean(at) && at.before === null, (el) => el.child(stake(t)));
     const rule = () => div().w(1).h(14).mx(4).flex_none().bg(t.ansi0);
-    return h_flex().id("tabs").relative().size_full().min_w(0).pl(4).pr(0).items_center().bg(t.background)
+    return h_flex().id("tabs").relative().size_full().min_w(0).pr(0).items_center().bg(t.background)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .on_mouse_up("left", () => { this.pressed = null; })
+      .on_mouse_up("left", (_e, cx) => this.drop(cx))
+      .on_hover((hovered, cx) => { if (!hovered) this.cancelDrag(cx); })
+      .when(Boolean(drag), (el) => el.cursor_grabbing())
       .on_scroll_wheel((e) => { if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next"); })
       // The horizon: a 2 px dithered line the tabs stand on.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)))
+      // Its left padding inside the scroll, so a stake before the first tab isn't cut.
+      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)).child(end))
       .child(h_flex().flex_none().gap(2).items_center()
         .child(scriptsControl(t, (...a) => this.tool(...a)))
         .child(rule())

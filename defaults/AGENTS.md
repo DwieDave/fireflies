@@ -548,10 +548,39 @@ the highlighted line shows where it will land.
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
   (`nocturne.grep`) searches every file's text as you type, lines grouped by
   file. Both are fff's (`findFiles`, `grep`): git-ignored files stay out, the
-  folder's index stays warm while it's used. tab switches mode, ↑↓ pick, enter
-  opens in the editor (grep: at the line), ctrl-r regex, ctrl-t fuzzy lines,
-  esc closes; a wide window shows the picked file around the line. Pressing
-  the same key again closes it.
+  folder's index stays warm while it's used. It covers most of the window: the
+  list beside a preview of the picked file around the line, about two thirds
+  wide and as tall as the picker (narrow windows drop the preview). tab or
+  shift-tab switches mode keeping the query, and so does the other mode's key
+  while it's open (cmd-shift-f in files, cmd-p in grep; each chip at the top
+  right names its key); the same key again closes it. ↑↓ or ctrl-p / ctrl-n
+  pick, pgup / pgdn page, enter opens in the editor (grep: at the line),
+  ctrl-r regex, ctrl-t fuzzy lines, esc closes. The hint bar lists every key.
+  A `query` prop starts the box with text. Tab is the base's focus key: a mod
+  that wants it binds it to an action in its own `key_context` (`cx.bind_keys`),
+  as the picker does; an `on_key_down` alone never hears it.
+- **The command palette** (`app.palette`, cmd-shift-p) lists every command a
+  person can run without pointing at something, each row with the key that
+  runs it now (a key a layout or the focused pane takes for something else
+  isn't shown on the row it shadows). Commands for what's focused or waiting
+  show only then: terminal ones on a terminal; pin, right-clicks to the
+  program, Send back to the parent for the focused agent or sub-agent; Move
+  this pane to a new tab beside another pane; Restart into / Update
+  herdr-core once an update waits. Commands that need an id, index, path or
+  URL (`tab.select`, `pane.focus`, `editor.open`, ...) stay out: the
+  palette's `OUT` list names each with its reason, and a test fails when a
+  command, a shipped key's action or a Nocturne mod command is neither in it
+  nor in the palette. Nocturne's palette (its `palette_mod`) adds its own:
+  Find a file… and Grep the project… (`nocturne.picker`, `nocturne.grep`),
+  New… (the + new menu), the panels, Start <agent> (beside or in a tab), New
+  worktree…, Notifications, the keyboard to the sidebar / tab strip / pane
+  header, the toast's action, and while it's focused the focused pane's own
+  commands (an editor's save, find, go to line, problems, vim...; a web
+  pane's address, reload, back, inspect...; the Markdown viewer's, the
+  preview's, the agents graph's, usage's), and the git and GitHub windows'
+  while they're open. A mod opening Nocturne's palette itself
+  (`openOverlay({ mod: "nocturne", props: { dialog: "palette", query } })`)
+  may hand it a search to start from.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
@@ -700,10 +729,12 @@ Properties any node can have:
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
   `rounded*` included. Default `"round"`: as each asks.
-- Root only: `"scrim"` (this fork): what dims the window behind a dialog (and the command palette),
-  `{"color": "#080808", "opacity": 0.85, "dither": true, "cell": 1}` (color: a
-  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px). Default:
-  black at 35%.
+- Root only: `"scrim"` (this fork): what dims the window behind a dialog (and the command palette,
+  and windows / popups opened with `scrim: true`),
+  `{"color": "#000000", "opacity": 1, "dither": true, "fill": 0.45, "cell": 1}` (color: a
+  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px; `fill`: the same
+  color at that opacity under the checker, so a dithered scrim can dim past half).
+  Default: black at 35%.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
@@ -898,6 +929,14 @@ rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
+Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
+lifts where it is and a blue stake stands in the gap it will drop into: the
+half of the tab under the pointer picks before or after it, the strip past the
+last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
+drops nothing. Two blue corner ticks mark what's shown: the shown space on the
+folded rail, the focused agent in the sky (around its name, over its moonlit
+path) and on the rail.
+
 ### Layouts and mods other people made
 
 People share layouts at herdr.dev/layouts and mods at herdr.dev/mods. Each
@@ -1031,10 +1070,11 @@ The main ones:
   toast with its exit code and last output lines. Or `tab.new {name?, space?, mod,
   props?}` for a tab whose only pane is a mod (a file, a board; split a shell
   in beside it like any tab), `tab.close {id?, confirmed?}` (closing the last tab
-  closes its space and asks first unless confirmed; a tab where something runs, an
-  agent working or needing you or a program other than the shell in front, asks the
-  person first however it is closed (keys, menus, middle-click, a mod's `run`), and
-  from a script fails unless confirmed; an idle tab just closes),
+  closes its space and asks first unless confirmed; a tab holding an agent, whatever
+  its status (idle too, or one a terminal there started), a program other than the
+  shell in front or unsaved work asks the person first however it is closed (keys,
+  menus, middle-click, a mod's `run`), naming the agents and counting them, and from a
+  script fails unless confirmed; a tab of shells at their prompts just closes),
   `tab.rename {id?, name}` ("": its number again), `tab.move {id, index}`,
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
@@ -1047,7 +1087,9 @@ The main ones:
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
   flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?, confirmed?}`
-  (a mod pane holding unsaved work, an editor's, asks the person first; a script passes `confirmed`),
+  (a pane holding an agent, whatever its status, or a mod pane holding unsaved work, an
+  editor's, asks the person first, parked ones too; a script passes `confirmed`; a shell
+  or another program closes without a word, so tool panes toggle quietly),
   `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this

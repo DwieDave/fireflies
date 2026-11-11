@@ -5,11 +5,18 @@
 // grouped by file. Both are fff's (the engine behind fff.nvim): git-ignored
 // files stay out, and the folder's index is kept warm while it's used. In a
 // wide window a preview shows the picked file around the line.
-// Props: { mode: "files" | "grep", folder, on, overlay }.
+// Props: { mode: "files" | "grep", folder, on, query? (the box's first text), overlay }.
 //
 // Keys: up / down (ctrl-p / ctrl-n) pick, enter opens (grep: at the line),
-// tab switches mode keeping the query, ctrl-r regex (grep), ctrl-t fuzzy
-// lines (grep), esc closes.
+// tab / shift-tab switch mode keeping the query, and so do the global keys
+// inside it (cmd-shift-f to grep, cmd-p to files: nocturne/picker.js sends
+// "grep" / "files" to nextCommand()), ctrl-r regex (grep), ctrl-t fuzzy lines
+// (grep), esc closes. The hint bar lists every one of them: the box takes
+// typing, so there's no ? list here.
+//
+// Tab is the base's focus key (Root's Tab action, and the Input's indent)
+// before any on_key_down hears it: bound to an action in the picker's own key
+// context, it switches the mode instead.
 //
 // Rendering stays cheap at any repo size (a render has 50 ms): typing waits
 // for a pause before it searches (fff runs off the window's thread), an
@@ -19,13 +26,15 @@
 import { div } from "gpui-kit";
 import { View } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { props, theme, settings, closeOverlay, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, window as appWindow } from "herdr";
+import { props, theme, settings, closeOverlay, shared, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
 import { PathBuilder, Background } from "gpui-kit";
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE } from "./logic.js";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor } from "./logic.js";
 
 const ROW = 28, LINE = 24, HEAD = 26;
 const FILES_LIMIT = 80, GREP_LIMIT = 400;
-const PREVIEW_MIN = 860; // the overlay's width from which the preview shows
+const OPEN = "nocturne.picker-open"; // { id, mode }: nocturne/picker.js's note of the open picker
+const CONTEXT = "NocturnePicker", SWITCH = "nocturne_picker::switch";
+const GLOBAL = { files: ["nocturne.picker", "cmd-p"], grep: ["nocturne.grep", "cmd-shift-f"] };
 const GIT = { M: "ansi3", A: "ansi2", U: "ansi5", D: "ansi1", R: "ansi4", "!": "ansi9" };
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
@@ -56,11 +65,27 @@ export default class Picker extends View {
     this.scroll = VirtualListScrollHandle.new();
     this.gen = 0; // which answer the rows are: a click on an older list's row is dropped
     this.typed = 0;
-    this.input = InputState.new({ placeholder: this.placeholder() });
-    this.input.on("change", (_e, cx) => this.typing(cx));
-    this.input.on("submit", (e, cx) => this.open(e?.secondary));
-    this.input.focus();
+    this.makeInput(typeof pr.query === "string" ? pr.query : "");
+    // The opener's note names this picker (again, after a reload of the mod).
+    if (pr.overlay) setShared(OPEN, { id: pr.overlay, mode: this.mode });
     cx.timer.after(200, () => this.input.focus());
+    if (!Picker.bound) {
+      try {
+        cx.bind_keys([
+          { keystroke: "tab", action: SWITCH, context: CONTEXT },
+          { keystroke: "shift-tab", action: SWITCH, context: CONTEXT },
+        ]);
+        Picker.bound = true;
+      } catch { /* the key handler still tries */ }
+    }
+    // cmd-shift-f / cmd-p while it's open (nocturne/picker.js): that mode, here.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        let c;
+        try { c = await nextCommand(); } catch { return; }
+        if (c === "files" || c === "grep") { this.setMode(c, cx); cx.notify(); }
+      }
+    });
     cx.spawn(async (cx) => {
       // The repository's top, so the whole project is searched.
       if (this.root && !this.on) {
@@ -69,6 +94,16 @@ export default class Picker extends View {
       }
       this.query(cx);
     });
+  }
+
+  /** The text box, holding `value`; made again on a mode switch, as its
+   *  placeholder names the mode. */
+  makeInput(value) {
+    this.input?.release?.();
+    this.input = InputState.new({ placeholder: this.placeholder(), value });
+    this.input.on("change", (_e, cx) => this.typing(cx));
+    this.input.on("submit", (e, cx) => this.open(e?.secondary));
+    this.input.focus();
   }
 
   placeholder() {
@@ -80,8 +115,11 @@ export default class Picker extends View {
   }
 
   /** Herdr's last call: nocturne's cmd-p noted the open picker
-   *  (nocturne/picker.js); it's gone now. */
-  async close() { setShared("nocturne.picker-open", null); }
+   *  (nocturne/picker.js); it's gone now, if the note is this one's. */
+  async close() {
+    const open = shared(OPEN), me = props()?.overlay;
+    if (!me || open?.id === me) setShared(OPEN, null);
+  }
 
   /** A key in the box: search once typing pauses (the newest text then). */
   typing(cx) {
@@ -127,9 +165,18 @@ export default class Picker extends View {
     });
   }
 
-  switchMode(cx) {
-    this.mode = this.mode === "files" ? "grep" : "files";
-    this.rows = []; this.at = -1; this.preview = null;
+  /** Tab, a chip, or the other mode's global key: the other mode, the
+   *  query kept. */
+  switchMode(cx) { this.setMode(otherMode(this.mode), cx); }
+
+  setMode(mode, cx) {
+    if (mode === this.mode) return;
+    this.mode = mode;
+    this.rows = []; this.at = -1; this.preview = null; this.total = null; this.note = null;
+    this.makeInput(this.input.value());
+    // nocturne/picker.js's note follows, so the same key again closes it.
+    const open = shared(OPEN);
+    if (open?.id) setShared(OPEN, { ...open, mode });
     this.query(cx);
   }
 
@@ -144,9 +191,11 @@ export default class Picker extends View {
   /** The picked file around its line, when the preview shows. */
   loadPreview(cx) {
     const r = this.rows[this.at];
-    if (!r || this.size.width < PREVIEW_MIN) { this.preview = null; return; }
+    if (!r || !previewWidth(this.size.width)) { this.preview = null; return; }
     const path = `${this.root}/${r.path}`, line = r.match?.line ?? 1;
-    if (this.preview?.path === path && this.preview.line === line) return;
+    // As many lines as fill its height, the hit a third of the way down.
+    const count = previewLines(this.size.height);
+    if (this.preview?.path === path && this.preview.line === line && this.preview.count >= count) return;
     const want = { path, line };
     this.want = want;
     cx.spawn(async (cx) => {
@@ -154,8 +203,8 @@ export default class Picker extends View {
       try { text = await readTextFile(path); } catch { /* too big or unreadable */ }
       if (this.want !== want) return;
       if (text == null || text.includes("\0")) { this.preview = { path, line, from: 1, lines: [], note: text == null ? "can't show this file" : "binary file" }; cx.notify(); return; }
-      const { from, lines } = around(text, line, 40);
-      this.preview = { path, line, from, lines, runs: this.previewRuns(path, lines), lang: languageOf(path) };
+      const { from, lines } = around(text, line, count);
+      this.preview = { path, line, count, from, lines, runs: this.previewRuns(path, lines), lang: languageOf(path) };
       cx.notify();
     });
   }
@@ -194,18 +243,27 @@ export default class Picker extends View {
 
   render(cx) {
     const t = theme();
-    const wide = this.size.width >= PREVIEW_MIN;
+    const wide = previewWidth(this.size.width) > 0;
+    const bound = keys(), key = (m) => keyFor(bound, ...GLOBAL[m]), other = otherMode(this.mode);
     const code = settings()?.font_family || "JetBrains Mono";
     const count = this.mode === "files"
       ? (this.total != null ? `${this.rows.length} of ${this.total}` : "")
       : this.input.value().trim() ? `${this.total ?? 0} lines${this.files != null ? ` in ${this.files} files` : ""}` : "";
-    const modeChip = (m) => div().id(`mode-${m}`).px(9).py(3).text_color(this.mode === m ? t.background : t.dim)
+    // Each chip carries its key; the one shown is lit.
+    const modeChip = (m) => h_flex().id(`mode-${m}`).px(9).py(3).gap(8).items_center().text_color(this.mode === m ? t.background : t.dim)
       .when(this.mode === m, (el) => el.bg(t.accent))
-      .when(this.mode !== m, (el) => el.hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { this.switchMode(cx); }))
-      .child(m);
+      .when(this.mode !== m, (el) => el.hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { this.setMode(m, cx); cx.notify(); }))
+      .child(div().child(m))
+      .child(div().text_size(9.5).text_color(this.mode === m ? t.background : t.ansi8).opacity(this.mode === m ? 0.75 : 1).child(key(m)));
     const hint = (k, what) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what));
+    // Two keys for one thing: "tab / cmd-shift-f grep".
+    const hint2 = (a, b, what) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(a)).child(div().text_color(t.ansi8).child("/"))
+      .child(div().text_color(t.accent).child(b)).child(div().text_color(t.dim).child(what));
     return v_flex().id("nocturne-picker").size_full().bg(t.background).border(1).border_color(t.ansi0).text_size(11)
-      .on_size_change((size, cx) => { this.size = size; this.loadPreview(cx); cx.notify(); })
+      .key_context(CONTEXT)
+      .on_action(SWITCH, (_e, cx) => { this.switchMode(cx); cx.notify(); })
+      // Logical px in, the zoomed px every w() / h() here is drawn in out.
+      .on_size_change((size, cx) => { this.size = { width: size.width / zoom(), height: size.height / zoom() }; this.loadPreview(cx); cx.notify(); })
       .on_key_down((e, cx) => {
         const k = e.keystroke;
         if (k === "escape") return this.dismiss();
@@ -238,14 +296,15 @@ export default class Picker extends View {
           .when(!this.rows.length && !this.note, (el) => el.child(div().px(16).py(10).text_color(t.dim)
             .child(this.mode === "files" ? (this.input.value() ? "No file matches." : "") : this.input.value().trim() ? "No line matches." : "Type to search the text of every file."))))
         .when(wide && !!this.preview, (el) => el.child(this.previewView(t, code))))
-      .child(h_flex().relative().h(26).flex_none().px(16).gap(14).items_center().text_size(10)
+      // The keys wrap onto a second line in a narrow window rather than run off it.
+      .child(h_flex().relative().flex_wrap().min_h(26).flex_none().px(16).py(6).gap_x(14).gap_y(4).items_center().text_size(10)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(hint("↑↓", "pick")).child(hint("enter", this.mode === "files" ? "edit" : "edit at line"))
-        .child(hint("tab", this.mode === "files" ? "grep" : "files"))
+        .child(hint2("↑↓", "ctrl-p ctrl-n", "pick")).child(hint("pgup pgdn", "page")).child(hint("enter", this.mode === "files" ? "edit" : "edit at line"))
+        .child(hint2("tab", key(other), other))
         .when(this.mode === "grep", (el) => el.child(hint("ctrl-r", "regex")).child(hint("ctrl-t", "fuzzy")))
         .child(hint("esc", "close"))
         .child(div().flex_1())
-        .child(div().text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms != null ? ` · ${this.ms} ms` : ""}` : "")));
+        .child(div().min_w(0).text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms != null ? ` · ${this.ms} ms` : ""}` : "")));
   }
 
   /** The rows, only those on screen drawn: files are one height, grep's
@@ -314,7 +373,7 @@ export default class Picker extends View {
     const p = this.preview;
     const rel = p.path.startsWith(this.root + "/") ? p.path.slice(this.root.length + 1) : p.path;
     const lines = p.runs ?? [];
-    return v_flex().id("picker-preview").w(Math.round(this.size.width * 0.5)).flex_none().h_full().border_l(1).border_color(t.ansi0)
+    return v_flex().id("picker-preview").w(previewWidth(this.size.width)).flex_none().h_full().border_l(1).border_color(t.ansi0)
       .child(h_flex().h(26).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.ansi0).text_color(t.dim)
         .child(div().text_color(t.foreground).truncate().child(rel))
         .child(div().child(`${p.line}`))
@@ -325,7 +384,7 @@ export default class Picker extends View {
         .children(lines.map((runs, k) => {
           const n = p.from + k;
           const hit = n === p.line;
-          return h_flex().id(`pv-${k}`).relative().h(20).flex_none().items_center()
+          return h_flex().id(`pv-${k}`).relative().h(PREVIEW_LINE).flex_none().items_center()
             .when(hit, (el) => el.bg(t.accent + "14").child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
             .child(div().w(48).flex_none().text_right().pr(12).text_color(hit ? t.foreground : t.dim).child(String(n)))
             .child(h_flex().flex_1().min_w(0).overflow_hidden().children(runs.map(([piece, color], j) => div().id(`pv-${k}-${j}`).flex_none().text_color(color ?? t.foreground).child(piece))));

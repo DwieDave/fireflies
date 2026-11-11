@@ -28,6 +28,16 @@ export function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 
+/** The dim under a popup inside the window (a menu, a confirm, a prompt):
+ *  black, dithered, light enough that the window stays readable under it.
+ *  Every in-window popup dims with this one (nocturne-github's kit.js too). */
+export const POPUP_SCRIM = "#0000008c";
+
+/** The layer that dims the window under an in-window popup (POPUP_SCRIM). */
+export function popupScrim(id) {
+  return div().id(id).absolute().inset_0().child(dither(POPUP_SCRIM, 1));
+}
+
 /** The graph's lane colors, by index (graph.js LANE_COLORS). */
 export const laneColors = (t) => [t.ansi4, t.ansi2, t.ansi5, t.ansi6, t.ansi3, t.ansi13 ?? t.ansi5, t.ansi10 ?? t.ansi2, t.ansi12 ?? t.ansi4];
 
