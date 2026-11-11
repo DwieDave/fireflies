@@ -87,7 +87,25 @@ const TEXT_HEAD = `[ -f "$1" ] || exit 3; wc -c < "$1"; wc -l < "$1"; head -c ${
 // What changed a file without reading it all (a database being written): size and time.
 const STAMP = `[ -f "$1" ] || exit 3; wc -c < "$1"; date -r "$1" +%s 2>/dev/null || stat -c %Y "$1"; od -An -v -tx1 -N 16 "$1"`;
 
+// What's read and worked out for the shown file (text with its highlight, a
+// table's rows, a patch's, a database's tables) is kept off the view object:
+// before a nested view takes new props the app walks every object reachable
+// from it (to undo a failed update) and refuses past 10,000 objects or
+// 100,000 properties. Held on the view, a big highlighted file (a Cargo.lock)
+// failed every next file's props and the split stayed on it.
+const HELD = new WeakMap();
+const held = (view) => { let h = HELD.get(view); if (!h) HELD.set(view, (h = {})); return h; };
+
 export default class Viewer extends View {
+  get text() { return held(this).text; }
+  set text(v) { held(this).text = v; }
+  get grid() { return held(this).grid; }
+  set grid(v) { held(this).grid = v; }
+  get patch() { return held(this).patch; }
+  set patch(v) { held(this).patch = v; }
+  get db() { return held(this).db; }
+  set db(v) { held(this).db = v; }
+
   init(p, cx) {
     // Embedded (the files pane's split): its props come from the pane that mounts it.
     this.embedded = Boolean(p?.embedded);
@@ -201,10 +219,15 @@ export default class Viewer extends View {
     // Another machine's pictures, PDFs, fonts and clips would be fetched whole: not for a look.
     if (this.embedded && this.on && COPIED.includes(this.kind)) { this.fail(cx, `On ${this.on}: p opens this ${noun(this.kind)} in the preview`); return; }
     cx.spawn(async (cx) => {
-      if (this.kind === "text" || this.kind === "markdown") await this.loadLook(cx, gen);
-      else if (TEXT.includes(this.kind)) await this.loadText(cx, gen);
-      else if (this.kind === "sqlite") await this.loadDb(cx, gen);
-      else await this.loadCopy(cx, gen);
+      // A file that breaks the reading says so in its place; the next one loads as ever.
+      try {
+        if (this.kind === "text" || this.kind === "markdown") await this.loadLook(cx, gen);
+        else if (TEXT.includes(this.kind)) await this.loadText(cx, gen);
+        else if (this.kind === "sqlite") await this.loadDb(cx, gen);
+        else await this.loadCopy(cx, gen);
+      } catch (e) {
+        if (gen === this.gen) this.fail(cx, `Can't show it: ${e?.message ?? e}`);
+      }
     });
   }
 
