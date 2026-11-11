@@ -44,7 +44,7 @@ mock.module("gpui-base", () => ({
   InputState: { new: () => new Input() }, Input: { new: () => new El() },
   ScrollHandle: { new: () => ({ scroll_to_item() {} }) }, VirtualListScrollHandle: { new: () => ({}) },
 }));
-const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} } };
+const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => true }), new: () => ({ set_props() {} }), timer: { every() {}, after() {} } };
 (globalThis as any).window = { paint_path: () => new El() };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 

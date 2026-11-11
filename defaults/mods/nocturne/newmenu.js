@@ -95,14 +95,17 @@ function items(agents) {
 /** Opens the menu, or closes it when it's open: hanging under the tab
  *  strip's "+ new" (`at`, kit.js dropBelow; else under the pointer), dead
  *  center from a key (cmd-n), where the pointer could be anywhere. A dialog
- *  also takes the keyboard, so esc and the menu's keys reach it. */
-export function openNewMenu({ centered = false, at = null } = {}) {
+ *  also takes the keyboard, so esc and the menu's keys reach it.
+ *  `wasOpen`: "+ new" was lit when pressed (tabs.js tool): the press closed
+ *  the menu already, or closes it now; either way it stays closed. */
+export function openNewMenu({ centered = false, at = null, wasOpen = false } = {}) {
   const open = shared(OPEN);
   if (open) {
     setShared(OPEN, null);
     closeOverlay(open);
     return;
   }
+  if (wasOpen) return;
   setShared(OPEN, openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width: WIDTH, height: newMenuHeight(),
     ...(at && !centered ? { at } : {}), props: { role: "new" } }));
 }

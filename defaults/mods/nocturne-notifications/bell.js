@@ -1,24 +1,29 @@
 // The bell: a quiet mark in the tab strip, and the engine behind it.
 //
-//   nothing waits   a dim "N" (for notifications, lettered as the rail's spaces)
-//   requests wait   a blinking pink pip and how many permissions and
+//   nothing waits   a 9 px pixel bell (art/bell.svg, drawn like the strip's
+//                   ▶), muted like the strip's tools; blue while open
+//   requests wait   the bell in pink, blinking, and how many permissions and
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
-// Click (or nocturne-notifications.open) opens the overview. Nocturne's tab
-// strip walks to it with the keyboard (its row's last control): a blue ring
-// while its cursor is here (shared CHROME), enter opens the overview.
+//   a look only     the bell in the working yellow and a dim count
+// Click (or nocturne-notifications.open) opens the overview, hanging under
+// the bell like the script runner's deck under ▶; again closes it, and the
+// bell is lit (a dithered band, a blue foot) while it's open. A toast's
+// request for one terminal opens it on that one. Nocturne's tab strip walks
+// to it with the keyboard (its row's last control): a blue ring while its
+// cursor is here (shared CHROME), enter opens or closes the overview.
 //
 // The bell's block is as wide as the bell plus END: it ends where the panes
 // below end, with no blank after it. It sizes its own block (layout.resize)
 // when the bell grows or shrinks.
 
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, terminals, nextCommand, shared, keys, layout, run, settings } from "herdr";
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
-import { openOverview } from "./open.js";
-import { dither, pip, stop } from "./kit.js";
+import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.js";
+import { ART, dither, stop } from "./kit.js";
 
 const POLL = 1500;
 // Room after the bell, layout px: the main block's side padding, so its edge
@@ -50,6 +55,12 @@ function shortcut() {
   return k.replace(/cmd-/g, "⌘").replace(/shift-/g, "⇧").replace(/alt-/g, "⌥").replace(/ctrl-/g, "⌃").toUpperCase();
 }
 
+/** The bell's mark in `color`; `blink` for what needs the person. */
+export function mark(color, blink = false) {
+  const el = svg(`${ART}/bell.svg`).size(9).flex_none().text_color(color);
+  return blink ? el.loop("opacity", { from: 0.15, to: 1, period: 700, easing: "linear" }) : el;
+}
+
 export default class Bell {
   init(_props, cx) {
     this.engine = new Engine();
@@ -60,9 +71,14 @@ export default class Bell {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-notifications\./, "");
         if (c === "open") {
-          // A toast asks for one terminal's request through shared(OPEN), fresh.
+          // A toast asks for one terminal's request through shared(OPEN),
+          // fresh and once: that opens (or retargets) the overview; else open
+          // toggles it.
           const o = shared(OPEN);
-          openOverview(o && Date.now() - (o.at ?? 0) < 5000 ? o.terminal : null);
+          if (o?.terminal && o.at !== this.asked && Date.now() - (o.at ?? 0) < 5000) {
+            this.asked = o.at;
+            openOverview(o.terminal);
+          } else toggleOverview();
         } else if (c === "refresh") this.refresh(cx);
         cx.notify();
       }
@@ -85,20 +101,29 @@ export default class Bell {
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
     const ring = shared(CHROME)?.region === "bell";
+    const open = Boolean(overviewOpen());
+    // Where a drop-down opened by a key goes (open.js overviewPlace).
+    try { noteWindow(window.viewport_size?.()); } catch { /* not drawing: the last size stays */ }
     return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(t.muted).cursor_pointer()
+      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(open ? t.foreground : t.muted).cursor_pointer()
         .on_size_change((size) => fit(size.width))
         .hover((s) => s.bg(t.ansi0).text_color(t.foreground))
-        .tooltip(tip)
-        .on_mouse_down("left", stop)
-        .on_click(() => openOverview())
+        // No tooltip while open: it would sit on the drop-down.
+        .when(!open, (el) => el.tooltip(tip))
+        // As the strip's buttons (nocturne/tabs.js tool): the click goes by
+        // whether the bell was lit when pressed, since the press itself
+        // closes an open drop-down before the click comes.
+        .on_mouse_down("left", (e, cx) => { stop(e, cx); this.press = { e, open }; })
+        .on_click(() => toggleOverview({ press: this.press?.e, wasOpen: Boolean(this.press?.open) }))
+        // Open: the strip's open look, a dithered band and a blue foot.
+        .when(open, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
         .when(c.needs > 0, (el) => el
-          .child(pip(t.blocked, 6, true))
+          .child(mark(t.blocked, true))
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))
-        .when(c.needs === 0 && c.other > 0, (el) => el.child(pip(t.working, 6)))
-        .when(c.needs === 0 && !c.other, (el) => el.child(div().child("N")))
+        .when(c.needs === 0 && c.other > 0, (el) => el.child(mark(t.working)))
+        .when(c.needs === 0 && !c.other, (el) => el.child(mark(open ? t.accent : t.muted)))
         .when(c.other > 0, (el) => el.child(div().text_color(t.dim).child(c.needs > 0 ? `+${c.other}` : String(c.other))))
         .when(ring, (el) => el.text_color(t.foreground).child(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent))));
   }

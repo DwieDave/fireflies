@@ -147,6 +147,24 @@ def glow(n=20):
 write("glow.svg", glow())
 
 
+# Lantern: the person's own firefly, the light the pointer carries over the
+# sky (glow.js). Wider and fainter than a firefly's halo: no solid core, its
+# heart at most 6/16 lit, so a name under it stays readable.
+def lantern(n=56, peak=0.375):
+    c = (n - 1) / 2
+    grid = []
+    for j in range(n):
+        row = []
+        for i in range(n):
+            r = math.hypot(i - c, j - c) / (n / 2)
+            row.append(lit(i, j, max(0.0, 1 - r) ** 1.6 * peak))
+        grid.append(row)
+    return svg(n * CELL, n * CELL, runs(grid))
+
+
+write("lantern.svg", lantern())
+
+
 # Haze: moonlight thickening toward the horizon, in eight Bayer steps, drawn
 # bottom-anchored so the horizon stays at the sidebar's foot at any height.
 def haze(w=480, h=1400, ramp=640, peak=0.375):
@@ -225,6 +243,21 @@ def hills(w=480, h=144):
 
 
 hills()
+
+# The notification bell (nocturne-notifications' mark in the tab strip): 9 px,
+# drawn like the strip's other pixel marks (play), one cell a layout px.
+BELL = [
+    "....#....",
+    "...###...",
+    "..#####..",
+    "..#####..",
+    ".#######.",
+    ".#######.",
+    "#########",
+    ".........",
+    "...###...",
+]
+write("bell.svg", svg(9 * CELL, 9 * CELL, runs([[c == "#" for c in row] for row in BELL])))
 
 # Status pips: 6 px dithered diamonds, crisp at any zoom.
 write(

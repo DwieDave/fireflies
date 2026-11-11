@@ -70,10 +70,14 @@ test:
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
     bun test scripts/hint-bars.test.ts
+    # The strip's drop-downs (script runner, + new, bell) toggle by press and by key, with stand-ins that record handlers.
+    bun test scripts/nocturne-drop-toggle.test.ts
     # Every ? list names every key its handler takes (each key pressed on the real handler), and the keys dialog's map.
     bun test scripts/keys-lists.test.ts
     # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
     bun test scripts/nocturne-tab-drag.test.ts
+    # The pointer's firefly glow over nocturne's sidebar: placed by the sky's real mouse handlers, calm and leave, only its own view rebuilt.
+    bun test scripts/nocturne-fireglow.test.ts
     cargo test --locked
 
 docs-generate: build
