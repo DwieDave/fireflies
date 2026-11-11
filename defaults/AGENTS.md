@@ -931,7 +931,7 @@ at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
 unpin from a firefly's or an agent pane's right-click menu (open sky and
 rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Toasts by key:
+`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move it in the jar. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
@@ -950,7 +950,7 @@ cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
 cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
 ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
-`"cmd-ctrl-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
+`"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
 the control's menu, r renames, esc/q go back to the pane, ? lists every key
 of the row the cursor is on (the strip's, the header's, the parked chips').
@@ -1184,7 +1184,7 @@ The main ones:
   or height (default 0.05: ten steps cross half the tab). Stored like a divider drag (weights,
   or the px of a px side; kept across restarts, zoom and parking), with the drag's minimum
   (24 px a side, a pane's own `min` / `max`). A zoomed tab, one pane, or no split that way:
-  `{ok, changed: false}`. Keys: `"pane.resize:left"`. Palette: Resize pane left / right / up / down.
+  `{ok, changed: false}`. Keys: cmd-ctrl-left / right / up / down on macOS (`"pane.resize:left"`, ...). Palette: Resize pane left / right / up / down.
   Nocturne's `nocturne.gridify` (palette "Gridify panes", cmd-alt-g on macOS, the pane
   header's grid button with three or more panes, the popup's "As a grid") rearranges every
   placed pane of the shown tab into an even grid: ceil(sqrt(n)) columns, rows filled left to
