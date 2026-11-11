@@ -3,3 +3,4 @@
 /.brain
 /AGENTS.local.md
 /.env
+.direnv/
