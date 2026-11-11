@@ -135,7 +135,8 @@ export class Popups {
   render(t, size) {
     const p = this.top;
     if (!p) return null;
-    const scrim = div().id("git-scrim").absolute().inset_0().opacity(0.6).child(dither("#000000", 1))
+    // The window dims under a popup: half the background, dithered (Nocturne's way of 50%).
+    const scrim = div().id("git-scrim").absolute().inset_0().bg(t.background + "99").child(dither(t.background, 1))
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu" || p.kind === "confirm") this.close(); cx.notify(); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu") this.close(); cx.notify(); });
     let box;
@@ -151,8 +152,8 @@ export class Popups {
     return v_flex().id(id).absolute().left(x).top(y).w(w).bg(t.background).border(1).border_color(edge)
       .on_mouse_down("left", stop)
       .child(h_flex().absolute().top(-7).left(8).right(8).h(13).items_center().text_size(11)
-        .child(div().px(4).bg(t.background).text_color(danger ? t.ansi1 : t.foreground).child(title))
-        .child(div().flex_1())
+        .child(div().px(4).min_w(0).max_w(w - (right ? 110 : 30)).truncate().bg(t.background).text_color(danger ? t.ansi1 : t.foreground).child(title))
+        .child(div().flex_1().min_w(8))
         .when(Boolean(right), (el) => el.child(div().px(4).bg(t.background).text_color(t.dim).child(right))))
       .child(body);
   }

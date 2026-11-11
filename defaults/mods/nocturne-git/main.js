@@ -1307,4 +1307,4 @@ const T7 = (t, s, c) => div().w(56).flex_none().text_color(c).child(s);
 const short = (r) => (/^[0-9a-f]{40}$/.test(r ?? "") ? r.slice(0, 7) : r);
 const text = (s, color = "foreground") => ({ kind: "text", parts: [[s, color]] });
 /** A bar label: the first words before "/" or "…". */
-const shortLabel = (s) => s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0].split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0].toLowerCase();
+const shortLabel = (s) => s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0].split(",")[0].split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0].toLowerCase();

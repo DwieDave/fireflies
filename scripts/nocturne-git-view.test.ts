@@ -104,6 +104,18 @@ test("opens on the repo: every panel reads, renders without throwing", async () 
   for (const mode of ["normal", "half", "full"]) { v.mode = mode; for (const p of ["status", "files", "branches", "commits", "stash"]) { v.setPanel(p); await settle(v); v.render(); } }
 });
 
+test("narrow: one thing at a time, enter into the main view and esc back", async () => {
+  const v = await open();
+  v.size = { width: 500, height: 600 };
+  v.render();
+  v.setPanel("commits"); await settle(v);
+  await press(v, "0");
+  expect(v.focus).toBe("main");
+  v.render();
+  await press(v, "escape");
+  expect(v.focus).toBe("side");
+});
+
 test("files: space stages, the main view shows the diff, c commits through the popup", async () => {
   const v = await open();
   v.setPanel("files"); v.tree = false; v.moveTo(0); await settle(v);
