@@ -598,7 +598,8 @@ the highlighted line shows where it will land.
   in one line; a folder shows what it holds. On another machine only text is
   read (a capped `head`); pictures, PDFs, fonts and clips there say `p` opens
   them. Clips never play by themselves. A native view (PDF, font, clip) steps
-  aside while the menu is open. Enter, `e`, `E`, `p`, `v` and a click open as
+  aside while the menu is open. `nocturne-files.look` toggles it in the focused
+  files pane (the palette's "Show or hide the preview"). Enter, `e`, `E`, `p`, `v` and a click open as
   before: the split is only a look. Each pane keeps it (on, size) in shared
   `nocturne-files.look` by slot.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)

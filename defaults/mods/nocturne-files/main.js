@@ -71,6 +71,9 @@
 // P in any files pane on that machine pastes it. Rows can't be dragged: a mod
 // can't tell which row a press started on (no per-row handlers in a virtual list).
 //
+// Commands (keys.json, the palette, `herdr-app do nocturne-files.<c>`, to the
+// focused files pane): keys (the ? overview), look (the preview split on / off).
+//
 // The keyboard: a copy takes it when its pane is the focused one as it opens
 // (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
 // cmd-e on an open panel (nocturne/files.js focusFiles: "take-panel").
@@ -187,6 +190,7 @@ export default class Files extends View {
         const c = String(await nextCommand()).replace(`${MOD}.`, "");
         if (c === "focus" || (c === "take-panel" && !this.alone && this.isFocusedPane())) this.takeKeys(cx);
         else if (c === "keys" && (this.alone || this.isFocusedPane())) this.keysShown = !this.keysShown;
+        else if (c === "look" && (this.alone || this.isFocusedPane())) this.toggleLook(cx);
         cx.notify();
       }
     });
@@ -1105,11 +1109,17 @@ export default class Files extends View {
    *  preview `px` along it. The divider drags; its line lights while it does. */
   split(t, side, px, list, foot) {
     const right = side === "right";
-    const tree = v_flex().id("nf-treecol").relative().flex_1().min_w(0).min_h(0).child(list).when(Boolean(foot), (el) => el.child(foot));
-    const line = dither(this.dragging ? t.accent : t.ansi0, 1);
+    // h_flex centers its items: the tree's column is stretched to the split's height by hand.
+    const tree = v_flex().id("nf-treecol").relative().flex_1().min_w(0).min_h(0).when(right, (el) => el.h_full())
+      .child(list).when(Boolean(foot), (el) => el.child(foot));
+    // At rest a dotted rule; under the pointer or held, a lit band the width of the grab area.
+    const lit = Boolean(this.dragging) || this.dividerHover;
+    const band = lit ? DIVIDER - 2 : 1, at = Math.floor((DIVIDER - band) / 2);
+    const line = dither(lit ? t.accent : t.ansi8, 1);
     const divider = div().id("nf-divider").relative().flex_none()
-      .when(right, (el) => el.w(DIVIDER).h_full().cursor_col_resize().child(div().absolute().top(0).bottom(0).left(Math.floor(DIVIDER / 2)).w(1).child(line)))
-      .when(!right, (el) => el.h(DIVIDER).w_full().cursor_row_resize().child(div().absolute().left(0).right(0).top(Math.floor(DIVIDER / 2)).h(1).child(line)))
+      .when(right, (el) => el.w(DIVIDER).h_full().cursor_col_resize().child(div().absolute().top(0).bottom(0).left(at).w(band).child(line)))
+      .when(!right, (el) => el.h(DIVIDER).w_full().cursor_row_resize().child(div().absolute().left(0).right(0).top(at).h(band).child(line)))
+      .on_hover((over, cx) => { if (over !== Boolean(this.dividerHover)) { this.dividerHover = over; cx.notify(); } })
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragging = side; this.handle.focus(); cx.notify(); });
     const look = div().id("nf-look").relative().flex_none().overflow_hidden()
       .when(right, (el) => el.w(px).h_full()).when(!right, (el) => el.h(px).w_full())

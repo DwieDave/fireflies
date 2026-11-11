@@ -218,3 +218,38 @@ export function lineRuns(text, starts, spans, n, colors) {
   if (at < line.length) out.push([line.slice(at), null]);
   return out.map(([piece, color]) => [piece.replace(/\t/g, "  ").replace(/\r$/, ""), color]);
 }
+
+// ---- soft wrap (the files pane's narrow preview)
+
+/** Where each line's wrapped rows start at `cols` characters a row (tabs
+ *  count two, as lineRuns draws them); the last entry is the row count. */
+export function wrapRows(text, starts, cols) {
+  const at = [0];
+  for (let n = 0; n < starts.length; n++) {
+    const from = starts[n], to = n + 1 < starts.length ? starts[n + 1] - 1 : text.length;
+    let len = to - from;
+    for (let i = from; i < to; i++) if (text.charCodeAt(i) === 9) len++;
+    at.push(at[n] + Math.max(1, Math.ceil(len / cols)));
+  }
+  return at;
+}
+
+/** The line a wrapped row belongs to, and which of its rows it is: [line, k]. */
+export function rowLine(at, row) {
+  let lo = 0, hi = at.length - 2;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (at[mid] <= row) lo = mid; else hi = mid - 1; }
+  return [lo, row - at[lo]];
+}
+
+/** The [piece, color] runs of characters [from, to) of a line's runs. */
+export function sliceRuns(runs, from, to) {
+  const out = [];
+  let at = 0;
+  for (const [piece, color] of runs) {
+    const end = at + piece.length;
+    if (end > from && at < to) out.push([piece.slice(Math.max(0, from - at), Math.min(piece.length, to - at)), color]);
+    at = end;
+    if (at >= to) break;
+  }
+  return out;
+}

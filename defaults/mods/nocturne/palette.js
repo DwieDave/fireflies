@@ -114,6 +114,7 @@ const PANE = {
   ]],
   "nocturne-files": ["Files", [
     ["keys", "Files pane keys", "help shortcuts list ? keybindings"],
+    ["look", "Show or hide the preview", "preview split quick look peek file viewer space"],
   ]],
 };
 

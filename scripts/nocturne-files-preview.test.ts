@@ -514,3 +514,40 @@ test("the shared kinds: text and Markdown for the split, the preview's own kinds
   expect(lineRuns(text, starts, spans, 1, syntaxColors(theme))).toEqual([["  ", null], ["fn", theme.ansi5], [" b", null]]);
   expect(lineRuns(text, starts, spans, 2, syntaxColors(theme))).toEqual([]);
 });
+
+test("code wraps to the preview's width: a narrow panel shows whole lines, the number on a line's first row only", async () => {
+  const { wrapRows, rowLine, sliceRuns, lineStarts } = kinds;
+  const text = "short\n" + "x".repeat(25) + "\n\tab\n";
+  const starts = lineStarts(text);
+  expect(wrapRows(text, starts, 10)).toEqual([0, 1, 4, 5, 6]);
+  expect([rowLine([0, 1, 4, 5, 6], 0), rowLine([0, 1, 4, 5, 6], 3), rowLine([0, 1, 4, 5, 6], 4)]).toEqual([[0, 0], [1, 2], [2, 0]]);
+  expect(sliceRuns([["abc", "red"], ["defg", null]], 2, 5)).toEqual([["c", "red"], ["de", null]]);
+  const long = "fn main() { let answer = compute_the_answer_to_everything(); }\n";
+  files({ "/r/w.rs": { head: { code: 0, stdout: `${long.length}\n0\n${long}` } } });
+  const v = await viewer("/r/w.rs");
+  v.port = { width: 280, height: 400 };
+  const drawn = v.render(cx);
+  const shown = words(drawn).join("");
+  // Every character is drawn, over several rows; one line number.
+  expect(shown.replace(/\s+/g, "")).toContain(long.trim().replace(/\s+/g, ""));
+  expect(v.wrapped().rows).toBeGreaterThan(1);
+  expect(words(drawn).filter((w: string) => w === "1").length).toBe(1);
+  // Wide: a row a line (the text's last, empty line too).
+  v.port = { width: 1200, height: 400 };
+  expect(v.wrapped().rows).toBe(2);
+});
+
+test("the divider lights under the pointer and while held", () => {
+  world.shared = {};
+  const view = pane();
+  key(view, "space");
+  view.size = { width: 1000, height: 600 };
+  const band = () => byId(view.render(cx), "nf-divider").nodes[0].calls.find(([k]: [string]) => k === "w")[1][0];
+  expect(band()).toBe(1);
+  handler(byId(view.render(cx), "nf-divider"), "on_hover")(true, cx);
+  expect(band()).toBe(DIVIDER - 2);
+  handler(byId(view.render(cx), "nf-divider"), "on_hover")(false, cx);
+  expect(band()).toBe(1);
+  handler(byId(view.render(cx), "nf-divider"), "on_mouse_down", "left")({}, cx);
+  expect(band()).toBe(DIVIDER - 2);
+});

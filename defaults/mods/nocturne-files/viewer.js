@@ -21,7 +21,7 @@ import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, TextView } from "gpui-base";
 import * as herdr from "herdr";
 import { props, theme, settings, exec, run, panes, shared, setShared, watchFolder, nextCommand, home, appHome, writeTextFile, highlight, languageOf, window as appWindow } from "herdr";
-import { kindOf, lookKind, sniffKind, route, TOOLS, rasterArgv, pageCount, duration, tag, noun, siblings, stepIn, fileSize, count, syntaxColors, lineStarts, lineRuns } from "./kinds.js";
+import { kindOf, lookKind, sniffKind, route, TOOLS, rasterArgv, pageCount, duration, tag, noun, siblings, stepIn, fileSize, count, syntaxColors, lineStarts, lineRuns, wrapRows, rowLine, sliceRuns } from "./kinds.js";
 import { formatOf, hexBytes, sniff, sizeFromFile, plan, cantShow, fitted, fitScale, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned } from "./image.js";
 import { MAX_BYTES, MAX_ROWS, separator, parse as parseTable, table, oneLine, wholeLines, shownNote, SQLITE_ARGS, TABLES_SQL, rowsSql, countSql, tablesOf, sqliteError } from "./table.js";
 import { parse as parsePatch, fileStarts, nextFile } from "./diff.js";
@@ -421,8 +421,18 @@ export default class Viewer extends View {
   maxScroll() {
     const x = this.text, room = unzoom(this.port.height);
     if (!x) return 0;
-    const total = x.md ? x.height + 24 : x.starts.length * LINE + 12;
+    const total = x.md ? x.height + 24 : this.wrapped().rows * LINE + 12;
     return Math.max(0, total - room);
+  }
+
+  /** Text: the line numbers' column, and the lines soft-wrapped to the view's
+   *  width (a narrow panel shows whole lines, no sideways scrolling). */
+  wrapped() {
+    const x = this.text;
+    const gutter = Math.max(30, String(x.starts.length).length * CH + 16);
+    const cols = Math.max(8, Math.floor(((unzoom(this.port.width) || 600) - gutter - 14) / CH));
+    if (x.wrap?.cols !== cols) x.wrap = { cols, gutter, at: wrapRows(x.body, x.starts, cols) };
+    return { ...x.wrap, rows: x.wrap.at[x.wrap.at.length - 1] };
   }
 
   /** Embedded: J / K in the tree. Text, Markdown, tables and patches move
@@ -1264,16 +1274,19 @@ export default class Viewer extends View {
   textView(t) {
     const x = this.text, colors = this.colors ??= syntaxColors(t);
     const room = unzoom(this.port.height) || 400;
-    const first = Math.max(0, Math.floor(this.sy / LINE)), last = Math.min(x.starts.length, first + Math.ceil(room / LINE) + 2);
-    const gutter = Math.max(30, String(x.starts.length).length * CH + 16);
+    const { cols, gutter, at, rows: total } = this.wrapped();
+    const first = Math.max(0, Math.floor(this.sy / LINE)), last = Math.min(total, first + Math.ceil(room / LINE) + 2);
     const rows = [];
-    for (let n = first; n < last; n++) {
-      rows.push(h_flex().absolute().left(0).right(0).top(6 + n * LINE - this.sy).h(LINE).items_center()
-        .child(div().w(gutter).flex_none().text_right().pr(10).text_color(t.dim).child(String(n + 1)))
+    for (let r = first; r < last; r++) {
+      // A wrapped row: its line's number on the first one only.
+      const [n, k] = rowLine(at, r);
+      const runs = sliceRuns(this.runsOf(n, colors), k * cols, (k + 1) * cols);
+      rows.push(h_flex().absolute().left(0).right(0).top(6 + r * LINE - this.sy).h(LINE).items_center()
+        .child(div().w(gutter).flex_none().text_right().pr(10).text_color(t.dim).child(k ? "" : String(n + 1)))
         .child(h_flex().flex_1().min_w(0).overflow_hidden().pr(8)
-          .children(this.runsOf(n, colors).map(([piece, color]) => div().flex_none().whitespace_nowrap().text_color(color ?? t.foreground).child(piece)))));
+          .children(runs.map(([piece, color]) => div().flex_none().whitespace_nowrap().text_color(color ?? t.foreground).child(piece)))));
     }
-    return [div().absolute().inset_0().font_family(code()).text_size(12).children(rows), ...this.textRail(t, x.starts.length * LINE + 12)];
+    return [div().absolute().inset_0().font_family(code()).text_size(12).children(rows), ...this.textRail(t, total * LINE + 12)];
   }
 
   /** Markdown, rendered as the viewer renders it; its measured height bounds the scroll. */
