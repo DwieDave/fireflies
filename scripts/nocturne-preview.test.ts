@@ -76,7 +76,7 @@ test("pictures are told apart by extension, any case", () => {
 });
 
 test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click / e the other way", async () => {
-  const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js");
+  const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
   expect([viewerFor("a.json"), viewerFor("a.yaml"), viewerFor("Cargo.toml")]).toEqual([null, null, null]);
@@ -133,7 +133,7 @@ test("the files mod opens pictures and PDFs in the preview; alt-click: the syste
 test("the pane header names a viewer by the file it shows", async () => {
   const src = await readFile(new URL("../defaults/mods/nocturne/header.js", import.meta.url), "utf8");
   expect(src).toContain('"nocturne-preview": ["Preview", "eye"]');
-  expect(src).toContain('new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor"])');
+  expect(src).toContain('new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor", "nocturne-files"])');
   await readFile(new URL("../defaults/mods/workspace-chrome/eye.svg", import.meta.url), "utf8");
 });
 

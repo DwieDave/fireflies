@@ -12,7 +12,7 @@
 
 import { spaces, panes, focused, run } from "herdr";
 import { ART } from "./kit.js";
-import { filesPane, toggleFiles } from "./files.js";
+import { filesPane, toggleFiles, filesSlot } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen, toggleGithub } from "./github.js";
@@ -81,7 +81,7 @@ export function panels() {
     { id: "web", name: "Web", icon: "monitor", key: "w", words: "browser page url",
       pane: () => modBeside("nocturne-browser", { slot: slot() }), tab: () => modTab("nocturne-browser", { slot: slot() }, "web") },
     { id: "files", name: "Files", icon: "files", key: "f", words: "tree explorer folder", fixed: "edge", open: filesPane,
-      pane: toggleFiles, tab: () => modTab("nocturne-files", { folder: h.folder, on: h.on }, "files") },
+      pane: toggleFiles, tab: () => modTab("nocturne-files", { folder: h.folder, on: h.on, slot: filesSlot() }, "files") },
     { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => modPane("nocturne-agents"),
       pane: () => toggleBeside("nocturne-agents", agentsProps()), tab: () => modTab("nocturne-agents", agentsProps(), "agents") },
     { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: usagePane,

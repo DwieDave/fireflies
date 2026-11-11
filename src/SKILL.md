@@ -64,6 +64,11 @@ shows unedited; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.
 
+To show them a folder (what you generated, where the files you changed
+live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
+there beside the focused pane (`--in tab` for a tab of its own). Cmd/Ctrl-click
+on a folder path in terminal output does the same.
+
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the
 top of the sidebar's agent list (`false` unpins). The pin stays with the

@@ -71,10 +71,10 @@ export function paneName(p) {
 }
 
 /** A file viewer (Markdown, preview) goes by the file it shows (it notes that by
- *  slot in shared `<mod>.titles`). */
-const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor"]);
+ *  slot in shared `<mod>.titles`); a files pane of its own by its folder. */
+const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor", "nocturne-files"]);
 function viewerName(p) {
-  if (!VIEWERS.has(p.mod)) return null;
+  if (!VIEWERS.has(p.mod) || (p.mod === "nocturne-files" && !p.props?.path)) return null;
   const slot = p.props?.slot;
   return (slot && shared(`${p.mod}.titles`)?.[slot]) || String(p.props?.path ?? "").split("/").pop() || null;
 }

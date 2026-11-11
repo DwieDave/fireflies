@@ -37,14 +37,14 @@ const base = {
 /** A shipped mod file run with stand-ins for the app's modules (imports
  *  dropped, exports returned), the way picker.test.ts does it: no module mocks,
  *  which would leak into the other test files of the same run. */
-async function load(path: string): Promise<any> {
+async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
   const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
   const names: string[] = [];
   const body = source
     .replace(/^import .*;\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, window: globalThis.window };
+  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: globalThis.window };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
@@ -144,7 +144,7 @@ test("path helpers", () => {
 });
 
 test("nocturne-files opens Markdown in the viewer beside the editor; alt-click and e open it as text", async () => {
-  const { default: Files, isMarkdown } = await load("nocturne-files/main.js");
+  const { default: Files, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }, { pane: "pf", tab: "tab1", mod: "nocturne-files" }];

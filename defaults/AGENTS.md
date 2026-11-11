@@ -290,7 +290,8 @@ the highlighted line shows where it will land.
   notes): an http(s) page opens in a new web pane (`nocturne-browser`) split
   beside that terminal's pane (else the focused one; no pane: a tab of its own).
   Other schemes (mailto:, file:, ssh:, ...) and files go to the system; a file
-  one of the app's viewers shows (below) opens in that viewer instead, also
+  one of the app's viewers shows (below) opens in that viewer instead, and a
+  folder in a new files pane beside (Files panes), also
   from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
@@ -421,6 +422,26 @@ the highlighted line shows where it will land.
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`.
+- **Files panes** (Nocturne's `nocturne-files`): cmd-e (`nocturne.files`) and
+  "+ new" > Files toggle the panel down the tab's right edge at the focused
+  pane's folder. A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a
+  bare `ls` name in a terminal, a mod's `file:` link) opens a files pane of its
+  own rooted there, split beside that pane (clicking it again shows the one
+  already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
+  of its own; `"system"`: the system's file manager) and the palette's "Files
+  pane of this folder". It works as the panel (files open beside it) and closes
+  with `q` / `esc`. Every files pane: `j k h l` / arrows, enter, `e` / `E` edit,
+  `-` / `.` reroot, `r` refresh; `/` filters as you type (fff's fuzzy
+  `findFiles` over the root, git-ignored files left out; hits under their
+  folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
+  `/` and other machines search the folders listed so far); `H` / `I` (the eye
+  switches under the toolbar) hide or show dotfiles and git-ignored files
+  (`git ls-files --ignored`), each pane keeping its choice (shared
+  `nocturne-files.filters` by slot; new panes take settings.json `files`).
+  Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
+  Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
+  on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
+  (`y`), close.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
@@ -1086,6 +1107,9 @@ The main ones:
   machine the file is on; the reply says `opened` and the absolute `path`),
   `preview.open {path, in?, pane?, on?}` (the same for a picture, PDF, table, SQLite database,
   patch, font or clip, in the preview; `image.open` is the same command),
+  `files.open {path, in?, pane?, on?}` (a folder in a new files pane beside `pane`, or the one
+  there already rooted at it; `in: "tab"` a tab of its own, `"system"` the system's file manager;
+  see Files panes),
   `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Herdr sends nothing itself), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).
@@ -1227,6 +1251,10 @@ What's about the user, never a look:
                      "python": { "server": ["pyright-langserver", "--stdio"] },
                      "go": { "server": false }, "markdown": { "soft_wrap": true } } } }
   ```
+- `files`: what a new files pane lists (Nocturne's `nocturne-files`, see Files
+  panes): `{ "hidden": false }` leaves dotfiles out, `{ "ignored": false }`
+  files git ignores; both are listed when unset. A pane's `H` / `I` switch
+  overrides it for that pane.
 - `pane_scrollbars`: `false` hides the scroll position thumb at a terminal
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and

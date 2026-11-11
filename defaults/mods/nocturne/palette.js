@@ -11,7 +11,7 @@ import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win, agents } from "herdr";
 import { dither, eyebrow, focusedTerminal, pinned, pin } from "./kit.js";
-import { panels } from "./panels.js";
+import { panels, here } from "./panels.js";
 import { toggleDeck } from "./scripts.js";
 import { gitOpen } from "./git.js";
 
@@ -38,6 +38,15 @@ function openEntries() {
       title: p.open?.() ? `Close ${p.name.toLowerCase()}` : p.name, words: `open ${p.words ?? ""} ${where}`, go: () => p.pane() });
     out.push({ name: "nocturne", args: { panel: p.id, tab: true }, group: "Open", icon: p.icon,
       title: `${p.name} in a new tab`, words: `open ${p.words ?? ""} tab`, go: () => p.tab() });
+  }
+  // The focused pane's folder as a files pane of its own (files.open), beside it or in a tab.
+  const h = here();
+  if (h.folder) {
+    const at = { path: h.folder, ...(h.pane ? { pane: h.pane } : {}), ...(h.on ? { on: h.on } : {}) };
+    out.push({ name: "files.open", args: at, group: "Open", icon: "files",
+      title: "Files pane of this folder", words: "files tree explorer folder browse split beside new pane", go: () => run("files.open", at) });
+    out.push({ name: "files.open", args: { ...at, in: "tab" }, group: "Open", icon: "files",
+      title: "Files of this folder in a new tab", words: "files tree explorer folder browse tab", go: () => run("files.open", { ...at, in: "tab" }) });
   }
   out.push({ name: "nocturne", args: { fold: true }, group: "Open", icon: "sidebar", bind: "nocturne.fold",
     title: "Fold or open the sidebar", words: "toggle sidebar sky rail collapse hide", go: () => run("nocturne.fold") });
