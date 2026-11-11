@@ -49,7 +49,10 @@ export function lspStart(options: { argv: string[]; root: string; settings?: obj
 /** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
  *  or when the server exits. */
 export function lspRequest(id: number, method: string, params?: any): Promise<any>;
-/** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). */
+/** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). Open
+ *  documents are counted per mod copy: the server hears `didOpen` once (a later copy's becomes a
+ *  `didChange` with its text, and that copy gets the file's last `publishDiagnostics` at once) and
+ *  `didClose` when the last copy closes the file or goes. */
 export function lspNotify(id: number, method: string, params?: any): void;
 /** The next notification the server sent this copy: `{ method, params }`
  *  (`textDocument/publishDiagnostics`, `$/progress`, `window/logMessage`, ...). `$/exit` with

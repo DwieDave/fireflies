@@ -78,10 +78,16 @@ export function languageSettings(editor, lang) {
 export function serverCandidates(lang, settings) {
   if (settings?.server === false) return [];
   const extra = settings?.server_settings ?? null;
-  if (Array.isArray(settings?.server) && settings.server.length) return [{ argv: settings.server, settings: extra }];
   let list = SERVERS[lang];
   if (typeof list === "string") list = SERVERS[list];
-  return (list ?? []).map((s) => ({ argv: s.argv, settings: merge(s.settings ?? null, extra) }));
+  list = list ?? [];
+  if (Array.isArray(settings?.server) && settings.server.length) {
+    // Another build of a built-in server (a path, a wrapper) keeps its settings.
+    const name = (a) => String(a ?? "").split("/").pop();
+    const same = list.find((s) => name(s.argv[0]) === name(settings.server[0]));
+    return [{ argv: settings.server, settings: merge(same?.settings ?? null, extra) }];
+  }
+  return list.map((s) => ({ argv: s.argv, settings: merge(s.settings ?? null, extra) }));
 }
 
 function merge(a, b) {

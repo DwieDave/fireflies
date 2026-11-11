@@ -644,7 +644,7 @@ export default class EditorPane extends View {
           .child(div().text_color(sevColor[d.severity]).child(d.severity))
           .child(div().child([d.code, d.source].filter(Boolean).join(" · "))))))
       .when(c.waiting, (el) => el.child(div().px(12).py(8).text_color(t.dim).child("asking the language server…")))
-      .child(div().id("card-parts").flex_1().min_h(0).overflow_y_scrollbar().child(v_flex().children(parts)))
+      .child(div().id("card-parts").max_h(Math.max(120, Math.min(360, this.size.height - top - HINTS - 120))).overflow_y_scrollbar().child(v_flex().children(parts)))
       .when(c.parts.length > 0, (el) => el.child(h_flex().h(24).flex_none().px(12).gap(12).items_center().border_t(1).border_color(t.ansi0).text_size(10).text_color(t.dim)
         .child(div().child(this.server?.name ?? ""))
         .when(expandable, (el) => el
@@ -652,7 +652,6 @@ export default class EditorPane extends View {
           .child(div().child(`type depth ${c.level}`))
           .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx))))
         .child(div().flex_1())
-        .child(h_flex().gap(4).child(div().text_color(t.accent).child("f12")).child(div().child("definition")))
-        .when(expandable, (el) => el.child(h_flex().gap(4).child(div().text_color(t.accent).child("ctrl-= / ctrl--")).child(div().child("depth"))))));
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child("f12")).child(div().child("definition")))));
   }
 }

@@ -48,6 +48,12 @@ struct Session {
     stderr: Mutex<VecDeque<String>>,
     /// The `initialize` result, once there is one; waiters until then.
     ready: Mutex<Readiness>,
+    /// Open documents by URI and the copies that have them open: the server
+    /// sees one didOpen and one didClose however many copies show a file.
+    docs: Mutex<HashMap<String, HashSet<u64>>>,
+    /// The last diagnostics published for each document, for a copy that
+    /// opens one already open.
+    diagnostics: Mutex<HashMap<String, Value>>,
 }
 
 #[derive(Default)]
@@ -163,7 +169,15 @@ impl Session {
                 };
                 let _ = tx.try_send(result);
             }
-            (None, Some(_)) => self.broadcast(json!({ "method": message["method"], "params": message.get("params").cloned().unwrap_or(Value::Null) })),
+            (None, Some(method)) => {
+                let note = json!({ "method": method, "params": message.get("params").cloned().unwrap_or(Value::Null) });
+                if method == "textDocument/publishDiagnostics"
+                    && let Some(uri) = note["params"]["uri"].as_str()
+                {
+                    self.diagnostics.lock().unwrap().insert(uri.to_owned(), note.clone());
+                }
+                self.broadcast(note);
+            }
             (None, None) => {}
         }
     }
@@ -324,6 +338,8 @@ fn spawn(argv: Vec<String>, root: String, settings: Value) -> Result<Arc<Session
         alive: AtomicBool::new(true),
         stderr: Default::default(),
         ready: Default::default(),
+        docs: Default::default(),
+        diagnostics: Default::default(),
     });
     let s = session.clone();
     std::thread::spawn(move || {
@@ -444,13 +460,72 @@ pub fn request(id: u64, method: &str, params: Value) -> Result<async_channel::Re
     Ok(session.request(method, params))
 }
 
-pub fn notify(id: u64, method: &str, params: Value) -> Result<(), String> {
-    find(id)?.notify(method, params)
+/// Sends a notification for `copy`. Documents are counted per copy: the
+/// server hears didOpen when the first copy opens a file (a later copy's
+/// didOpen becomes a didChange with its text, and gets the file's last
+/// diagnostics) and didClose when the last copy closes it.
+pub fn notify(copy: u64, id: u64, method: &str, params: Value) -> Result<(), String> {
+    let s = find(id)?;
+    let uri = params["textDocument"]["uri"].as_str().map(str::to_owned);
+    match (method, uri) {
+        ("textDocument/didOpen", Some(uri)) => {
+            let first = {
+                let mut docs = s.docs.lock().unwrap();
+                let copies = docs.entry(uri.clone()).or_default();
+                let first = copies.is_empty();
+                copies.insert(copy);
+                first
+            };
+            if first {
+                return s.notify(method, params);
+            }
+            let doc = &params["textDocument"];
+            s.notify("textDocument/didChange", json!({
+                "textDocument": { "uri": uri, "version": doc["version"] },
+                "contentChanges": [{ "text": doc["text"] }],
+            }))?;
+            if let Some(last) = s.diagnostics.lock().unwrap().get(&uri).cloned()
+                && let Some(tx) = s.subscribers.lock().unwrap().get(&copy)
+            {
+                let _ = tx.try_send(last);
+            }
+            Ok(())
+        }
+        ("textDocument/didClose", Some(uri)) => {
+            if close_doc(&s, copy, &uri) {
+                s.notify(method, params)?;
+            }
+            Ok(())
+        }
+        _ => s.notify(method, params),
+    }
+}
+
+/// Forgets that `copy` has `uri` open; true when no copy has it open now.
+fn close_doc(s: &Session, copy: u64, uri: &str) -> bool {
+    let mut docs = s.docs.lock().unwrap();
+    let Some(copies) = docs.get_mut(uri) else { return false };
+    if !copies.remove(&copy) {
+        return false;
+    }
+    if copies.is_empty() {
+        docs.remove(uri);
+        s.diagnostics.lock().unwrap().remove(uri);
+        return true;
+    }
+    false
 }
 
 /// The copy no longer uses session `id`; with no users left it stops after a while.
 pub fn release(copy: u64, id: u64) {
     if let Ok(s) = find(id) {
+        // Documents only this copy had open are closed.
+        let uris: Vec<String> = s.docs.lock().unwrap().iter().filter(|(_, c)| c.contains(&copy)).map(|(u, _)| u.clone()).collect();
+        for uri in uris {
+            if close_doc(&s, copy, &uri) {
+                let _ = s.notify("textDocument/didClose", json!({ "textDocument": { "uri": uri } }));
+            }
+        }
         let mut users = s.users.lock().unwrap();
         users.remove(&copy);
         s.subscribers.lock().unwrap().remove(&copy);
@@ -577,15 +652,24 @@ while True:
         // (Copy 2 joined after this was sent: only copy 1 sees it.)
         assert_eq!(one.recv_blocking().unwrap(), json!({ "method": "echo/config", "params": [3] }));
 
-        notify(id, "textDocument/didOpen", json!({ "textDocument": { "uri": "file:///x.rs", "text": "", "version": 1, "languageId": "rust" } })).unwrap();
+        let open = json!({ "textDocument": { "uri": "file:///x.rs", "text": "", "version": 1, "languageId": "rust" } });
+        notify(1, id, "textDocument/didOpen", open.clone()).unwrap();
         assert_eq!(one.recv_blocking().unwrap()["method"], "textDocument/publishDiagnostics");
         assert_eq!(two.recv_blocking().unwrap()["params"]["diagnostics"][0]["message"], "bad");
+        // Copy 2 opening the same file: the server isn't told twice, and copy 2
+        // gets the file's last diagnostics at once.
+        notify(2, id, "textDocument/didOpen", open).unwrap();
+        assert_eq!(two.recv_blocking().unwrap()["params"]["diagnostics"][0]["message"], "bad");
+        assert_eq!(find(id).unwrap().docs.lock().unwrap()["file:///x.rs"].len(), 2);
+        notify(1, id, "textDocument/didClose", json!({ "textDocument": { "uri": "file:///x.rs" } })).unwrap();
+        assert!(find(id).unwrap().docs.lock().unwrap().contains_key("file:///x.rs"), "still open in copy 2");
 
         let hover = request(id, "textDocument/hover", json!({})).unwrap().recv_blocking().unwrap().unwrap();
         assert_eq!(hover["contents"], "a hover");
 
         release(1, id);
         release_copy(2);
+        assert!(find(id).unwrap().docs.lock().unwrap().is_empty(), "the last copy's release closed it");
         assert!(sessions().as_array().unwrap().iter().any(|s| s["id"] == json!(id) && s["users"] == json!(0)));
         find(id).unwrap().shut_down();
         let deadline = Instant::now() + Duration::from_secs(5);

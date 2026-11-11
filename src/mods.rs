@@ -1095,8 +1095,8 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             let rx = crate::lsp::request(id, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
             Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
         })
-        .function("lspNotify", |a| {
-            crate::lsp::notify(lsp_id(a.value(0)?)?, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+        .function("lspNotify", move |a| {
+            crate::lsp::notify(copy, lsp_id(a.value(0)?)?, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
             Ok(HostValue::Null)
         })
         .async_function("lspNextMessage", move |a| {

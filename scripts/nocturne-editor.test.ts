@@ -29,6 +29,8 @@ test("servers: settings.json's argv, off, or the built-in list in order, sharing
   expect(ts[0].settings).toEqual({ supportsHoverVerbosity: true });
   expect(serverCandidates("javascript", { server_settings: { preferences: { a: 1 } } })[0].settings).toEqual({ supportsHoverVerbosity: true, preferences: { a: 1 } });
   expect(serverCandidates("python", {}).map((s) => s.argv[0])).toEqual(["basedpyright-langserver", "pyright-langserver", "pylsp"]);
+  expect(serverCandidates("typescript", { server: ["/nix/x/bin/typescript-language-server", "--stdio"], server_settings: { tsserver: { path: "/ts" } } }))
+    .toEqual([{ argv: ["/nix/x/bin/typescript-language-server", "--stdio"], settings: { supportsHoverVerbosity: true, tsserver: { path: "/ts" } } }]);
   expect(serverCandidates("csv", {})).toEqual([]);
   expect(serverCandidates("text", {})).toEqual([]);
 });
