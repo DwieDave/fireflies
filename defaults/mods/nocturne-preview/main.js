@@ -37,6 +37,11 @@
 //   tables, patches: j k ↓ ↑ rows, J K / pageup pagedown pages, g / G top / bottom,
 //             h l ← → columns (tables), } { next / previous file (patches),
 //             t / T next / previous table (SQLite)
+//   audio, video: space / k play / pause, ← → (h l) 5 s, shift 30 s, 0 start, m sound
+//   tab / shift-tab  the bar's controls (a ring shows which), enter presses it
+//   ?  the keys, as a strip under the bar     esc  ring, then strip, away
+// A native view (the PDF, the player, Quick Look) that took the keyboard with a
+// click gives it back on esc (cmd-esc too): the preview's keys work again.
 // Mouse: pictures: drag to pan, ⌘/ctrl + scroll zooms at the pointer, scroll
 // pans, double-click toggles fit and 100%. Tables and patches: scroll (shift or
 // sideways: across).
@@ -52,6 +57,7 @@ import { kindOf, sniffKind, route, TOOLS, rasterArgv, pageCount, duration, tag, 
 import { formatOf, hexBytes, sniff, sizeFromFile, plan, cantShow, fitted, fitScale, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned } from "./image.js";
 import { MAX_BYTES, MAX_ROWS, separator, parse as parseTable, table, oneLine, wholeLines, shownNote, SQLITE_ARGS, TABLES_SQL, rowsSql, countSql, tablesOf, sqliteError } from "./table.js";
 import { parse as parsePatch, fileStarts, nextFile } from "./diff.js";
+import { keyOf, keyList, cycle } from "./keys.js";
 
 const MOD = "nocturne-preview";
 // Each preview's shown file by slot: its name for the pane header
@@ -66,6 +72,8 @@ const HEAD = 262144;
 const POLL = 4000, REMOTE_MAX = 6 * 1024 * 1024;
 // Pan steps: a key, and a key with shift.
 const NUDGE = 60, SHOVE = 240;
+// Audio and video: seconds a key moves, and with shift.
+const SEEK = 5, SEEK_FAR = 30;
 // Formats the SVG renderer can embed when turning a picture; others get a PNG copy first.
 const EMBEDS = ["png", "jpeg", "gif", "webp", "svg"];
 // Tables and patches: a row's height, a character's width in the code font
@@ -523,6 +531,8 @@ export default class PreviewView extends View {
   nativeEvent(e, cx) {
     if (e.id && e.id !== this.nativeId()) return;
     const d = e.data ?? {};
+    // Esc in the view: the keyboard is the app's again, this preview's keys first.
+    if (e.event === "view.escapeKey") { this.handle.focus(); return; }
     if (e.event === "load.error") this.fail(cx, d.message ?? `Can't show this ${noun(this.kind)}`);
     else if (e.event === "pdf.locked") this.note = "locked with a password";
     else if (e.event === "pdf.page" || (e.event === "load.finish" && this.kind === "pdf")) {
@@ -733,12 +743,41 @@ export default class PreviewView extends View {
     return true;
   }
 
+  /** tab / shift-tab, enter, esc and ?: the bar's controls and the keys strip. */
+  barKey(k, m, cx) {
+    if (k === "tab") this.ring = cycle((this.chips ?? []).map((c) => c.id), this.ring, m.shift ? -1 : 1);
+    else if (k === "enter" && this.ring) {
+      const c = (this.chips ?? []).find((x) => x.id === this.ring);
+      if (!c) { this.ring = null; return false; }
+      c.action(cx);
+    } else if (k === "?") this.keysShown = !this.keysShown;
+    else if (k === "escape" && this.ring) this.ring = null;
+    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    else return false;
+    return true;
+  }
+
+  /** Audio and video: play / pause, seek, sound. */
+  mediaKey(k, m) {
+    const s = this.call("state")?.content ?? {};
+    const by = m.shift ? SEEK_FAR : SEEK;
+    const seek = (t) => this.call("media.seek", { time: Math.max(0, s.duration > 0 ? Math.min(s.duration, t) : t) });
+    if (k === "space" || k === "k") this.call(s.rate > 0 ? "media.pause" : "media.play");
+    else if (k === "right" || k === "l" || k === "L") seek((s.time ?? 0) + by);
+    else if (k === "left" || k === "h" || k === "H") seek((s.time ?? 0) - by);
+    else if (k === "0" || k === "home") seek(0);
+    else if (k === "m") this.call("media.setMuted", { muted: !s.muted });
+    else return false;
+    return true;
+  }
+
   key(e, cx) {
-    const k = e.key, m = e.modifiers ?? {};
+    const k = keyOf(e), m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
     const d = m.shift ? SHOVE : NUDGE;
     const how = this.how?.how;
-    if (k === "o") this.system();
+    if (this.barKey(k, m, cx)) { /* the bar */ }
+    else if (k === "o") this.system();
     else if (k === "e") this.edit();
     else if (k === "y") this.copyPath(cx);
     else if (k === "f") this.reveal();
@@ -776,9 +815,8 @@ export default class PreviewView extends View {
       else if (k === "r" || k === "R") this.turn(m.shift || k === "R" ? -1 : 1, cx);
       else if (k === "b") this.checker = !this.checker;
       else return;
-    } else if (how === "native" && (this.kind === "video" || this.kind === "audio") && k === "space") {
-      const s = this.call("state")?.content;
-      this.call(s?.rate > 0 ? "media.pause" : "media.play");
+    } else if (how === "native" && (this.kind === "video" || this.kind === "audio")) {
+      if (!this.mediaKey(k, m)) return;
     } else return;
     cx.stop_propagation();
     cx.notify();
@@ -827,13 +865,30 @@ export default class PreviewView extends View {
 
   // ---- parts
 
+  /** A control on the bar or the strip; tab / shift-tab reach it in drawing order. */
   chip(t, id, label, action, on) {
+    (this.chips ??= []).push({ id, action });
+    const ringed = this.ring === id && this.focusedNow;
     return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
-      .text_color(on ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
+      .text_color(on || ringed ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { cx.stop_propagation(); action(cx); cx.notify(); })
       .when(Boolean(on), (el) => el.child(checker(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .child(div().relative().child(label));
+  }
+
+  /** `?`: the keys that do something here, under the bar. */
+  keysStrip(t) {
+    const list = keyList(this.how?.how, this.kind, {
+      editable: this.editable(), db: Boolean(this.db),
+      paged: this.how?.how === "raster" && !this.how.firstOnly && this.pages > 1,
+    });
+    return h_flex().id("preview-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
+      .children(list.map(([keys, what], i) => h_flex().id(`preview-key-${i}`).flex_none().gap(4)
+        .child(div().text_color(t.accent).child(keys))
+        .child(div().text_color(t.dim).child(what))))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
   }
 
   /** "1920 × 1080 · PNG · 2.4 MB · animated", "12 034 rows × 9 columns · 3.1 MB", "3 files · +120 −40". */
@@ -929,6 +984,7 @@ export default class PreviewView extends View {
         .when(w >= 300, (e3) => e3.child(this.chip(t, "img-files", "files", () => this.reveal())))
         .when(w >= 540 && !this.on, (e3) => e3.child(this.chip(t, "img-open", "open", () => this.system())))
         .when(w >= 620, (e3) => e3.child(this.chip(t, "img-copy", this.copied ? "copied" : "copy", (cx) => this.copyPath(cx), Boolean(this.copied)))))
+      .child(this.chip(t, "img-keys", "?", () => { this.keysShown = !this.keysShown; }, Boolean(this.keysShown)))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
   }
 
@@ -1087,8 +1143,14 @@ export default class PreviewView extends View {
 
   render() {
     const t = theme();
-    const focused = this.handle.is_focused();
+    const focused = this.focusedNow = this.handle.is_focused();
+    this.chips = [];
     const how = this.how?.how;
+    // Fitted before the bar shows its scale.
+    this.current();
+    // Drawn first so tab goes bar, then strip, then the body's controls.
+    const bar = this.toolbar(t);
+    const strip = this.error || this.busy ? null : this.strip(t);
     let inner = [];
     if (this.error) inner = [this.empty(t, `Can't preview this ${noun(this.kind)}`, this.error, true)];
     else if (this.busy) inner = [this.empty(t, this.busy, tilde(this.path, home()))];
@@ -1123,10 +1185,10 @@ export default class PreviewView extends View {
       .on_mouse_up("left", (_e, cx) => { if (this.drag) { this.drag = null; cx.notify(); } })
       .on_hover((over, cx) => { if (!over && this.drag) { this.drag = null; cx.notify(); } })
       .children(inner);
-    const strip = this.error || this.busy ? null : this.strip(t);
     return v_flex().id(MOD).size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(this.toolbar(t))
+      .child(bar)
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .when(Boolean(strip), (el) => el.child(strip))
       .child(body);
   }
