@@ -9979,6 +9979,81 @@ export default class Rows extends View {
     );
 }
 
+#[gpui::test]
+fn a_virtual_list_scroll_handle_reports_where_the_list_is_scrolled(cx: &mut TestAppContext) {
+    cx.update(crate::init);
+    let runtime = ShellRuntime::new_isolated().expect("runtime");
+    cx.update(|cx| runtime.set_global(cx));
+    let source = r#"
+import { View, div } from "gpui-kit";
+import { v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+
+export default class Rows extends View {
+  init() {
+    this.items = Array.from({ length: 20 }, (_, i) => `row-${i}`);
+    this.scroll = VirtualListScrollHandle.new();
+  }
+  render(cx) {
+    const at = this.scroll.offset();
+    return v_flex()
+      .w(300)
+      .child(
+        v_virtual_list(
+          "rows",
+          this.items.length,
+          40,
+          (index) => this.items[index],
+          (range) => {
+            const rows = [];
+            for (let index = range.start; index < range.end; index++) {
+              rows.push(div().h(40).child(this.items[index]));
+            }
+            return rows;
+          },
+        )
+          .h(200)
+          .track_scroll(this.scroll)
+          .on_item_click((key, cx) => {
+            this.scroll.scroll_to_item(10, "top");
+            cx.notify();
+          }),
+      )
+      .child(`offset ${Math.round(at.x)} ${Math.round(at.y)}`);
+  }
+}
+"#;
+    let view_type = runtime.load_source("scrolled-list.js", source).expect("load");
+    let runtime_for_view = Rc::clone(&runtime);
+    let window = cx.add_window(move |window, cx| {
+        let view = runtime_for_view
+            .instantiate_view(&view_type, window, cx)
+            .expect("instantiate");
+        RootedScriptView(view)
+    });
+    let mut context = VisualTestContext::from_window(*window.deref(), cx);
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let view = window
+        .root(&mut context)
+        .expect("view")
+        .read_with(&context, |root, _| root.0.clone());
+
+    // Not scrolled yet.
+    let tree = redraw_and_read(&mut context, &view);
+    assert!(tree.contains("offset 0 0"), "a fresh list sits at the top:\n{tree}");
+
+    // A click on the first row asks for row 10: base scrolls as little as
+    // brings it on screen, so its bottom (440) meets the 200 px view's.
+    context.simulate_click(point(px(150.), px(20.)), Modifiers::default());
+    context.run_until_parked();
+    context.update(|window, cx| window.draw(cx).clear(cx));
+    let tree = redraw_and_read(&mut context, &view);
+    assert!(
+        tree.contains("offset 0 -240"),
+        "the offset must say how far the list scrolled, in window pixels:\n{tree}"
+    );
+}
+
 /// Rebuilds the description so that what the item renderer recorded during the
 /// last layout shows up in the tree.
 ///

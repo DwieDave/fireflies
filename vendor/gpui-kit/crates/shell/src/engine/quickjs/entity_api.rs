@@ -1251,6 +1251,21 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
         ),
     )?;
 
+    // Where the list is scrolled to, as GPUI keeps it: the content's offset in
+    // window pixels, so `-y` is how far down it has scrolled. A plain read of
+    // what the last layout left, legal anywhere (render too): with fixed row
+    // sizes it maps a pointer's position to the row under it, which a drag
+    // over rows needs and the per-row handlers can't give.
+    let scroll_offset = runtime.clone();
+    globals.set(
+        "__virtual_scroll_offset",
+        // Scalars, as everything here: the prelude makes the `{ x, y }`.
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<Vec<f32>> {
+            let offset = live_virtual_scroll(&ctx, &scroll_offset, handle)?.base_handle().offset();
+            Ok(vec![f32::from(offset.x), f32::from(offset.y)])
+        }),
+    )?;
+
     let scroll_to_bottom = runtime.clone();
     globals.set(
         "__virtual_scroll_to_bottom",
