@@ -1,11 +1,20 @@
 // Context menus (Herdr's items). Opened as a popup with
 // props { tab: "pane" | "tab" | "space" | "global", target }.
 // ↑/↓ move, Enter runs, Esc closes. An item is [label, command, args];
-// a command "worktree" opens the worktree dialog instead.
+// a command "worktree" opens the git window's worktrees instead.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, home, pickFolder } from "herdr";
+
+// Worktrees live in the git window (nocturne-git's Worktrees tab): new asks
+// for a branch and opens its checkout as a space, open lists the repo's,
+// remove removes the space's (it asks first).
+function gitWorktrees(space, folder, action) {
+  const s = spaces().find((x) => x.id === space);
+  openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] },
+    props: { folder, on: s?.machine ?? null, worktrees: { action, ...(space ? { space } : {}) } } });
+}
 
 // A space's folder: the one it's attached to (space.folder; home holds no repo),
 // else where it is now: its first terminal's live folder, else where it was made.
@@ -144,7 +153,7 @@ export default class Menu extends View {
       });
     }
     closeOverlay(props()?.overlay);
-    if (it[1] === "worktree") openOverlay({ mod: "worktree", kind: "dialog", ...(it[2].action === "open" ? { width: 560, height: 480 } : { width: 440, height: 260 }), props: it[2] });
+    if (it[1] === "worktree") gitWorktrees(it[2].space, place(spaces().find((s) => s.id === it[2].space)), it[2].action);
     else run(it[1], it[2]);
   }
 

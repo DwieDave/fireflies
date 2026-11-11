@@ -1003,6 +1003,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.lazygit",
         "nocturne.git",
         "nocturne.diff",
+        "nocturne.worktrees",
         "nocturne.files",
         "nocturne.github",
         "nocturne.scripts",

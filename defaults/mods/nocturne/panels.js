@@ -14,7 +14,7 @@ import { spaces, panes, focused, run } from "herdr";
 import { ART } from "./kit.js";
 import { filesPane, toggleFiles, filesSlot } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
-import { gitOpen, toggleGit } from "./git.js";
+import { gitOpen, toggleGit, openWorktrees } from "./git.js";
 import { githubOpen, toggleGithub } from "./github.js";
 
 /** Where things would open now: the shown space and tab, the focused pane and its folder. */
@@ -27,7 +27,7 @@ export function here() {
   return { space, tab, pane: pane?.pane ?? null, terminal: pane?.terminal ?? null, folder, on: space?.machine ?? null };
 }
 
-/** A mod pane of `mod` in the shown tab, if any (Nocturne's own: the worktrees, its only pane role). */
+/** A mod pane of `mod` in the shown tab, if any. */
 export const modPane = (mod) => {
   const { tab } = here();
   return panes().find((p) => p.mod === mod && p.tab === tab) ?? null;
@@ -86,8 +86,8 @@ export function panels() {
       pane: () => toggleBeside("nocturne-agents", agentsProps()), tab: () => modTab("nocturne-agents", agentsProps(), "agents") },
     { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: usagePane,
       pane: toggleUsage, tab: () => modTab("nocturne-usage", {}, "usage") },
-    { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches", open: () => modPane("nocturne"),
-      pane: () => toggleBeside("nocturne", { role: "worktrees" }), tab: () => modTab("nocturne", { role: "worktrees" }, "worktrees") },
+    { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches checkouts", fixed: "float", open: () => Boolean(gitOpen()),
+      pane: () => (gitOpen() ? toggleGit() : openWorktrees()), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on, worktrees: { action: "open" } }, "worktrees") },
     { id: "git", name: "Git", icon: "git-compare", key: "l", words: "git lazygit stage commit branches log graph rebase stash", fixed: "float", open: () => Boolean(gitOpen()),
       pane: () => toggleGit(), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on }, "git") },
     { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review reviewed", fixed: "float", open: () => Boolean(gitOpen()),
