@@ -887,12 +887,27 @@ ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
 `"cmd-ctrl-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
-the control's menu, r renames, esc/q go back to the pane, ? lists every key.
+the control's menu, r renames, esc/q go back to the pane, ? lists every key
+of the row the cursor is on (the strip's, the header's, the parked chips').
 The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
 rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
+
+Keys, everywhere: cmd-/ (`app.help`) opens Nocturne's keys dialog
+(`nocturne/screens.js` Keys, `nocturne/keymap.js`): every binding in plain
+words, grouped as a map (keyboard focus, spaces, tabs, panes, agents, windows
+and panels, in a terminal, in the editor, in the web pane, app), Nocturne's
+own keys in place of the global ones they rebind, the core's own (esc closes
+the window in front, stops a pane drag, closes a terminal's search). The
+keys that give a block the keyboard (sidebar, tab strip, a pane's header,
+toasts) open into what works there (enter or a click), as do the parked
+chips, menus and panes. Typing filters: every word must match a key, its
+words or its group ("focus sidebar"). A binding you add gets its command's
+own words. Every pane and window takes ? for its own keys (all of them) and
+ends its key bar with that entry; where ? would type (the editor, the script
+runner's filter) cmd-k ? does it instead, shown as the bar's last entry.
 
 ### Layouts and mods other people made
 

@@ -111,6 +111,14 @@ function chip(t, id, label, action, color) {
     .child(label);
 }
 
+/** What ? lists: every key key() takes, ? keys last. */
+export const KEYS = [
+  ["h l", "parent / first child"], ["j k", "down / up the column"], ["H J K L", "move the graph"],
+  ["+ - 0", "zoom in / out / reset"], ["enter space", "fold or open a run"], ["G", "newest step, follow it"],
+  ["gg", "oldest step"], ["w", "next working agent"], ["s", "every agent's time, tokens, cost"], ["f", "focus its terminal"],
+  ["[ ]", "previous / next session"], ["esc", "close the details"], ["?", "keys"],
+];
+
 export default class Agents extends View {
   init(_props, cx) {
     this.terminal = props()?.terminal ?? null; // the Claude Code shown
@@ -226,6 +234,7 @@ export default class Agents extends View {
 
   /** nocturne-agents.<command>: the keyboard's moves, for keys.json. */
   command(c, cx) {
+    if (c === "keys") { this.help = !this.help; return; }
     if ("hjkl".includes(c) && c.length === 1) return this.step(c, cx);
     if (c === "in") this.zoomTo(this.zoom * ZOOM.step);
     else if (c === "out") this.zoomTo(this.zoom / ZOOM.step);
@@ -654,7 +663,7 @@ export default class Agents extends View {
 
   /** lazygit's options bar: the main keys. */
   hints(t) {
-    const list = this.help ? [["esc", "close"]]
+    const list = this.help ? [["esc", "close"], ["?", "keys"]]
       : [["hjkl", "move"], ["enter", "fold"], ["G", "follow"], ["w", "working"], ["s", "stats"], ["f", "terminal"], ["[ ]", "session"], ["?", "keys"]];
     return h_flex().id("ag-hints").relative().h(22).flex_none().px(12).gap(10).items_center().text_size(11).overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
@@ -665,15 +674,9 @@ export default class Agents extends View {
 
   /** ?: every key, over the pane. */
   helpPanel(t) {
-    const keys = [
-      ["h l", "parent / first child"], ["j k", "down / up the column"], ["H J K L", "move the graph"],
-      ["+ - 0", "zoom in / out / reset"], ["enter", "fold or open a run"], ["G", "newest step, follow it"],
-      ["gg", "oldest step"], ["w", "next working agent"], ["s", "every agent's time, tokens, cost"], ["f", "focus its terminal"],
-      ["[ ]", "previous / next session"], ["esc", "close the details"], ["?", "these keys"],
-    ];
     return v_flex().id("ag-help").absolute().inset_0().bg(t.background).px(16).py(12).gap(2).text_size(11)
       .child(div().pb(6).text_color(t.ansi8).child("KEYS"))
-      .children(keys.map(([k, what], i) => h_flex().id(`ag-help-${i}`).gap(12)
+      .children(KEYS.map(([k, what], i) => h_flex().id(`ag-help-${i}`).gap(12)
         .child(div().w(90).flex_none().text_color(t.accent).child(k))
         .child(div().text_color(t.muted).child(what))));
   }

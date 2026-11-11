@@ -62,8 +62,10 @@ const stop = (_e, cx) => cx.stop_propagation();
 /** A key's name: the typed character for printable keys ("G", "?", "]"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
 // What `?` lists.
-const KEYS = [["j k", "scroll"], ["d u", "half page"], ["gg G", "top / bottom"], ["tab ⇧tab", "links"], ["enter", "follow"],
-  ["] [", "headings"], ["h", "back"], ["r", "raw"], ["e", "edit"], ["f", "files"], ["y", "copy path"], ["?", "keys"]];
+// Every key key() takes, ? keys last.
+export const KEYS = [["j k  ↑ ↓", "scroll"], ["d u  space", "half a page down / up"], ["ctrl-d ctrl-u  pgdn pgup", "half a page down / up"],
+  ["gg G  home end", "top / bottom"], ["tab ⇧tab", "links"], ["enter", "follow"], ["] [", "headings"], ["h ←  ⌫", "back"],
+  ["r", "raw"], ["e", "edit"], ["f", "files"], ["y", "copy path"], ["esc", "off the link · keys away"], ["?", "keys"]];
 
 export default class Markdown extends View {
   init(p, cx) {
@@ -333,6 +335,7 @@ export default class Markdown extends View {
 
   /** `nocturne-markdown.<command>` (keys.json, `herdr-app do`): every shown viewer takes it. */
   command(c, cx) {
+    if (c === "keys" || c === "nocturne-markdown.keys") { this.keysShown = !this.keysShown; return; }
     const page = Math.max(80, this.shown().viewH / 2);
     if (c === "down") this.scroll(page);
     else if (c === "up") this.scroll(-page);

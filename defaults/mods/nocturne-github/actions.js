@@ -331,8 +331,8 @@ export default class Actions {
 
   static help() {
     return [
-      ["j k", "move: runs, steps; scroll the log"], ["h l ← →", "out / in: runs → jobs → steps → log"], ["hjkl (jobs)", "move through the graph"],
-      ["enter tab ⇧tab", "in / next / previous panel"], ["esc", "back out"], ["J K", "page the log"], ["g G", "first / last"],
+      ["j k ↓ ↑", "move: runs, steps; scroll the log"], ["h l ← →", "out / in: runs → jobs → steps → log"], ["hjkl (jobs)", "move through the graph"],
+      ["enter tab ⇧tab", "in / next / previous panel"], ["esc", "back out"], ["J K pgdn pgup", "page the log"], ["g G home end", "first / last"],
       ["w", "next running run"], ["n", "run a workflow by hand (workflow_dispatch)"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
       ["X", "cancel the run"], ["o", "in the browser"], ["r", "refresh now"],
       ["drag scroll", "move the graph (double-click: back)"],

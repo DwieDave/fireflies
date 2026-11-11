@@ -623,7 +623,8 @@ export default class Projects {
 
   static help() {
     return [
-      ["h l ← →", "column"], ["j k ↓ ↑ g G", "card / first / last"], ["enter", "the card's detail (again: into it)"], ["space m", "carry it: hjkl moves, enter drops, esc puts back"],
+      ["h l ← →", "column"], ["j k ↓ ↑ g G home end", "card / first / last"], ["J K pgdn pgup", "scroll the card's detail"],
+      ["tab ⇧tab", "to the detail and back"], ["esc", "close the detail · clear the filter"], ["enter", "the card's detail (again: into it)"], ["space m", "carry it: hjkl moves, enter drops, esc puts back"],
       ["e", "edit its fields"], ["a", "add a draft to the column"], ["i", "make the draft an issue"], ["x", "archive (asks)"],
       ["/", "filter: assignee: label: status: is: repo: no: words"], ["v", "the project's views"], ["p", "projects (repo's, owner's)"],
       ["-", "fold the column"], ["z", "fold the swimlane"], ["w", "the column's limit"], ["L", "a link in the open card"], ["o", "on GitHub"], ["r", "refresh"],

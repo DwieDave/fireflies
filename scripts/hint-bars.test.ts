@@ -59,6 +59,13 @@ test("GitHub window: ? keys sits after the right-aligned note, at the bar's end"
   expect(texts(gh.hints(theme, [["esc", "close"]], right))).toEqual(["esc", "close", "loaded 2 min ago"]);
 });
 
+const gitDraw = await import("../defaults/mods/nocturne-git/draw.js");
+
+test("Git window: ? keys ends its options bar, after the global keys and the note", () => {
+  const bar = gitDraw.hints(theme, [["j/k", "move"]], new El().child("q closes this pane"), null, { ends: [["P", "push"]], help: ["?", "keys"] });
+  expect(texts(bar).slice(-3)).toEqual(["q closes this pane", "?", "keys"]);
+});
+
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 
@@ -74,9 +81,9 @@ test("tab strip: with the keyboard, ? keys is the strip's last word, after its t
   expect(words.indexOf("+ new")).toBeLessThan(words.length - 1);
 });
 
-test("sidebar: its hint line ends with ?", () => {
+test("sidebar: its hint line ends with ? keys", () => {
   const words = texts((Object.create(Sky.prototype) as any).hints(theme));
-  expect(words.join(" ").trim().endsWith("?")).toBe(true);
+  expect(words.at(-1)).toBe("? keys");
 });
 
 const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/nocturne-notifications/overview.js");

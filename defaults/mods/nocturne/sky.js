@@ -395,8 +395,10 @@ export default class Sky {
     return h_flex().id("sky-hints").absolute().left(0).right(0).bottom(0).h(20).px(10).gap(8).items_center()
       .bg(t.background).text_size(11).text_color(t.dim)
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.accent, 1)))
-      .child(div().text_color(t.accent).child("keys"))
-      .child(div().flex_1().min_w(0).truncate().child("jk ⏎ m menu esc ?"));
+      .child(div().text_color(t.accent).child("sidebar"))
+      .child(div().flex_1().min_w(0).truncate().child("jk ⏎ m menu esc"))
+      // ? keys last, never cut off.
+      .child(div().flex_none().child("? keys"));
   }
 
   header(t, list) {

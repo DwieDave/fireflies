@@ -161,9 +161,10 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
  *  labels ("full": dotfiles / ignored, "short": .* / ign, "icon": the eye
  *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
 /** What ? lists under the filter line, ? keys last. */
-export const KEYS = [["j k", "move"], ["h l", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
-  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["m", "menu"], ["/", "filter"], ["H I", "dotfiles / ignored"],
-  ["- .", "root up / here"], ["[ ]", "back / forward"], ["gg G", "top / bottom"], ["r", "refresh"], ["q", "close"], ["?", "keys"]];
+export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
+  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "in the filter: pick a hit"], ["tab ⇧tab", "in the filter: to the list"], ["H I", "dotfiles / ignored"],
+  ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→  ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
+  ["r", "refresh"], ["esc", "clear the filter · leave"], ["q", "close"], ["?", "keys"]];
 /** The ? chip's width on the filter line (px). */
 const KEYS_CHIP = 15;
 

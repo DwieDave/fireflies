@@ -9,26 +9,28 @@ export function keyOf(e) {
   return String(e?.key ?? "");
 }
 
-const COMMON = [["n p", "next / prev file"], ["o", "open in its app"], ["y", "copy path"], ["f", "files"]];
-const AFTER = [["tab", "bar"], ["?", "keys"]];
+const COMMON = [["n p  ] [", "next / prev file"], ["o", "open in its app"], ["y", "copy path"], ["f", "files"]];
+const AFTER = [["tab ⇧tab", "the bar's buttons (⏎ presses)"], ["esc", "out of the bar · keys away"], ["?", "keys"]];
 
-/** [[keys, what]] for the strip: `how` is the preview's way of showing it
- *  (image, raster, native, table, diff), `kind` the file's kind. */
+/** [[keys, what]] for the strip, every key main.js's key() takes for it: `how` is
+ *  the preview's way of showing it (image, raster, native, table, diff), `kind`
+ *  the file's kind. */
 export function keyList(how, kind, { editable = false, paged = false, db = false } = {}) {
   const own = [];
   if (how === "image" || how === "raster") {
-    own.push(["+ -", "zoom"], ["0", "fit"], ["1", "100%"], ["h j k l", "pan"]);
-    if (paged) own.push(["space ⇧space", "pages"], ["g G", "first / last"]);
-    if (how === "image") own.push(["r R", "turn"], ["b", "background"]);
+    own.push(["+ -", "zoom"], ["0", "fit"], ["1", "100%"], ["h j k l  ← ↑ ↓ →", "pan (fitted: h l step)"],
+      ["space ⌫  pgdn pgup", paged ? "pages" : "next / prev file"]);
+    if (paged) own.push(["g G", "first / last"]);
+    own.push(["r R", "turn"], ["b", "background"]);
   } else if (how === "native" && kind === "pdf") {
-    own.push(["+ -", "zoom"], ["0", "fit width"], ["← →", "pages"], ["g G", "first / last"], ["esc", "out of the page"]);
+    own.push(["+ -", "zoom"], ["0", "fit width"], ["← →  h l", "pages"], ["space ⌫  pgdn pgup", "pages"], ["g G", "first / last"], ["esc", "out of the page"]);
   } else if (how === "native" && (kind === "video" || kind === "audio")) {
-    own.push(["space k", "play / pause"], ["← →", "5 s"], ["⇧← ⇧→", "30 s"], ["0", "start"], ["m", "sound"], ["esc", "out of the player"]);
+    own.push(["space k", "play / pause"], ["← →  h l", "5 s"], ["⇧← ⇧→  H L", "30 s"], ["0 home", "start"], ["m", "sound"], ["esc", "out of the player"]);
   } else if (how === "native") {
     own.push(["esc", "out of the view"]);
   } else if (how === "table" || how === "diff") {
-    own.push(["j k", "rows"], ["J K", "pages"], ["g G", "top / bottom"]);
-    if (how === "table") own.push(["h l", "columns"]);
+    own.push(["j k  ↑ ↓", "rows"], ["J K  pgdn pgup", "pages"], ["g G  home end", "top / bottom"]);
+    if (how === "table") own.push(["h l  ← →", "columns"]);
     if (how === "diff") own.push(["} {", "next / prev file"]);
     if (db) own.push(["t T", "tables"]);
   }

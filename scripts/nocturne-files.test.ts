@@ -502,7 +502,7 @@ test("? shows the keys under the filter line (? keys its last item), ? or esc hi
   expect(view.typing).toBeFalsy();
   const strip = texts(view.keysStrip(world.props));
   expect(strip.slice(-2)).toEqual(["?", "keys"]);
-  expect(strip).toEqual(expect.arrayContaining(["j k", "/", "q"]));
+  expect(strip).toEqual(expect.arrayContaining(["j k  ↑ ↓", "/", "q"]));
   expect(texts(view.render())).toEqual(expect.arrayContaining(["?", "keys"]));
   view.key(q, cx);
   expect(view.keysShown).toBe(false);

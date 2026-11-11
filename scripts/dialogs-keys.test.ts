@@ -254,12 +254,22 @@ test("keys screen: ↑↓ walk the rows, the list scrolls past the eyebrows, esc
   state.props = { overlay: "k" };
   const k: any = new Keys();
   k.init({}, cx());
-  const root = k.render();
-  press(root, "down"); press(root, "ctrl-n");
-  expect(k.at).toBe(2);
-  // tabs: eyebrow 0, rows 1-2; panes: eyebrow 3, row 4.
-  expect(k.scroll.items.at(-1)).toBe(4);
-  press(root, "pageup");
+  let root = k.render();
+  // keyboard focus comes first (its blocks), then tabs: walk to cmd-d, under the panes eyebrow.
+  const want = k.rows.findIndex((r: any) => r.x.k?.keys === "cmd-d");
+  for (let i = 0; i < want - 1; i++) press(root, "down");
+  press(root, "ctrl-n");
+  expect(k.at).toBe(want);
+  expect(k.scroll.items.at(-1)).toBe(k.rows[want].child);
+  expect(texts(root)).toContain("Split the pane: a terminal to the right");
+  // enter on a block unfolds its keys under it, again folds them.
+  k.at = k.rows.findIndex((r: any) => r.x.surface === "sidebar");
+  press(root, "enter");
+  root = k.render();
+  expect(texts(root)).toContain("new worktree");
+  press(root, "enter");
+  expect(texts(k.render())).not.toContain("new worktree");
+  press(root, "pageup"); press(root, "pageup"); press(root, "pageup");
   expect(k.at).toBe(0);
   expect(press(root, "j").stopped).toBe(0); // typing filters
   const c = press(root, "escape");

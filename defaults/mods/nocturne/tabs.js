@@ -28,7 +28,7 @@ import { dither, pip, spaceFolder, givenName, dropBelow, navRing } from "./kit.j
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { openMenu, openKeys } from "./menu.js";
 import { headerControls, paneMenu, renamePane } from "./header.js";
-import { CURSOR, STRIP_KEYS, STRIP_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
+import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
 import { gitState } from "./lazygit.js";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
@@ -184,7 +184,9 @@ export default class Tabs {
         break;
       }
       case "back": return this.back();
-      case "help": return openKeys("tab strip keys", STRIP_HELP);
+      // The row the cursor is on says which keys: the strip's, the header's, the chips'.
+      case "help": return this.row === "head" ? openKeys("pane header keys", HEADER_HELP)
+        : this.row === "parked" ? openKeys("parked pane keys", PARKED_HELP) : openKeys("tab strip keys", STRIP_HELP);
       case "new": { const sp = spaces().find((s) => s.active); run("tab.new", sp ? { space: sp.id } : {}); return; }
       default:
         if (/^n[1-9]$/.test(verb)) return run("tab.select", { index: Number(verb.slice(1)) });

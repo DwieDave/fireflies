@@ -115,6 +115,7 @@ export default class GitHub extends View {
         const c = String(await nextCommand()).replace(/^nocturne-github\./, "");
         if (c === "focus") this.handle.focus();
         else if (c === "refresh") this.refresh(cx, true);
+        else if (c === "keys") this.help = !this.help;
         else if (c === "fork") this.switchFork(cx);
         else if (c === "prs" || c === "actions" || c === "projects") this.setTab(c, cx);
         else if (c === "diff" && this.repo && this.prs.current()) this.openDiff(this.prs.current().number);
@@ -521,7 +522,7 @@ export default class GitHub extends View {
     const fork = this.tab === "projects" ? "F" : "p F";
     const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],
       ...(this.repo?.parent ? [[fork, `the parent, ${this.repo.parent}`]] : this.repo?.child ? [[fork, `back to the fork, ${this.repo.child}`]] : []),
-      ["?", "these keys"], ["esc q", "close (from the top)"]];
+      ["esc q", "close (from the top)"], ["?", "keys"]];
     const tab = this.tab === "prs" ? Prs.help() : this.tab === "projects" ? Projects.help() : Actions.help();
     const col = (title, list) => v_flex().gap(3).min_w(260)
       .child(div().pb(4).text_color(t.ansi8).child(title))

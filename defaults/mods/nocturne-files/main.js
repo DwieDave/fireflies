@@ -128,6 +128,7 @@ export default class Files extends View {
       for (;;) {
         const c = String(await nextCommand()).replace(`${MOD}.`, "");
         if (c === "focus" || (c === "take-panel" && !this.alone && this.isFocusedPane())) this.takeKeys(cx);
+        else if (c === "keys" && (this.alone || this.isFocusedPane())) this.keysShown = !this.keysShown;
         cx.notify();
       }
     });
