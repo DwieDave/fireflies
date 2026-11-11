@@ -321,7 +321,8 @@ the highlighted line shows where it will land.
   Markdown (tables, task lists, strikethrough, autolinks) it draws, as every
   Markdown text in the app does (the editor's preview, the GitHub window): math,
   `$…$` inline and `$$…$$` or a ```` ```math ```` fence as a block, typeset with
-  KaTeX's coverage (RaTeX, in the app, no network; `$5 and $10` stays text);
+  KaTeX's coverage in white (the theme's bright white, or its foreground on a
+  light theme; RaTeX, in the app, no network; `$5 and $10` stays text);
   mermaid diagrams in a ```` ```mermaid ```` fence (flowchart, sequence, class,
   state, ER, gantt, pie, mindmap, timeline, git graph, …), in the theme's
   colors; code fences colored by tree-sitter (the editor's languages);

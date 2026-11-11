@@ -167,7 +167,7 @@ impl MarkdownPlugin for MathInline {
 
     fn render_inline(&self, node: &MarkdownNode, context: &InlineRenderContext, _window: &mut Window, _cx: &mut App) -> Option<InlineElement> {
         let math = node.data::<Math>()?;
-        let color = context.text_style().color;
+        let color = math_color();
         let size = f32::from(context.font_size()) * MATH_SCALE;
         Some(match rendered_math(&math.tex, math.display, color, size) {
             Ok(r) => InlineElement::new(img(r.image.clone()).w(px(r.width)).h(px(r.height)).flex_none()).with_baseline(px(r.baseline)),
@@ -206,7 +206,7 @@ impl MarkdownPlugin for MathBlock {
         let math = node.data::<Math>().cloned().unwrap_or(Math { tex: String::new(), display: true });
         let id = SharedString::from(format!("herdr-math-{:x}", hash(&(&math.tex, node.source_range().map(|r| r.start)))));
         let shell = div().id(id).w_full().py(px(4.)).flex().justify_center();
-        match rendered_math(&math.tex, true, style.color, size) {
+        match rendered_math(&math.tex, true, math_color(), size) {
             Ok(r) => shell.child(fitted(&r)),
             Err(e) => shell.child(source_with_error(&math.tex, &e)),
         }
@@ -399,6 +399,20 @@ fn mermaid_theme(p: &Palette) -> mermaid_rs_renderer::Theme {
 /// A drawn block at its own size, scaled down (keeping its shape) when the text is narrower.
 fn fitted(r: &Rendered) -> impl IntoElement {
     img(r.image.clone()).w(px(r.width)).max_w_full().aspect_ratio(r.width / r.height.max(1.))
+}
+
+/// Formulas are drawn white: of the theme's foreground and its bright white
+/// (ansi15), the one further from the background (on a light theme, the
+/// foreground). Thin serif strokes in the foreground's grey read dimmer than text.
+fn math_color() -> Hsla {
+    let p = palette();
+    let parse = |name: &str, fallback: &str| crate::settings::parse_hex(&p.hex(name, fallback));
+    let fg = parse("foreground", "#ffffff").unwrap_or(gpui::white());
+    let bg = parse("background", "#000000").unwrap_or(gpui::black());
+    match parse("ansi15", "") {
+        Some(white) if (white.l - bg.l).abs() > (fg.l - bg.l).abs() => white,
+        _ => fg,
+    }
 }
 
 fn error_color() -> Hsla {
