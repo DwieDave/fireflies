@@ -33,6 +33,7 @@ const MODS = {
   "nocturne-diff": ["Diff", "git-compare"], "nocturne-files": ["Files", "files"],
   "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
   "nocturne-markdown": ["Markdown", "file-text"], "nocturne-preview": ["Preview", "eye"],
+  "nocturne-editor": ["Editor", "file-text"],
   nocturne: ["Worktrees", "git-branch"],
 };
 // Header widths (px) at which parts give way.
@@ -71,7 +72,7 @@ export function paneName(p) {
 
 /** A file viewer (Markdown, preview) goes by the file it shows (it notes that by
  *  slot in shared `<mod>.titles`). */
-const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview"]);
+const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor"]);
 function viewerName(p) {
   if (!VIEWERS.has(p.mod)) return null;
   const slot = p.props?.slot;

@@ -40,6 +40,7 @@ import { menuHeight, NAME_AGENT } from "./menu.js";
 import { toggleLazygit } from "./lazygit.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
+import { togglePicker } from "./picker.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
@@ -141,7 +142,8 @@ export default class Sky {
     // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
     // that Herdr Core's missing App Management stopped, opens that setting),
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
-    // the shown tab's panes into an even grid (gridify.js).
+    // the shown tab's panes into an even grid (gridify.js), nocturne.picker
+    // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -152,6 +154,8 @@ export default class Sky {
         else if (c === "fold") this.fold(cx);
         else if (c === "lazygit") toggleLazygit();
         else if (c === "files") toggleFiles();
+        else if (c === "picker") togglePicker("files");
+        else if (c === "grep") togglePicker("grep");
         else if (c === "github") toggleGithub();
         else if (c === "scripts") toggleDeck({ centered: true });
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });

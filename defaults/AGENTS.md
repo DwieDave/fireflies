@@ -282,7 +282,7 @@ the highlighted line shows where it will land.
   The viewer re-reads the file when it changes on disk, keeping its scroll;
   web links in it follow `links`, relative `.md` links open in the same viewer
   (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
-  edit ($EDITOR in a terminal beside), files. Commands for the shown viewers:
+  edit (the editor beside; another machine's file: $EDITOR in a terminal), files. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
 - **Previews**: the same goes for files you look at but don't edit: pictures
   (`.png`, `.jpg` / `.jpeg`, `.gif`, `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`,
@@ -299,7 +299,7 @@ the highlighted line shows where it will land.
   patch the editor); so do such links and drawn images in the Markdown viewer.
   `preview.open {path, in?, pane?, on?}` does it from a mod or an agent
   (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
-  code and other text you edit stay with the editor. Per kind:
+  code and other text you edit open in the editor (Editing files). Per kind:
   - pictures fit the pane; `+` / `-` zoom, `0` fit, `1` 100%, `h j k l` /
     arrows / drag pan (scroll pans, Cmd/Ctrl-scroll zooms at the pointer), `r` /
     `R` turn, `b` checker / dark background. Animated GIF and WebP play. HEIC
@@ -331,6 +331,57 @@ the highlighted line shows where it will land.
   on disk. Commands for the shown previews: `nocturne-preview.zoom_in`,
   `.zoom_out`, `.fit`, `.actual`, `.next`, `.prev`, `.page_next`, `.page_prev`,
   `.rotate`, `.background`, `.reload`.
+- **Editing files**: source code and other text people edit (every language
+  `languageOf` knows, plus Makefiles, Dockerfiles, `.env`, SQL, Ruby, ...)
+  opens in the editor (`nocturne-editor`): a link to one in a terminal (a
+  `path:42:7` link puts the caret there), a file picked in the files panes
+  (Nocturne's: click or `e`; `E` and folders: $EDITOR in a terminal beside), the
+  Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
+  as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
+  One file per pane, beside the pane it came from; an editor already on the
+  file there goes to the line instead. The text is the code editor of
+  gpui-kit (undo / redo cmd-z / cmd-shift-z, selection, multiple carets, copy /
+  paste, folding) colored by tree-sitter in moonfly's roles (a curated set of
+  grammars: Rust, TypeScript / TSX / JavaScript, Python, Go, Nix, Lua, Bash,
+  JSON, YAML, TOML, Markdown, CSS, HTML, C, Zig; other text plain). Its bar:
+  unsaved mark (also `●` in the pane header), name, folder, the problems'
+  counts (click: the problems drawer), the language server, language and
+  indent, line:col. Saving writes only over what was read: a file changed
+  outside while edited says so (reload theirs / keep mine), a clean one
+  reloads by itself, keeping the caret. Closing an edited editor's pane or tab
+  asks first (`setUnsaved`). Keys while it has focus (keys.json
+  `mod:nocturne-editor`, macOS): cmd-s save, cmd-f find (enter / shift-enter,
+  Aa, esc), cmd-alt-f replace (cmd-enter: all), ctrl-g / cmd-l go to line
+  (`42`, `42:7`), f8 / shift-f8 next / previous problem, cmd-shift-m the
+  problems drawer, f12 definition (another file opens in its own editor),
+  cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level deeper /
+  shallower, cmd-r reload. Resting the pointer on a word shows the hover card:
+  the server's signature and docs, and every problem there with its whole
+  message (multi-line type errors included), code and source. TypeScript and
+  JavaScript (typescript-language-server 5.3+ with TypeScript 5.9+) expand the
+  type a level at a time (the card's − / +). Language servers run per language
+  and workspace (the outermost `Cargo.toml` in the repository, the nearest
+  `tsconfig.json` / `package.json`, `pyproject.toml`, `go.mod`, `flake.nix`,
+  ..., else the repository) from settings.json's `editor` (see The person):
+  the built-in ones only when on PATH (rust-analyzer, typescript-language-server
+  or vtsls, basedpyright / pyright / pylsp, gopls, nixd or nil,
+  lua-language-server, bash-language-server, vscode-json-language-server
+  (validates JSON), yaml-language-server, taplo, marksman, vscode-css / html
+  language servers, clangd, zls), shared by every editor of that workspace and
+  stopped 90 s after the last closes. Files up to 1 MiB; files on another
+  machine open without a language server. Commands for the shown editors:
+  `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
+  `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
+  `.hover-less`, `.reload`.
+- **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
+  finds a file in the space's repository (its attached folder, else the focused
+  pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
+  (`nocturne.grep`) searches every file's text as you type, lines grouped by
+  file. Both are fff's (`findFiles`, `grep`): git-ignored files stay out, the
+  folder's index stays warm while it's used. tab switches mode, ↑↓ pick, enter
+  opens in the editor (grep: at the line), ctrl-r regex, ctrl-t fuzzy lines,
+  esc closes; a wide window shows the picked file around the line. Pressing
+  the same key again closes it.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.
@@ -800,7 +851,8 @@ The main ones:
   `pane.split {edge: "right" | "left" | "top" | "bottom", px?, tab?, argv? | mod?, props?, folder?}`
   (instead of `direction`: the new pane along that side of a whole tab, default the shown
   one, spanning its full height or width; `px` fixes its width or height and the rest stays
-  flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?}`,
+  flexible; later splits of the other panes stay in the rest of the tab), `pane.close {pane?, confirmed?}`
+  (a mod pane holding unsaved work, an editor's, asks the person first; a script passes `confirmed`),
   `pane.zoom {pane?}`, `pane.focus {pane | terminal}`, `pane.go {direction}`, `pane.swap {pane?, direction | target}`, `pane.move {pane?, tab? | target?, edge?, space?, name?}`, `pane.equalize {scope?, pane?}`,
   `pane.font_bigger {pane?}`, `pane.font_smaller {pane?}`, `pane.font_reset {pane?}` (that pane's
   terminal text only, in the app zoom's tenths on top of it, 0.5–3; the grid refits; kept with this
@@ -977,6 +1029,9 @@ The main ones:
   never one a package manager owns), `app.welcome`, `app.whats_new`,
   `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
   `"system"` the system's browser; default: the `links` setting; the reply says `opened`),
+  `editor.open {path, line?, col?, in?, pane?, on?}` (text or source in the editor beside `pane`,
+  default the focused one, or the editor there already on it, going to `line` / `col`, one-based;
+  `in: "system"` the system's app; see Editing files),
   `markdown.open {path, anchor?, in?, pane?, on?}` (a Markdown file rendered in the viewer beside
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a
   heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
@@ -1412,6 +1467,15 @@ All of it is in `herdr.d.ts`. In short:
   A returned root path means refresh everything (the pending paths are bounded).
   Files also refreshes on its 10-second timer:
   `cx.spawn(async (cx) => { for (;;) { await watchFolder(dir); this.reload(); cx.notify(); } })`.
+- Code (this machine): `highlight(text, language)` (tree-sitter spans `[start, end, name]`
+  to color code you draw yourself; `languageOf(path)` names the language), `findFiles(root,
+  query)` and `grep(root, query, { mode })` (fff: fuzzy file names and live grep, git-ignored
+  files left out), and language servers: `lspStart({ argv, root, settings })` (shared per argv
+  and root, initialized for you), `lspRequest`, `lspNotify`, `lspNextMessage` (diagnostics and
+  other notifications), `lspRelease`; documents and their sync are yours. A code editor's
+  `EditorState` moves its caret, finds, edits, underlines problems (`set_diagnostics`), writes
+  notes after lines (`set_line_notes`) and reports the word under the pointer (`on("hover")`).
+  `setUnsaved(note)`: closing this copy's pane or tab asks the person first.
 - `notify({ ..., action: { name, args } })`: the toast runs the command when clicked.
 - This copy: `props()`, `shared(key)` / `setShared(key, value)` (every mod
   sees it; setting re-renders all), `nextCommand()` (key commands for this
