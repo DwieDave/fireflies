@@ -144,6 +144,11 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
             })
         });
     }
+    // Pure: the real ones.
+    module = module.function("highlight", |a| {
+        Ok(to_host(&Value::Array(crate::syntax::highlight(a.string(0)?, a.string(1)?).into_iter().map(|(s, e, n)| json!([s, e, n])).collect())))
+    });
+    module = module.function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())));
     module = module.async_function("knownAgents", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("pickFolder", |_| Ok(async { Ok(HostValue::Null) }));
     module = module.async_function("pickFile", |_| Ok(async { Ok(HostValue::Null) }));

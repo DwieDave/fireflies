@@ -1103,6 +1103,23 @@ What's about the user, never a look:
   `p` writes Linux primary selection. `s` is ignored; cut buffers `0`–`7`
   are treated as the system clipboard.
   Clipboard reads (`?`) are never allowed.
+- `editor`: the code editor (Nocturne's `nocturne-editor`, see Editing files).
+  Top-level values apply to every language; `languages` overrides them per
+  language id (`languageOf(path)`: `rust`, `typescript`, `tsx`, `javascript`,
+  `python`, `go`, `nix`, `lua`, `bash`, `json`, `yaml`, `toml`, `markdown`,
+  `css`, `html`, `c`, `zig`, `csv`, `text`). Each takes `tab_size` (1–16),
+  `insert_spaces`, `soft_wrap`, `format` (an argv that reads the file on stdin
+  and prints it formatted), `format_on_save` (off unless set), `server` (the
+  language server's argv, or `false` for none) and `server_settings` (what the
+  server gets as `workspace/configuration` and `initializationOptions`).
+  Without `server`, a language uses the first built-in server found on PATH;
+  none is ever installed. Changes apply to editors opened afterwards.
+  ```json
+  { "editor": { "tab_size": 4, "format_on_save": true,
+      "languages": { "rust": { "format": ["rustfmt", "--edition", "2024"] },
+                     "python": { "server": ["pyright-langserver", "--stdio"] },
+                     "go": { "server": false }, "markdown": { "soft_wrap": true } } } }
+  ```
 - `pane_scrollbars`: `false` hides the scroll position thumb at a terminal
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and
