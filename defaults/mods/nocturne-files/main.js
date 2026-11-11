@@ -20,11 +20,13 @@
 // terminal pane beside this one. With nvim it listens on a socket per tab,
 // so later picks open in that same nvim instead of a new pane.
 //
-// Click a file: edit it in the app's editor (a Markdown file: read it in the Markdown viewer,
-// nocturne-markdown, alt-click edits it as text; a picture, PDF, table, patch,
-// font or clip: the preview, nocturne-preview, alt-click opens the system's app,
-// or edits a table or patch). Click a folder: fold it;
-// click it again quickly: edit the folder. Keys while it has focus:
+// Click a file: select it (the keyboard comes here, the preview split follows).
+// Double-click a file: edit it in the app's editor (a Markdown file: read it in
+// the Markdown viewer, nocturne-markdown, alt-double-click edits it as text; a
+// picture, PDF, table, patch, font or clip: the preview, nocturne-preview,
+// alt-double-click opens the system's app, or edits a table or patch). Click a
+// folder: fold it; double-click it: edit the folder in $EDITOR (the fold its
+// first click made is undone). Keys while it has focus:
 //   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
@@ -93,7 +95,7 @@ const EDIT = "nocturne-edit";
 /** The editor wrapper: the one this mod ships, here; another machine's own. */
 const editTool = (on) => (on ? EDIT : `${appHome()}/mods/nocturne-files/bin/${EDIT}`);
 /** Files the app has a viewer for, by type: the command that opens one there,
- *  and what the other way (alt-click, `e`) does instead. */
+ *  and what the other way (alt-double-click, `e`) does instead. */
 const VIEWERS = [
   { test: /\.(md|markdown)$/i, open: "markdown.open", other: "edit" },
   // The preview (nocturne-preview/kinds.js KINDS); tables and patches are text: e edits them.
@@ -123,6 +125,8 @@ const NATIVE_IDS = ["preview-pdf", "preview-media", "preview-quicklook"];
 /** The list's key for the new file's or folder's input row. */
 const DRAFT = "\u0000draft";
 const HITS = 200, MENU_ROW = 20;
+/** Two clicks on a row this close (ms) are a double click. */
+const DOUBLE = 400;
 const zoom = () => Number(settings()?.zoom) || 1;
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
@@ -626,7 +630,7 @@ export default class Files extends View {
 
   /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
    *  viewer, beside this tab's editor or its first other pane (else this one);
-   *  anything else in the editor. `other` (alt-click, `e`): Markdown as text in
+   *  anything else in the editor. `other` (alt-double-click, `e`): Markdown as text in
    *  the editor, a picture in the system's app. */
   openFile(path, cx, other) {
     const viewer = viewerFor(path);
@@ -940,17 +944,22 @@ export default class Files extends View {
     if (rows[i]) this.select(rows, i);
   }
 
+  /** A click on a row: a file is selected (the preview follows), a double
+   *  click opens it (alt: the other way); a folder folds, a double click edits
+   *  it in $EDITOR (its first click's fold undone); a search's folder line
+   *  shows that folder in the tree. */
   pick(path, cx) {
     // A click in the name's input row places the caret; it doesn't open the row.
     if (path === DRAFT || (this.draft?.kind === "rename" && this.draft.path === path)) return;
     const rows = this.shown(), row = rows.find((r) => r.path === path);
     if (!row) return;
-    const now = Date.now(), again = this.lastClick?.path === path && now - this.lastClick.at < 400;
-    this.lastClick = { path, at: now };
+    const now = Date.now(), again = this.lastClick?.path === path && now - this.lastClick.at < DOUBLE;
+    // A double click is used up: a third click selects again.
+    this.lastClick = again ? null : { path, at: now };
     this.sel = path;
     this.handle.focus();
     if (row.head) this.reveal(path, cx);
-    else if (!row.dir) this.openFile(path, cx, this.alt);
+    else if (!row.dir) { if (again) this.openFile(path, cx, this.alt); }
     else if (again) { this.toggle(path, cx); this.edit(path, cx); } // undo the first click's fold
     else this.toggle(path, cx);
     cx.notify();
@@ -1329,7 +1338,7 @@ export default class Files extends View {
     };
     return v_flex().id("nocturne-files").relative().size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      // A row's click comes after this: alt-click opens a Markdown file as text.
+      // A row's click comes after this: alt-double-click opens a Markdown file as text.
       .on_mouse_down("left", (e, cx) => {
         if (endDrag()) cx?.notify();
         this.alt = Boolean(e?.modifiers?.alt);

@@ -551,3 +551,69 @@ test("the divider lights under the pointer and while held", () => {
   handler(byId(view.render(cx), "nf-divider"), "on_mouse_down", "left")({}, cx);
   expect(band()).toBe(DIVIDER - 2);
 });
+
+// ---- clicks: a click selects, a double click opens
+
+test("a click on a file selects it and opens nothing; a double click opens it as a click did; alt-double-click the other way", async () => {
+  world.shared = {};
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  const view = pane();
+  world.panes.push({ pane: "p1", tab: "t1", terminal: "x" });
+  const edits: string[] = [];
+  view.edit = (path: string) => edits.push(path);
+  const click = (path: string, alt = false) => { view.alt = alt; view.pick(path, cx); view.alt = false; };
+  commands.length = 0;
+  // One click: selected, the keyboard here, nothing opened.
+  click("src/m00.rs");
+  click("README.md");
+  click("logo.png");
+  expect([commands, edits, view.sel]).toEqual([[], [], "logo.png"]);
+  // Double clicks: what one click did until now.
+  click("src/m00.rs"); click("src/m00.rs");
+  click("README.md"); click("README.md");
+  click("logo.png"); click("logo.png");
+  expect(edits).toEqual(["src/m00.rs"]);
+  expect(commands.map(([c, a]) => [c, a.path, a.in ?? null])).toEqual([["markdown.open", "/repo/README.md", null], ["preview.open", "/repo/logo.png", null]]);
+  // alt-double-click: Markdown as text, a picture in the system's app; a text file is edited either way.
+  commands.length = 0; edits.length = 0;
+  click("README.md", true); click("README.md", true);
+  click("logo.png", true); click("logo.png", true);
+  click("src/m00.rs", true); click("src/m00.rs", true);
+  expect(edits).toEqual(["README.md", "src/m00.rs"]);
+  expect(commands).toEqual([["preview.open", { path: "/repo/logo.png", in: "system" }]]);
+  // A slow second click (past the double-click time) is two selects; a third quick click after a double selects again.
+  commands.length = 0; edits.length = 0;
+  click("logo.png");
+  view.lastClick.at -= 1000;
+  click("logo.png");
+  expect(commands).toEqual([]);
+  click("logo.png");
+  expect(commands.length).toBe(1);
+  click("logo.png");
+  expect(commands.length).toBe(1);
+  // With the preview on, a click is what the preview follows.
+  key(view, "space");
+  view.render(cx);
+  click("README.md");
+  view.render(cx);
+  await tick();
+  expect(view.look.props.path).toBe("/repo/README.md");
+  expect(commands.length).toBe(1);
+});
+
+test("a folder: a click folds it, a double click opens it in $EDITOR with its fold as it was", () => {
+  world.shared = {};
+  const view = pane();
+  const terminal: string[] = [];
+  view.edit = (path: string) => terminal.push(path);
+  view.folders.delete("src");
+  view.pick("docs", cx);
+  expect(view.folders.has("docs")).toBe(true);
+  view.lastClick.at -= 1000;
+  view.pick("docs", cx);
+  expect(view.folders.has("docs")).toBe(false);
+  expect(terminal).toEqual([]);
+  view.pick("src", cx);
+  view.pick("src", cx);
+  expect([view.folders.has("src"), terminal]).toEqual([false, ["src"]]);
+});

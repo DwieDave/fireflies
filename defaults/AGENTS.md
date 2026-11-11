@@ -383,7 +383,8 @@ the highlighted line shows where it will land.
   the terminal's folder, or a bare `README.md` there) opens it rendered in the
   Markdown viewer (`nocturne-markdown`) beside that pane; clicking it again
   shows the viewer already open on it. The files panes do the same for a picked
-  `.md` (alt-click, or `e` in Nocturne's files pane: as text in the editor).
+  `.md` (alt-click; in Nocturne's files pane a double click opens it, and
+  alt-double-click or `e` opens it as text in the editor).
   `markdown.open {path, anchor?, in?, pane?, on?}` does it from a mod or an agent.
   The viewer re-reads the file when it changes on disk, keeping its scroll;
   web links in it follow `links`, relative `.md` links open in the same viewer
@@ -419,8 +420,8 @@ the highlighted line shows where it will land.
   opens it in the preview (`nocturne-preview`, called `nocturne-image` before:
   panes and keys saved with that name keep working) beside that pane, or shows
   the preview already on it. The files panes open a picked one there
-  (alt-click, or `e` in Nocturne's files pane: the system's app; for a table or
-  patch the editor); so do such links and drawn images in the Markdown viewer.
+  (alt-click, or in Nocturne's files pane alt-double-click or `e`: the
+  system's app; for a table or patch the editor); so do such links and drawn images in the Markdown viewer.
   `preview.open {path, in?, pane?, on?}` does it from a mod or an agent
   (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
   code and other text you edit open in the editor (Editing files). Per kind:
@@ -463,7 +464,7 @@ the highlighted line shows where it will land.
   `languageOf` knows, plus Makefiles, Dockerfiles, `.env`, SQL, Ruby, ...)
   opens in the editor (`nocturne-editor`): a link to one in a terminal (a
   `path:42:7` link puts the caret there), a file picked in the files panes
-  (Nocturne's: click or `e`; `E` and folders: $EDITOR in a terminal beside), the
+  (Nocturne's: double click or `e`; `E` and folders: $EDITOR in a terminal beside), the
   Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
   One file per pane, beside the pane it came from; an editor already on the
@@ -554,7 +555,11 @@ the highlighted line shows where it will land.
   already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
-  with `q` / `esc`. Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
+  with `q` / `esc`. In every files pane a click on a file selects it (the
+  keyboard goes there, the preview split follows) and opens nothing; a double
+  click opens it (alt-double-click: the other way, as `e`). A click on a folder
+  folds it; a double click opens the folder in $EDITOR (its first click's fold
+  undone). Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
   `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`
   (alt-← / alt-→, ctrl-o / ctrl-i, backspace; the toolbar's ‹ ›) back and
   forward through the folders rooted at (back with none goes up), `r` refresh; `/` filters as you type (fff's fuzzy
@@ -599,7 +604,7 @@ the highlighted line shows where it will land.
   read (a capped `head`); pictures, PDFs, fonts and clips there say `p` opens
   them. Clips never play by themselves. A native view (PDF, font, clip) steps
   aside while the menu is open. `nocturne-files.look` toggles it in the focused
-  files pane (the palette's "Show or hide the preview"). Enter, `e`, `E`, `p`, `v` and a click open as
+  files pane (the palette's "Show or hide the preview"). Enter, `e`, `E`, `p`, `v` and a double click open as
   before: the split is only a look. Each pane keeps it (on, size) in shared
   `nocturne-files.look` by slot.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)

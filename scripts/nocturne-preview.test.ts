@@ -88,7 +88,7 @@ test("pictures are told apart by extension, any case", () => {
   expect(extension("/a.b/c")).toBe("");
 });
 
-test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click / e the other way", async () => {
+test("nocturne-files: Markdown to its viewer, pictures to the preview (a double click), alt-double-click / e the other way", async () => {
   const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
@@ -104,7 +104,9 @@ test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click
   const cx = { notify() {}, stop_propagation() {} };
   commands.length = 0;
   view.pick("shots/Screen Shot.png", cx);
+  view.pick("shots/Screen Shot.png", cx);
   view.alt = true;
+  view.pick("shots/Screen Shot.png", cx);
   view.pick("shots/Screen Shot.png", cx);
   view.alt = false;
   view.sel = "shots/Screen Shot.png";
@@ -117,6 +119,7 @@ test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click
     ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
   ]);
   expect(edits).toEqual([]);
+  view.pick("main.rs", cx);
   view.pick("main.rs", cx);
   expect(edits).toEqual(["main.rs"]);
 });
