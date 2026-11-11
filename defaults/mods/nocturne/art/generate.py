@@ -226,6 +226,21 @@ def hills(w=480, h=144):
 
 hills()
 
+# The notification bell (nocturne-notifications' mark in the tab strip): 9 px,
+# drawn like the strip's other pixel marks (play), one cell a layout px.
+BELL = [
+    "....#....",
+    "...###...",
+    "..#####..",
+    "..#####..",
+    ".#######.",
+    ".#######.",
+    "#########",
+    ".........",
+    "...###...",
+]
+write("bell.svg", svg(9 * CELL, 9 * CELL, runs([[c == "#" for c in row] for row in BELL])))
+
 # Status pips: 6 px dithered diamonds, crisp at any zoom.
 write(
     "pip.svg",

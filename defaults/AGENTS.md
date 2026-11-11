@@ -311,9 +311,10 @@ the highlighted line shows where it will land.
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
-  machine. The bell at the right of Nocturne's tab strip counts what waits
-  (permissions and questions in a pink chip, agents that need a look as a
-  dim `+n`; a dim "N" when nothing waits) and sizes its own block (`layout.resize`) to fit, ending where
+  machine. The bell at the right of Nocturne's tab strip (a 9 px pixel bell,
+  muted like the strip's tools when nothing waits) counts what waits: the
+  bell turns pink beside a pink chip for permissions and questions; agents
+  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit, ending where
   the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
   overview, hanging under the bell like the scripts deck under ▶ (as wide as
   the window allows, up to 880, and as tall as what it shows), and closes it

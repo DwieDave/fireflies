@@ -14,6 +14,7 @@ class El {
   kids: any[] = [];
   on: Record<string, Function> = {};
   placed = false; // absolute(): out of the flow
+  color: string | null = null;
   elId: string | null = null;
   constructor(public tag?: string) {
     return new Proxy(this, {
@@ -26,6 +27,7 @@ class El {
         else if (k === "on_mouse_down") t.on[`down:${a[0]}`] = a[1];
         else if (k === "on_click") t.on.click = a[0];
         else if (k === "on_size_change") t.on.size = a[0];
+        else if (k === "text_color") t.color = a[0];
         else if (k === "absolute") t.placed = true;
         return proxy;
       },
@@ -69,7 +71,7 @@ const herdr: Record<string, any> = {
   terminals: () => [], theme: () => theme, updates: () => null, window: () => ({ platform: "macos" }),
 };
 mock.module("herdr", () => herdr);
-mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: () => new El(), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (path: string) => new El(`svg:${path}`), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} }
 mock.module("gpui-base", () => ({
   h_flex: () => new El(), v_flex: () => new El(), v_virtual_list: () => new El(), Scrollbar: { new: () => new El() },
@@ -78,7 +80,8 @@ mock.module("gpui-base", () => ({
 }));
 const VIEWPORT = { width: 1600, height: 1000 };
 (globalThis as any).window = { paint_path: () => new El("dither"), viewport_size: () => VIEWPORT };
-const theme: any = new Proxy({}, { get: () => "#808080" });
+// Colors by their names, so a test can tell which one an element got.
+const theme: any = new Proxy({}, { get: (_t, k) => String(k) });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch(() => {}); }, notify() {}, stop_propagation() {},
   focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} },
@@ -441,4 +444,48 @@ test("the center's key bar fits a narrow drop-down: the least needed hints go fi
     expect(40 + used + 14 + 50).toBeLessThanOrEqual(w);
     expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
   }
+});
+
+// ---- the bell's mark
+
+const BELL_ART = "svg:mods/nocturne/art/bell.svg";
+const strings = (e: any): string[] => typeof e === "string" ? [e] : e instanceof Object && "kids" in e ? e.kids.flatMap(strings) : [];
+
+test("bell, nothing waits: the pixel bell, muted like the strip's tools; blue on the lit band while the center is open", async () => {
+  const b = bell();
+  await tick();
+  sharedState[ITEMS] = [];
+  b.draw();
+  const marks = () => ids["bell"].kids.filter((k: any) => k?.tag === BELL_ART);
+  expect(marks()).toHaveLength(1);
+  expect(marks()[0].color).toBe("muted");
+  expect(strings(ids["bell"])).not.toContain("N");
+  expect(lit("bell")).toBe(false);
+  press("bell");
+  b.draw();
+  expect(lit("bell")).toBe(true);
+  expect(marks()[0].color).toBe("accent");
+  expect(ids["bell"].color).toBe("foreground");
+});
+
+test("bell, requests waiting: the bell turns pink beside the pink count; a look only: yellow with a dim count", async () => {
+  const b = bell();
+  await tick();
+  const marks = () => ids["bell"].kids.filter((k: any) => k?.tag === BELL_ART);
+  sharedState[ITEMS] = [PERMISSION, QUESTION];
+  b.draw();
+  expect(marks()).toHaveLength(1);
+  expect(marks()[0].color).toBe("blocked");
+  const chip = ids["bell"].kids.find((k: any) => k?.kids?.includes("2"));
+  expect(chip).toBeTruthy();
+  sharedState[ITEMS] = [OTHER];
+  b.draw();
+  expect(marks()[0].color).toBe("working");
+  const count = ids["bell"].kids.find((k: any) => k?.kids?.includes("1"));
+  expect(count.color).toBe("dim");
+  // Both: pink bell and chip, the look as "+1".
+  sharedState[ITEMS] = [PERMISSION, OTHER];
+  b.draw();
+  expect(marks()[0].color).toBe("blocked");
+  expect(strings(ids["bell"])).toEqual(["1", "+1"]);
 });
