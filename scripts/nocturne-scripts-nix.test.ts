@@ -16,7 +16,7 @@ const CLASSIC = {
   checks: { "aarch64-darwin": { fmt: { type: "derivation" } } },
   darwinConfigurations: { work: { type: "unknown" }, homelab: { type: "unknown" } },
   nixosConfigurations: { vps: { type: "nixos-configuration" }, homelab: { type: "nixos-configuration" } },
-  homeConfigurations: { "david@homelab": { type: "unknown" }, "david@work": { type: "unknown" } },
+  homeConfigurations: { "developer@homelab": { type: "unknown" }, "developer@work": { type: "unknown" } },
   formatter: { "aarch64-darwin": { type: "derivation" } },
 };
 
@@ -34,8 +34,8 @@ const INVENTORY = {
   version: 2,
 };
 
-const MAC = { host: "homelab", user: "david", os: "Darwin", arch: "arm64" };
-const LINUX = { host: "homelab", user: "david", os: "Linux", arch: "x86_64" };
+const MAC = { host: "homelab", user: "developer", os: "Darwin", arch: "arm64" };
+const LINUX = { host: "homelab", user: "developer", os: "Linux", arch: "x86_64" };
 const pick = (list: any[]) => list.map((s) => [s.group, s.name, s.cmd, s.admin ?? null, Boolean(s.here)]);
 
 test("systems from uname", () => {
@@ -65,10 +65,10 @@ test("a Mac: this system's outputs, nix-darwin and home-manager, this host first
     ["nix-darwin", "build homelab", "darwin-rebuild build --flake '.#homelab'", null, true],
     ["nix-darwin", "switch work", "darwin-rebuild switch --flake '.#work'", "sudo", false],
     ["nix-darwin", "build work", "darwin-rebuild build --flake '.#work'", null, false],
-    ["home-manager", "switch david@homelab", "home-manager switch --flake '.#david@homelab'", null, true],
-    ["home-manager", "build david@homelab", "home-manager build --flake '.#david@homelab'", null, true],
-    ["home-manager", "switch david@work", "home-manager switch --flake '.#david@work'", null, false],
-    ["home-manager", "build david@work", "home-manager build --flake '.#david@work'", null, false],
+    ["home-manager", "switch developer@homelab", "home-manager switch --flake '.#developer@homelab'", null, true],
+    ["home-manager", "build developer@homelab", "home-manager build --flake '.#developer@homelab'", null, true],
+    ["home-manager", "switch developer@work", "home-manager switch --flake '.#developer@work'", null, false],
+    ["home-manager", "build developer@work", "home-manager build --flake '.#developer@work'", null, false],
   ]);
 });
 
@@ -101,7 +101,7 @@ test("a flake's static entries come with the probe, ids are unique", () => {
 });
 
 test("the probe says who and where", () => {
-  const p = parseProbe("\u001els\nflake.nix\n\u001esys\nhomelab\ndavid\nDarwin\narm64\n");
+  const p = parseProbe("\u001els\nflake.nix\n\u001esys\nhomelab\ndeveloper\nDarwin\narm64\n");
   expect(p.sys).toEqual(MAC);
 });
 

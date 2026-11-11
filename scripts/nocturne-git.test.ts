@@ -116,7 +116,7 @@ test("age and initials", () => {
   expect(age(1000 - 30, 1000)).toBe("30s");
   expect(age(1000 - 3 * 3600, 1000)).toBe("3h");
   expect(age(0, 86400 * 3)).toBe("3d");
-  expect(initials("David Stahl-Gruber")).toBe("DS");
+  expect(initials("Developer Smith-Jones")).toBe("DS");
   expect(initials("can")).toBe("CA");
 });
 
