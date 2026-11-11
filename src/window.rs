@@ -86,6 +86,21 @@ fn palette_spec(layout_scrim: bool) -> Value {
     spec
 }
 
+/// The solid floor under a dithered scrim (its `fill`), if it has one.
+fn scrim_fill(s: Option<&crate::layout::Scrim>) -> Option<Hsla> {
+    s.filter(|s| s.dither && s.fill > 0.0).map(|s| c(&s.color).opacity(s.fill.clamp(0.0, 1.0)))
+}
+
+/// A layer that dims what's under it as the layout's `scrim` says: its
+/// `fill` (if any) under the checker, or the plain color.
+fn scrim_layer(s: Option<&crate::layout::Scrim>, scale: f32) -> Div {
+    div()
+        .absolute()
+        .inset_0()
+        .when_some(scrim_fill(s), |d, fill| d.bg(fill))
+        .child(div().absolute().inset_0().bg(scrim(s, scale)))
+}
+
 /// The dim behind a dialog: the layout's `scrim`, else black at 35%. A
 /// dithered one counts device pixels (the checkerboard's cells are those).
 fn scrim(s: Option<&crate::layout::Scrim>, scale: f32) -> Background {
@@ -5465,7 +5480,7 @@ impl AppWindow {
                                 .id(SharedString::from(format!("scrim-{id}")))
                                 .absolute()
                                 .inset_0()
-                                .bg(scrim(self.chrome.scrim.as_ref(), scale))
+                                .child(scrim_layer(self.chrome.scrim.as_ref(), scale))
                                 .occlude()
                                 .child(crate::native_view::dim_probe())
                                 .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
@@ -5478,7 +5493,7 @@ impl AppWindow {
                     div()
                         .absolute()
                         .inset_0()
-                        .bg(scrim(self.chrome.scrim.as_ref(), scale))
+                        .child(scrim_layer(self.chrome.scrim.as_ref(), scale))
                         .occlude()
                         .child(crate::native_view::dim_probe())
                         .flex()
@@ -5499,7 +5514,7 @@ impl AppWindow {
                             .absolute()
                             .inset_0()
                             // `scrim: true`: the dialog dim behind it (a click there still closes it).
-                            .when(o.scrim, |d| d.bg(scrim(self.chrome.scrim.as_ref(), scale)).occlude().child(crate::native_view::dim_probe()))
+                            .when(o.scrim, |d| d.child(scrim_layer(self.chrome.scrim.as_ref(), scale)).occlude().child(crate::native_view::dim_probe()))
                             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
                             .on_mouse_down(MouseButton::Right, cx.listener({
                                 let id = o.id.clone();
@@ -8019,7 +8034,12 @@ export default class SystemToast extends View {
         })).unwrap();
         assert_eq!(root.dialog_mods.get("welcome").map(String::as_str), Some("mine"));
         let scrim = root.scrim.unwrap();
-        assert_eq!((scrim.color.as_str(), scrim.opacity, scrim.cell), ("#000000", 0.35, 1.0));
+        assert_eq!((scrim.color.as_str(), scrim.opacity, scrim.cell, scrim.fill), ("#000000", 0.35, 1.0, 0.0));
+        assert!(super::scrim_fill(Some(&scrim)).is_none(), "no fill: the checker alone");
+        let filled: crate::layout::Scrim = serde_json::from_value(serde_json::json!({ "dither": true, "fill": 0.5 })).unwrap();
+        assert_eq!(super::scrim_fill(Some(&filled)).map(|c| c.a), Some(0.5));
+        let plain: crate::layout::Scrim = serde_json::from_value(serde_json::json!({ "fill": 0.5 })).unwrap();
+        assert!(super::scrim_fill(Some(&plain)).is_none(), "fill is for a dithered scrim only");
     }
 
     #[test]

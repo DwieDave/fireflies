@@ -5,7 +5,7 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
-import { dither, stop, edgeRow } from "./draw.js";
+import { dither, stop, edgeRow, popupScrim } from "./draw.js";
 import { keyLabel } from "./keys.js";
 
 const ROW = 20;
@@ -161,8 +161,8 @@ export class Popups {
   render(t, size) {
     const p = this.top;
     if (!p) return null;
-    // The window dims under a popup: half the background, dithered (Nocturne's way of 50%).
-    const scrim = div().id("git-scrim").absolute().inset_0().bg(t.background + "99").child(dither(t.background, 1))
+    // The window dims under a popup, lightly (draw.js POPUP_SCRIM): it stays readable.
+    const scrim = popupScrim("git-scrim")
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu" || p.kind === "confirm") this.close(); cx.notify(); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu") this.close(); cx.notify(); });
     let box;

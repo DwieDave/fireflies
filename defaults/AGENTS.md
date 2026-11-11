@@ -696,10 +696,12 @@ Properties any node can have:
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
   `rounded*` included. Default `"round"`: as each asks.
-- Root only: `"scrim"` (this fork): what dims the window behind a dialog (and the command palette),
-  `{"color": "#080808", "opacity": 0.85, "dither": true, "cell": 1}` (color: a
-  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px). Default:
-  black at 35%.
+- Root only: `"scrim"` (this fork): what dims the window behind a dialog (and the command palette,
+  and windows / popups opened with `scrim: true`),
+  `{"color": "#000000", "opacity": 1, "dither": true, "fill": 0.45, "cell": 1}` (color: a
+  theme name or hex; dither: a 1-bit checkerboard of it, `cell` px; `fill`: the same
+  color at that opacity under the checker, so a dithered scrim can dim past half).
+  Default: black at 35%.
 - Colors are theme names (`border`, `accent`, `surface`, ...) or `#rrggbb[aa]`.
 
 A personal terminal menu replaces the whole menu; it doesn't merge items.
