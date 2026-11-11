@@ -90,6 +90,8 @@ test:
     bun test scripts/nocturne-hit-areas.test.ts
     # The editor's servers through the workspace's .envrc (direnv: allowed, blocked, none, missing, a slow load), and what cmd-i says without one, exec faked.
     bun test scripts/nocturne-editor-env.test.ts
+    # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
+    bun test scripts/nocturne-editor-follow.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
     bun test scripts/nocturne-files-preview.test.ts
     # nocturne-files ships the preview's viewer and what it imports: each copy is nocturne-preview's byte for byte.

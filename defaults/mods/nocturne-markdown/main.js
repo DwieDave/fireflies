@@ -35,6 +35,7 @@ import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./ma
 import { follow, dirname, basename, join, tilde } from "./paths.js";
 import { documentLinks, nextLink, nextHeading } from "./links.js";
 import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 
 const MOD = "nocturne-markdown";
 // Each viewer's shown file by slot, for its pane header (nocturne/header.js).
@@ -80,6 +81,9 @@ export default class Markdown extends View {
     this.doc = new MarkdownDoc("md");
     this.rawDoc = new MarkdownDoc("md-raw");
     this.width = 600;
+    // Renamed or moved from the files pane (follow.js): the viewer follows,
+    // only what comes after this start.
+    this.seenChange = newestId(shared(CHANGES));
     this.open(pr.path ?? "", cx, pr.anchor);
     if (this.on) cx.timer.every(POLL, (cx) => this.load(cx));
     cx.spawn(async (cx) => {
@@ -166,6 +170,18 @@ export default class Markdown extends View {
         });
       }
     }
+  }
+
+  /** The files pane renamed or moved the shown file (or its folder): shown
+   *  from there, the scroll kept; the back history follows too. A delete
+   *  shows as the missing file it is. From a task, never a render. */
+  followChanges(cx) {
+    const list = shared(CHANGES);
+    const r = followFiles(list, this.seenChange, this.path, this.on);
+    this.history = this.history.map((h) => (typeof h === "string" ? followFiles(list, this.seenChange, h, this.on).path : h?.path ? { ...h, path: followFiles(list, this.seenChange, h.path, this.on).path } : h));
+    this.seenChange = r.seen;
+    if (r.path !== this.path) this.open(r.path, cx, null, true);
+    cx.notify();
   }
 
   /** Tells the pane header which file this viewer shows. */
@@ -412,9 +428,11 @@ export default class Markdown extends View {
       .child(div().flex_none().text_color(t.dim).child(`${this.sel + 1}/${this.links.length}`));
   }
 
-  render() {
+  render(cx) {
     const t = theme();
     const focused = this.handle.is_focused();
+    // A newer rename or move from the files pane: answered after this render.
+    if (newestId(shared(CHANGES)) > this.seenChange) cx?.timer?.after(0, (cx) => this.followChanges(cx));
     let body;
     if (this.error) body = this.empty(t, "Can't show this file", this.error);
     else if (this.text == null) body = this.empty(t, "Reading…", tilde(this.path, home()));

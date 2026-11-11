@@ -59,6 +59,7 @@ import { follow, join } from "./paths.js";
 import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 import { projectEnv, lookup, wrap } from "./envrc.js";
+import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -116,6 +117,13 @@ export default class EditorPane extends View {
     const pr = props() ?? p ?? {};
     this.path = pr.path ?? "";
     this.on = pr.on ?? null;
+    // Renamed, moved or deleted from the files pane (follow.js): only what
+    // comes after this start counts. A pane that followed its file before a
+    // restart opens it where it went (its props keep the first path).
+    this.firstPath = this.path;
+    this.seenChange = newestId(shared(CHANGES));
+    this.deleted = false; // the file was deleted (the files pane): a save writes it again
+    try { const m = JSON.parse(localStorage.getItem("moved") ?? "null"); if (m?.from === this.path && m.to) this.path = m.to; } catch { /* a nicety */ }
     this.slot = pr.slot ?? null;
     this.lang = languageOf(this.path) ?? "text";
     this.opts = languageSettings(settings()?.editor, this.lang);
@@ -215,6 +223,57 @@ export default class EditorPane extends View {
     if (all[this.slot] !== name) setShared(TITLES, { ...all, [this.slot]: name });
   }
 
+  // ---- the files pane's renames, moves and deletes (follow.js)
+
+  /** Acts on the change record's entries newer than the last seen (from a task, never a render). */
+  followChanges(cx) {
+    const r = followFiles(shared(CHANGES), this.seenChange, this.path, this.on);
+    this.seenChange = r.seen;
+    if (r.path !== this.path) this.moveTo(r.path, cx);
+    if (r.deleted && !this.deleted) this.markDeleted(cx);
+    cx.notify();
+  }
+
+  /** The file is at `to` now: the buffer, its edits, caret, scroll and undo
+   *  stay; the name, the folder, the language and the server's document follow. */
+  moveTo(to, cx) {
+    const from = this.path, s = this.server;
+    if (s?.id != null) lspNotify(s.id, "textDocument/didClose", { textDocument: { uri: uri(from) } });
+    this.path = to;
+    this.deleted = false;
+    try { localStorage.setItem("moved", JSON.stringify({ from: this.firstPath, to })); } catch { /* a nicety */ }
+    const lang = languageOf(to) ?? "text";
+    if (lang !== this.lang) {
+      // Another language: its grammar, settings and server.
+      this.lang = lang;
+      this.opts = languageSettings(settings()?.editor, lang);
+      this.editor.set_language(lang);
+      this.markdown = lang === "markdown";
+      if (s?.id != null) lspRelease(s.id);
+      this.server = null;
+      this.setProblems([]);
+      if (this.state === "ready") this.startServer(cx);
+    } else if (s?.id != null) {
+      this.version += 1;
+      lspNotify(s.id, "textDocument/didOpen", { textDocument: { uri: uri(to), languageId: languageId(lang, to), version: this.version, text: this.editor.value() } });
+    }
+    if (!this.on) this.watch(cx);
+    setUnsaved(this.dirty ? `${basename(to)}: unsaved changes` : null);
+    this.title();
+    this.say(`moved to ${tilde(dirname(to), home())}`);
+  }
+
+  /** The file was deleted: the editor keeps its text and says so; a save writes it again. */
+  markDeleted(cx) {
+    this.deleted = true;
+    this.saved = null; // a save creates it (writeTextFile's "new file")
+    this.conflict = false;
+    this.dirty = this.editor.value() !== "";
+    setUnsaved(this.dirty ? `${basename(this.path)}: deleted, unsaved` : null);
+    this.title();
+    cx?.notify?.();
+  }
+
   /** Reads the file; `go`: the place to put the caret after. `quiet`: a poll
    *  or a change on disk, which leaves an edited buffer alone. */
   load(cx, go, quiet) {
@@ -256,10 +315,13 @@ export default class EditorPane extends View {
   /** Waits for the file's folder to change, and reads the file again. */
   watch(cx) {
     const dir = dirname(this.path);
+    // A moved file's editor watches its new folder; the old loop ends.
+    const gen = this.watchGen = (this.watchGen ?? 0) + 1;
     cx.spawn(async (cx) => {
       for (;;) {
         let changed;
         try { changed = await watchFolder(dir); } catch { return; }
+        if (gen !== this.watchGen) return;
         if (!changed.some((p) => basename(p) === basename(this.path) || p === dir)) continue;
         this.load(cx, null, true);
       }
@@ -288,6 +350,7 @@ export default class EditorPane extends View {
       await writeTextFile(this.path, text, this.saved);
       this.saved = text;
       this.state = "ready";
+      this.deleted = false;
       this.dirty = this.editor.value() !== text;
       this.conflict = false;
       setUnsaved(this.dirty ? `${basename(this.path)}: unsaved changes` : null);
@@ -868,6 +931,8 @@ export default class EditorPane extends View {
     const t = theme();
     if (this.vimWas !== undefined && this.vimWas !== this.vimOn()) this.vimSettled(this.vimOn());
     const goto = shared(GOTO);
+    // A newer rename, move or delete from the files pane: answered after this render.
+    if (newestId(shared(CHANGES)) > this.seenChange) cx.timer.after(0, (cx) => this.followChanges(cx));
     if (goto && goto.path === this.path && goto.n !== this.seenGoto) {
       this.seenGoto = goto.n;
       if (this.state !== "loading") this.goto(goto.line - 1, (goto.col ?? 1) - 1, cx);
@@ -923,6 +988,7 @@ export default class EditorPane extends View {
       .child(div().relative().size(8).flex_none().border(1).border_color(this.dirty ? t.ansi3 : t.ansi0)
         .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))))
       .child(div().flex_none().text_color(t.foreground).child(basename(this.path) || "untitled"))
+      .when(this.deleted, (el) => el.child(div().id("bar-deleted").flex_none().text_color(t.ansi1).child("deleted · cmd-s writes it again")))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(narrow ? "" : dir))
       .when(!!msg, (el) => el.child(div().flex_none().text_color(msg.bad ? t.ansi1 : t.ansi2).truncate().max_w(260).child(msg.text)))
       .when(c.error > 0, (el) => el.child(sev(c.error, t.ansi1, "bar-errors")))

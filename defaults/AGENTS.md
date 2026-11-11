@@ -535,7 +535,19 @@ the highlighted line shows where it will land.
   lua-language-server, bash-language-server, vscode-json-language-server
   (validates JSON), yaml-language-server, taplo, marksman, vscode-css / html
   language servers, clangd, zls), shared by every editor of that workspace and
-  stopped 90 s after the last closes. Found means: in the workspace's own
+  stopped 90 s after the last closes. A file renamed, moved or deleted from
+  the files pane (its record `shared("nocturne.files.changes")`: newest last,
+  at most 50 entries `{ id, from, to, on, at }`, `to` null for a delete, a
+  folder one entry matched by prefix; only entries newer than the editor's
+  start, only its own machine's) is followed: a rename or move keeps the
+  buffer, unsaved edits, caret, scroll and undo, and the name, folder,
+  language, unsaved mark, tab name and the server's document follow (a pane
+  restarted later opens it where it went); a delete keeps the editor and its
+  text, the bar says `deleted · cmd-s writes it again`, and a save writes it
+  again. The Markdown viewer follows a rename or move the same way. Changes
+  made elsewhere (a terminal's `mv`, git) aren't followed: the editor keeps
+  the old path, and a save there is refused ("the file changed outside
+  Herdr"), the draft kept. Found means: in the workspace's own
   environment when the file's folder or one above it (up to the repository)
   has an `.envrc` that direnv allows (looked up and started inside what
   `direnv export` gives, loaded once per folder, a flake's first load
