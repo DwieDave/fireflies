@@ -88,6 +88,10 @@ test:
     bun test scripts/nocturne-render-asks.test.ts
     # An agent's row is pressed anywhere on it (full width, half of each gap; the rail's cell and its padding), with recording gpui stand-ins.
     bun test scripts/nocturne-hit-areas.test.ts
+    # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
+    bun test scripts/nocturne-files-preview.test.ts
+    # nocturne-files ships the preview's viewer and what it imports: each copy is nocturne-preview's byte for byte.
+    bun test scripts/nocturne-preview-shared.test.ts
     cargo test --locked
 
 docs-generate: build

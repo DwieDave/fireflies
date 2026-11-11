@@ -33,6 +33,7 @@ const herdr: Record<string, any> = {
   panes: () => [], pickFolder: async () => null, presentUpdateNotes: () => {}, props: () => ({}), run: () => null, setAgentOrder: () => {},
   setShared: () => {}, shared: () => null, spaces: () => [], terminals: () => [], theme: () => theme, updates: () => ({ notes: [] }),
   findFiles: async () => [], readTextFile: async () => null, writeTextFile: async () => {}, watchFolder: () => {},
+  highlight: () => [], languageOf: () => null,
   nativeView: { new: () => new El() }, nativeViewCall: () => null, nextNativeViewEvent: () => new Promise(() => {}),
 };
 mock.module("herdr", () => herdr);

@@ -86,8 +86,9 @@ export function nvimLaunch(abs, dir) {
 /** The right-click menu for a row: [{ key, label, act }], `act` naming the
  *  pane's action. Folders and files differ; the root (empty space, `path` "")
  *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
- *  (it closes); `clip`: something is cut (paste shows). */
-export function menuItems(row, { pane = false, clip = false } = {}) {
+ *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
+ *  split is open (its entry hides it). */
+export function menuItems(row, { pane = false, clip = false, look = false } = {}) {
   const root = row.dir && !row.path;
   const items = row.dir
     ? [
@@ -109,6 +110,7 @@ export function menuItems(row, { pane = false, clip = false } = {}) {
   if (clip) items.push({ key: "P", label: row.dir ? (root ? "Paste here" : "Paste in it") : "Paste beside it", act: "paste" });
   if (!root) items.push({ key: "d", label: "Delete…", act: "delete" });
   items.push({ key: "y", label: "Copy path", act: "copy" });
+  items.push({ key: "space", label: look ? "Hide the preview" : "Show the preview", act: "look" });
   if (pane) items.push({ key: "q", label: "Close this pane", act: "close" });
   return items;
 }
@@ -308,6 +310,7 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
  *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
+  ["space", "preview on / off"], ["J K", "scroll the preview"], ["< >", "preview smaller / bigger"],
   ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
@@ -339,11 +342,11 @@ function lensWidth(fit, [h, i], cut, count) {
 /** The toolbar's parts that fit `w`: back, forward and the folder's name
  *  always (`name`: the px it keeps, up to NAME, before it truncates); then, as
  *  room allows, the close button (a pane of its own: its header has one too),
- *  the changed count, the edit button, the branch, the FILES eyebrow and the
+ *  the changed count, the preview's switch, the edit button, the branch, the FILES eyebrow and the
  *  folder's parent path. */
 export const NAME = 56;
 export function toolbarFit(w, { alone = false, branch = null, changed = 0, name = "" } = {}) {
-  const fit = { close: false, changed: false, edit: false, branch: false, eyebrow: false, path: false, name: 0 };
+  const fit = { close: false, changed: false, look: false, edit: false, branch: false, eyebrow: false, path: false, name: 0 };
   const want = Math.min(NAME, name.length * CH);
   fit.name = Math.max(Math.min(want, 3 * CH), Math.min(want, w - 20 - 19 - 19 - 8 * 2));
   let used = 20 + 19 + 19 + want, n = 3;
@@ -351,9 +354,71 @@ export function toolbarFit(w, { alone = false, branch = null, changed = 0, name 
   const take = (key, px) => { if (room(px)) { fit[key] = true; used += px; n++; } };
   if (alone) take("close", 20);
   if (changed > 0) take("changed", (String(changed).length + 1) * CH);
+  // The preview split's switch: an icon.
+  take("look", 20);
   take("edit", 12 + 4 * CH);
   if (branch) take("branch", Math.min(140, branch.length * CH));
   take("eyebrow", 5 * CH);
   take("path", 80);
   return fit;
+}
+
+// ---- the preview split
+
+/** How much wider than tall (or taller than wide) a pane is before its
+ *  preview moves: near square it stays where it was, so it doesn't flip. */
+export const SLACK = 1.2;
+
+/** Where a pane `size` ({ width, height }, layout px) puts its preview:
+ *  "right" when clearly wider than tall, "bottom" when clearly taller; in
+ *  between where it `was` (first time: right if at least as wide). */
+export function lookSide(size, was = null) {
+  const { width: w, height: h } = size;
+  if (w > h * SLACK) return "right";
+  if (h > w * SLACK) return "bottom";
+  return was ?? (w >= h ? "right" : "bottom");
+}
+
+/** The toolbar and the filter line above the split (px). */
+export const LOOK_TOP = 34 + 26;
+/** The divider's grab area (px); its line is 1 px in the middle. */
+export const DIVIDER = 5;
+/** What each part keeps at least (px along the split), by side. */
+export const LOOK_MIN = { bottom: { tree: 110, look: 96 }, right: { tree: 150, look: 160 } };
+/** A new pane's preview share, and one < / > step. */
+export const LOOK_SHARE = 0.5;
+export const LOOK_STEP = 0.06;
+
+/** The room the split shares along `side`: the pane's width, or its height under the header. */
+export const lookRoom = (size, side) => (side === "right" ? size.width : size.height - LOOK_TOP) - DIVIDER;
+
+/** `share` kept so both parts get their least; null: the room can't hold both. */
+export function clampShare(size, side, share) {
+  const room = lookRoom(size, side), min = LOOK_MIN[side];
+  if (room < min.tree + min.look) return null;
+  const f = Number.isFinite(share) ? share : LOOK_SHARE;
+  return Math.max(min.look / room, Math.min((room - min.tree) / room, f));
+}
+
+/** The preview's size (px along `side`) for its `share`; null: no room for it. */
+export function lookSize(size, side, share) {
+  const f = clampShare(size, side, share);
+  return f == null ? null : Math.round(lookRoom(size, side) * f);
+}
+
+/** The share a divider dragged to `at` ({ x, y } in the pane, layout px) gives. */
+export function dragShare(size, side, at) {
+  const room = lookRoom(size, side);
+  const look = side === "right" ? size.width - at.x - DIVIDER / 2 : size.height - at.y - DIVIDER / 2;
+  return clampShare(size, side, look / room);
+}
+
+/** Each pane's preview, as kept in shared state by slot: { on, right, bottom } (shares). */
+export const newLook = () => ({ on: false, right: LOOK_SHARE, bottom: LOOK_SHARE });
+
+/** A folder's summary in the preview: "3 folders · 12 files". */
+export function folderFacts(entries) {
+  const dirs = entries.filter((e) => e.dir).length, files = entries.length - dirs;
+  const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
+  return entries.length ? `${n(dirs, "folder", "folders")} · ${n(files, "file", "files")}` : "empty";
 }

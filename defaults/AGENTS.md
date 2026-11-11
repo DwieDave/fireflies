@@ -457,7 +457,8 @@ the highlighted line shows where it will land.
   drawn from a copy in its cache) and it shows the file again when it changes
   on disk. Commands for the shown previews: `nocturne-preview.zoom_in`,
   `.zoom_out`, `.fit`, `.actual`, `.next`, `.prev`, `.page_next`, `.page_prev`,
-  `.rotate`, `.background`, `.reload`.
+  `.rotate`, `.background`, `.reload`. The files panes' preview split shows
+  files with this same viewer (Files panes).
 - **Editing files**: source code and other text people edit (every language
   `languageOf` knows, plus Makefiles, Dockerfiles, `.env`, SQL, Ruby, ...)
   opens in the editor (`nocturne-editor`): a link to one in a terminal (a
@@ -582,6 +583,24 @@ the highlighted line shows where it will land.
   tree then shows the result, unfolded and selected. Editors with a renamed,
   moved or deleted file open keep the old path. `?` (or the `? keys` that ends the
   filter line) shows the keys overview in the list's place; `?` or esc hides it.
+  The preview split: `space` (the toolbar's split icon, the menu's "Show the
+  preview") shows the selected file in a part of the files pane's own area, at
+  the bottom of a pane taller than wide and at the right of one wider than tall
+  (near square it stays where it was); `space` again hides it. Moving through
+  the tree updates it once the selection rests (stepping fast loads only the
+  last file), and the keyboard stays in the tree: `J` / `K` scroll the preview
+  (half a view; a PDF a page), `<` / `>` make it smaller / bigger, or drag the
+  divider; both parts keep a usable least. It is the preview pane's own viewer
+  (`nocturne-preview/viewer.js`; nocturne-files ships identical copies of it
+  and its files), so every kind the preview shows looks the same here, and it
+  adds text: code in the editor's colors, Markdown rendered, other text plain,
+  the first 256 KB. A binary without a viewer or a file it can't read says why
+  in one line; a folder shows what it holds. On another machine only text is
+  read (a capped `head`); pictures, PDFs, fonts and clips there say `p` opens
+  them. Clips never play by themselves. A native view (PDF, font, clip) steps
+  aside while the menu is open. Enter, `e`, `E`, `p`, `v` and a click open as
+  before: the split is only a look. Each pane keeps it (on, size) in shared
+  `nocturne-files.look` by slot.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f

@@ -186,6 +186,8 @@ function modCommands(): [string, string, string?][] {
     for (const f of readdirSync(root + `defaults/mods/${d}`).filter((x) => x.endsWith(".js"))) {
       const text = read(`defaults/mods/${d}/${f}`);
       if (!text.includes("nextCommand()")) continue;
+      // nocturne-files' copy of the preview's viewer: its commands are the preview's (embedded, it takes none).
+      if (d !== "nocturne-preview" && f === "viewer.js" && text === read(`defaults/mods/nocturne-preview/${f}`)) continue;
       for (const [, c] of text.matchAll(/(?<!typeof )\bc === "([a-z0-9_-]+)"/g)) out.push([`${d}.${c}`, `defaults/mods/${d}/${f}`]);
     }
   }

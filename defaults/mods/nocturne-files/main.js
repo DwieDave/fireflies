@@ -43,6 +43,24 @@
 //   d              delete: asks first (y or enter; anything else keeps it); the machine's trash, else permanently
 //   ?              the keys, under the filter line (its ? chip too; ? or esc hides them)
 //   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
+//   space          the preview split on / off (the toolbar's split icon and the menu too)
+//   J / K          scroll the preview (half a view; a PDF: a page), the keyboard stays here
+//   < / >          the preview smaller / bigger (or drag the divider)
+//
+// The preview split: the selected file, shown in a part of this pane's own
+// area by the preview pane's viewer (viewer.js and the files it imports are
+// nocturne-preview's, copied unchanged; scripts/nocturne-preview-shared.test.ts
+// keeps them alike), mounted as a nested view so its loading never redraws
+// the tree. A pane taller than wide has it at the bottom, one wider than tall
+// at the right; near square (logic.js SLACK) it stays where it was. Stepping
+// loads only the row the selection rests on (REST ms); a folder shows what it
+// holds. Text (code in the editor's colors, Markdown rendered), pictures,
+// PDFs, tables, patches, databases, fonts and clips (never playing by
+// themselves) show as the preview shows them, the first 256 KB of text; a
+// binary or unreadable file says why in a line. On another machine only text
+// is read. Each pane keeps its split (on, how big) by slot in shared
+// `nocturne-files.look`. A native view (PDF, clip, font) steps aside while the
+// menu is open, and goes when the split closes or a folder is picked.
 //
 // File operations run as one `sh -c` (logic.js OPS) on the pane's machine,
 // paths as their own arguments: nothing is overwritten (a target that exists
@@ -58,10 +76,13 @@
 // cmd-e on an open panel (nocturne/files.js focusFiles: "take-panel").
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
+import * as herdr from "herdr";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
+// The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
+import Viewer from "./viewer.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -90,6 +111,12 @@ const FILTERS = `${MOD}.filters`, TITLES = `${MOD}.titles`, PATHS = `${MOD}.path
 const FROM = `${MOD}.from`;
 /** What `x` cut, for `P` in any files pane: { abs, on, dir, name }. */
 const CUT = `${MOD}.cut`;
+/** Each pane's preview split by slot: { on, right, bottom } (logic.js newLook). */
+const LOOK = `${MOD}.look`;
+/** How long the selection rests before the preview loads it (ms): stepping through doesn't. */
+const REST = 90;
+/** The viewer's native views (nocturne-preview/viewer.js nativeId): set aside under a menu, dropped with the split. */
+const NATIVE_IDS = ["preview-pdf", "preview-media", "preview-quicklook"];
 /** The list's key for the new file's or folder's input row. */
 const DRAFT = "\u0000draft";
 const HITS = 200, MENU_ROW = 20;
@@ -143,6 +170,11 @@ export default class Files extends View {
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
     this.nav = newNav();
+    // The preview split: on or off and its shares, kept per pane like the filters.
+    this.lookState = { ...newLook(), ...((this.slot && shared(LOOK)?.[this.slot]) || {}) };
+    this.side = null; this.lookAt = null; this.lookDir = null; this.lookN = 0;
+    this.lookProps = { embedded: true, path: null, on: this.on };
+    if (this.lookState.on) this.mountLook(cx);
     this.reroot(pr.path || pr.folder || home(), cx);
     // Opened as the focused pane (cmd-e, files.open): the keyboard comes here,
     // which the app leaves with the window for a mod pane. Again a little
@@ -283,7 +315,7 @@ export default class Files extends View {
     if (this.on || this.watched === this.root) return;
     const root = this.watched = this.root;
     cx.spawn(async (cx) => {
-      try { while (this.watched === root) { await watchFolder(root); if (this.watched === root) this.refresh(cx); } }
+      try { while (this.watched === root) { await watchFolder(root); if (this.watched === root) { this.refresh(cx); this.reloadLook(); } } }
       catch { if (this.watched === root) this.watched = null; }
     });
   }
@@ -341,6 +373,96 @@ export default class Files extends View {
     }
     if (this.query.trim()) this.search(cx);
     cx.notify();
+  }
+
+  // ---- the preview split
+
+  /** The viewer (the preview pane's, viewer.js), made once: a nested view, so
+   *  its reading and drawing redraw only it, never the tree. */
+  mountLook(cx) {
+    if (!this.look && cx?.new) this.look = cx.new(Viewer, this.lookProps);
+  }
+
+  /** space, the toolbar's switch, the menu's entry: the split on or off. */
+  toggleLook(cx) {
+    const on = !this.lookState.on;
+    this.saveLook({ on });
+    this.lookAt = null; this.lookDir = null;
+    if (on) this.mountLook(cx);
+    else { this.natives("dispose"); this.setLook({ path: null }); }
+    cx?.notify();
+  }
+
+  /** Keeps this pane's split (on, shares) by slot, as its filters; panes that are gone drop out. */
+  saveLook(change) {
+    this.lookState = { ...this.lookState, ...change };
+    if (!this.slot) return;
+    const live = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.props?.slot).filter(Boolean));
+    const all = Object.fromEntries(Object.entries(shared(LOOK) ?? {}).filter(([k]) => live.has(k)));
+    setShared(LOOK, { ...all, [this.slot]: this.lookState });
+  }
+
+  /** New props for the viewer (it applies them on its next render). */
+  setLook(change) {
+    this.lookProps = { ...this.lookProps, ...change };
+    this.look?.set_props(this.lookProps);
+  }
+
+  /** Every native view the viewer may have (a PDF, a clip, a font): `action` on it. */
+  natives(action, args) {
+    for (const id of NATIVE_IDS) { try { herdr.nativeViewCall?.(id, action, args ?? {}); } catch { /* none of that kind */ } }
+  }
+
+  /** What the preview shows: the selected row, else the root. */
+  lookTarget() {
+    const row = this.sel ? this.shown().find((r) => r.path === this.sel) : null;
+    if (!row) return { abs: this.root, rel: "", dir: true };
+    return { abs: join(this.root, row.path), rel: row.path, dir: Boolean(row.dir || row.head) };
+  }
+
+  /** From render: once the selection rests REST ms on a row, the preview
+   *  shows it. Stepping on cancels the wait, so only the row rested on loads. */
+  follow(cx) {
+    const target = this.lookTarget(), key = `${target.dir ? "d" : "f"}:${target.abs}`;
+    if (key === this.lookAt) return;
+    this.lookAt = key;
+    cx?.timer?.after(REST, (cx) => { if (this.lookAt === key && this.lookState.on) { this.showLook(target, cx); cx.notify(); } });
+  }
+
+  /** A file to the viewer; a folder: its summary, drawn here (the viewer lets go of what it showed). */
+  showLook(target, cx) {
+    if (!target.dir) { this.lookDir = null; this.setLook({ path: target.abs, on: this.on }); return; }
+    this.natives("dispose");
+    this.setLook({ path: null });
+    const listed = this.entries.get(target.rel);
+    this.lookDir = { ...target, entries: listed ?? null, error: null };
+    if (listed) return;
+    cx.spawn(async (cx) => {
+      let entries = null, error = null;
+      try { entries = (await directory(target.abs, this.on)).sort((a, b) => Number(b.dir) - Number(a.dir) || a.name.localeCompare(b.name)); }
+      catch (e) { error = cleanError(e?.message ?? e); }
+      if (this.lookDir?.abs !== target.abs) return;
+      this.lookDir = { ...target, entries, error };
+      cx.notify();
+    });
+  }
+
+  /** The folder changed on disk: the preview reads its file again (unchanged ones stay as they are). */
+  reloadLook() {
+    if (this.lookState.on && this.lookProps.path) this.setLook({ reload: ++this.lookN });
+  }
+
+  /** J / K: the preview scrolls, the keyboard stays in the tree. */
+  scrollLook(dir) {
+    if (this.lookState.on && this.lookProps.path) this.setLook({ scroll: { n: ++this.lookN, dir } });
+  }
+
+  /** < / >: the preview smaller or bigger, both parts keeping their least. */
+  resizeLook(dir) {
+    if (!this.lookState.on) return;
+    const side = this.side ?? lookSide(this.size);
+    const f = clampShare(this.size, side, this.lookState[side] + dir * LOOK_STEP);
+    if (f != null) this.saveLook({ [side]: f });
   }
 
   // ---- search
@@ -527,7 +649,7 @@ export default class Files extends View {
   // ---- the menu
 
   openMenu(row, cx) {
-    let items = menuItems(row, { pane: this.alone, clip: Boolean(this.clip()) });
+    let items = menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -553,6 +675,7 @@ export default class Files extends View {
     else if (act === "cut") this.cutRow(row, cx);
     else if (act === "paste") this.paste(row, cx);
     else if (act === "delete") this.askDelete(row, cx);
+    else if (act === "look") this.toggleLook(cx);
   }
 
   menuKey(e, cx) {
@@ -866,7 +989,12 @@ export default class Files extends View {
     }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
-    if (low === "h" && upper) this.setFilter("hidden", cx);
+    if (k === "space") this.toggleLook(cx);
+    else if (low === "j" && upper) this.scrollLook(1);
+    else if (low === "k" && upper) this.scrollLook(-1);
+    else if (k === "<" || (k === "," && m.shift)) this.resizeLook(-1);
+    else if (k === ">" || (k === "." && m.shift)) this.resizeLook(1);
+    else if (low === "h" && upper) this.setFilter("hidden", cx);
     else if (low === "i" && upper) this.setFilter("ignored", cx);
     else if (low === "a") this.startDraft(upper ? "folder" : "file", row ?? null, cx);
     else if (low === "r" && upper) this.startRename(row, cx);
@@ -934,6 +1062,7 @@ export default class Files extends View {
         .when(fit.path, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))
       .when(fit.branch, (el) => el.child(div().flex_none().max_w(140).truncate().text_color(t.ansi2).child(this.branch)))
       .when(fit.changed, (el) => el.child(div().flex_none().text_color(t.ansi3).child(`±${changed}`)))
+      .when(fit.look, (el) => el.child(this.lookChip(t)))
       .when(fit.edit, (el) => el.child(this.chip(t, "nf-edit", "edit", (cx) => this.edit("", cx))))
       .when(fit.close, (el) => el.child(h_flex().id("nf-close").relative().size(20).flex_none().items_center().justify_center()
         .text_color(t.muted).hover((s) => s.text_color(t.foreground))
@@ -942,6 +1071,52 @@ export default class Files extends View {
         .child(svg(`${ICONS}/x.svg`).size(12))))
       // The keyboard is here: the rule under the toolbar lights up.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : t.ansi0, 1)));
+  }
+
+  /** The preview split's switch: where it opens (right or bottom), lit while it's on. */
+  lookChip(t) {
+    const on = this.lookState.on, side = this.side ?? lookSide(this.size);
+    return h_flex().id("nf-look-chip").relative().size(20).flex_none().items_center().justify_center()
+      .text_color(on ? t.accent : t.muted).hover((s) => s.text_color(on ? t.accent : t.foreground))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { this.toggleLook(cx); cx.notify(); })
+      .child(svg(`mods/${MOD}/look-${side}.svg`).relative().size(12));
+  }
+
+  /** A folder in the preview: its name, what it holds (as the filters list it), its first entries. */
+  folderView(t) {
+    const d = this.lookDir;
+    const entries = (d.entries ?? []).filter((e) => lists(d.rel ? `${d.rel}/${e.name}` : e.name, this.filters, this.ignored));
+    const facts = d.error ? "" : d.entries ? folderFacts(entries) : "listing…";
+    const bar = h_flex().id("nf-look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
+      .child(div().flex_none().text_color(t.ansi8).child("DIR"))
+      .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.foreground).child(d.abs === "/" ? "/" : base(d.abs)))
+      .when(Boolean(facts), (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(facts)))
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+    const list = v_flex().flex_1().min_h(0).overflow_hidden().py(4).text_size(12)
+      .when(Boolean(d.error), (el) => el.child(div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)))
+      .children(entries.slice(0, 120).map((e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
+        .child(svg(`mods/files/${e.dir ? "folder" : "file"}.svg`).relative().size(12).flex_none().text_color(e.dir ? t.ansi4 : t.dim))
+        .child(div().min_w(0).truncate().text_color(e.dir ? t.foreground : t.muted).child(e.name))));
+    return v_flex().id("nf-look-dir").size_full().bg(t.background).child(bar).child(list);
+  }
+
+  /** The tree (with its hint line) and the preview, split along `side`; the
+   *  preview `px` along it. The divider drags; its line lights while it does. */
+  split(t, side, px, list, foot) {
+    const right = side === "right";
+    const tree = v_flex().id("nf-treecol").relative().flex_1().min_w(0).min_h(0).child(list).when(Boolean(foot), (el) => el.child(foot));
+    const line = dither(this.dragging ? t.accent : t.ansi0, 1);
+    const divider = div().id("nf-divider").relative().flex_none()
+      .when(right, (el) => el.w(DIVIDER).h_full().cursor_col_resize().child(div().absolute().top(0).bottom(0).left(Math.floor(DIVIDER / 2)).w(1).child(line)))
+      .when(!right, (el) => el.h(DIVIDER).w_full().cursor_row_resize().child(div().absolute().left(0).right(0).top(Math.floor(DIVIDER / 2)).h(1).child(line)))
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.dragging = side; this.handle.focus(); cx.notify(); });
+    const look = div().id("nf-look").relative().flex_none().overflow_hidden()
+      .when(right, (el) => el.w(px).h_full()).when(!right, (el) => el.h(px).w_full())
+      // A right-click here isn't a row's: no menu.
+      .on_mouse_down("right", stop)
+      .child(this.lookDir ? this.folderView(t) : this.look);
+    return (right ? h_flex() : v_flex()).id("nf-split").relative().flex_1().min_h(0).min_w(0).child(tree).child(divider).child(look);
   }
 
   /** A filter's switch: an open eye while that kind is listed; a shut one,
@@ -982,8 +1157,8 @@ export default class Files extends View {
   }
 
   /** `?`: every key, in the list's place (keyhelp.js); one column at the panel's width. */
-  keysStrip(t) {
-    return keysView(t, { id: "nf-keys-strip", title: "files", list: KEYS, narrow: this.size.width < 2 * SECTION, close: () => { this.keysShown = false; } });
+  keysStrip(t, width = this.size.width) {
+    return keysView(t, { id: "nf-keys-strip", title: "files", list: KEYS, narrow: width < 2 * SECTION, close: () => { this.keysShown = false; } });
   }
 
 
@@ -1092,7 +1267,7 @@ export default class Files extends View {
       .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)));
   }
 
-  render() {
+  render(cx) {
     const t = theme();
     const rows = this.shown();
     this.publish();
@@ -1126,10 +1301,27 @@ export default class Files extends View {
         .size_full().track_scroll(this.scroll))
       .child(Scrollbar.vertical("nf-rows").absolute().inset_0());
     const foot = this.footer(t, searching);
+    // The preview split: its side follows the pane's shape; no room for both parts, no split.
+    const side = this.lookState.on && this.look ? (this.side = lookSide(this.size, this.side)) : null;
+    const px = side ? lookSize(this.size, side, this.dragged ?? this.lookState[side]) : null;
+    if (px != null) this.follow(cx);
+    // A native view (PDF, clip, font) would cover the menu: set aside while it's open.
+    const aside = Boolean(this.menu) && px != null;
+    if (aside !== Boolean(this.aside)) { this.aside = aside; cx?.timer?.after(0, () => this.natives("setVisible", { visible: !aside })); }
+    const treeW = side === "right" && px != null ? this.size.width - px - DIVIDER : this.size.width;
+    // ?: the keys in the list's place, the toolbar and filter line stay (keyhelp.js).
+    const area = this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t, treeW)) : body;
+    const endDrag = () => {
+      if (!this.dragging) return false;
+      if (this.dragged != null) this.saveLook({ [this.dragging]: this.dragged });
+      this.dragging = null; this.dragged = null;
+      return true;
+    };
     return v_flex().id("nocturne-files").relative().size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       // A row's click comes after this: alt-click opens a Markdown file as text.
       .on_mouse_down("left", (e, cx) => {
+        if (endDrag()) cx?.notify();
         this.alt = Boolean(e?.modifiers?.alt);
         // A click in the name's input keeps it (a click on another row ends it: pick).
         if (!this.draft) this.handle.focus();
@@ -1142,16 +1334,21 @@ export default class Files extends View {
         this.pressed = null;
         this.openMenu(row, cx);
       })
-      .on_mouse_move((e) => { if (e.local_position) this.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() }; })
+      .on_mouse_move((e, cx) => {
+        if (e.local_position) this.mouse = { x: e.local_position.x / zoom(), y: e.local_position.y / zoom() };
+        // The divider follows the pointer while it's held.
+        if (this.dragging && e.local_position) { const f = dragShare(this.size, this.dragging, this.mouse); if (f != null && f !== this.dragged) { this.dragged = f; cx.notify(); } }
+      })
+      .on_mouse_up("left", (_e, cx) => { if (endDrag()) cx.notify(); })
+      .on_hover((over, cx) => { if (!over && endDrag()) cx.notify(); })
       .on_size_change((size, cx) => {
         const s = { width: size.width / zoom(), height: size.height / zoom() };
         if (Math.abs(s.width - this.size.width) > 1 || Math.abs(s.height - this.size.height) > 1) { this.size = s; cx.notify(); }
       })
       .child(this.toolbar(t, w, focused))
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
-      // ?: the keys in the list's place, the toolbar and filter line stay (keyhelp.js).
-      .child(this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t)) : body)
-      .when(Boolean(foot), (el) => el.child(foot))
+      .when(px == null, (el) => el.child(area).when(Boolean(foot), (el) => el.child(foot)))
+      .when(px != null, (el) => el.child(this.split(t, side, px, area, foot)))
       .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)));
   }
 }

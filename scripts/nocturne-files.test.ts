@@ -139,8 +139,8 @@ test("Neovim opens a file in its folder, a folder as nvim . there", () => {
 
 test("the menu offers Neovim for files and folders, a new pane for folders, close in a pane of its own", () => {
   const acts = (row: any, o?: any) => menuItems(row, o).map((x: any) => x.act);
-  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy"]);
-  expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "close"]);
+  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "look"]);
+  expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "look", "close"]);
   expect(menuItems({ dir: false }).find((x: any) => x.act === "nvim").label).toBe("Open in Neovim");
 });
 
@@ -295,7 +295,7 @@ test("the right-click menu runs by key or enter; it opens under the pointer and 
   expect(commands.at(-1)).toEqual(["files.open", { path: "/repo/src", pane: "pf" }]);
   // On empty space: the root's menu, without fold and root.
   view.openMenu({ path: "", name: "/repo", dir: true }, cx);
-  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "new-file", "new-folder", "copy", "close"]);
+  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "new-file", "new-folder", "copy", "look", "close"]);
 });
 
 test("the header shows both filters, the search hint and a close button in a pane of its own", () => {
@@ -453,9 +453,9 @@ test("the header fits every width from the narrowest panel up: nothing overlaps,
   expect(lensFit(150, { cut }).chips).toBe("icon");
   // The toolbar drops its extras before the name gets too small.
   const narrow = toolbarFit(160, { branch: "main", changed: 3, name: "fireflies" });
-  expect(narrow).toEqual({ close: false, changed: true, edit: false, branch: false, eyebrow: false, path: false, name: 56 });
+  expect(narrow).toEqual({ close: false, changed: true, look: false, edit: false, branch: false, eyebrow: false, path: false, name: 56 });
   expect(toolbarFit(280, { branch: "main", changed: 0, name: "fireflies" })).toMatchObject({ edit: true, branch: true });
-  expect(toolbarFit(600, { branch: "main", changed: 3, name: "fireflies", alone: true })).toEqual({ close: true, changed: true, edit: true, branch: true, eyebrow: true, path: true, name: 56 });
+  expect(toolbarFit(600, { branch: "main", changed: 3, name: "fireflies", alone: true })).toEqual({ close: true, changed: true, look: true, edit: true, branch: true, eyebrow: true, path: true, name: 56 });
   // A pane squeezed to ~110 px keeps some of its name; its close button (the pane header has one) goes first.
   const tight = toolbarFit(110, { alone: true, name: "defaults" });
   expect(tight.close).toBe(false);
