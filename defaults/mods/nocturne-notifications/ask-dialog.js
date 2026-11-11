@@ -5,10 +5,10 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, run, nextCommand } from "herdr";
+import { theme, props, closeOverlay, run, nextCommand, window as appWindow } from "herdr";
 import { items } from "./engine.js";
 import { where } from "./model.js";
-import { start, press, setOther, answers, answered, isReview, otherRow, REVIEW } from "./ask.js";
+import { start, press, setOther, keepOther, answers, answered, isReview, otherRow, REVIEW } from "./ask.js";
 import { reviewText } from "./claude.js";
 import { answer } from "./drive.js";
 import { forget, followCommands } from "./open.js";
@@ -71,10 +71,13 @@ export default class AskDialog {
 
   key(e, cx) {
     if (!this.s) { if (e.key === "escape") this.close(); return; }
-    const m = e.modifiers;
-    if (m.control || m.platform || m.alt) return;
-    if (this.s.editing && e.key !== "escape") return; // the input has it
-    const k = e.key === " " ? "space" : e.key;
+    const m = e.modifiers ?? {};
+    // cmd-enter (ctrl-enter) submits from anywhere, the typed answer kept.
+    const chord = e.key === "enter" && (m.platform || m.control);
+    if (!chord && (m.control || m.platform || m.alt)) return;
+    if (this.s.editing && (e.key === "tab" || chord)) this.s = keepOther(this.qs(), this.s, this.input.value());
+    else if (this.s.editing && e.key !== "escape") return; // the input has it
+    const k = chord ? "submit" : e.key === " " ? "space" : e.key;
     const { state, action } = press(this.qs(), this.s, k, { shift: m.shift });
     this.s = state;
     if (!state.editing) this.handle.focus();
@@ -199,11 +202,13 @@ export default class AskDialog {
     const q = qs[this.s.q];
     return h_flex().relative().h(30).flex_none().px(18).gap(12).items_center()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .when(this.s.editing, (el) => el.child(hint("↵", "keep")).child(hint("esc", "drop")))
+      .when(this.s.editing, (el) => el.child(hint("↵", "keep")).child(hint("⇥ ⇧⇥", "keep, move")).child(hint("esc", "drop")))
       .when(!this.s.editing, (el) => el
-        .child(hint("j k", "move"))
-        .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, this.s) ? "choose" : "pick"))
-        .when(qs.length > 1, (el) => el.child(hint("⇥", "next")).child(hint("⇧⇥", "back"))))
+        .child(hint("⇥ ⇧⇥", "move"))
+        .child(hint("j k", isReview(qs, this.s) ? "row" : "answer"))
+        .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, this.s) ? "choose" : "pick")))
+      .when(!isReview(qs, this.s), (el) => el.child(hint(appWindow?.()?.platform === "macos" ? "⌘↵" : "ctrl-↵", "submit")))
+      .child(hint("esc", "close"))
       .child(div().flex_1())
       .when(this.changed && !isReview(qs, this.s), (el) => el.child(div().text_color(t.blocked).child("changed in the terminal")));
   }
