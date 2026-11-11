@@ -20,9 +20,10 @@ worktrees, you brief, review, merge, and ship.
    ruled out, files to read, parallel agents and which files they own.
 3. **Launch** it as a tab in David's fireflies space, then label it:
    ```sh
-   T=$(herdr-app do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude",$b],folder:"'$W'"}')" | jq -r .terminal)
+   T=$(herdr-app do tab.new "$(jq -n --rawfile b $SCRATCH/<name>.md '{name:"<name>",space:"sp29a5b18766c620ac796867e1c51c5d1c",argv:["env","CLAUDE_CODE_FORCE_SESSION_PERSISTENCE=1","claude","--model","claude-opus-5-5","--effort","high",$b],folder:"'$W'"}')" | jq -r .terminal)
    ~/.local/bin/hc label $T nocturne.name=<name>
    ```
+   Agents run on Opus 5.5 at high effort (the `--model` and `--effort` above).
    `hc` is at `~/.local/bin/hc` (not on the Bash tool's PATH). Without
    `space`, the tab lands in whatever space is focused.
 4. **Follow-ups** go to a live agent with `hc send <t> "<task>"`; check it's
@@ -35,9 +36,11 @@ your read on them.
 
 ## Review and merge
 
-Reports arrive as `<hc from="tNN">`. Before merging, **look**: open the
-agent's screenshots and check them against what David asked; send back
-anything off (clipped text, leftover F-keys, wrong state) instead of merging.
+Reports arrive as `<hc from="tNN">`. An agent that reports success is merged
+right away: David's go-ahead for the merge loop is standing. First **look**:
+open the agent's screenshots and check them against what David asked; send
+back anything off (clipped text, leftover F-keys, wrong state) instead of
+merging.
 
 The merge loop, in `/Volumes/data/coding/fireflies-wt/integrate` (branch
 `integrate`):
