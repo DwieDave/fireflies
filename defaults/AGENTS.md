@@ -848,7 +848,7 @@ The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
 rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
 focused pane's header (name, text size, float, splits, even out, gridify,
-park, zoom, close, ⋯); the shown tab's parked chips (enter unparks).
+park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
 ### Layouts and mods other people made
 

@@ -79,7 +79,7 @@ const nav = await import("../defaults/mods/nocturne/nav.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const toast = await import("../defaults/mods/nocturne/toast.js");
-const { headerControls } = await import("../defaults/mods/nocturne/header.js");
+const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.js");
 
 beforeEach(() => {
   sharedState = {}; commands = []; overlays = []; closed = []; queue = []; waiting = [];
@@ -341,6 +341,8 @@ test("j walks down: the focused pane's header, the parked chips, then the pane",
   press(s, "enter");
   expect(commands.at(-1)).toEqual(["pane.float", { pane: "p1" }]);
   press(s, "G", { shift: true }, "G");
+  expect(s.cursor).toBe("close");
+  press(s, "h");
   expect(s.cursor).toBe("more");
   press(s, "enter");
   expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { tab: "pane", target: { pane: "p1" } } });
@@ -374,12 +376,33 @@ test("tab cycles every control across the rows; leaving clears the shared cursor
   press(s, "/", { shift: true }, "?");
 });
 
-test("the header's controls: name, text size, float, splits, even out, gridify, park, zoom, close, ⋯", () => {
+test("the header's controls: name, text size, float, splits, even out, gridify, park, zoom, ⋯, close (the rightmost)", () => {
   const all = [...panesNow, { pane: "p4", tab: "t1", terminal: "a/4" }];
   expect(headerControls(all[0], all).map((c: any) => c.id))
-    .toEqual(["name", "fs", "fb", "float", "split-right", "split-down", "equalize", "gridify", "park", "zoom", "close", "more"]);
+    .toEqual(["name", "fs", "fb", "float", "split-right", "split-down", "equalize", "gridify", "park", "zoom", "more", "close"]);
   const mod = { pane: "m1", tab: "t5", mod: "nocturne-git", terminal: null };
-  expect(headerControls(mod, [mod]).map((c: any) => c.id)).toEqual(["split-right", "split-down", "zoom", "close", "more"]);
+  expect(headerControls(mod, [mod]).map((c: any) => c.id)).toEqual(["split-right", "split-down", "zoom", "more", "close"]);
+  const zoomed = { ...all[0], zoomed: true };
+  expect(headerControls(zoomed, all).slice(-3).map((c: any) => c.id)).toEqual(["zoom", "more", "close"]);
+});
+
+test("every header width draws close last, ⋯ right before it", () => {
+  const all = [...panesNow, { pane: "p4", tab: "t1", terminal: "a/4" }];
+  const drawn = (width: number, hovered: boolean, cursor: string | null = null) => {
+    const h: any = Object.create(Header.prototype);
+    Object.assign(h, { width, hovered });
+    sharedState["nocturne.chrome"] = cursor ? { region: "head", pane: all[0].pane, item: cursor } : null;
+    const ids: string[] = [];
+    const row = { children: (list: any[]) => row };
+    h.control = (_t: any, _p: any, c: any) => { ids.push(c.id); return el; };
+    h.buttons(theme, row, all[0]);
+    sharedState["nocturne.chrome"] = null;
+    return ids;
+  };
+  expect(drawn(1000, true).at(-1)).toBe("close");
+  expect(drawn(300, true)).toEqual(["zoom", "more", "close"]);
+  expect(drawn(150, true)).toEqual(["more"]);
+  expect(drawn(1000, false, "fs").slice(-2)).toEqual(["more", "close"]);
 });
 
 // ---- toasts (toast.js is the dialogs' work; here: the alias, through the sidebar's command loop)

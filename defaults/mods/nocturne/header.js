@@ -15,13 +15,14 @@
 // Narrow panes give way in order, never overlapping: the folder shrinks
 // first and goes under FOLDER_MIN px; the status word goes under WORD_MIN
 // (the pip still says it); the hover buttons fold into ⋯ (the pane menu):
-// all of them from FULL_MIN, zoom and close beside ⋯ from SOME_MIN, ⋯ alone
-// below. The name and the pip stay.
+// all of them from FULL_MIN, zoom, ⋯ and close from SOME_MIN, ⋯ alone
+// below. Close is always the rightmost, ⋯ right before it. The name and the
+// pip stay.
 //
 // Keys: the tab strip's cursor (tabs.js, nav.js) walks the focused pane's
 // header as its second row: the name (rename), every button here (the
 // header shows them all while the cursor is in it, the one under it in a
-// blue ring) and ⋯; it says where through shared(nav.js CURSOR).
+// blue ring), ⋯ and close; it says where through shared(nav.js CURSOR).
 
 import { div, svg } from "gpui-kit";
 import { h_flex, InputState } from "gpui-base";
@@ -99,7 +100,8 @@ export function renamePane(p) {
 
 /**
  * A pane's header controls, in the order drawn: { id, icon | text, tip?, go }.
- * The name (rename) leads when the pane has a terminal; ⋯ (the pane menu) ends.
+ * The name (rename) leads when the pane has a terminal; ⋯ (the pane menu)
+ * then close end it, close the rightmost.
  * The header draws the buttons from this; the tab strip's keyboard walks it.
  */
 export function headerControls(p, all = panes()) {
@@ -121,8 +123,8 @@ export function headerControls(p, all = panes()) {
     ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/nocturne-equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
     ...(parkable(p, all) ? [c("park", CHROME("archive"), "pane.park", { pane }, `Park pane${keyLabel("pane.park") ? ` (${keyLabel("pane.park")})` : ""}`)] : []),
     c("zoom", p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }, p.zoomed ? "Unzoom" : "Zoom"),
-    c("close", "close", "pane.close", { pane }, "Close"),
     { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: () => paneMenu(p, true) },
+    c("close", "close", "pane.close", { pane }, "Close"),
   ];
 }
 
@@ -259,7 +261,7 @@ export default class Header {
   }
 
   /** The buttons: the text size while it differs; on hover all (wide) or
-   *  zoom, close and ⋯ (narrow); with the keyboard's cursor here, all and ⋯. */
+   *  zoom, ⋯ and close (narrow); with the keyboard's cursor here, all, ⋯ included. */
   buttons(t, el, p) {
     const all = headerControls(p).filter((c) => c.id !== "name");
     const at = this.cursor(p);
