@@ -79,7 +79,7 @@ mock.module("gpui-base", () => ({
 const theme: any = new Proxy({}, { get: (_t, k) => String(k) });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch(() => {}); }, notify() {}, stop_propagation() {},
-  focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} }, bind_keys() {},
+  focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} }, bind_keys() {}, new: () => ({ set_props() {} }),
 };
 
 const newmenu = await import("../defaults/mods/nocturne/newmenu.js");
@@ -116,11 +116,12 @@ test("+ new menu: no tile floats over the tab; the five others in one row, in or
   expect(rows).toEqual([["terminal", "web", "files", "agents", "usage"]]);
   // Each keeps its letter.
   expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u" });
-  // Nothing on a tile says "float"; files still says it runs down the edge.
+  // No tile carries a spot label: not "float", and Files not "edge" (it opens a pane of its own).
   const tileWords = rows.flat().filter((id) => id !== "pad").flatMap((id) => words(ids[`nm-${id}`]));
   expect(tileWords).not.toContain("float");
-  expect(tileWords).toContain("edge");
-  expect(menuPanels().every((p: any) => p.fixed !== "float")).toBe(true);
+  expect(tileWords).not.toContain("edge");
+  expect(words(ids["nm-files"]).filter(Boolean)).toEqual(["f", "Files"]);
+  expect(menuPanels().every((p: any) => !p.fixed)).toBe(true);
 });
 
 test("+ new menu: its height has room for the one row of tiles it shows", () => {
@@ -306,4 +307,80 @@ test("+ new is lit while its menu is open and a second press closes it", () => {
   ids["tab-new"].on["down:left"]({}, cx);
   ids["tab-new"].on.click({}, cx);
   expect(newmenu.newMenuOpen()).toBe(false);
+});
+
+// ---- 5. Files: a files pane of its own, not the docked panel
+
+/** The menu's live tiles, as its key handler gets them. */
+const liveTiles = () => menuPanels().map((p: any) => ({ kind: "tile", id: p.id, p, key: p.key }));
+const DOCK = (r: [string, any]) => r[0] === "pane.split" && r[1]?.edge === "right" && r[1]?.mod === "nocturne-files";
+
+test("+ new > Files with \"pane\": a files pane beside the focused pane, at the folder a terminal would get; never the docked panel", () => {
+  const { m } = menuGrid();
+  const tiles = liveTiles();
+  const files = tiles.find((x: any) => x.id === "files")!;
+  m.pick(tiles.find((x: any) => x.id === "terminal"), "pane");
+  const folder = ran.find(([n]) => n === "terminal.open")![1].folder;
+  expect(folder).toBeTruthy();
+  ran = [];
+  m.pick(files, "pane");
+  expect(ran).toEqual([["files.open", { path: folder, pane: "p1" }]]);
+  // Picked again: another files.open (the app focuses the one already rooted there), no toggle.
+  m.pick(files, "pane");
+  expect(ran.map(([n]) => n)).toEqual(["files.open", "files.open"]);
+  expect(ran.some(DOCK)).toBe(false);
+  expect(ran.some(([n]) => n === "pane.close")).toBe(false);
+});
+
+test("+ new > Files with \"new tab\": a files pane in a tab of its own; shift (f / enter) does the other", () => {
+  const { m } = menuGrid();
+  const live = liveTiles();
+  m.pick(live.find((x: any) => x.id === "files"), "tab");
+  expect(ran.at(-1)).toEqual(["files.open", { path: expect.any(String), in: "tab" }]);
+  const kx: any = { stop_propagation() {}, notify() {} };
+  // The switch on "pane": shift-f opens it in a tab.
+  ran = [];
+  m.key({ key: "f", key_char: "F", modifiers: { shift: true } }, kx, live);
+  expect(ran).toEqual([["files.open", { path: expect.any(String), in: "tab" }]]);
+  // The switch on "new tab": shift-f opens it beside the focused pane.
+  sharedState["nocturne.newDest"] = "tab";
+  ran = [];
+  m.key({ key: "f", key_char: "F", modifiers: { shift: true } }, kx, live);
+  expect(ran).toEqual([["files.open", { path: expect.any(String), pane: "p1" }]]);
+  ran = [];
+  m.key({ key: "f", key_char: "f", modifiers: {} }, kx, live);
+  expect(ran[0][1].in).toBe("tab");
+  expect(ran.some(DOCK)).toBe(false);
+});
+
+test("+ new > Files: no corner mark or \"close\" while the docked panel is open, and the footer says where it opens", () => {
+  // The docked panel open in the shown tab.
+  const docked = { pane: "p9", tab: "t1", mod: "nocturne-files", props: { folder: "/home/a" } };
+  const was = herdr.panes;
+  herdr.panes = () => [...was(), docked];
+  try {
+    const { m } = menuGrid();
+    const files = liveTiles().find((x: any) => x.id === "files");
+    expect(words(ids["nm-files"])).not.toContain("open");
+    expect(words(ids["nm-files"])).not.toContain("close");
+    expect(m.say(files, "pane")).toBe("files in a new pane");
+    expect(m.say(files, "tab")).toBe("files in a new tab");
+  } finally { herdr.panes = was; }
+});
+
+test("the toolbar's files button and cmd-e (nocturne.files) still toggle the docked panel", async () => {
+  const s = strip();
+  ids["tab-files"].on["down:left"]({}, cx);
+  ids["tab-files"].on.click({}, cx);
+  expect(ran.filter(DOCK)).toHaveLength(1);
+  ran = [];
+  const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+  const sky: any = new Sky();
+  sky.init({ role: "sky" }, cx);
+  await new Promise((r) => setTimeout(r, 0));
+  const w = waiting; waiting = [];
+  for (const f of w) f("nocturne.files");
+  await new Promise((r) => setTimeout(r, 0));
+  expect(ran.filter(DOCK)).toHaveLength(1);
+  void s;
 });

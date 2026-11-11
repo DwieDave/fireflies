@@ -6,12 +6,14 @@
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
 //             usage, in one row of five (COLS; a short last row would keep
-//             the columns). The
+//             the columns). Each opens beside the focused pane or in a tab
+//             of its own; Files too (a files pane of its own, `files.open`:
+//             the panel docked down the tab's edge is the strip's files
+//             button and cmd-e). Agents and Usage, open in the shown tab,
+//             say so with a corner mark and close on a second pick. The
 //             panels that float over the tab (worktrees, Git, its diff,
 //             GitHub) aren't here: the strip's git button and its ▾, their
-//             keys and the palette open them. Files runs down the tab's edge
-//             when "pane" is picked; open ones say so with a corner mark and
-//             close on a second pick.
+//             keys and the palette open them.
 //   agents    every installed agent, started at the landing spot
 //   space     a new space, or a worktree (made or opened)
 //   footer    what the item under the cursor will do, in words
@@ -23,7 +25,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, window as appWindow, keys, shared, setShared } from "herdr";
 import { ART, LOGO, dither, eyebrow } from "./kit.js";
-import { panels, here, terminalPane, terminalTab } from "./panels.js";
+import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
@@ -85,8 +87,11 @@ function agentRows(agents) {
 }
 
 /** The menu's tiles: every panel (panels.js) that lands in a pane or a tab,
- *  not the ones that float over the tab. */
-export const menuPanels = () => panels().filter((p) => p.fixed !== "float");
+ *  not the ones that float over the tab. Files is a files pane of its own
+ *  here, beside the focused pane or in a tab, like Terminal (no corner mark,
+ *  no close on a second pick); the docked panel is the strip's button's. */
+export const menuPanels = () => panels().filter((p) => p.fixed !== "float")
+  .map((p) => (p.id === "files" ? { ...p, fixed: undefined, open: undefined, pane: () => filesHere(), tab: () => filesHere(true) } : p));
 
 /** Every pickable item, in cursor order: tiles, agents, space rows. */
 function items(agents) {
@@ -193,7 +198,6 @@ export default class NewMenu {
     if (dest === "tab") return `${name} in a new tab`;
     if (x.kind === "tile") {
       if (x.p.open?.()) return `closes the ${name}`;
-      if (x.p.fixed === "edge") return `${name} along the tab's right edge`;
     }
     return `${name} in a new pane`;
   }
@@ -253,12 +257,11 @@ export default class NewMenu {
     return (h, cx) => { if (h && !x.off) { const i = live.indexOf(x); if (i !== this.cursor) { this.cursor = i; cx.notify(); } } };
   }
 
-  /** A panel tile: a strip along its top (where it always lands, left; its key,
-   *  right), then its icon and name. Open ones carry a blue mark before the label. */
+  /** A panel tile: a strip along its top ("open" when it's open in the shown
+   *  tab, with a blue mark, left; its key, right), then its icon and name. */
   tile(t, x, on, live, dest) {
     const open = !x.off && x.p.open?.();
     const color = x.off ? t.ansi8 : on ? t.foreground : t.muted;
-    const fixed = dest === "pane" ? x.p.fixed : null;
     // Every tile keeps its 1 px border (only its color changes), so hovering doesn't move anything.
     return v_flex().id(`nm-${x.id}`).relative().flex_1().min_w(0).h(TILE_H).px(5).pt(3).pb(7)
       .border(1).border_color(on && !x.off ? t.ansi8 : t.ansi0)
@@ -267,7 +270,7 @@ export default class NewMenu {
       .when(on && !x.off, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
       .child(h_flex().relative().h(12).flex_none().gap(3).items_center().text_size(9)
         .when(open, (el) => el.child(div().size(4).flex_none().bg(t.accent)))
-        .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : fixed ?? ""))
+        .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : ""))
         .child(div().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(x.key)))
       .child(v_flex().relative().flex_1().items_center().justify_center().gap(5)
         .child(svg(x.p.icon.includes("/") ? x.p.icon : chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.ansi8 : on || open ? t.accent : t.dim))

@@ -594,9 +594,10 @@ the highlighted line shows where it will land.
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`.
-- **Files panes** (Nocturne's `nocturne-files`): "+ new" > Files and the tab
-  strip's button toggle the panel down the tab's right edge at the focused
-  pane's folder; cmd-e (`nocturne.files`) is the keyboard's way: it opens the
+- **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
+  button toggles the panel down the tab's right edge at the focused pane's
+  folder ("+ new" > Files opens a files pane of its own instead, beside the
+  focused pane or in a new tab, at the folder a terminal would open in); cmd-e (`nocturne.files`) is the keyboard's way: it opens the
   panel with the keyboard in it, moves the keyboard into an open one, and
   closes it when pressed inside, the keyboard back in the pane it came from
   (esc in the panel goes back there and leaves it open; `q` closes it). A
@@ -1133,7 +1134,8 @@ layout without it gets "+ new" in the strip before the bell). The strip's
 keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
 the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
-row of five panels (Terminal t, Web w, Files f, Agents a, Usage
+row of five panels (Terminal t, Web w, Files f: a files pane of its own, not
+the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
 u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
 open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9), then New space, New worktree… and Open worktree….
