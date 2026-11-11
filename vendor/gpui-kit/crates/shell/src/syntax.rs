@@ -23,6 +23,21 @@ pub fn set_host_highlighters(factory: gpui_base::input::InputHighlighterFactory)
     HOST_HIGHLIGHTERS.with_borrow_mut(|h| *h = Some(factory));
 }
 
+// HERDR: the host's Markdown plugins (math, diagrams) for every Markdown TextView.
+thread_local! {
+    static HOST_MARKDOWN: std::cell::RefCell<Option<gpui_base::MarkdownExtensions>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Installs Markdown extensions every `TextView.markdown` uses from now on.
+pub fn set_host_markdown_extensions(extensions: gpui_base::MarkdownExtensions) {
+    HOST_MARKDOWN.with_borrow_mut(|m| *m = Some(extensions));
+}
+
+pub(crate) fn host_markdown_extensions() -> Option<gpui_base::MarkdownExtensions> {
+    HOST_MARKDOWN.with_borrow(|m| m.clone())
+}
+
 /// The highlighter for an editor of `language`: the host's, else syntect's.
 pub(crate) fn editor_highlighter(language: &str) -> Option<Box<dyn gpui_base::input::InputHighlighter>> {
     let host = HOST_HIGHLIGHTERS.with_borrow(|h| h.clone());

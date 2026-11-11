@@ -1269,6 +1269,8 @@ pub fn init(cx: &mut App) {
     gpui_shell::set_host_highlighters(std::rc::Rc::new(|language: &str| {
         crate::syntax::Highlighter::new(language).map(|h| Box::new(h) as Box<dyn gpui_base::input::InputHighlighter>)
     }));
+    // Rendered Markdown: math, mermaid, colored code (src/markdown.rs).
+    crate::markdown::install(cx);
     apply_theme(cx);
 }
 
@@ -1295,6 +1297,7 @@ pub fn apply_theme(cx: &mut App) {
         }
         Err(e) => tracing::error!("theme did not map onto mod tokens: {e}"),
     }
+    crate::markdown::set_theme(cx);
 }
 
 fn capabilities() -> Capabilities {

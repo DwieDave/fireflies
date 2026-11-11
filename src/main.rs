@@ -13,6 +13,7 @@ mod layout;
 mod layout_sync;
 mod links;
 mod lsp;
+mod markdown;
 mod model;
 mod mirror;
 mod mirror_sync;

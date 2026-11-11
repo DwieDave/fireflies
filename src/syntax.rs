@@ -198,12 +198,7 @@ const HIGHLIGHT_LIMIT: usize = 2 * 1024 * 1024;
 /// code units (JavaScript string offsets), ordered and non-overlapping.
 /// Empty for an unknown language.
 pub fn highlight(text: &str, language: &str) -> Vec<(usize, usize, &'static str)> {
-    if text.len() > HIGHLIGHT_LIMIT {
-        return Vec::new();
-    }
-    let Some(g) = grammar(language) else { return Vec::new() };
-    let Some(tree) = parser(&g).and_then(|mut p| p.parse(text, None)) else { return Vec::new() };
-    let spans = spans(&g, &tree, text.as_bytes(), 0..text.len());
+    let spans = highlight_bytes(text, language);
     // Byte offsets to UTF-16 offsets, walking the text once.
     let mut out = Vec::with_capacity(spans.len());
     let mut unit = 0usize;
@@ -224,6 +219,16 @@ pub fn highlight(text: &str, language: &str) -> Vec<(usize, usize, &'static str)
         out.push((s, e, name));
     }
     out
+}
+
+/// `text`'s capture spans as UTF-8 byte ranges (for Rust callers: Markdown's code blocks).
+pub fn highlight_bytes(text: &str, language: &str) -> Vec<(Range<usize>, &'static str)> {
+    if text.len() > HIGHLIGHT_LIMIT {
+        return Vec::new();
+    }
+    let Some(g) = grammar(language) else { return Vec::new() };
+    let Some(tree) = parser(&g).and_then(|mut p| p.parse(text, None)) else { return Vec::new() };
+    spans(&g, &tree, text.as_bytes(), 0..text.len())
 }
 
 /// Fold candidates: multi-line nodes, the outermost per starting line.

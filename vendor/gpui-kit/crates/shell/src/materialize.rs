@@ -1102,7 +1102,14 @@ fn materialize_component(
         Component::TextView(spec) => {
             let mut view = match spec.format {
                 crate::spec::TextViewFormat::Html => TextView::html(spec.id, spec.text),
-                crate::spec::TextViewFormat::Markdown => TextView::markdown(spec.id, spec.text),
+                crate::spec::TextViewFormat::Markdown => {
+                    let view = TextView::markdown(spec.id, spec.text);
+                    // HERDR: the host's Markdown plugins (math, diagrams).
+                    match crate::syntax::host_markdown_extensions() {
+                        Some(extensions) => view.markdown_extensions(extensions),
+                        None => view,
+                    }
+                }
             }
             .style(TextViewStyle::from_theme(&Theme::global(cx)));
             if let Some(selectable) = behavior.selectable {
