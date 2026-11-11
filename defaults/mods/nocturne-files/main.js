@@ -36,6 +36,7 @@
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   o              a folder in a new files pane  y  copy the path
 //   m              the right-click menu          q  close
+//   ?              the keys, under the filter line (its ? chip too; ? or esc hides them)
 //   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
 //
 // The keyboard: a copy takes it when its pane is the focused one as it opens
@@ -45,7 +46,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -588,6 +589,9 @@ export default class Files extends View {
     if ((m.alt && k === "left") || (m.control && k === "o")) { this.back(cx); cx.stop_propagation(); cx.notify(); return; }
     if ((m.alt && k === "right") || (m.control && k === "i")) { this.forward(cx); cx.stop_propagation(); cx.notify(); return; }
     if (m.platform || m.control || m.alt) return;
+    // ? (shift-/ on most layouts: check what was typed before "/" filters).
+    if (e.key_char === "?" || k === "?") { this.keysShown = !this.keysShown; cx.stop_propagation(); cx.notify(); return; }
+    if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); cx.notify(); return; }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     if (low === "h" && upper) this.setFilter("hidden", cx);
@@ -695,6 +699,21 @@ export default class Files extends View {
       .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
       .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
       .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
+      // ? keys: the line's last item.
+      .child(h_flex().id("nf-keys").relative().h(20).px(4).flex_none().items_center()
+        .text_color(this.keysShown ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
+        .child(div().relative().child("?")))
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+  }
+
+  /** `?`: the keys, under the filter line. */
+  keysStrip(t) {
+    return h_flex().id("nf-keys-strip").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
+      .children(KEYS.map(([keys, what], i) => h_flex().id(`nf-key-${i}`).flex_none().gap(4)
+        .child(div().text_color(t.accent).child(keys))
+        .child(div().text_color(t.dim).child(what))))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
@@ -803,6 +822,7 @@ export default class Files extends View {
       })
       .child(this.toolbar(t, w, focused))
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(body)
       .when(Boolean(foot), (el) => el.child(div().flex_none().px(10).py(4).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0).child(foot)))
       .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)));

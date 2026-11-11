@@ -488,3 +488,27 @@ test("Herdr's cleanup call when the pane goes closes nothing more (it used to cl
   expect(commands).toEqual([["pane.close", { pane: "pf" }]]);
   world.focused = null;
 });
+
+test("? shows the keys under the filter line (? keys its last item), ? or esc hides them; / still filters", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  world.shared = {};
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  const texts = (el: any): string[] => typeof el === "string" ? [el] : el && typeof el === "object" && "nodes" in el ? el.nodes.flatMap(texts) : [];
+  // The filter line ends with the ? chip.
+  expect(texts(view.lens(world.props, 400, 0)).at(-1)).toBe("?");
+  const q = { key: "/", key_char: "?", modifiers: { shift: true } };
+  view.key(q, cx);
+  expect(view.keysShown).toBe(true);
+  expect(view.typing).toBeFalsy();
+  const strip = texts(view.keysStrip(world.props));
+  expect(strip.slice(-2)).toEqual(["?", "keys"]);
+  expect(strip).toEqual(expect.arrayContaining(["j k", "/", "q"]));
+  expect(texts(view.render())).toEqual(expect.arrayContaining(["?", "keys"]));
+  view.key(q, cx);
+  expect(view.keysShown).toBe(false);
+  view.key(q, cx);
+  commands.length = 0;
+  view.key({ key: "escape" }, cx);
+  expect(view.keysShown).toBe(false);
+  expect(commands).toEqual([]); // esc hid the keys; it didn't close the pane
+});

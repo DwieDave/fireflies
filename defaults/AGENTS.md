@@ -536,7 +536,8 @@ the highlighted line shows where it will land.
   Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
-  (`y`), close.
+  (`y`), close. `?` (or the `?` that ends the filter line) lists the keys under
+  it; `?` or esc hides them.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f

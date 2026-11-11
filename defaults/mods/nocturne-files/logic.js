@@ -160,6 +160,13 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
  *  placeholder ("filter files", "filter" or only the /) and the two switches'
  *  labels ("full": dotfiles / ignored, "short": .* / ign, "icon": the eye
  *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
+/** What ? lists under the filter line, ? keys last. */
+export const KEYS = [["j k", "move"], ["h l", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
+  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["m", "menu"], ["/", "filter"], ["H I", "dotfiles / ignored"],
+  ["- .", "root up / here"], ["[ ]", "back / forward"], ["gg G", "top / bottom"], ["r", "refresh"], ["q", "close"], ["?", "keys"]];
+/** The ? chip's width on the filter line (px). */
+const KEYS_CHIP = 15;
+
 export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {}) {
   const LABELS = { full: ["dotfiles", "ignored"], short: [".*", "ign"], icon: ["", ""] };
   const variants = [
@@ -173,10 +180,10 @@ export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {
   return { find: "", chips: "icon", cuts: false, count: false, labels: LABELS.icon };
 }
 
-/** How wide the filter line is with `fit` (logical px). */
+/** How wide the filter line is with `fit` (logical px); the ? chip ends it. */
 function lensWidth(fit, [h, i], cut, count) {
   const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
-  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0)];
+  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), KEYS_CHIP];
   if (fit.count) parts.push(String(count).length * CH);
   return 16 + parts.reduce((a, b) => a + b, 0) + 6 * (parts.length - 1);
 }
