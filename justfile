@@ -66,6 +66,8 @@ test:
     bun test scripts/nocturne-picker-view.test.ts
     # The picker's mode switch by tab, cmd-shift-f and cmd-p, the query kept.
     bun test scripts/nocturne-picker-keys.test.ts
+    # The picker's folder: one that was moved or deleted is passed over, and named when none is left.
+    bun test scripts/nocturne-picker-folder.test.ts
     # No mod's cleanup hook (an exported View's close()) closes its pane again.
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.

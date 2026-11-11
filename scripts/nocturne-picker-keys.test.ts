@@ -41,7 +41,8 @@ mock.module("herdr", () => ({
     { section: "layout:nocturne", keys: "cmd-p", action: "nocturne.picker" },
     { section: "layout:nocturne", keys: "cmd-shift-f", action: "nocturne.grep" },
   ],
-  exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+  // `test -d`: the folder is there; git: not a repository.
+  exec: async (cmd: string) => ({ code: cmd === "test" ? 0 : 1, stdout: "", stderr: "" }),
   findFiles: async (_r: string, q: string) => { searched.push(`files:${q}`); return { files: [], total: 0 }; },
   grep: async (_r: string, q: string) => { searched.push(`grep:${q}`); return { matches: [], files: 0 }; },
   readTextFile: async () => "", highlight: () => [], languageOf: () => null,

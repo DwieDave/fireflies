@@ -11,6 +11,7 @@
 // instead (the menus say "Close …").
 
 import { spaces, panes, focused, run } from "herdr";
+import { folderCandidates } from "./folders.js";
 import { ART } from "./kit.js";
 import { filesPane, toggleFiles, filesSlot } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
@@ -23,7 +24,8 @@ export function here() {
   const tab = space?.tabs.find((c) => c.active)?.id ?? null;
   const f = focused();
   const pane = panes().find((p) => p.focused && p.tab === tab) ?? (f?.pane ? panes().find((p) => p.pane === f.pane) : null);
-  const folder = pane?.cwd || f?.cwd || space?.folder || null;
+  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.js).
+  const folder = folderCandidates(space, pane, f, panes(), { attached: false })[0] ?? null;
   return { space, tab, pane: pane?.pane ?? null, terminal: pane?.terminal ?? null, folder, on: space?.machine ?? null };
 }
 

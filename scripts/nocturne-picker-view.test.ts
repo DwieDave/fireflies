@@ -16,7 +16,8 @@ const SCREEN = 20;
 mock.module("herdr", () => ({
   props: () => ({ mode: "grep", folder: "/src", overlay: "o1" }), theme: () => new Proxy({}, { get: () => "#808080" }),
   settings: () => ({ zoom: 0.9 }), closeOverlay: () => {}, setShared: () => {}, run: () => {},
-  exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+  // `test -d`: the folder is there; git: not a repository.
+  exec: async (cmd: string) => ({ code: cmd === "test" ? 0 : 1, stdout: "", stderr: "" }),
   findFiles: (_root: string, q: string) => { calls.files.push(q); return answers[`f:${q}`] ?? { files: [], total: 0 }; },
   grep: (_root: string, q: string) => { calls.grep.push(q); return answers[`g:${q}`] ?? { matches: [], files: 0 }; },
   readTextFile: async () => "a\nb\n", highlight: () => { calls.highlight++; return []; }, languageOf: () => null,

@@ -10,6 +10,7 @@
 // in the panel goes back there too and leaves it open).
 
 import { spaces, panes, focused, run, shared, setShared } from "herdr";
+import { folderCandidates } from "./folders.js";
 
 const MOD = "nocturne-files";
 const WIDTH = 280;
@@ -31,7 +32,8 @@ export function toggleFiles() {
   if (open) return closeFiles(open);
   const space = spaces().find((s) => s.active), f = focused();
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  const folder = pane?.cwd || f?.cwd || space?.folder || null;
+  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.js).
+  const folder = folderCandidates(space, pane, f, panes(), { attached: false })[0] ?? null;
   run("pane.split", { edge: "right", px: WIDTH, mod: MOD, props: { folder, on: space?.machine ?? null, slot: filesSlot() } });
 }
 

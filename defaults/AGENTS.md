@@ -675,7 +675,10 @@ the highlighted line shows where it will land.
   `nocturne-files.look` by slot.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
-  pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
+  pane's, else the editor's or files pane's, else one of the space's terminals',
+  else where the space was made; the first that's still there, up to its git
+  top; when none is, it names the missing folder and says to change the space's
+  folder) by fuzzy, typo-tolerant name; cmd-shift-f
   (`nocturne.grep`) searches every file's text as you type, lines grouped by
   file. Both are fff's (`findFiles`, `grep`): git-ignored files stay out, the
   folder's index stays warm while it's used. It covers most of the window: the

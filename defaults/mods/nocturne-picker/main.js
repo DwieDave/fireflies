@@ -5,7 +5,9 @@
 // grouped by file. Both are fff's (the engine behind fff.nvim): git-ignored
 // files stay out, and the folder's index is kept warm while it's used. In a
 // wide window a preview shows the picked file around the line.
-// Props: { mode: "files" | "grep", folder, on, query? (the box's first text), overlay }.
+// Props: { mode: "files" | "grep", folder, folders? (to try, best first: the
+// first that's there is searched), space? (the space's folder, named when none
+// is there), on, query? (the box's first text), overlay }.
 //
 // Keys: up / down (ctrl-p / ctrl-n) pick, enter opens (grep: at the line),
 // tab / shift-tab switch mode keeping the query, and so do the global keys
@@ -28,7 +30,7 @@ import { View } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { props, theme, settings, closeOverlay, shared, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
 import { PathBuilder, Background } from "gpui-kit";
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor } from "./logic.js";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote } from "./logic.js";
 
 const ROW = 28, LINE = 24, HEAD = 26;
 const FILES_LIMIT = 80, GREP_LIMIT = 400;
@@ -50,7 +52,13 @@ export default class Picker extends View {
     const pr = props() ?? p ?? {};
     this.mode = pr.mode === "grep" ? "grep" : "files";
     this.on = pr.on ?? null;
-    this.root = pr.folder ?? null;
+    // The folders to try; the root is the first one that's there, once
+    // that's known (init's first task), the repository's top when it's one.
+    this.folders = Array.isArray(pr.folders) && pr.folders.length ? pr.folders : pr.folder ? [pr.folder] : [];
+    this.space = pr.space ?? null;
+    this.root = null;
+    this.finding = this.folders.length > 0;
+    this.gone = null; // the note when none of them is there
     this.regex = false;
     this.fuzzy = false;
     this.rows = [];
@@ -87,6 +95,16 @@ export default class Picker extends View {
       }
     });
     cx.spawn(async (cx) => {
+      // A folder that was moved or deleted (a space's, a finished shell's)
+      // is passed over; another machine's are searched nowhere yet.
+      if (this.on) this.root = this.folders[0] ?? null;
+      else {
+        this.root = await firstFolder(this.folders, async (f) => {
+          try { return (await exec("test", ["-d", f])).code === 0; } catch { return null; }
+        });
+        if (!this.root && this.folders.length) this.gone = goneNote(this.folders, this.space, tilde);
+      }
+      this.finding = false;
       // The repository's top, so the whole project is searched.
       if (this.root && !this.on) {
         const r = await exec("git", ["-C", this.root, "rev-parse", "--show-toplevel"]).catch(() => null);
@@ -132,7 +150,8 @@ export default class Picker extends View {
     const q = this.input.value();
     const seq = ++this.seq;
     if (this.on) { this.note = "Files on another machine can't be searched here yet."; this.rows = []; cx.notify(); return; }
-    if (!this.root) { this.note = "No folder: open a terminal in the project first."; cx.notify(); return; }
+    if (this.finding) return; // the first search follows
+    if (!this.root) { this.note = this.gone ?? "No folder: open a terminal in the project first."; cx.notify(); return; }
     const started = Date.now();
     cx.spawn(async (cx) => {
       try {

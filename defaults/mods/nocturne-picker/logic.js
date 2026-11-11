@@ -185,3 +185,19 @@ export function keyFor(bound, action, fallback) {
   const k = (bound ?? []).find((b) => b.action === action && (b.section === "layout:nocturne" || b.section === "global"));
   return k?.keys ?? fallback;
 }
+
+/** The first of `folders` that is there: `there(folder)` says true, false,
+ *  or null when it can't tell (no `test` to ask, as on Windows), which
+ *  counts as there. Null when none is. */
+export async function firstFolder(folders, there) {
+  for (const f of folders ?? []) if ((await there(f)) !== false) return f;
+  return null;
+}
+
+/** The line shown when none of `folders` is there: it names the missing
+ *  folder (the space's own when it was one of them) and how to point the
+ *  space somewhere else. `show` writes a path the way the picker does (~). */
+export function goneNote(folders, space, show = (p) => p) {
+  const gone = space && folders.includes(space) ? space : folders[0];
+  return `${show(gone)} isn't there any more. Point the space at its folder: f on the space in the sidebar, or "Change this space's folder…" in the palette.`;
+}
