@@ -144,6 +144,16 @@ it). Fixed px sizes stay. A 3x2 grid: split, then equalize all:
 herdr-app do pane.equalize '{"scope":"all"}'
 ```
 
+`pane.resize {direction, step?, pane?}` moves a pane's divider a step (default:
+the focused pane): with a neighbor on the arrow's side it grows that way, at
+the tab's edge its other divider moves and it shrinks. `step` is a share of the
+tab (default 0.05); panes keep a drag's minimum; a zoomed or one-pane tab
+replies `changed: false`. Move pane p3's divider right by a tenth of the tab:
+
+```sh
+herdr-app do pane.resize '{"pane":"p3","direction":"right","step":0.1}'
+```
+
 In the Nocturne layout, `nocturne.gridify` rearranges the shown tab's placed
 panes into an even grid (about square, in their order) and equalizes it; the
 terminals keep running:
