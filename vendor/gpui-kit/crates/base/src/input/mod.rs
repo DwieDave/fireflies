@@ -91,7 +91,16 @@ pub use diagnostics::{
     DiagnosticSummary, DiagnosticTag, RelatedInformation,
 };
 pub use display_map::{BufferPoint, DisplayMap, DisplayPoint, FoldRange, WrappingIndent};
-pub use editor::{Editor, EditorState};
+pub use editor::{Editor, EditorState, LineNote, LineNotes};
+
+// HERDR: the caret's shape (`set_cursor_shape`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum CursorShape {
+    #[default]
+    Bar,
+    Block,
+    Underline,
+}
 pub use highlighting::{
     DiagnosticColors, FoldIconRenderer, HighlightStyleResolver, InputEditorStyle, InputHighlighter,
     InputHighlighterFactory, SharedHighlightStyleResolver, SyntaxContext, SyntaxContextProvider,
@@ -112,6 +121,8 @@ pub use lsp::{
     ShowDocumentHandler,
 };
 pub use lsp_types::Position;
+// HERDR: hosts build edits and ranges without naming lsp-types themselves.
+pub use lsp_types::{Range as LspRange, TextEdit as LspTextEdit};
 pub use mask_pattern::MaskPattern;
 #[cfg(target_os = "macos")]
 #[doc(hidden)]

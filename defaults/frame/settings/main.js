@@ -9,6 +9,7 @@ const I = (name) => `frame/settings/${name}.svg`;
 const SECTIONS = [
   { id: "look", title: "Look", icon: "palette" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
+  { id: "editor", title: "Editor", icon: "code" },
   { id: "machines", title: "Machines", icon: "server" },
   { id: "alerts", title: "Alerts", icon: "bell" },
   { id: "updates", title: "Updates", icon: "refresh" },
@@ -545,6 +546,33 @@ export default class Settings extends View {
       }));
   }
 
+  // Editor ---------------------------------------------------------------
+
+  // settings.json `editor.vim` (default true) and `editor.leader`: what new
+  // editors start with; each editor pane's vim chip switches that pane only.
+  editor(t) {
+    const radio = (id, on, label, edit) => h_flex()
+      .id(id).gap(10).px(12).py(10).rounded(7).items_center().cursor_pointer()
+      .hover((s) => s.bg(t.hover))
+      .on_click((_e, cx) => this.change(edit, cx))
+      .child(div().text_color(on ? t.accent : t.muted).child(on ? "◉" : "○"))
+      .child(div().text_size(14).text_color(t.foreground).child(label));
+    const vim = this.person.editor?.vim !== false;
+    const leader = this.person.editor?.leader ?? "space";
+    const set = (k, v) => (p) => { p.editor = { ...(p.editor ?? {}), [k]: v }; };
+    return v_flex()
+      .w_full()
+      .child(this.heading(t, "Vim mode"))
+      .child(div().pb(12).text_size(13).text_color(t.dim).child("How new editors start. An editor's own vim chip (cmd-k v, :novim) switches that pane only, and the pane keeps its choice."))
+      .child(radio("st-vim-on", vim, "Start in vim mode", set("vim", true)))
+      .child(radio("st-vim-off", !vim, "Start without vim", set("vim", false)))
+      .child(div().pt(18).child(this.heading(t, "Leader key")))
+      .child(div().pb(12).text_size(13).text_color(t.dim).child("Vim's leader: it opens the list of what comes next (files, grep, problems, ...)."))
+      .child(radio("st-leader-space", leader === "space" || leader === " ", "Space", set("leader", "space")))
+      .child(radio("st-leader-comma", leader === "comma" || leader === ",", "Comma", set("leader", "comma")))
+      .child(div().pt(12).text_size(12.5).text_color(t.dim).child("Language servers, formatters and indentation per language: settings.json editor (ask your agent)."));
+  }
+
   // Machines -------------------------------------------------------------
 
   async loadMachines() {
@@ -861,6 +889,8 @@ export default class Settings extends View {
                       ? this.look(t, cx)
                       : this.section === "keyboard"
                         ? this.keyboard(t)
+                      : this.section === "editor"
+                        ? this.editor(t)
                       : this.section === "machines"
                         ? this.machines(t)
                       : this.section === "alerts"

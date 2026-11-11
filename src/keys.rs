@@ -62,6 +62,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-gridify-keys.macos.json"),
     // With cmd-alt-p, before cmd-g opened the git window instead of lazygit.
     include_str!("keys/shipped/fireflies-pin-keys.macos.json"),
+    // With the git window on cmd-g, before cmd-p / cmd-shift-f opened the file picker and grep, and the editor's keys.
+    include_str!("keys/shipped/fireflies-git-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

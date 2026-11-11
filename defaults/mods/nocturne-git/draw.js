@@ -7,6 +7,7 @@
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
+import * as herdr from "herdr";
 import { segments } from "./graph.js";
 
 export const ART = "mods/nocturne/art";
@@ -128,11 +129,29 @@ export function graphCell(t, row, width, { lane = 12, h = 18, head = false, big 
   return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
 }
 
-/** Syntax spans for a diff line's text: null today (plain text). The editor
- *  branch's herdr.highlight(text, lang) plugs in here and nowhere else:
- *  return [{ text, color }] and diffLine draws them. */
-export function codeSpans(_text, _path, _t) {
-  return null;
+/** Syntax spans for a diff line's text, by the file's language: tree-sitter
+ *  (herdr.highlight) in moonfly's roles, `base` between them; null for plain
+ *  text (no grammar, nothing to color, a very long line). Each line is
+ *  highlighted on its own: a line inside a multi-line string or comment can
+ *  be colored as code. */
+export function codeSpans(text, path, t, base = t.foreground) {
+  if (!path || !text || text.length > 2000) return null;
+  // An app without herdr.highlight (or a test's stand-in) draws plain text.
+  const spans = herdr.highlight?.(text, path) ?? [];
+  if (!spans.length) return null;
+  const role = { keyword: t.ansi5, function: t.ansi12, type: t.ansi10, constructor: t.ansi10, tag: t.ansi10, string: t.ansi11,
+    character: t.ansi11, number: t.ansi3, float: t.ansi3, boolean: t.ansi3, constant: t.ansi3, comment: t.ansi8, property: t.ansi6,
+    field: t.ansi6, operator: t.ansi9, attribute: t.ansi13, namespace: t.ansi6, module: t.ansi6, label: t.ansi3, escape: t.ansi9 };
+  const color = (name) => (name === "variable.builtin" ? t.ansi4 : name === "string.escape" ? t.ansi9 : role[name] ?? role[name.split(".")[0]] ?? base);
+  const out = [];
+  let at = 0;
+  for (const [s, e, name] of spans) {
+    if (s > at) out.push({ text: text.slice(at, s), color: base });
+    if (e > s) out.push({ text: text.slice(s, e), color: color(name) });
+    at = Math.max(at, e);
+  }
+  if (at < text.length) out.push({ text: text.slice(at), color: base });
+  return out;
 }
 
 /** One diff row in the main view (nocturne-diff's look): a dithered bar for
@@ -157,7 +176,7 @@ export function diffLine(t, row, { code, compact = false, pick = false, cursor =
       .children((row.parts ?? [[row.text, "foreground"]]).map(([s, c], i) => div().id(`tx-${i}`).flex_none().text_color(t[c] ?? c).child(s)));
   }
   const tint = row.kind === "+" ? t.ansi2 : row.kind === "-" ? t.ansi1 : null;
-  const spans = row.kind === "\\" ? null : codeSpans(row.text, path, t);
+  const spans = row.kind === "\\" ? null : codeSpans(row.text, path, t, row.kind === " " ? t.muted : t.foreground);
   const text = div().flex_1().min_w(0).truncate().pr(8).text_color(row.kind === "\\" ? t.dim : row.kind === " " ? t.muted : t.foreground);
   return h_flex().h(h).w_full().relative().items_center().font_family(code).text_size(compact ? 11.5 : 12)
     .when(Boolean(tint), (el) => el.bg(tint + "16"))

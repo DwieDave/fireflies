@@ -28,6 +28,57 @@ export function readTextFile(path: string, options?: { on?: string | null }): Pr
  * Rejects on a stale snapshot; existing files are replaced atomically. */
 export function writeTextFile(path: string, text: string, expected: string | null): Promise<null>;
 
+/** Syntax spans of `text` from a tree-sitter grammar: `[start, end, name]`, ordered and
+ *  non-overlapping, offsets in JavaScript string units. `name` is the grammar's capture name
+ *  (`keyword`, `function.method`, `string.escape`, `comment`, `type.builtin`, ...): color the
+ *  root name and let dotted ones fall back to it. `language` is a language id, alias or a path
+ *  (`"rust"`, `"ts"`, `"src/main.rs"`). Empty for languages without a grammar and text over 2 MB. */
+export function highlight(text: string, language: string): [number, number, string][];
+/** The editor's language id for a path or name (`"src/a.tsx"` → `"tsx"`, `"Cargo.lock"` →
+ *  `"toml"`), or null when unknown. */
+export function languageOf(pathOrName: string): string | null;
+
+/** A language server for code a mod shows (this machine). Starts `argv` in `root` (or joins the
+ *  session already running it there: one server per argv and root, shared by every mod copy),
+ *  initializes it (utf-16 positions; `settings` go out as `initializationOptions`, answer its
+ *  `workspace/configuration` and follow in `workspace/didChangeConfiguration`) and resolves once
+ *  it's ready with its `id` and `capabilities`. Rejects when it can't start. The copy keeps it until
+ *  `lspRelease(id)` or the copy goes; a server no copy keeps is stopped after 90 s. Herdr only
+ *  carries messages: opening documents, keeping them in sync and reading diagnostics is yours. */
+export function lspStart(options: { argv: string[]; root: string; settings?: object | null }): Promise<{ id: number; capabilities: any }>;
+/** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
+ *  or when the server exits. */
+export function lspRequest(id: number, method: string, params?: any): Promise<any>;
+/** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). Open
+ *  documents are counted per mod copy: the server hears `didOpen` once (a later copy's becomes a
+ *  `didChange` with its text, and that copy gets the file's last `publishDiagnostics` at once) and
+ *  `didClose` when the last copy closes the file or goes. */
+export function lspNotify(id: number, method: string, params?: any): void;
+/** The next notification the server sent this copy: `{ method, params }`
+ *  (`textDocument/publishDiagnostics`, `$/progress`, `window/logMessage`, ...). `$/exit` with
+ *  `params.stderr` (its last lines) when the server is gone. */
+export function lspNextMessage(id: number): Promise<{ method: string; params: any }>;
+/** This copy no longer needs the session. */
+export function lspRelease(id: number): void;
+/** The running servers: `{ id, argv, root, users, alive, ready, stderr }`. */
+export function lspSessions(): { id: number; argv: string[]; root: string; users: number; alive: boolean; ready: boolean | null; stderr: string[] }[];
+
+/** Files under `root` (this machine) that fuzzily match `query`, best first (fff: typo-resistant,
+ *  git-ignored files left out, the index kept current while it's used). `ranges`: the matched
+ *  characters of `path` (relative to root), `git`: "M" "A" "U" "D" "R" "!" or null. `scanning`:
+ *  the first index of a big folder isn't complete yet; ask again. An empty query lists files.
+ *  Rejects for a missing folder, and for home or / as a whole. */
+export function findFiles(root: string, query: string, options?: { limit?: number }): Promise<{ files: { path: string; git: string | null; ranges: [number, number][] }[]; total: number; indexed: number; scanning: boolean }>;
+/** Lines under `root` matching `query` (fff's live grep, ~150 ms budget, git-ignored files left
+ *  out): `mode` "plain" (default), "regex" or "fuzzy"; `case` "smart" (default), "sensitive",
+ *  "insensitive". `line` is one-based; `col` and `ranges` in the line's string units. `error`: a
+ *  regex that didn't compile (searched as plain text). */
+export function grep(root: string, query: string, options?: { limit?: number; mode?: "plain" | "regex" | "fuzzy"; case?: "smart" | "sensitive" | "insensitive" }): Promise<{ matches: { path: string; line: number; col: number; text: string; ranges: [number, number][] }[]; files: number; truncated: boolean; error: string | null; scanning: boolean }>;
+
+/** This copy holds unsaved work: closing its pane or tab asks the person first (scripts must pass
+ *  `confirmed`), showing `note` ("picker.rs: unsaved changes"). null or "" when it's saved again. */
+export function setUnsaved(note: string | null): void;
+
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
  *  `on`, its login/interactive shell when supported), at most once a minute per machine.

@@ -966,6 +966,29 @@ fn exec_future(command: String, args: Vec<String>, cwd: Option<String>, on: Opti
     }
 }
 
+/// Mod copies holding unsaved work (`setUnsaved`): their mod, props and what
+/// they'd lose, so closing their pane or tab asks first.
+static UNSAVED: std::sync::LazyLock<std::sync::Mutex<HashMap<u64, (String, Value, String)>>> = std::sync::LazyLock::new(Default::default);
+
+/// Forgets a copy's unsaved note when it goes.
+struct UnsavedGuard(u64);
+
+impl Drop for UnsavedGuard {
+    fn drop(&mut self) {
+        UNSAVED.lock().unwrap().remove(&self.0);
+    }
+}
+
+/// What the mod pane showing `name` with `props` would lose if closed now.
+pub fn unsaved(name: &str, props: &Value) -> Option<String> {
+    UNSAVED.lock().unwrap().values().find(|(n, p, _)| n == name && p == props).map(|(_, _, note)| note.clone())
+}
+
+/// A language server session's id from a mod.
+fn lsp_id(v: &HostValue) -> Result<u64, HostError> {
+    from_host(v).as_f64().filter(|n| *n >= 0.0).map(|n| n as u64).ok_or_else(|| HostError::new("a session id is a number from lspStart"))
+}
+
 fn module(inst: Instance, copy: u64) -> HostModule {
     let reads = Rc::new(RefCell::new(LiveReads::default()));
     LIVE_READS.with_borrow_mut(|copies| {
@@ -1048,6 +1071,78 @@ fn module(inst: Instance, copy: u64) -> HostModule {
                 Ok(path.map(|p| HostValue::Str(p.to_string_lossy().into_owned())).unwrap_or(HostValue::Null))
             })
         })
+        .function("highlight", |a| {
+            let spans = crate::syntax::highlight(a.string(0)?, a.string(1)?);
+            Ok(to_host(&Value::Array(spans.into_iter().map(|(s, e, n)| json!([s, e, n])).collect())))
+        })
+        .async_function("lspStart", {
+            // The copy's sessions are let go when its module goes.
+            let guard = Rc::new(crate::lsp::CopyGuard(copy));
+            move |a| {
+                let _ = &guard;
+                let o = from_host(a.value(0)?);
+                let argv: Vec<String> = o.get("argv").and_then(Value::as_array).map(|v| v.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default();
+                let root = o.get("root").and_then(Value::as_str).ok_or_else(|| HostError::new("lspStart needs { argv, root }"))?.to_owned();
+                if argv.is_empty() {
+                    return Err(HostError::new("lspStart needs { argv, root }"));
+                }
+                let rx = crate::lsp::start(copy, argv, root, o.get("settings").cloned().unwrap_or(Value::Null));
+                Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+            }
+        })
+        .async_function("lspRequest", |a| {
+            let id = lsp_id(a.value(0)?)?;
+            let rx = crate::lsp::request(id, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
+        .function("lspNotify", move |a| {
+            crate::lsp::notify(copy, lsp_id(a.value(0)?)?, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+            Ok(HostValue::Null)
+        })
+        .async_function("lspNextMessage", move |a| {
+            let rx = crate::lsp::next_message(copy, lsp_id(a.value(0)?)?).map_err(HostError::new)?;
+            Ok(async move { rx.recv().await.map(|v| to_host(&v)).map_err(|_| HostError::new("released")) })
+        })
+        .function("lspRelease", move |a| {
+            crate::lsp::release(copy, lsp_id(a.value(0)?)?);
+            Ok(HostValue::Null)
+        })
+        .function("lspSessions", |_| Ok(to_host(&crate::lsp::sessions())))
+        .function("setUnsaved", {
+            let guard = Rc::new(UnsavedGuard(copy));
+            let (name, props) = (inst.name.clone(), inst.props.clone());
+            move |a| {
+                let _ = &guard;
+                match a.get(0).map(from_host) {
+                    Some(Value::String(note)) if !note.is_empty() => {
+                        UNSAVED.lock().unwrap().insert(copy, (name.clone(), props.clone(), note));
+                    }
+                    _ => {
+                        UNSAVED.lock().unwrap().remove(&copy);
+                    }
+                }
+                Ok(HostValue::Null)
+            }
+        })
+        .async_function("findFiles", |a| {
+            let root = PathBuf::from(a.string(0)?);
+            let query = a.string(1)?.to_owned();
+            let o = a.get(2).map(from_host).unwrap_or(Value::Null);
+            let limit = o.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+            let rx = crate::search::background(move || crate::search::find_files(&root, &query, limit));
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
+        .async_function("grep", |a| {
+            let root = PathBuf::from(a.string(0)?);
+            let query = a.string(1)?.to_owned();
+            let o = a.get(2).map(from_host).unwrap_or(Value::Null);
+            let limit = o.get("limit").and_then(Value::as_u64).unwrap_or(300) as usize;
+            let mode = o.get("mode").and_then(Value::as_str).unwrap_or("plain").to_owned();
+            let case = o.get("case").and_then(Value::as_str).unwrap_or("smart").to_owned();
+            let rx = crate::search::background(move || crate::search::grep(&root, &query, limit, &mode, &case));
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
+        .function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())))
         .function("themes", |_| {
             let list: Vec<Value> = crate::settings::themes().into_iter().map(|(name, colors)| json!({ "light": crate::settings::theme_is_light(&name), "name": name, "colors": colors })).collect();
             Ok(to_host(&Value::Array(list)))
@@ -1170,6 +1265,10 @@ fn module(inst: Instance, copy: u64) -> HostModule {
 /// The runtime's base layer, themed from settings.json.
 pub fn init(cx: &mut App) {
     gpui_shell::init(cx);
+    // Code editors color with tree-sitter (src/syntax.rs) where a grammar exists.
+    gpui_shell::set_host_highlighters(std::rc::Rc::new(|language: &str| {
+        crate::syntax::Highlighter::new(language).map(|h| Box::new(h) as Box<dyn gpui_base::input::InputHighlighter>)
+    }));
     apply_theme(cx);
 }
 

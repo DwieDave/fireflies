@@ -3010,7 +3010,7 @@ impl<M: InputModeKind> Element for TextElement<M> {
         window: &mut Window,
         cx: &mut App,
     ) {
-        let (focus_handle, show_cursor, disabled, selected_range, editor_style, editor_paddings) = {
+        let (focus_handle, show_cursor, disabled, selected_range, editor_style, editor_paddings, line_notes) = {
             let state = self.state.read(cx);
             (
                 state.focus_handle.clone(),
@@ -3019,6 +3019,8 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 *state.active_selection(),
                 state.editor_style.clone(),
                 state.editor_paddings,
+                // HERDR: line notes (end-of-line text, gutter marks).
+                M::line_notes(state).filter(|n| !n.is_empty()).cloned(),
             )
         };
         let focused = focus_handle.is_focused(window);
@@ -3189,7 +3191,33 @@ impl<M: InputModeKind> Element for TextElement<M> {
                 window,
                 cx,
             );
-            offset_y += line.size(line_height).height;
+            let line_size = line.size(line_height);
+            offset_y += line_size.height;
+
+            // HERDR: a line note's text after the line's last visual row.
+            if let Some(note) = line_notes.as_ref().and_then(|n| n.get(&row))
+                && !note.text.is_empty()
+            {
+                let text_style = window.text_style();
+                let font_size = text_style.font_size.to_pixels(window.rem_size()) * 0.92;
+                let label: SharedString = note.text.lines().next().unwrap_or_default().to_string().into();
+                let runs = [TextRun {
+                    len: label.len(),
+                    font: text_style.font(),
+                    color: if disabled { note.color.opacity(0.5) } else { note.color },
+                    background_color: None,
+                    underline: None,
+                    strikethrough: None,
+                }];
+                let shaped = window.text_system().shape_line(label, font_size, &runs, None);
+                let last_row_width = line.wrapped_lines.last().map_or(line_size.width, |l| l.width);
+                let rows = line.wrapped_lines.len().max(1) as f32;
+                let note_p = point(
+                    p.x + last_row_width + px(24.),
+                    line_y + line_height * (rows - 1.) + (line_height - font_size) * 0.3,
+                );
+                _ = shaped.paint(note_p, line_height, TextAlign::Left, None, window, cx);
+            }
 
             if Some(row) == prepaint.current_row {
                 cursor_row_y = Some(line_y);
@@ -3231,9 +3259,34 @@ impl<M: InputModeKind> Element for TextElement<M> {
         }
 
         // Paint blinking cursors (shared blink state for all carets)
-        if focused && show_cursor {
+        // HERDR: a block or underline caret (vim's modes) is a character wide;
+        // a block is see-through so the character shows. Shown even unfocused
+        // as a hollow block would be noise: it follows the blink like a bar.
+        let shape = self.state.read(cx).cursor_shape;
+        if focused && (show_cursor || shape != super::CursorShape::Bar) {
+            let char_width = if shape == super::CursorShape::Bar {
+                CURSOR_WIDTH
+            } else {
+                let style = window.text_style();
+                let font_size = style.font_size.to_pixels(window.rem_size());
+                let font_id = window.text_system().resolve_font(&style.font());
+                window.text_system().em_advance(font_id, font_size).unwrap_or(font_size * 0.6)
+            };
             for cursor_info in prepaint.cursor_infos_with_scroll() {
-                window.paint_quad(fill(cursor_info.bounds, editor_style.caret));
+                let mut b = cursor_info.bounds;
+                match shape {
+                    super::CursorShape::Bar => window.paint_quad(fill(b, editor_style.caret)),
+                    super::CursorShape::Block => {
+                        b.size.width = char_width;
+                        window.paint_quad(fill(b, editor_style.caret.opacity(0.55)));
+                    }
+                    super::CursorShape::Underline => {
+                        b.size.width = char_width;
+                        b.origin.y += b.size.height - px(2.);
+                        b.size.height = px(2.);
+                        window.paint_quad(fill(b, editor_style.caret));
+                    }
+                }
             }
         }
 
@@ -3277,6 +3330,14 @@ impl<M: InputModeKind> Element for TextElement<M> {
                             bg_color,
                         ));
                     }
+                }
+
+                // HERDR: a line note's mark at the gutter's left edge.
+                if let Some(mark) = line_notes.as_ref().and_then(|n| n.get(&buffer_line)).and_then(|n| n.mark) {
+                    window.paint_quad(fill(
+                        Bounds::new(point(gutter_bounds.origin.x, p.y), size(px(3.), height)),
+                        mark,
+                    ));
                 }
 
                 for line in lines {

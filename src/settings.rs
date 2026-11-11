@@ -444,6 +444,69 @@ pub struct Person {
     pub theme: Option<crate::layout::ThemeChoice>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub colors: BTreeMap<String, String>,
+    /// The code editor (Nocturne's editor mod): indentation, wrapping, formatting
+    /// and language servers, overall and per language.
+    #[serde(skip_serializing_if = "EditorSettings::is_default")]
+    pub editor: EditorSettings,
+}
+
+/// settings.json `editor`. Unset values fall back to the language's entry in
+/// `languages`, then to these, then to the editor's built-in defaults.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditorSettings {
+    #[serde(flatten)]
+    pub all: EditorLanguage,
+    /// Whether editors start in vim mode (default on); a pane's own switch overrides it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vim: Option<bool>,
+    /// Vim's leader key: "space" (default), "comma", or a character.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub leader: Option<String>,
+    /// By language id (`rust`, `typescript`, `json`, ...; see `languageOf`).
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub languages: BTreeMap<String, EditorLanguage>,
+}
+
+impl EditorSettings {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// One language's editor settings (or every language's, at the top).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EditorLanguage {
+    /// Spaces per indent level (1 to 16).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tab_size: Option<u8>,
+    /// Tab inserts spaces (true) or a tab character.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub insert_spaces: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub soft_wrap: Option<bool>,
+    /// Run `format` on save.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format_on_save: Option<bool>,
+    /// A formatter: argv that reads the file on stdin and prints it formatted.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub format: Option<Vec<String>>,
+    /// The language server: argv, or false for none.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server: Option<ServerSetting>,
+    /// What the server gets as its settings (`workspace/configuration`) and
+    /// `initializationOptions`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_settings: Option<serde_json::Value>,
+}
+
+/// `server`: an argv to run, or `false` to run none.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ServerSetting {
+    Off(bool),
+    Run(Vec<String>),
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -517,6 +580,7 @@ impl Default for Person {
             appearance: Appearance::System,
             theme: None,
             colors: BTreeMap::new(),
+            editor: EditorSettings::default(),
         }
     }
 }
@@ -553,6 +617,8 @@ pub struct Settings {
     pub links: Links,
     pub option_as_alt: OptionAsAlt,
     pub sounds: Sounds,
+    /// settings.json `editor`, as written.
+    pub editor: EditorSettings,
 }
 
 /// Attention sounds: when an agent needs you, and when one finished while you
@@ -596,6 +662,7 @@ impl Default for Settings {
             links: Links::App,
             option_as_alt: OptionAsAlt::Auto,
             sounds: Sounds::default(),
+            editor: EditorSettings::default(),
         }
     }
 }
@@ -635,6 +702,7 @@ impl Settings {
             minimum_contrast: person.minimum_contrast,
             links: person.links,
             option_as_alt: person.option_as_alt,
+            editor: person.editor.clone(),
         }
     }
 }
@@ -1012,6 +1080,21 @@ mod tests {
     /// settings.json files from before telemetry was removed still load,
     /// with nothing to report, and the old key is gone once the app saves.
     #[test]
+    fn editor_settings_read_per_language_servers_and_formatters() {
+        let p = parse_person(r#"{"editor": {"tab_size": 2, "format_on_save": true, "leader": ",", "vim": false,
+            "languages": {"rust": {"server": ["ra-multiplex"], "format": ["rustfmt"]}, "go": {"server": false}}}}"#).unwrap();
+        assert_eq!(p.editor.all.tab_size, Some(2));
+        assert_eq!(p.editor.leader.as_deref(), Some(","));
+        assert_eq!(p.editor.vim, Some(false));
+        assert_eq!(p.editor.all.format_on_save, Some(true));
+        assert_eq!(p.editor.languages["rust"].server, Some(ServerSetting::Run(vec!["ra-multiplex".into()])));
+        assert_eq!(p.editor.languages["go"].server, Some(ServerSetting::Off(false)));
+        assert!(parse_person(r#"{"editor": {"tab_size": "two"}}"#).is_err());
+        // Unset, it stays out of a saved settings.json.
+        assert!(!serde_json::to_string(&Person::default()).unwrap().contains("editor"));
+    }
+
+    #[test]
     fn an_old_telemetry_key_is_ignored() {
         for text in [r#"{"telemetry": false}"#, r#"{"telemetry": true, "font_ligatures": true}"#, r#"{"telemetry": "whatever"}"#] {
             let person = parse_person(text).unwrap_or_else(|e| panic!("{text}: {e}"));
@@ -1025,7 +1108,7 @@ mod tests {
     /// settings.json key.
     #[test]
     fn the_guide_explains_every_setting() {
-        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), clipboard_write: false, links: Links::System, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), ..Person::default() };
+        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), clipboard_write: false, links: Links::System, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), editor: EditorSettings { all: EditorLanguage { tab_size: Some(2), ..Default::default() }, ..Default::default() }, ..Person::default() };
         let keys: Vec<String> = serde_json::to_value(&all).unwrap().as_object().unwrap().keys().cloned().collect();
         let guide = include_str!("../defaults/AGENTS.md");
         let section = guide.split("## The person").nth(1).and_then(|s| s.split("\n## ").next()).unwrap_or_default();

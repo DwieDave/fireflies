@@ -71,7 +71,8 @@ pub enum TerminalEvent {
     OpenUrl(String),
     /// A link to a local file one of the app's viewers shows (`links::Viewer`:
     /// Markdown, images) was clicked: the window opens it in that viewer.
-    OpenFile(PathBuf),
+    /// A file one of the app's viewers shows, and the place a `path:42:7` link names (one-based).
+    OpenFile(PathBuf, Option<(u32, u32)>),
     TitleChanged,
     /// The program ended.
     Ended,
@@ -1125,17 +1126,19 @@ impl TerminalView {
     }
 
     /// The link at a window position, and where it shows.
-    fn link_at(&self, pos: Point<Pixels>) -> Option<(LinkTarget, vt::Spans)> {
+    fn link_at(&self, pos: Point<Pixels>) -> Option<(LinkTarget, vt::Spans, Option<(u32, u32)>)> {
         let g = self.grid.borrow();
         let (x, y) = local(&g, pos);
         let (col, row) = (x / f32::from(g.cell.width), y / f32::from(g.cell.height));
         let mut target = None;
+        let mut place = None;
         let hit = g.vt.link_at(col as u16, row as u16, |text, at, joined| {
             // In lines joined back together only a file that exists proves the join right.
             if let Some(range) = links::find(text, at)
                 && let Some(link) = links::resolve(&text[range.clone()], self.cwd.as_deref())
                 && (!joined || matches!(link, links::Target::File(_)))
             {
+                place = links::place(&text[range.clone()]);
                 target = Some(LinkTarget::External(link));
                 return Some(range);
             }
@@ -1154,7 +1157,7 @@ impl TerminalView {
         })?;
         // OSC 8 links bypass text detection.
         let target = target.or_else(|| links::resolve(&hit.target, self.cwd.as_deref()).map(LinkTarget::External))?;
-        Some((target, hit.spans))
+        Some((target, hit.spans, place))
     }
 
     fn start_selection(&mut self, pos: Point<Pixels>, cx: &mut Context<Self>) {
@@ -2326,7 +2329,7 @@ impl Render for TerminalView {
         let cell = cell_size_at(window, font_px(self.grid.borrow().font_zoom));
         let hover = self.grid.borrow().hover;
         let found = hover.filter(|_| link_mods(&window.modifiers())).and_then(|pos| self.link_at(pos));
-        let (link, spans) = found.unzip();
+        let (link, spans) = found.map(|(l, s, _)| (l, s)).unzip();
         self.link = link;
         self.grid.borrow_mut().link_spans = spans.unwrap_or_default();
         let grid = self.grid.clone();
@@ -2397,12 +2400,12 @@ impl Render for TerminalView {
                 }
                 drop(g);
                 if link_mods(&ev.modifiers)
-                    && let Some((target, _)) = this.link_at(ev.position)
+                    && let Some((target, _, place)) = this.link_at(ev.position)
                 {
                     match target {
                         LinkTarget::External(links::Target::Url(url)) if links::is_web(&url) => cx.emit(TerminalEvent::OpenUrl(url)),
                         LinkTarget::External(target) => match links::viewable(&target) {
-                            Some((_, path)) => cx.emit(TerminalEvent::OpenFile(path)),
+                            Some((_, path)) => cx.emit(TerminalEvent::OpenFile(path, place)),
                             None => links::open(&target),
                         },
                         LinkTarget::Terminal(address) => cx.emit(TerminalEvent::Peek(address)),
@@ -3054,13 +3057,13 @@ mod tests {
         std::fs::write(dir.join("docs/plan.md"), "# plan").unwrap();
         std::fs::write(dir.join("README.md"), "# readme").unwrap();
         std::fs::write(dir.join("docs/my notes/To Do.md"), "# todo").unwrap();
-        std::fs::write(dir.join("main.rs"), "").unwrap();
+        std::fs::write(dir.join("app.bin"), "").unwrap();
         std::fs::write(dir.join("docs/shot.png"), "").unwrap();
         std::fs::write(dir.join("logo.svg"), "").unwrap();
         std::fs::write(dir.join("docs/my notes/Screen Shot.heic"), "").unwrap();
         let osc8 = format!("file://{}", dir.join("docs/my notes/To Do.md").display()).replace(' ', "%20");
         let osc8_image = format!("file://{}", dir.join("docs/my notes/Screen Shot.heic").display()).replace(' ', "%20");
-        let screen = format!("see docs/plan.md:3 now\r\nREADME.md\r\n\x1b]8;;{osc8}\x1b\\the todo\x1b]8;;\x1b\\\r\nmain.rs\r\nat docs/shot.png:4\r\nlogo.svg\r\n\x1b]8;;{osc8_image}\x1b\\a shot\x1b]8;;\x1b\\\r\n");
+        let screen = format!("see docs/plan.md:3 now\r\nREADME.md\r\n\x1b]8;;{osc8}\x1b\\the todo\x1b]8;;\x1b\\\r\napp.bin\r\nat docs/shot.png:4\r\nlogo.svg\r\n\x1b]8;;{osc8_image}\x1b\\a shot\x1b]8;;\x1b\\\r\n");
 
         cx.update(gpui_base::init);
         let cwd = dir.clone();
@@ -3076,7 +3079,7 @@ mod tests {
         let seen = opened.clone();
         cx.update(|_, app| {
             app.subscribe(&term, move |_, ev: &super::TerminalEvent, _| {
-                if let super::TerminalEvent::OpenFile(path) = ev {
+                if let super::TerminalEvent::OpenFile(path, _) = ev {
                     seen.borrow_mut().push(path.clone());
                 }
             }).detach();

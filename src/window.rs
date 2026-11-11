@@ -1598,10 +1598,15 @@ impl AppWindow {
                         tracing::warn!("cannot open {url}: {e}");
                     }
                 }
-                TerminalEvent::OpenFile(path) => {
+                TerminalEvent::OpenFile(path, place) => {
                     let Some(viewer) = Viewer::of(path) else { return };
                     let path = path.to_string_lossy().into_owned();
-                    if let Err(e) = this.open_viewer(viewer, &path, Some(block.trim_end_matches(SWAP).to_owned()), None, None, Value::Null, window, cx) {
+                    // `path:42:7`: the editor goes there.
+                    let extra = match place {
+                        Some((line, col)) if viewer == Viewer::Editor => json!({ "line": line, "col": col }),
+                        _ => Value::Null,
+                    };
+                    if let Err(e) = this.open_viewer(viewer, &path, Some(block.trim_end_matches(SWAP).to_owned()), None, None, extra, window, cx) {
                         tracing::warn!("cannot open {path}: {e}");
                     }
                 }
@@ -1892,10 +1897,21 @@ impl AppWindow {
     /// (`running_note`), placed and parked.
     fn running_notes(&self, tab: &str) -> Vec<String> {
         let Some(c) = self.model.tab(tab) else { return vec![] };
-        c.addresses().iter().filter_map(|addr| {
+        let mut notes: Vec<String> = c.addresses().iter().filter_map(|addr| {
             let rec = self.live.get(addr)?;
             running_note(self.model.status(addr).or_else(|| rec["status"].as_str()), rec)
-        }).collect()
+        }).collect();
+        // Mod panes with unsaved work (an editor's changes).
+        notes.extend(c.root.panes().into_iter().filter_map(|n| self.unsaved_note(n)));
+        notes
+    }
+
+    /// What a mod pane would lose if closed now (`setUnsaved`), if anything.
+    fn unsaved_note(&self, node: &Node) -> Option<String> {
+        match node.content() {
+            Some(Content::Mod { name, props }) => crate::mods::unsaved(name, props),
+            _ => None,
+        }
     }
 
     fn program(&self, addr: &str) -> Value {
@@ -2889,6 +2905,12 @@ impl AppWindow {
             })).map(|n| n.id.clone())
         });
         if let Some(id) = shown {
+            // The editor already on the file moves to the place asked for: it
+            // watches shared `nocturne-editor.goto` for its path.
+            if viewer == Viewer::Editor && extra.get("line").is_some() {
+                let n = crate::mods::shared("nocturne-editor.goto").and_then(|g| g.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+                crate::mods::set_shared("nocturne-editor.goto".into(), json!({ "path": path, "line": extra["line"], "col": extra.get("col").cloned().unwrap_or(json!(1)), "n": n }));
+            }
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
             return match r.get("error") {
                 Some(e) => Err(e.to_string()),
@@ -3536,9 +3558,18 @@ impl AppWindow {
                 if c.root.find(&pane).is_some_and(|n| !n.closable()) {
                     return;
                 }
+                let confirmed = a.get("confirmed").and_then(Value::as_bool) == Some(true);
                 if c.root.panes().len() == 1 && c.parked.is_empty() {
                     let id = c.id.clone();
-                    return self.dispatch("tab.close", &json!({ "id": id }), person, window, cx);
+                    return self.dispatch("tab.close", &json!({ "id": id, "confirmed": a.get("confirmed").cloned().unwrap_or(Value::Null) }), person, window, cx);
+                }
+                // A mod pane with unsaved work: the person says so first; a script passes confirmed.
+                if !confirmed && let Some(note) = c.root.find(&pane).and_then(|n| self.unsaved_note(n)) {
+                    if !person {
+                        return self.fail(format!("pane.close loses {note}: pass confirmed: true"));
+                    }
+                    self.confirm("Close without saving?", &format!("{note}\n\nClosing the pane loses them."), "pane.close", json!({ "pane": pane, "confirmed": true }), window, cx);
+                    return;
                 }
                 let addr = self.model.address_of(&pane);
                 self.model.remove_pane(&pane);
@@ -4052,6 +4083,18 @@ impl AppWindow {
             "app.open_url" => {
                 let url = Self::owned(a, "url").unwrap_or_default();
                 let r = self.open_link(&url, None, Self::arg(a, "in"), window, cx);
+                self.answer(r);
+                return;
+            }
+            "editor.open" => {
+                let path = Self::owned(a, "path").unwrap_or_default();
+                // Numbers, or their text (`herdr-app do editor.open --line 42`).
+                let num = |k: &str| a.get(k).and_then(|v| v.as_u64().or_else(|| v.as_str()?.trim().parse().ok())).filter(|n| *n >= 1);
+                let extra = match num("line") {
+                    Some(line) => json!({ "line": line, "col": num("col").unwrap_or(1) }),
+                    None => Value::Null,
+                };
+                let r = self.open_viewer(Viewer::Editor, &path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), extra, window, cx);
                 self.answer(r);
                 return;
             }

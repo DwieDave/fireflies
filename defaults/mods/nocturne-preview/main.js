@@ -30,6 +30,7 @@
 // Keys while it has focus:
 //   n ] / p [   next / previous file of the same kind in the folder
 //   o  open in the system's app    y  copy path    f  folder in the files pane
+//   e  edit as text in the editor (tables, patches, SVG)
 //   pictures: + = / - zoom, 0 fit, 1 100%, h j k l ←↓↑→ pan (← → step the
 //             folder when it fits), r / R turn, b background
 //   PDF:      + / - zoom, 0 fit width, ← → / pageup pagedown pages, g / G first / last
@@ -572,6 +573,18 @@ export default class PreviewView extends View {
     if (!this.on) run("preview.open", { path: this.path, in: "system" });
   }
 
+  /** Text shown as something else (a table, a patch, an SVG): edit it as
+   *  text in the editor (nocturne-editor), beside this preview. */
+  editable() {
+    return !this.on && /\.(csv|tsv|diff|patch|svg)$/i.test(this.path);
+  }
+
+  edit() {
+    if (!this.editable()) return;
+    const me = panes().find((p) => p.mod === "nocturne-preview" && p.props?.slot && p.props.slot === props()?.slot);
+    run("editor.open", { path: this.path, ...(me ? { pane: me.pane } : {}) });
+  }
+
   copyPath(cx) {
     cx.write_to_clipboard(this.on ? `${this.on}:${this.path}` : this.path);
     const at = this.copied = Date.now();
@@ -726,6 +739,7 @@ export default class PreviewView extends View {
     const d = m.shift ? SHOVE : NUDGE;
     const how = this.how?.how;
     if (k === "o") this.system();
+    else if (k === "e") this.edit();
     else if (k === "y") this.copyPath(cx);
     else if (k === "f") this.reveal();
     else if (k === "n" || k === "]") this.go(1, cx);
@@ -911,6 +925,7 @@ export default class PreviewView extends View {
     el = this.controls(t, w, el);
     return el
       .when(Boolean(this.path), (e2) => e2
+        .when(w >= 360 && this.editable(), (e3) => e3.child(this.chip(t, "img-edit", "edit", () => this.edit())))
         .when(w >= 300, (e3) => e3.child(this.chip(t, "img-files", "files", () => this.reveal())))
         .when(w >= 540 && !this.on, (e3) => e3.child(this.chip(t, "img-open", "open", () => this.system())))
         .when(w >= 620, (e3) => e3.child(this.chip(t, "img-copy", this.copied ? "copied" : "copy", (cx) => this.copyPath(cx), Boolean(this.copied)))))

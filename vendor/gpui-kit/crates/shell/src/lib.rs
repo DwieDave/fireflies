@@ -66,6 +66,8 @@ mod component_registry;
 mod input_tokens;
 // HERDR: syntax highlighting shipped with script editors.
 mod syntax;
+// HERDR: the host's own code-editor highlighters.
+pub use syntax::set_host_highlighters;
 pub use input_tokens::{
     InlineTokenCallbacks, inline_token_click_data, inline_token_context_data,
     inline_token_hover_data, input_token_state_methods, textarea_token_state_methods,

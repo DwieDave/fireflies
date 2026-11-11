@@ -12,8 +12,8 @@
 // system. It reads the file again whenever it changes on disk (agents edit
 // these), keeping where you were.
 //
-// The bar: the file and its folder, ‹ back, raw / rendered, edit ($EDITOR in
-// a terminal beside), files (the folder in the files pane).
+// The bar: the file and its folder, ‹ back, raw / rendered, edit (the editor
+// beside; another machine's file: $EDITOR in a terminal there), files (the folder in the files pane).
 // Keys while it has focus:
 //   j / k  ↓ ↑   scroll         d / u  space   half a page down / up
 //   gg / G       top / bottom   r              raw / rendered
@@ -208,8 +208,11 @@ export default class Markdown extends View {
     this.scrollY = last.scrollY;
   }
 
+  /** The app's editor (nocturne-editor) beside this viewer; a file on another
+   *  machine in $EDITOR in a terminal there. */
   edit() {
     const me = this.pane();
+    if (!this.on) return run("editor.open", { path: this.path, ...(me ? { pane: me.pane } : {}) });
     run("terminal.open", { argv: ["sh", "-c", 'exec "${VISUAL:-${EDITOR:-vi}}" "$1"', "edit", this.path], folder: dirname(this.path), place: "left", ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 

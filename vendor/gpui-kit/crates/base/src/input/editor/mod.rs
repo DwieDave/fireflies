@@ -16,6 +16,10 @@ impl InputModeKind for EditorMode {
 
     type Extras = super::EditorExtras;
 
+    fn line_notes(state: &InputBaseState<Self>) -> Option<&super::LineNotes> {
+        Some(&state.extras.line_notes)
+    }
+
     fn hover_definition_style(
         state: &InputBaseState<Self>,
         _cx: &App,
@@ -275,5 +279,35 @@ impl crate::input::InputExtras for super::EditorExtras {
             self.lsp.definition_provider.is_some(),
             !self.lsp.code_action_providers.is_empty(),
         )
+    }
+}
+
+// HERDR: notes on whole lines — a short text after the line's end and a mark in
+// the gutter (a diagnostic's first line and its severity). Rows are buffer rows;
+// the host replaces the set whenever its source changes.
+/// A note on one buffer row.
+#[derive(Clone, Debug, PartialEq)]
+pub struct LineNote {
+    /// Drawn after the line's text, in `color`; empty draws only the mark.
+    pub text: gpui::SharedString,
+    pub color: gpui::Hsla,
+    /// A thin bar at the gutter's left edge.
+    pub mark: Option<gpui::Hsla>,
+}
+
+/// Line notes by buffer row.
+pub type LineNotes = std::collections::BTreeMap<usize, LineNote>;
+
+impl EditorState {
+    /// Replaces every line note.
+    pub fn set_line_notes(&mut self, notes: LineNotes, cx: &mut gpui::Context<Self>) {
+        if self.extras.line_notes != notes {
+            self.extras.line_notes = notes;
+            cx.notify();
+        }
+    }
+
+    pub fn line_notes(&self) -> &LineNotes {
+        &self.extras.line_notes
     }
 }

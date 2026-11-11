@@ -131,6 +131,16 @@ pub enum InputEvent {
     Blur,
     /// A paste found no text on the clipboard (an image, say): the owner may read it.
     PasteWithoutText,
+    // HERDR: the pointer rested on a word of a code editor without a hover
+    // provider (the owner draws its own card), or left it (`word` is None).
+    Hover {
+        /// The word's UTF-8 byte range.
+        word: Option<std::ops::Range<usize>>,
+        /// Its start as an LSP position (UTF-16 columns).
+        position: Option<Position>,
+        /// Where the word is drawn, in window coordinates, if laid out.
+        bounds: Option<Bounds<Pixels>>,
+    },
 }
 
 pub(super) const CONTEXT: &str = "Input";
@@ -470,6 +480,8 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) touch_selection: super::touch::TouchSelection,
     pub(crate) disabled: bool,
     pub(crate) readonly: bool,
+    // HERDR: the caret's shape (vim's modes): see `set_cursor_shape`.
+    pub(crate) cursor_shape: super::CursorShape,
     pub(crate) text_align: TextAlign,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -836,6 +848,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             touch_selection: Default::default(),
             disabled: false,
             readonly: false,
+            cursor_shape: super::CursorShape::Bar,
             text_align: TextAlign::Left,
             masked: false,
             clean_on_escape: false,
@@ -2649,6 +2662,11 @@ impl<M: InputModeKind> InputBaseState<M> {
         self.scroll_to_with_padding(offset, direction, padding, cx);
     }
 
+    // HERDR: reveal an offset with a few lines around it (go to line, a jump).
+    pub fn reveal_offset(&mut self, offset: usize, cx: &mut Context<Self>) {
+        self.scroll_to_with_padding(offset, None, ScrollPadding::SurroundingLines, cx);
+    }
+
     /// Reveal an offset with independently chosen direction restriction and padding.
     /// Search uses surrounding lines without restricting movement to match order.
     pub(crate) fn scroll_to_with_padding(
@@ -2983,6 +3001,24 @@ impl<M: InputModeKind> InputBaseState<M> {
                 .record_selections(vec![selection_before], vec![selection_after]);
         }
         recorded
+    }
+
+    // HERDR: the caret's shape: a bar (typing), a block or an underline (vim's
+    // normal and replace modes). It isn't a mode: keys still do what they do.
+    pub fn set_cursor_shape(&mut self, shape: super::CursorShape, cx: &mut Context<Self>) {
+        if self.cursor_shape != shape {
+            self.cursor_shape = shape;
+            cx.notify();
+        }
+    }
+
+    // HERDR: undo and redo for hosts with their own buttons or menus.
+    pub fn undo_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.undo(&Undo, window, cx);
+    }
+
+    pub fn redo_edit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.redo(&Redo, window, cx);
     }
 
     pub(super) fn undo(&mut self, _: &Undo, window: &mut Window, cx: &mut Context<Self>) {

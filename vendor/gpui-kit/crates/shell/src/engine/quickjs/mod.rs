@@ -1097,6 +1097,15 @@ pub(super) struct InputCallbackOwner {
     application: Option<Rc<ApplicationGeneration>>,
     view: Option<WeakEntity<ScriptView>>,
 }
+
+impl InputCallbackOwner {
+    // HERDR: editor_keys hands a copy to each dispatch.
+    pub(super) fn clone_owner(&self) -> Self {
+        Self { policy: self.policy.clone(), application: self.application.clone(), view: self.view.clone() }
+    }
+}
+// HERDR: code editors' keystrokes for scripts (vim).
+mod editor_keys;
 mod lifecycle;
 mod standard;
 mod template;
@@ -1371,6 +1380,8 @@ pub struct ShellRuntime {
     /// `Persistent` handle must be released while the context still exists.
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
+    // HERDR: code editors' key handlers (editor_keys.rs), released with the runtime.
+    editor_keys: RefCell<Vec<(gpui::WeakEntity<gpui_base::input::EditorState>, Persistent<Function<'static>>, InputCallbackOwner)>>,
     components: FrozenComponentRegistry,
     component_state_proof: String,
     interactive_inline_layout: Cell<bool>,
@@ -1492,6 +1503,7 @@ impl Drop for ShellRuntime {
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
         self.callbacks.borrow_mut().clear();
+        self.editor_keys.borrow_mut().clear();
         // Each holds a `Persistent` view class, which must be released while
         // the context is still alive — and the panel registry keeps a second
         // reference to every one of them in an `App` global that outlives this,
@@ -1729,6 +1741,7 @@ impl ShellRuntime {
 
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
+            editor_keys: RefCell::new(Vec::new()),
             components,
             component_state_proof,
             interactive_inline_layout: Cell::new(false),
@@ -3866,6 +3879,53 @@ impl ShellRuntime {
     ///
     /// Unlike a rendered callback this handler outlives the pass that created
     /// it, so it lives with the entity rather than in the per-frame arena.
+    // HERDR: a code editor's keystroke, before the editor or any key binding
+    // sees it (`state.on("key")`). True when the handler took it.
+    pub(super) fn dispatch_editor_key(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        keystroke: &gpui::Keystroke,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        if owner.application.as_ref().is_some_and(|application| !application.is_active()) {
+            return false;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            payload.set("key", keystroke.key.as_str())?;
+            payload.set("keystroke", script_keystroke(keystroke))?;
+            match keystroke.key_char.as_deref() {
+                Some(char) => payload.set("key_char", char)?,
+                None => payload.set("key_char", rquickjs::Undefined)?,
+            }
+            payload.set("modifiers", modifiers_object(ctx, keystroke.modifiers)?)?;
+            let out: rquickjs::Value = handler.call((payload, context_object(ctx, ContextBinding::Call(generation))?))?;
+            Ok(out.as_bool().unwrap_or(false))
+        });
+        let taken = match result {
+            Ok(taken) => taken,
+            Err(error) => {
+                tracing::error!("error in editor key handler: {error}");
+                false
+            }
+        };
+        scheduler::drain_runtime_jobs(self, window, cx);
+        taken
+    }
+
     pub(super) fn dispatch_input_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
@@ -3906,6 +3966,20 @@ impl ShellRuntime {
                 InputEvent::PressEnter { secondary, shift } => {
                     payload.set("secondary", *secondary)?;
                     payload.set("shift", *shift)?;
+                }
+                // HERDR: the word under the pointer (code editors without a hover provider).
+                InputEvent::Hover { word, position, bounds } => {
+                    payload.set("hovering", word.is_some())?;
+                    if let Some(p) = position {
+                        payload.set("line", p.line)?;
+                        payload.set("col", p.character)?;
+                    }
+                    if let Some(b) = bounds {
+                        payload.set("x", f32::from(b.origin.x))?;
+                        payload.set("y", f32::from(b.origin.y))?;
+                        payload.set("width", f32::from(b.size.width))?;
+                        payload.set("height", f32::from(b.size.height))?;
+                    }
                 }
                 InputEvent::Change | InputEvent::Focus | InputEvent::Blur | InputEvent::PasteWithoutText => {}
             }
@@ -5623,6 +5697,37 @@ globalThis.__gpui = (() => {
 
   globalThis.__diagnostics = false;
 
+  // HERDR: a code editor's methods past value/set_value, one native call each.
+  const editorCalls = (handle) => {
+    const call = (name, args) => {
+      const out = __editor_call(handle, name, JSON.stringify(args ?? null));
+      return out === "" ? undefined : JSON.parse(out);
+    };
+    return {
+      cursor: () => call("cursor"),
+      selection: () => call("selection"),
+      set_cursor: (line, col, end) => call("set_cursor", { line, col, end: end ?? null }),
+      find: (query, options) => call("find", { query: String(query), case_sensitive: !!options?.case_sensitive }),
+      find_next: () => call("find_next"),
+      find_prev: () => call("find_prev"),
+      find_state: () => call("find_state"),
+      find_close: () => call("find_close"),
+      replace: (text, all) => call("replace", { text: String(text), all: !!all }),
+      edit: (edits) => call("edit", edits),
+      set_diagnostics: (list) => call("set_diagnostics", list ?? []),
+      set_line_notes: (list) => call("set_line_notes", list ?? []),
+      set_tab_size: (size, hard_tabs) => call("set_tab_size", { size, hard_tabs: !!hard_tabs }),
+      set_soft_wrap: (wrap) => call("set_soft_wrap", !!wrap),
+      set_readonly: (readonly) => call("set_readonly", !!readonly),
+      set_language: (language) => call("set_language", String(language)),
+      focus: () => call("focus"),
+      set_cursor_shape: (shape) => call("set_cursor_shape", String(shape)),
+      set_selections: (list) => call("set_selections", list ?? []),
+      undo: () => call("undo"),
+      redo: () => call("redo"),
+    };
+  };
+
   const element = (id) => {
     const object = Object.create(globalThis.__diagnostics ? diagnostic : methods);
     object.__id = id;
@@ -7110,6 +7215,8 @@ globalThis.__gpui = (() => {
           set_value: (value) => __editor_set_value(handle, String(value)),
           on: (event, handler) => __editor_on(handle, String(event), handler),
           release: () => __editor_release(handle),
+          // HERDR: the editor's caret, selection, find, notes and edits.
+          ...editorCalls(handle),
         };
       },
     },

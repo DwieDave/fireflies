@@ -34,6 +34,8 @@ impl InputBaseState<EditorMode> {
         }
 
         let Some(provider) = self.extras.lsp.hover_provider.clone() else {
+            // HERDR: no provider: tell the owner which word the pointer rests on.
+            self.report_hover_word(offset, window, cx);
             return;
         };
 
@@ -109,7 +111,36 @@ impl InputBaseState<EditorMode> {
         }
     }
 
+    // HERDR: `InputEvent::Hover` for owners drawing their own hover card. A word
+    // is reported once the pointer rests on it; leaving it reports `None`.
+    fn report_hover_word(&mut self, offset: usize, window: &mut Window, cx: &mut Context<Self>) {
+        let word = self.text.word_range(offset).filter(|r| !r.is_empty());
+        if word == self.extras.hover_word {
+            return;
+        }
+        if word.is_none() {
+            self.extras.hover_word = None;
+            self.extras.lsp._hover_task = Task::ready(Ok(()));
+            cx.emit(crate::input::InputEvent::Hover { word: None, position: None, bounds: None });
+            return;
+        }
+        self.extras.lsp._hover_task = cx.spawn_in(window, async move |this, cx| {
+            cx.background_executor().timer(Duration::from_millis(350)).await;
+            this.update(cx, |this, cx| {
+                let Some(word) = word else { return };
+                this.extras.hover_word = Some(word.clone());
+                let position = this.text.offset_to_position(word.start);
+                let bounds = this.range_to_bounds(&word);
+                cx.emit(crate::input::InputEvent::Hover { word: Some(word), position: Some(position), bounds });
+            })?;
+            Ok(())
+        });
+    }
+
     pub fn clear_hover_state(&mut self, cx: &mut Context<Self>) {
+        if self.extras.hover_word.take().is_some() {
+            cx.emit(crate::input::InputEvent::Hover { word: None, position: None, bounds: None });
+        }
         let changed =
             !self.extras.hover_definition.is_empty() || self.extras.hover_popover.is_some();
         self.extras.hover_definition.clear();

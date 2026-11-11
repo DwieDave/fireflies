@@ -5,12 +5,13 @@
 // of following focus, and opening files in the editor instead of a preview.
 // Opened from Nocturne's "+ new" > Files (or cmd-e) with props { folder, on }.
 //
-// The editor runs through this mod's bin/nocturne-edit (on another
+// Files open in the app's editor (nocturne-editor, `editor.open`); folders,
+// files on another machine and E go to $EDITOR. That one runs through this mod's bin/nocturne-edit (on another
 // machine: `nocturne-edit` from its PATH) in a
 // terminal pane beside this one. With nvim it listens on a socket per tab,
 // so later picks open in that same nvim instead of a new pane.
 //
-// Click a file: edit it (a Markdown file: read it in the Markdown viewer,
+// Click a file: edit it in the app's editor (a Markdown file: read it in the Markdown viewer,
 // nocturne-markdown, alt-click edits it as text; a picture, PDF, table, patch,
 // font or clip: the preview, nocturne-preview, alt-click opens the system's app,
 // or edits a table or patch). Click a folder: fold it;
@@ -18,6 +19,7 @@
 //   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
+//   E              edit it in $EDITOR (a terminal beside)
 //   -              root one folder up            .  root at the selected folder
 //   gg / G         top / bottom                  r  refresh
 
@@ -195,9 +197,21 @@ export default class Files extends View {
     return { tab, pane: panes().find((p) => p.tab === tab && p.terminal && ours.has(p.terminal)) ?? null };
   }
 
+  /** Edits a file (relative to the root) in the app's editor (nocturne-editor),
+   *  beside this tab's other panes; a folder, or a file on another machine, in
+   *  $EDITOR (terminalEdit). */
+  edit(path, cx) {
+    const row = this.rows().find((r) => r.path === path);
+    if (this.on || !path || row?.dir) return this.terminalEdit(path, cx);
+    const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    const beside = panes().find((p) => p.tab === tab && p.mod !== "nocturne-files" && !p.parked)
+      ?? panes().find((p) => p.tab === tab && p.mod === "nocturne-files");
+    run("editor.open", { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}) });
+  }
+
   /** Opens a file or folder (relative to the root; "" is the root) in $EDITOR: in this
    *  tab's nvim when it is listening, else in a new terminal pane to this one's left. */
-  edit(path, cx) {
+  terminalEdit(path, cx) {
     const abs = path ? `${this.root}/${path}` : this.root;
     const { tab, pane } = this.editorPane();
     // One socket per tab; ids from other machines carry a "machine/" prefix.
@@ -269,6 +283,7 @@ export default class Files extends View {
       if (row.dir && this.folders.has(row.path)) this.toggle(row.path, cx);
       else if (row.depth > 0) this.select(rows, rows.findIndex((r) => r.path === parent(row.path)));
     } else if (k === "enter" && row) row.dir ? this.toggle(row.path, cx) : this.openFile(row.path, cx);
+    else if (k === "E" || (low === "e" && m.shift)) this.terminalEdit(row?.path ?? "", cx);
     else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "-") { const from = this.root; this.reroot(parent(this.root), cx); this.pendingSel = from; }
     else if (k === "." && row) {

@@ -89,7 +89,25 @@
     "cmd-alt--": "pane.font_smaller",
     "cmd-alt-0": "pane.font_reset",
     "cmd-alt-e": "pane.equalize:all",
-    "cmd-alt-g": "nocturne.gridify"
+    "cmd-alt-g": "nocturne.gridify",
+    "cmd-p": "nocturne.picker",
+    "cmd-shift-f": "nocturne.grep"
+  },
+  "mod:nocturne-editor": {
+    "cmd-s": "nocturne-editor.save",
+    "cmd-f": "nocturne-editor.find",
+    "cmd-alt-f": "nocturne-editor.replace",
+    "ctrl-g": "nocturne-editor.line",
+    "cmd-l": "nocturne-editor.line",
+    "cmd-k n": "nocturne-editor.next-problem",
+    "cmd-k p": "nocturne-editor.prev-problem",
+    "cmd-k m": "nocturne-editor.problems",
+    "cmd-k d": "nocturne-editor.definition",
+    "cmd-i": "nocturne-editor.hover",
+    "ctrl-=": "nocturne-editor.hover-more",
+    "ctrl--": "nocturne-editor.hover-less",
+    "cmd-r": "nocturne-editor.reload",
+    "cmd-k v": "nocturne-editor.vim"
   },
   "mod:nocturne-browser": {
     "cmd-p": "nocturne-browser.url",

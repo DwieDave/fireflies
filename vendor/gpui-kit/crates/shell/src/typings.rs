@@ -3159,12 +3159,59 @@ const BASE: &str = r#"  /** A row. */
   export const Textarea: { new: (state: TextareaState) => NativeElement };
 
   // HERDR: built-in source editing and read-only code viewing.
+  /** A place in the text: zero-based line, UTF-16 column (LSP's positions). */
+  export interface EditorPosition { line: number; col: number }
+  /** Where a search stands: matches, the current one (zero-based), whether highlighted. */
+  export interface EditorFindState { query: string; count: number; current: number | null; active: boolean }
+  /** `on("hover")`: the word the pointer rests on (after a short delay), or `hovering: false`
+   *  when it leaves the word. `x`/`y`/`width`/`height`: the word in window coordinates. */
+  export interface EditorHoverEvent { hovering: boolean; line?: number; col?: number; x?: number; y?: number; width?: number; height?: number }
   export interface EditorState {
     value(): string;
-    /** Programmatic replacement works even in readonly mode. */
+    /** Programmatic replacement works even in readonly mode; it resets undo and the caret. */
     set_value(value: string): void;
     on(event: "change" | "submit" | "focus" | "blur" | "paste_other", handler: (event: InputEvent, cx: Context) => void): boolean;
+    on(event: "hover", handler: (event: EditorHoverEvent, cx: Context) => void): boolean;
+    /** Every keystroke while this editor has the keyboard, before the editor, its bindings and
+     *  the app's keys see it; return true to take it (nothing else sees it, nothing is typed).
+     *  For a modal scheme (vim); return false for text in insert mode, so IME keeps working. */
+    on(event: "key", handler: (event: KeyEvent, cx: Context) => boolean): boolean;
     release(): boolean;
+    /** The caret. */
+    cursor(): EditorPosition;
+    /** The selection (start == end with none) and its text. */
+    selection(): { start: EditorPosition; end: EditorPosition; text: string };
+    /** Moves the caret (or selects to `end`) and scrolls it into view with a few lines around. */
+    set_cursor(line: number, col: number, end?: EditorPosition): void;
+    /** Highlights every match of `query` (plain text; case-insensitive unless asked). */
+    find(query: string, options?: { case_sensitive?: boolean }): EditorFindState;
+    /** Selects and reveals the next / previous match. */
+    find_next(): EditorFindState;
+    find_prev(): EditorFindState;
+    find_state(): EditorFindState;
+    /** Ends the search and its highlights; the query is kept. */
+    find_close(): void;
+    /** Replaces the current match (and moves on), or every match. */
+    replace(text: string, all?: boolean): EditorFindState;
+    /** Applies text edits as one undoable change (a formatter's, a server's). */
+    edit(edits: { start: EditorPosition; end: EditorPosition; text: string }[]): void;
+    /** Replaces the underlined problems (the hover over them is yours to draw). */
+    set_diagnostics(list: (EditorPosition & { end_line?: number; end_col?: number; severity?: "error" | "warning" | "info" | "hint"; message: string; code?: string | number; source?: string })[]): void;
+    /** Replaces the line notes: `text` after the line's end in `color`, `mark` a bar at the gutter's left. */
+    set_line_notes(list: { line: number; text?: string; color?: string; mark?: string }[]): void;
+    /** Indent width (1–16) and whether Tab inserts a tab character. */
+    set_tab_size(size: number, hard_tabs?: boolean): void;
+    set_soft_wrap(wrap: boolean): void;
+    set_readonly(readonly: boolean): void;
+    /** Recolors with another language's grammar (an id, alias or path). */
+    set_language(language: string): void;
+    focus(): void;
+    undo(): void;
+    redo(): void;
+    /** The caret's look: "bar" (default), "block" or "underline" (vim's modes). */
+    set_cursor_shape(shape: "bar" | "block" | "underline"): void;
+    /** Replaces the selections (several: one caret each, typing goes to all). */
+    set_selections(list: { start: EditorPosition; end: EditorPosition }[]): void;
   }
   export const EditorState: {
     new: (options?: {
