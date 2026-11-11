@@ -65,7 +65,7 @@ const cx: any = {
   timer: { every() {}, after(_ms: number, f: Function) { timers.push(f); } },
 };
 
-const { placeGlow, nextGlow, drawGlow, GONE_AFTER } = await import("../defaults/mods/nocturne/glow.js");
+const { placeGlow, nextGlow, drawGlow, GONE_AFTER, PULSE, PULSE_FRAMES, pulseFrame, Fireglow } = await import("../defaults/mods/nocturne/glow.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 
 beforeEach(() => { windowNow = { platform: "linux", active: true }; zoom = 1; byId = {}; glows = []; timers = []; cx.notified = 0; });
@@ -180,20 +180,49 @@ test("on the rail a second glow lights the space list, placed by where the list 
 
 // ---- drawing it
 
-test("drawn: it breathes and flashes and trails the pointer; calm, it holds still", () => {
-  const live = named(drawGlow(theme, { on: true, x: 100, y: 200, h: 900, lift: 120 }), "loop");
-  expect(live.length).toBe(2); // the halo breathes, the heart flashes
-  const lively = drawGlow(theme, { on: true, x: 100, y: 200, h: 900, lift: 120 });
-  expect(named(lively, "transition").map(([, a]) => a[0])).toContain("left");
-  const still = drawGlow(theme, { on: true, x: 100, y: 200, calm: true, h: 900, lift: 120 });
-  expect(named(still, "loop")).toEqual([]);
+test("drawn: a dim + at rest, a bright x on each blink with a ring opening out; it trails the pointer; calm, it holds still", () => {
+  const heart = (el: El) => {
+    const all = (e: El): El[] => (e?.calls ? [e, ...e.kids.flatMap(all)] : []);
+    const h = all(el).find((e) => e.calls.some(([n, a]) => n === "id" && a[0] === "fireglow-heart"))!;
+    return { opacity: h.calls.find(([n]) => n === "opacity")![1][0] };
+  };
+  const at = (frame: any) => drawGlow(theme, { on: true, x: 100, y: 200, h: 900, lift: 120, frame });
+  // The pulse: rest, then two blinks, each an x with the ring, then rest again.
+  expect(PULSE_FRAMES.map((f: any) => f[1]).join("")).toBe("+xx++xx+++");
+  expect(PULSE_FRAMES.filter((f: any) => f[4] > 0).map((f: any) => f[4])).toEqual([16, 20, 26, 32, 16, 20, 26, 32]);
+  const rest = at(PULSE_FRAMES[0]), blink = at(PULSE_FRAMES[1]);
+  expect(byId["fireglow-ring"]).toBeDefined();
+  expect(heart(blink).opacity).toBeGreaterThan(heart(rest).opacity);
+  expect(named(blink, "transition").map(([, a]) => a[0])).toContain("left");
+  // No native loop: the frames step on the view's own timers.
+  expect(named(blink, "loop")).toEqual([]);
+  // pulseFrame finds the frame and the wait until the next.
+  expect(pulseFrame(0)).toMatchObject({ i: 0, wait: 1860 });
+  expect(pulseFrame(PULSE + 1870)).toMatchObject({ i: 1, wait: 70 });
+  expect(pulseFrame(2600).frame[1]).toBe("+");
+  const still = drawGlow(theme, { on: true, x: 100, y: 200, calm: true, h: 900, lift: 120, frame: PULSE_FRAMES[1] });
   expect(named(still, "transition")).toEqual([]);
-  // Centered on the pointer: the 112 px carrier's corner 56 px up and left.
-  expect(still.calls.find(([n]) => n === "left")![1][0]).toBe(44);
-  expect(still.calls.find(([n]) => n === "top")![1][0]).toBe(144);
+  expect(heart(still).opacity).toBe(heart(rest).opacity);
+  // Centered on the pointer: the 48 px carrier's corner 24 px up and left.
+  expect(still.calls.find(([n]) => n === "left")![1][0]).toBe(76);
+  expect(still.calls.find(([n]) => n === "top")![1][0]).toBe(176);
 });
 
-test("drawn: leaving fades it with no loop running; gone or never shown, nothing is drawn", () => {
+test("the nested view steps the pulse on one timer at a time, none while calm or fading", () => {
+  const g: any = new Fireglow();
+  g.init({ on: true, x: 10, y: 10 });
+  const after: number[] = [];
+  const c: any = { timer: { after: (ms: number) => after.push(ms) } };
+  g.render(c); g.render(c);
+  expect(after.length).toBe(2);
+  expect(g.tick).toBe(2); // the first timer's notify is dropped: only the latest counts
+  after.length = 0;
+  g.update({ on: true, x: 10, y: 10, calm: true }); g.render(c);
+  g.update({ on: false, x: 10, y: 10 }); g.render(c);
+  expect(after).toEqual([]);
+});
+
+test("drawn: leaving fades it, no timer; gone or never shown, nothing is drawn", () => {
   const fading = drawGlow(theme, { on: false, x: 100, y: 200 });
   expect(named(fading, "loop")).toEqual([]);
   expect(fading.calls.find(([n]) => n === "opacity")![1][0]).toBe(0);
@@ -211,5 +240,5 @@ test("drawn: in its own light (ansi11), the night's stars and grass lit around i
   expect(svgs(rail).length).toBe(6); // no haze on the rail
   // Drawn inside the rail's list: moved by where the list sits.
   const inList = drawGlow(theme, { on: true, x: 40, y: 200, calm: true, ox: 0, oy: 142 });
-  expect(inList.calls.find(([n]) => n === "top")![1][0]).toBe(200 - 56 - 142);
+  expect(inList.calls.find(([n]) => n === "top")![1][0]).toBe(200 - 24 - 142);
 });

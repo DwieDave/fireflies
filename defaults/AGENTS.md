@@ -951,8 +951,10 @@ rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
 While the pointer is over the sky (open or folded) it carries a firefly's
-light: a faint dithered halo in the theme's ansi11 that trails it, lights the
-stars, haze and grass near it, breathes, and fades when the pointer leaves;
+light: a small dithered diamond in the theme's ansi11 around a pixel + that
+trails it and lights the stars, haze and grass near it. Every 2.8 s it
+signals as a firefly does, two quick blinks: the + turns into a bright x and
+a square ring opens out from it, then rest. It fades when the pointer leaves;
 it holds still when the window isn't in front or the system asks for less
 motion (nocturne's `glow.js`, a nested view, so it never redraws the sky).
 
