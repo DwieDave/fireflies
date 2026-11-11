@@ -68,6 +68,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-editor-keys.macos.json"),
     // With the keyboard keys, before cmd-shift-v switched the editor's Markdown preview.
     include_str!("keys/shipped/fireflies-keyboard-keys.macos.json"),
+    // With cmd-shift-v for the markdown preview, before cmd-k ? opened the editor's key list.
+    include_str!("keys/shipped/fireflies-preview-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

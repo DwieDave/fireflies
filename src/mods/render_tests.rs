@@ -1025,6 +1025,7 @@ fn shipped_layouts_and_keys() {
         "nocturne-editor.hover-less",
         "nocturne-editor.reload",
         "nocturne-editor.vim",
+        "nocturne-editor.keys",
         "nocturne-editor.preview",
         "nocturne-browser.url",
         "nocturne-browser.reload",

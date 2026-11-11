@@ -115,6 +115,7 @@
     "ctrl--": "nocturne-editor.hover-less",
     "cmd-r": "nocturne-editor.reload",
     "cmd-k v": "nocturne-editor.vim",
+    "cmd-k shift-/": "nocturne-editor.keys",
     "cmd-shift-v": "nocturne-editor.preview"
   },
   "mod:nocturne-browser": {
