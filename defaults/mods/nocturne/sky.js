@@ -39,7 +39,7 @@ import Spaces from "./spaces.js";
 import { menuHeight, NAME_AGENT } from "./menu.js";
 import { toggleGit } from "./git.js";
 import { UsageSection } from "./usage.js";
-import { toggleFiles } from "./files.js";
+import { focusFiles } from "./files.js";
 import { togglePicker } from "./picker.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
@@ -137,7 +137,7 @@ export default class Sky {
     // here: the next space in the sidebar's order (worktrees under their repo);
     // nocturne.git (cmd-g; nocturne.lazygit, its old name, too) toggles the git
     // window (git.js), nocturne.diff the same on its Review tab, nocturne.files
-    // the files pane (files.js), nocturne.github (cmd-shift-g) the GitHub
+    // the files pane with the keyboard in it (files.js focusFiles), nocturne.github (cmd-shift-g) the GitHub
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
     // on that run's output; nocturne.scripts-again runs the folder's last
@@ -158,7 +158,7 @@ export default class Sky {
         else if (c === "fold") this.fold(cx);
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
-        else if (c === "files") toggleFiles();
+        else if (c === "files") focusFiles();
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
         else if (c === "github") toggleGithub();

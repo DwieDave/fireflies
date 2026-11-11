@@ -34,7 +34,7 @@ export default class DiffMoved extends View {
     if (p.overlay) {
       this.done = true;
       const key = p.back ? "nocturne-github" : "nocturne-git";
-      const id = openOverlay({ mod: "nocturne-git", kind: "window", key, frame: "none", width: 0.85, height: 0.85, props: gitProps(p) });
+      const id = openOverlay({ mod: "nocturne-git", kind: "window", key, frame: "none", scrim: true, width: 0.85, height: 0.85, props: gitProps(p) });
       if (p.back) setShared("nocturne-github.window", { id, beat: Date.now() });
       else setShared("nocturne-git.window", { id, beat: Date.now(), folder: p.folder ?? null });
       closeOverlay(p.overlay);

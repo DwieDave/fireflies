@@ -20,14 +20,14 @@ class Element {
 }
 const walk = (el: any): any[] => (el && typeof el === "object" && "nodes" in el ? [el, ...el.nodes.flatMap(walk)] : []);
 const commands: [string, any][] = [];
-const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; find: (root: string, q: string) => Promise<any> } = {
-  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, find: async () => ({ files: [], scanning: false }),
+const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; find: (root: string, q: string) => Promise<any> } = {
+  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, find: async () => ({ files: [], scanning: false }),
 };
 const herdr = {
   props: () => world.props, theme: () => ({ background: "#080808", foreground: "#c6c6c6", ansi0: "#323437", ansi3: "#e3c78a", ansi4: "#80a0ff", ansi8: "#949494", accent: "#80a0ff", muted: "#949494", dim: "#5F6D6D" }),
   settings: () => world.settings, exec: async () => ({ code: 1, stdout: "", stderr: "" }),
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
-  panes: () => world.panes, spaces: () => world.spaces, terminals: () => [] as any[],
+  panes: () => world.panes, spaces: () => world.spaces, terminals: () => [] as any[], focused: () => world.focused,
   shared: (k: string) => world.shared[k] ?? null, setShared: (k: string, v: any) => { world.shared[k] = v; return null; },
   findFiles: (root: string, q: string) => world.find(root, q),
   watchFolder: () => new Promise(() => {}), nextCommand: () => new Promise(() => {}),
@@ -243,20 +243,32 @@ test("v opens Neovim beside; o a folder in a new files pane; y copies; q and esc
     ["pane.close", { pane: "pf" }],
   ]);
   expect(clipboard.at(-1)).toBe("/repo/src");
-  // The panel (no path of its own): q and esc are left alone; Neovim opens to its left.
+  // The panel (no path of its own): esc hands the keyboard back to the pane it
+  // came from, q closes it (the keyboard back there too); Neovim opens to its left.
   world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pp", tab: "t1", mod: "nocturne-files", props: { folder: "/repo" } }];
+  world.shared = { "nocturne-files.from": "p1" };
+  world.focused = { pane: "pp" };
   const panel = pane({ folder: "/repo" }, TREE);
   commands.length = 0;
-  panel.key({ key: "q" }, cx);
   panel.key({ key: "escape" }, cx);
   panel.sel = "README.md";
   panel.key({ key: "v" }, cx);
   panel.sel = "src";
   panel.key({ key: "o" }, cx);
+  panel.key({ key: "q" }, cx);
   expect(commands).toEqual([
+    ["pane.focus", { pane: "p1" }],
     ["terminal.open", { argv: ["nvim", "/repo/README.md"], folder: "/repo", place: "left", pane: "pp" }],
     ["files.open", { path: "/repo/src", pane: "p1" }],
+    ["pane.close", { pane: "pp" }],
+    ["pane.focus", { pane: "p1" }],
   ]);
+  // Without a pane to go back to: the pane to its left.
+  world.shared = {};
+  commands.length = 0;
+  panel.key({ key: "escape" }, cx);
+  expect(commands).toEqual([["pane.go", { direction: "left" }]]);
+  world.focused = null;
 });
 
 test("the right-click menu runs by key or enter; it opens under the pointer and draws Open in Neovim", () => {
@@ -300,4 +312,160 @@ test("the header shows both filters, the search hint and a close button in a pan
 test("the panel toggle leaves files panes of their own alone", async () => {
   const src = await readFile(new URL("../defaults/mods/nocturne/files.js", import.meta.url), "utf8");
   expect(src).toContain("p.mod === MOD && p.tab === tab && !p.props?.path");
+});
+
+// ---- the keyboard, the folders visited, narrow widths
+
+test("a copy opened as the focused pane takes the keyboard, with a row picked; pane.go and cmd-e's take-panel give it too", () => {
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pp", tab: "t1", mod: "nocturne-files", props: { folder: "/repo", slot: "s9" } }];
+  world.focused = { pane: "pp" };
+  let focusedHandle = 0;
+  const own = { ...cx, focus_handle: () => ({ focus() { focusedHandle++; }, is_focused: () => false }) };
+  later.length = 0;
+  const view: any = Object.create(Files.prototype);
+  view.loadFolder = async () => {}; view.refresh = () => {};
+  world.props = { folder: "/repo", slot: "s9" };
+  view.init.call(view, world.props, own);
+  for (const [k, list] of Object.entries(TREE)) view.entries.set(k, list.map(([name, dir]) => ({ name, dir })));
+  for (const f of later.splice(0)) f(own);
+  expect(focusedHandle).toBe(3);
+  expect(view.sel).toBe("src");
+  // Not the focused pane (a restart with the keyboard elsewhere): it leaves the keyboard be.
+  world.focused = { pane: "p1" };
+  focusedHandle = 0;
+  const other: any = Object.create(Files.prototype);
+  other.loadFolder = async () => {}; other.refresh = () => {};
+  other.init.call(other, world.props, own);
+  for (const f of later.splice(0)) f(own);
+  expect(focusedHandle).toBe(0);
+  world.focused = null;
+});
+
+test("cmd-e: opens the panel, moves the keyboard into an open one, closes it from inside, back where it came from", async () => {
+  const files = await load("nocturne/files.js");
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }], folder: "/repo" }];
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x", cwd: "/repo" }];
+  world.focused = { pane: "p1", cwd: "/repo" };
+  world.shared = {};
+  commands.length = 0;
+  files.focusFiles();
+  expect(commands[0][0]).toBe("pane.split");
+  expect(world.shared["nocturne-files.from"]).toBe("p1");
+  world.panes.push({ pane: "pp", tab: "t1", mod: "nocturne-files", props: { folder: "/repo", slot: "s1" } });
+  commands.length = 0;
+  files.focusFiles();
+  expect(commands).toEqual([["pane.focus", { pane: "pp" }], ["nocturne-files.take-panel", undefined]]);
+  world.focused = { pane: "pp" };
+  commands.length = 0;
+  files.focusFiles();
+  expect(commands).toEqual([["pane.close", { pane: "pp" }], ["pane.focus", { pane: "p1" }]]);
+  // The tab strip's button and the palette still just toggle.
+  commands.length = 0;
+  world.focused = { pane: "p1" };
+  files.toggleFiles();
+  expect(commands).toEqual([["pane.close", { pane: "pp" }]]);
+  world.focused = null;
+});
+
+test("back and forward walk the folders the tree was rooted at; back with none goes up", () => {
+  const { navGo, navBack, navForward, newNav } = logic;
+  let nav = newNav(), root = "/repo";
+  const step = (s: any) => { nav = s.nav; root = s.to; };
+  step(navGo(nav, root, "/repo/src"));
+  step(navGo(nav, root, "/repo/src/app"));
+  expect(navGo(nav, root, root)).toBeNull();
+  step(navBack(nav, root));
+  expect(root).toBe("/repo/src");
+  step(navBack(nav, root));
+  expect(root).toBe("/repo");
+  step(navForward(nav, root));
+  expect(root).toBe("/repo/src");
+  // Going somewhere new drops what was ahead.
+  step(navGo(nav, root, "/repo/docs"));
+  expect(navForward(nav, root)).toBeNull();
+  // With nothing behind, back is up a folder, and forward returns.
+  nav = newNav(); root = "/repo/src";
+  step(navBack(nav, root));
+  expect(root).toBe("/repo");
+  step(navForward(nav, root));
+  expect(root).toBe("/repo/src");
+  expect(navBack(newNav(), "/")).toBeNull();
+});
+
+test("the pane's keys: [ ] and alt-arrows go back and forward, - and . are remembered", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.sel = "src";
+  view.key({ key: "." }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "[" }, cx);
+  expect(view.root).toBe("/repo");
+  expect(view.pendingSel).toBe("/repo/src");
+  view.key({ key: "]" }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "left", modifiers: { alt: true } }, cx);
+  expect(view.root).toBe("/repo");
+  view.key({ key: "right", modifiers: { alt: true } }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "-" }, cx);
+  expect(view.root).toBe("/repo");
+  view.key({ key: "o", modifiers: { control: true } }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "i", modifiers: { control: true } }, cx);
+  expect(view.root).toBe("/repo");
+});
+
+test("p opens a file in its viewer; the whole tree can be walked by keys", () => {
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, { ...TREE, "": [...TREE[""], ["shot.png", false]] });
+  commands.length = 0;
+  for (const k of ["j", "l", "j", "j", "h", "h", "G", "p", "g", "g"]) view.key({ key: k }, cx);
+  expect(view.folders.has("src")).toBe(false);
+  expect(commands).toEqual([["preview.open", { path: "/repo/shot.png", pane: "pf" }]]);
+  expect(view.sel).toBe("src");
+});
+
+test("the header fits every width from the narrowest panel up: nothing overlaps, labels shorten first", () => {
+  const { lensFit, toolbarFit, CH } = logic;
+  const cut = { hidden: 12, ignored: 3 };
+  let last = "";
+  for (let w = 140; w <= 900; w += 2) {
+    const fit = lensFit(w, { cut, count: 120 });
+    // Its estimate fits the width (CH px a character at size 11).
+    const chip = (label: string, n: number) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (fit.cuts && n ? 4 + String(n).length * CH : 0);
+    const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
+    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...(fit.count ? [3 * CH] : [])];
+    expect(16 + parts.reduce((a: number, b: number) => a + b, 0) + 6 * (parts.length - 1)).toBeLessThanOrEqual(w);
+    last = fit.chips;
+  }
+  expect(last).toBe("full");
+  // The panel's 280 px (the screenshot's overlap): short labels, the whole placeholder or most of it.
+  expect(lensFit(280, { cut }).chips).toBe("short");
+  expect(lensFit(400, {}).labels).toEqual(["dotfiles", "ignored"]);
+  expect(lensFit(150, { cut }).chips).toBe("icon");
+  // The toolbar drops its extras before the name gets too small.
+  const narrow = toolbarFit(160, { branch: "main", changed: 3, name: "fireflies" });
+  expect(narrow).toEqual({ close: false, changed: true, edit: false, branch: false, eyebrow: false, path: false, name: 56 });
+  expect(toolbarFit(280, { branch: "main", changed: 0, name: "fireflies" })).toMatchObject({ edit: true, branch: true });
+  expect(toolbarFit(600, { branch: "main", changed: 3, name: "fireflies", alone: true })).toEqual({ close: true, changed: true, edit: true, branch: true, eyebrow: true, path: true, name: 56 });
+  // A pane squeezed to ~110 px keeps some of its name; its close button (the pane header has one) goes first.
+  const tight = toolbarFit(110, { alone: true, name: "defaults" });
+  expect(tight.close).toBe(false);
+  expect(tight.name).toBeGreaterThanOrEqual(3 * CH);
+});
+
+test("drawn at 280 px with filters on, the header has no long labels; at 120 only the eyes", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/repo", slot: "s1" } }];
+  const view = pane({ folder: "/repo", slot: "s1" }, TREE);
+  view.filters = { hidden: false, ignored: true };
+  const words = () => walk(view.render()).flatMap((e: any) => e.nodes).filter((n: any) => typeof n === "string");
+  view.size = { width: 280, height: 600 };
+  expect(words()).not.toContain("dotfiles");
+  expect(words()).toEqual(expect.arrayContaining([".*", "ign", "‹", "›"]));
+  view.size = { width: 120, height: 600 };
+  const narrow = words();
+  expect(narrow).not.toContain(".*");
+  expect(narrow).not.toContain("edit");
 });

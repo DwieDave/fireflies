@@ -64,11 +64,12 @@ function openEntries() {
   out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/nocturne-equalize-panes/grid.svg", bind: "nocturne.gridify",
     title: "Gridify panes", words: "grid tile arrange rearrange even out equalize layout", go: () => run("nocturne.gridify") });
   // Pinning the focused pane's agent to the top of the sky (kit.js pin; Herdr's terminal.pin).
-  const here = focusedTerminal();
-  if (here && agents().some((a) => a.address === here)) {
-    const on = pinned(here);
+  // (Not named `here`: that is panels.js's, called above.)
+  const agent = focusedTerminal();
+  if (agent && agents().some((a) => a.address === agent)) {
+    const on = pinned(agent);
     out.push({ name: "nocturne", args: { pin: true }, group: "Agent", icon: on ? "pin-off" : "pin", bind: "nocturne.pin",
-      title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top jar sidebar fireflies watch orchestrator", go: () => pin(here, !on) });
+      title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top jar sidebar fireflies watch orchestrator", go: () => pin(agent, !on) });
   }
   // The picture in picture player (nocturne-pip), while its window is open.
   if (shared("nocturne-pip.player")) {

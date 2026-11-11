@@ -343,7 +343,7 @@ export default class GitHub extends View {
     this.save();
     if (this.overlay) {
       const back = { mod: "nocturne-github", props: { folder: this.folder, on: this.on, tab: "prs" } };
-      const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { ...diff, back } });
+      const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-github", frame: "none", scrim: true, width: 0.85, height: 0.85, props: { ...diff, back } });
       setShared(WINDOW, { id, beat: Date.now() }); // the review holds the window now (and renews this)
     } else {
       run("pane.split", { direction: "auto", mod: "nocturne-git", props: diff });

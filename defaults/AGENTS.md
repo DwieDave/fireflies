@@ -441,16 +441,24 @@ the highlighted line shows where it will land.
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`.
-- **Files panes** (Nocturne's `nocturne-files`): cmd-e (`nocturne.files`) and
-  "+ new" > Files toggle the panel down the tab's right edge at the focused
-  pane's folder. A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a
+- **Files panes** (Nocturne's `nocturne-files`): "+ new" > Files and the tab
+  strip's button toggle the panel down the tab's right edge at the focused
+  pane's folder; cmd-e (`nocturne.files`) is the keyboard's way: it opens the
+  panel with the keyboard in it, moves the keyboard into an open one, and
+  closes it when pressed inside, the keyboard back in the pane it came from
+  (esc in the panel goes back there and leaves it open; `q` closes it). A
+  files pane that opens as the focused pane takes the keyboard; `pane.go`
+  reaches every files pane; `nocturne-files.take-panel` hands an open panel
+  the keyboard (cmd-e sends it after `pane.focus`). A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a
   bare `ls` name in a terminal, a mod's `file:` link) opens a files pane of its
   own rooted there, split beside that pane (clicking it again shows the one
   already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
-  with `q` / `esc`. Every files pane: `j k h l` / arrows, enter, `e` / `E` edit,
-  `-` / `.` reroot, `r` refresh; `/` filters as you type (fff's fuzzy
+  with `q` / `esc`. Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
+  `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`
+  (alt-← / alt-→, ctrl-o / ctrl-i, backspace; the toolbar's ‹ ›) back and
+  forward through the folders rooted at (back with none goes up), `r` refresh; `/` filters as you type (fff's fuzzy
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
@@ -1548,6 +1556,8 @@ All of it is in `herdr.d.ts`. In short:
   or centered. `key: "name"` remembers its spot (opening that key again
   replaces it); `keep: true` with a key reopens it on the next start. A
   layout switch closes windows; kept ones come back with their layout.
+  `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
+  window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
