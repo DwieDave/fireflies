@@ -448,7 +448,8 @@ pub struct Node {
 
 /// What dims the window behind a dialog (`"scrim"` on the root): `color` (a
 /// theme color's name or `#rrggbb`) at `opacity`; `dither`: a 1-bit
-/// checkerboard of it instead, every other pixel (`cell` px squares).
+/// checkerboard of it instead, every other pixel (`cell` px squares), over
+/// the same color at `fill` (default 0), so a dithered scrim can dim past half.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Scrim {
     #[serde(default = "scrim_color")]
@@ -459,6 +460,12 @@ pub struct Scrim {
     pub dither: bool,
     #[serde(default = "one")]
     pub cell: f32,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub fill: f32,
+}
+
+fn is_zero(v: &f32) -> bool {
+    *v == 0.0
 }
 
 fn scrim_color() -> String {

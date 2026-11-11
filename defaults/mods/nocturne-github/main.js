@@ -43,7 +43,7 @@ import { readAgo } from "./model.js";
 import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
-import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize } from "./kit.js";
+import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -547,8 +547,9 @@ export default class GitHub extends View {
       .child(v_flex().relative().flex_1().min_w(0)
         .child(div().truncate().text_color(i === p.at ? t.foreground : t.muted).child(r.label))
         .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub)))));
-    return div().id("gh-picker").absolute().inset_0().bg(t.background + "cc").flex().items_center().justify_center().text_size(12)
+    return div().id("gh-picker").absolute().inset_0().flex().items_center().justify_center().text_size(12)
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.picker = null; cx.notify(); })
+      .child(popupScrim("gh-picker-scrim"))
       .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
         .on_mouse_down("left", stop)
         .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).child(p.title))

@@ -86,6 +86,21 @@ fn palette_spec(layout_scrim: bool) -> Value {
     spec
 }
 
+/// The solid floor under a dithered scrim (its `fill`), if it has one.
+fn scrim_fill(s: Option<&crate::layout::Scrim>) -> Option<Hsla> {
+    s.filter(|s| s.dither && s.fill > 0.0).map(|s| c(&s.color).opacity(s.fill.clamp(0.0, 1.0)))
+}
+
+/// A layer that dims what's under it as the layout's `scrim` says: its
+/// `fill` (if any) under the checker, or the plain color.
+fn scrim_layer(s: Option<&crate::layout::Scrim>, scale: f32) -> Div {
+    div()
+        .absolute()
+        .inset_0()
+        .when_some(scrim_fill(s), |d, fill| d.bg(fill))
+        .child(div().absolute().inset_0().bg(scrim(s, scale)))
+}
+
 /// The dim behind a dialog: the layout's `scrim`, else black at 35%. A
 /// dithered one counts device pixels (the checkerboard's cells are those).
 fn scrim(s: Option<&crate::layout::Scrim>, scale: f32) -> Background {
@@ -1915,18 +1930,34 @@ impl AppWindow {
         }
     }
 
-    /// How a terminal shows (`program` for mods): its agent, else what it runs.
-    /// What runs in a tab that closing it would end: a note per terminal
-    /// (`running_note`), placed and parked.
-    fn running_notes(&self, tab: &str) -> Vec<String> {
+    /// What closing a tab would end that the person is asked about first
+    /// (`ending`): its terminals, placed and parked, the terminals they
+    /// started (`doomed`), and mod panes with unsaved work.
+    fn tab_endings(&self, tab: &str) -> Vec<Ending> {
         let Some(c) = self.model.tab(tab) else { return vec![] };
-        let mut notes: Vec<String> = c.addresses().iter().filter_map(|addr| {
+        let mut endings = self.endings(&c.addresses());
+        endings.extend(c.root.panes().into_iter().chain(c.parked.iter().map(|p| &p.pane)).filter_map(|n| self.unsaved_note(n)).map(Ending::unsaved));
+        endings
+    }
+
+    /// What closing a pane (placed or parked) would end that the person is
+    /// asked about first: an agent in it or started from it, whatever its
+    /// status, and unsaved work. A program alone doesn't ask: tool panes
+    /// (lazygit, a viewer) close as they were toggled open.
+    fn pane_endings(&self, pane: &str) -> Vec<Ending> {
+        let mut endings: Vec<Ending> = self.endings(&self.model.address_of(pane).into_iter().collect::<Vec<_>>()).into_iter().filter(|e| e.kind == EndingKind::Agent).collect();
+        let node = self.model.tab_of(pane).and_then(|c| c.root.find(pane))
+            .or_else(|| self.model.parked_tab_of(pane).and_then(|c| c.parked.iter().map(|p| &p.pane).find(|n| n.id == pane)));
+        endings.extend(node.and_then(|n| self.unsaved_note(n)).map(Ending::unsaved));
+        endings
+    }
+
+    /// `ending` of these terminals and every terminal they started.
+    fn endings(&self, addresses: &[String]) -> Vec<Ending> {
+        self.doomed(addresses).iter().filter_map(|addr| {
             let rec = self.live.get(addr)?;
-            running_note(self.model.status(addr).or_else(|| rec["status"].as_str()), rec)
-        }).collect();
-        // Mod panes with unsaved work (an editor's changes).
-        notes.extend(c.root.panes().into_iter().filter_map(|n| self.unsaved_note(n)));
-        notes
+            ending(self.model.status(addr).or_else(|| rec["status"].as_str()), rec)
+        }).collect()
     }
 
     /// What a mod pane would lose if closed now (`setUnsaved`), if anything.
@@ -1937,6 +1968,7 @@ impl AppWindow {
         }
     }
 
+    /// How a terminal shows (`program` for mods): its agent, else what it runs.
     fn program(&self, addr: &str) -> Value {
         let rec = self.live.get(addr).and_then(Value::as_object);
         program_of(rec.and_then(|r| r.get("report")).unwrap_or(&Value::Null), rec.and_then(running_argv))
@@ -3217,7 +3249,9 @@ impl AppWindow {
     /// Kills terminals and their sub-agents, all the way down. Core keeps a
     /// sub-agent running when its parent dies; closing one here means done with
     /// its whole tree. Kept sub-agents (given a tab) are the person's: spared.
-    fn kill(&mut self, addresses: &[String], cx: &mut Context<Self>) {
+    /// These terminals and the ones they started (`parent`), which end with
+    /// them unless a space keeps them (`herdr.space`).
+    fn doomed(&self, addresses: &[String]) -> Vec<String> {
         let mut doomed: Vec<String> = addresses.to_vec();
         let mut i = 0;
         while i < doomed.len() {
@@ -3231,6 +3265,11 @@ impl AppWindow {
             }
             i += 1;
         }
+        doomed
+    }
+
+    fn kill(&mut self, addresses: &[String], cx: &mut Context<Self>) {
+        let doomed = self.doomed(addresses);
         self.closing_terminals.extend(doomed.iter().cloned().map(|a| (a, false)));
         // Off the UI thread: a kill waits for the program to go, and for slow machines.
         let core = self.core.clone();
@@ -3437,7 +3476,12 @@ impl AppWindow {
                         return self.fail("space.close ends its terminals: pass confirmed: true");
                     }
                     let panes: usize = p.tabs.iter().map(|c| c.root.panes().len()).sum();
-                    let detail = format!("{} \u{2014} {} tabs, {} terminals", self.model.space_name(p, &home()), p.tabs.len(), panes);
+                    let mut detail = format!("{} \u{2014} {} tabs, {} terminals", self.model.space_name(p, &home()), p.tabs.len(), panes);
+                    let tabs: Vec<String> = p.tabs.iter().map(|c| c.id.clone()).collect();
+                    let endings: Vec<Ending> = tabs.iter().flat_map(|c| self.tab_endings(c)).collect();
+                    if !endings.is_empty() {
+                        detail = format!("{detail}\n\n{}", endings_summary(&endings));
+                    }
                     self.confirm("Close space?", &detail, "space.close", json!({ "id": id, "confirmed": true }), window, cx);
                     return;
                 }
@@ -3500,16 +3544,16 @@ impl AppWindow {
                     args["confirmed"] = a.get("confirmed").cloned().unwrap_or(Value::Null);
                     return self.dispatch("space.close", &args, person, window, cx);
                 }
-                // Something still running there: the person says so first; a
-                // script passes confirmed. An idle tab just closes.
+                // An agent there (whatever its status), a program running or
+                // unsaved work: the person says so first; a script passes
+                // confirmed. A tab of shells at their prompts just closes.
                 if a.get("confirmed").and_then(Value::as_bool) != Some(true) {
-                    let notes = self.running_notes(&id);
-                    if !notes.is_empty() {
+                    let endings = self.tab_endings(&id);
+                    if !endings.is_empty() {
                         if !person {
-                            return self.fail(format!("tab.close ends what runs there ({}): pass confirmed: true", running_summary(&notes)));
+                            return self.fail(format!("tab.close ends what runs there ({}): pass confirmed: true", endings_summary(&endings).replace('\n', " \u{b7} ")));
                         }
-                        let detail = format!("{}\n\nClosing the tab ends {}.", running_summary(&notes), if notes.len() == 1 { "it" } else { "them" });
-                        self.confirm("Close tab?", &detail, "tab.close", json!({ "id": id, "confirmed": true }), window, cx);
+                        self.confirm("Close tab?", &close_detail(&endings, "tab"), "tab.close", json!({ "id": id, "confirmed": true }), window, cx);
                         return;
                     }
                 }
@@ -3589,32 +3633,41 @@ impl AppWindow {
             }
             "pane.close" => {
                 let Some(pane) = Self::owned(a, "pane").or_else(|| self.model.focused_pane()) else { return self.fail("no pane to close") };
-                if self.model.parked_tab_of(&pane).is_some() {
-                    let addr = self.model.address_of(&pane);
-                    self.model.remove_pane(&pane);
-                    self.kill(&addr.into_iter().collect::<Vec<_>>(), cx);
-                    return self.sync(window, cx);
-                }
-                let Some(c) = self.model.tab_of(&pane) else { return self.fail(format!("no pane {pane:?}")) };
-                if c.root.find(&pane).is_some_and(|n| !n.closable()) {
-                    return;
-                }
                 let confirmed = a.get("confirmed").and_then(Value::as_bool) == Some(true);
-                if c.root.panes().len() == 1 && c.parked.is_empty() {
-                    let id = c.id.clone();
-                    return self.dispatch("tab.close", &json!({ "id": id, "confirmed": a.get("confirmed").cloned().unwrap_or(Value::Null) }), person, window, cx);
-                }
-                // A mod pane with unsaved work: the person says so first; a script passes confirmed.
-                if !confirmed && let Some(note) = c.root.find(&pane).and_then(|n| self.unsaved_note(n)) {
-                    if !person {
-                        return self.fail(format!("pane.close loses {note}: pass confirmed: true"));
+                let parked = self.model.parked_tab_of(&pane).is_some();
+                if !parked {
+                    let Some(c) = self.model.tab_of(&pane) else { return self.fail(format!("no pane {pane:?}")) };
+                    if c.root.find(&pane).is_some_and(|n| !n.closable()) {
+                        return;
                     }
-                    self.confirm("Close without saving?", &format!("{note}\n\nClosing the pane loses them."), "pane.close", json!({ "pane": pane, "confirmed": true }), window, cx);
+                    if c.root.panes().len() == 1 && c.parked.is_empty() {
+                        let id = c.id.clone();
+                        return self.dispatch("tab.close", &json!({ "id": id, "confirmed": a.get("confirmed").cloned().unwrap_or(Value::Null) }), person, window, cx);
+                    }
+                }
+                // An agent in it (whatever its status) or a mod pane's unsaved
+                // work: the person says so first; a script passes confirmed.
+                let endings = if confirmed { vec![] } else { self.pane_endings(&pane) };
+                if !endings.is_empty() {
+                    let unsaved = endings.iter().all(|e| e.kind == EndingKind::Unsaved);
+                    if !person {
+                        let what = endings_summary(&endings).replace('\n', " \u{b7} ");
+                        return self.fail(if unsaved { format!("pane.close loses {what}: pass confirmed: true") } else { format!("pane.close ends {what}: pass confirmed: true") });
+                    }
+                    let args = json!({ "pane": pane, "confirmed": true });
+                    if unsaved {
+                        self.confirm("Close without saving?", &format!("{}\n\nClosing the pane loses them.", endings_summary(&endings)), "pane.close", args, window, cx);
+                    } else {
+                        self.confirm("Close pane?", &close_detail(&endings, "pane"), "pane.close", args, window, cx);
+                    }
                     return;
                 }
                 let addr = self.model.address_of(&pane);
                 self.model.remove_pane(&pane);
                 self.kill(&addr.into_iter().collect::<Vec<_>>(), cx);
+                if parked {
+                    return self.sync(window, cx);
+                }
             }
             "pane.zoom" => {
                 let pane = Self::owned(a, "pane").or_else(|| self.model.focused_pane());
@@ -5427,7 +5480,7 @@ impl AppWindow {
                                 .id(SharedString::from(format!("scrim-{id}")))
                                 .absolute()
                                 .inset_0()
-                                .bg(scrim(self.chrome.scrim.as_ref(), scale))
+                                .child(scrim_layer(self.chrome.scrim.as_ref(), scale))
                                 .occlude()
                                 .child(crate::native_view::dim_probe())
                                 .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
@@ -5440,7 +5493,7 @@ impl AppWindow {
                     div()
                         .absolute()
                         .inset_0()
-                        .bg(scrim(self.chrome.scrim.as_ref(), scale))
+                        .child(scrim_layer(self.chrome.scrim.as_ref(), scale))
                         .occlude()
                         .child(crate::native_view::dim_probe())
                         .flex()
@@ -5461,7 +5514,7 @@ impl AppWindow {
                             .absolute()
                             .inset_0()
                             // `scrim: true`: the dialog dim behind it (a click there still closes it).
-                            .when(o.scrim, |d| d.bg(scrim(self.chrome.scrim.as_ref(), scale)).occlude().child(crate::native_view::dim_probe()))
+                            .when(o.scrim, |d| d.child(scrim_layer(self.chrome.scrim.as_ref(), scale)).occlude().child(crate::native_view::dim_probe()))
                             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
                             .on_mouse_down(MouseButton::Right, cx.listener({
                                 let id = o.id.clone();
@@ -5695,18 +5748,44 @@ struct FolderCheck {
 /// in repos, while the window is in front.
 const FOLDER_FALLBACK: Duration = Duration::from_secs(60);
 
-/// What keeps a terminal's tab from closing without a word: its agent
-/// working or waiting on the person, or a program other than the shell in
-/// front (an agent between turns, or a shell at its prompt, closes quietly).
-fn running_note(status: Option<&str>, rec: &Value) -> Option<String> {
-    let name = rec.pointer("/program/name").and_then(Value::as_str).filter(|n| !n.is_empty()).unwrap_or("a program");
-    match status {
-        Some("working") => return Some(format!("{name} is working")),
-        Some("blocked") => return Some(format!("{name} needs you")),
-        _ => {}
+/// What a close would end, named in its confirm.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum EndingKind {
+    Agent,
+    Program,
+    Unsaved,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+struct Ending {
+    kind: EndingKind,
+    note: String,
+}
+
+impl Ending {
+    fn unsaved(note: String) -> Self {
+        Ending { kind: EndingKind::Unsaved, note }
     }
+}
+
+/// What keeps a terminal from closing without a word: an agent, whatever
+/// its status (an idle one still holds its conversation), or a program
+/// other than the shell in front. A shell at its prompt closes quietly.
+fn ending(status: Option<&str>, rec: &Value) -> Option<Ending> {
     let flag = |k: &str| rec["program"][k].as_bool() == Some(true);
-    if !rec.get("program").is_some_and(Value::is_object) || flag("shell") || flag("agent") {
+    let named = rec.pointer("/program/name").and_then(Value::as_str).filter(|n| !n.is_empty());
+    // Only agents report a status.
+    if flag("agent") || status.is_some() {
+        let name = named.unwrap_or("an agent");
+        let state = match status {
+            Some("working") => "is working",
+            Some("blocked") => "needs you",
+            Some("done") => "is done",
+            _ => "is idle",
+        };
+        return Some(Ending { kind: EndingKind::Agent, note: format!("{name} {state}") });
+    }
+    if !rec.get("program").is_some_and(Value::is_object) || flag("shell") {
         return None;
     }
     // A program in its own words: its command and first argument ("cargo build").
@@ -5716,12 +5795,12 @@ fn running_note(status: Option<&str>, rec: &Value) -> Option<String> {
             Some(arg) => format!("{cmd} {arg}"),
             None => cmd.to_owned(),
         },
-        None => name.to_owned(),
+        None => named.unwrap_or("a program").to_owned(),
     };
-    Some(format!("{what} running"))
+    Some(Ending { kind: EndingKind::Program, note: format!("{what} running") })
 }
 
-/// A confirm's line of what runs: the first few notes, then how many more.
+/// A line of notes: the first few, then how many more.
 fn running_summary(notes: &[String]) -> String {
     const SHOWN: usize = 3;
     let mut line = notes.iter().take(SHOWN).cloned().collect::<Vec<_>>().join(" \u{b7} ");
@@ -5729,6 +5808,28 @@ fn running_summary(notes: &[String]) -> String {
         line.push_str(&format!(" \u{b7} +{} more", notes.len() - SHOWN));
     }
     line
+}
+
+/// A confirm's lines for what a close ends: the agents first (counted when
+/// there are several), then programs and unsaved work.
+fn endings_summary(endings: &[Ending]) -> String {
+    let notes = |agents: bool| endings.iter().filter(|e| (e.kind == EndingKind::Agent) == agents).map(|e| e.note.clone()).collect::<Vec<_>>();
+    let (agents, rest) = (notes(true), notes(false));
+    let mut lines = Vec::new();
+    match agents.len() {
+        0 => {}
+        1 => lines.push(agents[0].clone()),
+        n => lines.push(format!("{n} agents: {}", running_summary(&agents))),
+    }
+    if !rest.is_empty() {
+        lines.push(running_summary(&rest));
+    }
+    lines.join("\n")
+}
+
+/// A confirm's detail: what ends, then that closing `what` ends it.
+fn close_detail(endings: &[Ending], what: &str) -> String {
+    format!("{}\n\nClosing the {what} ends {}.", endings_summary(endings), if endings.len() == 1 { "it" } else { "them" })
 }
 
 /// An agent working, or a program other than the shell in front (an agent
@@ -7754,23 +7855,131 @@ export default class SystemToast extends View {
     }
 
     #[test]
-    fn a_tab_asks_before_closing_only_while_something_runs_there() {
+    fn closing_asks_for_any_agent_and_a_running_program_never_a_shell() {
+        use super::{Ending, EndingKind::*};
         let rec = |name: &str, shell: bool, agent: bool| {
             serde_json::json!({ "program": { "name": name, "shell": shell, "agent": agent } })
         };
-        let note = |status, r: &serde_json::Value| super::running_note(status, r);
-        assert_eq!(note(Some("working"), &rec("claude", false, true)).as_deref(), Some("claude is working"));
-        assert_eq!(note(Some("blocked"), &rec("codex", false, true)).as_deref(), Some("codex needs you"));
-        assert_eq!(note(None, &rec("vim", false, false)).as_deref(), Some("vim running"));
+        let note = |status, r: &serde_json::Value| super::ending(status, r);
+        let agent = |n: &str| Some(Ending { kind: Agent, note: n.into() });
+        assert_eq!(note(Some("working"), &rec("claude", false, true)), agent("claude is working"));
+        assert_eq!(note(Some("blocked"), &rec("codex", false, true)), agent("codex needs you"));
+        // An agent asks whatever its status: between turns, or never started.
+        assert_eq!(note(Some("done"), &rec("claude", false, true)), agent("claude is done"));
+        assert_eq!(note(Some("idle"), &rec("claude", false, true)), agent("claude is idle"));
+        assert_eq!(note(None, &rec("pi", false, true)), agent("pi is idle"), "an agent with no status yet");
+        assert_eq!(note(Some("idle"), &serde_json::json!({})), agent("an agent is idle"), "a status says agent");
+        assert_eq!(note(None, &rec("vim", false, false)).map(|e| (e.kind, e.note)), Some((Program, "vim running".into())));
         let cargo = serde_json::json!({ "program": { "name": "cargo", "shell": false, "agent": false }, "foreground": { "argv": ["/usr/bin/cargo", "build", "--locked"] } });
-        assert_eq!(note(None, &cargo).as_deref(), Some("cargo build running"));
+        assert_eq!(note(None, &cargo).map(|e| e.note).as_deref(), Some("cargo build running"));
+        assert_eq!(note(None, &rec("zsh", true, false)), None, "the shell at its prompt");
+        assert_eq!(note(None, &serde_json::json!({})), None, "nothing known about it");
         let notes: Vec<String> = ["claude is working", "cargo build running", "vim running", "codex needs you", "top running"].map(String::from).into();
         assert_eq!(super::running_summary(&notes[..2]), "claude is working \u{b7} cargo build running");
         assert_eq!(super::running_summary(&notes), "claude is working \u{b7} cargo build running \u{b7} vim running \u{b7} +2 more");
-        assert_eq!(note(Some("done"), &rec("claude", false, true)), None, "an agent between turns");
-        assert_eq!(note(Some("idle"), &rec("claude", false, true)), None);
-        assert_eq!(note(None, &rec("zsh", true, false)), None, "the shell at its prompt");
-        assert_eq!(note(None, &serde_json::json!({})), None, "nothing known about it");
+    }
+
+    #[test]
+    fn a_close_confirm_names_the_agents_and_counts_them() {
+        use super::{Ending, EndingKind::*};
+        let e = |kind, note: &str| Ending { kind, note: note.into() };
+        let one = [e(Agent, "claude is idle")];
+        assert_eq!(super::close_detail(&one, "pane"), "claude is idle\n\nClosing the pane ends it.");
+        let mixed = [e(Agent, "claude is working"), e(Program, "vim running"), e(Agent, "codex is idle"), e(Unsaved, "1 unsaved file")];
+        assert_eq!(super::close_detail(&mixed, "tab"), "2 agents: claude is working \u{b7} codex is idle\nvim running \u{b7} 1 unsaved file\n\nClosing the tab ends them.");
+        let many: Vec<Ending> = ["a", "b", "c", "d"].iter().map(|n| e(Agent, &format!("{n} is idle"))).collect();
+        assert_eq!(super::endings_summary(&many), "4 agents: a is idle \u{b7} b is idle \u{b7} c is idle \u{b7} +1 more");
+    }
+
+    #[test]
+    fn closing_a_pane_or_tab_with_an_agent_asks_first() {
+        in_own_process("close_asks_for_agents");
+    }
+
+    #[gpui::test]
+    fn close_asks_for_agents(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("close_asks_for_agents") {
+            return;
+        }
+        let (view, cx) = open_window(cx, "unused", "", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            // As run_as, past its check that the (offline) core holds the document.
+            macro_rules! run {
+                ($name:expr, $args:expr, $person:expr) => {{
+                    this.reply = None;
+                    this.dispatch($name, &$args, $person, window, cx);
+                    this.reply.take().unwrap_or_else(|| json!({ "ok": true }))
+                }};
+            }
+            // tb1: a shell (p1) beside an idle agent (p2); tb2: a shell alone;
+            // tb3: two idle agents; t5, an agent the shell in tb2 started.
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            assert!(this.model.add_tab("sp1", crate::model::Tab::new("tb2", "", "p3", "t3")));
+            assert!(this.model.add_tab("sp1", crate::model::Tab::new("tb3", "", "p4", "t4")));
+            this.sync(window, cx);
+            let shell = json!({ "program": { "name": "zsh", "shell": true, "agent": false } });
+            let agent = |name: &str| json!({ "status": "idle", "program": { "name": name, "shell": false, "agent": true } });
+            this.live.insert("t1".into(), shell.clone());
+            this.live.insert("t3".into(), shell.clone());
+            this.live.insert("t4".into(), agent("claude"));
+            let mut child = agent("codex");
+            child["parent"] = json!("t3");
+            this.live.insert("t5".into(), child);
+            let split = |this: &mut super::AppWindow, pane: &str, addr: &str, rec: serde_json::Value| {
+                assert!(this.model.split_toward("p1", crate::model::Direction::Right, crate::model::pane(pane, addr)));
+                this.live.insert(addr.into(), rec);
+            };
+            split(this, "p2", "t2", agent("pi"));
+            this.sync(window, cx);
+            // The confirm dialog's props, if one is open.
+            let asked = |this: &super::AppWindow| this.overlays.last().and_then(|o| this.copies.get(&format!("overlay:{}", o.id))).map(|c| c.inst.props.clone()).filter(|p| p["command"].is_object());
+
+            // A script is told to confirm; nothing closes.
+            let r = run!("pane.close", json!({ "pane": "p2" }), false);
+            assert_eq!(r["error"], "pane.close ends pi is idle: pass confirmed: true");
+            let r = run!("tab.close", json!({ "id": "tb3" }), false);
+            assert_eq!(r["error"], "tab.close ends what runs there (claude is idle): pass confirmed: true");
+            let r = run!("tab.close", json!({ "id": "tb2" }), false);
+            assert_eq!(r["error"], "tab.close ends what runs there (codex is idle): pass confirmed: true", "a sub-agent the shell started ends with the tab");
+            assert!(this.model.tab_of("p2").is_some() && this.model.tab("tb2").is_some() && this.model.tab("tb3").is_some());
+            assert!(asked(this).is_none());
+
+            // The person is asked, and the dialog says what ends.
+            run!("pane.close", json!({ "pane": "p2" }), true);
+            let ask = asked(this).expect("a confirm");
+            assert_eq!(ask["title"], "Close pane?");
+            assert_eq!(ask["detail"], "pi is idle\n\nClosing the pane ends it.");
+            assert_eq!(ask["command"], json!({ "name": "pane.close", "args": { "pane": "p2", "confirmed": true } }));
+            run!("tab.close", json!({ "id": "tb1" }), true);
+            let ask = asked(this).expect("a confirm");
+            assert_eq!((ask["title"].as_str(), ask["detail"].as_str()), (Some("Close tab?"), Some("pi is idle\n\nClosing the tab ends it.")));
+            assert!(this.model.tab("tb1").is_some());
+
+            // Confirmed, it closes; a shell's pane closes without a word.
+            let r = run!("pane.close", json!({ "pane": "p2", "confirmed": true }), false);
+            assert!(r.get("error").is_none(), "{r}");
+            assert!(this.model.tab_of("p2").is_none());
+            split(this, "p6", "t6", shell.clone());
+            let r = run!("pane.close", json!({ "pane": "p6" }), false);
+            assert!(r.get("error").is_none(), "{r}");
+            assert!(this.model.tab_of("p6").is_none());
+            // A parked agent asks too.
+            split(this, "p7", "t7", agent("claude"));
+            this.model.park_pane("p7", None).unwrap();
+            let r = run!("pane.close", json!({ "pane": "p7" }), false);
+            assert_eq!(r["error"], "pane.close ends claude is idle: pass confirmed: true");
+            assert!(this.model.parked_tab_of("p7").is_some());
+            // Two agents in a tab: counted and named.
+            this.live.insert("t1".into(), agent("codex"));
+            run!("tab.close", json!({ "id": "tb1" }), true);
+            assert_eq!(asked(this).unwrap()["detail"], "2 agents: codex is idle \u{b7} claude is idle\n\nClosing the tab ends them.");
+            let r = run!("tab.close", json!({ "id": "tb1", "confirmed": true }), false);
+            assert!(r.get("error").is_none(), "{r}");
+            assert!(this.model.tab("tb1").is_none());
+        }));
     }
 
     #[test]
@@ -7825,7 +8034,12 @@ export default class SystemToast extends View {
         })).unwrap();
         assert_eq!(root.dialog_mods.get("welcome").map(String::as_str), Some("mine"));
         let scrim = root.scrim.unwrap();
-        assert_eq!((scrim.color.as_str(), scrim.opacity, scrim.cell), ("#000000", 0.35, 1.0));
+        assert_eq!((scrim.color.as_str(), scrim.opacity, scrim.cell, scrim.fill), ("#000000", 0.35, 1.0, 0.0));
+        assert!(super::scrim_fill(Some(&scrim)).is_none(), "no fill: the checker alone");
+        let filled: crate::layout::Scrim = serde_json::from_value(serde_json::json!({ "dither": true, "fill": 0.5 })).unwrap();
+        assert_eq!(super::scrim_fill(Some(&filled)).map(|c| c.a), Some(0.5));
+        let plain: crate::layout::Scrim = serde_json::from_value(serde_json::json!({ "fill": 0.5 })).unwrap();
+        assert!(super::scrim_fill(Some(&plain)).is_none(), "fill is for a dithered scrim only");
     }
 
     #[test]

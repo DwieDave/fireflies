@@ -138,8 +138,9 @@
   },
   "corners": "square",
   "scrim": {
-    "color": "#080808",
-    "opacity": 0.85,
-    "dither": true
+    "color": "#000000",
+    "opacity": 1,
+    "dither": true,
+    "fill": 0.45
   }
 }

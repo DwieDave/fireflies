@@ -67,6 +67,17 @@ function clock() {
   return { time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, date: `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}` };
 }
 
+/** The blue corner ticks: a 4 px corner in the accent at a thing's top left
+ *  and one at its bottom right, `out` px outside its box (0: on its corners).
+ *  What's shown wears them: the shown space on the rail, the focused agent in
+ *  the open sky (around its name, over the moonlit path) and on the rail. */
+function cornerTicks(t, out = 3) {
+  const tick = (pos) => div().absolute().size(4).border_color(t.accent)
+    .when(pos === "top", (el) => el.left(-out).top(-out).border_t(1).border_l(1))
+    .when(pos === "bottom", (el) => el.right(-out).bottom(-out).border_b(1).border_r(1));
+  return [tick("top"), tick("bottom")];
+}
+
 function moonPhase(list) {
   if (!list.length) return 8;
   const rest = list.filter((a) => a.status === "idle" || a.status === "done").length;
@@ -511,7 +522,8 @@ export default class Sky {
     // what the halo doesn't already say follows: its space when that isn't
     // the shown one; awake ones add their status on a second line, resting
     // ones keep to one. The focused one stands in a moonlit path: a dithered band
-    // behind its name that thins out in three steps, and only its name is bright.
+    // behind its name that thins out in three steps, and only its name is bright;
+    // its name wears the corner ticks, as the shown space does on the rail.
     const title = givenName(a.address) ?? (a.program?.agent ? a.program.name : a.title || a.program?.name || a.address);
     const naming = this.naming === a.address;
     const resting = a.status === "idle" || lane < 32;
@@ -537,7 +549,8 @@ export default class Sky {
             ? h_flex().min_w(0).gap(4).items_center()
               .child(svg(CHECK).size(10).flex_none().text_color(t.done))
               .child(div().truncate().text_size(11).text_color(t.foreground).child(sub))
-            : div().truncate().text_size(11).text_color(t.dim).child(sub))));
+            : div().truncate().text_size(11).text_color(t.dim).child(sub)))
+          .when(Boolean(a.focused), (el) => el.children(cornerTicks(t))));
     const step = (o) => div().flex_1().h_full().relative().opacity(o).child(dither(t.ansi0, 1));
     const path = h_flex().absolute().top(4).bottom(4).left(x + 36).right(0).gap(2)
       .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
@@ -737,9 +750,6 @@ export default class Sky {
    *  one that wants attention its status pip beside the initials. */
   railSpace(t, s, at, count) {
     const hot = this.railHover === s.id || this.nav(`space:${s.id}`, "spaces", this.railActs(s));
-    const tick = (pos) => div().absolute().size(4).border_color(t.accent)
-      .when(pos === "top", (el) => el.left(-3).top(-3).border_t(1).border_l(1))
-      .when(pos === "bottom", (el) => el.right(-3).bottom(-3).border_b(1).border_r(1));
     const thread = count > 1 ? div().absolute().left(0).right(0).top(at === 0 ? 13 : 0).bottom(at === count - 1 ? 13 : 0).flex().justify_center()
       .child(div().relative().w(1).h_full().child(dither(t.ansi8 + "99", 1))) : null;
     return div().id(`rail-space-${s.id}`).relative().w_full().h(26).flex_none().flex().items_center().justify_center().text_size(11)
@@ -753,7 +763,7 @@ export default class Sky {
       // lands beside a letter like a stray mark), so the thread stops at the letters.
       .child(div().relative().px(3).py(1).bg(hot ? t.ansi0 : t.background).text_color(s.active || hot ? t.foreground : t.muted)
         .child(this.initials(s.name))
-        .when(s.active, (el) => el.child(tick("top")).child(tick("bottom")))
+        .when(s.active, (el) => el.children(cornerTicks(t)))
         .when(Boolean(s.status) && s.status !== "idle", (el) => el.child(div().absolute().right(-13).top(5).child(pip(t, s.status)))));
   }
 
@@ -772,7 +782,8 @@ export default class Sky {
       .on_mouse_down("left", stop)
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
       .on_click(() => run("agent.focus", { terminal: a.address }))
-      .when(a.focused, (el) => el.child(dither(t.ansi0, 1)))
+      // Focused: a plate of the ground, the corner ticks on its corners.
+      .when(a.focused, (el) => el.child(dither(t.ansi0, 1)).children(cornerTicks(t, 0)))
       .when(awake, (el) => el
         .child(flash(svg(`${ART}/glow.svg`).size(size).absolute().top(0).left(0).text_color(color), a.status, h))
         .child(div().absolute().top(plate).left(plate).size(16).bg(t.background)))

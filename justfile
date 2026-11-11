@@ -70,6 +70,8 @@ test:
     bun test scripts/hint-bars.test.ts
     # Every ? list names every key its handler takes (each key pressed on the real handler), and the keys dialog's map.
     bun test scripts/keys-lists.test.ts
+    # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
+    bun test scripts/nocturne-tab-drag.test.ts
     cargo test --locked
 
 docs-generate: build
