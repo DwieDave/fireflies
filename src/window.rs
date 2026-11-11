@@ -1987,6 +1987,17 @@ impl AppWindow {
             Some(json!({ "space": p.id, "tab": ctx.id, "terminal": m.address_of(&pane), "shown": self.swapped.get(&pane),
                 "pane": pane, "agent": self.shown_agent(), "cwd": cwd }))
         });
+        // A layout block holding the keyboard (a focusable mod: `pane.go`, `layout.focus`).
+        let chrome_block = self.focused_block.as_ref().filter(|b| self.chrome.find(b).is_some()).cloned();
+        // With no space yet, a block holding the keyboard is still reported (the rest null).
+        let focused = match focused {
+            Some(mut f) => {
+                f["block"] = json!(chrome_block);
+                Some(f)
+            }
+            None => chrome_block.map(|b| json!({ "space": null, "tab": null, "pane": null, "terminal": null,
+                "shown": null, "agent": null, "cwd": null, "block": b })),
+        };
         let machines = self.documents.iter().map(|(name, slot)| json!({
             "name": (!name.is_empty()).then_some(name), "layout": slot.layout(),
         })).collect();
@@ -4007,6 +4018,18 @@ impl AppWindow {
                     "layout.show" => false,
                     _ => true,
                 };
+            }
+            "layout.focus" => {
+                // What `pane.go` does on reaching a focusable mod block, by id.
+                let id = Self::arg(a, "id").unwrap_or_default().to_owned();
+                let shown = self.chrome.visible_blocks().iter().any(|n| n.id == id && matches!(n.content(), Some(Content::Mod { .. })));
+                if !shown {
+                    return self.fail(format!("no shown mod block {id:?} in the shown layout"));
+                }
+                if !self.focusable(&id) {
+                    return self.fail(format!("{id:?} shows a mod whose mod.json isn't \"focusable\": true"));
+                }
+                return self.focus_block(&id, window, cx);
             }
             "layout.resize" => {
                 let id = Self::arg(a, "id").unwrap_or_default();

@@ -89,6 +89,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("layout.toggle", &[req("id")], "Hide or show a layout node."),
     cmd("layout.show", &[req("id")], "Show a layout node."),
     cmd("layout.hide", &[req("id")], "Hide a layout node."),
+    cmd("layout.focus", &[req("id")], "Give the keyboard to a shown layout block whose mod.json says \"focusable\": true (it gets \"focus\" from nextCommand(); pane.go leaves it)."),
     cmd("layout.resize", &[req("id"), opt("px"), opt("weight")], "Size a layout node."),
     cmd("layout.select", &[req("stack"), req("child")], "Show one child of a stack."),
     cmd("layout.reset", &[opt("name")], "Reset a shipped layout and its clicks (the old file is kept aside)."),

@@ -137,6 +137,7 @@ export function playSound(sound: string): null;
  *   terminal.scroll {lines | pages | to: "top" | "bottom", terminal?} (Herdr's view of the history: negative goes up; pages may be fractional).
  * Agents: agent.next, agent.prev (the agents list's order), agent.focus {terminal} (sub-agents too).
  * Layout (the shown layout's nodes by id): layout.toggle|show|hide {id}, layout.resize {id, px | weight},
+ *   layout.focus {id} (the keyboard to a shown block whose mod.json says focusable: it gets "focus" from nextCommand()),
  *   layout.select {stack, child}, layout.set {layout} (personal trees; shipped layouts: click/look fields only), layout.switch {name?} (no name: the next one).
  *   layout.clone {name, as?} duplicates and switches; mod.clone {name, as?} duplicates a mod.
  *   Layout clones copy the look and clicks as-is. Layout looks win; settings fill unset fields; theme picks override both.
@@ -322,8 +323,10 @@ export function terminals(): any[];
  *  focused pane under the window.
  *  pane.focus {terminal} prefers the first visible layout terminal block, then a model pane.
  *  `shown`: terminal.show replacement, if any. `agent`: the agent an agent block shows.
- *  `terminal` is null for mod panes. Live. */
-export function focused(): { space: string; tab: string; pane: string | null; terminal: string | null; shown: string | null; agent: string | null; cwd: string | null } | null;
+ *  `terminal` is null for mod panes. `block`: the layout block holding the keyboard
+ *  (a focusable mod reached with pane.go or layout.focus), else null; with no space yet
+ *  only `block` is set. Live. */
+export function focused(): { space: string | null; tab: string | null; pane: string | null; terminal: string | null; shown: string | null; agent: string | null; cwd: string | null; block: string | null } | null;
 
 /** The shown layout (layouts/<name>.json). Its name is shared("layout").
  *  Root `terminal_menu?: string` chooses a terminal right-click menu mod (default: "menu").
