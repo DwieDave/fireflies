@@ -1,8 +1,9 @@
 {
   # A development shell for this repository: the language servers its code
   # needs, so editors (Fireflies' own through direnv, see .envrc) work on it
-  # without anything installed globally. Language tooling only: the build's
-  # toolchain (cargo from the system, Zig 0.16 by path) stays as it is.
+  # without anything installed globally. Language tooling, and the Zig its
+  # build scripts run; the build's own toolchain (cargo from the system, Zig
+  # 0.16 by path) stays as it is.
   #
   # nix-darwin takes this repository with `flake = false`: this file doesn't
   # change how the app is built there.
@@ -26,6 +27,10 @@
             pkgs.rustc
             pkgs.rustfmt
             pkgs.clippy
+            # ghostty-sys's build script builds libghostty with it: without
+            # it rust-analyzer's build scripts and `cargo check` fail there.
+            # The same store path as the build's Zig (justfile, AGENTS.md).
+            pkgs.zig_0_16
             # The mods (JavaScript) and scripts (TypeScript).
             pkgs.typescript-language-server
             pkgs.typescript
