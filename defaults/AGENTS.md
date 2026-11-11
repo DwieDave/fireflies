@@ -942,7 +942,9 @@ the window buttons need at the person's zoom; it and the open sky list agents
 needs you, working, running a command, done, resting; the done and resting ones
 sit on the ground above the hills (the rail pairs them up when crowded). Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
-at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
+at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
+a sheen down its glass, never shorter than a jar with room under one firefly;
+on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
 unpin from a firefly's or an agent pane's right-click menu (open sky and
 rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);

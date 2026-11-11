@@ -128,7 +128,9 @@ const SETTLE = 350;
 // The jar of pinned fireflies (pins.js) at the top of the sky: where its
 // first lane starts under the lid, the glass under its last, the clear sky
 // before the next firefly (layout px).
-const JAR = { at: 4, top: 26, bottom: 10, gap: 10 };
+const JAR = { at: 4, top: 38, bottom: 12, gap: 10, min: 112 };
+// min: the jar's least height, so with one firefly in it its lid, neck and
+// shoulders don't take most of it (a wide flat band): there's glass under it.
 // The jar's side margins in the open sky (equal both sides), and how far its
 // fireflies' lanes sit in from the sidebar's edges (inside the 2 px walls).
 const JAR_SIDE = 8, JAR_INSET = JAR_SIDE + 2;
@@ -136,6 +138,9 @@ const JAR_SIDE = 8, JAR_INSET = JAR_SIDE + 2;
 const NECK = 22, RAIL_NECK = 11;
 // Where the body's walls begin, under the lid, neck and shoulders.
 const BODY = 16;
+// The open sky's mason jar: its lid (rim and thread) and where its walls
+// begin, under the neck and the round shoulders.
+const LID = 10, JAR_BODY = 28;
 // How long the glass glints after a firefly flies in (ms): as long as the flight.
 const GLINT = 1800;
 
@@ -604,12 +609,12 @@ export default class Sky {
   }
 
   /**
-   * The jar's glass, filling its (relative) parent: a lid, a neck, 2 px
+   * The folded rail's jar, filling its (relative) parent: a lid, a neck, 2 px
    * dithered walls and a faint moonlit fill, square like everything here.
    * When a pinned firefly needs you the glass breathes in its color, slower
    * than the firefly's own blink; just after one flies in, it glints.
    */
-  glass(t, jarred, n = NECK) {
+  railGlass(t, jarred, n = RAIL_NECK) {
     const needs = jarred.some((a) => a.status === "blocked");
     const tone = needs ? t.blocked : t.ansi8;
     const strip = (el) => el.absolute().child(dither(tone, 1));
@@ -639,6 +644,67 @@ export default class Sky {
       .when(glinting, (el) => el.child(div().absolute().top(0).left(0).size_full()
         .loop("opacity", { from: 0.35, to: 0, period: GLINT * 2, easing: "ease-out" }).children(fill(t.foreground, 1))))
       .child(needs ? frame.loop("opacity", { from: 0.5, to: 1, period: 2400 }) : frame.opacity(0.85));
+  }
+
+  /**
+   * The jar in the open sky, filling its (relative) parent: a mason jar,
+   * square pixels only. A lid with a rim and a screw thread, a clear neck,
+   * shoulders in a quarter round, walls drawn crisp outside and dithered
+   * inside (the glass's thickness), round foot corners and a thick base, a
+   * sheen down the left of the glass and a faint moonlit fill. When a pinned
+   * firefly needs you the glass breathes in its color; just after one flies
+   * in, it glints.
+   */
+  glass(t, jarred, n = NECK) {
+    const needs = jarred.some((a) => a.status === "blocked");
+    const tone = needs ? t.blocked : t.ansi8;
+    const light = needs ? t.blocked : t.ansi11;
+    const strip = (el, c = tone) => el.absolute().child(dither(c, 1));
+    const solid = (el, c = tone) => el.absolute().bg(c);
+    const pair = (mk) => ["left", "right"].map((side) => mk((el, x) => el[side](x)));
+    // The shoulders: a quarter round from the neck (n in) down to the walls,
+    // in 2 px rows, square pixels: each row's edge, x in from the side.
+    const SH = JAR_BODY - LID - 4, rows = SH / 2;
+    const edge = (k) => Math.round(n * (1 - Math.sin((Math.PI / 2) * (k + 1) / rows)));
+    const shoulders = [];
+    for (let k = 0; k < rows; k++) {
+      const x = edge(k), prev = k ? edge(k - 1) : n;
+      shoulders.push(...pair((side) => solid(side(div().top(LID + 4 + 2 * k).w(Math.max(1, prev - x + 1)).h(k === rows - 1 ? 2 : 1), x))));
+      shoulders.push(...pair((side) => solid(side(div().top(LID + 4 + 2 * k).w(1).h(2), x))));
+    }
+    // J1, a mason jar: a lid with a rim and a screw thread, a clear neck,
+    // round shoulders, walls drawn crisp outside and dithered inside (the
+    // glass's thickness), round foot corners, a sheen down the left.
+    const frame = div().absolute().top(0).left(0).size_full()
+      .child(solid(div().top(0).left(n - 6).right(n - 6).h(2))) // the lid's rim
+      .children([3, 5, 7].map((y) => solid(div().top(y).left(n - 5).right(n - 5).h(1)).opacity(0.65))) // its thread
+      .children(pair((side) => solid(side(div().top(0).w(1).h(LID), n - 6)))) // the lid's sides
+      .child(solid(div().top(LID - 1).left(n - 6).right(n - 6).h(1)))
+      .children(pair((side) => solid(side(div().top(LID).w(1).h(4), n)))) // the neck
+      .children(shoulders)
+      .children(pair((side) => solid(side(div().top(JAR_BODY).bottom(4).w(1), 0)))) // the walls
+      .children(pair((side) => strip(side(div().top(JAR_BODY).bottom(5).w(2), 1)).opacity(0.5))) // their thickness
+      .children(pair((side) => solid(side(div().bottom(2).w(2).h(2), 1)))) // the foot's corners
+      .child(solid(div().bottom(0).left(3).right(3).h(2))) // the base
+      .child(strip(div().bottom(2).left(3).right(3).h(3)).opacity(0.5));
+    const sheen = div().absolute().top(0).left(0).size_full()
+      .child(strip(div().top(JAR_BODY + 4).left(4).w(2).bottom(20), t.foreground).opacity(0.5))
+      .child(strip(div().bottom(10).left(4).w(2).h(4), t.foreground).opacity(0.35))
+      .child(strip(div().top(LID + 6).left(Math.round(n / 3) + 2).w(4).h(2), t.foreground).opacity(0.45));
+    const inner = div();
+    const glinting = (this.glintUntil ?? 0) > Date.now();
+    const fill = (c, o) => [
+      div().absolute().top(JAR_BODY).left(2).right(2).bottom(3).opacity(o).child(dither(c, 1)),
+      div().absolute().top(LID).left(n + 1).right(n + 1).h(SH + 4).opacity(o).child(dither(c, 1)),
+      div().absolute().top(LID + 4 + SH / 2).left(Math.round(n / 3)).right(Math.round(n / 3)).h(SH / 2).opacity(o).child(dither(c, 1)),
+    ];
+    return div().absolute().top(0).left(0).size_full()
+      .child(inner)
+      .children(fill(needs ? t.blocked : t.ansi4, needs ? 0.16 : 0.12))
+      .when(glinting, (el) => el.child(div().absolute().top(0).left(0).size_full()
+        .loop("opacity", { from: 0.35, to: 0, period: GLINT * 2, easing: "ease-out" }).children(fill(t.foreground, 1))))
+      .child(sheen)
+      .child(needs ? frame.loop("opacity", { from: 0.55, to: 1, period: 2400 }) : frame.opacity(0.95));
   }
 
   /** The jar in the open sky, behind its fireflies' lanes. */
@@ -701,7 +767,7 @@ export default class Sky {
     const ground = hgt - 96; // above the far ridge (hills-rim), so labels stay on clear sky
     let lane = 40, restLane = 28;
     const laneOf = (a) => (a.status === "idle" ? restLane : lane);
-    const jarNeed = jarred.length ? JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + JAR.bottom : 0;
+    const jarNeed = jarred.length ? Math.max(JAR.min, JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + JAR.bottom) : 0;
     const need = jarNeed + awake.length * lane + resting.length * restLane + 16;
     let placed = [];
     let more = 0;
@@ -711,7 +777,7 @@ export default class Sky {
       // rest settle on the ground.
       let y = JAR.top;
       for (const a of jarred) { placed.push([a, y, laneOf(a)]); y += laneOf(a); }
-      jarH = jarred.length ? y + JAR.bottom : 0;
+      jarH = jarred.length ? Math.max(JAR.min, y + JAR.bottom) : 0;
       const top = jarH ? jarH + JAR.gap : 8;
       const restTop = ground - resting.length * restLane;
       const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;
@@ -863,7 +929,7 @@ export default class Sky {
     const free = list.filter((a) => !inJar.has(a.address));
     // The pinned ones' marks in a small jar of their own, resting ones lit a little.
     const jar = jarred.length ? v_flex().id("rail-jar").relative().w(48).flex_none().items_center().pt(BODY + 2).pb(4).gap(2).mb(6)
-      .child(this.glass(t, jarred, RAIL_NECK))
+      .child(this.railGlass(t, jarred, RAIL_NECK))
       .children(jarred.map((a) => div().relative().size(32).flex_none()
         .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
           .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
