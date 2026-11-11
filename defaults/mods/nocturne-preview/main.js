@@ -524,7 +524,11 @@ export default class PreviewView extends View {
     const d = e.data ?? {};
     if (e.event === "load.error") this.fail(cx, d.message ?? `Can't show this ${noun(this.kind)}`);
     else if (e.event === "pdf.locked") this.note = "locked with a password";
-    else if (e.event === "pdf.page" || (e.event === "load.finish" && this.kind === "pdf")) this.pdf = { ...(this.pdf ?? {}), ...d };
+    else if (e.event === "pdf.page" || (e.event === "load.finish" && this.kind === "pdf")) {
+      this.pdf = { ...(this.pdf ?? {}), ...d };
+      // The view fits the page once it has its size, without saying so: ask again.
+      if (e.event === "load.finish") this.pdfLater(cx);
+    }
     else if (e.event === "load.finish" && (this.kind === "video" || this.kind === "audio")) this.mediaFacts(cx);
   }
 
@@ -538,6 +542,17 @@ export default class PreviewView extends View {
   pdfDo(action, args) {
     const s = this.call(action, args);
     if (s && typeof s === "object") this.pdf = { ...(this.pdf ?? {}), ...s };
+  }
+
+  /** The PDF view's page and scale a moment from now (after a resize, a load). */
+  pdfLater(cx) {
+    if (this.how?.how !== "native" || this.kind !== "pdf") return;
+    const at = this.pdfAsk = (this.pdfAsk ?? 0) + 1;
+    cx.timer.after(300, (cx) => {
+      if (at !== this.pdfAsk) return;
+      const s = this.call("state")?.content;
+      if (s && typeof s === "object" && s.pageCount) { this.pdf = { ...(this.pdf ?? {}), ...s }; cx.notify(); }
+    });
   }
 
   /** A clip's length, once the player knows it. */
@@ -645,6 +660,7 @@ export default class PreviewView extends View {
     const v = this.view;
     if (v && this.pictured()) this.set(v.fit ? { ...v, scale: fitScale(this.img(), port, v.rot, this.vector()) } : clampPan(v, this.img(), port), cx);
     this.scrollBy(0, 0);
+    this.pdfLater(cx);
     cx.notify();
   }
 

@@ -70,7 +70,11 @@ const nativeHerdr = {
   ...herdr,
   nativeView: { new: (id: string, props: any) => new Element("native", { id, props }) },
   nativeViewCapabilities: () => ({ available: true }),
-  nativeViewCall: (id: string, action: string, args: any) => { calls.push([id, action, args]); return action.startsWith("pdf.") ? { page: 2, pageCount: 9, scale: 1.5, autoScales: false } : { content: { rate: 0, duration: 187 } }; },
+  nativeViewCall: (id: string, action: string, args: any) => {
+    calls.push([id, action, args]);
+    if (action.startsWith("pdf.")) return { page: 2, pageCount: 9, scale: 1.5, autoScales: false };
+    return { content: id === "preview-pdf" ? { page: 1, pageCount: 9, scale: 1.25, autoScales: true } : { rate: 0, duration: 187 } };
+  },
   nextNativeViewEvent: () => new Promise(() => {}),
 };
 const logic = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
@@ -142,6 +146,11 @@ test("a PDF on macOS: the system's PDF view on the cached copy; pages and zoom i
   // Page events from the view keep the bar current.
   view.nativeEvent({ id: "preview-pdf", event: "pdf.page", data: { page: 5, pageCount: 9 } }, cx);
   expect(view.pdf.page).toBe(5);
+  // Loaded: it fits the page once it has its size, without an event; the bar asks again.
+  calls.length = 0;
+  const later = { notify() {}, timer: { after: (_ms: number, f: any) => f(later) } };
+  view.nativeEvent({ id: "preview-pdf", event: "load.finish", data: { page: 1, pageCount: 9, scale: 0.1, autoScales: true } }, later);
+  expect(calls.map(([, a]) => a)).toEqual(["state"]);
   view.nativeEvent({ id: "preview-pdf", event: "load.error", data: { message: "This PDF is damaged" } }, cx);
   expect(text(view.render())).toEqual(expect.arrayContaining(["Can't preview this PDF", "This PDF is damaged", "open in its app  o"]));
 });
