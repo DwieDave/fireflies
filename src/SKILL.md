@@ -125,6 +125,16 @@ own). The tab it leaves closes when it was its last pane:
 herdr-app do pane.move '{"pane":"p12","tab":"tb3"}'
 ```
 
+Closing ends what runs there. `tab.close`, `pane.close` and `space.close`
+from a script fail with what they would end (an agent in any status, idle
+too; for a tab also a busy program or unsaved work) until you pass
+`confirmed: true`. Read the error and make sure that's meant before
+confirming; a pane or tab of plain shells closes without it:
+
+```sh
+herdr-app do pane.close '{"pane":"p12","confirmed":true}'
+```
+
 `pane.equalize {scope?, pane?}` evens out pane sizes in `pane`'s tab (default:
 the focused one): `scope` `"all"` (default: every row and column, every level),
 `"row"` (the panes side by side with it) or `"column"` (the panes stacked with
