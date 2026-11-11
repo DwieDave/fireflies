@@ -480,6 +480,8 @@ pub struct InputBaseState<M: InputModeKind> {
     pub(super) touch_selection: super::touch::TouchSelection,
     pub(crate) disabled: bool,
     pub(crate) readonly: bool,
+    // HERDR: the caret's shape (vim's modes): see `set_cursor_shape`.
+    pub(crate) cursor_shape: super::CursorShape,
     pub(crate) text_align: TextAlign,
     pub(super) masked: bool,
     pub(super) clean_on_escape: bool,
@@ -846,6 +848,7 @@ impl<M: InputModeKind> InputBaseState<M> {
             touch_selection: Default::default(),
             disabled: false,
             readonly: false,
+            cursor_shape: super::CursorShape::Bar,
             text_align: TextAlign::Left,
             masked: false,
             clean_on_escape: false,
@@ -2998,6 +3001,15 @@ impl<M: InputModeKind> InputBaseState<M> {
                 .record_selections(vec![selection_before], vec![selection_after]);
         }
         recorded
+    }
+
+    // HERDR: the caret's shape: a bar (typing), a block or an underline (vim's
+    // normal and replace modes). It isn't a mode: keys still do what they do.
+    pub fn set_cursor_shape(&mut self, shape: super::CursorShape, cx: &mut Context<Self>) {
+        if self.cursor_shape != shape {
+            self.cursor_shape = shape;
+            cx.notify();
+        }
     }
 
     // HERDR: undo and redo for hosts with their own buttons or menus.

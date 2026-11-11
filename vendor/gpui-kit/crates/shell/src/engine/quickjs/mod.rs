@@ -1097,6 +1097,15 @@ pub(super) struct InputCallbackOwner {
     application: Option<Rc<ApplicationGeneration>>,
     view: Option<WeakEntity<ScriptView>>,
 }
+
+impl InputCallbackOwner {
+    // HERDR: editor_keys hands a copy to each dispatch.
+    pub(super) fn clone_owner(&self) -> Self {
+        Self { policy: self.policy.clone(), application: self.application.clone(), view: self.view.clone() }
+    }
+}
+// HERDR: code editors' keystrokes for scripts (vim).
+mod editor_keys;
 mod lifecycle;
 mod standard;
 mod template;
@@ -3866,6 +3875,53 @@ impl ShellRuntime {
     ///
     /// Unlike a rendered callback this handler outlives the pass that created
     /// it, so it lives with the entity rather than in the per-frame arena.
+    // HERDR: a code editor's keystroke, before the editor or any key binding
+    // sees it (`state.on("key")`). True when the handler took it.
+    pub(super) fn dispatch_editor_key(
+        self: &Rc<Self>,
+        handler: &Persistent<Function<'static>>,
+        owner: &InputCallbackOwner,
+        keystroke: &gpui::Keystroke,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> bool {
+        if owner.application.as_ref().is_some_and(|application| !application.is_active()) {
+            return false;
+        }
+        let view = owner.view.as_ref().and_then(WeakEntity::upgrade);
+        let (_guard, generation) = scope::enter_with_application(
+            self,
+            window,
+            cx,
+            ScopePhase::Event,
+            view,
+            owner.policy.clone(),
+            owner.application.clone(),
+        );
+        let result = self.with_js(|ctx| {
+            let handler = handler.clone().restore(ctx)?;
+            let payload = Object::new(ctx.clone())?;
+            payload.set("key", keystroke.key.as_str())?;
+            payload.set("keystroke", script_keystroke(keystroke))?;
+            match keystroke.key_char.as_deref() {
+                Some(char) => payload.set("key_char", char)?,
+                None => payload.set("key_char", rquickjs::Undefined)?,
+            }
+            payload.set("modifiers", modifiers_object(ctx, keystroke.modifiers)?)?;
+            let out: rquickjs::Value = handler.call((payload, context_object(ctx, ContextBinding::Call(generation))?))?;
+            Ok(out.as_bool().unwrap_or(false))
+        });
+        let taken = match result {
+            Ok(taken) => taken,
+            Err(error) => {
+                tracing::error!("error in editor key handler: {error}");
+                false
+            }
+        };
+        scheduler::drain_runtime_jobs(self, window, cx);
+        taken
+    }
+
     pub(super) fn dispatch_input_event(
         self: &Rc<Self>,
         handler: &Persistent<Function<'static>>,
@@ -5661,6 +5717,8 @@ globalThis.__gpui = (() => {
       set_readonly: (readonly) => call("set_readonly", !!readonly),
       set_language: (language) => call("set_language", String(language)),
       focus: () => call("focus"),
+      set_cursor_shape: (shape) => call("set_cursor_shape", String(shape)),
+      set_selections: (list) => call("set_selections", list ?? []),
       undo: () => call("undo"),
       redo: () => call("redo"),
     };

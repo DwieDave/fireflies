@@ -3259,9 +3259,34 @@ impl<M: InputModeKind> Element for TextElement<M> {
         }
 
         // Paint blinking cursors (shared blink state for all carets)
-        if focused && show_cursor {
+        // HERDR: a block or underline caret (vim's modes) is a character wide;
+        // a block is see-through so the character shows. Shown even unfocused
+        // as a hollow block would be noise: it follows the blink like a bar.
+        let shape = self.state.read(cx).cursor_shape;
+        if focused && (show_cursor || shape != super::CursorShape::Bar) {
+            let char_width = if shape == super::CursorShape::Bar {
+                CURSOR_WIDTH
+            } else {
+                let style = window.text_style();
+                let font_size = style.font_size.to_pixels(window.rem_size());
+                let font_id = window.text_system().resolve_font(&style.font());
+                window.text_system().em_advance(font_id, font_size).unwrap_or(font_size * 0.6)
+            };
             for cursor_info in prepaint.cursor_infos_with_scroll() {
-                window.paint_quad(fill(cursor_info.bounds, editor_style.caret));
+                let mut b = cursor_info.bounds;
+                match shape {
+                    super::CursorShape::Bar => window.paint_quad(fill(b, editor_style.caret)),
+                    super::CursorShape::Block => {
+                        b.size.width = char_width;
+                        window.paint_quad(fill(b, editor_style.caret.opacity(0.55)));
+                    }
+                    super::CursorShape::Underline => {
+                        b.size.width = char_width;
+                        b.origin.y += b.size.height - px(2.);
+                        b.size.height = px(2.);
+                        window.paint_quad(fill(b, editor_style.caret));
+                    }
+                }
             }
         }
 

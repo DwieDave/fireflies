@@ -1379,6 +1379,23 @@ fn subscribe(
     handler: Handler,
     what: &str,
 ) -> JsResult<bool> {
+    // HERDR: a code editor's keystrokes go to one handler that may take them.
+    if name == "key" {
+        let store = alive(ctx, runtime)?;
+        let editor = store.entities().editor(handle).ok_or_else(|| {
+            Exception::throw_type(ctx, "on(\"key\") is a code editor's (EditorState)")
+        })?;
+        let owner = InputCallbackOwner {
+            policy: scope::policy(),
+            application: scope::current_application_generation(),
+            view: scope::current_view().map(|view| view.downgrade()),
+        };
+        scope::with_current_app(|cx| {
+            super::editor_keys::register(editor.downgrade(), runtime.clone(), handler.0, owner, cx);
+        })
+        .ok_or_else(|| Exception::throw_type(ctx, "on(\"key\") needs a live host call; subscribe from init()"))?;
+        return Ok(true);
+    }
     let event = InputEventName::from_name(name).ok_or_else(|| {
         Exception::throw_type(
             ctx,
@@ -2030,6 +2047,37 @@ fn editor_call(
         }
         "focus" => {
             state.update(cx, |s, cx| s.focus(window, cx));
+            None
+        }
+        "set_cursor_shape" => {
+            let shape = match args.as_str() {
+                Some("block") => gpui_base::input::CursorShape::Block,
+                Some("underline") => gpui_base::input::CursorShape::Underline,
+                _ => gpui_base::input::CursorShape::Bar,
+            };
+            state.update(cx, |s, cx| s.set_cursor_shape(shape, cx));
+            None
+        }
+        "set_selections" => {
+            let list = args.as_array().ok_or("set_selections takes a list of { start, end }")?;
+            let mut ranges = Vec::with_capacity(list.len());
+            for r in list {
+                ranges.push((pos(r.get("start").ok_or("a selection needs `start`")?)?, pos(r.get("end").ok_or("a selection needs `end`")?)?));
+            }
+            state.update(cx, |s, cx| {
+                for (i, (a, b)) in ranges.iter().enumerate() {
+                    let (a, b) = (s.text().position_to_offset(a), s.text().position_to_offset(b));
+                    if i == 0 {
+                        s.set_selected_range(a.min(b)..a.max(b), cx);
+                    } else {
+                        s.add_selection(a.min(b)..a.max(b), cx);
+                    }
+                }
+                if let Some((a, _)) = ranges.first() {
+                    let at = s.text().position_to_offset(a);
+                    s.reveal_offset(at, cx);
+                }
+            });
             None
         }
         "undo" => {
