@@ -323,9 +323,6 @@ export default class Tabs {
       // The horizon: a 2 px dithered line the tabs stand on.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)))
-      // While the strip has the keyboard: which row its cursor is on, and ? for the keys.
-      .when(on, (el) => el.child(div().flex_none().px(6).text_size(11).text_color(t.dim)
-        .child(this.row === "head" ? "pane ←→ ⏎ · ? keys" : this.row === "parked" ? "parked ⏎ · ? keys" : "? keys")))
       .child(h_flex().flex_none().gap(2).items_center()
         .child(scriptsControl(t, (...a) => this.tool(...a)))
         .child(rule())
@@ -333,6 +330,10 @@ export default class Tabs {
         .child(this.gitButton(t))
         .child(rule())
         .child(this.newButton(t))
-        .child(rule()));
+        .child(rule()))
+      // While the strip has the keyboard: which row its cursor is on, and ? for
+      // the keys, the strip's last word (after its buttons, as every keys bar).
+      .when(on, (el) => el.child(div().flex_none().px(6).text_size(11).text_color(t.dim)
+        .child(this.row === "head" ? "pane ←→ ⏎ · ? keys" : this.row === "parked" ? "parked ⏎ · ? keys" : "? keys")));
   }
 }

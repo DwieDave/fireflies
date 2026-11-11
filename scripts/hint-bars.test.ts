@@ -1,0 +1,80 @@
+// The keys/options bars: the help entry (? keys) is the last thing in every
+// bar, after a right-aligned group too. gpui and herdr stand-ins that record
+// what each element draws, in order (mock.module is process-wide: this file
+// runs alone).
+import { test, expect, mock } from "bun:test";
+
+class El {
+  kids: any[] = [];
+  constructor(public text?: string) {
+    return new Proxy(this, {
+      get: (t, k: string, proxy) => k in t ? (t as any)[k] : k === "then" ? undefined : (...a: any[]) => {
+        if (k === "child") t.kids.push(a[0]);
+        else if (k === "children") t.kids.push(...a[0]);
+        else if (k === "when") { if (a[0]) a[1](proxy); }
+        else if (k === "map") return a[0](proxy);
+        return proxy;
+      },
+    });
+  }
+}
+/** The strings an element draws, depth first, in order. */
+const texts = (e: any): string[] => typeof e === "string" ? [e] : e instanceof Object && "kids" in e ? e.kids.flatMap(texts) : [];
+
+let focusedNow: any = { space: "s1", tab: "t1", pane: "p1", terminal: "a/1", block: "tabs" };
+const LAYOUT = { id: "root", type: "row", children: [
+  { id: "sidebar", type: "block", content: { mod: "nocturne", props: { role: "sky" } } },
+  { id: "tabs", type: "block", content: { mod: "nocturne", props: { role: "tabs" } } },
+] };
+const herdr: Record<string, any> = {
+  settings: () => ({ zoom: 1 }), window: () => ({ platform: "linux" }), agents: () => [], appHome: () => "/tmp/app",
+  closeOverlay: () => {}, commands: () => [], exec: async () => ({ code: 1, stdout: "", stderr: "" }), focused: () => focusedNow,
+  hc: async () => ({ code: 0, stdout: "" }), home: () => "/home/a", keys: () => [], knownAgents: () => [], layout: () => LAYOUT,
+  layouts: () => ["nocturne"], nextCommand: () => new Promise(() => {}), notify: () => {}, openOverlay: () => "o1",
+  panes: () => [{ pane: "p1", tab: "t1", terminal: "a/1", focused: true, cwd: "/home/a" }], pickFolder: async () => null,
+  presentUpdateNotes: () => {}, props: () => ({ role: "tabs" }), run: () => null, setAgentOrder: () => {}, setShared: () => {},
+  shared: () => null, spaces: () => [{ id: "s1", name: "one", active: true, folder: "/home/a", tabs: [{ id: "t1", index: 1, active: true, name: "1" }] }],
+  terminals: () => [], theme: () => theme, updates: () => null,
+};
+mock.module("herdr", () => herdr);
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: () => new El(), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} }
+mock.module("gpui-base", () => ({
+  h_flex: () => new El(), v_flex: () => new El(), v_virtual_list: () => new El(), Scrollbar: { new: () => new El() },
+  InputState: { new: () => new Input() }, Input: { new: () => new El() },
+  ScrollHandle: { new: () => ({ scroll_to_item() {} }) }, VirtualListScrollHandle: { new: () => ({}) },
+}));
+const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} } };
+(globalThis as any).window = { paint_path: () => new El() };
+const theme: any = new Proxy({}, { get: () => "#808080" });
+
+const gh = await import("../defaults/mods/nocturne-github/kit.js");
+
+test("GitHub window: ? keys sits after the right-aligned note, at the bar's end", () => {
+  const right = new El().child("loaded 2 min ago");
+  const bar = gh.hints(theme, [["j/k", "move"], ["?", "keys"], ["esc", "close"]], right);
+  expect(texts(bar)).toEqual(["j/k", "move", "esc", "close", "loaded 2 min ago", "?", "keys"]);
+  // Without a note, and without a help entry.
+  expect(texts(gh.hints(theme, [["j/k", "move"], ["?", "keys"]], null)).slice(-2)).toEqual(["?", "keys"]);
+  expect(texts(gh.hints(theme, [["esc", "close"]], right))).toEqual(["esc", "close", "loaded 2 min ago"]);
+});
+
+const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+
+test("tab strip: with the keyboard, ? keys is the strip's last word, after its tool buttons", () => {
+  const s: any = new Tabs();
+  s.init({ role: "tabs" }, cx);
+  s.render(cx);
+  s.takeKeys();
+  const words = texts(s.render(cx));
+  expect(words.at(-1)).toMatch(/\? keys$/);
+  expect(words.filter((w) => w.includes("? keys"))).toHaveLength(1);
+  expect(words.indexOf("+ new")).toBeGreaterThanOrEqual(0);
+  expect(words.indexOf("+ new")).toBeLessThan(words.length - 1);
+});
+
+test("sidebar: its hint line ends with ?", () => {
+  const words = texts((Object.create(Sky.prototype) as any).hints(theme));
+  expect(words.join(" ").trim().endsWith("?")).toBe(true);
+});

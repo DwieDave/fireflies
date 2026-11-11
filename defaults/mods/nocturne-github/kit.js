@@ -94,13 +94,17 @@ export function chip(t, id, label, on, action, color) {
 
 /** lazygit's options bar: the keys that do something now. */
 export function hints(t, list, right) {
+  // The help entry (? keys) ends the bar, after the right-aligned note too.
+  const help = list.filter(([key]) => key === "?"), rest = list.filter(([key]) => key !== "?");
+  const hint = ([key, what], i) => h_flex().id(`gh-hint-${i}`).flex_none().gap(4)
+    .child(div().text_color(t.accent).child(key))
+    .child(div().text_color(t.dim).child(what));
   return h_flex().id("gh-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-    .children(list.map(([key, what], i) => h_flex().id(`gh-hint-${i}`).flex_none().gap(4)
-      .child(div().text_color(t.accent).child(key))
-      .child(div().text_color(t.dim).child(what))))
+    .children(rest.map(hint))
     .child(div().flex_1())
-    .when(Boolean(right), (el) => el.child(right));
+    .when(Boolean(right), (el) => el.child(right))
+    .children(help.map((h, i) => hint(h, rest.length + i)));
 }
 
 /** A quiet middle-of-the-panel note, with the moon. */

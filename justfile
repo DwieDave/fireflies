@@ -62,6 +62,8 @@ test:
     bun test scripts/nocturne-picker-view.test.ts
     # No mod's cleanup hook (an exported View's close()) closes its pane again.
     bun test scripts/mod-close-hook.test.ts
+    # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
+    bun test scripts/hint-bars.test.ts
     cargo test --locked
 
 docs-generate: build
