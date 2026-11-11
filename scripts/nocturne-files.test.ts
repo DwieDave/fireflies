@@ -56,7 +56,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 const logic = await load("nocturne-files/logic.js");
 const { default: Files } = await load("nocturne-files/main.js", logic);
-const { filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
+const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
 
 const later: ((cx: any) => void)[] = [];
 const cx: any = {
@@ -136,6 +136,18 @@ test("the menu offers Neovim for files and folders, a new pane for folders, clos
   expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "copy"]);
   expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "copy", "close"]);
   expect(menuItems({ dir: false }).find((x: any) => x.act === "nvim").label).toBe("Open in Neovim");
+});
+
+test("the menu's key column fits its widest key", () => {
+  expect(keyColumn(menuItems({ dir: false }))).toBe("enter".length * 7 + 14);
+  expect(keyColumn([{ key: "v" }])).toBe(30);
+  // Drawn at that width, every row's key cell the same.
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.openMenu({ path: "README.md", name: "README.md", dir: false }, cx);
+  const cells = walk(view.render()).filter((e: any) => e.nodes.length === 1 && ["enter", "e", "E", "v", "y", "q"].includes(e.nodes[0]));
+  expect(cells.length).toBe(6);
+  for (const c of cells) expect(c.calls.find(([k]: [string]) => k === "w")?.[1]).toEqual([49]);
 });
 
 // ---- the pane

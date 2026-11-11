@@ -120,3 +120,6 @@ export function marks(text, ranges) {
   if (at < text.length) out.push([text.slice(at), false]);
   return out;
 }
+
+/** The menu's key column width (layout px, before zoom): its widest key at 7 px a character, plus room. */
+export const keyColumn = (items) => Math.max(30, ...items.map((x) => String(x.key ?? "").length * 7 + 14));

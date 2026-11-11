@@ -39,7 +39,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -635,6 +635,8 @@ export default class Files extends View {
   menuBox(t) {
     const m = this.menu, w = Math.min(240, this.size.width - 16);
     const h = m.items.length * MENU_ROW + 20;
+    // The key column fits its widest key on one line (7 px a character at size 11, as nocturne-git's menus).
+    const keyW = keyColumn(m.items);
     const x = Math.max(8, Math.min(m.at.x, this.size.width - w - 8)), y = Math.max(8, Math.min(m.at.y, this.size.height - h - 8));
     const edge = (where) => h_flex().absolute().left(0).right(0).h(13).items_center().text_size(11)
       .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
@@ -646,7 +648,7 @@ export default class Files extends View {
       .on_mouse_move((_e, cx) => { if (m.n !== i) { m.n = i; cx.notify(); } })
       .on_click((_e, cx) => { cx.stop_propagation(); this.menu = null; this.act(it.act, m.row, cx); cx.notify(); })
       .when(i === m.n, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-      .child(div().relative().w(44).flex_none().text_color(t.accent).child(it.key))
+      .child(div().relative().w(keyW).min_w(keyW).flex_none().overflow_hidden().text_color(t.accent).child(it.key))
       .child(div().relative().flex_1().min_w(0).truncate().text_color(i === m.n ? t.foreground : t.muted).child(it.label)));
     return div().id("nf-menu-layer").absolute().inset_0()
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.menu = null; cx.notify(); })
