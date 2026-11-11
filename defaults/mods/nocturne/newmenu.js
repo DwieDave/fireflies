@@ -5,8 +5,8 @@
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (panels.js): terminal, web, files, agents,
-//             usage, worktrees, lazygit, diff, github, in fixed columns (a short
-//             last row keeps them). Lazygit, the diff and GitHub float and
+//             usage, worktrees, git, diff, github, in fixed columns (a short
+//             last row keeps them). Git, the diff (Git's review) and GitHub float and
 //             files runs down the tab's edge when "pane" is picked; open
 //             ones say so with a corner mark and close on a second pick.
 //   agents    every installed agent, started at the landing spot

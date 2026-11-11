@@ -26,8 +26,9 @@
 //
 // Opened by the nocturne mod's sky (nocturne.github) as an overlay window
 // with props { folder, on }; also works as a pane or tab (+ new > GitHub in
-// a new tab). `d` on a PR swaps the window for nocturne-diff on that PR, whose
-// esc brings this window back where it was (its state is in shared(STATE)).
+// a new tab). `d` on a PR swaps the window for the git window's review of
+// that PR (nocturne-git, which took in nocturne-diff), whose esc / q brings
+// this window back where it was (its state is in shared(STATE)).
 // A link opened from the floating window (o, a check, a link in a PR) opens
 // in a web pane beside the pane underneath and closes the window.
 
@@ -334,16 +335,16 @@ export default class GitHub extends View {
   showRun(runId, jobId, cx) { this.tab = "actions"; this.actions.show(runId, jobId, cx); }
   showRuns(filter, cx) { this.tab = "actions"; this.actions.showRuns(filter, cx); }
 
-  /** The PR's diff in nocturne-diff: in this window's place (esc comes back), or beside it as a pane. */
+  /** The PR's diff in the git window's review: in this window's place (esc / q come back), or beside it as a pane. */
   openDiff(number) {
     const diff = { folder: this.repo.root, on: this.on, pr: number, repo: slug(this.repo) };
     this.save();
     if (this.overlay) {
       const back = { mod: "nocturne-github", props: { folder: this.folder, on: this.on, tab: "prs" } };
-      const id = openOverlay({ mod: "nocturne-diff", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { ...diff, back } });
-      setShared(WINDOW, { id, beat: Date.now() }); // the diff holds the window now (and renews this)
+      const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: { ...diff, back } });
+      setShared(WINDOW, { id, beat: Date.now() }); // the review holds the window now (and renews this)
     } else {
-      run("pane.split", { direction: "auto", mod: "nocturne-diff", props: diff });
+      run("pane.split", { direction: "auto", mod: "nocturne-git", props: diff });
     }
   }
 

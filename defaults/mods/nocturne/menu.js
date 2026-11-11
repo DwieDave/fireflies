@@ -118,6 +118,15 @@ export function menuItems(t, p) {
       { id: "delete", mark: icon(t, "x", t.blocked), name: "Delete", hint: "", go: edit("delete") },
     ];
   }
+  if (p?.tab === "git") {
+    // The tab strip's git ▾: the git window, its review, the GitHub window.
+    const bound = (cmd) => keys().find((b) => b.action === cmd)?.keys ?? "";
+    return [
+      { id: "git", mark: icon(t, "git-compare"), name: "Git", hint: bound("nocturne.git") || bound("nocturne.lazygit"), go: () => run("nocturne.git") },
+      { id: "diff", mark: icon(t, "eye"), name: "Diff", hint: bound("nocturne.diff"), go: () => run("nocturne.diff") },
+      { id: "github", mark: svg(`${ART}/github.svg`).size(14).flex_none().text_color(t.accent), name: "GitHub", hint: bound("nocturne.github"), go: () => run("nocturne.github") },
+    ];
+  }
   if (p?.tab === "tab") {
     return [
       item(t, "rename", "square-pen", "Rename", "tab.rename", { id: tg.id }),

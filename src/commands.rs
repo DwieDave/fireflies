@@ -34,7 +34,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("space.close", &[opt("id"), opt("confirmed")], "Close a space and end its terminals (asks first unless confirmed)."),
     cmd("space.rename", &[opt("id"), opt("name")], "Rename a space (asks the person when no name; an empty name: called after where its first terminal is again)."),
     cmd("space.move", &[req("id"), req("index")], "Move a space to a position (1 = first)."),
-    cmd("space.folder", &[req("folder"), opt("id")], "Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and lazygit panes use."),
+    cmd("space.folder", &[req("folder"), opt("id")], "Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and git windows use."),
     cmd("tab.new", &[opt("name"), opt("space"), opt("folder"), opt("argv"), opt("task"), opt("mod"), opt("props")],
         "Make a tab in a space (default: the selected one; name default: none, so it's called by its number) with a terminal in folder (default: the focused terminal's), optionally an agent (argv) and its first message (task); or with a mod as its only pane (`mod`, its `props`: a file, a board). With no space open, a person's new tab starts a space (as space.new)."),
     cmd("tab.close", &[opt("id"), opt("confirmed")], "Close a tab and end its terminals. While something runs there (an agent working or needing you, a program other than the shell in front) it asks the person first, and a script must pass confirmed: true."),

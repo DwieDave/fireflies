@@ -252,7 +252,7 @@ export default class Prs {
     return [
       ["j k ↓ ↑", "move in the panel"], ["h l ← → tab", "previous / next panel"], ["g G", "first / last"],
       ["J K pgup pgdn", "scroll the pull request"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"],
-      ["d", "its diff (nocturne-diff)"], ["c", "comment"], ["C", "check it out here"], ["a", "its Actions runs"],
+      ["d", "its diff (Git's review)"], ["c", "comment"], ["C", "check it out here"], ["a", "its Actions runs"],
       ["o", "in the browser"], ["r", "refresh"],
     ];
   }

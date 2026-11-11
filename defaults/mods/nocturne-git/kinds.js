@@ -1,5 +1,5 @@
-// Which changed files are tests, config, assets or docs, so the pane can hide
-// them and leave the business code. Decided by path alone.
+// Which changed files are tests, config, assets or docs, so review can hide
+// them and leave the business code. Decided by path alone (nocturne-diff's).
 
 const TEST_DIR = /(^|\/)(__tests__|__mocks__|tests?|specs?|e2e|cypress|playwright|fixtures|testdata)\//i;
 const TEST_FILE = /(\.|_|-)(test|spec)s?\.[^/]+$|(^|\/)test_[^/]+\.py$|(^|\/)[^/]+Tests?\.(swift|kt|java|cs|m)$|(^|\/)conftest\.py$/i;

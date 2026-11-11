@@ -5,9 +5,9 @@
 //   files   the files pane down the tab's right edge (files.js); lit while open
 //   git     one button for the repo: the changed files and how far the branch
 //           is ahead / behind its upstream; a plain git mark when there's
-//           nothing anywhere. Click floats the git float over the tab
-//           (lazygit.js) on its diff when there are changes, else on lazygit;
-//           again closes it.
+//           nothing anywhere. Click floats the git window over the tab
+//           (git.js, nocturne-git); again closes it. Its ▾ (or a right-click)
+//           drops a menu: Git, Diff (Git's review) and GitHub.
 //   + new   the Nocturne new menu (newmenu.js)
 // The drop-downs (+ new, the script deck) hang under their button, right
 // edges lined up (kit.js dropBelow); a second press closes them. A rule like
@@ -19,7 +19,9 @@ import { spaces, panes, run, openOverlay, theme } from "herdr";
 import { dither, pip, spaceFolder, givenName, dropBelow } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { menuHeight } from "./menu.js";
-import { lazygitOpen, toggleLazygit, toggleDiff, gitState } from "./lazygit.js";
+import { gitState } from "./lazygit.js";
+import { gitOpen, toggleGit } from "./git.js";
+import { githubOpen } from "./github.js";
 import { filesPane, toggleFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns } from "./scripts.js";
 import { runJobs, pendingJobs } from "./jobs.js";
@@ -83,18 +85,25 @@ export default class Tabs {
   /** Changes and branch state in one: ±n, ↑ahead, ↓behind; else the git mark alone. */
   gitButton(t) {
     const g = this.git;
-    const open = lazygitOpen();
+    const open = Boolean(gitOpen());
     const busy = Boolean(g && (g.changed || g.ahead || g.behind));
-    const tip = !g ? "Lazygit"
+    const tip = !g ? "Git (⌘G)"
       : [g.changed ? `${g.changed} changed` : "clean", g.ahead ? `${g.ahead} ahead` : null, g.behind ? `${g.behind} behind` : null]
-        .filter(Boolean).join(" · ") + (g.branch ? ` on ${g.branch}` : "");
-    const go = () => (open ? (lazygitOpen(1) ? toggleDiff() : toggleLazygit()) : g?.changed ? toggleDiff() : toggleLazygit());
+        .filter(Boolean).join(" · ") + (g.branch ? ` on ${g.branch}` : "") + " · Git (⌘G)";
     const num = (s, c) => div().flex_none().text_color(c).child(s);
-    return this.tool(t, "tab-git", open, tip, go,
-      svg(chrome(busy ? "git-compare" : "git-branch")).size(14).text_color(open ? t.accent : g?.changed ? t.ansi3 : t.muted),
-      ...(g?.changed ? [num(String(g.changed), t.ansi3)] : []),
-      ...(g?.ahead ? [num(`↑${g.ahead}`, t.ansi4)] : []),
-      ...(g?.behind ? [num(`↓${g.behind}`, t.ansi5)] : []));
+    const menu = (e) => {
+      const props = { role: "menu", tab: "git" };
+      openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 220, height: menuHeight(props), ...(dropBelow(e, 220) ? { at: dropBelow(e, 220) } : {}), props });
+    };
+    const github = Boolean(githubOpen());
+    return h_flex().id("tab-git-group").flex_none().items_center()
+      .on_mouse_down("right", (e, cx) => { cx.stop_propagation(); menu(e); })
+      .child(this.tool(t, "tab-git", open, tip, () => toggleGit(),
+        svg(chrome(busy ? "git-compare" : "git-branch")).size(14).text_color(open ? t.accent : g?.changed ? t.ansi3 : t.muted),
+        ...(g?.changed ? [num(String(g.changed), t.ansi3)] : []),
+        ...(g?.ahead ? [num(`↑${g.ahead}`, t.ansi4)] : []),
+        ...(g?.behind ? [num(`↓${g.behind}`, t.ansi5)] : [])))
+      .child(this.tool(t, "tab-git-more", github, null, (e) => menu(e), div().text_size(9).text_color(github ? t.accent : t.dim).child("▾")).px(3));
   }
 
   /** "+ new": its menu hangs under it; lit (the open look) while it's open. */
