@@ -41,19 +41,22 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
   const names: string[] = [];
   const body = source
-    .replace(/^import .*;\n/gm, "")
+    .replace(/^import [\s\S]*? from "[^"]+";\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
   const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: globalThis.window };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine } = await load("nocturne-markdown/markdown.js");
+const md = await load("nocturne-markdown/markdown.js");
+const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc } = md;
 const { follow, join, dirname, basename, tilde } = await load("nocturne-markdown/paths.js");
 
-test("the GitHub window and the viewer ship the same markdown.js", async () => {
-  const read = (mod: string) => readFile(new URL(`../defaults/mods/${mod}/markdown.js`, import.meta.url), "utf8");
+test("the GitHub window, the viewer and the editor ship the same markdown.js (and the editor the viewer's paths.js)", async () => {
+  const read = (mod: string, file = "markdown.js") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
   expect(await read("nocturne-github")).toBe(await read("nocturne-markdown"));
+  expect(await read("nocturne-editor")).toBe(await read("nocturne-markdown"));
+  expect(await read("nocturne-editor", "paths.js")).toBe(await read("nocturne-markdown", "paths.js"));
 });
 
 test("markdown() draws selectable Markdown in the theme's text and routes links", () => {
@@ -95,18 +98,19 @@ test("a document is cut at headings and lines of local images, keeping fences wh
     "[ref]: https://example.org",
   ].join("\n");
   const parts = blocks(doc);
-  expect(parts.map((p: any) => p.kind)).toEqual(["md", "images", "md", "md", "images", "md"]);
+  expect(parts.map((p: any) => p.kind)).toEqual(["md", "images", "md", "md", "md", "images", "md"]);
+  expect(parts.map((p: any) => [p.from, p.to])).toEqual([[0, 0], [2, 2], [4, 4], [5, 9], [10, 10], [11, 11], [12, 13]]);
   expect(parts[1].images).toEqual([{ alt: "logo", src: "img/logo.png" }]);
   expect(parts[2].anchor).toBe("one");
-  expect(parts[2].text).toContain("# not a heading");
-  expect(parts[2].text).toContain("![x](y.png)");
+  expect(parts[3].text).toContain("# not a heading");
+  expect(parts[3].text).toContain("![x](y.png)");
   // Reference definitions go into every run, so [text][ref] resolves in each.
   expect(parts[0].text).toContain("[ref]: https://example.org");
-  expect(parts[3].anchor).toBe("one-1");
-  expect(parts[4].images).toEqual([{ alt: "pic", src: "a b.png" }]);
+  expect(parts[4].anchor).toBe("one-1");
+  expect(parts[5].images).toEqual([{ alt: "pic", src: "a b.png" }]);
   // Web images stay in the text (TextView fetches those); local inline ones become links.
-  expect(parts[5].text).toContain("![web](https://x.com/a.png)");
-  expect(parts[5].text).toContain("[▧ i](i.png)");
+  expect(parts[6].text).toContain("![web](https://x.com/a.png)");
+  expect(parts[6].text).toContain("[▧ i](i.png)");
 });
 
 test("image lines and inline images", () => {
@@ -188,4 +192,143 @@ test("the files mod opens Markdown in the viewer; alt-click previews it as text"
   view.pick("notes.txt", {}, false);
   expect(commands).toEqual([["markdown.open", { path: "/repo/README.md" }]]);
   expect(shown).toEqual(["README.md", "notes.txt"]);
+});
+
+test("blocks: blank lines end blocks, but not inside fences, $$ math, list items or indented continuations", () => {
+  const doc = [
+    "para one", "still one", "", "para two", "", "- a", "", "- b", "  more of b", "", "$$", "x", "", "y", "$$", "", "Title", "=====", "", "```", "a", "", "b", "```",
+  ].join("\n");
+  const parts = blocks(doc);
+  expect(parts.map((p: any) => [p.kind, p.from, p.to])).toEqual([
+    ["md", 0, 1], ["md", 3, 3], ["md", 5, 8], ["md", 10, 14], ["md", 16, 17], ["md", 19, 23],
+  ]);
+  expect(parts[4].anchor).toBe("title");
+  // Same text, same key (the preview keeps what it measured); repeats are told apart.
+  expect(blocks(doc).map((p: any) => p.key)).toEqual(parts.map((p: any) => p.key));
+  const twice = blocks("same\n\nsame");
+  expect(twice[0].key).not.toBe(twice[1].key);
+});
+
+test("front matter shows as a YAML block", () => {
+  const [fm, body] = blocks("---\ntitle: x\n---\n# Hi");
+  expect(fm).toMatchObject({ kind: "md", from: 0, to: 2 });
+  expect(fm.text).toBe("```yaml\ntitle: x\n```");
+  expect(body.anchor).toBe("hi");
+});
+
+test("task lists: items with their lines, ticks and nesting; a tick is one character in the text", () => {
+  const text = "# Todo\n\n- [ ] write it\n- [x] test **it**\n  - [ ] nested\n  more text\n- plain item\n1. [X] numbered";
+  const [, tasks] = blocks(text);
+  expect(tasks.kind).toBe("tasks");
+  expect(tasks.items.map((i: any) => [i.line, i.indent, i.checked])).toEqual([[2, 0, false], [3, 0, true], [4, 2, false], [6, 0, null], [7, 0, true]]);
+  expect(tasks.items[2].text).toBe("nested\nmore text");
+  expect(taskToggle(text, 2)).toEqual({ line: 2, col: 3, text: "x" });
+  expect(taskToggle(text, 4)).toEqual({ line: 4, col: 5, text: "x" });
+  expect(taskToggle(text, 7)).toEqual({ line: 7, col: 4, text: " " });
+  expect(taskToggle(text, 6)).toBeNull();
+  expect(taskToggle(text, 99)).toBeNull();
+});
+
+test("callouts: GitHub's > [!NOTE], titles, folds, and MkDocs' !!! admonitions", () => {
+  const [note, warn, adm, other] = blocks("> [!NOTE]\n> Read **this**.\n\n> [!warning]- Careful now\n> body\n\n!!! tip \"Pro tip\"\n    indented body\n\n    second para\n\n> [!custom]\n> x");
+  expect(note).toMatchObject({ kind: "callout", type: "note", title: "Note", color: "ansi4", folded: false });
+  expect(note.text).toBe("Read **this**.");
+  expect(warn).toMatchObject({ type: "warning", title: "Careful now", color: "ansi3", folded: true });
+  expect(adm).toMatchObject({ kind: "callout", type: "tip", title: "Pro tip", color: "ansi2" });
+  expect(adm.text).toBe("indented body\n\nsecond para");
+  expect(other).toMatchObject({ type: "custom", title: "Custom", color: "ansi4" });
+  // A plain quote stays a quote.
+  expect(blocks("> just a quote")[0].kind).toBe("md");
+});
+
+test("footnotes: numbered superscript links where they're used, gathered at the end with a way back", () => {
+  const text = "Fact[^b] and more[^a], code `[^a]` stays.\n\n[^a]: First *note*.\n[^b]: Second note\n    continued.\n\nAfter.";
+  const parts = blocks(text);
+  expect(parts.map((p: any) => p.kind)).toEqual(["md", "md", "footnotes"]);
+  expect(parts[0].text).toBe("Fact[¹](#fn-b) and more[²](#fn-a), code `[^a]` stays.");
+  expect(parts[0].anchors).toEqual(["fnref-b", "fnref-a"]);
+  expect(parts[1].text).toBe("After.");
+  expect(parts[2].notes.map((n: any) => [n.n, n.anchor, n.text, n.from, n.to])).toEqual([
+    [1, "fn-b", "Second note\ncontinued.", 3, 4], [2, "fn-a", "First *note*.", 2, 2],
+  ]);
+  expect(footnoteRefs("x[^10]", () => 12)).toBe("x[¹²](#fn-10)");
+});
+
+test("the document view: source lines to heights and back, anchors, and measuring keeps the view still", () => {
+  const doc = new MarkdownDoc("t");
+  doc.setText("# A\n\none\ntwo\n\n# B\n\nthree");
+  const [a, body, b, three] = doc.parts;
+  for (const [p, h] of [[a, 30], [body, 40], [b, 30], [three, 20]] as const) doc.heights.set(p.key, h);
+  // Tops: 20, 62, 114, 156 (padding 20, gaps 12).
+  expect(doc.yOfLine(0)).toBe(20);
+  expect(doc.yOfLine(2)).toBe(62);
+  expect(doc.yOfLine(3)).toBe(82);
+  expect(doc.lineAtY(82)).toBe(3);
+  expect(doc.lineAtY(doc.yOfLine(5))).toBe(5);
+  doc.viewH = 50;
+  expect(doc.scrollTo("b")).toBe(true);
+  expect(doc.scrollY).toBe(106);
+  expect(doc.scrollTo("nope")).toBe(false);
+  // A block above the view grows: the view moves with it.
+  doc.setScroll(120);
+  doc.measured(a.key, 50);
+  expect(doc.scrollY).toBe(140);
+  // The text changes: blocks keep their measured heights by key.
+  doc.setText("# A\n\none\ntwo\n\n# B\n\nthree\n\nfour");
+  expect(doc.heights.get(a.key)).toBe(50);
+});
+
+test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
+  const extra = {
+    ...(await load("nocturne-editor/logic.js")), ...(await load("nocturne-editor/vim.js")), ...md, ...(await load("nocturne-editor/paths.js")),
+    languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
+    setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
+  };
+  const { default: EditorPane } = await load("nocturne-editor/main.js", extra);
+  const view: any = Object.create(EditorPane.prototype);
+  const edits: any[] = [];
+  const text = "# Plan\n\n- [ ] one\n- [x] two\n\n## Next";
+  Object.assign(view, {
+    path: "/repo/docs/plan.md", on: null, slot: "s1", markdown: true, view: "split", text, saved: text, messages: [],
+    preview: new MarkdownDoc("pv"), images: new Map(), previewHandle: { focus() {}, is_focused: () => false },
+    editor: { edit: (e: any) => edits.push(e), value: () => text, focus() {}, set_cursor() {}, scroll_to_line() {} },
+  });
+  view.preview.setText(text);
+  view.changed = () => {};
+  const cx = { notify() {}, timer: { after: (_ms: number, f: any) => f(cx) } };
+
+  view.tick(2, cx);
+  view.tick(3, cx);
+  view.tick(0, cx);
+  expect(edits).toEqual([
+    [{ start: { line: 2, col: 3 }, end: { line: 2, col: 4 }, text: "x" }],
+    [{ start: { line: 3, col: 3 }, end: { line: 3, col: 4 }, text: " " }],
+  ]);
+
+  world.panes = [{ pane: "pe", mod: "nocturne-editor", props: { slot: "s1" } }];
+  commands.length = 0;
+  view.previewLink("other.md#x", cx);
+  view.previewLink("../src/main.rs", cx);
+  view.previewLink("shot.png", cx);
+  view.previewLink("https://example.org", cx);
+  expect(commands).toEqual([
+    ["editor.open", { path: "/repo/docs/other.md", pane: "pe" }],
+    ["editor.open", { path: "/repo/src/main.rs", pane: "pe" }],
+    ["preview.open", { path: "/repo/docs/shot.png", pane: "pe" }],
+    ["app.open_url", { url: "https://example.org" }],
+  ]);
+  // An anchor scrolls the preview (and the text to the heading).
+  const lines: number[] = [];
+  view.editor.scroll_to_line = (l: number) => lines.push(l);
+  view.previewLink("#next", cx);
+  expect(lines).toEqual([5]);
+
+  const seen: string[] = [];
+  view.say = (m: string) => seen.push(m);
+  for (let i = 0; i < 3; i++) { view.command("preview", cx); seen.push(view.view); }
+  expect(seen.filter((s) => !s.includes(" "))).toEqual(["preview", "text", "split"]);
+  view.markdown = false;
+  view.command("preview-only", cx);
+  expect(view.view).toBe("split");
+  expect(seen.at(-1)).toBe("the preview is for Markdown files");
 });

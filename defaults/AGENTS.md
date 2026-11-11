@@ -307,7 +307,20 @@ the highlighted line shows where it will land.
   `markdown.open {path, anchor?, in?, pane?, on?}` does it from a mod or an agent.
   The viewer re-reads the file when it changes on disk, keeping its scroll;
   web links in it follow `links`, relative `.md` links open in the same viewer
-  (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
+  (‹ back), `#anchors` scroll, local images are drawn. Besides GitHub's
+  Markdown (tables, task lists, strikethrough, autolinks) it draws, as every
+  Markdown text in the app does (the editor's preview, the GitHub window): math,
+  `$…$` inline and `$$…$$` or a ```` ```math ```` fence as a block, typeset with
+  KaTeX's coverage (RaTeX, in the app, no network; `$5 and $10` stays text);
+  mermaid diagrams in a ```` ```mermaid ```` fence (flowchart, sequence, class,
+  state, ER, gantt, pie, mindmap, timeline, git graph, …), in the theme's
+  colors; code fences colored by tree-sitter (the editor's languages);
+  callouts (`> [!NOTE]`, `[!TIP]`, `[!IMPORTANT]`, `[!WARNING]`, `[!CAUTION]`,
+  Obsidian's others, `> [!note]- Title`, MkDocs' `!!! note "Title"`);
+  footnotes (`[^1]` as numbered links, the notes gathered at the end, ↩ back);
+  front matter as a YAML block. Ticking a task box writes `[x]` into the file
+  (local files). A formula or diagram that can't be drawn shows its source and
+  why. Its bar: raw / rendered,
   edit (the editor beside; another machine's file: $EDITOR in a terminal), files. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
 - **Previews**: the same goes for files you look at but don't edit: pictures
@@ -381,7 +394,8 @@ the highlighted line shows where it will land.
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
   the problems drawer, cmd-k d definition (another file opens in its own
   editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
-  deeper / shallower, cmd-r reload, cmd-k v vim on / off. **Vim** is on by
+  deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
+  Markdown preview (below). **Vim** is on by
   default (settings.json `editor.vim`, Settings → Editor). The bar's `vim`
   chip, cmd-k v and `:novim` switch it for that pane only; the pane keeps its
   choice, panes never switched follow the default. The bar shows the mode (NORMAL,
@@ -404,8 +418,19 @@ the highlighted line shows where it will land.
   settings.json `editor.leader`) opens a which-key popup of the keys after it:
   `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
   `h` hover, `cf` format, `gd` definition, `gr` references (`ca` code action and
-  `rn` rename are listed, not done yet). cmd combinations stay the app's in
-  every mode.
+  `rn` rename are listed, not done yet), `mp` the Markdown preview's next
+  view, `ms` / `mv` / `mt` split / preview only / text only. cmd combinations
+  stay the app's in every mode.
+  **Markdown files** get a live preview beside the text (under it in a pane
+  narrower than 760 px), redrawn as you type with the Markdown viewer's
+  renderer (math, mermaid, colored code, tables, callouts, footnotes, local
+  images: see Markdown files). It follows the text's scrolling and the text
+  follows it; ticking a task box puts `[x]` into the text (undoable); links go
+  where they point: a heading in it (the text too), another `.md` in the
+  editor beside, pictures and the like in the preview, web pages per `links`.
+  The bar's chip (split / preview / text), cmd-shift-v and space `m p` go
+  split → preview only → text only; the pane keeps its choice. In preview
+  only: j / k / d / u / gg / G scroll, `e` or esc back to the text.
   Resting the pointer on a word shows the hover card:
   the server's signature and docs, and every problem there with its whole
   message (multi-line type errors included), code and source. TypeScript and
@@ -423,7 +448,8 @@ the highlighted line shows where it will land.
   machine open without a language server. Commands for the shown editors:
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
-  `.hover-less`, `.reload`, `.vim`.
+  `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
+  `.preview-split`, `.preview-only`, `.preview-text`.
 - **Files panes** (Nocturne's `nocturne-files`): cmd-e (`nocturne.files`) and
   "+ new" > Files toggle the panel down the tab's right edge at the focused
   pane's folder. A link to a folder (Ctrl/Cmd-click a path, a `file://` URL or a

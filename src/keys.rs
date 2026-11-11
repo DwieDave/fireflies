@@ -64,6 +64,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-pin-keys.macos.json"),
     // With the git window on cmd-g, before cmd-p / cmd-shift-f opened the file picker and grep, and the editor's keys.
     include_str!("keys/shipped/fireflies-git-keys.macos.json"),
+    // With the picker and the editor's keys, before cmd-shift-v switched the editor's Markdown preview.
+    include_str!("keys/shipped/fireflies-editor-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

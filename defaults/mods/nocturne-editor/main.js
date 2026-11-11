@@ -20,6 +20,14 @@
 // it says so); a change on disk reloads a clean file and offers a choice to
 // an edited one. Closing an edited editor asks first.
 //
+// Markdown files get a live preview beside the text (under it when the pane
+// is narrow), drawn as it's typed by the Markdown viewer's renderer
+// (markdown.js): math, mermaid, colored code, tables, callouts, footnotes,
+// local images. It follows the text's scrolling and the text follows it;
+// ticking a task box writes the [x] into the text; links go where they point
+// (a heading in it, another .md file in the editor). The bar's chip, cmd-shift-v
+// and space m p go split -> preview -> text; space m s / m v / m t pick one.
+//
 // Vim (vim.js): new editors start as settings.json `editor.vim` says (default
 // on); the pane's "vim" chip, `:novim` and cmd-k v switch this pane only, and
 // the pane keeps that choice (its localStorage) over the default. Its leader is space (settings.json
@@ -28,7 +36,8 @@
 // cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
 // cmd-alt-f replace, cmd-l go to line, cmd-k n / cmd-k p next / previous
 // problem, cmd-k m problems, cmd-k d definition, cmd-i hover, ctrl-= / ctrl--
-// hover type more / less, cmd-r reload, cmd-k v vim on / off. Without vim:
+// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
+// Markdown preview. Without vim:
 // cmd-z / cmd-shift-z undo / redo, ctrl-g go to line.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
@@ -43,6 +52,8 @@ import {
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
+import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
+import { follow, join } from "./paths.js";
 
 const MOD = "nocturne-editor";
 // Each editor's file name by slot, for its pane header (nocturne/header.js).
@@ -52,6 +63,13 @@ const GOTO = "nocturne-editor.goto";
 const POLL = 4000; // a file on another machine can't be watched
 const CHANGE_DELAY = 200; // ms of quiet before the server hears about an edit
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
+// The Markdown preview: how it shows, in the order the switch goes.
+const VIEWS = ["split", "preview", "text"];
+// Under this width a split puts the preview under the text.
+const SIDE_BY_SIDE = 760;
+// Links to these open in the preview pane (nocturne-preview); other files with a language in the editor.
+const PREVIEWED = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
+const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 const CARD_W = 520;
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
@@ -139,6 +157,20 @@ export default class EditorPane extends View {
     this.vimWas = this.vimOn();
     this.editor.on("change", (_e, cx) => this.changed(cx));
     this.editor.on("hover", (e, cx) => this.hovered(e, cx));
+    // Markdown: the live preview and how it shows (the pane remembers).
+    this.markdown = this.lang === "markdown";
+    this.preview = new MarkdownDoc("pv");
+    this.images = new Map(); // abs path -> cache name | null (can't) | undefined (copying)
+    let view = null;
+    try { view = localStorage.getItem("preview"); } catch { /* the default */ }
+    this.view = VIEWS.includes(view) ? view : "split";
+    this.driver = "editor"; // which side scrolled last: the other follows
+    this.previewHandle = cx.focus_handle();
+    this.editor.on("scroll", (_e, cx) => {
+      if (Date.now() - (this.previewDrove ?? 0) < 150) return;
+      this.driver = "editor";
+      if (this.markdown && this.view === "split") cx.notify();
+    });
     this.findInput = InputState.new({ placeholder: "find" });
     this.findInput.on("change", (_e, cx) => this.search(cx));
     this.findInput.on("submit", (e, cx) => this.step(e?.shift ? -1 : 1, cx));
@@ -188,6 +220,7 @@ export default class EditorPane extends View {
         this.saved = text;
         this.editor.set_value(text);
         this.text = text;
+        if (this.markdown) this.refreshPreview(cx, true);
         this.editor.set_cursor(at.line, at.col);
         this.say("reloaded: it changed on disk");
         this.didChange(cx, true);
@@ -198,6 +231,7 @@ export default class EditorPane extends View {
       if (text == null) { this.state = "missing"; this.saved = null; this.editor.set_value(""); }
       else { this.state = "ready"; this.saved = text; this.editor.set_value(text); }
       this.text = text ?? "";
+      if (this.markdown) this.refreshPreview(cx, true);
       this.dirty = false; this.conflict = false;
       setUnsaved(null);
       this.title();
@@ -222,6 +256,7 @@ export default class EditorPane extends View {
 
   changed(cx) {
     this.text = this.editor.value();
+    if (this.markdown) this.refreshPreview(cx);
     const dirty = this.text !== (this.saved ?? "");
     if (dirty !== this.dirty) {
       this.dirty = dirty;
@@ -545,6 +580,7 @@ export default class EditorPane extends View {
       case "format": return this.formatNow(cx);
       case "code-action": case "rename": return this.say(`${name}: not here yet`);
       case "vim": return this.toggleVim(cx);
+      case "preview": case "preview-split": case "preview-only": case "preview-text": return this.command(name, cx);
       case "set": return this.say(`:set ${arg ?? ""}: only :novim is known`);
       case "write": return this.say("E: :w <file> isn't supported; :w saves this file", true);
       default: return;
@@ -590,6 +626,156 @@ export default class EditorPane extends View {
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
     if (c === "vim") return this.toggleVim(cx);
+    if (c === "preview") return this.setView(VIEWS[(VIEWS.indexOf(this.view) + 1) % VIEWS.length], cx);
+    if (c === "preview-split") return this.setView("split", cx);
+    if (c === "preview-only") return this.setView("preview", cx);
+    if (c === "preview-text") return this.setView("text", cx);
+  }
+
+  // ---- the Markdown preview
+
+  /** Splits the text into the preview's blocks again (now, or after a moment of typing). */
+  refreshPreview(cx, now) {
+    const apply = (cx) => {
+      this.previewDue = false;
+      this.preview.setText(this.text);
+      this.loadImages(cx);
+      cx.notify();
+    };
+    if (now) return apply(cx);
+    if (this.previewDue) return;
+    this.previewDue = true;
+    cx.timer.after(40, (cx) => apply(cx));
+  }
+
+  /** Split, preview only or text only; the pane remembers. */
+  setView(view, cx) {
+    if (!this.markdown) return this.say("the preview is for Markdown files");
+    this.view = view;
+    try { localStorage.setItem("preview", view); } catch { /* a nicety */ }
+    this.driver = "editor";
+    if (view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
+    else this.editor.focus();
+    this.say(view === "split" ? "preview beside the text" : view === "preview" ? "preview only (e: back to the text)" : "text only");
+    cx.notify();
+  }
+
+  /** Copies the document's local images where they can be drawn. */
+  loadImages(cx) {
+    if (this.on) return;
+    for (const part of this.preview.parts) {
+      if (part.kind !== "images") continue;
+      for (const img of part.images) {
+        if (!isLocalSource(img.src)) continue;
+        const abs = join(dirname(this.path), decodeURI(img.src.split(/[?#]/)[0]));
+        if (this.images.has(abs)) continue;
+        if (!IMAGE_EXT.test(abs)) { this.images.set(abs, null); continue; }
+        this.images.set(abs, undefined);
+        cx.spawn(async (cx) => { this.images.set(abs, await cacheImage(abs, MOD)); cx.notify(); });
+      }
+    }
+  }
+
+  image(src) {
+    if (!isLocalSource(src) || this.on) return { abs: null, name: null };
+    const abs = join(dirname(this.path), decodeURI(src.split(/[?#]/)[0]));
+    const name = this.images.get(abs);
+    return { abs, name: name ? `cache/${MOD}/${name}` : name };
+  }
+
+  /** A preview link: a heading here, another Markdown file in the editor,
+   *  pictures and the like in the preview pane, web pages as the app opens them. */
+  previewLink(href, cx) {
+    const to = follow(href, this.path);
+    if (!to) return;
+    const me = panes().find((p) => p.mod === MOD && p.props?.slot === this.slot);
+    const here = (anchor) => {
+      if (!this.preview.scrollTo(anchor)) return;
+      // The text goes there too: the heading's line.
+      const part = this.preview.parts.find((p) => p.anchor === anchor || p.anchors?.includes(anchor) || p.notes?.some((n) => n.anchor === anchor));
+      const line = part?.notes?.find((n) => n.anchor === anchor)?.from ?? part?.from;
+      if (line != null && this.view !== "preview") { this.previewDrove = Date.now(); this.driver = "preview"; this.editor.set_cursor(line, 0); this.editor.scroll_to_line(line); }
+    };
+    if (to.kind === "anchor") here(to.anchor);
+    else if (to.kind === "markdown") {
+      if (to.path === this.path) { if (to.anchor) here(to.anchor); }
+      else run("editor.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    } else if (to.kind === "web") run("app.open_url", { url: to.url });
+    else if (to.kind === "file" && PREVIEWED.test(to.path)) run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    else if (to.kind === "file" && languageOf(to.path)) run("editor.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    else if (!this.on) {
+      const opener = appWindow()?.platform === "windows" ? null : appWindow()?.platform === "macos" ? "open" : "xdg-open";
+      if (opener) exec(opener, [to.kind === "file" ? to.path : to.url]).catch(() => null);
+    }
+    cx.notify();
+  }
+
+  /** A task box ticked in the preview: [ ] <-> [x] in the text, one undoable edit. */
+  tick(line, cx) {
+    const edit = taskToggle(this.text, line);
+    if (!edit) return;
+    this.editor.edit([{ start: { line, col: edit.col }, end: { line, col: edit.col + 1 }, text: edit.text }]);
+    this.changed(cx);
+  }
+
+  /** Keys while the preview alone has the keyboard: the viewer's scrolling, and back to the text. */
+  previewKey(e, cx) {
+    const k = e.key, m = e.modifiers ?? {};
+    if (m.platform || m.alt) return;
+    const doc = this.preview, page = Math.max(80, doc.viewH / 2);
+    if (this.leaderAt && Date.now() - this.leaderAt < 1500) {
+      const seq = (this.leaderKeys ?? "") + k;
+      if (seq === "m") { this.leaderKeys = "m"; cx.stop_propagation(); return; }
+      this.leaderAt = 0; this.leaderKeys = "";
+      const go = { mp: "preview", ms: "preview-split", mv: "preview-only", mt: "preview-text" }[seq];
+      if (go) { this.command(go, cx); cx.stop_propagation(); cx.notify(); }
+      return;
+    }
+    if (m.control) {
+      if (k === "d") doc.scroll(page); else if (k === "u") doc.scroll(-page); else return;
+    } else if (k === "j" || k === "down") doc.scroll(60);
+    else if (k === "k" || k === "up") doc.scroll(-60);
+    else if (k === "d" || k === "pagedown") doc.scroll(page);
+    else if (k === "u" || k === "pageup") doc.scroll(-page);
+    else if (k === "G" || (k === "g" && m.shift) || k === "end") doc.scroll(1e9);
+    else if (k === "g" || k === "home") {
+      if (k === "home" || Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; doc.scrollY = 0; } else this.gAt = Date.now();
+    } else if (k === "space" && this.vimOn()) { this.leaderAt = Date.now(); this.leaderKeys = ""; }
+    else if (k === "space") doc.scroll(page);
+    else if (k === "e" || k === "i" || k === "escape") return this.setView("split", cx);
+    else return;
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  /** The preview, following the text when the text scrolled last. */
+  previewView(t) {
+    const doc = this.preview;
+    if (this.view === "split" && this.driver === "editor") {
+      const top = this.editor.top_line();
+      if (top != null) doc.setScroll(doc.yOfLine(top) - 4);
+    }
+    const focused = this.view === "preview" && this.previewHandle.is_focused();
+    return v_flex().id("editor-preview").relative().flex_1().min_w(0).min_h(0).bg(t.background)
+      .track_focus(this.previewHandle)
+      .on_key_down((e, cx) => this.previewKey(e, cx))
+      .on_mouse_down("left", () => { if (this.view === "preview") this.previewHandle.focus(); })
+      .child(doc.render(t, {
+        onLink: (url, cx) => this.previewLink(url, cx),
+        onTask: (line, cx) => this.tick(line, cx),
+        image: (src) => this.image(src),
+        onImage: (abs) => { const me = panes().find((p) => p.mod === MOD && p.props?.slot === this.slot); run("preview.open", { path: abs, ...(me ? { pane: me.pane } : {}) }); },
+        dither: (color) => dither(color, 1),
+        focused, size: 13, maxWidth: this.view === "preview" ? 780 : 720, unzoom: (v) => v / zoom(),
+        notify: (cx) => cx.notify(),
+        onScroll: () => {
+          // The preview scrolled by hand: the text follows it.
+          this.driver = "preview";
+          if (this.view !== "split") return;
+          this.previewDrove = Date.now();
+          this.editor.scroll_to_line(doc.lineAtY(doc.scrollY + 4));
+        },
+      }));
   }
 
   async close() {
@@ -668,6 +854,9 @@ export default class EditorPane extends View {
         .child(`${this.lang} · ${this.opts.insert_spaces === false ? "tab" : `${this.opts.tab_size} sp`}`)))
       .when(vim && !!this.pending, (el) => el.child(div().flex_none().text_color(t.foreground).child(this.pending)))
       .when(!!at, (el) => el.child(div().flex_none().text_color(t.dim).child(`${at.line + 1}:${at.col + 1}`)))
+      .when(this.markdown, (el) => el.child(div().id("bar-preview").flex_none().h(18).px(6).flex().items_center().border(1)
+        .border_color(this.view === "text" ? t.ansi0 : t.ansi5).text_color(this.view === "text" ? t.dim : t.ansi5).hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => this.command("preview", cx)).child(this.view)))
       .child(div().id("bar-vim").flex_none().h(18).px(6).flex().items_center().border(1).border_color(vim ? t.accent : t.ansi0)
         .text_color(vim ? t.accent : t.dim).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.toggleVim(cx)).child("vim"));
@@ -754,9 +943,16 @@ export default class EditorPane extends View {
   body(t, code) {
     if (this.state === "error") return this.note(t, "Can't edit this file", this.error);
     if (this.state === "loading") return this.note(t, "Reading…", null);
-    return div().id("editor-body").relative().flex_1().min_h(0)
+    const text = div().id("editor-body").relative().flex_1().min_h(0).min_w(0)
       .when(this.state === "missing", (el) => el.child(div().absolute().top(6).right(14).text_color(t.dim).child("new file: cmd-s creates it")))
       .child(Editor.new(this.editor).size_full().font_family(code));
+    if (!this.markdown || this.view === "text") return text;
+    if (this.view === "preview") return this.previewView(t);
+    const side = this.size.width >= SIDE_BY_SIDE;
+    const rule = div().relative().flex_none().when(side, (el) => el.w(1).h_full()).when(!side, (el) => el.h(1).w_full()).child(dither(t.ansi8, 1));
+    // A plain row: h_flex centers its children, which would leave them no height.
+    return (side ? div().flex().flex_row() : div().flex().flex_col()).id("editor-split").flex_1().min_h(0).min_w(0)
+      .child(text).child(rule).child(this.previewView(t));
   }
 
   note(t, title, detail) {
@@ -799,6 +995,7 @@ export default class EditorPane extends View {
       : this.vimOn() && this.vim.mode === "insert" ? [["esc", "normal"], ["cmd-s", "save"], ["cmd-p", "files"]]
       : this.vimOn() ? [[":", "ex"], ["space", "leader"], ["/", "search"], ["]d", "problem"], ...(this.server?.id != null ? [["gd", "definition"], ["K", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]]
       : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(this.server?.id != null ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
+    if (this.markdown && !this.mode) list.splice(Math.min(list.length, 3), 0, this.view === "preview" ? ["e", "text"] : [this.vimOn() ? "space m p" : "cmd-shift-v", "preview"]);
     return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
       .children(list.map(([k, what], i) => h_flex().id(`editor-hint-${i}`).flex_none().gap(4)

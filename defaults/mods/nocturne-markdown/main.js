@@ -3,7 +3,9 @@
 // output, `ls`, an OSC 8 link), a .md picked in the files pane, or the
 // `markdown.open {path}` command. Props: { path, on?, slot }.
 //
-// Readable width, headings, code, tables, task lists, images next to the
+// Readable width, headings, code in tree-sitter colors, tables, math ($…$,
+// $$…$$), mermaid diagrams, callouts (> [!NOTE]), footnotes, task lists (a
+// click ticks the box in the file), images next to the
 // file (copied into the app's cache so they can be drawn; a click opens one in
 // the preview, nocturne-preview, as do links to pictures, PDFs, tables and the
 // other files it shows), links: web pages
@@ -21,10 +23,10 @@
 // Commands (keys.json, `herdr-app do nocturne-markdown.<c>`; every shown
 // viewer takes them): down, up, top, bottom, raw, back, reload.
 
-import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
+import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, watchFolder, nextCommand, home, appHome, window as appWindow } from "herdr";
-import { markdown, fenced, blocks, isLocalSource } from "./markdown.js";
+import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
+import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
 
 const MOD = "nocturne-markdown";
@@ -34,14 +36,11 @@ const TITLES = "nocturne-markdown.titles";
 const PATHS = "nocturne-markdown.paths";
 const ART = "mods/nocturne/art";
 // Local images are copied here (under the app's folder, where image() reads).
-const IMAGES = "cache/nocturne-markdown";
+const IMAGES = "nocturne-markdown";
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 // Links to these open in the preview (nocturne-preview/kinds.js KINDS).
 const PREVIEW = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
 const WIDTH = 780;
-// Images are drawn at most this tall.
-const IMAGE_H = 360;
-const GAP = 12;
 // A file on another machine can't be watched: read it this often.
 const POLL = 4000;
 
@@ -55,13 +54,6 @@ function dither(color, cell = 1) {
 }
 const stop = (_e, cx) => cx.stop_propagation();
 
-/** Copies a local image into the cache, named by its contents; -> its name there. */
-async function cacheImage(path) {
-  const script = 'mkdir -p "$2" && [ -f "$1" ] || exit 3; s=$(cksum < "$1" | cut -d" " -f1); n="$s.${1##*.}"; [ -f "$2/$n" ] || cp "$1" "$2/$n" || exit 4; printf %s "$n"';
-  const r = await exec("sh", ["-c", script, "md-image", path, `${appHome()}/${IMAGES}`]).catch(() => null);
-  return r?.code === 0 && r.stdout ? r.stdout.trim() : null;
-}
-
 export default class Markdown extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
@@ -71,7 +63,9 @@ export default class Markdown extends View {
     this.raw = false;
     this.history = [];
     this.images = new Map(); // abs path -> cache name | null (can't) | undefined (copying)
-    this.scrollY = 0; this.viewH = 400; this.heights = []; this.width = 600;
+    this.doc = new MarkdownDoc("md");
+    this.rawDoc = new MarkdownDoc("md-raw");
+    this.width = 600;
     this.open(pr.path ?? "", cx, pr.anchor);
     if (this.on) cx.timer.every(POLL, (cx) => this.load(cx));
     cx.spawn(async (cx) => {
@@ -89,9 +83,10 @@ export default class Markdown extends View {
   /** Shows `path` (scrolled to `anchor`), from the top unless `keep`. */
   open(path, cx, anchor, keep) {
     this.path = path;
-    this.text = null; this.error = null; this.parts = []; this.heights = [];
-    if (!keep) this.scrollY = 0;
-    this.want = anchor || null;
+    this.text = null; this.error = null;
+    this.doc.setText(null); this.rawDoc.setText(null);
+    if (!keep) { this.doc.scrollY = 0; this.rawDoc.scrollY = 0; }
+    this.doc.want = anchor || null;
     this.gen = (this.gen ?? 0) + 1;
     this.title();
     this.load(cx);
@@ -112,7 +107,9 @@ export default class Markdown extends View {
       if (gen !== this.gen) return;
       if (text === this.text && error === this.error) return;
       this.text = text; this.error = error;
-      this.parts = text == null ? [] : blocks(text);
+      this.doc.setText(text);
+      this.rawDoc.setText(text == null ? null : fenced(text));
+      if (this.doc.want) this.doc.scrollTo(this.doc.want);
       this.loadImages(cx);
       cx.notify();
     });
@@ -138,7 +135,7 @@ export default class Markdown extends View {
 
   loadImages(cx) {
     if (this.on) return;
-    for (const part of this.parts) {
+    for (const part of this.doc.parts) {
       if (part.kind !== "images") continue;
       for (const img of part.images) {
         if (!isLocalSource(img.src)) continue;
@@ -147,7 +144,7 @@ export default class Markdown extends View {
         if (!IMAGE_EXT.test(abs)) { this.images.set(abs, null); continue; }
         this.images.set(abs, undefined);
         cx.spawn(async (cx) => {
-          const name = await cacheImage(abs);
+          const name = await cacheImage(abs, IMAGES);
           this.images.set(abs, name);
           cx.notify();
         });
@@ -182,10 +179,10 @@ export default class Markdown extends View {
   link(href, cx) {
     const to = follow(href, this.path);
     if (!to) return;
-    if (to.kind === "anchor") this.scrollTo(to.anchor);
+    if (to.kind === "anchor") this.doc.scrollTo(to.anchor);
     else if (to.kind === "markdown") {
-      if (to.path === this.path) { if (to.anchor) this.scrollTo(to.anchor); }
-      else { this.history.push({ path: this.path, scrollY: this.scrollY }); this.open(to.path, cx, to.anchor); }
+      if (to.path === this.path) { if (to.anchor) this.doc.scrollTo(to.anchor); }
+      else { this.history.push({ path: this.path, scrollY: this.doc.scrollY }); this.open(to.path, cx, to.anchor); }
     } else if (to.kind === "web") run("app.open_url", { url: to.url });
     else if (to.kind === "file" && PREVIEW.test(to.path)) this.showImage(to.path);
     else if (!this.on) {
@@ -205,7 +202,23 @@ export default class Markdown extends View {
     const last = this.history.pop();
     if (!last) return;
     this.open(last.path, cx);
-    this.scrollY = last.scrollY;
+    this.doc.scrollY = last.scrollY;
+  }
+
+  /** Ticks or unticks a task in the file itself (only over what was read). */
+  tick(line, cx) {
+    if (this.on || this.text == null) return;
+    const edit = taskToggle(this.text, line);
+    if (!edit) return;
+    const lines = this.text.split("\n");
+    const l = lines[line];
+    lines[line] = l.slice(0, edit.col) + edit.text + l.slice(edit.col + 1);
+    const next = lines.join("\n"), was = this.text;
+    this.text = next;
+    this.doc.setText(next);
+    this.rawDoc.setText(fenced(next));
+    cx.notify();
+    writeTextFile(this.path, next, was).catch(() => { this.load(cx); });
   }
 
   /** The app's editor (nocturne-editor) beside this viewer; a file on another
@@ -222,29 +235,15 @@ export default class Markdown extends View {
 
   // ---- scrolling
 
-  contentH() {
-    return this.heights.reduce((a, h) => a + (h ?? 0), 0) + GAP * Math.max(0, this.heights.length - 1) + 64;
-  }
+  /** The document on screen: rendered, or the raw text. */
+  shown() { return this.raw ? this.rawDoc : this.doc; }
 
-  scroll(dy) {
-    const max = Math.max(0, this.contentH() - this.viewH);
-    this.scrollY = Math.max(0, Math.min(max, this.scrollY + dy));
-  }
-
-  /** Scrolls a heading to the top, once the blocks above it are measured. */
-  scrollTo(anchor) {
-    const i = this.parts.findIndex((p) => p.anchor === anchor);
-    if (i < 0) { this.want = null; return; }
-    if (this.heights.slice(0, i).some((h) => h == null)) { this.want = anchor; return; }
-    this.want = null;
-    this.scrollY = 0;
-    this.scroll(this.heights.slice(0, i).reduce((a, h) => a + h + GAP, 0) + 24 - 8);
-  }
+  scroll(dy) { this.shown().scroll(dy); }
 
   key(e, cx) {
     const k = e.key, m = e.modifiers ?? {};
     if (m.platform || m.alt) return;
-    const page = Math.max(80, this.viewH / 2);
+    const page = Math.max(80, this.shown().viewH / 2);
     if (m.control) {
       if (k === "d") this.scroll(page); else if (k === "u") this.scroll(-page); else return;
     } else if (k === "j" || k === "down") this.scroll(60);
@@ -253,7 +252,7 @@ export default class Markdown extends View {
     else if (k === "u" || k === "pageup") this.scroll(-page);
     else if (k === "G" || (k === "g" && m.shift) || k === "end") this.scroll(1e9);
     else if (k === "g" || k === "home") {
-      if (k === "home" || Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; this.scrollY = 0; } else this.gAt = Date.now();
+      if (k === "home" || Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; this.shown().scrollY = 0; } else this.gAt = Date.now();
     } else if (k === "r") this.raw = !this.raw;
     else if (k === "e") this.edit();
     else if (k === "backspace" || k === "h" || k === "left") this.back(cx);
@@ -264,10 +263,10 @@ export default class Markdown extends View {
 
   /** `nocturne-markdown.<command>` (keys.json, `herdr-app do`): every shown viewer takes it. */
   command(c, cx) {
-    const page = Math.max(80, this.viewH / 2);
+    const page = Math.max(80, this.shown().viewH / 2);
     if (c === "down") this.scroll(page);
     else if (c === "up") this.scroll(-page);
-    else if (c === "top") this.scrollY = 0;
+    else if (c === "top") this.shown().scrollY = 0;
     else if (c === "bottom") this.scroll(1e9);
     else if (c === "raw") this.raw = !this.raw;
     else if (c === "back") this.back(cx);
@@ -308,39 +307,12 @@ export default class Markdown extends View {
       .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)));
   }
 
-  imageRow(t, part, i) {
-    return v_flex().gap(6).children(part.images.map((img, j) => {
-      const local = isLocalSource(img.src);
-      const abs = local ? join(dirname(this.path), decodeURI(img.src.split(/[?#]/)[0])) : null;
-      const name = abs ? this.images.get(abs) : null;
-      // A click shows it whole in the preview.
-      if (name) return div().id(`md-imgbox-${i}-${j}`).flex().cursor_pointer().on_click((_e, cx) => { cx.stop_propagation(); this.showImage(abs); })
-        .child(image(`${IMAGES}/${name}`).id(`md-img-${i}-${j}`).max_w_full().max_h(IMAGE_H));
-      const label = name === undefined && local && !this.on ? "loading…" : img.alt || img.src;
-      return markdown(t, `md-imgalt-${i}-${j}`, `[▧ ${label.replace(/[[\]]/g, "")}](${img.src})`, { onLink: (url, cx) => this.link(url, cx) })
-        .text_color(t.muted);
-    }));
-  }
-
-  document(t) {
-    const onLink = (url, cx) => this.link(url, cx);
-    if (this.raw) {
-      return v_flex().child(div().on_size_change((size, cx) => this.measured(0, size, cx))
-        .child(markdown(t, "md-raw", fenced(this.text), { onLink, size: 12 })));
-    }
-    if (this.heights.length !== this.parts.length) this.heights = this.parts.map((_, i) => this.heights[i]);
-    return v_flex().gap(GAP).children(this.parts.map((part, i) => div().id(`md-part-${i}`)
-      .on_size_change((size, cx) => this.measured(i, size, cx))
-      .child(part.kind === "md" ? markdown(t, `md-${i}`, part.text, { onLink, size: 13 }) : this.imageRow(t, part, i))));
-  }
-
-  measured(i, size, cx) {
-    const h = unzoom(size.height);
-    if (Math.abs((this.heights[i] ?? -1) - h) <= 1) return;
-    this.heights[i] = h;
-    if (this.want) this.scrollTo(this.want);
-    this.scroll(0);
-    cx.notify();
+  /** A local image's place and its name in the cache (undefined while copying). */
+  image(src) {
+    if (!isLocalSource(src)) return { abs: null, name: null };
+    const abs = join(dirname(this.path), decodeURI(src.split(/[?#]/)[0]));
+    const name = this.images.get(abs);
+    return { abs: this.on ? null : abs, name: name ? `cache/${IMAGES}/${name}` : name };
   }
 
   render() {
@@ -350,20 +322,16 @@ export default class Markdown extends View {
     if (this.error) body = this.empty(t, "Can't show this file", this.error);
     else if (this.text == null) body = this.empty(t, "Reading…", tilde(this.path, home()));
     else {
-      if (this.raw && this.heights.length !== 1) this.heights = [this.heights[0]];
-      const contentH = this.contentH();
-      const max = Math.max(1, contentH - this.viewH), shown = Math.min(1, this.viewH / Math.max(1, contentH));
-      body = div().id("md-view").relative().flex_1().min_h(0).overflow_hidden()
-        .on_size_change((size, cx) => {
-          const h = unzoom(size.height), w = unzoom(size.width);
-          if (Math.abs(h - this.viewH) > 1 || Math.abs(w - this.width) > 1) { this.viewH = h; this.width = w; this.scroll(0); cx.notify(); }
-        })
-        .on_scroll_wheel((e, cx) => { this.scroll(-unzoom(e.delta?.y ?? 0)); cx.notify(); })
-        .child(h_flex().absolute().left(0).right(0).top(-this.scrollY).justify_center()
-          .child(div().w_full().max_w(WIDTH).px(24).pt(20).pb(44).child(this.document(t))))
-        .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3)
-          .top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
-          .child(dither(focused ? t.accent : t.ansi8, 1))));
+      const doc = this.shown();
+      this.width = doc.width;
+      body = doc.render(t, {
+        onLink: (url, cx) => this.link(url, cx),
+        onTask: (line, cx) => this.tick(line, cx),
+        image: (src) => this.image(src),
+        onImage: (abs) => this.showImage(abs),
+        dither: (color) => dither(color, 1),
+        focused, size: this.raw ? 12 : 13, maxWidth: WIDTH, unzoom, notify: (cx) => cx.notify(),
+      });
     }
     return v_flex().id("nocturne-markdown").size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))

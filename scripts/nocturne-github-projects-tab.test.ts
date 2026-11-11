@@ -15,7 +15,7 @@ let sharedState: Record<string, unknown> = {};
 const gh = { mutations: [] as string[], fail: false, noScope: false, reads: 0 };
 const answer = (v: unknown, code = 0) => ({ code, stdout: JSON.stringify(v), stderr: "" });
 mock.module("herdr", () => ({
-  settings: () => ({ zoom: 1 }), window: () => ({ platform: "linux" }),
+  settings: () => ({ zoom: 1 }), window: () => ({ platform: "linux" }), appHome: () => "/home/me/.config/herdr-app",
   shared: (k: string) => sharedState[k] ?? null,
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   exec: async (_cmd: string, args: string[]) => {
@@ -38,7 +38,7 @@ mock.module("herdr", () => ({
 }));
 // Every element method chains; lists draw their rows so cards are built too.
 const el: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : () => el), apply: () => el });
-mock.module("gpui-kit", () => ({ div: () => el, svg: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
+mock.module("gpui-kit", () => ({ div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 class Input { handlers: Record<string, Function> = {}; v = ""; constructor(o: any) { this.v = o?.value ?? ""; } on(e: string, f: Function) { this.handlers[e] = f; return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } fire(e: string) { this.handlers[e]?.({}, cx); } }
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el,
