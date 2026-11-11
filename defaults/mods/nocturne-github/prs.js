@@ -9,7 +9,8 @@ import { ghJson, ghRun, api, graphql } from "./gh.js";
 import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn } from "./model.js";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
 import { markdown } from "./markdown.js";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize } from "./kit.js";
+import { PrForm } from "./prForm.js";
+import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize, chip } from "./kit.js";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
 const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
@@ -41,6 +42,37 @@ export default class Prs {
     this.composer = null; // TextareaState while writing a comment
     this.error = "";
     this.sizes = { ...(kept.sizes ?? {}) }; // dragged splitters: left (width), top (height, narrow), checks (height)
+    this.flow = null; // PrForm while a new pull request is written
+    this.want = null; // a pull request just made: selected once the list has it
+  }
+
+  /** The open form (form.js), if any: it takes the keys and the body. */
+  get form() { return this.flow?.form ?? null; }
+
+  /** n, + new, the menu, the palette, the git window: a new pull request (from `head`, else the current branch). */
+  newPr(cx, { head = null } = {}) {
+    if (!this.app.repo) return;
+    this.flow?.form.release();
+    this.flow = new PrForm(this.app, this, { head });
+    this.flow.load(cx);
+    this.flow.form.go(head ? 2 : 0, cx); // from a branch: base and head are set, the title is next
+  }
+
+  closeForm() { if (this.flow) this.flow.closed = true; this.flow = null; this.app.focusSelf(); }
+
+  /** Made: the form goes, the list shows every open pull request and selects the new one once GitHub lists it. */
+  created(number, cx) {
+    this.closeForm();
+    this.app.note = { text: number ? `Opened #${number}.` : "Opened the pull request.", tone: "done", at: Date.now() };
+    if (number == null) { this.app.refresh(cx, true); return; }
+    this.want = number;
+    if (this.filter !== "all") { this.filter = "all"; const l = this.lists.all; this.list = l?.list ?? null; this.listAt = l?.at ?? 0; }
+    this.app.refresh(cx, true);
+    const again = (n) => cx?.timer?.after(2500, (cx) => {
+      if (this.want !== number || n > 8 || this.app.closed) return;
+      this.app.refresh(cx, true); again(n + 1);
+    });
+    again(1);
   }
 
   save() { return { filter: this.filter, sel: this.sel, sizes: this.sizes }; }
@@ -95,6 +127,10 @@ export default class Prs {
       if (this.filter !== filter || this.app.repo !== repo) return;
       this.lists[filter] = { list: rows, at: Date.now() };
       this.list = rows; this.listAt = this.lists[filter].at;
+      if (this.want != null && rows.some((p) => p.number === this.want)) {
+        this.sel = this.want; this.want = null; this.focus = "list"; this.scrollY = 0; this.checkSel = 0;
+        this.listScroll.scroll_to_item(rows.findIndex((p) => p.number === this.sel));
+      }
       if (this.sel == null || !rows.some((p) => p.number === this.sel)) this.sel = rows[0]?.number ?? null;
       this.follow();
       cx?.notify();
@@ -208,6 +244,7 @@ export default class Prs {
     else if (k === "J" || k === "pagedown" || (k === "d" && e.modifiers?.control)) this.scroll(page);
     else if (k === "K" || k === "pageup" || (k === "u" && e.modifiers?.control)) this.scroll(-page);
     else if (k === "f") this.cycleFilter(cx);
+    else if (k === "n") this.newPr(cx);
     else if (k === "d" && p) this.app.openDiff(p.number);
     else if (k === "c" && p) this.startComment(cx);
     else if (k === "C" && p) this.app.ask(`Check out #${p.number} (${p.headRefName}) in ${this.app.repo.root}?`, () => this.checkout(p, cx));
@@ -247,17 +284,18 @@ export default class Prs {
   }
 
   hints() {
+    if (this.form) return this.form.hints();
     if (this.composer) return [["cmd-enter", "post"], ["esc", "cancel"]];
     const base = [["j/k", "move"], ["h/l", "panel"]];
     if (this.focus === "checks") return [...base, ["enter", "open run"], ["d", "diff"], ["?", "keys"]];
     if (this.focus === "main") return [...base, ["J/K", "page"], ["c", "comment"], ["d", "diff"], ["?", "keys"]];
-    return [...base, ["d", "diff"], ["c", "comment"], ["a", "actions"], ["f", FILTER_WORD[this.filter]], ["?", "keys"]];
+    return [...base, ["n", "new"], ["d", "diff"], ["c", "comment"], ["a", "actions"], ["f", FILTER_WORD[this.filter]], ["?", "keys"]];
   }
 
   static help() {
     return [
       ["j k ↓ ↑", "move in the panel"], ["h l ← → tab ⇧tab", "previous / next panel"], ["g G", "first / last"],
-      ["J K pgup pgdn", "scroll the pull request"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"],
+      ["J K pgup pgdn", "scroll the pull request"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"], ["n", "new pull request"],
       ["d", "its diff (Git's review)"], ["c", "comment"], ["C", "check it out here"], ["a", "its Actions runs"],
       ["L", "a link in it"], ["o", "in the browser"], ["r", "refresh"],
     ];
@@ -295,7 +333,21 @@ export default class Prs {
             (range) => list.slice(range.start, range.end).map((p) => this.prRow(t, p, p === cur, active)))
             .on_item_click((key, cx) => { this.focus = "list"; this.select(list.findIndex((p) => String(p.number) === key), cx); cx.notify(); })
             .size_full().track_scroll(this.listScroll));
-    return panel(t, "pr-list", `Pull requests · ${FILTER_WORD[this.filter]}`, active, body, { right: this.list ? `${list.length}` : "" }).flex_1();
+    const right = h_flex().gap(6).items_center()
+      .child(div().child(this.list ? `${list.length}` : ""))
+      .child(chip(t, "pr-new", "+ new", false, (cx) => this.newPr(cx), t.accent));
+    return panel(t, "pr-list", `Pull requests · ${FILTER_WORD[this.filter]}`, active, body, { right }).flex_1()
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu(cx); cx.notify(); });
+  }
+
+  /** Right-click on the list: what can be done from here. */
+  menu() {
+    const p = this.current();
+    const rows = [{ label: "New pull request…", sub: "n", go: (cx) => this.newPr(cx) }];
+    if (p) rows.push({ label: `Diff of #${p.number}`, sub: "d", go: () => this.app.openDiff(p.number) },
+      { label: `Comment on #${p.number}`, sub: "c", go: (cx) => this.startComment(cx) },
+      { label: `#${p.number} in the browser`, sub: "o", go: (cx) => this.app.openUrl(this.detail()?.pr?.url ?? `${this.app.repo.url}/pull/${p.number}`, cx) });
+    this.app.picker = { title: "PULL REQUESTS", at: 0, rows };
   }
 
   checksPanel(t) {
@@ -391,6 +443,7 @@ export default class Prs {
   }
 
   render(t, size) {
+    if (this.form) return this.form.render(t, size);
     const app = this.app, wide = size.width >= 820;
     const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
     const lw = clamp(this.sizes.left ?? Math.min(460, Math.max(300, size.width * 0.38)), 220, size.width - 320);

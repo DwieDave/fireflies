@@ -3,7 +3,7 @@
 // (popups.js) for what needs an answer. `v` is the window (main.js): it owns
 // the data, the selection, the popups and the command log.
 
-import { run as herdrRun, notify } from "herdr";
+import { run as herdrRun, notify, setShared } from "herdr";
 import { rewrite, nextUndo, nextRedo, UNDO, REDO } from "./history.js";
 import { partialPatch, hunkKeys } from "./patch.js";
 import { shq } from "./git.js";
@@ -357,6 +357,8 @@ const ACTIONS = {
     ],
   }),
   "pr-create": (v) => { const b = it(v); if (b) gh(v, "Create pull request", ["pr", "create", "--web", "--head", b.name]); },
+  // The GitHub window's form (nocturne-github's prForm.js) on this branch: it reads the branch from shared state.
+  "pr-create-github": (v) => { const b = it(v); if (b) { setShared("nocturne-github.create", { folder: v.folder, on: v.on, head: b.name, at: Date.now() }); herdrRun("nocturne.github-pr"); } },
   "pr-open": (v) => { const b = it(v); if (b) gh(v, "Open pull request", ["pr", "view", b.name, "--web"]); },
   "copy-name": (v, cx) => { const x = it(v); if (x) v.copy(x.name, cx); },
   "view-commits": (v) => { const r = refOf(v); if (r) v.enterSub({ kind: "subCommits", ref: r, title: short(r) }); },

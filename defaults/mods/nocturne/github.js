@@ -4,7 +4,7 @@
 // that every few seconds, so a stale note (an app restart) doesn't swallow a
 // press.
 
-import { openOverlay, closeOverlay, shared, setShared } from "herdr";
+import { openOverlay, closeOverlay, shared, setShared, run } from "herdr";
 import { here } from "./panels.js";
 
 const WINDOW = "nocturne-github.window";
@@ -20,9 +20,22 @@ export function githubOpen() {
 export function toggleGithub() {
   const open = githubOpen();
   if (open) { closeOverlay(open); setShared(WINDOW, null); return; }
+  openWindow({});
+}
+
+function openWindow(more) {
   const h = here();
   // A space attached to a folder shows that repo; otherwise the focused pane's.
   const folder = (h.space?.attached && h.space.folder) || h.folder;
-  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", scrim: true, width: 0.85, height: 0.85, resizable: { min: [520, 360] }, props: { folder, on: h.on } });
+  const id = openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", scrim: true, width: 0.85, height: 0.85, resizable: { min: [520, 360] }, props: { folder, on: h.on, ...more } });
   setShared(WINDOW, { id, beat: Date.now() });
+}
+
+/** nocturne.github-pr / nocturne.github-run (the palette, keys.json, the git
+ *  window's branches panel): the window on a new pull request or on running a
+ *  workflow; an open window gets the form in place. The git window leaves its
+ *  branch in shared("nocturne-github.create") first. */
+export function githubForm(what) {
+  if (githubOpen()) run(what === "pr" ? "nocturne-github.new-pr" : "nocturne-github.run-workflow");
+  else openWindow({ tab: what === "pr" ? "prs" : "actions", create: what, at: Date.now() });
 }
