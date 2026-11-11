@@ -23,7 +23,7 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, h_resizable, resizable_panel, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { props, theme, settings, shared, setShared, watchFolder, nextCommand, openOverlay, window as appWindow } from "herdr";
+import { props, theme, settings, shared, setShared, watchFolder, nextCommand, openOverlay, highlight, window as appWindow } from "herdr";
 import { repo, changes, prChanges } from "./git.js";
 import { KINDS, kind } from "./kinds.js";
 
@@ -321,7 +321,27 @@ export default class Diff extends View {
         .child(Scrollbar.vertical("files").absolute().inset_0()));
   }
 
-  line(t, row, code, compact) {
+  /** A code line in moonfly's syntax colors (tree-sitter, by the file's
+   *  language; each line on its own), the row's base color between. */
+  code(t, text, path, base) {
+    const role = { keyword: t.ansi5, function: t.ansi12, type: t.ansi10, constructor: t.ansi10, tag: t.ansi10, string: t.ansi11,
+      number: t.ansi3, boolean: t.ansi3, constant: t.ansi3, comment: t.ansi8, property: t.ansi6, field: t.ansi6,
+      operator: t.ansi9, attribute: t.ansi13, namespace: t.ansi6, module: t.ansi6, label: t.ansi3, escape: t.ansi9 };
+    const color = (name) => role[name] ?? role[name.split(".")[0]] ?? (name.startsWith("function") ? role.function : name === "variable.builtin" ? t.ansi4 : null);
+    const spans = path && text.length < 2000 ? highlight(text, path) : [];
+    if (!spans.length) return text || " ";
+    const parts = [];
+    let at = 0;
+    for (const [s, e, name] of spans) {
+      if (s > at) parts.push([text.slice(at, s), base]);
+      parts.push([text.slice(s, e), color(name) ?? base]);
+      at = Math.max(at, e);
+    }
+    if (at < text.length) parts.push([text.slice(at), base]);
+    return h_flex().min_w(0).overflow_hidden().children(parts.map(([piece, c]) => div().flex_none().text_color(c).child(piece)));
+  }
+
+  line(t, row, code, compact, path) {
     const num = (n, w) => div().w(w).flex_none().text_right().pr(6).text_color(t.dim).child(n == null ? "" : String(n));
     if (row.kind === "@") {
       return h_flex().h(20).w_full().relative().items_center().px(8).gap(10).text_size(11)
@@ -338,7 +358,8 @@ export default class Diff extends View {
       .when(!compact, (el) => el.child(num(row.o, 38)).child(num(row.n, 38)))
       .child(div().w(compact ? 12 : 14).flex_none().text_color(tint ?? t.dim).child(row.kind === "+" || row.kind === "-" ? row.kind : ""))
       .child(div().flex_1().min_w(0).truncate().pr(8)
-        .text_color(row.kind === "\\" ? t.dim : row.kind === " " ? t.muted : t.foreground).child(row.text || " "));
+        .text_color(row.kind === "\\" ? t.dim : row.kind === " " ? t.muted : t.foreground)
+        .child(row.kind === "\\" ? row.text || " " : this.code(t, row.text ?? "", path, row.kind === " " ? t.muted : t.foreground)));
   }
 
   fileView(t, list, f, w, narrow, short) {
@@ -371,7 +392,7 @@ export default class Diff extends View {
       : !f.rows.length ? note(f.status === "untracked" ? "Untracked, not diffed (too many new files)." : "No text changes (mode or rename only).")
       : div().relative().flex_1().min_h(0)
           .child(v_virtual_list(`diff-${f.key}`, f.rows.length, 20, (n) => `${f.key}:${n}`,
-            (range) => f.rows.slice(range.start, range.end).map((row) => this.line(t, row, code, compact)))
+            (range) => f.rows.slice(range.start, range.end).map((row) => this.line(t, row, code, compact, f.path)))
             .size_full().track_scroll(this.diffScroll))
           .child(Scrollbar.vertical(`diff-${f.key}`).absolute().inset_0());
     return v_flex().id("diff-side").flex_1().min_w(0).size_full()
