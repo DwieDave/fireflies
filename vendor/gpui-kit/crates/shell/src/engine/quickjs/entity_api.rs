@@ -455,8 +455,16 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
                         .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))?;
                     colors.insert(name.clone(), color);
                 }
+                // HERDR: a mod's own selection color (the theme's is often a border tone).
+                let selection = match &options.selection {
+                    Some(s) => crate::value::Bridged::Str(s.clone())
+                        .as_color()
+                        .map_err(|error| Exception::throw_type(&ctx, &error.to_string()))?,
+                    None => gpui::Hsla::default(),
+                };
                 let style = gpui_base::input::InputEditorStyle {
                     highlight_styles: std::sync::Arc::new(crate::syntax::SyntaxStyles(colors)),
+                    selection,
                     ..Default::default()
                 };
                 let store = alive(&ctx, &create_editor)?;
