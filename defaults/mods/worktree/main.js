@@ -234,7 +234,9 @@ export default class Worktree extends View {
     if (this.opening) {
       const n = this.shown().length;
       if (e.key === "enter") this.open(this.shown()[this.at]);
-      else if ((e.key === "down" || e.key === "up") && n) this.at = (this.at + (e.key === "down" ? 1 : n - 1)) % n;
+      else if (n && (e.key === "down" || e.key === "up" || (e.modifiers?.control && (e.key === "n" || e.key === "p")))) {
+        this.at = (this.at + (e.key === "down" || e.key === "n" ? 1 : n - 1)) % n;
+      }
       else return;
       cx.stop_propagation();
       return cx.notify();

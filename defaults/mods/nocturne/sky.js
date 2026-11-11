@@ -43,16 +43,16 @@ import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { NAME_AGENT, openMenu, openKeys } from "./menu.js";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
-import { actOnToast, dismissToasts } from "./toast.js";
 import { toggleGit } from "./git.js";
 import { UsageSection } from "./usage.js";
-import { toggleFiles } from "./files.js";
+import { focusFiles } from "./files.js";
 import { togglePicker } from "./picker.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
 import { gridify } from "./gridify.js";
+import { toastKey } from "./toast.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -151,7 +151,7 @@ export default class Sky {
     // here: the next space in the sidebar's order (worktrees under their repo);
     // nocturne.git (cmd-g; nocturne.lazygit, its old name, too) toggles the git
     // window (git.js), nocturne.diff the same on its Review tab, nocturne.files
-    // the files pane (files.js), nocturne.github (cmd-shift-g) the GitHub
+    // the files pane with the keyboard in it (files.js focusFiles), nocturne.github (cmd-shift-g) the GitHub
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
     // on that run's output; nocturne.scripts-again runs the folder's last
@@ -159,7 +159,9 @@ export default class Sky {
     // that Herdr Core's missing App Management stopped, opens that setting),
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
-    // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js).
+    // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
+    // nocturne.toast runs the newest toast's action, nocturne.toast-close
+    // (alias nocturne.toast-dismiss) dismisses it (toast.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -167,14 +169,12 @@ export default class Sky {
         const c = String(await nextCommand()).replace(/^nocturne\./, "");
         if (c === "focus") this.takeKeys();
         else if (c === "sidebar") this.toggleKeys();
-        else if (c === "toast") actOnToast();
-        else if (c === "toast-dismiss") dismissToasts();
         else if (c === "next") this.spaces.step(1);
         else if (c === "prev") this.spaces.step(-1);
         else if (c === "fold") this.fold(cx);
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
-        else if (c === "files") toggleFiles();
+        else if (c === "files") focusFiles();
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
         else if (c === "github") toggleGithub();
@@ -187,6 +187,7 @@ export default class Sky {
         else if (c === "pin") pin(focusedTerminal());
         else if (c === "pin-up") movePin(focusedTerminal(), -1);
         else if (c === "pin-down") movePin(focusedTerminal(), 1);
+        else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") toastKey(c);
         cx.notify();
       }
     });

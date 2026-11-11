@@ -50,11 +50,13 @@ export const COMMAND_KEYS = {
   ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), { key: String(n) }])),
 };
 
-/** Feeds this copy's commands to its key handler, as if pressed. */
-export function followCommands(cx, nextCommand, handle) {
+/** Feeds this copy's commands to its key handler, as if pressed; `focus`
+ *  (overlay.focus, a window cycle key) to `onFocus`. */
+export function followCommands(cx, nextCommand, handle, onFocus) {
   cx.spawn(async (cx) => {
     for (;;) {
       const c = String(await nextCommand()).replace(/^nocturne-notifications\./, "");
+      if (c === "focus") { onFocus?.(); continue; }
       const k = COMMAND_KEYS[c];
       if (!k) continue;
       const shim = { stop_propagation() {}, notify: () => cx.notify(), spawn: (f) => cx.spawn(f) };

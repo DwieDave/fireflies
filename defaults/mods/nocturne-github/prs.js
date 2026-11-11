@@ -6,7 +6,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextareaState, Textarea } from "gpui-base";
 import { ghJson, ghRun, api, graphql } from "./gh.js";
-import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW } from "./model.js";
+import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn } from "./model.js";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
 import { markdown } from "./markdown.js";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize } from "./kit.js";
@@ -191,7 +191,7 @@ export default class Prs {
     const at = PANELS.indexOf(this.focus);
     if (k === "l" || k === "right") this.focus = PANELS[Math.min(PANELS.length - 1, at + 1 + (at === 0 && !checks.length ? 1 : 0))];
     else if (k === "h" || k === "left") this.focus = PANELS[Math.max(0, at - 1 - (at === 2 && !checks.length ? 1 : 0))];
-    else if (k === "tab") this.focus = PANELS[(at + 1) % PANELS.length];
+    else if (k === "tab") this.focus = PANELS[(at + (e.modifiers?.shift ? PANELS.length - 1 : 1)) % PANELS.length];
     else if (k === "escape" && this.focus !== "list") this.focus = "list";
     else if (this.focus === "list" && (k === "j" || k === "down")) this.select(i + 1, cx);
     else if (this.focus === "list" && (k === "k" || k === "up")) this.select(i - 1, cx);
@@ -215,6 +215,12 @@ export default class Prs {
     else if (k === "a" && p) this.app.showRuns({ branch: p.headRefName, label: `#${p.number}` }, cx);
     else return false;
     return true;
+  }
+
+  /** L: the links in the shown pull request (its body and conversation). */
+  links() {
+    const d = this.detail();
+    return d?.pr ? linksIn([d.pr.body, ...this.timeline(d).map((c) => c.body)]) : [];
   }
 
   checkout(p, cx) {
@@ -250,10 +256,10 @@ export default class Prs {
 
   static help() {
     return [
-      ["j k ↓ ↑", "move in the panel"], ["h l ← → tab", "previous / next panel"], ["g G", "first / last"],
+      ["j k ↓ ↑", "move in the panel"], ["h l ← → tab ⇧tab", "previous / next panel"], ["g G", "first / last"],
       ["J K pgup pgdn", "scroll the pull request"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"],
       ["d", "its diff (Git's review)"], ["c", "comment"], ["C", "check it out here"], ["a", "its Actions runs"],
-      ["o", "in the browser"], ["r", "refresh"],
+      ["L", "a link in it"], ["o", "in the browser"], ["r", "refresh"],
     ];
   }
 

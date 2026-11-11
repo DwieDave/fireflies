@@ -6,13 +6,15 @@
 // An agent's own toast (Herdr's "… needs you", going to the agent) says what
 // it asks when the notifications mod knows (shared ITEMS: "wants to run a
 // command", the command), and a click opens that request in its overview.
-// Keys: nocturne.toast does what a click on the newest toast does,
-// nocturne.toast-dismiss closes every toast (sky.js takes both commands;
-// each toast notes itself in shared(TOASTS) while it shows).
+//
+// By key: every toast on screen is listed in shared(TOASTS), newest last;
+// nocturne.toast runs the newest one's action as a click would, and
+// nocturne.toast-close (or its alias nocturne.toast-dismiss) dismisses it
+// (sky.js's command loop calls toastKey).
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { props, closeOverlay, run, theme, shared, setShared, keys } from "herdr";
+import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
 import { ART, dither } from "./kit.js";
 
 // The level's theme color: the same words the fireflies use for status.
@@ -22,19 +24,15 @@ const COLOR = { error: "blocked", warning: "working", success: "done", info: "ac
 const ITEMS = "nocturne-notifications.items";
 const OPEN = "nocturne-notifications.open";
 
-/** shared() key: the toasts showing, oldest first: [{ overlay, at, title }]. */
+/** shared() key: the toasts on screen, [{ overlay, action, at }], newest last. */
 export const TOASTS = "nocturne.toasts";
-// A toast that never said goodbye (a crash) is forgotten after this long (ms).
-const STALE = 60_000;
+// A toast that went without saying so (the app quit) is forgotten after this.
+const STALE = 10 * 60_000;
 
-/** The toasts showing now, oldest first. */
-export function toasts(now = Date.now()) {
-  const list = shared(TOASTS);
-  return Array.isArray(list) ? list.filter((x) => x?.overlay && now - (x.at ?? 0) < STALE) : [];
-}
+const listed = () => (Array.isArray(shared(TOASTS)) ? shared(TOASTS) : []).filter((x) => Date.now() - x.at < STALE);
 
-/** What a click on the toast with these props does: its action, then it closes. */
-function act(p) {
+/** What a click on a toast does: its request's overview, else its action; then it goes. */
+export function act(p) {
   const ask = request(p);
   if (ask) {
     setShared(OPEN, { terminal: ask.address, at: Date.now() });
@@ -43,18 +41,15 @@ function act(p) {
   closeOverlay(p.overlay);
 }
 
-/** nocturne.toast: the newest toast's action, as a click. False with none showing. */
-export function actOnToast() {
-  const last = toasts().at(-1);
+/** nocturne.toast (run the newest toast's action) and nocturne.toast-close /
+ *  nocturne.toast-dismiss (dismiss it). */
+export function toastKey(command) {
+  const last = listed().at(-1);
   if (!last) return false;
-  act(last.props ?? { overlay: last.overlay });
+  setShared(TOASTS, listed().filter((x) => x.overlay !== last.overlay));
+  if (command === "toast") act(last);
+  else closeOverlay(last.overlay);
   return true;
-}
-
-/** nocturne.toast-dismiss: closes every toast. */
-export function dismissToasts() {
-  for (const x of toasts()) closeOverlay(x.overlay);
-  setShared(TOASTS, []);
 }
 
 /** The notifications mod's request for an agent's toast, if it has one. */
@@ -66,16 +61,14 @@ function request(p) {
 
 export default class Toast {
   init(p) {
-    const pr = props() ?? p ?? {};
-    if (!pr.overlay) return;
-    this.overlay = pr.overlay;
-    const keep = { title: pr.title, body: pr.body, level: pr.level, action: pr.action, overlay: pr.overlay };
-    setShared(TOASTS, [...toasts().filter((x) => x.overlay !== pr.overlay), { overlay: pr.overlay, at: Date.now(), props: keep }]);
+    if (!p?.overlay) return;
+    setShared(TOASTS, [...listed().filter((x) => x.overlay !== p.overlay), { overlay: p.overlay, action: p.action ?? null, at: Date.now() }]);
   }
 
-  /** Gone (clicked, timed out, dismissed): off the list. */
+  /** The toast is going (timed out, clicked, dismissed): off the list. */
   closing() {
-    if (this.overlay) setShared(TOASTS, toasts().filter((x) => x.overlay !== this.overlay));
+    const id = props()?.overlay;
+    if (listed().some((x) => x.overlay === id)) setShared(TOASTS, listed().filter((x) => x.overlay !== id));
   }
 
   render() {
@@ -84,8 +77,6 @@ export default class Toast {
     const ask = request(p);
     const color = t[COLOR[p.level] ?? "accent"];
     const urgent = p.level === "error" || p.level === "warning";
-    const bound = keys().find((b) => b.action === "nocturne.toast")?.keys ?? "";
-    const hint = bound.replace(/cmd-/g, "⌘").replace(/shift-/g, "⇧").replace(/alt-/g, "⌥").replace(/ctrl-/g, "⌃").toUpperCase();
     const mark = p.icon
       ? image(p.icon).size(16).flex_none()
       : svg(`${ART}/pip.svg`).size(8).flex_none().text_color(color)
@@ -100,9 +91,7 @@ export default class Toast {
         .child(div().w(16).flex_none().flex().items_center().justify_center().child(mark))
         .child(v_flex().flex_1().min_w(0).gap(3)
           .child(div().truncate().text_size(12).text_color(urgent ? color : t.foreground).child(ask?.title ?? p.title ?? ""))
-          .when(Boolean(ask?.line ?? p.body), (el) => el.child(div().truncate().text_size(11).text_color(t.muted).child(ask?.line ?? p.body))))
-        // The key that does what a click does, when one is bound.
-        .when(Boolean(hint), (el) => el.child(div().flex_none().text_size(10).text_color(t.dim).child(hint))))
+          .when(Boolean(ask?.line ?? p.body), (el) => el.child(div().truncate().text_size(11).text_color(t.muted).child(ask?.line ?? p.body)))))
       // The horizon line, like the tab strip's.
       .child(div().absolute().left(6).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }

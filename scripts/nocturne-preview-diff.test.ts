@@ -66,7 +66,8 @@ const { parse: parsePatch, ...diffRest } = D;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
 
 const colors = { ...herdr.theme(), ansi1: "#ff5189", ansi2: "#36c692", ansi3: "#e3c78a" };
-const logic = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
+const keyLogic = await load("nocturne-preview/keys.js");
+const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
 const { parse, fileStarts, nextFile } = D;
 
 const GIT = `diff --git a/src/a.rs b/src/a.rs

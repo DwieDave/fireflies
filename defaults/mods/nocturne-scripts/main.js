@@ -21,10 +21,17 @@
 // esc clears the filter, then gives the keyboard back to the list. Esc on the
 // list closes (an ended run's output: back first). props.focus "runs" starts
 // the cursor on the runs.
+//
+// More keys on the list: g / G (home / end) the first / last row, pgup /
+// pgdn a page, tab / shift-tab the next / previous group (the runs, then each
+// manifest's scripts); on a run w watches, x stops (or dismisses), R runs it
+// again; q closes; ? lists every key. An ended run's output scrolls with j/k
+// ↑↓, pgup/pgdn and g/G; o opens the App Management setting when its hint
+// shows. nocturne-scripts.focus gives the deck the keyboard back.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { closeOverlay, exec, hc, home, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
+import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
 import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
@@ -95,6 +102,8 @@ export default class ScriptsDeck extends View {
     if (shown && !shown.live) this.showOutput(shown, cx);
     this.hover = null;
     this.scroll = 0;
+    this.help = false; // ? lists the keys in place of the scripts
+    this.page = 8; // rows in a page (render)
     // The filter is typed through the deck's own key handler ("/" starts it),
     // not a text input: an input's own bindings take up, down, enter and esc
     // before any handler around it sees them.
@@ -104,6 +113,8 @@ export default class ScriptsDeck extends View {
     this.handle = cx.focus_handle();
     this.handle.focus();
     for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.handle.focus());
+    // nocturne-scripts.focus (overlay.focus hands it): the keyboard back here.
+    cx.spawn(async () => { for (;;) { if (String(await nextCommand()).replace(/^nocturne-scripts\./, "") === "focus") this.handle.focus(); } });
     // Esc is the overlay's (it closes it) before any key handler sees it:
     // bound to an action in the deck's key context, it's the deck's.
     if (!ScriptsDeck.bound) {
@@ -251,6 +262,7 @@ export default class ScriptsDeck extends View {
     const all = lines ?? ["reading…"];
     const end = Math.max(0, all.length - back);
     const view = all.slice(Math.max(0, end - shown), end);
+    this.output.shown = shown;
     return v_flex().id("output").h(h).flex_none()
       .on_scroll_wheel((e, cx) => {
         const step = Math.round(-e.delta.y / LINE);
@@ -389,12 +401,11 @@ export default class ScriptsDeck extends View {
    *  that act on it as caps. Never the raw shell line: that's what the
    *  script row's own aside is for. */
   foot(t, cur) {
-    const mac = appWindow()?.platform === "macos";
-    const cmd = mac ? "⌘" : "ctrl";
     const bar = h_flex().relative().h(FOOT).flex_none().px(12).gap(10).items_center().text_size(11)
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
     const left = (...kids) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids);
-    const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps);
+    const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps.filter(Boolean));
+    if (this.help) return bar.child(left(div().text_color(t.dim).child("every key"))).child(keys(this.hint(t, "k-esc", "esc", "back")));
     if (this.output) {
       const r = this.output.r;
       return bar
@@ -402,7 +413,7 @@ export default class ScriptsDeck extends View {
           this.badge(t, r.runner || "run", false),
           div().flex_none().text_color(t[TONE[tone(r)]]).child(r.word),
           div().flex_none().text_color(t.dim).child(`after ${elapsed(r)}`)))
-        .child(keys(this.hint(t, "k-esc", "esc", "back")));
+        .child(keys(this.output.grant ? this.hint(t, "k-grant", "o", "settings") : null, this.hint(t, "k-scroll", "j k", "scroll"), this.hint(t, "k-esc", "esc", "back")));
     }
     if (this.typing) {
       return bar
@@ -415,13 +426,13 @@ export default class ScriptsDeck extends View {
       return bar
         .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child(r.name)))
         .child(keys(this.hint(t, "k-enter", "enter", r.live ? "watch" : "output"),
-          this.hint(t, "k-stop", `${cmd}⌫`, r.live ? "stop" : "dismiss"),
-          this.hint(t, "k-again", `${cmd}R`, "again")));
+          this.hint(t, "k-stop", "x", r.live ? "stop" : "dismiss"),
+          this.hint(t, "k-again", "R", "again"), this.hint(t, "k-help", "?", "keys")));
     }
     return bar
       .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
         .child(cur.row.s.admin ? "asks for your password" : "in the background")))
-      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "& watch"), this.hint(t, "k-filter", "/", "filter")));
+      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "& watch"), this.hint(t, "k-help", "?", "keys")));
   }
 
   /** The runs header's aside: a pip and a count for each state there is. */
@@ -468,22 +479,67 @@ export default class ScriptsDeck extends View {
     this.scroll = 0;
   }
 
+  /** Scrolls an ended run's output `d` lines (+: back, toward its start). */
+  scrollOutput(d) {
+    const o = this.output;
+    const n = o?.lines?.length ?? 0;
+    o.back = Math.max(0, Math.min(Math.max(0, n - (o.shown ?? 1)), o.back + d));
+  }
+
+  /** Where each group starts in `items`: the runs, then each manifest's scripts. */
+  groups(items) {
+    const at = [];
+    items.forEach((it, i) => {
+      const prev = items[i - 1];
+      if (i === 0 || it.kind !== prev.kind || (it.kind === "script" && it.row.head !== prev.row.head)) at.push(i);
+    });
+    return at;
+  }
+
   // Not `key`: that's the folder's cache key (init), and a method by that
   // name was shadowed by it, so no key ever reached here.
   onKey(e, cx, items) {
     const m = e.modifiers ?? {};
     const k = String(e.key ?? "").toLowerCase();
+    const ch = typeof e.key_char === "string" ? e.key_char : "";
     const n = items.length;
     const cur = items[this.cursor];
     const cmd = m.platform || m.control;
     const move = (d) => { if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + d)); };
     const done = () => { cx.stop_propagation(); cx.notify(); };
+    if (this.help) {
+      if (k === "escape" || k === "q" || ch === "?" || k === "enter") { this.help = false; return done(); }
+      return;
+    }
+    if (this.output && !this.typing && !cmd && !m.alt) {
+      const page = Math.max(1, (this.output.shown ?? 10) - 1);
+      if (k === "down" || k === "j") this.scrollOutput(m.shift ? -page : -1);
+      else if (k === "up" || k === "k") this.scrollOutput(m.shift ? page : 1);
+      else if (k === "pagedown") this.scrollOutput(-page);
+      else if (k === "pageup") this.scrollOutput(page);
+      else if (k === "end" || (k === "g" && m.shift)) this.scrollOutput(-1e9);
+      else if (k === "home" || k === "g") this.scrollOutput(1e9);
+      else if (k === "o" && this.output.grant) exec("sh", ["-c", APP_MANAGEMENT.open], { on: this.output.r.on }).catch(() => null);
+      else if (k === "escape" || k === "backspace" || k === "h" || k === "left") this.output = null;
+      else if (k === "q") return cx.stop_propagation(), this.dismissDeck();
+      else if (ch === "?") this.help = true;
+      else if (k === "/") { this.output = null; this.typing = true; }
+      else return;
+      return done();
+    }
     if (k === "down" || k === "up") return move(k === "down" ? 1 : -1), done();
     if (k === "enter") return cx.stop_propagation(), this.enter(Boolean(m.shift), cx);
+    if (k === "pagedown" || k === "pageup") return move((k === "pagedown" ? 1 : -1) * this.page), done();
+    if (k === "tab") {
+      const starts = this.groups(items);
+      const next = m.shift ? [...starts].reverse().find((i) => i < this.cursor) : starts.find((i) => i > this.cursor);
+      if (next != null) this.cursor = next;
+      return done();
+    }
     if (this.typing) {
       if (k === "backspace") { this.filter(cmd || m.alt ? "" : [...this.query].slice(0, -1).join("")); return done(); }
-      const ch = e.key_char;
-      if (!cmd && typeof ch === "string" && ch.length && !/[\u0000-\u001f\u007f]/.test(ch)) { this.filter(this.query + ch); return done(); }
+      if (!cmd && ch.length && !/[\u0000-\u001f\u007f]/.test(ch)) { this.filter(this.query + ch); return done(); }
+      if (k === "escape") return cx.stop_propagation(), this.escape(cx);
       return;
     }
     if (k === "escape") return cx.stop_propagation(), this.escape(cx);
@@ -492,9 +548,32 @@ export default class ScriptsDeck extends View {
     else if (cmd || m.alt) return;
     else if (k === "j") move(1);
     else if (k === "k") move(-1);
-    else if (k === "/" || e.key_char === "/") { this.output = null; this.typing = true; }
+    else if (k === "end" || (k === "g" && m.shift)) move(n);
+    else if (k === "home" || k === "g") move(-n);
+    else if (k === "w" && cur?.kind === "run") this.act("watch", cur.r, cx);
+    else if (k === "x" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
+    else if (k === "r" && m.shift && cur?.kind === "run") this.act("again", cur.r, cx);
+    else if (k === "q") return cx.stop_propagation(), this.dismissDeck();
+    else if (ch === "?") this.help = true;
+    else if (k === "/" || ch === "/") { this.output = null; this.typing = true; }
     else return;
     done();
+  }
+
+  /** ? : every key of the deck, in place of the scripts. */
+  helpView(t, h) {
+    const cmd = appWindow()?.platform === "macos" ? "⌘" : "ctrl-";
+    const rows = [
+      ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
+      ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
+      ["w", "watch the run"], [`x ${cmd}⌫`, "stop the run · dismiss an ended one"], [`R ${cmd}R`, "run it again"],
+      ["output", "j k pgup pgdn g G scroll · o settings · esc back"], ["q esc", "close"], ["?", "these keys"],
+    ];
+    return v_flex().id("deck-help").h(h).flex_none().gap(2).overflow_hidden()
+      .child(this.section(t, "keys", "? esc"))
+      .children(rows.map(([k, w], i) => h_flex().id(`dh-${i}`).h(20).flex_none().px(12).gap(10).items_center().text_size(11)
+        .child(div().w(110).flex_none().text_color(t.accent).child(k))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(w))));
   }
 
   /** The bar of a switch's password window (../nocturne/prompt.js): its name,
@@ -511,7 +590,7 @@ export default class ScriptsDeck extends View {
       .child(div().flex_none().text_color(t.foreground).child(name))
       .child(div().flex_none().text_color(t.dim).child("· password"))
       .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
-      .child(div().flex_none().text_size(11).text_color(t.dim).child("enter activates"))
+      .child(div().flex_none().text_size(11).text_color(t.dim).child("type it, enter · ctrl-c cancels"))
       .child(this.action(t, "pw-cancel", "cancel", t.blocked, cancel));
   }
 
@@ -540,6 +619,7 @@ export default class ScriptsDeck extends View {
     // The runs: up to RUNS_SHOWN rows tall; the rest scroll.
     const runsH = all.length ? SECTION + Math.min(all.length, RUNS_SHOWN) * ROW + 4 : 0;
     const listH = H - 2 - HEAD - runsH - INPUT - FOOT - 4;
+    this.page = Math.max(1, Math.floor(listH / ROW) - 1);
 
     // The scripts: each row (and its group's head) at a fixed y, scrolled to keep the cursor in sight.
     const tops = [];
@@ -587,8 +667,9 @@ export default class ScriptsDeck extends View {
         .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll()
           .children(all.map((r, i) => this.runRow(t, r, i, this.cursor === i))))
         .child(div().h(4).flex_none()))
-      .when(Boolean(this.output), (el) => el.child(this.outputView(t, INPUT + 4 + listH)))
-      .when(!this.output, (el) => el.child(h_flex().relative().h(INPUT).flex_none().mx(12).gap(8).items_center()
+      .when(this.help, (el) => el.child(this.helpView(t, INPUT + 4 + listH)))
+      .when(!this.help && Boolean(this.output), (el) => el.child(this.outputView(t, INPUT + 4 + listH)))
+      .when(!this.help && !this.output, (el) => el.child(h_flex().relative().h(INPUT).flex_none().mx(12).gap(8).items_center()
         .on_mouse_down("left", (_e, cx) => { this.typing = true; cx.notify(); })
         .child(div().flex_none().text_size(12).text_color(this.typing ? t.accent : t.dim).child("/"))
         .child(h_flex().flex_1().min_w(0).h_full().items_center().text_size(12)

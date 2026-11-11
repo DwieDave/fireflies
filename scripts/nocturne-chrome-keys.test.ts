@@ -10,6 +10,7 @@ let spacesNow: any[] = [];
 let panesNow: any[] = [];
 let agentsNow: any[] = [];
 let focusedNow: any = null;
+let propsNow: any = null;
 let commands: [string, any][] = [];
 let overlays: any[] = [];
 let closed: any[] = [];
@@ -36,7 +37,7 @@ const herdr: Record<string, any> = {
   layout: () => LAYOUT, layouts: () => ["nocturne"],
   nextCommand: () => queue.length ? Promise.resolve(queue.shift()!) : new Promise<string>((r) => waiting.push(r)),
   notify: () => {}, openOverlay: (spec: any) => { overlays.push(spec); return `o${overlays.length}`; },
-  panes: () => panesNow, pickFolder: async () => null, presentUpdateNotes: () => {}, props: () => null,
+  panes: () => panesNow, pickFolder: async () => null, presentUpdateNotes: () => {}, props: () => propsNow,
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   setAgentOrder: () => {}, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   settings: () => ({ zoom: 1 }), shared: (k: string) => sharedState[k] ?? null,
@@ -81,7 +82,7 @@ const toast = await import("../defaults/mods/nocturne/toast.js");
 const { headerControls } = await import("../defaults/mods/nocturne/header.js");
 
 beforeEach(() => {
-  sharedState = {}; commands = []; overlays = []; closed = []; queue = [];
+  sharedState = {}; commands = []; overlays = []; closed = []; queue = []; waiting = [];
   spacesNow = [
     { id: "s1", name: "one", active: true, tabs: [{ id: "t1", index: 1, active: true, name: "1" }, { id: "t2", index: 2, active: false, name: "2" }, { id: "t3", index: 3, active: false, name: "3" }] },
     { id: "s2", name: "two", active: false, tabs: [{ id: "t9", index: 1, active: true, name: "1" }] },
@@ -381,20 +382,36 @@ test("the header's controls: name, text size, float, splits, even out, gridify, 
   expect(headerControls(mod, [mod]).map((c: any) => c.id)).toEqual(["split-right", "split-down", "zoom", "close", "more"]);
 });
 
-// ---- toasts
+// ---- toasts (toast.js is the dialogs' work; here: the alias, through the sidebar's command loop)
 
-test("nocturne.toast does what a click on the newest toast does; nocturne.toast-dismiss closes them all", () => {
+test("nocturne.toast-dismiss closes the newest toast, as nocturne.toast-close does", async () => {
   const T = toast.default;
-  const a = new T(); a.init({ title: "one", overlay: "ov1", action: { name: "agent.focus", args: { terminal: "a/1" } } });
-  const b = new T(); b.init({ title: "two", overlay: "ov2", action: { name: "tab.select", args: { id: "t2" } } });
-  expect(toast.toasts().map((x: any) => x.overlay)).toEqual(["ov1", "ov2"]);
-  expect(toast.actOnToast()).toBe(true);
-  expect(commands.at(-1)).toEqual(["tab.select", { id: "t2" }]);
+  new T().init({ title: "one", overlay: "ov1", action: { name: "agent.focus", args: { terminal: "a/1" } } });
+  new T().init({ title: "two", overlay: "ov2", action: { name: "tab.select", args: { id: "t2" } } });
+  sky(false);
+  const next = () => new Promise((r) => setTimeout(r, 0));
+  const send = async (c: string) => { const w = waiting.shift(); if (w) w(c); else queue.push(c); await next(); await next(); };
+  await send("nocturne.toast-dismiss");
   expect(closed.at(-1)).toBe("ov2");
-  b.closing();
-  expect(toast.toasts().map((x: any) => x.overlay)).toEqual(["ov1"]);
-  toast.dismissToasts();
+  await send("nocturne.toast");
+  expect(commands.at(-1)).toEqual(["agent.focus", { terminal: "a/1" }]);
   expect(closed.at(-1)).toBe("ov1");
-  expect(toast.toasts()).toEqual([]);
-  expect(toast.actOnToast()).toBe(false);
+});
+
+// ---- popup menus: q closes like esc, unless an item is bound to q
+
+test("q closes a popup menu, unless one of its items takes q", async () => {
+  const { Popup } = await import("../defaults/mods/nocturne/popup.js");
+  propsNow = { overlay: "menu1" };
+  const p: any = new Popup();
+  p.init(cx);
+  const items = [{ id: "a", name: "a", go: () => {} }];
+  expect(p.key(key("q"), items, items)).toBe(true);
+  expect(closed.at(-1)).toBe("menu1");
+  closed = [];
+  let picked = "";
+  const withQ = [{ id: "quit", name: "quit", key: "q", go: () => { picked = "quit"; } }];
+  expect(p.key(key("q"), withQ, withQ)).toBe(true);
+  expect(picked).toBe("quit");
+  propsNow = null;
 });

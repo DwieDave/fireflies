@@ -10,13 +10,18 @@
 // Keys: up / down (ctrl-p / ctrl-n) pick, enter opens (grep: at the line),
 // tab switches mode keeping the query, ctrl-r regex (grep), ctrl-t fuzzy
 // lines (grep), esc closes.
+//
+// Rendering stays cheap at any repo size (a render has 50 ms): typing waits
+// for a pause before it searches (fff runs off the window's thread), an
+// answer to an older query is dropped, only the rows on screen are drawn (a
+// virtual list), and each line is colored once, when it's first shown.
 
 import { div } from "gpui-kit";
 import { View } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
+import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { props, theme, settings, closeOverlay, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, window as appWindow } from "herdr";
 import { PathBuilder, Background } from "gpui-kit";
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns } from "./logic.js";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE } from "./logic.js";
 
 const ROW = 28, LINE = 24, HEAD = 26;
 const FILES_LIMIT = 80, GREP_LIMIT = 400;
@@ -48,9 +53,11 @@ export default class Picker extends View {
     this.preview = null; // { path, from, lines, line }
     this.size = { width: 760, height: 520 };
     this.colors = syntaxColors(theme());
-    this.scroll = ScrollHandle.new();
+    this.scroll = VirtualListScrollHandle.new();
+    this.gen = 0; // which answer the rows are: a click on an older list's row is dropped
+    this.typed = 0;
     this.input = InputState.new({ placeholder: this.placeholder() });
-    this.input.on("change", (_e, cx) => this.query(cx));
+    this.input.on("change", (_e, cx) => this.typing(cx));
     this.input.on("submit", (e, cx) => this.open(e?.secondary));
     this.input.focus();
     cx.timer.after(200, () => this.input.focus());
@@ -76,6 +83,12 @@ export default class Picker extends View {
    *  (nocturne/picker.js); it's gone now. */
   async close() { setShared("nocturne.picker-open", null); }
 
+  /** A key in the box: search once typing pauses (the newest text then). */
+  typing(cx) {
+    const n = ++this.typed;
+    cx.timer.after(PAUSE[this.mode], (cx) => { if (n === this.typed) this.query(cx); });
+  }
+
   /** Asks fff for the query; answers to older queries are dropped. */
   query(cx) {
     const q = this.input.value();
@@ -89,6 +102,7 @@ export default class Picker extends View {
           const r = await findFiles(this.root, q, { limit: FILES_LIMIT });
           if (seq !== this.seq) return;
           this.rows = r.files.map((f) => ({ head: false, path: f.path, file: f }));
+          this.gen++;
           this.total = r.total;
           this.note = r.scanning ? "indexing the folder… (results grow)" : null;
           if (r.scanning) cx.timer.after(800, (cx) => { if (seq === this.seq) this.query(cx); });
@@ -96,12 +110,14 @@ export default class Picker extends View {
           const r = q.trim() ? await grep(this.root, q, { limit: GREP_LIMIT, mode: this.regex ? "regex" : this.fuzzy ? "fuzzy" : "plain" }) : { matches: [], files: 0 };
           if (seq !== this.seq) return;
           this.rows = grepRows(r.matches);
+          this.gen++;
           this.total = r.matches.length;
           this.files = r.files;
           this.note = r.error ? `regex: ${r.error} (searched as text)` : r.truncated ? "more matches: type more to narrow" : r.scanning ? "indexing the folder…" : null;
         }
         this.ms = Date.now() - started;
         this.at = first(this.rows);
+        if (this.at >= 0) this.scroll.scroll_to_item(this.at);
         this.loadPreview(cx);
       } catch (e) {
         if (seq !== this.seq) return;
@@ -139,9 +155,30 @@ export default class Picker extends View {
       if (this.want !== want) return;
       if (text == null || text.includes("\0")) { this.preview = { path, line, from: 1, lines: [], note: text == null ? "can't show this file" : "binary file" }; cx.notify(); return; }
       const { from, lines } = around(text, line, 40);
-      this.preview = { path, line, from, lines, lang: languageOf(path) };
+      this.preview = { path, line, from, lines, runs: this.previewRuns(path, lines), lang: languageOf(path) };
       cx.notify();
     });
+  }
+
+  /** The preview's lines in their colors, worked out once per file and line. */
+  previewRuns(path, lines) {
+    if (!lines.length) return [];
+    const spans = highlight(lines.join("\n"), path);
+    let at = 0;
+    return lines.map((line) => {
+      const end = at + line.length;
+      const mine = spans.filter(([s, e]) => e > at && s < end).map(([s, e, n]) => [Math.max(s, at) - at, Math.min(e, end) - at, n]);
+      at = end + 1;
+      return colorRuns(line.replace(/\t/g, "  "), mine, this.colors);
+    });
+  }
+
+  /** A row clicked in the list (its key: the answer and the index). */
+  clicked(key) {
+    const [gen, i] = String(key).split(":").map(Number);
+    if (gen !== this.gen || !this.rows[i] || this.rows[i].head) return;
+    this.at = i;
+    this.open();
   }
 
   open(split) {
@@ -196,8 +233,8 @@ export default class Picker extends View {
         .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
       .when(!!this.note, (el) => el.child(div().px(16).py(4).text_color(t.ansi3).child(this.note)))
       .child(h_flex().flex_1().min_h(0)
-        .child(div().id("picker-list").relative().flex_1().min_w(0).h_full().py(4).overflow_y_scrollbar().track_scroll(this.scroll)
-          .children(this.rows.map((r, i) => this.mode === "files" ? this.fileRow(t, r, i) : r.head ? this.headRow(t, r, i) : this.lineRow(t, r, i, code)))
+        .child(div().id("picker-list").relative().flex_1().min_w(0).h_full().py(4)
+          .when(this.rows.length > 0, (el) => el.child(this.list(t, code)).child(Scrollbar.vertical("picker-rows").absolute().inset_0()))
           .when(!this.rows.length && !this.note, (el) => el.child(div().px(16).py(10).text_color(t.dim)
             .child(this.mode === "files" ? (this.input.value() ? "No file matches." : "") : this.input.value().trim() ? "No line matches." : "Type to search the text of every file."))))
         .when(wide && !!this.preview, (el) => el.child(this.previewView(t, code))))
@@ -209,6 +246,20 @@ export default class Picker extends View {
         .child(hint("esc", "close"))
         .child(div().flex_1())
         .child(div().text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms != null ? ` · ${this.ms} ms` : ""}` : "")));
+  }
+
+  /** The rows, only those on screen drawn: files are one height, grep's
+   *  file heads and lines their own. */
+  list(t, code) {
+    const rows = this.rows, gen = this.gen, files = this.mode === "files";
+    const sizes = files ? ROW : rows.map((r) => (r.head ? HEAD : LINE));
+    return v_virtual_list("picker-rows", rows.length, sizes, (i) => `${gen}:${i}`,
+      (range) => rows.slice(range.start, range.end).map((r, k) => {
+        const i = range.start + k;
+        return files ? this.fileRow(t, r, i) : r.head ? this.headRow(t, r, i) : this.lineRow(t, r, i, code);
+      }))
+      .on_item_click((key) => this.clicked(key))
+      .size_full().track_scroll(this.scroll);
   }
 
   /** The picked row: a flat accent tint and the bar, clear on moonfly's
@@ -226,8 +277,7 @@ export default class Picker extends View {
     const g = r.file.git;
     const sel = i === this.at;
     return this.selected(t, h_flex().id(`file-${i}`).relative().h(ROW).flex_none().px(16).gap(10).items_center().text_size(12)
-      .hover((s) => s.bg(t.ansi0 + "55"))
-      .on_click((_e, cx) => { this.at = i; this.open(); }), sel)
+      .hover((s) => s.bg(t.ansi0 + "55")), sel)
       .child(div().relative().w(10).flex_none().text_size(11).text_color(g ? t[GIT[g]] ?? t.dim : t.dim).child(g ?? ""))
       .child(h_flex().relative().flex_none().children(this.pieces(t, marks(name, nameRanges(r.path, r.file.ranges)), t.foreground)))
       .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().children(this.pieces(t, marks(dir, dirRanges(r.path, r.file.ranges)), sel ? t.muted : t.dim)));
@@ -245,28 +295,15 @@ export default class Picker extends View {
   lineRow(t, r, i, code) {
     const m = r.match;
     const sel = i === this.at;
-    // The line, colored by its language, the matches over it.
-    const text = m.text.replace(/\t/g, "  ").slice(0, 300);
-    const spans = highlight(text, r.path);
-    const runs = colorRuns(text, spans, this.colors);
-    const hits = new Set();
-    for (const [s, e] of m.ranges) for (let k = s; k < e; k++) hits.add(k);
-    const out = [];
-    let at = 0;
-    for (const [piece, color] of runs) {
-      // Split each colored run where a match starts or ends.
-      let start = 0;
-      for (let k = 1; k <= piece.length; k++) {
-        if (k === piece.length || hits.has(at + k) !== hits.has(at + start)) {
-          out.push([piece.slice(start, k), color, hits.has(at + start)]);
-          start = k;
-        }
-      }
-      at += piece.length;
+    // The line, colored by its language, the matches over it: worked out the
+    // first time the row shows, kept on the row after.
+    if (!r.runs) {
+      const text = m.text.replace(/\t/g, "  ").slice(0, 300);
+      r.runs = lineRuns(colorRuns(text, highlight(text, r.path), this.colors), m.ranges);
     }
+    const out = r.runs;
     return this.selected(t, h_flex().id(`line-${i}`).relative().h(LINE).flex_none().pl(26).pr(16).gap(10).items_center()
-      .hover((s) => s.bg(t.ansi0 + "55"))
-      .on_click((_e, cx) => { this.at = i; this.open(); }), sel)
+      .hover((s) => s.bg(t.ansi0 + "55")), sel)
       .child(div().relative().w(40).flex_none().text_right().font_family(code).text_size(11.5).text_color(t.dim).child(String(m.line)))
       .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().font_family(code).text_size(12)
         .children(out.map(([piece, color, hit], j) => div().id(`l-${i}-${j}`).flex_none()
@@ -276,18 +313,7 @@ export default class Picker extends View {
   previewView(t, code) {
     const p = this.preview;
     const rel = p.path.startsWith(this.root + "/") ? p.path.slice(this.root.length + 1) : p.path;
-    let lines = [];
-    if (p.lines.length) {
-      const text = p.lines.join("\n");
-      const spans = highlight(text, p.path);
-      let at = 0;
-      lines = p.lines.map((line) => {
-        const end = at + line.length;
-        const mine = spans.filter(([s, e]) => e > at && s < end).map(([s, e, n]) => [Math.max(s, at) - at, Math.min(e, end) - at, n]);
-        at = end + 1;
-        return colorRuns(line.replace(/\t/g, "  "), mine, this.colors);
-      });
-    }
+    const lines = p.runs ?? [];
     return v_flex().id("picker-preview").w(Math.round(this.size.width * 0.5)).flex_none().h_full().border_l(1).border_color(t.ansi0)
       .child(h_flex().h(26).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.ansi0).text_color(t.dim)
         .child(div().text_color(t.foreground).truncate().child(rel))

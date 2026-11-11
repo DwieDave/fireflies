@@ -5,9 +5,12 @@
 // no answers are added quietly. Opened as a dialog
 // (`mod.open machine-add`); the sidebars' Add machine and the welcome
 // open it.
+//
+// Keys: ↓ / ↑ (ctrl-n / ctrl-p) walk the ssh config's hosts from the typed
+// field; enter adds the highlighted host (in the field: what's typed); esc closes.
 
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, InputState, Input, TextView } from "gpui-base";
+import { v_flex, h_flex, InputState, Input, TextView, ScrollHandle } from "gpui-base";
 import { hc, exec, home, readTextFile, theme, props, closeOverlay } from "herdr";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -75,6 +78,8 @@ export default class MachineAdd extends View {
     this.macs = {}; // target -> { name, core } for an added Mac
     this.opened = {};
     this.handle = cx.focus_handle();
+    this.at = -1; // the host row under the keyboard; -1: the typed field
+    this.scroll = ScrollHandle.new();
     cx.spawn(async (cx) => {
       this.hosts = await parseConfig(await readTextFile(`${home()}/.ssh/config`).catch(() => null));
       await this.refresh();
@@ -212,7 +217,19 @@ export default class MachineAdd extends View {
   }
 
   key(e, cx) {
-    if (e.key === "escape") { this.close(); cx.stop_propagation(); }
+    const k = e.key, m = e.modifiers ?? {};
+    const ctrl = m.control && !m.platform && !m.alt;
+    const n = (this.hosts ?? []).length;
+    if (k === "escape") this.close();
+    else if ((k === "down" || (ctrl && k === "n")) && n) this.at = Math.min(n - 1, this.at + 1);
+    else if ((k === "up" || (ctrl && k === "p")) && n) this.at = Math.max(-1, this.at - 1);
+    else if (k === "enter" && this.at >= 0 && this.hosts?.[this.at]) {
+      const target = this.hosts[this.at].alias;
+      if (!this.isAdded(target)) this.add(target, cx);
+    } else return;
+    if (this.at >= 0) this.scroll.scroll_to_item(this.at);
+    cx.stop_propagation();
+    cx.notify();
   }
 
   message(t, target) {
@@ -227,7 +244,7 @@ export default class MachineAdd extends View {
         .child(this.copiedCommand === command ? "Copied" : "Copy"))));
   }
 
-  row(t, target, label, sub) {
+  row(t, target, label, sub, picked = false) {
     const st = this.state[target];
     const done = this.isAdded(target);
     const right = done
@@ -261,6 +278,7 @@ export default class MachineAdd extends View {
           .gap(10)
           .items_center()
           .rounded(8)
+          .when(picked, (el) => el.bg(t.hover).border_1().border_color(t.accent))
           .hover((s) => s.bg(t.hover))
           .when(idle, (el) => el.cursor_pointer().on_click((_e, cx) => this.add(target, cx)))
           .child(svg(I("server")).size(15).text_color(t.muted))
@@ -293,7 +311,7 @@ export default class MachineAdd extends View {
           .text_color(t.muted)
           .child("A VPS, a Mac mini, a box at home: Herdr reaches it over ssh, and agents there keep running while your laptop sleeps."),
       )
-      .child(div().pt(16).pb(6).text_size(11.5).font_medium().text_color(t.dim).child(hosts.length ? "From your ssh config" : "Your ssh config lists no hosts"))
+      .child(div().pt(16).pb(6).text_size(11.5).font_medium().text_color(t.dim).child(hosts.length ? "From your ssh config · ↑↓ pick, ↵ add" : "Your ssh config lists no hosts"))
       .child(
         v_flex()
           .id("ma-hosts")
@@ -301,10 +319,11 @@ export default class MachineAdd extends View {
           .min_h(0)
           .flex_shrink(1)
           .overflow_y_scroll()
+          .track_scroll(this.scroll)
           .children(
             this.hosts === null
               ? [div().px(10).py(8).text_size(12.5).text_color(t.dim).child("Reading ~/.ssh/config…")]
-              : hosts.map((h) => this.row(t, h.alias, h.alias, [h.user, h.hostname].filter(Boolean).join("@") || (h.aliases.length ? `also ${h.aliases.join(", ")}` : ""))),
+              : hosts.map((h, i) => this.row(t, h.alias, h.alias, [h.user, h.hostname].filter(Boolean).join("@") || (h.aliases.length ? `also ${h.aliases.join(", ")}` : ""), i === this.at)),
           ),
       )
       .child(div().pt(14).pb(6).text_size(11.5).font_medium().text_color(t.dim).child("Or type how ssh reaches it"))
@@ -320,7 +339,7 @@ export default class MachineAdd extends View {
               .items_center()
               .rounded(8)
               .border_1()
-              .border_color(this.inputFocused ? t.accent : t.input)
+              .border_color(this.inputFocused && this.at < 0 ? t.accent : t.input)
               .bg(t.background)
               .text_size(13)
               .text_color(t.foreground),

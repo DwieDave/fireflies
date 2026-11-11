@@ -14,7 +14,7 @@ function setup(result: any) {
   let task: Promise<void>;
   const values = {
     View: class {}, div() {}, svg() {}, TextView: {}, v_flex() {}, h_flex() {},
-    InputState: { new: () => ({ on() {}, focus() {}, set_value() {} }) }, Input: {},
+    InputState: { new: () => ({ on() {}, focus() {}, set_value() {} }) }, Input: {}, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
     home: () => "/home/test", readTextFile: async () => null,
     theme() {}, props: () => ({}), closeOverlay() {},
     openOverlay: (...args: unknown[]) => overlays.push(args),

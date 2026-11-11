@@ -62,7 +62,8 @@ const diffLogic = await load("nocturne-preview/diff.js");
 const { parse: parseTable, ...tableRest } = tableLogic;
 const { parse: parsePatch, ...diffRest } = diffLogic;
 /** Everything main.js imports, as its imports name it. */
-const logic = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
+const keyLogic = await load("nocturne-preview/keys.js");
+const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
 const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
 const { extension, siblings, stepIn, fileSize } = kinds;
 
@@ -391,4 +392,44 @@ test("the viewer says what's wrong instead of a picture", async () => {
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
   expect(text).toEqual(expect.arrayContaining(["Can't preview this picture", cantShow("heic", "linux"), "open in its app  o"]));
   expect(walk(view.render()).some((e) => e.kind === "image")).toBe(false);
+});
+
+test("the bar by keys: tab rings its controls in order, enter presses one, ? lists the keys, esc backs out", async () => {
+  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const view: any = Object.create(PreviewView.prototype);
+  Object.assign(view, {
+    path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,
+    names: ["a.png", "b.png"], info: { format: "png", width: 1600, height: 1200, bytes: 2048 },
+    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-preview/1-2048.png", view: null, gen: 1,
+  });
+  view.draw = () => {};
+  const opened: string[] = [];
+  view.open = (p: string) => opened.push(p);
+  const cx = { notify() {}, stop_propagation() {}, write_to_clipboard() {}, timer: { after() {} } };
+  view.render();
+  expect(view.chips.map((c: any) => c.id)).toEqual(["img-prev", "img-next", "img-fit", "img-actual", "img-turn", "img-bg", "img-files", "img-open", "img-copy", "img-keys"]);
+  view.key({ key: "tab", modifiers: {} }, cx);
+  expect(view.ring).toBe("img-prev");
+  view.key({ key: "tab", modifiers: { shift: true } }, cx);
+  view.key({ key: "tab", modifiers: { shift: true } }, cx);
+  expect(view.ring).toBe("img-copy");
+  view.key({ key: "tab", modifiers: {} }, cx);
+  view.key({ key: "tab", modifiers: {} }, cx);
+  expect(view.ring).toBe("img-prev");
+  view.key({ key: "enter", modifiers: {} }, cx);
+  expect(opened).toEqual(["/shots/a.png"]);
+  // The ring is drawn on the chip while the preview has the keyboard.
+  const ringed = walk(view.render()).find((e) => e.calls.some(([k, a]: any) => k === "id" && a[0] === "img-prev"));
+  expect(walk(ringed).some((e) => e.calls.some(([k, a]: any) => k === "border_color"))).toBe(true);
+  view.key({ key: "/", key_char: "?", modifiers: { shift: true } }, cx);
+  expect(view.keysShown).toBe(true);
+  const strip = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
+  expect(strip).toEqual(expect.arrayContaining(["+ -", "zoom", "h j k l", "pan", "r R", "turn", "n p", "tab", "keys"]));
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect([view.ring, view.keysShown]).toEqual([null, true]);
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect(view.keysShown).toBe(false);
+  // Shifted punctuation by the typed character: "}" is a patch's next file, "+" zooms.
+  view.key({ key: "=", key_char: "+", modifiers: { shift: true } }, cx);
+  expect(view.view.fit).toBe(false);
 });

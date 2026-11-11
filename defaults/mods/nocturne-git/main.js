@@ -607,7 +607,7 @@ export default class GitView extends View {
 
   goBack() {
     this.saveState();
-    openOverlay({ mod: this.backTo.mod, kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85, props: this.backTo.props ?? {} });
+    openOverlay({ mod: this.backTo.mod, kind: "window", key: "nocturne-github", frame: "none", scrim: true, width: 0.85, height: 0.85, props: this.backTo.props ?? {} });
   }
 
   focusMain() {

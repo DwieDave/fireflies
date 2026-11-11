@@ -32,7 +32,7 @@ import { CURSOR, STRIP_KEYS, STRIP_HELP, keyVerb, move, blockOf, hasMod } from "
 import { gitState } from "./lazygit.js";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
-import { filesPane, toggleFiles } from "./files.js";
+import { filesPane, toggleFiles, focusFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
 import { runJobs, pendingJobs } from "./jobs.js";
 import { watchPrompts } from "./prompt.js";
@@ -138,7 +138,8 @@ export default class Tabs {
     const gitMenu = () => openMenu({ tab: "git" }, { centered: true });
     const tools = [
       { id: "tab-scripts-run", go: () => toggleDeck({ centered: true }) },
-      { id: "tab-files", go: () => toggleFiles() },
+      // As cmd-e: the panel with the keyboard in it (opened if need be); in it, closed.
+      { id: "tab-files", go: () => focusFiles() },
       { id: "tab-git", go: () => toggleGit(), menu: gitMenu },
       { id: "tab-git-more", go: gitMenu, menu: gitMenu },
       { id: "tab-new", go: () => openNewMenu({ centered: true }) },

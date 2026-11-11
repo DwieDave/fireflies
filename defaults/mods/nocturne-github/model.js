@@ -296,3 +296,25 @@ export function readAgo(at, now = Date.now()) {
   const a = ago(new Date(at).toISOString(), now);
   return a === "now" ? "just now" : `${a} ago`;
 }
+
+/** The web links in some Markdown texts, for `L` (the keyboard's way to a
+ *  link in a PR or a card): [label](url), <url> and bare http(s) URLs, each
+ *  url once, in reading order. Images are left out. */
+export function linksIn(texts) {
+  const out = [], seen = new Set();
+  const add = (url, label) => {
+    url = url.replace(/[.,;:!?)\]]+$/, "");
+    if (!/^https?:\/\//i.test(url) || seen.has(url)) return;
+    seen.add(url);
+    out.push({ url, label: label?.trim() || url });
+  };
+  for (const text of texts) {
+    const s = String(text ?? "").replace(/```[\s\S]*?```/g, "");
+    const re = /(!?)\[([^\]]*)\]\((\S+?)(?:\s+"[^"]*")?\)|<(https?:\/\/[^>\s]+)>|(https?:\/\/[^\s<>()\[\]"'`]+)/gi;
+    for (const m of s.matchAll(re)) {
+      if (m[3]) { if (!m[1]) add(m[3], m[2]); }
+      else add(m[4] ?? m[5]);
+    }
+  }
+  return out;
+}
