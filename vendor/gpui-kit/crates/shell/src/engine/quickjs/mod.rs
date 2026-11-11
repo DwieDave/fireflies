@@ -1380,6 +1380,8 @@ pub struct ShellRuntime {
     /// `Persistent` handle must be released while the context still exists.
     /// QuickJS aborts the process if a value outlives its runtime.
     callbacks: RefCell<CallbackArena<Persistent<Function<'static>>>>,
+    // HERDR: code editors' key handlers (editor_keys.rs), released with the runtime.
+    editor_keys: RefCell<Vec<(gpui::WeakEntity<gpui_base::input::EditorState>, Persistent<Function<'static>>, InputCallbackOwner)>>,
     components: FrozenComponentRegistry,
     component_state_proof: String,
     interactive_inline_layout: Cell<bool>,
@@ -1501,6 +1503,7 @@ impl Drop for ShellRuntime {
         // released after its runtime aborts the process.
         scheduler::shutdown(self);
         self.callbacks.borrow_mut().clear();
+        self.editor_keys.borrow_mut().clear();
         // Each holds a `Persistent` view class, which must be released while
         // the context is still alive — and the panel registry keeps a second
         // reference to every one of them in an `App` global that outlives this,
@@ -1738,6 +1741,7 @@ impl ShellRuntime {
 
         let runtime = Rc::new(Self {
             callbacks: RefCell::new(CallbackArena::default()),
+            editor_keys: RefCell::new(Vec::new()),
             components,
             component_state_proof,
             interactive_inline_layout: Cell::new(false),
