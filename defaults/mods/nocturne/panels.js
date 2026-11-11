@@ -3,8 +3,9 @@
 //
 //   dest "pane"  beside the focused pane (across from its split, "auto")
 //   dest "tab"   a new tab of its own in the shown space
-//   fixed        a panel that always lands in one place: lazygit, the diff
-//                and GitHub float over the tab, files runs down the tab's right edge
+//   fixed        a panel that always lands in one place: Git (nocturne-git:
+//                lazygit's views and the review that was the diff) and GitHub
+//                float over the tab, files runs down the tab's right edge
 //
 // A panel that is open in the shown tab and has no other place to go closes
 // instead (the menus say "Close …").
@@ -13,7 +14,7 @@ import { spaces, panes, focused, run } from "herdr";
 import { ART } from "./kit.js";
 import { filesPane, toggleFiles } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
-import { lazygitOpen, toggleLazygit, toggleDiff, lazygitArgv } from "./lazygit.js";
+import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen, toggleGithub } from "./github.js";
 
 /** Where things would open now: the shown space and tab, the focused pane and its folder. */
@@ -87,10 +88,10 @@ export function panels() {
       pane: toggleUsage, tab: () => modTab("nocturne-usage", {}, "usage") },
     { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches", open: () => modPane("nocturne"),
       pane: () => toggleBeside("nocturne", { role: "worktrees" }), tab: () => modTab("nocturne", { role: "worktrees" }, "worktrees") },
-    { id: "lazygit", name: "Lazygit", icon: "git-compare", key: "l", words: "git stage commit", fixed: "float", open: () => lazygitOpen(0),
-      pane: () => toggleLazygit(), tab: () => terminalTab(lazygitArgv(h.on), "lazygit") },
-    { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review", fixed: "float", open: () => lazygitOpen(1),
-      pane: () => toggleDiff(), tab: () => modTab("nocturne-diff", { folder: h.folder, on: h.on }, "diff") },
+    { id: "git", name: "Git", icon: "git-compare", key: "l", words: "git lazygit stage commit branches log graph rebase stash", fixed: "float", open: () => Boolean(gitOpen()),
+      pane: () => toggleGit(), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on }, "git") },
+    { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review reviewed", fixed: "float", open: () => Boolean(gitOpen()),
+      pane: () => toggleGit({ review: true }), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on, review: true }, "diff") },
     { id: "github", name: "GitHub", icon: `${ART}/github.svg`, key: "h", words: "pull requests prs actions ci runs checks workflows", fixed: "float", open: () => Boolean(githubOpen()),
       pane: () => toggleGithub(), tab: () => modTab("nocturne-github", { folder: h.folder, on: h.on }, "github") },
   ];

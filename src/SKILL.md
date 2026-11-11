@@ -76,7 +76,7 @@ herdr-app do space.new --name "remote api" --machine vps --folder /srv/api
 ```
 
 The folder is on that machine; tabs and splits in the space stay there.
-A space made with `--folder` is attached to it: its GitHub and lazygit panes use
+A space made with `--folder` is attached to it: its GitHub and git windows use
 that repo. `herdr-app do space.folder --id <space> --folder <path>` attaches a
 space to another folder later.
 New-space keys and clicks follow the focused space's machine. Script commands

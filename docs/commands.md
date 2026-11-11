@@ -59,7 +59,7 @@ Move a space to a position (1 = first).
 
 ## `space.folder`
 
-Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and lazygit panes use.
+Attach a space (default: the selected one) to a folder: where its terminals start when none is focused, and the repo its GitHub and git windows use.
 
 | Argument | Required |
 |---|---|

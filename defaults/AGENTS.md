@@ -112,6 +112,20 @@ hidden columns, so limits and folds are Herdr's, per project, in shared state
 `nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
 `project` (`gh auth refresh -s project`); the tab says which is missing.
 
+Nocturne's git window (`mods/nocturne-git`, cmd-g, `nocturne.git`; the old
+`nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
+the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
+Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
+graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
+Its keys are lazygit's defaults (`?` lists them in the window; `+` / `_`
+widen the focused panel: half gives Commits a wide graph column, then full).
+Review (`nocturne.diff`, the git button's ▾ > Diff) is what nocturne-diff was:
+uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
+(space, `a`) and hidden tests / config / assets / docs (ctrl-b). Open it in a
+pane or tab yourself with `pane.split` / `tab.new {mod: "nocturne-git", props:
+{folder, on?, review?, scope?: "work" | "branch", pr?, repo?}}`. A
+`nocturne-diff` pane or window (old saved tabs) hands over to it.
+
 ## The model: spaces, tabs, terminals
 
 Every layout shows the same world; a layout may show less, never a
@@ -138,7 +152,7 @@ the highlighted line shows where it will land.
   space's repo from its first terminal. A space made with a `folder`, or
   given one later (`space.folder`; right-click a space > Change folder…),
   is attached to it (`spaces()[i].attached`): the default mods and
-  Nocturne's GitHub, lazygit, git button and worktrees take its repo from
+  Nocturne's GitHub, git window, git button and worktrees take its repo from
   that folder instead (a space attached to home still goes by its terminals).
   In the sidebars, spaces stay top level; only a space on a linked git
   worktree is indented under its repo's main-checkout space. Right-click a

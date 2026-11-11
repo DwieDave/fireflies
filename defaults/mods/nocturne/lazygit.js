@@ -7,8 +7,8 @@
 // machine runs plain `nocturne-lazygit` from its PATH (else lazygit).
 // Docked, it's a terminal pane whose header (header.js) gives it the
 // dithered Nocturne chrome.
-// The tab strip's git button and "+ new" > Lazygit (l) toggle it; the same button
-// opens the same float on its diff view (nocturne-diff).
+// Nothing opens it any more (the git window, git.js, took its place); a lazygit
+// pane or float started by hand still gets its header and float bar.
 
 import { spaces, panes, terminals, run, exec, appHome } from "herdr";
 import { spaceFolder } from "./kit.js";

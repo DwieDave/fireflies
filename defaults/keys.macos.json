@@ -79,7 +79,7 @@
     "cmd-s": "nocturne.fold",
     "cmd-n": "nocturne.new",
     "cmd-d": "pane.split:auto",
-    "cmd-g": "nocturne.lazygit",
+    "cmd-g": "nocturne.git",
     "cmd-shift-g": "nocturne.github",
     "cmd-shift-r": "nocturne.scripts",
     "cmd-shift-a": "nocturne-notifications.open",
