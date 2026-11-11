@@ -70,6 +70,11 @@ fn separator_line(row: bool, width: f32, color: Hsla, top: f32) -> Div {
         .when(!row, |d| d.h(px(width)).w_full())
 }
 
+/// A window opened with `scrim: true` sits on the dialog dim (dialogs always do; popups and toasts never).
+fn window_scrim(kind: OverlayKind, spec: &Value) -> bool {
+    kind == OverlayKind::Window && spec.get("scrim").and_then(Value::as_bool) == Some(true)
+}
+
 /// The dim behind a dialog: the layout's `scrim`, else black at 35%. A
 /// dithered one counts device pixels (the checkerboard's cells are those).
 fn scrim(s: Option<&crate::layout::Scrim>, scale: f32) -> Background {
@@ -311,6 +316,9 @@ struct Copy {
     missing: bool,
 }
 
+/// Counts overlays as they open (Overlay::opened).
+static OVERLAYS_OPENED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone, Copy, PartialEq)]
 enum OverlayKind {
     Dialog,
@@ -396,8 +404,12 @@ struct Overlay {
     modal: bool,
     /// `frame: "none"`: no border, corners, shadow or background; the mod draws its own.
     bare: bool,
+    /// A window with `scrim: true`: the layout's dialog dim behind it; a click on it closes it.
+    scrim: bool,
     /// A window: where its top left is (None: centered) and its name (`key`).
     place: Option<Point<Pixels>>,
+    /// When it opened, for `overlay.focus`'s order (pressing reorders `overlays`).
+    opened: u64,
     key: Option<String>,
     /// A window people can resize by its edges (`resizable`).
     resize: Option<movable::Resize>,
@@ -3743,6 +3755,10 @@ impl AppWindow {
                 self.focused_pane = None;
                 self.agent = self.model.address_of(&p);
                 self.swapped.remove(&p);
+                // A focusable mod pane takes the keyboard, as `pane.go` gives it.
+                if self.focusable(&p) {
+                    return self.focus_block(&p, window, cx);
+                }
             }
             "pane.go" => {
                 let dir = Self::arg(a, "direction").unwrap_or_default();
@@ -4093,6 +4109,20 @@ impl AppWindow {
                     return self.fail(e);
                 }
                 cx.notify();
+            }
+            "overlay.focus" => {
+                let dir = Self::arg(a, "dir").unwrap_or("next").to_owned();
+                if let Err(e) = self.focus_window_cmd(Self::owned(a, "id"), &dir, window, cx) {
+                    return self.fail(e);
+                }
+                return;
+            }
+            "overlay.move" => {
+                let n = |k: &str| a.get(k).and_then(|v| v.as_f64().or_else(|| v.as_str()?.trim().parse().ok())).unwrap_or(0.0) as f32;
+                if let Err(e) = self.move_window_cmd(Self::owned(a, "id"), [n("dx"), n("dy"), n("dw"), n("dh")], window.viewport_size(), window, cx) {
+                    return self.fail(e);
+                }
+                return;
             }
             "overlay.close" => {
                 let id = Self::owned(a, "id").or_else(|| self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.id.clone()));
@@ -4478,7 +4508,9 @@ impl AppWindow {
             fit,
             modal: spec.get("modal").and_then(Value::as_bool).unwrap_or(false),
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
+            scrim: window_scrim(kind, &spec),
             place,
+            opened: OVERLAYS_OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             key: key.clone(),
             resize,
             sizes,
@@ -5375,7 +5407,24 @@ impl AppWindow {
                 .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }))
                 .child(content);
             match o.kind {
-                OverlayKind::Window => out.push(self.render_window(o, body, viewport, cx)),
+                OverlayKind::Window => {
+                    // A window over a dim of its own: like a dialog's, a click on it closes the window.
+                    if o.scrim {
+                        let id = id.clone();
+                        out.push(
+                            div()
+                                .id(SharedString::from(format!("scrim-{id}")))
+                                .absolute()
+                                .inset_0()
+                                .bg(scrim(self.chrome.scrim.as_ref(), scale))
+                                .occlude()
+                                .child(crate::native_view::dim_probe())
+                                .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
+                                .into_any_element(),
+                        );
+                    }
+                    out.push(self.render_window(o, body, viewport, cx));
+                }
                 OverlayKind::Dialog => out.push(
                     div()
                         .absolute()
@@ -6304,6 +6353,16 @@ mod tests {
         assert_eq!(super::new_space_machine(&json!({}), true, &model), None);
         model.active = Some("remote".into());
         assert_eq!(super::new_space_machine(&json!({}), true, &model).as_deref(), Some("second"));
+    }
+
+    #[test]
+    fn only_windows_asking_for_it_get_a_scrim() {
+        use super::{OverlayKind, window_scrim};
+        use serde_json::json;
+        assert!(window_scrim(OverlayKind::Window, &json!({ "scrim": true })));
+        assert!(!window_scrim(OverlayKind::Window, &json!({})));
+        assert!(!window_scrim(OverlayKind::Window, &json!({ "scrim": "yes" })));
+        assert!(!window_scrim(OverlayKind::Popup, &json!({ "scrim": true })));
     }
 
     #[gpui::test]
