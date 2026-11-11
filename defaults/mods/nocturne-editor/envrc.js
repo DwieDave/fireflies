@@ -5,31 +5,64 @@
 // allow list decides: an .envrc that isn't allowed is never loaded, and never
 // allowed from here. Without an .envrc, the app's PATH, as before.
 //
-//   envrcDir(exec, folder)          the folder holding the nearest .envrc, or null
+//   probe(exec, folder)             the nearest .envrc's folder, direnv, its allow state, what it watches
 //   projectEnv(exec, folder, ...)   what that means for servers (kinds below)
 //   lookup(exec, program, env)      the program's path in that environment, or null
 //   wrap(argv, path, env)           argv that runs it there (`env` sets the variables)
 //
 // `exec` is herdr's (passed in, so tests fake it). A first load of a flake's
-// shell can take minutes: it runs once per folder, while the editor stays
-// usable, and every editor of the workspace shares it after.
+// shell can take minutes; it runs once per folder while the editor stays
+// usable, and is kept on disk (`cache`) keyed by the files direnv watches, so
+// the next app start has it at once without running nix: it's refreshed
+// behind the scenes then, and replaced when it changed.
 
-// Up from the folder: the first .envrc, stopping at the repository's top (.git).
-export const ENVRC_SCRIPT = 'd=$1; while :; do if [ -f "$d/.envrc" ]; then printf %s "$d"; exit 0; fi; '
-  + 'if [ -e "$d/.git" ] || [ "$d" = / ]; then exit 0; fi; d=$(dirname "$d"); done';
+// What decides a direnv environment besides the .envrc: a flake, a classic
+// nix shell, devenv. A change to any of them is a new environment.
+export const WATCHED = [".envrc", ".env", "flake.nix", "flake.lock", "shell.nix", "default.nix", "devenv.nix", "devenv.lock", "devenv.yaml"];
+// Up from the folder: the first .envrc, stopping at the repository's top
+// (.git). Then, there: whether direnv is installed, a checksum of each file
+// that decides what the environment is, and direnv's status. One process:
+// each exec costs a few ms, and this runs every time an editor opens.
+export const PROBE_SCRIPT = 'd=$1; while :; do if [ -f "$d/.envrc" ]; then break; fi; '
+  + 'if [ -e "$d/.git" ] || [ "$d" = / ]; then exit 0; fi; d=$(dirname "$d"); done; '
+  + 'printf "dir\\t%s\\n" "$d"; command -v direnv >/dev/null 2>&1 || { printf "direnv\\tnone\\n"; exit 0; }; cd "$d" || exit 0; '
+  + `for f in ${WATCHED.join(" ")}; do [ -f "$f" ] && printf "sum\\t%s %s\\n" "$(cksum < "$f" | tr -s ' ' ' ')" "$f"; done; `
+  + 'printf "status\\t"; direnv status --json 2>/dev/null | tr -d "\\n"; printf "\\n"';
 // How long a first load may take (ms): a flake shell's first build.
 export const LOAD_TIMEOUT = 600000;
 
-// Loaded environments by folder: a promise, so editors opened meanwhile wait on the same load.
+// Loaded environments by folder: { key, env (a promise) }, so editors opened
+// meanwhile wait on the same load, and a changed key loads again.
 const loads = new Map();
 
-/** Forgets every loaded environment (tests; an .envrc edited). */
+/** Forgets every loaded environment (tests). */
 export function forgetEnvs() { loads.clear(); }
+
+/** The probe's findings: { dir } (null: no .envrc), { direnv } (false: not
+ *  installed), { allowed } (direnv: 0 allowed, 1 not yet, 2 denied, null:
+ *  unknown), { key } (the watched files' checksums). */
+export async function probe(exec, folder) {
+  const r = await exec("sh", ["-c", PROBE_SCRIPT, "probe", folder]).catch(() => null);
+  const out = { dir: null, direnv: true, allowed: null, key: "" };
+  const sums = [];
+  for (const line of String(r?.stdout ?? "").split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab < 0) continue;
+    const [k, v] = [line.slice(0, tab), line.slice(tab + 1)];
+    if (k === "dir") out.dir = v;
+    else if (k === "direnv") out.direnv = v !== "none";
+    else if (k === "sum") sums.push(v);
+    else if (k === "status") {
+      try { out.allowed = JSON.parse(v)?.state?.foundRC?.allowed ?? null; } catch { /* old direnv: unknown */ }
+    }
+  }
+  out.key = sums.join("\n");
+  return out;
+}
 
 /** The folder holding the nearest .envrc above `folder` (up to the repository), or null. */
 export async function envrcDir(exec, folder) {
-  const r = await exec("sh", ["-c", ENVRC_SCRIPT, "envrc", folder]).catch(() => null);
-  return r?.code === 0 && r.stdout ? r.stdout : null;
+  return (await probe(exec, folder)).dir;
 }
 
 /**
@@ -37,34 +70,64 @@ export async function envrcDir(exec, folder) {
  *   { kind: "none" }                      no .envrc: the app's PATH
  *   { kind: "no-direnv", dir }            an .envrc, and no direnv to load it
  *   { kind: "blocked", dir, denied }      direnv hasn't been allowed there (or was denied)
- *   { kind: "ready", dir, env }           loaded: env is direnv's change ({ NAME: value | null })
+ *   { kind: "ready", dir, env, cached }   loaded: env is direnv's change ({ NAME: value | null });
+ *                                         cached: from the disk, a refresh runs behind it
  *   { kind: "failed", dir, note }         direnv tried and failed (its last words)
- * `loading(dir)` is called when a load starts that isn't already done.
+ * Options:
+ *   loading(dir)     a load starts that the editor will wait on
+ *   cache            { read(dir) -> {key, env} | null, write(dir, {key, env}) }: the disk's
+ *   fresh            skip what's kept (a cached shell whose server is gone: garbage-collected)
+ *   refreshed(env)   the refresh behind a cached environment found it changed
  */
-export async function projectEnv(exec, folder, { loading } = {}) {
-  const dir = await envrcDir(exec, folder);
-  if (!dir) return { kind: "none" };
-  const has = await exec("sh", ["-c", 'command -v direnv >/dev/null 2>&1']).catch(() => null);
-  if (has?.code !== 0) return { kind: "no-direnv", dir };
-  // Asked every time (cheap): an allow or a revoke takes effect at the next start.
-  const st = await exec("direnv", ["status", "--json"], { cwd: dir }).catch(() => null);
-  let allowed = null;
-  try { allowed = JSON.parse(st?.stdout ?? "")?.state?.foundRC?.allowed ?? null; } catch { /* old direnv: below */ }
-  // direnv: 0 allowed, 1 not allowed yet, 2 denied.
-  if (allowed !== 0) return { kind: "blocked", dir, denied: allowed === 2 };
-  if (!loads.has(dir)) {
-    loading?.(dir);
-    loads.set(dir, exec("direnv", ["export", "json"], { cwd: dir, timeout: LOAD_TIMEOUT }).then((r) => {
-      if (r.code !== 0) throw new Error(lastWords(r.stderr) || `direnv exited with ${r.code}`);
-      return r.stdout.trim() ? JSON.parse(r.stdout) : {};
-    }));
+export async function projectEnv(exec, folder, { loading, cache = null, fresh = false, refreshed } = {}) {
+  const p = await probe(exec, folder);
+  if (!p.dir) return { kind: "none" };
+  const dir = p.dir;
+  if (!p.direnv) return { kind: "no-direnv", dir };
+  // Asked every time (it's in the probe): an allow or a revoke takes effect at the next start.
+  if (p.allowed !== 0) return { kind: "blocked", dir, denied: p.allowed === 2 };
+  const key = p.key;
+  let cached = false;
+  const known = loads.get(dir);
+  if (fresh || !known || known.key !== key) {
+    const kept = !fresh && cache ? await Promise.resolve(cache.read(dir)).catch(() => null) : null;
+    if (kept && kept.key === key && kept.env) {
+      cached = true;
+      loads.set(dir, { key, env: Promise.resolve(kept.env) });
+      // Behind the scenes: what direnv says now (nix-direnv answers from its own cache in ~0.1 s).
+      exportEnv(exec, dir).then((env) => {
+        if (same(env, kept.env)) return;
+        loads.set(dir, { key, env: Promise.resolve(env) });
+        cache?.write(dir, { key, env });
+        refreshed?.(env);
+      }, () => { /* the kept one stays; a real failure shows at the next uncached load */ });
+    } else {
+      loading?.(dir);
+      const env = exportEnv(exec, dir);
+      loads.set(dir, { key, env });
+      env.then((e) => cache?.write(dir, { key, env: e }), () => {});
+    }
   }
   try {
-    return { kind: "ready", dir, env: await loads.get(dir) };
+    return { kind: "ready", dir, env: await loads.get(dir).env, cached };
   } catch (e) {
-    loads.delete(dir); // next time, again
+    if (loads.get(dir)?.key === key) loads.delete(dir); // next time, again
     return { kind: "failed", dir, note: String(e?.message ?? e) };
   }
+}
+
+/** direnv's environment for `dir`, without its own bookkeeping (DIRENV_*):
+ *  those change with every load and would make each start look like a new server. */
+async function exportEnv(exec, dir) {
+  const r = await exec("direnv", ["export", "json"], { cwd: dir, timeout: LOAD_TIMEOUT });
+  if (r.code !== 0) throw new Error(lastWords(r.stderr) || `direnv exited with ${r.code}`);
+  const all = r.stdout.trim() ? JSON.parse(r.stdout) : {};
+  return Object.fromEntries(Object.entries(all).filter(([k]) => !k.startsWith("DIRENV_")));
+}
+
+function same(a, b) {
+  const ka = Object.keys(a ?? {}), kb = Object.keys(b ?? {});
+  return ka.length === kb.length && ka.every((k) => a[k] === b?.[k]);
 }
 
 /** The last line direnv wrote that says something (its errors end its output). */
@@ -86,4 +149,11 @@ export function wrap(argv, path, env = null) {
   const vars = Object.entries(env ?? {});
   if (!vars.length) return [path, ...argv.slice(1)];
   return ["env", ...vars.flatMap(([k, v]) => (v == null ? ["-u", k] : [])), ...vars.filter(([, v]) => v != null).map(([k, v]) => `${k}=${v}`), path, ...argv.slice(1)];
+}
+
+/** A file name for a folder's kept environment (FNV-1a of the path). */
+export function cacheName(dir) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < dir.length; i++) { h ^= dir.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+  return `env-${h.toString(16).padStart(8, "0")}.json`;
 }

@@ -1086,13 +1086,15 @@ fn module(inst: Instance, copy: u64) -> HostModule {
                 if argv.is_empty() {
                     return Err(HostError::new("lspStart needs { argv, root }"));
                 }
-                let rx = crate::lsp::start(copy, argv, root, o.get("settings").cloned().unwrap_or(Value::Null));
+                let idle = o.get("idle").and_then(Value::as_f64).filter(|n| *n >= 0.0).map(std::time::Duration::from_secs_f64);
+                let rx = crate::lsp::start(copy, argv, root, o.get("settings").cloned().unwrap_or(Value::Null), idle);
                 Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
             }
         })
-        .async_function("lspRequest", |a| {
+        .async_function("lspRequest", move |a| {
             let id = lsp_id(a.value(0)?)?;
-            let rx = crate::lsp::request(id, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+            let key = opt_str(a.get(3), "key");
+            let rx = crate::lsp::request(copy, id, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null), key).map_err(HostError::new)?;
             Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
         })
         .function("lspNotify", move |a| {

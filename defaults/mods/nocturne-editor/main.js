@@ -52,13 +52,14 @@ import {
 import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
+  cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
 import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
-import { projectEnv, lookup, wrap } from "./envrc.js";
+import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
@@ -72,7 +73,25 @@ const TITLES = "nocturne-editor.titles";
 // The app asks an editor already on a file to go somewhere (`editor.open` with a line).
 const GOTO = "nocturne-editor.goto";
 const POLL = 4000; // a file on another machine can't be watched
-const CHANGE_DELAY = 200; // ms of quiet before the server hears about an edit
+const CHANGE_DELAY = 40; // ms: edits typed together go to the server as one change (and before any question)
+// How long a server runs on once its last editor closes (s): coming back to
+// the project within it is instant. Herdr keeps at most a few unused servers
+// (least recently used stop first), so this is a ceiling, not a promise.
+export const SERVER_IDLE = 15 * 60;
+// The project environments kept on disk (envrc.js): a second app start runs no nix.
+const envCache = {
+  file: (dir) => `${appHome()}/cache/nocturne-editor/${cacheName(dir)}`,
+  async read(dir) {
+    const text = await readTextFile(this.file(dir));
+    const kept = text ? JSON.parse(text) : null;
+    return kept?.dir === dir ? kept : null;
+  },
+  async write(dir, value) {
+    const path = this.file(dir);
+    const was = await readTextFile(path).catch(() => null);
+    await writeTextFile(path, JSON.stringify({ dir, ...value }), was).catch(() => {});
+  },
+};
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
 // The line numbers' room from the pane's left edge, as the top bar's inset (px):
 // the gutter right-aligns them, so a 4-digit file's touched the border.
@@ -85,6 +104,10 @@ const SIDE_BY_SIDE = 760;
 const PREVIEWED = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 const CARD_W = 520;
+// A server that reported work within this long (ms) is still loading the
+// workspace: rust-analyzer goes quiet for a moment between its phases, and
+// an empty answer then means "not yet", not "nothing here".
+const SETTLE = 2000;
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 const zoom = () => Number(settings()?.zoom) || 1;
@@ -116,6 +139,7 @@ export default class EditorPane extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
     this.path = pr.path ?? "";
+    this.openedAt = Date.now(); // the language server's timeline counts from here (mark)
     this.on = pr.on ?? null;
     // Renamed, moved or deleted from the files pane (follow.js): only what
     // comes after this start counts. A pane that followed its file before a
@@ -139,9 +163,13 @@ export default class EditorPane extends View {
     this.caseSensitive = false;
     this.server = null; // { id, argv, root, status: "starting" | "ready" | "exited" | "none", note }
     this.version = 1;
-    this.card = null; // the hover card: { line, col, x, y, parts, problems, level, more, keyboard }
+    this.sent = null; // the text the server has (its last didOpen / didChange)
+    this.progress = new Map(); // the server's work under way ($/progress): token -> { title, message, percentage }
+    this.hovers = new Map(); // answers by place, level and version: asking again is instant
+    // The hover card: { line, col, keyboard, problems, parts, level, more, pending, note, scroll }.
+    // It sits at its place in the text (editor.bounds), under the word or above it.
+    this.card = null;
     this.overCard = false;
-    this.origin = { x: 0, y: 0 };
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.handle = cx.focus_handle();
@@ -172,6 +200,9 @@ export default class EditorPane extends View {
     this.vimWas = this.vimOn();
     this.editor.on("change", (_e, cx) => this.changed(cx));
     this.editor.on("hover", (e, cx) => this.hovered(e, cx));
+    // The editor losing the keyboard closes the card (and watchFocus, while
+    // one is open: the editor's blur doesn't reach mods every time).
+    this.editor.on("blur", (_e, cx) => this.closeCard(cx));
     // Markdown: the live preview and how it shows (the pane remembers).
     this.markdown = this.lang === "markdown";
     this.preview = new MarkdownDoc("pv");
@@ -184,6 +215,9 @@ export default class EditorPane extends View {
     // The keys overview takes the keyboard while it's open (? would type into the file).
     this.keysHandle = cx.focus_handle();
     this.editor.on("scroll", (_e, cx) => {
+      // The card stays at its word: drawn again where the word went (and once
+      // more a frame later, when the scrolled text has been laid out).
+      if (this.card) { cx.notify(); cx.timer.after(16, (cx) => cx.notify()); }
       if (Date.now() - (this.previewDrove ?? 0) < 150) return;
       this.driver = "editor";
       if (this.markdown && this.view === "split") cx.notify();
@@ -255,7 +289,8 @@ export default class EditorPane extends View {
       if (this.state === "ready") this.startServer(cx);
     } else if (s?.id != null) {
       this.version += 1;
-      lspNotify(s.id, "textDocument/didOpen", { textDocument: { uri: uri(to), languageId: languageId(lang, to), version: this.version, text: this.editor.value() } });
+      this.sent = this.editor.value();
+      lspNotify(s.id, "textDocument/didOpen", { textDocument: { uri: uri(to), languageId: languageId(lang, to), version: this.version, text: this.sent } });
     }
     if (!this.on) this.watch(cx);
     setUnsaved(this.dirty ? `${basename(to)}: unsaved changes` : null);
@@ -295,6 +330,10 @@ export default class EditorPane extends View {
         this.editor.set_cursor(at.line, at.col);
         this.say("reloaded: it changed on disk");
         this.didChange(cx, true);
+        // What's in the editor is what's on disk now: saved, as far as the
+        // server goes (rust-analyzer runs cargo check on a save, so an agent's
+        // edit shows its errors as one of Developer's would).
+        if (this.server?.id != null) lspNotify(this.server.id, "textDocument/didSave", { textDocument: { uri: uri(this.path) }, text });
         cx.notify();
         return;
       }
@@ -330,6 +369,9 @@ export default class EditorPane extends View {
 
   changed(cx) {
     this.text = this.editor.value();
+    this.hovers.clear();
+    // Typing closes the card.
+    if (this.card) this.closeCard(cx);
     if (this.markdown) this.refreshPreview(cx);
     const dirty = this.text !== (this.saved ?? "");
     if (dirty !== this.dirty) {
@@ -391,36 +433,61 @@ export default class EditorPane extends View {
 
   // ---- language server
 
-  async startServer(cx) {
+  /** A step of the way to the server's answers, for a look at where the time
+   *  goes: `HERDR_APP_LOG=info,gpui_shell::script=debug` prints them. */
+  mark(what) {
+    console.debug(`lsp ${basename(this.path)} +${Date.now() - this.openedAt}ms ${what}`);
+  }
+
+  /** Starts (or joins) the file's language server as the editor opens, so it
+   *  is warm by the time anything is asked: the project's environment from
+   *  disk when nothing it depends on changed (envrc.js), the lookups side by
+   *  side, then herdr's session for this server and workspace. `fresh`: the
+   *  kept environment's server is gone (garbage-collected): load it anew. */
+  async startServer(cx, fresh = false) {
     if (this.on) { this.server = { status: "none", why: "remote" }; return; }
     const candidates = serverCandidates(this.lang, this.opts);
     if (!candidates.length) { this.server = { status: "none", why: this.opts.server === false ? "off" : "unknown" }; cx.notify(); return; }
     const names = candidates.map((c) => basename(c.argv[0]));
     const dir = dirname(this.path);
     // The workspace's own environment first (envrc.js): its .envrc, through direnv.
-    const env = await projectEnv(exec, dir, { loading: (at) => { this.server = { status: "env", envrc: at, names }; cx.notify(); } });
+    this.mark("start");
+    const env = await projectEnv(exec, dir, {
+      cache: envCache, fresh,
+      loading: (at) => { this.server = { status: "env", envrc: at, names }; this.mark("environment: loading with direnv"); cx.notify(); },
+    });
+    this.mark(`environment: ${env.kind}${env.cached ? " (kept on disk; refreshing behind)" : ""}`);
     const inEnv = env.kind === "ready" ? env.env : null;
-    let pick = null, path = null;
-    for (const c of candidates) {
-      path = c.argv[0].startsWith("/") ? c.argv[0] : await lookup(exec, c.argv[0], inEnv);
-      if (path) { pick = c; break; }
-    }
+    // Every candidate's path and the workspace root at once: each is a process.
+    const markers = ROOTS[this.lang]?.markers ?? [];
+    const [paths, r] = await Promise.all([
+      Promise.all(candidates.map((c) => (c.argv[0].startsWith("/") ? c.argv[0] : lookup(exec, c.argv[0], inEnv)))),
+      exec("sh", ["-c", rootScript(markers), "root", dir]).catch(() => null),
+    ]);
+    const at = paths.findIndex(Boolean);
+    const pick = at >= 0 ? candidates[at] : null, path = paths[at] ?? null;
+    if (!pick && env.cached && !fresh) return this.startServer(cx, true);
     // Not there: why, for the bar and the hover card (logic.js serverNote).
     const envNote = env.kind === "none" ? {} : { envrc: env.dir, envKind: env.kind, envNote: env.note ?? null, denied: env.denied ?? false };
-    if (!pick) { this.server = { status: "none", why: "missing", names, ...envNote }; cx.notify(); return; }
-    const markers = ROOTS[this.lang]?.markers ?? [];
-    const r = await exec("sh", ["-c", rootScript(markers), "root", dir]).catch(() => null);
+    if (!pick) { this.server = { status: "none", why: "missing", names, ...envNote }; this.cardState(cx); cx.notify(); return; }
+    this.mark(`lookup: ${path ?? "none"}`);
     const root = pickRoot(this.lang, r?.stdout, dir);
     const argv = wrap(pick.argv, path, inEnv);
     this.server = { status: "starting", argv, root, name: basename(pick.argv[0]), ...envNote };
+    this.progress.clear();
     cx.notify();
     let started;
-    try { started = await lspStart({ argv, root, settings: pick.settings }); }
-    catch (e) { this.server = { ...this.server, status: "exited", note: String(e?.message ?? e) }; cx.notify(); return; }
+    this.mark("lspStart");
+    try { started = await lspStart({ argv, root, settings: pick.settings, idle: SERVER_IDLE }); }
+    catch (e) { this.server = { ...this.server, status: "exited", note: String(e?.message ?? e) }; this.cardState(cx); cx.notify(); return; }
     this.server = { ...this.server, id: started.id, caps: started.capabilities ?? {}, status: "ready" };
+    this.mark("initialized");
+    this.lastWork = Date.now();
     this.version = 1;
-    lspNotify(started.id, "textDocument/didOpen", { textDocument: { uri: uri(this.path), languageId: languageId(this.lang, this.path), version: this.version, text: this.editor.value() } });
+    this.sent = this.editor.value();
+    lspNotify(started.id, "textDocument/didOpen", { textDocument: { uri: uri(this.path), languageId: languageId(this.lang, this.path), version: this.version, text: this.sent } });
     this.listen(started.id, cx);
+    this.cardState(cx);
     cx.notify();
   }
 
@@ -429,16 +496,38 @@ export default class EditorPane extends View {
       for (;;) {
         let m;
         try { m = await lspNextMessage(id); } catch { return; }
+        if (this.server?.id !== id) return;
         if (m.method === "textDocument/publishDiagnostics" && m.params?.uri === uri(this.path)) {
           this.setProblems(diagnostics(m.params.diagnostics));
           cx.notify();
+        } else if (m.method === "$/progress") {
+          this.progressed(m.params, cx);
         } else if (m.method === "$/exit") {
           this.server = { ...this.server, status: "exited", id: null, note: (m.params?.stderr ?? []).slice(-1)[0] ?? "it stopped" };
+          this.progress.clear();
+          this.cardState(cx);
           cx.notify();
           return;
         }
       }
     });
+  }
+
+  /** The server's work under way, for the bar ("indexing 120/340") and a
+   *  waiting card, which asks again once the work answers wait on is done. */
+  progressed(params, cx) {
+    const token = String(params?.token), v = params?.value ?? {};
+    const wasBusy = busy(this.progress);
+    if (!/\b(cargo check|check|clippy|flycheck)\b/i.test(v.title ?? this.progress.get(token)?.title ?? "")) this.lastWork = Date.now();
+    if (v.kind === "begin") { this.progress.set(token, { title: v.title ?? "", message: v.message ?? "", percentage: v.percentage }); this.mark(`begin ${v.title}`); }
+    else if (v.kind === "report" && this.progress.has(token)) Object.assign(this.progress.get(token), v.message != null ? { message: v.message } : {}, v.percentage != null ? { percentage: v.percentage } : {});
+    else if (v.kind === "end") { this.mark(`end ${this.progress.get(token)?.title ?? token}`); this.progress.delete(token); }
+    else return;
+    if (v.kind === "end" && !busy(this.progress)) { this.hovers.clear(); if (wasBusy) this.cardState(cx); }
+    // Reports come by the hundred while it indexes: one redraw per frame or so.
+    if (this.redrawSoon) return;
+    this.redrawSoon = true;
+    cx.timer.after(50, (cx) => { this.redrawSoon = false; cx.notify(); });
   }
 
   setProblems(list) {
@@ -449,28 +538,53 @@ export default class EditorPane extends View {
     this.editor.set_line_notes(lineNotes(list, colors).map((n) => ({ ...n, color: n.color + "bb" })));
   }
 
-  /** Tells the server about an edit, after a moment of quiet. */
+  /** Tells the server about an edit: what changed since it last heard, as one
+   *  ranged change (the whole text for servers that want it, or when another
+   *  editor has the file open too: their buffers differ), a moment after the
+   *  typing, or at once (`now`; before every question). */
   didChange(cx, now) {
     if (this.server?.id == null) return;
-    const v = ++this.version;
-    const send = () => {
-      if (v !== this.version || this.server?.id == null) return;
-      lspNotify(this.server.id, "textDocument/didChange", { textDocument: { uri: uri(this.path), version: v }, contentChanges: [{ text: this.editor.value() }] });
-    };
-    if (now) send();
-    else cx.timer.after(CHANGE_DELAY, send);
+    if (now) return this.flush();
+    if (this.flushDue) return;
+    this.flushDue = true;
+    cx.timer.after(CHANGE_DELAY, () => this.flush());
   }
 
-  async request(method, extra = {}, line, col) {
+  flush() {
+    this.flushDue = false;
+    const s = this.server;
+    if (s?.id == null) return;
+    const text = this.editor.value();
+    if (text === this.sent) return;
+    const alone = panes().filter((p) => p.mod === MOD && p.props?.path === this.firstPath).length <= 1;
+    const change = this.sent != null && alone && incremental(s.caps) ? changeBetween(this.sent, text) : { text };
+    this.sent = text;
+    lspNotify(s.id, "textDocument/didChange", { textDocument: { uri: uri(this.path), version: ++this.version }, contentChanges: [change] });
+  }
+
+  /** A question about a place (the caret by default). `key`: a newer question
+   *  with the same key cancels this one at the server (herdr's lspRequest). */
+  async request(method, extra = {}, line, col, key) {
     if (this.server?.id == null) return null;
+    this.flush();
     const at = line == null ? this.editor.cursor() : { line, col };
-    return lspRequest(this.server.id, method, { textDocument: { uri: uri(this.path) }, position: { line: at.line, character: at.col }, ...extra });
+    return lspRequest(this.server.id, method, { textDocument: { uri: uri(this.path) }, position: { line: at.line, character: at.col }, ...extra }, key ? { key } : undefined);
   }
 
   async definition(cx) {
     let loc = null;
-    try { loc = firstLocation(await this.request("textDocument/definition")); } catch (e) { this.say(String(e?.message ?? e), true); }
-    if (!loc) { if (this.server?.id != null) this.say("no definition found"); cx.notify(); return; }
+    try { loc = firstLocation(await this.request("textDocument/definition", {}, undefined, undefined, "definition")); }
+    catch (e) { if (!/cancelled/.test(String(e?.message ?? e))) this.say(String(e?.message ?? e), true); }
+    if (!loc) {
+      // Still loading the workspace: say so, rather than "not found".
+      const work = busy(this.progress) ? progressWord(this.progress) : null;
+      if (work) this.say(`${this.server?.name ?? "the server"} is busy: ${work}`);
+      else if (this.server?.id != null) this.say("no definition found");
+      else this.say(this.serverNote()?.short || "no language server");
+      cx.notify();
+      return;
+    }
+    this.closeCard(cx);
     if (loc.path === this.path) this.goto(loc.line, loc.col, cx);
     else run("editor.open", { path: loc.path, line: loc.line + 1, col: loc.col + 1 });
   }
@@ -483,37 +597,119 @@ export default class EditorPane extends View {
       cx.timer.after(250, (cx) => { if (!this.overCard && this.card && !this.card.keyboard) { this.card = null; cx.notify(); } });
       return;
     }
-    this.showCard(e.line, e.col, { x: e.x, y: e.y, h: e.height }, cx);
+    // A card asked for with the keyboard stays until it's closed.
+    if (this.card?.keyboard) return;
+    this.showCard(e.line, e.col, false, cx);
   }
 
-  /** The card for a place: its problems now, the server's hover when it answers. */
-  showCard(line, col, at, cx, level = 0) {
+  /** The card for a place: its problems at once, the server's hover when it
+   *  answers. `keyboard`: asked for (cmd-i, K, a problem gone to); the
+   *  pointer's card says nothing when there's nothing to say. */
+  showCard(line, col, keyboard, cx, level = 0) {
     const here = diagnosticsAt(this.problems, line, col);
-    const card = { line, col, at, problems: here, parts: [], level, more: false, keyboard: !at, waiting: this.server?.id != null, note: null };
-    // Asked for (cmd-i, `at` null) with no server to ask: say why, and what to
-    // do (logic.js serverNote). The pointer's passive hover stays quiet.
-    if (!card.waiting && card.keyboard) card.note = this.serverNote();
-    this.card = here.length || card.waiting || card.note ? card : null;
+    const card = { line, col, keyboard: !!keyboard, problems: here, parts: [], level, more: false, pending: true, note: null, scroll: 0, opened: Date.now() };
+    this.card = card;
+    this.watchFocus(card, cx);
+    this.cardState(cx);
     cx.notify();
-    if (!card.waiting) return;
-    const verbosity = this.lang === "typescript" || this.lang === "tsx" || this.lang === "javascript" ? { verbosityLevel: level } : {};
-    this.request("textDocument/hover", verbosity, line, col).then((h) => {
+  }
+
+  /** The card's question, as the server stands: answered from what's known,
+   *  asked, or waiting (with what it waits for) until the server can answer;
+   *  called again when it can (started, done indexing, stopped). */
+  cardState(cx) {
+    const card = this.card;
+    if (!card?.pending) return;
+    const s = this.server;
+    const key = `${card.line}:${card.col}:${card.level}`;
+    if (this.hovers.has(key)) return this.answered(card, this.hovers.get(key), cx);
+    if (s?.id == null) {
+      // No server to ask yet: starting, loading the environment (the card
+      // waits, saying so), or none (the note says why and what to do).
+      const coming = !s || s.status === "starting" || s.status === "env";
+      card.note = card.keyboard && !coming ? this.serverNote() : null;
+      if (!coming) card.pending = false;
+      if (!coming && !card.keyboard && !card.problems.length) this.card = null;
+      return;
+    }
+    card.note = null;
+    card.asked ??= Date.now();
+    const verbosity = this.lang === "typescript" || this.lang === "tsx" || this.lang === "javascript" ? { verbosityLevel: card.level } : {};
+    this.request("textDocument/hover", verbosity, card.line, card.col, "hover").then((h) => {
       if (this.card !== card) return;
-      card.waiting = false;
-      card.parts = hoverParts(h?.contents);
-      card.more = !!h?.canIncreaseVerbosityLevel;
-      // Nothing here: asked for, the card says so; passing over, it goes.
-      if (!card.parts.length && !card.problems.length) {
-        if (card.keyboard) card.note = this.serverNote(true); else this.card = null;
-      }
-      cx.notify();
+      const answer = { parts: hoverParts(h?.contents), more: !!h?.canIncreaseVerbosityLevel };
+      // Nothing yet while the workspace loads: wait for it, then ask again.
+      if (!answer.parts.length && this.settling()) return this.askAgain(card, cx);
+      this.hovers.set(key, answer);
+      this.answered(card, answer, cx);
     }, (e) => {
-      if (this.card !== card) return;
-      card.waiting = false;
-      if (card.keyboard && !card.problems.length) card.note = { text: `${this.server?.name ?? "The language server"} didn't answer${e?.message ? `: ${e.message}` : "."}`, fix: null };
+      if (this.card !== card || /cancelled/.test(String(e?.message ?? e))) return;
+      // Changed under it while loading ("content modified"): asked again when the work is done.
+      if (this.settling()) return this.askAgain(card, cx);
+      card.pending = false;
+      if (card.keyboard && !card.problems.length) card.note = { text: `${s.name ?? "The language server"} didn't answer${e?.message ? `: ${e.message}` : "."}`, fix: null };
       else if (!card.problems.length) this.card = null;
       cx.notify();
     });
+  }
+
+  /** The server is still loading the workspace: work under way, or some
+   *  reported a moment ago (it pauses between phases). */
+  settling() {
+    return busy(this.progress) || Date.now() - (this.lastWork ?? 0) < SETTLE;
+  }
+
+  /** A waiting card asks again: when the work ends (progressed), and once a
+   *  second meanwhile, since a server can answer before it's all done. */
+  askAgain(card, cx) {
+    card.waitingOn = true;
+    cx.notify();
+    cx.timer.after(1000, (cx) => { if (this.card === card && card.pending) this.cardState(cx); });
+  }
+
+  answered(card, answer, cx) {
+    if (card.keyboard && card.pending) this.mark(`hover answered ${Date.now() - card.opened}ms after it was asked`);
+    card.pending = false;
+    card.waitingOn = false;
+    card.parts = answer.parts.map((p) => ({ ...p }));
+    card.more = answer.more;
+    // Nothing here: asked for, the card says so; passing over, it goes.
+    if (!card.parts.length && !card.problems.length) {
+      if (card.keyboard) card.note = this.serverNote(true); else if (this.card === card) this.card = null;
+    }
+    cx.notify();
+  }
+
+  /** What a waiting card says: what the answer waits for. */
+  waitWords() {
+    const s = this.server, name = s?.name ?? "the language server";
+    if (!s || s.status === "env") return s?.envrc ? `Loading this project's environment (${tilde(s.envrc, home())}/.envrc)…` : "Finding the language server…";
+    if (s.status === "starting") return `Starting ${name}…`;
+    const work = busy(this.progress) ? progressWord(this.progress) : null;
+    if (work) return `${name}: ${work}${work.endsWith("…") ? "" : "."} The answer comes when it's done.`;
+    if (this.settling()) return `${name} is loading the workspace. The answer comes when it's done.`;
+    return `Asking ${name}…`;
+  }
+
+  /** While the card is open: the editor going from having the keyboard to
+   *  not having it (the find line, another pane) closes it. A pointer's card
+   *  over an editor that never had the keyboard stays. */
+  watchFocus(card, cx) {
+    const had = this.editor.focused?.() ?? false;
+    const check = (cx) => {
+      if (this.card !== card) return;
+      const has = this.editor.focused?.() ?? false;
+      if (had && !has) return this.closeCard(cx);
+      cx.timer.after(200, check);
+    };
+    cx.timer.after(200, check);
+  }
+
+  closeCard(cx) {
+    if (!this.card) return;
+    this.card = null;
+    this.overCard = false;
+    cx?.notify?.();
   }
 
   /** Why the hover has nothing (logic.js serverNote), the paths as ~. */
@@ -527,12 +723,49 @@ export default class EditorPane extends View {
     if (!c) return;
     const level = Math.max(0, c.level + d);
     if (level === c.level || (d > 0 && !c.more)) return;
-    this.showCard(c.line, c.col, c.at, cx, level);
+    this.showCard(c.line, c.col, c.keyboard, cx, level);
+  }
+
+  /** A key while the card is open, before vim and the editor: esc closes it
+   *  (and does nothing else), ctrl-d / ctrl-u and page down / up scroll a long
+   *  one. True when taken. Other keys go on; when one moves the caret or the
+   *  text, the card goes (checked once the editor has had the key). */
+  cardKey(e, cx) {
+    const c = this.card;
+    if (!c) return false;
+    const k = e.key, m = e.modifiers ?? {};
+    if (["shift", "control", "alt", "platform", "function", "capslock"].includes(k)) return false;
+    const plain = !m.platform && !m.control && !m.alt;
+    if (k === "escape" && plain && !m.shift) { this.closeCard(cx); return true; }
+    const page = Math.max(40, Math.round((c.viewH ?? 200) * 0.6));
+    const scroll = m.control && !m.platform && !m.alt && (k === "d" || k === "u") ? (k === "d" ? page : -page)
+      : plain && (k === "pagedown" || k === "pageup") ? (k === "pagedown" ? page : -page) : 0;
+    if (scroll && this.cardOverflows()) {
+      c.scroll = Math.max(0, Math.min((c.contentH ?? 0) - (c.viewH ?? 0), (c.scroll ?? 0) + scroll));
+      cx.notify();
+      return true;
+    }
+    // App keys (cmd-…) are commands: cmd-i closes it, gd / cmd-k d go.
+    if (m.platform) return false;
+    // (Typing closes it through the change it makes.)
+    const was = this.editor.cursor();
+    cx.timer.after(0, (cx) => {
+      if (this.card !== c) return;
+      const now = this.editor.cursor();
+      if (now.line !== was.line || now.col !== was.col) this.closeCard(cx);
+    });
+    return false;
+  }
+
+  cardOverflows() {
+    const c = this.card;
+    return !!c && (c.contentH ?? 0) > (c.viewH ?? 0) + 1;
   }
 
   // ---- moving around
 
   goto(line, col, cx) {
+    this.closeCard(cx);
     this.editor.set_cursor(line, col);
     // Before the first layout there's nothing to scroll: try again once drawn.
     cx.timer.after(60, () => this.editor.set_cursor(line, col));
@@ -552,7 +785,7 @@ export default class EditorPane extends View {
     const d = nextProblem(this.problems, at.line, at.col, dir);
     if (!d) return this.say("no problems");
     this.goto(d.line, d.col, cx);
-    this.showCard(d.line, d.col, null, cx);
+    this.showCard(d.line, d.col, true, cx);
   }
 
   // ---- find
@@ -645,6 +878,7 @@ export default class EditorPane extends View {
 
   /** A keystroke, before the editor sees it: vim's, or the editor's (false). */
   vimKey(e, cx) {
+    if (this.cardKey(e, cx)) return true;
     if (!this.vimOn() || this.state === "loading" || this.mode) return false;
     const k = token(e);
     if (k == null) return false;
@@ -754,7 +988,8 @@ export default class EditorPane extends View {
     if (c === "prev-problem") return this.problem(-1, cx);
     if (c === "problems") { this.drawer = !this.drawer; return; }
     if (c === "definition") return this.definition(cx);
-    if (c === "hover") { const at = this.editor.cursor(); return this.showCard(at.line, at.col, null, cx); }
+    // cmd-i (vim: K) opens the card at the caret, and closes an open one.
+    if (c === "hover") { if (this.card) return this.closeCard(cx); const at = this.editor.cursor(); return this.showCard(at.line, at.col, true, cx); }
     if (c === "hover-more") return this.hoverLevel(1, cx);
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
@@ -940,13 +1175,15 @@ export default class EditorPane extends View {
     const code = settings()?.font_family || "JetBrains Mono";
     return v_flex().id("nocturne-editor").relative().size_full().bg(t.background).text_size(11)
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
-      .on_mouse_move((e) => { if (e.local_position) this.origin = { x: e.position.x - e.local_position.x, y: e.position.y - e.local_position.y }; })
       .on_key_down((e, cx) => {
-        if (e.keystroke === "escape") {
-          if (this.mode) { this.closeFind(cx); cx.stop_propagation(); }
-          else if (this.card) { this.card = null; cx.notify(); cx.stop_propagation(); }
-        }
+        // The editor's own keys came through vimKey; these are the pane's
+        // others (the find line, the preview): esc closes the card, then find.
+        if (e.key !== "escape") return;
+        if (this.card) { this.closeCard(cx); cx.stop_propagation(); }
+        else if (this.mode) { this.closeFind(cx); cx.stop_propagation(); }
       })
+      // A click outside the card closes it (the card keeps its own).
+      .on_mouse_down("left", (_e, cx) => this.closeCard(cx))
       .child(this.bar(t))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
@@ -956,7 +1193,7 @@ export default class EditorPane extends View {
       .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(this.body(t, code)) : this.body(t, code))
       .when(this.drawer && !this.keysShown, (el) => el.child(this.drawerView(t)))
       .child(this.hints(t))
-      .when(!!this.card, (el) => el.child(this.cardView(t, code)))
+      .map((el) => { const card = this.card ? this.cardView(t, code) : null; return card ? el.child(card) : el; })
       .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)));
   }
 
@@ -973,7 +1210,11 @@ export default class EditorPane extends View {
     // The server's word (logic.js serverNote): running, starting, loading the
     // project's .envrc, stopped, or why there's none ("direnv allow").
     const word = serverNote(s, this.lang, { tilde: (p) => tilde(p, home()) })?.short;
-    const server = s?.status === "ready" ? [t.ansi2, s.name]
+    // A running server's own words for what it's doing: "indexing 120/340"
+    // while answers wait on it (yellow), "· cargo check" beside its name after.
+    const work = s?.status === "ready" ? progressWord(this.progress) : null;
+    const server = s?.status === "ready" && work ? (busy(this.progress) ? [t.ansi3, work] : [t.ansi2, `${s.name} · ${work}`])
+      : s?.status === "ready" ? [t.ansi2, s.name]
       : s?.status === "starting" || s?.status === "env" || s?.envKind === "blocked" ? [t.ansi3, word]
       : s?.status === "exited" || s?.envKind === "failed" ? [t.ansi1, word]
       : word ? [t.dim, word] : null;
@@ -1172,46 +1413,75 @@ export default class EditorPane extends View {
       .child(keysView(t, { id: "editor-keys", title: this.vimOn() ? "editor · vim" : "editor", list: editorKeys(this.vimOn()), close: () => this.toggleKeys(false) }));
   }
 
-  /** Highlighted code, line by line, in the card. */
-  codeBlock(t, text, lang, code) {
-    const spans = lang ? highlight(text, lang) : [];
-    const lines = [];
-    let at = 0;
-    for (const line of text.split("\n")) {
-      const end = at + line.length;
-      const mine = spans.filter(([s, e]) => e > at && s < end).map(([s, e, n]) => [Math.max(s, at) - at, Math.min(e, end) - at, n]);
-      lines.push(colorRuns(line, mine, this.colors));
-      at = end + 1;
+  /** Highlighted code, line by line, in the card: colored once per answer
+   *  (kept on the part), not at every frame. */
+  codeBlock(t, part, lang, code) {
+    if (!part.lines) {
+      const text = part.code;
+      const spans = lang ? highlight(text, lang) : [];
+      part.lines = [];
+      let at = 0;
+      for (const line of text.split("\n")) {
+        const end = at + line.length;
+        const mine = spans.filter(([s, e]) => e > at && s < end).map(([s, e, n]) => [Math.max(s, at) - at, Math.min(e, end) - at, n]);
+        part.lines.push(colorRuns(line, mine, this.colors));
+        at = end + 1;
+      }
     }
-    return v_flex().px(12).py(8).font_family(code).text_size(12).children(lines.slice(0, 40).map((runs, i) =>
+    return v_flex().px(12).py(8).font_family(code).text_size(12).children(part.lines.slice(0, 200).map((runs, i) =>
       h_flex().id(`card-code-${i}`).flex_wrap().children(runs.map(([piece, color], j) =>
         div().id(`card-run-${i}-${j}`).text_color(color ?? t.foreground).child(piece)))));
   }
 
+  /** How far down the pane the text starts: the bar, and whatever lines sit
+   *  between it and the text (a conflict, find / replace, vim's ex line). */
+  textTop() {
+    return BAR + (this.conflict ? FIND : 0) + (this.mode === "replace" ? 2 * FIND : this.mode ? FIND : 0) + (this.vim.ex != null ? FIND : 0);
+  }
+
+  /** The card's word in pane coordinates (unzoomed), from where the editor
+   *  last drew it; null when it's off screen. */
+  cardAnchor(c) {
+    const b = this.editor.bounds?.({ line: c.line, col: c.col });
+    if (!b?.view) return null;
+    const z = zoom();
+    const x = (b.x - b.view.x) / z, y = (b.y - b.view.y) / z, h = b.height / z;
+    // Scrolled out of the text's own box: it waits there until the word is back.
+    if (y + h < 0 || y > b.view.height / z) return null;
+    return { x: x + GUTTER_INSET, y: y + this.textTop(), w: b.width / z, h };
+  }
+
+  /** The card, at its word: under it, or above it near the pane's foot;
+   *  null while there's nothing to show (a pointer's card still waiting) or
+   *  its word is off screen. */
   cardView(t, code) {
     const c = this.card;
-    const sevColor = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
+    const waiting = c.pending && !c.problems.length;
+    if (!c.keyboard && !c.problems.length && !c.parts.length) return null;
+    const anchor = this.cardAnchor(c);
+    if (!anchor) return null;
+    if (c.keyboard && !c.drawn) { c.drawn = true; this.mark(`card drawn ${Date.now() - c.opened}ms after it was asked${c.pending ? `, waiting: ${this.waitWords()}` : ""}`); }
+    const footH = 24;
+    const natural = c.contentH != null ? c.contentH + footH + 2 : null;
+    // The pane's size comes in window pixels (zoomed); the card is placed in layout units.
     const z = zoom();
-    const w = Math.min(CARD_W, this.size.width - 24);
-    // Under the word, else above it; the keyboard's card sits at the top.
-    let left = 12, top = BAR + 8;
-    if (c.at) {
-      left = Math.max(8, Math.min((c.at.x - this.origin.x) / z, this.size.width - w - 8));
-      const below = (c.at.y - this.origin.y + (c.at.h ?? 18)) / z + 4;
-      top = below + 220 > this.size.height ? Math.max(8, (c.at.y - this.origin.y) / z - 224) : below;
-    }
+    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W, height: natural }, { top: BAR, bottom: HINTS });
+    const sevColor = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
     const lang = this.lang === "tsx" ? "typescript" : this.lang;
     const parts = c.parts.map((p, i) => p.code != null
-      ? this.codeBlock(t, p.code, p.lang ? (languageOf(p.lang) ?? lang) : lang, code)
-      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted).child(TextView.markdown(`card-md-${i}`, p.text)));
-    const expandable = lang === "typescript" || lang === "javascript";
+      ? this.codeBlock(t, p, p.lang ? (languageOf(p.lang) ?? lang) : lang, code)
+      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted).child(TextView.markdown(`card-md-${i}`, p.md ??= cardMarkdown(p.text))));
+    const expandable = (lang === "typescript" || lang === "javascript") && c.parts.length > 0;
     const ctrl = (id, label, on, go) => div().id(id).flex_none().w(18).h(18).flex().items_center().justify_center().border(1)
       .border_color(on ? t.ansi0 : t.background).text_color(on ? t.foreground : t.dim)
       .when(on, (el) => el.hover((s) => s.border_color(t.accent)).on_click((_e, cx) => { go(cx); cx.notify(); })).child(label);
-    return v_flex().id("editor-card").absolute().left(left).top(top).w(w).max_h(Math.max(160, this.size.height - top - HINTS - 8))
-      .bg(t.background).border(1).border_color(t.ansi0).shadow_lg().overflow_hidden()
-      .on_hover((h, cx) => { this.overCard = h; if (!h && !c.keyboard) cx.timer.after(250, (cx) => { if (!this.overCard) { this.card = null; cx.notify(); } }); })
-      .on_mouse_down("left", stop)
+    const key = (k, what) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().child(what));
+    const vim = this.vimOn();
+    const overflow = this.cardOverflows();
+    // What the card holds: its problems, what it waits for or why there's
+    // nothing, and the server's answer; scrolled by its own offset (keys, wheel).
+    const content = v_flex().id("card-content").relative().top(-(c.scroll ?? 0)).flex_none()
+      .on_size_change((size, cx) => { const h = size.height / zoom(); if (Math.abs((c.contentH ?? -1) - h) > 0.5) { c.contentH = h; cx.notify(); } })
       .children(c.problems.map((d, i) => v_flex().id(`card-problem-${i}`).relative().border_b(1).border_color(t.ansi0)
         .child(div().absolute().left(0).right(0).top(0).h(3).child(dither(sevColor[d.severity], 1)))
         .child(div().px(12).pt(9).pb(4).text_size(11.5).text_color(t.foreground).font_family(code).child(d.message))
@@ -1220,19 +1490,40 @@ export default class EditorPane extends View {
         .child(h_flex().px(12).pb(8).gap(12).text_size(10).text_color(t.dim)
           .child(div().text_color(sevColor[d.severity]).child(d.severity))
           .child(div().child([d.code, d.source].filter(Boolean).join(" · "))))))
-      .when(c.waiting, (el) => el.child(div().px(12).py(8).text_color(t.dim).child("asking the language server…")))
+      .when(c.pending && c.keyboard, (el) => el.child(h_flex().id("card-wait").px(12).py(8).gap(8).items_center()
+        .child(div().relative().size(6).flex_none().child(dither(t.ansi3, 1)))
+        .child(div().flex_1().min_w(0).text_color(t.dim).child(this.waitWords()))))
       // No answer to give: what's the case, and what to do about it.
       .when(Boolean(c.note), (el) => el.child(v_flex().id("card-note").px(12).py(8).gap(4)
         .child(div().text_color(t.foreground).child(c.note.text))
         .when(Boolean(c.note.fix), (e2) => e2.child(div().text_color(t.dim).child(c.note.fix)))))
-      .child(div().id("card-parts").max_h(Math.max(120, Math.min(360, this.size.height - top - HINTS - 120))).overflow_y_scrollbar().child(v_flex().children(parts)))
-      .when(c.parts.length > 0, (el) => el.child(h_flex().h(24).flex_none().px(12).gap(12).items_center().border_t(1).border_color(t.ansi0).text_size(10).text_color(t.dim)
-        .child(div().child(this.server?.name ?? ""))
+      .children(parts);
+    const box = v_flex().id("editor-card").absolute().left(place.left).w(place.width).max_h(place.maxH)
+      .bg(t.background).border(1).border_color(waiting ? t.ansi8 : t.ansi0).shadow_lg().overflow_hidden()
+      .on_hover((h, cx) => { this.overCard = h; if (!h && !c.keyboard) cx.timer.after(250, (cx) => { if (!this.overCard && this.card === c) { this.card = null; cx.notify(); } }); })
+      .on_mouse_down("left", stop)
+      .child(div().id("card-scroll").relative().min_h(0).overflow_hidden()
+        .on_size_change((size, cx) => { const h = size.height / zoom(); if (Math.abs((c.viewH ?? -1) - h) > 0.5) { c.viewH = h; cx.notify(); } })
+        .on_scroll_wheel((e, cx) => {
+          if (!this.cardOverflows()) return;
+          c.scroll = Math.max(0, Math.min(c.contentH - c.viewH, (c.scroll ?? 0) - (e.delta?.y ?? 0) / zoom()));
+          cx.stop_propagation();
+          cx.notify();
+        })
+        .child(content))
+      // Its keys, and how it closes.
+      .child(h_flex().id("card-foot").h(footH).flex_none().px(12).gap(12).items_center().overflow_hidden().border_t(1).border_color(t.ansi0).text_size(10).text_color(t.dim)
+        // The server's name, unless the type depth needs the room.
+        .when(c.parts.length > 0 && !expandable, (el) => el.child(div().flex_none().child(this.server?.name ?? "")))
         .when(expandable, (el) => el
           .child(ctrl("card-less", "−", c.level > 0, (cx) => this.hoverLevel(-1, cx)))
-          .child(div().child(`type depth ${c.level}`))
-          .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx))))
+          .child(div().flex_none().child(`type depth ${c.level}`))
+          .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx)))
+          .child(div().flex_none().text_color(t.accent).child("ctrl-−/=")))
+        .when(c.parts.length > 0 && this.server?.id != null, (el) => el.child(key(vim ? "gd" : "cmd-k d", "definition")))
+        .when(overflow, (el) => el.child(key("ctrl-d ctrl-u", "scroll")))
         .child(div().flex_1())
-        .child(h_flex().gap(4).child(div().text_color(t.accent).child(this.vimOn() ? "gd" : "cmd-k d")).child(div().child("definition")))));
+        .child(key("esc", "close")));
+    return place.above ? box.bottom(place.bottom) : box.top(place.top);
   }
 }

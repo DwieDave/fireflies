@@ -5,6 +5,7 @@ import { test, expect } from "bun:test";
 import {
   languageSettings, serverCandidates, languageId, rootScript, pickRoot, uri, pathOf, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hintList, editorKeys, hoverParts, splitMarkdown, parseGoto, firstLocation, firstLine, tilde, syntaxColors, colorOf, colorRuns,
+  RUST_ANALYZER,
 } from "../defaults/mods/nocturne-editor/logic.js";
 
 test("a language's settings: its own over the top level over its convention over the defaults", () => {
@@ -21,7 +22,11 @@ test("a language's settings: its own over the top level over its convention over
 });
 
 test("servers: settings.json's argv, off, or the built-in list in order, sharing aliases", () => {
-  expect(serverCandidates("rust", {})).toEqual([{ argv: ["rust-analyzer"], settings: null }]);
+  expect(serverCandidates("rust", {})).toEqual([{ argv: ["rust-analyzer"], settings: RUST_ANALYZER }]);
+  // rust-analyzer builds in its own target folder: it never waits on a cargo build's lock.
+  expect(RUST_ANALYZER.cargo.targetDir).toBe(true);
+  // Another build of it keeps those settings, under the person's own.
+  expect(serverCandidates("rust", { server: ["/x/rust-analyzer"], server_settings: { cargo: { features: "all" } } })[0].settings).toEqual({ ...RUST_ANALYZER, cargo: { ...RUST_ANALYZER.cargo, features: "all" } });
   expect(serverCandidates("rust", { server: false })).toEqual([]);
   expect(serverCandidates("rust", { server: ["ra-multiplex"], server_settings: { x: 1 } })).toEqual([{ argv: ["ra-multiplex"], settings: { x: 1 } }]);
   const ts = serverCandidates("tsx", {});
@@ -84,6 +89,13 @@ test("line notes: the worst problem per line, its first line", () => {
   ]);
   expect(firstLine("\n\n  two\nthree")).toBe("  two");
   expect(firstLine("x".repeat(200), 10)).toBe("x".repeat(9) + "…");
+});
+
+test("next problem steps over hints beside an error, and takes them when they're all there is", () => {
+  const error = { line: 7, col: 21, severity: "error" }, hint = { line: 7, col: 15, severity: "hint" };
+  expect(nextProblem([hint, error], 0, 0, 1)).toBe(error);
+  expect(nextProblem([hint, error], 9, 0, -1)).toBe(error);
+  expect(nextProblem([hint], 0, 0, 1)).toBe(hint);
 });
 
 test("problems at a place, and the next and previous ones wrapping around", () => {

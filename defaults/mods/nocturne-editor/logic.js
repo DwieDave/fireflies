@@ -4,10 +4,16 @@
 // server's diagnostics become line notes and the problems list, what a hover
 // says, and where "go to line" goes.
 
+/** rust-analyzer's settings (its initializationOptions; workspace/configuration). */
+export const RUST_ANALYZER = { cargo: { targetDir: true } };
+
 /** Built-in language servers, tried in order: the first found on PATH runs.
  *  `settings` go out as initializationOptions and workspace/configuration. */
 export const SERVERS = {
-  rust: [{ argv: ["rust-analyzer"] }],
+  // Its own target folder (target/rust-analyzer): its build scripts, proc
+  // macros and `cargo check` never wait on a `cargo build` for the lock, nor
+  // rebuild what the build made with another environment (the dev shell's).
+  rust: [{ argv: ["rust-analyzer"], settings: RUST_ANALYZER }],
   typescript: [{ argv: ["typescript-language-server", "--stdio"], settings: { supportsHoverVerbosity: true } }, { argv: ["vtsls", "--stdio"] }],
   tsx: "typescript",
   javascript: "typescript",
@@ -187,8 +193,11 @@ export function diagnosticsAt(list, line, col) {
   });
 }
 
-/** The next (dir 1) or previous (-1) problem from a place, wrapping around. */
+/** The next (dir 1) or previous (-1) problem from a place, wrapping around.
+ *  Hints (rustc's "expected due to this" beside its error) are stepped over
+ *  while there are real problems. */
 export function nextProblem(list, line, col, dir = 1) {
+  if (list.some((d) => d.severity !== "hint")) list = list.filter((d) => d.severity !== "hint");
   if (!list.length) return null;
   const key = (d) => d.line * 1e6 + d.col;
   const at = line * 1e6 + col;
@@ -362,4 +371,93 @@ export function serverNote(server, lang, { empty = false, tilde: t = (p) => p } 
     return { short: "no server", text: `${names} isn't in this project's environment (${where}/.envrc) or on PATH.`, fix: `Add it to the project's shell (its flake or .envrc), or settings.json editor.languages.${lang}.server.` };
   }
   return { short: "no server", text: `${names} isn't on PATH.`, fix: `Install it, or add it to the project's shell through an .envrc (direnv), or settings.json editor.languages.${lang}.server.` };
+}
+
+/**
+ * Where the hover card goes (pane coordinates, unzoomed px): under the word,
+ * or above it when the room below is short of what it needs and there's more
+ * above; left-aligned with the word, slid in to stay inside the pane; never
+ * over the word. `anchor` { x, y, w, h }: the word. `pane` { width, height }.
+ * `card` { width, height }: height its natural height (null before it's
+ * measured: then a guess). It's never taller than half the pane. `top` / `bottom`: the bars it stays clear of.
+ * Returns { left, width, top | bottom (the other null), maxH, above }.
+ */
+export function cardPlace(anchor, pane, card, { top = 0, bottom = 0, margin = 8, gap = 2, guess = 180 } = {}) {
+  const width = Math.max(120, Math.min(card.width, pane.width - 2 * margin));
+  const left = Math.max(margin, Math.min(anchor.x, pane.width - width - margin));
+  const under = anchor.y + anchor.h + gap;
+  const over = anchor.y - gap;
+  const roomBelow = pane.height - bottom - margin - under;
+  const roomAbove = over - top - margin;
+  // At most about half the pane (as Zed's popovers): a long answer scrolls
+  // rather than covering the text it's about.
+  const cap = Math.max(72, Math.round(pane.height / 2));
+  const want = Math.min(card.height ?? guess, cap);
+  const above = roomBelow < want && roomAbove > roomBelow;
+  return above
+    ? { left, width, top: null, bottom: pane.height - over, maxH: Math.max(48, Math.min(cap, roomAbove)), above }
+    : { left, width, top: under, bottom: null, maxH: Math.max(48, Math.min(cap, roomBelow)), above };
+}
+
+// Work a server reports that its answers wait on (rust-analyzer: the
+// workspace's loading and indexing); a `cargo check` running doesn't hold
+// hovers back.
+const BACKGROUND_WORK = /\b(cargo check|check|clippy|flycheck)\b/i;
+// The most telling of several at once, first.
+const WORK_ORDER = [/index/i, /proc-?macro/i, /build/i, /load/i, /fetch/i, /roots/i];
+
+/** Open `$/progress` work ({ title, message, percentage } by token) that
+ *  answers wait on: true while the server isn't ready to say much. */
+export function busy(progress) {
+  return [...(progress?.values?.() ?? [])].some((p) => !BACKGROUND_WORK.test(p.title ?? ""));
+}
+
+/** The bar's words for a server's work under way: "indexing 120/340",
+ *  "building compile-time-deps 40%"; null with nothing under way. The work
+ *  answers wait on first, then the rest (cargo check). */
+export function progressWord(progress) {
+  const all = [...(progress?.values?.() ?? [])];
+  if (!all.length) return null;
+  const rank = (p) => {
+    if (BACKGROUND_WORK.test(p.title ?? "")) return WORK_ORDER.length + 1;
+    const i = WORK_ORDER.findIndex((re) => re.test(p.title ?? ""));
+    return i < 0 ? WORK_ORDER.length : i;
+  };
+  const p = all.sort((a, b) => rank(a) - rank(b))[0];
+  const title = String(p.title ?? "working").toLowerCase().replace(/\s+/g, " ").trim();
+  const count = String(p.message ?? "").match(/\b(\d+\/\d+)\b/)?.[1];
+  const tail = count ?? (Number.isFinite(p.percentage) ? `${Math.round(p.percentage)}%` : "");
+  const word = tail ? `${title} ${tail}` : `${title}…`;
+  return word.length > 34 ? word.slice(0, 33) + "…" : word;
+}
+
+/** One LSP change from the text the server has (`from`) to the editor's
+ *  (`to`): the span between their common start and end, in LSP positions
+ *  (UTF-16, as JavaScript strings count). Null when they're the same. */
+export function changeBetween(from, to) {
+  if (from === to) return null;
+  let s = 0;
+  while (s < from.length && s < to.length && from[s] === to[s]) s++;
+  let e = 0;
+  while (e < from.length - s && e < to.length - s && from[from.length - 1 - e] === to[to.length - 1 - e]) e++;
+  const pos = (text, o) => {
+    const before = text.slice(0, o);
+    const nl = before.lastIndexOf("\n");
+    let line = 0;
+    for (let i = before.indexOf("\n"); i >= 0; i = before.indexOf("\n", i + 1)) line++;
+    return { line, character: o - (nl + 1) };
+  };
+  return { range: { start: pos(from, s), end: pos(from, from.length - e) }, text: to.slice(s, to.length - e) };
+}
+
+/** Whether a server takes ranged changes (LSP's incremental sync, 2). */
+export function incremental(caps) {
+  const sync = caps?.textDocumentSync;
+  return (typeof sync === "number" ? sync : sync?.change) === 2;
+}
+
+/** A hover's Markdown for the card: headings (rust-analyzer's "# Examples",
+ *  "# Errors") as bold lines, so docs read as one card, not a page. */
+export function cardMarkdown(text) {
+  return String(text ?? "").replace(/^#{1,6}[ \t]+(.+?)[ \t#]*$/gm, "**$1**");
 }

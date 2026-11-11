@@ -1927,6 +1927,24 @@ fn editor_call(
     let out = match name {
         "cursor" => Some(pos_json(state.read(cx).cursor_position())),
         "top_line" => Some(state.read(cx).top_line().map_or(Value::Null, |l| json!(l))),
+        // The word at a place (or the caret-wide spot when it isn't on one) as last drawn, and the
+        // editor's own box, in window coordinates: where to put something about that place. Null
+        // when that line isn't on screen.
+        "bounds" => {
+            let s = state.read(cx);
+            let at = s.text().position_to_offset(&pos(args)?);
+            let word = s.text().word_range(at).filter(|r| !r.is_empty() && r.contains(&at)).unwrap_or(at..at);
+            let view = s.input_bounds();
+            let rect = |b: gpui::Bounds<gpui::Pixels>| json!({ "x": f32::from(b.origin.x), "y": f32::from(b.origin.y), "width": f32::from(b.size.width), "height": f32::from(b.size.height) });
+            Some(match s.range_to_bounds(&word) {
+                Some(b) => {
+                    let mut out = rect(b);
+                    out["view"] = rect(view);
+                    out
+                }
+                None => Value::Null,
+            })
+        }
         "scroll_to_line" => {
             let line = args.as_f64().unwrap_or(0.);
             state.update(cx, |s, cx| s.scroll_to_line(line, cx));
@@ -2078,6 +2096,8 @@ fn editor_call(
             state.update(cx, |s, cx| s.focus(window, cx));
             None
         }
+        // Whether the editor has the keyboard now.
+        "focused" => Some(json!(gpui::Focusable::focus_handle(state.read(cx), cx).is_focused(window))),
         "set_cursor_shape" => {
             let shape = match args.as_str() {
                 Some("block") => gpui_base::input::CursorShape::Block,

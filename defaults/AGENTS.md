@@ -483,7 +483,7 @@ the highlighted line shows where it will land.
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
   the problems drawer, cmd-k d definition (another file opens in its own
-  editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
+  editor), cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
   Markdown preview (below), `nocturne-editor.keys` (space ? in vim; the hint
   bar's last entry, `? keys`, clickable) the keys overview in the file's place; ? or esc hides it. **Vim** is on by
@@ -526,7 +526,24 @@ the highlighted line shows where it will land.
   the server's signature and docs, and every problem there with its whole
   message (multi-line type errors included), code and source. TypeScript and
   JavaScript (typescript-language-server 5.3+ with TypeScript 5.9+) expand the
-  type a level at a time (the card's − / +). Language servers run per language
+  type a level at a time (the card's − / +, ctrl-- / ctrl-=). **The card** opens
+  under its word (cmd-i / vim's K: the caret's; the pointer: the word it rests
+  on), above it when the room below is short, slid in to stay inside the pane,
+  at most half the pane tall, never over the word; it stays at its word as the
+  text scrolls (hidden while the word is off screen). Its keys: esc closes it
+  and does nothing else (in every vim mode and without vim), cmd-i again
+  closes it, ctrl-d / ctrl-u and page down / up scroll a long one, gd (cmd-k d)
+  goes to the definition; its footer lists them. Moving the caret, typing, a
+  click outside it and the editor losing the keyboard close it. Asked before
+  the server can answer (loading the `.envrc`, starting, loading or indexing
+  the workspace), it opens at once saying what it waits for ("rust-analyzer:
+  indexing 120/340") and fills in by itself; the bar shows the server's own
+  progress words meanwhile. An answer is kept per place until the text
+  changes. Edits go to the server as ranged changes 40 ms after typing (the
+  whole text when another editor has the file open), and before every
+  question; a hover the pointer left is cancelled at the server. A clean file
+  reloaded because it changed on disk counts as saved for the server
+  (rust-analyzer's `cargo check` runs, so an agent's edit shows its errors). Language servers run per language
   and workspace (the outermost `Cargo.toml` in the repository, the nearest
   `tsconfig.json` / `package.json`, `pyproject.toml`, `go.mod`, `flake.nix`,
   ..., else the repository) from settings.json's `editor` (see The person):
@@ -535,7 +552,14 @@ the highlighted line shows where it will land.
   lua-language-server, bash-language-server, vscode-json-language-server
   (validates JSON), yaml-language-server, taplo, marksman, vscode-css / html
   language servers, clangd, zls), shared by every editor of that workspace and
-  stopped 90 s after the last closes. A file renamed, moved or deleted from
+  started as the first editor of that language and workspace opens. **A
+  server's lifetime**: it runs while an editor uses it, and 15 minutes after
+  the last one closes (coming back is instant); of the servers no editor uses,
+  Herdr keeps at most 2, stopping the least recently used first. Nothing starts
+  for a project no editor has opened. rust-analyzer builds in its own target
+  folder (`target/rust-analyzer`: `cargo.targetDir`), so it never waits on a
+  `cargo build`'s lock nor rebuilds what that built; `server_settings`
+  overrides it. A file renamed, moved or deleted from
   the files pane (its record `shared("nocturne.files.changes")`: newest last,
   at most 50 entries `{ id, from, to, on, at }`, `to` null for a delete, a
   folder one entry matched by prefix; only entries newer than the editor's
@@ -551,7 +575,12 @@ the highlighted line shows where it will land.
   environment when the file's folder or one above it (up to the repository)
   has an `.envrc` that direnv allows (looked up and started inside what
   `direnv export` gives, loaded once per folder, a flake's first load
-  meanwhile shown as "loading .envrc…"), else on the app's PATH. An `.envrc`
+  meanwhile shown as "loading .envrc…"), else on the app's PATH. The loaded
+  environment is kept on disk (`cache/nocturne-editor/env-*.json`, keyed by
+  checksums of `.envrc`, `.env`, `flake.nix`, `flake.lock`, `shell.nix`,
+  `default.nix` and devenv's files): the next app start has it at once
+  without running nix, refreshes it behind the scenes, and loads anew when
+  one of those files changed (or its server is gone from the store). An `.envrc`
   direnv hasn't allowed is never loaded: the bar says `direnv allow`, as it
   says `no direnv` without direnv. cmd-i with no answer says why (no server
   for the language, not on PATH or in the environment, still starting or
@@ -1937,11 +1966,16 @@ All of it is in `herdr.d.ts`. In short:
 - Code (this machine): `highlight(text, language)` (tree-sitter spans `[start, end, name]`
   to color code you draw yourself; `languageOf(path)` names the language), `findFiles(root,
   query)` and `grep(root, query, { mode })` (fff: fuzzy file names and live grep, git-ignored
-  files left out), and language servers: `lspStart({ argv, root, settings })` (shared per argv
-  and root, initialized for you), `lspRequest`, `lspNotify`, `lspNextMessage` (diagnostics and
-  other notifications), `lspRelease`; documents and their sync are yours. A code editor's
+  files left out), and language servers: `lspStart({ argv, root, settings, idle })` (shared per
+  argv and root, initialized for you; `idle`: seconds it runs on once no copy uses it, default
+  90, of such servers at most 2 stay, least recently used stopped first), `lspRequest(id,
+  method, params, { key })` (a newer request with the same key cancels this one), `lspNotify`,
+  `lspNextMessage` (diagnostics, `$/progress` (work under way is replayed to a copy that joins)
+  and other notifications), `lspRelease`; documents and their sync are yours. A code editor's
   `EditorState` moves its caret, finds, edits, underlines problems (`set_diagnostics`), writes
   notes after lines (`set_line_notes`), reports the word under the pointer (`on("hover")`),
+  says where a place is drawn (`bounds({ line, col })`: its word and the editor's box, window
+  coordinates) and whether it has the keyboard (`focused()`),
   gets every keystroke first and may take it (`on("key")`, a modal scheme's), shapes its caret
   (`set_cursor_shape`) and sets several selections (`set_selections`).
   `setUnsaved(note)`: closing this copy's pane or tab asks the person first.

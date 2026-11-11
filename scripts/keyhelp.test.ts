@@ -263,18 +263,18 @@ test("editor: the gutter's numbers sit in from the pane's edge as the top bar's 
 
 test("editor: the asked-for hover (cmd-i) says why there's no answer; the pointer's hover stays quiet", async () => {
   const m = await import("../defaults/mods/nocturne-editor/main.js");
-  const v: any = surface(m.default, ["showCard", "serverNote"], { problems: [], lang: "rust", path: "/p/a.rs",
+  const v: any = surface(m.default, ["showCard", "serverNote", "cardState", "answered"], { problems: [], lang: "rust", path: "/p/a.rs", hovers: new Map(), progress: new Map(),
     server: { status: "none", why: "missing", names: ["rust-analyzer"], envrc: "/p", envKind: "blocked" } });
-  v.showCard(1, 2, null, cx());
+  v.showCard(1, 2, true, cx());
   expect(v.card.note.text).toMatch(/\/p\/\.envrc isn't allowed/);
   expect(v.card.note.fix).toBe("Run `direnv allow` in /p.");
   v.card = null;
-  v.showCard(1, 2, { x: 10, y: 10 }, cx());
+  v.showCard(1, 2, false, cx());
   expect(v.card).toBe(null);
   // A running server with nothing there: asked, the card says so.
   let answer: (h: any) => void = () => {};
   Object.assign(v, { server: { status: "ready", id: 1, name: "rust-analyzer" }, request: () => new Promise((r) => { answer = r; }) });
-  v.showCard(1, 2, null, cx());
+  v.showCard(1, 2, true, cx());
   answer(null);
   await Promise.resolve(); await Promise.resolve();
   expect(v.card.note.text).toBe("rust-analyzer has nothing for this place.");
