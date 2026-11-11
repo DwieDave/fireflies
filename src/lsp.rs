@@ -2,8 +2,10 @@
 //! spoken to in LSP's JSON-RPC over its stdin and stdout, and shared by every
 //! mod copy that asks for the same one. Herdr only carries messages: it starts
 //! the server, initializes it once, answers the requests a server makes of its
-//! client generically, and stops it a while after the last copy lets go. What
-//! to send (documents, hovers, diagnostics) is the mod's.
+//! client generically, and stops it a while after the last copy lets go (the
+//! starter says how long; a cap on servers nobody uses stops the least
+//! recently used first). What to send (documents, hovers, diagnostics) is the
+//! mod's.
 //!
 //! `herdr.lspStart`, `lspRequest`, `lspNotify`, `lspNextMessage`, `lspRelease`,
 //! `lspSessions` (see herdr.d.ts).
@@ -21,8 +23,14 @@ use std::{
 
 use serde_json::{Value, json};
 
-/// A server nobody uses is shut down after this long.
+/// A server nobody uses is shut down after this long, unless its starter asked
+/// for another time (`lspStart`'s `idle`).
 const IDLE: Duration = Duration::from_secs(90);
+/// The longest a starter may keep an unused server.
+const IDLE_MAX: Duration = Duration::from_secs(4 * 3600);
+/// At most this many servers nobody uses stay running: past it the least
+/// recently used of them stops. Servers in use are never stopped for it.
+const UNUSED_CAP: usize = 2;
 /// A request the server hasn't answered by then fails.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 /// Initialization can take a while (rust-analyzer loading a workspace).
@@ -44,6 +52,15 @@ struct Session {
     subscribers: Mutex<HashMap<u64, async_channel::Sender<Value>>>,
     users: Mutex<HashSet<u64>>,
     idle_since: Mutex<Option<Instant>>,
+    /// How long it may sit unused (the longest any starter asked for).
+    idle: Mutex<Duration>,
+    /// The last time a copy started, asked or told it something.
+    used: Mutex<Instant>,
+    /// Requests that a newer one with the same key replaces: (copy, key) -> request id.
+    keyed: Mutex<HashMap<(u64, String), i64>>,
+    /// Work in progress (`$/progress` begun and not ended): token -> its
+    /// begin, updated by reports, for a copy that joins meanwhile.
+    progress: Mutex<HashMap<String, Value>>,
     alive: AtomicBool,
     stderr: Mutex<VecDeque<String>>,
     /// The `initialize` result, once there is one; waiters until then.
@@ -112,6 +129,11 @@ impl Session {
     }
 
     fn request(&self, method: &str, params: Value) -> async_channel::Receiver<Result<Value, String>> {
+        self.request_id(method, params).1
+    }
+
+    /// Sends a request: its id, and where its answer arrives.
+    fn request_id(&self, method: &str, params: Value) -> (i64, async_channel::Receiver<Result<Value, String>>) {
         let (tx, rx) = async_channel::bounded(1);
         let id = self.next_request.fetch_add(1, Ordering::Relaxed);
         self.pending.lock().unwrap().insert(id, (tx.clone(), Instant::now()));
@@ -119,11 +141,40 @@ impl Session {
             self.pending.lock().unwrap().remove(&id);
             let _ = tx.try_send(Err(e));
         }
-        rx
+        (id, rx)
     }
 
     fn notify(&self, method: &str, params: Value) -> Result<(), String> {
         self.send(&json!({ "jsonrpc": "2.0", "method": method, "params": params }))
+    }
+
+    fn touch(&self) {
+        *self.used.lock().unwrap() = Instant::now();
+    }
+
+    /// Keeps what `$/progress` says is under way, for copies that join later.
+    fn track_progress(&self, params: &Value) {
+        let Some(token) = params.get("token").map(|t| t.to_string()) else { return };
+        let value = &params["value"];
+        let mut open = self.progress.lock().unwrap();
+        match value.get("kind").and_then(Value::as_str) {
+            Some("begin") => {
+                open.insert(token, params.clone());
+            }
+            Some("report") => {
+                if let Some(begun) = open.get_mut(&token) {
+                    for key in ["message", "percentage"] {
+                        if let Some(v) = value.get(key) {
+                            begun["value"][key] = v.clone();
+                        }
+                    }
+                }
+            }
+            Some("end") => {
+                open.remove(&token);
+            }
+            _ => {}
+        }
     }
 
     fn broadcast(&self, message: Value) {
@@ -176,6 +227,9 @@ impl Session {
                 {
                     self.diagnostics.lock().unwrap().insert(uri.to_owned(), note.clone());
                 }
+                if method == "$/progress" {
+                    self.track_progress(&note["params"]);
+                }
                 self.broadcast(note);
             }
             (None, None) => {}
@@ -214,6 +268,7 @@ impl Session {
         json!({
             "id": self.id, "argv": self.argv, "root": self.root,
             "users": self.users.lock().unwrap().len(),
+            "idle": self.idle.lock().unwrap().as_secs(),
             "alive": self.alive.load(Ordering::SeqCst),
             "ready": self.ready.lock().unwrap().result.as_ref().map(|r| r.is_ok()),
             "stderr": self.stderr.lock().unwrap().iter().rev().take(20).rev().cloned().collect::<Vec<_>>(),
@@ -300,18 +355,48 @@ fn reaper() {
                     }
                     !late
                 });
-                let idle = *s.idle_since.lock().unwrap();
-                if idle.is_some_and(|t| now.duration_since(t) > IDLE) && s.users.lock().unwrap().is_empty() {
-                    *s.idle_since.lock().unwrap() = None;
-                    SESSIONS.lock().unwrap().retain(|x| x.id != s.id);
-                    s.shut_down();
+                if expired(&s, now) {
+                    stop(&s);
                 }
             }
+            enforce_cap();
         });
     });
 }
 
-fn spawn(argv: Vec<String>, root: String, settings: Value) -> Result<Arc<Session>, String> {
+/// Nobody has used the session for longer than it may sit unused.
+fn expired(s: &Session, now: Instant) -> bool {
+    let since = *s.idle_since.lock().unwrap();
+    let keep = *s.idle.lock().unwrap();
+    since.is_some_and(|t| now.duration_since(t) > keep) && s.users.lock().unwrap().is_empty()
+}
+
+/// Stops a session (it's gone from the list at once).
+fn stop(s: &Arc<Session>) {
+    *s.idle_since.lock().unwrap() = None;
+    SESSIONS.lock().unwrap().retain(|x| x.id != s.id);
+    s.shut_down();
+}
+
+/// The sessions over the cap of unused ones, least recently used first.
+fn over_cap(sessions: &[Arc<Session>]) -> Vec<Arc<Session>> {
+    let mut unused: Vec<&Arc<Session>> = sessions.iter().filter(|s| s.users.lock().unwrap().is_empty()).collect();
+    if unused.len() <= UNUSED_CAP {
+        return vec![];
+    }
+    unused.sort_by_key(|s| *s.used.lock().unwrap());
+    unused[..unused.len() - UNUSED_CAP].iter().map(|s| (*s).clone()).collect()
+}
+
+/// Stops the least recently used unused sessions past the cap.
+fn enforce_cap() {
+    let sessions: Vec<Arc<Session>> = SESSIONS.lock().unwrap().clone();
+    for s in over_cap(&sessions) {
+        stop(&s);
+    }
+}
+
+fn spawn(argv: Vec<String>, root: String, settings: Value, idle: Duration) -> Result<Arc<Session>, String> {
     let (program, args) = argv.split_first().ok_or("a language server needs a command")?;
     let mut child = Command::new(program)
         .args(args)
@@ -335,6 +420,10 @@ fn spawn(argv: Vec<String>, root: String, settings: Value) -> Result<Arc<Session
         subscribers: Default::default(),
         users: Default::default(),
         idle_since: Default::default(),
+        idle: Mutex::new(idle),
+        used: Mutex::new(Instant::now()),
+        keyed: Default::default(),
+        progress: Default::default(),
         alive: AtomicBool::new(true),
         stderr: Default::default(),
         ready: Default::default(),
@@ -389,15 +478,22 @@ fn spawn(argv: Vec<String>, root: String, settings: Value) -> Result<Arc<Session
 
 /// `lspStart`: the session for this argv and root (started if needed), once
 /// initialized: `{ id, capabilities }`. The copy uses it until it releases it
-/// or goes away.
-pub fn start(copy: u64, argv: Vec<String>, root: String, settings: Value) -> async_channel::Receiver<Result<Value, String>> {
+/// or goes away; then it runs on unused for `idle` (default 90 s, at most 4 h;
+/// the longest any starter asked for), or until the cap on unused servers
+/// stops it, least recently used first.
+pub fn start(copy: u64, argv: Vec<String>, root: String, settings: Value, idle: Option<Duration>) -> async_channel::Receiver<Result<Value, String>> {
     reaper();
+    let idle = idle.unwrap_or(IDLE).min(IDLE_MAX);
     let (tx, rx) = async_channel::bounded(1);
     let session = {
         let mut sessions = SESSIONS.lock().unwrap();
         match sessions.iter().find(|s| s.argv == argv && s.root == root && s.alive.load(Ordering::SeqCst)) {
-            Some(s) => Ok(s.clone()),
-            None => spawn(argv, root, settings).inspect(|s| sessions.push(s.clone())),
+            Some(s) => {
+                let mut keep = s.idle.lock().unwrap();
+                *keep = (*keep).max(idle);
+                Ok(s.clone())
+            }
+            None => spawn(argv, root, settings, idle).inspect(|s| sessions.push(s.clone())),
         }
     };
     let session = match session {
@@ -409,6 +505,7 @@ pub fn start(copy: u64, argv: Vec<String>, root: String, settings: Value) -> asy
     };
     session.users.lock().unwrap().insert(copy);
     *session.idle_since.lock().unwrap() = None;
+    session.touch();
     subscribe(&session, copy);
     let id = session.id;
     let (ready_tx, ready_rx) = async_channel::bounded(1);
@@ -437,6 +534,10 @@ fn subscribe(session: &Session, copy: u64) -> async_channel::Receiver<Value> {
         return rx.clone();
     }
     let (tx, rx) = async_channel::bounded(4096);
+    // What's under way already: a copy joining while the server indexes sees it.
+    for begun in session.progress.lock().unwrap().values() {
+        let _ = tx.try_send(json!({ "method": "$/progress", "params": begun }));
+    }
     session.subscribers.lock().unwrap().insert(copy, tx);
     receivers.insert((copy, session.id), rx.clone());
     rx
@@ -452,12 +553,25 @@ pub fn next_message(copy: u64, id: u64) -> Result<async_channel::Receiver<Value>
     Ok(subscribe(&*find(id)?, copy))
 }
 
-pub fn request(id: u64, method: &str, params: Value) -> Result<async_channel::Receiver<Result<Value, String>>, String> {
+/// `lspRequest`. With a `key`, a newer request of the same copy and key
+/// replaces this one: the server hears `$/cancelRequest` for it and its
+/// caller gets "cancelled" (a hover the pointer has left, say).
+pub fn request(copy: u64, id: u64, method: &str, params: Value, key: Option<String>) -> Result<async_channel::Receiver<Result<Value, String>>, String> {
     let session = find(id)?;
     if !session.alive.load(Ordering::SeqCst) {
         return Err("the language server has exited".into());
     }
-    Ok(session.request(method, params))
+    session.touch();
+    let (this, rx) = session.request_id(method, params);
+    if let Some(key) = key {
+        if let Some(old) = session.keyed.lock().unwrap().insert((copy, key), this)
+            && let Some((tx, _)) = session.pending.lock().unwrap().remove(&old)
+        {
+            let _ = session.notify("$/cancelRequest", json!({ "id": old }));
+            let _ = tx.try_send(Err("cancelled".into()));
+        }
+    }
+    Ok(rx)
 }
 
 /// Sends a notification for `copy`. Documents are counted per copy: the
@@ -466,6 +580,7 @@ pub fn request(id: u64, method: &str, params: Value) -> Result<async_channel::Re
 /// diagnostics) and didClose when the last copy closes it.
 pub fn notify(copy: u64, id: u64, method: &str, params: Value) -> Result<(), String> {
     let s = find(id)?;
+    s.touch();
     let uri = params["textDocument"]["uri"].as_str().map(str::to_owned);
     match (method, uri) {
         ("textDocument/didOpen", Some(uri)) => {
@@ -526,6 +641,7 @@ pub fn release(copy: u64, id: u64) {
                 let _ = s.notify("textDocument/didClose", json!({ "textDocument": { "uri": uri } }));
             }
         }
+        s.keyed.lock().unwrap().retain(|(c, _), _| *c != copy);
         let mut users = s.users.lock().unwrap();
         users.remove(&copy);
         s.subscribers.lock().unwrap().remove(&copy);
@@ -579,6 +695,59 @@ mod tests {
         assert_eq!(file_uri("/a b/ü.rs"), if cfg!(windows) { "file:///" } else { "file://" }.to_owned() + "/a%20b/%C3%BC.rs");
     }
 
+    /// A session with no process, for the bookkeeping's tests.
+    fn idle_session(used_secs_ago: u64, users: &[u64]) -> Arc<Session> {
+        Arc::new(Session {
+            id: NEXT_SESSION.fetch_add(1, Ordering::Relaxed),
+            argv: vec!["none".into()],
+            root: "/".into(),
+            settings: Value::Null,
+            stdin: Mutex::new(None),
+            child: Mutex::new(None),
+            next_request: AtomicI64::new(1),
+            pending: Default::default(),
+            subscribers: Default::default(),
+            users: Mutex::new(users.iter().copied().collect()),
+            idle_since: Default::default(),
+            idle: Mutex::new(IDLE),
+            used: Mutex::new(Instant::now() - Duration::from_secs(used_secs_ago)),
+            keyed: Default::default(),
+            progress: Default::default(),
+            alive: AtomicBool::new(false),
+            stderr: Default::default(),
+            ready: Default::default(),
+            docs: Default::default(),
+            diagnostics: Default::default(),
+        })
+    }
+
+    #[test]
+    fn past_the_cap_of_unused_servers_the_least_recently_used_stop_first_and_used_ones_never() {
+        let in_use_old = idle_session(1000, &[7]);
+        let unused: Vec<_> = [50, 400, 10, 200, 300].iter().map(|ago| idle_session(*ago, &[])).collect();
+        let mut all = vec![in_use_old.clone()];
+        all.extend(unused.iter().cloned());
+        let stopped: Vec<u64> = over_cap(&all).iter().map(|s| s.id).collect();
+        // Five unused, two may stay: the three used longest ago (400 s, 300 s, 200 s) go, in that order.
+        assert_eq!(stopped, vec![unused[1].id, unused[4].id, unused[3].id]);
+        assert!(!stopped.contains(&in_use_old.id), "one in use is never stopped");
+        assert!(over_cap(&all[..3]).is_empty(), "two unused: at the cap");
+    }
+
+    #[test]
+    fn an_unused_server_stops_once_idle_for_its_starters_time_and_one_in_use_never() {
+        let now = Instant::now();
+        let s = idle_session(0, &[]);
+        assert!(!expired(&s, now), "released never: running");
+        *s.idle_since.lock().unwrap() = Some(now - Duration::from_secs(100));
+        assert!(expired(&s, now), "the default 90 s are up");
+        *s.idle.lock().unwrap() = Duration::from_secs(900);
+        assert!(!expired(&s, now), "its starter asked for 15 min");
+        assert!(expired(&s, now + Duration::from_secs(801)));
+        s.users.lock().unwrap().insert(3);
+        assert!(!expired(&s, now + Duration::from_secs(5000)), "in use again");
+    }
+
     /// A tiny language server in Python: answers initialize and hover,
     /// publishes diagnostics on didOpen, asks for its configuration.
     const FAKE: &str = r#"
@@ -602,6 +771,12 @@ while True:
     if meth == 'initialize':
         send({'jsonrpc': '2.0', 'id': m['id'], 'result': {'capabilities': {'hoverProvider': True}}})
         send({'jsonrpc': '2.0', 'id': 900, 'method': 'workspace/configuration', 'params': {'items': [{'section': 'fake.level'}]}})
+        send({'jsonrpc': '2.0', 'method': '$/progress', 'params': {'token': 'idx', 'value': {'kind': 'begin', 'title': 'Indexing'}}})
+        send({'jsonrpc': '2.0', 'method': '$/progress', 'params': {'token': 'idx', 'value': {'kind': 'report', 'message': '3/9'}}})
+    elif meth == 'slow/never':
+        pass
+    elif meth == '$/cancelRequest':
+        send({'jsonrpc': '2.0', 'method': 'echo/cancel', 'params': m['params']})
     elif meth == 'textDocument/didOpen':
         send({'jsonrpc': '2.0', 'method': 'textDocument/publishDiagnostics', 'params': {'uri': m['params']['textDocument']['uri'], 'diagnostics': [{'message': 'bad'}]}})
     elif meth == 'textDocument/hover':
@@ -628,18 +803,32 @@ while True:
         let root = dir.to_string_lossy().into_owned();
         let settings = json!({ "fake": { "level": 3 } });
 
-        let started = start(1, argv.clone(), root.clone(), settings.clone()).recv_blocking().unwrap().unwrap();
+        let started = start(1, argv.clone(), root.clone(), settings.clone(), Some(Duration::from_secs(600))).recv_blocking().unwrap().unwrap();
         let id = started["id"].as_u64().unwrap();
         assert_eq!(started["capabilities"]["hoverProvider"], json!(true));
-        // A second copy shares it.
-        let again = start(2, argv.clone(), root.clone(), settings).recv_blocking().unwrap().unwrap();
-        assert_eq!(again["id"].as_u64(), Some(id));
-
         let one = next_message(1, id).unwrap();
-        let two = next_message(2, id).unwrap();
+        assert_eq!(one.recv_blocking().unwrap()["params"]["value"]["kind"], "begin");
+        assert_eq!(one.recv_blocking().unwrap()["params"]["value"]["message"], "3/9");
         // The configuration answer came back from Herdr's reply to the server.
-        // (Copy 2 joined after this was sent: only copy 1 sees it.)
         assert_eq!(one.recv_blocking().unwrap(), json!({ "method": "echo/config", "params": [3] }));
+        // A second copy shares it, and its idle time is the longest asked for.
+        let again = start(2, argv.clone(), root.clone(), settings, None).recv_blocking().unwrap().unwrap();
+        assert_eq!(again["id"].as_u64(), Some(id));
+        assert_eq!(sessions()[0]["idle"], json!(600));
+        // Joining while the server indexes: the work under way, with its last words, first.
+        let two = next_message(2, id).unwrap();
+        let joined = two.recv_blocking().unwrap();
+        assert_eq!((joined["method"].as_str(), joined["params"]["value"]["title"].as_str(), joined["params"]["value"]["message"].as_str()), (Some("$/progress"), Some("Indexing"), Some("3/9")));
+
+        // A keyed request replaces the one before it: cancelled here and at the server.
+        let first = request(1, id, "slow/never", json!({}), Some("hover".into())).unwrap();
+        let second = request(1, id, "textDocument/hover", json!({}), Some("hover".into())).unwrap();
+        assert_eq!(first.recv_blocking().unwrap(), Err("cancelled".into()));
+        assert_eq!(second.recv_blocking().unwrap().unwrap()["contents"], "a hover");
+        let cancel = one.recv_blocking().unwrap();
+        assert_eq!(cancel["method"], "echo/cancel");
+        assert!(cancel["params"]["id"].is_i64());
+        assert_eq!(two.recv_blocking().unwrap()["method"], "echo/cancel");
 
         let open = json!({ "textDocument": { "uri": "file:///x.rs", "text": "", "version": 1, "languageId": "rust" } });
         notify(1, id, "textDocument/didOpen", open.clone()).unwrap();
@@ -653,7 +842,7 @@ while True:
         notify(1, id, "textDocument/didClose", json!({ "textDocument": { "uri": "file:///x.rs" } })).unwrap();
         assert!(find(id).unwrap().docs.lock().unwrap().contains_key("file:///x.rs"), "still open in copy 2");
 
-        let hover = request(id, "textDocument/hover", json!({})).unwrap().recv_blocking().unwrap().unwrap();
+        let hover = request(1, id, "textDocument/hover", json!({}), None).unwrap().recv_blocking().unwrap().unwrap();
         assert_eq!(hover["contents"], "a hover");
 
         release(1, id);

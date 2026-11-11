@@ -43,12 +43,16 @@ export function languageOf(pathOrName: string): string | null;
  *  initializes it (utf-16 positions; `settings` go out as `initializationOptions`, answer its
  *  `workspace/configuration` and follow in `workspace/didChangeConfiguration`) and resolves once
  *  it's ready with its `id` and `capabilities`. Rejects when it can't start. The copy keeps it until
- *  `lspRelease(id)` or the copy goes; a server no copy keeps is stopped after 90 s. Herdr only
- *  carries messages: opening documents, keeping them in sync and reading diagnostics is yours. */
-export function lspStart(options: { argv: string[]; root: string; settings?: object | null }): Promise<{ id: number; capabilities: any }>;
+ *  `lspRelease(id)` or the copy goes; a server no copy keeps runs on for `idle` seconds (default 90,
+ *  at most 4 h, the longest any starter asked for), and of the servers nobody uses at most 2 stay:
+ *  past that the least recently used stops first. A copy joining while the server works gets the
+ *  `$/progress` begun and not ended (with the last report's words) first. Herdr only carries
+ *  messages: opening documents, keeping them in sync and reading diagnostics is yours. */
+export function lspStart(options: { argv: string[]; root: string; settings?: object | null; idle?: number }): Promise<{ id: number; capabilities: any }>;
 /** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
- *  or when the server exits. */
-export function lspRequest(id: number, method: string, params?: any): Promise<any>;
+ *  or when the server exits. `key`: a later request of this copy with the same key replaces this
+ *  one (the server hears `$/cancelRequest`, this rejects with "cancelled"). */
+export function lspRequest(id: number, method: string, params?: any, options?: { key?: string }): Promise<any>;
 /** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). Open
  *  documents are counted per mod copy: the server hears `didOpen` once (a later copy's becomes a
  *  `didChange` with its text, and that copy gets the file's last `publishDiagnostics` at once) and
