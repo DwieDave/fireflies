@@ -534,8 +534,10 @@ the highlighted line shows where it will land.
   JavaScript (typescript-language-server 5.3+ with TypeScript 5.9+) expand the
   type a level at a time (the card's − / +, ctrl-- / ctrl-=). **The card** opens
   under its word (cmd-i / vim's K: the caret's; the pointer: the word it rests
-  on), above it when the room below is short, slid in to stay inside the pane,
-  at most half the pane tall, never over the word; it stays at its word as the
+  on) when a full-size card (half the pane) fits there, else above it,
+  standing on the line by its bottom edge: its first frame is its place, and
+  filling in or growing never moves it (a long one scrolls). Slid in to stay
+  inside the pane, at most half the pane tall, never over the word; it stays at its word as the
   text scrolls (hidden while the word is off screen). Its keys: esc closes it
   and does nothing else (in every vim mode and without vim), cmd-i again
   closes it, ctrl-d / ctrl-u and page down / up scroll a long one, gd (cmd-k d)

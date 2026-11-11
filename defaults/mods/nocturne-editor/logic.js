@@ -374,15 +374,18 @@ export function serverNote(server, lang, { empty = false, tilde: t = (p) => p } 
 }
 
 /**
- * Where the hover card goes (pane coordinates, unzoomed px): under the word,
- * or above it when the room below is short of what it needs and there's more
- * above; left-aligned with the word, slid in to stay inside the pane; never
- * over the word. `anchor` { x, y, w, h }: the word. `pane` { width, height }.
- * `card` { width, height }: height its natural height (null before it's
- * measured: then a guess). It's never taller than half the pane. `top` / `bottom`: the bars it stays clear of.
+ * Where the hover card goes (pane coordinates, unzoomed px): under the word
+ * when a card of full size (half the pane) fits there, else above it if
+ * there's more room above; left-aligned with the word, slid in to stay inside
+ * the pane; never over the word. The side never waits on the card's height:
+ * under, it hangs from the line's bottom; above, it stands on the line's top
+ * by its bottom edge. So its first frame is its place, and a card that fills
+ * in or grows only grows away from its word (scrolling past its limit).
+ * `anchor` { x, y, w, h }: the word. `pane` { width, height }. `card`
+ * { width }. `top` / `bottom`: the bars it stays clear of.
  * Returns { left, width, top | bottom (the other null), maxH, above }.
  */
-export function cardPlace(anchor, pane, card, { top = 0, bottom = 0, margin = 8, gap = 2, guess = 180 } = {}) {
+export function cardPlace(anchor, pane, card, { top = 0, bottom = 0, margin = 8, gap = 2 } = {}) {
   const width = Math.max(120, Math.min(card.width, pane.width - 2 * margin));
   const left = Math.max(margin, Math.min(anchor.x, pane.width - width - margin));
   const under = anchor.y + anchor.h + gap;
@@ -392,8 +395,7 @@ export function cardPlace(anchor, pane, card, { top = 0, bottom = 0, margin = 8,
   // At most about half the pane (as Zed's popovers): a long answer scrolls
   // rather than covering the text it's about.
   const cap = Math.max(72, Math.round(pane.height / 2));
-  const want = Math.min(card.height ?? guess, cap);
-  const above = roomBelow < want && roomAbove > roomBelow;
+  const above = roomBelow < cap && roomAbove > roomBelow;
   return above
     ? { left, width, top: null, bottom: pane.height - over, maxH: Math.max(48, Math.min(cap, roomAbove)), above }
     : { left, width, top: under, bottom: null, maxH: Math.max(48, Math.min(cap, roomBelow)), above };

@@ -1539,10 +1539,9 @@ export default class EditorPane extends View {
     if (!anchor) return null;
     if (c.keyboard && !c.drawn) { c.drawn = true; this.mark(`card drawn ${Date.now() - c.opened}ms after it was asked${c.pending ? `, waiting: ${this.waitWords()}` : ""}`); }
     const footH = 24;
-    const natural = c.contentH != null ? c.contentH + footH + 2 : null;
     // The pane's size comes in window pixels (zoomed); the card is placed in layout units.
     const z = zoom();
-    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W, height: natural }, { top: BAR, bottom: HINTS });
+    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W }, { top: BAR, bottom: HINTS });
     const sevColor = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
     const lang = this.lang === "tsx" ? "typescript" : this.lang;
     const parts = c.parts.map((p, i) => p.code != null

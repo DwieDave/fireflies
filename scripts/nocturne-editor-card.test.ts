@@ -128,10 +128,12 @@ test("placement: near the pane's foot it flips above the line, its bottom just o
     .toMatchObject({ above: false, maxH: 160 });
   expect(cardPlace({ x: 300, y: 300, w: 18, h: 18 }, { width: 1000, height: 340 }, { width: 520, height: 300 }, { top: 30, bottom: 22 }))
     .toMatchObject({ above: true, maxH: 170 });
-  // A short card that fits below stays below, even low down.
-  expect(cardPlace({ x: 300, y: 700, w: 18, h: 18 }, { width: 1000, height: 800 }, { width: 520, height: 40 }, { top: 30, bottom: 22 }).above).toBe(false);
-  // Before it's measured, a guess decides; measured, its real height.
-  expect(cardPlace({ x: 0, y: 600, w: 9, h: 18 }, { width: 1000, height: 800 }, { width: 520, height: null }, { top: 30, bottom: 22 }).above).toBe(true);
+  // Its height never decides (item 8): short, long or not yet measured, the same place.
+  const at = (height: number | null) => cardPlace({ x: 300, y: 700, w: 18, h: 18 }, { width: 1000, height: 800 }, { width: 520, height }, { top: 30, bottom: 22 });
+  expect([at(40), at(null)]).toEqual([at(900), at(900)]);
+  // Under the line when a full-size card (half the pane) fits there.
+  expect(cardPlace({ x: 0, y: 360, w: 9, h: 18 }, { width: 1000, height: 800 }, { width: 520 }, { top: 30, bottom: 22 }).above).toBe(false);
+  expect(cardPlace({ x: 0, y: 400, w: 9, h: 18 }, { width: 1000, height: 800 }, { width: 520 }, { top: 30, bottom: 22 }).above).toBe(true);
 });
 
 test("placement: near the right edge it slides in to stay inside the pane; a narrow pane shrinks it", () => {
@@ -670,4 +672,72 @@ test("item 7: the editor's own section keeps its keys (cmd-s saves, not the layo
   p.appKeys = null;
   ran.length = 0;
   expect([press(chord("cmd-alt-y")), ran]).toEqual([true, [["pane.go", { direction: "up" }]]]);
+});
+
+// ---- item 8: a card's first seen frame is its final place
+/** Where a drawn card is, and whether it's seen: its left, its anchored edge, its height limit. */
+function frame(p: any) {
+  const v = p.cardView(theme, "mono");
+  if (!v) return null;
+  const at = (k: string) => v.calls[k]?.at(-1)?.[0];
+  return { left: at("left"), top: at("top") ?? null, bottom: at("bottom") ?? null, maxH: at("max_h"), seen: at("opacity") !== 0 && !v.calls.invisible };
+}
+/** The size reports a drawn frame brings (window pixels, zoomed): the content's, the scroll window's. */
+function measured(p: any, contentH: number, viewH = contentH) {
+  const v = p.cardView(theme, "mono");
+  byId(v, "card-content").calls.on_size_change[0][0]({ width: 520 * zoomNow, height: contentH * zoomNow }, cx());
+  byId(v, "card-scroll").calls.on_size_change[0][0]({ width: 520 * zoomNow, height: viewH * zoomNow }, cx());
+}
+const LONG = { contents: { kind: "markdown", value: "```rust\npub fn spawn<F, T>(f: F) -> JoinHandle<T>\n```\n---\n" + "Spawns a new thread. ".repeat(80) } };
+
+test("item 8: near the pane's foot, waiting then filled with a long answer: every seen frame is at the settled place", async () => {
+  const p = await pane();
+  // The word 500 px down an 800 px pane: 250 px below it, 460 above.
+  ed.drawn = { x: 40 + 90, y: 60 + (500 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  const d = deferred();
+  answer = () => d.promise;
+  p.command("hover", cx());
+  const seen: any[] = [];
+  const look = () => { const f = frame(p); if (f?.seen) seen.push(f); };
+  look();                 // the first frame: waiting
+  measured(p, 38); look(); // its size report
+  d.resolve(LONG); await flush();
+  look();                 // filled, before its size is known
+  measured(p, 900, 370); look(); // settled: taller than any room, scrolling
+  expect(seen.length).toBeGreaterThan(0);
+  const settled = seen.at(-1);
+  for (const f of seen) expect(f).toEqual(settled);
+  // It's above the line (not enough room under it for a card), its bottom just over the word.
+  expect(settled.top).toBe(null);
+  expect(settled.bottom).toBeCloseTo(800 - 498, 5);
+});
+
+test("item 8: a card below its line that fills and grows taller than the room stays below and scrolls: no flip, no frame elsewhere", async () => {
+  const p = await pane();
+  // The word 100 px down: 680 px below it.
+  ed.drawn = { x: 40 + 90, y: 60 + (100 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  const d = deferred();
+  answer = () => d.promise;
+  p.command("hover", cx());
+  const first = frame(p);
+  measured(p, 38);
+  d.resolve(LONG); await flush();
+  const mid = frame(p);
+  measured(p, 2000, 380);
+  const settled = frame(p);
+  expect([first, mid]).toEqual([settled, settled]);
+  expect(settled.top).toBeCloseTo(120, 5);
+  expect(settled.bottom).toBe(null);
+});
+
+test("item 8: a short answer near the foot opens above at once, as a long one does (the side never waits on a height)", async () => {
+  const p = await pane();
+  ed.drawn = { x: 40 + 90, y: 60 + (600 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  answer = () => HOVER;
+  p.command("hover", cx());
+  await flush();
+  const first = frame(p);
+  measured(p, 60);
+  expect(frame(p)).toEqual(first);
+  expect(first.top).toBe(null);
 });
