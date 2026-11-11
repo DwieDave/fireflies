@@ -586,20 +586,30 @@ export default class Sky {
       .child("»");
   }
 
-  /** A space's rail row: its initials, its status pip at the right edge; the
-   *  shown one on the dithered band with a blue edge (like a tile's foot). */
-  railSpace(t, s) {
-    // On the night's own ground, so no star lands beside a letter like a stray mark.
-    return h_flex().id(`rail-space-${s.id}`).relative().w_full().h(24).flex_none().pl(12).pr(10).items_center().text_size(11)
-      .bg(t.background).text_color(s.active ? t.foreground : t.muted)
-      .hover((st) => st.text_color(t.foreground).bg(t.ansi0 + "55"))
+  /** A space's rail row: its initials on a dotted thread down the rail's
+   *  middle that runs only between spaces (`at`: its place, of `count`). The
+   *  shown one has blue corner ticks; the one under the pointer a grey plate;
+   *  one that wants attention its status pip beside the initials. */
+  railSpace(t, s, at, count) {
+    const hot = this.railHover === s.id;
+    const tick = (pos) => div().absolute().size(4).border_color(t.accent)
+      .when(pos === "top", (el) => el.left(-3).top(-3).border_t(1).border_l(1))
+      .when(pos === "bottom", (el) => el.right(-3).bottom(-3).border_b(1).border_r(1));
+    const thread = count > 1 ? div().absolute().left(0).right(0).top(at === 0 ? 13 : 0).bottom(at === count - 1 ? 13 : 0).flex().justify_center()
+      .child(div().relative().w(1).h_full().child(dither(t.ansi8 + "99", 1))) : null;
+    return div().id(`rail-space-${s.id}`).relative().w_full().h(26).flex_none().flex().items_center().justify_center().text_size(11)
       .tooltip(s.name)
+      .on_hover((h, cx) => { if (h ? this.railHover !== s.id : this.railHover === s.id) { this.railHover = h ? s.id : null; cx.notify(); } })
       .on_mouse_down("left", stop)
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.spaces.menu(s); })
       .on_click(() => run("space.select", { id: s.id }))
-      .when(s.active, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-      .child(div().relative().flex_1().min_w(0).child(this.initials(s.name)))
-      .child(div().relative().child(pip(t, s.status)));
+      .when(Boolean(thread), (el) => el.child(thread))
+      // On a plate of the night's ground (the list is on it too, so no star
+      // lands beside a letter like a stray mark), so the thread stops at the letters.
+      .child(div().relative().px(3).py(1).bg(hot ? t.ansi0 : t.background).text_color(s.active || hot ? t.foreground : t.muted)
+        .child(this.initials(s.name))
+        .when(s.active, (el) => el.child(tick("top")).child(tick("bottom")))
+        .when(Boolean(s.status) && s.status !== "idle", (el) => el.child(div().absolute().right(-13).top(5).child(pip(t, s.status)))));
   }
 
   /** A firefly on the rail: its mark in a 32 px cell, glowing in its rhythm
@@ -669,7 +679,7 @@ export default class Sky {
         .child(svg(`${ART}/moon-${moonPhase(list)}.svg`).size(32).flex_none().text_color(t.ansi7))
         .child(div().pt(4).text_size(11).text_color(t.foreground).child(this.clock.time)))
       .child(div().pt(10).pb(14).flex_none().child(this.openKey(t)))
-      .child(v_flex().w_full().px(8).py(2).flex_none().bg(t.background).children(rows.map(({ s }) => this.railSpace(t, s))))
+      .child(v_flex().id("rail-spaces").w_full().flex_none().bg(t.background).children(rows.map(({ s }, i) => this.railSpace(t, s, i, rows.length))))
       .child(div().py(12).flex_none().child(rule()))
       .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().when(Boolean(jar), (el) => el.child(jar)).children(flies))
       .when(Boolean(ground), (el) => el.child(ground))
