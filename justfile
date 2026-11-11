@@ -88,8 +88,10 @@ test:
     bun test scripts/nocturne-render-asks.test.ts
     # An agent's row is pressed anywhere on it (full width, half of each gap; the rail's cell and its padding), with recording gpui stand-ins.
     bun test scripts/nocturne-hit-areas.test.ts
-    # The editor's servers through the workspace's .envrc (direnv: allowed, blocked, none, missing, a slow load), and what cmd-i says without one, exec faked.
+    # The editor's servers through the workspace's .envrc (direnv: allowed, blocked, none, missing, a slow load, kept on disk: hit, miss, a changed flake.lock), and what cmd-i says without one, exec faked.
     bun test scripts/nocturne-editor-env.test.ts
+    # The editor's hover card (its place, every way it closes in each vim mode, a card that waits and fills in), progress words, ranged edits, kept answers: a whole pane with herdr and gpui stand-ins (mocks herdr).
+    bun test scripts/nocturne-editor-card.test.ts
     # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
     bun test scripts/nocturne-editor-follow.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.

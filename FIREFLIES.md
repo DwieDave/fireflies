@@ -62,8 +62,14 @@ With Nix, build it from source with crane, as `modules/herdr-app.nix` in
 
 `flake.nix` is a shell with the language servers for this repository:
 rust-analyzer (with cargo, rustc and the standard library's sources), the
-TypeScript language server for the mods and scripts, nixd and taplo. It holds
-language tooling only; the build's toolchain stays as it is. nix-darwin takes
+TypeScript language server for the mods and scripts, nixd and taplo, and Zig
+0.16 (the same store path as the build's), which ghostty-sys's build script
+needs when rust-analyzer runs build scripts and `cargo check` (without it they
+fail there, and the app crate gets no `cargo check` errors). It holds language
+tooling only; the build's toolchain stays as it is. The editor's
+rust-analyzer builds in `target/rust-analyzer`, apart from `cargo build`'s
+folder: the shell's environment differs from a terminal's, and sharing one
+folder would rebuild each other's work and wait on each other's lock. nix-darwin takes
 this repository with `flake = false`, so the file doesn't change that build.
 `.envrc` loads it with direnv: run `direnv allow` once in the checkout. Then
 terminals with direnv's hook, and Fireflies' editor (it looks a language
