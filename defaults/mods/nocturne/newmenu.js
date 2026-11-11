@@ -4,12 +4,21 @@
 //             the focused one, or a tab of their own. Its little picture shows
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
-//   panels    a grid of tiles (panels.js): terminal, web, files, agents,
-//             usage, worktrees, git, diff, github, in fixed columns (a short
-//             last row keeps them). Git, the diff (Git's review) and GitHub float and
-//             files runs down the tab's edge when "pane" is picked; open
-//             ones say so with a corner mark and close on a second pick.
-//   agents    every installed agent, started at the landing spot
+//   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
+//             usage, three to a row (COLS): the short second row keeps the
+//             columns, its third cell empty. Each opens beside the focused pane or in a tab
+//             of its own; Files too (a files pane of its own, `files.open`:
+//             the panel docked down the tab's edge is the strip's files
+//             button and cmd-e). Agents and Usage, open in the shown tab,
+//             say so with a corner mark and close on a second pick. The
+//             panels that float over the tab (worktrees, Git, its diff,
+//             GitHub) aren't here: the strip's git button and its ▾, their
+//             keys and the palette open them.
+//   agents    every installed agent, started at the landing spot; the ones
+//             that aren't installed are hidden behind a dim last row, "2 not
+//             installed · show" (enter or a click shows them, again hides
+//             them; remembered, shared(MISSING)). They come after the
+//             installed ones and carry no number, so 1-9 never move.
 //   space     a new space, or a worktree (made or opened)
 //   footer    what the item under the cursor will do, in words
 //
@@ -20,17 +29,22 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, window as appWindow, keys, shared, setShared } from "herdr";
 import { ART, LOGO, dither, eyebrow } from "./kit.js";
-import { panels, here, terminalPane, terminalTab } from "./panels.js";
+import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
 const KNOWN = "new-menu.agents";
 // Where new things land: "pane" or "tab".
 const DEST = "nocturne.newDest";
+// The agents that aren't installed are shown (true) or hidden (else, the default).
+export const MISSING = "nocturne.newShowMissing";
 
-export const WIDTH = 352;
+// Three tiles to a row, "Terminal" whole in one: each (WIDTH - 2 PAD - 2 GAP)
+// / 3 = 96 px, 84 inside its padding and border. The footer's words fit
+// beside "shift: other" (say(): short lines).
+export const WIDTH = 320;
 const PAD = 12;
-const COLS = 4;
+const COLS = 3;
 const GAP = 4;
 const TILE_H = 64;
 const ROW = 26;
@@ -65,30 +79,41 @@ export function shortcut(name) {
 export const OPEN = "nocturne.newOpen";
 
 const destNow = () => (shared(DEST) === "tab" ? "tab" : "pane");
+const showMissing = () => shared(MISSING) === true;
 const CONTEXT = "NocturneNew";
 const FLIP = "nocturne_new::flip";
 const CLOSE = "nocturne_new::close";
 
-/** The agents a machine last reported, installed first. */
-function agentRows(agents) {
+/** The agents a machine last reported, installed first (numbered 1-9), then
+ *  (`show`) the first two that aren't, then the row that shows or hides those
+ *  (only when there are any). */
+function agentRows(agents, show = showMissing()) {
   const installed = agents.filter((a) => a.installed);
   const missing = agents.filter((a) => !a.installed).slice(0, 2);
   return [
     ...installed.map((a, i) => ({ kind: "agent", id: `agent-${a.key}`, a, key: i < 9 ? String(i + 1) : null })),
-    ...missing.map((a) => ({ kind: "agent", id: `agent-${a.key}`, a, off: true })),
+    ...(show ? missing.map((a) => ({ kind: "agent", id: `agent-${a.key}`, a, off: true })) : []),
+    ...(missing.length ? [{ kind: "missing", id: "agents-missing", n: missing.length, shown: show }] : []),
   ];
 }
+
+/** The menu's tiles: every panel (panels.js) that lands in a pane or a tab,
+ *  not the ones that float over the tab. Files is a files pane of its own
+ *  here, beside the focused pane or in a tab, like Terminal (no corner mark,
+ *  no close on a second pick); the docked panel is the strip's button's. */
+export const menuPanels = () => panels().filter((p) => p.fixed !== "float")
+  .map((p) => (p.id === "files" ? { ...p, fixed: undefined, open: undefined, pane: () => filesHere(), tab: () => filesHere(true) } : p));
 
 /** Every pickable item, in cursor order: tiles, agents, space rows. */
 function items(agents) {
   const space = here().space;
   const worktree = (action) => () => openWorktrees({ space: space?.id, action });
   return [
-    ...panels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
+    ...menuPanels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
-    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a new space, in your home folder" },
-    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a branch in its own folder, as a space" },
-    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree that's already there, as a space" },
+    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a space in your home folder" },
+    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a new branch, as a space" },
+    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree, as a space" },
   ];
 }
 
@@ -106,19 +131,30 @@ export function openNewMenu({ centered = false, at = null, wasOpen = false } = {
     return;
   }
   if (wasOpen) return;
-  setShared(OPEN, openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width: WIDTH, height: newMenuHeight(),
-    ...(at && !centered ? { at } : {}), props: { role: "new" } }));
+  // It sets its own height (menuHeight) as it finds agents and shows or hides
+  // the ones that aren't installed: a popup is as tall as its content up to
+  // `height`, a dialog without one up to most of the window.
+  setShared(OPEN, openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width: WIDTH,
+    ...(centered ? {} : { height: MOST }), ...(at && !centered ? { at } : {}), props: { role: "new" } }));
 }
 
 /** The menu is open (the strip lights "+ new" and drops its tooltip). */
 export const newMenuOpen = () => Boolean(shared(OPEN));
 
+// The menu at its tallest (layout px); past it the body scrolls.
+const MOST = 640;
+
+/** How tall the menu is with these agents' rows (at least one: the "looking" line). */
+export function menuHeight(agents, show = showMissing()) {
+  const n = Math.max(1, agentRows(agents, show).length);
+  const tiles = Math.ceil(menuPanels().length / COLS);
+  return Math.min(MOST, HEAD + SECTION + tiles * TILE_H + (tiles - 1) * GAP + SECTION + n * ROW + SECTION + 3 * ROW + 8 + FOOT + 2);
+}
+
 /** How tall the menu is for the agents it last found on the shown space's machine. */
 export function newMenuHeight() {
   const machine = spaces().find((s) => s.active)?.machine ?? "";
-  const n = Math.max(1, agentRows(shared(KNOWN)?.[machine] ?? []).length);
-  const tiles = Math.ceil(panels().length / COLS);
-  return Math.min(640, HEAD + SECTION + tiles * TILE_H + (tiles - 1) * GAP + SECTION + n * ROW + SECTION + 3 * ROW + 8 + FOOT + 2);
+  return menuHeight(shared(KNOWN)?.[machine] ?? []);
 }
 
 export default class NewMenu {
@@ -166,9 +202,17 @@ export default class NewMenu {
     cx.notify();
   }
 
-  /** Runs an item at `dest` (the switch's, unless shift asked for the other). */
-  pick(x, dest = destNow()) {
+  /** Runs an item at `dest` (the switch's, unless shift asked for the other).
+   *  The not-installed row shows or hides those agents and the menu stays. */
+  pick(x, dest = destNow(), cx = null) {
     if (!x || x.off) return;
+    if (x.kind === "missing") {
+      setShared(MISSING, !showMissing());
+      // The cursor stays on the row (it moves down as the agents show).
+      this.keep = x.id;
+      cx?.notify();
+      return;
+    }
     this.dismiss();
     if (x.kind === "tile") return dest === "tab" ? x.p.tab() : x.p.pane();
     if (x.kind === "agent") return dest === "tab" ? terminalTab(x.a.run, x.a.name) : terminalPane(x.a.run);
@@ -178,14 +222,13 @@ export default class NewMenu {
   /** What picking `x` will do, for the footer. */
   say(x, dest) {
     if (!x) return "";
-    if (x.off) return x.kind === "agent" ? `${x.a.name} isn't installed here` : "open a space first";
+    if (x.off) return x.kind === "agent" ? `${x.a.name} isn't installed` : "open a space first";
     if (x.kind === "row") return x.say;
+    if (x.kind === "missing") return `${x.shown ? "hides" : "shows"} ${x.n} not installed`;
     const name = x.kind === "agent" ? x.a.name : x.p.name.toLowerCase();
     if (dest === "tab") return `${name} in a new tab`;
     if (x.kind === "tile") {
       if (x.p.open?.()) return `closes the ${name}`;
-      if (x.p.fixed === "float") return `${name} floats over the tab`;
-      if (x.p.fixed === "edge") return `${name} along the tab's right edge`;
     }
     return `${name} in a new pane`;
   }
@@ -245,21 +288,20 @@ export default class NewMenu {
     return (h, cx) => { if (h && !x.off) { const i = live.indexOf(x); if (i !== this.cursor) { this.cursor = i; cx.notify(); } } };
   }
 
-  /** A panel tile: a strip along its top (where it always lands, left; its key,
-   *  right), then its icon and name. Open ones carry a blue mark before the label. */
+  /** A panel tile: a strip along its top ("open" when it's open in the shown
+   *  tab, with a blue mark, left; its key, right), then its icon and name. */
   tile(t, x, on, live, dest) {
     const open = !x.off && x.p.open?.();
     const color = x.off ? t.ansi8 : on ? t.foreground : t.muted;
-    const fixed = dest === "pane" ? x.p.fixed : null;
     // Every tile keeps its 1 px border (only its color changes), so hovering doesn't move anything.
     return v_flex().id(`nm-${x.id}`).relative().flex_1().min_w(0).h(TILE_H).px(5).pt(3).pb(7)
       .border(1).border_color(on && !x.off ? t.ansi8 : t.ansi0)
       .on_hover(this.hoverTo(x, live))
-      .on_click((e) => this.pick(x, e?.modifiers?.shift ? (dest === "tab" ? "pane" : "tab") : dest))
+      .on_click((e, cx) => this.pick(x, e?.modifiers?.shift ? (dest === "tab" ? "pane" : "tab") : dest, cx))
       .when(on && !x.off, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
       .child(h_flex().relative().h(12).flex_none().gap(3).items_center().text_size(9)
         .when(open, (el) => el.child(div().size(4).flex_none().bg(t.accent)))
-        .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : fixed ?? ""))
+        .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : ""))
         .child(div().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(x.key)))
       .child(v_flex().relative().flex_1().items_center().justify_center().gap(5)
         .child(svg(x.p.icon.includes("/") ? x.p.icon : chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.ansi8 : on || open ? t.accent : t.dim))
@@ -278,11 +320,17 @@ export default class NewMenu {
     return h_flex().id(`nm-${x.id}`).relative().h(ROW).flex_none().px(PAD).gap(10).items_center().text_size(12)
       .text_color(x.off ? t.ansi8 : on ? t.foreground : t.muted)
       .on_hover(this.hoverTo(x, live))
-      .on_click((e) => this.pick(x, e?.modifiers?.shift ? (dest === "tab" ? "pane" : "tab") : dest))
+      .on_click((e, cx) => this.pick(x, e?.modifiers?.shift ? (dest === "tab" ? "pane" : "tab") : dest, cx))
       .when(on && !x.off, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(mark))
       .child(div().relative().flex_1().min_w(0).truncate().child(name))
       .child(div().relative().flex_none().text_size(11).text_color(on && !x.off ? t.accent : t.dim).child(hint ?? ""));
+  }
+
+  /** The dim last row of the agents: how many aren't installed, and show / hide. */
+  missingRow(t, x, on, live, dest) {
+    const icon = svg(chrome(x.shown ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(on ? t.accent : t.ansi8);
+    return this.row(t, x, on, live, dest, icon, `${x.n} not installed`, x.shown ? "hide" : "show").text_color(on ? t.muted : t.dim);
   }
 
   foot(t, x, dest) {
@@ -298,16 +346,22 @@ export default class NewMenu {
     if (m.control || m.platform || m.alt) return;
     const k = String(e.key ?? "").toLowerCase(), n = live.length;
     const cur = live[this.cursor];
-    // In the grid, ↑ ↓ move by a row of tiles.
+    // In the grid, ↑ ↓ move by a row of tiles; ↓ into the short last row
+    // from past its end lands on its last tile, ↓ from the last row leaves the grid.
     const tiles = live.filter((x) => x.kind === "tile").length;
     const inGrid = cur?.kind === "tile";
     const other = destNow() === "tab" ? "pane" : "tab";
     let done = true;
     if (k === "tab") this.flip(cx);
     else if (k === "right" || k === "left") this.cursor = (this.cursor + (k === "right" ? 1 : -1) + n) % n;
-    else if (k === "down") this.cursor = inGrid && this.cursor + COLS < tiles ? this.cursor + COLS : inGrid ? tiles : (this.cursor + 1) % n;
+    else if (k === "down") {
+      const lastRow = Math.floor((tiles - 1) / COLS);
+      this.cursor = !inGrid ? (this.cursor + 1) % n
+        : this.cursor + COLS < tiles ? this.cursor + COLS
+        : Math.floor(this.cursor / COLS) < lastRow ? tiles - 1 : tiles;
+    }
     else if (k === "up") this.cursor = inGrid ? (this.cursor >= COLS ? this.cursor - COLS : (this.cursor - 1 + n) % n) : this.cursor === tiles ? tiles - 1 : (this.cursor - 1 + n) % n;
-    else if (k === "enter") { cx.stop_propagation(); return this.pick(cur, m.shift ? other : destNow()); }
+    else if (k === "enter") { cx.stop_propagation(); return this.pick(cur, m.shift ? other : destNow(), cx); }
     else if (k === "escape") { cx.stop_propagation(); return this.dismiss(); }
     else {
       // A tile's letter or an agent's number: the key itself, or what it types.
@@ -324,6 +378,7 @@ export default class NewMenu {
     const dest = destNow();
     const all = items(this.agents);
     const live = all.filter((x) => !x.off);
+    if (this.keep) { const i = live.findIndex((x) => x.id === this.keep); if (i >= 0) this.cursor = i; this.keep = null; }
     this.cursor = Math.min(this.cursor, Math.max(0, live.length - 1));
     const current = live[this.cursor];
     const tiles = all.filter((x) => x.kind === "tile");
@@ -336,10 +391,10 @@ export default class NewMenu {
         // padding and border count toward a flex_1 item's width), left empty.
         .children(Array.from({ length: COLS - slice.length }, (_, j) => div().id(`nm-pad-${i}-${j}`).flex_1().min_w(0).h(TILE_H).px(5).border(1).border_color(t.background))));
     }
-    const ags = all.filter((x) => x.kind === "agent");
+    const ags = all.filter((x) => x.kind === "agent" || x.kind === "missing");
     const rows = all.filter((x) => x.kind === "row");
     const machine = here().space?.machine;
-    return v_flex().id("nocturne-new").size_full().bg(t.background).border(1).border_color(t.ansi0)
+    return v_flex().id("nocturne-new").w_full().h(menuHeight(this.agents)).bg(t.background).border(1).border_color(t.ansi0)
       .key_context(CONTEXT)
       .track_focus(this.handle)
       .on_action(FLIP, (_e, cx) => this.flip(cx))
@@ -350,8 +405,9 @@ export default class NewMenu {
         .child(this.section(t, "panels"))
         .child(v_flex().px(PAD).gap(GAP).children(grid))
         .child(this.section(t, "start an agent", machine ? `on ${machine}` : null))
-        .children(ags.map((x) => this.row(t, x, x === current, live, dest, this.mark(t, x.a, x.off ? t.ansi8 : x === current ? t.foreground : t.dim),
-          x.a.name, x.off ? "not installed" : x.key ?? "")))
+        .children(ags.map((x) => x.kind === "missing" ? this.missingRow(t, x, x === current, live, dest)
+          : this.row(t, x, x === current, live, dest, this.mark(t, x.a, x.off ? t.ansi8 : x === current ? t.foreground : t.dim),
+            x.a.name, x.off ? "not installed" : x.key ?? "")))
         .when(!ags.length, (el) => el.child(div().h(ROW).px(PAD).flex().items_center().text_size(11).text_color(t.dim)
           .child(this.failed ? "couldn't ask for agents" : "looking for agents…")))
         .child(this.section(t, "space"))

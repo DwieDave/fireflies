@@ -177,7 +177,7 @@ view shows for the Branches panel, lazygit's `git log --graph` on the lane graph
 q / esc close it. keys.json can bind any of the window's actions as
 `nocturne-git.<action>` (`open-pane`, `screen-next`, `panel-commits`…).
 Worktrees (the Files panel's third tab; `nocturne.worktrees`, the git
-button's ▾ > Worktrees, "+ new" > Worktrees, New / Open worktree) is what the
+button's ▾ > Worktrees, "+ new" > New / Open worktree…) is what the
 worktree dialog and the worktrees pane were: the repo's checkouts, the main
 one first, with the spaces showing each and the agents working in it. `space`
 goes to its space (or opens one), `enter` turns the window to it, `n` checks
@@ -311,15 +311,18 @@ the highlighted line shows where it will land.
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
-  machine. The bell at the right of Nocturne's tab strip (a 9 px pixel bell,
+  machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
   muted like the strip's tools when nothing waits) counts what waits: the
   bell turns pink beside a pink chip for permissions and questions; agents
-  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit, ending where
-  the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
-  overview, hanging under the bell like the scripts deck under ▶ (as wide as
-  the window allows, up to 880, and as tall as what it shows), and closes it
-  again; the bell is lit while it's open. A toast's click opens it on that
-  agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
+  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit (props `end`:
+  the room after it, 8 px unless a block follows); a click on it opens the
+  overview hanging under the bell like the scripts deck under ▶ (as wide as
+  the window allows, up to 880; with a request as tall as the room below the
+  strip, up to 900, with nothing waiting only as tall as its note); cmd-shift-a
+  (`nocturne-notifications.open`: a key, the palette, the strip's enter on the
+  bell) opens it centered, as cmd-shift-r the deck (up to 85% of the window's
+  height). Either closes it again; the bell is lit while it's open. A toast's
+  click opens it centered on that agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
   space / tab and how long it has waited. Finished agents aren't listed: the
   sidebar and Herdr's toast tell about them.
@@ -599,9 +602,10 @@ the highlighted line shows where it will land.
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`.
-- **Files panes** (Nocturne's `nocturne-files`): "+ new" > Files and the tab
-  strip's button toggle the panel down the tab's right edge at the focused
-  pane's folder; cmd-e (`nocturne.files`) is the keyboard's way: it opens the
+- **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
+  button toggles the panel down the tab's right edge at the focused pane's
+  folder ("+ new" > Files opens a files pane of its own instead, beside the
+  focused pane or in a new tab, at the folder a terminal would open in); cmd-e (`nocturne.files`) is the keyboard's way: it opens the
   panel with the keyboard in it, moves the keyboard into an open one, and
   closes it when pressed inside, the keyboard back in the pane it came from
   (esc in the panel goes back there and leaves it open; `q` closes it). A
@@ -1098,7 +1102,7 @@ each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
 The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
-rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
+rows are the tabs (x close, H/L move, 1-9), its buttons, the bell and "+ new"; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
@@ -1129,6 +1133,23 @@ last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
 drops nothing. Two blue corner ticks mark what's shown: the shown space (its plate in
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
+
+Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
+files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
+then "+ new", the last control at the window's right edge (a block of its
+own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
+layout without it gets "+ new" in the strip before the bell). The strip's
+keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
+the button's, inside the window (a key opens it centered): where new
+things land (a pane beside the focused one, or a new tab; tab flips it), a
+grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
+the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
+u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
+open from the git button, its ▾, their keys and the palette instead), every
+installed agent (1-9; the ones that aren't installed hide behind a dim
+"2 not installed · show" row: enter or a click shows them, again hides them,
+remembered in shared `nocturne.newShowMissing`; the numbers never move), then
+New space, New worktree… and Open worktree….
 
 ### Layouts and mods other people made
 

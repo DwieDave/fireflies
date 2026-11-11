@@ -1,8 +1,9 @@
 // The files pane (the nocturne-files mod): a narrow column along the tab's
 // whole right edge, rooted at the focused pane's folder on its machine; files
-// open in panes to its left (nocturne-files). "+ new" > Files (f) and cmd-e (nocturne.files)
-// toggle it. Folder links open files panes of their own (props.path,
-// `files.open`): those aren't the panel, and stay when it toggles.
+// open in panes to its left (nocturne-files). The tab strip's files button
+// and cmd-e (nocturne.files) toggle it. Folder links and "+ new" > Files open
+// files panes of their own (props.path, `files.open`, panels.js filesHere):
+// those aren't the panel, and stay when it toggles.
 //
 // cmd-e is the keyboard's way in and out (focusFiles): it opens the panel
 // with the keyboard in it, moves the keyboard into an open one, and closes

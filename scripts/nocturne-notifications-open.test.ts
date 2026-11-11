@@ -7,9 +7,11 @@
 import { test, expect, mock, beforeEach } from "bun:test";
 
 let sharedState: Record<string, unknown> = {};
+let specs: any[] = [];
+let propsNow: any = { overlay: "o1", most: 580 };
 mock.module("herdr", () => ({
-  closeOverlay: () => null, openOverlay: () => "o9", run: () => null, nextCommand: () => new Promise(() => {}),
-  props: () => ({ overlay: "o1", most: 580 }), settings: () => ({ zoom: 0.9 }), theme: () => theme,
+  closeOverlay: () => null, openOverlay: (spec: any) => { specs.push(spec); return "o9"; }, run: () => null, nextCommand: () => new Promise(() => {}),
+  props: () => propsNow, settings: () => ({ zoom: 0.9 }), theme: () => theme,
   shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; return null; },
   window: () => ({ platform: "macos" }), terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), exec: async () => ({ code: 1, stdout: "" }),
 }));
@@ -40,6 +42,7 @@ mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () 
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
 const { default: Overview } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const notif = await import("../defaults/mods/nocturne-notifications/open.js");
 const { ITEMS } = await import("../defaults/mods/nocturne-notifications/engine.js");
 
 const cx: any = { focus_handle: () => ({ focus() {}, is_focused: () => true }), spawn() {}, notify() {}, stop_propagation() {}, timer: { after() {}, every() {} } };
@@ -82,7 +85,7 @@ const permission = {
   request: { type: "permission", tool: "Bash", line: "ls -la", options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "No", kind: "no" }], canAmend: true },
 };
 
-beforeEach(() => { sharedState = {}; });
+beforeEach(() => { sharedState = {}; specs = []; propsNow = { overlay: "o1", most: 580 }; });
 
 for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
   test(`overview ${name}: the first frame seen has the height and key bar it settles at`, () => {
@@ -92,8 +95,9 @@ for (const [name, items] of [["with a request", [permission]], ["empty", []]] as
     const frames = [frame(v), frame(v), frame(v)];
     const settled = frames.at(-1)!;
     expect(settled.seen).toBe(true);
-    // Settled below the popup's most: it is as tall as what it shows.
-    expect(settled.height).toBeLessThan(580);
+    // With a request: the popup's most, all the room it has. Empty: as tall as its note.
+    if (items.length) expect(settled.height).toBe(580);
+    else expect(settled.height).toBeLessThan(580);
     expect(frames[1]).toEqual(settled);
     const seen = frames.filter((f) => f.seen);
     expect(seen[0]).toEqual(settled);
@@ -112,3 +116,68 @@ test("overview: a request coming in while it's open changes its height, seen (no
   expect(next.every((f) => f.seen)).toBe(true);
   expect(next[1].height).not.toBe(empty.height);
 });
+
+// ---- how tall: the room below the strip, up to OVERVIEW_H
+
+/** Under the bell in a window `height` drawn px tall (zoom 0.9): its spec. */
+function underBell(height: number) {
+  notif.noteWindow({ width: 1600, height });
+  // The bell: its top at 6, 24 layout px tall.
+  const z = 0.9;
+  return notif.overviewPlace({ position: { x: 1500, y: 12 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 * z } });
+}
+
+test("the overview's height: a small window's room below the strip, a laptop's most, a tall window's cap", () => {
+  const z = 0.9;
+  const top = 6 + 24 * z + 6 * z;
+  // Small (500 px): the room below the strip, 8 px from the window's bottom.
+  const small = underBell(500);
+  expect(small.at.y).toBe(Math.round(top));
+  expect(small.height).toBe(Math.floor((500 - Math.round(top) - 8) / z));
+  // A laptop's (1000 px): all the room below the strip, most of the window.
+  const normal = underBell(1000);
+  expect(normal.height).toBe(notif.OVERVIEW_H);
+  expect(normal.height * z).toBeGreaterThan(0.8 * 1000);
+  expect(Math.round(top) + normal.height * z).toBeLessThanOrEqual(1000 - 8);
+  // Tall (1600 px): no taller than the cap.
+  expect(underBell(1600).height).toBe(notif.OVERVIEW_H);
+  // A tiny window: still 160 at the least.
+  expect(underBell(150).height).toBe(160);
+});
+
+test("the overview is taller than it was: with a request it fills the popup's most, whatever it shows", () => {
+  sharedState[ITEMS] = [permission];
+  const v: any = new Overview();
+  v.init({}, cx);
+  frame(v); frame(v);
+  expect(frame(v).height).toBe(580);
+  expect(notif.OVERVIEW_H).toBeGreaterThan(580);
+});
+
+// ---- opened by a key (centered) or by a press on the bell (under it)
+
+const BELL_PRESS = { position: { x: 1500, y: 12 }, local_position: { x: 10, y: 6 }, bounds: { width: 40, height: 24 * 0.9 } };
+
+for (const [how, press] of [["by a key: centered", null], ["by a click on the bell: under it", BELL_PRESS]] as const) {
+  for (const [name, items] of [["with a request", [permission]], ["empty", []]] as const) {
+    test(`overview opened ${how}, ${name}: its first frame seen is the settled one`, () => {
+      notif.noteWindow({ width: 1600, height: 1000 });
+      sharedState[ITEMS] = items;
+      notif.openOverview(null, press);
+      const spec = specs.at(-1);
+      if (press) expect(spec).toMatchObject({ kind: "popup", at: { x: expect.any(Number), y: expect.any(Number) } });
+      else { expect(spec.kind).toBe("dialog"); expect(spec.at).toBeUndefined(); expect(spec.height).toBeUndefined(); }
+      propsNow = { overlay: "o9", ...spec.props };
+      const v: any = new Overview();
+      v.init(spec.props, cx);
+      const frames = [frame(v), frame(v), frame(v)];
+      const settled = frames.at(-1)!;
+      expect(frames.filter((f) => f.seen)[0]).toEqual(settled);
+      if (items.length) expect(settled.height).toBe(spec.props.most);
+      else expect(settled.height).toBeLessThan(spec.props.most);
+      // The taller size, both ways: under the bell, the room below the strip; centered, 85% of the window.
+      expect(spec.props.most).toBe(Math.min(notif.OVERVIEW_H, press ? notif.OVERVIEW_H : Math.floor(1000 * 0.85 / 0.9)));
+      expect(spec.props.most).toBeGreaterThan(580);
+    });
+  }
+}

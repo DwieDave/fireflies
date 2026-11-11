@@ -8,7 +8,10 @@
 //           nothing anywhere. Click floats the git window over the tab
 //           (git.js, nocturne-git); again closes it. Its ▾ (or a right-click)
 //           drops a menu: Git, Diff (Git's review) and GitHub.
-//   + new   the Nocturne new menu (newmenu.js)
+// Then the bell (nocturne-notifications, a block of its own) and "+ new",
+// the toolbar's last control (newbutton.js, the row's last block; the new
+// menu, newmenu.js). A layout without that block gets "+ new" here, before
+// the bell, as before.
 // Drag a tab along the strip to move it (tabdrag.js): it lifts where it is
 // and a stake marks the gap it drops into; leaving the strip drops nothing.
 // The drop-downs (+ new, the script deck) hang under their button, right
@@ -17,17 +20,18 @@
 //
 // Keys: the strip takes the keyboard from pane.go (cmd-alt-up from a top
 // pane), nocturne.tabstrip or nocturne.header (layout.focus). Its cursor
-// walks three rows (nav.js STRIP_KEYS; ? lists them): the tabs, the buttons
-// and the bell; the focused pane's header (header.js headerControls); the
+// walks three rows (nav.js STRIP_KEYS; ? lists them): the tabs, the buttons,
+// the bell and "+ new"; the focused pane's header (header.js headerControls); the
 // shown tab's parked chips. j / ↓ past the last row, esc or q: back to the
 // pane; h / ← past the first tab: the sidebar. The header, the chips and the
-// bell draw the cursor from shared(nav.js CURSOR).
+// bell and "+ new" draw the cursor from shared(nav.js CURSOR).
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
 import { dither, pip, spaceFolder, givenName, dropBelow, navRing } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
+import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.js";
 import { keysHint } from "./keyhelp.js";
 import { headerControls, paneMenu, renamePane } from "./header.js";
@@ -142,14 +146,16 @@ export default class Tabs {
       "move-right": () => { if (c.index < space.tabs.length) run("tab.move", { id: c.id, index: c.index + 1 }); },
     });
     const gitMenu = () => openMenu({ tab: "git" }, { centered: true });
+    // Left to right as drawn: "+ new" after the bell when it's a block of its own (newbutton.js).
+    const neu = { id: "tab-new", go: () => openNewMenu({ centered: true }) };
+    const bell = hasMod(layout(), "nocturne-notifications") ? [{ id: "bell", go: () => run("nocturne-notifications.open") }] : [];
     const tools = [
       { id: "tab-scripts-run", go: () => toggleDeck({ centered: true }) },
       // As cmd-e: the panel with the keyboard in it (opened if need be); in it, closed.
       { id: "tab-files", go: () => focusFiles() },
       { id: "tab-git", go: () => toggleGit(), menu: gitMenu },
       { id: "tab-git-more", go: gitMenu, menu: gitMenu },
-      { id: "tab-new", go: () => openNewMenu({ centered: true }) },
-      ...(hasMod(layout(), "nocturne-notifications") ? [{ id: "bell", go: () => run("nocturne-notifications.open") }] : []),
+      ...(newButtonNode() ? [...bell, neu] : [neu, ...bell]),
     ];
     const all = panes();
     const fp = all.find((p) => p.focused && !p.parked);
@@ -213,7 +219,9 @@ export default class Tabs {
     const want = !on ? null
       : this.row === "head" ? { region: "head", pane: panes().find((p) => p.focused && !p.parked)?.pane ?? null, item: this.cursor }
       : this.row === "parked" ? { region: "parked", pane: this.item()?.pane ?? null, item: this.cursor }
-      : this.cursor === "bell" ? { region: "bell", item: "bell" } : null;
+      : this.cursor === "bell" ? { region: "bell", item: "bell" }
+      // "+ new" in its own block (newbutton.js) draws its own ring.
+      : this.cursor === "tab-new" && newButtonNode() ? { region: "new", item: "tab-new" } : null;
     if (JSON.stringify(want) !== JSON.stringify(shared(CURSOR) ?? null)) setShared(CURSOR, want);
   }
 
@@ -394,8 +402,8 @@ export default class Tabs {
         .child(this.filesButton(t))
         .child(this.gitButton(t))
         .child(rule())
-        .child(this.newButton(t))
-        .child(rule()))
+        // "+ new" is the row's last block (newbutton.js), after the bell; here in a layout without it.
+        .when(!newButtonNode(), (el) => el.child(this.newButton(t)).child(rule())))
       // While the strip has the keyboard: which row its cursor is on, and ? for
       // the keys, the strip's last word (after its buttons, as every keys bar).
       .when(on, (el) => el.child(h_flex().flex_none().px(6).gap(6).items_center().text_size(11).text_color(t.dim)

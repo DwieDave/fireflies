@@ -1,19 +1,23 @@
-// Opening the overview (a drop-down under the bell, as the script runner's
-// deck hangs under ▶) and the question dialog (a centered Nocturne dialog).
+// Opening the overview and the question dialog (a centered Nocturne dialog).
+// The overview is a drop-down under the bell when the bell is pressed, as the
+// script runner's deck hangs under ▶; from a key (cmd-shift-a, the palette,
+// the strip's enter on the bell) or a toast it opens centered, as the deck
+// does from cmd-shift-r.
 
 import { openOverlay, closeOverlay, shared, setShared, settings } from "herdr";
 
 const SHOWN = "nocturne-notifications.shown"; // { overview?: id, beat?: ms, ask?: id }
-// The overview at its biggest (layout px); smaller in a small window, and
-// only as tall as what it shows.
+// The overview at its biggest (layout px): 880 wide, 900 tall (810 drawn px
+// at zoom 0.9: most of a laptop's window). Smaller in a small window: as tall
+// as the room below the strip. With a request it takes all of that height;
+// with nothing waiting, only its note's.
 export const OVERVIEW_W = 880;
-export const OVERVIEW_H = 580;
-// The tab strip's row (layout px): the drop-down's top sits on its horizon.
-const ROW = 36;
-// Far right: the popup snaps back inside the window, its right edge 8 px in.
-export const FAR_RIGHT = 100000;
+export const OVERVIEW_H = 900;
 // The window margin a popup keeps (the app's popups snap to 8 px inside it).
 const MARGIN = 8;
+// A centered dialog fits its content up to this much of the window's height
+// (src/window.rs: a dialog without `height`).
+const DIALOG_MOST = 0.85;
 // The overview renews its note in shared(SHOWN) this often (ms), so a note an
 // app restart left behind doesn't swallow a press (overviewOpen).
 export const BEAT = 1000;
@@ -35,13 +39,8 @@ export function overviewBeat(id) {
   if (id && s.overview === id) setShared(SHOWN, { ...s, beat: Date.now() });
 }
 
-// For a drop-down opened without a press on the bell (a key, a toast): the
-// window's drawable size as the bell last drew (for the size), and the
-// strip's horizon from the bell's last press (else the row's height down).
-// It goes far right, where the popup snaps 8 px inside the window's edge:
-// the bell's right edge (bell.js END in), whatever size the window is now.
+// The window's drawable size as the bell last drew, for the overview's size.
 let win = null;
-let horizon = null;
 
 /** The bell notes the window's size (window.viewport_size, drawn px) as it draws. */
 export function noteWindow(size) {
@@ -58,34 +57,39 @@ function fromPress(e) {
   return { right: left + b.width, top: top + b.height + 6 * zoom() };
 }
 
-/** The overview's spec: its size (layout px) and where it hangs (drawn px). */
+/** The overview's spec: its size (layout px) and, under the bell, where it
+ *  hangs (drawn px). `press`: the bell's mouse-down; without one (a key, a
+ *  toast) it's centered: no `at`, as tall as the dialog's most allows. */
 export function overviewPlace(press = null) {
   const z = zoom();
   const p = fromPress(press);
-  if (p) horizon = p.top;
-  const top = p?.top ?? horizon ?? ROW * z;
   const width = win ? Math.max(320, Math.min(OVERVIEW_W, Math.floor((win.width - 2 * MARGIN) / z))) : OVERVIEW_W;
-  const height = win ? Math.max(160, Math.min(OVERVIEW_H, Math.floor((win.height - top - MARGIN) / z))) : OVERVIEW_H;
-  const x = p ? Math.round(Math.max(MARGIN, p.right - width * z)) : FAR_RIGHT;
-  return { width, height, at: { x, y: Math.round(top) } };
+  const room = !win ? OVERVIEW_H : p ? (win.height - p.top - MARGIN) / z : (win.height * DIALOG_MOST) / z;
+  const height = Math.max(160, Math.min(OVERVIEW_H, Math.floor(room)));
+  if (!p) return { width, height, centered: true };
+  return { width, height, at: { x: Math.round(Math.max(MARGIN, p.right - width * z)), y: Math.round(p.top) } };
 }
 
-/** Opens the overview hanging under the bell (on `terminal`'s request, if
- *  given), in place of one already open. A request for a terminal retargets
- *  an open overview; `press`: the bell's mouse-down, to hang right under it. */
+/** Opens the overview (on `terminal`'s request, if given), in place of one
+ *  already open. A request for a terminal retargets an open overview.
+ *  `press`: the bell's mouse-down, to hang right under it (a popup); without
+ *  one it opens centered (a dialog that takes the keyboard, its height its
+ *  content's, which sets its own: props.most). */
 export function openOverview(terminal = null, press = null) {
   const s = shown();
   if (s.overview) closeOverlay(s.overview);
   if (s.ask) closeOverlay(s.ask);
-  const { width, height, at } = overviewPlace(press);
-  const id = openOverlay({ mod: "nocturne-notifications", kind: "popup", frame: "none", width, height, at, props: { role: "overview", terminal, most: height } });
+  const { width, height, at, centered } = overviewPlace(press);
+  const id = openOverlay({ mod: "nocturne-notifications", kind: centered ? "dialog" : "popup", frame: "none", width,
+    ...(centered ? {} : { height, at }), props: { role: "overview", terminal, most: height } });
   setShared(SHOWN, { overview: id, beat: Date.now() });
 }
 
-/** The bell's press, cmd-shift-a, the strip's enter on the bell: the overview
- *  opens, or closes when it's open, and stays closed. `wasOpen`: the bell was
- *  lit when pressed; the press closed the drop-down already (a popup closes
- *  on any press beside it, and the press goes on to the bell), or closes it now. */
+/** The bell's press (under it), cmd-shift-a or the strip's enter on the bell
+ *  (centered): the overview opens, or closes when it's open, and stays
+ *  closed. `wasOpen`: the bell was lit when pressed; the press closed the
+ *  drop-down already (a popup closes on any press beside it, and the press
+ *  goes on to the bell), or closes it now. */
 export function toggleOverview({ press = null, wasOpen = false } = {}) {
   const open = overviewOpen();
   if (open) { remember("overview", null); closeOverlay(open); return; }

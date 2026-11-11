@@ -10,7 +10,7 @@
 // A panel that is open in the shown tab and has no other place to go closes
 // instead (the menus say "Close …").
 
-import { spaces, panes, focused, run } from "herdr";
+import { spaces, panes, focused, run, home } from "herdr";
 import { folderCandidates } from "./folders.js";
 import { ART } from "./kit.js";
 import { filesPane, toggleFiles, filesSlot } from "./files.js";
@@ -48,6 +48,15 @@ export function terminalPane(argv) {
 export function terminalTab(argv, name) {
   const h = here();
   run("tab.new", { ...(h.space ? { space: h.space.id } : {}), ...(h.folder ? { folder: h.folder } : {}), ...(argv ? { argv } : {}), ...(name ? { name } : {}) });
+}
+
+/** A files pane of its own (`files.open`, not the panel docked down the tab's
+ *  edge) at the folder a terminal would open in: beside the focused pane, or
+ *  `inTab` in a tab of its own. */
+export function filesHere(inTab = false) {
+  const h = here();
+  const path = h.folder ?? h.space?.folder ?? home();
+  run("files.open", { path, ...(inTab ? { in: "tab" } : h.pane ? { pane: h.pane } : {}), ...(h.on ? { on: h.on } : {}) });
 }
 
 /** A mod beside the focused pane. */

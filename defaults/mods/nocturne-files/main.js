@@ -3,9 +3,9 @@
 // same lazy listing, folder watch and git marks (a mod can't import another
 // mod's files, so it isn't wrapped), but rooted where it was opened instead
 // of following focus, and opening files in the editor instead of a preview.
-// Opened from Nocturne's "+ new" > Files (or cmd-e) with props { folder, on }:
+// Opened from Nocturne's tab strip files button (or cmd-e) with props { folder, on }:
 // the panel down the tab's right edge. A folder link (a terminal's cmd-click,
-// `files.open`) opens a pane of its own instead, props { path, on, slot }:
+// `files.open`, Nocturne's "+ new" > Files) opens a pane of its own instead, props { path, on, slot }:
 // beside the pane it came from, closed with q / esc, opening files beside itself.
 //
 // Each pane keeps its filters (dotfiles, git-ignored files; new panes take
