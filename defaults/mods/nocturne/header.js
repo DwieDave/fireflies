@@ -30,7 +30,7 @@ import { openEqualize } from "./equalize.js";
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
 const MODS = {
   "nocturne-agents": ["Agents", "layers"], "nocturne-browser": ["Web", "monitor"],
-  "nocturne-diff": ["Diff", "git-compare"], "nocturne-files": ["Files", "files"],
+  "nocturne-diff": ["Diff", "git-compare"], "nocturne-git": ["Git", "git-compare"], "nocturne-files": ["Files", "files"],
   "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
   "nocturne-markdown": ["Markdown", "file-text"], "nocturne-preview": ["Preview", "eye"],
   nocturne: ["Worktrees", "git-branch"],

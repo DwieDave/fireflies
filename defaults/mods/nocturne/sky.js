@@ -37,7 +37,7 @@ import { stamps } from "./pins.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { menuHeight, NAME_AGENT } from "./menu.js";
-import { toggleLazygit } from "./lazygit.js";
+import { toggleGit } from "./git.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
 import { toggleGithub } from "./github.js";
@@ -133,7 +133,8 @@ export default class Sky {
     this.usage.init(cx);
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
     // here: the next space in the sidebar's order (worktrees under their repo);
-    // nocturne.lazygit toggles the lazygit pane (lazygit.js), nocturne.files
+    // nocturne.git (cmd-g; nocturne.lazygit, its old name, too) toggles the git
+    // window (git.js), nocturne.diff the same on its Review tab, nocturne.files
     // the files pane (files.js), nocturne.github (cmd-shift-g) the GitHub
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
@@ -150,7 +151,8 @@ export default class Sky {
         if (c === "next") this.spaces.step(1);
         else if (c === "prev") this.spaces.step(-1);
         else if (c === "fold") this.fold(cx);
-        else if (c === "lazygit") toggleLazygit();
+        else if (c === "git" || c === "lazygit") toggleGit();
+        else if (c === "diff") toggleGit({ review: true });
         else if (c === "files") toggleFiles();
         else if (c === "github") toggleGithub();
         else if (c === "scripts") toggleDeck({ centered: true });

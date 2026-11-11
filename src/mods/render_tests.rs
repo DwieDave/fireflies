@@ -989,6 +989,8 @@ fn shipped_layouts_and_keys() {
         "nocturne.fold",
         "nocturne.new",
         "nocturne.lazygit",
+        "nocturne.git",
+        "nocturne.diff",
         "nocturne.files",
         "nocturne.github",
         "nocturne.scripts",

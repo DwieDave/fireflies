@@ -60,6 +60,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-notify-keys.macos.json"),
     // With cmd-alt-g, before cmd-alt-p pinned the focused agent.
     include_str!("keys/shipped/fireflies-gridify-keys.macos.json"),
+    // With cmd-alt-p, before cmd-g opened the git window instead of lazygit.
+    include_str!("keys/shipped/fireflies-pin-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
