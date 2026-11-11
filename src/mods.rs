@@ -966,6 +966,11 @@ fn exec_future(command: String, args: Vec<String>, cwd: Option<String>, on: Opti
     }
 }
 
+/// A language server session's id from a mod.
+fn lsp_id(v: &HostValue) -> Result<u64, HostError> {
+    from_host(v).as_f64().filter(|n| *n >= 0.0).map(|n| n as u64).ok_or_else(|| HostError::new("a session id is a number from lspStart"))
+}
+
 fn module(inst: Instance, copy: u64) -> HostModule {
     let reads = Rc::new(RefCell::new(LiveReads::default()));
     LIVE_READS.with_borrow_mut(|copies| {
@@ -1052,6 +1057,39 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             let spans = crate::syntax::highlight(a.string(0)?, a.string(1)?);
             Ok(to_host(&Value::Array(spans.into_iter().map(|(s, e, n)| json!([s, e, n])).collect())))
         })
+        .async_function("lspStart", {
+            // The copy's sessions are let go when its module goes.
+            let guard = Rc::new(crate::lsp::CopyGuard(copy));
+            move |a| {
+                let _ = &guard;
+                let o = from_host(a.value(0)?);
+                let argv: Vec<String> = o.get("argv").and_then(Value::as_array).map(|v| v.iter().filter_map(Value::as_str).map(str::to_owned).collect()).unwrap_or_default();
+                let root = o.get("root").and_then(Value::as_str).ok_or_else(|| HostError::new("lspStart needs { argv, root }"))?.to_owned();
+                if argv.is_empty() {
+                    return Err(HostError::new("lspStart needs { argv, root }"));
+                }
+                let rx = crate::lsp::start(copy, argv, root, o.get("settings").cloned().unwrap_or(Value::Null));
+                Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+            }
+        })
+        .async_function("lspRequest", |a| {
+            let id = lsp_id(a.value(0)?)?;
+            let rx = crate::lsp::request(id, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
+        .function("lspNotify", |a| {
+            crate::lsp::notify(lsp_id(a.value(0)?)?, a.string(1)?, a.get(2).map(from_host).unwrap_or(Value::Null)).map_err(HostError::new)?;
+            Ok(HostValue::Null)
+        })
+        .async_function("lspNextMessage", move |a| {
+            let rx = crate::lsp::next_message(copy, lsp_id(a.value(0)?)?).map_err(HostError::new)?;
+            Ok(async move { rx.recv().await.map(|v| to_host(&v)).map_err(|_| HostError::new("released")) })
+        })
+        .function("lspRelease", move |a| {
+            crate::lsp::release(copy, lsp_id(a.value(0)?)?);
+            Ok(HostValue::Null)
+        })
+        .function("lspSessions", |_| Ok(to_host(&crate::lsp::sessions())))
         .function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())))
         .function("themes", |_| {
             let list: Vec<Value> = crate::settings::themes().into_iter().map(|(name, colors)| json!({ "light": crate::settings::theme_is_light(&name), "name": name, "colors": colors })).collect();

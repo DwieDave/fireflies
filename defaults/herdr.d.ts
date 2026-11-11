@@ -38,6 +38,28 @@ export function highlight(text: string, language: string): [number, number, stri
  *  `"toml"`), or null when unknown. */
 export function languageOf(pathOrName: string): string | null;
 
+/** A language server for code a mod shows (this machine). Starts `argv` in `root` (or joins the
+ *  session already running it there: one server per argv and root, shared by every mod copy),
+ *  initializes it (utf-16 positions; `settings` go out as `initializationOptions`, answer its
+ *  `workspace/configuration` and follow in `workspace/didChangeConfiguration`) and resolves once
+ *  it's ready with its `id` and `capabilities`. Rejects when it can't start. The copy keeps it until
+ *  `lspRelease(id)` or the copy goes; a server no copy keeps is stopped after 90 s. Herdr only
+ *  carries messages: opening documents, keeping them in sync and reading diagnostics is yours. */
+export function lspStart(options: { argv: string[]; root: string; settings?: object | null }): Promise<{ id: number; capabilities: any }>;
+/** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
+ *  or when the server exits. */
+export function lspRequest(id: number, method: string, params?: any): Promise<any>;
+/** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). */
+export function lspNotify(id: number, method: string, params?: any): void;
+/** The next notification the server sent this copy: `{ method, params }`
+ *  (`textDocument/publishDiagnostics`, `$/progress`, `window/logMessage`, ...). `$/exit` with
+ *  `params.stderr` (its last lines) when the server is gone. */
+export function lspNextMessage(id: number): Promise<{ method: string; params: any }>;
+/** This copy no longer needs the session. */
+export function lspRelease(id: number): void;
+/** The running servers: `{ id, argv, root, users, alive, ready, stderr }`. */
+export function lspSessions(): { id: number; argv: string[]; root: string; users: number; alive: boolean; ready: boolean | null; stderr: string[] }[];
+
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
  *  `on`, its login/interactive shell when supported), at most once a minute per machine.

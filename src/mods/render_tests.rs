@@ -149,6 +149,13 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
         Ok(to_host(&Value::Array(crate::syntax::highlight(a.string(0)?, a.string(1)?).into_iter().map(|(s, e, n)| json!([s, e, n])).collect())))
     });
     module = module.function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())));
+    module = module.function("lspSessions", |_| Ok(HostValue::Array(vec![])));
+    for name in ["lspNotify", "lspRelease"] {
+        module = module.function(name, |_| Ok(HostValue::Null));
+    }
+    for name in ["lspStart", "lspRequest"] {
+        module = module.async_function(name, |_| Ok(async { Err::<HostValue, _>(HostError::new("no language servers in render tests")) }));
+    }
     module = module.async_function("knownAgents", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
     module = module.async_function("pickFolder", |_| Ok(async { Ok(HostValue::Null) }));
     module = module.async_function("pickFile", |_| Ok(async { Ok(HostValue::Null) }));
@@ -156,7 +163,7 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
     module = module.component("nativeView", |_, _, _| gpui::IntoElement::into_any_element(gpui::div()));
     module = module.function("nativeViewCapabilities", |_| Ok(to_host(&json!({"interface":"native-view/0","available":false,"kinds":[]}))));
     module = module.function("nativeViewCall", |_| Err(HostError::new("no native views in render tests")));
-    for name in ["nextCommand", "watchFolder", "nextNativeViewEvent"] {
+    for name in ["nextCommand", "watchFolder", "nextNativeViewEvent", "lspNextMessage"] {
         module = module.async_function(name, |_| Ok(std::future::pending::<gpui_shell::HostResult>()));
     }
     for name in ["exec", "hc", "readTextFile", "writeTextFile"] {
