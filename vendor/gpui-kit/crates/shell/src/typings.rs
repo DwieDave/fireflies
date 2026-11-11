@@ -3036,6 +3036,13 @@ const BASE: &str = r#"  /** A row. */
      */
     scroll_to_item(index: number, strategy?: "top" | "center"): void;
     scroll_to_bottom(): void;
+    /**
+     * Where the list is scrolled to after its last layout: the content's
+     * offset in window pixels, `{ x: 0, y: -120 }` 120 px down. With fixed
+     * item sizes it maps a pointer position to the item under it. A plain
+     * read; legal in render too.
+     */
+    offset(): { x: number; y: number };
     /** Releases the handle. Using it afterwards throws. */
     release(): boolean;
   }

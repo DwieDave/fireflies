@@ -20,6 +20,9 @@ class Element {
 }
 const walk = (el: any): any[] => (el && typeof el === "object" && "nodes" in el ? [el, ...el.nodes.flatMap(walk)] : []);
 const commands: [string, any][] = [];
+/** The list's scroll position (px down) and the rows it was asked to show. */
+const scrollTop = { y: 0 };
+const scrolled: number[] = [];
 const noExec = async (..._a: any[]) => ({ code: 1, stdout: "", stderr: "" });
 const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; find: (root: string, q: string) => Promise<any>; exec: (cmd: string, args: string[], o?: any) => Promise<any> } = {
   props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, find: async () => ({ files: [], scanning: false }), exec: noExec,
@@ -45,7 +48,7 @@ const input = () => {
 };
 const base = {
   h_flex: () => new Element(), v_flex: () => new Element(), v_virtual_list: () => new Element(), Scrollbar: { vertical: () => new Element() },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item(i: number) { scrolled.push(i); }, offset: () => ({ x: 0, y: -scrollTop.y }) }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
 };
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
@@ -761,7 +764,7 @@ test("x and P: cut a file, paste it in a folder; a folder by the menu; the cut r
     const view = await realPane(box.root);
     view.sel = "README.md";
     view.key({ key: "x" }, cx);
-    expect(world.shared["nocturne-files.cut"]).toEqual({ abs: `${box.root}/README.md`, on: null, dir: false, name: "README.md" });
+    expect(world.shared["nocturne-files.cut"]).toEqual({ on: null, items: [{ abs: `${box.root}/README.md`, dir: false, name: "README.md" }] });
     expect(words(view.render())).toContain("Cut “README.md”: P pastes it in the selected folder");
     expect(words(view.row(herdr.theme(), row(view, "README.md"), true))).toEqual(["README.md", "cut"]);
     view.sel = "docs";
@@ -998,4 +1001,326 @@ test("from the search's hits: a rename ends the search and shows the result in t
     expect(asked).toBe(2);
     expect(await exists(pjoin(box.root, "docs", "guide.txt"))).toBe(false);
   } finally { await box.done(); world.find = async () => ({ files: [], scanning: false }); }
+});
+
+// ---- several rows: marks, actions on a set, drag and drop, the changes record
+
+const on = (el: any, name: string, button?: string) => el.calls.find(([k, a]: [string, any[]]) => k === name && (button == null || a[0] === button))?.[1].at(-1);
+const listOf = (tree: any) => walk(tree).find((e: any) => e.calls.some(([k]: [string]) => k === "on_item_click"));
+/** Drives the pane's own mouse handlers and the list's row click, as the app does. */
+function mouse(view: any) {
+  const tree = () => view.render(cx);
+  const at = (i: number, x = 60) => ({ x, y: logic.TREE_TOP + i * logic.ROW_H + 11 });
+  const index = (p: string) => (view.listed ?? view.shown()).findIndex((r: any) => r.path === p);
+  return {
+    /** A click on row `p` (down, up, the row's click), with modifiers. */
+    click(p: string, modifiers: any = {}) {
+      const t = tree();
+      on(t, "on_mouse_down", "left")({ modifiers, local_position: at(index(p)) }, cx);
+      on(t, "on_mouse_up", "left")({}, cx);
+      on(listOf(t), "on_item_click")(p, cx);
+    },
+    down(p: string) { on(tree(), "on_mouse_down", "left")({ modifiers: {}, local_position: at(index(p)) }, cx); },
+    /** The pointer to row `p` (or { y } in px), the button held. */
+    move(to: string | { y: number; x?: number }) {
+      const pos = typeof to === "string" ? at(index(to)) : { x: to.x ?? 60, y: to.y };
+      on(tree(), "on_mouse_move")({ local_position: pos }, cx);
+    },
+    /** The release: on row `p` the row's click comes first (the app's order), then the pane's up. */
+    up(p?: string) {
+      const t = tree();
+      if (p) on(listOf(t), "on_item_click")(p, cx);
+      on(t, "on_mouse_up", "left")({}, cx);
+    },
+    leave() { on(tree(), "on_hover")(false, cx); },
+  };
+}
+const changes = () => (world.shared["nocturne.files.changes"] ?? []).map((c: any) => [c.from, c.to]);
+
+test("cmd-click adds and removes rows, shift-click marks a run; a plain click marks one row again; the hint line counts", () => {
+  world.shared = {};
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.folders.add("src");
+  const m = mouse(view);
+  commands.length = 0;
+  m.click("src/main.rs");
+  expect([view.sel, view.marked.size]).toEqual(["src/main.rs", 0]);
+  // cmd-click: the keyboard's row and the clicked one are marked; again: unmarked.
+  m.click("README.md", { platform: true });
+  expect([...view.marked]).toEqual(["src/main.rs", "README.md"]);
+  m.click("target", { platform: true });
+  m.click("README.md", { platform: true });
+  expect([...view.marked].sort()).toEqual(["src/main.rs", "target"]);
+  // Nothing opened, nothing folded by those clicks.
+  expect(commands).toEqual([]);
+  expect(view.folders.has("target")).toBe(false);
+  // shift-click: every row from the last clicked one to this one (target up to src: four rows).
+  m.click("target", { platform: true });
+  m.click("src", { shift: true });
+  expect([...view.marked]).toEqual(view.shown().slice(0, 4).map((r: any) => r.path));
+  expect(view.shown()[3].path).toBe("target");
+  expect(words(view.render(cx)).join(" ")).toContain("4 marked");
+  // A plain click: that row alone, the marks gone.
+  m.click("README.md");
+  expect([view.marked.size, view.sel]).toEqual([0, "README.md"]);
+});
+
+test("t marks and steps, V marks a range while moving, shift-↑↓ mark while moving; esc unmarks before it closes", () => {
+  world.shared = {};
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.folders.add("src");
+  const rows = () => view.shown().map((r: any) => r.path);
+  view.sel = "src";
+  view.key({ key: "t" }, cx);
+  expect([[...view.marked], view.sel]).toEqual([["src"], "src/main.rs"]);
+  view.key({ key: "t" }, cx);
+  expect([...view.marked]).toEqual(["src", "src/main.rs"]);
+  view.key({ key: "k" }, cx);
+  view.key({ key: "t" }, cx);
+  expect([...view.marked]).toEqual(["src"]);
+  // V: a range from here; moving grows and shrinks it; the marks before it stay.
+  view.sel = "target";
+  view.key({ key: "v", modifiers: { shift: true } }, cx);
+  view.key({ key: "j" }, cx);
+  view.key({ key: "j" }, cx);
+  const at = rows().indexOf("target");
+  expect([...view.marked].sort()).toEqual(["src", ...rows().slice(at, at + 3)].sort());
+  view.key({ key: "k" }, cx);
+  expect(view.marked.size).toBe(3);
+  view.key({ key: "V" }, cx);
+  expect(view.range).toBeNull();
+  view.key({ key: "j" }, cx);
+  expect(view.marked.size).toBe(3);
+  // esc: the marks go first; the pane stays open.
+  commands.length = 0;
+  view.key({ key: "escape" }, cx);
+  expect([view.marked.size, commands]).toEqual([0, []]);
+  // shift-↓ ↓ ↑: marks while moving; a plain move ends it and keeps the marks.
+  view.sel = "src";
+  view.key({ key: "down", modifiers: { shift: true } }, cx);
+  view.key({ key: "down", modifiers: { shift: true } }, cx);
+  expect([...view.marked]).toEqual(rows().slice(0, 3));
+  view.key({ key: "up", modifiers: { shift: true } }, cx);
+  expect([...view.marked]).toEqual(rows().slice(0, 2));
+  view.key({ key: "down" }, cx);
+  expect([view.range, view.marked.size]).toEqual([null, 2]);
+  // The new keys are in ?.
+  expect(logic.KEYS.map(([k]: [string]) => k)).toEqual(expect.arrayContaining(["t", "V", "⇧↑ ⇧↓"]));
+});
+
+test("a set: one question names the count and the first names; a marked folder covers what's in it; each row is tried and what failed is listed", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.folders.add("src"); view.folders.add("docs");
+    view.refresh(cx); await settle(); view.render(cx);
+    // src, src/main.rs (inside it) and README.md.
+    for (const p of ["src", "src/main.rs", "README.md"]) view.marked.add(p);
+    view.sel = "README.md";
+    view.key({ key: "d" }, cx);
+    await settle();
+    expect(view.ask.set.map((x: any) => x.path)).toEqual(["src", "README.md"]);
+    expect(words(view.render(cx)).join(" ")).toContain("Move 2 items (“src/”, “README.md”) to the Trash?");
+    view.key({ key: "y" }, cx);
+    await settle();
+    expect([await exists(pjoin(box.trashDir, "src")), await exists(pjoin(box.trashDir, "README.md")), await exists(pjoin(box.trashDir, "main.rs"))]).toEqual([true, true, false]);
+    expect(view.msg.text).toBe("Moved 2 items to the Trash");
+    expect(changes()).toEqual([[pjoin(box.root, "src"), null], [pjoin(box.root, "README.md"), null]]);
+    expect(view.marked.size).toBe(0);
+    // A row that fails: docs can't be written, so its guide stays; the other goes, the reason is listed.
+    await writeFile(pjoin(box.root, "a.txt"), "a\n");
+    view.refresh(cx); await settle(); view.render(cx);
+    await chmod(pjoin(box.root, "docs"), 0o555);
+    view.marked = new Set(["docs/guide.txt", "a.txt"]);
+    view.sel = "a.txt";
+    view.key({ key: "d" }, cx); await settle();
+    view.key({ key: "enter" }, cx); await settle();
+    await chmod(pjoin(box.root, "docs"), 0o755);
+    expect([await exists(pjoin(box.root, "docs", "guide.txt")), await exists(pjoin(box.root, "a.txt"))]).toEqual([true, false]);
+    expect(view.msg.text).toMatch(/^Moved 1 item to the Trash; 1 failed: “guide.txt”: /);
+    expect(view.msg.error).toBe(true);
+    // The record: the earlier two, then a.txt alone (no entry for the failed one).
+    expect(changes().map(([f]: [string]) => logic.base(f))).toEqual(["src", "README.md", "a.txt"]);
+  } finally { await box.done(); }
+});
+
+test("a set: x cuts all of them, P moves them into the folder; y copies every path; the menu on a marked row acts on the set", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.folders.add("docs");
+    view.refresh(cx); await settle(); view.render(cx);
+    view.marked = new Set(["docs/guide.txt", "README.md"]);
+    view.sel = "README.md";
+    clipboard.length = 0;
+    view.key({ key: "y" }, cx);
+    expect(clipboard.at(-1)).toBe(`${pjoin(box.root, "docs", "guide.txt")}\n${pjoin(box.root, "README.md")}`);
+    // The menu on a marked row: the set's entries first.
+    view.openMenu(row(view, "README.md"), cx);
+    expect(view.menu.items.slice(0, 4).map((x: any) => x.label)).toEqual(["Delete 2 items…", "Cut 2 items", "Copy 2 paths", "Unmark all"]);
+    view.key({ key: "x" }, cx);
+    expect(logic.cutItems(world.shared["nocturne-files.cut"]).map((c: any) => c.name)).toEqual(["guide.txt", "README.md"]);
+    // Both are drawn as cut.
+    view.unmark();
+    view.sel = "src";
+    view.key({ key: "P", modifiers: { shift: true } }, cx);
+    await settle();
+    expect([await exists(pjoin(box.root, "src", "guide.txt")), await exists(pjoin(box.root, "src", "README.md"))]).toEqual([true, true]);
+    expect(view.msg.text).toBe(`Moved 2 items to ${pjoin(box.root, "src")}`);
+    expect(world.shared["nocturne-files.cut"]).toBeNull();
+    expect(changes()).toEqual([
+      [pjoin(box.root, "docs", "guide.txt"), pjoin(box.root, "src", "guide.txt")],
+      [pjoin(box.root, "README.md"), pjoin(box.root, "src", "README.md")],
+    ]);
+    // A set that partly can't move: the one whose name is taken there stays, the other goes.
+    await writeFile(pjoin(box.root, "docs", "main.rs"), "other\n");
+    await writeFile(pjoin(box.root, "x.txt"), "x\n");
+    view.refresh(cx); await settle(); view.render(cx);
+    view.moveSet([pjoin(box.root, "src", "main.rs"), pjoin(box.root, "x.txt")], pjoin(box.root, "docs"), cx);
+    await settle();
+    expect(view.msg.text).toBe(`Moved 1 item to ${pjoin(box.root, "docs")}; 1 failed: “main.rs”: already exists`);
+    expect(await Bun.file(pjoin(box.root, "docs", "main.rs")).text()).toBe("other\n");
+  } finally { await box.done(); }
+});
+
+test("the changes record: a rename, a folder's move, a delete; at most 50, ids growing", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.sel = "README.md";
+    view.key({ key: "R", modifiers: { shift: true } }, cx);
+    await name(view, "READ.md");
+    view.sel = "docs";
+    view.key({ key: "x" }, cx);
+    view.sel = "src";
+    view.key({ key: "P", modifiers: { shift: true } }, cx);
+    await settle(); view.render(cx);
+    const list = world.shared["nocturne.files.changes"];
+    expect(list.map((c: any) => [c.from, c.to, c.on])).toEqual([
+      [pjoin(box.root, "README.md"), pjoin(box.root, "READ.md"), null],
+      [pjoin(box.root, "docs"), pjoin(box.root, "src", "docs"), null],
+    ]);
+    expect(list[1].id).toBe(list[0].id + 1);
+    expect(typeof list[0].at).toBe("number");
+    // A failed rename leaves no entry.
+    await writeFile(pjoin(box.root, "taken.md"), "t\n");
+    view.refresh(cx); await settle(); view.render(cx);
+    view.sel = "READ.md";
+    view.key({ key: "R", modifiers: { shift: true } }, cx);
+    await name(view, "taken.md");
+    expect(world.shared["nocturne.files.changes"].length).toBe(2);
+    view.endDraft(cx);
+    // Capped at 50, newest last.
+    const many = logic.withChanges(list, Array.from({ length: 60 }, (_, i) => ({ from: `/a${i}`, to: null })), "box", 1);
+    expect([many.length, many.at(-1).from, many.at(-1).id - many[0].id, many.at(-1).on]).toEqual([50, "/a59", 49, "box"]);
+  } finally { await box.done(); }
+});
+
+test("drag and drop: a row onto a folder, a set onto the root; refused drops stay put; esc, leaving and a still press don't move anything", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.folders.add("src");
+    view.refresh(cx); await settle(); view.render(cx);
+    const m = mouse(view);
+    // README.md onto docs (closed): docs lights; after a rest it unfolds.
+    later.length = 0;
+    m.down("README.md");
+    const readme = view.listed.findIndex((r: any) => r.path === "README.md");
+    m.move({ y: logic.TREE_TOP + readme * logic.ROW_H + 11 + 2 }); // a couple of px: still a press
+    expect(view.drag).toBeNull();
+    m.move("docs");
+    expect([view.drag.into, view.drag.ok]).toEqual(["docs", true]);
+    expect(words(view.render(cx)).join(" ")).toContain("Drop: “README.md” into docs/");
+    for (const f of later.splice(0)) f(cx);
+    expect(view.folders.has("docs")).toBe(true);
+    m.up("docs");
+    await settle();
+    expect(await exists(pjoin(box.root, "docs", "README.md"))).toBe(true);
+    expect(changes().at(-1)).toEqual([pjoin(box.root, "README.md"), pjoin(box.root, "docs", "README.md")]);
+    view.refresh(cx); await settle(); view.render(cx);
+    // A set (pressed on one of them) onto the empty space below the rows: the root.
+    view.marked = new Set(["docs/guide.txt", "src/main.rs"]);
+    m.down("src/main.rs");
+    m.move({ y: 480 });
+    expect([view.drag.paths, view.drag.into, view.drag.ok]).toEqual([["docs/guide.txt", "src/main.rs"], "", true]);
+    m.up();
+    await settle();
+    expect([await exists(pjoin(box.root, "guide.txt")), await exists(pjoin(box.root, "main.rs"))]).toEqual([true, true]);
+    view.refresh(cx); await settle(); view.render(cx);
+    // A set partly in the target: the label and the hint count what moves; the one there stays.
+    await writeFile(pjoin(box.root, "src", "keep.rs"), "k\n");
+    view.refresh(cx); await settle(); view.render(cx);
+    view.marked = new Set(["guide.txt", "main.rs", "src/keep.rs"]);
+    m.down("guide.txt");
+    m.move("src");
+    expect([view.drag.ok, view.drag.moving]).toEqual([true, ["guide.txt", "main.rs"]]);
+    const drawn = words(view.render(cx)).join(" ");
+    expect(drawn).toContain("Drop: 2 items into src/ (1 already there)");
+    expect(drawn).toContain("2 items");
+    m.up("src");
+    await settle();
+    expect([await exists(pjoin(box.root, "src", "guide.txt")), await exists(pjoin(box.root, "src", "main.rs")), await exists(pjoin(box.root, "src", "keep.rs"))]).toEqual([true, true, true]);
+    expect(view.msg.text).toBe(`Moved 2 items to ${pjoin(box.root, "src")}`);
+    // Back to the root for what follows.
+    view.moveSet([pjoin(box.root, "src", "guide.txt"), pjoin(box.root, "src", "main.rs")], box.root, cx);
+    await settle();
+    view.refresh(cx); await settle(); view.render(cx);
+    // Refused: src into its own subfolder, src onto itself, docs where it already is; nothing moves.
+    m.down("src");
+    m.move("src/sub");
+    expect([view.drag.ok, view.drag.why]).toEqual([false, "A folder can't go into its own folder"]);
+    m.move("src");
+    expect(view.drag.why).toBe("A folder can't go into itself");
+    m.up("src");
+    m.down("docs");
+    m.move({ y: 480 });
+    expect(view.drag.why).toBe("It's already there");
+    m.up();
+    await settle();
+    expect(await exists(pjoin(box.root, "src", "sub"))).toBe(true);
+    // A file row isn't a target; esc cancels; leaving the pane cancels.
+    m.down("guide.txt");
+    m.move("main.rs");
+    expect([view.drag.into, view.drag.ok]).toEqual([null, false]);
+    m.move("docs");
+    view.key({ key: "escape" }, cx);
+    expect(view.drag).toBeNull();
+    m.up("docs");
+    m.down("guide.txt"); m.move("docs"); m.leave();
+    expect(view.drag).toBeNull();
+    m.up();
+    await settle();
+    expect(await exists(pjoin(box.root, "guide.txt"))).toBe(true);
+    // A press that doesn't move stays a click, and a double click still opens.
+    commands.length = 0;
+    m.click("guide.txt");
+    expect([view.sel, commands]).toEqual(["guide.txt", []]);
+    m.click("guide.txt");
+    expect(commands.map(([c]) => c)).toEqual(["editor.open"]);
+    // Near the bottom edge of a long list it scrolls a row at a time while the drag stays.
+    for (let i = 0; i < 30; i++) await writeFile(pjoin(box.root, `f${i}.txt`), "");
+    view.refresh(cx); await settle(); view.render(cx);
+    scrolled.length = 0;
+    view.size = { width: 400, height: 300 };
+    m.down("docs");
+    m.move({ y: 300 - 5 });
+    expect(scrolled).toEqual([Math.floor((300 - (logic.TREE_TOP - 4)) / logic.ROW_H) - 1]);
+    // While it stays there, the next step scrolls on.
+    for (const f of later.splice(0)) f(cx);
+    expect(scrolled.length).toBe(2);
+    view.key({ key: "escape" }, cx);
+  } finally { await box.done(); }
+});
+
+test("a scrolled list maps the pointer to the row under it", () => {
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.render(cx);
+  scrollTop.y = 2 * logic.ROW_H;
+  expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[2] });
+  scrollTop.y = 0;
+  expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[0] });
+  expect(view.hitAt({ x: 40, y: 20 })).toBeNull();
 });

@@ -607,7 +607,23 @@ the highlighted line shows where it will land.
   existing target is refused (nothing is overwritten), so are the root and a
   folder into itself; a failed command shows its error in the hint line. The
   tree then shows the result, unfolded and selected. Editors with a renamed,
-  moved or deleted file open keep the old path. `?` (or the `? keys` that ends the
+  moved or deleted file open keep the old path. Several rows: cmd-click marks or
+  unmarks a row, shift-click marks every row from the last clicked one, `t`
+  marks / unmarks and steps down, `V` marks a range while moving (`V` again ends
+  it), shift-↑↓ mark while moving, esc clears the marks before anything else;
+  the hint line counts them. With marks, `d` (one question: the count and the
+  first names), `x` / `P`, `y` (every path, one a line) and the menu on a marked
+  row ("Delete 3 items…") act on all of them; a marked folder covers what's in
+  it; rename, open, edit and the viewers act on the keyboard's row. Each row is
+  tried; what failed is listed afterwards with its reason. Drag a row, or the
+  marked rows when the press starts on one, onto a folder row or below the rows
+  (the root): the target lights while a drop is allowed (not into itself, its
+  own folder or where it already is), a folder unfolds after a short rest, the
+  list scrolls near its edges, esc or a release elsewhere cancels. Every rename,
+  move and delete that worked is appended to shared `nocturne.files.changes`
+  (`[{ id, from, to, on, at }]`, newest last, 50 at most, `to` null for a
+  delete, a folder one entry with its own paths: match by prefix) for editors to
+  follow. `?` (or the `? keys` that ends the
   filter line) shows the keys overview in the list's place; `?` or esc hides it.
   The preview split: `space` (the toolbar's split icon, the menu's "Show the
   preview") shows the selected file in a part of the files pane's own area, at
