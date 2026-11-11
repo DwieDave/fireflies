@@ -16,7 +16,7 @@ Rules:
 - Keep defaults/AGENTS.md and src/SKILL.md current for what you change, in your area's sections.
 - Write actions on real services (GitHub PRs, workflow runs, project items, pushes, sudo, answering Developer's agents) are tested against fakes; ask <orchestrator> before any real one.
 - Design work: invoke /impeccable; the nocturne look is locked in (dithered night UI, moonfly colors, square corners, existing fonts and icons).
-- Everything committed (code, comments, tests, docs, commit messages) calls the person you work for `Developer`.
+- Everything committed (code, comments, tests, docs, commit messages) calls the person you work for `Developer` and writes a path under his home as `~/…`.
 - Commits: lowercase single-line conventional commits, no co-author or AI trailers. Leave pushing to the orchestrator. Work alone: no subagents or other agents.
 - Developer's screen recordings (scrawl captures): open contact-sheet.png and frames/ before changing anything.
 

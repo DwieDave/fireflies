@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Stay in `/Users/david/code/fireflies-github`; never touch `/Users/david/code/fireflies`, never stop/restart the running app.
+- Stay in `~/code/fireflies-github`; never touch `~/code/fireflies`, never stop/restart the running app.
 - Key: `"cmd-shift-g": "nocturne.github"` in `defaults/keys.macos.json` `layout:nocturne` (unreleased section: no shipped copy needed).
 - Poll: 3000 ms while anything shown is queued/in_progress, 60000 ms otherwise; nothing while closed. Requests carry `If-None-Match`.
 - Overlay: `openOverlay({ mod: "nocturne-github", kind: "window", key: "nocturne-github", frame: "none", width: 0.85, height: 0.85 })`.

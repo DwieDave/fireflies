@@ -11,7 +11,7 @@ worktrees, you brief, review, merge, and ship.
    ```sh
    W=/Volumes/data/coding/fireflies-wt/<name>
    git worktree add -b feat/<name> $W main
-   git -C $W submodule update --init --reference /Users/david/Documents/personal/coding/fireflies/vendor/ghostty
+   git -C $W submodule update --init --reference ~/Documents/personal/coding/fireflies/vendor/ghostty
    cp -cR /Volumes/data/coding/fireflies-wt/integrate/target $W/target   # APFS clone, seeds the build
    ```
 2. **Brief**: write it to your scratchpad (`$SCRATCH`) as `<name>.md`. Start from
@@ -116,7 +116,8 @@ Batch several merges before one nix build when agents finish close together.
 ## Housekeeping
 
 - **Naming**: everything committed (code, comments, tests, docs, commit
-  messages) and every brief calls the person `Developer`.
+  messages) and every brief calls the person `Developer`, and writes a path
+  under his home as `~/…`.
 - **Cleanup**: a worktree goes when its branch is on main (or, after a
   rebase, on the tagged old main) and no live agent sits in it
   (`hc ls | jq '.terminals[] | select(.state=="live") | .cwd'`). Look at
