@@ -544,7 +544,8 @@ export default class ScriptsDeck extends View {
     }
     if (k === "escape") return cx.stop_propagation(), this.escape(cx);
     if (cmd && k === "backspace" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
-    else if (cmd && k === "r" && cur?.kind === "run") this.act("again", cur.r, cx);
+    // cmd-r; cmd-shift-r is the deck's own key (nocturne.scripts): it closes the deck.
+    else if (cmd && k === "r" && !m.shift && cur?.kind === "run") this.act("again", cur.r, cx);
     else if (cmd || m.alt) return;
     else if (k === "j") move(1);
     else if (k === "k") move(-1);

@@ -233,15 +233,20 @@ export default class Tabs {
   }
 
   /** A square icon button on the strip; `on`: its panel is open (a dithered band, a blue foot).
-   *  `action` gets the press's event, for a drop-down to hang under the button
-   *  (dropBelow). No `tip`: no tooltip (one over an open drop-down would sit on it). */
+   *  `action(e, wasOpen)` gets the press's event, for a drop-down to hang under
+   *  the button (dropBelow), and whether the button was lit when pressed: an
+   *  open drop-down closes on that very press (a popup closes on any press
+   *  beside it, and the press goes on to the button), so by the click nothing
+   *  is open; a toggle goes by `wasOpen` and stays closed (scripts.js
+   *  toggleDeck, newmenu.js openNewMenu). No `tip`: no tooltip (one over an
+   *  open drop-down would sit on it). */
   tool(t, id, on, tip, action, ...kids) {
     return h_flex().id(id).relative().flex_none().h(24).px(7).gap(5).items_center().text_size(11)
       .text_color(on ? t.foreground : t.muted)
       .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
       .when(Boolean(tip), (el) => el.tooltip(tip))
-      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = e; })
-      .on_click(() => action(this.press))
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = { e, on }; })
+      .on_click(() => action(this.press?.e, Boolean(this.press?.on)))
       .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
       .children(kids.map((k) => k.relative()))
       .map((el) => navRing(t, el, this.at(id)));
@@ -277,7 +282,7 @@ export default class Tabs {
   /** "+ new": its menu hangs under it; lit (the open look) while it's open. */
   newButton(t) {
     const open = newMenuOpen();
-    return this.tool(t, "tab-new", open, open ? null : "New (⌘N)", (e) => openNewMenu({ at: dropBelow(e, NEW_W) }),
+    return this.tool(t, "tab-new", open, open ? null : "New (⌘N)", (e, wasOpen) => openNewMenu({ at: dropBelow(e, NEW_W), wasOpen }),
       div().text_color(open ? t.foreground : t.muted).child("+ new"));
   }
 
