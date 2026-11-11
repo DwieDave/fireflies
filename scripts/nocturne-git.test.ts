@@ -7,7 +7,7 @@ import {
   parseStatus, letters, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseRefs,
   parseReflog, parseStash, parseWorktrees, repoState, age, initials, fileTree, trackOf, parseLogFull, relativeDate,
 } from "../defaults/mods/nocturne-git/parse.js";
-import { layoutGraph, segments } from "../defaults/mods/nocturne-git/graph.js";
+import { layoutGraph, segments, usedWidth, widthOf } from "../defaults/mods/nocturne-git/graph.js";
 import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/nocturne-git/patch.js";
 import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/nocturne-git/keys.js";
 import { rewrite, nextUndo, nextRedo, reflogAction, UNDO, REDO } from "../defaults/mods/nocturne-git/history.js";
@@ -150,6 +150,16 @@ test("graph: a merge forks a lane that joins back where the branch began", () =>
   expect(b.joins.map((j) => j.from)).toEqual([1]);
   expect(g.width).toBe(2);
   expect(m.color).not.toBe(x2.color);
+});
+
+test("graph width: only the lanes the rows in view draw in", () => {
+  // A side branch merged near the top, then a straight line below it.
+  const g = layoutGraph([C("m", "y", "x"), C("y", "b"), C("x", "b"), C("b", "a"), C("a", "z"), C("z")]);
+  expect(g.width).toBe(2);
+  expect(g.rows.map(usedWidth)).toEqual([2, 2, 2, 2, 1, 1]);
+  expect(widthOf(g.rows, 0, 3)).toBe(2);
+  expect(widthOf(g.rows, 4, 6)).toBe(1);
+  expect(widthOf(g.rows, 4, 99)).toBe(1);
 });
 
 test("graph: two branch tips get their own lanes and meet at their base", () => {

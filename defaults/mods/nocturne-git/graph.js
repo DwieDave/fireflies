@@ -87,3 +87,17 @@ export function segments(r) {
   for (const f of r.forks) h.push({ from: Math.min(f.to, r.col), to: Math.max(f.to, r.col), color: f.color });
   return { v, h, node: { lane: r.col, color: r.color, merge: r.merge } };
 }
+
+/** The lanes one row really draws in (empty lanes on the right left out). */
+export function usedWidth(r) {
+  const last = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i + 1; return 0; };
+  return Math.max(1, last(r.before), last(r.after), r.col + 1, ...r.forks.map((f) => f.to + 1), ...r.joins.map((j) => j.from + 1));
+}
+
+/** The lanes rows a..b (exclusive) draw in: the graph column of the rows in
+ *  view, so a wide stretch elsewhere in history doesn't push the text right. */
+export function widthOf(rows, a = 0, b = rows.length) {
+  let w = 1;
+  for (let i = Math.max(0, a); i < Math.min(rows.length, b); i++) w = Math.max(w, usedWidth(rows[i]));
+  return w;
+}

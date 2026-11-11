@@ -40,7 +40,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder } from "herdr";
 import { Git, LOG_LIMIT } from "./git.js";
-import { layoutGraph } from "./graph.js";
+import { layoutGraph, usedWidth, widthOf } from "./graph.js";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
 import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.js";
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
@@ -58,7 +58,9 @@ const TABS = {
   commits: [["commits", "Commits"], ["reflog", "Reflog"]],
 };
 const MODES = ["normal", "half", "full"];
-const ROW = 18, WIDE_ROW = 36, NARROW = 640;
+const ROW = 18, WIDE_ROW = 32, LOG_ROW = 16, NARROW = 640;
+// The graph's lane width: the Commits list, its wide rows, the branch log.
+const LANE = 10, WIDE_LANE = 13;
 const CONTEXT_NAMES = {
   status: "status", files: "files", review: "review", worktrees: "worktrees", branches: "branches", remotes: "remotes", remoteBranches: "remote branches",
   tags: "tags", commits: "commits", reflog: "reflog", subCommits: "commits", commitFiles: "commit files", stash: "stash", staging: "staging", main: "main view",
@@ -775,14 +777,13 @@ export default class GitView extends View {
     const refColor = { head: "ansi6", branch: "ansi2", ref: "ansi1", tag: "ansi3", detached: "ansi6" };
     const rows = [];
     commits.forEach((c, i) => {
-      const g = graph.rows[i], w = graph.width;
+      const g = graph.rows[i], w = usedWidth(g);
       const line = (parts) => rows.push({ kind: "log", g, w, node: false, parts });
       const refs = c.refs.flatMap((r, k) => [[k ? ", " : " (", "ansi3"], [r.kind === "head" ? `HEAD -> ${r.name}` : r.kind === "tag" ? `tag: ${r.name}` : r.name, refColor[r.kind] ?? "ansi2"]]);
       rows.push({ kind: "log", g, w, node: true, head: c.hash === head, parts: [[`commit ${c.short}`, "ansi3"], ...refs, ...(refs.length ? [[")", "ansi3"]] : [])] });
       if (c.parents.length > 1) line([["Merge: ", "dim"], [c.parents.map((p) => p.slice(0, 7)).join(" "), "muted"]]);
       line([["Author: ", "dim"], [`${c.author} <${c.email}>`, "ansi5"]]);
       line([["Date:   ", "dim"], [relativeDate(c.date), "muted"]]);
-      line([]);
       for (const l of c.message.split("\n")) line([[`    ${l}`, "foreground"]]);
       line([]);
     });
@@ -821,7 +822,7 @@ export default class GitView extends View {
       const files = (await g.stashShow(s.ref, opts)).filter((f) => !s.path || f.path === s.path);
       return { title: `Stash · ${short(s.ref)}${s.path ? ` · ${s.path}` : ""}`, rows: files.length ? flat(files) : [text("Empty stash entry.", "muted")] };
     }
-    if (s.kind === "log") return { title: `Log · ${s.ref}`, rows: await this.logRows(s.ref) };
+    if (s.kind === "log") return { title: `Log · ${s.ref}`, rows: await this.logRows(s.ref), rowH: LOG_ROW };
     if (s.kind === "range") {
       const files = await g.between(s.a, s.b, opts);
       return { title: `Diff ${short(s.a)}..${short(s.b)}`, rows: files.length ? flat(files) : [text("No differences.", "muted")] };
@@ -878,7 +879,7 @@ export default class GitView extends View {
       }
       case "worktrees": return { title: "Worktree", rows: [text(x.path, "foreground"), text(x.branch ? `on ${x.branch}` : x.detached ? "detached" : "", "ansi6"), text(x.head ?? "", "dim")] };
       case "remotes": return { title: x.name, rows: [text(`fetch ${x.url}`, "foreground"), text(`push  ${x.push}`, "muted"), text(""), ...this.data.remoteBranches.filter((r) => r.remote === x.name).slice(0, 40).map((r) => text(`${r.branch}  ${r.subject}`, "muted"))] };
-      case "branches": case "remoteBranches": case "tags": return { title: `Log · ${x.name}`, rows: await this.logRows(x.name) };
+      case "branches": case "remoteBranches": case "tags": return { title: `Log · ${x.name}`, rows: await this.logRows(x.name), rowH: LOG_ROW };
       case "commits": case "subCommits": case "reflog": {
         const c = await g.show(x.hash, opts);
         if (!c) return { title: short(x.hash), rows: [text("Not a commit.", "muted")] };
@@ -1104,6 +1105,13 @@ export default class GitView extends View {
     return () => div();
   }
 
+  /** The graph column's width in lanes for the rows in view (list() sets
+   *  the top before it draws them). */
+  shownWidth(ctx, g) {
+    const top = this.top[ctx] ?? 0;
+    return widthOf(g.rows, top, top + Math.max(1, this.vis[ctx] ?? 12) + 1);
+  }
+
   graphFor(ctx) {
     if (this.noGraph || this.filters[ctx]) return null;
     return ctx === "subCommits" ? this.sub()?.graph ?? null : this.graph;
@@ -1137,7 +1145,7 @@ export default class GitView extends View {
       return this.rowLine(t, [
         T7(t, c.short, this.hashColor(t, c)),
         div().w(18).flex_none().text_color(this.authorColor(t, c.author)).child(initials(c.author)),
-        row ? graphCell(t, row, g.width, { lane: 12, h: ROW, head: this.isHead(c) }) : null,
+        row ? graphCell(t, row, this.shownWidth(ctx, g), { lane: LANE, h: ROW, head: this.isHead(c) }) : null,
         copied ? div().flex_none().px(3).bg(t.ansi5 + "44").text_color(t.ansi5).child("copied") : null,
         ...this.refChips(t, c),
         div().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : t.muted).child(c.subject),
@@ -1163,7 +1171,7 @@ export default class GitView extends View {
       const copied = this.copied.some((x) => x.hash === c.hash);
       const ahead = this.data.unpushed.has(c.hash);
       return h_flex().pl(4).pr(8).gap(8).items_center().overflow_hidden()
-        .child(row ? graphCell(t, row, g.width, { lane: 16, h: WIDE_ROW, head: this.isHead(c), big: true }).relative() : div())
+        .child(row ? graphCell(t, row, this.shownWidth(ctx, g), { lane: WIDE_LANE, h: WIDE_ROW, head: this.isHead(c), big: true }).relative() : div())
         .child(v_flex().relative().flex_1().min_w(0).gap(2).justify_center()
           .child(h_flex().gap(7).items_center().text_size(11).children(flags)
             .when(copied, (el) => el.child(div().flex_none().px(3).bg(t.ansi5 + "44").text_color(t.ansi5).child("copied")))
@@ -1172,7 +1180,7 @@ export default class GitView extends View {
             .child(div().flex_none().text_color(ahead ? t.ansi1 : this.hashColor(t, c)).child(`${c.short}${ahead ? " ↑" : ""}`))
             .child(div().flex_none().text_color(this.authorColor(t, c.author)).child(c.author))
             .child(div().flex_none().child(age(c.date)))))
-        .when(i === firstOnMain && firstOnMain > 0, (el) => el.child(h_flex().absolute().left(g ? g.width * 16 + 8 : 8).right(8).top(0).h(1).child(dither(t.ansi8, 1)))
+        .when(i === firstOnMain && firstOnMain > 0, (el) => el.child(h_flex().absolute().left(g ? this.shownWidth(ctx, g) * WIDE_LANE + 8 : 8).right(8).top(0).h(1).child(dither(t.ansi8, 1)))
           .child(div().absolute().right(10).top(-6).px(4).bg(t.background).text_size(10).text_color(t.ansi4).child(`↑ ${firstOnMain} not on ${this.data.main}`)));
     };
   }
@@ -1192,8 +1200,9 @@ export default class GitView extends View {
     else tabs.forEach(([id, label], k) => {
       if (k) parts.push(div().text_color(t.ansi0).child("-"));
       const on = this.tabOf[p] === id;
-      parts.push(div().id(`tab-${p}-${id}`).text_color(on ? (active ? t.foreground : t.muted) : t.dim)
-        .when(on && active, (el) => el.border_b(1).border_color(t.accent))
+      // The open tab of the focused panel is lit in the accent, lazygit's
+      // way: an underline would sit below the edge row, on the first row.
+      parts.push(div().id(`tab-${p}-${id}`).text_color(on ? (active ? t.accent : t.muted) : t.dim)
         .hover((st) => st.text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.panel = p; this.focus = "side"; this.setTab(id); cx.notify(); })
         .child(label));
@@ -1263,7 +1272,7 @@ export default class GitView extends View {
     const rows = m?.rows ?? [];
     const body = !m ? empty(t, this.state === "ready" ? "Reading…" : "", null, { small: true })
       : !rows.length ? empty(t, "Nothing to show", null, { small: true })
-      : this.mainList(t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: r.path ?? m.path, active }), { key: "main" });
+      : this.mainList(t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: r.path ?? m.path, active, h: m.rowH ?? ROW }), { key: "main", rowH: m.rowH ?? ROW });
     // ⧉: what this view shows, as a pane (shift: a new tab), like a pane header's split.
     const asPane = !this.show && m?.rows?.length ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((s) => s.text_color(t.accent).bg(t.ansi0 + "66"))
       .tooltip("Open as a pane beside (ctrl-p) · shift: in a new tab (ctrl-shift-p)")
@@ -1282,7 +1291,7 @@ export default class GitView extends View {
   }
 
   /** A main-view list: windowed like the side lists; the wheel scrolls it. */
-  mainList(t, id, rows, draw, { follow = null, key = "main" } = {}) {
+  mainList(t, id, rows, draw, { follow = null, key = "main", rowH = ROW } = {}) {
     const vis = Math.max(1, this.mainVisOf?.[key] ?? 30);
     let top = key === "staging" ? (this.staging.top ?? 0) : key === "main" ? this.mainTop : (this.otherTop?.[key] ?? 0);
     if (follow != null) {
@@ -1294,13 +1303,13 @@ export default class GitView extends View {
     if (key === "main" || key === "staging") this.mainVis = vis;
     return div().id(id).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
-        const v = Math.max(1, Math.floor(unzoom(size.height) / ROW));
+        const v = Math.max(1, Math.floor(unzoom(size.height) / rowH));
         (this.mainVisOf ??= {});
         if (v !== this.mainVisOf[key]) { this.mainVisOf[key] = v; cx.notify(); }
       })
       .on_scroll_wheel((e, cx) => {
         cx.stop_propagation();
-        this.mainWheel = (this.mainWheel ?? 0) + unzoom(e.delta.y) / ROW;
+        this.mainWheel = (this.mainWheel ?? 0) + unzoom(e.delta.y) / rowH;
         const steps = Math.trunc(this.mainWheel);
         if (!steps) return;
         this.mainWheel -= steps;
@@ -1313,7 +1322,7 @@ export default class GitView extends View {
         if (key === "staging" && this.staging) {
           // A click picks the line under the pointer; shift extends a range.
           const y = unzoom(e.local_position?.y ?? 0);
-          const i = top + Math.floor(y / ROW);
+          const i = top + Math.floor(y / rowH);
           if (isChange(this.staging.rows[i])) {
             if (e.modifiers?.shift) { if (this.staging.anchor == null) this.staging.anchor = this.staging.cur; } else this.staging.anchor = null;
             this.staging.cur = i;
