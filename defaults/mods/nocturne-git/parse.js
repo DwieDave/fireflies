@@ -142,16 +142,50 @@ export function parseLog(text) {
   return out;
 }
 
+/** `git log --format=LOG_FULL_FORMAT`: as parseLog, with the whole message
+ *  (body included), records ended by %x1e (a message can span lines). */
+export const LOG_FULL_FORMAT = ["%H", "%P", "%an", "%ae", "%at", "%D", "%B"].join("%x1f") + "%x1e";
+
+export function parseLogFull(text) {
+  const out = [];
+  for (let rec of text.split("\x1e")) {
+    rec = rec.replace(/^\n+/, "");
+    if (!rec.trim()) continue;
+    const [hash, parents, author, email, date, refs, ...body] = rec.split(SEP);
+    const message = body.join(SEP).replace(/\s+$/, "");
+    out.push({ hash, short: hash.slice(0, 7), parents: parents ? parents.split(" ") : [], author, email, date: +date || 0, refs: parseRefs(refs ?? ""), subject: message.split("\n")[0], message });
+  }
+  return out;
+}
+
+/** git's relative date: "8 minutes ago", "2 days ago", "3 months ago". */
+export function relativeDate(unix, now = Date.now() / 1000) {
+  const s = Math.max(0, Math.round(now - unix));
+  const n = (v, unit) => `${v} ${unit}${v === 1 ? "" : "s"} ago`;
+  if (s < 90) return n(s, "second");
+  if (s < 90 * 60) return n(Math.round(s / 60), "minute");
+  if (s < 36 * 3600) return n(Math.round(s / 3600), "hour");
+  if (s < 14 * 86400) return n(Math.round(s / 86400), "day");
+  if (s < 10 * 7 * 86400) return n(Math.round(s / (7 * 86400)), "week");
+  if (s < 365 * 86400) return n(Math.round(s / (30 * 86400)), "month");
+  return n(Math.round(s / (365 * 86400)), "year");
+}
+
 /** %D: "HEAD -> main, origin/main, tag: v1" into [{ kind, name }]. */
 export function parseRefs(d) {
   const out = [];
   for (let s of d.split(", ")) {
     s = s.trim();
     if (!s) continue;
-    if (s.startsWith("HEAD -> ")) out.push({ kind: "head", name: s.slice(8) });
+    // Full names (git log --decorate=full) say what a ref is; a short name
+    // with a slash could be a local feat/x or a remote's origin/x.
+    if (s.startsWith("HEAD -> ")) out.push({ kind: "head", name: s.slice(8).replace(/^refs\/heads\//, "") });
     else if (s === "HEAD") out.push({ kind: "detached", name: "HEAD" });
-    else if (s.startsWith("tag: ")) out.push({ kind: "tag", name: s.slice(5) });
+    else if (s.startsWith("tag: ")) out.push({ kind: "tag", name: s.slice(5).replace(/^refs\/tags\//, "") });
     else if (s.endsWith("/HEAD")) continue;
+    else if (s.startsWith("refs/heads/")) out.push({ kind: "branch", name: s.slice(11) });
+    else if (s.startsWith("refs/remotes/")) out.push({ kind: "ref", name: s.slice(13) });
+    else if (s.startsWith("refs/")) out.push({ kind: "ref", name: s.replace(/^refs\/[^/]+\//, "") });
     else out.push({ kind: s.includes("/") ? "ref" : "branch", name: s });
   }
   return out;

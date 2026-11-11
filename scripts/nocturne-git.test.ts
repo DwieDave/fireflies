@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
   parseStatus, letters, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseRefs,
-  parseReflog, parseStash, parseWorktrees, repoState, age, initials, fileTree, trackOf,
+  parseReflog, parseStash, parseWorktrees, repoState, age, initials, fileTree, trackOf, parseLogFull, relativeDate,
 } from "../defaults/mods/nocturne-git/parse.js";
 import { layoutGraph, segments } from "../defaults/mods/nocturne-git/graph.js";
 import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/nocturne-git/patch.js";
@@ -85,6 +85,21 @@ test("log: parents, refs and subjects", () => {
   expect(l[0].refs).toEqual([{ kind: "head", name: "main" }, { kind: "ref", name: "origin/main" }, { kind: "tag", name: "v1" }]);
   expect(parseRefs("HEAD")).toEqual([{ kind: "detached", name: "HEAD" }]);
   expect(parseRefs("feat")).toEqual([{ kind: "branch", name: "feat" }]);
+  // --decorate=full: a local branch with a slash stays local
+  expect(parseRefs("HEAD -> refs/heads/feat/x, refs/heads/fix/up, refs/remotes/origin/fix/up, tag: refs/tags/v1, refs/remotes/origin/HEAD")).toEqual([
+    { kind: "head", name: "feat/x" }, { kind: "branch", name: "fix/up" }, { kind: "ref", name: "origin/fix/up" }, { kind: "tag", name: "v1" },
+  ]);
+});
+
+test("full log: whole messages across lines, records split on RS", () => {
+  const rec = (h: string, msg: string, refs = "") => ["h".repeat(39) + h, "", "Ann", "a@x", "100", refs, msg].join(US) + "\x1e";
+  const l = parseLogFull(rec("1", "subject one\n\nbody line\nmore\n", "HEAD -> main") + "\n" + rec("2", "two\n"));
+  expect(l.length).toBe(2);
+  expect(l[0]).toMatchObject({ subject: "subject one", message: "subject one\n\nbody line\nmore", refs: [{ kind: "head", name: "main" }] });
+  expect(l[1].message).toBe("two");
+  expect(relativeDate(1000 - 8 * 60, 1000)).toBe("8 minutes ago");
+  expect(relativeDate(0, 86400 * 3)).toBe("3 days ago");
+  expect(relativeDate(0, 1)).toBe("1 second ago");
 });
 
 test("reflog, stash, worktrees, state", () => {

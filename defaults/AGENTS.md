@@ -131,6 +131,8 @@ as a pane beside the focused pane, ctrl-shift-p in a new tab, and closes the
 window. That pane is `nocturne-git` with props `{folder, on?, paneId, show}`,
 `show` one of `{kind: "file", path}` (the working diff), `{kind: "commit",
 hash, path?}`, `{kind: "stash", ref, path?}`, `{kind: "range", a, b}`,
+`{kind: "log", ref}` (a branch's, remote branch's or tag's log: what the main
+view shows for the Branches panel, lazygit's `git log --graph` on the lane graph),
 `{kind: "review", scope, pr?, repo?, path?}`; it refreshes on changes and its
 q / esc close it. keys.json can bind any of the window's actions as
 `nocturne-git.<action>` (`open-pane`, `screen-next`, `panel-commits`…).

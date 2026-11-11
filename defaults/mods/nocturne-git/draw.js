@@ -129,6 +129,16 @@ export function graphCell(t, row, width, { lane = 12, h = 18, head = false, big 
   return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
 }
 
+/** The lanes running past a commit's other rows (its author, date and
+ *  message in the branch log): `after` (a graph row's after) as straight
+ *  lines through the whole row, in the same colors and places as graphCell. */
+export function graphPass(t, after, width, { lane = 12, h = 18 } = {}) {
+  const colors = laneColors(t);
+  const cx = (i) => i * lane + Math.floor(lane / 2) - 1;
+  const kids = (after ?? []).flatMap((c, i) => (c == null ? [] : [div().absolute().left(cx(i)).top(0).w(2).h(h).bg(colors[c] + "99").child(dither(colors[c], 1))]));
+  return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
+}
+
 /** Syntax spans for a diff line's text, by the file's language: tree-sitter
  *  (herdr.highlight) in moonfly's roles, `base` between them; null for plain
  *  text (no grammar, nothing to color, a very long line). Each line is
@@ -170,6 +180,13 @@ export function diffLine(t, row, { code, compact = false, pick = false, cursor =
       .child(dither(t.ansi0, 2))
       .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(row.text))
       .when(Boolean(row.sub), (el) => el.child(div().relative().px(4).bg(t.background).text_color(t.muted).child(row.sub)));
+  }
+  if (row.kind === "log") {
+    // The branch log (lazygit's git log --graph): the lanes, then the text.
+    const graph = row.node ? graphCell(t, row.g, row.w, { lane: 12, h, head: row.head }) : graphPass(t, row.g.after, row.w, { lane: 12, h });
+    return h_flex().h(h).w_full().items_center().pl(8).pr(10).gap(8).text_size(11.5).overflow_hidden()
+      .child(graph)
+      .child(h_flex().flex_1().min_w(0).overflow_hidden().children((row.parts ?? []).map(([s, c], i) => div().id(`lg-${i}`).flex_none().text_color(t[c] ?? c).child(s))));
   }
   if (row.kind === "text") {
     return h_flex().h(h).w_full().items_center().px(10).text_size(11).overflow_hidden()

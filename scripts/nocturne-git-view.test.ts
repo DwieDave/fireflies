@@ -293,6 +293,23 @@ test("ctrl-p opens the main view as a pane (ctrl-shift-p a tab); the pane shows 
   expect(commands.some(([n]) => n === "pane.close")).toBe(true);
 });
 
+test("branches: the main view shows the branch's log on the lane graph; ctrl-p opens it as a log pane", async () => {
+  const v = await open();
+  v.setPanel("branches"); await settle(v);
+  v.moveTo(v.items("branches").findIndex((b: any) => b.name === "main")); await settle(v);
+  const rows = v.main.rows;
+  expect(v.main.title).toBe("Log · main");
+  const heads = rows.filter((r: any) => r.kind === "log" && r.node);
+  expect(heads.length).toBeGreaterThan(2);
+  expect(heads[0].parts[0][0]).toMatch(/^commit [0-9a-f]{7}$/);
+  expect(rows.some((r: any) => r.kind === "log" && r.parts[0]?.[0] === "Merge: ")).toBe(true);
+  expect(rows.some((r: any) => r.kind === "log" && r.parts[0]?.[0] === "Author: ")).toBe(true);
+  expect(heads.some((r: any) => r.g.merge)).toBe(true);
+  expect(Math.max(...heads.map((r: any) => r.w))).toBe(2);
+  v.render();
+  expect(v.showNow()).toEqual({ kind: "log", ref: "main" });
+});
+
 test("ctrl-p on a working file and on review open those as panes", async () => {
   sh("echo more >> f.txt");
   const v = await open();

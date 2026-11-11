@@ -25,7 +25,9 @@
 // ctrl-shift-p in a new tab, and closes the window. That pane is this mod
 // with props { show }: { kind: "file", path } (the working diff), "commit"
 // { hash, path? }, "stash" { ref, path? }, "range" { a, b } (diff mode), or
-// "review" { scope, pr?, repo?, path? } (the review list beside its diff).
+// "review" { scope, pr?, repo?, path? } (the review list beside its diff),
+// "log" { ref } (a branch's, remote branch's or tag's log, as the main view
+// shows it for the Branches panel: lazygit's git log --graph on our lanes).
 // It reads again on changes like the window; q / esc close the pane.
 //
 // Props: { folder?, on? } (the shown space's when missing), { review: true,
@@ -40,7 +42,7 @@ import { props, theme, settings, shared, setShared, spaces, panes, focused, run,
 import { Git, LOG_LIMIT } from "./git.js";
 import { layoutGraph } from "./graph.js";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
-import { fileTree, dirLetters, letters, age, initials } from "./parse.js";
+import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.js";
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
@@ -579,7 +581,7 @@ export default class GitView extends View {
         return s?.stash ? { kind: "stash", ref: s.hash, ...(path ? { path } : {}) } : { kind: "commit", hash: s.hash, ...(path ? { path } : {}) };
       }
       case "stash": return x ? { kind: "stash", ref: x.hash ?? x.ref } : null;
-      case "branches": case "tags": case "remoteBranches": return x?.oid ? { kind: "commit", hash: x.oid } : null;
+      case "branches": case "tags": case "remoteBranches": return x?.name ? { kind: "log", ref: x.name } : null;
     }
     return null;
   }
@@ -763,6 +765,30 @@ export default class GitView extends View {
     });
   }
 
+  /** lazygit's branch log (git log --graph with whole headers): a block of
+   *  rows per commit, the commit line on the lane graph's node, the others
+   *  with the lanes running through, in the Commits panel's colors. */
+  async logRows(ref) {
+    const commits = await this.git.logFull(ref);
+    const graph = layoutGraph(commits);
+    const head = this.data.status?.oid;
+    const refColor = { head: "ansi6", branch: "ansi2", ref: "ansi1", tag: "ansi3", detached: "ansi6" };
+    const rows = [];
+    commits.forEach((c, i) => {
+      const g = graph.rows[i], w = graph.width;
+      const line = (parts) => rows.push({ kind: "log", g, w, node: false, parts });
+      const refs = c.refs.flatMap((r, k) => [[k ? ", " : " (", "ansi3"], [r.kind === "head" ? `HEAD -> ${r.name}` : r.kind === "tag" ? `tag: ${r.name}` : r.name, refColor[r.kind] ?? "ansi2"]]);
+      rows.push({ kind: "log", g, w, node: true, head: c.hash === head, parts: [[`commit ${c.short}`, "ansi3"], ...refs, ...(refs.length ? [[")", "ansi3"]] : [])] });
+      if (c.parents.length > 1) line([["Merge: ", "dim"], [c.parents.map((p) => p.slice(0, 7)).join(" "), "muted"]]);
+      line([["Author: ", "dim"], [`${c.author} <${c.email}>`, "ansi5"]]);
+      line([["Date:   ", "dim"], [relativeDate(c.date), "muted"]]);
+      line([]);
+      for (const l of c.message.split("\n")) line([[`    ${l}`, "foreground"]]);
+      line([]);
+    });
+    return rows.length ? rows : [text("No commits.", "muted")];
+  }
+
   /** A ctrl-p pane's one diff (show kinds other than review). */
   async showContent() {
     const g = this.git, s = this.show, opts = { context: this.context, ws: this.ws };
@@ -795,6 +821,7 @@ export default class GitView extends View {
       const files = (await g.stashShow(s.ref, opts)).filter((f) => !s.path || f.path === s.path);
       return { title: `Stash · ${short(s.ref)}${s.path ? ` · ${s.path}` : ""}`, rows: files.length ? flat(files) : [text("Empty stash entry.", "muted")] };
     }
+    if (s.kind === "log") return { title: `Log · ${s.ref}`, rows: await this.logRows(s.ref) };
     if (s.kind === "range") {
       const files = await g.between(s.a, s.b, opts);
       return { title: `Diff ${short(s.a)}..${short(s.b)}`, rows: files.length ? flat(files) : [text("No differences.", "muted")] };
@@ -851,10 +878,7 @@ export default class GitView extends View {
       }
       case "worktrees": return { title: "Worktree", rows: [text(x.path, "foreground"), text(x.branch ? `on ${x.branch}` : x.detached ? "detached" : "", "ansi6"), text(x.head ?? "", "dim")] };
       case "remotes": return { title: x.name, rows: [text(`fetch ${x.url}`, "foreground"), text(`push  ${x.push}`, "muted"), text(""), ...this.data.remoteBranches.filter((r) => r.remote === x.name).slice(0, 40).map((r) => text(`${r.branch}  ${r.subject}`, "muted"))] };
-      case "branches": case "remoteBranches": case "tags": {
-        const log = await g.log(x.name, { limit: 60 });
-        return { title: `Log · ${x.name}`, rows: log.map((c) => ({ kind: "text", parts: [[`${c.short} `, "ansi3"], [`${initials(c.author)} `, "ansi5"], [c.subject, "muted"]] })) };
-      }
+      case "branches": case "remoteBranches": case "tags": return { title: `Log · ${x.name}`, rows: await this.logRows(x.name) };
       case "commits": case "subCommits": case "reflog": {
         const c = await g.show(x.hash, opts);
         if (!c) return { title: short(x.hash), rows: [text("Not a commit.", "muted")] };
@@ -1446,7 +1470,7 @@ export default class GitView extends View {
 /** Contexts whose right-click menu offers ctrl-p (the main view shows a diff for them). */
 const PANE_CONTEXTS = new Set(["files", "review", "commits", "subCommits", "reflog", "commitFiles", "stash", "staging", "main"]);
 /** A ctrl-p tab's name. */
-const paneName = (s) => (s.kind === "file" ? s.path.split("/").pop() : s.kind === "review" ? (s.pr ? `#${s.pr}` : "review") : s.kind === "range" ? "diff" : (s.hash ?? s.ref ?? "").slice(0, 7));
+const paneName = (s) => (s.kind === "file" ? s.path.split("/").pop() : s.kind === "review" ? (s.pr ? `#${s.pr}` : "review") : s.kind === "range" ? "diff" : s.kind === "log" ? s.ref : (s.hash ?? s.ref ?? "").slice(0, 7));
 const T7 = (t, s, c) => div().w(56).flex_none().text_color(c).child(s);
 const short = (r) => (/^[0-9a-f]{40}$/.test(r ?? "") ? r.slice(0, 7) : r);
 const text = (s, color = "foreground") => ({ kind: "text", parts: [[s, color]] });

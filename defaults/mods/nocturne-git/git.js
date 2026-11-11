@@ -6,7 +6,7 @@
 
 import { exec } from "herdr";
 import {
-  parseStatus, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseReflog, parseStash, parseWorktrees, repoState,
+  parseStatus, parseLogFull, LOG_FULL_FORMAT, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseReflog, parseStash, parseWorktrees, repoState,
   BRANCH_FORMAT, REMOTE_BRANCH_FORMAT, TAG_FORMAT, LOG_FORMAT, REFLOG_FORMAT, STASH_FORMAT,
 } from "./parse.js";
 import { parseDiff } from "./patch.js";
@@ -97,8 +97,14 @@ export class Git {
   /** Commits of `ref` (HEAD), newest first, in topo order like lazygit's graph.
    *  all: every branch (the Status panel's "all branch logs"). */
   async log(ref = "HEAD", { all = false, limit = LOG_LIMIT } = {}) {
-    const r = await this.read(["log", ...(all ? ["--all"] : [ref]), "--topo-order", `-${limit}`, `--format=${LOG_FORMAT}`, "--"]);
+    const r = await this.read(["log", ...(all ? ["--all"] : [ref]), "--topo-order", "--decorate=full", `-${limit}`, `--format=${LOG_FORMAT}`, "--"]);
     return r.code === 0 ? parseLog(r.stdout) : [];
+  }
+
+  /** A ref's history with whole messages, for the branch log in the main view. */
+  async logFull(ref, limit = 200) {
+    const r = await this.read(["log", ref, "--topo-order", "--decorate=full", `-${limit}`, `--format=${LOG_FULL_FORMAT}`, "--"]);
+    return r.code === 0 ? parseLogFull(r.stdout) : [];
   }
 
   /** Hashes of `ref` not on `not` (unpushed, or not on main), as a Set. */
