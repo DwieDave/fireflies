@@ -111,9 +111,9 @@ function menuGrid() {
   return { m, rows, letters };
 }
 
-test("+ new menu: no tile floats over the tab; the five others in one row, in order, none alone on a row", () => {
+test("+ new menu: no tile floats over the tab; the five others three to a row, the short row's third cell empty", () => {
   const { rows, letters } = menuGrid();
-  expect(rows).toEqual([["terminal", "web", "files", "agents", "usage"]]);
+  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "pad"]]);
   // Each keeps its letter.
   expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u" });
   // No tile carries a spot label: not "float", and Files not "edge" (it opens a pane of its own).
@@ -124,30 +124,67 @@ test("+ new menu: no tile floats over the tab; the five others in one row, in or
   expect(menuPanels().every((p: any) => !p.fixed)).toBe(true);
 });
 
-test("+ new menu: its height has room for the one row of tiles it shows", () => {
+test("+ new menu: its height has room for the two rows of tiles it shows", () => {
   sharedState["new-menu.agents"] = { "": [] };
   const h = newmenu.newMenuHeight();
-  // head, section, a row of 64, section, one agent row, section, 3 rows, padding, foot, border.
-  expect(h).toBe(44 + 24 + 64 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
+  // head, section, 2 rows of 64 and a gap, section, one agent row, section, 3 rows, padding, foot, border.
+  expect(h).toBe(44 + 24 + 2 * 64 + 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
 });
 
-test("+ new menu: each of the five tiles is wide enough for its name (Terminal, 8 letters, ~56 px at 11 px)", () => {
-  // The grid's room: the menu less its padding, less four gaps; then each tile's own padding and border.
-  const inside = (NEW_W - 2 * 12 - 4 * 4) / 5 - 2 * 5 - 2;
-  expect(inside).toBeGreaterThanOrEqual(56);
+test("+ new menu: a little narrower than it was (352), each of three tiles wide enough for \"Terminal\"", () => {
+  expect(NEW_W).toBe(320);
+  expect(NEW_W).toBeLessThan(352);
+  // The grid's room: the menu less its padding and border, less two gaps; then each tile's own padding and border.
+  const inside = (NEW_W - 2 - 2 * 12 - 2 * 4) / 3 - 2 * 5 - 2;
+  // "Terminal": 8 letters at 11 px, 7 px a letter (measured on screen at zoom 0.9).
+  expect(inside).toBeGreaterThanOrEqual(8 * 7);
+  // The pads (the empty third cell) are a tile's box: the same flex, padding and border.
+  menuGrid();
+  const pad = ids[Object.keys(ids).find((id) => id.startsWith("nm-pad-"))!];
+  const tile = ids["nm-usage"];
+  for (const k of ["flex_1", "min_w", "h", "px", "border"]) expect(pad.calls[k]).toEqual(tile.calls[k]);
 });
 
-test("+ new menu: ← → walk the row, ↓ from a tile leaves the grid for the agents", () => {
+test("+ new menu: nothing clipped at the new width: the head, every agent row and every footer line beside \"shift: other\"", () => {
+  // Letter widths (layout px), measured: 7 at 11 px, 7.6 at 12 px.
+  const w11 = (s: string) => s.length * 7, w12 = (s: string) => s.length * 7.6;
+  const inner = NEW_W - 2 - 2 * 12;
+  // The head: picture 30, "New", the tab key's box, the switch's two words; gaps of 10.
+  expect(30 + 10 + w12("New") + 10 + (8 + w11("tab")) + 10 + (14 + w11("pane")) + (14 + w11("new tab"))).toBeLessThanOrEqual(inner);
+  // An agent row: its mark 14, the name, "not installed"; gaps of 10.
+  for (const name of ["Claude Code", "OpenCode", "Copilot", "Cursor"]) expect(14 + 10 + w12(name) + 10 + w11("not installed")).toBeLessThanOrEqual(inner);
+  // The footer: ↳, the line, "shift: other"; gaps of 6.
+  const room = inner - w11("↳") - 6 - 6 - w11("shift: other");
+  const { m } = menuGrid();
+  const said: string[] = [];
+  for (const p of menuPanels()) for (const dest of ["pane", "tab"]) said.push(m.say({ kind: "tile", p }, dest));
+  for (const a of ["Claude Code", "OpenCode", "Copilot"]) {
+    for (const dest of ["pane", "tab"]) said.push(m.say({ kind: "agent", a: { name: a } }, dest));
+    said.push(m.say({ kind: "agent", a: { name: a }, off: true }, "pane"));
+  }
+  for (const id of ["space", "wt-new", "wt-open"]) said.push(m.say({ kind: "row", say: rowSay(id) }, "pane"));
+  expect(said.filter((x) => w11(x) > room)).toEqual([]);
+});
+
+/** What the footer says for the menu's space row `id` (its item's `say`). */
+function rowSay(id: string) {
+  const src = readFileSync(new URL("../defaults/mods/nocturne/newmenu.js", import.meta.url), "utf8");
+  const said = [...src.matchAll(/id: "([\w-]+)", icon:[^\n]*say: "([^"]+)"/g)].find(([, rid]) => rid === id);
+  expect(said).toBeTruthy();
+  return said![2];
+}
+
+test("+ new menu: arrow keys in the 3 + 2 grid", () => {
   const { m } = menuGrid();
   const kx: any = { stop_propagation() {}, notify() {} };
-  const live = [0, 1, 2, 3, 4].map((i) => ({ kind: "tile", id: `t${i}` })).concat([{ kind: "agent", id: "a1" } as any]);
-  m.cursor = 0;
-  for (let i = 1; i <= 4; i++) { m.key({ key: "right", modifiers: {} }, kx, live); expect(m.cursor).toBe(i); }
-  m.cursor = 2;
-  m.key({ key: "down", modifiers: {} }, kx, live);
-  expect(m.cursor).toBe(5);
-  m.key({ key: "up", modifiers: {} }, kx, live);
-  expect(m.cursor).toBe(4);
+  const live = [0, 1, 2, 3, 4].map((i) => ({ kind: "tile", id: `t${i}` })).concat([{ kind: "agent", id: "a1" } as any, { kind: "agent", id: "a2" } as any]);
+  const go = (from: number, key: string) => { m.cursor = from; m.key({ key, modifiers: {} }, kx, live); return m.cursor; };
+  // → walks the tiles in order, on into the agents.
+  expect([0, 1, 2, 3, 4].map((i) => go(i, "right"))).toEqual([1, 2, 3, 4, 5]);
+  // ↓: Terminal → Agents, Web → Usage, Files → Usage (the short row's last tile); from the second row, out to the agents.
+  expect([0, 1, 2, 3, 4].map((i) => go(i, "down"))).toEqual([3, 4, 4, 5, 5]);
+  // ↑: Agents → Terminal, Usage → Web; the first agent → Usage.
+  expect([go(3, "up"), go(4, "up"), go(5, "up")]).toEqual([0, 1, 4]);
 });
 
 test("+ new menu: the floating panels' letters pick nothing there (g l d h)", () => {

@@ -5,8 +5,8 @@
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
-//             usage, in one row of five (COLS; a short last row would keep
-//             the columns). Each opens beside the focused pane or in a tab
+//             usage, three to a row (COLS): the short second row keeps the
+//             columns, its third cell empty. Each opens beside the focused pane or in a tab
 //             of its own; Files too (a files pane of its own, `files.open`:
 //             the panel docked down the tab's edge is the strip's files
 //             button and cmd-e). Agents and Usage, open in the shown tab,
@@ -33,11 +33,12 @@ const KNOWN = "new-menu.agents";
 // Where new things land: "pane" or "tab".
 const DEST = "nocturne.newDest";
 
-// Wide enough for five tiles in a row with "Terminal" whole in one: each
-// (WIDTH - 2 PAD - 4 GAP) / 5 = 70 px, 58 inside its padding and border.
-export const WIDTH = 392;
+// Three tiles to a row, "Terminal" whole in one: each (WIDTH - 2 PAD - 2 GAP)
+// / 3 = 96 px, 84 inside its padding and border. The footer's words fit
+// beside "shift: other" (say(): short lines).
+export const WIDTH = 320;
 const PAD = 12;
-const COLS = 5;
+const COLS = 3;
 const GAP = 4;
 const TILE_H = 64;
 const ROW = 26;
@@ -100,9 +101,9 @@ function items(agents) {
   return [
     ...menuPanels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
-    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a new space, in your home folder" },
-    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a branch in its own folder, as a space" },
-    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree that's already there, as a space" },
+    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a space in your home folder" },
+    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a new branch, as a space" },
+    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree, as a space" },
   ];
 }
 
@@ -192,7 +193,7 @@ export default class NewMenu {
   /** What picking `x` will do, for the footer. */
   say(x, dest) {
     if (!x) return "";
-    if (x.off) return x.kind === "agent" ? `${x.a.name} isn't installed here` : "open a space first";
+    if (x.off) return x.kind === "agent" ? `${x.a.name} isn't installed` : "open a space first";
     if (x.kind === "row") return x.say;
     const name = x.kind === "agent" ? x.a.name : x.p.name.toLowerCase();
     if (dest === "tab") return `${name} in a new tab`;
@@ -309,14 +310,20 @@ export default class NewMenu {
     if (m.control || m.platform || m.alt) return;
     const k = String(e.key ?? "").toLowerCase(), n = live.length;
     const cur = live[this.cursor];
-    // In the grid, ↑ ↓ move by a row of tiles.
+    // In the grid, ↑ ↓ move by a row of tiles; ↓ into the short last row
+    // from past its end lands on its last tile, ↓ from the last row leaves the grid.
     const tiles = live.filter((x) => x.kind === "tile").length;
     const inGrid = cur?.kind === "tile";
     const other = destNow() === "tab" ? "pane" : "tab";
     let done = true;
     if (k === "tab") this.flip(cx);
     else if (k === "right" || k === "left") this.cursor = (this.cursor + (k === "right" ? 1 : -1) + n) % n;
-    else if (k === "down") this.cursor = inGrid && this.cursor + COLS < tiles ? this.cursor + COLS : inGrid ? tiles : (this.cursor + 1) % n;
+    else if (k === "down") {
+      const lastRow = Math.floor((tiles - 1) / COLS);
+      this.cursor = !inGrid ? (this.cursor + 1) % n
+        : this.cursor + COLS < tiles ? this.cursor + COLS
+        : Math.floor(this.cursor / COLS) < lastRow ? tiles - 1 : tiles;
+    }
     else if (k === "up") this.cursor = inGrid ? (this.cursor >= COLS ? this.cursor - COLS : (this.cursor - 1 + n) % n) : this.cursor === tiles ? tiles - 1 : (this.cursor - 1 + n) % n;
     else if (k === "enter") { cx.stop_propagation(); return this.pick(cur, m.shift ? other : destNow()); }
     else if (k === "escape") { cx.stop_propagation(); return this.dismiss(); }
