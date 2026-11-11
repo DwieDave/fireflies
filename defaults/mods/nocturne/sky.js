@@ -27,16 +27,23 @@
 //            and a meter per usage window; the » key under the hour opens it
 //            again. On macOS the rail is wide enough for the window buttons
 //            at any zoom.
+//   keys     the sidebar takes the keyboard from pane.go (cmd-alt-left from
+//            the leftmost pane) or nocturne.sidebar (layout.focus): a cursor
+//            walks every control (nav.js SIDEBAR_KEYS; ? lists them), the
+//            hint line at its foot says the main ones; l / → goes back to
+//            the panes, esc / q to the pane it came from.
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, openOverlay, settings, window as appWindow } from "herdr";
+import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal } from "./kit.js";
+import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal, navRing } from "./kit.js";
 import { stamps } from "./pins.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
-import { menuHeight, NAME_AGENT } from "./menu.js";
+import { NAME_AGENT, openMenu, openKeys } from "./menu.js";
+import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
+import { actOnToast, dismissToasts } from "./toast.js";
 import { toggleGit } from "./git.js";
 import { UsageSection } from "./usage.js";
 import { toggleFiles } from "./files.js";
@@ -44,6 +51,7 @@ import { togglePicker } from "./picker.js";
 import { toggleGithub } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
+import { newWorktree } from "./menu.js";
 import { gridify } from "./gridify.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 
@@ -130,6 +138,13 @@ export default class Sky {
     setShared(NEW_OPEN, null);
     this.spaces = new Spaces();
     this.spaces.init(cx);
+    // The keyboard (nav.js): the cursor's control, where it was in the list,
+    // the controls as last drawn ({ id, sec, go?, menu?, ... }).
+    this.handle = cx.focus_handle();
+    this.cursor = null;
+    this.navAt = 0;
+    this.navList = [];
+    this.spaces.onDone = () => this.refocus();
     this.usage = new UsageSection();
     this.usage.init(cx);
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
@@ -150,7 +165,11 @@ export default class Sky {
     cx.spawn(async (cx) => {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne\./, "");
-        if (c === "next") this.spaces.step(1);
+        if (c === "focus") this.takeKeys();
+        else if (c === "sidebar") this.toggleKeys();
+        else if (c === "toast") actOnToast();
+        else if (c === "toast-dismiss") dismissToasts();
+        else if (c === "next") this.spaces.step(1);
         else if (c === "prev") this.spaces.step(-1);
         else if (c === "fold") this.fold(cx);
         else if (c === "git" || c === "lazygit") toggleGit();
@@ -201,9 +220,8 @@ export default class Sky {
   }
 
   /** A firefly's right-click menu: focus, rename, move or close its pane. */
-  flyMenu(a) {
-    const props = { role: "menu", tab: "fly", target: { id: a.tab, address: a.address } };
-    openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 280, height: Math.min(520, menuHeight(props)), props });
+  flyMenu(a, centered = false) {
+    openMenu({ tab: "fly", target: { id: a.tab, address: a.address } }, { width: 280, centered });
   }
 
   /** Folded: what was last asked for while a fold settles, else what the width says
@@ -244,7 +262,9 @@ export default class Sky {
   }
 
   foldButton(t, label) {
-    return div().id("fold").flex_none().px(5).h(18).flex().items_center().text_size(11).text_color(t.dim)
+    const on = this.nav("fold", "top", { go: (cx) => this.fold(cx) });
+    return div().id("fold").relative().flex_none().px(5).h(18).flex().items_center().text_size(11).text_color(on ? t.foreground : t.dim)
+      .map((el) => navRing(t, el, on))
       .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { cx.stop_propagation(); this.fold(cx); })
@@ -265,6 +285,113 @@ export default class Sky {
     this.naming = null;
     cx.notify();
     if (terminal) nameTerminal(terminal, value);
+    this.refocus();
+  }
+
+  // ---- the keyboard (nav.js)
+
+  /** This sidebar's layout block (the one showing nocturne as the sky). */
+  get block() { return blockOf(layout(), "sky"); }
+
+  /** The sidebar has the keyboard (pane.go or layout.focus gave it the block). */
+  get navOn() { const b = this.block; return Boolean(b) && focused()?.block === b; }
+
+  /** "focus" from Herdr: the keyboard is the sidebar's. */
+  takeKeys() {
+    this.handle.focus();
+    this.placeCursor();
+  }
+
+  /** A cursor on a live control: where it was, else its neighbor (a space closed), else the shown space. */
+  placeCursor() {
+    if (this.navList.some((x) => x.id === this.cursor)) return false;
+    const shown = spaces().find((s) => s.active);
+    this.cursor = this.cursor == null
+      ? this.navList.find((x) => x.id === `space:${shown?.id}`)?.id ?? keep(this.navList, null)
+      : keep(this.navList, this.cursor, this.navAt);
+    return true;
+  }
+
+  /** nocturne.sidebar: into the sidebar, or back out to the pane. */
+  toggleKeys() {
+    if (this.navOn) return this.back();
+    const b = this.block;
+    if (b) run("layout.focus", { id: b });
+  }
+
+  /** Back to the pane the keyboard came from (pane.focus clears the block). */
+  back() {
+    const pane = focused()?.pane;
+    if (pane) run("pane.focus", { pane });
+    else run("pane.go", { direction: "right" });
+  }
+
+  /** After an inline edit (a name, a folder, a delete): the keyboard back on the sidebar. */
+  refocus() { if (this.navOn) this.handle.focus(); }
+
+  /** A control the keyboard can reach, as it's drawn: true while the cursor is on it. */
+  nav(id, sec, acts = {}) {
+    this.navList.push({ id, sec, ...acts });
+    return this.navOn && this.cursor === id;
+  }
+
+  /** The verbs on a firefly. */
+  flyActs(a) {
+    return {
+      go: () => run("agent.focus", { terminal: a.address }),
+      menu: () => this.flyMenu(a, true),
+      rename: (cx) => { if (!this.folded) this.startNaming(a, cx); },
+      pin: () => pin(a.address),
+      "pin-up": () => movePin(a.address, -1),
+      "pin-down": () => movePin(a.address, 1),
+    };
+  }
+
+  /** The verbs on a space's rail row: Herdr's own dialogs, as the folded menu uses. */
+  railActs(s) {
+    return {
+      go: () => run("space.select", { id: s.id }),
+      menu: () => this.spaces.menu(s, true),
+      rename: () => run("space.rename", { id: s.id }),
+      folder: (cx) => this.spaces.pick(cx, s),
+      delete: () => run("space.close", { id: s.id }),
+      tab: () => run("tab.new", { space: s.id }),
+      worktree: () => newWorktree(s.id),
+    };
+  }
+
+  /** A key while the sidebar has the keyboard. */
+  key(e, cx) {
+    if (this.spaces.confirmKey(e, cx)) { cx.stop_propagation(); return cx.notify(); }
+    // A field inside (a name, a folder) has the keyboard: its keys are its own.
+    if (this.naming || (this.spaces.mode && this.spaces.mode.kind !== "delete")) return;
+    const verb = keyVerb(e, SIDEBAR_KEYS);
+    if (!verb) return;
+    cx.stop_propagation();
+    const items = this.navList;
+    const item = items.find((x) => x.id === this.cursor);
+    switch (verb) {
+      case "down": case "up": this.cursor = move(items, this.cursor, verb === "down" ? 1 : -1); break;
+      case "first": this.cursor = items[0]?.id ?? null; break;
+      case "last": this.cursor = items.at(-1)?.id ?? null; break;
+      case "next": case "prev": this.cursor = moveSection(items, this.cursor, verb === "next" ? 1 : -1); break;
+      case "right": return run("pane.go", { direction: "right" });
+      case "back": return this.back();
+      case "help": return openKeys("sidebar keys", SIDEBAR_HELP);
+      case "new": if (this.folded) run("space.new"); else this.spaces.start({ kind: "new" }, cx); break;
+      default: item?.[verb]?.(cx);
+    }
+    this.navAt = Math.max(0, items.findIndex((x) => x.id === this.cursor));
+    cx.notify();
+  }
+
+  /** The hint line at the sidebar's foot while it has the keyboard. */
+  hints(t) {
+    return h_flex().id("sky-hints").absolute().left(0).right(0).bottom(0).h(20).px(10).gap(8).items_center()
+      .bg(t.background).text_size(11).text_color(t.dim)
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.accent, 1)))
+      .child(div().text_color(t.accent).child("keys"))
+      .child(div().flex_1().min_w(0).truncate().child("jk ⏎ m menu ? esc"));
   }
 
   header(t, list) {
@@ -341,6 +468,7 @@ export default class Sky {
 
   firefly(t, a, y, lane, w) {
     const h = hash(a.address);
+    const on = this.nav(`fly:${a.address}`, "flies", this.flyActs(a));
     const x = 6; // the halo's edge lines up with the eyebrow; every mark in one column
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
     const glow = svg(`${ART}/glow.svg`).w(40).h(40).absolute().top(0).left(0).text_color(color);
@@ -381,7 +509,7 @@ export default class Sky {
     const naming = this.naming === a.address;
     const resting = a.status === "idle" || lane < 32;
     const elsewhere = a.space_name && a.space !== this.shownSpace ? a.space_name : null;
-    const whereColor = a.focused ? t.foreground : a.status === "blocked" ? t.blocked : t.muted;
+    const whereColor = a.focused || on ? t.foreground : a.status === "blocked" ? t.blocked : t.muted;
     const sub = [elsewhere, a.status === "idle" ? null : WORD[a.status]].filter(Boolean).join(" · ");
     const body = h_flex().id(`fly-${a.address}`).absolute().top(0).left(x).h(lane).items_center()
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); if (e.click_count === 2) this.startNaming(a, cx); })
@@ -411,7 +539,8 @@ export default class Sky {
     const inner = div().absolute().top(0).left(0).w(w).h(lane).child(body);
     return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
       .transition("top", { duration: LAND, easing: "ease-in-out" })
-      .when(a.focused, (el) => el.child(path))
+      .when(a.focused || on, (el) => el.child(path))
+      .when(on, (el) => el.child(div().absolute().left(0).top(4).bottom(4).w(2).bg(t.accent)))
       .child(inner);
   }
 
@@ -552,6 +681,7 @@ export default class Sky {
         ? this.firefly(t, a, y, l, w - 2 * JAR_INSET).left(JAR_INSET)
         : this.firefly(t, a, y, l, w)))
       .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(placed.length ? placed.at(-1)[1] + placed.at(-1)[2] : 8)
+        .map((el) => navRing(t, el, this.nav("more", "flies", { go: () => run("agent.next") })))
         .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", stop).on_click(() => run("agent.next"))
         .child(`+${more} more in the grass`)));
@@ -583,7 +713,9 @@ export default class Sky {
 
   /** The rail's » : a bordered key, filled and bright under the pointer. */
   openKey(t) {
-    return div().id("fold").flex_none().w(28).h(20).flex().items_center().justify_center()
+    const on = this.nav("fold", "top", { go: (cx) => this.fold(cx) });
+    return div().id("fold").relative().flex_none().w(28).h(20).flex().items_center().justify_center()
+      .map((el) => navRing(t, el, on))
       .border(1).border_color(t.ansi0).text_size(11).text_color(t.muted)
       .hover((s) => s.text_color(t.foreground).bg(t.ansi0).border_color(t.ansi8))
       .tooltip("Open the sidebar (⌘B)")
@@ -597,7 +729,7 @@ export default class Sky {
    *  shown one has blue corner ticks; the one under the pointer a grey plate;
    *  one that wants attention its status pip beside the initials. */
   railSpace(t, s, at, count) {
-    const hot = this.railHover === s.id;
+    const hot = this.railHover === s.id || this.nav(`space:${s.id}`, "spaces", this.railActs(s));
     const tick = (pos) => div().absolute().size(4).border_color(t.accent)
       .when(pos === "top", (el) => el.left(-3).top(-3).border_t(1).border_l(1))
       .when(pos === "bottom", (el) => el.right(-3).bottom(-3).border_b(1).border_r(1));
@@ -622,6 +754,7 @@ export default class Sky {
    *  (flight.js); a working one rises and falls a pixel or two. */
   railFly(t, a, size = 32) {
     const h = hash(a.address);
+    const on = this.nav(`fly:${a.address}`, "flies", this.flyActs(a));
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
     const awake = a.status !== "idle";
     const mark = div().relative().child(this.mark(a, color));
@@ -637,7 +770,8 @@ export default class Sky {
         .child(flash(svg(`${ART}/glow.svg`).size(size).absolute().top(0).left(0).text_color(color), a.status, h))
         .child(div().absolute().top(plate).left(plate).size(16).bg(t.background)))
       .child(a.status === "working" && !calm() ? mark.loop("top", { from: -1, to: 1, period: 1900 + (h % 700) }) : mark)
-      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(size > 28 ? 2 : 0).right(size > 28 ? 2 : 0)));
+      .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().bottom(size > 28 ? 2 : 0).right(size > 28 ? 2 : 0)))
+      .map((el) => navRing(t, el, on));
   }
 
   /** The rail's ground: fireflies at rest (done, then resting) stacked at its
@@ -652,7 +786,8 @@ export default class Sky {
     const more = resting.length - shown.length;
     // The count takes the last cell, so the stack keeps its shape above the hills.
     const marks = [...shown.map((a) => this.railFly(t, a, cell)),
-      ...(more > 0 ? [div().id("rail-ground-more").size(cell).flex_none().flex().items_center().justify_center()
+      ...(more > 0 ? [div().id("rail-ground-more").relative().size(cell).flex_none().flex().items_center().justify_center()
+        .map((el) => navRing(t, el, this.nav("more", "flies", { go: () => run("agent.next") })))
         .text_size(10).text_color(t.ansi8).hover((s) => s.text_color(t.foreground).bg(t.ansi0 + "55"))
         .tooltip(`${more} more at rest`)
         .on_mouse_down("left", stop).on_click(() => run("agent.next"))
@@ -669,9 +804,6 @@ export default class Sky {
     const rows = this.spaces.rows().filter((r) => r.s);
     const inJar = new Set(jarred.map((a) => a.address));
     const free = list.filter((a) => !inJar.has(a.address));
-    // Awake ones under the jar at the top; those at rest on the ground at the foot (railGround).
-    const flies = free.filter((a) => !atRest(a)).map((a) => this.railFly(t, a));
-    const ground = this.railGround(t, free.filter(atRest));
     // The pinned ones' marks in a small jar of their own, resting ones lit a little.
     const jar = jarred.length ? v_flex().id("rail-jar").relative().w(48).flex_none().items_center().pt(BODY + 2).pb(4).gap(2).mb(6)
       .child(this.glass(t, jarred, RAIL_NECK))
@@ -679,6 +811,9 @@ export default class Sky {
         .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
           .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
         .child(div().absolute().top(0).left(0).child(this.railFly(t, a))))) : null;
+    // Awake ones under the jar at the top; those at rest on the ground at the foot (railGround).
+    const flies = free.filter((a) => !atRest(a)).map((a) => this.railFly(t, a));
+    const ground = this.railGround(t, free.filter(atRest));
     const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
     return v_flex().w_full().flex_1().min_h(0).pt(48).items_center()
       .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date)
@@ -689,11 +824,14 @@ export default class Sky {
       .child(div().py(12).flex_none().child(rule()))
       .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().when(Boolean(jar), (el) => el.child(jar)).children(flies))
       .when(Boolean(ground), (el) => el.child(ground))
-      .child(this.usage.rail(t));
+      .child(this.usage.rail(t, (...a) => this.nav(...a)));
   }
 
   render(cx) {
     const t = theme();
+    // The controls are listed again as they're drawn (nav()).
+    this.navList = [];
+    const on = this.navOn;
     // Pinned agents first, in the order pinned (pins.js), then by status (kit.js agentRank).
     const { pinned: jarred, all: list } = sortedAgents();
     setAgentOrder(list.map((a) => a.address));
@@ -705,19 +843,30 @@ export default class Sky {
     this.answerNaming(list);
     this.spaces.answer(this.folded, cx);
     const sky = v_flex().id("sky").relative().size_full().overflow_hidden().bg(t.background)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => { this.size = size; cx.notify(); });
+    // After drawing: the controls top to bottom (the rail draws its fireflies
+    // before its spaces), and a cursor on one that went moves to its neighbor.
+    const placeCursor = (el) => {
+      const rank = { top: 0, spaces: 1, flies: 2, usage: 3 };
+      this.navList = this.navList.map((x, i) => [x, i]).sort(([a, i], [b, j]) => (rank[a.sec] - rank[b.sec]) || i - j).map(([x]) => x);
+      if (on && this.placeCursor()) cx.timer.after(0, (cx) => cx.notify?.());
+      return el;
+    };
     if (this.folded) {
-      return sky
+      return placeCursor(sky
         // Fainter stars than open: here they'd sit between small controls.
         .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.3))
         // The hills rest on the usage, as open, never behind its numbers.
         .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.background))
         .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.ansi8).opacity(0.5))
-        .child(this.rail(t, list, jarred));
+        .child(this.rail(t, list, jarred)));
     }
     // The usage section sits at the foot; the haze and hills rest on it.
-    const lift = this.usage.height;
-    return sky
+    // While the sidebar has the keyboard, its hint line lies under the usage.
+    const lift = this.usage.height + (on ? 20 : 0);
+    return placeCursor(sky.when(on, (el) => el.pb(20))
       // Backdrop, back to front: stars, moonlight haze, ground, its lit rim.
       .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.55))
       .child(svg(`${ART}/haze.svg`).w(480).h(1400).absolute().bottom(lift).left(0).text_color(t.ansi4).opacity(0.2))
@@ -725,9 +874,10 @@ export default class Sky {
       .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.ansi8).opacity(0.5))
       .child(div().absolute().top(14).right(10).child(this.foldButton(t, "«")))
       .child(this.header(t, list))
-      .child(this.spaces.render(t))
+      .child(this.spaces.render(t, (...a) => this.nav(...a)))
       .child(div().px(16).pt(8).flex_none().child(eyebrow(t, "fireflies")))
       .child((this.land(t, list, cx), this.meadow(t, list, jarred)))
-      .child(this.usage.render(t));
+      .child(this.usage.render(t, (...a) => this.nav(...a)))
+      .when(on, (el) => el.child(this.hints(t))));
   }
 }

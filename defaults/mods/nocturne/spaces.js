@@ -22,9 +22,9 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared } from "herdr";
-import { dither, pip, eyebrow, spaceFolder } from "./kit.js";
+import { dither, pip, eyebrow, spaceFolder, navRow, navRing } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
-import { menuHeight, EDIT_SPACE } from "./menu.js";
+import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const tilde = (p) => { const h = home(); return p === h ? "~" : p.startsWith(h + "/") ? "~" + p.slice(h.length) : p; };
@@ -52,10 +52,22 @@ export default class Spaces {
     this.editAsked = shared(EDIT_SPACE)?.at ?? null;
   }
 
-  /** A space's right-click menu. */
-  menu(s) {
-    const props = { role: "menu", tab: "space", target: { id: s.id } };
-    openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 220, height: menuHeight(props), props });
+  /** A space's right-click menu (`centered`: opened from the keyboard). */
+  menu(s, centered = false) {
+    openMenu({ tab: "space", target: { id: s.id } }, { centered });
+  }
+
+  /** The keyboard's verbs on a space row (sky.js navigation; nav.js). */
+  acts(s) {
+    return {
+      go: () => run("space.select", { id: s.id }),
+      menu: () => this.menu(s, true),
+      rename: (cx) => this.start({ kind: "rename", s }, cx),
+      folder: (cx) => this.start({ kind: "folder", s }, cx),
+      delete: (cx) => this.start({ kind: "delete", s }, cx),
+      tab: () => run("tab.new", { space: s.id }),
+      worktree: () => newWorktree(s.id),
+    };
   }
 
   /** Answers the menu's rename / delete, once per request: inline, or with Herdr's dialogs when folded. */
@@ -143,8 +155,10 @@ export default class Spaces {
   // ---- editing
 
   start(mode, cx) {
+    const was = this.mode;
     this.mode = mode;
     this.error = "";
+    if (was && !mode) this.onDone?.(cx);
     if (mode?.kind === "new" || mode?.kind === "rename") {
       this.input.set_value(mode.kind === "rename" && mode.s.named ? mode.s.name : "");
       this.input.focus();
@@ -162,8 +176,7 @@ export default class Spaces {
     const m = this.mode;
     if (m?.kind === "rename") {
       run("space.rename", { id: m.s.id, name: this.input.value().trim() });
-      this.mode = null;
-      return cx.notify();
+      return this.start(null, cx);
     }
     if (m?.kind !== "new" && m?.kind !== "folder") return;
     if (m.busy) return;
@@ -181,8 +194,7 @@ export default class Spaces {
       if (!there) { this.error = `no folder ${tilde(folder)}`; return cx.notify(); }
       if (m.kind === "new") run("space.new", { ...(name ? { name } : {}), folder, machine: "" });
       else run("space.folder", { id: m.s.id, folder });
-      this.mode = null;
-      cx.notify();
+      this.start(null, cx);
     });
   }
 
@@ -203,8 +215,17 @@ export default class Spaces {
 
   remove(s, cx) {
     run("space.close", { id: s.id, confirmed: true });
-    this.mode = null;
-    cx.notify();
+    this.start(null, cx);
+  }
+
+  /** While a delete asks (inline): y / enter deletes, n / esc keeps. True when the key was its. */
+  confirmKey(e, cx) {
+    if (this.mode?.kind !== "delete") return false;
+    const k = e.key, c = e.key_char;
+    if (k === "enter" || c === "y") this.remove(this.mode.s, cx);
+    else if (k === "escape" || c === "n" || c === "q") this.start(null, cx);
+    else return false;
+    return true;
   }
 
   // ---- parts
@@ -216,8 +237,9 @@ export default class Spaces {
       .child(div().absolute().left(2).top(0).bottom(0).w(1).bg(t.ansi8 + "55"));
   }
 
-  row(t, s, depth) {
+  row(t, s, depth, nav) {
     const id = `space-${s.id}`;
+    const on = nav?.(`space:${s.id}`, "spaces", this.acts(s)) ?? false;
     const m = this.mode?.s?.id === s.id ? this.mode : null;
     if (m?.kind === "rename") {
       return h_flex().id(id).h(24).px(16).gap(8).items_center()
@@ -249,8 +271,9 @@ export default class Spaces {
             : [t.ansi8, "nothing running in it"],
           [t.dim, "its folders and files stay"],
         ],
-        go: { label: "delete", action: (cx) => this.remove(s, cx) },
+        go: { label: on ? "delete (y)" : "delete", action: (cx) => this.remove(s, cx) },
         keep: (cx) => this.start(null, cx),
+        keepLabel: on ? "keep (n)" : "keep",
       });
     }
     return h_flex().id(id).relative().h(24).px(16).gap(8).items_center().text_size(11)
@@ -259,9 +282,10 @@ export default class Spaces {
       .on_click(() => run("space.select", { id: s.id }))
       .hover((st) => st.bg(t.ansi0 + "55"))
       .when(s.active, (el) => el.child(dither(t.ansi0, 1)))
+      .map((el) => navRow(t, el, on))
       .when(depth > 0, (el) => el.child(this.indent(t, depth)))
       .child(pip(t, s.status))
-      .child(div().relative().flex_1().min_w(0).truncate().text_color(s.active ? t.foreground : t.muted).child(s.name))
+      .child(div().relative().flex_1().min_w(0).truncate().text_color(s.active || on ? t.foreground : t.muted).child(s.name))
       .child(div().relative().flex_none().text_color(t.dim).child(String(s.tabs.length)));
   }
 
@@ -276,21 +300,24 @@ export default class Spaces {
     return v_flex().id("space-new").px(16).gap(2)
       .child(h_flex().h(24).gap(8).items_center()
         .child(div().w(6).flex_none().text_size(11).text_color(t.accent).child("+"))
-        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx)))
+        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), () => this.folderInput.focus()))
         .child(chip(t, "space-new-cancel", "esc", (cx) => this.start(null, cx))))
       .child(h_flex().pl(14).h(24).gap(4).items_center().text_size(11)
         .child(div().flex_none().text_color(t.dim).child("in"))
-        .child(field(t, "space-new-folder-input", this.folderInput, (cx) => this.start(null, cx)))
+        .child(field(t, "space-new-folder-input", this.folderInput, (cx) => this.start(null, cx), () => this.input.focus()))
         .child(chip(t, "space-new-folder", "browse", (cx) => this.pick(cx))))
       .when(Boolean(this.error), (el) => el.child(div().pl(14).text_size(11).text_color(t.blocked).child(this.error)));
   }
 
-  render(t) {
+  /** `nav` (sky.js): registers a control with the keyboard's cursor, true while it's on it. */
+  render(t, nav) {
+    const startNew = (cx) => this.start({ kind: "new" }, cx);
+    const newOn = this.mode?.kind !== "new" && (nav?.("space-new", "spaces", { go: startNew }) ?? false);
     return v_flex().id("spaces").pt(22).pb(10).flex_none()
       .child(h_flex().px(16).pb(4).items_center()
         .child(div().flex_1().child(eyebrow(t, "spaces")))
-        .when(this.mode?.kind !== "new", (el) => el.child(chip(t, "space-new-start", "+ new", (cx) => this.start({ kind: "new" }, cx)))))
-      .children(this.rows().map((r) => r.s ? this.row(t, r.s, r.depth) : this.header(t, r)))
+        .when(this.mode?.kind !== "new", (el) => el.child(navRing(t, chip(t, "space-new-start", "+ new", startNew), newOn))))
+      .children(this.rows().map((r) => r.s ? this.row(t, r.s, r.depth, nav) : this.header(t, r)))
       .when(this.mode?.kind === "new", (el) => el.child(this.newRow(t)));
   }
 }

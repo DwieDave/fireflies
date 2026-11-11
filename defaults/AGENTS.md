@@ -774,6 +774,21 @@ rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
 `nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
 
+Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
+(`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
+and cmd-alt-up from a top pane the tab strip; `nocturne.sidebar`,
+`nocturne.tabstrip` and `nocturne.header` (the focused pane's header controls)
+go straight there and, pressed again, back. A blue ring or edge marks the
+cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
+the control's menu, r renames, esc/q go back to the pane, ? lists every key.
+The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
+d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
+rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the
+focused pane's header (name, text size, float, splits, even out, gridify,
+park, zoom, close, ⋯); the shown tab's parked chips (enter unparks).
+`nocturne.toast` does what a click on the newest toast does,
+`nocturne.toast-dismiss` closes them all.
+
 ### Layouts and mods other people made
 
 People share layouts at herdr.dev/layouts and mods at herdr.dev/mods. Each
@@ -1037,7 +1052,8 @@ The main ones:
   programs such as yazi; partial images and scrolling follow the placeholder cells.
 - Agents: `agent.next`, `agent.prev`, `agent.focus {terminal}`.
 - Layout: `layout.switch {name?}`, `layout.toggle {id}`, `layout.show {id}`, `layout.hide {id}`,
-  `layout.resize {id, px | weight}`, `layout.select {stack, child}`, `layout.set {layout}`
+  `layout.resize {id, px | weight}`, `layout.focus {id}` (the keyboard to a shown block whose
+  mod is focusable, as `pane.go` gives it), `layout.select {stack, child}`, `layout.set {layout}`
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
@@ -1318,7 +1334,9 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`
-  again after a popup over it closes. Leave with `run("pane.go", {direction})`.
+  again after a popup over it closes. `layout.focus {id}` gives a layout block the
+  keyboard the same way; `focused().block` names the layout block that has it (else null).
+  Leave with `run("pane.go", {direction})` or `run("pane.focus", {pane})`.
   Without this opt-in, navigation and clicks stay unchanged.
 
 - The first time Herdr sees a folder, it docks one copy per `mod.json` into

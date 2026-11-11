@@ -88,9 +88,27 @@ export function newWorktree(id) {
   openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { space: s.id, folder: spaceFolder(s, panes()), action: "new" } });
 }
 
+/** Opens a menu for these props (role "menu"). From the keyboard (`centered`)
+ *  it opens in the middle as a dialog, since there's no pointer to hang it from;
+ *  `at` places it (kit.js dropBelow), else it opens at the pointer. */
+export function openMenu(props, { width = 220, centered = false, at = null } = {}) {
+  const p = { role: "menu", ...props };
+  return openOverlay({ mod: "nocturne", kind: centered ? "dialog" : "popup", frame: "none", width, height: menuHeight(p),
+    ...(at && !centered ? { at } : {}), props: p });
+}
+
+/** The keys a chrome block takes (nav.js SIDEBAR_HELP, STRIP_HELP), as a list in a menu. */
+export function openKeys(title, lines) {
+  return openMenu({ tab: "keys", title, lines }, { width: 420, centered: true });
+}
+
 /** The rows for these props. */
 export function menuItems(t, p) {
   const tg = p?.target ?? {};
+  if (p?.tab === "keys") {
+    const w = Math.max(...(p.lines ?? []).map(([k]) => k.length), 4) + 2;
+    return [{ section: p.title ?? "keys" }, ...(p.lines ?? []).map(([k, what]) => ({ note: `${k.padEnd(w)}${what}` })), { note: "esc closes" }];
+  }
   if (p?.tab === "fly") {
     // Closing an agent closes its pane, not the tab around it; a pane alone
     // in its tab takes the tab with it, and the row says so. A sub-agent

@@ -17,12 +17,18 @@
 // (the pip still says it); the hover buttons fold into ⋯ (the pane menu):
 // all of them from FULL_MIN, zoom and close beside ⋯ from SOME_MIN, ⋯ alone
 // below. The name and the pip stay.
+//
+// Keys: the tab strip's cursor (tabs.js, nav.js) walks the focused pane's
+// header as its second row: the name (rename), every button here (the
+// header shows them all while the cursor is in it, the one under it in a
+// blue ring) and ⋯; it says where through shared(nav.js CURSOR).
 
 import { div, svg } from "gpui-kit";
 import { h_flex, InputState } from "gpui-base";
-import { panes, spaces, props, run, theme, home, openOverlay, shared, keys } from "herdr";
-import { menuHeight, NAME_PANE } from "./menu.js";
-import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal } from "./kit.js";
+import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
+import { NAME_PANE, openMenu } from "./menu.js";
+import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.js";
+import { CURSOR } from "./nav.js";
 import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
 import { openEqualize } from "./equalize.js";
@@ -77,6 +83,47 @@ function viewerName(p) {
   if (!VIEWERS.has(p.mod) || (p.mod === "nocturne-files" && !p.props?.path)) return null;
   const slot = p.props?.slot;
   return (slot && shared(`${p.mod}.titles`)?.[slot]) || String(p.props?.path ?? "").split("/").pop() || null;
+}
+
+const CHROME = (n) => `mods/workspace-chrome/${n}.svg`;
+
+/** The pane menu (menu.js), as on a right-click (`centered`: from the keyboard). */
+export function paneMenu(p, centered = false) {
+  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 240, centered });
+}
+
+/** Asks this pane's header to name its terminal in place (as the menu's Rename). */
+export function renamePane(p) {
+  if (p?.terminal) setShared(NAME_PANE, { terminal: p.terminal, at: Date.now() });
+}
+
+/**
+ * A pane's header controls, in the order drawn: { id, icon | text, tip?, go }.
+ * The name (rename) leads when the pane has a terminal; ⋯ (the pane menu) ends.
+ * The header draws the buttons from this; the tab strip's keyboard walks it.
+ */
+export function headerControls(p, all = panes()) {
+  if (!p) return [];
+  const pane = p.pane, zoom = p.font_zoom ?? 1, term = Boolean(p.terminal) && !p.mod;
+  const tab = all.filter((x) => x.tab === p.tab);
+  const c = (id, icon, command, args, tip) => ({ id, icon, tip, go: () => run(command, args) });
+  return [
+    ...(p.terminal ? [{ id: "name", go: () => renamePane(p), tip: "Rename" }] : []),
+    ...(term && zoom !== 1 ? [{ id: "fz", text: `${Math.round(zoom * 100)}%`, tip: "Text size back", go: () => run("pane.font_reset", { pane }) }] : []),
+    ...(term ? [
+      c("fs", CHROME("minus"), "pane.font_smaller", { pane }, "Smaller text"),
+      c("fb", CHROME("plus"), "pane.font_bigger", { pane }, "Bigger text"),
+      c("float", CHROME("square"), "pane.float", { pane }, "Float"),
+    ] : []),
+    c("split-right", "split-right", "pane.split", { direction: "right", pane }, "Split right"),
+    c("split-down", "split-down", "pane.split", { direction: "down", pane }, "Split down"),
+    ...(tab.length > 1 ? [{ id: "equalize", icon: "mods/nocturne-equalize-panes/equalize.svg", tip: "Even out panes", go: () => openEqualize(pane) }] : []),
+    ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/nocturne-equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
+    ...(parkable(p, all) ? [c("park", CHROME("archive"), "pane.park", { pane }, `Park pane${keyLabel("pane.park") ? ` (${keyLabel("pane.park")})` : ""}`)] : []),
+    c("zoom", p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }, p.zoomed ? "Unzoom" : "Zoom"),
+    c("close", "close", "pane.close", { pane }, "Close"),
+    { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: () => paneMenu(p, true) },
+  ];
 }
 
 export function folder(cwd) {
@@ -192,50 +239,36 @@ export default class Header {
   }
 
   /** The pane menu (menu.js), as on a right-click: rename, split, zoom, even out, move, close. */
-  menu(p) {
-    const props = { role: "menu", tab: "pane", target: { pane: p.pane, terminal: p.terminal } };
-    openOverlay({ mod: "nocturne", kind: "popup", frame: "none", width: 240, height: menuHeight(props), props });
+  menu(p) { paneMenu(p); }
+
+  /** The tab strip's keyboard cursor in this header: the control's id, else null. */
+  cursor(p) {
+    const c = shared(CURSOR);
+    return c?.region === "head" && c.pane === p.pane ? c.item : null;
   }
 
+  /** One control (headerControls) as drawn; `on`: the keyboard's cursor is on it. */
+  control(t, p, c, on) {
+    const el = div().id(`h-${c.id}-${p.pane}`).relative().p(c.text ? 0 : 3).flex_none().text_color(on ? t.foreground : t.dim)
+      .hover((s) => s.text_color(t.foreground))
+      .when(Boolean(c.tip) && !c.text, (el) => el.tooltip(c.tip))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); c.go(); });
+    const path = c.icon && (c.icon.includes("/") ? c.icon : `mods/pane/${c.icon}.svg`);
+    return navRing(t, el.child(c.text ?? svg(path).size(12)), on);
+  }
+
+  /** The buttons: the text size while it differs; on hover all (wide) or
+   *  zoom, close and ⋯ (narrow); with the keyboard's cursor here, all and ⋯. */
   buttons(t, el, p) {
-    const pane = p.pane;
-    const zoom = p.font_zoom ?? 1, term = Boolean(p.terminal) && !p.mod;
-    const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
-    return el
-      // A pane's own text size shows while it differs; click to reset.
-      .when(term && zoom !== 1, (el) => el.child(div().id(`h-fz-${pane}`).flex_none().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); run("pane.font_reset", { pane }); })
-        .child(`${Math.round(zoom * 100)}%`)))
-      .when(this.hovered && this.width < FULL_MIN, (el) => el
-        .when(this.width >= SOME_MIN, (el) => el
-          .child(this.button(t, `h-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
-          .child(this.button(t, `h-x-${pane}`, "close", "pane.close", { pane })))
-        .child(div().id(`h-more-${pane}`).p(3).flex_none().text_color(t.dim).hover((s) => s.text_color(t.foreground))
-          .tooltip(parkable(p) ? "More: split, even out, park, move, close" : "More: split, even out, move, close")
-          .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-          .on_click((_e, cx) => { cx.stop_propagation(); this.menu(p); })
-          .child(svg(`${ART}/more.svg`).size(12))))
-      .when(this.hovered && this.width >= FULL_MIN, (el) => el
-      .when(term, (el) => el
-        .child(this.button(t, `h-fs-${pane}`, chrome("minus"), "pane.font_smaller", { pane }))
-        .child(this.button(t, `h-fb-${pane}`, chrome("plus"), "pane.font_bigger", { pane }))
-        .child(this.button(t, `h-f-${pane}`, chrome("square"), "pane.float", { pane })))
-      .child(this.button(t, `h-r-${pane}`, "split-right", "pane.split", { direction: "right", pane }))
-      .child(this.button(t, `h-d-${pane}`, "split-down", "pane.split", { direction: "down", pane }))
-      .when(panes().filter((x) => x.tab === p.tab).length > 1, (el) => el.child(div().id(`h-eq-${pane}`).p(3).flex_none().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground))
-        .on_click((_e, cx) => { cx.stop_propagation(); openEqualize(pane); })
-        .child(svg("mods/nocturne-equalize-panes/equalize.svg").size(12))))
-      .when(panes().filter((x) => x.tab === p.tab && !x.parked).length > 2, (el) => el.child(div().id(`h-grid-${pane}`).p(3).flex_none().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground))
-        .tooltip("Gridify panes")
-        .on_click((_e, cx) => { cx.stop_propagation(); run("nocturne.gridify"); })
-        .child(svg("mods/nocturne-equalize-panes/grid.svg").size(12))))
-      .when(parkable(p), (el) => el.child(this.button(t, `h-p-${pane}`, chrome("archive"), "pane.park", { pane },
-        `Park pane${keyLabel("pane.park") ? ` (${keyLabel("pane.park")})` : ""}`)))
-      .child(this.button(t, `h-z-${pane}`, p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }))
-      .child(this.button(t, `h-x-${pane}`, "close", "pane.close", { pane })));
+    const all = headerControls(p).filter((c) => c.id !== "name");
+    const at = this.cursor(p);
+    const pick = (ids) => all.filter((c) => ids.includes(c.id));
+    const shown = at ? all
+      : !this.hovered ? pick(["fz"])
+      : this.width >= FULL_MIN ? all.filter((c) => c.id !== "more")
+      : pick(this.width >= SOME_MIN ? ["fz", "zoom", "close", "more"] : ["fz", "more"]);
+    return el.children(shown.map((c) => this.control(t, p, c, at === c.id)));
   }
 
   render() {
@@ -248,7 +281,8 @@ export default class Header {
     const st = p.status;
     const label = this.naming && p.terminal
       ? h_flex().min_w(60).w(200).child(field(t, `name-${p.pane}`, this.nameInput, (cx) => { this.naming = false; cx.notify(); }))
-      : div().id(`h-n-${p.pane}`).min_w(24).max_w(220).flex_shrink(1).truncate().text_color(p.focused ? t.foreground : t.muted)
+      : div().id(`h-n-${p.pane}`).relative().min_w(24).max_w(220).flex_shrink(1).truncate().text_color(p.focused ? t.foreground : t.muted)
+        .map((el) => navRing(t, el, this.cursor(p) === "name"))
         .when(Boolean(p.terminal), (el) => el.on_mouse_down("left", (e, cx) => {
           if (e.click_count === 2) { cx.stop_propagation(); this.startNaming(p); cx.notify(); }
         }))
@@ -258,7 +292,7 @@ export default class Header {
       .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))
       .child(label)
       // The folder gives way long before the name does (shrinks 50x faster), then goes.
-      .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))
+      .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && !this.cursor(p) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))
       .child(div().flex_1().min_w(8).h(6).relative().child(dither(p.focused ? t.accent : t.ansi0, 2)))
       .when((st === "blocked" || st === "working") && this.width >= WORD_MIN, (el) => el.child(div().flex_none().text_color(t[st]).child(WORD[st]))), p);
   }
