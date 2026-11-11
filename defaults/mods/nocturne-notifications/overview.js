@@ -178,6 +178,17 @@ export default class Overview {
     };
   }
 
+  /** Whether every part its height and its key bar depend on has measured
+   *  (the list, the request or the empty note, the bar). Until then it draws
+   *  unseen: its first seen frame has its real height and bar, not the
+   *  popup's most for a frame and then its own (a jump as it opens). Once
+   *  seen it stays seen: a request coming in resizes it in view. */
+  measured(it) {
+    const m = this.sizes;
+    this.seen ||= m.list != null && m.bar != null && (it ? m.top != null && m.detail != null : m.empty != null);
+    return this.seen;
+  }
+
   /** Its height (layout px): the taller of the list and the request (or the
    *  empty note) as they measured, and the key bar under both (with the ?
    *  list when open), up to the popup's most; the most until they have. */
@@ -196,6 +207,7 @@ export default class Overview {
     const it = this.current(list);
     // The key bar (and the ? list) spans the drop-down, under both columns.
     return v_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
+      .when(!this.measured(it), (el) => el.opacity(0))
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().flex_1().min_h(0)
