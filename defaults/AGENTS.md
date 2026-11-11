@@ -485,7 +485,13 @@ the highlighted line shows where it will land.
   the problems drawer, cmd-k d definition (another file opens in its own
   editor), cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
-  Markdown preview (below), `nocturne-editor.keys` (space ? in vim; the hint
+  Markdown preview (below). The app's keys win over the code editor's own
+  keymap: a chord keys.json binds in `global` or `layout:nocturne` and not in
+  `mod:nocturne-editor` runs the app's command with an editor focused (in
+  every vim mode, card open or not) and the editor does nothing with it:
+  cmd-alt-arrows move between panes, cmd-] / cmd-[ go to the next / previous
+  agent, cmd-shift-f greps (indent with tab / shift-tab or vim's > / <).
+  `nocturne-editor.keys` (space ? in vim; the hint
   bar's last entry, `? keys`, clickable) the keys overview in the file's place; ? or esc hides it. **Vim** is on by
   default (settings.json `editor.vim`, Settings → Editor). The bar's `vim`
   chip, cmd-k v and `:novim` switch it for that pane only; the pane keeps its

@@ -35,9 +35,13 @@ let answer: (method: string, params: any) => any = () => null;
 let paneList: any[] = [];
 let zoomNow = 0.9;
 let onDisk = "fn main() {\n    let x = 1;\n}\n";
+// The app's keys (keys.json, as herdr.keys() lists them) and what run() ran.
+const ran: any[] = [];
+let keysNow: { section: string; keys: string; action: string }[] = [];
 const herdr: Record<string, any> = {
   settings: () => ({ zoom: zoomNow, editor: {} }), window: () => ({ platform: "macos" }), appHome: () => "/tmp/app", home: () => "/home/a",
-  props: () => ({ path: "/p/src/a.rs", slot: "s1" }), theme: () => theme, run: () => null, panes: () => paneList, shared: () => null, setShared: () => {},
+  props: () => ({ path: "/p/src/a.rs", slot: "s1" }), theme: () => theme, run: (name: string, args?: any) => { ran.push(args === undefined ? [name] : [name, args]); return null; },
+  keys: () => keysNow, panes: () => paneList, shared: () => null, setShared: () => {},
   readTextFile: async (p: string) => (p === "/p/src/a.rs" ? onDisk : null), writeTextFile: async () => null, watchFolder: () => new Promise(() => {}),
   nextCommand: () => new Promise(() => {}),
   // The pane's own start never gets past its first process: the tests set the server.
@@ -608,4 +612,62 @@ test("item 6: vim's gd with the card open goes to the definition (its call has r
   await flush();
   expect(p.card).toBe(null);
   expect(ed.caret).toEqual({ line: 2, col: 0 });
+});
+
+// ---- item 7: the app's pane keys reach the app with an editor focused
+// The shipped bindings (defaults/keys.macos.json): the global section's and
+// Nocturne's, and the editor's own section, which keeps its keys.
+const SHIPPED = JSON.parse(require("fs").readFileSync(`${import.meta.dir}/../defaults/keys.macos.json`, "utf8"));
+const listing = () => Object.entries(SHIPPED).flatMap(([section, keys]: any) => typeof keys === "object" ? Object.entries(keys).map(([k, a]) => ({ section, keys: k, action: typeof a === "string" ? a : JSON.stringify(a) })) : []);
+/** A chord as the editor hands it over (gpui's order: ctrl alt cmd shift). */
+function chord(spec: string) {
+  const parts = spec.split("-"), k = parts.pop()!;
+  const m = { control: parts.includes("ctrl"), alt: parts.includes("alt"), platform: parts.includes("cmd"), shift: parts.includes("shift"), function: false };
+  const keystroke = [m.control && "ctrl", m.alt && "alt", m.platform && "cmd", m.shift && "shift", k].filter(Boolean).join("-");
+  return { key: k, key_char: null, keystroke, modifiers: m };
+}
+const PANE_KEYS: [string, string][] = [
+  ["cmd-alt-up", "pane.go:up"], ["cmd-alt-down", "pane.go:down"], ["cmd-alt-left", "pane.go:left"], ["cmd-alt-right", "pane.go:right"],
+  ["cmd-alt-shift-up", "pane.swap:up"], ["cmd-alt-shift-down", "pane.swap:down"], ["cmd-alt-shift-left", "pane.swap:left"], ["cmd-alt-shift-right", "pane.swap:right"],
+  ["cmd-ctrl-up", "pane.resize:up"], ["cmd-ctrl-down", "pane.resize:down"], ["cmd-ctrl-left", "pane.resize:left"], ["cmd-ctrl-right", "pane.resize:right"],
+  // The editor's own keymap also binds these (indent, outdent, replace): the app's win too.
+  ["cmd-]", "agent.next"], ["cmd-[", "agent.prev"], ["cmd-shift-f", "nocturne.grep"],
+];
+for (const [name, vim, mode] of modes) {
+  for (const card of [false, true]) {
+    test(`item 7: ${name}${card ? ", a card open" : ""}: the pane keys run the app's command, and the editor does nothing with them`, async () => {
+      keysNow = listing();
+      const p = await pane(vim);
+      answer = () => HOVER;
+      if (mode) { p.vim.mode = mode; p.vim.anchor = { line: 0, col: 0 }; }
+      if (card) { p.command("hover", cx()); await flush(); expect(p.card).not.toBe(null); }
+      ed.caret = { line: 1, col: 4 };
+      const text = ed.v, before = JSON.stringify(ed.selection());
+      for (const [k, action] of PANE_KEYS) {
+        ran.length = 0;
+        later = [];
+        const taken = press(chord(k));
+        tick();
+        expect([k, taken, ran]).toEqual([k, true, [[action]]]);
+        expect([k, ed.v, ed.caret, JSON.stringify(ed.selection())]).toEqual([k, text, { line: 1, col: 4 }, before]);
+        if (mode) expect([k, p.vim.mode]).toEqual([k, mode]);
+      }
+    });
+  }
+}
+
+test("item 7: the editor's own section keeps its keys (cmd-s saves, not the layout's fold); keys typed go on as before", async () => {
+  keysNow = listing();
+  const p = await pane(false);
+  for (const k of ["cmd-s", "cmd-f", "cmd-i", "ctrl-g", "cmd-l"]) {
+    ran.length = 0;
+    expect([k, press(chord(k)), ran]).toEqual([k, false, []]);
+  }
+  ran.length = 0;
+  expect([press(key("a")), press(key("up")), ran]).toEqual([false, false, []]);
+  // A binding with its arguments as an object (a person's keys.json) runs with them.
+  keysNow = [...listing(), { section: "global", keys: "cmd-alt-y", action: JSON.stringify({ command: "pane.go", args: { direction: "up" } }) }];
+  p.appKeys = null;
+  ran.length = 0;
+  expect([press(chord("cmd-alt-y")), ran]).toEqual([true, [["pane.go", { direction: "up" }]]]);
 });

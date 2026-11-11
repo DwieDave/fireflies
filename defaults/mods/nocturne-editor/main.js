@@ -46,13 +46,13 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, EditorState, Editor, InputState, Input, TextView } from "gpui-base";
 import {
   props, theme, settings, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, exec,
-  home, appHome, languageOf, highlight, lspStart, lspRequest, lspNotify, lspNextMessage, lspRelease, setUnsaved, notify,
+  home, appHome, languageOf, highlight, lspStart, lspRequest, lspNotify, lspNextMessage, lspRelease, setUnsaved, notify, keys,
   window as appWindow,
 } from "herdr";
 import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
-  cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown,
+  cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown, appBindings, chordOf,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
@@ -792,6 +792,26 @@ export default class EditorPane extends View {
     return false;
   }
 
+  /** The app's keys win over the code editor's own keymap: a chord keys.json
+   *  binds for the window (global, Nocturne's) and this editor's section
+   *  doesn't is run as the app's command here and taken, so the editor does
+   *  nothing with it. The editor's keymap binds cmd-alt-up / down (a caret
+   *  above / below), cmd-] / cmd-[ (indent) and cmd-shift-f (replace), which
+   *  ate pane.go, agent.next / prev and grep. keys.json is read again after a
+   *  few seconds, so an edit there counts. */
+  appKey(e) {
+    const now = Date.now();
+    if (!this.appKeys || now - this.appKeys.at > 3000) {
+      let list = [];
+      try { list = keys() ?? []; } catch { /* no keys: none taken */ }
+      this.appKeys = { at: now, map: appBindings(list, MOD, "nocturne") };
+    }
+    const bound = this.appKeys.map.get(chordOf(e.keystroke ?? ""));
+    if (!bound) return false;
+    run(bound.command, ...(bound.args === undefined ? [] : [bound.args]));
+    return true;
+  }
+
   /** Whether a card is drawn: the keyboard's always, the pointer's once it has something. */
   cardShown(c) {
     return c.keyboard || c.problems.length > 0 || c.parts.length > 0;
@@ -926,6 +946,7 @@ export default class EditorPane extends View {
   /** A keystroke, before the editor sees it: vim's, or the editor's (false). */
   vimKey(e, cx) {
     if (this.cardKey(e, cx)) return true;
+    if (this.appKey(e)) return true;
     if (!this.vimOn() || this.state === "loading" || this.mode) return false;
     const k = token(e);
     if (k == null) return false;

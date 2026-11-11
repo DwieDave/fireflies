@@ -5,7 +5,7 @@ import { test, expect } from "bun:test";
 import {
   languageSettings, serverCandidates, languageId, rootScript, pickRoot, uri, pathOf, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hintList, editorKeys, hoverParts, splitMarkdown, parseGoto, firstLocation, firstLine, tilde, syntaxColors, colorOf, colorRuns,
-  RUST_ANALYZER,
+  RUST_ANALYZER, chordOf, appBindings,
 } from "../defaults/mods/nocturne-editor/logic.js";
 
 test("a language's settings: its own over the top level over its convention over the defaults", () => {
@@ -165,4 +165,29 @@ test("the hint bar ends with its keys entry: space ? in vim's normal mode, cmd-k
   expect(editorKeys(true).map(([k]) => k)).toEqual(expect.arrayContaining(["gd gr K", "space f f", ":w :q :wq"]));
   expect(editorKeys(false).at(-1)).toEqual(["cmd-k ?", "keys"]);
   expect(editorKeys(false).map(([k]) => k)).toEqual(expect.arrayContaining(["cmd-s", "cmd-k v"]));
+});
+
+test("chords: one spelling whatever the modifiers' order or names; the minus key", () => {
+  expect(chordOf("alt-cmd-up")).toBe("cmd-alt-up");
+  expect(chordOf("ctrl-alt-cmd-shift-up")).toBe("cmd-ctrl-alt-shift-up");
+  expect(chordOf("secondary-option-Down")).toBe("cmd-alt-down");
+  expect(chordOf("ctrl--")).toBe("ctrl--");
+  expect(chordOf("cmd-alt--")).toBe("cmd-alt--");
+});
+
+test("the app's keys over an editor: global under the layout's, less the editor's own section (and its two-chord keys' first chord)", () => {
+  const list = [
+    { section: "global", keys: "cmd-alt-up", action: "pane.go:up" },
+    { section: "global", keys: "cmd-s", action: "app.save-all" },
+    { section: "global", keys: "cmd-k", action: "app.palette" },
+    { section: "global", keys: "cmd-x cmd-y", action: "two.chords" },
+    { section: "layout:nocturne", keys: "cmd-alt-up", action: "nocturne.up" },
+    { section: "layout:other", keys: "cmd-alt-o", action: "other.layout" },
+    { section: "terminal", keys: "cmd-alt-t", action: "terminal.only" },
+    { section: "mod:nocturne-editor", keys: "cmd-s", action: "nocturne-editor.save" },
+    { section: "mod:nocturne-editor", keys: "cmd-k d", action: "nocturne-editor.definition" },
+    { section: "global", keys: "cmd-alt-j", action: JSON.stringify({ command: "pane.go", args: { direction: "down" } }) },
+  ];
+  const m = appBindings(list, "nocturne-editor", "nocturne");
+  expect(Object.fromEntries(m)).toEqual({ "cmd-alt-up": { command: "nocturne.up" }, "cmd-alt-j": { command: "pane.go", args: { direction: "down" } } });
 });

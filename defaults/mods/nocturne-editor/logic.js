@@ -461,3 +461,44 @@ export function incremental(caps) {
 export function cardMarkdown(text) {
   return String(text ?? "").replace(/^#{1,6}[ \t]+(.+?)[ \t#]*$/gm, "**$1**");
 }
+
+/** A chord's one spelling: its modifiers sorted (cmd, ctrl, alt, shift, fn;
+ *  keys.json's aliases too), then its key. "alt-cmd-up" and "cmd-alt-up" are
+ *  the same chord. */
+export function chordOf(spec) {
+  const s = String(spec ?? "").trim().toLowerCase();
+  const minus = s.endsWith("--") || s === "-";
+  const parts = minus ? [...s.slice(0, s.length - 2).split("-").filter(Boolean), "-"] : s.split("-");
+  const key = parts.pop() ?? "";
+  const alias = { command: "cmd", super: "cmd", secondary: "cmd", platform: "cmd", control: "ctrl", option: "alt", function: "fn" };
+  const order = ["cmd", "ctrl", "alt", "shift", "fn"];
+  const mods = [...new Set(parts.map((m) => alias[m] ?? m))].sort((a, b) => order.indexOf(a) - order.indexOf(b));
+  return [...mods, key].join("-");
+}
+
+/**
+ * The app's single-chord keys that apply where an editor sits, by chord:
+ * keys.json's `global` section under the layout's (`layout:<layout>`), less
+ * every chord the mod's own section uses (its keys stay its: cmd-s saves),
+ * the first chord of its two-chord keys included (cmd-k of cmd-k d). Values
+ * `{ command, args? }`: "pane.go:up" runs as such; an object binding
+ * (`{"command", "args"}`, a JSON string in keys()) with its arguments.
+ */
+export function appBindings(list, mod, layout) {
+  const own = new Set();
+  for (const b of list ?? []) if (b.section === `mod:${mod}`) own.add(chordOf(String(b.keys).split(" ")[0]));
+  const out = new Map();
+  for (const section of ["global", `layout:${layout}`]) {
+    for (const b of list ?? []) {
+      if (b.section !== section || String(b.keys).trim().includes(" ")) continue;
+      const chord = chordOf(b.keys);
+      if (own.has(chord) || !b.action) continue;
+      let bound = { command: b.action };
+      if (b.action.startsWith("{")) {
+        try { const o = JSON.parse(b.action); bound = o.args === undefined ? { command: o.command } : { command: o.command, args: o.args }; } catch { continue; }
+      }
+      if (bound.command) out.set(chord, bound);
+    }
+  }
+  return out;
+}
