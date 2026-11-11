@@ -202,15 +202,11 @@ test("overview: q closes, up / down move between requests that have no options",
   expect(closed).toEqual(["n1"]);
 });
 
-// ---- picture in picture
+// ---- picture in picture (the rest of its keys: nocturne-browser.test.ts)
 
-const { keyCommand } = await import("../defaults/mods/nocturne-pip/main.js");
+const { keyControl } = await import("../defaults/mods/nocturne-pip/main.js");
 
-test("pip: the player's keys, and what a pane leaves out", () => {
-  expect(["space", "k", "j", "left", "l", "right", "m", "b", "p", "z", "o", "x", "q", "escape"].map((k) => keyCommand(k)))
-    .toEqual(["toggle", "toggle", "rewind", "rewind", "forward", "forward", "mute", "back", "pane", "park", "out", "close", "close", "unfocus"]);
-  expect(keyCommand(" ")).toBe("toggle");
-  expect(keyCommand("p", {}, true)).toBeNull();
-  expect(keyCommand("escape", {}, true)).toBeNull();
-  expect(keyCommand("k", { platform: true })).toBeNull();
+test("pip: esc gives the keyboard back; command keys stay the app's", () => {
+  expect(keyControl(key("escape"))).toBe("unfocus");
+  expect(keyControl(key("k", { platform: true }))).toBeNull();
 });

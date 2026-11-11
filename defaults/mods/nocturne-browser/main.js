@@ -7,6 +7,13 @@
 //   cmd+r    reload, also while the page has the keyboard
 //   cmd+[ / cmd+]   back / forward
 //   cmd+alt+i  the inspector (the </> button)
+//   cmd+esc  out of the page: the keyboard back to the bar (the page keeps esc)
+// Keys while the bar has the keyboard (pane.go, cmd+esc, a click on the bar):
+//   enter / i  into the page        o  /   the address
+//   H L  back / forward   r  reload   + - 0  zoom   p  picture in picture
+//   d  the inspector   O  the system's browser   ?  the keys, under the bar
+//   tab / shift-tab  the bar's buttons (a ring shows which), enter presses it
+//   esc  the ring, then the keys strip, away
 //   ⧉        (only while the page has a <video>)
 //            the page's video in the nocturne-pip player, a Herdr window over
 //            every tab and space (command nocturne-browser.pip); the page goes
@@ -41,6 +48,11 @@ import { props, theme, settings, nextCommand, shared, setShared, run, panes, spa
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
 const SEARCH = "https://duckduckgo.com/?q=";
+// What `?` lists.
+const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /", "address"], ["H L", "back / forward"], ["r", "reload"],
+  ["+ - 0", "zoom"], ["p", "picture in picture"], ["d", "inspector"], ["O", "system browser"], ["tab ⇧tab", "buttons"], ["?", "keys"]];
+/** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
+const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
 // The copy that last had the keyboard or a click: it alone takes broadcast commands.
 const ACTIVE = "nocturne-browser.active";
 // The open inspector panes: { [web view key]: pane id }, one per page.
@@ -83,15 +95,25 @@ export default class Browser extends View {
     this.inspect = pr.inspect ? String(pr.inspect) : null;
     if (this.inspect) {
       this.lost = null;
+      // pane.go gives it the keyboard; enter puts it into the inspector, cmd+esc takes it out.
+      this.handle = cx.focus_handle();
       if (available()) {
         cx.spawn(async (cx) => {
           for (;;) {
             let e;
             try { e = JSON.parse(await herdr.nextNativeViewEvent()); } catch { return; }
             if (e.event === "load.error") { this.lost = e.data?.message ?? "Nothing to inspect."; cx.notify(); }
+            if (e.event === "view.escapeKey") this.handle.focus();
           }
         });
       }
+      cx.spawn(async (cx) => {
+        for (;;) {
+          const c = String(await nextCommand()).replace(/^nocturne-browser\./, "");
+          if (c === "focus") this.handle.focus();
+          cx.notify();
+        }
+      });
       return;
     }
     this.slot = pr.slot ? String(pr.slot) : Math.random().toString(36).slice(2);
@@ -206,6 +228,8 @@ export default class Browser extends View {
   onEvent(e, cx) {
     const d = e.data ?? {};
     if (e.event === "view.click") this.claim();
+    // cmd+esc in the page: the keyboard is the bar's again.
+    if (e.event === "view.escapeKey") { this.claim(); this.handle.focus(); }
     // Right-click "Inspect Element": WebKit opened the inspector; give it its pane.
     if (e.event === "web.inspector" && d.of) this.openInspector(d.of, cx);
     // ⌥⌘I while the page has the keyboard (it never reaches Herdr's keys).
@@ -328,6 +352,8 @@ export default class Browser extends View {
   }
 
   edit() {
+    // The page may hold AppKit's keyboard: typing would go on to it.
+    if (this.start && available()) this.call("blur");
     this.editing = true;
     this.input.set_value(this.page.href ?? "");
     this.input.focus();
@@ -357,16 +383,62 @@ export default class Browser extends View {
     else if (k === "cmd-[") this.command("back");
     else if (k === "cmd-]") this.command("forward");
     else if (k === "cmd-alt-i") this.command("inspect", cx);
-    else return;
+    else if (this.editing || !this.barKey(e, cx)) return;
     cx.stop_propagation();
     cx.notify();
+  }
+
+  /** Plain keys while the bar has the keyboard (not the address field, not the page). */
+  barKey(e, cx) {
+    const m = e.modifiers ?? {};
+    if (m.platform || m.control || m.alt) return false;
+    const k = keyOf(e);
+    const ready = Boolean(this.start && available());
+    if (k === "tab") {
+      const ids = (this.controls ?? []).filter((c) => c.enabled).map((c) => c.id);
+      const i = ids.indexOf(this.ring);
+      this.ring = !ids.length ? null : i < 0 ? ids[m.shift ? ids.length - 1 : 0] : ids[(i + (m.shift ? -1 : 1) + ids.length) % ids.length];
+    } else if (k === "enter" && this.ring) {
+      const c = (this.controls ?? []).find((x) => x.id === this.ring && x.enabled);
+      if (c) c.action(cx); else this.ring = null;
+    } else if (k === "escape" && this.ring) this.ring = null;
+    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    else if (k === "?") this.keysShown = !this.keysShown;
+    else if ((k === "enter" || k === "i") && ready) this.command("web");
+    else if (k === "o" || k === "/") this.command("url");
+    else if (k === "H") this.command("back");
+    else if (k === "L") this.command("forward");
+    else if (k === "r" && this.start) this.command("reload");
+    else if (k === "+" || k === "=") this.command("zoom_in");
+    else if (k === "-") this.command("zoom_out");
+    else if (k === "0") this.command("zoom_reset");
+    else if (k === "p" && ready && (this.video || this.away)) this.command("pip");
+    else if (k === "d" && ready) this.inspector(cx);
+    else if (k === "O") this.external(cx);
+    else return false;
+    return true;
+  }
+
+  /** The inspector pane's keys: enter puts the keyboard into it. */
+  inspectorKey(e, cx) {
+    if (keyOf(e) !== "enter" || this.lost) return;
+    try { herdr.nativeViewCall(INSPECTOR, "focus", {}); } catch {}
+    cx.stop_propagation();
+  }
+
+  /** A bar button for tab / enter, in drawing order; `ringed`: the ring is on it. */
+  control(id, enabled, action) {
+    (this.controls ??= []).push({ id, enabled, action });
+    return this.ring === id && this.barFocused;
   }
 
   // ---- parts
 
   icon(t, id, name, enabled, action, { focus = false } = {}) {
-    return div().id(id).size(24).flex_none().flex().items_center().justify_center()
-      .text_color(enabled ? t.muted : t.ansi0)
+    const ringed = this.control(id, enabled, action);
+    return div().id(id).relative().size(24).flex_none().flex().items_center().justify_center()
+      .text_color(ringed ? t.foreground : enabled ? t.muted : t.ansi0)
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .when(enabled, (el) => el.hover((s) => s.text_color(t.foreground).bg(t.ansi0)))
       // focus: the press goes on to the pane too, which Herdr then focuses.
       .on_mouse_down("left", (e, cx) => (focus ? this.claim() : this.stop(e, cx)))
@@ -381,8 +453,10 @@ export default class Browser extends View {
         .child(Input.new(this.input).w_full().text_size(11).text_color(t.foreground));
     }
     const [host, rest] = parts(this.page.href);
-    return h_flex().id("address").flex_1().min_w(0).h(22).px(6).items_center().gap(0).text_size(11)
+    const ringed = this.control("address", true, () => this.edit());
+    return h_flex().id("address").relative().flex_1().min_w(0).h(22).px(6).items_center().gap(0).text_size(11)
       .hover((s) => s.bg(t.ansi0 + "66"))
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .on_mouse_down("left", (e, cx) => this.stop(e, cx))
       .on_click((_e, cx) => { this.edit(); cx.notify(); })
       .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(host || "blank"))
@@ -398,7 +472,9 @@ export default class Browser extends View {
       .child(this.icon(t, "reload", loading ? "x" : "rotate-cw", Boolean(this.start), () => this.command("reload")))
       .child(this.address(t))
       .child(this.icon(t, "zoom-out", "minus", this.zoom > 0.5, () => this.command("zoom_out")))
-      .child(div().id("zoom").flex_none().w(34).text_center().text_size(11).text_color(t.dim)
+      .child(div().id("zoom").relative().flex_none().w(34).text_center().text_size(11)
+        .text_color(this.control("zoom", true, () => this.command("zoom_reset")) ? t.foreground : t.dim)
+        .when(this.ring === "zoom" && this.barFocused, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
         .hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", (e, cx) => this.stop(e, cx))
         .on_click((_e, cx) => { this.command("zoom_reset"); cx.notify(); })
@@ -408,11 +484,33 @@ export default class Browser extends View {
       .when(Boolean(this.start && available() && (this.video || this.away)), (el) => el.child(this.icon(t, "pip", "picture-in-picture", true, () => this.command("pip"), { focus: true })))
       .child(this.icon(t, "inspect", "code", Boolean(this.start && available()), (cx) => this.inspector(cx), { focus: true }))
       .child(this.icon(t, "external", "external-link", Boolean(this.start && p.href), (cx) => this.external(cx)))
+      .child(this.keysButton(t))
       // Loading: a dithered line along the bar's foot, as far as the page has come.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .when(Boolean(loading), (el) => el.child(div().absolute().left(0).bottom(0).h(2)
         .w(Math.max(8, this.barW * Math.min(1, p.progress || 0.05))).transition("width", 180)
         .child(dither(t.accent, 1))));
+  }
+
+  /** ?: the keys strip. */
+  keysButton(t) {
+    const ringed = this.control("keys", true, () => { this.keysShown = !this.keysShown; });
+    return div().id("keys").relative().size(24).flex_none().flex().items_center().justify_center().text_size(11)
+      .text_color(ringed || this.keysShown ? t.foreground : t.muted)
+      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
+      .on_mouse_down("left", (e, cx) => this.stop(e, cx))
+      .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
+      .child("?");
+  }
+
+  /** `?`: the keys, under the bar. */
+  keysStrip(t) {
+    return h_flex().id("browser-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
+      .children(KEYS.map(([keys, what], i) => h_flex().id(`browser-key-${i}`).flex_none().gap(4)
+        .child(div().text_color(t.accent).child(keys))
+        .child(div().text_color(t.dim).child(what))))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
   blank(t, title, hint) {
@@ -424,9 +522,13 @@ export default class Browser extends View {
 
   render() {
     const t = theme();
+    this.controls = [];
+    this.barFocused = Boolean(this.handle?.is_focused?.());
     if (this.inspect) {
-      if (this.lost) return v_flex().id("inspector").size_full().bg(t.background).child(this.blank(t, "Nothing to inspect", this.lost));
-      return v_flex().id("inspector").size_full().bg(t.background)
+      const root = v_flex().id("inspector").size_full().bg(t.background).track_focus(this.handle)
+        .on_key_down((e, cx) => this.inspectorKey(e, cx));
+      if (this.lost) return root.child(this.blank(t, "Nothing to inspect", this.lost));
+      return root
         .child(div().flex_1().min_h(0).relative().child(herdr.nativeView.new(INSPECTOR, { kind: "inspector", of: this.inspect })
           .child(this.blank(t, "Opening the inspector…", null))));
     }
@@ -445,6 +547,7 @@ export default class Browser extends View {
       .on_mouse_down("left", () => this.claim())
       .on_key_down((e, cx) => this.key(e, cx))
       .child(this.bar(t))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .when(Boolean(this.error), (el) => el.child(div().flex_none().px(10).py(4).text_size(11).text_color(t.blocked).child(this.error)))
       .child(body);
   }

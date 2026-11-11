@@ -8,7 +8,7 @@
 //
 // Each is pane.equalize {scope, pane}; fixed widths (a px size) stay. The
 // row under the cursor sits on a dithered band with a blue edge, like
-// Nocturne's menus. a / r / c pick, ↑/↓ move, Enter runs, Esc closes.
+// Nocturne's menus. a / r / c / g pick, ↑/↓ (j/k) move, Enter runs, Esc closes.
 //
 // Opened by the nocturne pane header's ▦ button and the pane menu's
 // "Even out panes…" (props { pane, overlay }); without a pane it works on the
@@ -82,8 +82,9 @@ export default class EqualizePanes extends View {
       .on_key_down((e, cx) => {
         if (e.modifiers.control || e.modifiers.platform || e.modifiers.alt) return;
         const k = e.key;
-        if ((k === "down" || k === "up") && live.length) {
-          this.cursor = (this.cursor + (k === "down" ? 1 : -1) + live.length) % live.length;
+        const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
+        if (d && live.length) {
+          this.cursor = (this.cursor + d + live.length) % live.length;
           return cx.notify();
         }
         if (k === "enter") return this.pick(current);

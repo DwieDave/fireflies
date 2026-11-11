@@ -301,7 +301,13 @@ the highlighted line shows where it will land.
   from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
-  pages open in the system's browser.
+  pages open in the system's browser. The web pane's bar, while it has the
+  keyboard (`pane.go`, or Cmd-Esc in the page): Enter / `i` into the page, `o`
+  / `/` the address (also Cmd-L), `H` `L` back / forward, `r` reload, `+ - 0`
+  zoom, `p` picture in picture, `d` the inspector, `O` the system's browser,
+  Tab / Shift-Tab its buttons (Enter presses), `?` the keys. Cmd-Esc in any
+  native view (page, PDF, player) gives the keyboard back to its pane; in a
+  PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
   terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
   the terminal's folder, or a bare `README.md` there) opens it rendered in the
@@ -312,7 +318,11 @@ the highlighted line shows where it will land.
   The viewer re-reads the file when it changes on disk, keeping its scroll;
   web links in it follow `links`, relative `.md` links open in the same viewer
   (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
-  edit (the editor beside; another machine's file: $EDITOR in a terminal), files. Commands for the shown viewers:
+  edit (the editor beside; another machine's file: $EDITOR in a terminal), files.
+  Keys: `j k` scroll, `d u` half pages, `gg G`, Tab / Shift-Tab the next /
+  previous link or picture (its block marked, where it goes at the foot),
+  Enter follows, `] [` headings, `h` back, `r` raw, `e` edit, `f` files, `y`
+  copy the path, `?` the keys, Esc lets go. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
 - **Previews**: the same goes for files you look at but don't edit: pictures
   (`.png`, `.jpg` / `.jpeg`, `.gif`, `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`,
@@ -351,11 +361,14 @@ the highlighted line shows where it will land.
   - patches (git's, `diff -u`'s, `git format-patch` mails): colored per file as
     the diff pane colors them; `}` / `{` next / previous file.
   - fonts: Quick Look's specimen. Audio and video: the system's player (it
-    never plays by itself; Space plays / pauses while the preview has focus).
+    never plays by itself; while the preview has focus Space / `k` plays /
+    pauses, ← → 5 s, with Shift 30 s, `0` the start, `m` sound). Esc in the
+    PDF view, the player or Quick Look gives the keys back to the preview.
   The bar: kind, name, facts (size, pages, rows, length), the place among the
   folder's files of the same kind (`n` `]` / `p` `[` next / previous; ← → too
   for a fitted picture), the kind's controls, files (`f`), open (`o`, the
-  system's app), copy (`y`, the path). What it can't show says why and offers
+  system's app), copy (`y`, the path), `?` (the keys, under the bar); Tab /
+  Shift-Tab ring the bar's controls (Enter presses one). What it can't show says why and offers
   the system's app. The original is only read (pictures, PDFs and fonts are
   drawn from a copy in its cache) and it shows the file again when it changes
   on disk. Commands for the shown previews: `nocturne-preview.zoom_in`,
@@ -1097,9 +1110,10 @@ The main ones:
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
-  `.close`; Nocturne's palette lists them while the player window is open. With the
-  keyboard (`overlay.focus`, or a press on its bar; its border lights up): space / k,
-  j / l (← →), m, b, p, z, o, x / q, and esc gives the keyboard back to the pane.
+  `.close`; Nocturne's palette lists them while the player window is open. Keys while the
+  player has the keyboard (`overlay.focus`, or a click on it; its bar's edge turns blue):
+  Space / `k`, ← → (`h l`), `m`, `b`, `p` pane, `P` park, `o` out, `x` / `q` close; esc
+  gives the keyboard back to the pane.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `overlay.focus {dir?, id?}` (`overlay.focus:prev` in keys.json) and `overlay.move {id?, dx?, dy?, dw?, dh?}` (a window by keyboard, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `editor`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;

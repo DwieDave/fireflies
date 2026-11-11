@@ -1317,6 +1317,9 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
 /// The browser chords in a web view that has the keyboard: the page would
 /// take them before Herdr's keys see them, so its mod hears an event instead:
 /// ⌥⌘I `web.inspectKey`, ⌘R `web.reloadKey`.
+/// The way out of any native view: ⌘Esc, and plain Esc in views that don't use
+/// it (PDF, media, Quick Look; a page keeps plain Esc for itself). The keyboard
+/// goes back to GPUI and the mod hears `view.escapeKey`, to focus its own pane.
 fn install_key_monitor() {
     if KEY_MONITOR.with(|m| m.borrow().is_some()) {
         return;
@@ -1328,6 +1331,33 @@ fn install_key_monitor() {
             && !flags.contains(NSEventModifierFlags::Control)
             && !flags.contains(NSEventModifierFlags::Shift);
         let alt = flags.contains(NSEventModifierFlags::Option);
+        if event.keyCode() == ESCAPE_KEY_CODE
+            && let Some(window) = unsafe { event.window(MainThreadMarker::new_unchecked()) }
+            && let Some(fr) = window.firstResponder()
+        {
+            let bare = !flags.intersects(
+                NSEventModifierFlags::Command
+                    | NSEventModifierFlags::Control
+                    | NSEventModifierFlags::Option
+                    | NSEventModifierFlags::Shift,
+            );
+            let hit = VIEWS.with(|v| {
+                v.try_borrow().ok().and_then(|v| {
+                    v.iter()
+                        .find(|(_, e)| responder_inside(&fr, &e.view))
+                        .filter(|(_, e)| e.kind.escape_leaves(cmd && !alt, bare))
+                        .map(|(k, e)| (k.clone(), e.generation, e.gpui.load()))
+                })
+            });
+            if let Some((k, g, gpui)) = hit {
+                if let Some(gpui) = gpui {
+                    window.makeFirstResponder(Some(&gpui));
+                }
+                emit(&k, g, "view.escapeKey", json!({}));
+                return std::ptr::null_mut();
+            }
+            return ev.as_ptr();
+        }
         let key = event.charactersIgnoringModifiers().map(|c| c.to_string().to_ascii_lowercase());
         let name = match (cmd, alt, key.as_deref()) {
             (true, true, Some("i")) => "web.inspectKey",
@@ -1355,6 +1385,9 @@ fn install_key_monitor() {
     let monitor = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::KeyDown, &block) };
     KEY_MONITOR.with(|m| *m.borrow_mut() = monitor);
 }
+
+/// Escape's virtual key code (kVK_Escape).
+const ESCAPE_KEY_CODE: u16 = 53;
 
 pub struct WebIvars {
     key: String,

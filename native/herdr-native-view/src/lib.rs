@@ -98,6 +98,13 @@ pub enum Kind {
 }
 
 impl Kind {
+    /// Whether Escape hands the keyboard back from a view of this kind to the
+    /// app: ⌘Esc (`cmd`) from any, plain Esc (`bare`) from views that have no
+    /// use for it. Pages, the inspector and picture in picture keep plain Esc.
+    pub fn escape_leaves(self, cmd: bool, bare: bool) -> bool {
+        cmd || (bare && matches!(self, Kind::Pdf | Kind::Media | Kind::QuickLook))
+    }
+
     pub fn parse(s: &str) -> Result<Kind, String> {
         match s {
             "web" => Ok(Kind::Web),
@@ -516,6 +523,19 @@ impl Event {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn escape_gives_the_keyboard_back() {
+        for kind in [Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::Chromium, Kind::Pip] {
+            assert!(kind.escape_leaves(true, false), "{kind:?}: cmd-esc");
+            assert!(!kind.escape_leaves(false, false), "{kind:?}: esc with another modifier");
+        }
+        let bare: Vec<Kind> = [Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::Chromium, Kind::Pip]
+            .into_iter()
+            .filter(|k| k.escape_leaves(false, true))
+            .collect();
+        assert_eq!(bare, [Kind::Pdf, Kind::Media, Kind::QuickLook]);
+    }
 
     #[test]
     fn urls_never_become_searches() {

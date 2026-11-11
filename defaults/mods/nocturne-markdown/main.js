@@ -18,6 +18,11 @@
 //   j / k  ↓ ↑   scroll         d / u  space   half a page down / up
 //   gg / G       top / bottom   r              raw / rendered
 //   e            edit           backspace h    back
+//   tab / shift-tab  next / previous link or picture (its block gets a blue
+//                edge, where it goes shows at the foot), enter follows it
+//   ] / [        next / previous heading
+//   f            the folder in the files pane      y  copy the path
+//   ?            the keys, under the bar           esc  link, then keys, away
 // Commands (keys.json, `herdr-app do nocturne-markdown.<c>`; every shown
 // viewer takes them): down, up, top, bottom, raw, back, reload.
 
@@ -26,6 +31,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, watchFolder, nextCommand, home, appHome, window as appWindow } from "herdr";
 import { markdown, fenced, blocks, isLocalSource } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
+import { documentLinks, nextLink, nextHeading } from "./links.js";
 
 const MOD = "nocturne-markdown";
 // Each viewer's shown file by slot, for its pane header (nocturne/header.js).
@@ -54,6 +60,11 @@ function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 const stop = (_e, cx) => cx.stop_propagation();
+/** A key's name: the typed character for printable keys ("G", "?", "]"), else GPUI's key. */
+const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
+// What `?` lists.
+const KEYS = [["j k", "scroll"], ["d u", "half page"], ["gg G", "top / bottom"], ["tab ⇧tab", "links"], ["enter", "follow"],
+  ["] [", "headings"], ["h", "back"], ["r", "raw"], ["e", "edit"], ["f", "files"], ["y", "copy path"], ["?", "keys"]];
 
 /** Copies a local image into the cache, named by its contents; -> its name there. */
 async function cacheImage(path) {
@@ -89,7 +100,7 @@ export default class Markdown extends View {
   /** Shows `path` (scrolled to `anchor`), from the top unless `keep`. */
   open(path, cx, anchor, keep) {
     this.path = path;
-    this.text = null; this.error = null; this.parts = []; this.heights = [];
+    this.text = null; this.error = null; this.parts = []; this.heights = []; this.links = []; this.sel = null;
     if (!keep) this.scrollY = 0;
     this.want = anchor || null;
     this.gen = (this.gen ?? 0) + 1;
@@ -113,6 +124,8 @@ export default class Markdown extends View {
       if (text === this.text && error === this.error) return;
       this.text = text; this.error = error;
       this.parts = text == null ? [] : blocks(text);
+      this.links = documentLinks(this.parts);
+      if (this.sel != null && this.sel >= this.links.length) this.sel = null;
       this.loadImages(cx);
       cx.notify();
     });
@@ -216,7 +229,7 @@ export default class Markdown extends View {
     run("terminal.open", { argv: ["sh", "-c", 'exec "${VISUAL:-${EDITOR:-vi}}" "$1"', "edit", this.path], folder: dirname(this.path), place: "left", ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
-  reveal() {
+  revealFolder() {
     run("pane.split", { edge: "right", px: 280, mod: "nocturne-files", props: { folder: dirname(this.path), on: this.on } });
   }
 
@@ -241,11 +254,70 @@ export default class Markdown extends View {
     this.scroll(this.heights.slice(0, i).reduce((a, h) => a + h + GAP, 0) + 24 - 8);
   }
 
+  /** Where block `i` starts, in the document's px. */
+  partTop(i) {
+    return 20 + this.heights.slice(0, i).reduce((a, h) => a + (h ?? 0) + GAP, 0);
+  }
+
+  /** The first block still in view. */
+  firstShown() {
+    const i = this.parts.findIndex((_, j) => this.partTop(j) + (this.heights[j] ?? 0) > this.scrollY);
+    return i < 0 ? 0 : i;
+  }
+
+  /** Brings block `i` into view, near the top when it was out of it. */
+  reveal(i) {
+    const top = this.partTop(i), h = this.heights[i] ?? 0;
+    if (top >= this.scrollY && top + Math.min(h, this.viewH / 2) <= this.scrollY + this.viewH - 32) return;
+    this.scrollY = 0;
+    this.scroll(top - 24);
+  }
+
+  /** The last block that starts in view. */
+  lastShown() {
+    const i = this.parts.findLastIndex((_, j) => this.partTop(j) < this.scrollY + this.viewH);
+    return Math.max(0, i);
+  }
+
+  /** tab / shift-tab: the next / previous link, from the ones in view. */
+  pickLink(dir) {
+    if (this.raw || !this.links.length) return;
+    this.sel = nextLink(this.links, this.sel, dir, dir > 0 ? this.firstShown() : this.lastShown());
+    this.reveal(this.links[this.sel].part);
+  }
+
+  /** enter: where the chosen link goes. */
+  followLink(cx) {
+    const l = this.links[this.sel];
+    if (!l) return;
+    this.sel = null;
+    const local = l.image && isLocalSource(l.href) && !this.on;
+    if (local) this.showImage(join(dirname(this.path), decodeURI(l.href.split(/[?#]/)[0])));
+    else this.link(l.href, cx);
+  }
+
+  /** ] / [: the next / previous heading to the top. */
+  heading(dir) {
+    const here = this.firstShown();
+    // The heading at the top already counts as passed going down.
+    const at = dir > 0 && this.partTop(here) < this.scrollY + 30 ? here : dir > 0 ? here - 1 : here;
+    const i = nextHeading(this.parts, at, dir);
+    if (i != null) this.scrollTo(this.parts[i].anchor);
+  }
+
+  copyPath(cx) {
+    cx.write_to_clipboard?.(this.on ? `${this.on}:${this.path}` : this.path);
+  }
+
   key(e, cx) {
-    const k = e.key, m = e.modifiers ?? {};
+    const k = keyOf(e), m = e.modifiers ?? {};
     if (m.platform || m.alt) return;
     const page = Math.max(80, this.viewH / 2);
-    if (m.control) {
+    if (k === "tab" && !m.control) this.pickLink(m.shift ? -1 : 1);
+    else if (k === "enter" && this.sel != null && !m.control) this.followLink(cx);
+    else if (k === "escape" && this.sel != null) this.sel = null;
+    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    else if (m.control) {
       if (k === "d") this.scroll(page); else if (k === "u") this.scroll(-page); else return;
     } else if (k === "j" || k === "down") this.scroll(60);
     else if (k === "k" || k === "up") this.scroll(-60);
@@ -254,9 +326,13 @@ export default class Markdown extends View {
     else if (k === "G" || (k === "g" && m.shift) || k === "end") this.scroll(1e9);
     else if (k === "g" || k === "home") {
       if (k === "home" || Date.now() - (this.gAt ?? 0) < 500) { this.gAt = 0; this.scrollY = 0; } else this.gAt = Date.now();
-    } else if (k === "r") this.raw = !this.raw;
+    } else if (k === "r") { this.raw = !this.raw; this.sel = null; }
     else if (k === "e") this.edit();
     else if (k === "backspace" || k === "h" || k === "left") this.back(cx);
+    else if (k === "]" || k === "[") this.heading(k === "]" ? 1 : -1);
+    else if (k === "f") this.revealFolder();
+    else if (k === "y") this.copyPath(cx);
+    else if (k === "?") this.keysShown = !this.keysShown;
     else return;
     cx.stop_propagation();
     cx.notify();
@@ -297,7 +373,8 @@ export default class Markdown extends View {
       .child(this.chip(t, "md-raw", this.raw ? "raw" : "rendered", () => { this.raw = !this.raw; }, this.raw))
       .when(Boolean(this.path), (el) => el
         .child(this.chip(t, "md-edit", "edit", () => this.edit()))
-        .when(w >= 300, (e2) => e2.child(this.chip(t, "md-files", "files", () => this.reveal()))))
+        .when(w >= 300, (e2) => e2.child(this.chip(t, "md-files", "files", () => this.revealFolder()))))
+      .child(this.chip(t, "md-keys", "?", () => { this.keysShown = !this.keysShown; }, Boolean(this.keysShown)))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
@@ -329,8 +406,10 @@ export default class Markdown extends View {
         .child(markdown(t, "md-raw", fenced(this.text), { onLink, size: 12 })));
     }
     if (this.heights.length !== this.parts.length) this.heights = this.parts.map((_, i) => this.heights[i]);
-    return v_flex().gap(GAP).children(this.parts.map((part, i) => div().id(`md-part-${i}`)
+    const chosen = this.links[this.sel]?.part;
+    return v_flex().gap(GAP).children(this.parts.map((part, i) => div().id(`md-part-${i}`).relative()
       .on_size_change((size, cx) => this.measured(i, size, cx))
+      .when(i === chosen, (el) => el.child(div().absolute().left(-12).top(0).bottom(0).w(2).bg(t.accent)))
       .child(part.kind === "md" ? markdown(t, `md-${i}`, part.text, { onLink, size: 13 }) : this.imageRow(t, part, i))));
   }
 
@@ -341,6 +420,26 @@ export default class Markdown extends View {
     if (this.want) this.scrollTo(this.want);
     this.scroll(0);
     cx.notify();
+  }
+
+  /** `?`: the keys, under the bar. */
+  keysStrip(t) {
+    return h_flex().id("md-keys-strip").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
+      .children(KEYS.map(([keys, what], i) => h_flex().id(`md-key-${i}`).flex_none().gap(4)
+        .child(div().text_color(t.accent).child(keys))
+        .child(div().text_color(t.dim).child(what))))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+  }
+
+  /** The chosen link, at the foot of the page: what it says and where it goes. */
+  linkBar(t) {
+    const l = this.links[this.sel];
+    return h_flex().id("md-link").absolute().left(0).right(0).bottom(0).h(24).px(10).gap(8).items_center().text_size(11).bg(t.background)
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().flex_none().text_color(t.accent).child("enter"))
+      .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(`${l.image ? "▧ " : ""}${l.text}`))
+      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(l.href))
+      .child(div().flex_none().text_color(t.dim).child(`${this.sel + 1}/${this.links.length}`));
   }
 
   render() {
@@ -363,12 +462,14 @@ export default class Markdown extends View {
           .child(div().w_full().max_w(WIDTH).px(24).pt(20).pb(44).child(this.document(t))))
         .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3)
           .top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
-          .child(dither(focused ? t.accent : t.ansi8, 1))));
+          .child(dither(focused ? t.accent : t.ansi8, 1))))
+        .when(!this.raw && this.links[this.sel] != null, (el) => el.child(this.linkBar(t)));
     }
     return v_flex().id("nocturne-markdown").size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_down("left", () => this.handle.focus())
       .child(this.toolbar(t))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(body);
   }
 }

@@ -16,11 +16,12 @@
 //   ✕    close: the video goes back to its page, paused (nocturne-pip.close)
 //   ⋯    when the bar is too narrow for them all: the rest, as a menu.
 //        Play/pause and close always stay on the bar.
-//
-// Keys, while the player has the keyboard (overlay.focus, a click on its
-// bar): space or k play/pause, j ← / l → 10 seconds back / on, m sound,
-// b back to the page, p into a pane, z park, o out of Herdr, x q close; esc
-// gives the keyboard back to the pane. Its border lights up meanwhile.
+// Keys while it has the keyboard (overlay.focus to the window, pane.go to its
+// pane, a click on it; its bar's edge turns blue meanwhile):
+//   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
+//   p  into a pane   P  park   o  out of Herdr   x q  close
+//   esc  (the window) the keyboard back to the pane (overlay.focus none)
+// The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close.
 //
 // Opened by nocturne-browser (`openOverlay` WINDOW below, props { of: the
 // browser's web view key }). As a pane (◧): props { of, pane: true }; the pane
@@ -79,16 +80,6 @@ function dither(color, cell = 1) {
 // The bar keeps this much for its title before controls go into ⋯.
 const TITLE = 70;
 
-/** The control a key stands for, while the player has the keyboard (null:
- *  not one of its keys). "unfocus": esc, the keyboard back to the pane. */
-export function keyCommand(key, mods = {}, inPane = false) {
-  if (mods.platform || mods.control || mods.alt) return null;
-  const k = key === " " ? "space" : key;
-  const map = { space: "toggle", k: "toggle", j: "rewind", left: "rewind", l: "forward", right: "forward", m: "mute",
-    b: "back", p: inPane ? null : "pane", z: "park", o: "out", x: "close", q: "close", escape: inPane ? null : "unfocus" };
-  return map[k] ?? null;
-}
-
 /** The controls a `width` px bar shows, and those for ⋯ (which takes a place itself). */
 export function fit(controls, width) {
   const room = Math.floor((width - 8 - TITLE) / BAR);
@@ -97,10 +88,27 @@ export function fit(controls, width) {
   return { shown: controls.filter((c) => keep.has(c.id)), more: controls.filter((c) => !keep.has(c.id)) };
 }
 
+/** The player's control for a key event, or null. "unfocus": esc, the keyboard back to the pane. */
+export function keyControl(e) {
+  const m = e?.modifiers ?? {};
+  if (m.platform || m.control || m.alt) return null;
+  const c = e?.key_char;
+  const k = typeof c === "string" && c.length === 1 && c.trim() ? c : String(e?.key ?? "");
+  return { space: "toggle", k: "toggle", left: "rewind", h: "rewind", right: "forward", l: "forward", m: "mute", b: "back",
+    p: "pane", P: "park", o: "out", x: "close", q: "close", escape: "unfocus" }[k] ?? null;
+}
+
+/** The ⋯ menu's cursor after a key (null: not a moving key). */
+export function menuMove(k, at, n) {
+  const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
+  return d && n ? (at + d + n) % n : null;
+}
+
 export default class Pip extends View {
   init(_p, cx) {
     this.menu = props()?.menu ?? null;
     if (this.menu) return this.initMenu(cx);
+    this.handle = cx.focus_handle();
     this.playing = true;
     this.muted = false;
     this.error = null;
@@ -111,8 +119,6 @@ export default class Pip extends View {
     this.aspect = null;
     this.inPane = Boolean(props()?.pane);
     this.parks = Boolean(props()?.park);
-    // The keyboard comes with overlay.focus ("focus" below) or a press on the bar.
-    this.handle = cx.focus_handle();
     if (!available()) return;
     if (!this.inPane) setShared(PLAYER, props()?.of ?? null);
     cx.spawn(async (cx) => {
@@ -152,13 +158,12 @@ export default class Pip extends View {
     });
   }
 
-  /** A key while the player has the keyboard. */
-  onKey(e, cx) {
-    const c = keyCommand(e.key, e.modifiers ?? {}, this.inPane);
-    if (!c) return;
-    cx.stop_propagation();
+  key(e, cx) {
+    const c = keyControl(e);
+    if (!c || ((c === "pane" || c === "unfocus") && this.inPane) || (c === "park" && this.parks)) return;
     if (c === "unfocus") run("overlay.focus", { dir: "none" });
     else this.command(c);
+    cx.stop_propagation();
     cx.notify();
   }
 
@@ -324,9 +329,9 @@ export default class Pip extends View {
     const items = shown.map((c) => this.button(t, c));
     // The ⋯ goes before ✕, the last on the bar.
     if (more.length) items.splice(items.length - 1, 0, this.more(t, more.map((c) => c.id)));
+    // The bar's edge turns blue while the player has the keyboard.
     return h_flex().id("pip-bar").h(BAR).flex_none().pl(8).items_center().text_size(11).bg(t.background)
-      .on_mouse_down("left", () => this.handle?.focus())
-      .border_b(1).border_color(t.border)
+      .border_b(1).border_color(this.handle?.is_focused?.() ? t.accent : t.border)
       .child(div().flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : this.hover ? t.foreground : t.dim)
         .child(this.error ?? this.hover?.name ?? "picture in picture"))
       .children(items);
@@ -339,9 +344,9 @@ export default class Pip extends View {
     const body = available() && of
       ? herdr.nativeView.new(ID, { kind: "pip", of }).child(div().size_full().bg("#000000"))
       : div().size_full().flex().items_center().justify_center().text_size(11).text_color(t.dim).child("Picture in picture needs native views (macOS).");
-    const keys = this.handle?.is_focused();
-    return v_flex().id("pip").size_full().bg(t.background).when(!this.inPane, (el) => el.border(1).border_color(keys ? t.accent : t.border))
-      .when(Boolean(this.handle), (el) => el.track_focus(this.handle).on_key_down((e, cx) => this.onKey(e, cx)))
+    return v_flex().id("pip").size_full().bg(t.background).when(!this.inPane, (el) => el.border(1).border_color(t.border))
+      .when(Boolean(this.handle), (el) => el.track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
+        .on_mouse_down("left", () => this.handle.focus()))
       .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) >= 1) { this.width = size.width; cx.notify(); } })
       .child(this.bar(t))
       .child(div().flex_1().min_h(0).relative().child(body));
@@ -380,8 +385,9 @@ export default class Pip extends View {
       .track_focus(this.handle)
       .on_key_down((e, cx) => {
         const k = e.key;
-        if (k === "down" || k === "up" || k === "j" || k === "k") {
-          this.cursor = (this.cursor + (k === "down" || k === "j" ? 1 : -1) + items.length) % Math.max(1, items.length);
+        const to = menuMove(k, this.cursor, items.length);
+        if (to != null) {
+          this.cursor = to;
           return cx.notify();
         }
         if (k === "enter" && items[this.cursor]) return this.pick(items[this.cursor]);
