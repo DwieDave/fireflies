@@ -14,6 +14,7 @@ export class Element {
         if (key === "child") target.nodes.push(args[0]);
         else if (key === "children") target.nodes.push(...args[0]);
         else if (key === "when") { if (args[0]) return args[1](proxy) ?? proxy; }
+        else if (key === "map") return args[0](proxy) ?? proxy;
         else target.calls[key] = args;
         return proxy;
       },
@@ -61,7 +62,7 @@ export const state = {
 class Input { value_ = ""; focused = 0; handlers: Record<string, any> = {}; constructor(o: any = {}) { this.value_ = o.value ?? ""; }
   static new(o?: any) { return new Input(o); }
   on(ev: string, f: any) { this.handlers[ev] = f; } focus() { this.focused++; } value() { return this.value_; }
-  set_value(v: string) { this.value_ = v; } set_selected_range() {} }
+  set_value(v: string) { this.value_ = v; } set_selected_range() {} release() {} set_auto_grow() {} }
 class Scroll { items: number[] = []; static new() { return new Scroll(); } scroll_to_item(i: number) { this.items.push(i); } }
 
 mock.module("gpui-kit", () => ({
@@ -73,6 +74,7 @@ mock.module("gpui-base", () => ({
   v_flex: el, h_flex: el, InputState: Input, Input: { new: el }, ScrollHandle: Scroll, VirtualListScrollHandle: Scroll,
   Scrollbar: { vertical: el }, Popup: { new: (_id: string, trigger: any) => { const p = el(); p.nodes.push(trigger); return p; } },
   Checkbox: el, Switch: el, Button: el, TextView: { html: el, markdown: el },
+  TextareaState: Input, Textarea: { new: el }, EditorState: Input, Editor: { new: el },
 }));
 mock.module("herdr", () => ({
   props: () => state.props, theme: () => theme, themes: () => [{ name: "b", colors: theme }, { name: "a", light: true, colors: theme }],
@@ -85,6 +87,9 @@ mock.module("herdr", () => ({
   updates: () => ({ app: { version: "1.0", updates: true }, core: { version: "1.0" }, checks: true, checked: 1, notes: [] }),
   appHome: () => "/tmp/none", home: () => "/tmp", readTextFile: async () => null, writeTextFile: async () => {}, playSound: () => {},
   presentUpdateNotes: () => {}, knownAgents: async () => [], nextCommand: () => new Promise(() => {}), exec: async () => ({ code: 1 }),
+  feedbackIssue: (title: string, message: string) => ({ title: title || message.split("\n")[0], body: message, url: `https://github.com/DwieDave/fireflies/issues/new?title=${encodeURIComponent(title || message.split("\n")[0])}` }),
+  pickFolder: async () => null, watchFolder: () => {}, languageOf: () => null, highlight: () => [], lspStart: async () => null, lspRequest: async () => null,
+  lspNotify: () => {}, lspNextMessage: () => new Promise(() => {}), lspRelease: () => {}, setUnsaved: () => {}, notify: () => {},
 }));
 
 /** A context: notify / stop counted, timers and spawns ignored. */
