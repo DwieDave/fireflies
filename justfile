@@ -91,6 +91,8 @@ test:
     # The editor's servers through the workspace's .envrc (direnv: allowed, blocked, none, missing, a slow load), and what cmd-i says without one, exec faked.
     bun test scripts/nocturne-editor-env.test.ts
     cargo test --locked
+    # The native views' own tests (not a workspace member): picture in picture's live resize among them.
+    cargo test --locked -p herdr-native-view
 
 docs-generate: build
     bun scripts/docs.ts generate

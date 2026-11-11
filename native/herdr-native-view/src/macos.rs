@@ -813,6 +813,10 @@ pub fn frame_end(
                 let local = NSRect::new(NSPoint::new(x, y), NSSize::new(w, h));
                 let frame = gpui.convertRect_toView(local, Some(&container));
                 e.view.setFrame(frame);
+                // A picture-in-picture host being resized keeps its page's layout until it settles (resize.rs).
+                if let Renderer::Pip { view } = &e.renderer {
+                    crate::pip::host_framed(k, view);
+                }
             }
             e.view.setHidden(!visible);
         }

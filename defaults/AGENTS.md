@@ -1357,7 +1357,9 @@ The main ones:
   leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
   `nocturne-pip` player, a `kind: "window"` overlay with key `nocturne-pip` that resizes in
-  its video's real shape (`overlay.resizable` once `pip.state` gives the size). While
+  its video's real shape (`overlay.resizable` once `pip.state` gives the size). While it
+  is being resized the video's page keeps its layout, drawn scaled to the new size, and
+  is laid out once the size has held 150 ms (the page doesn't relayout on every step). While
   the video is out, the browser pane is parked and comes back when the video goes home or
   into a pane. When it is its tab's only pane, the whole tab is settled instead, after
   showing the tab shown before it (else its neighbor; the only tab of its space: the space

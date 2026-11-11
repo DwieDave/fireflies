@@ -250,6 +250,17 @@ thread_local! {
     static SESSION: RefCell<Option<Session>> = const { RefCell::new(None) };
     static ATTACHED: RefCell<HashMap<String, Attached>> = RefCell::new(HashMap::new());
     static SEQ: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// Per `pip` view: its host's last size change and, while a resize is
+    /// under way, the size its web view keeps (crate::resize).
+    static RESIZING: RefCell<HashMap<String, Resizing>> = RefCell::new(HashMap::new());
+}
+
+struct Resizing {
+    last: std::time::Instant,
+    /// Live: the web view's settled size, drawn scaled into the host.
+    settled: Option<NSSize>,
+    /// Bumped each change: a settle timer acts only if no change came after it.
+    tick: u64,
 }
 
 /// Lets a `pip: true` web view's page report the frames that play videos.
@@ -557,9 +568,83 @@ pub(crate) fn attach(key: &str, generation: u64, of: &str, host: &NSView) {
     place(of);
 }
 
+/// The `pip` view `key`'s host got a new frame (macos.rs frame_end, after
+/// setting it). A burst of changes (a resize being dragged) keeps the web
+/// view at its settled size, drawn scaled into the host through the host's
+/// bounds, so WebKit doesn't lay the page out on every step; once the size
+/// has held for `resize::SETTLE`, the web view gets the real size, one
+/// layout. A single change lays it out at once, as autoresizing always did.
+pub(crate) fn host_framed(key: &str, host: &NSView) {
+    let Some(web) = web_in(key, host) else {
+        RESIZING.with(|r| r.borrow_mut().remove(key));
+        return;
+    };
+    let now = std::time::Instant::now();
+    let frame = host.frame().size;
+    let step = RESIZING.with(|r| {
+        let mut r = r.borrow_mut();
+        let e = r.entry(key.to_owned()).or_insert(Resizing { last: now, settled: None, tick: 0 });
+        let since = (e.tick > 0).then(|| now.duration_since(e.last));
+        e.last = now;
+        e.tick += 1;
+        if !crate::resize::goes_live(e.settled.is_some(), since) {
+            return None;
+        }
+        // Going live: the web view keeps the size it has now, and stops following the host.
+        let settled = *e.settled.get_or_insert_with(|| web.frame().size);
+        Some((settled, e.tick))
+    });
+    let Some((settled, tick)) = step else { return };
+    web.setAutoresizingMask(NSAutoresizingMaskOptions::empty());
+    web.setFrame(NSRect::new(NSPoint::new(0.0, 0.0), settled));
+    let (bw, bh) = crate::resize::live_bounds((settled.width, settled.height), (frame.width, frame.height));
+    host.setBoundsSize(NSSize::new(bw, bh));
+    // Settle once no change follows this one for SETTLE.
+    let (k, host_w, web_w) = (key.to_owned(), Weak::from(host), Weak::from(&*web));
+    let block = RcBlock::new(move |_timer: std::ptr::NonNull<AnyObject>| {
+        let due = RESIZING.with(|r| {
+            let Ok(mut r) = r.try_borrow_mut() else { return false };
+            match r.get_mut(&k) {
+                Some(e) if e.tick == tick && crate::resize::settles(e.last.elapsed()) => {
+                    e.settled = None;
+                    true
+                }
+                _ => false,
+            }
+        });
+        if due && let (Some(host), Some(web)) = (host_w.load(), web_w.load()) {
+            settle(&host, &web);
+        }
+    });
+    let Some(cls) = objc2::runtime::AnyClass::get(c"NSTimer") else { return };
+    let _: Retained<AnyObject> = unsafe {
+        msg_send![cls, scheduledTimerWithTimeInterval: crate::resize::SETTLE.as_secs_f64(), repeats: false, block: &*block]
+    };
+}
+
+/// A resize ended: the host's bounds its frame again, the web view the host's
+/// size (its one layout) and following the host as before.
+fn settle(host: &NSView, web: &WKWebView) {
+    host.setBoundsSize(host.frame().size);
+    // Moved elsewhere meanwhile (`put` set it up there): leave it.
+    if !is_in(web, host) {
+        return;
+    }
+    web.setFrame(host.bounds());
+    web.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+}
+
+/// The web view `key`'s host holds now, if any.
+fn web_in(key: &str, host: &NSView) -> Option<Retained<WKWebView>> {
+    let of = ATTACHED.with(|a| a.try_borrow().ok().and_then(|a| a.get(key).map(|p| p.of.clone())))?;
+    let web = with_session(&of, |s| s.web.load()).flatten()?;
+    is_in(&web, host).then_some(web)
+}
+
 /// A `pip` view went. If it was showing the video, the video goes home:
 /// nothing would show it (a player closed by Herdr, e.g. a layout switch).
 pub(crate) fn detach(key: &str) {
+    RESIZING.with(|r| r.borrow_mut().remove(key));
     let Some(p) = ATTACHED.with(|a| a.borrow_mut().remove(key)) else { return };
     let showing = with_session(&p.of, |s| s.web.load().is_some_and(|w| p.host.load().is_some_and(|h| is_in(&w, &h))));
     if showing == Some(true)

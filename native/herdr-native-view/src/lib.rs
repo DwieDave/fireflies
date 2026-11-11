@@ -16,6 +16,9 @@ pub mod macos;
 mod pip;
 #[cfg(target_os = "macos")]
 mod page;
+// Picture in picture's live resize, its decisions pure (tested everywhere, used on macOS).
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+mod resize;
 
 
 
