@@ -71,6 +71,9 @@ const GOTO = "nocturne-editor.goto";
 const POLL = 4000; // a file on another machine can't be watched
 const CHANGE_DELAY = 200; // ms of quiet before the server hears about an edit
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
+// The line numbers' room from the pane's left edge, as the top bar's inset (px):
+// the gutter right-aligns them, so a 4-digit file's touched the border.
+export const GUTTER_INSET = 12;
 // The Markdown preview: how it shows, in the order the switch goes.
 const VIEWS = ["split", "preview", "text"];
 // Under this width a split puts the preview under the text.
@@ -998,7 +1001,7 @@ export default class EditorPane extends View {
   body(t, code) {
     if (this.state === "error") return this.note(t, "Can't edit this file", this.error);
     if (this.state === "loading") return this.note(t, "Reading…", null);
-    const text = div().id("editor-body").relative().flex_1().min_h(0).min_w(0)
+    const text = div().id("editor-body").relative().flex_1().min_h(0).min_w(0).pl(GUTTER_INSET)
       .when(this.state === "missing", (el) => el.child(div().absolute().top(6).right(14).text_color(t.dim).child("new file: cmd-s creates it")))
       .child(Editor.new(this.editor).size_full().font_family(code));
     if (!this.markdown || this.view === "text") return text;

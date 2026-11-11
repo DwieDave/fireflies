@@ -250,3 +250,13 @@ test("welcome and what's new: ? opens the overview over the page, ? or esc close
     return all(n.render()).find((x) => x.calls?.id?.[0] === "wn-keys-strip");
   });
 });
+
+// ---- not key help, the same stand-ins: the editor's line numbers keep their room
+
+test("editor: the gutter's numbers sit in from the pane's edge as the top bar's text (a 4-digit file touched the border)", async () => {
+  const m = await import("../defaults/mods/nocturne-editor/main.js");
+  const v: any = surface(m.default, ["body"], { state: "ready", markdown: false, view: "text", editor: {} });
+  const body = v.body(theme, "mono");
+  expect(body.calls.pl).toEqual([m.GUTTER_INSET]);
+  expect(m.GUTTER_INSET).toBe(12);
+});
