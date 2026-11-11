@@ -10,6 +10,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup, ScrollHandle } from "gpui-base";
 import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window } from "herdr";
+import { bindTab, tabActions } from "./form-keys.js";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
@@ -72,6 +73,7 @@ export default class Settings extends View {
     this.machineEdit = null;
     this.machineNotice = null;
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     // The overlay takes the keyboard once it's shown; take it back.
     cx.timer.after(600, () => { if (!this.picking && !this.machineEdit) this.handle.focus(); });
@@ -1017,6 +1019,7 @@ export default class Settings extends View {
       // A click hides the ring until the next key.
       .on_mouse_down("left", () => { this.kbd = false; })
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .child(nav.h_full().child(div().flex_1())
         .child(v_flex().px(10).pb(10).gap(2).text_size(11).text_color(t.dim)
           .child(hint("tab ↑↓", "move"))

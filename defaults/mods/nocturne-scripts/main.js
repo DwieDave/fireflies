@@ -56,6 +56,8 @@ const FLAKE_FRESH = 30000;
 
 const W = 420, H = 470;
 const HEAD = 36, SECTION = 24, ROW = 26, INPUT = 32, FOOT = 26, RUNS_SHOWN = 5;
+/** The keys entry where ? types (the filter): cmd-k then ?, as in the editor. */
+const CHORD = "cmd-k ?";
 const TONE = { running: "working", ok: "done", failed: "blocked", stopped: "dim" };
 
 // The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
@@ -81,6 +83,15 @@ function aside(s) {
   const plain = [`${s.runner} ${s.name}`, `${s.runner} run ${s.name}`, `${s.runner} task ${s.name}`];
   return plain.includes(s.cmd) ? "" : s.cmd;
 }
+
+/** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
+export const deckKeys = (cmd) => [
+  ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
+  ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
+  ["w", "watch the run"], [`x ${cmd}⌫`, "stop the run · dismiss an ended one"], [`R ${cmd}R`, "run it again"],
+  ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
+  ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
+];
 
 export default class ScriptsDeck extends View {
   init(_p, cx) {
@@ -114,7 +125,14 @@ export default class ScriptsDeck extends View {
     this.handle.focus();
     for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.handle.focus());
     // nocturne-scripts.focus (overlay.focus hands it): the keyboard back here.
-    cx.spawn(async () => { for (;;) { if (String(await nextCommand()).replace(/^nocturne-scripts\./, "") === "focus") this.handle.focus(); } });
+    // nocturne-scripts.keys: its ? list, as ? (or cmd-k ?) shows it.
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const c = String(await nextCommand()).replace(/^nocturne-scripts\./, "");
+        if (c === "focus") this.handle.focus();
+        else if (c === "keys") { this.help = !this.help; cx.notify(); }
+      }
+    });
     // Esc is the overlay's (it closes it) before any key handler sees it:
     // bound to an action in the deck's key context, it's the deck's.
     if (!ScriptsDeck.bound) {
@@ -405,7 +423,9 @@ export default class ScriptsDeck extends View {
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
     const left = (...kids) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids);
     const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps.filter(Boolean));
-    if (this.help) return bar.child(left(div().text_color(t.dim).child("every key"))).child(keys(this.hint(t, "k-esc", "esc", "back")));
+    // Every bar ends with the keys entry: ?, or cmd-k ? while the filter takes what's typed.
+    const help = this.hint(t, "k-help", this.typing ? CHORD : "?", "keys");
+    if (this.help) return bar.child(left(div().text_color(t.dim).child("every key"))).child(keys(this.hint(t, "k-esc", "esc", "back"), help));
     if (this.output) {
       const r = this.output.r;
       return bar
@@ -413,26 +433,26 @@ export default class ScriptsDeck extends View {
           this.badge(t, r.runner || "run", false),
           div().flex_none().text_color(t[TONE[tone(r)]]).child(r.word),
           div().flex_none().text_color(t.dim).child(`after ${elapsed(r)}`)))
-        .child(keys(this.output.grant ? this.hint(t, "k-grant", "o", "settings") : null, this.hint(t, "k-scroll", "j k", "scroll"), this.hint(t, "k-esc", "esc", "back")));
+        .child(keys(this.output.grant ? this.hint(t, "k-grant", "o", "settings") : null, this.hint(t, "k-scroll", "j k", "scroll"), this.hint(t, "k-esc", "esc", "back"), help));
     }
     if (this.typing) {
       return bar
         .child(left(div().flex_none().text_color(t.accent).child("/"), div().min_w(0).truncate().text_color(t.muted).child(this.query ? `filtering "${this.query}"` : "type to filter")))
-        .child(keys(this.hint(t, "k-enter", "enter", cur?.kind === "run" ? "watch" : "run"), this.hint(t, "k-esc", "esc", this.query ? "clear" : "list")));
+        .child(keys(this.hint(t, "k-enter", "enter", cur?.kind === "run" ? "watch" : "run"), this.hint(t, "k-esc", "esc", this.query ? "clear" : "list"), help));
     }
-    if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(this.folder ? "" : "no folder here")));
+    if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(this.folder ? "" : "no folder here"))).child(keys(help));
     if (cur.kind === "run") {
       const r = cur.r;
       return bar
         .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child(r.name)))
         .child(keys(this.hint(t, "k-enter", "enter", r.live ? "watch" : "output"),
           this.hint(t, "k-stop", "x", r.live ? "stop" : "dismiss"),
-          this.hint(t, "k-again", "R", "again"), this.hint(t, "k-help", "?", "keys")));
+          this.hint(t, "k-again", "R", "again"), help));
     }
     return bar
       .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
         .child(cur.row.s.admin ? "asks for your password" : "in the background")))
-      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "& watch"), this.hint(t, "k-help", "?", "keys")));
+      .child(keys(this.hint(t, "k-run", "enter", "run"), this.hint(t, "k-watch", "⇧enter", "& watch"), help));
   }
 
   /** The runs header's aside: a pip and a count for each state there is. */
@@ -507,6 +527,10 @@ export default class ScriptsDeck extends View {
     const cmd = m.platform || m.control;
     const move = (d) => { if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + d)); };
     const done = () => { cx.stop_propagation(); cx.notify(); };
+    // cmd-k ?: the keys from anywhere, the filter too (where ? types), as the editor's.
+    if (cmd && !m.alt && k === "k") { this.chord = Date.now(); return done(); }
+    if (this.chord && Date.now() - this.chord < 2000 && ch === "?") { this.chord = 0; this.help = !this.help; return done(); }
+    this.chord = 0;
     if (this.help) {
       if (k === "escape" || k === "q" || ch === "?" || k === "enter") { this.help = false; return done(); }
       return;
@@ -563,13 +587,8 @@ export default class ScriptsDeck extends View {
 
   /** ? : every key of the deck, in place of the scripts. */
   helpView(t, h) {
-    const cmd = appWindow()?.platform === "macos" ? "⌘" : "ctrl-";
-    const rows = [
-      ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
-      ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
-      ["w", "watch the run"], [`x ${cmd}⌫`, "stop the run · dismiss an ended one"], [`R ${cmd}R`, "run it again"],
-      ["output", "j k pgup pgdn g G scroll · o settings · esc back"], ["q esc", "close"], ["?", "these keys"],
-    ];
+    const rows = deckKeys(appWindow()?.platform === "macos" ? "⌘" : "ctrl-");
+
     return v_flex().id("deck-help").h(h).flex_none().gap(2).overflow_hidden()
       .child(this.section(t, "keys", "? esc"))
       .children(rows.map(([k, w], i) => h_flex().id(`dh-${i}`).h(20).flex_none().px(12).gap(10).items_center().text_size(11)

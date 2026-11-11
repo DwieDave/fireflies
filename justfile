@@ -56,6 +56,8 @@ test:
     bun test scripts/nocturne-windows-keys.test.ts
     # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.
     bun test scripts/dialogs-keys.test.ts
+    # Every form by its keys (form-keys.js): tab order both ways, the wrap, submit, cancel; writes go to stand-ins.
+    bun test scripts/form-keys.test.ts
     # Nocturne's palette through its real imports, herdr and gpui stand-ins; no command, key or mod command goes missing from it.
     bun test scripts/nocturne-palette.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
@@ -70,6 +72,8 @@ test:
     bun test scripts/hint-bars.test.ts
     # The strip's drop-downs (script runner, + new, bell) toggle by press and by key, with stand-ins that record handlers.
     bun test scripts/nocturne-drop-toggle.test.ts
+    # Every ? list names every key its handler takes (each key pressed on the real handler), and the keys dialog's map.
+    bun test scripts/keys-lists.test.ts
     # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
     bun test scripts/nocturne-tab-drag.test.ts
     cargo test --locked

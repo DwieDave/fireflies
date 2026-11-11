@@ -165,6 +165,31 @@ test("e edits a field through the menu", async () => {
   expect(tab.menu).toBeNull();
 });
 
+test("e: tab and shift-tab walk the item's fields, wrapping, from either side; nothing is sent", async () => {
+  const { tab } = await open();
+  press(tab, "l", "l"); // #240
+  press(tab, "e");
+  const n = tab.menu.fields.length;
+  expect(n).toBeGreaterThan(2);
+  expect(tab.menu.at).toBe(0); // opens on the first field
+  press(tab, "tab");
+  expect(tab.menu.at).toBe(1);
+  tab.key("tab", { modifiers: { shift: true } }, cx);
+  tab.key("tab", { modifiers: { shift: true } }, cx);
+  expect(tab.menu.at).toBe(n - 1); // wraps back past the first
+  press(tab, "tab");
+  expect(tab.menu.at).toBe(0); // and forward past the last
+  press(tab, "l"); // into the values
+  expect(tab.menu.side).toBe("opts");
+  press(tab, "tab");
+  expect([tab.menu.at, tab.menu.side]).toEqual([1, "fields"]);
+  expect(tab.hints().map((h: any) => h[0])).toContain("tab ⇧tab");
+  press(tab, "escape");
+  expect(tab.menu).toBeNull();
+  await settle();
+  expect(gh.mutations).toEqual([]);
+});
+
 test("e on a text field asks for the value; labels toggle", async () => {
   const { tab } = await open();
   press(tab, "l", "l", "l"); // In progress, #226

@@ -20,8 +20,8 @@
 // beside or above its words, at the largest scale (1x to 4x, whole steps so
 // the pixel art stays crisp) where everything fits. Below 1x it scrolls.
 //
-// Keys (click the pane, or pane.go onto it):  r  read again now
-//                                             p  the next provider
+// Keys (click the pane, or pane.go onto it): KEYS below; ? shows them in a
+// strip under the toolbar, whose last item is the ? chip.
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
@@ -37,6 +37,8 @@ function lengthName(length) {
   return length < 86400_000 ? `${Math.round(length / 3600_000)} h` : `${Math.round(length / 86400_000)} d`;
 }
 const BAR = 34; // the toolbar
+/** What ? lists: every key key() takes, ? keys last. */
+export const KEYS = [["r", "read again now"], ["p", "the next provider"], ["esc", "keys away"], ["?", "keys"]];
 const GAP = 12;
 const stop = (_e, cx) => cx.stop_propagation();
 const pad = (n) => String(n).padStart(2, "0");
@@ -126,6 +128,7 @@ export default class Usage extends View {
         const c = String(await nextCommand()).replace(/^nocturne-usage\./, "");
         if (c === "focus") this.handle.focus();
         else if (c === "refresh") this.read(cx, true);
+        else if (c === "keys") this.keysShown = !this.keysShown;
         cx.notify();
       }
     });
@@ -140,12 +143,26 @@ export default class Usage extends View {
   }
 
   key(e, cx) {
-    if (e.keystroke === "r") this.read(cx, true);
+    const m = e.modifiers ?? {};
+    if (m.platform || m.control || m.alt) return;
+    if (e.key_char === "?" || e.key === "?") this.keysShown = !this.keysShown;
+    else if (e.key === "escape" && this.keysShown) this.keysShown = false;
+    else if (e.keystroke === "r") this.read(cx, true);
     else if (e.keystroke === "p") {
       const i = PROVIDERS.findIndex((p) => p.id === provider().id);
       this.pick(PROVIDERS[(i + 1) % PROVIDERS.length].id, cx);
     } else return;
     cx.stop_propagation();
+    cx.notify();
+  }
+
+  /** ?: the keys, a strip under the toolbar. */
+  keysStrip(t) {
+    return h_flex().id("us-keys").relative().flex_none().flex_wrap().px(12).py(4).gap_x(12).gap_y(2).items_center().text_size(11).bg(t.background)
+      .children(KEYS.map(([keys, what], i) => h_flex().id(`us-key-${i}`).flex_none().gap(4)
+        .child(div().text_color(t.accent).child(keys))
+        .child(div().text_color(t.dim).child(what))))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
   /** Shows provider `id` here and in the sidebar, asking it if its answer is old. */
@@ -316,6 +333,13 @@ export default class Usage extends View {
         .on_click((_e, cx) => { cx.stop_propagation(); this.read(cx, true); })
         .child(busy ? div().child("·").frames(["·", "✦", "✧", "·"], 220) : "↻")
         .child(div().ml(6).child(status)))
+      // ? keys: the toolbar's last item.
+      .child(div().id("us-keys-chip").relative().flex_none().px(6).h(20).flex().items_center()
+        .text_color(this.keysShown ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { cx.stop_propagation(); this.keysShown = !this.keysShown; cx.notify(); })
+        .when(Boolean(this.keysShown), (el) => el.child(dither(t.ansi0, 1)))
+        .child(div().relative().child("?")))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
@@ -365,7 +389,8 @@ export default class Usage extends View {
       .children(layer("haze", 1400, t.ansi4, 0.2))
       .children(layer("hills-fill", 144, t.background, 1))
       .children(layer("hills-rim", 144, t.ansi8, 0.5))
-      .child(this.toolbar(t, d, note));
+      .child(this.toolbar(t, d, note))
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)));
     if (!d) return root.child(this.message(t, note));
     // The meadow keeps the bottom for the sheep; a short pane gives it up.
     const meadow = height >= 340;

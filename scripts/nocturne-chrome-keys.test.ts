@@ -364,6 +364,20 @@ test("j walks down: the focused pane's header, the parked chips, then the pane",
   expect(s.row).toBe("tabs");
 });
 
+test("? lists the keys of the row the cursor is on: the strip's, the header's, the parked chips'", () => {
+  const s = strip();
+  const title = () => (overlays.at(-1) as any)?.props?.title;
+  press(s, "/", { shift: true }, "?");
+  expect(title()).toBe("tab strip keys");
+  press(s, "j");
+  press(s, "/", { shift: true }, "?");
+  expect(title()).toBe("pane header keys");
+  press(s, "j");
+  press(s, "/", { shift: true }, "?");
+  expect(title()).toBe("parked pane keys");
+  expect((overlays.at(-1) as any).props.lines.at(-1)).toEqual(["?", "keys"]);
+});
+
 test("tab cycles every control across the rows; leaving clears the shared cursor", () => {
   const s = strip();
   const seen = new Set<string>();

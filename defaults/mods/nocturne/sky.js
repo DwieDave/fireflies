@@ -54,6 +54,7 @@ import { newWorktree } from "./menu.js";
 import { gridify } from "./gridify.js";
 import { toastKey } from "./toast.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
+import { bindTab, tabActions } from "./form-keys.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 
@@ -152,10 +153,12 @@ export default class Sky {
     // The keyboard (nav.js): the cursor's control, where it was in the list,
     // the controls as last drawn ({ id, sec, go?, menu?, ... }).
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.cursor = null;
     this.navAt = 0;
     this.navList = [];
     this.spaces.onDone = () => this.refocus();
+    this.spaces.focusHost = () => this.handle.focus(); // an inline form's chip has the keyboard
     this.usage = new UsageSection();
     this.usage.init(cx);
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
@@ -380,7 +383,7 @@ export default class Sky {
   key(e, cx) {
     if (this.spaces.confirmKey(e, cx)) { cx.stop_propagation(); return cx.notify(); }
     // A field inside (a name, a folder) has the keyboard: its keys are its own.
-    if (this.naming || (this.spaces.mode && this.spaces.mode.kind !== "delete")) return;
+    if (this.naming || this.spaces.mode) return;
     const verb = keyVerb(e, SIDEBAR_KEYS);
     if (!verb) return;
     cx.stop_propagation();
@@ -406,8 +409,10 @@ export default class Sky {
     return h_flex().id("sky-hints").absolute().left(0).right(0).bottom(0).h(20).px(10).gap(8).items_center()
       .bg(t.background).text_size(11).text_color(t.dim)
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.accent, 1)))
-      .child(div().text_color(t.accent).child("keys"))
-      .child(div().flex_1().min_w(0).truncate().child("jk ⏎ m menu esc ?"));
+      .child(div().text_color(t.accent).child("sidebar"))
+      .child(div().flex_1().min_w(0).truncate().child("jk ⏎ m menu esc"))
+      // ? keys last, never cut off.
+      .child(div().flex_none().child("? keys"));
   }
 
   header(t, list) {
@@ -861,6 +866,7 @@ export default class Sky {
     const sky = v_flex().id("sky").relative().size_full().overflow_hidden().bg(t.background)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((size, cx) => { this.size = size; cx.notify(); });
     // After drawing: the controls top to bottom (the rail draws its fireflies
     // before its spaces), and a cursor on one that went moves to its neighbor.

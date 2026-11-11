@@ -824,7 +824,8 @@ export default class PreviewView extends View {
 
   /** `nocturne-preview.<command>` (keys.json, `herdr-app do`): every shown preview takes it. */
   command(c, cx) {
-    if (c === "zoom_in") this.zoomBy(1, cx);
+    if (c === "keys") this.keysShown = !this.keysShown;
+    else if (c === "zoom_in") this.zoomBy(1, cx);
     else if (c === "zoom_out") this.zoomBy(-1, cx);
     else if (c === "fit") this.fit(cx);
     else if (c === "actual") this.actual(cx);
