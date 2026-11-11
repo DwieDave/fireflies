@@ -27,6 +27,8 @@
 //            and a meter per usage window; the » key under the hour opens it
 //            again. On macOS the rail is wide enough for the window buttons
 //            at any zoom.
+//   glow     the pointer carries a firefly's light over the sky and the rail
+//            (glow.js): a nested view, so following it never redraws the sky
 //   keys     the sidebar takes the keyboard from pane.go (cmd-alt-left from
 //            the leftmost pane) or nocturne.sidebar (layout.focus): a cursor
 //            walks every control (nav.js SIDEBAR_KEYS; ? lists them), the
@@ -54,6 +56,7 @@ import { newWorktree } from "./menu.js";
 import { gridify } from "./gridify.js";
 import { toastKey } from "./toast.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
+import { Fireglow, nextGlow, GONE_AFTER } from "./glow.js";
 import { bindTab, tabActions } from "./form-keys.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -220,6 +223,16 @@ export default class Sky {
     // shared(NAME_AGENT); a request from before this sky was made is old.
     this.nameAsked = shared(NAME_AGENT)?.at ?? null;
     this.clock = clock();
+    // The pointer's own firefly (glow.js): a nested view, so following the
+    // pointer rebuilds only it.
+    this.glow = cx.new(Fireglow, {});
+    // On the rail the space list sits on a plate of the night (no star by a
+    // letter): a second glow inside it, under its letters, carries the light
+    // across it. railTop: how far down the sky the list starts (layout px).
+    this.glowList = cx.new(Fireglow, {});
+    this.railTops = {};
+    this.glowAt = null;
+    this.glowSky = {};
     cx.timer.every(5000, (cx) => {
       const c = clock();
       if (c.time !== this.clock.time) { this.clock = c; cx.notify(); }
@@ -236,6 +249,34 @@ export default class Sky {
     this.naming = a.address;
     this.nameInput.set_value(givenName(a.address) ?? "");
     this.nameInput.focus();
+  }
+
+  /** The pointer moved over the sky (or left it, `local` null): the glow
+   *  (glow.js) follows it. Only the glow's own view is rebuilt, and only when
+   *  it moves to another cell; once faded out it leaves the tree. */
+  pointer(local, cx) {
+    const at = nextGlow(this.glowAt, local, settings()?.zoom, calm());
+    if (!at) return;
+    this.glowAt = at;
+    this.showGlow(at);
+    if (!at.on) cx?.timer.after(GONE_AFTER, () => { if (this.glowAt === at) this.showGlow({ ...at, gone: true }); });
+  }
+
+  /** Hands the glow (and on the rail its copy in the space list) its props. */
+  showGlow(at) {
+    this.glow.set_props({ ...this.glowSky, ...at });
+    if (this.glowSky.folded) this.glowList.set_props({ ...this.glowSky, ...at, ox: 0, oy: this.railTop });
+  }
+
+  /** Where the rail's space list starts: under its top padding, the clock and the » key. */
+  get railTop() { return 48 + (this.railTops.clock ?? 0) + (this.railTops.key ?? 0); }
+
+  /** Notes a measured height above the rail's space list (railTop). */
+  railMeasure(k) {
+    return (size, cx) => {
+      const v = Math.round(size.height / (Number(settings()?.zoom) || 1));
+      if (this.railTops[k] !== v) { this.railTops[k] = v; cx.notify(); }
+    };
   }
 
   /** A firefly's right-click menu: focus, rename, move or close its pane. */
@@ -837,11 +878,11 @@ export default class Sky {
     const ground = this.railGround(t, free.filter(atRest));
     const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
     return v_flex().w_full().flex_1().min_h(0).pt(48).items_center()
-      .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date)
+      .child(v_flex().id("rail-clock").flex_none().items_center().tooltip(this.clock.date).on_size_change(this.railMeasure("clock"))
         .child(svg(`${ART}/moon-${moonPhase(list)}.svg`).size(32).flex_none().text_color(t.ansi7))
         .child(div().pt(4).text_size(11).text_color(t.foreground).child(this.clock.time)))
-      .child(div().pt(10).pb(14).flex_none().child(this.openKey(t)))
-      .child(v_flex().id("rail-spaces").w_full().flex_none().bg(t.background).children(rows.map(({ s }, i) => this.railSpace(t, s, i, rows.length))))
+      .child(div().id("rail-key").pt(10).pb(14).flex_none().on_size_change(this.railMeasure("key")).child(this.openKey(t)))
+      .child(v_flex().id("rail-spaces").relative().overflow_hidden().w_full().flex_none().bg(t.background).child(this.glowList).children(rows.map(({ s }, i) => this.railSpace(t, s, i, rows.length))))
       .child(div().py(12).flex_none().child(rule()))
       .child(v_flex().id("rail-flies").w_full().flex_1().min_h(0).gap(2).items_center().overflow_y_scroll().when(Boolean(jar), (el) => el.child(jar)).children(flies))
       .when(Boolean(ground), (el) => el.child(ground))
@@ -867,7 +908,19 @@ export default class Sky {
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
-      .on_size_change((size, cx) => { this.size = size; cx.notify(); });
+      .on_size_change((size, cx) => { this.size = size; cx.notify(); })
+      .on_mouse_move((e, cx) => this.pointer(e.local_position, cx))
+      .on_hover((h, cx) => { if (!h) this.pointer(null, cx); });
+    // What the glow needs of the sky to light its backdrop; a glow that's
+    // up hears at once when the sky changes under it or calm() turns.
+    const zoom = Number(settings()?.zoom) || 1;
+    this.glowSky = { folded: this.folded, h: Math.round(this.size.height / zoom), lift: this.folded ? this.usage.railHeight : this.usage.height + (on ? 20 : 0) };
+    const g = this.glowAt, key = JSON.stringify([this.glowSky, this.railTop]);
+    if (g?.on && (g.calm !== calm() || this.glowKey !== key)) {
+      const next = this.glowAt = { ...g, calm: calm() };
+      cx.timer.after(0, () => { if (this.glowAt === next) this.showGlow(next); });
+    }
+    this.glowKey = key;
     // After drawing: the controls top to bottom (the rail draws its fireflies
     // before its spaces), and a cursor on one that went moves to its neighbor.
     const placeCursor = (el) => {
@@ -883,6 +936,7 @@ export default class Sky {
         // The hills rest on the usage, as open, never behind its numbers.
         .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.background))
         .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.ansi8).opacity(0.5))
+        .child(this.glow)
         .child(this.rail(t, list, jarred)));
     }
     // The usage section sits at the foot; the haze and hills rest on it.
@@ -894,6 +948,7 @@ export default class Sky {
       .child(svg(`${ART}/haze.svg`).w(480).h(1400).absolute().bottom(lift).left(0).text_color(t.ansi4).opacity(0.2))
       .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.background))
       .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.ansi8).opacity(0.5))
+      .child(this.glow)
       .child(div().absolute().top(14).right(10).child(this.foldButton(t, "«")))
       .child(this.header(t, list))
       .child(this.spaces.render(t, (...a) => this.nav(...a)))
