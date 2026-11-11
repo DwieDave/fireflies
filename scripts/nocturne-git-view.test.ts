@@ -328,3 +328,51 @@ test("opened from GitHub ({pr, back}): q and esc put the GitHub window back", as
   await press(v, "q");
   expect(reopened?.mod).toBe("nocturne-github");
 });
+
+test("a log cut at its limit: the rows that fit follow the row height, the open lanes run to the bottom", async () => {
+  // 310 commits with a side branch open across the cut: more than the branch
+  // log (200) and the Commits panel (300) read.
+  const long = join(dir, "long");
+  mkdirSync(long);
+  let stream = "";
+  for (let i = 1; i <= 310; i++) {
+    const from = i === 1 ? "" : `from :${i - 1}\n`;
+    stream += `commit refs/heads/main\nmark :${i}\ncommitter Ada <a@x> ${1700000000 + i} +0000\ndata ${`c${i}`.length}\nc${i}\n${from}${i === 310 ? "merge :5\n" : ""}\n`;
+  }
+  writeFileSync(join(dir, "long.fi"), stream);
+  sh("git init -q -b main && git fast-import --quiet < ../long.fi && git checkout -q main", long);
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: long }, cx);
+  await settle(v);
+  v.render();
+
+  // The main view first shows a diff (18 px rows), then the branch log (16 px)
+  // in the same space: the log fills it rather than keeping the diff's count.
+  v.mainPx = { main: 320 };
+  v.setPanel("commits"); await settle(v); v.render();
+  expect(v.mainVis).toBe(Math.floor(320 / 18));
+  v.setPanel("branches"); await settle(v); v.render();
+  expect(v.main.title).toBe("Log · main");
+  expect(v.mainVis).toBe(Math.floor(320 / 16));
+
+  // The last commit read (the 200th) still has its parent's lane open: the
+  // view draws it on below the last row.
+  const last = v.main.rows[v.main.rows.length - 1];
+  expect(last.g.after.some((c: any) => c != null)).toBe(true);
+  const { logTail } = await import("../defaults/mods/nocturne-git/draw.js");
+  expect(logTail(theme, last, 100)).not.toBe(null);
+  expect(logTail(theme, { kind: "log", g: { after: [] }, w: 1 }, 100)).toBe(null);
+
+  // The Commits panel at its limit (300): the same below its last row, also
+  // after going wide (taller rows, more rows' worth of height kept).
+  expect(v.data.commits.length).toBe(300);
+  const end = v.data.commits.length - 1;
+  expect(v.graph.rows[end].after.some((c: any) => c != null)).toBe(true);
+  expect(v.listTail(theme, "commits", end, 18)).not.toBe(null);
+  v.listPx = { commits: 360 };
+  v.setPanel("commits"); v.mode = "half"; v.render();
+  expect(v.vis.commits).toBe(Math.floor(360 / 32));
+  v.mode = "normal"; v.render();
+  expect(v.vis.commits).toBe(Math.floor(360 / 18));
+});

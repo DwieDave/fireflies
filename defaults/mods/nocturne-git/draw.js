@@ -139,6 +139,15 @@ export function graphPass(t, after, width, { lane = 12, h = 18 } = {}) {
   return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
 }
 
+/** Below the branch log's last row: the lanes still open there (the log
+ *  cut at its limit) run on to the bottom of the view, laid out as the log
+ *  rows are. Null when nothing is open (a root commit) or not a log row. */
+export function logTail(t, row, h) {
+  if (row?.kind !== "log" || !(row.g?.after ?? []).some((c) => c != null)) return null;
+  return h_flex().id("log-tail").flex_1().min_h(0).w_full().items_start().pl(6).overflow_hidden()
+    .child(graphPass(t, row.g.after, row.w, { lane: 10, h }));
+}
+
 /** Syntax spans for a diff line's text, by the file's language: tree-sitter
  *  (herdr.highlight) in moonfly's roles, `base` between them; null for plain
  *  text (no grammar, nothing to color, a very long line). Each line is

@@ -47,7 +47,7 @@ import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from ".
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
 import { Review } from "./review.js";
-import { ART, dither, panel, band, chip, hints, empty, graphCell, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
+import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
 
 export const WINDOW = "nocturne-git.window"; // { id, beat }: the open window, for the toggle
 const STATE = "nocturne-git.state"; // where the window was, per folder
@@ -993,7 +993,12 @@ export default class GitView extends View {
   list(t, ctx, rowH, draw, { active }) {
     const rows = this.items(ctx);
     const n = rows.length;
-    const vis = Math.max(1, this.vis[ctx] ?? 12);
+    // The rows that fit, from the list's height: the row height can change
+    // without a resize (Commits going wide), so a count kept from the last
+    // resize would leave the bottom of the list empty.
+    const px = this.listPx?.[ctx];
+    const vis = px ? Math.max(1, Math.floor(px / rowH)) : Math.max(1, this.vis[ctx] ?? 12);
+    this.vis[ctx] = vis;
     let top = this.top[ctx] ?? 0;
     const sel = Math.min(this.sel[ctx] ?? 0, Math.max(0, n - 1));
     if (this.follow[ctx]) {
@@ -1016,13 +1021,29 @@ export default class GitView extends View {
     const bar = n > vis ? div().absolute().right(0).w(2).top(Math.round((top / n) * 100) + "%").h(Math.max(4, Math.round((vis / n) * 100)) + "%").bg(active ? t.accent + "aa" : t.ansi8 + "66") : null;
     return div().id(`${ctx}-list`).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
-        const v = Math.max(1, Math.floor(unzoom(size.height) / rowH));
-        if (v !== this.vis[ctx]) { this.vis[ctx] = v; cx.notify(); }
+        const h = unzoom(size.height);
+        (this.listPx ??= {});
+        if (h !== this.listPx[ctx]) { this.listPx[ctx] = h; this.vis[ctx] = Math.max(1, Math.floor(h / rowH)); cx.notify(); }
       })
       .on_scroll_wheel((e, cx) => this.wheel(ctx, e, rowH, n, cx))
-      .child(v_flex().w_full().children(shown))
+      .child(v_flex().size_full().children(shown).children([n > 0 && top + vis >= n - 1 ? this.listTail(t, ctx, n - 1, rowH) : null].filter(Boolean)))
       .when(Boolean(bar), (el) => el.child(bar))
       .when(!n, (el) => el.child(div().absolute().inset_0().child(empty(t, this.emptyText(ctx), null, { small: true }))));
+  }
+
+  /** Below a commit list's last row: its open lanes run on to the bottom
+   *  edge (history cut at the limit, or the panel taller than the list), so
+   *  no line ends in the air. */
+  listTail(t, ctx, last, rowH) {
+    if (ctx !== "commits" && ctx !== "subCommits") return null;
+    const g = this.graphFor(ctx), row = g?.rows[last];
+    if (!row || !row.after.some((c) => c != null)) return null;
+    const wide = rowH === WIDE_ROW;
+    const h = Math.max(rowH, this.listPx?.[ctx] ?? 600);
+    const lanes = graphPass(t, row.after, this.shownWidth(ctx, g), { lane: wide ? WIDE_LANE : LANE, h });
+    return h_flex().id(`${ctx}-tail`).flex_1().min_h(0).w_full().items_start().overflow_hidden()
+      .when(wide, (el) => el.pl(4).child(lanes))
+      .when(!wide, (el) => el.px(6).gap(7).child(div().w(56).flex_none()).child(div().w(18).flex_none()).child(lanes));
   }
 
   emptyText(ctx) {
@@ -1292,7 +1313,10 @@ export default class GitView extends View {
 
   /** A main-view list: windowed like the side lists; the wheel scrolls it. */
   mainList(t, id, rows, draw, { follow = null, key = "main", rowH = ROW } = {}) {
-    const vis = Math.max(1, this.mainVisOf?.[key] ?? 30);
+    // As list(): the rows that fit come from the height, at this list's row
+    // height (a diff's and the branch log's differ).
+    const px = this.mainPx?.[key];
+    const vis = px ? Math.max(1, Math.floor(px / rowH)) : 30;
     let top = key === "staging" ? (this.staging.top ?? 0) : key === "main" ? this.mainTop : (this.otherTop?.[key] ?? 0);
     if (follow != null) {
       if (follow < top + 1) top = Math.max(0, follow - 2);
@@ -1303,9 +1327,9 @@ export default class GitView extends View {
     if (key === "main" || key === "staging") this.mainVis = vis;
     return div().id(id).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
-        const v = Math.max(1, Math.floor(unzoom(size.height) / rowH));
-        (this.mainVisOf ??= {});
-        if (v !== this.mainVisOf[key]) { this.mainVisOf[key] = v; cx.notify(); }
+        const h = unzoom(size.height);
+        (this.mainPx ??= {});
+        if (h !== this.mainPx[key]) { this.mainPx[key] = h; cx.notify(); }
       })
       .on_scroll_wheel((e, cx) => {
         cx.stop_propagation();
@@ -1333,7 +1357,8 @@ export default class GitView extends View {
         cx.notify();
       })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (this.staging || this.focus === "main") this.contextMenu(this.staging ? "staging" : "main"); cx.notify(); })
-      .child(v_flex().w_full().children(rows.slice(top, top + vis + 1).map((r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none())))
+      .child(v_flex().size_full().children(rows.slice(top, top + vis + 1).map((r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none()))
+        .children([top + vis >= rows.length - 1 ? logTail(t, rows[rows.length - 1], px ?? 600) : null].filter(Boolean)))
       .when(rows.length > vis, (el) => el.child(div().absolute().right(0).w(2).top(Math.round((top / rows.length) * 100) + "%").h(Math.max(3, Math.round((vis / rows.length) * 100)) + "%").bg(t.ansi8 + "66")));
   }
 
