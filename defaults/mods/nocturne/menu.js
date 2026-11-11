@@ -17,6 +17,7 @@ import { svg } from "gpui-kit";
 import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, agents } from "herdr";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
+import { openWorktrees } from "./git.js";
 import { ART, spaceFolder, pinned, pin, movePin, sortedAgents } from "./kit.js";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
@@ -80,12 +81,12 @@ export function pinItems(t, terminal) {
   ];
 }
 
-/** The worktree dialog (the worktree mod) on a space's folder: a branch in its
- *  own checkout, as a new space attached to it (indented under the repo's). */
+/** A new worktree for a space's repo: the git window's Worktrees tab asks
+ *  for the branch, checks it out in its own folder and opens it as a new
+ *  space (indented under the repo's). */
 export function newWorktree(id) {
-  const s = spaces().find((x) => x.id === id);
-  if (!s) return;
-  openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { space: s.id, folder: spaceFolder(s, panes()), action: "new" } });
+  if (!spaces().some((x) => x.id === id)) return;
+  openWorktrees({ space: id, action: "new" });
 }
 
 /** Opens a menu for these props (role "menu"). From the keyboard (`centered`)
@@ -137,11 +138,12 @@ export function menuItems(t, p) {
     ];
   }
   if (p?.tab === "git") {
-    // The tab strip's git ▾: the git window, its review, the GitHub window.
+    // The tab strip's git ▾: the git window, its review, its worktrees, the GitHub window.
     const bound = (cmd) => keys().find((b) => b.action === cmd)?.keys ?? "";
     return [
       { id: "git", mark: icon(t, "git-compare"), name: "Git", hint: bound("nocturne.git") || bound("nocturne.lazygit"), go: () => run("nocturne.git") },
       { id: "diff", mark: icon(t, "eye"), name: "Diff", hint: bound("nocturne.diff"), go: () => run("nocturne.diff") },
+      { id: "worktrees", mark: icon(t, "git-branch"), name: "Worktrees", hint: bound("nocturne.worktrees"), go: () => run("nocturne.worktrees") },
       { id: "github", mark: svg(`${ART}/github.svg`).size(14).flex_none().text_color(t.accent), name: "GitHub", hint: bound("nocturne.github"), go: () => run("nocturne.github") },
     ];
   }

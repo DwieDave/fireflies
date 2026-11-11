@@ -43,7 +43,7 @@ import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 import { NAME_AGENT, openMenu, openKeys } from "./menu.js";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
-import { toggleGit } from "./git.js";
+import { toggleGit, openWorktrees } from "./git.js";
 import { UsageSection } from "./usage.js";
 import { focusFiles } from "./files.js";
 import { togglePicker } from "./picker.js";
@@ -150,7 +150,8 @@ export default class Sky {
     // keys.json's layout:nocturne section sends nocturne.next / nocturne.prev
     // here: the next space in the sidebar's order (worktrees under their repo);
     // nocturne.git (cmd-g; nocturne.lazygit, its old name, too) toggles the git
-    // window (git.js), nocturne.diff the same on its Review tab, nocturne.files
+    // window (git.js), nocturne.diff the same on its Review tab, nocturne.worktrees
+    // on its Worktrees tab (what the worktree dialog was), nocturne.files
     // the files pane with the keyboard in it (files.js focusFiles), nocturne.github (cmd-shift-g) the GitHub
     // window (github.js), nocturne.scripts (cmd-shift-r) the script runner's
     // deck (scripts.js; nocturne.scripts-failed, a failure's toast, opens it
@@ -174,6 +175,7 @@ export default class Sky {
         else if (c === "fold") this.fold(cx);
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
+        else if (c === "worktrees") openWorktrees();
         else if (c === "files") focusFiles();
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
