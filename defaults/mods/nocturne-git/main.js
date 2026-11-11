@@ -20,6 +20,14 @@
 // keys.json (or `herdr-app do`) can send nocturne-git.<action> to a shown
 // window: any action of keys.js (screen-next, push, panel-commits…).
 //
+// ctrl-p (or the ⧉ in the main view's title, a right-click menu, the
+// palette) opens what the main view shows as a pane beside the focused pane,
+// ctrl-shift-p in a new tab, and closes the window. That pane is this mod
+// with props { show }: { kind: "file", path } (the working diff), "commit"
+// { hash, path? }, "stash" { ref, path? }, "range" { a, b } (diff mode), or
+// "review" { scope, pr?, repo?, path? } (the review list beside its diff).
+// It reads again on changes like the window; q / esc close the pane.
+//
 // Props: { folder?, on? } (the shown space's when missing), { review: true,
 // scope? } to start on Review (nocturne-diff's props land here), { pr, repo,
 // back } a pull request's diff opened from the GitHub window: esc / q puts
@@ -110,8 +118,13 @@ export default class GitView extends View {
     this.resizing = null;
     this.mouse = { x: 200, y: 200 };
     this.popups = new Popups(this);
-    this.review = new Review(this, { scope: pr.scope ?? "work", pr: pr.pr ?? null, repo: pr.repo ?? null });
-    if (pr.review || pr.pr || pr.scope) { this.panel = "files"; this.tabOf.files = "review"; }
+    // A pane opened from the window (ctrl-p): one diff, or a review.
+    this.show = pr.show ?? null;
+    this.paneId = pr.paneId ?? null;
+    const rv = this.show?.kind === "review" ? this.show : pr;
+    this.review = new Review(this, { scope: rv.scope ?? "work", pr: rv.pr ?? null, repo: rv.repo ?? null });
+    if (pr.review || pr.pr || pr.scope || this.show?.kind === "review") { this.panel = "files"; this.tabOf.files = "review"; }
+    if (this.show) { this.mode = "normal"; this.showLog = false; if (this.show.kind !== "review") this.focus = "main"; }
     this.handle = cx.focus_handle();
     this.handle.focus();
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.popups.open && !this.filtering) this.handle.focus(); });
@@ -140,6 +153,8 @@ export default class GitView extends View {
         else if (c === "review") { this.setPanel("files"); this.setTab("review"); }
         // keys.json can bind any key table action: nocturne-git.<action>
         // (panel-commits for panel:commits).
+        // While a git window is open, commands are its keys: other copies (panes) leave them.
+        else if (this.notMine()) { /* the window's */ }
         else if (this.popups.open) { if (c === "back") this.popups.close(); else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.key("enter", null, cx); }
         else if (this.state === "ready") act(this, c.replace(/^panel-/, "panel:"), cx);
         cx.notify();
@@ -177,6 +192,12 @@ export default class GitView extends View {
     });
   }
 
+  /** A git window is open and this copy isn't it. */
+  notMine() {
+    const w = shared(WINDOW);
+    return Boolean(w?.id && Date.now() - (w.beat ?? 0) < 10000 && w.id !== this.overlay);
+  }
+
   beat() {
     if (!this.overlay || this.closed) return;
     // In the GitHub window's place (its d), this window is the one cmd-shift-g closes.
@@ -192,7 +213,7 @@ export default class GitView extends View {
   }
 
   saveState() {
-    if (!this.folder) return;
+    if (!this.folder || this.show) return;
     const all = { ...(shared(STATE) ?? {}) };
     all[this.folder] = { panel: this.panel, tabOf: this.tabOf, mode: this.mode, tree: this.tree, showLog: this.showLog, sideW: this.sideW, railW: this.railW, midW: this.midW, logH: this.logH };
     setShared(STATE, all);
@@ -204,7 +225,7 @@ export default class GitView extends View {
   spawn(fn) { this.acts.push(fn); }
 
   /** `fn(cx)` shortly after the next frame (focusing a new input). */
-  later(fn) { this.reads.push(async (cx) => { cx.timer.after(40, (cx2) => fn(cx2)); }); }
+  later(fn, ms = 40) { this.reads.push(async (cx) => { cx.timer.after(ms, (cx2) => fn(cx2)); }); }
 
   reload(loud = false) {
     if (this.state !== "ready" || this.reloadQueued) return;
@@ -214,7 +235,14 @@ export default class GitView extends View {
 
   async reloadNow() { await this.loadAll(); }
 
-  reloadReview() { this.reads.push(async () => { await this.review.load(); this.clampAll(); this.loadMain(); }); }
+  reloadReview() { this.reads.push(async () => { await this.review.load(); this.pickShownPath(); this.clampAll(); this.loadMain(); }); }
+
+  /** A review pane opened on a file starts on it. */
+  pickShownPath() {
+    if (!this.show?.path || this.pickedPath) return;
+    const i = this.review.shown().findIndex((f) => f.path === this.show.path);
+    if (i >= 0) { this.sel.review = i; this.follow.review = true; this.pickedPath = true; }
+  }
 
   async loadAll() {
     const g = this.git;
@@ -233,7 +261,7 @@ export default class GitView extends View {
     this.graph = layoutGraph(commits);
     if (this.ctxOf(this.panel) === "reflog" || this.data.reflog.length) this.data.reflog = await g.reflog();
     for (const s of Object.values(this.subs).flat()) await this.loadSub(s);
-    if (this.tabOf.files === "review" || this.review.files.length) await this.review.load();
+    if (this.tabOf.files === "review" || this.review.files.length) { await this.review.load(); this.pickShownPath(); }
     if (this.staging) await this.loadStaging();
     this.clampAll();
     this.loadMain();
@@ -337,7 +365,7 @@ export default class GitView extends View {
   ctx() {
     if (this.popups.open) return this.popups.kind;
     if (this.filtering) return "filter";
-    if (this.focus === "main") return this.staging ? "staging" : "main";
+    if (this.focus === "main" || (this.show && this.show.kind !== "review")) return this.staging ? "staging" : "main";
     return this.ctxOf(this.panel);
   }
 
@@ -418,7 +446,7 @@ export default class GitView extends View {
   // ---- moving
 
   setPanel(p) {
-    if (!PANELS.includes(p)) return;
+    if (!PANELS.includes(p) || (this.show && p !== "files")) return;
     if (this.panel === p && this.focus === "side") return;
     this.panel = p; this.focus = "side"; this.staging = null; this.range = null;
     this.ensureLoaded();
@@ -506,6 +534,7 @@ export default class GitView extends View {
   /** esc: the innermost thing gives way first. */
   back() {
     if (this.filtering) { const c = this.filtering.ctx; this.filtering = null; this.filters[c] = ""; this.handle.focus(); return; }
+    if (this.show && this.show.kind !== "review") { this.closePane(); return; }
     if (this.focus === "main") { this.focus = "side"; this.staging = null; this.loadMain(); return; }
     if (this.range) { this.range = null; return; }
     const ctx = this.ctxOf(this.panel);
@@ -520,9 +549,56 @@ export default class GitView extends View {
   /** q: back to the GitHub window when it opened this, else close. esc
    *  at the top level closes only a window (a pane stays). */
   quit(fromEsc = false) {
+    if (this.show) return this.closePane();
     if (this.backTo) return this.goBack();
     if (this.overlay) { this.saveState(); closeOverlay(this.overlay); return; }
     if (!fromEsc) run("pane.close");
+  }
+
+  /** Closes this copy's own pane (a ctrl-p pane finds itself by its paneId prop). */
+  closePane() {
+    const mine = this.paneId ? panes().find((p) => p.mod === "nocturne-git" && p.props?.paneId === this.paneId) : null;
+    run("pane.close", mine ? { pane: mine.pane } : {});
+  }
+
+  /** What the main view shows now, as a pane's { show } (null: nothing to open). */
+  showNow() {
+    const ctx = this.ctxOf(this.panel), x = this.item(ctx);
+    if (this.diffBase) {
+      const ref = x?.hash ?? x?.oid ?? null;
+      if (ref) return this.diffReverse ? { kind: "range", a: ref, b: this.diffBase } : { kind: "range", a: this.diffBase, b: ref };
+    }
+    if (this.staging) return { kind: "file", path: this.staging.file.path };
+    switch (ctx) {
+      case "files": return x?.file ? { kind: "file", path: x.file.path } : x?.kind === "dir" ? { kind: "review", scope: "work", path: x.files[0]?.path } : null;
+      case "review": return { kind: "review", scope: this.review.scope, ...(this.review.pr ? { pr: this.review.pr, repo: this.review.prRepo } : {}), ...(x?.path ? { path: x.path } : {}) };
+      case "commits": case "subCommits": case "reflog": return x?.hash ? { kind: "commit", hash: x.hash } : null;
+      case "commitFiles": {
+        const s = this.sub(), f = x?.file ?? x;
+        const path = x?.kind === "dir" ? null : f?.path ?? null;
+        return s?.stash ? { kind: "stash", ref: s.hash, ...(path ? { path } : {}) } : { kind: "commit", hash: s.hash, ...(path ? { path } : {}) };
+      }
+      case "stash": return x ? { kind: "stash", ref: x.hash ?? x.ref } : null;
+      case "branches": case "tags": case "remoteBranches": return x?.oid ? { kind: "commit", hash: x.oid } : null;
+    }
+    return null;
+  }
+
+  /** ctrl-p: the main view as a pane beside the focused pane (tab: in a new
+   *  tab); the window steps aside. */
+  openPane(tab = false) {
+    const show = this.git && this.showNow();
+    if (!show) return this.error("Nothing in the main view to open as a pane.");
+    const props = { folder: this.git.root, ...(this.on ? { on: this.on } : {}), show, paneId: `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}` };
+    if (tab) run("tab.new", { mod: "nocturne-git", props, name: paneName(show) });
+    else run("pane.split", { direction: "auto", mod: "nocturne-git", props });
+    // The window steps aside a moment later: closed in the same turn, the new
+    // pane's first tasks were cancelled with it (it stayed on "Reading…").
+    if (this.overlay) {
+      this.saveState();
+      const id = this.overlay;
+      this.later(() => closeOverlay(id), 300);
+    }
   }
 
   goBack() {
@@ -576,6 +652,10 @@ export default class GitView extends View {
   /** A row's right-click menu: its context's actions with their keys. */
   contextMenu(ctx) {
     const items = menuKeys(ctx).map((b) => ({ key: keyLabel(b.key), label: b.label, danger: b.flags.has("danger"), go: (cx) => this.run(b.action, cx) }));
+    if (!this.show && PANE_CONTEXTS.has(ctx)) {
+      items.push({ key: "ctrl-p", label: "Open the diff as a pane", go: () => this.openPane(false) });
+      items.push({ key: "ctrl-shift-p", label: "Open the diff in a new tab", go: () => this.openPane(true) });
+    }
     const x = this.item(ctx);
     const title = x?.name ?? x?.path ?? x?.subject ?? CONTEXT_NAMES[ctx];
     this.menu({ title: String(title).slice(0, 60), items, at: { x: this.mouse.x, y: this.mouse.y } });
@@ -683,7 +763,47 @@ export default class GitView extends View {
     });
   }
 
+  /** A ctrl-p pane's one diff (show kinds other than review). */
+  async showContent() {
+    const g = this.git, s = this.show, opts = { context: this.context, ws: this.ws };
+    const flat = (files) => {
+      if (files.length === 1) return diffRows(files[0]).map((r) => ({ ...r, path: files[0].path }));
+      return files.flatMap((f) => [{ kind: "file", text: f.status === "renamed" && f.old ? `${f.old} → ${f.path}` : f.path, sub: f.binary ? "binary" : `+${f.add} -${f.del}` }, ...diffRows(f).map((r) => ({ ...r, path: f.path }))]);
+    };
+    if (s.kind === "file") {
+      const f = (this.data.status?.files ?? []).find((x) => x.path === s.path);
+      if (!f) return { title: s.path, path: s.path, rows: [text("No changes in this file now.", "muted")] };
+      const [un, st] = await Promise.all([f.unstaged ? g.fileDiff(f, opts) : null, f.staged ? g.fileDiff(f, { cached: true, ...opts }) : null]);
+      const rows = [
+        ...(un ? [{ kind: "file", text: "unstaged", sub: `+${un.add} -${un.del}` }, ...diffRows(un).map((r) => ({ ...r, path: f.path }))] : []),
+        ...(st ? [{ kind: "file", text: "staged", sub: `+${st.add} -${st.del}` }, ...diffRows(st).map((r) => ({ ...r, path: f.path }))] : []),
+      ];
+      return { title: `Working diff · ${f.path}`, path: f.path, rows: rows.length ? rows : [text("No text changes (mode, rename or binary).", "muted")] };
+    }
+    if (s.kind === "commit") {
+      const c = await g.show(s.hash, { ...opts, path: s.path ?? null });
+      if (!c) return { title: short(s.hash), rows: [text("Not a commit.", "muted")] };
+      const head = [
+        { kind: "text", parts: [[`commit ${c.hash}`, "ansi3"], ...(c.refs ? [[` (${c.refs})`, "ansi5"]] : [])] },
+        { kind: "text", parts: [["Author: ", "dim"], [`${c.author} <${c.email}>`, "ansi5"]] },
+        { kind: "text", parts: [["Date:   ", "dim"], [new Date(c.date * 1000).toLocaleString(), "muted"]] },
+        text(""), ...c.body.split("\n").map((l) => text(`    ${l}`, "foreground")), text(""),
+      ];
+      return { title: `Patch · ${short(c.hash)}${s.path ? ` · ${s.path}` : ""}`, rows: [...head, ...flat(c.files)] };
+    }
+    if (s.kind === "stash") {
+      const files = (await g.stashShow(s.ref, opts)).filter((f) => !s.path || f.path === s.path);
+      return { title: `Stash · ${short(s.ref)}${s.path ? ` · ${s.path}` : ""}`, rows: files.length ? flat(files) : [text("Empty stash entry.", "muted")] };
+    }
+    if (s.kind === "range") {
+      const files = await g.between(s.a, s.b, opts);
+      return { title: `Diff ${short(s.a)}..${short(s.b)}`, rows: files.length ? flat(files) : [text("No differences.", "muted")] };
+    }
+    return { title: "", rows: [] };
+  }
+
   async mainContent() {
+    if (this.show && this.show.kind !== "review") return this.showContent();
     const g = this.git, ctx = this.ctxOf(this.panel), x = this.item(ctx), opts = { context: this.context, ws: this.ws };
     const flat = (files) => {
       if (files.length === 1) return diffRows(files[0]).map((r) => ({ ...r, path: files[0].path }));
@@ -1120,8 +1240,15 @@ export default class GitView extends View {
     const body = !m ? empty(t, this.state === "ready" ? "Reading…" : "", null, { small: true })
       : !rows.length ? empty(t, "Nothing to show", null, { small: true })
       : this.mainList(t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: r.path ?? m.path, active }), { key: "main" });
+    // ⧉: what this view shows, as a pane (shift: a new tab), like a pane header's split.
+    const asPane = !this.show && m?.rows?.length ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((s) => s.text_color(t.accent).bg(t.ansi0 + "66"))
+      .tooltip("Open as a pane beside (ctrl-p) · shift: in a new tab (ctrl-shift-p)")
+      .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.openPane(Boolean(e.modifiers?.shift)); cx.notify(); })
+      .child(svg("mods/workspace-chrome/panel-right.svg").size(11).text_color(t.dim)) : null;
     const one = panel(t, "main-a", [div().text_color(active ? t.foreground : t.muted).child(m?.title ?? "")], active, body, {
-      right: this.diffBase ? div().text_color(t.ansi3).child(`diff mode: ${short(this.diffBase)} (W)`) : null,
+      right: this.diffBase || asPane ? h_flex().gap(8).items_center()
+        .when(Boolean(this.diffBase), (el) => el.child(div().text_color(t.ansi3).child(`diff mode: ${short(this.diffBase)} (W)`)))
+        .when(Boolean(asPane), (el) => el.child(asPane)) : null,
       onTitle: (_e, cx) => { this.focusMain(); cx.notify(); },
     }).flex_grow(1.4).flex_basis(0);
     const parts = [one];
@@ -1198,7 +1325,19 @@ export default class GitView extends View {
         .child(div().h(this.logH).flex_none().pt(6).child(this.logPanel(t))));
   }
 
+  /** A ctrl-p pane: the one diff, or the review list beside its diff. */
+  showBody(t) {
+    if (this.show.kind !== "review") return div().size_full().px(6).pb(4).child(this.mainPanel(t));
+    if (this.size.width < NARROW) return div().size_full().px(6).pb(4).child(this.focus === "main" ? this.mainPanel(t) : this.sidePanel(t, "files").size_full().mt(7));
+    const sideW = this.sideW ?? Math.round(Math.max(220, Math.min(360, this.size.width * 0.3)));
+    return h_flex().size_full().px(6).pb(4)
+      .child(div().w(sideW).flex_none().h_full().pt(7).child(this.sidePanel(t, "files").size_full()))
+      .child(this.splitter(t, "split-side", "x", "side", sideW, (v) => { this.sideW = v; }, { min: 160, max: this.size.width * 0.7 }))
+      .child(div().flex_1().min_w(0).h_full().child(this.mainPanel(t)));
+  }
+
   body(t) {
+    if (this.show) return this.showBody(t);
     const w = this.size.width;
     const narrow = w < NARROW;
     if (narrow) {
@@ -1256,12 +1395,13 @@ export default class GitView extends View {
 
   bar(t) {
     const ctx = this.ctx();
-    const list = (ctx === "filter" ? [{ key: "enter", label: "keep" }, { key: "escape", label: "clear" }] : barKeys(ctx))
-      .map((b) => [keyLabel(b.key), shortLabel(b.label)]);
+    const list = this.show && ctx === "main" ? [["q", "close"], ["j/k", "scroll"], ["J/K", "page"], ["n/N", "file"], ["{ }", "context"], ["?", "keys"]]
+      : (ctx === "filter" ? [{ key: "enter", label: "keep" }, { key: "escape", label: "clear" }] : barKeys(ctx))
+        .map((b) => [keyLabel(b.key), shortLabel(b.label)]);
     const note = this.noteText;
     const right = note ? div().text_color(note.tone === "failed" ? t.blocked : t.done).truncate().max_w(420).child(note.text)
       : this.copied.length ? div().text_color(t.ansi5).child(`${this.copied.length} copied · V paste`)
-      : div().text_color(t.dim).child("1-5 panels · + widen");
+      : div().text_color(t.dim).child(this.show ? "q closes this pane" : "1-5 panels · + widen");
     return hints(t, [[null, null, (CONTEXT_NAMES[ctx] ?? ctx).toUpperCase()], ...list], right, (key, cx) => {
       const b = lookup(ctx, { esc: "escape", pgup: "pageup", pgdn: "pagedown" }[key] ?? key);
       if (b) act(this, b.action, cx);
@@ -1303,6 +1443,10 @@ export default class GitView extends View {
   }
 }
 
+/** Contexts whose right-click menu offers ctrl-p (the main view shows a diff for them). */
+const PANE_CONTEXTS = new Set(["files", "review", "commits", "subCommits", "reflog", "commitFiles", "stash", "staging", "main"]);
+/** A ctrl-p tab's name. */
+const paneName = (s) => (s.kind === "file" ? s.path.split("/").pop() : s.kind === "review" ? (s.pr ? `#${s.pr}` : "review") : s.kind === "range" ? "diff" : (s.hash ?? s.ref ?? "").slice(0, 7));
 const T7 = (t, s, c) => div().w(56).flex_none().text_color(c).child(s);
 const short = (r) => (/^[0-9a-f]{40}$/.test(r ?? "") ? r.slice(0, 7) : r);
 const text = (s, color = "foreground") => ({ kind: "text", parts: [[s, color]] });

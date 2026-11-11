@@ -125,6 +125,15 @@ uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 pane or tab yourself with `pane.split` / `tab.new {mod: "nocturne-git", props:
 {folder, on?, review?, scope?: "work" | "branch", pr?, repo?}}`. A
 `nocturne-diff` pane or window (old saved tabs) hands over to it.
+In the window, ctrl-p (or the ⧉ in the main view's title, a right-click menu,
+the palette's "Git: open the diff as a pane") opens what the main view shows
+as a pane beside the focused pane, ctrl-shift-p in a new tab, and closes the
+window. That pane is `nocturne-git` with props `{folder, on?, paneId, show}`,
+`show` one of `{kind: "file", path}` (the working diff), `{kind: "commit",
+hash, path?}`, `{kind: "stash", ref, path?}`, `{kind: "range", a, b}`,
+`{kind: "review", scope, pr?, repo?, path?}`; it refreshes on changes and its
+q / esc close it. keys.json can bind any of the window's actions as
+`nocturne-git.<action>` (`open-pane`, `screen-next`, `panel-commits`…).
 
 ## The model: spaces, tabs, terminals
 

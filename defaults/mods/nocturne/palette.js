@@ -13,6 +13,7 @@ import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, 
 import { dither, eyebrow, focusedTerminal, pinned, pin } from "./kit.js";
 import { panels } from "./panels.js";
 import { toggleDeck } from "./scripts.js";
+import { gitOpen } from "./git.js";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -44,6 +45,13 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  // While the git window is open: what its main view shows, as a pane (its ctrl-p) or a tab (ctrl-shift-p).
+  if (gitOpen()) {
+    out.push({ name: "nocturne-git.open-pane", args: {}, group: "Open", icon: "panel-right", bind: "nocturne-git.open-pane",
+      title: "Git: open the diff as a pane", words: "git diff pane split beside review patch commit stash", go: () => run("nocturne-git.open-pane") });
+    out.push({ name: "nocturne-git.open-pane-tab", args: {}, group: "Open", icon: "square", bind: "nocturne-git.open-pane-tab",
+      title: "Git: open the diff in a new tab", words: "git diff tab review patch commit stash", go: () => run("nocturne-git.open-pane-tab") });
+  }
   out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/nocturne-equalize-panes/grid.svg", bind: "nocturne.gridify",
     title: "Gridify panes", words: "grid tile arrange rearrange even out equalize layout", go: () => run("nocturne.gridify") });
   // Pinning the focused pane's agent to the top of the sky (kit.js pin; Herdr's terminal.pin).

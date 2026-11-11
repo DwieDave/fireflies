@@ -19,12 +19,13 @@ function sh(cmd: string, cwd = repo) {
 // ---- stand-ins
 
 let sharedState: Record<string, unknown> = {};
+let propsNow: any = null;
 const commands: [string, any][] = [];
 mock.module("herdr", () => ({
   settings: () => ({ zoom: 1, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
   shared: (k: string) => sharedState[k] ?? null,
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  props: () => ({ folder: repo }),
+  props: () => propsNow,
   spaces: () => [], panes: () => [], focused: () => null,
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   nextCommand: () => new Promise(() => {}),
@@ -258,6 +259,48 @@ test("keys: ? opens the keybindings menu; the bar follows the context; right-cli
   expect(v.popups.top.items.find((x: any) => x.label === "Drop").danger).toBe(true);
   await press(v, "escape");
   v.render();
+});
+
+test("ctrl-p opens the main view as a pane (ctrl-shift-p a tab); the pane shows it and q closes it", async () => {
+  const v = await open();
+  v.overlay = "w1";
+  v.setPanel("commits"); v.moveTo(0); await settle(v);
+  commands.length = 0;
+  await press(v, ["p", { control: true }]);
+  const [name, args] = commands.find(([n]) => n === "pane.split")!;
+  expect(name).toBe("pane.split");
+  expect(args.mod).toBe("nocturne-git");
+  expect(args.props.show).toEqual({ kind: "commit", hash: v.data.commits[0].hash });
+  await press(v, ["p", { control: true, shift: true }]);
+  expect(commands.some(([n, a]) => n === "tab.new" && a.mod === "nocturne-git")).toBe(true);
+  // right-click menus offer it too
+  v.rowMenu("commits", 0, cx);
+  expect(v.popups.top.items.some((x: any) => x.key === "ctrl-p")).toBe(true);
+  await press(v, "escape");
+
+  // the pane: its props as the window sent them
+  const pane = new GitView();
+  propsNow = args.props;
+  pane.init(args.props, cx);
+  propsNow = null;
+  await settle(pane);
+  expect(pane.state).toBe("ready");
+  pane.render();
+  expect(pane.ctx()).toBe("main");
+  expect(pane.main.title.startsWith("Patch")).toBe(true);
+  commands.length = 0;
+  await press(pane, "q");
+  expect(commands.some(([n]) => n === "pane.close")).toBe(true);
+});
+
+test("ctrl-p on a working file and on review open those as panes", async () => {
+  sh("echo more >> f.txt");
+  const v = await open();
+  v.setPanel("files"); v.tree = false; v.moveTo(0); await settle(v);
+  expect(v.showNow()).toEqual({ kind: "file", path: "f.txt" });
+  v.setTab("review"); await settle(v);
+  expect(v.showNow()).toMatchObject({ kind: "review", scope: "work", path: "f.txt" });
+  sh("git checkout -q -- f.txt");
 });
 
 test("opened from GitHub ({pr, back}): q and esc put the GitHub window back", async () => {

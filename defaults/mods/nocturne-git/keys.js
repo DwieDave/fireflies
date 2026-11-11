@@ -44,6 +44,9 @@ export const BINDINGS = [
   ["global", ["}"], "context-more", "More diff context", ""],
   ["global", ["{"], "context-less", "Less diff context", ""],
   ["global", ["ctrl-w"], "whitespace", "Toggle whitespace in diffs", ""],
+  // Not lazygit's: its ctrl-p (custom patch options) isn't built here.
+  ["global", ["ctrl-p"], "open-pane", "Open the main view as a pane beside", ""],
+  ["global", ["ctrl-shift-p"], "open-pane-tab", "Open the main view in a new tab", ""],
 
   // every list
   ["list", ["j", "down"], "down", "Next item", ""],
@@ -305,7 +308,7 @@ export function keyName(e) {
   const m = e.modifiers ?? {};
   if (m.platform || m.function) return null;
   const k = String(e.key ?? "").toLowerCase();
-  if (m.control) return `ctrl-${k}`;
+  if (m.control) return m.shift ? `ctrl-shift-${k}` : `ctrl-${k}`;
   if (m.alt) return k === "up" || k === "down" ? `alt-${k}` : null;
   const c = e.key_char;
   if (c && c.length === 1 && c.trim()) return c;
