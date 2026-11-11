@@ -80,6 +80,8 @@ test:
     bun test scripts/nocturne-fireglow.test.ts
     # The notifications overview opens without a jump: its first seen frame has the height and key bar it settles at, with recording gpui stand-ins.
     bun test scripts/nocturne-notifications-open.test.ts
+    # The blue corner ticks on what's shown: the focused agent's firefly square, the shown space open and on the rail, with recording gpui stand-ins.
+    bun test scripts/nocturne-highlight.test.ts
     cargo test --locked
 
 docs-generate: build

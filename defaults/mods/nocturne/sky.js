@@ -71,10 +71,16 @@ function clock() {
   return { time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, date: `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}` };
 }
 
+// The open sky's firefly square: the dots of art/glow.svg span 8..34 of its
+// 40 px; the ticks sit 2 px off them.
+export const GLOW_SQUARE = { at: 8, size: 26 };
+const TICK_OUT = 2;
+
 /** The blue corner ticks: a 4 px corner in the accent at a thing's top left
  *  and one at its bottom right, `out` px outside its box (0: on its corners).
- *  What's shown wears them: the shown space on the rail, the focused agent in
- *  the open sky (around its name, over the moonlit path) and on the rail. */
+ *  What's shown wears them: the shown space (its row in the open sidebar, its
+ *  initials on the rail) and the focused agent (its firefly's square in the
+ *  open sky, its cell on the rail). */
 function cornerTicks(t, out = 3) {
   const tick = (pos) => div().absolute().size(4).border_color(t.accent)
     .when(pos === "top", (el) => el.left(-out).top(-out).border_t(1).border_l(1))
@@ -559,15 +565,19 @@ export default class Sky {
       // Done says so by shape too, not only by its green: a check on the mark.
       .when(a.status === "done", (el) => el.child(this.doneBadge(t).absolute().top(22).left(22)));
     // Only the firefly flies (flight.js), in its slot, leaving dust; its name stays put.
+    // The focused one's square wears the corner ticks: the glow's dotted
+    // square (art/glow.svg, 8..34 of its 40 px) where its slot holds still as it flies.
     const fly = div().relative().size(40).flex_none()
       .children(dust(a.status, h, () => div().child(dither(color, 1))))
+      .when(Boolean(a.focused), (el) => el.child(div().absolute().left(GLOW_SQUARE.at).top(GLOW_SQUARE.at).size(GLOW_SQUARE.size)
+        .children(cornerTicks(t, TICK_OUT))))
       .child(flyPath(body0, a.status, h, this.naming === a.address || Boolean(landing)));
     // The pane's name leads (the agent's own when nobody named it). Only
     // what the halo doesn't already say follows: its space when that isn't
     // the shown one; awake ones add their status on a second line, resting
     // ones keep to one. The focused one stands in a moonlit path: a dithered band
     // behind its name that thins out in three steps, and only its name is bright;
-    // its name wears the corner ticks, as the shown space does on the rail.
+    // its firefly's square wears the corner ticks, as its cell does on the rail.
     const title = givenName(a.address) ?? (a.program?.agent ? a.program.name : a.title || a.program?.name || a.address);
     const naming = this.naming === a.address;
     const resting = a.status === "idle" || lane < 32;
@@ -593,8 +603,7 @@ export default class Sky {
             ? h_flex().min_w(0).gap(4).items_center()
               .child(svg(CHECK).size(10).flex_none().text_color(t.done))
               .child(div().truncate().text_size(11).text_color(t.foreground).child(sub))
-            : div().truncate().text_size(11).text_color(t.dim).child(sub)))
-          .when(Boolean(a.focused), (el) => el.children(cornerTicks(t))));
+            : div().truncate().text_size(11).text_color(t.dim).child(sub))));
     const step = (o) => div().flex_1().h_full().relative().opacity(o).child(dither(t.ansi0, 1));
     const path = h_flex().absolute().top(4).bottom(4).left(x + 36).right(0).gap(2)
       .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
