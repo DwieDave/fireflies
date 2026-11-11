@@ -8,10 +8,14 @@
 //
 // Keys: ↓ / ↑ (ctrl-n / ctrl-p) walk the ssh config's hosts from the typed
 // field; enter adds the highlighted host (in the field: what's typed); esc closes.
+// As in every form (form-keys.js), tab / shift-tab walk the field, Add, each
+// Copy and "Open the setting" shown, and Esc, wrapping; the focused one has
+// the ring; enter / space press it, cmd-enter adds what's typed.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView, ScrollHandle } from "gpui-base";
-import { hc, exec, home, readTextFile, theme, props, closeOverlay } from "herdr";
+import { hc, exec, home, readTextFile, theme, props, closeOverlay, window as appWindow } from "herdr";
+import { formKey, formHints, ring } from "./form-keys.js";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
 const shellArg = (target) => /^[a-z0-9_@%+=:,./-]+$/i.test(target) ? target : "'" + target.replace(/'/g, "'\\''") + "'";
@@ -71,7 +75,7 @@ export default class MachineAdd extends View {
     this.input.on("change", (_e, cx) => { this.typed = this.input.value(); cx.notify(); });
     this.input.on("submit", (_e, cx) => this.add(this.typed, cx));
     this.inputFocused = true;
-    this.input.on("focus", (_e, cx) => { this.inputFocused = true; cx.notify(); });
+    this.input.on("focus", (_e, cx) => { this.inputFocused = true; this.stop = "input"; cx.notify(); });
     this.input.on("blur", (_e, cx) => { this.inputFocused = false; cx.notify(); });
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
@@ -79,6 +83,7 @@ export default class MachineAdd extends View {
     this.opened = {};
     this.handle = cx.focus_handle();
     this.at = -1; // the host row under the keyboard; -1: the typed field
+    this.stop = "input"; // the form's stop with the keyboard (stops())
     this.scroll = ScrollHandle.new();
     cx.spawn(async (cx) => {
       this.hosts = await parseConfig(await readTextFile(`${home()}/.ssh/config`).catch(() => null));
@@ -202,11 +207,11 @@ export default class MachineAdd extends View {
               .cursor_pointer()
               .hover((s) => s.opacity(0.88))
               .on_click((_e, cx) => {
-                exec("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"], { on: mac.name }).catch(() => null);
-                this.opened[target] = true;
+                this.openSetting(target);
                 cx.notify();
               })
-              .child(`Open the setting on ${mac.name}`),
+              .child(`Open the setting on ${mac.name}`)
+              .map((el) => ring(el, this.stop === `mac:${target}`, t.foreground, 7)),
           )
           .when(Boolean(this.opened[target]), (el) => el.child(div().text_size(12).text_color(t.dim).child("It's open on the Mac's screen."))),
       );
@@ -216,17 +221,54 @@ export default class MachineAdd extends View {
     closeOverlay(props().overlay);
   }
 
+  /** The form's stops in tab order (form-keys.js): the field, Add, the Copy
+   *  and "Open the setting" buttons shown, Esc. */
+  stops() {
+    const out = [{ id: "input", kind: "text" }, { id: "add", kind: "button", submit: true }];
+    for (const target of this.pending) if (typeof this.state[target] === "string" && this.state[target] !== "adding") out.push({ id: `copy:${target}`, kind: "button" });
+    for (const target of Object.keys(this.macs)) out.push({ id: `mac:${target}`, kind: "button" });
+    out.push({ id: "close", kind: "button" });
+    return out;
+  }
+
+  goStop(id) {
+    this.stop = id;
+    if (id === "input") this.input.focus(); else this.handle.focus();
+  }
+
+  press(id, cx) {
+    if (id === "add") this.add(this.typed, cx);
+    else if (id === "close") this.close();
+    else if (id.startsWith("copy:")) { const command = `hc machine add ${shellArg(id.slice(5))}`; cx.write_to_clipboard?.(command); this.copiedCommand = command; }
+    else if (id.startsWith("mac:")) this.openSetting(id.slice(4));
+  }
+
+  openSetting(target) {
+    exec("open", ["x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles"], { on: this.macs[target].name }).catch(() => null);
+    this.opened[target] = true;
+  }
+
   key(e, cx) {
     const k = e.key, m = e.modifiers ?? {};
     const ctrl = m.control && !m.platform && !m.alt;
     const n = (this.hosts ?? []).length;
+    const inField = this.stop === "input";
     if (k === "escape") this.close();
-    else if ((k === "down" || (ctrl && k === "n")) && n) this.at = Math.min(n - 1, this.at + 1);
-    else if ((k === "up" || (ctrl && k === "p")) && n) this.at = Math.max(-1, this.at - 1);
-    else if (k === "enter" && this.at >= 0 && this.hosts?.[this.at]) {
+    else if (inField && (k === "down" || (ctrl && k === "n")) && n) this.at = Math.min(n - 1, this.at + 1);
+    else if (inField && (k === "up" || (ctrl && k === "p")) && n) this.at = Math.max(-1, this.at - 1);
+    else if (inField && k === "enter" && !m.platform && !ctrl && this.at >= 0 && this.hosts?.[this.at]) {
       const target = this.hosts[this.at].alias;
       if (!this.isAdded(target)) this.add(target, cx);
-    } else return;
+    } else {
+      const stops = this.stops();
+      const i = Math.max(0, stops.findIndex((s) => s.id === this.stop));
+      const a = formKey(stops, i, k, m, e.key_char);
+      // The field's own keys; its plain enter adds what's typed (its submit).
+      if (!a || a.act === "type" || (a.act === "submit" && inField && !m.platform && !ctrl)) return;
+      if (a.act === "move") this.goStop(stops[a.to].id);
+      else if (a.act === "submit") this.add(this.typed, cx);
+      else if (a.act === "press") this.press(stops[i].id, cx);
+    }
     if (this.at >= 0) this.scroll.scroll_to_item(this.at);
     cx.stop_propagation();
     cx.notify();
@@ -241,7 +283,8 @@ export default class MachineAdd extends View {
         .id(`ma-copy-${target}`).px(10).py(4).rounded(6).bg(t.raised).text_color(t.foreground)
         .text_size(12).cursor_pointer().hover(s => s.bg(t.hover))
         .on_click((_e, cx) => { cx.write_to_clipboard(command); this.copiedCommand = command; cx.notify(); })
-        .child(this.copiedCommand === command ? "Copied" : "Copy"))));
+        .child(this.copiedCommand === command ? "Copied" : "Copy")
+        .map((el) => ring(el, this.stop === `copy:${target}`, t.accent, 6)))));
   }
 
   row(t, target, label, sub, picked = false) {
@@ -302,7 +345,7 @@ export default class MachineAdd extends View {
       .p(18)
       .bg(t.popover)
       .text_color(t.foreground)
-      .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child("Add a machine")).child(div().id("ma-esc").px(6).py(2).rounded(5).text_size(11).text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.close()).child("Esc")))
+      .child(h_flex().items_center().child(div().flex_1().text_size(15).font_semibold().child("Add a machine")).child(ring(div().id("ma-esc").px(6).py(2).rounded(5).text_size(11).text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.close()).child("Esc"), this.stop === "close", t.accent, 5)))
       .child(
         div()
           .pt(6)
@@ -339,7 +382,7 @@ export default class MachineAdd extends View {
               .items_center()
               .rounded(8)
               .border_1()
-              .border_color(this.inputFocused && this.at < 0 ? t.accent : t.input)
+              .border_color(this.stop === "input" && this.at < 0 ? t.accent : t.input)
               .bg(t.background)
               .text_size(13)
               .text_color(t.foreground),
@@ -359,9 +402,12 @@ export default class MachineAdd extends View {
               .when(!this.typed.trim(), (el) => el.opacity(0.4))
               .cursor_pointer()
               .on_click((_e, cx) => this.add(this.typed, cx))
-              .child("Add"),
+              .child("Add")
+              .map((el) => ring(el, this.stop === "add", t.accent, 8)),
           ),
       )
+      .child(h_flex().id("ma-keys").pt(8).gap(12).text_size(11.5).children(formHints(this.stops(), Math.max(0, this.stops().findIndex((s) => s.id === this.stop)), { mac: appWindow?.()?.platform === "macos", submit: "add", cancel: "close" })
+        .map(([k, w], i) => h_flex().id(`ma-k-${i}`).gap(4).child(div().text_color(t.muted).child(k)).child(div().text_color(t.dim).child(w)))))
       .when(Boolean(this.typed.trim() && this.state[this.typed.trim()]), (el) => el.child(div().pt(6).child(this.message(t, this.typed.trim()))));
   }
 }
