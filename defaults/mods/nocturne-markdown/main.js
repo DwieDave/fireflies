@@ -5,7 +5,8 @@
 //
 // Readable width, headings, code, tables, task lists, images next to the
 // file (copied into the app's cache so they can be drawn; a click opens one in
-// the image viewer, nocturne-image, as do links to pictures), links: web pages
+// the preview, nocturne-preview, as do links to pictures, PDFs, tables and the
+// other files it shows), links: web pages
 // open as the app opens them (settings `links`), other .md files open here
 // (‹ goes back), #anchors scroll to their heading, other files go to the
 // system. It reads the file again whenever it changes on disk (agents edit
@@ -35,8 +36,8 @@ const ART = "mods/nocturne/art";
 // Local images are copied here (under the app's folder, where image() reads).
 const IMAGES = "cache/nocturne-markdown";
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
-// Links to these open in the image viewer.
-const PICTURE = /\.(png|jpe?g|gif|svg|webp|bmp|ico|tiff?|avif|hei[cf])$/i;
+// Links to these open in the preview (nocturne-preview/kinds.js KINDS).
+const PREVIEW = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
 const WIDTH = 780;
 // Images are drawn at most this tall.
 const IMAGE_H = 360;
@@ -186,7 +187,7 @@ export default class Markdown extends View {
       if (to.path === this.path) { if (to.anchor) this.scrollTo(to.anchor); }
       else { this.history.push({ path: this.path, scrollY: this.scrollY }); this.open(to.path, cx, to.anchor); }
     } else if (to.kind === "web") run("app.open_url", { url: to.url });
-    else if (to.kind === "file" && PICTURE.test(to.path)) this.showImage(to.path);
+    else if (to.kind === "file" && PREVIEW.test(to.path)) this.showImage(to.path);
     else if (!this.on) {
       const opener = appWindow()?.platform === "windows" ? null : appWindow()?.platform === "macos" ? "open" : "xdg-open";
       if (opener) exec(opener, [to.kind === "file" ? to.path : to.url]).catch(() => null);
@@ -194,10 +195,10 @@ export default class Markdown extends View {
     cx.notify();
   }
 
-  /** A picture in the image viewer (nocturne-image), beside this viewer. */
+  /** A picture (or a PDF, a table, …) in the preview (nocturne-preview), beside this viewer. */
   showImage(path) {
     const me = this.pane();
-    run("image.open", { path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    run("preview.open", { path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
   back(cx) {
@@ -309,7 +310,7 @@ export default class Markdown extends View {
       const local = isLocalSource(img.src);
       const abs = local ? join(dirname(this.path), decodeURI(img.src.split(/[?#]/)[0])) : null;
       const name = abs ? this.images.get(abs) : null;
-      // A click shows it whole in the image viewer.
+      // A click shows it whole in the preview.
       if (name) return div().id(`md-imgbox-${i}-${j}`).flex().cursor_pointer().on_click((_e, cx) => { cx.stop_propagation(); this.showImage(abs); })
         .child(image(`${IMAGES}/${name}`).id(`md-img-${i}-${j}`).max_w_full().max_h(IMAGE_H));
       const label = name === undefined && local && !this.on ? "loading…" : img.alt || img.src;

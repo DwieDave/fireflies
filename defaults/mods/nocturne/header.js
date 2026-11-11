@@ -32,7 +32,7 @@ const MODS = {
   "nocturne-agents": ["Agents", "layers"], "nocturne-browser": ["Web", "monitor"],
   "nocturne-diff": ["Diff", "git-compare"], "nocturne-files": ["Files", "files"],
   "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
-  "nocturne-markdown": ["Markdown", "file-text"], "nocturne-image": ["Image", "image"],
+  "nocturne-markdown": ["Markdown", "file-text"], "nocturne-preview": ["Preview", "eye"],
   nocturne: ["Worktrees", "git-branch"],
 };
 // Header widths (px) at which parts give way.
@@ -69,9 +69,9 @@ export function paneName(p) {
   return givenName(p.terminal) ?? viewerName(p) ?? MODS[p.mod]?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
 }
 
-/** A file viewer (Markdown, image) goes by the file it shows (it notes that by
+/** A file viewer (Markdown, preview) goes by the file it shows (it notes that by
  *  slot in shared `<mod>.titles`). */
-const VIEWERS = new Set(["nocturne-markdown", "nocturne-image"]);
+const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview"]);
 function viewerName(p) {
   if (!VIEWERS.has(p.mod)) return null;
   const slot = p.props?.slot;

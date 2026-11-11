@@ -12,7 +12,8 @@ use serde_json::Value;
 pub enum Content {
     Terminal { terminal: String },
     Mod {
-        #[serde(rename = "mod")]
+        /// A renamed shipped mod's old name reads as its new one (`RENAMED_MODS`).
+        #[serde(rename = "mod", deserialize_with = "renamed_mod")]
         name: String,
         #[serde(default, skip_serializing_if = "Value::is_null")]
         props: Value,
@@ -28,6 +29,20 @@ pub enum Content {
     },
     /// An agent's terminal, full size (`"focused"`: the selected agent).
     Agent { agent: String },
+}
+
+/// Shipped mods that were renamed, old name first: panes and layouts saved
+/// with the old name open the new mod, and its `<old>.<command>` reaches it.
+pub const RENAMED_MODS: &[(&str, &str)] = &[("nocturne-image", "nocturne-preview")];
+
+/// The name a mod goes by now (`RENAMED_MODS`); any other name as it is.
+pub fn current_mod_name(name: &str) -> &str {
+    RENAMED_MODS.iter().find(|(old, _)| *old == name).map_or(name, |(_, new)| new)
+}
+
+fn renamed_mod<'de, D: serde::Deserializer<'de>>(d: D) -> Result<String, D::Error> {
+    let name = String::deserialize(d)?;
+    Ok(current_mod_name(&name).to_owned())
 }
 
 /// Which side of its node a floating block sits on. Left/right make it
@@ -865,6 +880,18 @@ pub fn snap(x: f32, y: f32, w: f32, h: f32) -> (Edge, Align) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_renamed_mods_old_name_opens_the_new_one() {
+        // A pane saved while the preview was the image viewer.
+        let old: Content = serde_json::from_str(r#"{"mod":"nocturne-image","props":{"path":"/a.png"}}"#).unwrap();
+        assert_eq!(old, Content::Mod { name: "nocturne-preview".into(), props: serde_json::json!({ "path": "/a.png" }) });
+        let other: Content = serde_json::from_str(r#"{"mod":"nocturne-files"}"#).unwrap();
+        assert_eq!(other, Content::Mod { name: "nocturne-files".into(), props: Value::Null });
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"mod":"nocturne-preview","props":{"path":"/a.png"}}"#);
+        assert_eq!(current_mod_name("nocturne-image"), "nocturne-preview");
+        assert_eq!(current_mod_name("nocturne-markdown"), "nocturne-markdown");
+    }
 
     #[test]
     fn floats_snap_to_the_nearest_edge_and_third() {

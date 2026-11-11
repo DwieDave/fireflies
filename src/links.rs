@@ -167,26 +167,37 @@ pub fn local_file(target: &Target) -> Option<PathBuf> {
 pub enum Viewer {
     /// `nocturne-markdown`: `.md`, `.markdown`.
     Markdown,
-    /// `nocturne-image`: pictures (the viewer converts what it can't draw).
-    Image,
+    /// `nocturne-preview`: files you look at but don't edit (pictures, PDFs,
+    /// tables, databases, patches, fonts, audio and video). Was `nocturne-image`.
+    Preview,
 }
 
 const MARKDOWN_EXTS: &[&str] = &["md", "markdown"];
-const IMAGE_EXTS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic", "heif"];
+/// The preview's kinds (defaults/mods/nocturne-preview/kinds.js KINDS): pictures,
+/// PDF, CSV/TSV, SQLite, patches.
+const PREVIEW_EXTS: &[&str] = &[
+    "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic", "heif", "pdf", "csv", "tsv", "sqlite", "sqlite3", "db",
+    "db3", "diff", "patch",
+];
+/// Fonts, audio and video: the preview shows them in macOS views (Quick Look,
+/// AVPlayerView), so elsewhere their links keep going to the system's app.
+const PREVIEW_MACOS_EXTS: &[&str] = &["ttf", "otf", "ttc", "woff", "woff2", "mp4", "m4v", "mov", "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "caf"];
 
 impl Viewer {
-    pub const ALL: [Viewer; 2] = [Viewer::Markdown, Viewer::Image];
+    pub const ALL: [Viewer; 2] = [Viewer::Markdown, Viewer::Preview];
 
     /// The viewer for a file, by its extension.
     pub fn of(path: &Path) -> Option<Viewer> {
         let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-        Viewer::ALL.into_iter().find(|v| v.extensions().contains(&ext.as_str()))
+        Viewer::ALL.into_iter().find(|v| v.takes(&ext, cfg!(target_os = "macos")))
     }
 
-    pub fn extensions(self) -> &'static [&'static str] {
+    /// Whether it shows files with this (lower-case) extension; `macos`: the
+    /// kinds only macOS views show count too.
+    fn takes(self, ext: &str, macos: bool) -> bool {
         match self {
-            Viewer::Markdown => MARKDOWN_EXTS,
-            Viewer::Image => IMAGE_EXTS,
+            Viewer::Markdown => MARKDOWN_EXTS.contains(&ext),
+            Viewer::Preview => PREVIEW_EXTS.contains(&ext) || (macos && PREVIEW_MACOS_EXTS.contains(&ext)),
         }
     }
 
@@ -194,7 +205,7 @@ impl Viewer {
     pub fn mod_name(self) -> &'static str {
         match self {
             Viewer::Markdown => "nocturne-markdown",
-            Viewer::Image => "nocturne-image",
+            Viewer::Preview => "nocturne-preview",
         }
     }
 
@@ -202,7 +213,7 @@ impl Viewer {
     pub fn tab_name(self) -> &'static str {
         match self {
             Viewer::Markdown => "markdown",
-            Viewer::Image => "image",
+            Viewer::Preview => "preview",
         }
     }
 }
@@ -608,6 +619,18 @@ mod tests {
     }
 
     #[test]
+    fn fonts_and_media_go_to_the_preview_on_macos_only() {
+        for ext in ["ttf", "woff2", "mp4", "mov", "mp3", "wav"] {
+            assert!(Viewer::Preview.takes(ext, true), "{ext}");
+            assert!(!Viewer::Preview.takes(ext, false), "{ext}: elsewhere the system's app plays it");
+        }
+        for ext in ["png", "pdf", "csv", "patch"] {
+            assert!(Viewer::Preview.takes(ext, false), "{ext}");
+        }
+        assert!(!Viewer::Preview.takes("md", true));
+    }
+
+    #[test]
     fn files_go_to_the_viewer_for_their_type() {
         let dir = std::env::temp_dir().join(format!("herdr-viewer-links-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("shots/my shots")).unwrap();
@@ -616,11 +639,11 @@ mod tests {
         for f in [&png, &spaced] {
             std::fs::write(f, "").unwrap();
         }
-        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp", "notes.md", "main.rs"] {
+        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp", "r.pdf", "s.CSV", "t.tsv", "u.sqlite", "v.db", "w.patch", "x.diff", "notes.md", "main.rs", "data.json"] {
             std::fs::write(dir.join("shots").join(name), "").unwrap();
         }
         let view = |link: &str, cwd: Option<&Path>| resolve(link, cwd).and_then(|t| viewable(&t));
-        let image = |p: &PathBuf| Some((Viewer::Image, p.clone()));
+        let image = |p: &PathBuf| Some((Viewer::Preview, p.clone()));
         // Plain, relative to the terminal's folder, path:line ignored, a trailing period.
         assert_eq!(view(png.to_str().unwrap(), None), image(&png));
         assert_eq!(view("shots/a.png", Some(&dir)), image(&png));
@@ -633,12 +656,13 @@ mod tests {
         let text = format!("saved {}/shots/my shots/Screen Shot 1.JPEG and done", dir.display());
         let found = &text[find(&text, text.find("Screen").unwrap()).unwrap()];
         assert_eq!(view(found, None), image(&spaced));
-        // Every image type the viewer takes; Markdown still goes to its own viewer.
-        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp"] {
-            assert_eq!(view(&format!("shots/{name}"), Some(&dir)).map(|(v, _)| v), Some(Viewer::Image), "{name}");
+        // Every image type the preview takes; Markdown still goes to its own viewer.
+        for name in ["b.gif", "c.webp", "d.svg", "e.heic", "f.avif", "g.tiff", "h.ico", "i.bmp", "r.pdf", "s.CSV", "t.tsv", "u.sqlite", "v.db", "w.patch", "x.diff"] {
+            assert_eq!(view(&format!("shots/{name}"), Some(&dir)).map(|(v, _)| v), Some(Viewer::Preview), "{name}");
         }
         assert_eq!(view("shots/notes.md", Some(&dir)).map(|(v, _)| v), Some(Viewer::Markdown));
         assert_eq!(view("shots/main.rs", Some(&dir)), None);
+        assert_eq!(view("shots/data.json", Some(&dir)), None, "text people edit stays with the editor");
         assert_eq!(view("shots/gone.png", Some(&dir)), None);
         assert_eq!(view("shots", Some(&dir)), None, "a folder is no picture");
         // Web images stay web pages.
@@ -646,7 +670,7 @@ mod tests {
         // A bare name in the terminal's folder.
         assert_eq!(bare_viewable("a.png", Some(&dir.join("shots"))), Some(png.clone()));
         assert_eq!(bare_viewable("main.rs", Some(&dir.join("shots"))), None);
-        assert_eq!(Viewer::Image.mod_name(), "nocturne-image");
+        assert_eq!(Viewer::Preview.mod_name(), "nocturne-preview");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

@@ -11,8 +11,9 @@
 // so later picks open in that same nvim instead of a new pane.
 //
 // Click a file: edit it (a Markdown file: read it in the Markdown viewer,
-// nocturne-markdown, alt-click edits it as text; a picture: the image viewer,
-// nocturne-image, alt-click opens the system's app). Click a folder: fold it;
+// nocturne-markdown, alt-click edits it as text; a picture, PDF, table, patch,
+// font or clip: the preview, nocturne-preview, alt-click opens the system's app,
+// or edits a table or patch). Click a folder: fold it;
 // click it again quickly: edit the folder. Keys while it has focus:
 //   j / k  ↓ ↑     move                 l →  unfold, or open a file
 //   h ←            fold, or go to the parent row
@@ -33,7 +34,9 @@ const editTool = (on) => (on ? EDIT : `${appHome()}/mods/nocturne-files/bin/${ED
  *  and what the other way (alt-click, `e`) does instead. */
 const VIEWERS = [
   { test: /\.(md|markdown)$/i, open: "markdown.open", other: "edit" },
-  { test: /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf])$/i, open: "image.open", other: "system" },
+  // The preview (nocturne-preview/kinds.js KINDS); tables and patches are text: e edits them.
+  { test: /\.(csv|tsv|diff|patch)$/i, open: "preview.open", other: "edit" },
+  { test: /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|sqlite3?|db3?|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i, open: "preview.open", other: "system" },
 ];
 export const viewerFor = (name) => VIEWERS.find((v) => v.test.test(name)) ?? null;
 /** Markdown files open in the viewer (markdown.open), not the editor. */

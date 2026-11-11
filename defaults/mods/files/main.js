@@ -130,12 +130,12 @@ export default class Files extends View {
   }
 
   /** A file the app has a viewer for opens there beside the focused pane: Markdown
-   *  (markdown.open; alt-click previews it here as text), a picture (image.open;
-   *  alt-click: the system's app). Every other file previews here as text. */
+   *  (markdown.open; alt-click previews it here as text), a picture, PDF, table,
+   *  patch, … (preview.open; alt-click: the system's app). Every other file previews here as text. */
   pick(path, cx, other) {
     const abs = `${this.root}/${path}`, on = this.on ? { on: this.on } : {};
-    if (/\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf])$/i.test(path)) {
-      run("image.open", { path: abs, ...(other ? { in: "system" } : {}), ...on });
+    if (/\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i.test(path)) {
+      run("preview.open", { path: abs, ...(other ? { in: "system" } : {}), ...on });
       return;
     }
     if (!other && /\.(md|markdown)$/i.test(path)) {

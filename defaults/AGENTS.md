@@ -284,24 +284,52 @@ the highlighted line shows where it will land.
   (‹ back), `#anchors` scroll, local images are drawn. Its bar: raw / rendered,
   edit ($EDITOR in a terminal beside), files. Commands for the shown viewers:
   `nocturne-markdown.down`, `.up`, `.top`, `.bottom`, `.raw`, `.back`, `.reload`.
-- **Images**: the same goes for pictures (`.png`, `.jpg` / `.jpeg`, `.gif`,
-  `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`, `.svg`, `.avif`, `.heic` / `.heif`):
-  a link to one in a terminal (any of the forms above, a bare `shot.png` in the
-  terminal's folder too; `path:42` is ignored) opens it in the image viewer
-  (`nocturne-image`) beside that pane, or shows the viewer already on it. The
-  files panes open a picked picture there (alt-click, or `e` in Nocturne's
-  files pane: the system's app); so do image links and drawn images in the
-  Markdown viewer. `image.open {path, in?, pane?, on?}` does it from a mod or an
-  agent; web image URLs stay web pages. It fits the pane; `+` / `-` zoom, `0`
-  fit, `1` 100%, `h j k l` / arrows / drag pan (scroll pans, Cmd/Ctrl-scroll
-  zooms at the pointer), `r` / `R` turn, `b` checker / dark background, `n` `]`
-  / `p` `[` the next / previous picture in its folder (← → too while it fits),
-  `o` the system's app, `y` copy the path, `f` files. Animated GIF and WebP
-  play. HEIC and AVIF are converted to a PNG copy in `cache/nocturne-image`
-  (macOS: sips, qlmanage; Linux: heif-convert, avifdec, ImageMagick or ffmpeg,
-  else it says what to install); the original is only read. It shows the file
-  again when it changes on disk. Commands for the shown viewers:
-  `nocturne-image.zoom_in`, `.zoom_out`, `.fit`, `.actual`, `.next`, `.prev`,
+- **Previews**: the same goes for files you look at but don't edit: pictures
+  (`.png`, `.jpg` / `.jpeg`, `.gif`, `.webp`, `.bmp`, `.tif` / `.tiff`, `.ico`,
+  `.svg`, `.avif`, `.heic` / `.heif`), PDFs (`.pdf`), tables (`.csv`, `.tsv`),
+  SQLite databases (`.sqlite`, `.sqlite3`, `.db`, `.db3`), patches (`.diff`,
+  `.patch`) and, on macOS, fonts (`.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`),
+  audio (`.mp3`, `.m4a`, `.aac`, `.wav`, `.aif` / `.aiff`, `.flac`, `.caf`) and
+  video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
+  above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
+  opens it in the preview (`nocturne-preview`, called `nocturne-image` before:
+  panes and keys saved with that name keep working) beside that pane, or shows
+  the preview already on it. The files panes open a picked one there
+  (alt-click, or `e` in Nocturne's files pane: the system's app; for a table or
+  patch the editor); so do such links and drawn images in the Markdown viewer.
+  `preview.open {path, in?, pane?, on?}` does it from a mod or an agent
+  (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
+  code and other text you edit stay with the editor. Per kind:
+  - pictures fit the pane; `+` / `-` zoom, `0` fit, `1` 100%, `h j k l` /
+    arrows / drag pan (scroll pans, Cmd/Ctrl-scroll zooms at the pointer), `r` /
+    `R` turn, `b` checker / dark background. Animated GIF and WebP play. HEIC
+    and AVIF are converted to a PNG copy in `cache/nocturne-preview` (macOS:
+    sips, qlmanage; Linux: heif-convert, avifdec, ImageMagick or ffmpeg, else it
+    says what to install).
+  - PDFs: on macOS the system's PDF view (scroll, `+` / `-` zoom, `0` fit
+    width, ← → / PageUp PageDown pages, `g` / `G` first / last; the bar shows
+    the page and page count); elsewhere one page at a time drawn by `pdftoppm`
+    when it's installed, zoomed and panned as a picture.
+  - tables: the header row and row numbers stay put, numbers align right;
+    `j k` / arrows rows, `J K` / PageUp PageDown pages, `g` / `G` top / bottom,
+    `h l` / ← → columns, scroll (Shift or sideways: across). The separator is
+    found (`,` `;` tab `|`); the first 50 000 rows and 200 columns of the first
+    4 MB are shown, and the bar says what's left out.
+  - SQLite: its tables and views as chips (`t` / `T` next / previous), each
+    one's first 1 000 rows as a table; read through `sqlite3 -readonly`, so it
+    needs sqlite3.
+  - patches (git's, `diff -u`'s, `git format-patch` mails): colored per file as
+    the diff pane colors them; `}` / `{` next / previous file.
+  - fonts: Quick Look's specimen. Audio and video: the system's player (it
+    never plays by itself; Space plays / pauses while the preview has focus).
+  The bar: kind, name, facts (size, pages, rows, length), the place among the
+  folder's files of the same kind (`n` `]` / `p` `[` next / previous; ← → too
+  for a fitted picture), the kind's controls, files (`f`), open (`o`, the
+  system's app), copy (`y`, the path). What it can't show says why and offers
+  the system's app. The original is only read (pictures, PDFs and fonts are
+  drawn from a copy in its cache) and it shows the file again when it changes
+  on disk. Commands for the shown previews: `nocturne-preview.zoom_in`,
+  `.zoom_out`, `.fit`, `.actual`, `.next`, `.prev`, `.page_next`, `.page_prev`,
   `.rotate`, `.background`, `.reload`.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
@@ -953,7 +981,8 @@ The main ones:
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a
   heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
   machine the file is on; the reply says `opened` and the absolute `path`),
-  `image.open {path, in?, pane?, on?}` (the same for a picture, in the image viewer),
+  `preview.open {path, in?, pane?, on?}` (the same for a picture, PDF, table, SQLite database,
+  patch, font or clip, in the preview; `image.open` is the same command),
   `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Herdr sends nothing itself), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).

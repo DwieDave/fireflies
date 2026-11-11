@@ -55,8 +55,16 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const logic = await load("nocturne-image/logic.js");
-const { sizeFromFile, isImage, formatOf, extension, hexBytes, sniff, svgSize, plan, cantShow, siblings, stepIn, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, fileSize, wrapper, sharpness, turned, PAD } = logic;
+const kinds = await load("nocturne-preview/kinds.js");
+const imageLogic = await load("nocturne-preview/image.js", kinds);
+const tableLogic = await load("nocturne-preview/table.js");
+const diffLogic = await load("nocturne-preview/diff.js");
+const { parse: parseTable, ...tableRest } = tableLogic;
+const { parse: parsePatch, ...diffRest } = diffLogic;
+/** Everything main.js imports, as its imports name it. */
+const logic = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
+const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
+const { extension, siblings, stepIn, fileSize } = kinds;
 
 // ---- type dispatch
 
@@ -67,9 +75,11 @@ test("pictures are told apart by extension, any case", () => {
   expect(extension("/a.b/c")).toBe("");
 });
 
-test("nocturne-files: Markdown to its viewer, pictures to theirs, alt-click / e the other way", async () => {
+test("nocturne-files: Markdown to its viewer, pictures to the preview, alt-click / e the other way", async () => {
   const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js");
-  expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "image.open", "image.open", null]);
+  expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
+  expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
+  expect([viewerFor("a.json"), viewerFor("a.yaml"), viewerFor("Cargo.toml")]).toEqual([null, null, null]);
   expect([isMarkdown("a.md"), isMarkdown("a.png")]).toEqual([true, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }, { pane: "pf", tab: "tab1", mod: "nocturne-files" }];
@@ -88,17 +98,17 @@ test("nocturne-files: Markdown to its viewer, pictures to theirs, alt-click / e 
   view.key({ key: "e" }, cx);
   view.key({ key: "enter" }, cx);
   expect(commands).toEqual([
-    ["image.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
-    ["image.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
-    ["image.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
-    ["image.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
   ]);
   expect(edits).toEqual([]);
   view.pick("main.rs", cx);
   expect(edits).toEqual(["main.rs"]);
 });
 
-test("the files mod opens pictures in the viewer; alt-click: the system's app", async () => {
+test("the files mod opens pictures and PDFs in the preview; alt-click: the system's app", async () => {
   const { default: Files } = await load("files/main.js");
   const view: any = Object.create(Files.prototype);
   Object.assign(view, { root: "/repo", on: "box" });
@@ -109,18 +119,22 @@ test("the files mod opens pictures in the viewer; alt-click: the system's app", 
   view.pick("a.gif", {}, true);
   view.pick("README.md", {}, false);
   view.pick("a.txt", {}, false);
+  view.pick("r.pdf", {}, false);
+  view.pick("c.json", {}, false);
   expect(commands).toEqual([
-    ["image.open", { path: "/repo/a.gif", on: "box" }],
-    ["image.open", { path: "/repo/a.gif", in: "system", on: "box" }],
+    ["preview.open", { path: "/repo/a.gif", on: "box" }],
+    ["preview.open", { path: "/repo/a.gif", in: "system", on: "box" }],
     ["markdown.open", { path: "/repo/README.md", on: "box" }],
+    ["preview.open", { path: "/repo/r.pdf", on: "box" }],
   ]);
-  expect(shown).toEqual(["a.txt"]);
+  expect(shown).toEqual(["a.txt", "c.json"]);
 });
 
 test("the pane header names a viewer by the file it shows", async () => {
   const src = await readFile(new URL("../defaults/mods/nocturne/header.js", import.meta.url), "utf8");
-  expect(src).toContain('"nocturne-image": ["Image", "image"]');
-  await readFile(new URL("../defaults/mods/workspace-chrome/image.svg", import.meta.url), "utf8");
+  expect(src).toContain('"nocturne-preview": ["Preview", "eye"]');
+  expect(src).toContain('new Set(["nocturne-markdown", "nocturne-preview"])');
+  await readFile(new URL("../defaults/mods/workspace-chrome/eye.svg", import.meta.url), "utf8");
 });
 
 // ---- what the first bytes say
@@ -275,13 +289,13 @@ test("the wrapper SVG turns a picture (and its EXIF orientation) and draws vecto
 // ---- the view
 
 test("the viewer: a fitted picture, keys zoom, pan, step through the folder and toggle the background", async () => {
-  const { default: ImageView } = await load("nocturne-image/main.js", logic);
-  const view: any = Object.create(ImageView.prototype);
+  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const view: any = Object.create(PreviewView.prototype);
   const focus = { focus() {}, is_focused: () => true };
   Object.assign(view, {
-    path: "/shots/b.png", on: null, slot: "s1", handle: focus, port: { width: 800, height: 600 }, checker: true, copied: 0,
+    path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: focus, port: { width: 800, height: 600 }, checker: true, copied: 0,
     names: ["a.png", "b.png", "c.png"], info: { format: "png", width: 1600, height: 1200, bytes: 2048 },
-    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-image/1-2048.png", view: null, gen: 1,
+    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-preview/1-2048.png", view: null, gen: 1,
   });
   const opened: string[] = [];
   view.open = (p: string) => opened.push(p);
@@ -289,7 +303,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   const cx = { notify() {}, stop_propagation() {} };
   const tree: any = view.render();
   const pic = walk(tree).find((e) => e.kind === "image");
-  expect(pic.arg).toBe("cache/nocturne-image/1-2048.png");
+  expect(pic.arg).toBe("cache/nocturne-preview/1-2048.png");
   const scale = Math.min((800 - 2 * PAD) / 1600, (600 - 2 * PAD) / 1200);
   expect(call(pic, "w")).toEqual([1600 * scale]);
   expect(call(pic, "left")).toEqual([(800 - 1600 * scale) / 2]);
@@ -317,7 +331,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   view.key({ key: "r", modifiers: {} }, cx);
   expect(view.view.rot).toBe(1);
   view.key({ key: "o", modifiers: {} }, cx);
-  expect(commands.at(-1)).toEqual(["image.open", { path: "/shots/b.png", in: "system" }]);
+  expect(commands.at(-1)).toEqual(["preview.open", { path: "/shots/b.png", in: "system" }]);
   // ⌘ + scroll zooms at the pointer; plain scroll pans only when there's somewhere to go.
   view.view = { fit: true, scale, x: 0, y: 0, rot: 0 };
   view.wheel({ modifiers: {}, delta: { x: 0, y: -50 } }, cx);
@@ -326,19 +340,19 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   expect(view.view.scale).toBeCloseTo(scale * Math.E);
   // The header learns the file's name and the app its path.
   view.title();
-  world.panes = [{ pane: "p9", mod: "nocturne-image", props: { slot: "s1" } }];
+  world.panes = [{ pane: "p9", mod: "nocturne-preview", props: { slot: "s1" } }];
   view.title();
-  expect(world.shared["nocturne-image.titles"]).toEqual({ s1: "b.png" });
-  expect(world.shared["nocturne-image.paths"]).toEqual({ s1: "/shots/b.png" });
+  expect(world.shared["nocturne-preview.titles"]).toEqual({ s1: "b.png" });
+  expect(world.shared["nocturne-preview.paths"]).toEqual({ s1: "/shots/b.png" });
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
-  const { default: ImageView } = await load("nocturne-image/main.js", logic);
-  const view: any = Object.create(ImageView.prototype);
+  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const view: any = Object.create(PreviewView.prototype);
   Object.assign(view, {
-    path: "/shots/s.png", on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
+    path: "/shots/s.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
     names: [], info: { format: "png", width: 3752, height: 2078, bytes: 2048 },
-    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-image/1-2048.png", view: null, gen: 1,
+    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/nocturne-preview/1-2048.png", view: null, gen: 1,
   });
   view.draw = () => {};
   const cx = { notify() {}, stop_propagation() {} };
@@ -371,10 +385,10 @@ test("the bar's fit and 100% do what they say, in either state, and stay put", a
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {
-  const { default: ImageView } = await load("nocturne-image/main.js", logic);
-  const view: any = Object.create(ImageView.prototype);
-  Object.assign(view, { path: "/x/a.heic", handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
+  const { default: PreviewView } = await load("nocturne-preview/main.js", logic);
+  const view: any = Object.create(PreviewView.prototype);
+  Object.assign(view, { path: "/x/a.heic", kind: "image", how: { how: "image" }, handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
-  expect(text).toEqual(expect.arrayContaining(["Can't show this picture", cantShow("heic", "linux")]));
+  expect(text).toEqual(expect.arrayContaining(["Can't preview this picture", cantShow("heic", "linux"), "open in its app  o"]));
   expect(walk(view.render()).some((e) => e.kind === "image")).toBe(false);
 });

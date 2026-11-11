@@ -167,7 +167,7 @@ pub(crate) fn current(action: &str) -> String {
 fn gone_mod(action: &str) -> bool {
     let name = action.split_once(':').map_or(action, |(n, _)| n);
     crate::commands::find(name).is_none()
-        && name.split_once('.').is_some_and(|(m, _)| !m.starts_with("frame-") && !crate::mods::mods_dir().join(m).is_dir())
+        && name.split_once('.').is_some_and(|(m, _)| !m.starts_with("frame-") && !crate::mods::mods_dir().join(crate::layout::current_mod_name(m)).is_dir())
 }
 
 fn valid_action(action: &str) -> bool {

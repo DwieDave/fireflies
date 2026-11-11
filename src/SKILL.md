@@ -47,11 +47,14 @@ pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It
 re-renders by itself when you edit the file, so open it once. They can also
 Cmd/Ctrl-click a `.md` path in terminal output.
 
-To show them a picture (a screenshot you took, a chart you drew), `herdr-app
-do image.open --path /abs/path/shot.png` opens it beside the focused pane,
-fitted (png, jpg, gif, webp, svg, heic, ...). It shows the file again when you
-overwrite it, so open it once and keep saving to the same path. Cmd/Ctrl-click
-on an image path in terminal output does the same.
+To show them a file to look at (a screenshot you took, a chart you drew, a
+PDF or CSV you generated, a patch, a SQLite database), `herdr-app do
+preview.open --path /abs/path/shot.png` opens it beside the focused pane in the
+preview: pictures fitted, PDFs paged, CSV/TSV and database tables as tables,
+patches colored (on macOS fonts and audio/video too; `image.open` is the same).
+It shows the file again when you overwrite it, so open it once and keep saving
+to the same path. Cmd/Ctrl-click on such a path in terminal output does the
+same. JSON, YAML, source code and other text stay in the editor.
 
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the

@@ -1,21 +1,15 @@
-// The image viewer's decisions, as plain functions (no app calls), so
-// scripts/nocturne-image.test.ts can check them: which files are pictures,
-// what a file's first bytes say it is and how big, whether the app draws it
-// or it needs converting first, the folder's order for next / previous, and
-// the zoom and pan arithmetic.
+// The preview's pictures, as plain functions (no app calls), so
+// scripts/nocturne-preview.test.ts can check them: what a file's first bytes
+// say it is and how big, whether the app draws it or it needs converting
+// first, and the zoom and pan arithmetic.
 
-/** Extensions the viewer opens (the app's links::Viewer::Image list). */
-export const IMAGE_EXT = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic", "heif"];
+import { KINDS, extension } from "./kinds.js";
+
+/** Extensions of pictures (kinds.js KINDS.image). */
+export const IMAGE_EXT = KINDS.image;
 const EXT_FORMAT = { jpg: "jpeg", tif: "tiff", heif: "heic" };
 
-/** The lower-case extension of a path ("" without one). */
-export function extension(path) {
-  const name = String(path ?? "").split("/").pop();
-  const dot = name.lastIndexOf(".");
-  return dot > 0 ? name.slice(dot + 1).toLowerCase() : "";
-}
-
-/** Whether a path names a picture the viewer opens. */
+/** Whether a path names a picture. */
 export const isImage = (path) => IMAGE_EXT.includes(extension(path));
 
 /** The format a path's extension claims: png, jpeg, gif, webp, bmp, tiff, ico, svg, avif, heic. */
@@ -219,41 +213,6 @@ export function cantShow(format, platform) {
   return `Nothing on this computer converts ${name}`;
 }
 
-/** Names in a folder, the pictures among them in the order a person reads them
- *  (case-insensitive, numbers by value: shot-2 before shot-10), hidden ones out
- *  unless `current` is hidden. */
-export function siblings(names, current) {
-  const hidden = String(current ?? "").startsWith(".");
-  return [...new Set(names)].filter((n) => n && isImage(n) && (hidden || !n.startsWith(".")))
-    .sort((a, b) => natural(a, b) || (a < b ? -1 : a > b ? 1 : 0));
-}
-
-/** Compares names as a person reads them: case aside, runs of digits by value.
- *  (The app's script engine has no Intl.Collator.) */
-export function natural(a, b) {
-  const parts = (s) => String(s).toLowerCase().match(/\d+|\D+/g) ?? [];
-  const x = parts(a), y = parts(b);
-  for (let i = 0; i < Math.min(x.length, y.length); i++) {
-    if (x[i] === y[i]) continue;
-    const dx = /^\d/.test(x[i]), dy = /^\d/.test(y[i]);
-    if (dx && dy) return Number(x[i]) - Number(y[i]) || x[i].length - y[i].length;
-    return x[i] < y[i] ? -1 : 1;
-  }
-  return x.length - y.length;
-}
-
-/** The name `step` places from `current` in `list` (wrapping around); `current`
- *  gone from the list: where it would have been. */
-export function stepIn(list, current, step) {
-  if (!list.length) return null;
-  let i = list.indexOf(current);
-  if (i < 0) {
-    const after = list.findIndex((n) => natural(n, current) > 0);
-    i = (after < 0 ? list.length : after) - (step > 0 ? 1 : 0);
-  }
-  return list[(((i + step) % list.length) + list.length) % list.length];
-}
-
 // ---- zoom and pan
 // A view: { fit, scale, x, y, rot }. scale: screen px per image px; x / y: the
 // picture's centre from the viewport's centre, in screen px; rot: quarter
@@ -320,16 +279,6 @@ export function placed(view, img, port) {
 
 /** "42%", "100%", "1 600%". */
 export const percent = (scale) => `${Math.round(scale * 100)}%`;
-
-/** "812 B", "4.2 KB", "13 MB". */
-export function fileSize(bytes) {
-  if (!(bytes >= 0)) return "";
-  if (bytes < 1024) return `${bytes} B`;
-  const units = ["KB", "MB", "GB"];
-  let v = bytes / 1024, u = 0;
-  while (v >= 1024 && u < units.length - 1) { v /= 1024; u++; }
-  return `${v < 10 ? v.toFixed(1) : Math.round(v)} ${units[u]}`;
-}
 
 /** The SVG that draws a cached picture `href` (absolute) turned `rot` quarter turns
  *  (plus its EXIF `orientation`, which the SVG renderer doesn't apply) at `k` times its

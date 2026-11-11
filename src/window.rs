@@ -2844,7 +2844,7 @@ impl AppWindow {
     }
 
     /// A file one of the app's viewers shows (`links::Viewer`: a terminal's or a
-    /// mod's link, `markdown.open`, `image.open`): that viewer mod beside `pane`
+    /// mod's link, `markdown.open`, `preview.open` (`image.open`)): that viewer mod beside `pane`
     /// (default: the focused one; with none, a tab of its own), or the viewer in
     /// that tab already showing it; the system's app with `in` "system" or
     /// without the viewer. A relative path is the pane's folder's. `extra`: more
@@ -3277,9 +3277,9 @@ impl AppWindow {
             return self.run_as(n, args, person, window, cx);
         }
         let Some(command) = crate::commands::find(name) else {
-            // `<mod>.<command>` goes to that mod's nextCommand().
+            // `<mod>.<command>` goes to that mod's nextCommand() (a renamed mod's old name to it).
             if let Some((m, c)) = name.split_once('.')
-                && mods::send_command(m, c)
+                && mods::send_command(crate::layout::current_mod_name(m), c)
             {
                 return json!({ "ok": true });
             }
@@ -4055,8 +4055,9 @@ impl AppWindow {
                 self.answer(r);
                 return;
             }
-            "markdown.open" | "image.open" => {
-                let viewer = if name == "image.open" { Viewer::Image } else { Viewer::Markdown };
+            // image.open: the preview's name when it showed pictures only.
+            "markdown.open" | "preview.open" | "image.open" => {
+                let viewer = if name == "markdown.open" { Viewer::Markdown } else { Viewer::Preview };
                 let path = Self::owned(a, "path").unwrap_or_default();
                 let extra = match Self::arg(a, "anchor").filter(|a| !a.is_empty() && viewer == Viewer::Markdown) {
                     Some(anchor) => json!({ "anchor": anchor.trim_start_matches('#').to_lowercase() }),
