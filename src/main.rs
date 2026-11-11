@@ -33,6 +33,7 @@ mod setup;
 mod sound;
 mod spawn;
 mod sprites;
+mod syntax;
 mod feedback;
 mod terminal;
 mod update;

@@ -28,6 +28,16 @@ export function readTextFile(path: string, options?: { on?: string | null }): Pr
  * Rejects on a stale snapshot; existing files are replaced atomically. */
 export function writeTextFile(path: string, text: string, expected: string | null): Promise<null>;
 
+/** Syntax spans of `text` from a tree-sitter grammar: `[start, end, name]`, ordered and
+ *  non-overlapping, offsets in JavaScript string units. `name` is the grammar's capture name
+ *  (`keyword`, `function.method`, `string.escape`, `comment`, `type.builtin`, ...): color the
+ *  root name and let dotted ones fall back to it. `language` is a language id, alias or a path
+ *  (`"rust"`, `"ts"`, `"src/main.rs"`). Empty for languages without a grammar and text over 2 MB. */
+export function highlight(text: string, language: string): [number, number, string][];
+/** The editor's language id for a path or name (`"src/a.tsx"` → `"tsx"`, `"Cargo.lock"` →
+ *  `"toml"`), or null when unknown. */
+export function languageOf(pathOrName: string): string | null;
+
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
  *  `on`, its login/interactive shell when supported), at most once a minute per machine.

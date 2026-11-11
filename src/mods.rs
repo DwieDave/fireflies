@@ -1048,6 +1048,11 @@ fn module(inst: Instance, copy: u64) -> HostModule {
                 Ok(path.map(|p| HostValue::Str(p.to_string_lossy().into_owned())).unwrap_or(HostValue::Null))
             })
         })
+        .function("highlight", |a| {
+            let spans = crate::syntax::highlight(a.string(0)?, a.string(1)?);
+            Ok(to_host(&Value::Array(spans.into_iter().map(|(s, e, n)| json!([s, e, n])).collect())))
+        })
+        .function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())))
         .function("themes", |_| {
             let list: Vec<Value> = crate::settings::themes().into_iter().map(|(name, colors)| json!({ "light": crate::settings::theme_is_light(&name), "name": name, "colors": colors })).collect();
             Ok(to_host(&Value::Array(list)))
@@ -1170,6 +1175,10 @@ fn module(inst: Instance, copy: u64) -> HostModule {
 /// The runtime's base layer, themed from settings.json.
 pub fn init(cx: &mut App) {
     gpui_shell::init(cx);
+    // Code editors color with tree-sitter (src/syntax.rs) where a grammar exists.
+    gpui_shell::set_host_highlighters(std::rc::Rc::new(|language: &str| {
+        crate::syntax::Highlighter::new(language).map(|h| Box::new(h) as Box<dyn gpui_base::input::InputHighlighter>)
+    }));
     apply_theme(cx);
 }
 

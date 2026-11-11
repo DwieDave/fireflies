@@ -10,6 +10,26 @@ use syntect::{
     util::LinesWithEndings,
 };
 
+// HERDR: the host can install its own highlighters (tree-sitter in herdr-app);
+// syntect stays the fallback for languages the host has no grammar for.
+thread_local! {
+    static HOST_HIGHLIGHTERS: std::cell::RefCell<Option<gpui_base::input::InputHighlighterFactory>> =
+        const { std::cell::RefCell::new(None) };
+}
+
+/// Installs the host's highlighter factory for every code editor created
+/// afterwards. It is asked first; `None` falls back to the built-in syntect one.
+pub fn set_host_highlighters(factory: gpui_base::input::InputHighlighterFactory) {
+    HOST_HIGHLIGHTERS.with_borrow_mut(|h| *h = Some(factory));
+}
+
+/// The highlighter for an editor of `language`: the host's, else syntect's.
+pub(crate) fn editor_highlighter(language: &str) -> Option<Box<dyn gpui_base::input::InputHighlighter>> {
+    let host = HOST_HIGHLIGHTERS.with_borrow(|h| h.clone());
+    host.and_then(|f| f(language))
+        .or_else(|| SyntectHighlighter::new(language).map(|h| Box::new(h) as Box<dyn gpui_base::input::InputHighlighter>))
+}
+
 /// Loading the default syntax definitions deserializes a few megabytes, so share
 /// one set across every highlighter instance.
 static SYNTAX_SET: LazyLock<SyntaxSet> = LazyLock::new(SyntaxSet::load_defaults_newlines);
