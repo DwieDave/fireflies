@@ -5,7 +5,7 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
-import { dither, stop } from "./draw.js";
+import { dither, stop, edgeRow } from "./draw.js";
 import { keyLabel } from "./keys.js";
 
 const ROW = 20;
@@ -149,13 +149,13 @@ export class Popups {
 
   frame(t, id, title, w, x, y, body, { danger = false, right = null } = {}) {
     const edge = danger ? t.ansi1 : t.accent;
-    return v_flex().id(id).absolute().left(x).top(y).w(w).bg(t.background).border(1).border_color(edge)
+    return v_flex().id(id).absolute().left(x).top(y).w(w).bg(t.background).border_l(1).border_r(1).border_color(edge)
       .on_mouse_down("left", stop)
-      .child(h_flex().absolute().top(-7).left(8).right(8).h(13).items_center().text_size(11)
-        .child(div().px(4).min_w(0).max_w(w - (right ? 110 : 30)).truncate().bg(t.background).text_color(danger ? t.ansi1 : t.foreground).child(title))
-        .child(div().flex_1().min_w(8))
-        .when(Boolean(right), (el) => el.child(div().px(4).bg(t.background).text_color(t.dim).child(right))))
-      .child(body);
+      .child(body)
+      .child(edgeRow(t, `${id}-top`, edge, "top",
+        div().min_w(0).max_w(w - (right ? 120 : 40)).truncate().text_color(danger ? t.ansi1 : t.foreground).child(title),
+        right ? div().text_color(t.dim).child(right) : null))
+      .child(edgeRow(t, `${id}-bottom`, edge, "bottom", null, null));
   }
 
   center(size, w, h) {
