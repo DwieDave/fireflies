@@ -311,6 +311,9 @@ struct Copy {
     missing: bool,
 }
 
+/// Counts overlays as they open (Overlay::opened).
+static OVERLAYS_OPENED: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
 #[derive(Clone, Copy, PartialEq)]
 enum OverlayKind {
     Dialog,
@@ -398,6 +401,8 @@ struct Overlay {
     bare: bool,
     /// A window: where its top left is (None: centered) and its name (`key`).
     place: Option<Point<Pixels>>,
+    /// When it opened, for `overlay.focus`'s order (pressing reorders `overlays`).
+    opened: u64,
     key: Option<String>,
     /// A window people can resize by its edges (`resizable`).
     resize: Option<movable::Resize>,
@@ -4071,6 +4076,20 @@ impl AppWindow {
                 }
                 cx.notify();
             }
+            "overlay.focus" => {
+                let dir = Self::arg(a, "dir").unwrap_or("next").to_owned();
+                if let Err(e) = self.focus_window_cmd(Self::owned(a, "id"), &dir, window, cx) {
+                    return self.fail(e);
+                }
+                return;
+            }
+            "overlay.move" => {
+                let n = |k: &str| a.get(k).and_then(|v| v.as_f64().or_else(|| v.as_str()?.trim().parse().ok())).unwrap_or(0.0) as f32;
+                if let Err(e) = self.move_window_cmd(Self::owned(a, "id"), [n("dx"), n("dy"), n("dw"), n("dh")], window.viewport_size(), window, cx) {
+                    return self.fail(e);
+                }
+                return;
+            }
             "overlay.close" => {
                 let id = Self::owned(a, "id").or_else(|| self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.id.clone()));
                 if let Some(id) = id {
@@ -4456,6 +4475,7 @@ impl AppWindow {
             modal: spec.get("modal").and_then(Value::as_bool).unwrap_or(false),
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
             place,
+            opened: OVERLAYS_OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             key: key.clone(),
             resize,
             sizes,

@@ -370,6 +370,101 @@ impl AppWindow {
         true
     }
 
+    /// `overlay.focus`: the keyboard to a window (`id`), or to the next or
+    /// previous one (`dir`) in the order they opened; past the last (or
+    /// `dir: "none"`) back to the pane. It comes to the front; a mod gets
+    /// `focus` from `nextCommand()`. Not while a dialog or popup holds the keys.
+    pub(super) fn focus_window_cmd(&mut self, id: Option<String>, dir: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<(), String> {
+        if self.overlays.iter().any(|o| o.kind.modal_keys()) {
+            return Err("a dialog holds the keyboard".into());
+        }
+        let mut wins: Vec<(u64, String)> = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).map(|o| (o.opened, o.id.clone())).collect();
+        wins.sort();
+        let to = match id {
+            Some(id) if wins.iter().any(|(_, w)| *w == id) => Some(id),
+            Some(id) => return Err(format!("no window {id:?}")),
+            None => {
+                let at = wins.iter().position(|(_, w)| self.window_has_keys(w, window, cx));
+                cycle(at, wins.len(), dir)?.map(|i| wins[i].1.clone())
+            }
+        };
+        match to {
+            Some(id) => self.give_window_keys(&id, window, cx),
+            None => self.restore_focus(window, cx),
+        }
+        cx.notify();
+        Ok(())
+    }
+
+    /// The window (or something in it) holds the keyboard.
+    pub(super) fn window_has_keys(&self, id: &str, window: &Window, cx: &App) -> bool {
+        self.overlays.iter().find(|o| o.id == id).is_some_and(|o| o.focus.contains_focused(window, cx))
+    }
+
+    fn give_window_keys(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
+        self.raise_window(id, cx);
+        if id == "terminal-peek" {
+            return self.focus_float_view(window, cx);
+        }
+        let Some(o) = self.overlays.iter().find(|o| o.id == id) else { return };
+        // A window of blocks: its first terminal.
+        if let Some(t) = o.layout.as_ref().and_then(|l| l.visible_blocks().into_iter().find_map(|n| self.terms.get(&n.id))) {
+            return t.focus.focus(window, cx);
+        }
+        crate::native_view::release_keyboard(window);
+        o.focus.focus(window, cx);
+        if let Some(copy) = self.copies.get(&o.slot) {
+            mods::send_command_to(copy.id, "focus");
+        }
+    }
+
+    /// `overlay.move`: moves a window by `dx`/`dy` and, when it's resizable,
+    /// sizes it by `dw`/`dh` (design px, its right and bottom edges; within
+    /// its limits). Default: the window holding the keyboard, else the top one.
+    /// Kept like a drag (under its key).
+    pub(super) fn move_window_cmd(&mut self, id: Option<String>, d: [f32; 4], room: Size<Pixels>, window: &Window, cx: &mut Context<Self>) -> Result<(), String> {
+        let id = match id {
+            Some(id) => id,
+            None => {
+                let wins = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window);
+                let held = wins.clone().find(|o| o.focus.contains_focused(window, cx));
+                held.or_else(|| wins.last()).map(|o| o.id.clone()).ok_or("no window open")?
+            }
+        };
+        let b = self.bounds.borrow().get(&format!("overlay:{id}")).copied().ok_or_else(|| format!("no window {id:?} on screen"))?;
+        let o = self.overlays.iter_mut().find(|o| o.id == id && o.kind == OverlayKind::Window).ok_or_else(|| format!("no window {id:?}"))?;
+        let zoom = f32::from(settings::z(1.0));
+        let [dx, dy, dw, dh] = d.map(|v| v * zoom);
+        let (mut x, mut y) = (f32::from(b.origin.x) + dx, f32::from(b.origin.y) + dy);
+        if dw != 0.0 || dh != 0.0 {
+            let r = o.resize.ok_or("this window doesn't resize")?;
+            let (rx, ry, w, h) = r.resized(
+                (x, y, f32::from(b.size.width), f32::from(b.size.height)),
+                [false, false, true, true],
+                (dw, dh),
+                (f32::from(room.width), f32::from(room.height)),
+                zoom,
+            );
+            (x, y) = (rx, ry);
+            o.size = size((w / zoom).max(1.01), (h / zoom).max(1.01));
+            o.fit = false;
+            if let Some(k) = &o.key {
+                remember_size(k, o.size);
+            }
+        }
+        // Partly on screen, as a drag leaves it.
+        let keep = KEEP_SHOWN;
+        let x = x.min(f32::from(room.width) - keep).max(keep - f32::from(b.size.width));
+        let y = y.min(f32::from(room.height) - keep).max(0.0);
+        let at = point(px(x), px(y));
+        o.place = Some(at);
+        if let Some(k) = &o.key {
+            remember(k, at);
+        }
+        cx.notify();
+        Ok(())
+    }
+
     /// While a window is pressed: follows the pointer anywhere in the app.
     pub(super) fn window_tracker(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         self.win_drag.as_ref()?;
@@ -396,6 +491,37 @@ impl AppWindow {
             .size_full()
             .into_any_element(),
         )
+    }
+}
+
+/// The window after (or before) `at` of `n` (None: none has the keys);
+/// past either end, None: the keyboard goes back to the pane.
+fn cycle(at: Option<usize>, n: usize, dir: &str) -> Result<Option<usize>, String> {
+    Ok(match (dir, at) {
+        _ if n == 0 => None,
+        ("none", _) => None,
+        ("next", None) => Some(0),
+        ("next", Some(i)) => (i + 1 < n).then_some(i + 1),
+        ("prev", None) => Some(n - 1),
+        ("prev", Some(i)) => i.checked_sub(1),
+        _ => return Err(format!("dir is \"next\", \"prev\" or \"none\", not {dir:?}")),
+    })
+}
+
+#[cfg(test)]
+mod cycle_tests {
+    use super::cycle;
+
+    #[test]
+    fn cycling_goes_through_every_window_then_back_to_the_pane() {
+        assert_eq!(cycle(None, 3, "next"), Ok(Some(0)));
+        assert_eq!(cycle(Some(0), 3, "next"), Ok(Some(1)));
+        assert_eq!(cycle(Some(2), 3, "next"), Ok(None), "after the last: the pane");
+        assert_eq!(cycle(None, 3, "prev"), Ok(Some(2)));
+        assert_eq!(cycle(Some(0), 3, "prev"), Ok(None), "before the first: the pane");
+        assert_eq!(cycle(Some(1), 3, "none"), Ok(None));
+        assert_eq!(cycle(None, 0, "next"), Ok(None), "no windows: the pane");
+        assert!(cycle(None, 2, "up").is_err());
     }
 }
 
