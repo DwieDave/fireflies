@@ -20,8 +20,9 @@
 // it says so); a change on disk reloads a clean file and offers a choice to
 // an edited one. Closing an edited editor asks first.
 //
-// Vim (vim.js) is on unless the pane's "vim" chip, `:novim`, or cmd-k v turns
-// it off (remembered for every editor). Its leader is space (settings.json
+// Vim (vim.js): new editors start as settings.json `editor.vim` says (default
+// on); the pane's "vim" chip, `:novim` and cmd-k v switch this pane only, and
+// the pane keeps that choice (its localStorage) over the default. Its leader is space (settings.json
 // editor.leader): a which-key popup lists the keys after it.
 // Keys while it has focus (keys.json `mod:nocturne-editor`), vim on or off:
 // cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
@@ -48,8 +49,6 @@ const MOD = "nocturne-editor";
 const TITLES = "nocturne-editor.titles";
 // The app asks an editor already on a file to go somewhere (`editor.open` with a line).
 const GOTO = "nocturne-editor.goto";
-// Vim on (default) or off, for every editor.
-const VIM_ON = "nocturne-editor.vim";
 const POLL = 4000; // a file on another machine can't be watched
 const CHANGE_DELAY = 200; // ms of quiet before the server hears about an edit
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
@@ -108,7 +107,7 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.handle = cx.focus_handle();
-    // Vim: on unless turned off in a pane (remembered in shared VIM_ON).
+    // Vim: the pane's own switch, else settings.json editor.vim (default on).
     const leader = String(settings()?.editor?.leader ?? "space");
     this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
     this.which = null; // the leader's next keys
@@ -125,7 +124,10 @@ export default class EditorPane extends View {
     this.editor.set_tab_size(this.opts.tab_size, this.opts.insert_spaces === false);
     this.vim.indent = this.opts.insert_spaces === false ? "\t" : " ".repeat(this.opts.tab_size);
     this.editor.on("key", (e, cx) => this.vimKey(e, cx));
+    // This pane's own vim switch, if it was flipped here before.
+    try { const v = localStorage.getItem("vim"); this.paneVim = v === "on" ? true : v === "off" ? false : null; } catch { this.paneVim = null; }
     this.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
+    this.vimWas = this.vimOn();
     this.editor.on("change", (_e, cx) => this.changed(cx));
     this.editor.on("hover", (e, cx) => this.hovered(e, cx));
     this.findInput = InputState.new({ placeholder: "find" });
@@ -443,16 +445,26 @@ export default class EditorPane extends View {
 
   // ---- vim
 
-  vimOn() { return shared(VIM_ON) !== false; }
+  /** Vim in this pane: its own switch when flipped (remembered for the pane),
+   *  else settings.json's default `editor.vim` (on unless false). */
+  vimOn() { return this.paneVim ?? settings()?.editor?.vim !== false; }
 
+  /** The pane's switch (the vim chip, cmd-k v, :novim): this pane only. */
   toggleVim(cx) {
     const on = !this.vimOn();
-    setShared(VIM_ON, on);
+    this.paneVim = on;
+    try { localStorage.setItem("vim", on ? "on" : "off"); } catch { /* a nicety */ }
+    this.vimSettled(on);
+    this.say(on ? "vim on in this pane" : "vim off in this pane");
+    cx.notify();
+  }
+
+  /** Vim's state when it's turned on or off. */
+  vimSettled(on) {
     this.vim.mode = "normal"; this.vim.keys = []; this.vim.ex = null; this.vim.pendingLeader = null;
     this.which = null; this.pending = "";
     this.editor.set_cursor_shape(on ? SHAPE.normal : "bar");
-    this.say(on ? "vim on" : "vim off");
-    cx.notify();
+    this.vimWas = on;
   }
 
   /** A keystroke, before the editor sees it: vim's, or the editor's (false). */
@@ -588,6 +600,7 @@ export default class EditorPane extends View {
 
   render(cx) {
     const t = theme();
+    if (this.vimWas !== undefined && this.vimWas !== this.vimOn()) this.vimSettled(this.vimOn());
     const goto = shared(GOTO);
     if (goto && goto.path === this.path && goto.n !== this.seenGoto) {
       this.seenGoto = goto.n;

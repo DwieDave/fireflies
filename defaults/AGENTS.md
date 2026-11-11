@@ -356,8 +356,9 @@ the highlighted line shows where it will land.
   the problems drawer, cmd-k d definition (another file opens in its own
   editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off. **Vim** is on by
-  default; the bar's `vim` chip (or cmd-k v, `:novim`) turns it off for every
-  editor (remembered; on again the same way). The bar shows the mode (NORMAL,
+  default (settings.json `editor.vim`, Settings → Editor). The bar's `vim`
+  chip, cmd-k v and `:novim` switch it for that pane only; the pane keeps its
+  choice, panes never switched follow the default. The bar shows the mode (NORMAL,
   INSERT, VISUAL, V-LINE, V-BLOCK, REPLACE), the keys typed so far and
   `rec @a` while recording; the caret is a block in normal and visual mode, a
   bar in insert, an underline in replace. It has normal, insert, replace and
@@ -1048,7 +1049,7 @@ The main ones:
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
   `.close`; Nocturne's palette lists them while the player window is open.
 - App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
-  (sections: `look`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
+  (sections: `look`, `editor`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`,
   `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
@@ -1191,12 +1192,14 @@ What's about the user, never a look:
   and prints it formatted), `format_on_save` (off unless set), `server` (the
   language server's argv, or `false` for none) and `server_settings` (what the
   server gets as `workspace/configuration` and `initializationOptions`).
-  At the top only, `leader`: vim's leader key (`"space"`, default; `"comma"`; or
-  a character).
+  At the top only, `vim`: whether editors start in vim mode (default `true`;
+  Settings → Editor; a pane's own switch overrides it for that pane), and
+  `leader`: vim's leader key
+  (`"space"`, default; `"comma"`; or a character).
   Without `server`, a language uses the first built-in server found on PATH;
   none is ever installed. Changes apply to editors opened afterwards.
   ```json
-  { "editor": { "tab_size": 4, "format_on_save": true,
+  { "editor": { "tab_size": 4, "format_on_save": true, "vim": true, "leader": "space",
       "languages": { "rust": { "format": ["rustfmt", "--edition", "2024"] },
                      "python": { "server": ["pyright-langserver", "--stdio"] },
                      "go": { "server": false }, "markdown": { "soft_wrap": true } } } }

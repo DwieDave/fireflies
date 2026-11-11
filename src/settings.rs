@@ -457,6 +457,9 @@ pub struct Person {
 pub struct EditorSettings {
     #[serde(flatten)]
     pub all: EditorLanguage,
+    /// Whether editors start in vim mode (default on); a pane's own switch overrides it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vim: Option<bool>,
     /// Vim's leader key: "space" (default), "comma", or a character.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub leader: Option<String>,
@@ -1078,10 +1081,11 @@ mod tests {
     /// with nothing to report, and the old key is gone once the app saves.
     #[test]
     fn editor_settings_read_per_language_servers_and_formatters() {
-        let p = parse_person(r#"{"editor": {"tab_size": 2, "format_on_save": true, "leader": ",",
+        let p = parse_person(r#"{"editor": {"tab_size": 2, "format_on_save": true, "leader": ",", "vim": false,
             "languages": {"rust": {"server": ["ra-multiplex"], "format": ["rustfmt"]}, "go": {"server": false}}}}"#).unwrap();
         assert_eq!(p.editor.all.tab_size, Some(2));
         assert_eq!(p.editor.leader.as_deref(), Some(","));
+        assert_eq!(p.editor.vim, Some(false));
         assert_eq!(p.editor.all.format_on_save, Some(true));
         assert_eq!(p.editor.languages["rust"].server, Some(ServerSetting::Run(vec!["ra-multiplex".into()])));
         assert_eq!(p.editor.languages["go"].server, Some(ServerSetting::Off(false)));
