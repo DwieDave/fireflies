@@ -591,7 +591,11 @@ Properties any node can have:
   what's new calls `presentUpdateNotes(versions)`. The update note gets
   `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
   slot it hides itself from. Settings and feedback stay the app's (they follow the
-  theme). Nocturne: `defaults/mods/nocturne/screens.js`.
+  theme). Nocturne: `defaults/mods/nocturne/screens.js`. Nocturne's dialogs,
+  menus and screens take the keyboard when they open and give it back when they
+  close: tab / ← → between a dialog's field and buttons (the focused one lit),
+  ↑↓ / j k (ctrl-n / ctrl-p in a list with a search field) move, enter / space
+  press, esc closes; a confirm also takes y / n. Keep that when drawing your own.
   `{"dialog_mods": {"welcome": "my-screens", "help": "my-screens"}}`
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
@@ -771,7 +775,9 @@ at the top, in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Pin or
 unpin from a firefly's or an agent pane's right-click menu (open sky and
 rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Scripts:
+`nocturne.pin-up` / `nocturne.pin-down` move it in the jar. Toasts by key:
+`nocturne.toast` does what the newest toast on screen says (as a click would),
+`nocturne.toast-close` dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
 
 ### Layouts and mods other people made
@@ -1151,6 +1157,12 @@ What's about the user, never a look:
 ```json
 { "zoom": 1, "sounds": { "enabled": true } }
 ```
+
+The Settings window (`app.settings`) works by keyboard too: its section rail
+is one stop (↑↓ / j k, or 1-6 from anywhere), tab / shift-tab and ↑↓ / j k
+walk the page's controls (a ring marks the one with the keyboard), enter /
+space press it, ← → / h l step a stepper or a choice, esc closes an open font
+list or a machine's rename first.
 
 - `zoom` scales the whole app: terminals, mods, the layout's px sizes
   (0.5 to 3; the zoom keys change it). Write sizes as designed at zoom 1.

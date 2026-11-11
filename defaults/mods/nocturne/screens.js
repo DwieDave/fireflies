@@ -2,15 +2,18 @@
 // (nocturne.json): square, 1-bit, dithered horizons, a pip for every mark.
 // Herdr opens this mod with the shipped screen's props plus `dialog`:
 //   welcome    the first-run welcome (a movable window): Fireflies, on herdr-core;
-//              records frame.welcomed ("finished" / "skipped") like the shipped one
-//   whats_new  this release's notes ({ notes }, a movable window)
-//   help       the keys, filterable by typing
+//              records frame.welcomed ("finished" / "skipped") like the shipped one.
+//              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc skips
+//   whats_new  this release's notes ({ notes }, a movable window); ↑↓ / j k /
+//              space step through them, enter / esc close
+//   help       the keys, filterable by typing; ↑↓ / ctrl-n ctrl-p / page up
+//              and down move through the list, esc closes
 //   update     the update note, bottom right ({ label, restart, success, dismissal });
 //              × hides it until the next update (shared UPDATE_DISMISSED)
 // Colors from theme() only (the moonfly theme).
 
 import { div, svg, image } from "gpui-kit";
-import { h_flex, v_flex, InputState, Input } from "gpui-base";
+import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, run, spaces, keys, hc, setShared, shared, presentUpdateNotes, updates } from "herdr";
 import { ART, dither, pip } from "./kit.js";
 
@@ -89,6 +92,12 @@ export class Welcome {
     cx.timer.every(3000, (cx) => { if (this.page === 2) load(cx); });
   }
 
+  copy(cx) {
+    cx.write_to_clipboard(ASK);
+    this.copied = true;
+    cx.notify();
+  }
+
   done(outcome) {
     setShared("frame.welcomed", outcome);
     closeOverlay(props().overlay);
@@ -141,7 +150,7 @@ export class Welcome {
           .hover((s) => s.bg(t.ansi0))
           .on_mouse_down("left", stop)
           .on_click(() => run("mod.open", { name: "machine-add" }))
-          .child(div().w(10).flex_none().child("+")).child("add a machine")))
+          .child(div().w(10).flex_none().child("+")).child(div().flex_1().child("add a machine")).child(div().text_size(11).text_color(t.dim).child("a"))))
       .child(para(t, "Not now? Settings › Machines adds one later."));
   }
 
@@ -161,11 +170,9 @@ export class Welcome {
       .child(para(t, "Every part of this window is a layout or a mod: plain files your agent can change. Give it this line to start:"))
       .child(v_flex().relative().gap(8).p(10).border(1).border_color(t.ansi0)
         .child(div().text_size(12).line_height("19px").text_color(t.foreground).child(ASK))
-        .child(h_flex().child(button(t, "w-copy", this.copied ? "copied" : "copy", this.copied ? t.done : t.accent, !this.copied, (cx) => {
-          cx.write_to_clipboard(ASK);
-          this.copied = true;
-          cx.notify();
-        }))))
+        .child(h_flex().gap(8).items_center()
+          .child(button(t, "w-copy", this.copied ? "copied" : "copy", this.copied ? t.done : t.accent, !this.copied, (cx) => this.copy(cx)))
+          .child(div().text_size(11).text_color(t.dim).child("c"))))
       .child(para(t, "In any terminal, hc ls lists everything running in herdr-core and hc attach t3 jumps into one."));
   }
 
@@ -181,10 +188,12 @@ export class Welcome {
         const k = e.key, m = e.modifiers;
         if (k === "escape") return this.done("skipped");
         if (m.control || m.alt || m.platform) return;
-        if (k === "enter" || k === "right") {
+        if (k === "enter" || k === "right" || k === "l") {
           if (last) return k === "enter" ? this.start() : undefined;
           go(this.page + 1, cx);
-        } else if (k === "left") go(this.page - 1, cx);
+        } else if (k === "left" || k === "h") go(this.page - 1, cx);
+        else if (k === "a" && this.page === 2) run("mod.open", { name: "machine-add" });
+        else if (k === "c" && last) this.copy(cx);
         else return;
         cx.stop_propagation();
       })
@@ -195,6 +204,7 @@ export class Welcome {
       .child(h_flex().relative().h(48).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(dots)
+        .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc skip"))
         .child(div().flex_1())
         .when(this.page > 1, (el) => el.child(button(t, "w-back", "back", t.muted, false, (cx) => go(this.page - 1, cx))))
         .child(last
@@ -214,9 +224,27 @@ export class WhatsNew {
     this.handle = cx.focus_handle();
     this.handle.focus();
     cx.timer.after(600, () => this.handle.focus());
+    this.scroll = ScrollHandle.new();
+    this.at = 0; // the block the keyboard last scrolled to
+    this.blocks = 1;
   }
 
   done() { closeOverlay(props().overlay); }
+
+  key(e, cx) {
+    const k = e.key, m = e.modifiers ?? {};
+    if (m.control || m.platform || m.alt) return;
+    const n = this.blocks;
+    if (k === "escape" || k === "enter") this.done();
+    else if (k === "down" || k === "j" || k === "space" || k === "pagedown") this.at = Math.min(n - 1, this.at + 1);
+    else if (k === "up" || k === "k" || k === "pageup") this.at = Math.max(0, this.at - 1);
+    else if (k === "home" || k === "g") this.at = 0;
+    else if (k === "end") this.at = n - 1;
+    else return;
+    this.scroll.scroll_to_item(this.at);
+    cx.stop_propagation();
+    cx.notify();
+  }
 
   release(t, note) {
     const [y, m, d] = (note.date ?? "").split("-");
@@ -231,31 +259,37 @@ export class WhatsNew {
           .when(Boolean(item.headline), (el) => el.child(div().text_size(13).text_color(t.foreground).child(item.headline)))
           .when(Boolean(item.detail), (el) => el.child(div().text_size(12).line_height("19px").text_color(t.muted).child(item.detail)))));
     const fixes = items.filter((i) => i.fixed);
-    return v_flex().gap(12)
-      .child(h_flex().gap(10).items_center()
+    // Blocks, each a direct child of the scroll area so the keys can step to it.
+    return [
+      h_flex().gap(10).items_center()
         .child(pip(t, "done", 7))
         .child(div().text_size(13).text_color(t.foreground).child(note.version))
-        .child(div().text_size(11).text_color(t.dim).child(date)))
-      .children(items.filter((i) => !i.fixed).map(card))
-      .when(fixes.length > 0, (el) => el.child(v_flex().gap(6).pt(4)
+        .child(div().text_size(11).text_color(t.dim).child(date)),
+      ...items.filter((i) => !i.fixed).map(card),
+      ...(fixes.length > 0 ? [v_flex().gap(6).pt(4)
         .child(eyebrow(t, "also fixed"))
         .children(fixes.map((i) => h_flex().gap(10).items_start()
           .child(div().w(8).pt(5).flex_none().child(svg(`${ART}/pip.svg`).size(6).text_color(t.ansi8)))
-          .child(div().flex_1().min_w(0).text_size(11).line_height("17px").text_color(t.muted).child([i.headline, i.detail].filter(Boolean).join(" ")))))));
+          .child(div().flex_1().min_w(0).text_size(11).line_height("17px").text_color(t.muted).child([i.headline, i.detail].filter(Boolean).join(" ")))))] : []),
+    ];
   }
 
   render() {
     const t = theme();
     const notes = this.notes.map((n) => updates().notes?.find((x) => x.version === n.version) ?? n);
+    // One flat list of blocks (a release's head, its cards, its fixes), gaps as padding.
+    const blocks = notes.flatMap((n, r) => this.release(t, n).map((b, i) => [b, r > 0 && i === 0 ? 26 : i === 0 ? 0 : 12]));
+    this.blocks = Math.max(1, blocks.length);
+    this.at = Math.min(this.at, this.blocks - 1);
     return frame(t, "nocturne-whatsnew").track_focus(this.handle)
-      .on_key_down((e, cx) => { if (e.key === "escape" || e.key === "enter") { this.done(); cx.stop_propagation(); } })
+      .on_key_down((e, cx) => this.key(e, cx))
       .child(header(t, fly(18), "What's new", null, () => this.done()))
-      .child(div().id("wn-body").flex_1().min_h(0).overflow_y_scroll().on_mouse_down("left", stop)
-        .child(v_flex().px(22).pt(18).pb(18).gap(26).on_size_change((s, cx) => { if (Math.abs((this.width ?? 0) - (s.width - 44)) > 1) { this.width = s.width - 44; cx.notify(); } })
-          .children(notes.map((n) => this.release(t, n)))))
+      .child(div().id("wn-body").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).on_mouse_down("left", stop)
+        .on_size_change((s, cx) => { if (Math.abs((this.width ?? 0) - (s.width - 44)) > 1) { this.width = s.width - 44; cx.notify(); } })
+        .children(blocks.map(([b, gap], i) => div().px(22).pt(i === 0 ? 18 : gap).when(i === blocks.length - 1, (d) => d.pb(18)).child(b))))
       .child(h_flex().relative().h(46).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(div().flex_1().text_size(11).text_color(t.dim).child("something off? settings › send feedback"))
+        .child(div().flex_1().text_size(11).text_color(t.dim).child("↑↓ read · something off? settings › send feedback"))
         .child(button(t, "wn-done", "got it", t.accent, true, () => this.done())));
   }
 }
@@ -278,10 +312,31 @@ export class Keys {
   init(_props, cx) {
     this.filter = "";
     this.input = InputState.new({ placeholder: "type to filter" });
-    this.input.on("change", (_e, cx) => { this.filter = this.input.value(); cx.notify(); });
+    this.input.on("change", (_e, cx) => { this.filter = this.input.value(); this.at = 0; cx.notify(); });
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
+    this.at = 0; // the key row under the keyboard
+    this.rows = [];
+    this.scroll = ScrollHandle.new();
+  }
+
+  key(e, cx) {
+    const k = e.key, m = e.modifiers ?? {};
+    const ctrl = m.control && !m.platform && !m.alt;
+    const n = this.rows.length;
+    let d = 0;
+    if (k === "escape") { cx.stop_propagation(); return closeOverlay(props().overlay); }
+    if (k === "down" || (ctrl && k === "n")) d = 1;
+    else if (k === "up" || (ctrl && k === "p")) d = -1;
+    else if (k === "pagedown") d = 10;
+    else if (k === "pageup") d = -10;
+    else return;
+    this.at = Math.max(0, Math.min(n - 1, this.at + d));
+    // The list's children are the eyebrows and the rows: reveal the row's own.
+    if (n) this.scroll.scroll_to_item(this.rows[this.at].child);
+    cx.stop_propagation();
+    cx.notify();
   }
 
   render() {
@@ -291,8 +346,16 @@ export class Keys {
     const seen = new Set();
     const groups = GROUPS.map(([name, re]) => [name, all.filter((k) => !seen.has(k) && re.test(k.action) && (seen.add(k) || true))])
       .filter(([, rows]) => rows.length > 0);
+    // One flat list: each group's eyebrow, then its rows (`child`: the index among them).
+    const list = [];
+    this.rows = [];
+    for (const [name, rows] of groups) {
+      list.push({ head: name });
+      for (const k of rows) { this.rows.push({ k, child: list.length }); list.push({ k, name, i: this.rows.length - 1 }); }
+    }
+    this.at = Math.min(this.at, Math.max(0, this.rows.length - 1));
     return frame(t, "nocturne-keys").track_focus(this.handle)
-      .on_key_down((e) => { if (e.key === "escape") closeOverlay(props().overlay); })
+      .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().relative().h(36).flex_none().px(14).gap(10).items_center()
         .child(svg(`${ART}/pip.svg`).size(7).text_color(t.accent))
         .child(div().flex_1().text_size(12).text_color(t.foreground).child("Keys"))
@@ -300,13 +363,19 @@ export class Keys {
         .child(horizon(t)))
       .child(div().mx(14).mt(12).h(28).px(8).flex().items_center().flex_none().border(1).border_color(t.accent)
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground)))
-      .child(div().id("keys-list").flex_1().min_h(0).overflow_y_scroll().px(14).py(10)
-        .child(v_flex().gap(12).children(groups.map(([name, rows]) => v_flex()
-          .child(div().pb(4).child(eyebrow(t, name)))
-          .children(rows.map((k, i) => h_flex().id(`key-${name}-${i}`).relative().h(24).px(6).items_center().text_size(12)
+      .child(div().id("keys-list").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).px(14).py(10)
+        .children(list.map((x, j) => x.head
+          ? div().id(`key-head-${x.head}`).pb(4).when(j > 0, (el) => el.pt(12)).child(eyebrow(t, x.head))
+          : h_flex().id(`key-${x.name}-${x.i}`).relative().h(24).px(6).items_center().text_size(12)
             .hover((s) => s.bg(t.ansi0))
-            .child(div().w(200).flex_none().truncate().text_color(t.accent).child(k.keys + (k.section !== "global" ? `  (${k.section})` : "")))
-            .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(keyLabel(k.action)))))))));
+            .when(x.i === this.at, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+            .child(div().relative().w(200).flex_none().truncate().text_color(t.accent).child(x.k.keys + (x.k.section !== "global" ? `  (${x.k.section})` : "")))
+            .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(keyLabel(x.k.action))))))
+      .child(h_flex().relative().h(26).flex_none().px(14).gap(14).items_center().text_size(10)
+        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child("↑↓")).child(div().text_color(t.dim).child("move")))
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child("type")).child(div().text_color(t.dim).child("filter")))
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("close"))));
   }
 }
 
