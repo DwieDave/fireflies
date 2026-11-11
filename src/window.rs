@@ -2860,10 +2860,10 @@ impl AppWindow {
     }
 
     /// A file one of the app's viewers shows (`links::Viewer`: a terminal's or a
-    /// mod's link, `markdown.open`, `preview.open` (`image.open`)): that viewer mod beside `pane`
-    /// (default: the focused one; with none, a tab of its own), or the viewer in
-    /// that tab already showing it; the system's app with `in` "system" or
-    /// without the viewer. A relative path is the pane's folder's. `extra`: more
+    /// mod's link, `markdown.open`, `preview.open` (`image.open`), `files.open` for a folder):
+    /// that viewer mod beside `pane` (default: the focused one; with none, or `in` "tab",
+    /// a tab of its own), or the viewer in that tab already showing it; the system's
+    /// app with `in` "system" or without the viewer. A relative path is the pane's folder's. `extra`: more
     /// props for the viewer (Markdown's `anchor`).
     #[allow(clippy::too_many_arguments)]
     fn open_viewer(&mut self, viewer: Viewer, path: &str, pane: Option<String>, place: Option<&str>, on: Option<&str>, extra: Value, window: &mut Window, cx: &mut Context<Self>) -> Result<Value, String> {
@@ -2880,16 +2880,23 @@ impl AppWindow {
                 cwd.join(p).to_string_lossy().into_owned()
             }
         };
+        // A folder: one name for it, however the link wrote it.
+        let path = match viewer {
+            Viewer::Files if path.len() > 1 => path.trim_end_matches('/').to_owned(),
+            _ => path,
+        };
         let system = |path: &str| {
             crate::links::open(&crate::links::Target::File(path.into()));
             Ok(json!({ "opened": "system", "path": path }))
         };
-        match place {
-            None | Some("app") => {}
+        // "tab": a tab of its own, even with a pane to open beside.
+        let tab = match place {
+            None | Some("app") | Some("pane") => false,
+            Some("tab") => true,
             Some("system") if on.is_none() => return system(&path),
             Some("system") => return Err("in \"system\" opens files on this computer only".into()),
-            Some(other) => return Err(format!("in is \"app\" or \"system\", not {other:?}")),
-        }
+            Some(other) => return Err(format!("in is \"app\", \"pane\", \"tab\" or \"system\", not {other:?}")),
+        };
         if !self.folders.contains_key(viewer_mod) {
             return if on.is_none() { system(&path) } else { Err(format!("no mod {viewer_mod:?} in mods/")) };
         }
@@ -2897,7 +2904,7 @@ impl AppWindow {
         // file a viewer shows now (it notes that by slot in shared `<mod>.paths`,
         // having moved on from the one it opened with), else its props' file.
         let now = crate::mods::shared(&format!("{viewer_mod}.paths"));
-        let shown = pane.as_ref().and_then(|p| self.model.tab_of(p)).and_then(|tab| {
+        let shown = pane.as_ref().filter(|_| !tab).and_then(|p| self.model.tab_of(p)).and_then(|tab| {
             tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props }) if name == viewer_mod && {
                 let showing = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot)?.as_str())
                     .or_else(|| props.get("path").and_then(Value::as_str));
@@ -2921,7 +2928,7 @@ impl AppWindow {
         if let (Some(props), Value::Object(extra)) = (props.as_object_mut(), extra) {
             props.extend(extra);
         }
-        let r = match pane {
+        let r = match pane.filter(|_| !tab) {
             Some(pane) => self.run_as("pane.split", json!({ "direction": "auto", "pane": pane, "mod": viewer_mod, "props": props }), false, window, cx),
             None => self.run_as("tab.new", json!({ "name": viewer.tab_name(), "mod": viewer_mod, "props": props }), false, window, cx),
         };
@@ -4095,6 +4102,12 @@ impl AppWindow {
                     None => Value::Null,
                 };
                 let r = self.open_viewer(Viewer::Editor, &path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), extra, window, cx);
+                self.answer(r);
+                return;
+            }
+            "files.open" => {
+                let path = Self::owned(a, "path").unwrap_or_default();
+                let r = self.open_viewer(Viewer::Files, &path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), Value::Null, window, cx);
                 self.answer(r);
                 return;
             }

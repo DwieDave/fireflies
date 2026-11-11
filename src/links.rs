@@ -185,6 +185,8 @@ pub enum Viewer {
     Preview,
     /// `nocturne-editor`: source code and other text people edit.
     Editor,
+    /// `nocturne-files`: a folder, as a files pane rooted there.
+    Files,
 }
 
 /// Text people edit that the editor takes (besides every language
@@ -220,8 +222,12 @@ const PREVIEW_EXTS: &[&str] = &[
 const PREVIEW_MACOS_EXTS: &[&str] = &["ttf", "otf", "ttc", "woff", "woff2", "mp4", "m4v", "mov", "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "caf"];
 
 impl Viewer {
-    /// The viewer for a file, by its extension (the editor also by name).
+    /// The viewer for a file, by its extension (the editor also by name); a
+    /// folder that exists here: the files pane.
     pub fn of(path: &Path) -> Option<Viewer> {
+        if path.is_dir() {
+            return Some(Viewer::Files);
+        }
         let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
         let viewer = [Viewer::Markdown, Viewer::Preview].into_iter().find(|v| v.takes(&ext, cfg!(target_os = "macos")));
         viewer.or_else(|| edits(path).then_some(Viewer::Editor))
@@ -233,7 +239,7 @@ impl Viewer {
         match self {
             Viewer::Markdown => MARKDOWN_EXTS.contains(&ext),
             Viewer::Preview => PREVIEW_EXTS.contains(&ext) || (macos && PREVIEW_MACOS_EXTS.contains(&ext)),
-            Viewer::Editor => false,
+            Viewer::Editor | Viewer::Files => false,
         }
     }
 
@@ -243,6 +249,7 @@ impl Viewer {
             Viewer::Markdown => "nocturne-markdown",
             Viewer::Preview => "nocturne-preview",
             Viewer::Editor => "nocturne-editor",
+            Viewer::Files => "nocturne-files",
         }
     }
 
@@ -252,21 +259,26 @@ impl Viewer {
             Viewer::Markdown => "markdown",
             Viewer::Preview => "preview",
             Viewer::Editor => "editor",
+            Viewer::Files => "files",
         }
     }
 }
 
-/// A file a link names that one of the app's viewers shows.
+/// A file a link names that one of the app's viewers shows, or a folder (the files pane).
 pub fn viewable(target: &Target) -> Option<(Viewer, PathBuf)> {
-    let path = local_file(target).filter(|p| p.is_file())?;
+    let path = local_file(target).filter(|p| p.is_file() || p.is_dir())?;
     Some((Viewer::of(&path)?, path))
 }
 
 /// A word the link pattern leaves alone (`README.md`, `shot.png`: no slash)
-/// that names a file in the terminal's folder one of the viewers shows.
+/// that names a file in the terminal's folder one of the viewers shows, or a
+/// folder there (`ls` output). `.` and `..` aren't links.
 pub fn bare_viewable(word: &str, cwd: Option<&Path>) -> Option<PathBuf> {
+    if word.trim_end_matches('/').chars().all(|c| c == '.') {
+        return None;
+    }
     let path = cwd?.join(word);
-    (Viewer::of(&path).is_some() && path.is_file()).then_some(path)
+    (path.is_dir() || (Viewer::of(&path).is_some() && path.is_file())).then_some(path)
 }
 
 fn percent_decode(s: &str) -> Option<String> {
@@ -725,7 +737,14 @@ mod tests {
         assert_eq!(view("shots/main.rs", Some(&dir)).map(|(v, _)| v), Some(Viewer::Editor));
         assert_eq!(view("shots/data.json:3:9", Some(&dir)).map(|(v, _)| v), Some(Viewer::Editor));
         assert_eq!(view("shots/gone.png", Some(&dir)), None);
-        assert_eq!(view("shots", Some(&dir)), None, "a folder is no picture");
+        // A folder goes to the files pane, as a path, a `file://` URL or a bare `ls` name.
+        assert_eq!(view("shots", Some(&dir)), Some((Viewer::Files, dir.join("shots"))));
+        assert_eq!(view("shots/my shots/", Some(&dir)).map(|(v, _)| v), Some(Viewer::Files));
+        assert_eq!(view(&format!("file://{}", dir.join("shots").display()), None).map(|(v, _)| v), Some(Viewer::Files));
+        assert_eq!(bare_viewable("shots", Some(&dir)), Some(dir.join("shots")));
+        assert_eq!(bare_viewable(".", Some(&dir)), None);
+        assert_eq!(bare_viewable("..", Some(&dir)), None);
+        assert_eq!(Viewer::Files.mod_name(), "nocturne-files");
         // Web images stay web pages.
         assert_eq!(view("https://example.com/a.png", None), None);
         // A bare name in the terminal's folder.

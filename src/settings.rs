@@ -448,6 +448,29 @@ pub struct Person {
     /// and language servers, overall and per language.
     #[serde(skip_serializing_if = "EditorSettings::is_default")]
     pub editor: EditorSettings,
+    /// The files panes (Nocturne's files mod): which entries new panes list.
+    #[serde(skip_serializing_if = "FilesSettings::is_default")]
+    pub files: FilesSettings,
+}
+
+/// settings.json `files`: what a files pane lists when it opens (each pane
+/// keeps its own choice after that). Unset: hidden files and git-ignored
+/// files are listed.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FilesSettings {
+    /// List dotfiles.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
+    /// List files git ignores.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ignored: Option<bool>,
+}
+
+impl FilesSettings {
+    fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// settings.json `editor`. Unset values fall back to the language's entry in
@@ -581,6 +604,7 @@ impl Default for Person {
             theme: None,
             colors: BTreeMap::new(),
             editor: EditorSettings::default(),
+            files: FilesSettings::default(),
         }
     }
 }
@@ -619,6 +643,8 @@ pub struct Settings {
     pub sounds: Sounds,
     /// settings.json `editor`, as written.
     pub editor: EditorSettings,
+    /// settings.json `files`, as written.
+    pub files: FilesSettings,
 }
 
 /// Attention sounds: when an agent needs you, and when one finished while you
@@ -663,6 +689,7 @@ impl Default for Settings {
             option_as_alt: OptionAsAlt::Auto,
             sounds: Sounds::default(),
             editor: EditorSettings::default(),
+            files: FilesSettings::default(),
         }
     }
 }
@@ -703,6 +730,7 @@ impl Settings {
             links: person.links,
             option_as_alt: person.option_as_alt,
             editor: person.editor.clone(),
+            files: person.files.clone(),
         }
     }
 }
@@ -1092,6 +1120,9 @@ mod tests {
         assert!(parse_person(r#"{"editor": {"tab_size": "two"}}"#).is_err());
         // Unset, it stays out of a saved settings.json.
         assert!(!serde_json::to_string(&Person::default()).unwrap().contains("editor"));
+        let f = parse_person(r#"{"files": {"hidden": false, "ignored": true}}"#).unwrap().files;
+        assert_eq!((f.hidden, f.ignored), (Some(false), Some(true)));
+        assert!(!serde_json::to_string(&Person::default()).unwrap().contains("files"));
     }
 
     #[test]
@@ -1108,7 +1139,7 @@ mod tests {
     /// settings.json key.
     #[test]
     fn the_guide_explains_every_setting() {
-        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), clipboard_write: false, links: Links::System, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), editor: EditorSettings { all: EditorLanguage { tab_size: Some(2), ..Default::default() }, ..Default::default() }, ..Person::default() };
+        let all = Person { core: Some(String::new()), font: Some(String::new()), font_size: Some(1.0), ui_font: Some(String::new()), clipboard_write: false, links: Links::System, appearance: Appearance::Light, theme: Some(crate::layout::ThemeChoice::One(String::new())), colors: [("text".into(), String::new())].into(), editor: EditorSettings { all: EditorLanguage { tab_size: Some(2), ..Default::default() }, ..Default::default() }, files: FilesSettings { hidden: Some(false), ignored: None }, ..Person::default() };
         let keys: Vec<String> = serde_json::to_value(&all).unwrap().as_object().unwrap().keys().cloned().collect();
         let guide = include_str!("../defaults/AGENTS.md");
         let section = guide.split("## The person").nth(1).and_then(|s| s.split("\n## ").next()).unwrap_or_default();
