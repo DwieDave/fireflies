@@ -21,7 +21,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { window as appWindow } from "herdr";
-import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.js";
+import { dither, panel, stop, band, sweep, empty, unzoom, popupScrim } from "./kit.js";
 import { formKey, formHints, submitKey, wrap } from "./form-keys.js";
 
 const ROW = 28, AREA = 150, NOTE = 16, GAP = 8, LABEL = 96, PICK_ROWS = 12, BUTTONS = 48;
@@ -405,8 +405,9 @@ export class Form {
       .child(div().relative().px(8).py(6).text_size(11).text_color(t.foreground)
         .child(div().absolute().inset_0().opacity(0.6).child(dither(t.ansi0, 1)))
         .child(div().relative().child(c.line))));
-    return div().id("form-confirm").absolute().inset_0().bg(t.background + "cc").flex().items_center().justify_center()
+    return div().id("form-confirm").absolute().inset_0().flex().items_center().justify_center()
       .on_mouse_down("left", stop)
+      .child(popupScrim("form-confirm-scrim"))
       .child(v_flex().id("form-confirm-box").relative().w(w).max_h(size.height - 30).bg(t.background).border(1).border_color(sending ? t.working : t.accent).overflow_y_scroll()
         .child(h_flex().relative().h(24).flex_none().px(10).items_center().text_size(11)
           .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(sending ? t.working : t.accent, 1)))
@@ -446,8 +447,9 @@ export class Form {
       : !n ? div().px(10).py(10).text_size(11).text_color(t.dim).child(f.free ? "Nothing matches: type a name." : "Nothing matches.")
       : v_flex().py(4).children(rows.slice(top, top + PICK_ROWS).map((r, i) => row(r, top + i)));
     const w = Math.min(560, size.width - 40);
-    return div().id("form-picker").absolute().inset_0().bg(t.background + "aa").flex().justify_center().pt(40)
+    return div().id("form-picker").absolute().inset_0().flex().justify_center().pt(40)
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); p.query.release?.(); this.picker = null; this.focusField(); cx.notify(); })
+      .child(popupScrim("form-picker-scrim"))
       .child(v_flex().id("form-picker-box").w(w).max_h(PICK_ROWS * 32 + 60).bg(t.background).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
         .child(h_flex().relative().h(24).flex_none().px(10).items_center().text_size(11)

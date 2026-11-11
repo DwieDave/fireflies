@@ -58,14 +58,20 @@ test:
     bun test scripts/dialogs-keys.test.ts
     # Every form by its keys (form-keys.js): tab order both ways, the wrap, submit, cancel; writes go to stand-ins.
     bun test scripts/form-keys.test.ts
-    # Nocturne's palette through its real imports, herdr and gpui stand-ins.
+    # Nocturne's palette through its real imports, herdr and gpui stand-ins; no command, key or mod command goes missing from it.
     bun test scripts/nocturne-palette.test.ts
+    # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
+    bun test scripts/palette-commands.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.
     bun test scripts/nocturne-picker-view.test.ts
+    # The picker's mode switch by tab, cmd-shift-f and cmd-p, the query kept.
+    bun test scripts/nocturne-picker-keys.test.ts
     # No mod's cleanup hook (an exported View's close()) closes its pane again.
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
     bun test scripts/hint-bars.test.ts
+    # Dragging a tab along nocturne's strip: the stake stands where the tab lands, with recording gpui stand-ins.
+    bun test scripts/nocturne-tab-drag.test.ts
     cargo test --locked
 
 docs-generate: build

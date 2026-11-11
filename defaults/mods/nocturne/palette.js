@@ -6,27 +6,151 @@
 // in the picker.
 // The "Open" group holds Nocturne's own panels (panels.js): each beside the
 // focused pane (or where it always goes) and in a new tab, plus the sidebar fold.
+// "Find" is the file picker and grep (picker.js). The focused pane's own
+// commands (an editor's, a web pane's, ...) lead the list while it's focused
+// (PANE); the git and GitHub windows' while they're open.
+// Every command a person can trigger is either an entry here or in OUT with
+// the reason it stays out (scripts/nocturne-palette.test.ts holds that line).
 
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, window as win, agents } from "herdr";
-import { dither, eyebrow, focusedTerminal, pinned, pin } from "./kit.js";
-import { panels, here } from "./panels.js";
-import { toggleDeck } from "./scripts.js";
-import { gitOpen } from "./git.js";
+import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, setShared, window as win, agents, panes, terminals, updates } from "herdr";
+import { dither, eyebrow, focusedTerminal, pinned, pin, movePin, sortedAgents } from "./kit.js";
+import { panels, here, terminalPane, terminalTab } from "./panels.js";
+import { toggleDeck, lastFailed } from "./scripts.js";
+import { gitOpen, openWorktrees } from "./git.js";
+import { githubOpen } from "./github.js";
+import { togglePicker } from "./picker.js";
+import { openNewMenu } from "./newmenu.js";
+import { NAME_PANE, EDIT_SPACE } from "./menu.js";
+import { TOASTS, toastKey } from "./toast.js";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
 const ROW_H = 28;
 const HEAD_H = 30;
 const LIST_H = SHOWN * ROW_H;
-const GROUPS = ["Recent", "Open", "Tab", "Pane", "Space", "Layout", "Terminal", "Agent", "Window", "App"];
+const GROUPS = ["Recent", "Editor", "Web", "Markdown", "Preview", "Agents", "Usage", "Git", "GitHub", "Find", "Open",
+  "Tab", "Pane", "Space", "Layout", "Terminal", "Agent", "Window", "App"];
 // Each group's mark (mods/workspace-chrome/<icon>.svg).
 const ICONS = {
-  Recent: "clock", Open: "layers", Tab: "square", Pane: "panel-right", Space: "folder", Layout: "sidebar",
-  Terminal: "terminal", Agent: "layers", Window: "square", App: "settings",
+  Recent: "clock", Editor: "file-text", Web: "monitor", Markdown: "file-text", Preview: "image", Agents: "layers", Usage: "clock",
+  Git: "git-compare", GitHub: "mods/nocturne/art/github.svg", Find: "search", Open: "layers", Tab: "square", Pane: "panel-right",
+  Space: "folder", Layout: "sidebar", Terminal: "terminal", Agent: "layers", Window: "square", App: "settings",
 };
 const chrome = (n) => (n.includes("/") ? n : `mods/workspace-chrome/${n}.svg`);
+
+const MARKDOWN = /\.(md|markdown|mdx)$/i;
+
+/**
+ * The focused pane's own commands (`<mod>.<command>`, its nextCommand()),
+ * shown while a pane of that mod is focused: [group, [command, title, words, when?(pane)]].
+ * Their keys are the mod's section in keys.json (`mod:<mod>`).
+ */
+const PANE = {
+  "nocturne-editor": ["Editor", [
+    ["save", "Save the file", "write disk"],
+    ["find", "Find in the file…", "search text"],
+    ["replace", "Find and replace…", "search substitute text"],
+    ["line", "Go to line…", "jump goto line column number"],
+    ["definition", "Go to definition", "lsp jump symbol source"],
+    ["hover", "Show type and docs here", "hover info lsp card signature"],
+    ["next-problem", "Next problem", "error warning diagnostic lsp"],
+    ["prev-problem", "Previous problem", "error warning diagnostic lsp"],
+    ["problems", "Show or hide the problems list", "errors warnings diagnostics drawer lsp"],
+    ["reload", "Reload the file from disk", "revert refresh discard changes"],
+    ["vim", "Vim mode on or off", "vim modal keys normal insert"],
+    ["keys", "Editor keys", "help shortcuts list ? keybindings"],
+    ["preview", "Markdown: next view", "preview split text rendered cycle", (p) => MARKDOWN.test(p?.props?.path ?? "")],
+    ["preview-split", "Markdown: preview beside the text", "preview split rendered", (p) => MARKDOWN.test(p?.props?.path ?? "")],
+    ["preview-only", "Markdown: preview only", "preview rendered read", (p) => MARKDOWN.test(p?.props?.path ?? "")],
+    ["preview-text", "Markdown: text only", "preview source edit", (p) => MARKDOWN.test(p?.props?.path ?? "")],
+  ]],
+  "nocturne-browser": ["Web", [
+    ["url", "Go to an address…", "url address bar location navigate open page"],
+    ["reload", "Reload the page", "refresh stop"],
+    ["back", "Back", "history previous page"],
+    ["forward", "Forward", "history next page"],
+    ["inspect", "Inspect the page", "web inspector devtools developer console"],
+    ["pip", "Picture in picture", "pip video float player"],
+    ["zoom_in", "Page zoom in", "bigger larger text"],
+    ["zoom_out", "Page zoom out", "smaller text"],
+    ["zoom_reset", "Page zoom back to normal", "reset size text"],
+  ]],
+  "nocturne-markdown": ["Markdown", [
+    ["raw", "Show the source or the rendered page", "raw markdown source text toggle"],
+    ["back", "Back to the previous file", "history link"],
+    ["top", "Scroll to the top", "start beginning home"],
+    ["bottom", "Scroll to the bottom", "end"],
+    ["reload", "Reload the file", "refresh disk"],
+  ]],
+  "nocturne-preview": ["Preview", [
+    ["fit", "Fit to the pane", "zoom fit whole width"],
+    ["actual", "Actual size", "zoom 100% one to one pixels"],
+    ["zoom_in", "Zoom in", "bigger magnify"],
+    ["zoom_out", "Zoom out", "smaller"],
+    ["next", "Next file in the folder", "image picture following"],
+    ["prev", "Previous file in the folder", "image picture"],
+    ["page_next", "Next page", "pdf document"],
+    ["page_prev", "Previous page", "pdf document"],
+    ["rotate", "Rotate", "turn image picture"],
+    ["background", "Checkerboard behind the picture", "transparency background alpha"],
+    ["reload", "Reload the file", "refresh disk"],
+  ]],
+  "nocturne-agents": ["Agents", [
+    ["follow", "Follow the selected agent", "graph track watch live"],
+    ["working", "Next working agent", "graph busy jump follow"],
+    ["in", "Zoom in", "graph bigger"],
+    ["out", "Zoom out", "graph smaller"],
+    ["reset", "Reset the view", "graph zoom pan fit"],
+  ]],
+  "nocturne-usage": ["Usage", [
+    ["refresh", "Check usage again", "limits quota refresh reload claude"],
+  ]],
+};
+
+/** The focused pane's own commands, as entries. */
+function paneEntries() {
+  const h = here();
+  const p = h.pane ? panes().find((x) => x.pane === h.pane) : null;
+  const own = p?.mod && PANE[p.mod];
+  if (!own) return [];
+  const [group, list] = own;
+  return list.filter(([, , , when]) => !when || when(p)).map(([c, title, words]) => {
+    const name = `${p.mod}.${c}`;
+    return { name, args: {}, group, title, words, go: () => run(name) };
+  });
+}
+
+/** The git and GitHub windows' own commands, while they're open. */
+function windowEntries() {
+  const out = [];
+  const add = (name, group, icon, title, words) => out.push({ name, args: {}, group, icon, title, words, go: () => run(name) });
+  if (gitOpen()) {
+    add("nocturne-git.refresh", "Git", "git-compare", "Git: refresh", "reload status reread");
+    add("nocturne-git.review", "Git", "eye", "Git: review the changes", "diff review files reviewed");
+  }
+  if (githubOpen()) {
+    const gh = "mods/nocturne/art/github.svg";
+    add("nocturne-github.prs", "GitHub", gh, "GitHub: pull requests", "prs tab list");
+    add("nocturne-github.actions", "GitHub", gh, "GitHub: actions", "workflows runs ci checks tab");
+    add("nocturne-github.projects", "GitHub", gh, "GitHub: projects", "board items issues tab");
+    add("nocturne-github.diff", "GitHub", gh, "GitHub: diff of the selected pull request", "pr changes review files");
+    add("nocturne-github.fork", "GitHub", gh, "GitHub: switch between fork and upstream", "fork upstream origin remote repo");
+    add("nocturne-github.refresh", "GitHub", gh, "GitHub: refresh", "reload fetch again");
+  }
+  return out;
+}
+
+/** The file picker and grep (picker.js): the space's folder, else the focused pane's. */
+function findEntries() {
+  return [
+    { name: "nocturne.picker", args: {}, group: "Find", icon: "search", title: "Find a file…",
+      words: "open file picker fuzzy go to file quick open search name path", go: () => togglePicker("files") },
+    { name: "nocturne.grep", args: {}, group: "Find", icon: "search", title: "Grep the project…",
+      words: "grep search text in files find content ripgrep rg project folder", go: () => togglePicker("grep") },
+  ];
+}
 
 /** Nocturne's panels as palette entries: `go` runs them; `bind` is their key in keys.json's layout section. */
 function openEntries() {
@@ -60,6 +184,26 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  if (lastFailed()) {
+    out.push({ name: "nocturne.scripts-failed", args: {}, group: "Open", icon: "terminal",
+      title: "Show the last failed script", words: "scripts runner failed error exit output log", go: () => toggleDeck({ centered: true, focus: "runs", show: lastFailed() }) });
+  }
+  out.push({ name: "nocturne.new", args: {}, group: "Open", icon: "plus", title: "New…",
+    words: "plus new menu create terminal web pane tab agent space worktree", go: () => openNewMenu({ centered: true }) });
+  // The + new menu's agents (the last ones this machine reported): beside the focused pane, or in a tab.
+  const machine = h.space?.machine ?? "";
+  for (const a of (shared("new-menu.agents")?.[machine] ?? []).filter((x) => x?.installed && x.run)) {
+    out.push({ name: "terminal.open", args: { agent: a.key }, group: "Agent", icon: "terminal",
+      title: `Start ${a.name}`, words: `agent new start launch run beside pane ${a.key}`, go: () => terminalPane(a.run) });
+    out.push({ name: "tab.new", args: { agent: a.key }, group: "Agent", icon: "terminal",
+      title: `Start ${a.name} in a new tab`, words: `agent new start launch run tab ${a.key}`, go: () => terminalTab(a.run, a.name) });
+  }
+  if (h.space) {
+    out.push({ name: "nocturne", args: { worktree: "new" }, group: "Space", icon: "git-branch", title: "New worktree…",
+      words: "git branch checkout folder space worktree add", go: () => openWorktrees({ space: h.space.id, action: "new" }) });
+    out.push({ name: "nocturne", args: { space: "folder" }, group: "Space", icon: "folder", title: "Change this space's folder…",
+      words: "space folder directory attach repo cwd", go: () => setShared(EDIT_SPACE, { id: h.space.id, kind: "folder", at: Date.now() }) });
+  }
   // While the git window is open: what its main view shows, as a pane (its ctrl-p) or a tab (ctrl-shift-p).
   if (gitOpen()) {
     out.push({ name: "nocturne-git.open-pane", args: {}, group: "Open", icon: "panel-right", bind: "nocturne-git.open-pane",
@@ -76,16 +220,48 @@ function openEntries() {
     const on = pinned(agent);
     out.push({ name: "nocturne", args: { pin: true }, group: "Agent", icon: on ? "pin-off" : "pin", bind: "nocturne.pin",
       title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top jar sidebar fireflies watch orchestrator", go: () => pin(agent, !on) });
+    // Its place in the jar, while it has a neighbor to swap with (menu.js pinItems).
+    const jar = on ? sortedAgents().pinned : [], i = jar.findIndex((a) => a.address === agent);
+    if (i > 0) out.push({ name: "nocturne.pin-up", args: {}, group: "Agent", icon: "pin", title: "Move this agent up in the jar",
+      words: "pin order jar sidebar top", go: () => movePin(agent, -1) });
+    if (i >= 0 && i < jar.length - 1) out.push({ name: "nocturne.pin-down", args: {}, group: "Agent", icon: "pin", title: "Move this agent down in the jar",
+      words: "pin order jar sidebar bottom", go: () => movePin(agent, 1) });
   }
-  // The picture in picture player (nocturne-pip), while its window is open.
-  if (shared("nocturne-pip.player")) {
+  // The newest toast on screen (toast.js): run what it offers, or dismiss it.
+  if ((Array.isArray(shared(TOASTS)) ? shared(TOASTS) : []).length) {
+    out.push({ name: "nocturne.toast", args: {}, group: "App", icon: "check", title: "Do what the toast offers",
+      words: "toast notification act open click newest", go: () => toastKey("toast") });
+    out.push({ name: "nocturne.toast-close", args: {}, group: "App", icon: "x", title: "Dismiss the toast",
+      words: "toast notification close hide dismiss newest", go: () => toastKey("toast-close") });
+  }
+  out.push({ name: "nocturne-notifications.open", args: {}, group: "Agent", icon: "layers", title: "Notifications",
+    words: "notifications inbox agents waiting needs you permission questions bell overview", go: () => run("nocturne-notifications.open") });
+  // The keyboard into a chrome block (nav.js): the sidebar, the tab strip, the pane header.
+  for (const [cmd, title, words] of [
+    ["sidebar", "Keyboard to the sidebar", "focus sky spaces agents navigate"],
+    ["tabstrip", "Keyboard to the tab strip", "focus tabs navigate"],
+    ["header", "Keyboard to the pane header", "focus header tools navigate"],
+  ]) out.push({ name: `nocturne.${cmd}`, args: {}, group: "Window", icon: "square", title, words, go: () => run(`nocturne.${cmd}`) });
+  // The focused terminal: its name in the pane header (menu.js NAME_PANE).
+  if (h.terminal) {
+    const term = h.terminal;
+    out.push({ name: "nocturne", args: { rename: "pane" }, group: "Pane", icon: "square-pen", title: "Rename this pane",
+      words: "name title terminal label pane header", go: () => setShared(NAME_PANE, { terminal: term, at: Date.now() }) });
+  }
+  // The picture in picture player (nocturne-pip), while its window is open (or a pane holds it).
+  const pipWindow = Boolean(shared("nocturne-pip.player")), pipPane = panes().some((p) => p.mod === "nocturne-pip");
+  if (pipWindow || pipPane) {
     for (const [cmd, icon, title, words] of [
-      ["pane", "panel-right", "Picture in picture into a pane", "pip video player pane split beside dock"],
-      ["park", "archive", "Park picture in picture", "pip video player chip hide minimize"],
+      ...(pipWindow ? [
+        ["pane", "panel-right", "Picture in picture into a pane", "pip video player pane split beside dock"],
+        ["park", "archive", "Park picture in picture", "pip video player chip hide minimize"],
+      ] : [["out", "square", "Picture in picture out of the pane", "pip video player window float undock"]]),
       ["toggle", "square", "Picture in picture: play / pause", "pip video player pause resume"],
       ["mute", "square", "Picture in picture: sound off / on", "pip video player mute unmute volume audio"],
       ["rewind", "chevron-left", "Picture in picture: back 10 seconds", "pip video player skip rewind seek"],
       ["forward", "chevron-right", "Picture in picture: on 10 seconds", "pip video player skip forward seek"],
+      ["back", "monitor", "Picture in picture: back into the page", "pip video player return web page end"],
+      ["close", "x", "Close picture in picture", "pip video player stop end quit"],
     ]) {
       out.push({ name: `nocturne-pip.${cmd}`, args: {}, group: "Open", icon, title, words, go: () => run(`nocturne-pip.${cmd}`) });
     }
@@ -103,6 +279,7 @@ const NAMED = [
   ["tab.prev", {}, "Tab", "Previous tab", "tab"],
   ["pane.split", { direction: "right" }, "Pane", "Split right", "vertical"],
   ["pane.split", { direction: "down" }, "Pane", "Split down", "horizontal"],
+  ["pane.split", { direction: "auto" }, "Pane", "Split beside", "auto vertical horizontal new pane longer side"],
   ["pane.close", {}, "Pane", "Close pane", "kill"],
   ["pane.zoom", {}, "Pane", "Zoom pane", "maximize fullscreen"],
   ["pane.park", {}, "Pane", "Park pane", "minimize dock bottom chip hide"],
@@ -112,6 +289,11 @@ const NAMED = [
   ["pane.equalize", { scope: "all" }, "Pane", "Equalize panes", "even out balance same size grid all"],
   ["pane.equalize", { scope: "row" }, "Pane", "Equalize this row", "even out balance same width side by side"],
   ["pane.equalize", { scope: "column" }, "Pane", "Equalize this column", "even out balance same height stacked"],
+  ["pane.float", {}, "Pane", "Float this pane over the tab", "floating overlay detach popup"],
+  ["pane.font_bigger", {}, "Pane", "Bigger text in this pane", "font size zoom larger terminal"],
+  ["pane.font_smaller", {}, "Pane", "Smaller text in this pane", "font size zoom terminal"],
+  ["pane.font_reset", {}, "Pane", "Pane text back to normal size", "font size zoom reset terminal"],
+  ["tab.settle", {}, "Tab", "Put this tab away", "settle hide keep running background out of the list"],
   ["space.new", {}, "Space", "New space", "workspace"],
   ["space.rename", {}, "Space", "Rename space", "workspace"],
   ["space.close", {}, "Space", "Close space", "workspace kill"],
@@ -124,12 +306,23 @@ const NAMED = [
   ["terminal.open", {}, "Terminal", "New terminal", "shell"],
   ["terminal.copy", {}, "Terminal", "Copy", "clipboard"],
   ["terminal.paste", {}, "Terminal", "Paste", "clipboard"],
+  ["terminal.paste_image", {}, "Terminal", "Paste the clipboard image", "clipboard picture screenshot file ctrl-v"],
+  ["terminal.search", {}, "Terminal", "Find in the terminal…", "search scrollback history text"],
+  ["terminal.scroll", { to: "top" }, "Terminal", "Scroll to the top of the history", "scrollback oldest start beginning"],
+  ["terminal.scroll", { to: "bottom" }, "Terminal", "Scroll back to the live screen", "scrollback bottom end newest"],
   ["agent.next", {}, "Agent", "Next agent", ""],
   ["agent.prev", {}, "Agent", "Previous agent", ""],
   ["window.minimize", {}, "Window", "Minimize window", ""],
   ["window.maximize", {}, "Window", "Maximize window", "restore"],
   ["window.close", {}, "Window", "Close window", "quit"],
+  ["overlay.focus", {}, "Window", "Next window", "focus cycle git github floating terminal keyboard front"],
+  ["overlay.focus", { dir: "prev" }, "Window", "Previous window", "focus cycle git github floating terminal keyboard front"],
   ["app.settings", {}, "App", "Settings", "preferences options config look font theme sound"],
+  ["app.settings", { section: "look" }, "App", "Settings: look", "preferences theme font size colors appearance"],
+  ["app.settings", { section: "alerts" }, "App", "Settings: alerts", "preferences sounds notifications"],
+  ["app.settings", { section: "editor" }, "App", "Settings: editor", "preferences vim tabs indent lsp"],
+  ["app.settings", { section: "machines" }, "App", "Settings: machines", "preferences ssh remote hosts servers"],
+  ["app.settings", { section: "updates" }, "App", "Settings: updates", "preferences version release"],
   ["app.help", {}, "App", "Keys", "keybindings shortcuts help"],
   ["app.welcome", {}, "App", "Welcome", "intro start onboarding"],
   ["app.whats_new", {}, "App", "What's new", "release changes news update"],
@@ -137,31 +330,144 @@ const NAMED = [
   ["app.zoom_in", {}, "App", "Zoom in", "bigger font size"],
   ["app.zoom_out", {}, "App", "Zoom out", "smaller font size"],
   ["app.zoom_reset", {}, "App", "Reset zoom", "font size"],
+  ["app.feedback", {}, "App", "Send feedback…", "bug report issue github idea problem"],
+  ["app.hide", {}, "App", "Hide Herdr", "macos minimize away"],
+  ["app.hide_others", {}, "App", "Hide other apps", "macos"],
+  ["app.show_all", {}, "App", "Show all apps", "macos unhide"],
   ["app.quit", {}, "App", "Quit Herdr", "exit"],
   ...["graphite", "ink", "moss", "atom-one-dark"].map((n) => ["app.theme", { name: n }, "App", `Theme: ${n.replace(/-/g, " ")}`, "colors look"]),
 ];
 
-// Commands that act on something you point at (ids, terminals): not for a list.
-const HIDDEN = new Set([
-  "space.move", "tab.move", "space.select", "tab.select", "pane.focus", "terminal.keep",
-  "terminal.park", "terminal.kill", "terminal.show", "agent.focus", "layout.set", "layout.toggle",
-  "layout.show", "layout.hide", "layout.resize", "layout.select", "mod.open", "overlay.close",
-  "tab.settle", "tab.unsettle",
-  "app.palette", "app.hide", "app.hide_others", "app.show_all", "app.theme", "app.settings",
-]);
+// Commands (and keys.json actions) that stay out of the list, each with why:
+// most act on something you point at (ids, indexes, paths). A whole name
+// covers its `name:value` keys too.
+export const OUT = {
+  "space.select": "a place: spaces are in the picker (cmd-p ... ctrl-1..9 pick by position)",
+  "tab.select": "a place: tabs are in the picker (cmd-1..9 pick by position)",
+  "space.move": "needs a space id and a position: drag it in the sidebar",
+  "tab.move": "needs a tab id and a position: drag it in the tab strip",
+  "pane.focus": "needs a pane: Focus pane left/right/up/down, or click it",
+  "agent.focus": "needs an agent: the sidebar and the picker list them",
+  "terminal.keep": "needs a terminal without a pane (a sub-agent): the sidebar's agents",
+  "terminal.show": "needs a terminal: the sidebar's agents",
+  "terminal.peek": "needs a terminal: the sidebar's agents",
+  "terminal.kill": "needs a terminal: Close pane ends the focused one",
+  "terminal.pin": "Pin this agent to the top (nocturne.pin) pins the focused agent through it",
+  "float.view": "needs a view index: the floating terminal's own tabs",
+  "layout.set": "needs a whole layout tree (agents and mods write it)",
+  "layout.toggle": "needs a layout node id; the sidebar's is Fold or open the sidebar (nocturne.fold, cmd-b)",
+  "layout.show": "needs a layout node id",
+  "layout.hide": "needs a layout node id",
+  "layout.resize": "needs a layout node id and a size: drag the divider",
+  "layout.select": "needs a stack and a child id",
+  "layout.focus": "needs a layout block id: Keyboard to the sidebar / tab strip / pane header do it for Nocturne's",
+  "mod.open": "needs a mod name; the picker's is Go to space or tab…",
+  "overlay.close": "closes the top dialog: esc does it, and the palette is the top dialog until it runs",
+  "overlay.move": "needs how far to move: drag the window",
+  "overlay.resizable": "needs a window id and its sizing (mods set it)",
+  "native.debug": "a report for agents (herdr-app do native.debug): nothing to see from a list",
+  "native.call": "needs a native view key and an action (mods call it)",
+  "app.palette": "the palette itself",
+  "app.theme": "needs a theme name: the Theme: … rows, and Settings: look",
+  "app.open_url": "needs a URL: the Web panel's address bar (Go to an address… while a web pane is focused)",
+  "editor.open": "needs a path: Find a file… opens files in the editor",
+  "markdown.open": "needs a path: Find a file… opens Markdown files",
+  "preview.open": "needs a path: Find a file… opens pictures, PDFs and the rest",
+  "image.open": "needs a path (the old name of preview.open)",
+  "space.folder": "needs a folder: Change this space's folder… asks for it",
+  "tab.unsettle": "needs a put-away tab: showing it from the picker brings it back",
+  // Nocturne's own (sky.js, tabs.js) and its mods' internal commands.
+  "nocturne.focus": "internal: overlay.focus and pane.go hand a block the keyboard with it",
+  "nocturne.lazygit": "the old name of nocturne.git (Git)",
+  "nocturne.scripts-grant": "the failed nix-darwin toast's click (App Management): nothing to grant otherwise",
+  "nocturne.toast-dismiss": "the old name of nocturne.toast-close (Dismiss the toast)",
+  "nocturne-files.focus": "internal: hands the files pane the keyboard",
+  "nocturne-files.take-panel": "internal: the files panel takes the keyboard when its pane is focused",
+  "nocturne-diff.focus": "internal: hands the diff the keyboard",
+  "nocturne-markdown.focus": "internal: hands the viewer the keyboard",
+  "nocturne-markdown.up": "scrolls half a page: a key for the viewer, not a list",
+  "nocturne-markdown.down": "scrolls half a page: a key for the viewer, not a list",
+  "nocturne-preview.focus": "internal: hands the preview the keyboard",
+  "nocturne-editor.focus": "internal: hands the editor the keyboard",
+  "nocturne-editor.hover-more": "acts on the open hover card (ctrl-= while it's up)",
+  "nocturne-editor.hover-less": "acts on the open hover card (ctrl-- while it's up)",
+  "nocturne-browser.focus": "internal: hands the web pane's bar the keyboard",
+  "nocturne-browser.web": "hands the keyboard to the page: click it",
+  "nocturne-agents.focus": "internal: hands the agents graph the keyboard",
+  "nocturne-usage.focus": "internal: hands the usage pane the keyboard",
+  "nocturne-pip.focus": "internal: hands the player the keyboard",
+  "nocturne-pip.unfocus": "the player's key that hands the keyboard back: esc in the player",
+  "nocturne-git.focus": "internal: hands the git window the keyboard",
+  "nocturne-git.back": "the git window's esc (closes its popup)",
+  "nocturne-git.commit-ok": "the git window's enter in its commit popup",
+  "nocturne-git.confirm-yes": "the git window's enter in its confirm popup",
+  "nocturne-git.menu-run": "the git window's enter in its menu",
+  "nocturne-git.prompt-ok": "the git window's enter in its prompt",
+  "nocturne-github.focus": "internal: hands the GitHub window the keyboard",
+  "nocturne-github.new-pr": "the same form as GitHub: new pull request… (nocturne.github-pr)",
+  "nocturne-github.run-workflow": "the same form as GitHub: run a workflow… (nocturne.github-run)",
+  "nocturne-notifications.focus": "internal: hands the overview the keyboard",
+  "nocturne-notifications.refresh": "internal: the bell reads the notifications again",
+  "nocturne-picker.files": "the open picker's switch to files: Find a file… (nocturne.picker) sends it",
+  "nocturne-picker.grep": "the open picker's switch to grep: Grep the project… (nocturne.grep) sends it",
+};
+
+// Whole families of mod commands that stay out (the test knows where each one's list lives).
+export const OUT_FAMILIES = {
+  "nocturne-git": "the git window's key table (nocturne-git/keys.js): each acts on the window's selection; its ? and menus list them",
+  "nocturne-notifications": "the open overview's keys (open.js COMMAND_KEYS): they act on its selection; its key bar lists them",
+};
 
 function titleOf(name) {
   const [noun, verb] = name.split(".");
   return { group: noun.charAt(0).toUpperCase() + noun.slice(1), title: `${verb.replace(/_/g, " ")} ${noun}`.replace(/^./, (c) => c.toUpperCase()) };
 }
 
+/** Core commands for what's focused or waiting now: the focused pane and
+ *  terminal, an update. (The shipped palette has the same; frame/palette.) */
+function stateEntries() {
+  const out = [];
+  const h = here();
+  const ps = panes(), mine = h.pane ? ps.find((p) => p.pane === h.pane) : null;
+  if (mine && ps.filter((p) => p.tab === mine.tab).length > 1) {
+    out.push({ name: "pane.move", args: {}, group: "Pane", title: "Move this pane to a new tab", words: "pane move tab own detach break out" });
+  }
+  const all = terminals(), term = h.terminal ? all.find((x) => x.address === h.terminal) : null;
+  if (term) {
+    const toProgram = term.labels?.["herdr.right-click"] === "program";
+    out.push({ name: "terminal.right_click", args: { to: toProgram ? "menu" : "program", terminal: term.address }, group: "Terminal",
+      title: toProgram ? "Right-clicks open the menu" : "Send right-clicks to the program", words: "mouse right click menu program tmux vim" });
+    const parent = term.parent && all.find((x) => x.address === term.parent);
+    if (parent) out.push({ name: "terminal.park", args: { terminal: term.address }, group: "Agent",
+      title: `Send back to ${parent.name || parent.address}`, words: "sub-agent subagent parent park return pane" });
+  }
+  const u = updates?.();
+  if (u?.app?.ready) out.push({ name: "app.update", args: {}, group: "App", title: `Restart into ${u.app.ready}`, words: "update upgrade new version restart" });
+  if (u?.core?.ready && !u.core.managed) out.push({ name: "app.update_core", args: {}, group: "App", title: `Update herdr-core to ${u.core.ready}`, words: "update upgrade core terminals keep running" });
+  if (u?.checks !== false) out.push({ name: "app.check_updates", args: {}, group: "App", title: "Check for updates", words: "update upgrade new version release" });
+  return out;
+}
+
+// stateEntries' commands: only it adds them.
+const STATE = new Set(["pane.move", "terminal.right_click", "terminal.park", "app.update", "app.update_core", "app.check_updates"]);
+// Commands that need a terminal focused (they fail on a mod pane).
+const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.paste_image", "terminal.search", "terminal.scroll",
+  "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
+// macOS only (app.quit too, on every platform the window's close quits).
+const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
+// Nocturne runs these in place of Herdr's: the same key, the sidebar's order.
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev" };
+
 /** Every entry for the state we're in now. */
 function entries() {
   const known = new Set(commands().map((c) => c.name));
   const mac = win()?.platform === "macos";
-  const list = [...openEntries(), ...NAMED.filter(([n]) => known.has(n))
-    .filter(([n]) => !(mac && n.startsWith("window.")))
-    .map(([name, args, group, title, words]) => ({ name, args, group, title, words }))];
+  const terminal = Boolean(here().terminal);
+  const list = [...findEntries(), ...paneEntries(), ...windowEntries(), ...openEntries(), ...NAMED.filter(([n]) => known.has(n))
+    .filter(([n]) => !(mac && n.startsWith("window.")) && (mac || !MAC_ONLY.has(n)) && (terminal || !NEEDS_TERMINAL.has(n)))
+    .map(([name, args, group, title, words]) => IN_PLACE[name]
+      ? { name, args, group, title, words, bind: IN_PLACE[name], go: () => run(IN_PLACE[name]) }
+      : { name, args, group, title, words }), ...stateEntries()];
   for (const l of layouts()) {
     const t = { main: "Herdr", terminals: "Terminals", win98: "Herdr 98" }[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
     list.push({ name: "layout.switch", args: { name: l }, group: "Layout", title: `Layout: ${t}`, words: `look ${l}` });
@@ -169,34 +475,60 @@ function entries() {
   // Anything new in the app shows up too, until it gets a better name here.
   const named = new Set(NAMED.map(([n]) => n));
   for (const c of commands()) {
-    if (named.has(c.name) || HIDDEN.has(c.name) || c.args.some((a) => a.required && a.name !== "name")) continue;
+    if (named.has(c.name) || c.name in OUT || STATE.has(c.name) || c.args.some((a) => a.required && a.name !== "name")) continue;
     list.push({ name: c.name, args: {}, ...titleOf(c.name), words: c.about });
   }
   return list.map((e) => ({ ...e, id: `${e.name}:${JSON.stringify(e.args)}` }));
 }
 
-/** The key bound to an entry (`name` or `name:value` in keys.json), in macOS glyphs. */
-function keyOf(e, bound, mac) {
+/** The keys.json sections in force now, strongest first: the focused pane's
+ *  mod section (or `terminal` on a terminal), the layout's, then global. */
+function sections() {
+  const h = here();
+  const p = h.pane ? panes().find((x) => x.pane === h.pane) : null;
+  return [p?.mod ? `mod:${p.mod}` : h.terminal ? "terminal" : null, "layout:nocturne", "global"].filter(Boolean);
+}
+
+/** The key bound to an entry (`bind`, else `name` or `name:value` in
+ *  keys.json), in macOS glyphs. A key a stronger section binds to something
+ *  else isn't this entry's (cmd-p is the file picker in Nocturne, not Herdr's). */
+export function keyOf(e, bound, mac, order = sections()) {
   const v = Object.values(e.args)[0];
   const want = e.bind ?? (v === undefined ? e.name : `${e.name}:${v}`);
-  const k = bound.find((b) => (b.section === "global" || b.section === "layout:nocturne") && b.action === want)?.keys?.trim();
+  const rank = (b) => order.indexOf(b.section);
+  const k = bound.find((b) => rank(b) >= 0 && b.action === want
+    && !bound.some((o) => rank(o) >= 0 && rank(o) < rank(b) && o.keys.trim() === b.keys.trim() && o.action !== want))?.keys?.trim();
   if (!k) return null;
   // Departure Mono has ⌘ and ⌥; shift and control are spelled.
   const names = mac ? { cmd: "⌘", alt: "⌥", shift: "shift-", ctrl: "ctrl-" } : { ctrl: "ctrl-", alt: "alt-", shift: "shift-", cmd: "super-" };
   const alias = { secondary: mac ? "cmd" : "ctrl", super: "cmd", win: "cmd" };
   return k.split(/\s+/).map((stroke) => {
     const parts = stroke.endsWith("--") ? [...stroke.slice(0, -2).split("-"), "-"] : stroke.split("-");
-    const key = parts.pop();
+    let key = parts.pop();
     const held = new Set(parts.map((m) => alias[m.toLowerCase()] ?? m.toLowerCase()));
+    // shift-/ is ?, as the keys lists spell it.
+    if (key === "/" && held.has("shift")) { key = "?"; held.delete("shift"); }
     const label = key.length === 1 ? key.toUpperCase() : key.toLowerCase();
     return [...["ctrl", "alt", "shift", "cmd"].filter((m) => held.has(m)).map((m) => names[m]), label].join("");
   }).join(" ");
 }
 
-/** Fuzzy score of `q` in `text`, with the matched positions; null: no match. */
+/** Fuzzy score of `q` in `text`, with the matched positions; null: no match.
+ *  Tried from each word start too, so "file" finds the word in "Find a file…"
+ *  rather than the f of Find. */
 function fuzzy(q, text) {
   const t = text.toLowerCase();
-  let score = 0, at = 0, streak = 0;
+  let best = fuzzyFrom(q, t, text.length, 0);
+  for (let i = 1; i < t.length; i++) {
+    if (t[i] !== q[0] || !/[\s:.\-_/]/.test(t[i - 1])) continue;
+    const r = fuzzyFrom(q, t, text.length, i);
+    if (r && (!best || r.score > best.score)) best = r;
+  }
+  return best;
+}
+
+function fuzzyFrom(q, t, length, from) {
+  let score = 0, at = from, streak = 0;
   const hits = [];
   for (const ch of q) {
     const i = t.indexOf(ch, at);
@@ -207,7 +539,7 @@ function fuzzy(q, text) {
     hits.push(i);
     at = i + 1;
   }
-  return { score: score - text.length * 0.02, hits };
+  return { score: score - length * 0.02, hits };
 }
 
 function loadRecent() {
@@ -216,8 +548,10 @@ function loadRecent() {
 
 export default class Palette {
   init(_props, cx) {
-    this.query = "";
+    // A mod that opens the palette itself may hand it a search to start from (props.query).
+    this.query = typeof props()?.query === "string" ? props().query : "";
     this.input = InputState.new({ placeholder: "type a command" });
+    if (this.query) this.input.set_value(this.query);
     this.input.on("change", (_e, cx) => { this.query = this.input.value(); this.at = 0; cx.notify(); });
     this.input.on("submit", () => this.go(this.rows()[this.at]?.e));
     this.input.focus();
@@ -284,6 +618,12 @@ export default class Palette {
     return h_flex().min_w(0).children(parts.map(([s, h]) => div().text_color(h ? t.accent : base).child(s.replace(/ /g, " "))));
   }
 
+  /** Where a search that found no command may belong: files, text in files, places. */
+  elsewhere(bound, mac, order) {
+    const k = (name) => { const key = keyOf({ name, args: {} }, bound, mac, order); return key ? ` (${key})` : ""; };
+    return `Files: Find a file…${k("nocturne.picker")}. Text: Grep the project…${k("nocturne.grep")}. Spaces and tabs: Go to space or tab…${k("mod.open:picker")}.`;
+  }
+
   /** A key as a small square cap, one per stroke. */
   keycap(t, k, on) {
     return h_flex().flex_none().gap(3).children(k.split(" ").map((stroke, i) =>
@@ -305,6 +645,7 @@ export default class Palette {
     const rows = this.rows();
     const bound = keys();
     const mac = win()?.platform === "macos";
+    const order = sections();
     this.at = Math.min(this.at, Math.max(0, rows.length - 1));
     // One strip: each row (and the group title before it) at a fixed y. The
     // strip scrolls only as far as it takes to keep the selected row in view.
@@ -338,7 +679,7 @@ export default class Palette {
       if (head && visible(title, row)) list.push(place(v_flex().id(`pl-h-${i}`), title, row).justify_end().child(this.groupHead(t, r.head, counts.get(r.head))));
       if (!visible(row, row + ROW_H)) return;
       const on = i === this.at;
-      const k = keyOf(r.e, bound, mac);
+      const k = keyOf(r.e, bound, mac, order);
       const icon = r.e.icon ?? ICONS[r.e.group] ?? "square";
       // Placed last: an absolute row is its own anchor for the band; .relative() after it would undo it.
       list.push(place(h_flex().id(`pl-${i}`).relative(), row, row + ROW_H).px(16).gap(10).items_center().text_size(12)
@@ -388,7 +729,7 @@ export default class Palette {
           .children(fixed ? [div().relative().h(LIST_H).children(list)] : [v_flex().children(list)])
         : v_flex().px(16).py(14).gap(4).text_size(11)
           .child(div().text_color(t.muted).child(`Nothing matches "${this.query}".`))
-          .child(div().text_color(t.dim).child("Spaces and tabs are in the picker (⌘P).")))
+          .child(div().text_color(t.dim).child(this.elsewhere(bound, mac, order))))
       .child(h_flex().relative().h(26).mt(4).flex_none().px(16).gap(14).items_center().text_size(10)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(hint("↑↓ ctrl-n/p", "move")).child(hint("enter", "run")).child(hint("esc", "close"))

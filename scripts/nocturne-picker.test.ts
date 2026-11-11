@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 
 // The picker's decisions (defaults/mods/nocturne-picker/logic.js).
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, lineRuns } from "../defaults/mods/nocturne-picker/logic.js";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, lineRuns, previewWidth, previewLines, PREVIEW_MIN, LIST_MIN, PREVIEW_LINE, PREVIEW_CHROME, keyFor, otherMode } from "../defaults/mods/nocturne-picker/logic.js";
 
 test("matched characters are marked, ranges in any order and overlapping", () => {
   expect(marks("picker.rs", [[0, 1], [3, 4], [7, 9]])).toEqual([["p", true], ["ic", false], ["k", true], ["er.", false], ["rs", true]]);
@@ -57,4 +57,36 @@ test("a grep line's colored runs split where its matches start and end", () => {
     ["le", "kw", false], ["t ", "kw", true], ["need", null, true], ["le", null, false], [" = 1", null, false],
   ]);
   expect(lineRuns([["abc", null]], [])).toEqual([["abc", null, false]]);
+});
+
+test("the preview takes the larger share of a wide picker, and drops out of a narrow one", () => {
+  // David's window: about 2000 wide at 0.9, the picker 90% of it.
+  const w = 1980;
+  expect(previewWidth(w)).toBeGreaterThan(w * 0.55);
+  expect(w - previewWidth(w)).toBeGreaterThanOrEqual(LIST_MIN);
+  // Just wide enough: the list keeps its least.
+  expect(previewWidth(PREVIEW_MIN)).toBe(PREVIEW_MIN - LIST_MIN);
+  expect(previewWidth(PREVIEW_MIN - 1)).toBe(0);
+  expect(previewWidth(600)).toBe(0);
+});
+
+test("the preview loads enough lines to fill its height, the hit line in view", () => {
+  for (const h of [500, 900, 1300]) {
+    const n = previewLines(h);
+    expect(n * PREVIEW_LINE).toBeGreaterThanOrEqual(h - PREVIEW_CHROME);
+    const text = Array.from({ length: 500 }, (_, i) => `l${i + 1}`).join("\n");
+    const a = around(text, 250, n);
+    expect(a.lines.length).toBe(n);
+    // Shown rows: what fits under the bars; the hit is among them.
+    const shown = Math.floor((h - PREVIEW_CHROME) / PREVIEW_LINE);
+    expect(250 - a.from).toBeLessThan(shown);
+  }
+});
+
+test("the chips and the hint bar name the bound key, else the shipped one", () => {
+  const bound = [{ section: "layout:nocturne", keys: "cmd-alt-g", action: "nocturne.grep" }, { section: "mod:x", keys: "cmd-y", action: "nocturne.picker" }];
+  expect(keyFor(bound, "nocturne.grep", "cmd-shift-f")).toBe("cmd-alt-g");
+  expect(keyFor(bound, "nocturne.picker", "cmd-p")).toBe("cmd-p");
+  expect(otherMode("files")).toBe("grep");
+  expect(otherMode("grep")).toBe("files");
 });

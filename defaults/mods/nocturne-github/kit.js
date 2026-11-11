@@ -42,6 +42,16 @@ export function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 
+/** The dim under a popup inside the window (a picker, a confirm): black,
+ *  dithered, light enough that the window stays readable under it. The same
+ *  as nocturne-git's (draw.js POPUP_SCRIM): every in-window popup matches. */
+export const POPUP_SCRIM = "#0000008c";
+
+/** The layer that dims the window under an in-window popup (POPUP_SCRIM). */
+export function popupScrim(id) {
+  return div().id(id).absolute().inset_0().child(dither(POPUP_SCRIM, 1));
+}
+
 /** A tone (model.js) -> its theme color. */
 export function toneColor(t, tone) {
   return { working: t.working, done: t.done, failed: t.blocked, queued: t.ansi8, stopped: t.ansi8, skipped: t.ansi0 }[tone] ?? t.ansi8;

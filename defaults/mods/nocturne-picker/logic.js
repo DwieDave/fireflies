@@ -154,3 +154,34 @@ export function lineRuns(runs, ranges) {
 /** How long typing must pause before the picker searches (ms): grep reads
  *  every file, so it waits a little longer than the file list. */
 export const PAUSE = { files: 40, grep: 120 };
+
+/** The overlay width from which the preview shows, and the least the list
+ *  keeps beside it. */
+export const PREVIEW_MIN = 860, LIST_MIN = 340;
+
+/** The preview's width in a picker `width` wide: the larger share (about 64%),
+ *  the list keeping at least LIST_MIN; 0 below PREVIEW_MIN (no preview). */
+export function previewWidth(width) {
+  if (!(width >= PREVIEW_MIN)) return 0;
+  return Math.round(width - Math.max(LIST_MIN, width * 0.36));
+}
+
+/** The preview's line height and the height the picker's bars take
+ *  (input 48, hint bar 26, the preview's head 26 and its top padding 6). */
+export const PREVIEW_LINE = 20, PREVIEW_CHROME = 48 + 26 + 26 + 6;
+
+/** How many lines to load so the preview is full in a picker `height` tall,
+ *  with a few to spare (a note line moves it, the last row may be cut). */
+export function previewLines(height) {
+  return Math.max(12, Math.ceil(Math.max(0, height - PREVIEW_CHROME) / PREVIEW_LINE) + 3);
+}
+
+/** The other mode. */
+export const otherMode = (mode) => (mode === "files" ? "grep" : "files");
+
+/** The key bound to `action` in the nocturne layout or globally (keys()),
+ *  else `fallback`: what the chips and the hint bar name. */
+export function keyFor(bound, action, fallback) {
+  const k = (bound ?? []).find((b) => b.action === action && (b.section === "layout:nocturne" || b.section === "global"));
+  return k?.keys ?? fallback;
+}
