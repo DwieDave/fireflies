@@ -408,6 +408,8 @@ export const OUT = {
   "nocturne-github.run-workflow": "the same form as GitHub: run a workflow… (nocturne.github-run)",
   "nocturne-notifications.focus": "internal: hands the overview the keyboard",
   "nocturne-notifications.refresh": "internal: the bell reads the notifications again",
+  "nocturne-picker.files": "the open picker's switch to files: Find a file… (nocturne.picker) sends it",
+  "nocturne-picker.grep": "the open picker's switch to grep: Grep the project… (nocturne.grep) sends it",
 };
 
 // Whole families of mod commands that stay out (the test knows where each one's list lives).
