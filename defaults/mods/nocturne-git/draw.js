@@ -33,18 +33,33 @@ export const laneColors = (t) => [t.ansi4, t.ansi2, t.ansi5, t.ansi6, t.ansi3, t
 /** lazygit's status letter colors: staged green, unstaged red. */
 export const letterColor = (t, ch, staged) => (ch === " " ? t.dim : ch === "?" ? t.ansi1 : ch === "U" ? t.ansi3 : staged ? t.ansi2 : t.ansi1);
 
+/** A frame's top or bottom edge with labels cut into it, lazygit's way: the
+ *  1 px line runs up to a label, stops, and goes on after it, so no line is
+ *  drawn behind the text at any zoom. The row is 13 px tall and centered on
+ *  the frame's edge (its line lands on the edge's pixel row). `left` and
+ *  `right` are the labels (elements, or null). */
+export function edgeRow(t, id, edge, where, left, right) {
+  const line = () => div().h(1).bg(edge);
+  const label = (el) => h_flex().flex_none().min_w(0).px(4).gap(5).items_center().child(el);
+  return h_flex().id(id).absolute().left(0).right(0).h(13).items_center().text_size(11)
+    .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
+    .child(line().w(left ? 8 : 0).flex_none())
+    .when(Boolean(left), (el) => el.child(label(left).flex_shrink(1)))
+    .child(line().flex_1().min_w(8))
+    .when(Boolean(right), (el) => el.child(label(right)).child(line().w(8).flex_none()));
+}
+
 /** A lazygit panel: 1-bit frame, `title` (elements) cut into the top edge,
- *  accent when it has the keyboard; `foot` cut into the bottom edge. */
+ *  accent when it has the keyboard; `right` (a chip) and `foot` cut into the
+ *  top and bottom edges on the right. */
 export function panel(t, id, title, active, body, { foot = null, right = null, onTitle = null } = {}) {
   const edge = active ? t.accent : t.ansi0;
-  return div().id(id).relative().flex().flex_col().min_h(0).min_w(0).border(1).border_color(edge)
+  const head = h_flex().gap(5).items_center().children(title)
+    .when(Boolean(onTitle), (el) => el.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); }));
+  return div().id(id).relative().flex().flex_col().min_h(0).min_w(0).border_l(1).border_r(1).border_color(edge)
     .child(div().relative().flex_1().min_h(0).pt(7).pb(2).overflow_hidden().child(body))
-    .child(h_flex().id(`${id}-title`).absolute().top(-7).left(8).right(8).h(13).gap(6).items_center().text_size(11)
-      .child(h_flex().px(4).gap(5).bg(t.background).items_center().children(title)
-        .when(Boolean(onTitle), (el) => el.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); })))
-      .child(div().flex_1())
-      .when(Boolean(right), (el) => el.child(h_flex().px(4).bg(t.background).items_center().gap(4).child(right))))
-    .when(Boolean(foot), (el) => el.child(div().absolute().right(8).bottom(-7).px(4).bg(t.background).text_size(11).text_color(active ? t.accent : t.dim).child(foot)));
+    .child(edgeRow(t, `${id}-top`, edge, "top", head, right))
+    .child(edgeRow(t, `${id}-bottom`, edge, "bottom", null, foot ? div().text_color(active ? t.accent : t.dim).child(foot) : null));
 }
 
 /** A selected row's band: dither with an accent edge (dimmer off focus). */
