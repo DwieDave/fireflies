@@ -5740,6 +5740,75 @@ mod tests {
         });
     }
 
+    /// HERDR: a single-line input inside a bar whose mouse-down listeners stop
+    /// propagation (Nocturne's web pane address field sits in one): a press,
+    /// drag and release select, shift-right extends, a double click selects a
+    /// word and the selection is painted.
+    #[gpui::test]
+    fn a_bar_that_stops_mouse_down_leaves_the_input_its_selection(cx: &mut TestAppContext) {
+        struct Bar(Entity<InputBaseState<InputMode>>);
+        impl Render for Bar {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                div()
+                    .id("bar")
+                    .size_full()
+                    .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                    .child(
+                        div()
+                            .id("address")
+                            .w(px(380.))
+                            .h(px(22.))
+                            .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
+                            .child(crate::input::Input::new(&self.0)),
+                    )
+            }
+        }
+
+        const URL: &str = "https://example.com/some/path";
+        cx.update(crate::init);
+        let mut input = None;
+        let window = cx.open_window(size(px(400.), px(100.)), |window, cx| {
+            let state = cx.new(|cx| crate::input::InputState::new(window, cx).default_value(URL));
+            input = Some(state.clone());
+            Bar(state)
+        });
+        let input = input.unwrap();
+        let mut cx = VisualTestContext::from_window(window.into(), cx);
+        cx.update(|window, cx| input.update(cx, |state, cx| state.focus(window, cx)));
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+
+        let at = |cx: &mut VisualTestContext, col: usize| {
+            input.read_with(cx, |state, _| {
+                let layout = state.last_layout.as_ref().unwrap();
+                let origin = state.last_bounds.unwrap().origin;
+                let local = layout.lines[0].position_for_index(col, layout, false).unwrap();
+                origin + point(layout.line_number_width + local.x + px(1.), layout.line_height * 0.5)
+            })
+        };
+        let none = gpui::Modifiers::default();
+        let (from, to) = (at(&mut cx, 8), at(&mut cx, 15));
+        cx.simulate_mouse_down(from, MouseButton::Left, none);
+        cx.simulate_mouse_move(to, MouseButton::Left, none);
+        cx.simulate_mouse_up(to, MouseButton::Left, none);
+        let selected = input.read_with(&cx, |state, _| state.selected_range());
+        assert_eq!(selected, 8..15, "a drag selects");
+        cx.update(|window, cx| window.draw(cx).clear(cx));
+        let painted = input.read_with(&cx, |state, _| state.last_layout.is_some());
+        assert!(painted);
+
+        cx.simulate_keystrokes("shift-right");
+        assert_eq!(input.read_with(&cx, |state, _| state.selected_range()), 8..16, "shift-right extends");
+
+        // A double click selects the word under it.
+        let word = at(&mut cx, 10);
+        cx.simulate_event(gpui::MouseDownEvent { button: MouseButton::Left, position: word, modifiers: none, click_count: 1, first_mouse: false });
+        cx.simulate_event(gpui::MouseUpEvent { button: MouseButton::Left, position: word, modifiers: none, click_count: 1 });
+        cx.simulate_event(gpui::MouseDownEvent { button: MouseButton::Left, position: word, modifiers: none, click_count: 2, first_mouse: false });
+        cx.simulate_event(gpui::MouseUpEvent { button: MouseButton::Left, position: word, modifiers: none, click_count: 2 });
+        let (range, text) = input.read_with(&cx, |state, _| (state.selected_range(), state.selected_text().to_string()));
+        assert_eq!(text, "example", "a double click selects the word ({range:?})");
+    }
+
     #[gpui::test]
     fn test_noop_scroll_notifies_diagnostic_dismissal(cx: &mut TestAppContext) {
         use std::{cell::Cell, rc::Rc};
