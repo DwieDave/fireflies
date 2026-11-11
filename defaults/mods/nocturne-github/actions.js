@@ -361,7 +361,7 @@ export default class Actions {
     if (!this.jobsOf(r)) return panel(t, "graph", title, active, empty(t, "Reading jobs…", null, { small: true }));
     if (!cols.length) return panel(t, "graph", title, active, empty(t, "No jobs yet", "The run hasn't started its jobs.", { small: true }));
     // Keep the selected job in view: pan only as far as needed.
-    const g = layout(cols);
+    const g = layout(cols, this.parents(), r);
     const n = g.nodes.find((x) => x.job.id === this.jobSel);
     const { width: W, height: H } = this.graphSize;
     let px = g.width <= W ? Math.round((W - g.width) / 2) : 0, py = g.height <= H ? Math.round((H - g.height) / 2) : 0;
