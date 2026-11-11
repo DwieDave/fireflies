@@ -126,6 +126,7 @@ export const BINDINGS = [
   ["branches", ["u"], "upstream-menu", "Upstream options…", "menu"],
   ["branches", ["s"], "sort-menu", "Sort order…", "menu"],
   ["branches", ["o"], "pr-create", "Create pull request", "menu"],
+  ["branches", ["O"], "pr-create-github", "Create pull request in the GitHub window", "menu"],
   ["branches", ["G"], "pr-open", "Open pull request in browser", "menu"],
   ["branches", ["w"], "worktree-new", "New worktree", "menu"],
   ["branches", ["ctrl-o"], "copy-name", "Copy name", "menu"],
