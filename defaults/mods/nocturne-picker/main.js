@@ -211,8 +211,10 @@ export default class Picker extends View {
         .child(div().text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms != null ? ` · ${this.ms} ms` : ""}` : "")));
   }
 
+  /** The picked row: a flat accent tint and the bar, clear on moonfly's
+   *  near-black while the text on it stays readable. */
   selected(t, el, sel) {
-    return el.when(sel, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)));
+    return el.when(sel, (el) => el.bg(t.accent + "2e").child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)));
   }
 
   pieces(t, parts, base) {
@@ -228,7 +230,7 @@ export default class Picker extends View {
       .on_click((_e, cx) => { this.at = i; this.open(); }), sel)
       .child(div().relative().w(10).flex_none().text_size(11).text_color(g ? t[GIT[g]] ?? t.dim : t.dim).child(g ?? ""))
       .child(h_flex().relative().flex_none().children(this.pieces(t, marks(name, nameRanges(r.path, r.file.ranges)), t.foreground)))
-      .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().children(this.pieces(t, marks(dir, dirRanges(r.path, r.file.ranges)), t.dim)));
+      .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().children(this.pieces(t, marks(dir, dirRanges(r.path, r.file.ranges)), sel ? t.muted : t.dim)));
   }
 
   headRow(t, r, i) {

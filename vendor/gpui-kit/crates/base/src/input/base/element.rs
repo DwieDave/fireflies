@@ -3132,21 +3132,26 @@ impl<M: InputModeKind> Element for TextElement<M> {
         }
 
         // Paint selections
-        if window.is_window_active() {
+        // HERDR: also while the window is in the background, a little dimmer
+        // (a selection that vanishes when another app is in front reads as lost).
+        {
+            let active = window.is_window_active();
+            let dim = |c: Hsla| if active { c } else { c.opacity(0.7) };
+            let selection = dim(editor_style.selection);
             let secondary_selection = Hsla {
                 s: 0.1,
-                ..editor_style.selection
+                ..selection
             };
             for (path, is_active) in prepaint.search_match_paths.iter() {
                 window.paint_path(path.clone(), secondary_selection);
 
                 if *is_active {
-                    window.paint_path(path.clone(), editor_style.selection);
+                    window.paint_path(path.clone(), selection);
                 }
             }
 
             for path in prepaint.selection_paths.drain(..) {
-                window.paint_path(path, editor_style.selection);
+                window.paint_path(path, selection);
             }
 
             // Paint hover highlight

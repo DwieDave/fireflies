@@ -39,9 +39,12 @@ class Ed {
     if (!r.taken) this.native(k);
     if (r.replay) this.take(play(this.vim, r.replay.keys, { text: this.text, cursor: this.cursor, clipboard: this.clipboard }, r.replay.times));
   }
+  /** Like the real editor: with selections, the caret is at the first one's end. */
+  nativeCaret = false;
   take(r: any) {
     if (r.edits?.length) this.text = applyEdits(this.text, r.edits);
     if (r.cursor) this.cursor = r.cursor;
+    if (this.nativeCaret && r.selections?.length) this.cursor = r.selections[0].end;
     if (r.commands?.length) this.commands.push(...r.commands);
     if (r.clipboard) this.clipboard = r.clipboard.text;
     if (r.selections !== undefined) this.selections = r.selections;
@@ -241,6 +244,18 @@ describe("visual", () => {
     check("|abc\nabc\nabc", "<C-v>jjd", "|bc\nbc\nbc");
     const e = check("|abc\nabc", "<C-v>jI-<esc>", "|-abc\n-abc".replace("|-abc", "|-abc"));
     expect(e.text).toBe("-abc\n-abc");
+  });
+  test("visual keeps its own head while the editor's caret sits at the selection's end", () => {
+    const e = ed("|abc def ghi\nabc def ghi\nabc def ghi");
+    e.nativeCaret = true;
+    e.keys("wvee");
+    expect(e.selections[0]).toMatchObject({ start: { line: 0, col: 4 }, end: { line: 0, col: 11 } });
+    const b = ed("|abc def\nabc def\nabc def");
+    b.nativeCaret = true;
+    b.keys("w<C-v>jje");
+    expect(b.selections.map((s: any) => [s.start.line, s.start.col, s.end.col])).toEqual([[0, 4, 7], [1, 4, 7], [2, 4, 7]]);
+    b.keys("d");
+    expect(b.text).toBe("abc \nabc \nabc ");
   });
   test("p over a selection replaces it and keeps what was there", () => {
     const e = check("|one two", "yiwwviwp", "one on|e");

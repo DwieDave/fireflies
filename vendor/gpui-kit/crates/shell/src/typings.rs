@@ -3233,6 +3233,9 @@ const BASE: &str = r#"  /** A row. */
        * constant, variable, operator, punctuation, boolean, string.escape.
        * Values are concrete hex colors; unspecified UI colors follow the theme. */
       syntax?: Record<string, string>;
+      /** HERDR: the selection's color, `#rrggbbaa` (keep it see-through so text shows); search
+       *  matches are drawn from it. Unset: the theme's `selection`. */
+      selection?: string;
     }) => EditorState;
   };
   export const Editor: { new: (state: EditorState) => NativeElement };

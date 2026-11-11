@@ -195,6 +195,8 @@ pub(crate) struct EditorOptions {
     pub syntax: HashMap<String, String>,
     pub font_family: Option<String>,
     pub font_size: Option<f32>,
+    // HERDR: the selection's color (search matches are drawn from it); unset: the theme's.
+    pub selection: Option<String>,
 }
 
 impl Default for EditorOptions {
@@ -209,6 +211,7 @@ impl Default for EditorOptions {
             syntax: HashMap::new(),
             font_family: None,
             font_size: None,
+            selection: None,
         }
     }
 }
