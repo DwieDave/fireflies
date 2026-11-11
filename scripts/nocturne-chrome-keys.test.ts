@@ -66,6 +66,7 @@ const theme: any = new Proxy({}, { get: () => "#808080" });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch(() => {}); },
   notify() {}, stop_propagation() { cx.stopped = true; }, focus_handle: () => ({ focus() { cx.focusedHandle = true; }, is_focused: () => true }),
+  new: () => ({ set_props() {} }), // the pointer's glow (glow.js), a nested view
   timer: { every() {}, after() {} },
 };
 

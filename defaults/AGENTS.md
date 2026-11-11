@@ -275,8 +275,9 @@ the highlighted line shows where it will land.
   `terminal.peek` opens one, `terminal.keep` gives one a pane.
 - **Scripts** (Nocturne's script runner, the `nocturne-scripts` mod): the
   tab strip's ▶ (its deck hangs under it, like "+ new"'s menu; a second click
-  closes either; cmd-shift-r, `nocturne.scripts`; `nocturne.scripts-again` runs
-  the folder's last script again) lists what the space's folder
+  closes either, and it stays closed; the button is lit while its view is open;
+  cmd-shift-r, `nocturne.scripts`, opens the deck centered or closes it;
+  `nocturne.scripts-again` runs the folder's last script again) lists what the space's folder
   (else the focused pane's) can run: package.json scripts (bun / pnpm / yarn /
   npm by lockfile), just recipes, make targets, cargo, deno tasks, pyproject
   scripts (uv / poetry / pdm), Taskfile, mise tasks, composer scripts, go, and
@@ -310,11 +311,15 @@ the highlighted line shows where it will land.
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
-  machine. The bell at the right of Nocturne's tab strip counts what waits
-  (permissions and questions in a pink chip, agents that need a look as a
-  dim `+n`; a dim "N" when nothing waits) and sizes its own block (`layout.resize`) to fit, ending where
+  machine. The bell at the right of Nocturne's tab strip (a 9 px pixel bell,
+  muted like the strip's tools when nothing waits) counts what waits: the
+  bell turns pink beside a pink chip for permissions and questions; agents
+  that need a look turn it yellow, with a dim `+n` and sizes its own block (`layout.resize`) to fit, ending where
   the panes end; it or cmd-shift-a (`nocturne-notifications.open`) opens the
-  overview: Permissions, Questions and, when there are any, Needs a look (an
+  overview, hanging under the bell like the scripts deck under ▶ (as wide as
+  the window allows, up to 880, and as tall as what it shows), and closes it
+  again; the bell is lit while it's open. A toast's click opens it on that
+  agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
   space / tab and how long it has waited. Finished agents aren't listed: the
   sidebar and Herdr's toast tell about them.
@@ -930,6 +935,11 @@ rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
+While the pointer is over the sky (open or folded) it carries a firefly's
+light: a faint dithered halo in the theme's ansi11 that trails it, lights the
+stars, haze and grass near it, breathes, and fades when the pointer leaves;
+it holds still when the window isn't in front or the system asks for less
+motion (nocturne's `glow.js`, a nested view, so it never redraws the sky).
 
 Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
 (`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
@@ -1674,6 +1684,12 @@ Rules:
   `.transition(...)` for changes: they run without your script and stop
   when not shown. Timers are for data (a clock, a fetch), and only as often
   as what they show changes.
+- **Something that follows the pointer** (a highlight, a glow): make it a
+  nested view, `this.glow = cx.new(GlowClass, props)` in `init`, mounted with
+  `.child(this.glow)`, and feed it from `.on_mouse_move((e, cx) => …)` with
+  `this.glow.set_props({ x, y })`: only that view is rebuilt, not yours. Skip
+  moves that change nothing, and draw nothing once it's out of sight (a loop
+  at opacity 0 still runs). Nocturne's sidebar glow (`glow.js`) does this.
 
 ### UI
 
@@ -1754,8 +1770,8 @@ All of it is in `herdr.d.ts`. In short:
   window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
   A popup may ask for it too, when it's modal rather than hanging from a button
   (the command palette does in a layout with a `"scrim"`). Dialogs always have
-  it: the floating terminal, centered menus, the scripts deck, the picker and
-  the notifications overview sit on it.
+  it: the floating terminal, centered menus, the scripts deck opened by key, the
+  picker and the notifications question dialog sit on it.
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a
