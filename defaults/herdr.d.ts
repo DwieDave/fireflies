@@ -60,6 +60,18 @@ export function lspRelease(id: number): void;
 /** The running servers: `{ id, argv, root, users, alive, ready, stderr }`. */
 export function lspSessions(): { id: number; argv: string[]; root: string; users: number; alive: boolean; ready: boolean | null; stderr: string[] }[];
 
+/** Files under `root` (this machine) that fuzzily match `query`, best first (fff: typo-resistant,
+ *  git-ignored files left out, the index kept current while it's used). `ranges`: the matched
+ *  characters of `path` (relative to root), `git`: "M" "A" "U" "D" "R" "!" or null. `scanning`:
+ *  the first index of a big folder isn't complete yet; ask again. An empty query lists files.
+ *  Rejects for a missing folder, and for home or / as a whole. */
+export function findFiles(root: string, query: string, options?: { limit?: number }): Promise<{ files: { path: string; git: string | null; ranges: [number, number][] }[]; total: number; indexed: number; scanning: boolean }>;
+/** Lines under `root` matching `query` (fff's live grep, ~150 ms budget, git-ignored files left
+ *  out): `mode` "plain" (default), "regex" or "fuzzy"; `case` "smart" (default), "sensitive",
+ *  "insensitive". `line` is one-based; `col` and `ranges` in the line's string units. `error`: a
+ *  regex that didn't compile (searched as plain text). */
+export function grep(root: string, query: string, options?: { limit?: number; mode?: "plain" | "regex" | "fuzzy"; case?: "smart" | "sensitive" | "insensitive" }): Promise<{ matches: { path: string; line: number; col: number; text: string; ranges: [number, number][] }[]; files: number; truncated: boolean; error: string | null; scanning: boolean }>;
+
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
  *  `on`, its login/interactive shell when supported), at most once a minute per machine.

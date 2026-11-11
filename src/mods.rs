@@ -1090,6 +1090,24 @@ fn module(inst: Instance, copy: u64) -> HostModule {
             Ok(HostValue::Null)
         })
         .function("lspSessions", |_| Ok(to_host(&crate::lsp::sessions())))
+        .async_function("findFiles", |a| {
+            let root = PathBuf::from(a.string(0)?);
+            let query = a.string(1)?.to_owned();
+            let o = a.get(2).map(from_host).unwrap_or(Value::Null);
+            let limit = o.get("limit").and_then(Value::as_u64).unwrap_or(100) as usize;
+            let rx = crate::search::background(move || crate::search::find_files(&root, &query, limit));
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
+        .async_function("grep", |a| {
+            let root = PathBuf::from(a.string(0)?);
+            let query = a.string(1)?.to_owned();
+            let o = a.get(2).map(from_host).unwrap_or(Value::Null);
+            let limit = o.get("limit").and_then(Value::as_u64).unwrap_or(300) as usize;
+            let mode = o.get("mode").and_then(Value::as_str).unwrap_or("plain").to_owned();
+            let case = o.get("case").and_then(Value::as_str).unwrap_or("smart").to_owned();
+            let rx = crate::search::background(move || crate::search::grep(&root, &query, limit, &mode, &case));
+            Ok(async move { rx.recv().await.map_err(|_| HostError::new("lost"))?.map(|v| to_host(&v)).map_err(HostError::new) })
+        })
         .function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())))
         .function("themes", |_| {
             let list: Vec<Value> = crate::settings::themes().into_iter().map(|(name, colors)| json!({ "light": crate::settings::theme_is_light(&name), "name": name, "colors": colors })).collect();

@@ -29,6 +29,7 @@ mod agent_command;
 mod process_cwd;
 mod programs;
 mod remote_shell;
+mod search;
 mod settings;
 mod setup;
 mod sound;

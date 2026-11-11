@@ -153,7 +153,7 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
     for name in ["lspNotify", "lspRelease"] {
         module = module.function(name, |_| Ok(HostValue::Null));
     }
-    for name in ["lspStart", "lspRequest"] {
+    for name in ["lspStart", "lspRequest", "findFiles", "grep"] {
         module = module.async_function(name, |_| Ok(async { Err::<HostValue, _>(HostError::new("no language servers in render tests")) }));
     }
     module = module.async_function("knownAgents", |_| Ok(async { Ok(HostValue::Array(vec![])) }));
