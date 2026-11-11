@@ -544,10 +544,17 @@ the highlighted line shows where it will land.
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
   (`nocturne.grep`) searches every file's text as you type, lines grouped by
   file. Both are fff's (`findFiles`, `grep`): git-ignored files stay out, the
-  folder's index stays warm while it's used. tab switches mode, ↑↓ pick, enter
-  opens in the editor (grep: at the line), ctrl-r regex, ctrl-t fuzzy lines,
-  esc closes; a wide window shows the picked file around the line. Pressing
-  the same key again closes it.
+  folder's index stays warm while it's used. It covers most of the window: the
+  list beside a preview of the picked file around the line, about two thirds
+  wide and as tall as the picker (narrow windows drop the preview). tab or
+  shift-tab switches mode keeping the query, and so does the other mode's key
+  while it's open (cmd-shift-f in files, cmd-p in grep; each chip at the top
+  right names its key); the same key again closes it. ↑↓ or ctrl-p / ctrl-n
+  pick, pgup / pgdn page, enter opens in the editor (grep: at the line),
+  ctrl-r regex, ctrl-t fuzzy lines, esc closes. The hint bar lists every key.
+  A `query` prop starts the box with text. Tab is the base's focus key: a mod
+  that wants it binds it to an action in its own `key_context` (`cx.bind_keys`),
+  as the picker does; an `on_key_down` alone never hears it.
 - **Agent navigation order** belongs to the mods. A mod displaying agents calls
   `setAgentOrder(list.map(a => a.address))` on render so `agent.next` /
   `agent.prev` follow its list.

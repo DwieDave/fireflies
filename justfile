@@ -60,6 +60,8 @@ test:
     bun test scripts/nocturne-palette.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.
     bun test scripts/nocturne-picker-view.test.ts
+    # The picker's mode switch by tab, cmd-shift-f and cmd-p, the query kept.
+    bun test scripts/nocturne-picker-keys.test.ts
     # No mod's cleanup hook (an exported View's close()) closes its pane again.
     bun test scripts/mod-close-hook.test.ts
     # The keys bars end with their ? entry, with gpui stand-ins that record draw order.
