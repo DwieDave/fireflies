@@ -365,8 +365,8 @@ the highlighted line shows where it will land.
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
   pages open in the system's browser. The web pane's bar, while it has the
-  keyboard (`pane.go`, a click on the bar, Cmd-Esc in the page, or opened as
-  the focused pane): Enter / `i` into the page, `o` / `/` the address, `H` `L`
+  keyboard (whenever its pane is focused: a click on the bar, `pane.go`, a tab
+  switch, agent.next, Cmd-Esc in the page): Enter / `i` into the page, `o` / `/` the address, `H` `L`
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
   inspector, `O` the system's browser, Tab / Shift-Tab its buttons (Enter
   presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
@@ -583,7 +583,8 @@ the highlighted line shows where it will land.
   ctrl-r regex, ctrl-t fuzzy lines, esc closes. The hint bar lists every key.
   A `query` prop starts the box with text. Tab is the base's focus key: a mod
   that wants it binds it to an action in its own `key_context` (`cx.bind_keys`),
-  as the picker does; an `on_key_down` alone never hears it.
+  as the picker does; an `on_key_down` alone never hears it. Bind once: a mod's
+  bindings stay bound when keys.json is edited and reloaded.
 - **The command palette** (`app.palette`, cmd-shift-p) lists every command a
   person can run without pointing at something, each row with the key that
   runs it now (a key a layout or the focused pane takes for something else
@@ -1567,9 +1568,12 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`
-  again after a popup over it closes, and on every click into its native view (a
-  web page): the view keeps the keys it types, while the chords it leaves come
-  back to the mod's keys.json section (`mod:<name>`). `layout.focus {id}` gives a layout block the
+  again after a popup over it closes, and whenever the window focuses its pane
+  any other way (a tab or space switch, `agent.next`, a pane closing, the start),
+  as a terminal pane gets the keyboard (not while a dialog holds it). It gets it on
+  every click into its native view too (a web page): the view keeps the keys it
+  types, while the chords it leaves come back to the mod's keys.json section
+  (`mod:<name>`). `layout.focus {id}` gives a layout block the
   keyboard the same way, and `pane.focus {pane}` a mod pane; `focused().block` names the layout block that has it (else null).
   Leave with `run("pane.go", {direction})` or `run("pane.focus", {pane})`.
   Without this opt-in, navigation and clicks stay unchanged.

@@ -8,7 +8,7 @@
 //   cmd+[ / cmd+]   back / forward
 //   cmd+alt+i  the inspector (the </> button)
 //   cmd+esc  out of the page: the keyboard back to the bar (the page keeps esc)
-// Keys while the bar has the keyboard (pane.go, cmd+esc, a click on the bar):
+// Keys while the bar has the keyboard (its pane focused: a click, pane.go, a tab switch, cmd+esc):
 //   enter / i  into the page        o  /   the address
 //   H L  back / forward   r  reload   + - 0  zoom   p  picture in picture
 //   d  the inspector   O  the system's browser   ?  the keys, under the bar
