@@ -323,3 +323,43 @@ export function editorKeys(vim) {
     ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space d", "problems"], ["space m p", "Markdown preview"],
     ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
 }
+
+/**
+ * What a hover asked for (cmd-i) says when no server answers, and the bar's
+ * word for it: what is the case and, where there is one, what to do.
+ * `server`: the editor's (main.js startServer). `lang`: the file's language
+ * id. `{ short, text, fix }` (fix may be null), or null while a server runs
+ * (nothing to explain; `empty` asks for "it has nothing here").
+ */
+export function serverNote(server, lang, { empty = false, tilde: t = (p) => p } = {}) {
+  const s = server ?? { status: "none", why: "unknown" };
+  const names = (s.names ?? []).join(" or ");
+  const where = s.envrc ? t(s.envrc) : null;
+  if (s.status === "ready") {
+    return empty ? { short: s.name, text: `${s.name} has nothing for this place.`, fix: null } : null;
+  }
+  if (s.status === "starting") return { short: `${s.name}…`, text: `${s.name} is starting.`, fix: "Ask again in a moment." };
+  if (s.status === "env") return { short: "loading .envrc…", text: `Loading this project's environment (${t(s.envrc)}/.envrc); its language server starts when it's there.`, fix: "A flake's first load can take minutes; the editor works meanwhile." };
+  if (s.status === "exited") return { short: `${s.name ?? "server"} stopped`, text: `${s.name ?? "The language server"} stopped${s.note ? `: ${s.note}` : "."}`, fix: "cmd-r reloads the file and starts it again." };
+  if (s.why === "remote") return { short: "", text: "Files on another machine open without a language server.", fix: null };
+  if (s.why === "off") return { short: "no server", text: `The language server is off for ${lang} files (settings.json).`, fix: `Remove "server": false from editor.languages.${lang} to turn it on.` };
+  if (s.why === "unknown" || !names) {
+    return lang && lang !== "text"
+      ? { short: "", text: `No language server is set up for ${lang} files.`, fix: `settings.json: editor.languages.${lang}.server, its argv, adds one.` }
+      : { short: "", text: "Plain text: no language server.", fix: null };
+  }
+  // why "missing": not on PATH, and the project's environment (if any) as it is.
+  if (s.envKind === "blocked") {
+    return { short: "direnv allow", text: `${where}/.envrc isn't allowed${s.denied ? " (denied)" : ""}, so its environment isn't loaded, and ${names} isn't on PATH.`, fix: `Run \`direnv allow\` in ${where}.` };
+  }
+  if (s.envKind === "no-direnv") {
+    return { short: "no direnv", text: `${where} has an .envrc, but direnv isn't installed, so its environment isn't loaded; ${names} isn't on PATH.`, fix: "Install direnv, or put the server on PATH." };
+  }
+  if (s.envKind === "failed") {
+    return { short: ".envrc failed", text: `${where}/.envrc didn't load${s.envNote ? `: ${s.envNote}` : "."} ${names} isn't on PATH.`, fix: `Run \`direnv reload\` in ${where} to see why.` };
+  }
+  if (s.envKind === "ready") {
+    return { short: "no server", text: `${names} isn't in this project's environment (${where}/.envrc) or on PATH.`, fix: `Add it to the project's shell (its flake or .envrc), or settings.json editor.languages.${lang}.server.` };
+  }
+  return { short: "no server", text: `${names} isn't on PATH.`, fix: `Install it, or add it to the project's shell through an .envrc (direnv), or settings.json editor.languages.${lang}.server.` };
+}

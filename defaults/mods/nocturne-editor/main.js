@@ -14,7 +14,8 @@
 // for TypeScript the type expanded or folded a level at a time (+ / -).
 //
 // A language server starts when an editor of its language opens (the first
-// one found on PATH, or settings.json's `editor.languages.<id>.server`), is
+// one found in the workspace's .envrc environment through direnv, else on
+// PATH, envrc.js; or settings.json's `editor.languages.<id>.server`), is
 // shared by every editor of that workspace, and stops a while after the last
 // closes. Saving writes only if the file is still what was read (otherwise
 // it says so); a change on disk reloads a clean file and offers a choice to
@@ -50,13 +51,14 @@ import {
 } from "herdr";
 import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
-  diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys,
+  diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
 import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
+import { projectEnv, lookup, wrap } from "./envrc.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -91,13 +93,6 @@ function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 const stop = (_e, cx) => cx.stop_propagation();
-
-/** Which servers are on PATH, asked once per program. */
-const found = new Map();
-async function onPath(program) {
-  if (!found.has(program)) found.set(program, exec("sh", ["-c", 'command -v "$1" >/dev/null 2>&1', "which", program]).then((r) => r.code === 0, () => false));
-  return found.get(program);
-}
 
 /** The editor's selection (and, drawn from it, search matches): the accent
  *  at 40%, see-through so the syntax colors read on it. */
@@ -334,20 +329,30 @@ export default class EditorPane extends View {
   // ---- language server
 
   async startServer(cx) {
-    if (this.on) { this.server = { status: "none", note: "no language server for another machine's files" }; return; }
+    if (this.on) { this.server = { status: "none", why: "remote" }; return; }
     const candidates = serverCandidates(this.lang, this.opts);
-    if (!candidates.length) { this.server = { status: "none", note: this.opts.server === false ? "language server off (settings.json)" : null }; cx.notify(); return; }
-    let pick = null;
-    for (const c of candidates) if (await onPath(c.argv[0])) { pick = c; break; }
-    if (!pick) { this.server = { status: "none", note: `no language server on PATH (${candidates.map((c) => c.argv[0]).join(", ")})` }; cx.notify(); return; }
+    if (!candidates.length) { this.server = { status: "none", why: this.opts.server === false ? "off" : "unknown" }; cx.notify(); return; }
+    const names = candidates.map((c) => basename(c.argv[0]));
     const dir = dirname(this.path);
+    // The workspace's own environment first (envrc.js): its .envrc, through direnv.
+    const env = await projectEnv(exec, dir, { loading: (at) => { this.server = { status: "env", envrc: at, names }; cx.notify(); } });
+    const inEnv = env.kind === "ready" ? env.env : null;
+    let pick = null, path = null;
+    for (const c of candidates) {
+      path = c.argv[0].startsWith("/") ? c.argv[0] : await lookup(exec, c.argv[0], inEnv);
+      if (path) { pick = c; break; }
+    }
+    // Not there: why, for the bar and the hover card (logic.js serverNote).
+    const envNote = env.kind === "none" ? {} : { envrc: env.dir, envKind: env.kind, envNote: env.note ?? null, denied: env.denied ?? false };
+    if (!pick) { this.server = { status: "none", why: "missing", names, ...envNote }; cx.notify(); return; }
     const markers = ROOTS[this.lang]?.markers ?? [];
     const r = await exec("sh", ["-c", rootScript(markers), "root", dir]).catch(() => null);
     const root = pickRoot(this.lang, r?.stdout, dir);
-    this.server = { status: "starting", argv: pick.argv, root, name: basename(pick.argv[0]) };
+    const argv = wrap(pick.argv, path, inEnv);
+    this.server = { status: "starting", argv, root, name: basename(pick.argv[0]), ...envNote };
     cx.notify();
     let started;
-    try { started = await lspStart({ argv: pick.argv, root, settings: pick.settings }); }
+    try { started = await lspStart({ argv, root, settings: pick.settings }); }
     catch (e) { this.server = { ...this.server, status: "exited", note: String(e?.message ?? e) }; cx.notify(); return; }
     this.server = { ...this.server, id: started.id, caps: started.capabilities ?? {}, status: "ready" };
     this.version = 1;
@@ -883,7 +888,13 @@ export default class EditorPane extends View {
       .child(div().relative().size(7).border(1).border_color(color).child(dither(color, 1)))
       .child(div().text_color(color).child(String(n)));
     const s = this.server;
-    const server = s?.status === "ready" ? [t.ansi2, s.name] : s?.status === "starting" ? [t.ansi3, `${s.name}…`] : s?.status === "exited" ? [t.ansi1, `${s.name ?? "server"} stopped`] : null;
+    // The server's word (logic.js serverNote): running, starting, loading the
+    // project's .envrc, stopped, or why there's none ("direnv allow").
+    const word = serverNote(s, this.lang, { tilde: (p) => tilde(p, home()) })?.short;
+    const server = s?.status === "ready" ? [t.ansi2, s.name]
+      : s?.status === "starting" || s?.status === "env" || s?.envKind === "blocked" ? [t.ansi3, word]
+      : s?.status === "exited" || s?.envKind === "failed" ? [t.ansi1, word]
+      : word ? [t.dim, word] : null;
     const msg = this.message && Date.now() - this.message.at < 4000 ? this.message : null;
     const vim = this.vimOn();
     const modeColor = { normal: t.accent, insert: t.ansi2, replace: t.ansi1, visual: t.ansi5, vline: t.ansi5, vblock: t.ansi5 }[this.vim.mode] ?? t.accent;

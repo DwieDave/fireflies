@@ -88,6 +88,8 @@ test:
     bun test scripts/nocturne-render-asks.test.ts
     # An agent's row is pressed anywhere on it (full width, half of each gap; the rail's cell and its padding), with recording gpui stand-ins.
     bun test scripts/nocturne-hit-areas.test.ts
+    # The editor's servers through the workspace's .envrc (direnv: allowed, blocked, none, missing, a slow load), and what cmd-i says without one, exec faked.
+    bun test scripts/nocturne-editor-env.test.ts
     cargo test --locked
 
 docs-generate: build

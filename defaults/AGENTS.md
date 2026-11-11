@@ -528,12 +528,21 @@ the highlighted line shows where it will land.
   and workspace (the outermost `Cargo.toml` in the repository, the nearest
   `tsconfig.json` / `package.json`, `pyproject.toml`, `go.mod`, `flake.nix`,
   ..., else the repository) from settings.json's `editor` (see The person):
-  the built-in ones only when on PATH (rust-analyzer, typescript-language-server
+  the built-in ones only when found (rust-analyzer, typescript-language-server
   or vtsls, basedpyright / pyright / pylsp, gopls, nixd or nil,
   lua-language-server, bash-language-server, vscode-json-language-server
   (validates JSON), yaml-language-server, taplo, marksman, vscode-css / html
   language servers, clangd, zls), shared by every editor of that workspace and
-  stopped 90 s after the last closes. Files up to 1 MiB; files on another
+  stopped 90 s after the last closes. Found means: in the workspace's own
+  environment when the file's folder or one above it (up to the repository)
+  has an `.envrc` that direnv allows (looked up and started inside what
+  `direnv export` gives, loaded once per folder, a flake's first load
+  meanwhile shown as "loading .envrc…"), else on the app's PATH. An `.envrc`
+  direnv hasn't allowed is never loaded: the bar says `direnv allow`, as it
+  says `no direnv` without direnv. cmd-i with no answer says why (no server
+  for the language, not on PATH or in the environment, still starting or
+  loading, the `.envrc` not allowed, nothing for that place) and what to do;
+  the pointer's hover stays quiet then. Files up to 1 MiB; files on another
   machine open without a language server. Commands for the shown editors:
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
@@ -1521,7 +1530,8 @@ list or a machine's rename first.
   Settings → Editor; a pane's own switch overrides it for that pane), and
   `leader`: vim's leader key
   (`"space"`, default; `"comma"`; or a character).
-  Without `server`, a language uses the first built-in server found on PATH;
+  Without `server`, a language uses the first built-in server found (in the
+  workspace's `.envrc` environment, else on PATH, see Editing files);
   none is ever installed. Changes apply to editors opened afterwards.
   ```json
   { "editor": { "tab_size": 4, "format_on_save": true, "vim": true, "leader": "space",

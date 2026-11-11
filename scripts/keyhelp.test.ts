@@ -260,3 +260,4 @@ test("editor: the gutter's numbers sit in from the pane's edge as the top bar's 
   expect(body.calls.pl).toEqual([m.GUTTER_INSET]);
   expect(m.GUTTER_INSET).toBe(12);
 });
+
