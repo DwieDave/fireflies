@@ -1,6 +1,9 @@
 // The overview: every request, grouped down the left (permissions,
 // questions, other), the selected one in full on the right. A drop-down
-// under the bell (open.js), as tall as what it shows.
+// under the bell (open.js), as tall as what it shows: it measures its parts
+// (on_size_change) and sets its own height, up to the popup's most
+// (props.most). A popup is as tall as its content, and a scroll area has
+// none of its own, so without that the list and the request would be nothing.
 //
 //   j / k, [ / ]      the next / previous request
 //   up / down         the permission's options (as its terminal lists them)
@@ -16,11 +19,11 @@
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, run, nextCommand } from "herdr";
+import { theme, props, closeOverlay, run, nextCommand, settings } from "herdr";
 import { items, dismiss } from "./engine.js";
 import { group, age, headline, summary, where, TYPES } from "./model.js";
 import { answer } from "./drive.js";
-import { openAsk, forget, followCommands, overviewBeat, BEAT } from "./open.js";
+import { openAsk, forget, followCommands, overviewBeat, BEAT, OVERVIEW_H } from "./open.js";
 import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit.js";
 
 /** What ? lists, ? keys last. */
@@ -39,6 +42,7 @@ export default class Overview {
     this.but = null; // "yes" | "no": the note's line is open
     this.busy = null; // { id, text }
     this.note = null; // { id, text, bad }
+    this.sizes = {}; // measured parts, layout px (measure)
     this.input = InputState.new({ placeholder: "what it should do instead / next" });
     this.input.on("submit", (_e, cx) => this.answerWith(cx, { amend: this.input.value() }));
     this.handle = cx.focus_handle();
@@ -160,11 +164,32 @@ export default class Overview {
     if (handled) { cx.stop_propagation(); cx.notify(); }
   }
 
+  /** A part's height as drawn, kept in layout px; a change draws again. */
+  measure(key) {
+    return (size, cx) => {
+      const h = size.height / (Number(settings()?.zoom) || 1);
+      if (Math.abs((this.sizes[key] ?? -1) - h) < 0.5) return;
+      this.sizes[key] = h;
+      cx.notify();
+    };
+  }
+
+  /** Its height (layout px): the taller of the list and the request (or the
+   *  empty note) as they measured, up to the popup's most; the most until
+   *  they have. */
+  height(it) {
+    const most = Number(props()?.most) || OVERVIEW_H;
+    const m = this.sizes;
+    const main = !it ? m.empty : m.top == null || m.detail == null ? null : m.top + m.detail + 12 + (this.keysShown ? m.keys ?? 50 : 0) + 30;
+    if (m.list == null || main == null) return most;
+    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main))));
+  }
+
   render() {
     const t = theme();
     const list = this.list();
     const it = this.current(list);
-    return h_flex().id("notify-overview").size_full().bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
+    return h_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(this.side(t, list, it))
@@ -195,7 +220,8 @@ export default class Overview {
     });
     return v_flex().w(280).h_full().flex_none().border_r_1().border_color(t.ansi0)
       .child(head)
-      .child(v_flex().id("notify-list").flex_1().min_h(0).pb(8).overflow_y_scrollbar().children(groups));
+      .child(v_flex().id("notify-list").flex_1().min_h(0).pb(8).overflow_y_scrollbar()
+        .child(v_flex().id("notify-list-body").flex_none().on_size_change(this.measure("list")).children(groups)));
   }
 
   entry(t, x, on) {
@@ -233,12 +259,14 @@ export default class Overview {
     const body = it.type === "permission" ? this.permission(t, it) : it.type === "question" ? this.questions(t, it) : this.other(t, it);
     const note = this.note?.id === it.id && this.note.bad ? this.note.text : null;
     return v_flex().flex_1().min_w(0).h_full()
-      .child(hero)
-      .when(Boolean(note), (el) => el.child(h_flex().mx(20).mb(10).px(10).py(6).gap(8).items_start().border(1).border_color(t.blocked).flex_none()
-        .child(div().pt(3).child(pip(t.blocked, 6)))
-        .child(div().flex_1().min_w(0).text_color(t.blocked).child(`Not sent. ${note}`))))
-      .child(v_flex().id("notify-detail").flex_1().min_h(0).overflow_y_scrollbar().pb(12).child(body))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
+      .child(v_flex().id("notify-top").flex_none().on_size_change(this.measure("top"))
+        .child(hero)
+        .when(Boolean(note), (el) => el.child(h_flex().mx(20).mb(10).px(10).py(6).gap(8).items_start().border(1).border_color(t.blocked).flex_none()
+          .child(div().pt(3).child(pip(t.blocked, 6)))
+          .child(div().flex_1().min_w(0).text_color(t.blocked).child(`Not sent. ${note}`)))))
+      .child(v_flex().id("notify-detail").flex_1().min_h(0).overflow_y_scrollbar().pb(12)
+        .child(v_flex().id("notify-detail-body").flex_none().on_size_change(this.measure("detail")).child(body)))
+      .when(Boolean(this.keysShown), (el) => el.child(v_flex().id("notify-keys").flex_none().on_size_change(this.measure("keys")).child(this.keysStrip(t))))
       .child(this.footer(t, it));
   }
 
@@ -350,11 +378,13 @@ export default class Overview {
   }
 
   empty(t) {
-    return v_flex().flex_1().h_full().items_center().justify_center().gap(10).px(40).py(36)
-      .child(image("mods/nocturne/art/fireflies.svg").size(48))
-      .child(div().text_size(12).text_color(t.foreground).child("Nothing waits on you"))
-      .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and agents that need a look, from every agent in every space and machine, gather here."))
-      .child(div().text_color(t.dim).max_w(380).child(`For Claude Code's exact requests and its questions: ${HOOK_DOC}.`));
+    const sized = (size, cx) => this.measure("empty")({ height: size.height + 72 * (Number(settings()?.zoom) || 1) }, cx);
+    return v_flex().flex_1().h_full().items_center().justify_center().px(40)
+      .child(v_flex().id("notify-empty").flex_none().items_center().gap(10).on_size_change(sized)
+        .child(image("mods/nocturne/art/fireflies.svg").size(48))
+        .child(div().text_size(12).text_color(t.foreground).child("Nothing waits on you"))
+        .child(div().text_color(t.dim).max_w(380).child("Permissions, questions and agents that need a look, from every agent in every space and machine, gather here."))
+        .child(div().text_color(t.dim).max_w(380).child(`For Claude Code's exact requests and its questions: ${HOOK_DOC}.`)));
   }
 
   footer(t, it) {

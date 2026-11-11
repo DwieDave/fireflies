@@ -228,14 +228,15 @@ test("+ new by key (nocturne.new, cmd-n): opens the menu, closes it, opens it", 
 
 // ---- the bell
 
-test("bell, before any press on it: a key hangs the center END (8 px) in from the window's right, on the strip's horizon", () => {
+test("bell, before any press on it: a key hangs the center at the window's right (the popup snaps 8 px in, at the bell's edge), on the strip's horizon", () => {
   const b = bell();
   b.draw();
   notif.toggleOverview();
   const o = shown()[0];
   expect(o).toMatchObject({ kind: "popup", props: { role: "overview" } });
-  expect(o.at.x).toBe(Math.round(1600 - 8 * 0.9 - o.width * 0.9));
+  expect(o.at.x).toBe(notif.FAR_RIGHT);
   expect(o.at.y).toBe(Math.round(36 * 0.9));
+  expect(o.props.most).toBe(o.height);
 });
 
 for (const early of [true, false]) {
@@ -290,8 +291,8 @@ test("bell by key (nocturne-notifications.open, cmd-shift-a; the strip's enter):
     expect(shown()).toHaveLength(n);
   }
   expect(overlays.every((o) => o.kind === "popup" && o.props.role === "overview")).toBe(true);
-  // Where the last press on the bell found it (its right edge at 1530, its top at 12).
-  expect(overlays[0].at.x).toBe(Math.round(1530 - overlays[0].width * 0.9));
+  // Far right (the popup snaps inside the window), on the horizon the last press on the bell found.
+  expect(overlays[0].at.x).toBe(notif.FAR_RIGHT);
   expect(overlays[0].at.y).toBe(Math.round(12 + 24 + 6 * 0.9));
 });
 
@@ -342,4 +343,27 @@ test("a note of an open center left by a restart doesn't swallow a press", () =>
   sharedState["nocturne-notifications.shown"] = { overview: "gone", beat: Date.now() - 60000 };
   notif.toggleOverview();
   expect(shown()).toHaveLength(1);
+});
+
+test("the center is as tall as what it shows (as its parts measure), up to the popup's most", () => {
+  const o: any = Object.create(Overview.prototype);
+  o.sizes = {};
+  propsNow = { overlay: "o1", most: 500 };
+  const it = { id: "x" };
+  // Not measured yet: the most.
+  expect(o.height(it)).toBe(500);
+  const cx1: any = { notify() {} };
+  o.measure("list")({ height: 90 * 0.9 }, cx1);
+  o.measure("top")({ height: 80 * 0.9 }, cx1);
+  o.measure("detail")({ height: 120 * 0.9 }, cx1);
+  // The request (top, detail, its padding, the key bar) is taller than the list (head, entries, padding).
+  expect(o.height(it)).toBe(80 + 120 + 12 + 30);
+  o.measure("list")({ height: 400 * 0.9 }, cx1);
+  expect(o.height(it)).toBe(34 + 400 + 8);
+  o.measure("detail")({ height: 2000 }, cx1);
+  expect(o.height(it)).toBe(500);
+  // Nothing waits: the empty note.
+  o.sizes = { list: 70 };
+  o.measure("empty")({ height: 200 * 0.9 }, cx1);
+  expect(o.height(null)).toBe(200);
 });

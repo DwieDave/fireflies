@@ -10,9 +10,8 @@ export const OVERVIEW_W = 880;
 export const OVERVIEW_H = 580;
 // The tab strip's row (layout px): the drop-down's top sits on its horizon.
 const ROW = 36;
-// Room after the bell (bell.js END), layout px: the bell's right edge is this
-// far in from the window's.
-const END = 8;
+// Far right: the popup snaps back inside the window, its right edge 8 px in.
+export const FAR_RIGHT = 100000;
 // The window margin a popup keeps (the app's popups snap to 8 px inside it).
 const MARGIN = 8;
 // The overview renews its note in shared(SHOWN) this often (ms), so a note an
@@ -36,12 +35,13 @@ export function overviewBeat(id) {
   if (id && s.overview === id) setShared(SHOWN, { ...s, beat: Date.now() });
 }
 
-// Where the bell is, for a drop-down opened without a press on it (a key, a
-// toast): the window's drawable size as the bell last drew, and the bell's
-// right edge (px in from the window's) and the strip's horizon from its last
-// press. Before any press: END in from the right, the row's height down.
+// For a drop-down opened without a press on the bell (a key, a toast): the
+// window's drawable size as the bell last drew (for the size), and the
+// strip's horizon from the bell's last press (else the row's height down).
+// It goes far right, where the popup snaps 8 px inside the window's edge:
+// the bell's right edge (bell.js END in), whatever size the window is now.
 let win = null;
-let bell = null;
+let horizon = null;
 
 /** The bell notes the window's size (window.viewport_size, drawn px) as it draws. */
 export function noteWindow(size) {
@@ -62,13 +62,11 @@ function fromPress(e) {
 export function overviewPlace(press = null) {
   const z = zoom();
   const p = fromPress(press);
-  if (p) bell = { fromRight: win ? win.width - p.right : null, top: p.top };
-  const top = p?.top ?? bell?.top ?? ROW * z;
+  if (p) horizon = p.top;
+  const top = p?.top ?? horizon ?? ROW * z;
   const width = win ? Math.max(320, Math.min(OVERVIEW_W, Math.floor((win.width - 2 * MARGIN) / z))) : OVERVIEW_W;
   const height = win ? Math.max(160, Math.min(OVERVIEW_H, Math.floor((win.height - top - MARGIN) / z))) : OVERVIEW_H;
-  const right = p?.right ?? (win ? win.width - (bell?.fromRight ?? END * z) : null);
-  // Not knowing the window: far right, where the popup snaps to the window's edge.
-  const x = right == null ? 100000 : Math.round(Math.max(MARGIN, right - width * z));
+  const x = p ? Math.round(Math.max(MARGIN, p.right - width * z)) : FAR_RIGHT;
   return { width, height, at: { x, y: Math.round(top) } };
 }
 
@@ -80,7 +78,7 @@ export function openOverview(terminal = null, press = null) {
   if (s.overview) closeOverlay(s.overview);
   if (s.ask) closeOverlay(s.ask);
   const { width, height, at } = overviewPlace(press);
-  const id = openOverlay({ mod: "nocturne-notifications", kind: "popup", frame: "none", width, height, at, props: { role: "overview", terminal } });
+  const id = openOverlay({ mod: "nocturne-notifications", kind: "popup", frame: "none", width, height, at, props: { role: "overview", terminal, most: height } });
   setShared(SHOWN, { overview: id, beat: Date.now() });
 }
 
