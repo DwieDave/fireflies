@@ -88,7 +88,10 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
     h_flex: () => new Element(), v_flex: () => new Element(), Input: { new: () => new Element() },
     InputState: { new: () => {
       const handlers: Record<string, Function> = {};
-      return { handlers, focused: 0, value: () => "", on(e: string, f: Function) { handlers[e] = f; }, focus() { this.focused++; }, set_value() {} };
+      let v = "";
+      const state: any = { handlers, focused: 0, selected: null, value: () => v, on(e: string, f: Function) { handlers[e] = f; }, focus() { this.focused++; },
+        set_value(x: string) { v = x; state.selected = null; }, set_selected_range(r: any) { state.selected = r; } };
+      return state;
     } },
   };
   const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
@@ -289,8 +292,9 @@ test("typing in the address: esc goes back into the page, enter goes there, and 
   // Enter: the page goes there and takes the keyboard.
   press(view, cx, "o", char("o"));
   native.length = 0;
+  view.input.set_value("");
   view.input.handlers.submit({}, cx);
-  // (the stand-in field's value is "", so nothing to go to)
+  // (the field emptied, so nothing to go to)
   expect(view.editing).toBe(true);
   view.go("b.example", cx);
   expect(view.editing).toBe(false);
@@ -481,4 +485,18 @@ test("focus that comes by key (a tab switch, agent.next, a pane closing): the we
   let editorFocused = 0;
   mod.default.prototype.command.call({ editor: { focus: () => { editorFocused++; } } }, "focus", {});
   expect(editorFocused).toBe(1);
+});
+
+test("entering the address (cmd-l, cmd-p, a click) selects all of it, so typing replaces it", async () => {
+  reset();
+  const { view, cx } = await webPane({ slot: "s1", url: "https://example.com/a/b" });
+  view.page = { ...view.page, href: "https://example.com/a/b" };
+  view.edit();
+  expect([view.editing, view.input.value(), view.input.selected]).toEqual([true, "https://example.com/a/b", { start: 0, end: 23 }]);
+  // A blank page: nothing to select.
+  const blank = await webPane({ slot: "s2" });
+  blank.view.page = { ...blank.view.page, href: null };
+  blank.view.edit();
+  expect(blank.view.input.selected).toBe(null);
+  void cx;
 });

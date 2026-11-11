@@ -432,7 +432,10 @@ export default class Browser extends View {
     // The page may hold AppKit's keyboard: typing would go on to it.
     if (this.start && available()) this.call("blur");
     this.editing = true;
-    this.input.set_value(this.page.href ?? "");
+    const href = this.page.href ?? "";
+    this.input.set_value(href);
+    // The whole address selected, as a browser's: typing replaces it.
+    if (href) this.input.set_selected_range({ start: 0, end: href.length });
     this.input.focus();
   }
 
