@@ -696,7 +696,7 @@ Properties any node can have:
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
   `rounded*` included. Default `"round"`: as each asks.
-- Root only: `"scrim"` (this fork): what dims the window behind a dialog,
+- Root only: `"scrim"` (this fork): what dims the window behind a dialog (and the command palette),
   `{"color": "#080808", "opacity": 0.85, "dither": true, "cell": 1}` (color: a
   theme name or hex; dither: a 1-bit checkerboard of it, `cell` px). Default:
   black at 35%.
@@ -1650,6 +1650,10 @@ All of it is in `herdr.d.ts`. In short:
   layout switch closes windows; kept ones come back with their layout.
   `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
   window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
+  A popup may ask for it too, when it's modal rather than hanging from a button
+  (the command palette does in a layout with a `"scrim"`). Dialogs always have
+  it: the floating terminal, centered menus, the scripts deck, the picker and
+  the notifications overview sit on it.
   `resizable: true` or `{ min: [w, h], aspect, chrome: [w, h] }` lets people resize it by
   its edges and corners (grips just outside it): never below `min` (default 120×80) nor
   bigger than the app window, keeping `aspect` (width / height) once `chrome` (a bar, a

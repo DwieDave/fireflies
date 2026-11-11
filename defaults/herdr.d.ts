@@ -424,8 +424,9 @@ export interface OverlaySpec {
    *  else centered; as big as its content unless width/height. It doesn't take the keyboard
    *  when it opens (a mod may focus itself). A layout switch closes windows. */
   kind?: "dialog" | "popup" | "window";
-  /** A window with the layout's dialog dim (its `scrim`) behind it; a click on the dim closes
-   *  the window, like a dialog's (this fork). */
+  /** A window or popup with the layout's dialog dim (its `scrim`) behind it; a click on the
+   *  dim closes it, like a dialog's (this fork). Dialogs always have it; a popup hanging from
+   *  a button shouldn't ask. */
   scrim?: boolean;
   /** A dialog a click beside it doesn't close (Esc and its own buttons still do). */
   modal?: boolean;

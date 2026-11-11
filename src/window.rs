@@ -70,9 +70,20 @@ fn separator_line(row: bool, width: f32, color: Hsla, top: f32) -> Div {
         .when(!row, |d| d.h(px(width)).w_full())
 }
 
-/// A window opened with `scrim: true` sits on the dialog dim (dialogs always do; popups and toasts never).
+/// A window or popup opened with `scrim: true` sits on the dialog dim
+/// (dialogs always do; toasts never; a popup from a button doesn't ask).
 fn window_scrim(kind: OverlayKind, spec: &Value) -> bool {
-    kind == OverlayKind::Window && spec.get("scrim").and_then(Value::as_bool) == Some(true)
+    matches!(kind, OverlayKind::Window | OverlayKind::Popup) && spec.get("scrim").and_then(Value::as_bool) == Some(true)
+}
+
+/// The command palette: a popup hanging from the top, on the dialog dim when
+/// the layout has a `scrim` of its own (it's modal, like a dialog).
+fn palette_spec(layout_scrim: bool) -> Value {
+    let mut spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+    if layout_scrim {
+        spec["scrim"] = json!(true);
+    }
+    spec
 }
 
 /// The dim behind a dialog: the layout's `scrim`, else black at 35%. A
@@ -404,7 +415,7 @@ struct Overlay {
     modal: bool,
     /// `frame: "none"`: no border, corners, shadow or background; the mod draws its own.
     bare: bool,
-    /// A window with `scrim: true`: the layout's dialog dim behind it; a click on it closes it.
+    /// A window or popup with `scrim: true`: the layout's dialog dim behind it; a click on it closes it.
     scrim: bool,
     /// A window: where its top left is (None: centered) and its name (`key`).
     place: Option<Point<Pixels>>,
@@ -4181,7 +4192,7 @@ impl AppWindow {
                 if self.overlays.iter().any(|o| o.id == "palette") {
                     self.close_overlay("palette", window, cx);
                 } else {
-                    let mut spec = json!({ "mod": "frame-palette", "kind": "popup", "at": "top", "offset": 60, "width": 620, "height": 0.85 });
+                    let mut spec = palette_spec(self.chrome.scrim.is_some());
                     self.skin_dialog(&mut spec, self.chrome.palette_mod.clone(), "palette");
                     self.open_overlay("palette".into(), spec, window, cx);
                 }
@@ -5449,6 +5460,8 @@ impl AppWindow {
                         div()
                             .absolute()
                             .inset_0()
+                            // `scrim: true`: the dialog dim behind it (a click there still closes it).
+                            .when(o.scrim, |d| d.bg(scrim(self.chrome.scrim.as_ref(), scale)).occlude().child(crate::native_view::dim_probe()))
                             .on_mouse_down(MouseButton::Left, cx.listener(move |this, _, w, cx| this.close_overlay(&id, w, cx)))
                             .on_mouse_down(MouseButton::Right, cx.listener({
                                 let id = o.id.clone();
@@ -6356,13 +6369,24 @@ mod tests {
     }
 
     #[test]
-    fn only_windows_asking_for_it_get_a_scrim() {
+    fn only_windows_and_popups_asking_for_it_get_a_scrim() {
         use super::{OverlayKind, window_scrim};
         use serde_json::json;
         assert!(window_scrim(OverlayKind::Window, &json!({ "scrim": true })));
         assert!(!window_scrim(OverlayKind::Window, &json!({})));
         assert!(!window_scrim(OverlayKind::Window, &json!({ "scrim": "yes" })));
-        assert!(!window_scrim(OverlayKind::Popup, &json!({ "scrim": true })));
+        // A modal popup (the palette) may ask; one hanging from a button doesn't.
+        assert!(window_scrim(OverlayKind::Popup, &json!({ "scrim": true })));
+        assert!(!window_scrim(OverlayKind::Popup, &json!({})));
+        assert!(!window_scrim(OverlayKind::Toast, &json!({ "scrim": true })));
+    }
+
+    #[test]
+    fn the_palette_sits_on_the_scrim_where_the_layout_has_one() {
+        use serde_json::json;
+        assert_eq!(super::palette_spec(true)["scrim"], json!(true));
+        assert!(super::palette_spec(false).get("scrim").is_none());
+        assert_eq!(super::palette_spec(false)["kind"], json!("popup"));
     }
 
     #[gpui::test]
