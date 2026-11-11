@@ -387,7 +387,9 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 });
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
-  const { default: Markdown } = await load("nocturne-markdown/main.js", { ...md, follow, dirname, basename, join, tilde, ...linkLogic, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+  const filesLog = await load("nocturne-markdown/follow.js");
+  const { default: Markdown } = await load("nocturne-markdown/main.js", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
+    CHANGES: filesLog.CHANGES, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
   const view: any = Object.create(Markdown.prototype);
   const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
   const doc = new MarkdownDoc("md");
