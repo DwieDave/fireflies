@@ -44,11 +44,11 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import .*;\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: globalThis.window };
+  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine } = await load("nocturne-markdown/markdown.js");
+const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, isLocalSource } = await load("nocturne-markdown/markdown.js");
 const { follow, join, dirname, basename, tilde } = await load("nocturne-markdown/paths.js");
 
 test("the GitHub window and the viewer ship the same markdown.js", async () => {
@@ -188,4 +188,90 @@ test("the files mod opens Markdown in the viewer; alt-click previews it as text"
   view.pick("notes.txt", {}, false);
   expect(commands).toEqual([["markdown.open", { path: "/repo/README.md" }]]);
   expect(shown).toEqual(["README.md", "notes.txt"]);
+});
+
+// ---- the viewer by keys
+
+const walk = (el: any): any[] => (el && typeof el === "object" && Array.isArray(el.nodes) ? [el, ...el.nodes.flatMap(walk)] : []);
+
+const linkLogic = await load("nocturne-markdown/links.js");
+const { linksOf, documentLinks, nextLink, nextHeading } = linkLogic;
+
+test("links in reading order: inline, reference, autolinks, bare addresses; none in code", () => {
+  const text = [
+    "See [the guide](docs/guide.md \"Guide\") and [**bold** ref][r], then <https://a.example/x>.",
+    "Bare https://b.example/y. and www.c.example, `[not](code.md)`, ![pic](p.png), [short].",
+    "```", "[fenced](no.md)", "```",
+    "[r]: https://ref.example", "[short]: #top",
+  ].join("\n");
+  expect(linksOf(text)).toEqual([
+    { text: "the guide", href: "docs/guide.md" },
+    { text: "bold ref", href: "https://ref.example" },
+    { text: "https://a.example/x", href: "https://a.example/x" },
+    { text: "https://b.example/y", href: "https://b.example/y" },
+    { text: "www.c.example", href: "https://www.c.example" },
+    { text: "short", href: "#top" },
+  ]);
+  // [x] without a definition is text (a task box, a citation).
+  expect(linksOf("- [x] done [nothing]")).toEqual([]);
+});
+
+test("document links carry their block; tab starts from the blocks in view and wraps; headings step", () => {
+  const parts = blocks("# A\n[one](1.md)\n\n![shot](s.png)\n\n## B\n[two](2.md) [three](#a)");
+  const links = documentLinks(parts);
+  expect(links.map((l: any) => [l.text, l.part, Boolean(l.image)])).toEqual([["one", 0, false], ["shot", 1, true], ["two", 2, false], ["three", 2, false]]);
+  expect([nextLink(links, null, 1, 0), nextLink(links, null, 1, 2), nextLink(links, null, -1, 1), nextLink(links, 3, 1), nextLink(links, 0, -1), nextLink([], null, 1)]).toEqual([0, 2, 1, 0, 3, null]);
+  expect([nextHeading(parts, 0, 1), nextHeading(parts, 2, -1), nextHeading(parts, 2, 1)]).toEqual([2, 0, null]);
+});
+
+test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
+  const { default: Markdown } = await load("nocturne-markdown/main.js", { markdown, fenced, blocks, isLocalSource, follow, dirname, basename, join, tilde, ...linkLogic, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+  const view: any = Object.create(Markdown.prototype);
+  const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
+  const parts = blocks(text);
+  Object.assign(view, {
+    path: "/d/a.md", on: null, slot: "m1", handle: { focus() {}, is_focused: () => true }, raw: false, history: [], images: new Map(),
+    text, error: null, parts, links: documentLinks(parts), sel: null, heights: [100, 200, 100], scrollY: 0, viewH: 150, width: 700, gen: 1,
+  });
+  const opened: string[] = [];
+  view.open = (p: string) => { opened.push(p); view.sel = null; };
+  let clip = "";
+  const cx = { notify() {}, stop_propagation() {}, write_to_clipboard: (s: string) => { clip = s; } };
+  const key = (k: string, extra: any = {}) => view.key({ key: k, modifiers: {}, ...extra }, cx);
+  commands.length = 0;
+  key("tab");
+  expect(view.sel).toBe(0);
+  const strings = (el: any) => walk(el).flatMap((e: any) => e.nodes.filter((n: any) => typeof n === "string"));
+  expect(strings(view.render())).toEqual(expect.arrayContaining(["enter", "next", "next.md", "1/3"]));
+  key("tab");
+  expect(view.sel).toBe(1);
+  // The picture's block is lower down: it scrolls into view.
+  expect(view.scrollY).toBeGreaterThan(0);
+  key("enter");
+  expect(commands.at(-1)).toEqual(["preview.open", { path: "/d/shot.png" }]);
+  // Nothing chosen: shift-tab starts from the last link in view.
+  key("tab", { modifiers: { shift: true } });
+  expect(view.sel).toBe(1);
+  key("escape");
+  expect(view.sel).toBe(null);
+  key("tab", { modifiers: { shift: true } });
+  key("tab", { modifiers: { shift: true } });
+  expect(view.sel).toBe(0);
+  key("enter");
+  expect(opened).toEqual(["/d/next.md"]);
+  // ] goes to the next heading.
+  view.scrollY = 0;
+  key("]", { key_char: "]" });
+  expect(view.scrollY).toBeGreaterThan(200);
+  key("[", { key_char: "[" });
+  // The first heading, where an #anchor puts it.
+  expect(view.scrollY).toBe(16);
+  key("f");
+  expect(commands.at(-1)).toEqual(["pane.split", { edge: "right", px: 280, mod: "nocturne-files", props: { folder: "/d", on: null } }]);
+  key("y");
+  expect(clip).toBe("/d/a.md");
+  key("/", { key_char: "?", modifiers: { shift: true } });
+  expect(strings(view.render())).toEqual(expect.arrayContaining(["tab ⇧tab", "links", "] [", "headings"]));
+  key("escape");
+  expect(view.keysShown).toBe(false);
 });
