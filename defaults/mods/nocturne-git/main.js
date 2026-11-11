@@ -167,7 +167,7 @@ export default class GitView extends View {
         // (panel-commits for panel:commits).
         // While a git window is open, commands are its keys: other copies (panes) leave them.
         else if (this.notMine()) { /* the window's */ }
-        else if (this.popups.open) { if (c === "back") this.popups.close(); else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.key("enter", null, cx); }
+        else if (this.popups.open) { if (c === "back") this.popups.close(); else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.ok(cx); }
         else if (this.state === "ready") act(this, c.replace(/^panel-/, "panel:"), cx);
         cx.notify();
       }
@@ -1097,7 +1097,8 @@ export default class GitView extends View {
   // ---- keys
 
   key(e, cx) {
-    const k = keyName(e);
+    // cmd-enter submits a popup's form (keyName leaves cmd chords to the app).
+    const k = this.popups.open && e.key === "enter" && e.modifiers?.platform ? "cmd-enter" : keyName(e);
     if (!k) return;
     if (this.popups.open) {
       if (this.popups.key(k, e, cx)) { cx.stop_propagation(); cx.notify(); }
