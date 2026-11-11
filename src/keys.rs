@@ -60,6 +60,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-notify-keys.macos.json"),
     // With cmd-alt-g, before cmd-alt-p pinned the focused agent.
     include_str!("keys/shipped/fireflies-gridify-keys.macos.json"),
+    // With cmd-alt-p, before cmd-p / cmd-shift-f opened the file picker and grep, and the editor's keys.
+    include_str!("keys/shipped/fireflies-pin-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

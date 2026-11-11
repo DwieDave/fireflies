@@ -54,7 +54,15 @@ preview: pictures fitted, PDFs paged, CSV/TSV and database tables as tables,
 patches colored (on macOS fonts and audio/video too; `image.open` is the same).
 It shows the file again when you overwrite it, so open it once and keep saving
 to the same path. Cmd/Ctrl-click on such a path in terminal output does the
-same. JSON, YAML, source code and other text stay in the editor.
+same.
+
+To show them code or text at a place (the line you changed, a failing test),
+`herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens
+it in the editor beside the focused pane, the caret there (an editor already on
+that file goes there instead). It reloads by itself when you change a file it
+shows unedited; when the person has unsaved edits it asks them first, so don't
+fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
+`editor.open` doesn't save for them: their edits are theirs.
 
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the

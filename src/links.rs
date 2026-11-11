@@ -130,6 +130,19 @@ fn existing(path: &str) -> Option<PathBuf> {
     Path::new(bare).exists().then(|| PathBuf::from(bare))
 }
 
+/// The place a link's trailing `:42` / `:42:7` names in its file (one-based
+/// line and column; column 1 without one).
+pub fn place(link: &str) -> Option<(u32, u32)> {
+    let link = link.strip_suffix('.').unwrap_or(link);
+    let num = |s: &str| (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit())).then(|| s.parse::<u32>().ok()).flatten();
+    let (head, last) = link.rsplit_once(':')?;
+    let last = num(last)?;
+    match head.rsplit_once(':').and_then(|(_, n)| num(n)) {
+        Some(line) => Some((line.max(1), last.max(1))),
+        None => Some((last.max(1), 1)),
+    }
+}
+
 /// The local file a link names: a path, or a `file://` URL on this computer
 /// (percent-decoded, `#anchor` and `?query` dropped, `:42` trimmed as for paths).
 pub fn local_file(target: &Target) -> Option<PathBuf> {
@@ -170,6 +183,29 @@ pub enum Viewer {
     /// `nocturne-preview`: files you look at but don't edit (pictures, PDFs,
     /// tables, databases, patches, fonts, audio and video). Was `nocturne-image`.
     Preview,
+    /// `nocturne-editor`: source code and other text people edit.
+    Editor,
+}
+
+/// Text people edit that the editor takes (besides every language
+/// `syntax::lang` knows): by extension...
+const EDITOR_EXTS: &[&str] = &[
+    "rb", "java", "kt", "kts", "swift", "php", "cs", "fs", "scala", "clj", "ex", "exs", "erl", "hs", "ml", "mli", "elm", "dart", "r", "jl",
+    "sql", "graphql", "gql", "proto", "vue", "svelte", "astro", "less", "sass", "scss", "ini", "cfg", "conf", "properties", "env", "lock",
+    "gradle", "cmake", "mk", "tf", "hcl", "nu", "fish", "ps1", "bat", "cmd", "vim", "el", "lisp", "scm", "rst", "adoc", "org", "tex",
+    "bib", "diff3", "gitignore", "dockerignore", "editorconfig", "service", "desktop", "rc", "pl", "pm", "tcl", "v", "sv", "vhd", "asm", "s",
+];
+/// ... and by file name.
+const EDITOR_FILES: &[&str] = &[
+    "Makefile", "makefile", "GNUmakefile", "Dockerfile", "Containerfile", "Justfile", "justfile", "Procfile", "Gemfile", "Rakefile",
+    "Brewfile", "Vagrantfile", "CODEOWNERS", ".gitignore", ".gitattributes", ".gitmodules", ".editorconfig", ".env", ".npmrc", ".nvmrc",
+];
+
+/// Whether the editor takes a file: a language it knows, or text by name.
+fn edits(path: &Path) -> bool {
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or_default();
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    crate::syntax::lang(&path.to_string_lossy()).is_some() || EDITOR_EXTS.contains(&ext.as_str()) || EDITOR_FILES.contains(&name)
 }
 
 const MARKDOWN_EXTS: &[&str] = &["md", "markdown"];
@@ -184,12 +220,13 @@ const PREVIEW_EXTS: &[&str] = &[
 const PREVIEW_MACOS_EXTS: &[&str] = &["ttf", "otf", "ttc", "woff", "woff2", "mp4", "m4v", "mov", "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "caf"];
 
 impl Viewer {
-    pub const ALL: [Viewer; 2] = [Viewer::Markdown, Viewer::Preview];
+    pub const ALL: [Viewer; 3] = [Viewer::Markdown, Viewer::Preview, Viewer::Editor];
 
-    /// The viewer for a file, by its extension.
+    /// The viewer for a file, by its extension (the editor also by name).
     pub fn of(path: &Path) -> Option<Viewer> {
-        let ext = path.extension()?.to_str()?.to_ascii_lowercase();
-        Viewer::ALL.into_iter().find(|v| v.takes(&ext, cfg!(target_os = "macos")))
+        let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+        let viewer = [Viewer::Markdown, Viewer::Preview].into_iter().find(|v| v.takes(&ext, cfg!(target_os = "macos")));
+        viewer.or_else(|| edits(path).then_some(Viewer::Editor))
     }
 
     /// Whether it shows files with this (lower-case) extension; `macos`: the
@@ -198,6 +235,7 @@ impl Viewer {
         match self {
             Viewer::Markdown => MARKDOWN_EXTS.contains(&ext),
             Viewer::Preview => PREVIEW_EXTS.contains(&ext) || (macos && PREVIEW_MACOS_EXTS.contains(&ext)),
+            Viewer::Editor => false,
         }
     }
 
@@ -206,6 +244,7 @@ impl Viewer {
         match self {
             Viewer::Markdown => "nocturne-markdown",
             Viewer::Preview => "nocturne-preview",
+            Viewer::Editor => "nocturne-editor",
         }
     }
 
@@ -214,6 +253,7 @@ impl Viewer {
         match self {
             Viewer::Markdown => "markdown",
             Viewer::Preview => "preview",
+            Viewer::Editor => "editor",
         }
     }
 }
@@ -613,9 +653,31 @@ mod tests {
         assert_eq!(md(found, None), Some(spaced.clone()));
         // A bare name the pattern skips, in the terminal's folder.
         assert_eq!(bare_viewable("plan.md", Some(&dir.join("docs"))), Some(plan.clone()));
-        assert_eq!(bare_viewable("main.rs", Some(&dir.join("docs"))), None);
+        assert_eq!(bare_viewable("main.rs", Some(&dir.join("docs"))), Some(dir.join("docs/main.rs")), "source goes to the editor");
+        assert_eq!(bare_viewable("app.bin", Some(&dir.join("docs"))), None);
         assert_eq!(bare_viewable("plan.md", None), None);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_link_names_its_line_and_column() {
+        assert_eq!(place("src/main.rs:42"), Some((42, 1)));
+        assert_eq!(place("src/main.rs:42:7"), Some((42, 7)));
+        assert_eq!(place("src/main.rs:42:7."), Some((42, 7)));
+        assert_eq!(place("src/main.rs"), None);
+        assert_eq!(place("src/a:b.rs"), None);
+        assert_eq!(place("https://x.dev:8080"), Some((8080, 1)), "callers ask only for files");
+    }
+
+    #[test]
+    fn source_and_config_files_go_to_the_editor() {
+        for name in ["a.rs", "b.tsx", "flake.nix", "Cargo.lock", "Makefile", "Dockerfile", "x.rb", "q.sql", ".env", "notes.txt"] {
+            assert_eq!(Viewer::of(Path::new(name)), Some(Viewer::Editor), "{name}");
+        }
+        assert_eq!(Viewer::of(Path::new("rows.csv")), Some(Viewer::Preview), "tables stay previews");
+        assert_eq!(Viewer::of(Path::new("README.md")), Some(Viewer::Markdown));
+        assert_eq!(Viewer::of(Path::new("photo.jpg")), Some(Viewer::Preview));
+        assert_eq!(Viewer::of(Path::new("app.bin")), None);
     }
 
     #[test]
@@ -661,15 +723,16 @@ mod tests {
             assert_eq!(view(&format!("shots/{name}"), Some(&dir)).map(|(v, _)| v), Some(Viewer::Preview), "{name}");
         }
         assert_eq!(view("shots/notes.md", Some(&dir)).map(|(v, _)| v), Some(Viewer::Markdown));
-        assert_eq!(view("shots/main.rs", Some(&dir)), None);
-        assert_eq!(view("shots/data.json", Some(&dir)), None, "text people edit stays with the editor");
+        // Source and other text people edit go to the editor.
+        assert_eq!(view("shots/main.rs", Some(&dir)).map(|(v, _)| v), Some(Viewer::Editor));
+        assert_eq!(view("shots/data.json:3:9", Some(&dir)).map(|(v, _)| v), Some(Viewer::Editor));
         assert_eq!(view("shots/gone.png", Some(&dir)), None);
         assert_eq!(view("shots", Some(&dir)), None, "a folder is no picture");
         // Web images stay web pages.
         assert_eq!(view("https://example.com/a.png", None), None);
         // A bare name in the terminal's folder.
         assert_eq!(bare_viewable("a.png", Some(&dir.join("shots"))), Some(png.clone()));
-        assert_eq!(bare_viewable("main.rs", Some(&dir.join("shots"))), None);
+        assert_eq!(bare_viewable("main.rs", Some(&dir.join("shots"))), Some(dir.join("shots/main.rs")));
         assert_eq!(Viewer::Preview.mod_name(), "nocturne-preview");
         std::fs::remove_dir_all(dir).unwrap();
     }

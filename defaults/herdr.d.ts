@@ -72,6 +72,10 @@ export function findFiles(root: string, query: string, options?: { limit?: numbe
  *  regex that didn't compile (searched as plain text). */
 export function grep(root: string, query: string, options?: { limit?: number; mode?: "plain" | "regex" | "fuzzy"; case?: "smart" | "sensitive" | "insensitive" }): Promise<{ matches: { path: string; line: number; col: number; text: string; ranges: [number, number][] }[]; files: number; truncated: boolean; error: string | null; scanning: boolean }>;
 
+/** This copy holds unsaved work: closing its pane or tab asks the person first (scripts must pass
+ *  `confirmed`), showing `note` ("picker.rs: unsaved changes"). null or "" when it's saved again. */
+export function setUnsaved(note: string | null): void;
+
 /** The agents people can start from a menu (entries with `run` in programs.json), most picked
  *  first, and whether each is installed: asked of the shell agents start in (on another machine,
  *  `on`, its login/interactive shell when supported), at most once a minute per machine.

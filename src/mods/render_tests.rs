@@ -150,7 +150,7 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
     });
     module = module.function("languageOf", |a| Ok(crate::syntax::lang(a.string(0)?).map_or(HostValue::Null, |l| l.id.into())));
     module = module.function("lspSessions", |_| Ok(HostValue::Array(vec![])));
-    for name in ["lspNotify", "lspRelease"] {
+    for name in ["lspNotify", "lspRelease", "setUnsaved"] {
         module = module.function(name, |_| Ok(HostValue::Null));
     }
     for name in ["lspStart", "lspRequest", "findFiles", "grep"] {
@@ -1007,6 +1007,20 @@ fn shipped_layouts_and_keys() {
         "nocturne.gridify",
         "nocturne-notifications.open",
         "nocturne.pin",
+        "nocturne.picker",
+        "nocturne.grep",
+        "nocturne-editor.save",
+        "nocturne-editor.find",
+        "nocturne-editor.replace",
+        "nocturne-editor.line",
+        "nocturne-editor.next-problem",
+        "nocturne-editor.prev-problem",
+        "nocturne-editor.problems",
+        "nocturne-editor.definition",
+        "nocturne-editor.hover",
+        "nocturne-editor.hover-more",
+        "nocturne-editor.hover-less",
+        "nocturne-editor.reload",
         "nocturne-browser.url",
         "nocturne-browser.reload",
         "nocturne-browser.back",
