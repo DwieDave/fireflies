@@ -86,6 +86,8 @@ test:
     bun test scripts/keyhelp.test.ts
     # A menu's ask (rename, delete a space) is answered from a task after the render, never in it (GPUI refuses cx.notify there), with a cx that throws as GPUI does.
     bun test scripts/nocturne-render-asks.test.ts
+    # An agent's row is pressed anywhere on it (full width, half of each gap; the rail's cell and its padding), with recording gpui stand-ins.
+    bun test scripts/nocturne-hit-areas.test.ts
     cargo test --locked
 
 docs-generate: build

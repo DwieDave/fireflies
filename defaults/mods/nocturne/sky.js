@@ -74,6 +74,22 @@ function clock() {
   return { time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, date: `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}` };
 }
 
+/** How far each lane's press area reaches into the gaps above and below it
+ *  (layout px): half the gap to its neighbour, so no strip between two
+ *  agents is dead; the jar's lanes only to each other (its glass between). */
+export function laneReach(lanes) {
+  const order = lanes.map((l, i) => i).sort((i, j) => lanes[i].y - lanes[j].y);
+  const out = lanes.map(() => ({ up: 0, down: 0 }));
+  for (let k = 0; k + 1 < order.length; k++) {
+    const a = lanes[order[k]], b = lanes[order[k + 1]];
+    if (a.jar !== b.jar) continue;
+    const gap = Math.max(0, b.y - (a.y + a.h));
+    out[order[k]].down = Math.floor(gap / 2);
+    out[order[k + 1]].up = gap - Math.floor(gap / 2);
+  }
+  return out;
+}
+
 function moonPhase(list) {
   if (!list.length) return 8;
   const rest = list.filter((a) => a.status === "idle" || a.status === "done").length;
@@ -141,6 +157,10 @@ const BODY = 16;
 // The open sky's mason jar: its lid (rim and thread) and where its walls
 // begin, under the neck and the round shoulders.
 const LID = 10, JAR_BODY = 28;
+// How far a rail firefly's press area reaches past its cell: into the rail's
+// padding beside it, half the 2 px gap above and below; the ground's pairs
+// sit 2 px apart, so there only half that.
+const RAIL_REACH = { x: 8, y: 1 }, PAIR_REACH = { x: 1, y: 1 };
 // How long the glass glints after a firefly flies in (ms): as long as the flight.
 const GLINT = 1800;
 
@@ -530,7 +550,7 @@ export default class Sky {
     for (const [k, v] of this.landing) if (v.until <= now) this.landing.delete(k);
   }
 
-  firefly(t, a, y, lane, w) {
+  firefly(t, a, y, lane, w, reach = { up: 0, down: 0 }) {
     const h = hash(a.address);
     const on = this.nav(`fly:${a.address}`, "flies", this.flyActs(a));
     const x = 6; // the halo's edge lines up with the eyebrow; every mark in one column
@@ -580,10 +600,16 @@ export default class Sky {
     const elsewhere = a.space_name && a.space !== this.shownSpace ? a.space_name : null;
     const whereColor = a.focused || on ? t.foreground : a.status === "blocked" ? t.blocked : t.muted;
     const sub = [elsewhere, a.status === "idle" ? null : WORD[a.status]].filter(Boolean).join(" · ");
-    const body = h_flex().id(`fly-${a.address}`).absolute().top(0).left(x).h(lane).items_center()
+    // A press, a right-click or a double-click (naming) anywhere on the lane:
+    // its full width and half the gap to each neighbour (`reach`), not only
+    // the firefly and its name. While naming, the name's field keeps them.
+    const press = (el) => el
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); if (e.click_count === 2) this.startNaming(a, cx); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
-      .on_click((e) => { if ((e?.click_count ?? 1) < 2) run("agent.focus", { terminal: a.address }); })
+      .on_click((e) => { if ((e?.click_count ?? 1) < 2) run("agent.focus", { terminal: a.address }); });
+    const hit = div().id(`hit-${a.address}`).absolute().left(0).w(w).top(-reach.up).h(lane + reach.up + reach.down).map(press);
+    const body = h_flex().id(`fly-${a.address}`).absolute().top(0).left(x).h(lane).items_center()
+      .when(naming, press)
       .child(fly)
       .child(naming
         ? h_flex().ml(-2).w(w - x - 50).gap(4).items_center()
@@ -605,7 +631,7 @@ export default class Sky {
       .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
     // The lane holds still (only the firefly in it flies), so it can move to
     // a new spot (to rest, say) on its own transition.
-    const inner = div().absolute().top(0).left(0).w(w).h(lane).child(body);
+    const inner = div().absolute().top(0).left(0).w(w).h(lane).when(!naming, (el) => el.child(hit)).child(body);
     return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
       .transition("top", { duration: LAND, easing: "ease-in-out" })
       .when(a.focused || on, (el) => el.child(path))
@@ -803,13 +829,14 @@ export default class Sky {
       more = list.length - shown.length;
     }
     const jarLanes = placed.filter(([a]) => inJar.has(a.address));
+    const reaches = laneReach(placed.map(([a, y, l]) => ({ y, h: l, jar: inJar.has(a.address) })));
     return div().id("meadow").relative().flex_1().min_h(0).w_full()
       .on_size_change((size, cx) => { this.field = size; cx.notify(); })
       .when(jarH > 0, (el) => el.child(this.jar(t, jarred, jarH, w)).children(jarLanes.map(([a, y, l]) => this.jarGlow(t, a, y, l))))
       // The jar's lanes sit inside its walls, the same margin on both sides.
-      .children(placed.map(([a, y, l]) => inJar.has(a.address)
-        ? this.firefly(t, a, y, l, w - 2 * JAR_INSET).left(JAR_INSET)
-        : this.firefly(t, a, y, l, w)))
+      .children(placed.map(([a, y, l], i) => inJar.has(a.address)
+        ? this.firefly(t, a, y, l, w - 2 * JAR_INSET, reaches[i]).left(JAR_INSET)
+        : this.firefly(t, a, y, l, w, reaches[i])))
       .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(placed.length ? placed.at(-1)[1] + placed.at(-1)[2] : 8)
         .map((el) => navRing(t, el, this.nav("more", "flies", { go: () => run("agent.next") })))
         .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
@@ -879,7 +906,7 @@ export default class Sky {
 
   /** A firefly on the rail: its mark in a 32 px cell, glowing in its rhythm
    *  (flight.js); a working one rises and falls a pixel or two. */
-  railFly(t, a, size = 32) {
+  railFly(t, a, size = 32, reach = RAIL_REACH) {
     const h = hash(a.address);
     const on = this.nav(`fly:${a.address}`, "flies", this.flyActs(a));
     const color = a.status === "idle" ? t.muted : t[a.status] ?? t.dim;
@@ -889,9 +916,11 @@ export default class Sky {
     return div().id(`rail-fly-${a.address}`).relative().size(size).flex_none().flex().items_center().justify_center()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .tooltip(`${givenName(a.address) ?? a.program?.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status] ?? a.status}`)
-      .on_mouse_down("left", stop)
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
-      .on_click(() => run("agent.focus", { terminal: a.address }))
+      // Pressed anywhere on the cell and the padding around it (`reach`), not only the mark.
+      .child(div().id(`rail-hit-${a.address}`).absolute().left(-reach.x).top(-reach.y).w(size + 2 * reach.x).h(size + 2 * reach.y)
+        .on_mouse_down("left", stop)
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.flyMenu(a); })
+        .on_click(() => run("agent.focus", { terminal: a.address })))
       // Focused: a plate of the ground, the corner ticks on its corners.
       .when(a.focused, (el) => el.child(dither(t.ansi0, 1)).children(cornerTicks(t, 0)))
       .when(awake, (el) => el
@@ -913,7 +942,7 @@ export default class Sky {
     const shown = resting.length > room ? resting.slice(0, room - 1) : resting;
     const more = resting.length - shown.length;
     // The count takes the last cell, so the stack keeps its shape above the hills.
-    const marks = [...shown.map((a) => this.railFly(t, a, cell)),
+    const marks = [...shown.map((a) => this.railFly(t, a, cell, pairs ? PAIR_REACH : RAIL_REACH)),
       ...(more > 0 ? [div().id("rail-ground-more").relative().size(cell).flex_none().flex().items_center().justify_center()
         .map((el) => navRing(t, el, this.nav("more", "flies", { go: () => run("agent.next") })))
         .text_size(10).text_color(t.ansi8).hover((s) => s.text_color(t.foreground).bg(t.ansi0 + "55"))

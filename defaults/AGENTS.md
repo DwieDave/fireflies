@@ -940,7 +940,10 @@ the tabs also leave room for the window buttons when the sidebar is narrower.
 Nocturne's sky folds the same way (cmd-b, `nocturne.fold`) to a rail as wide as
 the window buttons need at the person's zoom; it and the open sky list agents
 needs you, working, running a command, done, resting; the done and resting ones
-sit on the ground above the hills (the rail pairs them up when crowded). Pinned agents
+sit on the ground above the hills (the rail pairs them up when crowded). A row
+takes a press anywhere on it (its full width and half the gap to its
+neighbours; on the rail the cell and its padding): click focuses the agent,
+right-click its menu, double-click renames it. Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
 a sheen down its glass, never shorter than a jar with room under one firefly;
