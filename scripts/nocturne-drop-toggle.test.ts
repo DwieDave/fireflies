@@ -13,6 +13,7 @@ import { test, expect, mock, beforeEach } from "bun:test";
 class El {
   kids: any[] = [];
   on: Record<string, Function> = {};
+  placed = false; // absolute(): out of the flow
   elId: string | null = null;
   constructor(public tag?: string) {
     return new Proxy(this, {
@@ -24,6 +25,8 @@ class El {
         else if (k === "map") return a[0](proxy);
         else if (k === "on_mouse_down") t.on[`down:${a[0]}`] = a[1];
         else if (k === "on_click") t.on.click = a[0];
+        else if (k === "on_size_change") t.on.size = a[0];
+        else if (k === "absolute") t.placed = true;
         return proxy;
       },
     });
@@ -356,14 +359,86 @@ test("the center is as tall as what it shows (as its parts measure), up to the p
   o.measure("list")({ height: 90 * 0.9 }, cx1);
   o.measure("top")({ height: 80 * 0.9 }, cx1);
   o.measure("detail")({ height: 120 * 0.9 }, cx1);
-  // The request (top, detail, its padding, the key bar) is taller than the list (head, entries, padding).
+  // The request (top, detail, its padding) is taller than the list (head, entries, padding); the key bar under both.
   expect(o.height(it)).toBe(80 + 120 + 12 + 30);
   o.measure("list")({ height: 400 * 0.9 }, cx1);
-  expect(o.height(it)).toBe(34 + 400 + 8);
+  expect(o.height(it)).toBe(34 + 400 + 8 + 30);
   o.measure("detail")({ height: 2000 }, cx1);
   expect(o.height(it)).toBe(500);
   // Nothing waits: the empty note.
   o.sizes = { list: 70 };
   o.measure("empty")({ height: 200 * 0.9 }, cx1);
-  expect(o.height(null)).toBe(200);
+  expect(o.height(null)).toBe(200 + 30);
+});
+
+// ---- the center's key bar: under both columns, ? keys last, whatever fits
+
+const ITEMS = "nocturne-notifications.items";
+const PERMISSION = { id: "p1", address: "t2", type: "permission", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
+  request: { type: "permission", tool: "Bash", line: "mkdir -p x", title: "Bash command", canAmend: true, input: {},
+    options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "Yes, always", kind: "always" }, { n: 3, label: "No", kind: "no" }] } };
+const QUESTION = { id: "q1", address: "t3", type: "question", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
+  request: { type: "question", questions: [{ question: "What for lunch?", header: "Lunch", options: [{ label: "Pizza" }, { label: "Salad" }] }] } };
+const OTHER = { id: "e1", address: "t4", type: "other", status: "error", name: "Codex", logo: "codex", since: Date.now(), msg: "it failed" };
+
+/** A center showing `item`, drawn; `width`: its key bar's (layout px), as measured, then drawn again. */
+function center(item: any, width?: number) {
+  sharedState[ITEMS] = item ? [item] : [];
+  propsNow = { overlay: "o1", most: 580 };
+  const o: any = new Overview();
+  o.init({ role: "overview" }, cx);
+  const draw = () => { ids = {}; o.render(cx); };
+  draw();
+  if (width != null) {
+    const z = 0.9;
+    // Each hint as wide as its words (7 px a letter, its key's box), ? keys 50.
+    for (const [id, el] of Object.entries(ids)) {
+      if (id.startsWith("ov-hint-")) el.on.size({ width: (id.length - 8) * 7 * z + 20 * z, height: 20 }, cx);
+    }
+    ids["ov-keys"].on.size({ width: 50 * z, height: 20 }, cx);
+    ids["ov-bar"].on.size({ width: width * z, height: 30 * z }, cx);
+    draw();
+  }
+  return { o, draw };
+}
+const flowKids = (id: string) => ids[id].kids.filter((k: any) => k instanceof Object && "kids" in k && !k.placed && k.tag !== "dither" && !(k.kids.length === 1 && k.kids[0]?.tag === "dither"));
+const hintsShown = () => Object.keys(ids).filter((id) => id.startsWith("ov-hint-")).map((id) => id.slice(8));
+
+for (const [kind, item] of [["permission", PERMISSION], ["question", QUESTION], ["other", OTHER], ["nothing waits", null]] as const) {
+  test(`the center's key bar spans the drop-down and ends with ? keys (${kind})`, () => {
+    center(item);
+    // Under both columns: the overview's last child, after the row of list and request.
+    expect(ids["notify-overview"].kids.at(-1)).toBe(ids["ov-bar"]);
+    expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
+    // The ? list open: still the bar's last word, with the list above the bar.
+    const { o, draw } = center(item);
+    o.keysShown = true;
+    draw();
+    expect(ids["notify-overview"].kids.at(-1)).toBe(ids["ov-bar"]);
+    expect(ids["notify-overview"].kids.at(-2)).toBe(ids["notify-keys"]);
+    expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
+  });
+}
+
+test("the center's key bar fits a narrow drop-down: the least needed hints go first, ? keys stays last", () => {
+  // Wide: every hint of a permission.
+  center(PERMISSION, 860);
+  expect(hintsShown()).toEqual(["j k requests", "↑↓ choose", "1-9 answer", "⇥ but…", "p peek", "g go to", "esc close"]);
+  // Narrower: but…, go to, peek go, then choose.
+  center(PERMISSION, 520);
+  const mid = hintsShown();
+  expect(mid).not.toContain("⇥ but…");
+  expect(mid).toContain("1-9 answer");
+  expect(mid).toContain("esc close");
+  center(PERMISSION, 260);
+  const narrow = hintsShown();
+  expect(narrow.length).toBeLessThan(mid.length);
+  expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
+  // What's left fits: the hints, their gaps, the padding and ? keys.
+  for (const [w, item] of [[520, PERMISSION], [260, PERMISSION], [300, QUESTION], [300, OTHER]] as const) {
+    const { o } = center(item, w);
+    const used = hintsShown().reduce((a, h) => a + o.sizes[`hint:${h}`] + 14, 0);
+    expect(40 + used + 14 + 50).toBeLessThanOrEqual(w);
+    expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
+  }
 });

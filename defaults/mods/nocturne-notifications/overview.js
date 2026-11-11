@@ -30,6 +30,10 @@ import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit
 export const KEYS = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
   ["p", "peek"], ["g", "go to"], ["x", "put an error away"], ["esc q", "close"], ["?", "keys"]];
 
+// The key bar's hints in the order a narrow drop-down leaves them out (the ?
+// list has them all); esc close goes last.
+const BAR_DROP = ["⇥ but…", "g go to", "p peek", "x put away", "↑↓ choose", "j k requests", "1-9 answer", "↵ answer", "↵ go to", "esc close"];
+
 const TITLE = { permission: "Permissions", question: "Questions", other: "Needs a look" };
 const KIND_COLOR = { yes: "done", always: "accent", auto: "working", no: "blocked" };
 const HOOK_DOC = "Claude Code's hook: see ~/.config/herdr-app/AGENTS.md, Notifications";
@@ -164,10 +168,10 @@ export default class Overview {
     if (handled) { cx.stop_propagation(); cx.notify(); }
   }
 
-  /** A part's height as drawn, kept in layout px; a change draws again. */
-  measure(key) {
+  /** A part's height (or `dim`) as drawn, kept in layout px; a change draws again. */
+  measure(key, dim = "height") {
     return (size, cx) => {
-      const h = size.height / (Number(settings()?.zoom) || 1);
+      const h = size[dim] / (Number(settings()?.zoom) || 1);
       if (Math.abs((this.sizes[key] ?? -1) - h) < 0.5) return;
       this.sizes[key] = h;
       cx.notify();
@@ -175,25 +179,30 @@ export default class Overview {
   }
 
   /** Its height (layout px): the taller of the list and the request (or the
-   *  empty note) as they measured, up to the popup's most; the most until
-   *  they have. */
+   *  empty note) as they measured, and the key bar under both (with the ?
+   *  list when open), up to the popup's most; the most until they have. */
   height(it) {
     const most = Number(props()?.most) || OVERVIEW_H;
     const m = this.sizes;
-    const main = !it ? m.empty : m.top == null || m.detail == null ? null : m.top + m.detail + 12 + (this.keysShown ? m.keys ?? 50 : 0) + 30;
+    const main = !it ? m.empty : m.top == null || m.detail == null ? null : m.top + m.detail + 12;
     if (m.list == null || main == null) return most;
-    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main))));
+    const bar = (this.keysShown ? m.keys ?? 50 : 0) + 30;
+    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main) + bar)));
   }
 
   render() {
     const t = theme();
     const list = this.list();
     const it = this.current(list);
-    return h_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
+    // The key bar (and the ? list) spans the drop-down, under both columns.
+    return v_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(this.side(t, list, it))
-      .child(this.main(t, it));
+      .child(h_flex().flex_1().min_h(0)
+        .child(this.side(t, list, it))
+        .child(this.main(t, it)))
+      .when(Boolean(this.keysShown), (el) => el.child(v_flex().id("notify-keys").flex_none().on_size_change(this.measure("keys")).child(this.keysStrip(t))))
+      .child(this.footer(t, it));
   }
 
   // ---- the list
@@ -266,8 +275,6 @@ export default class Overview {
           .child(div().flex_1().min_w(0).text_color(t.blocked).child(`Not sent. ${note}`)))))
       .child(v_flex().id("notify-detail").flex_1().min_h(0).overflow_y_scrollbar().pb(12)
         .child(v_flex().id("notify-detail-body").flex_none().on_size_change(this.measure("detail")).child(body)))
-      .when(Boolean(this.keysShown), (el) => el.child(v_flex().id("notify-keys").flex_none().on_size_change(this.measure("keys")).child(this.keysStrip(t))))
-      .child(this.footer(t, it));
   }
 
   plate(t, kids) {
@@ -389,8 +396,18 @@ export default class Overview {
 
   footer(t, it) {
     const note = this.note?.id === it?.id ? this.note : null;
-    const hint = (k, w) => h_flex().gap(5).items_center().flex_none().child(kbd(t, k)).child(div().text_color(t.dim).child(w));
-    return h_flex().relative().h(30).flex_none().px(20).gap(14).items_center()
+    // Too narrow for every hint: the least needed go first (barDrop); ? keys stays.
+    const busy = Boolean(it) && this.busy?.id === it.id;
+    const drop = this.barDrop(note || busy);
+    const shown = [];
+    const hint = (k, w) => {
+      shown.push(`${k} ${w}`);
+      // Left out: out of the row's flow (absolute), so it takes no gap either.
+      return drop.has(`${k} ${w}`) ? div().absolute() : h_flex().id(`ov-hint-${k} ${w}`).gap(5).items_center().flex_none().on_size_change(this.measure(`hint:${k} ${w}`, "width"))
+        .child(kbd(t, k)).child(div().text_color(t.dim).child(w));
+    };
+    this.barHints = shown;
+    return h_flex().id("ov-bar").relative().h(30).flex_none().px(20).gap(14).items_center().on_size_change(this.measure("bar", "width"))
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
       .child(hint("j k", "requests"))
       .when(it?.type === "permission" && it.answerable, (el) => el.child(hint("↑↓", "choose")).child(hint("1-9", "answer")).child(hint("⇥", "but…")))
@@ -400,11 +417,25 @@ export default class Overview {
       .child(hint("esc", "close"))
       .child(div().flex_1())
       .when(Boolean(note), (el) => el.child(div().max_w(320).truncate().text_color(note.bad ? t.blocked : t.done).child(note.bad ? "not sent" : note.text)))
-      .when(!note && this.busy?.id === it?.id, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)))
+      .when(!note && busy, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)))
       // ? keys: the bar's last item, after the note.
-      .child(h_flex().id("ov-keys").gap(5).items_center().flex_none().cursor_pointer()
+      .child(h_flex().id("ov-keys").gap(5).items_center().flex_none().cursor_pointer().on_size_change(this.measure("keys-entry", "width"))
         .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
         .child(kbd(t, "?")).child(div().text_color(this.keysShown ? t.foreground : t.dim).child("keys")));
+  }
+
+  /** The hints left out of the key bar so the rest fits its width, as they
+   *  measured last (layout px): the least needed first (BAR_DROP). `note`: a
+   *  note or a busy word sits before ? keys. */
+  barDrop(note) {
+    const m = this.sizes;
+    const out = new Set();
+    if (m.bar == null || !this.barHints) return out;
+    const hints = this.barHints.filter((h) => m[`hint:${h}`] != null);
+    const room = m.bar - 40 - (m["keys-entry"] ?? 50) - 14 - (note ? 80 + 14 : 0) - 2;
+    const used = () => hints.filter((h) => !out.has(h)).reduce((a, h) => a + m[`hint:${h}`] + 14, 0);
+    for (const h of BAR_DROP) if (used() > room && hints.includes(h)) out.add(h);
+    return out;
   }
 
   /** `?`: every key, over the key bar. */
