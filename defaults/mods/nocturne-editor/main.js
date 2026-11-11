@@ -383,7 +383,11 @@ export default class EditorPane extends View {
     cx.notify();
   }
 
-  async save(cx) {
+  save(cx) {
+    return this.later(cx, (cx) => this.saveNow(cx));
+  }
+
+  async saveNow(cx) {
     if (this.state === "error") return;
     let text = this.editor.value();
     if (this.opts.format_on_save && this.opts.format) text = await this.format(text, cx) ?? text;
@@ -571,7 +575,11 @@ export default class EditorPane extends View {
     return lspRequest(this.server.id, method, { textDocument: { uri: uri(this.path) }, position: { line: at.line, character: at.col }, ...extra }, key ? { key } : undefined);
   }
 
-  async definition(cx) {
+  definition(cx) {
+    return this.later(cx, (cx) => this.definitionNow(cx));
+  }
+
+  async definitionNow(cx) {
     let loc = null;
     try { loc = firstLocation(await this.request("textDocument/definition", {}, undefined, undefined, "definition")); }
     catch (e) { if (!/cancelled/.test(String(e?.message ?? e))) this.say(String(e?.message ?? e), true); }
@@ -634,20 +642,47 @@ export default class EditorPane extends View {
     }
     card.note = null;
     card.asked ??= Date.now();
+    this.ask(card, cx);
+  }
+
+  /** Asks the server about a card's place. The answer comes in a task of its
+   *  own: an editor event's cx (vim's K, the pointer's hover, a click) is
+   *  bound to that call and refuses notify and timers once it has returned,
+   *  which left cards at "Asking…" with their answer already in hand. Any
+   *  answer for the place fills the card open there, whichever ask brought
+   *  it; when the last ask ends without one, the card asks again (the
+   *  workspace still loading; a cancel, once) or says why: it never sits
+   *  asking with nothing out. */
+  ask(card, cx) {
+    const key = `${card.line}:${card.col}:${card.level}`;
     const verbosity = this.lang === "typescript" || this.lang === "tsx" || this.lang === "javascript" ? { verbosityLevel: card.level } : {};
-    this.request("textDocument/hover", verbosity, card.line, card.col, "hover").then((h) => {
-      if (this.card !== card) return;
-      const answer = { parts: hoverParts(h?.contents), more: !!h?.canIncreaseVerbosityLevel };
-      // Nothing yet while the workspace loads: wait for it, then ask again.
-      if (!answer.parts.length && this.settling()) return this.askAgain(card, cx);
-      this.hovers.set(key, answer);
-      this.answered(card, answer, cx);
-    }, (e) => {
-      if (this.card !== card || /cancelled/.test(String(e?.message ?? e))) return;
-      // Changed under it while loading ("content modified"): asked again when the work is done.
+    card.inflight = (card.inflight ?? 0) + 1;
+    cx.spawn(async (cx) => {
+      let h = null, error = null;
+      try { h = await this.request("textDocument/hover", verbosity, card.line, card.col, "hover"); } catch (e) { error = e; }
+      card.inflight -= 1;
+      const answer = error ? null : { parts: hoverParts(h?.contents), more: !!h?.canIncreaseVerbosityLevel };
+      // Something to say: kept for the place, and into the card open there.
+      if (answer?.parts.length) {
+        this.hovers.set(key, answer);
+        const open = this.card;
+        if (open?.pending && `${open.line}:${open.col}:${open.level}` === key) this.answered(open, answer, cx);
+        return;
+      }
+      if (this.card !== card || !card.pending || card.inflight > 0) return; // gone, filled, or a newer ask decides
+      const why = String(error?.message ?? error ?? "");
+      // Nothing yet while the workspace loads ("content modified", or null): ask again.
       if (this.settling()) return this.askAgain(card, cx);
+      if (/cancelled/.test(why)) {
+        if (!card.reasked) { card.reasked = true; return this.ask(card, cx); }
+        error = new Error("the question was cancelled twice");
+      }
+      if (!error) {
+        this.hovers.set(key, answer);
+        return this.answered(card, answer, cx);
+      }
       card.pending = false;
-      if (card.keyboard && !card.problems.length) card.note = { text: `${s.name ?? "The language server"} didn't answer${e?.message ? `: ${e.message}` : "."}`, fix: null };
+      if (card.keyboard && !card.problems.length) card.note = { text: `${this.server?.name ?? "The language server"} didn't answer${error?.message ? `: ${error.message}` : "."}`, fix: null };
       else if (!card.problems.length) this.card = null;
       cx.notify();
     });
@@ -755,6 +790,18 @@ export default class EditorPane extends View {
       if (now.line !== was.line || now.col !== was.col) this.closeCard(cx);
     });
     return false;
+  }
+
+  /** Whether a card is drawn: the keyboard's always, the pointer's once it has something. */
+  cardShown(c) {
+    return c.keyboard || c.problems.length > 0 || c.parts.length > 0;
+  }
+
+  /** Runs `work` in a task: its cx lasts past an await, where an editor
+   *  event's (a key, a click) refuses notify and timers once that call has
+   *  returned. Resolves with what `work` returns. */
+  later(cx, work) {
+    return new Promise((resolve, reject) => cx.spawn(async (cx) => { try { resolve(await work(cx)); } catch (e) { reject(e); } }));
   }
 
   cardOverflows() {
@@ -954,7 +1001,11 @@ export default class EditorPane extends View {
     }
   }
 
-  async references(cx) {
+  references(cx) {
+    return this.later(cx, (cx) => this.referencesNow(cx));
+  }
+
+  async referencesNow(cx) {
     let list = null;
     try { list = await this.request("textDocument/references", { context: { includeDeclaration: false } }); } catch (e) { return this.say(String(e?.message ?? e), true); }
     if (!list?.length) { this.say("no references"); cx.notify(); return; }
@@ -965,7 +1016,11 @@ export default class EditorPane extends View {
     cx.notify();
   }
 
-  async formatNow(cx) {
+  formatNow(cx) {
+    return this.later(cx, (cx) => this.formatting(cx));
+  }
+
+  async formatting(cx) {
     if (this.opts.format) { await this.format(this.editor.value(), cx); cx.notify(); return; }
     if (this.server?.id == null) return this.say("no formatter: settings.json editor format");
     try {
@@ -989,7 +1044,8 @@ export default class EditorPane extends View {
     if (c === "problems") { this.drawer = !this.drawer; return; }
     if (c === "definition") return this.definition(cx);
     // cmd-i (vim: K) opens the card at the caret, and closes an open one.
-    if (c === "hover") { if (this.card) return this.closeCard(cx); const at = this.editor.cursor(); return this.showCard(at.line, at.col, true, cx); }
+    // (A pointer's card still waiting isn't on screen: cmd-i opens the caret's then.)
+    if (c === "hover") { if (this.card && this.cardShown(this.card)) return this.closeCard(cx); const at = this.editor.cursor(); return this.showCard(at.line, at.col, true, cx); }
     if (c === "hover-more") return this.hoverLevel(1, cx);
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
@@ -1457,7 +1513,7 @@ export default class EditorPane extends View {
   cardView(t, code) {
     const c = this.card;
     const waiting = c.pending && !c.problems.length;
-    if (!c.keyboard && !c.problems.length && !c.parts.length) return null;
+    if (!this.cardShown(c)) return null;
     const anchor = this.cardAnchor(c);
     if (!anchor) return null;
     if (c.keyboard && !c.drawn) { c.drawn = true; this.mark(`card drawn ${Date.now() - c.opened}ms after it was asked${c.pending ? `, waiting: ${this.waitWords()}` : ""}`); }

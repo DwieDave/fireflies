@@ -432,13 +432,17 @@ test("an answer is kept for its place until the text changes: asking again is in
   expect(requests.filter(([m]) => m === "textDocument/hover").length).toBe(2);
 });
 
-test("a hover the pointer left is cancelled by the next (herdr's keyed request); a cancelled one changes nothing", async () => {
+test("a hover the pointer left is cancelled by the next (herdr's keyed request); the cancelled one changes nothing, the next fills its card", async () => {
   const p = await pane();
-  answer = () => Promise.reject(new Error("cancelled"));
-  p.hovered({ hovering: true, line: 1, col: 8 }, cx());
-  await flush();
+  const first = deferred();
+  answer = () => first.promise;
+  p.hovered({ hovering: true, line: 0, col: 3 }, cx());
   expect(requests.at(-1)[2]).toEqual({ key: "hover" });
-  expect(p.card?.pending).toBe(true);
+  answer = () => HOVER;
+  p.hovered({ hovering: true, line: 1, col: 8 }, cx()); // the pointer rests on another word
+  first.reject(new Error("cancelled"));
+  await flush();
+  expect([p.card.line, p.card.col, p.card.parts.length]).toEqual([1, 8, 2]);
 });
 
 test("the card's Markdown: rust-analyzer's headings become bold lines (code blocks are parts of their own)", () => {
@@ -454,4 +458,154 @@ test("a file changed on disk and reloaded is saved as far as the server goes (ru
   expect(notes.map(([m]) => m)).toEqual(["textDocument/didChange", "textDocument/didSave"]);
   expect(notes[1][1]).toEqual({ textDocument: { uri: "file:///p/src/a.rs" }, text: disk });
   onDisk = "fn main() {\n    let x = 1;\n}\n";
+});
+
+// ---- item 6: a card left at "Asking rust-analyzer…" while its answer had come
+// An editor event's cx (a key: vim's K, gd; the pointer's hover; a click) is
+// bound to that one call, as the shell's is: once the call has returned,
+// cx.notify() and cx.timer refuse. Only a task's cx (cx.spawn, a timer's)
+// lasts. `redraws` counts the redraws that happened.
+let redraws = 0;
+function callCx(): any {
+  const c: any = {
+    live: true, stopped: 0,
+    stop_propagation() { this.stopped++; },
+    notify() { if (!c.live) throw new TypeError("cx.notify(): this call has returned"); redraws++; },
+    timer: { after: (ms: number, fn: any) => { if (!c.live) throw new TypeError("cx.timer: this call has returned"); later.push([ms, fn]); }, every() {} },
+    spawn: (fn: any) => { if (!c.live) throw new TypeError("cx.spawn: this call has returned"); const t = cx(); t.notify = () => { redraws++; }; fn(t); },
+    focus_handle: () => ({ focus() {}, is_focused: () => true }), read_from_clipboard: () => null, write_to_clipboard() {},
+  };
+  return c;
+}
+/** A key as the editor hands it over: its handler runs, then the call returns. */
+function press(k: any) { const c = callCx(); const taken = ed.handlers.key(k, c); c.live = false; return taken; }
+/** An answer that comes when the test says. */
+function deferred() { let resolve!: (v: any) => void, reject!: (e: any) => void; const promise = new Promise((a, b) => { resolve = a; reject = b; }); promise.catch(() => {}); return { promise, resolve, reject }; }
+/** A card waits on nothing: no request out, no ask scheduled. Never allowed while it says it's asking. */
+function stranded(p: any) {
+  const c = p.card;
+  return !!c && c.pending && !(c.inflight > 0) && !later.length;
+}
+const tickAll = async () => { for (let i = 0; i < 5 && later.length; i++) { tick(); await flush(); } };
+
+test("item 6: vim's K: the answer that comes after the key's call returned fills the card and redraws it", async () => {
+  const p = await pane(true);
+  const d = deferred();
+  answer = () => d.promise;
+  press(key("K", { shift: true }, "K"));
+  expect(p.card?.pending).toBe(true);
+  const before = redraws;
+  d.resolve(HOVER);
+  await flush();
+  expect(p.card.pending).toBe(false);
+  expect(texts(p.cardView(theme, "mono"))).toContain("A number.");
+  // The card on screen is the one with the answer: a redraw came after it.
+  expect(redraws).toBeGreaterThan(before);
+});
+
+test("item 6: the pointer's hover: the answer after the event's call fills its card and redraws", async () => {
+  const p = await pane();
+  const d = deferred();
+  answer = () => d.promise;
+  const c = callCx();
+  ed.handlers.hover({ hovering: true, line: 1, col: 8 }, c);
+  c.live = false;
+  const before = redraws;
+  d.resolve(HOVER);
+  await flush();
+  expect(p.card?.parts.length).toBe(2);
+  expect(redraws).toBeGreaterThan(before);
+});
+
+test("item 6: an empty answer while rust-analyzer settles, asked by K: asked again, and the card fills", async () => {
+  const p = await pane(true);
+  p.lastWork = Date.now(); // a phase just ended
+  answer = () => null;
+  press(key("K", { shift: true }, "K"));
+  await flush();
+  expect(p.card.pending).toBe(true);
+  answer = () => HOVER;
+  p.lastWork = 0;
+  await tickAll();
+  expect(p.card.pending).toBe(false);
+  expect(texts(p.cardView(theme, "mono"))).toContain("A number.");
+});
+
+test("item 6: 'content modified' during a late indexing step, asked by K: asked again, and the card fills", async () => {
+  const p = await pane(true);
+  p.progressed({ token: "i", value: { kind: "begin", title: "Indexing" } }, cx());
+  answer = () => Promise.reject(new Error("content modified"));
+  press(key("K", { shift: true }, "K"));
+  await flush();
+  expect(p.card.pending).toBe(true);
+  answer = () => HOVER;
+  p.progressed({ token: "i", value: { kind: "end" } }, cx());
+  p.lastWork = 0;
+  await flush();
+  await tickAll();
+  expect(p.card.pending).toBe(false);
+  expect(p.card.parts.length).toBe(2);
+});
+
+test("item 6: the pointer's hover then cmd-i on the same word before the answer: the keyboard's card opens and fills (the first ask is cancelled)", async () => {
+  const p = await pane();
+  const first = deferred();
+  answer = () => first.promise;
+  p.hovered({ hovering: true, line: 1, col: 8 }, cx());
+  ed.caret = { line: 1, col: 8 };
+  answer = () => HOVER;
+  p.command("hover", cx()); // the pointer's card isn't drawn yet: this opens the caret's
+  first.reject(new Error("cancelled")); // herdr's keyed request: the newer ask cancels the older
+  await flush();
+  expect(p.card?.keyboard).toBe(true);
+  expect(p.card.pending).toBe(false);
+  expect(p.card.parts.length).toBe(2);
+});
+
+test("item 6: an older ask's answer for the open card's place fills it, whichever ask it came from", async () => {
+  const p = await pane();
+  const first = deferred(), second = deferred();
+  let n = 0;
+  answer = () => (n++ ? second.promise : first.promise);
+  p.hovered({ hovering: true, line: 1, col: 8 }, cx());
+  ed.caret = { line: 1, col: 8 };
+  p.command("hover", cx()); // a new card at the same place, asking again
+  first.resolve(HOVER); // the first ask answers (not cancelled by this server)
+  await flush();
+  expect(p.card.keyboard).toBe(true);
+  expect(p.card.pending).toBe(false);
+  second.resolve(null); // the later, empty one changes nothing
+  await flush();
+  expect(p.card.parts.length).toBe(2);
+});
+
+test("item 6, the guard: whatever ends the request (answer, nothing, failure, cancel), the card never sits asking with nothing pending", async () => {
+  const outcomes: [string, () => any][] = [
+    ["answer", () => HOVER], ["nothing", () => null], ["failure", () => Promise.reject(new Error("boom"))],
+    ["cancelled", () => Promise.reject(new Error("cancelled"))],
+  ];
+  for (const [name, outcome] of outcomes) {
+    const p = await pane(true);
+    later = [];
+    answer = outcome;
+    press(key("K", { shift: true }, "K"));
+    await flush();
+    await tickAll();
+    // Settled: the answer, "has nothing", why it failed; a cancel with nothing newer asks once more, then says so.
+    expect([name, stranded(p)]).toEqual([name, false]);
+    expect([name, p.card?.pending ?? false]).toEqual([name, false]);
+  }
+});
+
+test("item 6: vim's gd with the card open goes to the definition (its call has returned by the answer)", async () => {
+  const p = await pane(true);
+  answer = (m) => (m === "textDocument/definition" ? { uri: "file:///p/src/a.rs", range: { start: { line: 2, character: 0 } } } : HOVER);
+  p.command("hover", cx());
+  await flush();
+  expect(p.card).not.toBe(null);
+  press(key("g"));
+  press(key("d"));
+  await flush();
+  expect(p.card).toBe(null);
+  expect(ed.caret).toEqual({ line: 2, col: 0 });
 });
