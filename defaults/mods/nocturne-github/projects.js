@@ -541,6 +541,13 @@ export default class Projects {
     if (!item) { this.menu = null; return true; }
     const fields = m.fields.map((id) => b.fields.find((f) => f.id === id)).filter(Boolean);
     const f = fields[m.at], opts = f ? this.options(b, item, f) : [];
+    // tab / shift-tab: the next / previous field, wrapping, as in every form (form-keys.js).
+    if (k === "tab" || k === "shift-tab") {
+      const by = k === "tab" && !e?.modifiers?.shift ? 1 : -1;
+      m.at = (((m.at + by) % fields.length) + fields.length) % fields.length;
+      m.side = "fields";
+      return true;
+    }
     if (m.side === "fields") {
       if (k === "j" || k === "down") m.at = Math.min(fields.length - 1, m.at + 1);
       else if (k === "k" || k === "up") m.at = Math.max(0, m.at - 1);
@@ -612,7 +619,7 @@ export default class Projects {
   hints() {
     if (this.typing === "filter") return [["enter", "apply"], ["esc", "leave"], ["↓", "board"]];
     if (this.typing) return [["enter", "save"], ["esc", "cancel"]];
-    if (this.menu?.kind === "fields") return this.menu.side === "fields" ? [["j/k", "field"], ["l enter", "values"], ["esc", "close"]] : [["j/k", "value"], ["enter", "set"], ["h", "fields"], ["esc", "close"]];
+    if (this.menu?.kind === "fields") return this.menu.side === "fields" ? [["tab ⇧tab", "field"], ["l enter", "values"], ["esc", "close"]] : [["j/k", "value"], ["enter", "set"], ["tab ⇧tab", "field"], ["h", "fields"], ["esc", "close"]];
     if (this.menu) return [["j/k", "move"], ["enter", "choose"], ["esc", "close"]];
     if (this.carrying) return [["h/l", "column"], ["j/k", "move it"], ["enter", "drop"], ["esc", "put back"]];
     if (this.focus === "detail") return [["j/k", "scroll"], ["e", "edit fields"], ["o", "on GitHub"], ["h", "board"], ["esc", "close"], ["?", "keys"]];

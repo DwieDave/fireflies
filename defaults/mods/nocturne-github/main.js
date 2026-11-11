@@ -44,6 +44,7 @@ import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
+import { bindTab, tabActions } from "./form-keys.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -101,6 +102,7 @@ export default class GitHub extends View {
     this.checked = false; // the cache was looked at
     this.dirty = false; this.savedAt = 0; this.saving = null;
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer && !this.shown().form) this.handle.focus(); });
@@ -580,6 +582,7 @@ export default class GitHub extends View {
     return v_flex().id("nocturne-github").size_full().bg(t.background).border(1).border_color(t.ansi8)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
         if (Math.abs(size.width - this.size.width) > 1 || Math.abs(size.height - this.size.height) > 1) { this.size = size; cx.notify(); }

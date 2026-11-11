@@ -2,11 +2,29 @@
 // right-click menus, every "…options" menu), confirms (red for destructive
 // ones), prompts and the commit message (summary + description). One popup
 // at a time over the window, on a dithered scrim; esc closes it.
+//
+// The confirm and the commit message are forms (form-keys.js): tab /
+// shift-tab walk their stops (a confirm's checks, then its buttons; the
+// summary, the description, commit, cancel), wrapping; the focused one wears
+// the accent ring; enter submits from a one-line field and presses a
+// focused button, cmd-enter (ctrl-enter) commits from anywhere, esc cancels.
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { dither, stop, edgeRow, popupScrim } from "./draw.js";
 import { keyLabel } from "./keys.js";
+import { window as appWindow } from "herdr";
+import { formKey, formHints, ring } from "./form-keys.js";
+
+const mac = () => appWindow?.()?.platform === "macos";
+
+/** A key as keyName() writes it ("shift-tab", "ctrl-enter", "a") as form-keys.js takes it: the key and its modifiers. */
+function split(k) {
+  const m = {};
+  let key = k;
+  for (let r; (r = /^(ctrl|shift|cmd)-(.+)$/.exec(key));) { m[{ ctrl: "control", shift: "shift", cmd: "platform" }[r[1]]] = true; key = r[2]; }
+  return [key, m];
+}
 
 const ROW = 20;
 
@@ -32,7 +50,26 @@ export class Popups {
    *  `checks`: toggles [{ key, label, on }], their own key flips one, and
    *  go(cx, checks) gets them. */
   confirm({ title, text, danger = false, go, error = false, lines = [], checks = [] }) {
-    this.top = { kind: "confirm", title, text, danger, go, error, lines, checks };
+    this.top = { kind: "confirm", title, text, danger, go, error, lines, checks, at: 0 };
+  }
+
+  /** A form popup's stops in tab order (form-keys.js); `at` is the focused one. */
+  stops(p = this.top) {
+    if (p?.kind === "confirm") return [
+      ...(p.checks ?? []).map((_, i) => ({ id: `cf-c-${i}`, kind: "toggle" })),
+      { id: "cf-yes", kind: "button", submit: true },
+      ...(p.error ? [] : [{ id: "cf-no", kind: "button" }]),
+    ];
+    if (p?.kind === "commit") return [{ id: "cm-sum", kind: "text" }, { id: "cm-desc", kind: "area" }, { id: "cm-ok", kind: "button", submit: true }, { id: "cm-no", kind: "button" }];
+    return [];
+  }
+
+  /** The hint line of a form popup: tab, what the focused stop takes, and the submit / cancel buttons. */
+  hints(p = this.top) {
+    const submit = p.kind === "commit" ? "commit" : p.error ? "close" : p.danger ? "yes, do it" : "confirm";
+    const cancel = p.kind === "commit" && p.draft ? "keep draft" : "cancel";
+    const hs = formHints(this.stops(p), p.at, { mac: mac(), submit, cancel });
+    return p.error ? hs.filter(([k]) => k !== "esc").map(([k, w]) => [k, k === "enter" ? submit : w]) : hs;
   }
 
   /** `note`: a line under the input; `suggest(text)`: completions to pick
@@ -58,7 +95,11 @@ export class Popups {
     const input = InputState.new({ placeholder: "summary", value: summary ?? "" });
     const desc = TextareaState.new({ placeholder: "description (optional)", value: rest.join("\n").replace(/^\n+/, ""), rows: 6 });
     input.on("submit", (_e, cx) => this.submit(cx));
-    this.top = { kind: "commit", title, input, desc, ok, field: "summary", draft };
+    // The description eats cmd-enter as a new line and says so: take it back and commit.
+    let before = desc.value(), now = before;
+    desc.on("change", () => { before = now; now = desc.value(); });
+    desc.on("submit", (e, cx) => { if (!e?.secondary) return; desc.set_value(before); this.submit(cx); });
+    this.top = { kind: "commit", title, input, desc, ok, at: 0, draft };
     this.focusLater(input);
   }
 
@@ -87,6 +128,14 @@ export class Popups {
     cx?.notify?.();
   }
 
+  /** The popup's own yes (a command: menu-run, confirm-yes, prompt-ok, commit-ok), wherever its keyboard is. */
+  ok(cx) {
+    const p = this.top;
+    if (p?.kind === "menu") this.runItem(p.items[p.sel], cx);
+    else if (p?.kind === "confirm") this.yes(p, cx);
+    else if (p) this.submit(cx);
+  }
+
   /** A key while a popup is open: true when it was used. */
   key(k, e, cx) {
     const p = this.top;
@@ -108,8 +157,15 @@ export class Popups {
     if (p.kind === "confirm") {
       const check = p.checks?.find((c) => c.key === k);
       if (check) { check.on = !check.on; return true; }
-      if (k === "enter" || k === "y") { this.close(); if (!p.error) p.go?.(cx, p.checks); }
-      else if (k === "escape" || k === "n" || k === "q") this.close();
+      if (k === "y") { this.yes(p, cx); return true; }
+      if (k === "n" || k === "q") { this.close(); return true; }
+      const [key, m] = split(k);
+      const stops = this.stops(p);
+      const a = formKey(stops, p.at, key, m, k.length === 1 ? k : null);
+      if (a?.act === "move") p.at = a.to;
+      else if (a?.act === "submit" || (a?.act === "press" && stops[p.at].id === "cf-yes")) this.yes(p, cx);
+      else if (a?.act === "cancel" || a?.act === "press") this.close();
+      else if (a?.act === "flip") p.checks[p.at].on = !p.checks[p.at].on;
       return true;
     }
     if (p.kind === "prompt") {
@@ -133,21 +189,36 @@ export class Popups {
       return false; // typing goes to the input
     }
     if (p.kind === "commit") {
-      if (k === "escape") {
-        if (p.draft) this.v.draft = [p.input.value(), p.desc.value()].filter((s) => s.trim()).join("\n\n");
-        this.close();
-        return true;
-      }
-      if (k === "tab" || k === "shift-tab") {
-        p.field = p.field === "summary" ? "desc" : "summary";
-        (p.field === "summary" ? p.input : p.desc).focus();
-        return true;
-      }
-      if (k === "enter" && p.field === "summary") { this.submit(cx); return true; }
-      if (k === "ctrl-enter" || (k === "enter" && (e?.modifiers?.platform || e?.modifiers?.control))) { this.submit(cx); return true; }
-      return false;
+      const [key, m] = split(k);
+      const stops = this.stops(p);
+      const a = formKey(stops, p.at, key, m, k.length === 1 ? k : null);
+      if (!a || a.act === "type") return false; // typing goes to the input
+      if (a.act === "move") this.commitGo(p, a.to);
+      else if (a.act === "submit" || (a.act === "press" && stops[p.at].id === "cm-ok")) this.submit(cx);
+      else if (a.act === "cancel" || a.act === "press") this.cancelCommit(p);
+      return true;
     }
     return false;
+  }
+
+  /** A confirm's yes (an error's only button closes it). */
+  yes(p, cx) {
+    this.close();
+    if (!p.error) p.go?.(cx, p.checks);
+  }
+
+  /** Esc on the commit message: what's typed stays as the draft (a new commit). */
+  cancelCommit(p) {
+    if (p.draft) this.v.draft = [p.input.value(), p.desc.value()].filter((s) => s.trim()).join("\n\n");
+    this.close();
+  }
+
+  /** The commit message's keyboard to stop i: a field's input, or the window for a button. */
+  commitGo(p, i) {
+    p.at = i;
+    if (i === 0) p.input.focus();
+    else if (i === 1) p.desc.focus();
+    else this.v.focusSelf();
   }
 
   runItem(item, cx) {
@@ -223,19 +294,30 @@ export class Popups {
       .when(Boolean(p.lines?.length), (el) => el.child(v_flex().gap(3).text_size(11)
         .children(p.lines.map(([s, c], i) => div().id(`cf-l-${i}`).text_color(t[c] ?? c ?? t.muted).child(s)))))
       .when(Boolean(p.checks?.length), (el) => el.child(v_flex().gap(2).text_size(11)
-        .children(p.checks.map((c, i) => h_flex().id(`cf-c-${i}`).gap(8).items_center().hover((s) => s.bg(t.ansi0 + "66"))
-          .on_click((_e, cx) => { cx.stop_propagation(); c.on = !c.on; cx.notify(); })
+        .children(p.checks.map((c, i) => ring(h_flex().id(`cf-c-${i}`).px(4).gap(8).items_center().hover((s) => s.bg(t.ansi0 + "66")), p.at === i, t.accent)
+          .on_click((_e, cx) => { cx.stop_propagation(); p.at = i; c.on = !c.on; cx.notify(); })
           .child(div().w(18).text_color(t.accent).child(c.key))
           .child(div().text_color(c.on ? t.foreground : t.dim).child(c.on ? "[x]" : "[ ]"))
-          .child(div().text_color(c.on ? t.foreground : t.muted).child(c.label))))))
-      .child(h_flex().gap(16).text_size(11)
-        .child(h_flex().id("cf-yes").gap(5).hover((s) => s.bg(t.ansi0 + "66"))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.key("enter", null, cx); cx.notify(); })
-          .child(div().text_color(t.accent).child("enter")).child(div().text_color(t.dim).child(p.error ? "close" : p.danger ? "yes, do it" : "confirm")))
-        .when(!p.error, (el) => el.child(h_flex().id("cf-no").gap(5).hover((s) => s.bg(t.ansi0 + "66"))
-          .on_click((_e, cx) => { cx.stop_propagation(); this.close(); cx.notify(); })
-          .child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("cancel")))));
+          .child(div().text_color(c.on || p.at === i ? t.foreground : t.muted).child(c.label))))))
+      .child(this.hintRow(t, p, { "cf-yes": (cx) => this.yes(p, cx), "cf-no": () => this.close() }));
     return this.frame(t, "git-confirm", p.title, w, x, y, body, { danger: p.danger || p.error });
+  }
+
+  /** A form popup's hint line: each key and its word, the submit and cancel
+   *  ones as buttons (`go` by id) that tab reaches and the ring marks. */
+  hintRow(t, p, go) {
+    const stops = this.stops(p);
+    const ids = stops.filter((s) => s.kind === "button").map((s) => s.id); // [submit, cancel]
+    const hs = this.hints(p);
+    return h_flex().gap(10).text_size(11).items_center().children(hs.map(([k, w], i) => {
+      const id = i === hs.length - (ids.length === 2 ? 2 : 1) ? ids[0] : ids.length === 2 && i === hs.length - 1 ? ids[1] : null;
+      const pair = h_flex().gap(5).items_center().child(div().relative().text_color(t.accent).child(k)).child(div().relative().text_color(id && stops[p.at]?.id === id ? t.foreground : t.dim).child(w));
+      if (!id) return pair.id(`hint-${i}`);
+      return ring(pair.id(id).h(18).px(4).hover((s) => s.bg(t.ansi0 + "66")), stops[p.at]?.id === id, t.accent)
+        .when(stops[p.at]?.id === id, (el) => el.bg(t.ansi0))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { cx.stop_propagation(); go[id]?.(cx); cx.notify(); });
+    }));
   }
 
   promptBox(t, p, size) {
@@ -267,19 +349,14 @@ export class Popups {
     const label = (s, right) => h_flex().mt(10).mb(4).text_size(10).text_color(t.dim).child(div().child(s.toUpperCase())).child(div().flex_1()).when(Boolean(right), (el) => el.child(right));
     const body = v_flex().px(14).pt(6).pb(12)
       .child(label("Summary", h_flex().text_size(11).child(div().text_color(len > 50 ? (len > 72 ? t.ansi1 : t.ansi3) : t.ansi2).child(String(len))).child(div().text_color(t.dim).child(" / 50"))))
-      .child(div().id("cm-sum").border(1).border_color(p.field === "summary" ? t.accent : t.ansi0).px(6).h(26).flex().items_center()
-        .on_mouse_down("left", () => { p.field = "summary"; p.input.focus(); })
+      .child(div().id("cm-sum").border(1).border_color(p.at === 0 ? t.accent : t.ansi0).px(6).h(26).flex().items_center()
+        .on_mouse_down("left", () => { p.at = 0; p.input.focus(); })
         .child(Input.new(p.input).w_full().text_size(12).text_color(t.foreground)))
       .child(label("Description"))
-      .child(div().id("cm-desc").border(1).border_color(p.field === "desc" ? t.accent : t.ansi0).px(6).py(4).h(110)
-        .on_mouse_down("left", () => { p.field = "desc"; p.desc.focus(); })
+      .child(div().id("cm-desc").border(1).border_color(p.at === 1 ? t.accent : t.ansi0).px(6).py(4).h(110)
+        .on_mouse_down("left", () => { p.at = 1; p.desc.focus(); })
         .child(Textarea.new(p.desc).w_full().h_full().text_size(12).text_color(t.foreground)))
-      .child(h_flex().mt(10).gap(14).text_size(11)
-        .child(h_flex().gap(5).child(div().text_color(t.accent).child("enter")).child(div().text_color(t.dim).child(p.field === "summary" ? "commit" : "new line")))
-        .child(h_flex().gap(5).child(div().text_color(t.accent).child("tab")).child(div().text_color(t.dim).child(p.field === "summary" ? "description" : "summary")))
-        .child(h_flex().gap(5).child(div().text_color(t.accent).child("ctrl-enter")).child(div().text_color(t.dim).child("commit")))
-        .child(div().flex_1())
-        .child(h_flex().gap(5).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child(p.draft ? "keep draft" : "cancel"))));
+      .child(div().mt(10).child(this.hintRow(t, p, { "cm-ok": (cx) => this.submit(cx), "cm-no": () => this.cancelCommit(p) })));
     return this.frame(t, "git-commit", p.title, w, x, y, body, { right: this.v.commitWhat?.() ?? null });
   }
 }

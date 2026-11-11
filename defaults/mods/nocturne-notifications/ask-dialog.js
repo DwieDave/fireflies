@@ -5,14 +5,15 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { theme, props, closeOverlay, run, nextCommand } from "herdr";
+import { theme, props, closeOverlay, run, nextCommand, window as appWindow } from "herdr";
 import { items } from "./engine.js";
 import { where } from "./model.js";
-import { start, press, setOther, answers, answered, isReview, otherRow, REVIEW } from "./ask.js";
+import { start, press, setOther, keepOther, answers, answered, isReview, otherRow, REVIEW } from "./ask.js";
 import { reviewText } from "./claude.js";
 import { answer } from "./drive.js";
 import { forget, followCommands } from "./open.js";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.js";
+import { bindTab, tabActions } from "./form-keys.js";
 
 export default class AskDialog {
   init(p, cx) {
@@ -30,6 +31,7 @@ export default class AskDialog {
       cx.notify();
     });
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
@@ -71,10 +73,13 @@ export default class AskDialog {
 
   key(e, cx) {
     if (!this.s) { if (e.key === "escape") this.close(); return; }
-    const m = e.modifiers;
-    if (m.control || m.platform || m.alt) return;
-    if (this.s.editing && e.key !== "escape") return; // the input has it
-    const k = e.key === " " ? "space" : e.key;
+    const m = e.modifiers ?? {};
+    // cmd-enter (ctrl-enter) submits from anywhere, the typed answer kept.
+    const chord = e.key === "enter" && (m.platform || m.control);
+    if (!chord && (m.control || m.platform || m.alt)) return;
+    if (this.s.editing && (e.key === "tab" || chord)) this.s = keepOther(this.qs(), this.s, this.input.value());
+    else if (this.s.editing && e.key !== "escape") return; // the input has it
+    const k = chord ? "submit" : e.key === " " ? "space" : e.key;
     const { state, action } = press(this.qs(), this.s, k, { shift: m.shift });
     this.s = state;
     if (!state.editing) this.handle.focus();
@@ -91,7 +96,8 @@ export default class AskDialog {
     const it = this.item;
     const frame = v_flex().id("notify-ask").relative().size_full().bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
       .track_focus(this.handle)
-      .on_key_down((e, cx) => this.key(e, cx));
+      .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)));
     const head = h_flex().relative().h(34).flex_none().px(14).gap(10).items_center()
       .child(logo(it?.logo ?? "claude", t.foreground, 12))
       .child(div().flex_1().min_w(0).truncate().text_size(12).child(it ? `${it.name} asks` : "Questions"))
@@ -199,11 +205,13 @@ export default class AskDialog {
     const q = qs[this.s.q];
     return h_flex().relative().h(30).flex_none().px(18).gap(12).items_center()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .when(this.s.editing, (el) => el.child(hint("↵", "keep")).child(hint("esc", "drop")))
+      .when(this.s.editing, (el) => el.child(hint("↵", "keep")).child(hint("⇥ ⇧⇥", "keep, move")).child(hint("esc", "drop")))
       .when(!this.s.editing, (el) => el
-        .child(hint("j k", "move"))
-        .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, this.s) ? "choose" : "pick"))
-        .when(qs.length > 1, (el) => el.child(hint("⇥", "next")).child(hint("⇧⇥", "back"))))
+        .child(hint("⇥ ⇧⇥", "move"))
+        .child(hint("j k", isReview(qs, this.s) ? "row" : "answer"))
+        .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, this.s) ? "choose" : "pick")))
+      .when(!isReview(qs, this.s), (el) => el.child(hint(appWindow?.()?.platform === "macos" ? "⌘↵" : "ctrl-↵", "submit")))
+      .child(hint("esc", "close"))
       .child(div().flex_1())
       .when(this.changed && !isReview(qs, this.s), (el) => el.child(div().text_color(t.blocked).child("changed in the terminal")));
   }

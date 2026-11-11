@@ -4,12 +4,15 @@
 // it (the flow's `side`), and a last step that shows the exact commands
 // before anything runs.
 //
-// Keyboard first: tab / shift-tab (or ↓ ↑ outside text) walk the fields;
-// typing goes into text; space flips a toggle and opens a list (typing on a
-// list field opens it filtered); enter reviews the commands from anywhere
-// (cmd/ctrl-enter from the body, where enter is a new line); in the review
-// enter (or y) sends, esc goes back; esc in the form cancels it. The mouse
-// does the same: click a field, a toggle, a list, the buttons.
+// Keyboard first, the way every form is (form-keys.js): tab / shift-tab
+// (or ↓ ↑ outside the body) walk the fields, then Review and Cancel,
+// wrapping; typing goes into text; ← → step a choice's value, space flips a
+// toggle and opens a list (typing on a list field opens it filtered); enter
+// reviews the commands (cmd/ctrl-enter from the body, where enter is a new
+// line, or from Cancel); enter on a button presses it; esc cancels. In the
+// review Send has the keyboard: tab / ← → reach Back, enter presses, y sends,
+// esc goes back. The mouse does the same: click a field, a toggle, a list,
+// the buttons.
 //
 // Field: { id, label, kind: "text" | "area" | "number" | "toggle" | "choice" | "multi",
 //   value, required, hint, placeholder, note (beside a toggle), free (a list
@@ -17,9 +20,11 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
+import { window as appWindow } from "herdr";
 import { dither, panel, stop, band, sweep, empty, unzoom, popupScrim } from "./kit.js";
+import { formKey, formHints, submitKey, wrap } from "./form-keys.js";
 
-const ROW = 28, AREA = 150, NOTE = 16, GAP = 8, LABEL = 96, PICK_ROWS = 12;
+const ROW = 28, AREA = 150, NOTE = 16, GAP = 8, LABEL = 96, PICK_ROWS = 12, BUTTONS = 48;
 const TEXT = new Set(["text", "area", "number"]);
 const LIST = new Set(["choice", "multi"]);
 
@@ -29,7 +34,8 @@ export class Form {
     this.app = app;
     this.spec = spec;
     this.fields = [];
-    this.at = 0;
+    this.at = 0; // the stop with the keyboard: a field, then Review, Cancel
+    this.confirmAt = 0; // in the review: Send, Back
     this.stage = "edit"; // edit | confirm | sending
     this.errors = {}; // field id -> words
     this.sendError = "";
@@ -43,7 +49,7 @@ export class Form {
   /** Replaces the fields, keeping what was typed in the ones that stay (by id). */
   setFields(list) {
     const was = new Map(this.fields.map((f) => [f.id, f]));
-    const cur = this.fields[this.at]?.id;
+    const cur = this.stops()[this.at]?.id;
     this.fields = list.map((f) => {
       const old = was.get(f.id);
       if (old && old.kind === f.kind && !f.reset) { f.value = old.value; f.input = old.input; f.touched = old.touched; }
@@ -52,9 +58,22 @@ export class Form {
     for (const [id, f] of was) if (!this.fields.some((x) => x.id === id && x.input === f.input)) f.input?.release?.();
     // Inputs are made here, never while drawing (the runtime refuses that).
     for (const f of this.fields) if (TEXT.has(f.kind)) this.inputOf(f);
-    const i = this.fields.findIndex((f) => f.id === cur);
-    this.at = Math.max(0, Math.min(this.fields.length - 1, i < 0 ? this.at : i));
+    const i = this.stops().findIndex((s) => s.id === cur);
+    this.at = Math.max(0, Math.min(this.stops().length - 1, i < 0 ? this.at : i));
   }
+
+  /** The keyboard's stops, in tab order (form-keys.js): the fields and the
+   *  buttons under them, or in the review its two buttons. */
+  stops() {
+    if (this.stage !== "edit") return [{ id: "form-send", kind: "button", submit: true }, { id: "form-back", kind: "button" }];
+    return [
+      ...this.fields.map((f) => ({ id: f.id, kind: f.kind === "number" ? "text" : f.kind })),
+      { id: "form-review", kind: "button", submit: true },
+      { id: "form-cancel", kind: "button" },
+    ];
+  }
+
+  get mac() { return appWindow?.()?.platform === "macos"; }
 
   field(id) { return this.fields.find((f) => f.id === id) ?? null; }
   value(id) { return this.field(id)?.value; }
@@ -76,18 +95,25 @@ export class Form {
     f.input.on("change", (_e, cx) => {
       const v = f.input.value();
       if (v === f.value) return;
+      f.before = f.value; // cmd-enter's new line is taken back (below)
       f.value = v; f.touched = true;
       delete this.errors[f.id];
       f.onChange?.(v, cx);
       cx?.notify?.();
     });
+    // The body eats cmd-enter as a new line and says so: take it back and review.
+    if (f.kind === "area") f.input.on("submit", (e, cx) => {
+      if (!e?.secondary) return;
+      if (f.before != null) { f.value = f.before; f.input.set_value(String(f.before)); }
+      this.review(cx);
+      cx?.notify?.();
+    });
     return f.input;
   }
 
-  /** Moves to field i: a text field gets the keyboard, others leave it with the window. */
+  /** Moves to stop i: a text field gets the keyboard, others leave it with the window. */
   go(i, cx) {
-    if (!this.fields.length) return;
-    this.at = (i + this.fields.length) % this.fields.length;
+    this.at = wrap(this.stops().length, i, 0);
     this.focusField(cx);
     this.reveal();
   }
@@ -102,7 +128,7 @@ export class Form {
     } else this.app.focusSelf();
   }
 
-  /** The focused field's top and height in the scrolled form. */
+  /** The focused stop's top and height in the scrolled form (the buttons are one row under the fields). */
   place(i) {
     let y = 0;
     for (let k = 0; k < this.fields.length; k++) {
@@ -110,7 +136,7 @@ export class Form {
       if (k === i) return { y, h };
       y += h + GAP;
     }
-    return { y, h: 0 };
+    return { y, h: i >= this.fields.length && i < this.stops().length ? BUTTONS : 0 };
   }
 
   heightOf(f) {
@@ -128,32 +154,51 @@ export class Form {
   /** true: used (stop it); "typing": the focused input's; false: not the form's. */
   key(k, e, cx) {
     const m = e?.modifiers ?? {};
-    // cmd / alt chords are the app's (and an input's copy / paste), except cmd-enter.
-    if ((m.platform || m.alt) && k !== "enter") return false;
-    if (this.picker) return this.pickerKey(k, e, cx);
-    if (this.stage === "sending") return true;
+    if (this.picker) return (m.platform || m.alt) && k !== "enter" ? false : this.pickerKey(k, e, cx);
+    if (this.stage === "sending") return !(m.platform || m.alt);
+    const stops = this.stops();
     if (this.stage === "confirm") {
-      if (k === "enter" || k === "y") this.send(cx);
-      else if (k === "escape" || k === "n" || k === "q" || k === "backspace") { this.stage = "edit"; this.focusField(cx); }
+      const plain = !m.platform && !m.control && !m.alt;
+      if (plain && k === "y") { this.send(cx); return true; }
+      if (plain && (k === "n" || k === "q" || k === "backspace")) { this.back(cx); return true; }
+      const a = formKey(stops, this.confirmAt, k, m, e?.key_char);
+      if (!a) return false;
+      if (a.act === "move") this.confirmAt = a.to;
+      else if (a.act === "submit" || (a.act === "press" && this.confirmAt === 0)) this.send(cx);
+      else if (a.act === "cancel" || a.act === "press") this.back(cx);
       return true;
     }
+    const a = formKey(stops, this.at, k, m, e?.key_char);
+    if (!a) return false;
     const f = this.fields[this.at];
-    if (k === "escape") { this.cancel(); return true; }
-    if (k === "tab") { this.go(this.at + (m.shift ? -1 : 1), cx); return true; }
-    if (k === "enter" && (f?.kind !== "area" || m.platform || m.control)) { this.review(cx); return true; }
-    if (!f) return true;
-    if (TEXT.has(f.kind)) {
-      // ↑ ↓ leave a one-line field (the body keeps them for its lines).
-      if (f.kind !== "area" && (k === "down" || k === "up")) { this.go(this.at + (k === "down" ? 1 : -1), cx); return true; }
-      return "typing";
-    }
-    if (k === "down" || k === "j") this.go(this.at + 1, cx);
-    else if (k === "up" || k === "k") this.go(this.at - 1, cx);
-    else if (f.kind === "toggle" && (k === "space" || k === "x")) this.flip(f, cx);
-    else if (LIST.has(f.kind) && (k === "space" || k === "right" || k === "l")) this.openPicker(f, "", cx);
-    else if (LIST.has(f.kind) && (k === "backspace" || k === "delete")) this.clear(f, cx);
-    else if (LIST.has(f.kind) && k.length === 1 && !m.control) this.openPicker(f, k, cx);
+    if (a.act === "type") return "typing";
+    if (a.act === "move") this.go(a.to, cx);
+    else if (a.act === "submit") this.review(cx);
+    else if (a.act === "cancel") this.cancel();
+    else if (a.act === "press") stops[this.at].id === "form-review" ? this.review(cx) : this.cancel();
+    else if (a.act === "step") this.step(f, a.by, cx);
+    else if (a.act === "flip") this.flip(f, cx);
+    else if (a.act === "open") this.openPicker(f, a.typed, cx);
+    else if (a.act === "clear") this.clear(f, cx);
     return true;
+  }
+
+  /** ← →: a choice's previous / next value, wrapping (nothing while its list is read). */
+  step(f, by, cx) {
+    const opts = f.options?.() ?? [];
+    if (!opts.length) return;
+    const i = opts.findIndex((o) => o.value === f.value);
+    f.value = opts[wrap(opts.length, i < 0 ? (by > 0 ? -1 : 0) : i, by)].value;
+    f.touched = true;
+    delete this.errors[f.id];
+    f.onChange?.(f.value, cx);
+  }
+
+  /** From the review back to the form. */
+  back(cx) {
+    if (this.stage === "sending") return;
+    this.stage = "edit";
+    this.focusField(cx);
   }
 
   flip(f, cx) { f.value = !f.value; f.touched = true; f.onChange?.(f.value, cx); }
@@ -184,6 +229,7 @@ export class Form {
     if (bad >= 0) { this.go(bad, cx); return; }
     this.sendError = "";
     this.stage = "confirm";
+    this.confirmAt = 0;
     this.app.focusSelf();
     cx?.notify?.();
   }
@@ -195,7 +241,7 @@ export class Form {
       let r;
       try { r = await this.spec.send(cx); } catch (e) { r = { ok: false, err: String(e?.message ?? e) }; }
       if (r?.ok) { this.release(); this.spec.done?.(r, cx); }
-      else { this.stage = "confirm"; this.sendError = r?.err || "gh didn't answer."; }
+      else { this.stage = "confirm"; this.confirmAt = 0; this.sendError = r?.err || "gh didn't answer."; }
     });
   }
 
@@ -259,11 +305,9 @@ export class Form {
     if (this.picker) return this.picker.field.kind === "multi"
       ? [["type", "filter"], ["↑↓", "move"], ["enter", "on / off"], ["esc", "done"]]
       : [["type", "filter"], ["↑↓", "move"], ["enter", "choose"], ["esc", "back"]];
-    if (this.stage === "confirm") return [["enter y", this.spec.sendWord ?? "send"], ["esc", "back to the form"]];
     if (this.stage === "sending") return [["", "sending…"]];
-    const f = this.fields[this.at];
-    const own = f?.kind === "toggle" ? [["space", "on / off"]] : LIST.has(f?.kind) ? [["space", "pick"], ["type", "filter"]] : f?.kind === "area" ? [["enter", "new line"], ["ctrl-enter", "review"]] : [];
-    return [["tab ⇧tab", "field"], ...own, ...(f?.kind === "area" ? [] : [["enter", "review"]]), ["esc", "cancel"]];
+    if (this.stage === "confirm") return [...formHints(this.stops(), this.confirmAt, { mac: this.mac, submit: this.spec.sendWord ?? "send", cancel: "back" }), ["y", "send"]];
+    return formHints(this.stops(), this.at, { mac: this.mac, submit: "review", cancel: "cancel" });
   }
 
   // ---- drawing
@@ -280,16 +324,27 @@ export class Form {
       .when(Boolean(this.picker), (el) => el.child(this.pickerBox(t, size)));
   }
 
+  isAt(id) { return this.stage === "edit" && !this.picker && this.stops()[this.at]?.id === id; }
+
   body(t) {
     const rows = this.fields.map((f, i) => this.fieldRow(t, f, i));
     const content = v_flex().absolute().left(0).right(0).top(-this.scrollY).px(12).pt(10).gap(GAP).children(rows)
       .child(h_flex().pt(10).pb(14).gap(8).items_center()
-        .child(button(t, "form-review", "Review", "enter", true, (cx) => this.review(cx)))
-        .child(button(t, "form-cancel", "Cancel", "esc", false, () => this.cancel()))
+        .child(button(t, "form-review", "Review", submitKey(this.stops(), this.at, this.mac), true, (cx) => this.review(cx), false, this.isAt("form-review")))
+        .child(button(t, "form-cancel", "Cancel", "esc", false, () => this.cancel(), false, this.isAt("form-cancel")))
         .child(div().flex_1())
         .when(Boolean(this.spec.footer), (el) => el.child(this.spec.footer(t))));
     return div().id("form-view").relative().size_full().overflow_hidden()
-      .on_size_change((s, cx) => { const h = unzoom(s.height); if (Math.abs(h - this.viewH) > 1) { this.viewH = h; cx.notify(); } })
+      .on_size_change((s, cx) => {
+        const h = unzoom(s.height);
+        if (Math.abs(h - this.viewH) > 1) {
+          this.viewH = h;
+          // Scrolled before the panel's height was known: keep the focused stop in view, scrolling no further than the form needs.
+          this.scrollY = 0;
+          this.reveal();
+          cx.notify();
+        }
+      })
       .on_scroll_wheel((e, cx) => {
         const end = this.place(this.fields.length).y + 80;
         this.scrollY = Math.max(0, Math.min(Math.max(0, end - this.viewH), this.scrollY - unzoom(e.delta?.y ?? 0)));
@@ -334,7 +389,7 @@ export class Form {
         .on_mouse_down("left", click)
         .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(text ? (f.tone ? t[f.tone] ?? t.foreground : t.foreground) : t.dim).child(shown))
         .when(Boolean(f.right), (el) => el.child(div().relative().flex_none().text_size(10).text_color(t.dim).child(f.right)))
-        .child(div().relative().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(list ? `${list.length || ""} ▾` : "▾"));
+        .child(div().relative().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(list ? `${list.length || ""} ▾` : on ? "‹ ›  ▾" : "▾"));
     }
     return v_flex().id(`frow-${f.id}`).relative().flex_none()
       .child(h_flex().items_start().gap(10)
@@ -375,8 +430,8 @@ export class Form {
             .child(div().flex_none().text_color(t.blocked).child("failed"))
             .child(div().flex_1().min_w(0).text_color(t.blocked).child(this.sendError))))
           .child(h_flex().gap(8).pt(2)
-            .child(button(t, "form-send", this.sendError ? "Try again" : this.spec.sendWord ?? "Send", "enter", true, (cx) => { if (!sending) this.send(cx); }, sending))
-            .child(button(t, "form-back", "Back", "esc", false, () => { if (!sending) { this.stage = "edit"; this.focusField(); } }, sending)))));
+            .child(button(t, "form-send", this.sendError ? "Try again" : this.spec.sendWord ?? "Send", submitKey(this.stops(), this.confirmAt, this.mac), true, (cx) => { if (!sending) this.send(cx); }, sending, !sending && this.confirmAt === 0))
+            .child(button(t, "form-back", "Back", "esc", false, (cx) => this.back(cx), sending, !sending && this.confirmAt === 1)))));
   }
 
   pickerBox(t, size) {
@@ -419,14 +474,19 @@ export class Form {
   }
 }
 
-/** A form button: the key it answers to beside its word; `main` is the accent one. */
-export function button(t, id, word, key, main, action, off = false) {
+/** A form button: the key it answers to beside its word; `main` is the accent one.
+ *  `focused` (the keyboard's) wears the dialogs' ring: the main one filled in
+ *  the accent, the other on a band with an accent edge. */
+export function button(t, id, word, key, main, action, off = false, focused = false) {
+  const filled = focused && main;
   return h_flex().id(id).relative().h(24).px(10).gap(8).flex_none().items_center().text_size(11).border(1)
-    .border_color(off ? t.ansi0 : main ? t.accent : t.ansi8)
+    .border_color(off ? t.ansi0 : focused || main ? t.accent : t.ansi8)
     .when(!off, (el) => el.cursor_pointer().hover((s) => s.border_color(t.foreground)))
-    .when(main && !off, (el) => el.child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 1))))
+    .when(main && !off && !focused, (el) => el.child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 1))))
+    .when(filled, (el) => el.bg(t.accent))
+    .when(focused && !main, (el) => el.bg(t.ansi0))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => { cx.stop_propagation(); if (!off) action(cx); cx.notify(); })
-    .child(div().relative().text_color(off ? t.dim : main ? t.foreground : t.muted).child(word))
-    .child(div().relative().text_size(10).text_color(off ? t.dim : t.accent).child(key));
+    .child(div().relative().text_color(off ? t.dim : filled ? t.background : main || focused ? t.foreground : t.muted).child(word))
+    .child(div().relative().text_size(10).text_color(off ? t.dim : filled ? t.background : t.accent).child(key));
 }

@@ -131,10 +131,26 @@ on Actions (its "run workflow", a right-click, "GitHub: run a workflow…",
 declares (text, number, a list for `choice` and `environment`, a toggle for
 `boolean`; defaults filled, required ones checked). It runs
 `gh workflow run <file> --ref <ref> -f name=value…`, then waits for the run
-and selects it. In a form, tab / shift-tab walk the fields, space flips a
-toggle or opens a list (typing filters it), enter reviews (ctrl-enter from
-the body), esc cancels. With the window open, `nocturne-github.new-pr` and
-`nocturne-github.run-workflow` do the same.
+and selects it. Both forms take keys like every form (below): tab /
+shift-tab walk the fields, then Review and Cancel; ← → change a choice
+(base, head, a workflow, a ref, a choice input), space flips a toggle or
+opens a list (typing filters it), enter reviews (cmd-enter from the body or
+Cancel), esc cancels; in the last step Send has the keyboard, tab reaches
+Back. With the window open, `nocturne-github.new-pr` and
+`nocturne-github.run-workflow` do the same. On the Projects tab, `e`'s
+field editor walks the item's fields with tab / shift-tab too.
+
+Every form takes keys the same way: the GitHub window's, the git window's
+commit message and confirms, Nocturne's prompt and confirm dialogs, the
+sidebar's new / rename / folder / delete space forms, the ask dialog, the
+editor's find line, Add a machine and Send feedback. It opens on its first
+field; tab / shift-tab go to the next / previous field or button, wrapping
+at both ends (↑ ↓ too, outside a multi-line field), and the focused one has
+the accent ring; ← → step a choice and flip a toggle, typing on a list field
+opens it filtered; enter submits from a one-line field, a choice or a toggle
+and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
+anywhere (enter is a new line in a multi-line field), esc cancels. Each
+form's hint line names its keys.
 
 Nocturne's git window (`mods/nocturne-git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
@@ -307,7 +323,8 @@ the highlighted line shows where it will land.
   (tab / shift-tab): a line sent with the answer as the agent's next
   instruction. A question block opens a dialog like Claude Code's
   AskUserQuestion (j/k or ↑↓, enter / space, typed "other" answers, tab /
-  shift-tab between questions, a review that submits all of them). Answers go
+  shift-tab between questions and the review's submit / back, wrapping,
+  a review that submits all of them, cmd-enter from anywhere). Answers go
   into the agent's terminal as keys, the way a person answers there, and the
   screen is read again before every key: a request that changed or went away
   is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
@@ -1508,6 +1525,19 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
                 start one as `${appHome()}/mods/<name>/bin/<program>`)
 ```
 
+- A form (fields and buttons): copy `mods/nocturne/form-keys.js` into your
+  mod (a mod can't import another's files). `formKey(stops, at, key,
+  modifiers, char)` says what a key does on the focused stop (`{ act: "move",
+  to }`, `"submit"`, `"cancel"`, `"press"`, `"step"`, `"flip"`, `"open"`,
+  `"type"`: let the input have it), `formHints()` is the hint line, `ring()`
+  the focus ring; stops are `{ id, kind: "text" | "area" | "choice" |
+  "multi" | "toggle" | "button", submit? }` in tab order. Tab never reaches
+  an `on_key_down` (key bindings run first and the root binds tab to move the
+  focus): call `bindTab(cx)` in `init` and wrap the root that tracks your
+  focus handle, above the inputs, in `tabActions(el, (e, cx) => this.key(e,
+  cx))`; tab and shift-tab then reach your handler as key events. A
+  multi-line field types cmd-enter as a new line and fires `submit` with
+  `secondary`: listen for that to submit from it.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`

@@ -6,10 +6,13 @@
 //                         multiSelect space toggles, enter toggles too
 //   enter on "other"      types an answer: the dialog's input takes the keys;
 //                         enter keeps it (and goes on), esc drops the edit
-//   tab / shift-tab       the next / previous question; past the last one,
-//                         the review
+//   tab / shift-tab       the next / previous stop, wrapping, as in every
+//                         form (form-keys.js): the questions, then the
+//                         review's "submit" and "back" rows; tab in the
+//                         typed answer keeps it and goes on
 //   review                every answer; enter on "submit" sends them all,
 //                         a question without an answer is gone back to first
+//   cmd-enter             submits from anywhere ("submit"), as the review does
 //   esc                   closes without answering
 //
 // Pure: press() returns a new state and maybe an action for the dialog.
@@ -60,6 +63,22 @@ function go(questions, s, q) {
   if (s.q === questions.length) s.reviewCursor = 0;
 }
 
+/** Tab's stops: each question, then the review's rows; wrapping at both ends. */
+function tab(questions, s, by) {
+  const n = questions.length, stops = n + REVIEW.length;
+  const at = isReview(questions, s) ? n + s.reviewCursor : s.q;
+  const to = (((at + by) % stops) + stops) % stops;
+  go(questions, s, Math.min(to, n));
+  if (to >= n) s.reviewCursor = to - n;
+}
+
+/** Submitting: the first question without an answer, else the answers go. */
+function submit(questions, s) {
+  const missing = questions.findIndex((_, i) => !answered(questions, s, i));
+  if (missing >= 0) { go(questions, s, missing); return { state: s, action: null }; }
+  return { state: s, action: "submit" };
+}
+
 /**
  * One key. Keys are GPUI names ("up", "down", "j", "k", "enter", "space",
  * "tab", "escape") with `shift` for shift-tab. Returns { state, action }:
@@ -74,16 +93,15 @@ export function press(questions, state, key, { shift = false } = {}) {
     return { state: s, action: "close" };
   }
   if (s.editing) return { state: s, action: null }; // the input has the keys
-  if (key === "tab") { go(questions, s, s.q + (shift ? -1 : 1)); return { state: s, action: null }; }
+  if (key === "tab") { tab(questions, s, shift ? -1 : 1); return { state: s, action: null }; }
+  if (key === "submit") return submit(questions, s);
 
   if (isReview(questions, s)) {
     if (key === "up" || key === "k") s.reviewCursor = Math.max(0, s.reviewCursor - 1);
     else if (key === "down" || key === "j") s.reviewCursor = Math.min(REVIEW.length - 1, s.reviewCursor + 1);
     else if (key === "enter" || key === "space") {
       if (REVIEW[s.reviewCursor] === "back") { go(questions, s, 0); return { state: s, action: null }; }
-      const missing = questions.findIndex((_, i) => !answered(questions, s, i));
-      if (missing >= 0) { go(questions, s, missing); return { state: s, action: null }; }
-      return { state: s, action: "submit" };
+      return submit(questions, s);
     }
     return { state: s, action: null };
   }
@@ -115,14 +133,23 @@ export function press(questions, state, key, { shift = false } = {}) {
   return { state: s, action: null };
 }
 
-/** The typed answer for the current question was entered (enter in the input). */
+/** The typed answer for the current question was entered (enter in the input):
+ *  kept, and a single-select one goes on. */
 export function setOther(questions, state, text) {
+  const s = keepOther(questions, state, text);
+  const i = s.q;
+  if (i < questions.length && !questions[i].multiSelect && s.otherOn[i]) go(questions, s, i + 1);
+  return s;
+}
+
+/** The typed answer kept where it is (tab leaving the input moves on by itself). */
+export function keepOther(questions, state, text) {
   const s = clone(state);
   const i = s.q;
   if (i >= questions.length) return s;
   s.other[i] = String(text ?? "").replace(/[\r\n]+/g, " ").trim();
   s.otherOn[i] = Boolean(s.other[i]);
   s.editing = false;
-  if (!questions[i].multiSelect && s.otherOn[i]) { s.picked[i] = []; go(questions, s, i + 1); }
+  if (!questions[i].multiSelect && s.otherOn[i]) s.picked[i] = [];
   return s;
 }
