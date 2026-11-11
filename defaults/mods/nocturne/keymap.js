@@ -143,6 +143,18 @@ const WORDS = {
   "nocturne-browser.inspect": "The web inspector",
 };
 
+// A group's rows in this order (keys() comes sorted by key): the blocks first in
+// keyboard focus, then the order WORDS lists them; directions left, right, up, down.
+const FIRST = ["nocturne.sidebar", "nocturne.focus", "nocturne.tabstrip", "nocturne.header", "nocturne.toast", "nocturne.toast-close", "nocturne.toast-dismiss"];
+const ORDER = [...FIRST, ...Object.keys(WORDS).filter((a) => !FIRST.includes(a))];
+const ARG = { left: 0, right: 1, up: 2, down: 3 };
+function rank(action) {
+  const name = String(action).split(":")[0], arg = String(action).split(":")[1] ?? "";
+  const i = ORDER.indexOf(action) >= 0 ? ORDER.indexOf(action) : ORDER.indexOf(name);
+  return [i < 0 ? ORDER.length : i, ARG[arg] ?? (Number(arg) || 0)];
+}
+const byRank = (a, b) => { const x = rank(a.k.action), y = rank(b.k.action); return x[0] - y[0] || x[1] - y[1]; };
+
 /** The group for an action (its section decides first: a terminal's, a mod's). */
 function groupOf(section, action) {
   if (section === "terminal" || action.startsWith("send:")) return "in a terminal";
@@ -256,7 +268,7 @@ export function rows(bindings, { commands = [], filter = "", open = new Set(), l
     const text = (r) => `${r.k.keys} ${r.k.shown} ${r.label} ${r.k.action} ${g}`;
     const out = [];
     const used = new Set();
-    for (const r of all.filter((r) => r.group === g)) {
+    for (const r of all.filter((r) => r.group === g).sort(byRank)) {
       // The command that gives a block the keyboard opens into that block's keys (its first binding only).
       const s = g === "keyboard focus" && surfaces.find((x) => x.entry === r.k.action && !used.has(x.id));
       if (s) {
