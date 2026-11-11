@@ -301,3 +301,54 @@ test("the panel toggle leaves files panes of their own alone", async () => {
   const src = await readFile(new URL("../defaults/mods/nocturne/files.js", import.meta.url), "utf8");
   expect(src).toContain("p.mod === MOD && p.tab === tab && !p.props?.path");
 });
+
+// ---- the folders visited, narrow widths
+
+test("back and forward walk the folders the tree was rooted at; back with none goes up", () => {
+  const { navGo, navBack, navForward, newNav } = logic;
+  let nav = newNav(), root = "/repo";
+  const step = (s: any) => { nav = s.nav; root = s.to; };
+  step(navGo(nav, root, "/repo/src"));
+  step(navGo(nav, root, "/repo/src/app"));
+  expect(navGo(nav, root, root)).toBeNull();
+  step(navBack(nav, root));
+  expect(root).toBe("/repo/src");
+  step(navBack(nav, root));
+  expect(root).toBe("/repo");
+  step(navForward(nav, root));
+  expect(root).toBe("/repo/src");
+  // Going somewhere new drops what was ahead.
+  step(navGo(nav, root, "/repo/docs"));
+  expect(navForward(nav, root)).toBeNull();
+  // With nothing behind, back is up a folder, and forward returns.
+  nav = newNav(); root = "/repo/src";
+  step(navBack(nav, root));
+  expect(root).toBe("/repo");
+  step(navForward(nav, root));
+  expect(root).toBe("/repo/src");
+  expect(navBack(newNav(), "/")).toBeNull();
+});
+
+test("the pane's keys: [ ] and alt-arrows go back and forward, - and . are remembered", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.sel = "src";
+  view.key({ key: "." }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "[" }, cx);
+  expect(view.root).toBe("/repo");
+  expect(view.pendingSel).toBe("/repo/src");
+  view.key({ key: "]" }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "left", modifiers: { alt: true } }, cx);
+  expect(view.root).toBe("/repo");
+  view.key({ key: "right", modifiers: { alt: true } }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "-" }, cx);
+  expect(view.root).toBe("/repo");
+  view.key({ key: "o", modifiers: { control: true } }, cx);
+  expect(view.root).toBe("/repo/src");
+  view.key({ key: "i", modifiers: { control: true } }, cx);
+  expect(view.root).toBe("/repo");
+});
+

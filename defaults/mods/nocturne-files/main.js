@@ -30,6 +30,7 @@
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
 //   E              edit it in $EDITOR (a terminal beside)
 //   -              root one folder up            .  root at the selected folder
+//   [ / ]          back / forward through the folders rooted at (also alt-← / alt-→, ctrl-o / ctrl-i, backspace)
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   v              Neovim beside                 o  a folder in a new files pane
@@ -39,7 +40,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward } from "./logic.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -107,6 +108,7 @@ export default class Files extends View {
     this.input.on("submit", (_e, cx) => { this.enter(cx); cx.notify(); });
     this.scroll = VirtualListScrollHandle.new();
     this.handle = cx.focus_handle();
+    this.nav = newNav();
     this.reroot(pr.path || pr.folder || home(), cx);
     // Remote folders can't be watched: poll those instead.
     cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
@@ -117,6 +119,33 @@ export default class Files extends View {
         cx.notify();
       }
     });
+  }
+
+  // ---- the folders visited
+
+  /** Roots the tree at `folder`, remembered for back. */
+  go(folder, cx) {
+    const step = navGo(this.nav, this.root, folder);
+    if (!step) return;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
+  }
+
+  /** Back: the folder before (with none, the parent); the folder left is picked there. */
+  back(cx) {
+    const step = navBack(this.nav, this.root);
+    if (!step) return;
+    const from = this.root;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
+    this.pendingSel = from;
+  }
+
+  forward(cx) {
+    const step = navForward(this.nav, this.root);
+    if (!step) return;
+    this.nav = step.nav;
+    this.reroot(step.to, cx);
   }
 
   // ---- the tree
@@ -434,7 +463,7 @@ export default class Files extends View {
     const p = row.path;
     if (act === "toggle") row.head ? this.reveal(p, cx) : this.toggle(p, cx);
     else if (act === "pane") this.openPane(p);
-    else if (act === "root") this.reroot(p ? `${this.root}/${p}` : this.root, cx);
+    else if (act === "root") this.go(p ? `${this.root}/${p}` : this.root, cx);
     else if (act === "edit") this.edit(p, cx);
     else if (act === "nvim") this.nvim(row);
     else if (act === "open") this.openFile(p, cx);
@@ -506,6 +535,9 @@ export default class Files extends View {
       cx.notify();
       return;
     }
+    // Back and forward, the browser's and vim's jump list's way too.
+    if ((m.alt && k === "left") || (m.control && k === "o")) { this.back(cx); cx.stop_propagation(); cx.notify(); return; }
+    if ((m.alt && k === "right") || (m.control && k === "i")) { this.forward(cx); cx.stop_propagation(); cx.notify(); return; }
     if (m.platform || m.control || m.alt) return;
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
@@ -514,6 +546,8 @@ export default class Files extends View {
     else if (k === "/") this.input.focus();
     else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else return; }
     else if (k === "q" && this.alone) this.close();
+    else if (k === "[" || k === "backspace") this.back(cx);
+    else if (k === "]") this.forward(cx);
     else if (k === "j" || k === "down") this.select(rows, i + 1);
     else if (k === "k" || k === "up") this.select(rows, i < 0 ? 0 : i - 1);
     else if (low === "g" && upper) { this.select(rows, rows.length - 1); this.gAt = 0; }
@@ -535,10 +569,10 @@ export default class Files extends View {
     else if (k === "o") this.openPane(row?.dir ? row.path : "");
     else if (k === "y") this.copy(row?.path ?? "", cx);
     else if (k === "m") this.openMenu(row ?? { path: "", name: this.root, dir: true }, cx);
-    else if (k === "-") { const from = this.root; this.reroot(parent(this.root), cx); this.pendingSel = from; }
+    else if (k === "-") { const from = this.root; this.go(parent(this.root), cx); this.pendingSel = from; }
     else if (k === "." && row) {
       const into = row.dir ? row.path : row.path.includes("/") ? parent(row.path) : "";
-      if (into) this.reroot(`${this.root}/${into}`, cx);
+      if (into) this.go(`${this.root}/${into}`, cx);
     }
     else if (k === "r") this.refresh(cx);
     else return;
@@ -548,11 +582,11 @@ export default class Files extends View {
 
   // ---- parts
 
-  chip(t, id, label, action) {
+  chip(t, id, label, action, on = true) {
     return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
-      .text_color(t.muted).hover((s) => s.text_color(t.foreground))
+      .text_color(on ? t.muted : t.ansi0).when(on, (el) => el.hover((s) => s.text_color(t.foreground)))
       .on_mouse_down("left", stop)
-      .on_click((_e, cx) => { action(cx); cx.notify(); })
+      .on_click((_e, cx) => { if (on) action(cx); cx.notify(); })
       .child(div().relative().child(label));
   }
 
@@ -561,7 +595,8 @@ export default class Files extends View {
     const name = this.root === "/" ? "/" : this.root.split("/").pop();
     return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
       .when(w >= 300, (el) => el.child(div().flex_none().text_color(t.ansi8).child("FILES")))
-      .child(this.chip(t, "nf-up", "‹", (cx) => this.key({ key: "-" }, cx)))
+      .child(this.chip(t, "nf-back", "‹", (cx) => this.back(cx), this.root !== "/" || this.nav.past.length > 0))
+      .child(this.chip(t, "nf-forward", "›", (cx) => this.forward(cx), this.nav.future.length > 0))
       .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
         .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(name))
         .when(w >= 360, (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(tilde(parent(this.root))))))

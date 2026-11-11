@@ -123,3 +123,30 @@ export function marks(text, ranges) {
 
 /** The menu's key column width (layout px, before zoom): its widest key at 7 px a character, plus room. */
 export const keyColumn = (items) => Math.max(30, ...items.map((x) => String(x.key ?? "").length * 7 + 14));
+
+// ---- the folders visited: back and forward
+
+/** No folders visited yet. */
+export const newNav = () => ({ past: [], future: [] });
+
+/** Going to `to` from `root`: `root` goes on the back list, the forward list
+ *  empties (as in a browser). null: already there. */
+export function navGo(nav, root, to) {
+  if (!to || to === root) return null;
+  return { to, nav: { past: [...nav.past, root].slice(-50), future: [] } };
+}
+
+/** Back: the folder before; with none, up to the parent (forward comes back).
+ *  null: nowhere to go (the top of the disk). */
+export function navBack(nav, root) {
+  const to = nav.past.length ? nav.past[nav.past.length - 1] : parent(root);
+  if (to === root) return null;
+  return { to, nav: { past: nav.past.slice(0, -1), future: [...nav.future, root] } };
+}
+
+/** Forward: undoes a back. null: nothing ahead. */
+export function navForward(nav, root) {
+  if (!nav.future.length) return null;
+  return { to: nav.future[nav.future.length - 1], nav: { past: [...nav.past, root], future: nav.future.slice(0, -1) } };
+}
+

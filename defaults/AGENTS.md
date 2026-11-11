@@ -433,7 +433,9 @@ the highlighted line shows where it will land.
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
   with `q` / `esc`. Every files pane: `j k h l` / arrows, enter, `e` / `E` edit,
-  `-` / `.` reroot, `r` refresh; `/` filters as you type (fff's fuzzy
+  `-` / `.` reroot, `[` / `]` (alt-← / alt-→, ctrl-o / ctrl-i, backspace; the
+  toolbar's ‹ ›) back and forward through the folders rooted at (back with none
+  goes up), `r` refresh; `/` filters as you type (fff's fuzzy
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
