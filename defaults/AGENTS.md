@@ -809,7 +809,12 @@ Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
 (`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
 and cmd-alt-up from a top pane the tab strip; `nocturne.sidebar`,
 `nocturne.tabstrip` and `nocturne.header` (the focused pane's header controls)
-go straight there and, pressed again, back. A blue ring or edge marks the
+go straight there and, pressed again, back (macOS: cmd-alt-s, cmd-alt-t,
+cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
+cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
+ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
+(`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
+`"cmd-ctrl-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
 the control's menu, r renames, esc/q go back to the pane, ? lists every key.
 The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
