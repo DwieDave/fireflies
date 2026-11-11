@@ -5721,11 +5721,13 @@ globalThis.__gpui = (() => {
       set_readonly: (readonly) => call("set_readonly", !!readonly),
       set_language: (language) => call("set_language", String(language)),
       focus: () => call("focus"),
+      focused: () => call("focused") === true,
       set_cursor_shape: (shape) => call("set_cursor_shape", String(shape)),
       set_selections: (list) => call("set_selections", list ?? []),
       undo: () => call("undo"),
       redo: () => call("redo"),
       top_line: () => call("top_line") ?? null,
+      bounds: (at) => call("bounds", { line: Number(at?.line) || 0, col: Number(at?.col) || 0 }) ?? null,
       scroll_to_line: (line) => call("scroll_to_line", Number(line) || 0),
     };
   };

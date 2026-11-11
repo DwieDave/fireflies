@@ -3215,6 +3215,8 @@ const BASE: &str = r#"  /** A row. */
     /** Recolors with another language's grammar (an id, alias or path). */
     set_language(language: string): void;
     focus(): void;
+    /** HERDR: whether it has the keyboard now. */
+    focused(): boolean;
     undo(): void;
     redo(): void;
     /** The caret's look: "bar" (default), "block" or "underline" (vim's modes). */
@@ -3225,6 +3227,10 @@ const BASE: &str = r#"  /** A row. */
     top_line(): number | null;
     /** Scrolls so the (fractional) line is at the top. */
     scroll_to_line(line: number): void;
+    /** HERDR: the word at a place (a caret-wide spot when it isn't on one) as last drawn, and
+     *  `view`, the editor's own box, both in window coordinates (zoomed pixels): where to put a
+     *  card about that place. Null when that line isn't on screen or before the first draw. */
+    bounds(at: EditorPosition): { x: number; y: number; width: number; height: number; view: { x: number; y: number; width: number; height: number } } | null;
   }
   export const EditorState: {
     new: (options?: {
