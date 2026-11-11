@@ -177,7 +177,7 @@ view shows for the Branches panel, lazygit's `git log --graph` on the lane graph
 q / esc close it. keys.json can bind any of the window's actions as
 `nocturne-git.<action>` (`open-pane`, `screen-next`, `panel-commits`…).
 Worktrees (the Files panel's third tab; `nocturne.worktrees`, the git
-button's ▾ > Worktrees, "+ new" > Worktrees, New / Open worktree) is what the
+button's ▾ > Worktrees, "+ new" > New / Open worktree…) is what the
 worktree dialog and the worktrees pane were: the repo's checkouts, the main
 one first, with the spaces showing each and the agents working in it. `space`
 goes to its space (or opens one), `enter` turns the window to it, `n` checks
@@ -1121,6 +1121,15 @@ last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
 drops nothing. Two blue corner ticks mark what's shown: the shown space (its plate in
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
+
+Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
+files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), "+ new", then
+the bell. "+ new" (cmd-n, `nocturne.new`) drops a menu under it: where new
+things land (a pane beside the focused one, or a new tab; tab flips it), a
+grid of panels in four columns (Terminal t, Web w, Files f, Agents a, Usage
+u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
+open from the git button, its ▾, their keys and the palette instead), every
+installed agent (1-9), then New space, New worktree… and Open worktree….
 
 ### Layouts and mods other people made
 

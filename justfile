@@ -100,6 +100,8 @@ test:
     bun test scripts/nocturne-files-preview.test.ts
     # nocturne-files ships the preview's viewer and what it imports: each copy is nocturne-preview's byte for byte.
     bun test scripts/nocturne-preview-shared.test.ts
+    # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
+    bun test scripts/nocturne-toolbar.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view

@@ -4,11 +4,13 @@
 //             the focused one, or a tab of their own. Its little picture shows
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
-//   panels    a grid of tiles (panels.js): terminal, web, files, agents,
-//             usage, worktrees, git, diff, github, in fixed columns (a short
-//             last row keeps them). Git, the diff (Git's review) and GitHub float and
-//             files runs down the tab's edge when "pane" is picked; open
-//             ones say so with a corner mark and close on a second pick.
+//   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
+//             usage, in fixed columns (a short last row keeps them). The
+//             panels that float over the tab (worktrees, Git, its diff,
+//             GitHub) aren't here: the strip's git button and its ▾, their
+//             keys and the palette open them. Files runs down the tab's edge
+//             when "pane" is picked; open ones say so with a corner mark and
+//             close on a second pick.
 //   agents    every installed agent, started at the landing spot
 //   space     a new space, or a worktree (made or opened)
 //   footer    what the item under the cursor will do, in words
@@ -79,12 +81,16 @@ function agentRows(agents) {
   ];
 }
 
+/** The menu's tiles: every panel (panels.js) that lands in a pane or a tab,
+ *  not the ones that float over the tab. */
+export const menuPanels = () => panels().filter((p) => p.fixed !== "float");
+
 /** Every pickable item, in cursor order: tiles, agents, space rows. */
 function items(agents) {
   const space = here().space;
   const worktree = (action) => () => openWorktrees({ space: space?.id, action });
   return [
-    ...panels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
+    ...menuPanels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
     { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a new space, in your home folder" },
     { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a branch in its own folder, as a space" },
@@ -117,7 +123,7 @@ export const newMenuOpen = () => Boolean(shared(OPEN));
 export function newMenuHeight() {
   const machine = spaces().find((s) => s.active)?.machine ?? "";
   const n = Math.max(1, agentRows(shared(KNOWN)?.[machine] ?? []).length);
-  const tiles = Math.ceil(panels().length / COLS);
+  const tiles = Math.ceil(menuPanels().length / COLS);
   return Math.min(640, HEAD + SECTION + tiles * TILE_H + (tiles - 1) * GAP + SECTION + n * ROW + SECTION + 3 * ROW + 8 + FOOT + 2);
 }
 
@@ -184,7 +190,6 @@ export default class NewMenu {
     if (dest === "tab") return `${name} in a new tab`;
     if (x.kind === "tile") {
       if (x.p.open?.()) return `closes the ${name}`;
-      if (x.p.fixed === "float") return `${name} floats over the tab`;
       if (x.p.fixed === "edge") return `${name} along the tab's right edge`;
     }
     return `${name} in a new pane`;
