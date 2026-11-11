@@ -28,6 +28,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { theme, nextCommand } from "herdr";
 import { ART, OWN, dither } from "./kit.js";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const TICK = 30_000; // countdowns, and asking again once the answer is old
 const SESSION_MS = 5 * 3600_000;
@@ -145,8 +146,9 @@ export default class Usage extends View {
   key(e, cx) {
     const m = e.modifiers ?? {};
     if (m.platform || m.control || m.alt) return;
-    if (e.key_char === "?" || e.key === "?") this.keysShown = !this.keysShown;
-    else if (e.key === "escape" && this.keysShown) this.keysShown = false;
+    const help = keysKey(e, this.keysShown);
+    if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+    else if (this.keysShown) return;
     else if (e.keystroke === "r") this.read(cx, true);
     else if (e.keystroke === "p") {
       const i = PROVIDERS.findIndex((p) => p.id === provider().id);
@@ -156,14 +158,11 @@ export default class Usage extends View {
     cx.notify();
   }
 
-  /** ?: the keys, a strip under the toolbar. */
+  /** ?: every key, under the toolbar (keyhelp.js). */
   keysStrip(t) {
-    return h_flex().id("us-keys").relative().flex_none().flex_wrap().px(12).py(4).gap_x(12).gap_y(2).items_center().text_size(11).bg(t.background)
-      .children(KEYS.map(([keys, what], i) => h_flex().id(`us-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(keys))
-        .child(div().text_color(t.dim).child(what))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    return keysView(t, { id: "us-keys", title: "usage", list: KEYS, close: () => { this.keysShown = false; } });
   }
+
 
   /** Shows provider `id` here and in the sidebar, asking it if its answer is old. */
   pick(id, cx) {
@@ -333,13 +332,8 @@ export default class Usage extends View {
         .on_click((_e, cx) => { cx.stop_propagation(); this.read(cx, true); })
         .child(busy ? div().child("·").frames(["·", "✦", "✧", "·"], 220) : "↻")
         .child(div().ml(6).child(status)))
-      // ? keys: the toolbar's last item.
-      .child(div().id("us-keys-chip").relative().flex_none().px(6).h(20).flex().items_center()
-        .text_color(this.keysShown ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => { cx.stop_propagation(); this.keysShown = !this.keysShown; cx.notify(); })
-        .when(Boolean(this.keysShown), (el) => el.child(dither(t.ansi0, 1)))
-        .child(div().relative().child("?")))
+      // ? keys: the toolbar's last item (keyhelp.js).
+      .child(keysHint(t, "us-keys-chip", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).ml(6))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
@@ -371,6 +365,11 @@ export default class Usage extends View {
   }
 
   render() {
+    return this.page();
+  }
+
+  /** The pane: the toolbar, then the candle and the moon (or a note). */
+  page() {
     const t = theme();
     const d = lastUsage(), note = usageNote();
     const { width, height } = this.size;
@@ -389,8 +388,9 @@ export default class Usage extends View {
       .children(layer("haze", 1400, t.ansi4, 0.2))
       .children(layer("hills-fill", 144, t.background, 1))
       .children(layer("hills-rim", 144, t.ansi8, 0.5))
-      .child(this.toolbar(t, d, note))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)));
+      .child(this.toolbar(t, d, note));
+    // ?: the keys in the meadow's place, the toolbar stays (keyhelp.js).
+    if (this.keysShown) return root.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t)));
     if (!d) return root.child(this.message(t, note));
     // The meadow keeps the bottom for the sheep; a short pane gives it up.
     const meadow = height >= 340;

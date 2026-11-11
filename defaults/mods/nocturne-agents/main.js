@@ -51,6 +51,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { theme, spaces, panes, focused, terminals, hc, run, props, nextCommand, shared, setShared } from "herdr";
 import { dither, pip } from "./kit.js";
+import { keysView, keysKey, hintBar } from "./keyhelp.js";
 
 /** The name a person gave a pane's terminal (Nocturne's "Rename": the nocturne.name label), or null. */
 const givenName = (terminal) => terminals().find((x) => x.address === terminal)?.labels?.["nocturne.name"] || null;
@@ -347,13 +348,11 @@ export default class Agents extends View {
     const m = e.modifiers;
     if (m.control || m.platform || m.alt) return;
     const typed = e.key_char && e.key_char.length === 1 ? e.key_char : null;
-    if (this.help) {
-      if (e.key === "escape" || typed === "?" || typed === "q") { this.help = false; cx.stop_propagation(); cx.notify(); }
-      return;
-    }
-    if (typed === "?" || typed === "[" || typed === "]") {
-      if (typed === "?") this.help = true;
-      else this.cycle(typed === "]" ? 1 : -1, cx);
+    const help = keysKey(e, this.help);
+    if (help) { this.help = help === "toggle" ? !this.help : false; cx.stop_propagation(); return cx.notify(); }
+    if (this.help) return;
+    if (typed === "[" || typed === "]") {
+      this.cycle(typed === "]" ? 1 : -1, cx);
       cx.stop_propagation();
       return cx.notify();
     }
@@ -661,24 +660,16 @@ export default class Agents extends View {
         .child(`${Math.round(this.zoom * 100)}%`)));
   }
 
-  /** lazygit's options bar: the main keys. */
+  /** lazygit's options bar: the main keys, ? keys last (keyhelp.js). */
   hints(t) {
-    const list = this.help ? [["esc", "close"], ["?", "keys"]]
-      : [["hjkl", "move"], ["enter", "fold"], ["G", "follow"], ["w", "working"], ["s", "stats"], ["f", "terminal"], ["[ ]", "session"], ["?", "keys"]];
-    return h_flex().id("ag-hints").relative().h(22).flex_none().px(12).gap(10).items_center().text_size(11).overflow_hidden()
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .children(list.map(([key, what], i) => h_flex().id(`ag-hint-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(key))
-        .child(div().text_color(t.dim).child(what))));
+    const list = this.help ? [["esc", "close"]]
+      : [["hjkl", "move"], ["enter", "fold"], ["G", "follow"], ["w", "working"], ["s", "stats"], ["f", "terminal"], ["[ ]", "session"]];
+    return hintBar(t, "ag-hints", list, { keys: { on: Boolean(this.help), toggle: () => { this.help = !this.help; } } });
   }
 
-  /** ?: every key, over the pane. */
+  /** ?: every key, in the graph's place (keyhelp.js). */
   helpPanel(t) {
-    return v_flex().id("ag-help").absolute().inset_0().bg(t.background).px(16).py(12).gap(2).text_size(11)
-      .child(div().pb(6).text_color(t.ansi8).child("KEYS"))
-      .children(KEYS.map(([k, what], i) => h_flex().id(`ag-help-${i}`).gap(12)
-        .child(div().w(90).flex_none().text_color(t.accent).child(k))
-        .child(div().text_color(t.muted).child(what))));
+    return keysView(t, { id: "ag-help", title: "agents and workflows", list: KEYS, close: () => { this.help = false; } });
   }
 
   render() {
@@ -700,8 +691,11 @@ export default class Agents extends View {
       .on_mouse_up("left", (_e, cx) => endResize(cx))
       .on_hover((h, cx) => { if (!h) endResize(cx); })
       .child(this.toolbar(t, list, pane));
+    // ?: the keys in the graph's place, the toolbar and the bar stay (keyhelp.js).
+    if (this.help) return shell.child(div().relative().flex_1().min_h(0).child(this.helpPanel(t))).child(this.hints(t));
     const note = (text, sub) => shell.child(v_flex().flex_1().items_center().justify_center().gap(6).px(16).text_size(11)
-      .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.ansi8).child(sub ?? "")));
+      .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.ansi8).child(sub ?? "")))
+      .child(this.hints(t));
     if (!pane) return note("No Claude Code in this space", "Start one from + new, then its agents and workflows show here.");
     if (this.error && !this.data) return note(this.error, "");
     if (!this.data) return note("Reading the session…", pane.cwd ?? "");
@@ -715,7 +709,6 @@ export default class Agents extends View {
       .when(Boolean(sel), (el) => el.child(this.details(t, sel, pane)))
       .when(!root.children.length, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.ansi8)
         .child("No subagents or workflows in this session yet.")))
-      .child(this.hints(t))
-      .when(this.help, (el) => el.child(this.helpPanel(t)));
+      .child(this.hints(t));
   }
 }

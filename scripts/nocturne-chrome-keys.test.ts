@@ -240,7 +240,7 @@ test("l goes back to the panes, esc and q to the pane it came from, ? lists the 
   press(s, "q");
   expect(commands.at(-1)).toEqual(["pane.focus", { pane: "p1" }]);
   press(s, "/", { shift: true }, "?");
-  expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { tab: "keys" } });
+  expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { role: "keyshelp" } });
   expect(press(s, "j", { platform: true })).toBe(false);
 });
 

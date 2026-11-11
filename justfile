@@ -82,6 +82,8 @@ test:
     bun test scripts/nocturne-notifications-open.test.ts
     # The blue corner ticks on what's shown: the focused agent's firefly square, the shown space open and on the rail, with recording gpui stand-ins.
     bun test scripts/nocturne-highlight.test.ts
+    # Nocturne's one key help: every keyhelp.js copy is the source byte for byte; in every mod ? opens the overview, ? or esc closes it.
+    bun test scripts/keyhelp.test.ts
     cargo test --locked
 
 docs-generate: build

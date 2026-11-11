@@ -337,7 +337,7 @@ the highlighted line shows where it will land.
   x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
   `down`, `enter`, `space`, `tab`, `back`, `yes-but`, `no-but`, `peek`,
-  `goto`, `put-away`, `close`, `1`…`9`. Claude Code's exact requests and its
+  `goto`, `put-away`, `close`, `keys` (its ? overview), `1`…`9`. Claude Code's exact requests and its
   questions come from its PermissionRequest hook, which only records them and
   never answers (it prints nothing; outside a herdr-core terminal it does
   nothing). Turn it on in `~/.claude/settings.json` (on each machine its
@@ -451,7 +451,7 @@ the highlighted line shows where it will land.
   The bar: kind, name, facts (size, pages, rows, length), the place among the
   folder's files of the same kind (`n` `]` / `p` `[` next / previous; ← → too
   for a fitted picture), the kind's controls, files (`f`), open (`o`, the
-  system's app), copy (`y`, the path), `?` (the keys, under the bar); Tab /
+  system's app), copy (`y`, the path), `? keys` (the keys overview in the file's place); Tab /
   Shift-Tab ring the bar's controls (Enter presses one). What it can't show says why and offers
   the system's app. The original is only read (pictures, PDFs and fonts are
   drawn from a copy in its cache) and it shows the file again when it changes
@@ -484,7 +484,7 @@ the highlighted line shows where it will land.
   editor), cmd-i the hover card at the caret, ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
   Markdown preview (below), `nocturne-editor.keys` (space ? in vim; the hint
-  bar's last entry, clickable) every key over the hint bar, esc hides it. **Vim** is on by
+  bar's last entry, `? keys`, clickable) the keys overview in the file's place; ? or esc hides it. **Vim** is on by
   default (settings.json `editor.vim`, Settings → Editor). The bar's `vim`
   chip, cmd-k v and `:novim` switch it for that pane only; the pane keeps its
   choice, panes never switched follow the default. The bar shows the mode (NORMAL,
@@ -580,8 +580,8 @@ the highlighted line shows where it will land.
   existing target is refused (nothing is overwritten), so are the root and a
   folder into itself; a failed command shows its error in the hint line. The
   tree then shows the result, unfolded and selected. Editors with a renamed,
-  moved or deleted file open keep the old path. `?` (or the `?` that ends the
-  filter line) lists the keys under it; `?` or esc hides them.
+  moved or deleted file open keep the old path. `?` (or the `? keys` that ends the
+  filter line) shows the keys overview in the list's place; `?` or esc hides it.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
@@ -968,7 +968,25 @@ ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 `"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
 the control's menu, r renames, esc/q go back to the pane, ? lists every key
-of the row the cursor is on (the strip's, the header's, the parked chips').
+of the row the cursor is on (the strip's, the header's, the parked chips') in
+a dialog (the chrome has no body to draw it over).
+
+Every Nocturne pane, panel and window has the same key help: its bar ends
+with `? keys` (the key in the accent, bright while open; a click toggles it),
+and `?` shows the keys overview: KEYS, what it's for and `? esc close` on
+top, then each section's keys in an aligned column (sections side by side as
+the width allows, one under the other in a narrow panel; long words wrap).
+It takes the body's place and the bars stay; `?`, esc or q close it. Where
+`?` types (the editor, a filter) its chord opens it (`space ?`, `cmd-k ?`),
+and the bar's entry says so. Over a native view (a web page, a PDF, a video)
+the view hides while the keys show and comes back as it was; picture in
+picture opens them as a popup over its video. Git's rows run their action
+(j k, enter or the row's own key), as lazygit's menu does. Every overview
+also opens by command: `<mod>.keys` (nocturne-agents, -browser, -editor,
+-files, -git, -github, -markdown, -notifications, -pip, -preview, -scripts,
+-usage). The drawing is `mods/nocturne/keyhelp.js`, copied byte for byte into
+each of those mods (a mod can't import another's files): change the source
+and copy it, a copy of your own goes with your own mod.
 The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
 rows are the tabs (x close, H/L move, 1-9), its buttons and the bell; the

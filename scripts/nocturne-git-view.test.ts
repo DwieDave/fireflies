@@ -249,13 +249,22 @@ test("review: the Files panel's Review tab marks and hides like nocturne-diff", 
   sh("rm review.txt review2.txt");
 });
 
-test("keys: ? opens the keybindings menu; the bar follows the context; right-click has the row's actions", async () => {
+test("keys: ? opens the keys overview (keyhelp.js), its rows run; the bar follows the context; right-click has the row's actions", async () => {
   const v = await open();
   v.setPanel("commits"); await settle(v);
   await press(v, "?");
-  expect(v.popups.kind).toBe("menu");
-  expect(v.popups.top.items.some((x: any) => x.label === "Squash into the commit below")).toBe(true);
+  expect(v.popups.kind).toBe("keys");
+  expect(v.popups.top.rows.some((x: any) => x[1] === "Squash into the commit below")).toBe(true);
+  expect(v.popups.top.sections.map((x: any) => x.title)).toEqual(expect.arrayContaining(["global"]));
+  v.render();
+  // ? closes it as esc does; j moves the cursor over the rows.
+  await press(v, "?");
+  expect(v.popups.open).toBe(false);
+  await press(v, "?");
+  await press(v, "j");
+  expect(v.popups.top.sel).toBe(1);
   await press(v, "escape");
+  expect(v.popups.open).toBe(false);
   v.rowMenu("commits", 0, cx);
   expect(v.popups.top.items.find((x: any) => x.label === "Drop").danger).toBe(true);
   await press(v, "escape");

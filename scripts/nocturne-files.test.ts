@@ -60,7 +60,8 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 const logic = await load("nocturne-files/logic.js");
-const { default: Files } = await load("nocturne-files/main.js", logic);
+const keyhelp = await load("nocturne-files/keyhelp.js");
+const { default: Files } = await load("nocturne-files/main.js", { ...logic, ...keyhelp });
 const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
 
 const later: ((cx: any) => void)[] = [];
@@ -494,13 +495,13 @@ test("Herdr's cleanup call when the pane goes closes nothing more (it used to cl
   world.focused = null;
 });
 
-test("? shows the keys under the filter line (? keys its last item), ? or esc hides them; / still filters", () => {
+test("? shows the keys over the files (? keys the filter line's last item), ? or esc hides them; / still filters", () => {
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   world.shared = {};
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   const texts = (el: any): string[] => typeof el === "string" ? [el] : el && typeof el === "object" && "nodes" in el ? el.nodes.flatMap(texts) : [];
-  // The filter line ends with the ? chip.
-  expect(texts(view.lens(world.props, 400, 0)).at(-1)).toBe("?");
+  // The filter line ends with "? keys" (keyhelp.js).
+  expect(texts(view.lens(world.props, 400, 0)).slice(-2)).toEqual(["?", "keys"]);
   const q = { key: "/", key_char: "?", modifiers: { shift: true } };
   view.key(q, cx);
   expect(view.keysShown).toBe(true);

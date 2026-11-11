@@ -45,6 +45,7 @@ import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
 import { bindTab, tabActions } from "./form-keys.js";
+import { keysView, keysKey } from "./keyhelp.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -438,14 +439,14 @@ export default class GitHub extends View {
       if (this.pickerKey(k, cx) !== false) { cx.stop_propagation(); cx.notify(); }
       return;
     }
-    if (this.help) {
-      if (k === "escape" || k === "?" || k === "q") this.help = false;
+    const help = keysKey(e, this.help);
+    if (help || this.help) {
+      if (help) this.help = help === "toggle" ? !this.help : false;
       cx.stop_propagation(); cx.notify(); return;
     }
     const ids = TABS.map(([id]) => id);
     if (k === "1" || k === "2" || k === "3") this.setTab(ids[Number(k) - 1], cx);
     else if (k === "[" || k === "]") this.setTab(ids[(ids.indexOf(this.tab) + (k === "]" ? 1 : ids.length - 1)) % ids.length], cx);
-    else if (k === "?") this.help = true;
     else if (((k === "p" && this.tab !== "projects") || k === "F") && (this.repo?.parent || this.repo?.child)) this.switchFork(cx);
     else if (k === "L" && this.state === "ready" && this.shown().links) this.pickLink();
     else if (k === "r" && !m.control) this.refresh(cx, true);
@@ -520,22 +521,15 @@ export default class GitHub extends View {
       .when(Boolean(this.overlay), (el) => el.child(chip(t, "gh-close", "✕", false, () => this.closeWindow())));
   }
 
+  /** ?: every key of the tab and the window (keyhelp.js). */
   helpPanel(t) {
     const fork = this.tab === "projects" ? "F" : "p F";
     const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],
       ...(this.repo?.parent ? [[fork, `the parent, ${this.repo.parent}`]] : this.repo?.child ? [[fork, `back to the fork, ${this.repo.child}`]] : []),
       ["esc q", "close (from the top)"], ["?", "keys"]];
     const tab = this.tab === "prs" ? Prs.help() : this.tab === "projects" ? Projects.help() : Actions.help();
-    const col = (title, list) => v_flex().gap(3).min_w(260)
-      .child(div().pb(4).text_color(t.ansi8).child(title))
-      .children(list.map(([k, what], i) => h_flex().id(`help-${title}-${i}`).gap(12)
-        .child(div().w(120).flex_none().text_color(t.accent).child(k))
-        .child(div().text_color(t.muted).child(what))));
-    return div().id("gh-help").absolute().inset_0().bg(t.background + "f2").p(20).text_size(11)
-      .on_mouse_down("left", stop)
-      .child(h_flex().gap(40).items_start()
-        .child(col({ prs: "PULL REQUESTS", actions: "ACTIONS", projects: "PROJECTS" }[this.tab], tab))
-        .child(col("WINDOW", all)));
+    const name = { prs: "pull requests", actions: "actions", projects: "projects" }[this.tab];
+    return keysView(t, { id: "gh-help", title: `GitHub · ${name}`, list: [{ title: name, keys: tab }, { title: "window", keys: all }], close: () => { this.help = false; } });
   }
 
   pickerPanel(t) {
@@ -604,6 +598,7 @@ export default class GitHub extends View {
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(Boolean(this.picker), (el) => el.child(this.pickerPanel(t))))
       .when(Boolean(this.confirm), (el) => el.child(this.confirmBar(t)))
-      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"], ["?", "keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"], ["?", "keys"]], right));
+      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"], ["?", "keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"], ["?", "keys"]], right,
+        { on: this.help, toggle: () => { this.help = !this.help; } }));
   }
 }

@@ -9,6 +9,7 @@
 //          nocturne-git on its Worktrees tab
 //   new    the "+ new" menu, an overlay from the tab strip
 //   menu   right-click menus: a tab's, and a terminal's (the layout's terminal_menu)
+//   keyshelp  the keys overview of the sidebar, tab strip, header and parked chips (menu.js openKeys)
 //   toast  notifications (the layout's toast_mod, on the DwieDave fork)
 //   prompt, confirm  Herdr's name prompt and confirm dialog (dialog.js; the
 //          layout's prompt_mod / confirm_mod, on the DwieDave fork)
@@ -29,12 +30,12 @@ import Header from "./header.js";
 import Parked from "./parked.js";
 import { WorktreesPanel } from "./worktrees.js";
 import NewMenu from "./newmenu.js";
-import Menu from "./menu.js";
+import Menu, { KeysDialog } from "./menu.js";
 import Toast from "./toast.js";
 import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";
 
 const ROLES = {
-  sky: Sky, tabs: Tabs, pane: Header, parked: Parked, worktrees: WorktreesPanel, new: NewMenu, menu: Menu, toast: Toast,
+  sky: Sky, tabs: Tabs, pane: Header, parked: Parked, worktrees: WorktreesPanel, new: NewMenu, menu: Menu, keyshelp: KeysDialog, toast: Toast,
   prompt: Prompt, confirm: Confirm, palette: Palette, peek: Peek,
   welcome: Welcome, whats_new: WhatsNew, help: Keys, update: UpdateNote,
 };

@@ -61,6 +61,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;
@@ -857,8 +858,12 @@ export default class Files extends View {
     if ((m.alt && k === "right") || (m.control && k === "i")) { this.forward(cx); cx.stop_propagation(); cx.notify(); return; }
     if (m.platform || m.control || m.alt) return;
     // ? (shift-/ on most layouts: check what was typed before "/" filters).
-    if (e.key_char === "?" || k === "?") { this.keysShown = !this.keysShown; cx.stop_propagation(); cx.notify(); return; }
-    if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); cx.notify(); return; }
+    // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+    const help = keysKey(e, this.keysShown);
+    if (help || this.keysShown) {
+      if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+      cx.stop_propagation(); cx.notify(); return;
+    }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     if (low === "h" && upper) this.setFilter("hidden", cx);
@@ -971,23 +976,16 @@ export default class Files extends View {
       .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
       .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
       .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
-      // ? keys: the line's last item.
-      .child(h_flex().id("nf-keys").relative().h(20).px(4).flex_none().items_center()
-        .text_color(this.keysShown ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
-        .child(div().relative().child("?")))
+      // ? keys: the line's last item (keyhelp.js).
+      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).h(20).px(4))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
-  /** `?`: the keys, under the filter line. */
+  /** `?`: every key, in the list's place (keyhelp.js); one column at the panel's width. */
   keysStrip(t) {
-    return h_flex().id("nf-keys-strip").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
-      .children(KEYS.map(([keys, what], i) => h_flex().id(`nf-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(keys))
-        .child(div().text_color(t.dim).child(what))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+    return keysView(t, { id: "nf-keys-strip", title: "files", list: KEYS, narrow: this.size.width < 2 * SECTION, close: () => { this.keysShown = false; } });
   }
+
 
   /** Text with the matched characters in the accent. */
   matched(t, id, text, ranges, color) {
@@ -1151,8 +1149,8 @@ export default class Files extends View {
       })
       .child(this.toolbar(t, w, focused))
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
-      .child(body)
+      // ?: the keys in the list's place, the toolbar and filter line stay (keyhelp.js).
+      .child(this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t)) : body)
       .when(Boolean(foot), (el) => el.child(foot))
       .when(Boolean(this.menu), (el) => el.child(this.menuBox(t)));
   }

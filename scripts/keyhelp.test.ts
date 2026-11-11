@@ -1,0 +1,252 @@
+// Nocturne's one key help (defaults/mods/nocturne/keyhelp.js): every copy
+// in a nocturne mod is byte-identical to the source, and in every mod that
+// lists its keys ? opens the same overview and ? or esc closes it. herdr and
+// gpui stand-ins (mock.module is process-wide: this file runs alone).
+import { test, expect, mock } from "bun:test";
+import { readFileSync, readdirSync, existsSync } from "fs";
+
+class El {
+  kids: any[] = [];
+  calls: Record<string, any[]> = {};
+  constructor() {
+    return new Proxy(this, {
+      get: (t, k: string, proxy) => k in t ? (t as any)[k] : k === "then" ? undefined : (...a: any[]) => {
+        if (k === "child") t.kids.push(a[0]);
+        else if (k === "children") t.kids.push(...a[0]);
+        else if (k === "when") { if (a[0]) a[1](proxy); }
+        else if (k === "map") return a[0](proxy);
+        else t.calls[k] = a;
+        return proxy;
+      },
+    });
+  }
+}
+const texts = (e: any): string[] => typeof e === "string" ? [e] : e instanceof Object && "kids" in e ? e.kids.flatMap(texts) : [];
+const theme: any = new Proxy({}, { get: () => "#808080" });
+const opened: any[] = [];
+const closed: any[] = [];
+let propsNow: any = {};
+const herdr: Record<string, any> = {
+  settings: () => ({ zoom: 1 }), window: () => ({ platform: "macos" }), agents: () => [], appHome: () => "/tmp/app",
+  closeOverlay: (id: any) => { closed.push(id); }, commands: () => [], exec: async () => ({ code: 1, stdout: "", stderr: "" }), focused: () => null,
+  hc: async () => ({ code: 1, stdout: "" }), home: () => "/home/a", keys: () => [], knownAgents: async () => [], layout: () => ({}),
+  layouts: () => ["nocturne"], nextCommand: () => new Promise(() => {}), notify: () => {}, openOverlay: (o: any) => { opened.push(o); return "o1"; },
+  panes: () => [], pickFolder: async () => null, presentUpdateNotes: () => {}, props: () => propsNow, run: () => null, setAgentOrder: () => {},
+  setShared: () => {}, shared: () => null, spaces: () => [], terminals: () => [], theme: () => theme, updates: () => ({ notes: [] }),
+  findFiles: async () => [], readTextFile: async () => null, writeTextFile: async () => {}, watchFolder: () => {},
+  languageOf: () => null, highlight: () => [], lspStart: () => null, lspRequest: async () => null, lspNotify: () => null, lspNextMessage: () => new Promise(() => {}), lspRelease: () => null, setUnsaved: () => null,
+  nativeView: { new: () => new El() }, nativeViewCall: () => null, nextNativeViewEvent: () => new Promise(() => {}),
+};
+mock.module("herdr", () => herdr);
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: () => new El(), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} set_selected_range() {} }
+mock.module("gpui-base", () => ({
+  h_flex: () => new El(), v_flex: () => new El(), v_virtual_list: () => new El(), Scrollbar: { new: () => new El(), vertical: () => new El() },
+  InputState: { new: () => new Input() }, Input: { new: () => new El() }, TextView: { html: () => new El(), markdown: () => new El() },
+  TextareaState: { new: () => new Input() }, Textarea: { new: () => new El() }, EditorState: { new: () => new Input() }, Editor: { new: () => new El() },
+  ScrollHandle: { new: () => ({ scroll_to_item() {} }) }, VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+}));
+(globalThis as any).window = { paint_path: () => new El() };
+
+// ---- keys as GPUI sends them, and as the lists spell them
+
+
+const MODS = `${import.meta.dir}/../defaults/mods`;
+const SOURCE = readFileSync(`${MODS}/nocturne/keyhelp.js`, "utf8");
+
+test("every nocturne mod's keyhelp.js is the source, byte for byte", () => {
+  const copies = readdirSync(MODS).filter((m) => m.startsWith("nocturne-") && existsSync(`${MODS}/${m}/keyhelp.js`));
+  for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/keyhelp.js`, "utf8") === SOURCE]).toEqual([m, true]);
+  // Each mod that imports it has its copy, and every mod with a ? overview imports it.
+  const users = readdirSync(MODS).filter((m) => m.startsWith("nocturne") && readdirSync(`${MODS}/${m}`).some((f) => f.endsWith(".js") && f !== "keyhelp.js"
+    && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
+  expect(users.filter((m) => m !== "nocturne").sort()).toEqual(copies.sort());
+  expect(users.sort()).toEqual(["nocturne", "nocturne-agents", "nocturne-browser", "nocturne-editor", "nocturne-files", "nocturne-git", "nocturne-github",
+    "nocturne-markdown", "nocturne-notifications", "nocturne-pip", "nocturne-preview", "nocturne-scripts", "nocturne-usage"]);
+});
+
+const kh = await import("../defaults/mods/nocturne/keyhelp.js");
+
+test("keysKey: ? toggles; esc and q close only while it's open; modifiers leave it alone", () => {
+  const e = (key: string, key_char?: string, mods: any = {}) => ({ key, key_char, modifiers: { shift: false, control: false, alt: false, platform: false, ...mods } });
+  expect(kh.keysKey(e("/", "?", { shift: true }), false)).toBe("toggle");
+  expect(kh.keysKey(e("/", "?", { shift: true }), true)).toBe("toggle");
+  expect(kh.keysKey(e("escape"), true)).toBe("close");
+  expect(kh.keysKey(e("q", "q"), true)).toBe("close");
+  expect(kh.keysKey(e("escape"), false)).toBe(null);
+  expect(kh.keysKey(e("q", "q"), false)).toBe(null);
+  expect(kh.keysKey(e("/", "?", { platform: true }), false)).toBe(null);
+});
+
+test("the overview: KEYS, the title, ? esc close, then each section's keys; a bar's ? keys", () => {
+  const v = kh.keysView(theme, { id: "x", title: "files", list: [{ title: "list", keys: [["j k", "move"]] }, { title: "window", keys: [["?", "keys"]] }] });
+  expect(texts(v)).toEqual(["KEYS", "files", "? esc", "close", "LIST", "j k", "move", "WINDOW", "?", "keys"]);
+  expect(texts(kh.keysHint(theme, "h", false, () => {}))).toEqual(["?", "keys"]);
+  expect(texts(kh.keysHint(theme, "h", false, () => {}, "cmd-k ?"))).toEqual(["cmd-k ?", "keys"]);
+  expect(texts(kh.hintBar(theme, "b", [["j", "down"]], { keys: { on: false, toggle() {} } }))).toEqual(["j", "down", "?", "keys"]);
+  // A dialog's height grows with the rows and with words that wrap.
+  expect(kh.keysHeight([["a", "x".repeat(200)]], 400)).toBeGreaterThan(kh.keysHeight([["a", "x"]], 400));
+});
+
+// ---- each mod: ? opens it, ? closes it, ? then esc closes it
+
+const nop = () => {};
+function surface(Cls: any, keep: string[], fields: Record<string, any>) {
+  const o: any = Object.create(Cls.prototype);
+  for (let p = Cls.prototype; p && p !== Object.prototype; p = Object.getPrototypeOf(p)) {
+    for (const name of Object.getOwnPropertyNames(p)) {
+      if (name === "constructor" || keep.includes(name)) continue;
+      const d = Object.getOwnPropertyDescriptor(p, name);
+      if (typeof d?.value === "function" && !(name in fields)) o[name] = nop;
+    }
+  }
+  return Object.assign(o, fields);
+}
+const cx = (): any => ({ stopped: 0, stop_propagation() { this.stopped++; }, notify() {}, spawn() {}, write_to_clipboard() {}, timer: { after() {}, every() {} }, focus_handle: () => ({ focus() {}, is_focused: () => true }) });
+const QUESTION = { key: "/", key_char: "?", keystroke: "shift-/", modifiers: { shift: true, control: false, alt: false, platform: false } };
+const ESC = { key: "escape", key_char: null, keystroke: "escape", modifiers: { shift: false, control: false, alt: false, platform: false } };
+/** ? opens (the overview drawn: KEYS first), ? closes, ? then esc closes. */
+function opensAndCloses(name: string, press: (e: any) => void, open: () => boolean, draw: () => any) {
+  expect([name, open()]).toEqual([name, false]);
+  press(QUESTION);
+  expect([name, open()]).toEqual([name, true]);
+  expect([name, texts(draw())[0]]).toEqual([name, "KEYS"]);
+  press(QUESTION);
+  expect([name, open()]).toEqual([name, false]);
+  press(QUESTION);
+  press(ESC);
+  expect([name, open()]).toEqual([name, false]);
+}
+
+test("agents: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-agents/main.js");
+  const v: any = surface(m.default, ["key", "helpPanel"], { help: false });
+  opensAndCloses("agents", (e) => v.key(e, cx()), () => v.help, () => v.helpPanel(theme));
+});
+
+test("GitHub: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-github/main.js");
+  const v: any = surface(m.default, ["key", "helpPanel"], { help: false, confirm: null, picker: null, shown: () => ({}), tab: "prs", repo: {} });
+  opensAndCloses("github", (e) => v.key(e, cx()), () => v.help, () => v.helpPanel(theme));
+});
+
+test("script runner: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-scripts/main.js");
+  const v: any = surface(m.default, ["onKey", "helpView"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0] });
+  opensAndCloses("scripts", (e) => v.onKey(e, cx(), []), () => v.help, () => v.helpView(theme, 300).kids[0]);
+});
+
+test("notifications: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-notifications/overview.js");
+  const v: any = surface(m.default, ["key", "keysStrip"], { but: null, keysShown: false, cursor: 0, list: () => [], current: () => null });
+  opensAndCloses("notifications", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
+});
+
+test("usage: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-usage/main.js");
+  const v: any = surface(m.default, ["key", "keysStrip"], { keysShown: false });
+  opensAndCloses("usage", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
+});
+
+test("markdown: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-markdown/main.js");
+  const v: any = surface(m.default, ["key", "keysStrip"], { sel: null, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) });
+  opensAndCloses("markdown", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
+});
+
+test("preview: ? opens the overview in the file's place, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-preview/main.js");
+  const v: any = surface(m.default, ["key", "barKey", "keysStrip"], { how: { how: "image" }, kind: "image", keysShown: false, ring: null, chips: [], editable: () => true, db: null, pages: 1 });
+  opensAndCloses("preview", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme).kids[0]);
+});
+
+test("web pane: ? opens the overview in the page's place, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-browser/main.js");
+  const v: any = surface(m.default, ["key", "barKey", "keysStrip"], { editing: false, start: true, controls: [], ring: null, keysShown: false, video: true });
+  opensAndCloses("browser", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme).kids[0]);
+});
+
+test("files: ? opens the overview, ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-files/main.js");
+  const v: any = surface(m.default, ["key", "keysStrip"], { menu: null, typing: false, query: "", alone: false, keysShown: false, shown: () => [], sel: null, folders: new Set(), root: "/r",
+    input: { focus() {} }, handle: { focus() {} }, size: { width: 280, height: 600 } });
+  opensAndCloses("files", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
+});
+
+test("editor: its chord (the keys command) opens the overview, which holds the keyboard; ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-editor/main.js");
+  const focus = { keys: 0, editor: 0 };
+  const v: any = surface(m.default, ["command", "toggleKeys", "keysStrip"], { keysShown: false, view: "text", vimOn: () => true,
+    keysHandle: { focus() { focus.keys++; } }, editor: { focus() { focus.editor++; } }, previewHandle: { focus() {} } });
+  const press = (e: any) => {
+    if (!v.keysShown) { if (e === QUESTION) v.command("keys", cx()); return; }
+    v.keysStrip(theme).calls.on_key_down[0](e, cx());
+  };
+  opensAndCloses("editor", press, () => v.keysShown, () => v.keysStrip(theme).kids[0]);
+  expect(focus.keys).toBe(2);
+  expect(focus.editor).toBe(2);
+});
+
+test("git: ? opens the keys overview, ? or esc closes it (its rows run as a menu's)", async () => {
+  const { Popups } = await import("../defaults/mods/nocturne-git/popups.js");
+  let ran = 0;
+  const p: any = new Popups({ focusSelf() {} });
+  const open = () => p.keys({ title: "git · files", sections: [{ title: "files", keys: [Object.assign(["space", "Stage", () => { ran++; }], { key: "space" })] }] });
+  const press = (e: any) => { if (!p.open) { if (e === QUESTION) open(); return; } p.key(e.key === "escape" ? "escape" : "?", e, cx()); };
+  opensAndCloses("git", press, () => Boolean(p.open), () => p.render(theme, { width: 900, height: 600 }).kids[0]);
+  open();
+  p.key("enter", { key: "enter", modifiers: {} }, cx());
+  expect([ran, Boolean(p.open)]).toEqual([1, false]);
+});
+
+test("picture in picture: ? opens the overview in a popup (the video is native), ? or esc closes it", async () => {
+  const m = await import("../defaults/mods/nocturne-pip/main.js");
+  opened.length = 0;
+  const v: any = surface(m.default, ["command", "openKeys"], { menu: null });
+  v.command("keys");
+  expect(opened.at(-1)).toMatchObject({ mod: "nocturne-pip", kind: "popup", props: { keys: true } });
+  const k: any = surface(m.default, ["renderKeys"], { handle: { focus() {} } });
+  const root = k.renderKeys(theme);
+  expect(texts(root)[0]).toBe("KEYS");
+  for (const e of [QUESTION, ESC]) {
+    closed.length = 0;
+    root.calls.on_key_down[0](e, cx());
+    expect(closed.length).toBe(1);
+  }
+});
+
+test("Nocturne's chrome (sidebar, tab strip, header, parked chips): ? opens the overview in a dialog, ? or esc closes it", async () => {
+  const menu = await import("../defaults/mods/nocturne/menu.js");
+  opened.length = 0;
+  menu.openKeys("sidebar keys", [["j k", "move"], ["?", "keys"]]);
+  expect(opened.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "keyshelp", title: "sidebar keys" } });
+  propsNow = opened.at(-1).props;
+  const d: any = new menu.KeysDialog();
+  d.init({}, cx());
+  const root = d.render();
+  expect(texts(root).slice(0, 2)).toEqual(["KEYS", "sidebar keys"]);
+  for (const e of [QUESTION, ESC]) {
+    closed.length = 0;
+    root.calls.on_key_down[0](e, cx());
+    expect(closed.length).toBe(1);
+  }
+});
+
+test("welcome and what's new: ? opens the overview over the page, ? or esc closes it", async () => {
+  const s = await import("../defaults/mods/nocturne/screens.js");
+  const c = { focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, notify() {} };
+  const w: any = new s.Welcome();
+  w.init({}, c);
+  w.done = nop;
+  opensAndCloses("welcome", (e) => w.render().calls.on_key_down[0](e, cx()), () => Boolean(w.keysShown), () => {
+    const all = (e: any): any[] => (e?.kids ? [e, ...e.kids.flatMap(all)] : []);
+    return all(w.render()).find((x) => x.calls?.id?.[0] === "w-keys-strip");
+  });
+  const n: any = new s.WhatsNew();
+  n.init({}, c);
+  n.done = nop;
+  opensAndCloses("what's new", (e) => n.key(e, cx()), () => Boolean(n.keysShown), () => {
+    const all = (e: any): any[] => (e?.kids ? [e, ...e.kids.flatMap(all)] : []);
+    return all(n.render()).find((x) => x.calls?.id?.[0] === "wn-keys-strip");
+  });
+});

@@ -13,8 +13,9 @@
 // A pane's menu can also move it (pane.move): to any other tab on its machine,
 // or a tab of its own.
 
-import { svg } from "gpui-kit";
-import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, agents } from "herdr";
+import { svg, div } from "gpui-kit";
+import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay, agents } from "herdr";
+import { keysView, keysKey, keysHeight } from "./keyhelp.js";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
 import { openWorktrees } from "./git.js";
@@ -98,18 +99,36 @@ export function openMenu(props, { width = 220, centered = false, at = null } = {
     ...(at && !centered ? { at } : {}), props: p });
 }
 
-/** The keys a chrome block takes (nav.js SIDEBAR_HELP, STRIP_HELP), as a list in a menu. */
+// The chrome's keys overview (role "keyshelp"): a dialog, since the sidebar,
+// the folded rail and the tab strip have no body to draw it over.
+const KEYS_W = 460;
+
+/** The keys a chrome block takes (nav.js SIDEBAR_HELP, STRIP_HELP): keyhelp.js's overview, in a dialog. */
 export function openKeys(title, lines) {
-  return openMenu({ tab: "keys", title, lines }, { width: 420, centered: true });
+  return openOverlay({ mod: "nocturne", kind: "dialog", frame: "none", width: KEYS_W, height: keysHeight(lines, KEYS_W), props: { role: "keyshelp", title, lines } });
+}
+
+/** The dialog openKeys opens: ? esc q close it. */
+export class KeysDialog {
+  init(_p, cx) {
+    this.handle = cx.focus_handle();
+    this.handle.focus();
+    cx.timer.after(120, () => this.handle.focus());
+  }
+
+  render() {
+    const t = theme(), p = props() ?? {};
+    const close = () => closeOverlay(p.overlay);
+    return div().id("keys-dialog").relative().size_full().bg(t.background).border(1).border_color(t.ansi0)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); close(); } })
+      .child(keysView(t, { id: "chrome-keys", title: p.title ?? "", list: p.lines ?? [], narrow: true, close }));
+  }
 }
 
 /** The rows for these props. */
 export function menuItems(t, p) {
   const tg = p?.target ?? {};
-  if (p?.tab === "keys") {
-    const w = Math.max(...(p.lines ?? []).map(([k]) => k.length), 4) + 2;
-    return [{ section: p.title ?? "keys" }, ...(p.lines ?? []).map(([k, what]) => ({ note: `${k.padEnd(w)}${what}` })), { note: "esc closes" }];
-  }
   if (p?.tab === "fly") {
     // Closing an agent closes its pane, not the tab around it; a pane alone
     // in its tab takes the tab with it, and the row says so. A sub-agent

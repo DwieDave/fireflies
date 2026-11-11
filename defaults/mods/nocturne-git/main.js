@@ -46,6 +46,7 @@ import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./pa
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
+import { keysHint } from "./keyhelp.js";
 import { bindTab, tabActions } from "./form-keys.js";
 import * as WT from "./worktrees.js";
 import { Review } from "./review.js";
@@ -802,20 +803,20 @@ export default class GitView extends View {
     this.mainTop = Math.max(0, Math.min(Math.max(0, n - 4), this.mainTop + d * step));
   }
 
+  /** ?: every key of the focused context, the list's and the window's, as
+   *  keyhelp.js's overview; a row runs its action (j k enter, or its key). */
   openKeys() {
     const ctx = this.ctx();
     const own = bindings(LISTS.has(ctx) || ctx === "staging" || ctx === "main" ? ctx : this.ctxOf(this.panel));
     const glob = bindings("global").filter((b) => !b.flags.has("hidden"));
     const list = LISTS.has(ctx) ? bindings("list").filter((b) => !b.flags.has("hidden")) : [];
-    const item = (b) => ({ key: b.keys.map(keyLabel).join(" "), label: b.label, danger: b.flags.has("danger"), go: (cx) => this.run(b.action, cx) });
-    this.menu({
-      title: `Keybindings · ${CONTEXT_NAMES[ctx] ?? ctx}`,
-      items: [{ section: CONTEXT_NAMES[ctx] ?? ctx, off: true }, ...own.filter((b) => !b.flags.has("hidden")).map(item),
-        ...(list.length ? [{ section: "list", off: true }, ...list.map(item)] : []),
-        { section: "global", off: true }, ...glob.map(item)],
+    const row = (b) => Object.assign([b.keys.map(keyLabel).join(" "), b.label, (cx) => this.run(b.action, cx)], { key: b.keys[0], danger: b.flags.has("danger") });
+    this.popups.keys({
+      title: `git · ${CONTEXT_NAMES[ctx] ?? ctx}`,
+      sections: [{ title: CONTEXT_NAMES[ctx] ?? ctx, keys: own.filter((b) => !b.flags.has("hidden")).map(row) },
+        ...(list.length ? [{ title: "list", keys: list.map(row) }] : []),
+        { title: "global", keys: glob.map(row) }].filter((s) => s.keys.length),
     });
-    // The first runnable row, not a section head.
-    this.popups.top.sel = this.popups.top.items.findIndex((x) => !x.off);
   }
 
   /** A row's right-click menu: its context's actions with their keys. */
@@ -1653,7 +1654,7 @@ export default class GitView extends View {
       .when(Boolean(this.backTo), (el) => el.child(chip(t, "git-back", "‹ GitHub", false, () => this.goBack(), t.dim)))
       .child(div().flex_1())
       .when(Boolean(this.busyText), (el) => el.child(div().relative().text_color(t.working).child(this.busyText)))
-      .child(chip(t, "git-keys", "?", false, () => this.openKeys()))
+      .child(keysHint(t, "git-keys", this.popups.top?.kind === "keys", () => (this.popups.top?.kind === "keys" ? this.popups.close() : this.openKeys())).mx(4))
       .child(chip(t, "git-refresh", "↻", false, () => this.reload(true)))
       .when(Boolean(this.overlay), (el) => el.child(chip(t, "git-close", "✕", false, () => this.quit())));
   }

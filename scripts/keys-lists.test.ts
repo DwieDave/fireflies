@@ -162,14 +162,14 @@ test("agents: ? lists every key; the bar ends with ? keys, the list open too", (
 });
 
 const md = await import("../defaults/mods/nocturne-markdown/main.js");
-test("markdown: ? lists every key; the toolbar's last control is ?", () => {
+test("markdown: ? lists every key; the toolbar's last control is ? keys", () => {
   const make = (sel: number | null) => () => { const v = surface(md.default, ["key"], { sel, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(null)), ...taken(make(0))])];
   expect(keys).toEqual(expect.arrayContaining(["j", "space", "ctrl-d", "tab", "?"]));
   expect(unnamed(md.KEYS, keys)).toEqual([]);
   expect(md.KEYS.at(-1)).toEqual(["?", "keys"]);
   const v: any = surface(md.default, ["toolbar", "chip"], { width: 600, history: [], path: "/a/b.md", raw: false, keysShown: false });
-  expect(texts(v.toolbar(theme)).at(-1)).toBe("?");
+  expect(texts(v.toolbar(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
 const browser = await import("../defaults/mods/nocturne-browser/main.js");
@@ -213,12 +213,12 @@ test("preview: ? lists every key for each way it shows a file", () => {
 });
 
 const usage = await import("../defaults/mods/nocturne-usage/main.js");
-test("usage: ? lists every key; the toolbar's last control is ?", () => {
+test("usage: ? lists every key; the toolbar's last control is ? keys", () => {
   const keys = taken(() => { const u = surface(usage.default, ["key"], { keysShown: false }); return (e, cx) => u.key(e, cx); });
   expect(keys).toEqual(expect.arrayContaining(["r", "p", "?"]));
   expect(unnamed(usage.KEYS, keys)).toEqual([]);
   const u: any = surface(usage.default, ["toolbar", "providers"], { keysShown: false });
-  expect(texts(u.toolbar(theme, null, null)).at(-1)).toBe("?");
+  expect(texts(u.toolbar(theme, null, null)).slice(-2)).toEqual(["?", "keys"]);
 });
 
 const pip = await import("../defaults/mods/nocturne-pip/main.js");

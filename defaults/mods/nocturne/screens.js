@@ -20,6 +20,7 @@ import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, run, spaces, keys, commands, hc, setShared, shared, presentUpdateNotes, updates, nextCommand } from "herdr";
 import { rows } from "./keymap.js";
 import { ART, dither, pip } from "./kit.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const W = (name) => `mods/workspace-chrome/${name}.svg`;
 const stop = (_e, cx) => cx.stop_propagation();
@@ -69,22 +70,6 @@ function bullet(t, status, title, body) {
     .child(v_flex().flex_1().min_w(0).gap(2)
       .child(div().text_size(12).text_color(t.foreground).child(title))
       .child(div().text_size(11).line_height("17px").text_color(t.muted).child(body)));
-}
-
-/** A screen's ? strip: its keys over the foot, ? keys last. */
-function keysStrip(t, id, list) {
-  return h_flex().id(id).relative().flex_none().flex_wrap().px(16).py(6).gap_x(14).gap_y(2).items_center().text_size(11)
-    .on_mouse_down("left", stop)
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-    .children(list.map(([k, what], i) => h_flex().id(`${id}-${i}`).flex_none().gap(4)
-      .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
-}
-
-/** A foot's "? keys", its hints' last word: a click shows the strip too. */
-function keysHint(t, id, on, toggle) {
-  return h_flex().id(id).flex_none().gap(4).cursor_pointer().text_size(11)
-    .on_mouse_down("left", stop).on_click((_e, cx) => { toggle(); cx.notify(); })
-    .child(div().text_color(t.accent).child("?")).child(div().text_color(on ? t.foreground : t.dim).child("keys"));
 }
 
 /** What the welcome's ? lists: every key its handler takes. */
@@ -213,11 +198,16 @@ export class Welcome {
     return frame(t, "nocturne-welcome").track_focus(this.handle)
       .on_key_down((e, cx) => {
         const k = e.key, m = e.modifiers;
-        if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); return cx.notify(); }
+        // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+        const help = keysKey(e, this.keysShown);
+        if (help || this.keysShown) {
+          if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+          if (help || !(m.control || m.alt || m.platform)) { cx.stop_propagation(); return cx.notify(); }
+          return;
+        }
         if (k === "escape") return this.done("skipped");
         if (m.control || m.alt || m.platform) return;
-        if (e.key_char === "?") this.keysShown = !this.keysShown;
-        else if (k === "enter" || k === "right" || k === "l") {
+        if (k === "enter" || k === "right" || k === "l") {
           if (last) return k === "enter" ? this.start() : undefined;
           go(this.page + 1, cx);
         } else if (k === "left" || k === "h") go(this.page - 1, cx);
@@ -229,14 +219,15 @@ export class Welcome {
       })
       .child(header(t, fly(18), "Fireflies", "beta", () => this.done("skipped")))
       .child(this.hero(t))
-      .child(div().id("w-body").flex_1().min_h(0).overflow_y_scroll().on_mouse_down("left", stop)
-        .child(div().px(22).pt(18).pb(18).child([this.pageOne, this.pageTwo, this.pageThree][this.page - 1].call(this, t))))
-      .when(Boolean(this.keysShown), (el) => el.child(keysStrip(t, "w-keys-strip", WELCOME_KEYS)))
+      .child(div().relative().flex_1().min_h(0)
+        .child(div().id("w-body").size_full().overflow_y_scroll().on_mouse_down("left", stop)
+          .child(div().px(22).pt(18).pb(18).child([this.pageOne, this.pageTwo, this.pageThree][this.page - 1].call(this, t))))
+        .when(Boolean(this.keysShown), (el) => el.child(keysView(t, { id: "w-keys-strip", title: "welcome", list: WELCOME_KEYS, close: () => { this.keysShown = false; } }))))
       .child(h_flex().relative().h(48).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(dots)
         .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc skip ·"))
-        .child(keysHint(t, "w-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
+        .child(keysHint(t, "w-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }))
         .child(div().flex_1())
         .when(this.page > 1, (el) => el.child(button(t, "w-back", "back", t.muted, false, (cx) => go(this.page - 1, cx))))
         .child(last
@@ -267,8 +258,12 @@ export class WhatsNew {
     const k = e.key, m = e.modifiers ?? {};
     if (m.control || m.platform || m.alt) return;
     const n = this.blocks;
-    if (e.key_char === "?") { this.keysShown = !this.keysShown; cx.stop_propagation(); return cx.notify(); }
-    if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); return cx.notify(); }
+    // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+    const help = keysKey(e, this.keysShown);
+    if (help || this.keysShown) {
+      if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+      cx.stop_propagation(); return cx.notify();
+    }
     if (k === "escape" || k === "enter") this.done();
     else if (k === "down" || k === "j" || k === "space" || k === "pagedown") this.at = Math.min(n - 1, this.at + 1);
     else if (k === "up" || k === "k" || k === "pageup") this.at = Math.max(0, this.at - 1);
@@ -318,14 +313,15 @@ export class WhatsNew {
     return frame(t, "nocturne-whatsnew").track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(header(t, fly(18), "What's new", null, () => this.done()))
-      .child(div().id("wn-body").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).on_mouse_down("left", stop)
-        .on_size_change((s, cx) => { if (Math.abs((this.width ?? 0) - (s.width - 44)) > 1) { this.width = s.width - 44; cx.notify(); } })
-        .children(blocks.map(([b, gap], i) => div().px(22).pt(i === 0 ? 18 : gap).when(i === blocks.length - 1, (d) => d.pb(18)).child(b))))
-      .when(Boolean(this.keysShown), (el) => el.child(keysStrip(t, "wn-keys-strip", WHATS_NEW_KEYS)))
+      .child(div().relative().flex_1().min_h(0)
+        .child(div().id("wn-body").size_full().overflow_y_scroll().track_scroll(this.scroll).on_mouse_down("left", stop)
+          .on_size_change((s, cx) => { if (Math.abs((this.width ?? 0) - (s.width - 44)) > 1) { this.width = s.width - 44; cx.notify(); } })
+          .children(blocks.map(([b, gap], i) => div().px(22).pt(i === 0 ? 18 : gap).when(i === blocks.length - 1, (d) => d.pb(18)).child(b))))
+        .when(Boolean(this.keysShown), (el) => el.child(keysView(t, { id: "wn-keys-strip", title: "what's new", list: WHATS_NEW_KEYS, close: () => { this.keysShown = false; } }))))
       .child(h_flex().relative().h(46).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child("↑↓ read · something off? settings › send feedback ·"))
-        .child(keysHint(t, "wn-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
+        .child(keysHint(t, "wn-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }))
         .child(button(t, "wn-done", "got it", t.accent, true, () => this.done())));
   }
 }

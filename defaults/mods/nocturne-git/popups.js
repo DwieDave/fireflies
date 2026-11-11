@@ -15,6 +15,7 @@ import { dither, stop, edgeRow, popupScrim } from "./draw.js";
 import { keyLabel } from "./keys.js";
 import { window as appWindow } from "herdr";
 import { formKey, formHints, ring } from "./form-keys.js";
+import { keysView, keysKey } from "./keyhelp.js";
 
 const mac = () => appWindow?.()?.platform === "macos";
 
@@ -40,6 +41,14 @@ export class Popups {
     p?.input?.release?.();
     p?.desc?.release?.();
     this.v.focusSelf();
+  }
+
+  /** ?: every key here as keyhelp.js's overview, over the window; its rows
+   *  run as a menu's do (j k enter, or a row's own key). `sections`:
+   *  [{ title, keys: [[label, words, go], ...] }] with `.key` and `.danger` on a row. */
+  keys({ title, sections }) {
+    const rows = sections.flatMap((s) => s.keys);
+    this.top = { kind: "keys", title, sections, rows, sel: 0 };
   }
 
   menu({ title, items, at = null, empty = null }) {
@@ -132,6 +141,7 @@ export class Popups {
   ok(cx) {
     const p = this.top;
     if (p?.kind === "menu") this.runItem(p.items[p.sel], cx);
+    else if (p?.kind === "keys") this.runRow(p.rows[p.sel], cx);
     else if (p?.kind === "confirm") this.yes(p, cx);
     else if (p) this.submit(cx);
   }
@@ -140,6 +150,17 @@ export class Popups {
   key(k, e, cx) {
     const p = this.top;
     if (!p) return false;
+    if (p.kind === "keys") {
+      if (keysKey(e ?? { key: k }, true) || k === "escape" || k === "q") this.close();
+      else if (k === "j" || k === "down") p.sel = Math.min(p.rows.length - 1, p.sel + 1);
+      else if (k === "k" || k === "up") p.sel = Math.max(0, p.sel - 1);
+      else if (k === "enter" || k === "space") this.runRow(p.rows[p.sel], cx);
+      else {
+        const hit = p.rows.find((r) => r.key && r.key === k);
+        if (hit) this.runRow(hit, cx);
+      }
+      return true;
+    }
     if (p.kind === "menu") {
       const live = p.items.filter((x) => !x.off);
       if (k === "escape" || k === "q") this.close();
@@ -221,6 +242,13 @@ export class Popups {
     else this.v.focusSelf();
   }
 
+  /** A keys row: [label, words, go]. */
+  runRow(row, cx) {
+    if (!row) return;
+    this.close();
+    row[2]?.(cx);
+  }
+
   runItem(item, cx) {
     if (!item || item.off) return;
     this.close();
@@ -236,6 +264,11 @@ export class Popups {
     const scrim = popupScrim("git-scrim")
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu" || p.kind === "confirm") this.close(); cx.notify(); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (p.kind === "menu") this.close(); cx.notify(); });
+    if (p.kind === "keys") {
+      return div().id("git-popup-layer").absolute().inset_0()
+        .child(keysView(t, { id: "git-keys", title: p.title, list: p.sections, cursor: p.sel, narrow: size.width < 640,
+          pick: (row, cx) => this.runRow(row, cx), close: () => this.close() }));
+    }
     let box;
     if (p.kind === "menu") box = this.menuBox(t, p, size);
     else if (p.kind === "confirm") box = this.confirmBox(t, p, size);

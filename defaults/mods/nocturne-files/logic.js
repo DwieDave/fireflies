@@ -312,8 +312,8 @@ export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], 
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
   ["r", "refresh"], ["esc", "clear the filter · leave"], ["q", "close"], ["?", "keys"]];
-/** The ? chip's width on the filter line (px). */
-const KEYS_CHIP = 15;
+/** "? keys" on the filter line (keyhelp.js), px: 4 + "?" + 4 + "keys" + 4 at 7 px a character. */
+const KEYS_CHIP = 47;
 
 export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {}) {
   const LABELS = { full: ["dotfiles", "ignored"], short: [".*", "ign"], icon: ["", ""] };

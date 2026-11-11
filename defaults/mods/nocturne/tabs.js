@@ -29,6 +29,7 @@ import { spaces, panes, run, theme, shared, setShared, layout, focused, nextComm
 import { dither, pip, spaceFolder, givenName, dropBelow, navRing } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { openMenu, openKeys } from "./menu.js";
+import { keysHint } from "./keyhelp.js";
 import { headerControls, paneMenu, renamePane } from "./header.js";
 import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
 import { gitState } from "./lazygit.js";
@@ -190,8 +191,7 @@ export default class Tabs {
       }
       case "back": return this.back();
       // The row the cursor is on says which keys: the strip's, the header's, the chips'.
-      case "help": return this.row === "head" ? openKeys("pane header keys", HEADER_HELP)
-        : this.row === "parked" ? openKeys("parked pane keys", PARKED_HELP) : openKeys("tab strip keys", STRIP_HELP);
+      case "help": return this.openHelp();
       case "new": { const sp = spaces().find((s) => s.active); run("tab.new", sp ? { space: sp.id } : {}); return; }
       default:
         if (/^n[1-9]$/.test(verb)) return run("tab.select", { index: Number(verb.slice(1)) });
@@ -328,6 +328,12 @@ export default class Tabs {
       div().text_color(open ? t.foreground : t.muted).child("+ new"));
   }
 
+  /** ?: the keys of the row the cursor is on (menu.js openKeys, keyhelp.js's overview). */
+  openHelp() {
+    return this.row === "head" ? openKeys("pane header keys", HEADER_HELP)
+      : this.row === "parked" ? openKeys("parked pane keys", PARKED_HELP) : openKeys("tab strip keys", STRIP_HELP);
+  }
+
   render() {
     if (pendingJobs()) runJobs();
     const t = theme();
@@ -392,7 +398,8 @@ export default class Tabs {
         .child(rule()))
       // While the strip has the keyboard: which row its cursor is on, and ? for
       // the keys, the strip's last word (after its buttons, as every keys bar).
-      .when(on, (el) => el.child(div().flex_none().px(6).text_size(11).text_color(t.dim)
-        .child(this.row === "head" ? "pane ←→ ⏎ · ? keys" : this.row === "parked" ? "parked ⏎ · ? keys" : "? keys")));
+      .when(on, (el) => el.child(h_flex().flex_none().px(6).gap(6).items_center().text_size(11).text_color(t.dim)
+        .when(this.row !== "tabs", (e2) => e2.child(div().child(this.row === "head" ? "pane ←→ ⏎ ·" : "parked ⏎ ·")))
+        .child(keysHint(t, "strip-keys", false, () => this.openHelp()))));
   }
 }

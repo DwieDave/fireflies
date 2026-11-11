@@ -121,7 +121,7 @@ export const COMMAND_KEYS = {
   next: { key: "j" }, prev: { key: "k" }, up: { key: "up" }, down: { key: "down" },
   enter: { key: "enter" }, space: { key: "space" }, tab: { key: "tab" }, back: { key: "tab", shift: true },
   "yes-but": { key: "tab" }, "no-but": { key: "tab", shift: true },
-  peek: { key: "p" }, goto: { key: "g" }, "put-away": { key: "x" }, close: { key: "escape" },
+  peek: { key: "p" }, goto: { key: "g" }, "put-away": { key: "x" }, close: { key: "escape" }, keys: { key: "?" },
   ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => [String(n), { key: String(n) }])),
 };
 

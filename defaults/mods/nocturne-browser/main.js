@@ -58,6 +58,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
 import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, window as appWindow } from "herdr";
+import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
@@ -473,6 +474,10 @@ export default class Browser extends View {
     if (m.platform || m.control || m.alt) return false;
     const k = keyOf(e);
     const ready = Boolean(this.start && available());
+    // ? opens the keys in the page's place, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    const help = keysKey(e, this.keysShown);
+    if (help) { this.keysShown = help === "toggle" ? !this.keysShown : false; return true; }
+    if (this.keysShown) return true;
     if (k === "tab") {
       const ids = (this.controls ?? []).filter((c) => c.enabled).map((c) => c.id);
       const i = ids.indexOf(this.ring);
@@ -481,8 +486,6 @@ export default class Browser extends View {
       const c = (this.controls ?? []).find((x) => x.id === this.ring && x.enabled);
       if (c) c.action(cx); else this.ring = null;
     } else if (k === "escape" && this.ring) this.ring = null;
-    else if (k === "escape" && this.keysShown) this.keysShown = false;
-    else if (k === "?") this.keysShown = !this.keysShown;
     else if ((k === "enter" || k === "i") && ready) this.command("web");
     else if (k === "o" || k === "/") this.command("url");
     else if (k === "H") this.command("back");
@@ -571,25 +574,19 @@ export default class Browser extends View {
         .child(dither(t.accent, 1))));
   }
 
-  /** ?: the keys strip. */
+  /** ? keys, the bar's last control (keyhelp.js); tab rings it like the others. */
   keysButton(t) {
-    const ringed = this.control("keys", true, () => { this.keysShown = !this.keysShown; });
-    return div().id("keys").relative().size(24).flex_none().flex().items_center().justify_center().text_size(11)
-      .text_color(ringed || this.keysShown ? t.foreground : t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
-      .on_mouse_down("left", (e, cx) => this.stop(e, cx))
-      .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
-      .child("?");
+    const toggle = () => { this.keysShown = !this.keysShown; };
+    const ringed = this.control("keys", true, toggle);
+    return keysHint(t, "keys", Boolean(this.keysShown) || ringed, toggle).relative().h(24).px(4)
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
   }
 
-  /** `?`: the keys, under the bar. */
+  /** `?`: every key, in the page's place (keyhelp.js): the page is a native
+   *  view, drawn over anything laid on it, so it folds away meanwhile. */
   keysStrip(t) {
-    return h_flex().id("browser-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
-      .children(KEYS.map(([keys, what], i) => h_flex().id(`browser-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(keys))
-        .child(div().text_color(t.dim).child(what))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    return div().relative().flex_1().min_h(0)
+      .child(keysView(t, { id: "browser-keys", title: "web", list: KEYS, close: () => { this.keysShown = false; } }));
   }
 
   blank(t, title, hint) {
@@ -629,8 +626,8 @@ export default class Browser extends View {
       .on_mouse_down("left", () => this.claim())
       .on_key_down((e, cx) => this.key(e, cx))
       .child(this.bar(t))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .when(Boolean(this.error), (el) => el.child(div().flex_none().px(10).py(4).text_size(11).text_color(t.blocked).child(this.error)))
-      .child(body);
+      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
+      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(body) : body);
   }
 }

@@ -34,6 +34,7 @@ import { props, theme, settings, exec, run, panes, shared, setShared, readTextFi
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
 import { documentLinks, nextLink, nextHeading } from "./links.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const MOD = "nocturne-markdown";
 // Each viewer's shown file by slot, for its pane header (nocturne/header.js).
@@ -307,11 +308,17 @@ export default class Markdown extends View {
   key(e, cx) {
     const k = keyOf(e), m = e.modifiers ?? {};
     if (m.platform || m.alt) return;
+    // ? opens the keys over the page, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    const help = keysKey(e, this.keysShown);
+    if (help || this.keysShown) {
+      if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+      cx.stop_propagation();
+      return cx.notify();
+    }
     const page = Math.max(80, this.shown().viewH / 2);
     if (k === "tab" && !m.control) this.pickLink(m.shift ? -1 : 1);
     else if (k === "enter" && this.sel != null && !m.control) this.followLink(cx);
     else if (k === "escape" && this.sel != null) this.sel = null;
-    else if (k === "escape" && this.keysShown) this.keysShown = false;
     else if (m.control) {
       if (k === "d") this.scroll(page); else if (k === "u") this.scroll(-page); else return;
     } else if (k === "j" || k === "down") this.scroll(60);
@@ -327,7 +334,6 @@ export default class Markdown extends View {
     else if (k === "]" || k === "[") this.heading(k === "]" ? 1 : -1);
     else if (k === "f") this.revealFolder();
     else if (k === "y") this.copyPath(cx);
-    else if (k === "?") this.keysShown = !this.keysShown;
     else return;
     cx.stop_propagation();
     cx.notify();
@@ -370,7 +376,7 @@ export default class Markdown extends View {
       .when(Boolean(this.path), (el) => el
         .child(this.chip(t, "md-edit", "edit", () => this.edit()))
         .when(w >= 300, (e2) => e2.child(this.chip(t, "md-files", "files", () => this.revealFolder()))))
-      .child(this.chip(t, "md-keys", "?", () => { this.keysShown = !this.keysShown; }, Boolean(this.keysShown)))
+      .child(keysHint(t, "md-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).ml(4))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 
@@ -389,14 +395,11 @@ export default class Markdown extends View {
     return { abs: this.on ? null : abs, name: name ? `cache/${IMAGES}/${name}` : name };
   }
 
-  /** `?`: the keys, under the bar. */
+  /** `?`: every key, in the page's place (keyhelp.js). */
   keysStrip(t) {
-    return h_flex().id("md-keys-strip").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
-      .children(KEYS.map(([keys, what], i) => h_flex().id(`md-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(keys))
-        .child(div().text_color(t.dim).child(what))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    return keysView(t, { id: "md-keys-strip", title: "markdown", list: KEYS, close: () => { this.keysShown = false; } });
   }
+
 
   /** The chosen link, at the foot of the page: what it says and where it goes. */
   linkBar(t) {
@@ -428,11 +431,11 @@ export default class Markdown extends View {
         focused, size: this.raw ? 12 : 13, maxWidth: WIDTH, unzoom, notify: (cx) => cx.notify(), chosen,
       })).when(!this.raw && this.links[this.sel] != null, (el) => el.child(this.linkBar(t)));
     }
-    return v_flex().id("nocturne-markdown").size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
+    return v_flex().id("nocturne-markdown").relative().size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_down("left", () => this.handle.focus())
       .child(this.toolbar(t))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
-      .child(body);
+      // ?: the keys in the page's place, the toolbar stays (keyhelp.js).
+      .child(this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t)) : body);
   }
 }

@@ -15,7 +15,7 @@
 //   x                 put an error away
 //   up / down         on a question or a needs-a-look: the next / previous request
 //   esc q             close (from the note's line: back to the options)
-//   ?                 these keys, over the key bar (? or esc hides them)
+//   ?                 these keys, over the requests (? or esc hides them)
 
 import { div, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
@@ -24,7 +24,8 @@ import { items, dismiss } from "./engine.js";
 import { group, age, headline, summary, where, TYPES } from "./model.js";
 import { answer } from "./drive.js";
 import { openAsk, forget, followCommands, overviewBeat, BEAT, OVERVIEW_H } from "./open.js";
-import { dither, pip, logo, horizon, button, kbd, stop, TYPE_COLOR } from "./kit.js";
+import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.js";
+import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 /** What ? lists, ? keys last. */
 export const KEYS = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
@@ -144,8 +145,9 @@ export default class Overview {
     }
     if (m.control || m.platform || m.alt) return;
     let handled = true;
-    if (e.key_char === "?" || k === "?") this.keysShown = !this.keysShown;
-    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    const help = keysKey(e, this.keysShown);
+    if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+    else if (this.keysShown) handled = true; // the keys are over the requests: nothing else acts
     else if (k === "escape" || k === "q") this.close();
     else if (k === "j" || k === "]") this.select(list, 1);
     else if (k === "k" || k === "[") this.select(list, -1);
@@ -197,8 +199,10 @@ export default class Overview {
     const m = this.sizes;
     const main = !it ? m.empty : m.top == null || m.detail == null ? null : m.top + m.detail + 12;
     if (m.list == null || main == null) return most;
-    const bar = (this.keysShown ? m.keys ?? 50 : 0) + 30;
-    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main) + bar)));
+    const bar = 30;
+    // With its keys open, tall enough for them (keyhelp.js: a 26 px head, 20 px rows).
+    const keys = this.keysShown ? 26 + 22 + KEYS.length * 20 : 0;
+    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main, keys) + bar)));
   }
 
   render() {
@@ -210,10 +214,10 @@ export default class Overview {
       .when(!this.measured(it), (el) => el.opacity(0))
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
-      .child(h_flex().flex_1().min_h(0)
+      .child(h_flex().relative().flex_1().min_h(0)
         .child(this.side(t, list, it))
-        .child(this.main(t, it)))
-      .when(Boolean(this.keysShown), (el) => el.child(v_flex().id("notify-keys").flex_none().on_size_change(this.measure("keys")).child(this.keysStrip(t))))
+        .child(this.main(t, it))
+        .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t))))
       .child(this.footer(t, it));
   }
 
@@ -415,8 +419,7 @@ export default class Overview {
     const hint = (k, w) => {
       shown.push(`${k} ${w}`);
       // Left out: out of the row's flow (absolute), so it takes no gap either.
-      return drop.has(`${k} ${w}`) ? div().absolute() : h_flex().id(`ov-hint-${k} ${w}`).gap(5).items_center().flex_none().on_size_change(this.measure(`hint:${k} ${w}`, "width"))
-        .child(kbd(t, k)).child(div().text_color(t.dim).child(w));
+      return drop.has(`${k} ${w}`) ? div().absolute() : barHint(t, `ov-hint-${k} ${w}`, k, w).on_size_change(this.measure(`hint:${k} ${w}`, "width"));
     };
     this.barHints = shown;
     return h_flex().id("ov-bar").relative().h(30).flex_none().px(20).gap(14).items_center().on_size_change(this.measure("bar", "width"))
@@ -431,9 +434,7 @@ export default class Overview {
       .when(Boolean(note), (el) => el.child(div().max_w(320).truncate().text_color(note.bad ? t.blocked : t.done).child(note.bad ? "not sent" : note.text)))
       .when(!note && busy, (el) => el.child(div().text_color(t.working).child(`${this.busy.text}…`)))
       // ? keys: the bar's last item, after the note.
-      .child(h_flex().id("ov-keys").gap(5).items_center().flex_none().cursor_pointer().on_size_change(this.measure("keys-entry", "width"))
-        .on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); })
-        .child(kbd(t, "?")).child(div().text_color(this.keysShown ? t.foreground : t.dim).child("keys")));
+      .child(keysHint(t, "ov-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).on_size_change(this.measure("keys-entry", "width")));
   }
 
   /** The hints left out of the key bar so the rest fits its width, as they
@@ -450,10 +451,9 @@ export default class Overview {
     return out;
   }
 
-  /** `?`: every key, over the key bar. */
+  /** `?`: every key, over the requests (keyhelp.js). */
   keysStrip(t) {
-    return h_flex().relative().flex_none().flex_wrap().px(20).py(6).gap_x(14).gap_y(4).items_center()
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .children(KEYS.map(([k, w]) => h_flex().gap(5).items_center().flex_none().child(kbd(t, k)).child(div().text_color(t.dim).child(w))));
+    return keysView(t, { id: "notify-keys", title: "waiting on you", list: KEYS, close: () => { this.keysShown = false; } });
   }
+
 }

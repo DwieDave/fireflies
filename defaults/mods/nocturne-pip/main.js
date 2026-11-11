@@ -21,8 +21,9 @@
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
 //   p  into a pane   P  park   o  out of Herdr   x q  close
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
-//   ?    these keys (KEYS), as a popup: the video is a native view, drawn over
-//        anything in the window; the bar's ? (before ✕) opens it too
+//   ?    these keys (KEYS), keyhelp.js's overview in a popup: the video is a
+//        native view, drawn over anything in the window but an overlay; the
+//        bar's ? (before ✕) opens it too
 // The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close. The keys popup: esc q ? close.
 //
 // Opened by nocturne-browser (`openOverlay` WINDOW below, props { of: the
@@ -37,6 +38,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import * as herdr from "herdr";
 import { props, theme, settings, closeOverlay, openOverlay, run, panes, focused, shared, setShared, nextCommand, window as appWindow } from "herdr";
+import { keysView, keysKey, keysHeight } from "./keyhelp.js";
 
 const ID = "pip";
 const BAR = 22;
@@ -54,6 +56,8 @@ const PANE = "nocturne-pip.pane";
 const PLAYER = "nocturne-pip.player";
 const SKIP = 10;
 const ROW = 26;
+// The keys popup's width.
+const KEYS_W = 340;
 
 // The bar's controls, in bar order. `keep`: the lower, the longer it stays
 // on a narrow bar (the rest go into ⋯).
@@ -191,7 +195,7 @@ export default class Pip extends View {
 
   /** ?: the keys, a popup over the video. */
   openKeys() {
-    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 300, height: KEYS.length * 20 + 44, props: { keys: true } });
+    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: KEYS_W, height: keysHeight(KEYS, KEYS_W) + 2, props: { keys: true } });
   }
 
   /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
@@ -381,17 +385,13 @@ export default class Pip extends View {
     run(`nocturne-pip.${c.id}`);
   }
 
+  /** The keys, keyhelp.js's overview in a popup: ? esc q close it. */
   renderKeys(t) {
-    return v_flex().id("pip-keys").size_full().bg(t.background).border(1).border_color(t.ansi0).px(12).py(8).gap(0).text_size(11)
+    const close = () => closeOverlay(props()?.overlay);
+    return div().id("pip-keys").relative().size_full().bg(t.background).border(1).border_color(t.ansi0)
       .track_focus(this.handle)
-      .on_key_down((e, cx) => {
-        const k = e.key;
-        if (k === "escape" || k === "q" || e.key_char === "?") { cx.stop_propagation(); closeOverlay(props()?.overlay); }
-      })
-      .child(div().pb(6).text_color(t.foreground).child("picture in picture keys"))
-      .children(KEYS.map(([k, what], i) => h_flex().id(`pk-${i}`).h(20).gap(10).items_center()
-        .child(div().w(70).flex_none().text_color(t.accent).child(k))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(what))));
+      .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); close(); } })
+      .child(keysView(t, { id: "pip-keys-view", title: "picture in picture", list: KEYS, narrow: true, close }));
   }
 
   renderMenu(t) {

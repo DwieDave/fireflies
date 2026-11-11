@@ -35,6 +35,7 @@ import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, sha
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
 import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
+import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const ART = "mods/nocturne/art";
 // The tab strip's note that the deck is open (../nocturne/scripts.js DECK).
@@ -408,11 +409,9 @@ export default class ScriptsDeck extends View {
     return svg(`${ART}/lock.svg`).size(9).flex_none().text_color(on ? t.working : t.dim);
   }
 
-  /** A key as a small square cap, then what it does (the palette's keycaps). */
+  /** A bar entry: the key in the accent, what it does dimmed (keyhelp.js, as every Nocturne bar). */
   hint(t, id, key, what) {
-    return h_flex().id(id).flex_none().gap(4).items_center()
-      .child(div().h(15).px(4).flex().items_center().border(1).border_color(t.ansi0).text_size(10).text_color(t.muted).child(key))
-      .child(div().text_size(10).text_color(t.dim).child(what));
+    return hint(t, id, key, what);
   }
 
   /** The bar along the bottom: what the cursor is on, quietly, and the keys
@@ -424,7 +423,7 @@ export default class ScriptsDeck extends View {
     const left = (...kids) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids);
     const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps.filter(Boolean));
     // Every bar ends with the keys entry: ?, or cmd-k ? while the filter takes what's typed.
-    const help = this.hint(t, "k-help", this.typing ? CHORD : "?", "keys");
+    const help = keysHint(t, "k-help", Boolean(this.help), () => { this.help = !this.help; }, this.typing ? CHORD : "?");
     if (this.help) return bar.child(left(div().text_color(t.dim).child("every key"))).child(keys(this.hint(t, "k-esc", "esc", "back"), help));
     if (this.output) {
       const r = this.output.r;
@@ -532,7 +531,7 @@ export default class ScriptsDeck extends View {
     if (this.chord && Date.now() - this.chord < 2000 && ch === "?") { this.chord = 0; this.help = !this.help; return done(); }
     this.chord = 0;
     if (this.help) {
-      if (k === "escape" || k === "q" || ch === "?" || k === "enter") { this.help = false; return done(); }
+      if (keysKey(e, true) || k === "enter") { this.help = false; return done(); }
       return;
     }
     if (this.output && !this.typing && !cmd && !m.alt) {
@@ -585,16 +584,13 @@ export default class ScriptsDeck extends View {
     done();
   }
 
-  /** ? : every key of the deck, in place of the scripts. */
+  /** ? : every key of the deck, in place of the scripts (keyhelp.js). */
   helpView(t, h) {
     const rows = deckKeys(appWindow()?.platform === "macos" ? "⌘" : "ctrl-");
-
-    return v_flex().id("deck-help").h(h).flex_none().gap(2).overflow_hidden()
-      .child(this.section(t, "keys", "? esc"))
-      .children(rows.map(([k, w], i) => h_flex().id(`dh-${i}`).h(20).flex_none().px(12).gap(10).items_center().text_size(11)
-        .child(div().w(110).flex_none().text_color(t.accent).child(k))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(w))));
+    return div().id("deck-help").relative().h(h).flex_none()
+      .child(keysView(t, { id: "deck-keys", title: "scripts", list: rows, close: () => { this.help = false; } }));
   }
+
 
   /** The bar of a switch's password window (../nocturne/prompt.js): its name,
    *  and cancel, which presses ctrl-c in the run (it ends "cancelled"). */

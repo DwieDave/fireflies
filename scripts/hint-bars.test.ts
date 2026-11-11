@@ -75,15 +75,15 @@ test("tab strip: with the keyboard, ? keys is the strip's last word, after its t
   s.render(cx);
   s.takeKeys();
   const words = texts(s.render(cx));
-  expect(words.at(-1)).toMatch(/\? keys$/);
-  expect(words.filter((w) => w.includes("? keys"))).toHaveLength(1);
+  expect(words.slice(-2)).toEqual(["?", "keys"]);
+  expect(words.filter((w) => w === "keys")).toHaveLength(1);
   expect(words.indexOf("+ new")).toBeGreaterThanOrEqual(0);
   expect(words.indexOf("+ new")).toBeLessThan(words.length - 1);
 });
 
 test("sidebar: its hint line ends with ? keys", () => {
   const words = texts((Object.create(Sky.prototype) as any).hints(theme));
-  expect(words.at(-1)).toBe("? keys");
+  expect(words.slice(-2)).toEqual(["?", "keys"]);
 });
 
 const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/nocturne-notifications/overview.js");
@@ -97,5 +97,6 @@ test("notifications overview: ? keys ends its key bar, after the sent / not sent
   expect(texts(o.footer(theme, it)).slice(-2)).toEqual(["?", "keys"]);
   expect(OVERVIEW_KEYS.at(-1)[0]).toBe("?");
   o.keysShown = true;
-  expect(texts(o.keysStrip(theme))).toEqual(OVERVIEW_KEYS.flat());
+  // keyhelp.js's overview: its head, then every key.
+  expect(texts(o.keysStrip(theme))).toEqual(["KEYS", "waiting on you", "? esc", "close", ...OVERVIEW_KEYS.flat()]);
 });

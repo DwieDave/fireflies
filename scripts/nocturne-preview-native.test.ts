@@ -43,6 +43,17 @@ const base = {
 
 /** A shipped mod file run with stand-ins for the app's modules (imports dropped,
  *  exports returned); `extra` fills in what its own imports would have. */
+/** A mod file's keyhelp.js exports (imports stripped), when the file imports it. */
+async function keyhelpOf(path: string, source: string, scope: Record<string, any>): Promise<Record<string, unknown>> {
+  if (!/from "\.\/keyhelp\.js"/.test(source)) return {};
+  const src = await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.js")}`, import.meta.url), "utf8");
+  const names: string[] = [];
+  const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
+  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+    settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
+  return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
+}
+
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
   const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
   const names: string[] = [];
@@ -53,6 +64,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^export const (\w+) = /gm, (_m, n) => { names.push(n); return `const ${n} = `; });
   const win = { paint_path: () => new Element() };
   const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
+  Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 

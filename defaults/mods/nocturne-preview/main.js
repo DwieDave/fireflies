@@ -58,6 +58,7 @@ import { formatOf, hexBytes, sniff, sizeFromFile, plan, cantShow, fitted, fitSca
 import { MAX_BYTES, MAX_ROWS, separator, parse as parseTable, table, oneLine, wholeLines, shownNote, SQLITE_ARGS, TABLES_SQL, rowsSql, countSql, tablesOf, sqliteError } from "./table.js";
 import { parse as parsePatch, fileStarts, nextFile } from "./diff.js";
 import { keyOf, keyList, cycle } from "./keys.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const MOD = "nocturne-preview";
 // Each preview's shown file by slot: its name for the pane header
@@ -743,16 +744,14 @@ export default class PreviewView extends View {
     return true;
   }
 
-  /** tab / shift-tab, enter, esc and ?: the bar's controls and the keys strip. */
+  /** tab / shift-tab, enter, esc: the bar's controls. */
   barKey(k, m, cx) {
     if (k === "tab") this.ring = cycle((this.chips ?? []).map((c) => c.id), this.ring, m.shift ? -1 : 1);
     else if (k === "enter" && this.ring) {
       const c = (this.chips ?? []).find((x) => x.id === this.ring);
       if (!c) { this.ring = null; return false; }
       c.action(cx);
-    } else if (k === "?") this.keysShown = !this.keysShown;
-    else if (k === "escape" && this.ring) this.ring = null;
-    else if (k === "escape" && this.keysShown) this.keysShown = false;
+    } else if (k === "escape" && this.ring) this.ring = null;
     else return false;
     return true;
   }
@@ -776,6 +775,13 @@ export default class PreviewView extends View {
     if (m.platform || m.control || m.alt) return;
     const d = m.shift ? SHOVE : NUDGE;
     const how = this.how?.how;
+    // ? opens the keys in the file's place, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    const help = keysKey(e, this.keysShown);
+    if (help || this.keysShown) {
+      if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+      cx.stop_propagation();
+      return cx.notify();
+    }
     if (this.barKey(k, m, cx)) { /* the bar */ }
     else if (k === "o") this.system();
     else if (k === "e") this.edit();
@@ -879,18 +885,26 @@ export default class PreviewView extends View {
       .child(div().relative().child(label));
   }
 
-  /** `?`: the keys that do something here, under the bar. */
+  /** ? keys, the bar's last control (keyhelp.js); tab rings it like the chips. */
+  keysChip(t) {
+    const toggle = () => { this.keysShown = !this.keysShown; };
+    (this.chips ??= []).push({ id: "img-keys", action: toggle });
+    const ringed = this.ring === "img-keys" && this.focusedNow;
+    return keysHint(t, "img-keys", Boolean(this.keysShown) || ringed, toggle).relative().h(20).px(4).ml(2)
+      .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
+  }
+
+  /** `?`: the keys that do something here, in the file's place (keyhelp.js): a
+   *  native view (a PDF, a video) would draw over anything laid on it. */
   keysStrip(t) {
     const list = keyList(this.how?.how, this.kind, {
       editable: this.editable(), db: Boolean(this.db),
       paged: this.how?.how === "raster" && !this.how.firstOnly && this.pages > 1,
     });
-    return h_flex().id("preview-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(12).gap_y(2).items_center().text_size(11)
-      .children(list.map(([keys, what], i) => h_flex().id(`preview-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(keys))
-        .child(div().text_color(t.dim).child(what))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
+    return div().relative().flex_1().min_h(0)
+      .child(keysView(t, { id: "preview-keys", title: this.kind ?? "preview", list, close: () => { this.keysShown = false; } }));
   }
+
 
   /** "1920 × 1080 · PNG · 2.4 MB · animated", "12 034 rows × 9 columns · 3.1 MB", "3 files · +120 −40". */
   facts(w) {
@@ -985,7 +999,7 @@ export default class PreviewView extends View {
         .when(w >= 300, (e3) => e3.child(this.chip(t, "img-files", "files", () => this.reveal())))
         .when(w >= 540 && !this.on, (e3) => e3.child(this.chip(t, "img-open", "open", () => this.system())))
         .when(w >= 620, (e3) => e3.child(this.chip(t, "img-copy", this.copied ? "copied" : "copy", (cx) => this.copyPath(cx), Boolean(this.copied)))))
-      .child(this.chip(t, "img-keys", "?", () => { this.keysShown = !this.keysShown; }, Boolean(this.keysShown)))
+      .child(this.keysChip(t))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
   }
 
@@ -1189,8 +1203,9 @@ export default class PreviewView extends View {
     return v_flex().id(MOD).size_full().bg(t.background).text_color(t.foreground).track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(bar)
+      .when(Boolean(strip) && !this.keysShown, (el) => el.child(strip))
       .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
-      .when(Boolean(strip), (el) => el.child(strip))
-      .child(body);
+      // Under the keys the file folds away, still there (a native view hides, kept).
+      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(body) : body);
   }
 }

@@ -56,6 +56,7 @@ import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vi
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
 import { formKey, bindTab, tabActions } from "./form-keys.js";
+import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -174,6 +175,8 @@ export default class EditorPane extends View {
     this.view = VIEWS.includes(view) ? view : "split";
     this.driver = "editor"; // which side scrolled last: the other follows
     this.previewHandle = cx.focus_handle();
+    // The keys overview takes the keyboard while it's open (? would type into the file).
+    this.keysHandle = cx.focus_handle();
     this.editor.on("scroll", (_e, cx) => {
       if (Date.now() - (this.previewDrove ?? 0) < 150) return;
       this.driver = "editor";
@@ -668,7 +671,7 @@ export default class EditorPane extends View {
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
     if (c === "vim") return this.toggleVim(cx);
-    if (c === "keys") { this.keysShown = !this.keysShown; return; }
+    if (c === "keys") return this.toggleKeys(!this.keysShown);
     if (c === "preview") return this.setView(VIEWS[(VIEWS.indexOf(this.view) + 1) % VIEWS.length], cx);
     if (c === "preview-split") return this.setView("split", cx);
     if (c === "preview-only") return this.setView("preview", cx);
@@ -852,16 +855,16 @@ export default class EditorPane extends View {
         if (e.keystroke === "escape") {
           if (this.mode) { this.closeFind(cx); cx.stop_propagation(); }
           else if (this.card) { this.card = null; cx.notify(); cx.stop_propagation(); }
-          else if (this.keysShown) { this.keysShown = false; cx.notify(); }
         }
       })
       .child(this.bar(t))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
       .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
-      .child(this.body(t, code))
-      .when(this.drawer, (el) => el.child(this.drawerView(t)))
-      .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
+      // ?: the keys in the file's place (the file folds away, kept), the bars stay (keyhelp.js).
+      .when(Boolean(this.keysShown), (el) => el.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t))))
+      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(this.body(t, code)) : this.body(t, code))
+      .when(this.drawer && !this.keysShown, (el) => el.child(this.drawerView(t)))
       .child(this.hints(t))
       .when(!!this.card, (el) => el.child(this.cardView(t, code)))
       .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)));
@@ -1043,20 +1046,33 @@ export default class EditorPane extends View {
 
   hints(t) {
     const list = hintList({ mode: this.mode, vim: this.vimOn(), vimMode: this.vim.mode, server: this.server?.id != null, markdown: this.markdown, view: this.view });
+    // The keys entry (the last) is keyhelp.js's: its key is the chord that opens it here.
+    const help = list.at(-1)?.[1] === "keys" ? list.at(-1) : null;
+    const rest = help ? list.slice(0, -1) : list;
     return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .children(list.map(([k, what], i) => h_flex().id(`editor-hint-${i}`).flex_none().gap(4)
-        // The keys entry (the last) also opens the list by click.
-        .when(what === "keys", (el) => el.cursor_pointer().on_click((_e, cx) => { this.keysShown = !this.keysShown; cx.notify(); }))
-        .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
+      .children(rest.map(([k, what], i) => hint(t, `editor-hint-${i}`, k, what)))
+      .when(Boolean(help), (el) => el.child(div().flex_1()).child(keysHint(t, "editor-hint-keys", Boolean(this.keysShown), () => this.toggleKeys(!this.keysShown), help[0])));
   }
 
-  /** The keys entry (space ? / cmd-k ?): every key, over the hint bar. */
+  /** Opens or closes the keys overview; it holds the keyboard while open, the file gets it back after. */
+  toggleKeys(on) {
+    this.keysShown = on;
+    if (on) this.keysHandle.focus();
+    else if (this.view === "preview") this.previewHandle.focus();
+    else this.editor.focus();
+  }
+
+  /** The keys entry (space ? / cmd-k ?): every key, in the file's place (keyhelp.js); ? esc q close it. */
   keysStrip(t) {
-    return h_flex().id("editor-keys").relative().flex_none().flex_wrap().px(10).py(4).gap_x(14).gap_y(2).items_center()
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-      .children(editorKeys(this.vimOn()).map(([k, what], i) => h_flex().id(`editor-key-${i}`).flex_none().gap(4)
-        .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
+    return div().id("editor-keys-host").absolute().top(0).left(0).size_full().track_focus(this.keysHandle)
+      .on_key_down((e, cx) => {
+        const k = keysKey(e, true);
+        if (k) this.toggleKeys(false);
+        cx.stop_propagation();
+        cx.notify();
+      })
+      .child(keysView(t, { id: "editor-keys", title: this.vimOn() ? "editor · vim" : "editor", list: editorKeys(this.vimOn()), close: () => this.toggleKeys(false) }));
   }
 
   /** Highlighted code, line by line, in the card. */
