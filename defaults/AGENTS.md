@@ -937,6 +937,12 @@ words or its group ("focus sidebar"). A binding you add gets its command's
 own words. Every pane and window takes ? for its own keys (all of them) and
 ends its key bar with that entry; where ? would type (the editor, the script
 runner's filter) cmd-k ? does it instead, shown as the bar's last entry.
+`<mod>.keys` shows or hides a pane's list by command (the palette's "… keys":
+nocturne-files, -markdown, -preview, -browser, -agents, -usage, -pip,
+-github, -scripts, and the editor's `nocturne-editor.keys`). To show someone
+a key: `herdr-app do app.help`, then `herdr-app do nocturne.keys-filter.focus-sidebar`
+(the filter, `-` for spaces) or `nocturne.keys-open.sidebar` (unfolds that block:
+sidebar, tabstrip, header, parked, toasts, menus, panes).
 
 ### Layouts and mods other people made
 

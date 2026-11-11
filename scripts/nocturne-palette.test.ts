@@ -216,7 +216,7 @@ const COVER_STATES: (() => void)[] = [
   () => { state.shared["nocturne.toasts"] = [{ overlay: "o3", action: null, at: Date.now() }];
     state.shared["nocturne-scripts.ended"] = { r1: { address: "r1", labels: { "nocturne.script": "test" }, state: "finished", exit_code: 1, finished_ms: 5 } };
     state.updates = { app: { ready: "9.9.9", updates: true }, core: { ready: "1.2.3", managed: null }, checks: true }; },
-  ...[["nocturne-editor", "/src/a.md"], ["nocturne-browser"], ["nocturne-markdown"], ["nocturne-preview"], ["nocturne-agents"], ["nocturne-usage"]].map(([mod, path]) => () => {
+  ...[["nocturne-editor", "/src/a.md"], ["nocturne-browser"], ["nocturne-markdown"], ["nocturne-preview"], ["nocturne-agents"], ["nocturne-usage"], ["nocturne-files"]].map(([mod, path]) => () => {
     state.panes = [{ pane: "p1", tab: "c1", focused: true, cwd: "/src", terminal: null, mod, props: path ? { path } : {} }];
     state.focused = { pane: "p1", cwd: "/src" };
   }),

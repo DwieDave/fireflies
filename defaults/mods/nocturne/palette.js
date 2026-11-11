@@ -30,11 +30,11 @@ const SHOWN = 12;
 const ROW_H = 28;
 const HEAD_H = 30;
 const LIST_H = SHOWN * ROW_H;
-const GROUPS = ["Recent", "Editor", "Web", "Markdown", "Preview", "Agents", "Usage", "Git", "GitHub", "Find", "Open",
+const GROUPS = ["Recent", "Editor", "Web", "Markdown", "Preview", "Agents", "Usage", "Files", "Git", "GitHub", "Find", "Open",
   "Tab", "Pane", "Space", "Layout", "Terminal", "Agent", "Window", "App"];
 // Each group's mark (mods/workspace-chrome/<icon>.svg).
 const ICONS = {
-  Recent: "clock", Editor: "file-text", Web: "monitor", Markdown: "file-text", Preview: "image", Agents: "layers", Usage: "clock",
+  Recent: "clock", Editor: "file-text", Web: "monitor", Markdown: "file-text", Preview: "image", Agents: "layers", Usage: "clock", Files: "folder",
   Git: "git-compare", GitHub: "mods/nocturne/art/github.svg", Find: "search", Open: "layers", Tab: "square", Pane: "panel-right",
   Space: "folder", Layout: "sidebar", Terminal: "terminal", Agent: "layers", Window: "square", App: "settings",
 };
@@ -76,6 +76,7 @@ const PANE = {
     ["zoom_in", "Page zoom in", "bigger larger text"],
     ["zoom_out", "Page zoom out", "smaller text"],
     ["zoom_reset", "Page zoom back to normal", "reset size text"],
+    ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-markdown": ["Markdown", [
     ["raw", "Show the source or the rendered page", "raw markdown source text toggle"],
@@ -83,6 +84,7 @@ const PANE = {
     ["top", "Scroll to the top", "start beginning home"],
     ["bottom", "Scroll to the bottom", "end"],
     ["reload", "Reload the file", "refresh disk"],
+    ["keys", "Markdown viewer keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-preview": ["Preview", [
     ["fit", "Fit to the pane", "zoom fit whole width"],
@@ -96,6 +98,7 @@ const PANE = {
     ["rotate", "Rotate", "turn image picture"],
     ["background", "Checkerboard behind the picture", "transparency background alpha"],
     ["reload", "Reload the file", "refresh disk"],
+    ["keys", "Preview keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-agents": ["Agents", [
     ["follow", "Follow the selected agent", "graph track watch live"],
@@ -103,9 +106,14 @@ const PANE = {
     ["in", "Zoom in", "graph bigger"],
     ["out", "Zoom out", "graph smaller"],
     ["reset", "Reset the view", "graph zoom pan fit"],
+    ["keys", "Agents graph keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-usage": ["Usage", [
     ["refresh", "Check usage again", "limits quota refresh reload claude"],
+    ["keys", "Usage keys", "help shortcuts list ? keybindings"],
+  ]],
+  "nocturne-files": ["Files", [
+    ["keys", "Files pane keys", "help shortcuts list ? keybindings"],
   ]],
 };
 
@@ -138,6 +146,7 @@ function windowEntries() {
     add("nocturne-github.diff", "GitHub", gh, "GitHub: diff of the selected pull request", "pr changes review files");
     add("nocturne-github.fork", "GitHub", gh, "GitHub: switch between fork and upstream", "fork upstream origin remote repo");
     add("nocturne-github.refresh", "GitHub", gh, "GitHub: refresh", "reload fetch again");
+    add("nocturne-github.keys", "GitHub", gh, "GitHub: keys", "help shortcuts list ? keybindings");
   }
   return out;
 }
@@ -257,6 +266,7 @@ function openEntries() {
         ["park", "archive", "Park picture in picture", "pip video player chip hide minimize"],
       ] : [["out", "square", "Picture in picture out of the pane", "pip video player window float undock"]]),
       ["toggle", "square", "Picture in picture: play / pause", "pip video player pause resume"],
+      ["keys", "square", "Picture in picture: keys", "pip video player help shortcuts list ? keybindings"],
       ["mute", "square", "Picture in picture: sound off / on", "pip video player mute unmute volume audio"],
       ["rewind", "chevron-left", "Picture in picture: back 10 seconds", "pip video player skip rewind seek"],
       ["forward", "chevron-right", "Picture in picture: on 10 seconds", "pip video player skip forward seek"],
@@ -398,6 +408,8 @@ export const OUT = {
   "nocturne-pip.focus": "internal: hands the player the keyboard",
   "nocturne-pip.unfocus": "the player's key that hands the keyboard back: esc in the player",
   "nocturne-git.focus": "internal: hands the git window the keyboard",
+  "nocturne-scripts.focus": "internal: hands the script runner the keyboard",
+  "nocturne-scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
   "nocturne-git.back": "the git window's esc (closes its popup)",
   "nocturne-git.commit-ok": "the git window's enter in its commit popup",
   "nocturne-git.confirm-yes": "the git window's enter in its confirm popup",
