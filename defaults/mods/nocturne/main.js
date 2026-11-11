@@ -5,7 +5,8 @@
 //   tabs   the tab strip along the horizon
 //   pane   a pane's header (the layout's pane header)
 //   parked a parked pane's chip under the tab (the layout's pane.parked look)
-//   worktrees  the worktree manager, as a pane (the tab strip opens it)
+//   worktrees  (moved to the git window) hands a saved worktrees pane to
+//          nocturne-git on its Worktrees tab
 //   new    the "+ new" menu, an overlay from the tab strip
 //   menu   right-click menus: a tab's, and a terminal's (the layout's terminal_menu)
 //   toast  notifications (the layout's toast_mod, on the DwieDave fork)

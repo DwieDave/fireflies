@@ -21,6 +21,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, window as appWindow, keys, shared, setShared } from "herdr";
 import { ART, LOGO, dither, eyebrow } from "./kit.js";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";
+import { openWorktrees } from "./git.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
 const KNOWN = "new-menu.agents";
@@ -81,13 +82,13 @@ function agentRows(agents) {
 /** Every pickable item, in cursor order: tiles, agents, space rows. */
 function items(agents) {
   const space = here().space;
-  const worktree = (action, width, height) => () => openOverlay({ mod: "worktree", kind: "dialog", width, height, props: { space: space?.id, folder: here().folder, action } });
+  const worktree = (action) => () => openWorktrees({ space: space?.id, action });
   return [
     ...panels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
     { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a new space, in your home folder" },
-    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new", 460, 280), off: !space, say: "a branch in its own folder, as a space" },
-    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open", 560, 480), off: !space, say: "a worktree that's already there, as a space" },
+    { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a branch in its own folder, as a space" },
+    { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree that's already there, as a space" },
   ];
 }
 

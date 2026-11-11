@@ -28,15 +28,28 @@ export class Popups {
     this.top = { kind: "menu", title, items, sel: Math.max(0, items.findIndex((x) => !x.off)), at, empty };
   }
 
-  confirm({ title, text, danger = false, go, error = false }) {
-    this.top = { kind: "confirm", title, text, danger, go, error };
+  /** `lines`: more to say, as [text, color] (colors by theme name);
+   *  `checks`: toggles [{ key, label, on }], their own key flips one, and
+   *  go(cx, checks) gets them. */
+  confirm({ title, text, danger = false, go, error = false, lines = [], checks = [] }) {
+    this.top = { kind: "confirm", title, text, danger, go, error, lines, checks };
   }
 
-  prompt({ title, value = "", placeholder = "", ok, history = null }) {
+  /** `note`: a line under the input; `suggest(text)`: completions to pick
+   *  ([{ value, sub? }]): ↑↓ pick one, tab puts it in, enter takes it. */
+  prompt({ title, value = "", placeholder = "", ok, history = null, note = null, suggest = null }) {
     const input = InputState.new({ placeholder, value });
     input.on("submit", (_e, cx) => this.submit(cx));
-    this.top = { kind: "prompt", title, input, ok, history, hi: -1 };
+    const p = { kind: "prompt", title, input, ok, history, hi: -1, note, suggest, pick: -1 };
+    if (suggest) input.on("change", (_e, cx) => { if (this.top === p) { p.pick = -1; cx?.notify?.(); } });
+    this.top = p;
     this.focusLater(input);
+  }
+
+  /** A prompt's completions for what's typed now. */
+  suggestions(p) {
+    if (!p?.suggest) return [];
+    try { return (p.suggest(p.input.value()) ?? []).slice(0, 6); } catch { return []; }
   }
 
   commit({ title, value = "", ok, draft = false }) {
@@ -59,7 +72,8 @@ export class Popups {
     const p = this.top;
     if (!p) return;
     if (p.kind === "prompt") {
-      const text = p.input.value();
+      const picked = this.suggestions(p)[p.pick];
+      const text = picked ? picked.value : p.input.value();
       this.close();
       p.ok(text, cx);
     } else if (p.kind === "commit") {
@@ -92,13 +106,25 @@ export class Popups {
       return true;
     }
     if (p.kind === "confirm") {
-      if (k === "enter" || k === "y") { this.close(); if (!p.error) p.go?.(cx); }
+      const check = p.checks?.find((c) => c.key === k);
+      if (check) { check.on = !check.on; return true; }
+      if (k === "enter" || k === "y") { this.close(); if (!p.error) p.go?.(cx, p.checks); }
       else if (k === "escape" || k === "n" || k === "q") this.close();
       return true;
     }
     if (p.kind === "prompt") {
       if (k === "escape") { this.close(); return true; }
       if (k === "enter") { this.submit(cx); return true; }
+      const sug = this.suggestions(p);
+      if (sug.length && (k === "up" || k === "down")) {
+        p.pick = k === "down" ? Math.min(sug.length - 1, p.pick + 1) : Math.max(-1, p.pick - 1);
+        return true;
+      }
+      if (sug.length && k === "tab") {
+        p.input.set_value(sug[Math.max(0, p.pick)].value);
+        p.pick = -1;
+        return true;
+      }
       if (p.history?.length && (k === "up" || k === "down")) {
         p.hi = Math.max(-1, Math.min(p.history.length - 1, p.hi + (k === "up" ? 1 : -1)));
         p.input.set_value(p.hi < 0 ? "" : p.history[p.hi]);
@@ -190,10 +216,18 @@ export class Popups {
   }
 
   confirmBox(t, p, size) {
-    const w = Math.min(520, size.width - 24);
-    const { x, y } = this.center(size, w, 110);
+    const w = Math.min(560, size.width - 24);
+    const { x, y } = this.center(size, w, 110 + (p.lines?.length ?? 0) * 18 + (p.checks?.length ?? 0) * 20);
     const body = v_flex().px(12).pt(14).pb(10).gap(12).text_size(12)
       .child(div().text_color(p.error ? t.ansi1 : t.foreground).child(p.text))
+      .when(Boolean(p.lines?.length), (el) => el.child(v_flex().gap(3).text_size(11)
+        .children(p.lines.map(([s, c], i) => div().id(`cf-l-${i}`).text_color(t[c] ?? c ?? t.muted).child(s)))))
+      .when(Boolean(p.checks?.length), (el) => el.child(v_flex().gap(2).text_size(11)
+        .children(p.checks.map((c, i) => h_flex().id(`cf-c-${i}`).gap(8).items_center().hover((s) => s.bg(t.ansi0 + "66"))
+          .on_click((_e, cx) => { cx.stop_propagation(); c.on = !c.on; cx.notify(); })
+          .child(div().w(18).text_color(t.accent).child(c.key))
+          .child(div().text_color(c.on ? t.foreground : t.dim).child(c.on ? "[x]" : "[ ]"))
+          .child(div().text_color(c.on ? t.foreground : t.muted).child(c.label))))))
       .child(h_flex().gap(16).text_size(11)
         .child(h_flex().id("cf-yes").gap(5).hover((s) => s.bg(t.ansi0 + "66"))
           .on_click((_e, cx) => { cx.stop_propagation(); this.key("enter", null, cx); cx.notify(); })
@@ -206,14 +240,23 @@ export class Popups {
 
   promptBox(t, p, size) {
     const w = Math.min(560, size.width - 24);
-    const { x, y } = this.center(size, w, 90);
+    const sug = this.suggestions(p);
+    const { x, y } = this.center(size, w, 90 + sug.length * ROW + (p.note ? 18 : 0));
     const body = v_flex().px(12).pt(14).pb(10).gap(8)
       .child(div().border(1).border_color(t.accent).px(6).h(26).flex().items_center()
         .child(Input.new(p.input).w_full().text_size(12).text_color(t.foreground)))
+      .when(Boolean(p.note), (el) => el.child(div().text_size(11).text_color(t.muted).child(p.note)))
+      .when(sug.length > 0, (el) => el.child(v_flex().children(sug.map((s, i) => h_flex().id(`ps-${i}`).relative().h(ROW).px(6).gap(10).items_center().text_size(11)
+        .hover((st) => st.bg(t.ansi0 + "66"))
+        .on_click((_e, cx) => { cx.stop_propagation(); p.pick = i; this.submit(cx); cx.notify(); })
+        .when(i === p.pick, (r) => r.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+        .child(div().relative().flex_1().min_w(0).truncate().text_color(i === p.pick ? t.foreground : t.muted).child(s.value))
+        .when(Boolean(s.sub), (r) => r.child(div().relative().flex_none().text_color(t.dim).child(s.sub)))))))
       .child(h_flex().gap(16).text_size(11)
         .child(h_flex().gap(5).child(div().text_color(t.accent).child("enter")).child(div().text_color(t.dim).child("confirm")))
         .child(h_flex().gap(5).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("cancel")))
-        .when(Boolean(p.history?.length), (el) => el.child(h_flex().gap(5).child(div().text_color(t.accent).child("↑↓")).child(div().text_color(t.dim).child("history")))));
+        .when(Boolean(p.history?.length), (el) => el.child(h_flex().gap(5).child(div().text_color(t.accent).child("↑↓")).child(div().text_color(t.dim).child("history"))))
+        .when(sug.length > 0, (el) => el.child(h_flex().gap(5).child(div().text_color(t.accent).child("↑↓ tab")).child(div().text_color(t.dim).child("pick")))));
     return this.frame(t, "git-prompt", p.title, w, x, y, body);
   }
 

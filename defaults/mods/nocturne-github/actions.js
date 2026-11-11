@@ -11,9 +11,10 @@ import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-ba
 import { settings } from "herdr";
 import { api, ghRun, fileAt } from "./gh.js";
 import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.js";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize } from "./kit.js";
+import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.js";
+import { DispatchForm } from "./dispatchForm.js";
 
 const ROW = 38, STEP = 24, LINE = 18;
 const PANELS = ["runs", "graph", "steps", "log"];
@@ -43,7 +44,23 @@ export default class Actions {
     this.pan = null; // { x, y } once dragged or scrolled
     this.drag = null; // { x, y, from } while the graph is dragged
     this.sizes = { ...(kept.sizes ?? {}) }; // dragged splitters: runs (width), runsH (height, narrow), graph (height), steps (width)
+    this.flow = null; // DispatchForm while a workflow run is set up
+    this.waiting = null; // { name, ref, since }: a dispatch sent, its run not listed yet
   }
+
+  /** The open form (form.js), if any: it takes the keys and the body. */
+  get form() { return this.flow?.form ?? null; }
+
+  /** n, the button, the menu, the palette: run a workflow by hand (the selected run's, when it can be). */
+  runWorkflow(cx) {
+    if (!this.app.repo) return;
+    this.flow?.form.release();
+    this.flow = new DispatchForm(this.app, this, { path: this.run()?.path?.replace(/@.*$/, "") ?? null });
+    this.flow.load(cx);
+    this.flow.form.go(0, cx);
+  }
+
+  closeForm() { if (this.flow) this.flow.closed = true; this.flow = null; this.app.focusSelf(); }
 
   save() { return { filter: this.filter, sel: this.sel, jobSel: this.jobSel, sizes: this.sizes }; }
 
@@ -283,6 +300,7 @@ export default class Actions {
     else if (k === "J" || k === "pagedown") this.scrollLog(20);
     else if (k === "K" || k === "pageup") this.scrollLog(-20);
     else if (k === "w") this.nextRunning(cx);
+    else if (k === "n") this.runWorkflow(cx);
     else if (k === "R") this.act("failed", cx);
     else if (k === "A") this.act("all", cx);
     else if (k === "X") this.act("cancel", cx);
@@ -303,8 +321,9 @@ export default class Actions {
   }
 
   hints() {
+    if (this.form) return this.form.hints();
     const f = this.focus;
-    if (f === "runs") return [["j/k", "run"], ["l", "jobs"], ["w", "next live"], ["b", this.filter ? "all runs" : "this branch"], ["R", "re-run failed"], ["X", "cancel"], ["?", "keys"]];
+    if (f === "runs") return [["j/k", "run"], ["l", "jobs"], ["n", "run workflow"], ["w", "next live"], ["b", this.filter ? "all runs" : "this branch"], ["R", "re-run failed"], ["X", "cancel"], ["?", "keys"]];
     if (f === "graph") return [["hjkl", "job"], ["enter", "steps"], ["e", "re-run job"], ["R", "re-run failed"], ["o", "browser"], ["?", "keys"]];
     if (f === "steps") return [["j/k", "step"], ["l", "log"], ["J/K", "scroll log"], ["h", "jobs"], ["?", "keys"]];
     return [["j/k", "scroll"], ["J/K", "page"], ["g/G", "top/end"], ["h", "steps"], ["?", "keys"]];
@@ -314,7 +333,7 @@ export default class Actions {
     return [
       ["j k", "move: runs, steps; scroll the log"], ["h l ← →", "out / in: runs → jobs → steps → log"], ["hjkl (jobs)", "move through the graph"],
       ["enter tab ⇧tab", "in / next / previous panel"], ["esc", "back out"], ["J K", "page the log"], ["g G", "first / last"],
-      ["w", "next running run"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
+      ["w", "next running run"], ["n", "run a workflow by hand (workflow_dispatch)"], ["b", "this branch's runs / all"], ["R", "re-run failed jobs"], ["A", "re-run all"], ["e", "re-run this job"],
       ["X", "cancel the run"], ["o", "in the browser"], ["r", "refresh now"],
       ["drag scroll", "move the graph (double-click: back)"],
     ];
@@ -351,7 +370,22 @@ export default class Actions {
             .on_item_click((key, cx) => { this.focus = "runs"; this.selectRun(list.findIndex((r) => String(r.id) === key), cx); cx.notify(); })
             .size_full().track_scroll(this.runsScroll));
     const running = list.filter((r) => r.status === "in_progress").length;
-    return panel(t, "runs", this.filter ? `Runs · ${this.filter.label}` : "Runs", active, body, { right: running ? `${running} running` : this.runs ? `${list.length}` : "" });
+    const right = h_flex().gap(6).items_center()
+      .child(div().text_color(this.waiting ? t.working : t.dim).child(this.waiting ? "waiting for the run…" : running ? `${running} running` : this.runs ? `${list.length}` : ""))
+      .child(chip(t, "run-workflow", "▶ run workflow", false, (cx) => this.runWorkflow(cx), t.accent));
+    return panel(t, "runs", this.filter ? `Runs · ${this.filter.label}` : "Runs", active, body, { right })
+      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu(); cx.notify(); });
+  }
+
+  /** Right-click on the runs: what can be done from here. */
+  menu() {
+    const r = this.run();
+    const rows = [{ label: "Run a workflow…", sub: "n", go: (cx) => this.runWorkflow(cx) }];
+    if (r) rows.push({ label: `Re-run the failed jobs of #${r.run_number}`, sub: "R", go: (cx) => this.act("failed", cx) },
+      { label: `Re-run #${r.run_number}`, sub: "A", go: (cx) => this.act("all", cx) },
+      { label: `Cancel #${r.run_number}`, sub: "X", go: (cx) => this.act("cancel", cx) },
+      { label: `#${r.run_number} in the browser`, sub: "o", go: (cx) => this.app.openUrl(r.html_url, cx) });
+    this.app.picker = { title: "ACTIONS", at: 0, rows };
   }
 
   graphPanel(t) {
@@ -451,6 +485,7 @@ export default class Actions {
   }
 
   render(t, size) {
+    if (this.form) return this.form.render(t, size);
     const app = this.app, wide = size.width >= 820;
     const clamp = (v, lo, hi) => Math.round(Math.min(Math.max(lo, hi), Math.max(lo, v)));
     const rw = clamp(this.sizes.runs ?? Math.min(400, Math.max(280, size.width * 0.3)), 200, size.width - 420);

@@ -113,6 +113,28 @@ and roll back if GitHub refuses them. GitHub's API keeps no column limits or
 hidden columns, so limits and folds are Herdr's, per project, in shared state
 `nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
 `project` (`gh auth refresh -s project`); the tab says which is missing.
+It also writes, always after a last step that shows the exact commands
+(enter or `y` sends, esc goes back; nothing runs before it). `n` on Pull
+requests (or its "+ new", a right-click on the list, the palette's "GitHub:
+new pull request…", `nocturne.github-pr` in keys.json) opens a new pull
+request: base (the default branch) and head (the current branch) picked
+from lists, title and body filled like `gh pr create --fill` (the body from
+the repo's pull request template when it has one), draft, reviewers,
+assignees, labels, milestone; beside it the commits and files it will hold.
+A head that isn't on GitHub, or is ahead of it, gets a "push first" toggle
+(`git push --set-upstream`). It runs `gh pr create` and selects the new
+pull request. `O` on a branch in the git window's branches panel opens it on
+that branch (the branch goes through shared `nocturne-github.create`). `n`
+on Actions (its "run workflow", a right-click, "GitHub: run a workflow…",
+`nocturne.github-run`) runs a workflow by hand: only workflows with a
+`workflow_dispatch` trigger, a branch or tag, and the inputs that ref's file
+declares (text, number, a list for `choice` and `environment`, a toggle for
+`boolean`; defaults filled, required ones checked). It runs
+`gh workflow run <file> --ref <ref> -f name=value…`, then waits for the run
+and selects it. In a form, tab / shift-tab walk the fields, space flips a
+toggle or opens a list (typing filters it), enter reviews (ctrl-enter from
+the body), esc cancels. With the window open, `nocturne-github.new-pr` and
+`nocturne-github.run-workflow` do the same.
 
 Nocturne's git window (`mods/nocturne-git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
@@ -138,6 +160,24 @@ view shows for the Branches panel, lazygit's `git log --graph` on the lane graph
 `{kind: "review", scope, pr?, repo?, path?}`; it refreshes on changes and its
 q / esc close it. keys.json can bind any of the window's actions as
 `nocturne-git.<action>` (`open-pane`, `screen-next`, `panel-commits`…).
+Worktrees (the Files panel's third tab; `nocturne.worktrees`, the git
+button's ▾ > Worktrees, "+ new" > Worktrees, New / Open worktree) is what the
+worktree dialog and the worktrees pane were: the repo's checkouts, the main
+one first, with the spaces showing each and the agents working in it. `space`
+goes to its space (or opens one), `enter` turns the window to it, `n` checks
+out a branch (an existing one, or a new one from HEAD; `w` on a branch,
+remote branch, tag or commit does it from there) in
+`~/.herdr/worktrees/<repo>/<branch>` on the repo's machine and opens it as a
+space, `d` removes it after a confirm that says what goes (uncommitted
+files, submodules, commits pushed nowhere, the spaces it closes and agents
+it ends; `b` takes the branch too), `o` opens it in a files pane, the
+editor, a tab or the file manager, `R` renames its branch, `M` / `U` / `A`
+pick the merged, unused or all ones for one `d`, `X` prunes ones whose
+folder is gone. Open it yourself with props `{folder, on?, worktrees:
+{action: "new" | "open" | "remove", space?, branch?, tab?, argv?}}`: "new"
+with a `branch` makes it at once and opens its space with that first `tab` /
+`argv`; "remove" asks to remove the space's worktree. The `worktree` mod and
+a saved worktrees pane hand over to it.
 
 ## The model: spaces, tabs, terminals
 
@@ -169,7 +209,8 @@ the highlighted line shows where it will land.
   that folder instead (a space attached to home still goes by its terminals).
   In the sidebars, spaces stay top level; only a space on a linked git
   worktree is indented under its repo's main-checkout space. Right-click a
-  space > New worktree… checks out a branch in its own folder as such a space.
+  space > New worktree… (or `w` on it in the sidebar) checks out a branch in
+  its own folder as such a space, from the git window's Worktrees tab.
   If starting in an inherited folder fails, new spaces, tabs and splits retry in
   that machine's home. Explicit invalid folders still fail.
 - A **tab** is a piece of work in a space: its terminals and how they're
@@ -638,7 +679,8 @@ Properties any node can have:
   `machine_add`, `update` (the update note, bottom right), and `prompt`,
   `confirm`, `palette` (as the fields above, which win). Each gets the shipped
   one's props plus `dialog` (that key) and opens with `frame: "none"`, wherever it
-  is opened from (the app, a key, or a mod's `openOverlay({mod: "worktree"})`).
+  is opened from (the app, a key, or a mod's `openOverlay({mod: "worktree"})`;
+  the shipped `worktree` is now a stub that opens the git window's Worktrees).
   A welcome records `setShared("frame.welcomed", "finished" | "skipped")`; a
   what's new calls `presentUpdateNotes(versions)`. The update note gets
   `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
@@ -1430,18 +1472,15 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - The defaults are mods too, read them as examples: `spaces`, `agents`,
   `tabs` (the tab bar), `menu`, `prompt`, `confirm`, `help`, `toast`,
   Terminals' `picker`, `peek`, and `pane` (an
-  example pane header, not used by the default layouts), and `worktree`
-  (git worktrees as spaces: the space menu's and the + menu's New worktree,
-  Open worktree (the repo's checkouts, filtered; one already shown is gone
-  to) and Remove worktree open it as a dialog with props `{space, folder?,
-  action: "new" | "open" | "remove"}` (the repo: folder, else where the
-  space's first terminal is), or with `{branch, tab?, argv?}` to make one at once with
-  that first tab; checkouts go to
-  `~/.herdr/worktrees/<repo>/<branch>` on the space's machine, a constant
-  at its top; the
-  `spaces` sidebar nests worktree spaces under their repo's and shows each
-  space's repo, branch, ahead/behind and uncommitted changes). Shipped mods
-  are Herdr's; duplicate with `mod.clone` before editing.
+  example pane header, not used by the default layouts). Git worktrees as
+  spaces live in the git window's Worktrees tab (above): the space menu's and
+  the + menu's New worktree, Open worktree and Remove worktree open it; the
+  `worktree` mod is left as a stub that turns `openOverlay({mod: "worktree",
+  props: {space, folder?, action, branch?, tab?, argv?}})` into the git
+  window with the same request. The `spaces` sidebar nests worktree spaces
+  under their repo's and shows each space's repo, branch, ahead/behind and
+  uncommitted changes. Shipped mods are Herdr's; duplicate with `mod.clone`
+  before editing.
 
 ### Check before you finish
 

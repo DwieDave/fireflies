@@ -2,13 +2,13 @@
 // gpui are stand-ins, but exec runs the real git, so reading, the panels,
 // keys and actions run through the window's code down to git.
 import { test, expect, mock, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const ENV = { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_NOSYSTEM: "1", GIT_AUTHOR_NAME: "Ada Lovelace", GIT_AUTHOR_EMAIL: "a@x", GIT_COMMITTER_NAME: "Ada Lovelace", GIT_COMMITTER_EMAIL: "a@x" };
-const dir = mkdtempSync(join(tmpdir(), "nocturne-git-view-"));
+const dir = realpathSync(mkdtempSync(join(tmpdir(), "nocturne-git-view-")));
 const repo = join(dir, "repo");
 function sh(cmd: string, cwd = repo) {
   const r = spawnSync("sh", ["-c", cmd], { cwd, env: ENV, encoding: "utf8" });
@@ -20,13 +20,14 @@ function sh(cmd: string, cwd = repo) {
 
 let sharedState: Record<string, unknown> = {};
 let propsNow: any = null;
+let spacesNow: any[] = [], panesNow: any[] = [], agentsNow: any[] = [], homeNow = "/home/u";
 const commands: [string, any][] = [];
 mock.module("herdr", () => ({
   settings: () => ({ zoom: 1, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
   shared: (k: string) => sharedState[k] ?? null,
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   props: () => propsNow,
-  spaces: () => [], panes: () => [], focused: () => null,
+  spaces: () => spacesNow, panes: () => panesNow, focused: () => null, agents: () => agentsNow, home: () => homeNow,
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   nextCommand: () => new Promise(() => {}),
   watchFolder: () => new Promise(() => {}),
@@ -327,4 +328,138 @@ test("opened from GitHub ({pr, back}): q and esc put the GitHub window back", as
   v.goBack = () => { reopened = v.backTo; };
   await press(v, "q");
   expect(reopened?.mod).toBe("nocturne-github");
+});
+
+test("a log cut at its limit: the rows that fit follow the row height, the open lanes run to the bottom", async () => {
+  // 310 commits with a side branch open across the cut: more than the branch
+  // log (200) and the Commits panel (300) read.
+  const long = join(dir, "long");
+  mkdirSync(long);
+  let stream = "";
+  for (let i = 1; i <= 310; i++) {
+    const from = i === 1 ? "" : `from :${i - 1}\n`;
+    stream += `commit refs/heads/main\nmark :${i}\ncommitter Ada <a@x> ${1700000000 + i} +0000\ndata ${`c${i}`.length}\nc${i}\n${from}${i === 310 ? "merge :5\n" : ""}\n`;
+  }
+  writeFileSync(join(dir, "long.fi"), stream);
+  sh("git init -q -b main && git fast-import --quiet < ../long.fi && git checkout -q main", long);
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: long }, cx);
+  await settle(v);
+  v.render();
+
+  // The main view first shows a diff (18 px rows), then the branch log (16 px)
+  // in the same space: the log fills it rather than keeping the diff's count.
+  v.mainPx = { main: 320 };
+  v.setPanel("commits"); await settle(v); v.render();
+  expect(v.mainVis).toBe(Math.floor(320 / 18));
+  v.setPanel("branches"); await settle(v); v.render();
+  expect(v.main.title).toBe("Log · main");
+  expect(v.mainVis).toBe(Math.floor(320 / 16));
+
+  // The last commit read (the 200th) still has its parent's lane open: the
+  // view draws it on below the last row.
+  const last = v.main.rows[v.main.rows.length - 1];
+  expect(last.g.after.some((c: any) => c != null)).toBe(true);
+  const { logTail } = await import("../defaults/mods/nocturne-git/draw.js");
+  expect(logTail(theme, last, 100)).not.toBe(null);
+  expect(logTail(theme, { kind: "log", g: { after: [] }, w: 1 }, 100)).toBe(null);
+
+  // The Commits panel at its limit (300): the same below its last row, also
+  // after going wide (taller rows, more rows' worth of height kept).
+  expect(v.data.commits.length).toBe(300);
+  const end = v.data.commits.length - 1;
+  expect(v.graph.rows[end].after.some((c: any) => c != null)).toBe(true);
+  expect(v.listTail(theme, "commits", end, 18)).not.toBe(null);
+  v.listPx = { commits: 360 };
+  v.setPanel("commits"); v.mode = "half"; v.render();
+  expect(v.vis.commits).toBe(Math.floor(360 / 32));
+  v.mode = "normal"; v.render();
+  expect(v.vis.commits).toBe(Math.floor(360 / 18));
+});
+
+test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as a space; space goes to its space; d removes it", async () => {
+  homeNow = join(dir, "home");
+  commands.length = 0;
+  const v = await open();
+  v.setPanel("files"); v.setTab("worktrees"); await settle(v);
+  expect(v.items("worktrees").map((w: any) => w.main)).toEqual([true]);
+  // n: the prompt offers the branches not checked out anywhere.
+  await press(v, "n");
+  expect(v.popups.kind).toBe("prompt");
+  expect(v.popups.suggestions(v.popups.top).map((s: any) => s.value)).toEqual(["side"]);
+  v.popups.top.input.set_value("feat/wt");
+  await press(v, "enter");
+  const path = join(homeNow, ".herdr/worktrees/repo/feat-wt");
+  expect(sh("git worktree list --porcelain")).toContain(`worktree ${path}`);
+  expect(sh("git -C " + path + " branch --show-current").trim()).toBe("feat/wt");
+  expect(commands.find(([n]) => n === "space.new")?.[1]).toMatchObject({ folder: path });
+  // A space on it now: space goes there instead of making another.
+  spacesNow = [{ id: "s9", name: "feat-wt", machine: null, attached: true, folder: path, tabs: [] }];
+  agentsNow = [];
+  v.setTab("worktrees"); await settle(v);
+  const i = v.items("worktrees").findIndex((x: any) => x.path === path);
+  v.moveTo(i); await settle(v);
+  expect(v.main.title).toBe("Worktree · feat/wt");
+  expect(v.main.rows.some((r: any) => r.parts?.[1]?.[0] === "feat-wt")).toBe(true);
+  commands.length = 0;
+  await press(v, "space");
+  expect(commands[0]).toEqual(["space.select", { id: "s9" }]);
+  // d: a confirm that names what goes; b also deletes the branch.
+  sh(`echo x > ${path}/dirty.txt`);
+  await press(v, "d");
+  expect(v.popups.kind).toBe("confirm");
+  expect(v.popups.top.lines.some(([s]: any) => s.includes("1 uncommitted file"))).toBe(true);
+  expect(v.popups.top.lines.some(([s]: any) => s.includes("closes 1 space"))).toBe(true);
+  await press(v, "b", "enter");
+  expect(sh("git worktree list --porcelain")).not.toContain(path);
+  expect(sh("git branch --list feat/wt").trim()).toBe("");
+  expect(commands.some(([n, a]) => n === "space.close" && a.id === "s9")).toBe(true);
+  spacesNow = [];
+});
+
+test("worktrees: the main checkout can't go; M picks merged ones, U unused ones, d removes the picked", async () => {
+  homeNow = join(dir, "home");
+  sh("git branch done-a && git branch done-b");
+  sh(`git worktree add -q ${join(homeNow, "wt-a")} done-a && git worktree add -q ${join(homeNow, "wt-b")} done-b && git worktree add -q -b fresh ${join(homeNow, "wt-c")} HEAD`);
+  sh(`cd ${join(homeNow, "wt-c")} && git commit -q --allow-empty -m 'not merged'`);
+  agentsNow = [{ pane: "p1", name: "claude", status: "working" }];
+  panesNow = [{ pane: "p1", tab: "t1", cwd: join(homeNow, "wt-a") }];
+  const v = await open();
+  v.setPanel("files"); v.setTab("worktrees"); await settle(v);
+  v.moveTo(0); await settle(v);
+  await press(v, "d");
+  expect(v.popups.top.error).toBe(true);
+  await press(v, "enter");
+  await press(v, "M");
+  expect([...v.wtPicked].sort()).toEqual([join(homeNow, "wt-a"), join(homeNow, "wt-b")]);
+  await press(v, "U");
+  expect([...v.wtPicked].sort()).toEqual([join(homeNow, "wt-b"), join(homeNow, "wt-c")]);
+  await press(v, "escape");
+  expect(v.wtPicked.size).toBe(0);
+  await press(v, "M", "d");
+  expect(v.popups.top.title).toBe("Remove 2 worktrees");
+  expect(v.popups.top.lines.some(([s]: any) => s.includes("ends 1 agent"))).toBe(true);
+  await press(v, "enter");
+  const left = sh("git worktree list --porcelain");
+  expect(left).not.toContain("wt-a");
+  expect(left).not.toContain("wt-b");
+  expect(left).toContain("wt-c");
+  expect(sh("git branch --list done-a").trim()).toBe("done-a"); // b was off: the branches stay
+  sh(`git worktree remove --force ${join(homeNow, "wt-c")} && git branch -D fresh done-a done-b`);
+  agentsNow = []; panesNow = [];
+});
+
+test("worktrees: opened from a space's menu with a branch, tab and argv, it makes the worktree at once", async () => {
+  homeNow = join(dir, "home");
+  commands.length = 0;
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: repo, worktrees: { action: "new", branch: "agent/one", tab: "claude", argv: ["claude"] } }, cx);
+  await settle(v); await settle(v);
+  expect(v.tabOf.files).toBe("worktrees");
+  const path = join(homeNow, ".herdr/worktrees/repo/agent-one");
+  expect(sh("git worktree list --porcelain")).toContain(path);
+  expect(commands.find(([n]) => n === "space.new")?.[1]).toEqual({ folder: path, machine: "", tab: "claude", argv: ["claude"] });
+  sh(`git worktree remove --force ${path} && git branch -D agent/one`);
 });

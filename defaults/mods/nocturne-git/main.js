@@ -38,7 +38,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
-import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder } from "herdr";
+import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder, home } from "herdr";
 import { Git, LOG_LIMIT } from "./git.js";
 import { layoutGraph, usedWidth, widthOf } from "./graph.js";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
@@ -46,8 +46,9 @@ import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./pa
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
+import * as WT from "./worktrees.js";
 import { Review } from "./review.js";
-import { ART, dither, panel, band, chip, hints, empty, graphCell, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
+import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
 
 export const WINDOW = "nocturne-git.window"; // { id, beat }: the open window, for the toggle
 const STATE = "nocturne-git.state"; // where the window was, per folder
@@ -128,6 +129,13 @@ export default class GitView extends View {
     const rv = this.show?.kind === "review" ? this.show : pr;
     this.review = new Review(this, { scope: rv.scope ?? "work", pr: rv.pr ?? null, repo: rv.repo ?? null });
     if (pr.review || pr.pr || pr.scope || this.show?.kind === "review") { this.panel = "files"; this.tabOf.files = "review"; }
+    // Opened for a worktree (the space menu's New / Remove worktree, the
+    // sidebar's w, the palette, the old worktree dialog's callers):
+    // { action: "new" | "open" | "remove", space?, branch?, tab?, argv? }.
+    this.wtIntent = pr.worktrees ?? null;
+    this.wtPicked = new Set(); // worktree paths picked for d (M, U, A)
+    this.userHome = this.on ? null : home?.() ?? null;
+    if (this.wtIntent) { this.panel = "files"; this.tabOf.files = "worktrees"; this.mode = "normal"; }
     if (this.show) { this.mode = "normal"; this.showLog = false; if (this.show.kind !== "review") this.focus = "main"; }
     this.handle = cx.focus_handle();
     this.handle.focus();
@@ -176,6 +184,8 @@ export default class GitView extends View {
       this.state = "ready";
       await this.loadAll();
       this.watch();
+      if (this.on && !this.userHome) this.userHome = await WT.userHomeOn(this.on).catch(() => null);
+      this.worktreeIntent();
     });
   }
 
@@ -252,7 +262,7 @@ export default class GitView extends View {
     const g = this.git;
     if (!g) return;
     const [status, branches, remotes, remoteBranches, tags, stash, worktrees, state] = await Promise.all([
-      g.status(), g.branches(), g.remotes(), g.remoteBranches(), g.tags(), g.stash(), g.worktrees(), g.state(),
+      g.status(), g.branches(), g.remotes(), g.remoteBranches(), g.tags(), g.stash(), WT.listWorktrees(g), g.state(),
     ]);
     if (this.data.main === null) this.data.main = (await g.mainBranch()) ?? undefined;
     const main = this.data.main || null;
@@ -318,14 +328,19 @@ export default class GitView extends View {
   }
 
   /** A program in a terminal floating over the tab (an editor, git's own editor). */
-  terminal(argv, name) {
-    run("terminal.open", { argv, folder: this.git.root, place: "float", name });
+  terminal(argv, name, folder = this.git.root) {
+    run("terminal.open", { argv, folder, place: "float", name });
     // lazygit suspends for an editor; the floating window would sit over it.
     if (this.overlay) { this.saveState(); closeOverlay(this.overlay); }
   }
 
   editFile(path) {
     this.terminal(["sh", "-c", 'exec ${VISUAL:-${EDITOR:-vi}} "$1"', "-", path], path.split("/").pop());
+  }
+
+  /** $VISUAL / $EDITOR on a folder (a worktree), in a floating terminal there. */
+  editIn(folder) {
+    this.terminal(["sh", "-c", 'exec ${VISUAL:-${EDITOR:-vi}} .'], folder.split("/").pop(), folder);
   }
 
   openFile(path) {
@@ -351,8 +366,155 @@ export default class GitView extends View {
     this.subs = { files: [], branches: [], commits: [], stash: [] };
     this.sel = {}; this.top = {}; this.staging = null; this.focus = "side"; this.main = null;
     this.data.main = null; this.review.files = [];
-    this.watching = false;
+    this.watching = false; this.wtPicked = new Set();
     this.start();
+  }
+
+  // ---- worktrees
+
+  tilde(p) { return WT.tilde(p, this.userHome); }
+
+  /** Per worktree: the spaces showing it and the agents in it. */
+  occupancy() { return WT.occupancy(this.data.worktrees, this.on); }
+
+  /** After a worktree was made or picked from outside (a space's menu, the
+   *  palette, the sidebar's w): what it asked for, once the repo is read. */
+  worktreeIntent() {
+    const want = this.wtIntent;
+    this.wtIntent = null;
+    if (!want) return;
+    this.setPanel("files"); this.setTab("worktrees");
+    const s = want.space ? spaces().find((x) => x.id === want.space) : null;
+    const here = s ? WT.owner(this.data.worktrees, WT.spaceFolder(s)) : WT.owner(this.data.worktrees, this.folder);
+    const i = here ? this.items("worktrees").findIndex((w) => w.path === here.path) : -1;
+    if (i >= 0) this.moveTo(i);
+    if (want.action === "new" || want.branch) this.newWorktree({ value: want.branch ?? "", now: Boolean(want.branch), tab: want.tab, argv: want.argv });
+    else if (want.action === "remove") {
+      if (!here || here.main) this.error(here ? "This is the repository's main checkout, not a worktree." : "That space isn't on a worktree of this repo.");
+      else this.removeWorktrees([here]);
+    }
+  }
+
+  /** Goes to a worktree: the space showing it, else a new space there
+   *  (unnamed, so it follows the checkout and nests under its repo); the
+   *  window steps aside, as after lazygit's worktree switch. */
+  goToWorktree(w, { tab, argv } = {}) {
+    if (w.prunable) return this.error("Its folder is gone: X prunes it.");
+    const s = this.occupancy().get(w.path)?.spaces[0];
+    if (s && !tab && !argv) run("space.select", { id: s.id });
+    else run("space.new", { folder: w.path, machine: this.on ?? "", ...(tab ? { tab } : {}), ...(argv ? { argv } : {}) });
+    if (this.overlay && !this.show) { this.saveState(); closeOverlay(this.overlay); }
+  }
+
+  /** n: a branch for a new worktree (an existing one is checked out, a new
+   *  one starts from `base`, HEAD by default), checked out under
+   *  ~/.herdr/worktrees/<repo>/ and opened as a space. `now`: no prompt. */
+  newWorktree({ value = "", base = null, label = null, track = false, now = false, tab, argv } = {}) {
+    const from = label ?? this.data.status?.head ?? "HEAD";
+    const go = (branch) => {
+      const name = String(branch ?? "").trim();
+      if (!name) return;
+      this.spawn(async () => {
+        this.busyText = `Checking out ${name}…`;
+        const made = await WT.create(this.git, name, { base });
+        this.busyText = null;
+        if (made.error) { this.error(made.error); await this.loadAll(); return; }
+        if (track && made.created && base) await this.git.run("Set upstream", ["-C", made.path, "branch", "--set-upstream-to", base]);
+        await this.loadAll();
+        const w = this.data.worktrees.find((x) => x.path === made.path) ?? { path: made.path, branch: name };
+        this.note(`${name} checked out in ${this.tilde(made.path)}`);
+        this.goToWorktree(w, { tab, argv });
+      });
+    };
+    if (now) return go(value);
+    const out = new Set(this.data.worktrees.map((w) => w.branch).filter(Boolean));
+    const local = this.data.branches.filter((b) => !out.has(b.name));
+    this.prompt({
+      title: "New worktree: branch", value,
+      placeholder: "a branch: an existing one, or a new name",
+      note: `An existing branch is checked out; a new one starts from ${from}. It goes to ${this.tilde(this.userHome ? WT.ROOT(this.userHome) : "~/.herdr/worktrees")}/${this.git.name}/ and opens as a space.`,
+      suggest: (q) => {
+        const f = q.trim().toLowerCase();
+        return local.filter((b) => !f || b.name.toLowerCase().includes(f)).map((b) => ({ value: b.name, sub: b.subject ?? "" }));
+      },
+      ok: go,
+    });
+  }
+
+  /** d: removes the picked worktrees (M / U / A), else the range, else the
+   *  selected one, after one confirm that says what goes with them. */
+  removeWorktrees(list = null) {
+    const all = this.items("worktrees");
+    let items = list;
+    if (!items && this.wtPicked.size) items = this.data.worktrees.filter((w) => this.wtPicked.has(w.path));
+    if (!items && this.range?.ctx === "worktrees") {
+      const [a, b] = [Math.min(this.range.anchor, this.sel.worktrees ?? 0), Math.max(this.range.anchor, this.sel.worktrees ?? 0)];
+      items = all.slice(a, b + 1);
+    }
+    if (!items) items = [this.item("worktrees")].filter(Boolean);
+    if (items.some((w) => w.main)) {
+      items = items.filter((w) => !w.main);
+      if (!items.length) return this.error("This is the repository's main checkout: it can't be removed (a worktree can).");
+    }
+    if (!items.length) return;
+    this.note(`Checking ${items.length === 1 ? WT.label(items[0]) : `${items.length} worktrees`}…`);
+    this.reads.push(async () => {
+      const info = await Promise.all(items.map((w) => (w.prunable ? { dirty: 0, subs: 0, unpushed: [] } : WT.inspect(w, this.on))));
+      const occ = this.occupancy();
+      const n = (k, one, many = `${one}s`) => `${k} ${k === 1 ? one : many}`;
+      const dirty = info.filter((x) => x.dirty), subs = info.filter((x) => x.subs), lost = info.flatMap((x) => x.unpushed);
+      const spaceN = items.reduce((k, w) => k + (occ.get(w.path)?.spaces.length ?? 0), 0);
+      const agentN = items.reduce((k, w) => k + (occ.get(w.path)?.agents.length ?? 0), 0);
+      const one = items.length === 1;
+      const lines = [
+        ...(one ? [[`Deletes ${this.tilde(items[0].path)}. The branch stays unless b.`, "muted"]] : items.slice(0, 6).map((w) => [`${WT.label(w)}  ${this.tilde(w.path)}`, "muted"])),
+        ...(items.length > 6 ? [[`and ${items.length - 6} more`, "dim"]] : []),
+        ...(dirty.length ? [[one ? `${n(dirty[0].dirty, "uncommitted file")}: lost` : `${n(dirty.length, "has", "have")} uncommitted changes: lost`, "ansi1"]] : []),
+        ...(lost.length ? [[`Submodule ${lost.join(", ")} has commits pushed nowhere: lost`, "ansi1"]] : []),
+        ...(spaceN || agentN ? [[[spaceN ? `closes ${n(spaceN, "space")}` : null, agentN ? `ends ${n(agentN, "agent")}` : null].filter(Boolean).join(", "), agentN ? "ansi1" : "ansi3"]] : []),
+      ];
+      const checks = [{ key: "b", label: one ? "also delete its branch" : "also delete their branches", on: false }];
+      if (subs.length) checks.push({ key: "s", label: "take the submodules out first (else forced)", on: true });
+      this.ask({
+        title: one ? `Remove worktree ${WT.label(items[0])}` : `Remove ${items.length} worktrees`,
+        text: one ? `Remove the worktree ${WT.label(items[0])}?` : `Remove these ${items.length} worktrees?`,
+        danger: true, lines, checks,
+        go: (_cx, picked) => {
+          const branch = picked?.find((c) => c.key === "b")?.on ?? false;
+          const clearSubs = picked?.find((c) => c.key === "s")?.on ?? true;
+          this.spawn(async () => {
+            const failed = [];
+            const leaving = items.some((w) => w.path === this.git.root);
+            for (const [k, w] of items.entries()) {
+              if (w.prunable) continue;
+              const say = (text) => { this.busyText = `${items.length > 1 ? `${k + 1} of ${items.length}, ` : ""}${WT.label(w)}: ${text}`; };
+              const error = await WT.removeOne(this.git, w, { ...info[k], clearSubs, branch, spaces: occ.get(w.path)?.spaces ?? [] },
+                { closeSpace: (s) => run("space.close", { id: s.id, confirmed: true }), step: say });
+              if (error) failed.push(`${WT.label(w)}: ${error}`);
+              else this.wtPicked.delete(w.path);
+            }
+            if (items.some((w) => w.prunable)) await this.git.run("Prune worktrees", ["worktree", "prune"]);
+            this.busyText = null;
+            if (failed.length) this.error(`Removed ${items.length - failed.length} of ${items.length}. Not removed:\n${failed.join("\n")}`);
+            else this.note(one ? `Removed ${WT.label(items[0])}` : `Removed ${items.length} worktrees`);
+            // The window was on one of them: it goes to the main checkout.
+            if (leaving && !failed.length) { const main = this.data.worktrees.find((w) => w.main); if (main) { this.switchRepo(main.path); return; } }
+            await this.loadAll();
+          });
+        },
+      });
+    });
+  }
+
+  /** M: picks the worktrees whose branch is merged into the main checkout's. */
+  pickMergedWorktrees() {
+    const base = this.data.worktrees.find((w) => w.main)?.branch;
+    if (!base) return this.error("The main checkout has no branch to compare with.");
+    this.reads.push(async () => {
+      const merged = await WT.merged(this.git, base);
+      this.wtPicked = new Set(this.data.worktrees.filter((w) => !w.main && w.branch && w.branch !== base && merged.has(w.branch)).map((w) => w.path));
+      this.note(this.wtPicked.size ? `${this.wtPicked.size} merged into ${base} picked: d removes them, esc lets go` : `Nothing merged into ${base}`);
+    });
   }
 
   // ---- what's where
@@ -542,6 +704,7 @@ export default class GitView extends View {
     if (this.focus === "main") { this.focus = "side"; this.staging = null; this.loadMain(); return; }
     if (this.range) { this.range = null; return; }
     const ctx = this.ctxOf(this.panel);
+    if (ctx === "worktrees" && this.wtPicked.size) { this.wtPicked = new Set(); return; }
     if (this.filters[ctx]) { this.filters[ctx] = ""; return; }
     if (this.sub()) { this.subs[this.panel] = this.subs[this.panel].slice(0, -1); this.loadMain(); return; }
     if (this.diffBase) { this.diffBase = null; this.loadMain(); return; }
@@ -790,6 +953,28 @@ export default class GitView extends View {
     return rows.length ? rows : [text("No commits.", "muted")];
   }
 
+  /** A worktree in the main view: where it is, what's in it (spaces,
+   *  agents, uncommitted changes), then its branch's log. */
+  async worktreeContent(w) {
+    const occ = this.occupancy().get(w.path) ?? { spaces: [], agents: [] };
+    const kv = (k, parts) => ({ kind: "text", parts: [[k.padEnd(10), "dim"], ...parts] });
+    const rows = [kv("Worktree", [[this.tilde(w.path), "foreground"], ...(w.main ? [["  (the main checkout)", "dim"]] : [])])];
+    rows.push(kv("Branch", w.branch ? [[w.branch, "ansi6"]] : [[`detached at ${String(w.head ?? "").slice(0, 7)}`, "ansi3"]]));
+    if (w.prunable) rows.push(kv("Folder", [["gone: X forgets it (git worktree prune)", "ansi1"]]));
+    else {
+      const st = await this.git.read(["-C", w.path, "status", "--porcelain"]);
+      const n = st.code === 0 ? st.stdout.split("\n").filter(Boolean).length : null;
+      rows.push(kv("Changes", n == null ? [["unreadable", "ansi1"]] : n ? [[`${n} uncommitted file${n === 1 ? "" : "s"}`, "ansi3"]] : [["none", "muted"]]));
+    }
+    if (w.locked) rows.push(kv("Locked", [["git won't remove it until it's unlocked (git worktree unlock)", "ansi3"]]));
+    rows.push(kv("Spaces", occ.spaces.length ? [[occ.spaces.map((s) => s.name || "unnamed").join(", "), "accent"]] : [["none: space opens one", "muted"]]));
+    if (occ.agents.length) rows.push(kv("Agents", [[occ.agents.map((a) => `${a.name ?? "agent"} (${a.status ?? "running"})`).join(", "), "ansi3"]]));
+    rows.push(text(""));
+    const ref = w.branch ?? w.head;
+    const log = ref && !w.prunable ? await this.logRows(ref) : [];
+    return { title: `Worktree · ${WT.label(w)}`, rows: [...rows, ...log], rowH: LOG_ROW };
+  }
+
   /** A ctrl-p pane's one diff (show kinds other than review). */
   async showContent() {
     const g = this.git, s = this.show, opts = { context: this.context, ws: this.ws };
@@ -877,7 +1062,7 @@ export default class GitView extends View {
         const rows = f.binary ? [text("Binary file: not shown.", "muted")] : !f.hunks?.length ? [text(f.status === "untracked" ? "Untracked, not diffed (too many new files)." : "No text changes (mode or rename only).", "muted")] : diffRows(f).map((r) => ({ ...r, path: f.path }));
         return { title: `${this.review.scopeName()} · ${f.status === "renamed" && f.old ? `${f.old} → ${f.path}` : f.path}`, path: f.path, rows };
       }
-      case "worktrees": return { title: "Worktree", rows: [text(x.path, "foreground"), text(x.branch ? `on ${x.branch}` : x.detached ? "detached" : "", "ansi6"), text(x.head ?? "", "dim")] };
+      case "worktrees": return this.worktreeContent(x);
       case "remotes": return { title: x.name, rows: [text(`fetch ${x.url}`, "foreground"), text(`push  ${x.push}`, "muted"), text(""), ...this.data.remoteBranches.filter((r) => r.remote === x.name).slice(0, 40).map((r) => text(`${r.branch}  ${r.subject}`, "muted"))] };
       case "branches": case "remoteBranches": case "tags": return { title: `Log · ${x.name}`, rows: await this.logRows(x.name), rowH: LOG_ROW };
       case "commits": case "subCommits": case "reflog": {
@@ -993,7 +1178,12 @@ export default class GitView extends View {
   list(t, ctx, rowH, draw, { active }) {
     const rows = this.items(ctx);
     const n = rows.length;
-    const vis = Math.max(1, this.vis[ctx] ?? 12);
+    // The rows that fit, from the list's height: the row height can change
+    // without a resize (Commits going wide), so a count kept from the last
+    // resize would leave the bottom of the list empty.
+    const px = this.listPx?.[ctx];
+    const vis = px ? Math.max(1, Math.floor(px / rowH)) : Math.max(1, this.vis[ctx] ?? 12);
+    this.vis[ctx] = vis;
     let top = this.top[ctx] ?? 0;
     const sel = Math.min(this.sel[ctx] ?? 0, Math.max(0, n - 1));
     if (this.follow[ctx]) {
@@ -1016,13 +1206,29 @@ export default class GitView extends View {
     const bar = n > vis ? div().absolute().right(0).w(2).top(Math.round((top / n) * 100) + "%").h(Math.max(4, Math.round((vis / n) * 100)) + "%").bg(active ? t.accent + "aa" : t.ansi8 + "66") : null;
     return div().id(`${ctx}-list`).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
-        const v = Math.max(1, Math.floor(unzoom(size.height) / rowH));
-        if (v !== this.vis[ctx]) { this.vis[ctx] = v; cx.notify(); }
+        const h = unzoom(size.height);
+        (this.listPx ??= {});
+        if (h !== this.listPx[ctx]) { this.listPx[ctx] = h; this.vis[ctx] = Math.max(1, Math.floor(h / rowH)); cx.notify(); }
       })
       .on_scroll_wheel((e, cx) => this.wheel(ctx, e, rowH, n, cx))
-      .child(v_flex().w_full().children(shown))
+      .child(v_flex().size_full().children(shown).children([n > 0 && top + vis >= n - 1 ? this.listTail(t, ctx, n - 1, rowH) : null].filter(Boolean)))
       .when(Boolean(bar), (el) => el.child(bar))
       .when(!n, (el) => el.child(div().absolute().inset_0().child(empty(t, this.emptyText(ctx), null, { small: true }))));
+  }
+
+  /** Below a commit list's last row: its open lanes run on to the bottom
+   *  edge (history cut at the limit, or the panel taller than the list), so
+   *  no line ends in the air. */
+  listTail(t, ctx, last, rowH) {
+    if (ctx !== "commits" && ctx !== "subCommits") return null;
+    const g = this.graphFor(ctx), row = g?.rows[last];
+    if (!row || !row.after.some((c) => c != null)) return null;
+    const wide = rowH === WIDE_ROW;
+    const h = Math.max(rowH, this.listPx?.[ctx] ?? 600);
+    const lanes = graphPass(t, row.after, this.shownWidth(ctx, g), { lane: wide ? WIDE_LANE : LANE, h });
+    return h_flex().id(`${ctx}-tail`).flex_1().min_h(0).w_full().items_start().overflow_hidden()
+      .when(wide, (el) => el.pl(4).child(lanes))
+      .when(!wide, (el) => el.px(6).gap(7).child(div().w(56).flex_none()).child(div().w(18).flex_none()).child(lanes));
   }
 
   emptyText(ctx) {
@@ -1087,7 +1293,26 @@ export default class GitView extends View {
           T(f.binary ? "bin" : `${f.add + f.del}`, t.dim),
         ]);
       };
-      case "worktrees": return (w, i, sel) => this.rowLine(t, [T(w.path === this.git?.root ? "*" : " ", t.ansi6, { w: 8 }), T(w.path.split("/").pop(), sel ? t.foreground : t.muted), T(w.branch ?? (w.detached ? "(detached)" : ""), t.ansi6), T(w.path, t.dim, { grow: true })]);
+      case "worktrees": {
+        // * this window's checkout, ◆ picked for d; then the branch, what's
+        // in it (agents, open in a space), how old its last commit is, where.
+        const occ = this.occupancy();
+        return (w, i, sel) => {
+          const o = occ.get(w.path) ?? { spaces: [], agents: [] };
+          const picked = this.wtPicked.has(w.path);
+          const mark = picked ? ["◆", t.ansi5] : w.path === this.git?.root ? ["*", t.ansi6] : [" ", t.dim];
+          const busy = o.agents.length ? [`${o.agents.length} agent${o.agents.length === 1 ? "" : "s"}`, o.agents.some((a) => a.status === "blocked") ? t.ansi1 : t.working ?? t.ansi3] : null;
+          return this.rowLine(t, [
+            T(mark[0], mark[1], { w: 8 }),
+            T(w.branch ?? `(detached) ${String(w.head ?? "").slice(0, 7)}`, w.branch ? (sel ? t.foreground : t.ansi6) : t.ansi3),
+            w.main ? T("main", t.dim) : null,
+            w.prunable ? T("folder gone", t.ansi1) : w.locked ? T("locked", t.ansi3) : null,
+            T(this.tilde(w.path), t.dim, { grow: true }),
+            busy ? T(busy[0], busy[1]) : o.spaces.length ? T("open", t.accent) : null,
+            w.at ? T(age(w.at), t.dim) : null,
+          ]);
+        };
+      }
       case "branches": return (b, i, sel) => this.rowLine(t, [
         T(age(b.date), t.dim, { w: 26 }),
         T(b.head ? `* ${b.name}` : b.name, b.head ? t.ansi6 : sel ? t.foreground : t.muted),
@@ -1292,7 +1517,10 @@ export default class GitView extends View {
 
   /** A main-view list: windowed like the side lists; the wheel scrolls it. */
   mainList(t, id, rows, draw, { follow = null, key = "main", rowH = ROW } = {}) {
-    const vis = Math.max(1, this.mainVisOf?.[key] ?? 30);
+    // As list(): the rows that fit come from the height, at this list's row
+    // height (a diff's and the branch log's differ).
+    const px = this.mainPx?.[key];
+    const vis = px ? Math.max(1, Math.floor(px / rowH)) : 30;
     let top = key === "staging" ? (this.staging.top ?? 0) : key === "main" ? this.mainTop : (this.otherTop?.[key] ?? 0);
     if (follow != null) {
       if (follow < top + 1) top = Math.max(0, follow - 2);
@@ -1303,9 +1531,9 @@ export default class GitView extends View {
     if (key === "main" || key === "staging") this.mainVis = vis;
     return div().id(id).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
-        const v = Math.max(1, Math.floor(unzoom(size.height) / rowH));
-        (this.mainVisOf ??= {});
-        if (v !== this.mainVisOf[key]) { this.mainVisOf[key] = v; cx.notify(); }
+        const h = unzoom(size.height);
+        (this.mainPx ??= {});
+        if (h !== this.mainPx[key]) { this.mainPx[key] = h; cx.notify(); }
       })
       .on_scroll_wheel((e, cx) => {
         cx.stop_propagation();
@@ -1333,7 +1561,8 @@ export default class GitView extends View {
         cx.notify();
       })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); if (this.staging || this.focus === "main") this.contextMenu(this.staging ? "staging" : "main"); cx.notify(); })
-      .child(v_flex().w_full().children(rows.slice(top, top + vis + 1).map((r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none())))
+      .child(v_flex().size_full().children(rows.slice(top, top + vis + 1).map((r, k) => draw(r, top + k).id(`${id}-${top + k}`).flex_none()))
+        .children([top + vis >= rows.length - 1 ? logTail(t, rows[rows.length - 1], px ?? 600) : null].filter(Boolean)))
       .when(rows.length > vis, (el) => el.child(div().absolute().right(0).w(2).top(Math.round((top / rows.length) * 100) + "%").h(Math.max(3, Math.round((vis / rows.length) * 100)) + "%").bg(t.ansi8 + "66")));
   }
 
@@ -1428,17 +1657,23 @@ export default class GitView extends View {
 
   bar(t) {
     const ctx = this.ctx();
-    const list = this.show && ctx === "main" ? [["q", "close"], ["j/k", "scroll"], ["J/K", "page"], ["n/N", "file"], ["{ }", "context"], ["?", "keys"]]
+    // The context's keys on the left; the global ones (push, pull) at the
+    // right end, and the help key (?) last of all.
+    const all = this.show && ctx === "main" ? [["q", "close"], ["j/k", "scroll"], ["J/K", "page"], ["n/N", "file"], ["{ }", "context"], ["?", "keys", null, true]]
       : (ctx === "filter" ? [{ key: "enter", label: "keep" }, { key: "escape", label: "clear" }] : barKeys(ctx))
-        .map((b) => [keyLabel(b.key), shortLabel(b.label)]);
+        .map((b) => [keyLabel(b.key), shortLabel(b.label), null, b.context === "global"]);
+    const help = all.find(([k]) => k === "?") ?? null;
+    const list = all.filter((x) => x !== help && !x[3]).map(([k, w]) => [k, w]);
+    const ends = all.filter((x) => x !== help && x[3]).map(([k, w]) => [k, w]);
     const note = this.noteText;
     const right = note ? div().text_color(note.tone === "failed" ? t.blocked : t.done).truncate().max_w(420).child(note.text)
       : this.copied.length ? div().text_color(t.ansi5).child(`${this.copied.length} copied · V paste`)
       : div().text_color(t.dim).child(this.show ? "q closes this pane" : "1-5 panels · + widen");
     return hints(t, [[null, null, (CONTEXT_NAMES[ctx] ?? ctx).toUpperCase()], ...list], right, (key, cx) => {
+      if (this.show && ctx === "main" && key === "?") return this.openKeys();
       const b = lookup(ctx, { esc: "escape", pgup: "pageup", pgdn: "pagedown" }[key] ?? key);
       if (b) act(this, b.action, cx);
-    });
+    }, { ends, help: help ? [help[0], help[1]] : null });
   }
 
   render() {

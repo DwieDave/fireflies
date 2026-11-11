@@ -30,7 +30,7 @@ const chrome = (n) => (n.includes("/") ? n : `mods/workspace-chrome/${n}.svg`);
 
 /** Nocturne's panels as palette entries: `go` runs them; `bind` is their key in keys.json's layout section. */
 function openEntries() {
-  const bind = { files: "nocturne.files", git: "nocturne.git", diff: "nocturne.diff", github: "nocturne.github" };
+  const bind = { files: "nocturne.files", git: "nocturne.git", diff: "nocturne.diff", worktrees: "nocturne.worktrees", github: "nocturne.github" };
   const out = [];
   for (const p of panels()) {
     const where = p.fixed === "float" ? "floating over the tab" : p.fixed === "edge" ? "down the right edge" : "beside the focused pane";
@@ -47,6 +47,12 @@ function openEntries() {
       title: "Files pane of this folder", words: "files tree explorer folder browse split beside new pane", go: () => run("files.open", at) });
     out.push({ name: "files.open", args: { ...at, in: "tab" }, group: "Open", icon: "files",
       title: "Files of this folder in a new tab", words: "files tree explorer folder browse tab", go: () => run("files.open", { ...at, in: "tab" }) });
+  }
+  if (h.folder) {
+    out.push({ name: "nocturne.github-pr", args: {}, group: "Open", icon: "git-branch", bind: "nocturne.github-pr",
+      title: "GitHub: new pull request…", words: "github pr pull request create open new gh branch push", go: () => run("nocturne.github-pr") });
+    out.push({ name: "nocturne.github-run", args: {}, group: "Open", icon: "terminal", bind: "nocturne.github-run",
+      title: "GitHub: run a workflow…", words: "github actions workflow dispatch run trigger manual gh ci deploy", go: () => run("nocturne.github-run") });
   }
   out.push({ name: "nocturne", args: { fold: true }, group: "Open", icon: "sidebar", bind: "nocturne.fold",
     title: "Fold or open the sidebar", words: "toggle sidebar sky rail collapse hide", go: () => run("nocturne.fold") });

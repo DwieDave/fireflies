@@ -215,7 +215,7 @@ test("on a space: rename, folder, new tab, worktree, menu; delete asks and y del
   press(s, "t");
   expect(commands.at(-1)).toEqual(["tab.new", { space: "s1" }]);
   press(s, "w");
-  expect(overlays.at(-1)).toMatchObject({ mod: "worktree", props: { space: "s1", action: "new" } });
+  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne-git", kind: "window", props: { worktrees: { space: "s1", action: "new" } } });
   press(s, "r");
   expect(s.spaces.mode).toMatchObject({ kind: "rename" });
   s.spaces.start(null, cx);

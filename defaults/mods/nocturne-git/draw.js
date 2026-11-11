@@ -78,20 +78,25 @@ export function chip(t, id, label, on, action, color) {
     .child(div().relative().child(label));
 }
 
-/** The options bar: the keys that do something now (each clickable). */
-export function hints(t, list, right, onPress) {
+/** The options bar: the keys that do something now (each clickable), the
+ *  context's on the left; on the right `ends` (the global keys), `right`
+ *  (a note, or where to go next) and, last of all, `help` (? keys). */
+export function hints(t, list, right, onPress, { ends = [], help = null } = {}) {
+  const hint = (id) => ([key, what, ctx], i) => h_flex().id(`git-${id}-${i}`).flex_none().gap(4)
+    .when(Boolean(ctx), (el) => el.child(div().text_size(10).text_color(t.ansi8).child(ctx)))
+    .when(!ctx, (el) => el
+      .hover((s) => s.bg(t.ansi0 + "66"))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { onPress?.(key, cx); cx.notify(); })
+      .child(div().text_color(t.accent).child(key))
+      .child(div().text_color(t.dim).child(what)));
   return h_flex().id("git-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-    .children(list.map(([key, what, ctx], i) => h_flex().id(`git-hint-${i}`).flex_none().gap(4)
-      .when(Boolean(ctx), (el) => el.child(div().text_size(10).text_color(t.ansi8).child(ctx)))
-      .when(!ctx, (el) => el
-        .hover((s) => s.bg(t.ansi0 + "66"))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => { onPress?.(key, cx); cx.notify(); })
-        .child(div().text_color(t.accent).child(key))
-        .child(div().text_color(t.dim).child(what)))))
+    .children(list.map(hint("hint")))
     .child(div().flex_1())
-    .when(Boolean(right), (el) => el.child(right));
+    .children(ends.map(hint("end")))
+    .when(Boolean(right), (el) => el.child(right))
+    .children(help ? [hint("help")(help, 0)] : []);
 }
 
 /** A quiet middle-of-the-panel note, with the moon. */
@@ -137,6 +142,15 @@ export function graphPass(t, after, width, { lane = 12, h = 18 } = {}) {
   const cx = (i) => i * lane + Math.floor(lane / 2) - 1;
   const kids = (after ?? []).flatMap((c, i) => (c == null ? [] : [div().absolute().left(cx(i)).top(0).w(2).h(h).bg(colors[c] + "99").child(dither(colors[c], 1))]));
   return div().relative().flex_none().h(h).w(width * lane + 2).children(kids);
+}
+
+/** Below the branch log's last row: the lanes still open there (the log
+ *  cut at its limit) run on to the bottom of the view, laid out as the log
+ *  rows are. Null when nothing is open (a root commit) or not a log row. */
+export function logTail(t, row, h) {
+  if (row?.kind !== "log" || !(row.g?.after ?? []).some((c) => c != null)) return null;
+  return h_flex().id("log-tail").flex_1().min_h(0).w_full().items_start().pl(6).overflow_hidden()
+    .child(graphPass(t, row.g.after, row.w, { lane: 10, h }));
 }
 
 /** Syntax spans for a diff line's text, by the file's language: tree-sitter

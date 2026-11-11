@@ -2,6 +2,15 @@ import { View, div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, panes, knownAgents, run, openOverlay, closeOverlay, props, window, keys, shared, setShared } from "herdr";
 
+// Worktrees live in the git window (nocturne-git's Worktrees tab): new asks
+// for a branch and opens its checkout as a space, open lists the repo's,
+// remove removes the space's (it asks first).
+function gitWorktrees(space, folder, action) {
+  const s = spaces().find((x) => x.id === space);
+  openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] },
+    props: { folder, on: s?.machine ?? null, worktrees: { action, ...(space ? { space } : {}) } } });
+}
+
 // The last agents each machine reported, shown at once while knownAgents() checks again.
 const KNOWN = "new-menu.agents";
 
@@ -67,7 +76,7 @@ export default class NewMenu extends View {
         .when(this.failed || this.agents.length === 0, el => el.child(div().px(9).py(6).text_color(t.dim).child(this.failed ? "Could not check installed agents" : "Checking installed agents…"))))
       .child(div().h(1).mx(4).my(5).bg(t.border))
       .child(this.row("space", div().w(14).child("+"), "New space", () => run("space.new"), shortcut("space.new")))
-      .child(this.row("worktree", svg("mods/workspace-chrome/branch.svg").size(14), "New worktree…", () => openOverlay({ mod: "worktree", kind: "dialog", width: 460, height: 280, props: { space: space?.id, folder: panes().find(p => p.focused)?.cwd, action: "new" } }), "", Boolean(space)))
-      .child(this.row("worktree-open", svg("mods/workspace-chrome/branch.svg").size(14), "Open worktree\u2026", () => openOverlay({ mod: "worktree", kind: "dialog", width: 560, height: 480, props: { space: space?.id, folder: panes().find(p => p.focused)?.cwd, action: "open" } }), "", Boolean(space)));
+      .child(this.row("worktree", svg("mods/workspace-chrome/branch.svg").size(14), "New worktree…", () => gitWorktrees(space?.id, panes().find(p => p.focused)?.cwd, "new"), "", Boolean(space)))
+      .child(this.row("worktree-open", svg("mods/workspace-chrome/branch.svg").size(14), "Open worktree\u2026", () => gitWorktrees(space?.id, panes().find(p => p.focused)?.cwd, "open"), "", Boolean(space)));
   }
 }
