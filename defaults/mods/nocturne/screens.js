@@ -6,7 +6,10 @@
 //              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc skips
 //   whats_new  this release's notes ({ notes }, a movable window); ↑↓ / j k /
 //              space step through them, enter / esc close
-//   help       the keys, filterable by typing; ↑↓ / ctrl-n ctrl-p / page up
+//   help       the keys, as a map (keymap.js): every binding in plain words,
+//              grouped, the core's own keys and what works in each block that
+//              takes the keyboard (enter or a click unfolds a block's keys);
+//              typing filters by key and words; ↑↓ / ctrl-n ctrl-p / page up
 //              and down move through the list, esc closes
 //   update     the update note, bottom right ({ label, restart, success, dismissal });
 //              × hides it until the next update (shared UPDATE_DISMISSED)
@@ -14,7 +17,8 @@
 
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
-import { theme, props, closeOverlay, run, spaces, keys, hc, setShared, shared, presentUpdateNotes, updates } from "herdr";
+import { theme, props, closeOverlay, run, spaces, keys, commands, hc, setShared, shared, presentUpdateNotes, updates, nextCommand } from "herdr";
+import { rows } from "./keymap.js";
 import { ART, dither, pip } from "./kit.js";
 
 const W = (name) => `mods/workspace-chrome/${name}.svg`;
@@ -66,6 +70,29 @@ function bullet(t, status, title, body) {
       .child(div().text_size(12).text_color(t.foreground).child(title))
       .child(div().text_size(11).line_height("17px").text_color(t.muted).child(body)));
 }
+
+/** A screen's ? strip: its keys over the foot, ? keys last. */
+function keysStrip(t, id, list) {
+  return h_flex().id(id).relative().flex_none().flex_wrap().px(16).py(6).gap_x(14).gap_y(2).items_center().text_size(11)
+    .on_mouse_down("left", stop)
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .children(list.map(([k, what], i) => h_flex().id(`${id}-${i}`).flex_none().gap(4)
+      .child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what))));
+}
+
+/** A foot's "? keys", its hints' last word: a click shows the strip too. */
+function keysHint(t, id, on, toggle) {
+  return h_flex().id(id).flex_none().gap(4).cursor_pointer().text_size(11)
+    .on_mouse_down("left", stop).on_click((_e, cx) => { toggle(); cx.notify(); })
+    .child(div().text_color(t.accent).child("?")).child(div().text_color(on ? t.foreground : t.dim).child("keys"));
+}
+
+/** What the welcome's ? lists: every key its handler takes. */
+export const WELCOME_KEYS = [["→ l  ⏎", "next"], ["← h", "back"], ["a", "add a machine (page 2)"], ["c", "copy the line (page 3)"],
+  ["⏎", "done (page 3)"], ["esc", "skip · keys away"], ["?", "keys"]];
+/** What's new's ? list. */
+export const WHATS_NEW_KEYS = [["j k  ↑ ↓", "step through the notes"], ["space  pgdn pgup", "step"], ["g home  end", "top / end"],
+  ["⏎ esc", "close (esc: keys away first)"], ["?", "keys"]];
 
 const para = (t, text) => div().text_size(12).line_height("19px").text_color(t.muted).child(text);
 const eyebrow = (t, text) => div().text_size(10).text_color(t.ansi8).child(text.toUpperCase());
@@ -186,9 +213,11 @@ export class Welcome {
     return frame(t, "nocturne-welcome").track_focus(this.handle)
       .on_key_down((e, cx) => {
         const k = e.key, m = e.modifiers;
+        if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); return cx.notify(); }
         if (k === "escape") return this.done("skipped");
         if (m.control || m.alt || m.platform) return;
-        if (k === "enter" || k === "right" || k === "l") {
+        if (e.key_char === "?") this.keysShown = !this.keysShown;
+        else if (k === "enter" || k === "right" || k === "l") {
           if (last) return k === "enter" ? this.start() : undefined;
           go(this.page + 1, cx);
         } else if (k === "left" || k === "h") go(this.page - 1, cx);
@@ -196,15 +225,18 @@ export class Welcome {
         else if (k === "c" && last) this.copy(cx);
         else return;
         cx.stop_propagation();
+        cx.notify();
       })
       .child(header(t, fly(18), "Fireflies", "beta", () => this.done("skipped")))
       .child(this.hero(t))
       .child(div().id("w-body").flex_1().min_h(0).overflow_y_scroll().on_mouse_down("left", stop)
         .child(div().px(22).pt(18).pb(18).child([this.pageOne, this.pageTwo, this.pageThree][this.page - 1].call(this, t))))
+      .when(Boolean(this.keysShown), (el) => el.child(keysStrip(t, "w-keys-strip", WELCOME_KEYS)))
       .child(h_flex().relative().h(48).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(dots)
-        .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc skip"))
+        .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc skip ·"))
+        .child(keysHint(t, "w-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
         .child(div().flex_1())
         .when(this.page > 1, (el) => el.child(button(t, "w-back", "back", t.muted, false, (cx) => go(this.page - 1, cx))))
         .child(last
@@ -235,6 +267,8 @@ export class WhatsNew {
     const k = e.key, m = e.modifiers ?? {};
     if (m.control || m.platform || m.alt) return;
     const n = this.blocks;
+    if (e.key_char === "?") { this.keysShown = !this.keysShown; cx.stop_propagation(); return cx.notify(); }
+    if (k === "escape" && this.keysShown) { this.keysShown = false; cx.stop_propagation(); return cx.notify(); }
     if (k === "escape" || k === "enter") this.done();
     else if (k === "down" || k === "j" || k === "space" || k === "pagedown") this.at = Math.min(n - 1, this.at + 1);
     else if (k === "up" || k === "k" || k === "pageup") this.at = Math.max(0, this.at - 1);
@@ -287,38 +321,48 @@ export class WhatsNew {
       .child(div().id("wn-body").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).on_mouse_down("left", stop)
         .on_size_change((s, cx) => { if (Math.abs((this.width ?? 0) - (s.width - 44)) > 1) { this.width = s.width - 44; cx.notify(); } })
         .children(blocks.map(([b, gap], i) => div().px(22).pt(i === 0 ? 18 : gap).when(i === blocks.length - 1, (d) => d.pb(18)).child(b))))
+      .when(Boolean(this.keysShown), (el) => el.child(keysStrip(t, "wn-keys-strip", WHATS_NEW_KEYS)))
       .child(h_flex().relative().h(46).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(div().flex_1().text_size(11).text_color(t.dim).child("↑↓ read · something off? settings › send feedback"))
+        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child("↑↓ read · something off? settings › send feedback ·"))
+        .child(keysHint(t, "wn-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
         .child(button(t, "wn-done", "got it", t.accent, true, () => this.done())));
   }
 }
 
 // ---- keys --------------------------------------------------------------------
 
-const GROUPS = [
-  ["spaces", /^space\./], ["tabs", /^tab\./], ["panes", /^pane\./], ["agents", /^agent\./],
-  ["terminal", /^terminal\.|^send:/], ["window", /./],
-];
-
-function keyLabel(action) {
-  if (action.startsWith("send:")) return "type " + JSON.stringify(action.slice(5));
-  const [name, arg] = action.split(":");
-  const words = name.replace(/[._]/g, " ");
-  return arg ? `${words} ${arg}` : words;
-}
-
 export class Keys {
   init(_props, cx) {
     this.filter = "";
-    this.input = InputState.new({ placeholder: "type to filter" });
+    this.input = InputState.new({ placeholder: "type to filter: a key, or what it does" });
     this.input.on("change", (_e, cx) => { this.filter = this.input.value(); this.at = 0; cx.notify(); });
     this.input.focus();
     cx.timer.after(600, () => this.input.focus());
     this.handle = cx.focus_handle();
-    this.at = 0; // the key row under the keyboard
+    this.at = 0; // the row under the keyboard
     this.rows = [];
+    this.open = new Set(); // the blocks (keymap.js SURFACES) whose keys are unfolded
     this.scroll = ScrollHandle.new();
+    // By command, for an agent showing someone a key (every nocturne.* command
+    // reaches this copy too): nocturne.keys-filter.<words, - for spaces> fills
+    // the filter, nocturne.keys-open.<block> unfolds a block (sidebar, tabstrip, header,
+    // parked, toasts, menus, panes).
+    cx.spawn(async (cx) => {
+      for (;;) {
+        const c = String(await nextCommand()).replace(/^nocturne\./, "");
+        const f = /^keys-filter\.(.*)$/.exec(c), o = /^keys-open\.(.+)$/.exec(c);
+        if (f) { this.filter = f[1].replace(/-/g, " "); this.input.set_value(this.filter); this.at = 0; }
+        else if (o) this.toggle(o[1]);
+        else continue;
+        cx.notify();
+      }
+    });
+  }
+
+  /** A block's row: its keys unfolded under it, or folded again. */
+  toggle(id) {
+    if (this.open.has(id)) this.open.delete(id); else this.open.add(id);
   }
 
   key(e, cx) {
@@ -327,13 +371,18 @@ export class Keys {
     const n = this.rows.length;
     let d = 0;
     if (k === "escape") { cx.stop_propagation(); return closeOverlay(props().overlay); }
+    if (k === "enter") {
+      const r = this.rows[this.at]?.x;
+      if (r?.surface) { this.toggle(r.surface); cx.stop_propagation(); cx.notify(); }
+      return;
+    }
     if (k === "down" || (ctrl && k === "n")) d = 1;
     else if (k === "up" || (ctrl && k === "p")) d = -1;
     else if (k === "pagedown") d = 10;
     else if (k === "pageup") d = -10;
     else return;
     this.at = Math.max(0, Math.min(n - 1, this.at + d));
-    // The list's children are the eyebrows and the rows: reveal the row's own.
+    // The list's children are the eyebrows, the rows and unfolded lines: reveal the row's own.
     if (n) this.scroll.scroll_to_item(this.rows[this.at].child);
     cx.stop_propagation();
     cx.notify();
@@ -341,19 +390,27 @@ export class Keys {
 
   render() {
     const t = theme();
-    const f = this.filter.toLowerCase();
-    const all = keys().filter((k) => !f || k.keys.includes(f) || keyLabel(k.action).includes(f));
-    const seen = new Set();
-    const groups = GROUPS.map(([name, re]) => [name, all.filter((k) => !seen.has(k) && re.test(k.action) && (seen.add(k) || true))])
-      .filter(([, rows]) => rows.length > 0);
-    // One flat list: each group's eyebrow, then its rows (`child`: the index among them).
-    const list = [];
-    this.rows = [];
-    for (const [name, rows] of groups) {
-      list.push({ head: name });
-      for (const k of rows) { this.rows.push({ k, child: list.length }); list.push({ k, name, i: this.rows.length - 1 }); }
-    }
+    const list = rows(keys(), { commands: commands(), filter: this.filter, open: this.open });
+    // The rows the keyboard walks (bindings and blocks; `child`: the index in the list).
+    this.rows = list.map((x, child) => ({ x, child })).filter(({ x }) => !x.head && !x.line);
     this.at = Math.min(this.at, Math.max(0, this.rows.length - 1));
+    const under = this.rows[this.at]?.x;
+    const keyCol = (text, color) => div().relative().w(190).flex_none().truncate().text_color(color).child(text);
+    const row = (x, j) => {
+      if (x.head) return div().id(`key-head-${x.head}`).pb(4).when(j > 0, (el) => el.pt(12)).child(eyebrow(t, x.head));
+      if (x.line) return h_flex().id(`key-line-${x.of}-${j}`).relative().min_h(20).pl(22).pr(6).items_center().text_size(11)
+        .child(keyCol(x.k.shown, t.muted).w(172))
+        .child(div().relative().flex_1().min_w(0).text_color(t.dim).child(x.label));
+      const on = x === under;
+      return h_flex().id(`key-${j}`).relative().h(24).px(6).items_center().text_size(12)
+        .hover((s) => s.bg(t.ansi0))
+        .when(Boolean(x.surface), (el) => el.cursor_pointer().on_click((_e, cx) => { this.toggle(x.surface); cx.notify(); }))
+        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+        .child(keyCol(x.k.shown, t.accent))
+        .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(x.label))
+        .when(Boolean(x.surface), (el) => el.child(div().relative().flex_none().pl(8).text_size(11).text_color(on ? t.accent : t.dim)
+          .child(x.open ? "▾" : on ? "⏎ ▸" : "▸")));
+    };
     return frame(t, "nocturne-keys").track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
       .child(h_flex().relative().h(36).flex_none().px(14).gap(10).items_center()
@@ -364,16 +421,11 @@ export class Keys {
       .child(div().mx(14).mt(12).h(28).px(8).flex().items_center().flex_none().border(1).border_color(t.accent)
         .child(Input.new(this.input).flex_1().h_full().text_size(12).text_color(t.foreground)))
       .child(div().id("keys-list").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).px(14).py(10)
-        .children(list.map((x, j) => x.head
-          ? div().id(`key-head-${x.head}`).pb(4).when(j > 0, (el) => el.pt(12)).child(eyebrow(t, x.head))
-          : h_flex().id(`key-${x.name}-${x.i}`).relative().h(24).px(6).items_center().text_size(12)
-            .hover((s) => s.bg(t.ansi0))
-            .when(x.i === this.at, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-            .child(div().relative().w(200).flex_none().truncate().text_color(t.accent).child(x.k.keys + (x.k.section !== "global" ? `  (${x.k.section})` : "")))
-            .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(keyLabel(x.k.action))))))
+        .children(list.length ? list.map(row) : [div().pt(8).text_size(12).text_color(t.dim).child("no key does that")]))
       .child(h_flex().relative().h(26).flex_none().px(14).gap(14).items_center().text_size(10)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("↑↓")).child(div().text_color(t.dim).child("move")))
+        .child(h_flex().gap(4).child(div().text_color(t.accent).child("⏎")).child(div().text_color(t.dim).child("a block's keys")))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("type")).child(div().text_color(t.dim).child("filter")))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("close"))));
   }

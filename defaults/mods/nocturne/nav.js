@@ -39,28 +39,49 @@ const COMMON = {
   "?": "help",
 };
 
-/** The sidebar's own verbs on top of COMMON. */
-export const SIDEBAR_KEYS = { ...COMMON, n: "new", f: "folder", d: "delete", t: "tab", w: "worktree", p: "pin", J: "pin-down", K: "pin-up" };
+/** The sidebar's own verbs on top of COMMON (h / ← lead nowhere there: the sidebar is the leftmost block). */
+export const SIDEBAR_KEYS = (({ left: _l, h: _h, ...rest }) => rest)({ ...COMMON, n: "new", f: "folder", d: "delete", t: "tab", w: "worktree", p: "pin", J: "pin-down", K: "pin-up" });
 
 /** The tab strip's own verbs on top of COMMON. */
 export const STRIP_KEYS = { ...COMMON, x: "close", n: "new", H: "move-left", L: "move-right" };
 
-/** The ? list: [keys, what] per line, by keymap. */
+// The ? lists: [keys, what] per line, every key its keymap takes, ? keys last.
+// The keys dialog (screens.js, keymap.js) shows them too.
 export const SIDEBAR_HELP = [
-  ["j k  ↑ ↓", "move"], ["tab  ⇧tab", "next / previous section"], ["g G", "first / last"],
+  ["j k  ↑ ↓", "move"], ["tab  ⇧tab", "next / previous section"], ["g G  home end", "first / last"],
   ["⏎  space", "open: show the space, focus the agent, press the button"],
   ["m  .", "the row's menu"], ["r", "rename"], ["n", "new space"], ["t", "new tab in the space"],
   ["f", "change the space's folder"], ["w", "new worktree"], ["d", "delete the space (asks)"],
   ["p", "pin / unpin the agent"], ["J K", "move it in the jar"],
-  ["l  →", "to the panes"], ["esc  q", "back to the pane"],
+  ["l  →", "to the panes"], ["esc  q", "back to the pane"], ["?", "keys"],
 ];
 export const STRIP_HELP = [
-  ["h l  ← →", "move along the row"], ["j k  ↓ ↑", "tabs · the pane's header · parked panes · the pane"],
-  ["tab  ⇧tab", "every control in turn"], ["g G", "first / last"],
+  ["h l  ← →", "move along the row (h past the first tab: the sidebar)"], ["j k  ↓ ↑", "tabs · the pane's header · parked panes · the pane"],
+  ["tab  ⇧tab", "every control in turn"], ["g G  home end", "first / last"],
   ["⏎  space", "select the tab, press the button"], ["1 … 9", "select that tab"],
-  ["m  .", "the tab's or the pane's menu"], ["r", "rename the tab or the pane"],
-  ["x", "close the tab or the pane"], ["n", "new tab"], ["H L", "move the tab left / right"],
-  ["esc  q", "back to the pane"],
+  ["m  .", "the tab's menu (on a button: its menu)"], ["r", "rename the tab"],
+  ["x", "close the tab"], ["n", "new tab"], ["H L", "move the tab left / right"],
+  ["esc  q", "back to the pane"], ["?", "keys"],
+];
+/** The focused pane's header: the strip's second row (nocturne.header goes straight there). */
+export const HEADER_HELP = [
+  ["h l  ← →", "walk its controls: name, text size, float, splits, even out, gridify, park, zoom, ⋯, close"],
+  ["⏎  space", "press the control"], ["tab  ⇧tab", "every control in turn"], ["g G  home end", "first / last"],
+  ["m  .", "the pane's menu"], ["r", "rename the pane"], ["x", "close the pane"],
+  ["k  ↑", "up to the tabs"], ["j  ↓", "down to the parked panes, then the pane"],
+  ["1 … 9", "select that tab"], ["n", "new tab"], ["esc  q", "back to the pane"], ["?", "keys"],
+];
+/** The shown tab's parked chips: the strip's third row. */
+export const PARKED_HELP = [
+  ["h l  ← →", "walk the chips"], ["⏎  space", "put the pane back"], ["tab  ⇧tab", "every control in turn"],
+  ["g G  home end", "first / last"], ["m  .", "the pane's menu"], ["x", "close the pane"],
+  ["k  ↑", "up to the pane's header"], ["j  ↓", "back to the pane"],
+  ["1 … 9", "select that tab"], ["n", "new tab"], ["esc  q", "back to the pane"], ["?", "keys"],
+];
+/** Every popup menu (popup.js): right-click menus, the git menu, these key lists. */
+export const MENU_HELP = [
+  ["j k  ↑ ↓", "move"], ["ctrl-n ctrl-p", "move"], ["tab  ⇧tab", "move"], ["home end", "first / last"],
+  ["⏎  space", "pick the row"], ["a row's letter", "pick that row"], ["esc  q", "close"],
 ];
 
 /** What a key event means in `keymap`, or null (not ours: let it go). Keys with

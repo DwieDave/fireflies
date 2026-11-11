@@ -146,7 +146,7 @@ function makeApp() {
 const key = (form: any, k: string, mods: any = {}) => form.key(k, { modifiers: mods }, cx);
 /** Typing into the focused text field (the Input stand-in fires change like the real one). */
 const type = (text: string) => { const i = focusedInput!; i.v = text; i.handlers.change?.({}, cx); };
-const at = (form: any) => form.fields[form.at].id;
+const at = (form: any) => form.stops()[form.at].id;
 
 beforeEach(() => { world = fresh(); work.length = 0; focusedInput = null; });
 
@@ -178,9 +178,13 @@ test("every field is reached by tab, typing goes in, pickers choose, enter revie
   const form = prs.form;
   await settle();
   const order: string[] = [];
-  for (let i = 0; i < form.fields.length; i++) { order.push(at(form)); key(form, "tab"); }
-  expect(order).toEqual(["base", "head", "title", "body", "draft", "reviewers", "assignees", "labels", "milestone", "push"]);
+  for (let i = 0; i < form.stops().length; i++) { order.push(at(form)); key(form, "tab"); }
+  expect(order).toEqual(["base", "head", "title", "body", "draft", "reviewers", "assignees", "labels", "milestone", "push", "form-review", "form-cancel"]);
   expect(at(form)).toBe("base"); // wraps
+  key(form, "tab", { shift: true });
+  expect(at(form)).toBe("form-cancel"); // and back
+  key(form, "tab", { shift: true });
+  expect(at(form)).toBe("form-review");
   key(form, "tab", { shift: true });
   expect(at(form)).toBe("push");
 
@@ -348,4 +352,124 @@ test("a ref whose file can't be dispatched says so and blocks the review", async
   expect(at(form)).toBe("ref");
   key(form, "escape");
   expect(actions.form).toBeNull();
+});
+
+test("new pull request, keyboard first: ← → change a choice, buttons are stops, the hint line names the keys", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  expect(at(form)).toBe("base"); // opens on its first field
+  // base is a choice: ← → step through the branches, wrapping.
+  expect(form.field("base").options().map((o: any) => o.value)).toEqual(["main", "dev"]);
+  key(form, "right");
+  expect(form.value("base")).toBe("dev");
+  key(form, "right");
+  expect(form.value("base")).toBe("main");
+  key(form, "left");
+  expect(form.value("base")).toBe("dev");
+  key(form, "left");
+  expect(at(form)).toBe("base"); // ← → never leave the field
+  expect(form.hints()).toEqual([["tab ⇧tab", "move"], ["← →", "change"], ["type", "filter"], ["enter", "review"], ["esc", "cancel"]]);
+  // ↓ ↑ walk the stops outside the body, as tab does.
+  key(form, "down"); key(form, "down");
+  expect(at(form)).toBe("title");
+  key(form, "down");
+  expect(at(form)).toBe("body");
+  expect(key(form, "down")).toBe("typing"); // the body keeps its lines
+  expect(form.hints().map((h: any) => h[0])).toEqual(["tab ⇧tab", "enter", "ctrl-enter", "esc"]); // enter: a new line
+  // The draft toggle: ← → and space flip it.
+  key(form, "tab");
+  key(form, "right");
+  expect(form.value("draft")).toBe(true);
+  key(form, "left");
+  expect(form.value("draft")).toBe(false);
+  // Review, then Cancel: the buttons are stops; enter presses the focused one.
+  form.go(form.stops().findIndex((s: any) => s.id === "form-review"));
+  expect(form.isAt("form-review")).toBe(true);
+  expect(form.hints()).toEqual([["tab ⇧tab", "move"], ["enter", "review"], ["esc", "cancel"]]);
+  key(form, "right");
+  expect(at(form)).toBe("form-cancel");
+  expect(form.hints()).toEqual([["tab ⇧tab", "move"], ["enter", "press"], ["ctrl-enter", "review"], ["esc", "cancel"]]);
+  key(form, "right");
+  expect(at(form)).toBe("form-review"); // along the row, wrapping
+  key(form, "space");
+  expect(form.stage).toBe("confirm");
+  // The review: Send has the keyboard; tab reaches Back, enter there goes back.
+  expect(form.confirmAt).toBe(0);
+  expect(form.hints()[0]).toEqual(["tab ⇧tab", "move"]);
+  key(form, "tab");
+  expect(form.confirmAt).toBe(1);
+  key(form, "tab");
+  expect(form.confirmAt).toBe(0); // wraps
+  key(form, "tab", { shift: true });
+  expect(form.confirmAt).toBe(1);
+  key(form, "enter");
+  expect(form.stage).toBe("edit");
+  expect(world.writes).toEqual([]);
+  // Enter on Cancel cancels the form; nothing was sent.
+  form.go(form.stops().findIndex((s: any) => s.id === "form-cancel"));
+  key(form, "enter");
+  expect(prs.form).toBeNull();
+  expect(world.writes).toEqual([]);
+});
+
+test("cmd-enter reviews from anywhere, sends from the review; cmd chords stay the app's", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  form.go(2); type("Title");
+  form.go(3);
+  expect(key(form, "c", { platform: true })).toBe(false); // copy: the app's
+  key(form, "enter", { platform: true });
+  expect(form.stage).toBe("confirm");
+  key(form, "tab"); // Back has the keyboard, the chord still sends
+  key(form, "enter", { control: true });
+  await settle();
+  expect(world.writes.map((w) => w.slice(0, 3))).toEqual([["git", "push", "--set-upstream"], ["gh", "pr", "create"]]);
+  expect(prs.form).toBeNull();
+});
+
+test("run workflow: ← → step the workflow's choices, tab wraps through Run and Cancel, esc cancels", async () => {
+  const app = makeApp();
+  app.tab = "actions";
+  const actions = new Actions(app, {});
+  app.tabObj = actions;
+  actions.runWorkflow(cx);
+  await settle();
+  const form = actions.form;
+  const ids = form.stops().map((s: any) => s.id);
+  expect(ids).toEqual(["workflow", "ref", "in:1:environment", "in:1:level", "in:1:dry", "in:1:count", "form-review", "form-cancel"]);
+  form.go(ids.indexOf("in:1:level"));
+  key(form, "right");
+  expect(form.value("in:1:level")).toBe("debug");
+  form.go(ids.indexOf("in:1:environment"));
+  key(form, "right");
+  expect(form.value("in:1:environment")).toBe("prod");
+  key(form, "tab", { shift: true }); key(form, "tab", { shift: true }); key(form, "tab", { shift: true });
+  expect(at(form)).toBe("form-cancel"); // back past the first field
+  key(form, "escape");
+  expect(actions.form).toBeNull();
+  expect(world.writes).toEqual([]);
+});
+
+test("cmd-enter in the body (the textarea types a new line and says submit): the line is taken back, the form reviews", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  form.go(2); type("T");
+  form.go(3); type("Body");
+  type("Bo\ndy"); // what the textarea's cmd-enter did
+  focusedInput!.handlers.submit({ secondary: true }, cx);
+  expect(form.value("body")).toBe("Body");
+  expect(form.stage).toBe("confirm");
+  expect(world.writes).toEqual([]);
 });

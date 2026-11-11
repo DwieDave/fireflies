@@ -3,7 +3,7 @@
 
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
-import { keys, props, closeOverlay, theme } from "herdr";
+import { keys, commands, props, closeOverlay, theme } from "herdr";
 
 const GROUPS = [
   ["spaces", /^space\./],
@@ -14,11 +14,13 @@ const GROUPS = [
   ["window", /./],
 ];
 
-function label(action) {
+/** An action in words: its command's own (commands() about, first sentence), else its name. */
+function label(action, about = new Map()) {
   if (action.startsWith("send:")) return "type " + JSON.stringify(action.slice(5));
   const [name, arg] = action.split(":");
-  const words = name.replace(/[._]/g, " ");
-  return arg ? `${words} ${arg}` : words;
+  const said = String(about.get(name) ?? "").split(/(?<=[.:;])\s|\s\(/)[0].replace(/[.:;]$/, "").trim();
+  const words = said || name.replace(/[._]/g, " ");
+  return arg ? `${words}${said ? ":" : ""} ${arg}` : words;
 }
 
 export default class Help extends View {
@@ -34,7 +36,8 @@ export default class Help extends View {
   render(cx) {
     const t = theme();
     const f = this.filter.toLowerCase();
-    const all = keys().filter((k) => !f || k.keys.includes(f) || label(k.action).includes(f));
+    const about = new Map(commands().map((c) => [c.name, c.about]));
+    const all = keys().filter((k) => !f || k.keys.includes(f) || label(k.action, about).toLowerCase().includes(f));
     const seen = new Set();
     const groups = GROUPS.map(([name, re]) => {
       const rows = all.filter((k) => !seen.has(k) && re.test(k.action) && (seen.add(k) || true));
@@ -81,7 +84,7 @@ export default class Help extends View {
                       .rounded(7)
                       .items_center()
                       .child(div().w(190).text_color(t.accent).child(k.keys + (k.section !== "global" ? `  (${k.section})` : "")))
-                      .child(div().text_color(t.foreground).child(label(k.action))),
+                      .child(div().text_color(t.foreground).child(label(k.action, about))),
                   ),
                 ),
             ),

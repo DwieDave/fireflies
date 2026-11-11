@@ -21,7 +21,9 @@
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
 //   p  into a pane   P  park   o  out of Herdr   x q  close
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
-// The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close.
+//   ?    these keys (KEYS), as a popup: the video is a native view, drawn over
+//        anything in the window; the bar's ? (before ✕) opens it too
+// The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close. The keys popup: esc q ? close.
 //
 // Opened by nocturne-browser (`openOverlay` WINDOW below, props { of: the
 // browser's web view key }). As a pane (◧): props { of, pane: true }; the pane
@@ -64,8 +66,13 @@ const CONTROLS = [
   { id: "pane", keep: 7, glyph: "◧", name: "Into a pane", window: true },
   { id: "park", keep: 4, glyph: "⤓", name: "Park as a chip" },
   { id: "out", keep: 8, glyph: "⇱", name: "Out of Herdr" },
+  { id: "keys", keep: 9, glyph: "?", name: "Keys" },
   { id: "close", keep: 1, glyph: "✕", name: "Close" },
 ];
+
+/** What ? lists: every key keyControl() takes, ? keys last. */
+export const KEYS = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
+  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Herdr"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
 const available = () => typeof herdr.nativeView?.new === "function";
 const val = (v, s) => (typeof v === "function" ? v(s) : v);
@@ -95,7 +102,7 @@ export function keyControl(e) {
   const c = e?.key_char;
   const k = typeof c === "string" && c.length === 1 && c.trim() ? c : String(e?.key ?? "");
   return { space: "toggle", k: "toggle", left: "rewind", h: "rewind", right: "forward", l: "forward", m: "mute", b: "back",
-    p: "pane", P: "park", o: "out", x: "close", q: "close", escape: "unfocus" }[k] ?? null;
+    p: "pane", P: "park", o: "out", x: "close", q: "close", escape: "unfocus", "?": "keys" }[k] ?? null;
 }
 
 /** The ⋯ menu's cursor after a key (null: not a moving key). */
@@ -107,7 +114,8 @@ export function menuMove(k, at, n) {
 export default class Pip extends View {
   init(_p, cx) {
     this.menu = props()?.menu ?? null;
-    if (this.menu) return this.initMenu(cx);
+    this.keysList = Boolean(props()?.keys);
+    if (this.menu || this.keysList) return this.initMenu(cx);
     this.handle = cx.focus_handle();
     this.playing = true;
     this.muted = false;
@@ -178,6 +186,12 @@ export default class Pip extends View {
     else if (c === "out") this.popOut();
     else if (c === "pane" && !this.inPane) this.intoPane(false);
     else if (c === "park" && !this.parks) this.park();
+    else if (c === "keys") this.openKeys();
+  }
+
+  /** ?: the keys, a popup over the video. */
+  openKeys() {
+    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 300, height: KEYS.length * 20 + 44, props: { keys: true } });
   }
 
   /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
@@ -339,6 +353,7 @@ export default class Pip extends View {
 
   render() {
     const t = theme();
+    if (this.keysList) return this.renderKeys(t);
     if (this.menu) return this.renderMenu(t);
     const of = props()?.of;
     const body = available() && of
@@ -364,6 +379,19 @@ export default class Pip extends View {
     closeOverlay(props()?.overlay);
     // To the player (commands reach the shown copies; this one ignores them).
     run(`nocturne-pip.${c.id}`);
+  }
+
+  renderKeys(t) {
+    return v_flex().id("pip-keys").size_full().bg(t.background).border(1).border_color(t.ansi0).px(12).py(8).gap(0).text_size(11)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => {
+        const k = e.key;
+        if (k === "escape" || k === "q" || e.key_char === "?") { cx.stop_propagation(); closeOverlay(props()?.overlay); }
+      })
+      .child(div().pb(6).text_color(t.foreground).child("picture in picture keys"))
+      .children(KEYS.map(([k, what], i) => h_flex().id(`pk-${i}`).h(20).gap(10).items_center()
+        .child(div().w(70).flex_none().text_color(t.accent).child(k))
+        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(what))));
   }
 
   renderMenu(t) {

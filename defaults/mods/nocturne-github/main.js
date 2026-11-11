@@ -44,6 +44,7 @@ import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
+import { bindTab, tabActions } from "./form-keys.js";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -101,6 +102,7 @@ export default class GitHub extends View {
     this.checked = false; // the cache was looked at
     this.dirty = false; this.savedAt = 0; this.saving = null;
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     this.handle.focus();
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer && !this.shown().form) this.handle.focus(); });
@@ -115,6 +117,7 @@ export default class GitHub extends View {
         const c = String(await nextCommand()).replace(/^nocturne-github\./, "");
         if (c === "focus") this.handle.focus();
         else if (c === "refresh") this.refresh(cx, true);
+        else if (c === "keys") this.help = !this.help;
         else if (c === "fork") this.switchFork(cx);
         else if (c === "prs" || c === "actions" || c === "projects") this.setTab(c, cx);
         else if (c === "diff" && this.repo && this.prs.current()) this.openDiff(this.prs.current().number);
@@ -521,7 +524,7 @@ export default class GitHub extends View {
     const fork = this.tab === "projects" ? "F" : "p F";
     const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],
       ...(this.repo?.parent ? [[fork, `the parent, ${this.repo.parent}`]] : this.repo?.child ? [[fork, `back to the fork, ${this.repo.child}`]] : []),
-      ["?", "these keys"], ["esc q", "close (from the top)"]];
+      ["esc q", "close (from the top)"], ["?", "keys"]];
     const tab = this.tab === "prs" ? Prs.help() : this.tab === "projects" ? Projects.help() : Actions.help();
     const col = (title, list) => v_flex().gap(3).min_w(260)
       .child(div().pb(4).text_color(t.ansi8).child(title))
@@ -579,6 +582,7 @@ export default class GitHub extends View {
     return v_flex().id("nocturne-github").size_full().bg(t.background).border(1).border_color(t.ansi8)
       .track_focus(this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
         if (Math.abs(size.width - this.size.width) > 1 || Math.abs(size.height - this.size.height) > 1) { this.size = size; cx.notify(); }
@@ -600,6 +604,6 @@ export default class GitHub extends View {
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(Boolean(this.picker), (el) => el.child(this.pickerPanel(t))))
       .when(Boolean(this.confirm), (el) => el.child(this.confirmBar(t)))
-      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"]], right));
+      .child(hints(t, this.shown().form && !this.picker && !this.help ? this.shown().form.hints() : this.picker ? [["j/k", "move"], ["enter", "open"], ["esc", "close"]] : this.help ? [["esc", "close keys"], ["?", "keys"]] : this.state === "ready" ? this.shown().hints() : [["esc", "close"], ["?", "keys"]], right));
   }
 }

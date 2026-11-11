@@ -55,6 +55,12 @@ import {
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
+import { formKey, bindTab, tabActions } from "./form-keys.js";
+
+// The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
+// and, replacing, the "with" field, replace, all.
+const FIND_STOPS = [{ id: "find", kind: "text" }, { id: "case", kind: "toggle" }, { id: "prev", kind: "button" }, { id: "next", kind: "button", submit: true }];
+const REPLACE_STOPS = [...FIND_STOPS, { id: "with", kind: "text" }, { id: "replace-one", kind: "button" }, { id: "replace-all", kind: "button" }];
 
 const MOD = "nocturne-editor";
 // Each editor's file name by slot, for its pane header (nocturne/header.js).
@@ -132,6 +138,7 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.handle = cx.focus_handle();
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     // Vim: the pane's own switch, else settings.json editor.vim (default on).
     const leader = String(settings()?.editor?.leader ?? "space");
     this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
@@ -177,6 +184,9 @@ export default class EditorPane extends View {
     this.findInput.on("submit", (e, cx) => this.step(e?.shift ? -1 : 1, cx));
     this.replaceInput = InputState.new({ placeholder: "replace with" });
     this.replaceInput.on("submit", (e, cx) => this.replace(!!e?.secondary, cx));
+    // A click into a field moves the find line's stop with it.
+    this.findInput.on("focus", () => { this.findAt = "find"; });
+    this.replaceInput.on("focus", () => { this.findAt = "with"; });
     this.lineInput = InputState.new({ placeholder: "line or line:column" });
     this.lineInput.on("submit", (_e, cx) => this.goLine(cx));
 
@@ -458,6 +468,7 @@ export default class EditorPane extends View {
 
   openFind(replace) {
     this.mode = replace ? "replace" : "find";
+    this.findAt = "find";
     const sel = this.editor.selection();
     if (sel.text && !sel.text.includes("\n")) this.findInput.set_value(sel.text);
     this.findInput.focus();
@@ -478,6 +489,35 @@ export default class EditorPane extends View {
   replace(all, cx) {
     if (!this.findInput.value()) return;
     this.find = this.editor.replace(this.replaceInput.value(), all);
+    cx.notify();
+  }
+
+  /** The find line's keyboard to stop `id`: a field's input, or the line itself for a chip. */
+  findGo(id) {
+    this.findAt = id;
+    if (id === "find") this.findInput.focus();
+    else if (id === "with") this.replaceInput.focus();
+    else this.handle.focus();
+  }
+
+  /** A key on the find line, as every form takes them (form-keys.js): tab /
+   *  shift-tab walk its fields and chips, wrapping; space / enter press a
+   *  chip (Aa flips); a field keeps its own enter (next, or replace). */
+  findKey(e, cx) {
+    if (this.mode !== "find" && this.mode !== "replace") return;
+    const stops = this.mode === "replace" ? REPLACE_STOPS : FIND_STOPS;
+    const i = Math.max(0, stops.findIndex((s) => s.id === this.findAt));
+    const a = formKey(stops, i, e.key, e.modifiers ?? {}, e.key_char);
+    if (!a || a.act === "type" || (a.act === "submit" && stops[i].kind === "text")) return;
+    const id = stops[i].id;
+    if (a.act === "move") this.findGo(stops[a.to].id);
+    else if (a.act === "cancel") this.closeFind(cx);
+    else if (a.act === "flip" || (a.act === "press" && id === "case")) { this.caseSensitive = !this.caseSensitive; this.search(cx); }
+    else if (a.act === "press" && id === "prev") this.step(-1, cx);
+    else if (a.act === "press" && (id === "replace-one" || id === "replace-all")) this.replace(id === "replace-all", cx);
+    else if (a.act === "press" || a.act === "submit") this.step(1, cx);
+    else if (a.act !== "none") return;
+    cx.stop_propagation();
     cx.notify();
   }
 
@@ -918,30 +958,37 @@ export default class EditorPane extends View {
   }
 
   findLine(t) {
+    // A chip with the keyboard wears the dialogs' ring: a band, an accent edge.
     const chip = (id, label, on, go) => div().id(id).flex_none().h(18).px(6).flex().items_center().border(1)
-      .border_color(on ? t.accent : t.ansi0).text_color(on ? t.accent : t.muted)
+      .border_color(on || this.findAt === id ? t.accent : t.ansi0).text_color(on ? t.accent : this.findAt === id ? t.foreground : t.muted)
+      .when(this.findAt === id, (el) => el.bg(t.ansi0))
       .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { go(cx); cx.notify(); }).child(label);
     const hint = (k, what) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what));
     const line = this.mode === "line";
     const count = this.find.count ? `${(this.find.current ?? 0) + 1} / ${this.find.count}` : this.findInput.value() ? "none" : "";
     return v_flex().id("editor-find").relative().flex_none()
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.findKey(e, cx))
+      .map((el) => tabActions(el, (e, cx) => this.findKey(e, cx)))
       .child(h_flex().h(FIND).px(12).gap(10).items_center()
         .child(div().flex_none().text_color(t.accent).child(line ? "line" : "find"))
         .child(div().w(line ? 160 : 240).flex_none().h(20).border_b(1).border_color(t.accent)
           .child(Input.new(line ? this.lineInput : this.findInput).size_full().text_size(12).font_family(settings()?.font_family || "JetBrains Mono")))
         .when(!line, (el) => el
           .child(div().flex_none().text_color(this.find.count ? t.foreground : t.dim).child(count))
-          .child(chip("find-case", "Aa", this.caseSensitive, (cx) => { this.caseSensitive = !this.caseSensitive; this.search(cx); }))
-          .child(chip("find-prev", "‹", false, (cx) => this.step(-1, cx)))
-          .child(chip("find-next", "›", false, (cx) => this.step(1, cx))))
+          .child(chip("case", "Aa", this.caseSensitive, (cx) => { this.caseSensitive = !this.caseSensitive; this.search(cx); }))
+          .child(chip("prev", "‹", false, (cx) => this.step(-1, cx)))
+          .child(chip("next", "›", false, (cx) => this.step(1, cx))))
         .child(div().flex_1())
-        .when(this.size.width > 560, (el) => el.child(line ? hint("enter", "go") : hint("enter", "next")).child(line ? div() : hint("shift-enter", "prev")).child(hint("esc", "close"))))
+        .when(this.size.width > 560, (el) => el.child(line ? hint("enter", "go") : hint("enter", "next")).child(line ? div() : hint("shift-enter", "prev")).child(line ? div() : hint("tab ⇧tab", "move")).child(hint("esc", "close"))))
       .when(this.mode === "replace", (el) => el.child(h_flex().h(FIND).px(12).gap(10).items_center()
         .child(div().flex_none().text_color(t.accent).child("with"))
-        .child(div().w(240).flex_none().h(20).border_b(1).border_color(t.ansi0)
+        .child(div().w(240).flex_none().h(20).border_b(1).border_color(this.findAt === "with" ? t.accent : t.ansi0)
           .child(Input.new(this.replaceInput).size_full().text_size(12).font_family(settings()?.font_family || "JetBrains Mono")))
         .child(chip("replace-one", "replace", false, (cx) => this.replace(false, cx)))
-        .child(chip("replace-all", "all", false, (cx) => this.replace(true, cx)))))
+        .child(chip("replace-all", "all", false, (cx) => this.replace(true, cx)))
+        .child(div().flex_1())
+        .when(this.size.width > 560, (el) => el.child(hint("enter", "replace")).child(hint(appWindow()?.platform === "macos" ? "⌘enter" : "ctrl-enter", "all")))))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
 

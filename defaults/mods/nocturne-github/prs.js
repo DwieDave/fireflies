@@ -294,8 +294,8 @@ export default class Prs {
 
   static help() {
     return [
-      ["j k ↓ ↑", "move in the panel"], ["h l ← → tab ⇧tab", "previous / next panel"], ["g G", "first / last"],
-      ["J K pgup pgdn", "scroll the pull request"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"], ["n", "new pull request"],
+      ["j k ↓ ↑", "move in the panel"], ["h l ← → tab ⇧tab", "previous / next panel"], ["g G home end", "first / last"],
+      ["J K pgup pgdn ctrl-d ctrl-u", "scroll the pull request"], ["esc", "back to the list"], ["enter", "read it / open the check's run"], ["f", "open · mine · to review"], ["n", "new pull request"],
       ["d", "its diff (Git's review)"], ["c", "comment"], ["C", "check it out here"], ["a", "its Actions runs"],
       ["L", "a link in it"], ["o", "in the browser"], ["r", "refresh"],
     ];

@@ -2,7 +2,7 @@
 // screens and the other dialogs, through their own render and key handlers
 // (dialog-stubs.ts stands in for herdr and gpui). Its own bun process.
 import { test, expect, beforeEach } from "bun:test";
-import { state, find, ringed, cx, press, texts } from "./dialog-stubs.ts";
+import { state, find, ringed, cx, press, texts, act } from "./dialog-stubs.ts";
 
 const Settings = (await import("../defaults/frame/settings/main.js")).default;
 
@@ -54,6 +54,18 @@ test("settings: tab walks the page's controls in order and wraps through the rai
   expect(s.zone).toBe("nav");
   press(root, "shift-tab");
   expect([s.zone, s.focus]).toEqual(["body", "st-feedback"]);
+});
+
+test("settings: tab arrives as the Form context's bound action (the root binds tab to move the focus)", () => {
+  const s = settings("editor");
+  const root = s.render(cx());
+  expect(root.calls.key_context).toEqual(["Form"]);
+  act(root, "form::tab");
+  expect([s.zone, s.focus]).toEqual(["body", "st-vim-on"]);
+  act(root, "form::tab_back");
+  expect(s.zone).toBe("nav"); // back past the first control: the rail
+  act(root, "form::tab_back");
+  expect([s.zone, s.focus]).toEqual(["body", "st-feedback"]); // and around
 });
 
 test("settings: enter presses the focused control, ← goes back to the rail", () => {
@@ -254,12 +266,22 @@ test("keys screen: ↑↓ walk the rows, the list scrolls past the eyebrows, esc
   state.props = { overlay: "k" };
   const k: any = new Keys();
   k.init({}, cx());
-  const root = k.render();
-  press(root, "down"); press(root, "ctrl-n");
-  expect(k.at).toBe(2);
-  // tabs: eyebrow 0, rows 1-2; panes: eyebrow 3, row 4.
-  expect(k.scroll.items.at(-1)).toBe(4);
-  press(root, "pageup");
+  let root = k.render();
+  // keyboard focus comes first (its blocks), then tabs: walk to cmd-d, under the panes eyebrow.
+  const want = k.rows.findIndex((r: any) => r.x.k?.keys === "cmd-d");
+  for (let i = 0; i < want - 1; i++) press(root, "down");
+  press(root, "ctrl-n");
+  expect(k.at).toBe(want);
+  expect(k.scroll.items.at(-1)).toBe(k.rows[want].child);
+  expect(texts(root)).toContain("Split the pane: a terminal to the right");
+  // enter on a block unfolds its keys under it, again folds them.
+  k.at = k.rows.findIndex((r: any) => r.x.surface === "sidebar");
+  press(root, "enter");
+  root = k.render();
+  expect(texts(root)).toContain("new worktree");
+  press(root, "enter");
+  expect(texts(k.render())).not.toContain("new worktree");
+  press(root, "pageup"); press(root, "pageup"); press(root, "pageup");
   expect(k.at).toBe(0);
   expect(press(root, "j").stopped).toBe(0); // typing filters
   const c = press(root, "escape");

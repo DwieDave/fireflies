@@ -8,12 +8,15 @@ import { mock } from "bun:test";
 export class Element {
   nodes: any[] = [];
   calls: Record<string, any[]> = {};
+  actions: Record<string, any> = {}; // every on_action handler, by action name
   constructor() {
     const proxy: Element = new Proxy(this, {
       get: (target, key: string) => key in target ? (target as any)[key] : (...args: any[]) => {
         if (key === "child") target.nodes.push(args[0]);
         else if (key === "children") target.nodes.push(...args[0]);
         else if (key === "when") { if (args[0]) return args[1](proxy) ?? proxy; }
+        else if (key === "map") return args[0](proxy) ?? proxy;
+        else if (key === "on_action") { target.actions[args[0]] = args[1]; target.calls[key] = args; }
         else target.calls[key] = args;
         return proxy;
       },
@@ -61,7 +64,7 @@ export const state = {
 class Input { value_ = ""; focused = 0; handlers: Record<string, any> = {}; constructor(o: any = {}) { this.value_ = o.value ?? ""; }
   static new(o?: any) { return new Input(o); }
   on(ev: string, f: any) { this.handlers[ev] = f; } focus() { this.focused++; } value() { return this.value_; }
-  set_value(v: string) { this.value_ = v; } set_selected_range() {} }
+  set_value(v: string) { this.value_ = v; } set_selected_range() {} release() {} set_auto_grow() {} }
 class Scroll { items: number[] = []; static new() { return new Scroll(); } scroll_to_item(i: number) { this.items.push(i); } }
 
 mock.module("gpui-kit", () => ({
@@ -73,6 +76,7 @@ mock.module("gpui-base", () => ({
   v_flex: el, h_flex: el, InputState: Input, Input: { new: el }, ScrollHandle: Scroll, VirtualListScrollHandle: Scroll,
   Scrollbar: { vertical: el }, Popup: { new: (_id: string, trigger: any) => { const p = el(); p.nodes.push(trigger); return p; } },
   Checkbox: el, Switch: el, Button: el, TextView: { html: el, markdown: el },
+  TextareaState: Input, Textarea: { new: el }, EditorState: Input, Editor: { new: el },
 }));
 mock.module("herdr", () => ({
   props: () => state.props, theme: () => theme, themes: () => [{ name: "b", colors: theme }, { name: "a", light: true, colors: theme }],
@@ -85,6 +89,9 @@ mock.module("herdr", () => ({
   updates: () => ({ app: { version: "1.0", updates: true }, core: { version: "1.0" }, checks: true, checked: 1, notes: [] }),
   appHome: () => "/tmp/none", home: () => "/tmp", readTextFile: async () => null, writeTextFile: async () => {}, playSound: () => {},
   presentUpdateNotes: () => {}, knownAgents: async () => [], nextCommand: () => new Promise(() => {}), exec: async () => ({ code: 1 }),
+  feedbackIssue: (title: string, message: string) => ({ title: title || message.split("\n")[0], body: message, url: `https://github.com/DwieDave/fireflies/issues/new?title=${encodeURIComponent(title || message.split("\n")[0])}` }),
+  pickFolder: async () => null, watchFolder: () => {}, languageOf: () => null, highlight: () => [], lspStart: async () => null, lspRequest: async () => null,
+  lspNotify: () => {}, lspNextMessage: () => new Promise(() => {}), lspRelease: () => {}, setUnsaved: () => {}, notify: () => {},
 }));
 
 /** A context: notify / stop counted, timers and spawns ignored. */
@@ -96,7 +103,7 @@ export function cx() {
   c.timer = { after() {}, every() {} };
   c.spawn = () => {};
   c.write_to_clipboard = (s: string) => { c.clipboard = s; };
-  c.bind_keys = () => {};
+  c.bind_keys = (b: any[]) => { (globalThis as any).boundKeys = [...((globalThis as any).boundKeys ?? []), ...b]; return b.length; };
   return c;
 }
 
@@ -107,6 +114,14 @@ export function key(name: string) {
   const has = (m: string) => parts.includes(m);
   return { key: k, keystroke: name, key_char: k.length === 1 ? k : null,
     modifiers: { shift: has("shift"), control: has("ctrl"), alt: has("alt"), platform: has("cmd") } };
+}
+
+/** A bound action on the root of a render (form-keys.js binds tab / shift-tab to some). */
+export function act(root: any, name: string, c = cx()) {
+  const f = root.actions?.[name];
+  if (!f) throw new Error(`no ${name} action on the root (has ${Object.keys(root.actions ?? {}).join(", ")})`);
+  f({}, c);
+  return c;
 }
 
 /** The root's key handler of a render. */

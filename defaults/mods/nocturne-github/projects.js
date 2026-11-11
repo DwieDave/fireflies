@@ -541,6 +541,13 @@ export default class Projects {
     if (!item) { this.menu = null; return true; }
     const fields = m.fields.map((id) => b.fields.find((f) => f.id === id)).filter(Boolean);
     const f = fields[m.at], opts = f ? this.options(b, item, f) : [];
+    // tab / shift-tab: the next / previous field, wrapping, as in every form (form-keys.js).
+    if (k === "tab" || k === "shift-tab") {
+      const by = k === "tab" && !e?.modifiers?.shift ? 1 : -1;
+      m.at = (((m.at + by) % fields.length) + fields.length) % fields.length;
+      m.side = "fields";
+      return true;
+    }
     if (m.side === "fields") {
       if (k === "j" || k === "down") m.at = Math.min(fields.length - 1, m.at + 1);
       else if (k === "k" || k === "up") m.at = Math.max(0, m.at - 1);
@@ -612,7 +619,7 @@ export default class Projects {
   hints() {
     if (this.typing === "filter") return [["enter", "apply"], ["esc", "leave"], ["↓", "board"]];
     if (this.typing) return [["enter", "save"], ["esc", "cancel"]];
-    if (this.menu?.kind === "fields") return this.menu.side === "fields" ? [["j/k", "field"], ["l enter", "values"], ["esc", "close"]] : [["j/k", "value"], ["enter", "set"], ["h", "fields"], ["esc", "close"]];
+    if (this.menu?.kind === "fields") return this.menu.side === "fields" ? [["tab ⇧tab", "field"], ["l enter", "values"], ["esc", "close"]] : [["j/k", "value"], ["enter", "set"], ["tab ⇧tab", "field"], ["h", "fields"], ["esc", "close"]];
     if (this.menu) return [["j/k", "move"], ["enter", "choose"], ["esc", "close"]];
     if (this.carrying) return [["h/l", "column"], ["j/k", "move it"], ["enter", "drop"], ["esc", "put back"]];
     if (this.focus === "detail") return [["j/k", "scroll"], ["e", "edit fields"], ["o", "on GitHub"], ["h", "board"], ["esc", "close"], ["?", "keys"]];
@@ -623,7 +630,8 @@ export default class Projects {
 
   static help() {
     return [
-      ["h l ← →", "column"], ["j k ↓ ↑ g G", "card / first / last"], ["enter", "the card's detail (again: into it)"], ["space m", "carry it: hjkl moves, enter drops, esc puts back"],
+      ["h l ← →", "column"], ["j k ↓ ↑ g G home end", "card / first / last"], ["J K pgdn pgup", "scroll the card's detail"],
+      ["tab ⇧tab", "to the detail and back"], ["esc", "close the detail · clear the filter"], ["enter", "the card's detail (again: into it)"], ["space m", "carry it: hjkl moves, enter drops, esc puts back"],
       ["e", "edit its fields"], ["a", "add a draft to the column"], ["i", "make the draft an issue"], ["x", "archive (asks)"],
       ["/", "filter: assignee: label: status: is: repo: no: words"], ["v", "the project's views"], ["p", "projects (repo's, owner's)"],
       ["-", "fold the column"], ["z", "fold the swimlane"], ["w", "the column's limit"], ["L", "a link in the open card"], ["o", "on GitHub"], ["r", "refresh"],

@@ -49,8 +49,10 @@ const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
 const SEARCH = "https://duckduckgo.com/?q=";
 // What `?` lists.
-const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /", "address"], ["H L", "back / forward"], ["r", "reload"],
-  ["+ - 0", "zoom"], ["p", "picture in picture"], ["d", "inspector"], ["O", "system browser"], ["tab ⇧tab", "buttons"], ["?", "keys"]];
+// Every key key() and barKey() take (the cmd ones are keys.json's mod:nocturne-browser), ? keys last.
+export const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /  ⌘l ⌘p", "address"], ["H L  ⌘[ ⌘]", "back / forward"],
+  ["r  ⌘r", "reload"], ["+ - 0", "zoom"], ["p", "picture in picture"], ["d  ⌘⌥i", "inspector"], ["O", "system browser"],
+  ["tab ⇧tab", "buttons (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 /** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
 // The copy that last had the keyboard or a click: it alone takes broadcast commands.
@@ -360,7 +362,8 @@ export default class Browser extends View {
   }
 
   command(c, cx) {
-    if (c === "url") this.edit();
+    if (c === "keys") this.keysShown = !this.keysShown;
+    else if (c === "url") this.edit();
     else if (c === "inspect") { if (this.start) this.inspector(cx); }
     else if (c === "reload") this.call(this.page.loading ? "browser.stop" : "browser.reload");
     else if (c === "back") this.call("browser.back");

@@ -4,9 +4,12 @@
 //   requests wait   a blinking pink pip and how many permissions and
 //                   questions wait, in a filled chip; agents that need a
 //                   look (an error, waiting for input) as a dim "+n" beside it
-// Click (or nocturne-notifications.open) opens the overview. Nocturne's tab
-// strip walks to it with the keyboard (its row's last control): a blue ring
-// while its cursor is here (shared CHROME), enter opens the overview.
+// Click (or nocturne-notifications.open) opens the overview, hanging under
+// the bell like the script runner's deck under ▶; again closes it, and the
+// bell is lit (a dithered band, a blue foot) while it's open. A toast's
+// request for one terminal opens it on that one. Nocturne's tab strip walks
+// to it with the keyboard (its row's last control): a blue ring while its
+// cursor is here (shared CHROME), enter opens or closes the overview.
 //
 // The bell's block is as wide as the bell plus END: it ends where the panes
 // below end, with no blank after it. It sizes its own block (layout.resize)
@@ -17,7 +20,7 @@ import { h_flex } from "gpui-base";
 import { theme, terminals, nextCommand, shared, keys, layout, run, settings } from "herdr";
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
-import { openOverview } from "./open.js";
+import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.js";
 import { dither, pip, stop } from "./kit.js";
 
 const POLL = 1500;
@@ -60,9 +63,14 @@ export default class Bell {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-notifications\./, "");
         if (c === "open") {
-          // A toast asks for one terminal's request through shared(OPEN), fresh.
+          // A toast asks for one terminal's request through shared(OPEN),
+          // fresh and once: that opens (or retargets) the overview; else open
+          // toggles it.
           const o = shared(OPEN);
-          openOverview(o && Date.now() - (o.at ?? 0) < 5000 ? o.terminal : null);
+          if (o?.terminal && o.at !== this.asked && Date.now() - (o.at ?? 0) < 5000) {
+            this.asked = o.at;
+            openOverview(o.terminal);
+          } else toggleOverview();
         } else if (c === "refresh") this.refresh(cx);
         cx.notify();
       }
@@ -85,15 +93,24 @@ export default class Bell {
     const key = shortcut();
     const tip = (parts.length ? `Waiting on you: ${parts.join(" · ")}` : "Nothing waits on you") + (key ? ` (${key})` : "");
     const ring = shared(CHROME)?.region === "bell";
+    const open = Boolean(overviewOpen());
+    // Where a drop-down opened by a key goes (open.js overviewPlace).
+    try { noteWindow(window.viewport_size?.()); } catch { /* not drawing: the last size stays */ }
     return h_flex().id("notify-bell").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
       // The tab strip's horizon continues under the bell.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
-      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(t.muted).cursor_pointer()
+      .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(open ? t.foreground : t.muted).cursor_pointer()
         .on_size_change((size) => fit(size.width))
         .hover((s) => s.bg(t.ansi0).text_color(t.foreground))
-        .tooltip(tip)
-        .on_mouse_down("left", stop)
-        .on_click(() => openOverview())
+        // No tooltip while open: it would sit on the drop-down.
+        .when(!open, (el) => el.tooltip(tip))
+        // As the strip's buttons (nocturne/tabs.js tool): the click goes by
+        // whether the bell was lit when pressed, since the press itself
+        // closes an open drop-down before the click comes.
+        .on_mouse_down("left", (e, cx) => { stop(e, cx); this.press = { e, open }; })
+        .on_click(() => toggleOverview({ press: this.press?.e, wasOpen: Boolean(this.press?.open) }))
+        // Open: the strip's open look, a dithered band and a blue foot.
+        .when(open, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
         .when(c.needs > 0, (el) => el
           .child(pip(t.blocked, 6, true))
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))

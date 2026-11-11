@@ -16,6 +16,10 @@
 //   folder        inline; attaches the space to another folder (space.folder)
 //   delete        ends its terminals and agents (asks first, inline, saying
 //                 how many); it stays in Herdr's recent spaces
+// The inline forms (new, rename, folder, delete) take keys as every form does
+// (form-keys.js): tab / shift-tab walk name → folder → browse → esc (delete:
+// delete ↔ keep), wrapping; the focused chip wears the blue ring; enter in a
+// field saves (cmd-enter from anywhere), enter / space press a chip, esc cancels.
 // The menu asks through shared(EDIT_SPACE); on the folded rail Herdr's own
 // (Nocturne-skinned) prompt and confirm dialogs, and the folder picker, do it instead.
 
@@ -24,6 +28,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared } from "herdr";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
+import { formKey } from "./form-keys.js";
 import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -37,6 +42,7 @@ export default class Spaces {
   init(cx) {
     this.mode = null; // null | { kind: "new" } | { kind: "rename" | "folder" | "delete", s }
     this.error = ""; // why the last new / folder didn't go
+    this.at = null; // the inline form's stop with the keyboard (stops())
     this.input = InputState.new({ placeholder: "name" });
     this.input.on("submit", (_e, cx) => this.submit(cx));
     this.folderInput = InputState.new({ placeholder: "folder (empty: ~)" });
@@ -158,6 +164,7 @@ export default class Spaces {
     const was = this.mode;
     this.mode = mode;
     this.error = "";
+    this.at = this.stops()[0]?.id ?? null;
     if (was && !mode) this.onDone?.(cx);
     if (mode?.kind === "new" || mode?.kind === "rename") {
       this.input.set_value(mode.kind === "rename" && mode.s.named ? mode.s.name : "");
@@ -218,17 +225,60 @@ export default class Spaces {
     this.start(null, cx);
   }
 
-  /** While a delete asks (inline): y / enter deletes, n / esc keeps. True when the key was its. */
+  /** The inline form's stops in tab order (form-keys.js). */
+  stops() {
+    const k = this.mode?.kind;
+    if (k === "new") return [{ id: "name", kind: "text" }, { id: "folder", kind: "text" }, { id: "browse", kind: "button" }, { id: "cancel", kind: "button" }];
+    if (k === "folder") return [{ id: "folder", kind: "text" }, { id: "browse", kind: "button" }, { id: "cancel", kind: "button" }];
+    if (k === "rename") return [{ id: "name", kind: "text" }, { id: "cancel", kind: "button" }];
+    if (k === "delete") return [{ id: "go", kind: "button", submit: true }, { id: "keep", kind: "button" }];
+    return [];
+  }
+
+  /** The keyboard to stop `id`: a field's input, or the sidebar (focusHost) for a chip. */
+  goStop(id) {
+    this.at = id;
+    if (id === "name") this.input.focus();
+    else if (id === "folder") this.folderInput.focus();
+    else this.focusHost?.();
+  }
+
+  /** Tab / shift-tab in a field (inline.js field). */
+  tab(back, cx) {
+    const stops = this.stops(), i = stops.findIndex((s) => s.id === this.at);
+    this.goStop(stops[((i + (back ? -1 : 1)) % stops.length + stops.length) % stops.length].id);
+    cx?.notify?.();
+  }
+
+  /** A key while an inline form is open (a field, or a chip with the
+   *  keyboard): true when it was the form's. A delete: y deletes, n / q keep. */
   confirmKey(e, cx) {
-    if (this.mode?.kind !== "delete") return false;
-    const k = e.key, c = e.key_char;
-    if (k === "enter" || c === "y") this.remove(this.mode.s, cx);
-    else if (k === "escape" || c === "n" || c === "q") this.start(null, cx);
-    else return false;
+    const stops = this.stops();
+    if (!stops.length) return false;
+    const m = e.modifiers ?? {}, c = e.key_char;
+    const del = this.mode.kind === "delete";
+    if (del && !m.platform && !m.control && (c === "y" || c === "n" || c === "q")) {
+      if (c === "y") this.remove(this.mode.s, cx); else this.start(null, cx);
+      return true;
+    }
+    const i = Math.max(0, stops.findIndex((s) => s.id === this.at));
+    const a = formKey(stops, i, e.key, m, c);
+    // A field's own keys; its plain enter is the input's submit.
+    if (!a || a.act === "type" || (a.act === "submit" && stops[i].kind === "text" && !m.platform && !m.control)) return false;
+    const id = stops[i].id;
+    if (a.act === "move") this.goStop(stops[a.to].id);
+    else if (a.act === "cancel" || (a.act === "press" && (id === "cancel" || id === "keep"))) this.start(null, cx);
+    else if (a.act === "press" && id === "browse") this.pick(cx);
+    else if (a.act === "submit" || a.act === "press") del ? this.remove(this.mode.s, cx) : this.submit(cx);
     return true;
   }
 
   // ---- parts
+
+  /** An inline form's chip, ringed while the keyboard is on it (stop `stop`). */
+  chipAt(t, stop, id, label, action) {
+    return navRing(t, chip(t, id, label, action), this.at === stop);
+  }
 
   /** A worktree space's indent: a faint guide line, then the row's own padding. */
   indent(t, depth) {
@@ -245,8 +295,8 @@ export default class Spaces {
       return h_flex().id(id).h(24).px(16).gap(8).items_center()
         .when(depth > 0, (el) => el.child(this.indent(t, depth)))
         .child(pip(t, s.status))
-        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx)))
-        .child(chip(t, `${id}-cancel`, "esc", (cx) => this.start(null, cx)));
+        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
+        .child(this.chipAt(t, "cancel", `${id}-cancel`, "esc", (cx) => this.start(null, cx)));
     }
     if (m?.kind === "folder") {
       return v_flex().id(id).px(16).gap(2)
@@ -254,9 +304,9 @@ export default class Spaces {
           .when(depth > 0, (el) => el.child(this.indent(t, depth)))
           .child(pip(t, s.status))
           .child(div().min_w(0).max_w(90).truncate().text_size(11).text_color(t.muted).child(s.name))
-          .child(field(t, "space-folder-input", this.folderInput, (cx) => this.start(null, cx)))
-          .child(chip(t, `${id}-browse`, "browse", (cx) => this.pick(cx)))
-          .child(chip(t, `${id}-cancel`, "esc", (cx) => this.start(null, cx))))
+          .child(field(t, "space-folder-input", this.folderInput, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
+          .child(this.chipAt(t, "browse", `${id}-browse`, "browse", (cx) => this.pick(cx)))
+          .child(this.chipAt(t, "cancel", `${id}-cancel`, "esc", (cx) => this.start(null, cx))))
         .when(Boolean(this.error), (el) => el.child(div().pl(14).text_size(11).text_color(t.blocked).child(this.error)));
     }
     if (m?.kind === "delete") {
@@ -274,6 +324,7 @@ export default class Spaces {
         go: { label: on ? "delete (y)" : "delete", action: (cx) => this.remove(s, cx) },
         keep: (cx) => this.start(null, cx),
         keepLabel: on ? "keep (n)" : "keep",
+        at: this.at,
       });
     }
     return h_flex().id(id).relative().h(24).px(16).gap(8).items_center().text_size(11)
@@ -300,12 +351,12 @@ export default class Spaces {
     return v_flex().id("space-new").px(16).gap(2)
       .child(h_flex().h(24).gap(8).items_center()
         .child(div().w(6).flex_none().text_size(11).text_color(t.accent).child("+"))
-        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), () => this.folderInput.focus()))
-        .child(chip(t, "space-new-cancel", "esc", (cx) => this.start(null, cx))))
+        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
+        .child(this.chipAt(t, "cancel", "space-new-cancel", "esc", (cx) => this.start(null, cx))))
       .child(h_flex().pl(14).h(24).gap(4).items_center().text_size(11)
         .child(div().flex_none().text_color(t.dim).child("in"))
-        .child(field(t, "space-new-folder-input", this.folderInput, (cx) => this.start(null, cx), () => this.input.focus()))
-        .child(chip(t, "space-new-folder", "browse", (cx) => this.pick(cx))))
+        .child(field(t, "space-new-folder-input", this.folderInput, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
+        .child(this.chipAt(t, "browse", "space-new-folder", "browse", (cx) => this.pick(cx))))
       .when(Boolean(this.error), (el) => el.child(div().pl(14).text_size(11).text_color(t.blocked).child(this.error)));
   }
 

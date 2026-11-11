@@ -424,7 +424,7 @@ test("the bar by keys: tab rings its controls in order, enter presses one, ? lis
   view.key({ key: "/", key_char: "?", modifiers: { shift: true } }, cx);
   expect(view.keysShown).toBe(true);
   const strip = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
-  expect(strip).toEqual(expect.arrayContaining(["+ -", "zoom", "h j k l", "pan", "r R", "turn", "n p", "tab", "keys"]));
+  expect(strip).toEqual(expect.arrayContaining(["+ -", "zoom", "h j k l  ← ↑ ↓ →", "pan (fitted: h l step)", "r R", "turn", "n p  ] [", "tab ⇧tab", "keys"]));
   view.key({ key: "escape", modifiers: {} }, cx);
   expect([view.ring, view.keysShown]).toEqual([null, true]);
   view.key({ key: "escape", modifiers: {} }, cx);
