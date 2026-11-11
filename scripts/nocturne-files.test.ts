@@ -20,12 +20,13 @@ class Element {
 }
 const walk = (el: any): any[] => (el && typeof el === "object" && "nodes" in el ? [el, ...el.nodes.flatMap(walk)] : []);
 const commands: [string, any][] = [];
-const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; find: (root: string, q: string) => Promise<any> } = {
-  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, find: async () => ({ files: [], scanning: false }),
+const noExec = async (..._a: any[]) => ({ code: 1, stdout: "", stderr: "" });
+const world: { props: any; panes: any[]; spaces: any[]; shared: Record<string, any>; settings: any; focused: any; find: (root: string, q: string) => Promise<any>; exec: (cmd: string, args: string[], o?: any) => Promise<any> } = {
+  props: {}, panes: [], spaces: [], shared: {}, settings: { zoom: 1 }, focused: null, find: async () => ({ files: [], scanning: false }), exec: noExec,
 };
 const herdr = {
   props: () => world.props, theme: () => ({ background: "#080808", foreground: "#c6c6c6", ansi0: "#323437", ansi3: "#e3c78a", ansi4: "#80a0ff", ansi8: "#949494", accent: "#80a0ff", muted: "#949494", dim: "#5F6D6D" }),
-  settings: () => world.settings, exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+  settings: () => world.settings, exec: (cmd: string, args: string[], o?: any) => world.exec(cmd, args, o),
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   panes: () => world.panes, spaces: () => world.spaces, terminals: () => [] as any[], focused: () => world.focused,
   shared: (k: string) => world.shared[k] ?? null, setShared: (k: string, v: any) => { world.shared[k] = v; return null; },
@@ -37,7 +38,11 @@ const kit = {
   View: class {}, div: () => new Element(), svg: (p: string) => new Element("svg", p),
   PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) },
 };
-const input = () => { let v = ""; const on: Record<string, any> = {}; return { on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; }, focus() {}, fire: (e: string) => on[e]?.({}, cx) }; };
+const input = () => {
+  let v = ""; const on: Record<string, any> = {};
+  const state: any = { selected: null, on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; state.selected = null; }, set_selected_range: (r: any) => { state.selected = r; }, focus() {}, fire: (e: string) => on[e]?.({}, cx) };
+  return state;
+};
 const base = {
   h_flex: () => new Element(), v_flex: () => new Element(), v_virtual_list: () => new Element(), Scrollbar: { vertical: () => new Element() },
   VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
@@ -133,8 +138,8 @@ test("Neovim opens a file in its folder, a folder as nvim . there", () => {
 
 test("the menu offers Neovim for files and folders, a new pane for folders, close in a pane of its own", () => {
   const acts = (row: any, o?: any) => menuItems(row, o).map((x: any) => x.act);
-  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "copy"]);
-  expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "copy", "close"]);
+  expect(acts({ path: "a.rs", dir: false })).toEqual(["open", "other", "terminal", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy"]);
+  expect(acts({ path: "src", dir: true }, { pane: true })).toEqual(["toggle", "pane", "root", "edit", "nvim", "new-file", "new-folder", "rename", "cut", "delete", "copy", "close"]);
   expect(menuItems({ dir: false }).find((x: any) => x.act === "nvim").label).toBe("Open in Neovim");
 });
 
@@ -145,8 +150,8 @@ test("the menu's key column fits its widest key", () => {
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   view.openMenu({ path: "README.md", name: "README.md", dir: false }, cx);
-  const cells = walk(view.render()).filter((e: any) => e.nodes.length === 1 && ["enter", "e", "E", "v", "y", "q"].includes(e.nodes[0]));
-  expect(cells.length).toBe(6);
+  const cells = walk(view.render()).filter((e: any) => e.nodes.length === 1 && ["enter", "e", "E", "v", "a", "A", "R", "x", "d", "y", "q"].includes(e.nodes[0]));
+  expect(cells.length).toBe(11);
   for (const c of cells) expect(c.calls.find(([k]: [string]) => k === "w")?.[1]).toEqual([49]);
 });
 
@@ -289,7 +294,7 @@ test("the right-click menu runs by key or enter; it opens under the pointer and 
   expect(commands.at(-1)).toEqual(["files.open", { path: "/repo/src", pane: "pf" }]);
   // On empty space: the root's menu, without fold and root.
   view.openMenu({ path: "", name: "/repo", dir: true }, cx);
-  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "copy", "close"]);
+  expect(view.menu.items.map((x: any) => x.act)).toEqual(["pane", "edit", "nvim", "new-file", "new-folder", "copy", "close"]);
 });
 
 test("the header shows both filters, the search hint and a close button in a pane of its own", () => {
@@ -511,4 +516,485 @@ test("? shows the keys under the filter line (? keys its last item), ? or esc hi
   view.key({ key: "escape" }, cx);
   expect(view.keysShown).toBe(false);
   expect(commands).toEqual([]); // esc hid the keys; it didn't close the pane
+});
+
+// ---- file operations: real ones, in a folder made for each test
+
+import { mkdtemp, mkdir, writeFile, rm, chmod, stat, readdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join as pjoin } from "node:path";
+
+const exists = (p: string) => stat(p).then(() => true, () => false);
+const execs: { cmd: string; args: string[]; on: any }[] = [];
+
+/** A temp folder: `root` (the tree), `Trash` and `bin/trash`, a stand-in for
+ *  macOS's (the probe names it): it moves what it's given into `Trash`. */
+async function sandbox(trash = true) {
+  const dir = await mkdtemp(pjoin(tmpdir(), "nf-ops-"));
+  const root = pjoin(dir, "root");
+  await mkdir(pjoin(root, "src", "sub"), { recursive: true });
+  await mkdir(pjoin(root, "docs"));
+  await mkdir(pjoin(dir, "Trash"));
+  await mkdir(pjoin(dir, "bin"));
+  await writeFile(pjoin(root, "src", "main.rs"), "fn main() {}\n");
+  await writeFile(pjoin(root, "src", "sub", "deep.rs"), "deep\n");
+  await writeFile(pjoin(root, "docs", "guide.txt"), "guide\n");
+  await writeFile(pjoin(root, "README.md"), "# readme\n");
+  const tool = pjoin(dir, "bin", "trash");
+  await writeFile(tool, `#!/bin/sh\nfor p in "$@"; do mv "$p" "${pjoin(dir, "Trash")}/" || exit 1; done\n`);
+  await chmod(tool, 0o755);
+  world.exec = async (cmd, args = [], o = {}) => {
+    execs.push({ cmd, args, on: o.on ?? null });
+    if (args[2] === "files-trash-probe") return { code: 0, stdout: trash ? `${tool}\n` : "\n", stderr: "" };
+    const p = Bun.spawn([cmd, ...args], { cwd: o.cwd ?? dir, stdout: "pipe", stderr: "pipe", stdin: "ignore" });
+    const [stdout, stderr, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited]);
+    return { code, stdout, stderr };
+  };
+  execs.length = 0;
+  return { dir, root, trashDir: pjoin(dir, "Trash"), done: async () => { await chmod(dir, 0o755).catch(() => {}); await rm(dir, { recursive: true, force: true }); world.exec = noExec; } };
+}
+
+/** A pane on `root` that lists the real folder (the folder watch left out). */
+async function realPane(root: string, extra: any = {}) {
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: root, slot: "s1", ...extra } }];
+  world.shared = {};
+  world.props = { path: root, slot: "s1", ...extra };
+  const view: any = Object.create(Files.prototype);
+  view.refresh = () => {};
+  view.init.call(view, world.props, cx);
+  pending.length = 0;
+  delete view.refresh;
+  view.watch = () => {};
+  view.refresh(cx);
+  await settle();
+  view.render();
+  return view;
+}
+const paths = (view: any) => view.shown().map((r: any) => r.path);
+const row = (view: any, p: string) => view.shown().find((r: any) => r.path === p);
+/** Types a name into the open input and presses enter; the tree listed again and drawn. */
+async function name(view: any, text: string) {
+  view.nameInput.set_value(text);
+  view.nameInput.fire("change");
+  view.nameInput.fire("submit");
+  await settle();
+  view.render();
+}
+const words = (el: any): string[] => typeof el === "string" ? [el] : el && typeof el === "object" && "nodes" in el ? el.nodes.flatMap(words) : [];
+
+test("names: paths resolve from the folder, a trailing / makes a folder, . and .. aren't names", () => {
+  const { resolveName, renameTarget, stemRange, moveRefusal, relTo, join } = logic;
+  expect(resolveName("/r/src", "a/b.rs")).toEqual({ abs: "/r/src/a/b.rs", folder: false });
+  expect(resolveName("/r/src", "lib/")).toEqual({ abs: "/r/src/lib", folder: true });
+  expect(resolveName("/r/src", "../x")).toEqual({ abs: "/r/x", folder: false });
+  expect(resolveName("/r/src", "/etc/y")).toEqual({ abs: "/etc/y", folder: false });
+  expect(resolveName("/r", "~/n", "/home/me")).toEqual({ abs: "/home/me/n", folder: false });
+  expect(resolveName("/r", "~/n", null).error).toContain("~");
+  for (const bad of ["", "  ", ".", "..", "a/..", "/"]) expect(resolveName("/r", bad).error).toBeTruthy();
+  expect(resolveName("/r", "-dash 'q' \"ü\".txt").abs).toBe("/r/-dash 'q' \"ü\".txt");
+  expect(renameTarget("/r/src/main.rs", "lib.rs")).toEqual({ abs: "/r/src/lib.rs" });
+  expect(renameTarget("/r/src/main.rs", "../docs/")).toEqual({ abs: "/r/docs/main.rs" });
+  expect(stemRange("main.rs")).toEqual({ start: 0, end: 4 });
+  expect(stemRange("a.tar.gz")).toEqual({ start: 0, end: 5 });
+  expect(stemRange(".env")).toEqual({ start: 0, end: 4 });
+  expect(stemRange("Makefile")).toEqual({ start: 0, end: 8 });
+  expect(stemRange("my.folder", true)).toEqual({ start: 0, end: 9 });
+  expect(moveRefusal("/r", "/x/r", "/r")).toContain("root");
+  expect(moveRefusal("/r/src", "/r/src/sub/src", "/r")).toContain("into itself");
+  expect(moveRefusal("/r/src", "/r/src", "/r")).toContain("already");
+  expect(moveRefusal("/r/src", "/r/srcs", "/r")).toBeNull();
+  expect([relTo("/r", "/r/a/b"), relTo("/r", "/r"), relTo("/r", "/rx"), relTo("/", "/etc")]).toEqual(["a/b", "", null, "etc"]);
+  expect(join("/", "etc")).toBe("/etc");
+});
+
+test("the rest of the operations' logic: the neighbour after a delete, unfolded folders after a move, errors in a line", () => {
+  const { neighbour, movedFolders, cleanError, deleteQuestion } = logic;
+  const rows = ["src", "src/a", "src/b", "docs", "z"].map((path) => ({ path }));
+  expect(neighbour(rows, "src")).toBe("docs");
+  expect(neighbour(rows, "src/b")).toBe("docs");
+  expect(neighbour(rows, "z")).toBe("docs");
+  expect([...movedFolders(new Set(["src", "src/sub", "docs"]), "src", "lib/src")]).toEqual(["lib/src", "lib/src/sub", "docs"]);
+  expect([...movedFolders(new Set(["src", "src/sub", "docs"]), "src", null)]).toEqual(["docs"]);
+  expect(cleanError(`2026-11-11 trash[1:2] # Error attempting to move /x/f to the trash folder, Error Domain=NSCocoaErrorDomain Code=513 "“f” couldn’t be moved to the trash because you don’t have permission to access it." UserInfo={NSURL=file:///x/f}`))
+    .toBe("“f” couldn’t be moved to the trash because you don’t have permission to access it.");
+  expect(cleanError("mv: rename /a to /b: Permission denied\n")).toBe("mv: rename /a to /b: Permission denied");
+  expect(deleteQuestion("src", true, true)).toBe("Move “src/” and everything in it to the Trash?");
+  expect(deleteQuestion("a.rs", false, false)).toBe("Delete “a.rs” permanently?");
+});
+
+test("a: a new file in the selected folder, parents made for slashes, opened as enter would; from the menu beside a file", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    expect(paths(view)).toEqual(["docs", "src", "README.md"]);
+    view.sel = "src";
+    view.key({ key: "a" }, cx);
+    await settle();
+    expect(view.draft).toMatchObject({ kind: "file", dir: "src", after: "src" });
+    // The input row sits first in the unfolded folder.
+    const drawn = view.withDraft(view.shown()).map((r: any) => r.draft ? "<input>" : r.path);
+    expect(drawn.slice(0, 4)).toEqual(["docs", "src", "<input>", "src/sub"]);
+    expect(words(view.render())).toEqual(expect.arrayContaining(["New file in src/: end with / for a folder", "enter", "create", "esc", "cancel"]));
+    // While it's open, the pane's keys go to the name: j doesn't move, q doesn't close.
+    commands.length = 0;
+    view.key({ key: "j" }, cx);
+    view.key({ key: "q" }, cx);
+    expect(commands).toEqual([]);
+    await name(view, "new file.rs");
+    expect(await exists(pjoin(box.root, "src", "new file.rs"))).toBe(true);
+    expect(view.draft).toBeNull();
+    expect(view.sel).toBe("src/new file.rs");
+    expect(commands).toEqual([["editor.open", { path: `${box.root}/src/new file.rs`, pane: "pf" }]]);
+    // Slashes make the folders on the way; a Markdown file opens in its viewer.
+    view.key({ key: "a" }, cx);
+    await name(view, "notes/2026/plan.md");
+    expect(await exists(pjoin(box.root, "src", "notes", "2026", "plan.md"))).toBe(true);
+    expect(view.folders.has("src/notes/2026")).toBe(true);
+    expect(view.sel).toBe("src/notes/2026/plan.md");
+    expect(commands.at(-1)[0]).toBe("markdown.open");
+    // The menu on a file: beside it. A leading dash, quotes and unicode are a name like any other.
+    view.mouse = { x: 10, y: 10 };
+    view.openMenu(row(view, "README.md"), cx);
+    expect(view.menu.items.find((x: any) => x.act === "new-file")).toMatchObject({ key: "a", label: "New file beside it" });
+    view.key({ key: "a" }, cx);
+    expect(view.draft).toMatchObject({ kind: "file", dir: "", after: "README.md" });
+    await name(view, "-dash 'q' \"ü\".txt");
+    expect(await exists(pjoin(box.root, "-dash 'q' \"ü\".txt"))).toBe(true);
+    expect(view.sel).toBe("-dash 'q' \"ü\".txt");
+    // esc gives up: nothing made, the keyboard back on the tree.
+    view.key({ key: "a" }, cx);
+    view.nameInput.set_value("never.txt");
+    view.key({ key: "escape" }, cx);
+    expect(view.draft).toBeNull();
+    expect(await exists(pjoin(box.root, "never.txt"))).toBe(false);
+  } finally { await box.done(); }
+});
+
+test("A: a new folder beside the selected file; from the menu in a folder and on the empty space (the root); a / ending a makes one too", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.toggle("src", cx); await settle(); view.render();
+    view.sel = "src/main.rs";
+    view.key({ key: "a", modifiers: { shift: true } }, cx);
+    expect(view.draft).toMatchObject({ kind: "folder", dir: "src" });
+    await name(view, "lib");
+    expect((await stat(pjoin(box.root, "src", "lib"))).isDirectory()).toBe(true);
+    expect(view.sel).toBe("src/lib");
+    // The menu on a folder that's folded: it unfolds, the folder goes in it.
+    view.openMenu(row(view, "docs"), cx);
+    expect(view.menu.items.find((x: any) => x.act === "new-folder")).toMatchObject({ key: "A", label: "New folder in it" });
+    view.key({ key: "A" }, cx);
+    await settle();
+    expect(view.folders.has("docs")).toBe(true);
+    await name(view, "img");
+    expect((await stat(pjoin(box.root, "docs", "img"))).isDirectory()).toBe(true);
+    expect(view.sel).toBe("docs/img");
+    // The empty space's menu: new file and new folder in the root.
+    view.openMenu({ path: "", name: box.root, dir: true }, cx);
+    const acts = view.menu.items.map((x: any) => x.act);
+    expect(acts).toEqual(expect.arrayContaining(["new-file", "new-folder"]));
+    expect(acts).not.toEqual(expect.arrayContaining(["rename"]));
+    view.act("new-folder", view.menu.row, cx);
+    view.menu = null;
+    expect(view.draft).toMatchObject({ kind: "folder", dir: "" });
+    await name(view, "-out");
+    expect((await stat(pjoin(box.root, "-out"))).isDirectory()).toBe(true);
+    // a with a trailing /: a folder.
+    view.sel = null;
+    view.key({ key: "a" }, cx);
+    await name(view, "made/");
+    expect((await stat(pjoin(box.root, "made"))).isDirectory()).toBe(true);
+    expect(view.sel).toBe("made");
+  } finally { await box.done(); }
+});
+
+test("R: the name in the input, the stem selected; enter renames, the folder stays unfolded; a path moves it", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.toggle("src", cx); view.toggle("src/sub", cx); await settle(); view.render();
+    view.sel = "src/main.rs";
+    view.key({ key: "R" }, cx);
+    expect(view.draft).toMatchObject({ kind: "rename", path: "src/main.rs" });
+    expect(view.nameInput.value()).toBe("main.rs");
+    expect(view.nameInput.selected).toEqual({ start: 0, end: 4 });
+    expect(words(view.render())).toEqual(expect.arrayContaining(["Rename “main.rs”: a path moves it", "rename"]));
+    await name(view, "lib.rs");
+    expect(await readdir(pjoin(box.root, "src"))).toEqual(expect.arrayContaining(["lib.rs"]));
+    expect(await exists(pjoin(box.root, "src", "main.rs"))).toBe(false);
+    expect(view.sel).toBe("src/lib.rs");
+    // A folder from the menu (r with shift there too): unfolded folders under it stay unfolded.
+    view.openMenu(row(view, "src"), cx);
+    view.key({ key: "r", modifiers: { shift: true } }, cx);
+    expect(view.nameInput.selected).toEqual({ start: 0, end: 3 });
+    await name(view, "source");
+    expect(await exists(pjoin(box.root, "source", "sub", "deep.rs"))).toBe(true);
+    expect([view.folders.has("source"), view.folders.has("source/sub"), view.folders.has("src")]).toEqual([true, true, false]);
+    expect(view.sel).toBe("source");
+    expect(paths(view)).toContain("source/sub/deep.rs");
+    // A path in the name moves it: up a folder, and into a folder (a trailing /) keeping its name.
+    view.sel = "source/lib.rs";
+    view.key({ key: "R" }, cx);
+    await name(view, "../top.rs");
+    expect(await exists(pjoin(box.root, "top.rs"))).toBe(true);
+    expect(view.sel).toBe("top.rs");
+    view.key({ key: "R" }, cx);
+    await name(view, "docs/");
+    expect(await exists(pjoin(box.root, "docs", "top.rs"))).toBe(true);
+    expect(view.sel).toBe("docs/top.rs");
+    expect(view.folders.has("docs")).toBe(true);
+    // The same name: nothing runs.
+    execs.length = 0;
+    view.key({ key: "R" }, cx);
+    await name(view, "top.rs");
+    expect(view.draft).toBeNull();
+    expect(execs.filter((e) => e.args[2] === "files-op")).toEqual([]);
+  } finally { await box.done(); }
+});
+
+test("x and P: cut a file, paste it in a folder; a folder by the menu; the cut row is marked, the cut used up", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.sel = "README.md";
+    view.key({ key: "x" }, cx);
+    expect(world.shared["nocturne-files.cut"]).toEqual({ abs: `${box.root}/README.md`, on: null, dir: false, name: "README.md" });
+    expect(words(view.render())).toContain("Cut “README.md”: P pastes it in the selected folder");
+    expect(words(view.row(herdr.theme(), row(view, "README.md"), true))).toEqual(["README.md", "cut"]);
+    view.sel = "docs";
+    view.key({ key: "p", modifiers: { shift: true } }, cx);
+    await settle(); view.render();
+    expect(await exists(pjoin(box.root, "docs", "README.md"))).toBe(true);
+    expect(await exists(pjoin(box.root, "README.md"))).toBe(false);
+    expect(view.sel).toBe("docs/README.md");
+    expect(view.folders.has("docs")).toBe(true);
+    expect(world.shared["nocturne-files.cut"]).toBeNull();
+    // A folder, by the menu: cut, then paste beside a file in another folder (into that folder).
+    view.openMenu(row(view, "docs"), cx);
+    view.key({ key: "x" }, cx);
+    view.toggle("src", cx); await settle(); view.render();
+    view.openMenu(row(view, "src/main.rs"), cx);
+    expect(view.menu.items.find((x: any) => x.act === "paste")).toMatchObject({ key: "P", label: "Paste beside it" });
+    view.key({ key: "P" }, cx);
+    await settle(); view.render();
+    expect(await exists(pjoin(box.root, "src", "docs", "guide.txt"))).toBe(true);
+    expect(view.sel).toBe("src/docs");
+    // Nothing cut: P says so.
+    view.key({ key: "P" }, cx);
+    expect(view.msg.text).toContain("Nothing is cut");
+    // x again on the cut row uncuts it.
+    view.sel = "src/main.rs";
+    view.key({ key: "x" }, cx);
+    view.key({ key: "x" }, cx);
+    expect(world.shared["nocturne-files.cut"]).toBeNull();
+  } finally { await box.done(); }
+});
+
+test("d: asks first, naming the item; y moves it to the Trash and the selection takes the next row; anything else keeps it", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.sel = "docs";
+    view.key({ key: "d" }, cx);
+    await settle();
+    expect(view.ask).toMatchObject({ path: "docs", dir: true });
+    expect(words(view.render())).toEqual(expect.arrayContaining(["Move “docs/” and everything in it to the Trash?", "y", "move to the Trash", "esc", "keep it"]));
+    // Anything else cancels, and goes no further (j doesn't move).
+    view.key({ key: "j" }, cx);
+    expect(view.ask).toBeNull();
+    expect(view.sel).toBe("docs");
+    expect(await exists(pjoin(box.root, "docs"))).toBe(true);
+    view.key({ key: "d" }, cx); await settle();
+    view.key({ key: "y" }, cx);
+    await settle(); view.render();
+    expect(await exists(pjoin(box.root, "docs"))).toBe(false);
+    expect(await exists(pjoin(box.trashDir, "docs", "guide.txt"))).toBe(true);
+    expect(view.sel).toBe("src");
+    expect(view.msg.text).toBe("Moved “docs” to the Trash");
+    // A file by the menu, enter confirms; the last row: the one before takes the selection.
+    view.openMenu(row(view, "README.md"), cx);
+    view.key({ key: "d" }, cx);
+    await settle();
+    expect(words(view.render())).toContain("Move “README.md” to the Trash?");
+    view.key({ key: "enter" }, cx);
+    await settle(); view.render();
+    expect(await exists(pjoin(box.trashDir, "README.md"))).toBe(true);
+    expect(view.sel).toBe("src");
+  } finally { await box.done(); }
+});
+
+test("d where the machine has no trash: the question says permanently, and it's gone", async () => {
+  const box = await sandbox(false);
+  try {
+    const view = await realPane(box.root);
+    view.sel = "src";
+    view.key({ key: "d" }, cx); await settle();
+    expect(words(view.render())).toEqual(expect.arrayContaining(["Delete “src/” and everything in it permanently?", "delete"]));
+    view.key({ key: "y" }, cx); await settle(); view.render();
+    expect(await exists(pjoin(box.root, "src"))).toBe(false);
+    expect(await readdir(box.trashDir)).toEqual([]);
+    expect(view.msg.text).toBe("Deleted “src”");
+  } finally { await box.done(); }
+});
+
+test("refused: an existing target (nothing overwritten), the root, a folder into itself", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    // A new file over an existing one: said, the input stays open, the file untouched.
+    view.sel = "README.md";
+    view.key({ key: "a" }, cx);
+    await name(view, "README.md");
+    expect(view.msg.text).toBe("“README.md” already exists");
+    expect(view.draft).not.toBeNull();
+    expect(words(view.render())).toContain("“README.md” already exists");
+    view.key({ key: "escape" }, cx);
+    view.key({ key: "A" }, cx);
+    await name(view, "src");
+    expect(view.msg.text).toBe("“src” already exists");
+    view.key({ key: "escape" }, cx);
+    // A rename onto an existing file.
+    view.sel = "README.md";
+    view.key({ key: "R" }, cx);
+    await name(view, "docs/guide.txt");
+    expect(view.msg.text).toBe("“guide.txt” already exists");
+    expect(await Bun.file(pjoin(box.root, "docs", "guide.txt")).text()).toBe("guide\n");
+    expect(await exists(pjoin(box.root, "README.md"))).toBe(true);
+    view.key({ key: "escape" }, cx);
+    // A paste where the name is taken.
+    await writeFile(pjoin(box.root, "docs", "README.md"), "other\n");
+    view.sel = "README.md";
+    view.key({ key: "x" }, cx);
+    view.sel = "docs";
+    view.key({ key: "P" }, cx);
+    await settle();
+    expect(view.msg.text).toBe("“README.md” already exists");
+    expect(await Bun.file(pjoin(box.root, "docs", "README.md")).text()).toBe("other\n");
+    expect(await Bun.file(pjoin(box.root, "README.md")).text()).toBe("# readme\n");
+    // The root: no row, or the empty space's menu.
+    view.sel = null;
+    for (const k of ["R", "x", "d"]) {
+      view.key({ key: k }, cx);
+      await settle();
+      expect(view.msg.text).toMatch(/root can't be (renamed|moved|deleted)/);
+      expect(view.draft ?? view.ask).toBeNull();
+    }
+    // A folder into itself: pasted into its own subfolder, or renamed into it.
+    view.toggle("src", cx); await settle(); view.render();
+    view.sel = "src";
+    view.key({ key: "x" }, cx);
+    view.sel = "src/sub";
+    view.key({ key: "P" }, cx);
+    expect(view.msg.text).toBe("A folder can't go into itself");
+    view.sel = "src";
+    view.key({ key: "R" }, cx);
+    await name(view, "src/sub/");
+    expect(view.msg.text).toBe("A folder can't go into itself");
+    expect(await exists(pjoin(box.root, "src", "sub", "deep.rs"))).toBe(true);
+  } finally { await box.done(); }
+});
+
+test("a failed command shows its error and the tree as the disk has it: no permission, a vanished file", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    view.toggle("docs", cx); await settle(); view.render();
+    await chmod(pjoin(box.root, "docs"), 0o555);
+    view.sel = "docs/guide.txt";
+    view.key({ key: "R" }, cx);
+    await name(view, "renamed.txt");
+    expect(view.msg.text).toContain("Permission denied");
+    expect(view.msg.error).toBe(true);
+    expect(view.draft).not.toBeNull();
+    expect(await exists(pjoin(box.root, "docs", "guide.txt"))).toBe(true);
+    view.key({ key: "escape" }, cx);
+    view.key({ key: "a" }, cx);
+    await name(view, "new.txt");
+    expect(view.msg.text).toContain("Permission denied");
+    view.key({ key: "escape" }, cx);
+    // The stand-in trash fails too.
+    view.key({ key: "d" }, cx); await settle();
+    view.key({ key: "y" }, cx); await settle(); view.render();
+    expect(view.msg.error).toBe(true);
+    expect(await exists(pjoin(box.root, "docs", "guide.txt"))).toBe(true);
+    expect(paths(view)).toContain("docs/guide.txt");
+    await chmod(pjoin(box.root, "docs"), 0o755);
+    // Gone behind the tree's back: said, and the tree drops it.
+    await rm(pjoin(box.root, "README.md"));
+    view.sel = "README.md";
+    view.key({ key: "R" }, cx);
+    await name(view, "x.md");
+    expect(view.msg.text).toBe("“x.md” isn't there anymore");
+    expect(paths(view)).not.toContain("README.md");
+  } finally { await box.done(); }
+});
+
+test("on another machine: every operation runs there, ~ isn't this Mac's home", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root, { on: "box" });
+    view.sel = "src";
+    view.key({ key: "a" }, cx);
+    await name(view, "remote.txt");
+    view.sel = "src/remote.txt";
+    view.key({ key: "R" }, cx);
+    await name(view, "moved.txt");
+    view.key({ key: "x" }, cx);
+    view.sel = "docs";
+    view.key({ key: "P" }, cx); await settle(); view.render();
+    expect(view.sel).toBe("docs/moved.txt");
+    view.key({ key: "d" }, cx); await settle();
+    view.key({ key: "y" }, cx); await settle();
+    const ops = execs.filter((e) => e.args[2] === "files-op" || e.args[2] === "files-trash-probe");
+    expect(ops.map((e) => e.args[3] ?? "probe")).toEqual(["file", "move", "move", "probe", "delete"]);
+    expect(ops.every((e) => e.on === "box")).toBe(true);
+    expect(await exists(pjoin(box.trashDir, "moved.txt"))).toBe(true);
+    // A cut made here doesn't paste on this Mac's panes.
+    expect(world.shared["nocturne-files.cut"]).toBeNull();
+    view.sel = "README.md";
+    view.key({ key: "x" }, cx);
+    expect(world.shared["nocturne-files.cut"].on).toBe("box");
+    view.on = null;
+    view.key({ key: "P" }, cx);
+    expect(view.msg.text).toBe("It was cut on another machine");
+    view.on = "box";
+    view.key({ key: "a" }, cx);
+    await name(view, "~/x");
+    expect(view.msg.text).toContain("~");
+  } finally { await box.done(); }
+});
+
+test("? lists the new keys, each fitting the 280 px panel", () => {
+  const { KEYS, CH } = logic;
+  const flat = KEYS.map(([k, w]: string[]) => `${k} ${w}`);
+  expect(flat).toEqual(expect.arrayContaining(["a A new file / folder", "R rename · move", "x P cut / paste", "d delete"]));
+  for (const [k, w] of KEYS) expect(20 + (k.length + w.length) * CH + 4).toBeLessThanOrEqual(280);
+});
+
+test("from the search's hits: a rename ends the search and shows the result in the tree; a delete looks the hits up again", async () => {
+  const box = await sandbox();
+  try {
+    const view = await realPane(box.root);
+    world.find = async () => ({ files: [{ path: "src/main.rs", ranges: [[4, 8]] }, { path: "docs/guide.txt", ranges: [[5, 9]] }], scanning: false });
+    view.query = "i"; view.search(cx); await settle();
+    expect(paths(view)).toEqual(["src", "src/main.rs", "docs", "docs/guide.txt"]);
+    view.typing = false;
+    view.sel = "src/main.rs";
+    view.key({ key: "R" }, cx);
+    await name(view, "lib.rs");
+    expect(view.query).toBe("");
+    expect(view.sel).toBe("src/lib.rs");
+    expect(view.folders.has("src")).toBe(true);
+    let asked = 0;
+    world.find = async () => { asked++; return { files: [{ path: "docs/guide.txt", ranges: [[5, 9]] }], scanning: false }; };
+    view.query = "i"; view.search(cx); await settle();
+    view.typing = false;
+    view.sel = "docs/guide.txt";
+    view.key({ key: "d" }, cx); await settle();
+    view.key({ key: "y" }, cx); await settle();
+    expect(asked).toBe(2);
+    expect(await exists(pjoin(box.root, "docs", "guide.txt"))).toBe(false);
+  } finally { await box.done(); world.find = async () => ({ files: [], scanning: false }); }
 });

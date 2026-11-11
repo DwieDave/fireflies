@@ -566,8 +566,22 @@ the highlighted line shows where it will land.
   Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
-  (`y`), close. `?` (or the `?` that ends the filter line) lists the keys under
-  it; `?` or esc hides them.
+  (`y`), the file operations below, close; on the empty space below the rows:
+  new file / folder and paste in the root. File operations, one row at a time:
+  `a` new file, `A` new folder (a name row in the selected folder or beside the
+  selected file; slashes make the folders on the way, a trailing `/` makes a
+  folder, a new file opens as enter would), `R` rename (the stem selected; a
+  path in the name, `../x` or `docs/`, moves it), `x` cut and `P` paste into the
+  selected folder (shared `nocturne-files.cut`: any files pane on that machine),
+  `d` delete after asking (y / enter; anything else keeps it): to the machine's
+  trash (macOS's `/usr/bin/trash`, else `gio trash` or `trash-put`), without
+  one permanently, and the question says so. Enter confirms a name, esc
+  cancels; while a name or the question is open the pane's keys go to it. An
+  existing target is refused (nothing is overwritten), so are the root and a
+  folder into itself; a failed command shows its error in the hint line. The
+  tree then shows the result, unfolded and selected. Editors with a renamed,
+  moved or deleted file open keep the old path. `?` (or the `?` that ends the
+  filter line) lists the keys under it; `?` or esc hides them.
 - **Finding files** (Nocturne's `nocturne-picker`): cmd-p (`nocturne.picker`)
   finds a file in the space's repository (its attached folder, else the focused
   pane's, up to its git top) by fuzzy, typo-tolerant name; cmd-shift-f
