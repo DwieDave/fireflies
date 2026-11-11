@@ -584,7 +584,10 @@ export function feed(vim, key, doc) {
   if (vim.recording && !vim.replaying && !(vim.mode !== "insert" && vim.keys.length === 0 && key === "q")) vim.recording.keys.push(key);
   if (vim.ex != null) return exKey(vim, key, doc, out);
   if (vim.mode === "insert" || vim.mode === "replace") return insertKey(vim, key, doc, out);
-  const b = new Buffer(doc.text, doc.cursor);
+  // In visual modes the editor's caret sits at the selection's end, not on
+  // vim's head: the head is vim's own.
+  const visual = vim.mode === "visual" || vim.mode === "vline" || vim.mode === "vblock";
+  const b = new Buffer(doc.text, visual && vim.head ? vim.head : doc.cursor);
   vim.page = doc.page ?? vim.page;
   if (vim.pendingLeader) return leaderKey(vim, key, b, out);
   if (vim.keys.length === 0 && key === vim.leader && (vim.mode === "normal")) {
@@ -594,7 +597,7 @@ export function feed(vim, key, doc) {
   }
   if (key === "<esc>") {
     vim.keys = [];
-    if (vim.mode !== "normal") { vim.mode = "normal"; vim.anchor = null; out.mode = "normal"; out.cursor = b.clamp(b.cursor); out.selections = null; }
+    if (vim.mode !== "normal") { vim.mode = "normal"; vim.anchor = null; vim.head = null; out.mode = "normal"; out.cursor = b.clamp(b.cursor); out.selections = null; }
     out.taken = true; out.pending = "";
     return out;
   }
@@ -628,6 +631,7 @@ export function feed(vim, key, doc) {
       b.cursor = cmp(r.end, r.start) > 0 ? (b.prev(r.end) ?? r.end) : r.end;
     }
     out.cursor = b.cursor; out.mode = vim.mode; out.selections = visualSelections(vim, b); out.pending = "";
+    vim.head = { ...b.cursor };
     return out;
   }
   const cmd = vim.mode === "visual" || vim.mode === "vline" || vim.mode === "vblock" ? parseVisual(vim.keys) : parse(vim.keys);
@@ -648,7 +652,8 @@ export function feed(vim, key, doc) {
   else out.cursor = b.cursor;
   if (cmp(before, b.cursor) !== 0 && !out.keepGoal) vim.goal = null;
   out.mode = vim.mode;
-  if (vim.mode === "visual" || vim.mode === "vline" || vim.mode === "vblock") out.selections = visualSelections(vim, b);
+  if (vim.mode === "visual" || vim.mode === "vline" || vim.mode === "vblock") { out.selections = visualSelections(vim, b); vim.head = { ...b.cursor }; }
+  else vim.head = null;
   return out;
 }
 
@@ -1093,7 +1098,8 @@ export function stopRecording(vim) {
 }
 
 /** The caret's shape for a mode. */
-export const SHAPE = { normal: "block", visual: "block", vline: "block", vblock: "block", insert: "bar", replace: "underline" };
+// Visual modes: a bar, where the editor draws its caret (the selection's edge).
+export const SHAPE = { normal: "block", visual: "bar", vline: "bar", vblock: "bar", insert: "bar", replace: "underline" };
 /** The mode's name in the bar. */
 export const MODE_NAME = { normal: "NORMAL", insert: "INSERT", replace: "REPLACE", visual: "VISUAL", vline: "V-LINE", vblock: "V-BLOCK" };
 

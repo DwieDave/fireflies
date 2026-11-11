@@ -70,6 +70,12 @@ async function onPath(program) {
   return found.get(program);
 }
 
+/** The editor's selection (and, drawn from it, search matches): the accent
+ *  at 40%, see-through so the syntax colors read on it. */
+export function selectionColor(t) {
+  return String(t.accent ?? "#80a0ff").slice(0, 7) + "66";
+}
+
 /** One edit taking `a` to `b`: the span between their common start and end. */
 function diff(a, b) {
   if (a === b) return null;
@@ -120,6 +126,9 @@ export default class EditorPane extends View {
     this.editor = EditorState.new({
       language: this.lang, value: "", font_family: settings()?.font_family || "JetBrains Mono", font_size: 13,
       line_numbers: true, folding: true, soft_wrap: !!this.opts.soft_wrap, syntax: this.colors,
+      // The theme's selection is moonfly's border tone, hard to see on its
+      // background: moonfly blue at 40% stands out and keeps text readable.
+      selection: selectionColor(t),
     });
     this.editor.set_tab_size(this.opts.tab_size, this.opts.insert_spaces === false);
     this.vim.indent = this.opts.insert_spaces === false ? "\t" : " ".repeat(this.opts.tab_size);
