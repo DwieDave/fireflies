@@ -29,17 +29,22 @@
 //   h ←            fold, or go to the parent row
 //   enter          open a file, fold a folder    e  edit what's selected (as text; a picture: system app)
 //   E              edit it in $EDITOR (a terminal beside)
+//   p              its viewer (preview, Markdown) v  Neovim beside
 //   -              root one folder up            .  root at the selected folder
 //   [ / ]          back / forward through the folders rooted at (also alt-← / alt-→, ctrl-o / ctrl-i, backspace)
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
-//   v              Neovim beside                 o  a folder in a new files pane
-//   y              copy the path                 m  the right-click menu
-//   q / esc        close (a pane of its own)
+//   o              a folder in a new files pane  y  copy the path
+//   m              the right-click menu          q  close
+//   esc            a pane of its own: close; the panel: back to the pane the keyboard came from
+//
+// The keyboard: a copy takes it when its pane is the focused one as it opens
+// (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
+// cmd-e on an open panel (nocturne/files.js focusFiles: "take-panel").
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
-import { props, theme, settings, exec, run, panes, spaces, terminals, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
+import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit } from "./logic.js";
 
 const ROW = 22;
@@ -65,6 +70,8 @@ const ART = "mods/nocturne/art";
 const MOD = "nocturne-files";
 const ICONS = "mods/workspace-chrome";
 const FILTERS = `${MOD}.filters`, TITLES = `${MOD}.titles`, PATHS = `${MOD}.paths`;
+/** The pane the keyboard came from into the panel (set by nocturne/files.js). */
+const FROM = `${MOD}.from`;
 const HITS = 200, MENU_ROW = 20;
 const zoom = () => Number(settings()?.zoom) || 1;
 
@@ -110,15 +117,47 @@ export default class Files extends View {
     this.handle = cx.focus_handle();
     this.nav = newNav();
     this.reroot(pr.path || pr.folder || home(), cx);
+    // Opened as the focused pane (cmd-e, files.open): the keyboard comes here,
+    // which the app leaves with the window for a mod pane. Again a little
+    // later, as the editor does, in case the window took it back meanwhile.
+    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing) this.takeKeys(cx); });
     // Remote folders can't be watched: poll those instead.
     cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
       for (;;) {
-        const c = await nextCommand();
-        if (c === "focus") this.handle.focus();
+        const c = String(await nextCommand()).replace(`${MOD}.`, "");
+        if (c === "focus" || (c === "take-panel" && !this.alone && this.isFocusedPane())) this.takeKeys(cx);
         cx.notify();
       }
     });
+  }
+
+  // ---- the keyboard
+
+  /** This copy's pane is the app's focused one. */
+  isFocusedPane() {
+    const mine = this.me() ?? (this.alone ? null : this.panel());
+    return Boolean(mine && focused()?.pane === mine.pane);
+  }
+
+  /** The panel in the shown tab (a pane without a path of its own). */
+  panel() {
+    const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    return panes().find((p) => p.mod === MOD && p.tab === tab && !p.props?.path) ?? null;
+  }
+
+  /** Takes the keyboard, with a row picked so j / k start somewhere. */
+  takeKeys(cx) {
+    this.handle.focus();
+    if (!this.sel) { const rows = this.shown(); if (rows.length) this.select(rows, 0); }
+    cx?.notify();
+  }
+
+  /** esc in the panel: the keyboard back to the pane it came from (else the pane to the left). */
+  leave() {
+    const from = shared(FROM), mine = this.me() ?? this.panel();
+    if (from && from !== mine?.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+    else run("pane.go", { direction: "left" });
   }
 
   // ---- the folders visited
@@ -416,9 +455,18 @@ export default class Files extends View {
     cx.timer.after(1400, (cx) => { if (this.copied === at) { this.copied = 0; cx.notify(); } });
   }
 
+  /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from. */
   close() {
-    const me = this.me();
-    if (me) run("pane.close", { pane: me.pane });
+    const me = this.me() ?? (this.alone ? null : this.panel());
+    if (!me) return;
+    const from = shared(FROM), had = focused()?.pane === me.pane;
+    run("pane.close", { pane: me.pane });
+    if (!this.alone && had && from && from !== me.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
+  }
+
+  /** p: a file in the app's viewer for it (the preview, Markdown); others in the editor. */
+  preview(row, cx) {
+    if (row && !row.dir && !row.head) this.openFile(row.path, cx);
   }
 
   /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
@@ -544,8 +592,8 @@ export default class Files extends View {
     if (low === "h" && upper) this.setFilter("hidden", cx);
     else if (low === "i" && upper) this.setFilter("ignored", cx);
     else if (k === "/") this.input.focus();
-    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else return; }
-    else if (k === "q" && this.alone) this.close();
+    else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.close(); else this.leave(); }
+    else if (k === "q") this.close();
     else if (k === "[" || k === "backspace") this.back(cx);
     else if (k === "]") this.forward(cx);
     else if (k === "j" || k === "down") this.select(rows, i + 1);
@@ -566,6 +614,7 @@ export default class Files extends View {
     else if (k === "E" || (low === "e" && m.shift)) this.terminalEdit(row?.path ?? "", cx);
     else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "v") this.nvim(row ?? null);
+    else if (k === "p") this.preview(row, cx);
     else if (k === "o") this.openPane(row?.dir ? row.path : "");
     else if (k === "y") this.copy(row?.path ?? "", cx);
     else if (k === "m") this.openMenu(row ?? { path: "", name: this.root, dir: true }, cx);
@@ -590,12 +639,12 @@ export default class Files extends View {
       .child(div().relative().child(label));
   }
 
-  toolbar(t, w) {
+  toolbar(t, w, focused) {
     const changed = Object.values(this.marks).filter((m) => m !== "•").length;
     const name = this.root === "/" ? "/" : this.root.split("/").pop();
     const fit = toolbarFit(w, { alone: this.alone, branch: this.branch, changed, name });
     return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
-      .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(t.ansi8).child("FILES")))
+      .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(focused ? t.accent : t.ansi8).child("FILES")))
       .child(this.chip(t, "nf-back", "‹", (cx) => this.back(cx), this.root !== "/" || this.nav.past.length > 0))
       .child(this.chip(t, "nf-forward", "›", (cx) => this.forward(cx), this.nav.future.length > 0))
       .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
@@ -609,7 +658,8 @@ export default class Files extends View {
         .on_mouse_down("left", stop)
         .on_click(() => this.close())
         .child(svg(`${ICONS}/x.svg`).size(12))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      // The keyboard is here: the rule under the toolbar lights up.
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : t.ansi0, 1)));
   }
 
   /** A filter's switch: an open eye while that kind is listed; a shut one,
@@ -750,7 +800,7 @@ export default class Files extends View {
         const s = { width: size.width / zoom(), height: size.height / zoom() };
         if (Math.abs(s.width - this.size.width) > 1 || Math.abs(s.height - this.size.height) > 1) { this.size = s; cx.notify(); }
       })
-      .child(this.toolbar(t, w))
+      .child(this.toolbar(t, w, focused))
       .child(this.lens(t, w, rows.filter((r) => !r.head).length))
       .child(body)
       .when(Boolean(foot), (el) => el.child(div().flex_none().px(10).py(4).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0).child(foot)))
