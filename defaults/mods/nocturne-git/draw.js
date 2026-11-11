@@ -183,8 +183,8 @@ export function diffLine(t, row, { code, compact = false, pick = false, cursor =
   }
   if (row.kind === "log") {
     // The branch log (lazygit's git log --graph): the lanes, then the text.
-    const graph = row.node ? graphCell(t, row.g, row.w, { lane: 12, h, head: row.head }) : graphPass(t, row.g.after, row.w, { lane: 12, h });
-    return h_flex().h(h).w_full().items_center().pl(8).pr(10).gap(8).text_size(11.5).overflow_hidden()
+    const graph = row.node ? graphCell(t, row.g, row.w, { lane: 10, h, head: row.head }) : graphPass(t, row.g.after, row.w, { lane: 10, h });
+    return h_flex().h(h).w_full().items_center().pl(6).pr(10).gap(6).text_size(11.5).overflow_hidden()
       .child(graph)
       .child(h_flex().flex_1().min_w(0).overflow_hidden().children((row.parts ?? []).map(([s, c], i) => div().id(`lg-${i}`).flex_none().text_color(t[c] ?? c).child(s))));
   }
