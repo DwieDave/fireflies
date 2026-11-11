@@ -117,3 +117,22 @@ test("in the jar: the pinned, focused agent's ticks frame its square too", () =>
   expect(w).toHaveLength(1);
   expect(has(w[0].el, "size", GLOW_SQUARE.size)).toBe(true);
 });
+
+const { SHOWN_INSET } = await import("../defaults/mods/nocturne/spaces.js");
+
+test("open sidebar: the shown space's row wears the corner ticks on its plate, the others none", () => {
+  const w = wearers(draw());
+  const shown = w.filter((x) => x.path.includes("space-s1"));
+  expect(shown).toHaveLength(1);
+  // The plate, in from the sidebar's edges, the ticks on its corners.
+  expect([has(shown[0].el, "left", SHOWN_INSET), has(shown[0].el, "right", SHOWN_INSET)]).toEqual([true, true]);
+  expect(SHOWN_INSET).toBeGreaterThan(0);
+  expect(shown[0].el.kids.filter(isTick).map((k: El) => k.calls.find(([n]) => n === "left" || n === "right")![1][0])).toEqual([-0, -0]);
+  expect(w.filter((x) => x.path.includes("space-s2"))).toHaveLength(0);
+});
+
+test("folded rail: the shown space's initials wear them, the others none", () => {
+  const w = wearers(draw(true));
+  expect(w.filter((x) => x.path.includes("rail-space-s1"))).toHaveLength(1);
+  expect(w.filter((x) => x.path.includes("rail-space-s2"))).toHaveLength(0);
+});

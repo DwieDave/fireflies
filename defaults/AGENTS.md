@@ -985,8 +985,8 @@ Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
 last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
-drops nothing. Two blue corner ticks mark what's shown: the shown space on the
-folded rail, the focused agent in the sky (around its firefly's dotted square,
+drops nothing. Two blue corner ticks mark what's shown: the shown space (its plate in
+the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
 
 ### Layouts and mods other people made

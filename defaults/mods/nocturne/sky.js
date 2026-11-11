@@ -39,10 +39,12 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal, navRing } from "./kit.js";
+import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, focusedTerminal, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
 import { stamps } from "./pins.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
+
+export { GLOW_SQUARE };
 import { NAME_AGENT, openMenu, openKeys } from "./menu.js";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
 import { toggleGit, openWorktrees } from "./git.js";
@@ -69,23 +71,6 @@ const pad = (n) => String(n).padStart(2, "0");
 function clock() {
   const d = new Date();
   return { time: `${pad(d.getHours())}:${pad(d.getMinutes())}`, date: `${DAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}` };
-}
-
-// The open sky's firefly square: the dots of art/glow.svg span 8..34 of its
-// 40 px; the ticks sit 2 px off them.
-export const GLOW_SQUARE = { at: 8, size: 26 };
-const TICK_OUT = 2;
-
-/** The blue corner ticks: a 4 px corner in the accent at a thing's top left
- *  and one at its bottom right, `out` px outside its box (0: on its corners).
- *  What's shown wears them: the shown space (its row in the open sidebar, its
- *  initials on the rail) and the focused agent (its firefly's square in the
- *  open sky, its cell on the rail). */
-function cornerTicks(t, out = 3) {
-  const tick = (pos) => div().absolute().size(4).border_color(t.accent)
-    .when(pos === "top", (el) => el.left(-out).top(-out).border_t(1).border_l(1))
-    .when(pos === "bottom", (el) => el.right(-out).bottom(-out).border_b(1).border_r(1));
-  return [tick("top"), tick("bottom")];
 }
 
 function moonPhase(list) {

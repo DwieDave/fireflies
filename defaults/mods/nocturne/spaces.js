@@ -26,9 +26,12 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared } from "herdr";
-import { dither, pip, eyebrow, spaceFolder, navRow, navRing } from "./kit.js";
+import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
 import { formKey } from "./form-keys.js";
+
+// The shown space's plate and its corner ticks: this far in from the sidebar's edges.
+export const SHOWN_INSET = 8;
 import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
@@ -332,7 +335,10 @@ export default class Spaces {
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu(s); })
       .on_click(() => run("space.select", { id: s.id }))
       .hover((st) => st.bg(t.ansi0 + "55"))
-      .when(s.active, (el) => el.child(dither(t.ansi0, 1)))
+      // Shown: a plate of the ground, in from the sidebar's edges, with the
+      // blue corner ticks on its corners, as its initials wear them on the rail.
+      .when(s.active, (el) => el.child(div().absolute().top(0).bottom(0).left(SHOWN_INSET).right(SHOWN_INSET)
+        .child(dither(t.ansi0, 1)).children(cornerTicks(t, 0))))
       .map((el) => navRow(t, el, on))
       .when(depth > 0, (el) => el.child(this.indent(t, depth)))
       .child(pip(t, s.status))

@@ -136,3 +136,20 @@ export function navRow(t, el, on) {
 export function navRing(t, el, on) {
   return on ? el.child(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent)) : el;
 }
+
+// The open sky's firefly square: the dots of art/glow.svg span 8..34 of its
+// 40 px; the ticks sit 2 px off them.
+export const GLOW_SQUARE = { at: 8, size: 26 };
+export const TICK_OUT = 2;
+
+/** The blue corner ticks: a 4 px corner in the accent at a thing's top left
+ *  and one at its bottom right, `out` px outside its box (0: on its corners).
+ *  What's shown wears them: the shown space (its row in the open sidebar, its
+ *  initials on the rail) and the focused agent (its firefly's square in the
+ *  open sky, its cell on the rail). */
+export function cornerTicks(t, out = 3) {
+  const tick = (pos) => div().absolute().size(4).border_color(t.accent)
+    .when(pos === "top", (el) => el.left(-out).top(-out).border_t(1).border_l(1))
+    .when(pos === "bottom", (el) => el.right(-out).bottom(-out).border_b(1).border_r(1));
+  return [tick("top"), tick("bottom")];
+}
