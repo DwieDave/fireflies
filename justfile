@@ -46,6 +46,8 @@ test:
     bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/nocturne-github.test.ts scripts/nocturne-github-cache.test.ts scripts/nocturne-github-remotes.test.ts scripts/nocturne-equalize-panes.test.ts scripts/nocturne-scripts.test.ts scripts/nocturne-scripts-runs.test.ts scripts/nocturne-scripts-nix.test.ts scripts/nocturne-markdown.test.ts scripts/nocturne-notifications.test.ts scripts/nocturne-preview.test.ts scripts/nocturne-preview-table.test.ts scripts/nocturne-preview-diff.test.ts scripts/nocturne-preview-native.test.ts scripts/nocturne-github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/nocturne-git.test.ts
     # Its own process: it stands in for "herdr" (mock.module is process-wide).
     bun test scripts/nocturne-github-projects-tab.test.ts
+    # The git window on a real scratch repo, with herdr and gpui stand-ins.
+    bun test scripts/nocturne-git-view.test.ts
     cargo test --locked
 
 docs-generate: build
