@@ -12,7 +12,8 @@
 //   enter / i  into the page        o  /   the address
 //   H L  back / forward   r  reload   + - 0  zoom   p  picture in picture
 //   d  the inspector   O  the system's browser   ?  the keys, under the bar
-//   tab / shift-tab  the bar's buttons (a ring shows which), enter presses it
+//   t  new tab   x  close the tab   J K  the tab left / right   1-9  a tab (9 the last)
+//   tab / shift-tab  the tabs and the bar's buttons (a ring shows which), enter presses it
 //   esc  the ring, then the keys strip, away
 //   ⧉        (only while the page has a <video>)
 //            the page's video in the nocturne-pip player, a Herdr window over
@@ -28,6 +29,20 @@
 //   </>      Safari's Web Inspector for the page, in a pane split beside it
 //            (again: closes it). That pane is this mod with props
 //            { inspect }: the inspector alone, no bar.
+//
+// Tabs (tabs.js has the rules): one pane, several pages, each its own web view
+// (id "web", "web-2", …) kept alive while another shows, in no room at all
+// (which hides a native view). From two on, a strip over the bar: number,
+// title, × (a middle click closes too), + a blank tab. The view is made with
+// `tabs: true`, so what would open a window comes as web.newTab: a middle or
+// Cmd click on a link and the link menu's "Open Link in New Tab" behind (Shift:
+// in front), target=_blank / window.open in front, each after its page's
+// earlier links. The bar, zoom, picture in picture and the inspector act on the
+// shown tab. Closing the last tab leaves a blank one. Kept in localStorage
+// "tabs" (addresses, titles, zoom): after a restart only the shown tab loads,
+// the others when first shown. Commands tab_new, tab_close, tab_next, tab_prev,
+// tab:<n>, and open:<{ url, slot? } as JSON, or a URL> (the editor's links):
+// the copy whose slot it names opens it in front and its pane takes the keyboard.
 //
 // Several can be open, in one tab or many: each pane is its own mod copy
 // (its own view, events and localStorage, when its props carry a `slot`).
@@ -50,8 +65,9 @@
 // Logins persist: the view keeps its own WebKit store (persist: true), never
 // Safari's or Chrome's. A new pane starts on a blank sky with the address
 // field focused, so nothing loads until you type.
-// Props: { url?, slot? }: url to open on a page; slot, unique per pane, keeps
-// its remembered page and zoom apart from other panes' (the store is per props).
+// Props: { url?, slot? }: url to open on a page (saved tabs win over it); slot,
+// unique per pane, keeps its remembered tabs apart from other panes' (the store
+// is per props).
 // { inspect }: an inspector pane for the web view with that key.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
@@ -59,15 +75,16 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
 import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, window as appWindow } from "herdr";
 import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import * as Tabs from "./tabs.js";
 
-const ID = "web";
 const ICONS = "mods/nocturne-browser/icons";
 const SEARCH = "https://duckduckgo.com/?q=";
 // What `?` lists.
 // Every key key() and barKey() take (the cmd ones are keys.json's mod:nocturne-browser), ? keys last.
 export const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /  ⌘l ⌘p", "address"], ["H L  ⌘[ ⌘]", "back / forward"],
   ["r  ⌘r", "reload"], ["+ - 0", "zoom"], ["p", "picture in picture"], ["d  ⌘⌥i", "inspector"], ["O", "system browser"],
-  ["tab ⇧tab", "buttons (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
+  ["t", "new tab"], ["x", "close the tab"], ["J K", "tab left / right"], ["1-9", "tab 1 to 8, 9 the last"],
+  ["tab ⇧tab", "buttons and tabs (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 /** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
 // The copy that last had the keyboard or a click: it takes broadcast commands
@@ -147,18 +164,18 @@ export default class Browser extends View {
         Browser.bound = true;
       } catch { /* key() still takes a tab that reaches it */ }
     }
-    let saved = null;
-    try { saved = localStorage.getItem("url"); } catch {}
-    // The page the view is created on. Later pages go through navigate
-    // calls: new props would rebuild the view.
-    this.start = pr.url ? target(pr.url) : saved;
-    // Page zoom, per pane: a step under the UI's size by default.
-    this.zoom = 0.9;
-    try { this.zoom = Number(localStorage.getItem("zoom")) || 0.9; } catch {}
-    this.page = { href: this.start, title: null, loading: false, progress: 0, canGoBack: false, canGoForward: false };
-    this.error = null;
-    // The page has a <video> (event web.video): ⧉ shows only then.
-    this.video = false;
+    let saved = null, savedTabs = null, zoom = 0.9;
+    try {
+      saved = localStorage.getItem("url");
+      savedTabs = localStorage.getItem("tabs");
+      // Page zoom, per tab: a step under the UI's size by default.
+      zoom = Number(localStorage.getItem("zoom")) || 0.9;
+    } catch {}
+    // The tabs (tabs.js), each its own web view: the ones saved, else one on
+    // the props' page, else the page this pane had before it kept tabs. A
+    // tab's view is created on its `start`; later pages go through navigate
+    // calls (new props would rebuild the view).
+    this.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(pr.url ? target(pr.url) : saved, zoom);
     this.barW = 600;
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "address or search" });
@@ -191,10 +208,102 @@ export default class Browser extends View {
         // the window focuses this pane any other way (a tab switch, agent.next).
         // A blank pane: the address field it types into keeps the keyboard.
         if (c === "focus") { this.claim(); if (this.editing && !this.start) this.input.focus(); else this.handle.focus(); }
+        // open names its pane by slot (else the one that takes the rest).
+        else if (c === "open" || c.startsWith("open:")) this.openCommand(c.slice(5), cx);
         else if (this.mine()) this.command(c, cx);
         cx.notify();
       }
     });
+  }
+
+  // The shown tab, and its page, address, zoom, … as the bar acts on them.
+  get tab() { this.tabs ??= Tabs.single(null, 0.9); return Tabs.activeTab(this.tabs); }
+  get start() { return this.tab.start; }
+  set start(v) { this.tab.start = v; }
+  get page() { return this.tab.page; }
+  set page(v) { this.tab.page = v; }
+  get error() { return this.tab.error; }
+  set error(v) { this.tab.error = v; }
+  /** The page has a <video> (event web.video): ⧉ shows only then. */
+  get video() { return this.tab.video; }
+  set video(v) { this.tab.video = v; }
+  get zoom() { return this.tab.zoom; }
+  set zoom(v) { this.tab.zoom = v; }
+
+  /** A call to tab `id`'s view that may find none (a tab not loaded yet). */
+  quiet(id, action, args) {
+    if (!available()) return null;
+    try { return herdr.nativeViewCall(id, action, args ?? {}); } catch { return null; }
+  }
+
+  /** The tabs, kept for the next start (and the shown page, as before tabs). */
+  saveTabs() {
+    try {
+      localStorage.setItem("tabs", Tabs.save(this.tabs));
+      if (this.page.href) localStorage.setItem("url", this.page.href);
+    } catch {}
+  }
+
+  /** A new tab on `url` (null: blank, its address open). In front unless
+   *  `background`; `opener`: the tab whose link opened it. */
+  openTab(url, { background = false, opener = null } = {}, cx) {
+    const before = this.tabs.active;
+    const [next, tab] = Tabs.open(this.tabs, url, { background, opener });
+    this.tabs = next;
+    if (background) this.saveTabs();
+    else this.shown(before, cx);
+    return tab;
+  }
+
+  /** Shows tab `id` (a click, a key, a command). */
+  showTab(id, cx) {
+    // A tab closed under the click (its ×): nothing to show.
+    if (!id || id === this.tabs.active || !this.tabs.list.some((t) => t.id === id)) return;
+    const before = this.tabs.active;
+    this.tabs = Tabs.show(this.tabs, id);
+    this.shown(before, cx);
+  }
+
+  /** After another tab came to the front: the one before steps aside, the
+   *  address follows (a blank tab: its field takes the keyboard). */
+  shown(before, cx) {
+    if (before) this.quiet(before, "setVisible", { visible: false });
+    this.tab.live = true;
+    this.quiet(this.tab.id, "setVisible", { visible: true });
+    this.editing = !this.start;
+    if (this.editing) { this.input?.set_value(""); cx?.timer?.after(50, () => this.input.focus()); }
+    this.saveTabs();
+  }
+
+  /** Closes tab `id` (the shown one by default): its view goes, and its
+   *  inspector pane. The last tab leaves a blank one: the pane stays. */
+  closeTab(id, cx) {
+    const tab = this.tabs.list.find((t) => t.id === (id ?? this.tabs.active));
+    if (!tab) return;
+    const of = tab.of ?? null;
+    const pane = of ? this.inspectorPane(of) : null;
+    if (pane) run("pane.close", { pane });
+    if (tab.live) this.quiet(tab.id, "dispose");
+    const was = this.tabs.active;
+    [this.tabs] = Tabs.close(this.tabs, tab.id);
+    if (this.tabs.active !== was) this.shown(null, cx);
+    else this.saveTabs();
+  }
+
+  /** `nocturne-browser.open:<{ url, slot? } or a URL>`: the page in a new tab
+   *  in front, and this pane takes the keyboard (the editor's links). */
+  openCommand(value, cx) {
+    const a = Tabs.openArgs(value);
+    if (!a || !(a.slot != null ? a.slot === this.slot : this.mine())) return;
+    const url = target(a.url);
+    if (!url) return;
+    this.openTab(url, {}, cx);
+    this.claim();
+    const me = this.ownPane();
+    if (me && focused()?.pane !== me.pane) run("pane.focus", { pane: me.pane });
+    this.handle?.focus();
+    // Its view comes with the next frame.
+    cx?.timer?.after(300, () => this.focusPage());
   }
 
   /** A click on the bar: this copy's, and not the pane's below. */
@@ -210,7 +319,7 @@ export default class Browser extends View {
   mine() {
     const f = focused()?.pane;
     const pane = f ? panes().find((x) => x.pane === f && x.mod === "nocturne-browser") : null;
-    if (pane?.props?.inspect != null) return String(pane.props.inspect) === this.viewKey();
+    if (pane?.props?.inspect != null) return this.tabs.list.some((t) => this.keyOf(t) === String(pane.props.inspect));
     if (pane?.props?.slot != null) return String(pane.props.slot) === this.slot;
     // A web pane without a slot: not one of the panes that have theirs.
     if (pane && this.ownSlot) return false;
@@ -218,11 +327,11 @@ export default class Browser extends View {
     return a == null || a === this.slot;
   }
 
-  /** This copy's web view key (an inspector pane's props name it), once it has one. */
-  viewKey() {
-    if (this.of || !this.start || !available()) return this.of ?? null;
-    try { this.of = herdr.nativeViewCall(ID, "web.inspect", {})?.of ?? null; } catch { this.of = null; }
-    return this.of;
+  /** Tab `t`'s web view key (an inspector pane's props name it), once it has one. */
+  keyOf(t) {
+    if (t.of || !t.start || !t.live || !available()) return t.of ?? null;
+    try { t.of = herdr.nativeViewCall(t.id, "web.inspect", {})?.of ?? null; } catch { t.of = null; }
+    return t.of;
   }
 
   /** This copy's pane is the window's focused one. */
@@ -284,6 +393,12 @@ export default class Browser extends View {
 
   onEvent(e, cx) {
     const d = e.data ?? {};
+    // Each tab's view says its id; a closed tab's last words go nowhere.
+    const tab = e.id == null ? this.tab : this.tabs.list.find((t) => t.id === e.id);
+    if (!tab) return;
+    // A new window, a middle or Cmd click, the link menu (native view `tabs: true`).
+    if (e.event === "web.newTab" && d.url) this.openTab(d.url, { background: Boolean(d.background), opener: tab.id }, cx);
+    if (e.event === "web.newTab" && d.url && !d.background) cx?.timer?.after(300, () => this.focusPage());
     if (e.event === "view.click") this.claim();
     // cmd+esc in the page: the keyboard is the bar's again.
     if (e.event === "view.escapeKey") { this.claim(); this.handle.focus(); }
@@ -296,13 +411,13 @@ export default class Browser extends View {
     // web.location: the address changed without a load too (links in
     // single-page apps, pushState, #fragments, back/forward within a page).
     if ((e.event?.startsWith("load.") && e.event !== "load.error") || e.event === "web.location") {
-      this.page = { ...this.page, ...d, href: d.href ?? d.url ?? this.page.href };
-      if (e.event === "load.start") this.error = null;
-      if ((e.event === "load.finish" || e.event === "web.location") && this.page.href) { try { localStorage.setItem("url", this.page.href); } catch {} }
+      tab.page = { ...tab.page, ...d, href: d.href ?? d.url ?? tab.page.href };
+      if (e.event === "load.start") tab.error = null;
+      if ((e.event === "load.finish" || e.event === "web.location") && tab.page.href) this.saveTabs();
     }
     // ⧉ shows while the page has a <video> (it comes and goes with the page).
-    if (e.event === "web.video") this.video = Boolean(d.present);
-    if (e.event === "load.error") { this.page = { ...this.page, loading: false }; this.error = d.message ?? "The page didn't load."; }
+    if (e.event === "web.video") tab.video = Boolean(d.present);
+    if (e.event === "load.error") { tab.page = { ...tab.page, loading: false }; tab.error = d.message ?? "The page didn't load."; }
     // The page's video goes to the player (⧉), or comes back into Herdr from
     // its popped-out window: the player shows it. Meanwhile the page is away.
     // From the window out of Herdr's ◧ / ⤓, `then`: the player goes on into a pane or a chip.
@@ -320,8 +435,9 @@ export default class Browser extends View {
     if (e.event === "pip.start" && d.error) this.error = `Picture in picture: ${d.error}`;
   }
 
+  /** A call to the shown tab's view. */
   call(action, args) {
-    try { return herdr.nativeViewCall(ID, action, args ?? {}); } catch (err) { this.error = String(err?.message ?? err); return null; }
+    try { return herdr.nativeViewCall(this.tab.id, action, args ?? {}); } catch (err) { this.error = String(err?.message ?? err); return null; }
   }
 
   noteShown() {
@@ -409,7 +525,7 @@ export default class Browser extends View {
   /** The page takes AppKit's keyboard (quietly: no view yet is no error). */
   focusPage() {
     if (!this.start || !available()) return;
-    try { herdr.nativeViewCall(ID, "focus", {}); } catch {}
+    try { herdr.nativeViewCall(this.tab.id, "focus", {}); } catch {}
   }
 
   /** Out of the address field without going: the page has the keyboard
@@ -453,8 +569,14 @@ export default class Browser extends View {
     else if (c === "zoom_in" || c === "zoom_out" || c === "zoom_reset") {
       const z = c === "zoom_reset" ? 0.9 : this.zoom + (c === "zoom_in" ? 0.1 : -0.1);
       this.zoom = Math.round(Math.min(3, Math.max(0.5, z)) * 10) / 10;
+      // The zoom a new tab starts on, too.
       try { localStorage.setItem("zoom", String(this.zoom)); } catch {}
+      this.saveTabs();
     }
+    else if (c === "tab_new") this.openTab(null, {}, cx);
+    else if (c === "tab_close") this.closeTab(null, cx);
+    else if (c === "tab_next" || c === "tab_prev") this.showTab(Tabs.step(this.tabs, c === "tab_next" ? 1 : -1), cx);
+    else if (/^tab:\d$/.test(c)) this.showTab(Tabs.nth(this.tabs, Number(c.slice(4))), cx);
   }
 
   key(e, cx) {
@@ -500,6 +622,11 @@ export default class Browser extends View {
     else if (k === "p" && ready && (this.video || this.away)) this.command("pip");
     else if (k === "d" && ready) this.inspector(cx);
     else if (k === "O") this.external(cx);
+    else if (k === "t") this.command("tab_new", cx);
+    else if (k === "x") this.command("tab_close", cx);
+    else if (k === "J") this.command("tab_prev", cx);
+    else if (k === "K") this.command("tab_next", cx);
+    else if (/^[1-9]$/.test(k)) this.command(`tab:${k}`, cx);
     else return false;
     return true;
   }
@@ -615,22 +742,74 @@ export default class Browser extends View {
     if (!available()) body = this.blank(t, "This Herdr has no native views", "The browser needs the DwieDave/herdr-app build (native-view/0).");
     else if (!this.start) body = this.blank(t, "Nothing open", "Type an address or a search, then Enter.");
     else {
-      // The mod's children sit under the native view: seen while it loads,
-      // or while a Herdr menu or dialog makes the view step aside.
-      body = div().flex_1().min_h(0).relative().child(herdr.nativeView.new(ID, { kind: "web", url: this.start, persist: true, zoom: this.zoom, pip: true })
-        .child(this.away
-          ? this.blank(t, "Playing in picture in picture", "↩ in the player brings it back here.")
-          : this.blank(t, this.page.loading ? "Loading…" : "", this.page.href)));
+      body = div().flex_1().min_h(0).relative().child(this.webView(t, this.tab));
     }
+    // The other tabs' pages stay alive (their video, scroll, forms), out of
+    // sight: in no room at all, which hides a native view.
+    const behind = !available() ? [] : this.tabs.list.filter((x) => x.live && x.start && x.id !== this.tab.id)
+      .map((x) => div().h(0).flex_none().overflow_hidden().child(this.webView(t, x)));
     return v_flex().id("browser").size_full().bg(t.background).track_focus(this.handle)
       .key_context(CONTEXT)
       .on_action(TAB, (_e, cx) => this.key(tabEvent(false), cx))
       .on_action(TAB_BACK, (_e, cx) => this.key(tabEvent(true), cx))
       .on_mouse_down("left", () => this.claim())
       .on_key_down((e, cx) => this.key(e, cx))
+      .when(this.tabs.list.length > 1, (el) => el.child(this.strip(t)))
       .child(this.bar(t))
       .when(Boolean(this.error), (el) => el.child(div().flex_none().px(10).py(4).text_size(11).text_color(t.blocked).child(this.error)))
       .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
-      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(body) : body);
+      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(body) : body)
+      .children(behind);
+  }
+
+  /** Tab `tab`'s page: a WebKit view of its own (id: the tab's). The mod's
+   *  children sit under it: seen while it loads, or while a Herdr menu or
+   *  dialog makes the view step aside. `tabs`: what would open a window
+   *  comes as web.newTab. */
+  webView(t, tab) {
+    return herdr.nativeView.new(tab.id, { kind: "web", url: tab.start, persist: true, zoom: tab.zoom, pip: true, tabs: true })
+      .child(this.away && tab === this.tab
+        ? this.blank(t, "Playing in picture in picture", "↩ in the player brings it back here.")
+        : this.blank(t, tab.page.loading ? "Loading…" : "", tab.page.href));
+  }
+
+  /** The tabs, over the bar (two or more): number, title, ×, and + at the
+   *  end; the shown one bright on a dithered accent line, as the app's tabs.
+   *  A click shows a tab, a middle click or × closes it; tab rings them. */
+  strip(t) {
+    const item = (tab, i) => {
+      const on = tab.id === this.tabs.active;
+      const ringed = this.control(`tab:${tab.id}`, true, (cx) => this.showTab(tab.id, cx));
+      return h_flex().id(`webtab-${tab.id}`).relative().flex_1().min_w(0).max_w(200).h_full().pl(8).pr(4).gap(6).items_center()
+        .text_size(11).text_color(on ? t.foreground : t.muted)
+        .hover((s) => s.text_color(t.foreground))
+        .on_mouse_down("left", (e, cx) => this.stop(e, cx))
+        .on_click((_e, cx) => { this.claim(); this.showTab(tab.id, cx); cx.notify(); })
+        // Middle click closes it, as in a browser.
+        .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.claim(); this.closeTab(tab.id, cx); cx.notify(); })
+        .child(div().flex_none().text_color(on || tab.page.loading ? t.accent : t.dim).child(i < 9 ? String(i + 1) : "·"))
+        .child(div().flex_1().min_w(0).truncate().child(Tabs.label(tab)))
+        .child(div().id(`webtab-x-${tab.id}`).size(16).flex_none().flex().items_center().justify_center().text_color(t.dim)
+          .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+          .on_mouse_down("left", (e, cx) => this.stop(e, cx))
+          .on_click((_e, cx) => { cx.stop_propagation(); this.claim(); this.closeTab(tab.id, cx); cx.notify(); })
+          .child(svg(`${ICONS}/x.svg`).size(10)))
+        // Loading: its line runs dim; shown: the accent line it stands on.
+        .when(on || tab.page.loading, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(2).child(dither(on ? t.accent : t.ansi8, 1))))
+        .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
+    };
+    const items = this.tabs.list.map(item);
+    const plusRinged = this.control("tab-new", true, (cx) => this.openTab(null, {}, cx));
+    return h_flex().id("webtabs").relative().h(26).flex_none().pl(2).pr(6).gap(1).items_center().overflow_hidden()
+      // The horizon the tabs stand on, as the app's tab strip.
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+      .children(items)
+      .child(div().id("webtab-new").relative().size(22).flex_none().flex().items_center().justify_center()
+        .text_color(plusRinged ? t.foreground : t.muted)
+        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .when(plusRinged, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
+        .on_mouse_down("left", (e, cx) => this.stop(e, cx))
+        .on_click((_e, cx) => { this.claim(); this.openTab(null, {}, cx); cx.notify(); })
+        .child(svg(`${ICONS}/plus.svg`).size(12)));
   }
 }

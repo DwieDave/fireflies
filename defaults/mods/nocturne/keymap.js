@@ -142,6 +142,10 @@ const WORDS = {
   "nocturne-browser.back": "Back a page",
   "nocturne-browser.forward": "Forward a page",
   "nocturne-browser.inspect": "The web inspector",
+  "nocturne-browser.tab_new": "New web tab",
+  "nocturne-browser.tab_close": "Close the web tab",
+  "nocturne-browser.tab_next": "Next web tab",
+  "nocturne-browser.tab_prev": "Previous web tab",
 };
 
 // A group's rows in this order (keys() comes sorted by key): the blocks first in

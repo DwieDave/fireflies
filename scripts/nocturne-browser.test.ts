@@ -77,7 +77,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
     run: (n: string, a: any) => { app.ran.push([n, a]); return null; },
     panes: () => app.panes, spaces: () => [], focused: () => ({ pane: app.focusedPane }),
     openOverlay() {}, closeOverlay() {}, window: () => ({ platform: "macos" }),
-    nativeView: { new: () => new Element() },
+    nativeView: { new: (id: string, p: any) => { const el: any = new Element(); el.view = [id, p]; return el; } },
     nativeViewCall: (id: string, action: string, args: any) => {
       native.push([id, action, args]);
       return action === "web.inspect" ? { of: `${own.copy ?? 1}:${id}` } : null;
@@ -96,6 +96,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   };
   const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
   Object.assign(scope, await keyhelpOf(path, source, scope));
+  // `import * as Tabs from "./tabs.js"`: the real module (it imports nothing).
+  if (/import \* as Tabs from "\.\/tabs\.js"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.js")}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
   const send = async (c: string) => {
     if (waiting) { const w = waiting; waiting = null; w(c); } else queue.push(c);
@@ -194,7 +196,7 @@ test("the bar has the keyboard: every bar key of the ? list does what it says", 
   press(view, cx, "escape");
   expect(view.keysShown).toBe(false);
   // Keys the bar doesn't take go on (the app's own).
-  expect(press(view, cx, "x", char("x"))).toBe(false);
+  expect(press(view, cx, "z", char("z"))).toBe(false);
   expect(press(view, cx, "k", { key_char: null, keystroke: "cmd-k", modifiers: { platform: true } })).toBe(false);
 });
 
@@ -378,7 +380,7 @@ test("two web panes: a command acts only in the focused one, however the focus g
   await both("reload");
   expect(reloads()).toEqual([1, 3]);
   // Keys pressed on a's bar claim it.
-  press(a.view, a.cx, "x", char("x"));
+  press(a.view, a.cx, "z", char("z"));
   await both("reload");
   expect(reloads()).toEqual([2, 3]);
   // A web pane without a slot focused: not a pane that has its own.
@@ -499,4 +501,322 @@ test("entering the address (cmd-l, cmd-p, a click) selects all of it, so typing 
   blank.view.edit();
   expect(blank.view.input.selected).toBe(null);
   void cx;
+});
+
+// ---- tabs (tabs.js): one web view per tab, a strip over the bar from two on
+
+const Tabs = await import("../defaults/mods/nocturne-browser/tabs.js");
+/** The web views a render draws: [id, props, hidden (in no room)]. */
+const viewsOf = (root: any) => {
+  const out: [string, any, boolean][] = [];
+  const go = (el: any, hidden: boolean) => {
+    if (!el || typeof el !== "object" || !Array.isArray(el.nodes)) return;
+    if (Array.isArray(el.view)) out.push([el.view[0], el.view[1], hidden]);
+    const h = hidden || callOf(el, "h").some(([v]: any) => v === 0);
+    el.nodes.forEach((n: any) => go(n, h));
+  };
+  go(root, false);
+  return out;
+};
+const ids = (view: any) => view.tabs.list.map((t: any) => t.id);
+/** A fake localStorage for one test (the mod's store is per pane). */
+function storage(init: Record<string, string> = {}) {
+  const m = new Map(Object.entries(init));
+  (globalThis as any).localStorage = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => { m.set(k, String(v)); } };
+  return { m, done: () => { delete (globalThis as any).localStorage; } };
+}
+
+test("the tab model: links go after their opener and its earlier links, a closed tab's neighbor shows, the last leaves a blank one", () => {
+  let m = Tabs.single("https://a.example", 0.9);
+  expect(m).toMatchObject({ active: "web", next: 2 });
+  // Two middle clicks from a: after a, in the order clicked; a stays shown.
+  let t;
+  [m, t] = Tabs.open(m, "https://b.example", { background: true, opener: "web" });
+  expect(t.id).toBe("web-2");
+  [m] = Tabs.open(m, "https://c.example", { background: true, opener: "web" });
+  // A new tab by key: at the end, in front.
+  [m] = Tabs.open(m, null, {});
+  expect(m.list.map((x: any) => x.id)).toEqual(["web", "web-2", "web-3", "web-4"]);
+  expect(m.active).toBe("web-4");
+  // From the shown tab again (a): its next link goes after b and c.
+  m = Tabs.show(m, "web");
+  [m] = Tabs.open(m, "https://d.example", { background: true, opener: "web" });
+  expect(m.list.map((x: any) => x.page.href)).toEqual(["https://a.example", "https://b.example", "https://c.example", "https://d.example", null]);
+  // Another tab shown in between: a's next link starts a new row, right after it.
+  m = Tabs.show(Tabs.show(m, "web-2"), "web");
+  [m] = Tabs.open(m, "https://e.example", { background: true, opener: "web" });
+  expect(m.list[1].page.href).toBe("https://e.example");
+  // step wraps, nth: 1–8, 9 the last.
+  expect([Tabs.step(m, -1), Tabs.step(m, 1)]).toEqual(["web-4", "web-6"]);
+  expect([Tabs.nth(m, 1), Tabs.nth(m, 3), Tabs.nth(m, 9), Tabs.nth(m, 8), Tabs.nth(m, 0)]).toEqual(["web", "web-2", "web-4", null, null]);
+  // Closing the shown tab: its right neighbor, at the end its left one.
+  m = Tabs.show(m, "web-2");
+  [m] = Tabs.close(m, "web-2");
+  expect(m.active).toBe("web-3");
+  m = Tabs.show(m, "web-4");
+  [m] = Tabs.close(m, "web-4");
+  expect(m.active).toBe("web-5");
+  // Closing another tab keeps the shown one.
+  [m] = Tabs.close(m, "web");
+  expect(m.active).toBe("web-5");
+  // The last one: a blank tab takes its place.
+  for (const id of m.list.map((x: any) => x.id)) [m] = Tabs.close(m, id);
+  expect(m.list.length).toBe(1);
+  expect(m.list[0]).toMatchObject({ start: null, id: `web-${m.next - 1}` });
+  expect(Tabs.close(m, "nope")[1]).toBe(null);
+});
+
+test("the tab model: saved and restored (only the shown tab loads at once), names, and open's value", () => {
+  let [m] = Tabs.open(Tabs.single("https://a.example/x", 0.9), "https://b.example", { background: true, opener: "web" });
+  m.list[1].page.title = "  B page ";
+  m.list[1].zoom = 1.2;
+  m = Tabs.show(m, "web-2");
+  const r = Tabs.restore(Tabs.save(m), 0.9)!;
+  expect(r.active).toBe("web-2");
+  expect(r.next).toBe(3);
+  expect(r.list.map((t: any) => [t.id, t.start, t.page.title, t.zoom, t.live])).toEqual([
+    ["web", "https://a.example/x", null, 0.9, false], ["web-2", "https://b.example", "  B page ", 1.2, true]]);
+  expect([Tabs.restore("{", 1), Tabs.restore("{}", 1), Tabs.restore('{"tabs":[]}', 1)]).toEqual([null, null, null]);
+  // A saved number lower than its tabs' (edited by hand): new ids never clash.
+  expect(Tabs.restore('{"tabs":[{"id":"web-7","href":"https://z.example"}],"next":2}', 1)!.next).toBe(8);
+  expect([Tabs.label(r.list[1]), Tabs.label(r.list[0]), Tabs.label(Tabs.makeTab("web", null, 1)), Tabs.label(Tabs.makeTab("x", "https://www.c.example/p", 1))])
+    .toEqual(["B page", "a.example", "new tab", "c.example"]);
+  expect(Tabs.openArgs('{"url":"https://a.example","slot":"s1"}')).toEqual({ url: "https://a.example", slot: "s1" });
+  expect(Tabs.openArgs('{"url":"https://a.example"}')).toEqual({ url: "https://a.example", slot: null });
+  expect(Tabs.openArgs("https://a.example/?q=1:2")).toEqual({ url: "https://a.example/?q=1:2", slot: null });
+  expect([Tabs.openArgs(""), Tabs.openArgs("{nope"), Tabs.openArgs('{"slot":"s"}')]).toEqual([null, null, null]);
+});
+
+test("a middle click, a Cmd click and the link menu open a tab behind; a new window opens one in front", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example", copy: 1 });
+  // One tab: no strip, one view.
+  let root = view.render();
+  expect(walk(root).some((e: any) => callOf(e, "id").some(([i]: any) => i === "webtabs"))).toBe(false);
+  expect(viewsOf(root)).toEqual([["web", { kind: "web", url: "https://a.example", persist: true, zoom: 0.9, pip: true, tabs: true }, false]]);
+  for (const from of ["click", "menu"]) view.onEvent({ id: "web", event: "web.newTab", data: { url: `https://${from}.example/`, background: true, from } }, cx);
+  expect(ids(view)).toEqual(["web", "web-2", "web-3"]);
+  expect(view.tabs.active).toBe("web");
+  // The background tabs load already, out of sight.
+  root = view.render();
+  expect(viewsOf(root).map(([id, p, hidden]) => [id, p.url, hidden])).toEqual([["web", "https://a.example", false], ["web-2", "https://click.example/", true], ["web-3", "https://menu.example/", true]]);
+  expect(strings(root)).toEqual(expect.arrayContaining(["1", "a.example", "2", "click.example", "3", "menu.example"]));
+  // target=_blank / window.open: in front, after a's links; the page takes the keyboard once its view is there.
+  native.length = 0;
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://win.example/", background: false, from: "window" } }, cx);
+  expect(ids(view)).toEqual(["web", "web-2", "web-3", "web-4"]);
+  expect([view.tabs.active, view.page.href, view.editing]).toEqual(["web-4", "https://win.example/", false]);
+  expect(native).toEqual([["web", "setVisible", { visible: false }], ["web-4", "setVisible", { visible: true }]]);
+  cx.timers.splice(0).forEach((f: Function) => f(cx));
+  expect(native.at(-1)).toEqual(["web-4", "focus", {}]);
+  // A bar command now acts on the shown tab's page.
+  native.length = 0;
+  view.command("reload");
+  expect(native).toEqual([["web-4", "browser.reload", {}]]);
+  // No address (window.open("")): nothing.
+  view.onEvent({ id: "web", event: "web.newTab", data: { background: false } }, cx);
+  expect(ids(view).length).toBe(4);
+});
+
+test("each tab's events go to that tab: a page loading behind changes its own title, not the shown one's", async () => {
+  reset();
+  const store = storage();
+  try {
+    const { view, cx } = await webPane({ slot: "b1", url: "https://a.example" });
+    view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+    view.onEvent({ id: "web-2", event: "load.start", data: { href: "https://b.example/", loading: true } }, cx);
+    view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://b.example/", title: "Bee", loading: true } }, cx);
+    expect([view.page.href, view.page.title]).toEqual(["https://a.example", null]);
+    expect(view.tabs.list[1].page).toMatchObject({ title: "Bee", loading: true });
+    // Loading behind: its number in the accent, a dim line under it.
+    expect(strings(view.render())).toEqual(expect.arrayContaining(["Bee"]));
+    view.onEvent({ id: "web-2", event: "load.error", data: { message: "offline" } }, cx);
+    expect([view.error, view.tabs.list[1].error]).toEqual([null, "offline"]);
+    view.onEvent({ id: "web-2", event: "web.video", data: { present: true } }, cx);
+    expect([view.video, view.tabs.list[1].video]).toEqual([false, true]);
+    // A closed tab's last events, and the inspector's: nowhere.
+    view.onEvent({ id: "web-9", event: "web.location", data: { href: "https://z.example/" } }, cx);
+    expect(view.tabs.list.map((t: any) => t.page.href)).toEqual(["https://a.example", "https://b.example/"]);
+    // Kept: every tab's address and title.
+    expect(JSON.parse(store.m.get("tabs")!).tabs).toEqual([
+      { id: "web", href: "https://a.example", title: null, zoom: 0.9 }, { id: "web-2", href: "https://b.example/", title: "Bee", zoom: 0.9 }]);
+  } finally { store.done(); }
+});
+
+test("the tab keys in the bar: t new, x close, J K left and right, 1–9; the palette's commands do the same", async () => {
+  reset();
+  const { view, cx, native, send } = await webPane({ slot: "b1", url: "https://a.example", copy: 1 });
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "b1" }, tab: "t1", focused: true }];
+  app.focusedPane = "p1";
+  // t: a blank tab in front, its address taking the keyboard.
+  const typed = view.input.focused;
+  expect(press(view, cx, "t", char("t"))).toBe(true);
+  expect([ids(view), view.tabs.active, view.editing, view.start]).toEqual([["web", "web-2"], "web-2", true, null]);
+  cx.timers.splice(0).forEach((f: Function) => f(cx));
+  expect(view.input.focused).toBe(typed + 1);
+  // Typing an address there: its view is made on it.
+  view.go("b.example", cx);
+  expect(viewsOf(view.render()).map(([id, p, h]) => [id, p.url, h])).toEqual([["web-2", "b.example", false], ["web", "https://a.example", true]]);
+  press(view, cx, "t", char("t"));
+  view.go("c.example", cx);
+  // J K step and wrap, 1–9 jump (9: the last).
+  const shown = () => view.tabs.active;
+  press(view, cx, "k", char("K"));
+  expect(shown()).toBe("web");
+  press(view, cx, "j", char("J"));
+  expect(shown()).toBe("web-3");
+  press(view, cx, "j", char("J"));
+  expect(shown()).toBe("web-2");
+  press(view, cx, "1", char("1"));
+  expect(shown()).toBe("web");
+  press(view, cx, "9", char("9"));
+  expect(shown()).toBe("web-3");
+  press(view, cx, "5", char("5"));
+  expect(shown()).toBe("web-3");
+  // x: the shown one goes (its view too), its left neighbor shows (it was last).
+  native.length = 0;
+  press(view, cx, "x", char("x"));
+  expect([ids(view), shown()]).toEqual([["web", "web-2"], "web-2"]);
+  expect(native[0]).toEqual(["web-3", "dispose", {}]);
+  // The palette's commands (any shown copy may get them; this one is focused).
+  await send("tab_new");
+  expect(ids(view).length).toBe(3);
+  await send("tab_prev");
+  expect(shown()).toBe("web-2");
+  await send("tab_next");
+  expect(shown()).toBe("web-4");
+  await send("tab_close");
+  await send("tab_close");
+  await send("tab_close");
+  // The last tab closed: a blank one, the pane stays.
+  expect([view.tabs.list.length, view.start, view.editing]).toEqual([1, null, true]);
+  expect(app.ran.some(([n]) => n === "pane.close")).toBe(false);
+});
+
+test("tab and enter reach the strip's tabs and its +; a click shows a tab, × and a middle click close one", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.handle.is_focused = () => true;
+  let root = view.render();
+  // In drawing order: the tabs, +, then the bar's buttons (back is off: no history).
+  expect(view.controls.filter((c: any) => c.enabled).map((c: any) => c.id).slice(0, 4)).toEqual(["tab:web", "tab:web-2", "tab-new", "reload"]);
+  press(view, cx, "tab");
+  view.render();
+  press(view, cx, "tab");
+  expect(view.ring).toBe("tab:web-2");
+  root = view.render();
+  // The ring on the second tab: an accent frame inside it.
+  const tab2 = walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === "webtab-web-2"));
+  expect(walk(tab2).some((e: any) => callOf(e, "border_color").length)).toBe(true);
+  press(view, cx, "enter");
+  expect(view.tabs.active).toBe("web-2");
+  // A click on the first tab shows it.
+  root = view.render();
+  const byId = (id: string) => walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === id));
+  const handler = (el: any, name: string, button?: string) => callOf(el, name).find((a: any) => button == null || a[0] === button)?.at(-1);
+  handler(byId("webtab-web"), "on_click")({}, cx);
+  expect(view.tabs.active).toBe("web");
+  // Its middle click closes the second.
+  handler(byId("webtab-web-2"), "on_mouse_down", "middle")({}, cx);
+  expect(ids(view)).toEqual(["web"]);
+  // + opens a blank one; × closes it, and the press doesn't also show the tab under it.
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  root = view.render();
+  handler(byId("webtab-new"), "on_click")({}, cx);
+  expect([ids(view).length, view.start]).toEqual([3, null]);
+  root = view.render();
+  expect(ids(view)).toEqual(["web", "web-3", "web-4"]);
+  const x = byId("webtab-x-web-3");
+  native.length = 0;
+  handler(x, "on_mouse_down", "left")({}, cx);
+  handler(x, "on_click")({}, cx);
+  // Should the click reach the tab under the × too: that tab is gone, nothing more happens.
+  handler(byId("webtab-web-3"), "on_click")({}, cx);
+  expect([ids(view), view.tabs.active]).toEqual([["web", "web-4"], "web-4"]);
+  expect(native).toEqual([["web-3", "dispose", {}]]);
+});
+
+test("a long title is cut in the strip, not the strip; many tabs share its width", async () => {
+  reset();
+  const { view, cx } = await webPane({ slot: "b1", url: "https://a.example" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://b.example/", title: "A very long title ".repeat(12) } }, cx);
+  const root = view.render();
+  const strip = walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === "webtabs"));
+  expect(callOf(strip, "overflow_hidden").length).toBe(1);
+  const tab = walk(strip).find((e: any) => callOf(e, "id").some(([i]: any) => i === "webtab-web-2"));
+  expect([callOf(tab, "min_w"), callOf(tab, "max_w"), callOf(tab, "flex_1").length]).toEqual([[[0]], [[200]], 1]);
+  const title = walk(tab).find((e: any) => e.nodes.includes(Tabs.label(view.tabs.list[1])));
+  expect(callOf(title, "truncate").length).toBe(1);
+});
+
+test("closing a tab closes its inspector pane; the inspector's chords reach a tab behind too", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example", copy: 4 });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: false } }, cx);
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "b1" }, tab: "t1" }, { pane: "pi", mod: "nocturne-browser", props: { inspect: "4:web" }, tab: "t1" }];
+  // The inspector of tab 1 is focused, tab 2 shows: its chords are this copy's.
+  app.focusedPane = "pi";
+  expect(view.mine()).toBe(true);
+  app.store["nocturne-browser.inspectors"] = { "4:web": "pi" };
+  native.length = 0;
+  view.closeTab("web", cx);
+  expect(app.ran.at(-1)).toEqual(["pane.close", { pane: "pi" }]);
+  expect(native.filter(([, a]) => a === "dispose")).toEqual([["web", "dispose", {}]]);
+  expect(ids(view)).toEqual(["web-2"]);
+});
+
+test("nocturne-browser.open (the editor's links): the pane named by its slot opens the page in front and takes the keyboard", async () => {
+  reset();
+  const a = await webPane({ slot: "a", url: "https://a.example", copy: 1 });
+  const b = await webPane({ slot: "b", url: "https://b.example", copy: 2 });
+  app.panes = [
+    { pane: "pa", mod: "nocturne-browser", props: { slot: "a" }, tab: "t1" },
+    { pane: "pb", mod: "nocturne-browser", props: { slot: "b" }, tab: "t1" },
+    { pane: "pe", mod: "nocturne-editor", props: {}, tab: "t1", focused: true },
+  ];
+  app.focusedPane = "pe";
+  a.view.claim();
+  const both = async (c: string) => { await a.send(c); await b.send(c); };
+  await both(`open:${JSON.stringify({ url: "https://docs.example/x", slot: "b" })}`);
+  expect([ids(a.view), ids(b.view)]).toEqual([["web"], ["web", "web-2"]]);
+  expect(b.view.page.href).toBe("https://docs.example/x");
+  expect(app.ran.at(-1)).toEqual(["pane.focus", { pane: "pb" }]);
+  expect(app.store["nocturne-browser.active"]).toBe("b");
+  b.cx.timers.splice(0).forEach((f: Function) => f(b.cx));
+  expect(b.native.at(-1)).toEqual(["web-2", "focus", {}]);
+  // No slot: the copy that takes the other commands (b, claimed last); a bare address.
+  await both("open:docs.example/y");
+  expect([ids(a.view).length, ids(b.view).length]).toEqual([1, 3]);
+  expect(b.view.page.href).toBe("docs.example/y");
+  // Already the focused pane: no pane.focus.
+  app.focusedPane = "pb";
+  const ran = app.ran.length;
+  await both(`open:${JSON.stringify({ url: "https://z.example", slot: "b" })}`);
+  expect(app.ran.length).toBe(ran);
+  // Nothing to open: nothing.
+  await both("open:");
+  expect(ids(b.view).length).toBe(4);
+});
+
+test("the tabs come back after a restart: the shown one loads, the others when first shown", async () => {
+  reset();
+  const saved = { active: "web-2", next: 3, tabs: [{ id: "web", href: "https://a.example/", title: "A", zoom: 1 }, { id: "web-2", href: "https://b.example/", title: "B", zoom: 1.1 }] };
+  const store = storage({ tabs: JSON.stringify(saved), url: "https://b.example/", zoom: "1.1" });
+  try {
+    // The props' url is where the pane began: the saved tabs win over it.
+    const { view, cx } = await webPane({ slot: "b1", url: "https://a.example/" });
+    expect([ids(view), view.tabs.active, view.zoom, view.editing]).toEqual([["web", "web-2"], "web-2", 1.1, false]);
+    expect(viewsOf(view.render()).map(([id, , h]) => [id, h])).toEqual([["web-2", false]]);
+    expect(strings(view.render())).toEqual(expect.arrayContaining(["A", "B"]));
+    press(view, cx, "1", char("1"));
+    expect(viewsOf(view.render()).map(([id, p, h]) => [id, p.url, h])).toEqual([["web", "https://a.example/", false], ["web-2", "https://b.example/", true]]);
+    // Before tabs: one page saved; it comes back as the one tab.
+    reset();
+    store.m.delete("tabs");
+    store.m.set("url", "https://b.example/");
+    const old = await webPane({ slot: "b2" });
+    expect([ids(old.view), old.view.start]).toEqual([["web"], "https://b.example/"]);
+  } finally { store.done(); }
 });

@@ -39,7 +39,10 @@ herdr-app do agent.focus --terminal t7
 
 To show the person a web page, `herdr-app do app.open_url --url https://...`
 opens it in a web pane beside the focused one (or the system's browser, per
-their `links` setting).
+their `links` setting). A web pane keeps tabs: `herdr-app do
+nocturne-browser.open:https://...` opens the page in a new tab of the web
+pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
+`.tab_close` move between them).
 
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused

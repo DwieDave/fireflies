@@ -25,7 +25,7 @@ use objc2_foundation::{
 use objc2_pdf_kit::{PDFDisplayMode, PDFDocument, PDFView, PDFViewPageChangedNotification};
 use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
 use objc2_web_kit::{
-    WKNavigation, WKNavigationAction, WKNavigationDelegate, WKScriptMessage,
+    WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate, WKScriptMessage,
     WKScriptMessageHandler, WKUIDelegate, WKUserContentController, WKWebView,
     WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
 };
@@ -436,8 +436,8 @@ fn make(
                 // Web Inspector: right-click "Inspect Element", and `web.inspect`.
                 let yes = NSNumber::new_bool(true);
                 let _: () = msg_send![&*config.preferences(), setValue: &*yes, forKey: &*NSString::from_str("developerExtrasEnabled")];
-                let view =
-                    WKWebView::initWithFrame_configuration(WKWebView::alloc(mtm), frame, &config);
+                // Its link menu says "in New Tab" when the mod keeps tabs (crate::tabs).
+                let view = crate::tabs::new_web_view(mtm, frame, &config);
                 let _: () = msg_send![&*view, setInspectable: true];
                 let delegate = WebDelegate::new(mtm, key, generation);
                 if spec.pip {
@@ -1168,6 +1168,7 @@ pub fn dispose(key: &str) {
                 crate::pip::unconfigure(&view.configuration().userContentController());
                 crate::pip::web_gone(key);
                 crate::page::web_gone(key);
+                crate::tabs::web_gone(key);
                 view.stopLoading();
                 view.setNavigationDelegate(None);
                 view.setUIDelegate(None);
@@ -1206,6 +1207,22 @@ pub fn dispose_where(pred: impl Fn(&str) -> bool) {
     for k in keys {
         dispose(&k);
     }
+}
+
+/// A web view's key, and whether its mod keeps tabs (`tabs: true`).
+pub(crate) fn web_view_key(web: &WKWebView) -> Option<(String, bool)> {
+    VIEWS.with(|v| {
+        let v = v.try_borrow().ok()?;
+        v.iter().find_map(|(k, e)| match &e.renderer {
+            Renderer::Web { view, .. } if std::ptr::eq(Retained::as_ptr(view), web) => Some((k.clone(), e.spec.tabs)),
+            _ => None,
+        })
+    })
+}
+
+/// Whether the web view `key`'s mod keeps tabs.
+fn tabs_of(key: &str) -> bool {
+    VIEWS.with(|v| v.try_borrow().ok().and_then(|v| v.get(key).map(|e| e.spec.tabs)).unwrap_or(false))
 }
 
 /// Everything the test harness wants to see, for `herdr-app do native.debug`.
@@ -1396,14 +1413,15 @@ const ESCAPE_KEY_CODE: u16 = 53;
 pub struct WebIvars {
     key: String,
     generation: Cell<u64>,
-    /// The address and history state `web.location` last reported.
-    location: RefCell<Option<(Option<String>, bool, bool)>>,
+    /// The address, history state and title `web.location` last reported.
+    location: RefCell<Option<(Option<String>, bool, bool, Option<String>)>>,
 }
 
 /// What the address bar follows: the URL changes on every navigation,
 /// including the ones the navigation delegate never hears of (pushState,
-/// replaceState, fragment changes, back/forward within a page).
-const LOCATION_KEYS: [&str; 3] = ["URL", "canGoBack", "canGoForward"];
+/// replaceState, fragment changes, back/forward within a page); and the
+/// title, which a page changes whenever it likes (a tab shows it).
+const LOCATION_KEYS: [&str; 4] = ["URL", "canGoBack", "canGoForward", "title"];
 
 /// Starts (`on`) or stops key-value observing the web view's location.
 fn observe_location(view: &WKWebView, delegate: &WebDelegate, on: bool) {
@@ -1469,6 +1487,19 @@ define_class!(
             self.report("load.error", s);
         }
 
+        // A middle or Cmd click on a link opens a tab, when the mod keeps them (crate::tabs).
+        #[unsafe(method(webView:decidePolicyForNavigationAction:decisionHandler:))]
+        fn decide_policy(
+            &self,
+            _web: &WKWebView,
+            action: &WKNavigationAction,
+            handler: &block2::DynBlock<dyn Fn(WKNavigationActionPolicy)>,
+        ) {
+            let i = self.ivars();
+            let tab = crate::tabs::click(&i.key, i.generation.get(), tabs_of(&i.key), action);
+            handler.call((if tab { WKNavigationActionPolicy::Cancel } else { WKNavigationActionPolicy::Allow },));
+        }
+
         #[unsafe(method(webViewWebContentProcessDidTerminate:))]
         fn did_terminate(&self, _web: &WKWebView) {
             // The page's process is gone, and with it the video in the player.
@@ -1513,9 +1544,9 @@ define_class!(
     }
 
     unsafe impl WKUIDelegate for WebDelegate {
-        // target=_blank and window.open: open in this same view rather than a
-        // new window. Only user-initiated ones reach here, since
-        // javaScriptCanOpenWindowsAutomatically is off.
+        // target=_blank and window.open: a tab when the mod keeps them
+        // (crate::tabs), else this same view rather than a new window. Only
+        // user-initiated ones reach here, since javaScriptCanOpenWindowsAutomatically is off.
         #[unsafe(method(webView:createWebViewWithConfiguration:forNavigationAction:windowFeatures:))]
         fn create_web_view(
             &self,
@@ -1524,6 +1555,10 @@ define_class!(
             action: &WKNavigationAction,
             _features: &WKWindowFeatures,
         ) -> *mut WKWebView {
+            let i = self.ivars();
+            if crate::tabs::new_window(&i.key, i.generation.get(), tabs_of(&i.key), action) {
+                return std::ptr::null_mut();
+            }
             unsafe {
                 if action.targetFrame().is_none() {
                     web.loadRequest(&action.request());
@@ -1552,6 +1587,7 @@ impl WebDelegate {
                 web.URL().and_then(|u| u.absoluteString()).map(|s| s.to_string()),
                 web.canGoBack(),
                 web.canGoForward(),
+                web.title().map(|s| s.to_string()),
             )
         };
         if self.ivars().location.borrow().as_ref() == Some(&now) {
