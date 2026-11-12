@@ -54,7 +54,7 @@ test("items: issues, pull requests and drafts with their values", async () => {
   const b = await board();
   const issue = b.items.find((i: any) => i.content.number === 226);
   expect(issue.content).toMatchObject({ kind: "issue", repo: "DwieDave/fireflies", state: "OPEN" });
-  expect(issue.content.assignees.map((a: any) => a.login)).toEqual(["DwieDave", "ogulcancelik"]);
+  expect(issue.content.assignees.map((a: any) => a.login)).toEqual(["DwieDave", "lanternmoth"]);
   expect(issue.content.labels.map((l: any) => l.name)).toEqual(["bug", "sidebar"]);
   expect(issue.values.F_status).toEqual({ optionId: "o_prog", name: "In progress" });
   expect(issue.values.F_sprint).toMatchObject({ iterationId: "it4", title: "Sprint 4" });
@@ -86,7 +86,7 @@ test("a missing scope says which command grants it", () => {
 test("detail and choices", async () => {
   const d = parseDetail(await load("detail.json"));
   expect(d.author).toBe("DwieDave");
-  expect(d.comments.map((c: any) => c.who)).toEqual(["ogulcancelik", "DwieDave"]);
+  expect(d.comments.map((c: any) => c.who)).toEqual(["lanternmoth", "DwieDave"]);
   expect(d.more).toBe(0);
   const c = parseChoices(await load("choices.json"));
   expect(c.labels.find((l: any) => l.name === "bug").id).toBe("L_bug");
@@ -330,7 +330,7 @@ test("mutations carry their arguments as literals", async () => {
 
 test("initials", () => {
   expect(initials("DwieDave")).toBe("DD");
-  expect(initials("ogulcancelik")).toBe("OG");
+  expect(initials("lanternmoth")).toBe("LA");
   expect(initials("cg-night")).toBe("CN");
 });
 

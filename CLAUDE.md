@@ -108,7 +108,7 @@ The merge loop, in `/Volumes/data/coding/fireflies-wt/integrate` (branch
    `nix build --no-link --print-out-paths .#darwinConfigurations.$(scutil --get LocalHostName).system`.
 5. Tell Developer: what changed in his words, what was verified, the list of
    what only his hands and eyes can check (a real pointer, native views, the
-   reports' "not verified"), the changes for Can, then
+   reports' "not verified"), the core changes for his review, then
    `! sudo darwin-rebuild switch --flake /private/etc/nix-darwin` and
    restart Fireflies. He commits the nix-darwin changes himself; the build
    takes in whatever else is uncommitted there, so name those files.
@@ -139,7 +139,7 @@ reworded: resetting main is his to run
 - Rebase onto upstream in a dedicated agent's worktree; keep our core
   changes unless an upstream change fully replaces one. Main gets rewritten
   only with Developer's yes: tag the old head, `--force-with-lease`.
-- Every change to `src/`, `vendor/` or `native/` is flagged for Can's review
+- Every change to `src/`, `vendor/` or `native/` is flagged for Developer's review
   with the three AGENTS.md questions; collect them in your reports.
 - Fork decisions stay: no telemetry; feedback opens a GitHub issue on DwieDave/fireflies.
 

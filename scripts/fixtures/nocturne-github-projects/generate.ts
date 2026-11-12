@@ -29,7 +29,7 @@ const views = { nodes: [
   { id: "V_table", number: 4, name: "Everything", layout: "TABLE_LAYOUT", filter: "", fields: named(["F_title", "F_status", "F_assignees"]), groupByFields: { nodes: [] }, verticalGroupByFields: { nodes: [] }, sortByFields: { nodes: [] } },
 ] };
 
-const people: Record<string, string> = { DwieDave: "U_dave", ogulcancelik: "U_can", "cg-night": "U_cg" };
+const people: Record<string, string> = { DwieDave: "U_dave", lanternmoth: "U_moth", "cg-night": "U_cg" };
 const labels: Record<string, [string, string]> = { bug: ["L_bug", "d73a4a"], enhancement: ["L_enh", "a2eeef"], sidebar: ["L_side", "0075ca"], "good first issue": ["L_gfi", "7057ff"] };
 let n = 0;
 type Spec = { t: string; kind?: "issue" | "pr" | "draft"; num?: number; repo?: string; st?: string; who?: string[]; lab?: string[]; pr?: string; sz?: string; sp?: string; est?: number; date?: string; notes?: string; state?: string; ms?: string };
@@ -60,7 +60,7 @@ const specs1: Spec[] = [
   { t: "Sidebar search ignores worktrees", num: 198, repo: "herdrdev/herdr-core", st: "o_backlog", lab: ["bug"], pr: "p1" },
   { t: "Sidebar badges for waiting agents", num: 240, st: "o_ready", who: ["cg-night"], sp: "it4", sz: "s_m", pr: "p2", est: 5 },
   { t: "Sidebar width survives restarts", num: 212, st: "o_ready", who: ["DwieDave"], lab: ["bug"], sp: "it4", sz: "s_s", pr: "p1", est: 2 },
-  { t: "Sidebar keyboard nav skips hidden tabs", num: 226, st: "o_prog", who: ["DwieDave", "ogulcancelik"], lab: ["bug", "sidebar"], sp: "it4", pr: "p1", est: 3, date: "2026-11-14", notes: "repro in the nocturne layout" },
+  { t: "Sidebar keyboard nav skips hidden tabs", num: 226, st: "o_prog", who: ["DwieDave", "lanternmoth"], lab: ["bug", "sidebar"], sp: "it4", pr: "p1", est: 3, date: "2026-11-14", notes: "repro in the nocturne layout" },
   { t: "Sidebar scroll jank on 120Hz", kind: "pr", num: 219, st: "o_prog", who: ["DwieDave"], sz: "s_xs", sp: "it4", pr: "p0" },
   { t: "Drag tabs between spaces", num: 211, st: "o_review", who: ["DwieDave"], sz: "s_l", sp: "it4", pr: "p2" },
   { t: "herdr-core: resize storms", kind: "pr", num: 207, repo: "herdrdev/herdr-core", st: "o_review", sp: "it3", pr: "p1" },
@@ -69,7 +69,7 @@ const specs2: Spec[] = [
   { t: "Projects tab in the GitHub window", num: 244, st: "o_ready", who: ["DwieDave"], sp: "it5", pr: "p1", sz: "s_xl", est: 8, ms: "2.1" },
   { t: "Spotlight on Linux only", num: 238, st: "o_review", sp: "it5", pr: "p3", lab: ["good first issue"] },
   { t: "Remember the board's scroll", kind: "draft", st: "o_ready", sp: "it5" },
-  { t: "Old crash on wake", num: 150, st: "o_done", who: ["ogulcancelik"], state: "CLOSED", lab: ["bug"], sp: "it2" },
+  { t: "Old crash on wake", num: 150, st: "o_done", who: ["lanternmoth"], state: "CLOSED", lab: ["bug"], sp: "it2" },
   { t: "Ship the nocturne layout", kind: "pr", num: 160, st: "o_done", state: "MERGED", sp: "it3" },
   { t: "Untriaged idea", kind: "draft" },
 ];
@@ -79,7 +79,7 @@ const page = (specs: Spec[], next: string | null, first: boolean) => ({ data: { 
 const p1 = page(specs1, "CURSOR_1", true);
 const p2 = page(specs2, null, false);
 const detail = { data: { node: { __typename: "Issue", body: "With a tab hidden by its space, `j`/`k` lands on the next visible tab but the focus ring stays on the hidden one.\n\n**Expected:** the ring follows.", url: "https://github.com/DwieDave/fireflies/issues/226", createdAt: "2026-11-07T09:00:00Z", author: { login: "DwieDave" },
-  comments: { totalCount: 2, nodes: [{ author: { login: "ogulcancelik" }, body: "Same with the palette open.", createdAt: "2026-11-08T09:00:00Z", url: "https://github.com/DwieDave/fireflies/issues/226#issuecomment-1" }, { author: { login: "DwieDave" }, body: "Looking at it in `sidebar.js`.", createdAt: "2026-11-09T09:00:00Z", url: "https://github.com/DwieDave/fireflies/issues/226#issuecomment-2" }] } } } };
+  comments: { totalCount: 2, nodes: [{ author: { login: "lanternmoth" }, body: "Same with the palette open.", createdAt: "2026-11-08T09:00:00Z", url: "https://github.com/DwieDave/fireflies/issues/226#issuecomment-1" }, { author: { login: "DwieDave" }, body: "Looking at it in `sidebar.js`.", createdAt: "2026-11-09T09:00:00Z", url: "https://github.com/DwieDave/fireflies/issues/226#issuecomment-2" }] } } } };
 const choices = { data: { repository: { labels: { nodes: Object.entries(labels).map(([name, [id, color]]) => ({ id, name, color })) }, assignableUsers: { nodes: Object.entries(people).map(([login, id]) => ({ id, login })) } } } };
 for (const [f, v] of Object.entries({ "list.json": list, "board-1.json": p1, "board-2.json": p2, "detail.json": detail, "choices.json": choices })) await Bun.write(`${out}/${f}`, JSON.stringify(v, null, 1) + "\n");
 console.log("ok");
