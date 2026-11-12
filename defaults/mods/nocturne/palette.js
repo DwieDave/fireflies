@@ -60,6 +60,7 @@ const PANE = {
     ["problems", "Show or hide the problems list", "errors warnings diagnostics drawer lsp"],
     ["reload", "Reload the file from disk", "revert refresh discard changes"],
     ["vim", "Vim mode on or off", "vim modal keys normal insert"],
+    ["wrap", "Word wrap on or off", "soft wrap long lines"],
     ["keys", "Editor keys", "help shortcuts list ? keybindings"],
     ["preview", "Markdown: next view", "preview split text rendered cycle", (p) => MARKDOWN.test(p?.props?.path ?? "")],
     ["preview-split", "Markdown: preview beside the text", "preview split rendered", (p) => MARKDOWN.test(p?.props?.path ?? "")],

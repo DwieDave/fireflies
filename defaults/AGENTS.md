@@ -487,8 +487,10 @@ the highlighted line shows where it will land.
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
   the problems drawer, cmd-k d definition (another file opens in its own
   editor), cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
-  deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
-  Markdown preview (below). The app's keys win over the code editor's own
+  deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-k w word wrap
+  on / off (vim: space u w, `:set wrap` / `nowrap` / `wrap!`; the bar's `wrap`
+  chip, lit while on; this editor only, settings.json's `soft_wrap` is where it
+  starts), cmd-shift-v the Markdown preview (below). The app's keys win over the code editor's own
   keymap: a chord keys.json binds in `global` or `layout:nocturne` and not in
   `mod:nocturne-editor` runs the app's command with an editor focused (in
   every vim mode, card open or not) and the editor does nothing with it:
@@ -511,13 +513,13 @@ the highlighted line shows where it will land.
   app's copy); `.`; macros q / @ / @@; marks m / ` / '; search / ? n N * #;
   undo u and redo ctrl-r; the ex line drawn under the bar: `:w` `:q` `:q!`
   `:wq` `:x` `:e` `:e!` `:e <file>` `:<line>` `:s/a/b/g` `:%s/(\w+)/[\1]/g`
-  (JS regex; `&`, `\1`), `:'<,'>d`, `:d` `:y` `:j`, `:noh`, `:novim`. Typing in
+  (JS regex; `&`, `\1`), `:'<,'>d`, `:d` `:y` `:j`, `:noh`, `:novim`, `:set wrap` / `nowrap`. Typing in
   insert mode stays the editor's (IME, auto-pairs, indentation): vim reads what
   was typed back from the text for `.` and macros. gd definition, gr
   references, K hover, ]d / [d next / previous problem. The **leader** (space;
   settings.json `editor.leader`) opens a which-key popup of the keys after it:
   `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
-  `h` hover, `cf` format, `?` the keys, `gd` definition, `gr` references (`ca` code action and
+  `h` hover, `cf` format, `uw` word wrap, `?` the keys, `gd` definition, `gr` references (`ca` code action and
   `rn` rename are listed, not done yet), `mp` the Markdown preview's next
   view, `ms` / `mv` / `mt` split / preview only / text only. cmd combinations
   stay the app's in every mode.
@@ -600,7 +602,7 @@ the highlighted line shows where it will land.
   machine open without a language server. Commands for the shown editors:
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
-  `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
+  `.hover-less`, `.reload`, `.vim`, `.wrap` (word wrap on / off), `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`.
 - **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
   button toggles the panel down the tab's right edge at the focused pane's
@@ -1639,7 +1641,8 @@ list or a machine's rename first.
   language id (`languageOf(path)`: `rust`, `typescript`, `tsx`, `javascript`,
   `python`, `go`, `nix`, `lua`, `bash`, `json`, `yaml`, `toml`, `markdown`,
   `css`, `html`, `c`, `zig`, `csv`, `text`). Each takes `tab_size` (1–16),
-  `insert_spaces`, `soft_wrap`, `format` (an argv that reads the file on stdin
+  `insert_spaces`, `soft_wrap` (where an editor's wrap starts: off, on for
+  `markdown` and `text`; cmd-k w switches one editor), `format` (an argv that reads the file on stdin
   and prints it formatted), `format_on_save` (off unless set), `server` (the
   language server's argv, or `false` for none) and `server_settings` (what the
   server gets as `workspace/configuration` and `initializationOptions`).
