@@ -24,14 +24,15 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import { dither, eyebrow, spaceFolder } from "./kit.js";
-import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail } from "./folderlist.js";
+import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.js";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";
 /** shared() key: the open picker, { id: its overlay, space: the one it attaches, or null }. */
 export const OPEN = "nocturne.newspace-open";
 
-export const WIDTH = 452;
+// Wide enough for a name, its path and its tag, and the footer's words beside its keys.
+export const WIDTH = 520;
 const ROW = 26;
 const SEC = 24;
 const HEAD = 34;
@@ -41,6 +42,10 @@ const CONTEXT = "NewSpace";
 const TAB = "newspace::tab", TAB_BACK = "newspace::tab_back", ESC = "newspace::escape";
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 const stop = (_e, cx) => cx.stop_propagation();
+/** A long name in the footer: its start. */
+const short = (n) => (n.length > 22 ? `${n.slice(0, 20)}…` : n);
+// A folder's subfolders, "::", then the ones that are checkouts (and ./.git when it is one).
+export const LIST_SCRIPT = 'cd "$1" 2>/dev/null || exit 1; find -L . -mindepth 1 -maxdepth 1 -type d 2>/dev/null; echo ::; find -L . -mindepth 2 -maxdepth 2 -name .git 2>/dev/null; if [ -e .git ]; then echo ./.git; fi; exit 0';
 const SECTIONS = { here: "here", spaces: "spaces", near: "near", recent: "recent", now: "now" };
 
 /** The focused pane's folder now: where "here" starts. */
@@ -73,8 +78,8 @@ export function openSpacePicker({ at = null, space = null, wasOpen = false, repl
   return id;
 }
 
-/** The picker is open ("+ new" stays lit). */
-export const pickerOpen = () => Boolean(shared(OPEN)?.id);
+/** A new-space picker is open ("+ new" stays lit; not for one attaching a space). */
+export const pickerOpen = () => Boolean(shared(OPEN)?.id) && !shared(OPEN)?.space;
 
 export default class NewSpace {
   init(p, cx) {
@@ -112,7 +117,10 @@ export default class NewSpace {
     cx.spawn((cx) => this.look(pr.here ?? null, cx));
   }
 
-  focusField() { (this.naming ? this.nameInput : this.input).focus(); }
+  focusField() {
+    if (this.done) return; // closed: its inputs are going
+    (this.naming ? this.nameInput : this.input).focus();
+  }
 
   close() {
     this.done = true;
@@ -180,8 +188,7 @@ export default class NewSpace {
     cx.spawn(async (cx) => {
       let names = [], git = new Set(), ok = false;
       try {
-        const script = 'cd "$1" 2>/dev/null || exit 1; find -L . -mindepth 1 -maxdepth 1 -type d 2>/dev/null; echo ::; find -L . -mindepth 2 -maxdepth 2 -name .git 2>/dev/null; [ -e .git ] && echo ./.git';
-        const r = await exec("sh", ["-c", script, "sh", dir], { on: this.on, timeout: 4000 });
+        const r = await exec("sh", ["-c", LIST_SCRIPT, "sh", dir], { on: this.on, timeout: 4000 });
         ok = r.code === 0;
         const [ds, gs = ""] = r.stdout.split("::");
         names = ds.split("\n").map((l) => l.trim().replace(/^\.\//, "")).filter(Boolean);
@@ -220,8 +227,8 @@ export default class NewSpace {
   rows(cx) {
     const f = this.folderRows(cx);
     const loose = this.space
-      ? { id: "loose", kind: "loose", name: "no folder", say: "detach · starts in ~, belongs to no project" }
-      : { id: "loose", kind: "loose", name: "no folder", say: "a space of its own · starts in ~, belongs to no project" };
+      ? { id: "loose", kind: "loose", name: "no folder", say: "detach: back to ~, no project" }
+      : { id: "loose", kind: "loose", name: "no folder", say: "starts in ~, belongs to no project" };
     return { ...f, all: [...f.rows.map((r) => ({ ...r, id: r.path, kind: "folder" })), { id: "browse", kind: "browse", name: "browse…", say: "the system's folder browser" }, loose] };
   }
 
@@ -364,10 +371,16 @@ export default class NewSpace {
   row(t, r, i, on) {
     const icon = r.kind === "browse" ? "search" : r.kind === "loose" ? "square" : r.from === "here" ? "terminal" : r.tag === "worktree" ? "git-branch" : "folder";
     const tagColor = r.tag === "now" ? t.accent : r.tag && !["git", "worktree"].includes(r.tag) ? t.done : t.dim;
-    const words = r.kind === "folder" ? tail(tilde(r.path, this.home), 52 - r.name.length - (r.tag?.length ?? 0)) : r.say;
+    // Where the folder is (its parent's path, the end of it in the room the name and
+    // tag leave); a typed path's own subfolders need none: the heading says it.
+    const room = 58 - r.name.length - (r.tag?.length ?? 0);
+    const where = r.kind !== "folder" || r.from === "path" ? "" : r.from === "self" || r.from === "typed" ? tilde(r.path, this.home) : `${tilde(parentOf(r.path), this.home)}/`;
+    const words = r.kind === "folder" ? (room >= 10 ? tail(where, room) : "") : r.say;
     return h_flex().id(`ns-row-${i}`).relative().h(ROW).flex_none().px(12).gap(10).items_center().text_size(11)
       .on_mouse_down("left", stop)
-      .on_hover((h, cx) => { if (h && this.cursor !== i) { this.cursor = i; cx.notify(); } })
+      // The pointer moving over a row takes the cursor; one resting where the list
+      // opens doesn't (enter would pick the row under it, not "here").
+      .on_mouse_move((_e, cx) => { if (this.cursor !== i) { this.cursor = i; cx.notify(); } })
       .on_click((_e, cx) => { this.cursor = i; this.enter(false, cx); })
       .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(svg(chrome(icon)).size(12).flex_none().relative().text_color(on || r.kind !== "folder" ? t.accent : t.ansi8))
@@ -382,18 +395,18 @@ export default class NewSpace {
     if (this.naming) {
       const n = this.nameInput.value().trim();
       const f = this.naming.folder;
-      return `a space "${n || (f ? folderName(f, this.home) : "~")}", in ${f ? tail(tilde(f, this.home), 28) : "~"}`;
+      return `"${short(n || (f ? folderName(f, this.home) : "~"))}" in ${f ? tail(tilde(f, this.home), 26) : "~"}`;
     }
     const r = all[this.cursor];
-    if (!r) return isPath(this.query) ? `a space in ${tail(this.query, 32)}` : "";
+    if (!r) return isPath(this.query) ? `in ${tail(this.query, 32)}` : "";
     if (r.kind === "browse") return "pick a folder in the system's browser";
     if (this.space) {
       if (r.kind === "loose") return `${this.space.name} detaches, back to ~`;
       if (r.from === "now") return `${this.space.name} stays where it is`;
-      return `${this.space.name} moves to ${tail(tilde(r.path, this.home), 30)}`;
+      return `${this.space.name} moves to ${tail(tilde(r.path, this.home), 24)}`;
     }
     if (r.kind === "loose") return "a space with no folder, in ~";
-    return `a space "${r.name}", in ${tail(tilde(r.path, this.home), 30)}`;
+    return `"${short(r.name)}" in ${tail(tilde(r.path, this.home), 26)}`;
   }
 
   render(_cx) {
@@ -420,7 +433,8 @@ export default class NewSpace {
     });
     const title = this.space ? `attach ${this.space.name} to` : "new space";
     const hint = (k, w) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(w));
-    const g = this.naming ? "" : ghost(this.query, all[this.cursor], this.home);
+    const full = this.naming ? "" : ghost(this.query, all[this.cursor], this.home);
+    const g = full.length > 16 ? `${full.slice(0, 14)}…/` : full;
     const field = (state, label) => h_flex().id(label ? "ns-name-field" : "ns-field").flex_1().min_w(0).h(22).px(6).gap(6).items_center()
       .border(1).border_color(t.accent).bg(t.background)
       .when(Boolean(label), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(label)))

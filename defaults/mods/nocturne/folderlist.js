@@ -94,7 +94,9 @@ export function sources({ here = null, spaces = [], near = [], recent = [], home
   };
   if (here) add(here.path ?? here, "here", here.branch ?? (git.has(here.path ?? here) ? "git" : ""));
   for (const s of spaces) add(s.path, "spaces", s.branch ?? (git.has(s.path) ? "git" : ""));
-  for (const n of near.slice(0, NEAR_MAX)) add(n.path, "near", n.worktree ? "worktree" : "git");
+  // At most NEAR_MAX near rows, counted after the folders already listed drop out.
+  const before = out.length;
+  for (const n of near) if (out.length - before < NEAR_MAX) add(n.path, "near", n.worktree ? "worktree" : "git");
   for (const r of recent) add(r, "recent", git.has(r) ? "git" : "");
   return out;
 }
@@ -150,7 +152,7 @@ export function complete(row, home) {
 export function ghost(q, row, home) {
   if (!row?.path || !isPath(q)) return "";
   const { prefix } = splitPath(q, home);
-  if (!prefix || row.from === "self" || !row.name.toLowerCase().startsWith(prefix.toLowerCase())) return "";
+  if (!prefix || row.from === "self" || row.from === "typed" || !row.name.toLowerCase().startsWith(prefix.toLowerCase())) return "";
   return `${row.name.slice(prefix.length)}/`;
 }
 

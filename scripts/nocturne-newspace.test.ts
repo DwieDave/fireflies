@@ -76,7 +76,7 @@ mock.module("herdr", () => ({
 }));
 
 const L = await import("../defaults/mods/nocturne/folderlist.js");
-const { default: NewSpace, openSpacePicker, RECENT, OPEN, WIDTH } = await import("../defaults/mods/nocturne/newspace.js");
+const { default: NewSpace, openSpacePicker, pickerOpen, RECENT, OPEN, WIDTH, LIST_SCRIPT } = await import("../defaults/mods/nocturne/newspace.js");
 
 /** A context whose spawns run, awaited with settle(). */
 function cx() {
@@ -124,6 +124,14 @@ test("sources: here, then the spaces', then near, then recent; each folder once,
   ]);
 });
 
+test("near: at most NEAR_MAX rows, counted after the folders listed already drop out", () => {
+  const dup = Array.from({ length: 20 }, () => ({ path: "/h/a/fireflies" }));
+  const near = [...dup, ...Array.from({ length: 15 }, (_, i) => ({ path: `/h/b/r${String(i).padStart(2, "0")}` }))];
+  const rows = L.sources({ spaces: [{ path: "/h/a/fireflies" }], near, home: "/h" });
+  expect(rows.filter((r: any) => r.from === "near").length).toBe(L.NEAR_MAX);
+  expect(rows.find((r: any) => r.from === "near").name).toBe("r00");
+});
+
 test("rank: a match on the name beats one on the path; ties keep the sources' order; hits mark the name", () => {
   const rows = L.sources({ spaces: [{ path: "/h/hc/zeta" }, { path: "/h/x/herdr-core" }, { path: "/h/x/hc-scripts" }], home: "/h" });
   const r = L.rank(rows, "hc", "/h");
@@ -160,6 +168,7 @@ test("completion: tab puts the row's path with a /; the ghost is the rest of its
   expect(L.ghost("~/code/fire", { path: "/h/code/fireflies", name: "fireflies", from: "path" }, "/h")).toBe("flies/");
   expect(L.ghost("~/code/", { path: "/h/code", name: "code", from: "self" }, "/h")).toBe("");
   expect(L.ghost("fire", { path: "/h/code/fireflies", name: "fireflies" }, "/h")).toBe("");
+  expect(L.ghost("~/no/deep", { path: "/h/no/deep", name: "deep", from: "typed" }, "/h")).toBe("");
   expect(L.up("~/code/fireflies/")).toBe("~/code/");
   expect(L.up("~/code/fire")).toBe("~/code/");
   expect(L.up("~/code")).toBe("~/");
@@ -200,6 +209,7 @@ test("opens hanging from the press that asked, centered without one; a second pr
   const id = openSpacePicker({ at });
   expect(st.opened[0]).toMatchObject({ mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, at, props: { role: "newspace", here: st.focused.cwd } });
   expect(st.shared[OPEN]).toEqual({ id, space: null });
+  expect(pickerOpen()).toBe(true); // "+ new" lit
   expect(openSpacePicker({ at })).toBeNull(); // open: the key closes it
   expect(st.closed).toEqual([id]);
   expect(st.shared[OPEN]).toBeNull();
@@ -212,6 +222,7 @@ test("opens hanging from the press that asked, centered without one; a second pr
   expect(st.opened.length).toBe(n + 1);
   expect(st.opened.at(-1).props).toMatchObject({ role: "newspace", space: "s2" });
   expect(st.closed.at(-1)).toBe(`ov${n}`);
+  expect(pickerOpen()).toBe(false); // attaching: "+ new" stays dark
   openSpacePicker({ space: "s2" }); // the same again: closes it
   expect(st.opened.length).toBe(n + 1);
   expect(st.shared[OPEN]).toBeNull();
@@ -301,6 +312,22 @@ test("a path lists its subfolders; tab completes the row and steps inside; shift
   expect(st.runs).toEqual([["space.new", { folder: `${HOME}/code/fireflies-wt/newspace-shots`, machine: "" }]]);
 });
 
+test("the subfolder listing runs as is: a folder that isn't a checkout still lists (exit 0), checkouts marked, a missing one fails", () => {
+  const { mkdtempSync, mkdirSync, realpathSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const root = realpathSync(mkdtempSync(`${tmpdir()}/ns-list-`));
+  mkdirSync(`${root}/repo/.git`, { recursive: true });
+  mkdirSync(`${root}/plain`);
+  const sh = (dir: string) => Bun.spawnSync(["sh", "-c", LIST_SCRIPT, "sh", dir]);
+  const r = sh(root);
+  expect(r.exitCode).toBe(0);
+  const [dirs, gits] = r.stdout.toString().split("::");
+  expect(dirs.split("\n").filter(Boolean).sort()).toEqual(["./plain", "./repo"]);
+  expect(gits.split("\n").filter(Boolean)).toEqual(["./repo/.git"]);
+  expect(sh(`${root}/repo`).stdout.toString()).toContain("./.git");
+  expect(sh(`${root}/nope`).exitCode).toBe(1);
+});
+
 test("tab outside a path starts one at ~; on a folder row it lists inside that folder", async () => {
   const { v, c, k } = await picker();
   await k("tab");
@@ -339,7 +366,7 @@ test("cmd-enter names it first: the folder's name in the field; esc goes back; e
   expect(v.nameInput.value()).toBe("fireflies");
   let r = v.render(c);
   expect(find(r, "ns-name-field")).toBeTruthy();
-  expect(texts(find(r, "ns-say"))).toEqual(['a space "fireflies", in ~/code/fireflies']);
+  expect(texts(find(r, "ns-say"))).toEqual(['"fireflies" in ~/code/fireflies']);
   expect(await k("down")).toBe(false); // the name field's own
   await k("escape");
   expect(v.naming).toBeNull();
@@ -395,11 +422,12 @@ test("tab and shift-tab arrive as the picker's bound actions (the root binds the
   expect(v.query).toBe("~/code/fireflies-wt/");
 });
 
-test("a click on a row picks it; hovering moves the cursor", async () => {
+test("a click on a row picks it; the pointer moving over a row moves the cursor, resting doesn't", async () => {
   const { v, c } = await picker();
   const r: any = v.render(c);
   const row: any = find(r, "ns-row-1");
-  row.calls.on_hover[0](true, c);
+  expect(row.calls.on_hover).toBeUndefined(); // no hover: a pointer resting where the list opens takes nothing
+  row.calls.on_mouse_move[0]({}, c);
   expect(v.cursor).toBe(1);
   row.calls.on_click[0]({}, c);
   expect(st.runs).toEqual([["space.new", { folder: `${HOME}/code/fireflies`, machine: "" }]]);
@@ -426,7 +454,7 @@ test("drawn: sections over the rows, the cursor's band, what enter does in the f
   expect(texts(find(r, "ns-sec-here"))).toEqual(["HERE"]);
   expect(texts(find(r, "ns-sec-spaces"))).toEqual(["SPACES"]);
   expect(texts(find(r, "ns-sec-near"))).toEqual(["NEAR"]);
-  expect(texts(find(r, "ns-say"))).toEqual(['a space "newspace", in ~/code/fireflies-wt/newspace']);
+  expect(texts(find(r, "ns-say"))).toEqual(['"newspace" in …/fireflies-wt/newspace']);
   expect(texts(find(r, "ns-foot"))).toEqual(expect.arrayContaining(["enter", "make", "⌘enter", "name it"]));
   expect(texts(r)).toContain("new space");
   const on: any = find(r, "ns-row-0");
