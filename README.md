@@ -35,11 +35,11 @@ just test
 just install
 ```
 
-On macOS `just install` builds a release, puts the app in `~/Applications/Herdr.app` and links both commands, `~/.local/bin/fireflies` and `~/.local/bin/herdr-app`, to it. Add that folder to your PATH. Quit and reopen the app to use a new build.
+On macOS `just install` builds a release, puts the app in `~/Applications/Fireflies.app` and links both commands, `~/.local/bin/fireflies` and `~/.local/bin/herdr-app`, to it. Add that folder to your PATH. Quit and reopen the app to use a new build.
 
-`scripts/install-fork-macos` installs into `/Applications/Herdr.app` instead, the place the official app uses, so Dock pins and settings that point there keep working. It refuses to overwrite an official Herdr: uninstall that first with `brew uninstall --cask herdr-app`, without `--zap` (zap deletes `~/.config/herdr-app`).
+`scripts/install-fork-macos` installs into `/Applications/Fireflies.app` instead. A fork build that an earlier run put at `/Applications/Herdr.app` moves there; pin it in the Dock again. An official Herdr can stay beside it, but both apps use `~/.config/herdr-app`. To remove Herdr, uninstall it without `--zap` (zap deletes `~/.config/herdr-app`): `brew uninstall --cask herdr-app`.
 
-Both scripts still name the bundle `Herdr.app`. A build from source never updates itself: pull and build again.
+The bundle keeps Herdr's bundle id, `dev.herdr.app`. A build from source never updates itself: pull and build again.
 
 ### Nix
 
