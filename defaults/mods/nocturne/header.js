@@ -97,7 +97,8 @@ const CHROME = (n) => `mods/workspace-chrome/${n}.svg`;
 
 /** The pane menu (menu.js), as on a right-click (`centered`: from the keyboard). */
 export function paneMenu(p, centered = false) {
-  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 240, centered });
+  // 260: its rows' names beside the longest keys ("Move right" by cmd-alt-shift-]).
+  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered });
 }
 
 /** Asks this pane's header to name its terminal in place (as the menu's Rename). */

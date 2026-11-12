@@ -84,8 +84,8 @@ export function pinItems(t, p) {
   const glyph = (name) => svg(`${name.startsWith("chevron-up") ? ART : "mods/workspace-chrome"}/${name}.svg`).size(14).flex_none().text_color(t.accent);
   return [
     { id: "unpin", mark: icon(t, "pin-off"), name: "Unpin", hint: layoutKey("nocturne.pin"), go: () => pinPane(p, false) },
-    ...(i > 0 ? [{ id: "pin-up", mark: glyph(shelf ? "chevron-left" : "chevron-up"), name: shelf ? "Move left on the shelf" : "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(key, -1) }] : []),
-    ...(i >= 0 && i < group.length - 1 ? [{ id: "pin-down", mark: glyph(shelf ? "chevron-right" : "chevron-down"), name: shelf ? "Move right on the shelf" : "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(key, 1) }] : []),
+    ...(i > 0 ? [{ id: "pin-up", mark: glyph(shelf ? "chevron-left" : "chevron-up"), name: shelf ? "Move left" : "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(key, -1) }] : []),
+    ...(i >= 0 && i < group.length - 1 ? [{ id: "pin-down", mark: glyph(shelf ? "chevron-right" : "chevron-down"), name: shelf ? "Move right" : "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(key, 1) }] : []),
   ];
 }
 

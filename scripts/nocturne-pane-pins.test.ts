@@ -180,9 +180,9 @@ test("the pane menu: a web pane gets Pin to the top, then Unpin and left / right
   expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["split-right", "Split right"]]);
   // A second tile: the first can move right, the second left; an agent moves in the jar, not past tiles.
   sharedState[pins.PANES_KEY] = [...records(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
-  expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["pin-down", "Move right on the shelf"]]);
+  expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["pin-down", "Move right"]]);
   const files = menuItems(theme, { tab: "pane", target: { pane: "p4", terminal: null } }).filter((r: any) => !r.rule);
-  expect(files.slice(0, 2).map((r: any) => r.name)).toEqual(["Unpin", "Move left on the shelf"]);
+  expect(files.slice(0, 2).map((r: any) => r.name)).toEqual(["Unpin", "Move left"]);
   pinTerminal("t1", 1);
   const agent = menuItems(theme, { tab: "pane", target: { pane: "p1", terminal: "t1" } }).filter((r: any) => !r.rule);
   expect(agent.slice(0, 3).map((r: any) => r.name)).toEqual(["Rename", "Unpin", "Split right"]);
