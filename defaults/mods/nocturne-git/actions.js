@@ -69,7 +69,7 @@ const ACTIONS = {
         const r = await v.git.run("Shell command", [], { shell: cmd, shown: cmd, timeout: 600000 });
         if (r.out.trim() || r.err) v.showOutput(cmd, (r.out + (r.ok ? "" : `\n${r.err}`)).trim(), r.ok);
         await v.reloadNow();
-      });
+      }, { row: null });
     },
   }),
   "recent-repos": (v) => v.menu({
@@ -85,7 +85,7 @@ const ACTIONS = {
   "diff-menu": (v) => diffMenu(v),
   push: (v) => push(v),
   pull: (v) => pull(v),
-  fetch: (v) => git(v, "Fetch", ["fetch", "--all", "--prune"], { timeout: 120000 }),
+  fetch: (v) => git(v, "Fetch", ["fetch", "--all", "--prune"], { timeout: 120000, row: null }),
 
   // ---- lists
   down: (v) => v.move(1),
@@ -731,13 +731,14 @@ function undoRedo(v, what) {
         shown: `git ${step.args.join(" ")}`,
       }),
     });
-  });
+  }, { row: null }); // the whole repo moves, not one row
 }
 
 function push(v) {
   const s = v.data.status;
   if (!s?.head) return v.error("Not on a branch: nothing to push.");
   const go = (args, title = "Push") => v.spawn(async () => {
+    // The pushed branch's row spins (whichever row is selected).
     v.busy(`Pushing ${s.head}…`);
     const r = await v.git.run(title, args, { timeout: 300000 });
     v.busy(null);
@@ -746,7 +747,7 @@ function push(v) {
       v.ask({ title: "Force push", text: `${s.head} was rejected: the remote has commits you don't. Force push (with lease)?`, danger: true, go: () => go(["push", "--force-with-lease"], "Force push") });
     } else v.error(r.err);
     await v.reloadNow();
-  });
+  }, { row: `branch:${s.head}` });
   if (s.upstream) return go(["push"]);
   const remote = (v.data.remotes ?? [])[0]?.name;
   if (!remote) return v.error("No remote to push to: add one in Branches › Remotes (n).");
@@ -762,7 +763,7 @@ function pull(v) {
     v.busy(null);
     if (!r.ok) v.error(r.err);
     await v.reloadNow();
-  });
+  }, { row: `branch:${s.head}` });
   if (s.upstream) return go(["pull", "--no-edit"]);
   const remote = (v.data.remotes ?? [])[0]?.name;
   if (!remote) return v.error("No remote to pull from.");
@@ -777,7 +778,7 @@ function gh(v, title, args) {
   v.spawn(async () => {
     const r = await v.git.run(title, [], { shell: `gh ${args.map(shq).join(" ")}`, shown: `gh ${args.join(" ")}` });
     if (!r.ok) v.error(r.err);
-  });
+  }, { row: null });
 }
 
 /** https://host/owner/repo/commit/<hash> from the first remote's url, if it's a GitHub-style one. */

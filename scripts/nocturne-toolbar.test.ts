@@ -259,9 +259,9 @@ test("the shipped nocturne layout: the tab row is the strip, the bell, then \"+ 
   expect(n.role).toBeInstanceOf(NewButton);
 });
 
-test("the tools row, left to right: run, files, git, git's menu, bell, + new; the strip itself no longer draws + new", () => {
+test("the tools row, left to right: run, processes, files, git, git's menu, bell, + new; the strip itself no longer draws + new", () => {
   const s = strip();
-  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab-scripts-run", "tab-files", "tab-git", "tab-git-more", "bell", "tab-new"]);
+  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab-scripts-run", "tab-procs", "tab-files", "tab-git", "tab-git-more", "bell", "tab-new"]);
   expect(ids["tab-new"]).toBeUndefined();
   expect(ids["tab-git-more"]).toBeTruthy();
   // The keyboard's next from the bell is + new, and its enter opens the menu centered.

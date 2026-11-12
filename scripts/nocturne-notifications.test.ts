@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "fs";
-import { parseScreen, describe as describeClaude, step, reviewText, optionKind } from "../defaults/mods/nocturne-notifications/claude.js";
+import { parseScreen, describe as describeClaude, step, reviewText, optionKind, dialog } from "../defaults/mods/nocturne-notifications/claude.js";
 
 const FIX = `${import.meta.dir}/fixtures/nocturne-notifications`;
 const screen = (name: string) => readFileSync(`${FIX}/${name}.txt`, "utf8");
@@ -32,6 +32,31 @@ test("the amend field open on Yes and on No", () => {
   const cur: any = parseScreen(screen("perm-bash-cursor-no"));
   expect(cur.cursor).toBe(3);
   expect(cur.amend).toBe(null);
+});
+
+test("Claude Code 2.1.322: the note line, empty and typed in, on Yes and on No", () => {
+  const plain: any = parseScreen(screen("perm-write-322"));
+  expect([plain.title, plain.question, plain.amend, plain.canAmend]).toEqual(["Create file", "Do you want to create notes.txt?", null, true]);
+  const yes: any = parseScreen(screen("perm-write-322-yes-amend"));
+  expect([yes.amend, yes.amendText, yes.cursor, yes.canAmend]).toEqual(["yes", "", 0, false]);
+  // Typed in: the option reads "Yes, <text>", not the placeholder.
+  const typed: any = parseScreen(screen("perm-write-322-yes-typed"));
+  expect([typed.amend, typed.amendText]).toEqual(["yes", "hi there"]);
+  const no: any = parseScreen(screen("perm-write-322-no-amend"));
+  expect([no.amend, no.amendText, no.cursor]).toEqual(["no", "", 2]);
+  const noTyped: any = parseScreen(screen("perm-write-322-no-typed"));
+  expect([noTyped.amend, noTyped.amendText]).toEqual(["no", "use txt"]);
+  // The request is the same one whatever the note line shows.
+  const req = describeClaude(screen("perm-write-322"), null);
+  for (const f of ["perm-write-322-yes-amend", "perm-write-322-yes-typed", "perm-write-322-no-amend", "perm-write-322-no-typed"]) {
+    expect(describeClaude(screen(f), null)?.options.map((o: any) => o.label)).toEqual(req!.options.map((o: any) => o.label));
+  }
+});
+
+test("Claude's 'Tip: auto mode…' line isn't part of the request", () => {
+  const s: any = parseScreen(screen("perm-bash"));
+  expect(s.body.join(" ")).not.toMatch(/Tip:/);
+  expect(describeClaude(screen("perm-bash"), null)?.line).toBe("Create tmpdir and touch a.txt inside it mkdir -p tmpdir && touch tmpdir/a.txt");
 });
 
 test("a Write permission", () => {
@@ -126,26 +151,46 @@ test("option kinds", () => {
 
 const RULE = "─".repeat(80);
 
+/** Claude Code 2.1.322's permission dialog, as captured: Tab opens the note
+ *  line on Yes or No and closes it again; typed text shows as "Yes, <text>".
+ *  `lag`: renders before a change is drawn (another part of a busy screen
+ *  changes first); `dropEnter`: the paste's Enter is lost. */
 class FakePermission {
-  options: string[]; cursor = 0; amend: "yes" | "no" | null = null; result: any = null; log: string[] = [];
+  options: string[]; cursor = 0; amend: "yes" | "no" | null = null; text = ""; result: any = null; log: string[] = [];
+  lag = 0; behind = 0; shown = ""; dropEnter = false; tick = 0;
   constructor(options = ["Yes", "Yes, and don't ask again for mkdir -p tmpdir commands in /tmp", "Yes, and switch to auto mode · auto mode handles these prompts for you", "No"]) { this.options = options; }
-  render() {
+  draw() {
     if (this.result) return `⏺ Bash(mkdir -p tmpdir && touch tmpdir/a.txt)\n${RULE}\n❯ \n${RULE}\n`;
-    const label = (o: string, i: number) => i === this.cursor && this.amend ? (this.amend === "yes" ? "Yes, and tell Claude what to do next" : "No, and tell Claude what to do differently") : o;
-    return [`⏺ Bash(mkdir -p tmpdir && touch tmpdir/a.txt)`, RULE, " Bash command", "", " mkdir -p tmpdir && touch tmpdir/a.txt", " Create tmpdir", "", " Do you want to proceed?",
+    const note = this.amend === "yes" ? "Yes, and tell Claude what to do next" : "No, and tell Claude what to do differently";
+    const label = (o: string, i: number) => i === this.cursor && this.amend ? (this.text ? `${this.amend === "yes" ? "Yes" : "No"}, ${this.text}` : note) : o;
+    return [`⏺ Bash(mkdir -p tmpdir && touch tmpdir/a.txt)`, RULE, " Bash command", " Tip: auto mode handles these prompts for you — choose \"switch to auto mode\" below", " Create tmpdir", "", " mkdir -p tmpdir && touch tmpdir/a.txt", "", " Do you want to proceed?",
       ...this.options.map((o, i) => ` ${i === this.cursor ? "❯" : " "} ${i + 1}. ${label(o, i)}`), "", this.amend ? " Esc to cancel" : " Esc to cancel · Tab to amend"].join("\n");
   }
+  render() {
+    // A busy screen: its status line ticks, so every read differs.
+    if (this.behind > 0) { this.behind--; return `${this.shown}\n ◐ ${this.tick++}`; }
+    this.shown = this.draw();
+    return `${this.shown}\n ◐ ${this.tick++}`;
+  }
+  changed() { this.behind = this.lag; }
   keys(ks: string[]) {
     for (const k of ks) {
       this.log.push(k);
-      if (k === "down") { this.cursor = Math.min(this.options.length - 1, this.cursor + 1); this.amend = null; }
-      else if (k === "up") { this.cursor = Math.max(0, this.cursor - 1); this.amend = null; }
-      else if (k === "tab") this.amend = this.cursor === 0 ? "yes" : this.options[this.cursor] === "No" ? "no" : null;
-      else if (k === "enter") this.result = { option: this.cursor + 1, note: null };
-      else if (/^\d$/.test(k)) this.result = { option: Number(k), note: null };
+      if (k === "down") { this.cursor = Math.min(this.options.length - 1, this.cursor + 1); this.amend = null; this.text = ""; }
+      else if (k === "up") { this.cursor = Math.max(0, this.cursor - 1); this.amend = null; this.text = ""; }
+      else if (k === "tab") { this.amend = this.amend ? null : this.cursor === 0 ? "yes" : this.options[this.cursor] === "No" ? "no" : null; this.text = ""; }
+      else if (k === "enter") this.result = { option: this.cursor + 1, note: this.amend ? this.text : null };
+      else if (/^\d$/.test(k) && !this.amend) this.result = { option: Number(k), note: null };
     }
+    this.changed();
   }
-  paste(text: string) { this.log.push(`paste:${text}`); if (this.amend) this.result = { option: this.cursor + 1, note: text }; }
+  /** hc send --force: the text, then Enter. */
+  paste(text: string) {
+    this.log.push(`paste:${text}`);
+    if (this.amend) this.text += text;
+    else if (/^\d/.test(text)) this.result = { option: Number(text[0]), note: null }; // typed into the dialog: a digit picks
+    if (!this.dropEnter) this.keys(["enter"]); else { this.log.push("enter lost"); this.changed(); }
+  }
 }
 
 type Q = { header: string; question: string; multiSelect: boolean; options: { label: string; description: string }[] };
@@ -217,15 +262,21 @@ class FakeQuestions {
   }
 }
 
-/** Runs the steps against a fake until done or refused; returns the outcome. */
+/** Runs the steps against a fake until done or refused; returns the outcome.
+ *  After a key it reads the screen until the dialog changes, as drive.js
+ *  settled() does (a few reads at most). */
 function drive(fake: any, goal: any, limit = 80) {
   const state = {};
+  let screen = fake.render();
   for (let i = 0; i < limit; i++) {
-    const a: any = step(goal, fake.render(), state);
+    const a: any = step(goal, screen, state);
     if (a.done) return { done: true };
     if (a.refuse) return { refuse: a.refuse };
+    const before = screen;
     if (a.keys) fake.keys(a.keys);
     if (a.paste != null) fake.paste(a.paste);
+    screen = fake.render();
+    for (let r = 0; r < 20 && (a.keys || a.paste != null) && dialog(screen) === dialog(before); r++) screen = fake.render();
   }
   return { stuck: true };
 }
@@ -254,10 +305,58 @@ test("permission: yes, but and no, but open the amend field, then send the note"
   const yes = new FakePermission();
   expect(drive(yes, { type: "permission", request: permRequest(yes), option: 1, amend: "and run the tests after" })).toEqual({ done: true });
   expect(yes.result).toEqual({ option: 1, note: "and run the tests after" });
-  expect(yes.log).toEqual(["tab", "paste:and run the tests after"]);
+  expect(yes.log).toEqual(["tab", "paste:and run the tests after", "enter"]);
   const no = new FakePermission();
   drive(no, { type: "permission", request: permRequest(no), option: 4, amend: "use cargo clean\ninstead" });
   expect(no.result).toEqual({ option: 4, note: "use cargo clean instead" });
+});
+
+test("permission: a busy screen drawing the note line late gets one Tab, not a second that shuts it", () => {
+  for (const lag of [1, 3, 6]) {
+    const fake = new FakePermission();
+    const request = permRequest(fake);
+    fake.lag = lag;
+    expect(drive(fake, { type: "permission", request, option: 1, amend: "then run the tests" })).toEqual({ done: true });
+    expect(fake.result).toEqual({ option: 1, note: "then run the tests" });
+    expect(fake.log.filter((k) => k === "tab")).toEqual(["tab"]);
+  }
+  const no = new FakePermission();
+  const request = permRequest(no);
+  no.lag = 4;
+  drive(no, { type: "permission", request, option: 4, amend: "use make" });
+  expect(no.result).toEqual({ option: 4, note: "use make" });
+});
+
+test("permission: a note whose Enter got lost is sent with one Enter", () => {
+  const fake = new FakePermission();
+  const request = permRequest(fake);
+  fake.dropEnter = true;
+  expect(drive(fake, { type: "permission", request, option: 1, amend: "and commit" })).toEqual({ done: true });
+  expect(fake.result).toEqual({ option: 1, note: "and commit" });
+  expect(fake.log.filter((k) => k === "enter")).toEqual(["enter"]);
+});
+
+test("permission: when the note line never opens, nothing is typed and the center says why", () => {
+  const fake = new FakePermission();
+  const request = permRequest(fake);
+  fake.keys = function (ks: string[]) { for (const k of ks) this.log.push(k); }; // keys don't arrive
+  const state: any = {};
+  const goal = { type: "permission", request, option: 1, amend: "x" };
+  let a: any;
+  for (let i = 0; i < 20; i++) { a = step(goal, fake.render(), state); if (a.keys) fake.keys(a.keys); if (!a.wait && !a.keys) break; }
+  expect(a.wait).toBe(true);
+  expect(a.reason).toMatch(/note line didn't open/);
+  expect(fake.log).toEqual(["tab"]);
+  expect(fake.result).toBe(null);
+});
+
+test("stale: a note typed in the terminal (\"Yes, …\") isn't overridden", () => {
+  const fake = new FakePermission();
+  const request = permRequest(fake);
+  fake.keys(["tab"]); fake.text = "mine"; fake.log = [];
+  expect(drive(fake, { type: "permission", request, option: 1, amend: "x" }).refuse).toMatch(/typing/);
+  expect(drive(fake, { type: "permission", request, option: 1 }).refuse).toMatch(/typing/);
+  expect(fake.log).toEqual([]);
 });
 
 test("permission: a note on 'don't ask again' is refused, not sent elsewhere", () => {

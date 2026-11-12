@@ -7,6 +7,16 @@ const ref: Reference = {
 };
 
 describe("CLI examples", () => {
+  test("checks examples under either name, fireflies or herdr-app", () => {
+    const fireflies: Reference = { ...ref, help: ref.help.replaceAll("herdr-app", "fireflies") };
+    for (const r of [ref, fireflies]) {
+      expect(checkExample("fireflies ls && herdr-app status", r)).toEqual([]);
+      expect(checkExample("fireflies do pane.split --direction right", r)).toEqual([]);
+      expect(checkExample("fireflies wat", r)).toEqual(["unknown command or flag: wat"]);
+      expect(checkExample("/usr/local/bin/fireflies do pane.wat", r)).toHaveLength(1);
+    }
+  });
+
   test("validates commands and named arguments without executing examples", () => {
     for (const source of ["herdr-app", "herdr-app ls", "herdr-app --help", "herdr-app --skill", "herdr-app do pane.split --direction right", `herdr-app do pane.split '{"direction":"right"}'`]) {
       expect(checkExample(source, ref)).toEqual([]);

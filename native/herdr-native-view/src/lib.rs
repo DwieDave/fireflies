@@ -16,6 +16,8 @@ pub mod macos;
 mod pip;
 #[cfg(target_os = "macos")]
 mod page;
+#[cfg(target_os = "macos")]
+mod tabs;
 // Picture in picture's live resize, its decisions pure (tested everywhere, used on macOS).
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod resize;
@@ -267,6 +269,11 @@ pub struct Spec {
     /// Web only: the page may put a video in Picture in Picture (`pip` views
     /// take it over). Default off: WebKit refuses Picture in Picture.
     pub pip: bool,
+    /// Web only: the mod keeps tabs. New windows (`target=_blank`,
+    /// `window.open`), a middle or Cmd click on a link and the link menu's
+    /// "Open Link in New Tab" become `web.newTab { url, background, from }`
+    /// for it to open; without it, a new window loads in place (as before).
+    pub tabs: bool,
 }
 
 impl Spec {
@@ -274,6 +281,7 @@ impl Spec {
     pub fn parse(v: &Value) -> Result<Spec, String> {
         let persist = v.get("persist").and_then(Value::as_bool).unwrap_or(false);
         let pip = v.get("pip").and_then(Value::as_bool).unwrap_or(false);
+        let tabs = v.get("tabs").and_then(Value::as_bool).unwrap_or(false);
         let zoom = match v.get("zoom") {
             None | Some(Value::Null) => 1.0,
             Some(z) => z
@@ -299,6 +307,7 @@ impl Spec {
                 persist,
                 zoom,
                 pip,
+                tabs,
             });
         }
         if kind == Kind::Pip {
@@ -307,7 +316,7 @@ impl Spec {
                 .and_then(Value::as_str)
                 .filter(|k| !k.is_empty())
                 .ok_or("a pip view needs `of`: the key `web.pip` returned")?;
-            return Ok(Spec { kind, source: Source::Pip(of.to_owned()), persist, zoom, pip });
+            return Ok(Spec { kind, source: Source::Pip(of.to_owned()), persist, zoom, pip, tabs });
         }
         if let Some(url) = v.get("url").and_then(Value::as_str) {
             if kind != Kind::Web && kind != Kind::Chromium {
@@ -324,6 +333,7 @@ impl Spec {
                 persist,
                 zoom,
                 pip,
+                tabs,
             });
         }
         let raw = v
@@ -362,6 +372,7 @@ impl Spec {
             persist,
             zoom,
             pip,
+            tabs,
         })
     }
 
@@ -501,6 +512,23 @@ pub fn capabilities() -> Value {
         .map(|k| json!({ "kind": k.name(), "actions": k.actions() }))
         .collect();
     json!({ "interface": INTERFACE, "platform": std::env::consts::OS, "available": cfg!(target_os = "macos"), "kinds": kinds })
+}
+
+/// A link click that opens a tab instead of going there (a `tabs: true` web
+/// view): a middle click, or a Cmd click. `button` is WKNavigationAction's
+/// `buttonNumber`, a button mask on macOS (left 1, right 2, middle 4); 2 is
+/// taken as middle too, as a zero-based number would have it (a right click
+/// never follows a link). Returns whether the tab opens in the background:
+/// yes, unless Shift is held too (as Safari does).
+pub fn click_opens_tab(link: bool, button: i64, cmd: bool, shift: bool) -> Option<bool> {
+    let middle = button == 4 || button == 2;
+    (link && (middle || cmd)).then_some(!shift)
+}
+
+/// The link menu's "… in New Window" items open a tab in a `tabs: true` web
+/// view: their title says so. None: not such an item (or another language).
+pub fn tab_menu_title(title: &str) -> Option<String> {
+    title.ends_with(" in New Window").then(|| format!("{} in New Tab", title.trim_end_matches(" in New Window")))
 }
 
 /// One event a view reports to its mod. `generation` counts loads of the view,
@@ -707,6 +735,37 @@ mod tests {
         assert!(n.pip);
         assert_eq!(n.zoom, 1.5);
         assert!(s.navigated("javascript:alert(1)").is_err());
+    }
+
+    #[test]
+    fn web_tabs_prop_defaults_off_and_survives_navigation() {
+        assert!(!Spec::parse(&json!({ "kind": "web", "url": "https://x.y" })).unwrap().tabs);
+        let s = Spec::parse(&json!({ "kind": "web", "url": "https://x.y", "tabs": true })).unwrap();
+        assert!(s.tabs);
+        assert!(s.navigated("c.d").unwrap().tabs);
+    }
+
+    #[test]
+    fn middle_and_cmd_clicks_on_links_open_tabs() {
+        // Middle (mask 4, or 2 counted from zero): a background tab; shift brings it to the front.
+        assert_eq!(click_opens_tab(true, 4, false, false), Some(true));
+        assert_eq!(click_opens_tab(true, 2, false, false), Some(true));
+        assert_eq!(click_opens_tab(true, 4, false, true), Some(false));
+        // Cmd with the left button (1, or 0 counted from zero).
+        assert_eq!(click_opens_tab(true, 1, true, false), Some(true));
+        assert_eq!(click_opens_tab(true, 0, true, true), Some(false));
+        // A plain left click, or no link: the page goes there itself.
+        assert_eq!(click_opens_tab(true, 1, false, false), None);
+        assert_eq!(click_opens_tab(true, 0, false, true), None);
+        assert_eq!(click_opens_tab(false, 4, true, false), None);
+    }
+
+    #[test]
+    fn new_window_menu_items_say_tab() {
+        assert_eq!(tab_menu_title("Open Link in New Window").as_deref(), Some("Open Link in New Tab"));
+        assert_eq!(tab_menu_title("Open Image in New Window").as_deref(), Some("Open Image in New Tab"));
+        assert_eq!(tab_menu_title("Download Linked File"), None);
+        assert_eq!(tab_menu_title("Link in neuem Fenster öffnen"), None);
     }
 
     #[test]

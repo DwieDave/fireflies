@@ -531,3 +531,31 @@ test("Change folder… hangs it under the row right-clicked; from a key or the f
   s.acts(st.spaces[0]).folder(cx()); // f on a row
   expect(st.opened.at(-1)).toMatchObject({ kind: "dialog", props: { space: "s1" } });
 });
+
+// ---- the dock (dock.js) keeps its rules
+
+test("the dock is never attached: no picker opens for it, and an open one attaches nothing", async () => {
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  st.spaces.push({ id: "dk", name: "dock", named: true, folder: HOME, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
+  st.shared[DOCK_KEY] = { id: "dk" };
+  expect(openSpacePicker({ space: "dk" })).toBeNull();
+  expect(openSpacePicker({ space: "dk", at: { x: 8, y: 8 }, replace: true })).toBeNull();
+  expect(st.opened).toEqual([]);
+  const { v, k } = await picker({ space: "dk" }); // forced open anyway
+  await k("enter");
+  expect(st.runs).toEqual([]);
+  expect(st.closed).toEqual(["ov1"]);
+  void v;
+});
+
+test("the dock isn't a folder in the list, and no folder makes an ordinary unnamed space, not the dock", async () => {
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  st.spaces.push({ id: "dk", name: "dock", named: true, folder: `${HOME}/code/scratch`, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
+  st.shared[DOCK_KEY] = { id: "dk" };
+  const { v, k } = await picker();
+  expect(v.rows(null).all.some((r: any) => r.path === `${HOME}/code/scratch`)).toBe(false);
+  await k("up");
+  await k("enter");
+  expect(st.runs).toEqual([["space.new", { folder: HOME, machine: "" }]]);
+  expect(st.shared[DOCK_KEY]).toEqual({ id: "dk" }); // the dock's record untouched
+});

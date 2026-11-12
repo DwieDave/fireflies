@@ -39,7 +39,17 @@ herdr-app do agent.focus --terminal t7
 
 To show the person a web page, `herdr-app do app.open_url --url https://...`
 opens it in a web pane beside the focused one (or the system's browser, per
-their `links` setting).
+their `links` setting). A web pane keeps tabs: `herdr-app do
+nocturne-browser.open:https://...` opens the page in a new tab of the web
+pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
+`.tab_close` move between them).
+
+To show them what runs and what listens (a dev server you started, a stuck
+build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
+manager centered (`nocturne.ports` on its ports, where they can open a port in
+a web pane, copy its address or end its process; its system tab graphs CPU,
+GPU, memory, disk and network). It only shows and asks: ending a process is
+theirs to confirm in it.
 
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
@@ -58,8 +68,8 @@ same.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens
-it in the editor beside the focused pane, the caret there (an editor already on
-that file goes there instead). It reloads by itself when you change a file it
+it in the editor beside the focused pane, the caret there (an editor already
+holding that file in one of its tabs shows that tab and goes there instead). It reloads by itself when you change a file it
 shows unedited; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.
@@ -67,12 +77,22 @@ fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
 there beside the focused pane (`--in tab` for a tab of its own). Cmd/Ctrl-click
-on a folder path in terminal output does the same.
+on a folder path in terminal output does the same. It leaves dotfiles and
+git-ignored files out unless settings.json `files` says otherwise (H / I show
+them): to show a `.github/` or `target/` folder, open that folder itself.
 
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the
 top of the sidebar's agent list (`false` unpins). The pin stays with the
-terminal and ends with it.
+terminal and ends with it. In the nocturne layout any pane can be pinned to the
+jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
+on the jar's shelf), a web, editor or files pane from its right-click menu,
+the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
+mods' shared `nocturne.pinned-panes`; it ends when the pane closes). For a pane
+that belongs to no project (a docs page, a dashboard), `herdr-app do
+nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
+repo for git or GitHub, terminals start in ~), pinned to the shelf;
+`herdr-app do nocturne.dock` moves the focused pane there.
 
 For a remote space:
 
@@ -212,7 +232,14 @@ those files or the generated guide. The app rewrites them on start.
   `agent.next`, a pane closing), as a terminal gets the keyboard, and on a click
   into its native view (a web page), so the mod's keys.json section applies.
   `layout.focus {id}` does the same for a layout block by id; `focused().block`
-  names the block holding the keyboard.
+  names the block holding the keyboard. None of this moves the keyboard out of an
+  open dialog, popup or window opened with `scrim: true` (Git, GitHub): those keep
+  it until they close, and a key that finds it behind one is dropped.
+- Native views (web, PDF, video; macOS) sit above Herdr's own drawing and
+  don't appear in `shot`. Every overlay painted after the one a view is in
+  (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
+  backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
+  layer, holes and dim, so check those instead of a screenshot.
 - Shipped mods belong to Herdr: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.

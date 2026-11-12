@@ -12,8 +12,8 @@ Shipped files update on start; personal copies do not.
 Save to reload. Check for errors, even when the old screen still looks fine.
 
 ```sh
-herdr-app check ~/.config/herdr-app/mods/my-panel
-herdr-app status
+fireflies check ~/.config/herdr-app/mods/my-panel
+fireflies status
 ```
 
 The check loads a mod and renders it once. It does not replace looking at the result in the window.

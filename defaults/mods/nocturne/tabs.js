@@ -2,6 +2,8 @@
 // underlined in a blue checker. Right of the tabs, icons only:
 //   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
 //           deck's queued jobs (jobs.js)
+//   procs   a tree mark and the ports listening in this app's terminals
+//           (":2"): the processes and ports manager (procs.js, nocturne-procs)
 //   files   the files pane down the tab's right edge (files.js); lit while open
 //   git     one button for the repo: the changed files and how far the branch
 //           is ahead / behind its upstream; a plain git mark when there's
@@ -41,6 +43,7 @@ import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
 import { filesPane, toggleFiles, focusFiles } from "./files.js";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
+import { procsControl, toggleProcs } from "./procs.js";
 import { runJobs, pendingJobs } from "./jobs.js";
 import { watchPrompts } from "./prompt.js";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
@@ -151,6 +154,7 @@ export default class Tabs {
     const bell = hasMod(layout(), "nocturne-notifications") ? [{ id: "bell", go: () => run("nocturne-notifications.open") }] : [];
     const tools = [
       { id: "tab-scripts-run", go: () => toggleDeck({ centered: true }) },
+      { id: "tab-procs", go: () => toggleProcs({ centered: true }) },
       // As cmd-e: the panel with the keyboard in it (opened if need be); in it, closed.
       { id: "tab-files", go: () => focusFiles() },
       { id: "tab-git", go: () => toggleGit(), menu: gitMenu },
@@ -398,6 +402,7 @@ export default class Tabs {
       .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)).child(end))
       .child(h_flex().flex_none().gap(2).items_center()
         .child(scriptsControl(t, (...a) => this.tool(...a)))
+        .child(procsControl(t, (...a) => this.tool(...a)))
         .child(rule())
         .child(this.filesButton(t))
         .child(this.gitButton(t))

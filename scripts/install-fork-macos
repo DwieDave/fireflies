@@ -1,9 +1,10 @@
 #!/bin/bash
 # Builds this fork (native views for mods) and installs it as
-# /Applications/Herdr.app, where the official app goes, so Dock pins and
-# config that point there keep working. Uninstall the official cask first,
-# WITHOUT zap: `brew uninstall --cask herdr-app` (its zap trashes
-# ~/.config/herdr-app). A build from source never updates itself: to follow a
+# /Applications/Fireflies.app. A fork build an earlier run left at
+# /Applications/Herdr.app (Info.plist key HerdrFork) moves there; re-pin it in
+# the Dock. The official app may stay beside it, but both read
+# ~/.config/herdr-app: to remove it, uninstall the cask WITHOUT zap:
+# `brew uninstall --cask herdr-app` (its zap trashes ~/.config/herdr-app). A build from source never updates itself: to follow a
 # new Herdr release, rebase this branch on it and run this again.
 #
 # Toolchain (the versions Herdr's CI uses): Rust 1.95.0 and Zig 0.16.0, e.g.
@@ -16,35 +17,47 @@ cargo build --release
 
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 fork=$(git rev-parse --short HEAD)
-app=/Applications/Herdr.app
+app=/Applications/Fireflies.app
+old=/Applications/Herdr.app
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 if [[ -d $app ]] && ! /usr/libexec/PlistBuddy -c 'Print :HerdrFork' "$app/Contents/Info.plist" >/dev/null 2>&1; then
-  echo "$app is not a fork build (the official app?). Uninstall it first: brew uninstall --cask herdr-app (no --zap)." >&2
+  echo "$app is not a fork build. Move it aside first." >&2
   exit 1
+fi
+# The fork's earlier home: move it over (only a fork build, never the official app).
+if [[ ! -d $app && -d $old ]] && /usr/libexec/PlistBuddy -c 'Print :HerdrFork' "$old/Contents/Info.plist" >/dev/null 2>&1; then
+  "$lsregister" -u "$old" 2>/dev/null || true
+  mv "$old" "$app"
+  rm -f "$app/Contents/MacOS/Herdr" "$app/Contents/Resources/Herdr.icns"
+  echo "Moved the fork build from $old to $app."
 fi
 
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$HOME/.local/bin"
-# Replace atomically so installing does not interrupt a running Herdr.
-cp target/release/herdr-app "$app/Contents/MacOS/Herdr.new"
-mv -f "$app/Contents/MacOS/Herdr.new" "$app/Contents/MacOS/Herdr"
-chmod +x "$app/Contents/MacOS/Herdr"
-cp assets/icons/Herdr.icns "$app/Contents/Resources/Herdr.icns"
+# Replace atomically so installing does not interrupt a running Fireflies.
+cp target/release/herdr-app "$app/Contents/MacOS/Fireflies.new"
+mv -f "$app/Contents/MacOS/Fireflies.new" "$app/Contents/MacOS/Fireflies"
+chmod +x "$app/Contents/MacOS/Fireflies"
+# The firefly icon: Liquid Glass (Assets.car, macOS 26+) and the flat fallback.
+cp assets/icons/Fireflies.car "$app/Contents/Resources/Assets.car"
+cp assets/icons/Fireflies.icns "$app/Contents/Resources/Fireflies.icns"
 
 cat > "$app/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-    <key>CFBundleExecutable</key><string>Herdr</string>
+    <key>CFBundleExecutable</key><string>Fireflies</string>
     <key>CFBundleIdentifier</key><string>dev.herdr.app</string>
-    <key>CFBundleName</key><string>Herdr</string>
-    <key>CFBundleDisplayName</key><string>Herdr</string>
-    <key>CFBundleIconFile</key><string>Herdr</string>
+    <key>CFBundleName</key><string>Fireflies</string>
+    <key>CFBundleDisplayName</key><string>Fireflies</string>
+    <key>CFBundleIconFile</key><string>Fireflies</string>
+    <key>CFBundleIconName</key><string>Fireflies</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
     <key>CFBundleVersion</key><string>$version+$fork</string>
     <key>HerdrFork</key><string>$fork</string>
-    <key>NSMicrophoneUsageDescription</key><string>Terminal programs running in Herdr can use the microphone, for example for voice input.</string>
-    <key>NSCameraUsageDescription</key><string>Terminal programs running in Herdr can use the camera.</string>
-    <key>NSAppleEventsUsageDescription</key><string>Terminal programs running in Herdr can use AppleScript to control other apps.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Terminal programs running in Fireflies can use the microphone, for example for voice input.</string>
+    <key>NSCameraUsageDescription</key><string>Terminal programs running in Fireflies can use the camera.</string>
+    <key>NSAppleEventsUsageDescription</key><string>Terminal programs running in Fireflies can use AppleScript to control other apps.</string>
     <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>LSEnvironment</key><dict/></dict></plist>
@@ -52,6 +65,8 @@ PLIST
 # Finder does not inherit a login shell's PATH; hc must still be discoverable.
 /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PATH string $HOME/.local/bin:/opt/homebrew/bin:/run/current-system/sw/bin:/usr/bin:/bin" "$app/Contents/Info.plist"
 codesign --force --sign - "$app"
-ln -sfn "$app/Contents/MacOS/Herdr" "$HOME/.local/bin/herdr-app"
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
-echo "Installed $app ($version, fork $fork). Quit and reopen Herdr to use it."
+ln -sfn "$app/Contents/MacOS/Fireflies" "$HOME/.local/bin/herdr-app"
+# The app's other name, the one its docs lead with; a `fireflies` that isn't a link is someone else's.
+[[ -e "$HOME/.local/bin/fireflies" && ! -L "$HOME/.local/bin/fireflies" ]] || ln -sfn "$app/Contents/MacOS/Fireflies" "$HOME/.local/bin/fireflies"
+"$lsregister" -f "$app"
+echo "Installed $app ($version, fork $fork). Quit and reopen Fireflies to use it."

@@ -30,6 +30,8 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
+import * as herdr from "herdr";
+import { openInEditor } from "./editor-route.js";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
@@ -253,11 +255,18 @@ export default class Markdown extends View {
     writeTextFile(this.path, next, was).catch(() => { this.load(cx); });
   }
 
-  /** The app's editor (nocturne-editor) beside this viewer; a file on another
-   *  machine in $EDITOR in a terminal there. */
+  /** The app's editor (nocturne-editor) in this viewer's place, its Markdown
+   *  preview on (split): a tab of the tab's editor when it has one
+   *  (editor-route.js), else a new editor opened beside this viewer, which
+   *  then closes so the editor takes its room. A file on another machine:
+   *  $EDITOR in a terminal beside. */
   edit() {
     const me = this.pane();
-    if (!this.on) return run("editor.open", { path: this.path, ...(me ? { pane: me.pane } : {}) });
+    if (!this.on) {
+      openInEditor(herdr, { path: this.path, pane: me?.pane ?? null, view: "split" });
+      if (me) run("pane.close", { pane: me.pane });
+      return;
+    }
     run("terminal.open", { argv: ["sh", "-c", 'exec "${VISUAL:-${EDITOR:-vi}}" "$1"', "edit", this.path], folder: dirname(this.path), place: "left", ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 

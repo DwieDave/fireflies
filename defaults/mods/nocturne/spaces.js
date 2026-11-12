@@ -27,7 +27,7 @@
 // The menu asks through shared(EDIT_SPACE); on the folded rail Herdr's own
 // (Nocturne-skinned) prompt and confirm dialogs, and the centered picker, do it instead.
 
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, shared } from "herdr";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.js";
@@ -38,6 +38,7 @@ import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.j
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
 import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
+import { isDock } from "./dock.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
 // How often to look for spaces in folders not yet placed in a repo.
@@ -73,10 +74,9 @@ export default class Spaces {
       go: () => run("space.select", { id: s.id }),
       menu: () => this.menu(s, true),
       rename: (cx) => this.start({ kind: "rename", s }, cx),
-      folder: () => this.folder(s),
-      delete: (cx) => this.start({ kind: "delete", s }, cx),
       tab: () => run("tab.new", { space: s.id }),
-      worktree: () => newWorktree(s.id),
+      // The dock (dock.js) keeps no folder and isn't deleted by a key.
+      ...(isDock(s) ? {} : { folder: () => this.folder(s), delete: (cx) => this.start({ kind: "delete", s }, cx), worktree: () => newWorktree(s.id) }),
     };
   }
 
@@ -306,6 +306,7 @@ export default class Spaces {
       .when(depth > 0, (el) => el.child(this.indent(t, depth)))
       .child(pip(t, s.status))
       .child(div().relative().flex_1().min_w(0).truncate().text_color(s.active || on ? t.foreground : t.muted).child(s.name))
+      .when(isDock(s), (el) => el.child(svg("mods/workspace-chrome/pin.svg").size(10).flex_none().text_color(t.dim))) // the dock (dock.js)
       .child(div().relative().flex_none().text_color(t.dim).child(String(s.tabs.length)));
   }
 

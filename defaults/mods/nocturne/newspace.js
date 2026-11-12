@@ -15,6 +15,10 @@
 //   name      unnamed spaces are called after their folder; cmd-enter on a
 //             row asks for a name first, the folder's in the field
 //
+// The dock (dock.js) is never attached: its row has no Change folder, and
+// asking anyway (the palette's "Change this space's folder…") opens nothing.
+// "no folder" here makes an ordinary space in ~, not the dock.
+//
 // Keys: ↑ ↓ (ctrl-n / ctrl-p) move, wrapping (↑ from the top: "no folder");
 // enter makes (attaches); cmd-enter names it first; tab puts the row's path
 // in the field and lists inside it; shift-tab goes one folder up; esc leaves
@@ -24,6 +28,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import { dither, eyebrow, spaceFolder } from "./kit.js";
+import { isDock } from "./dock.js";
 import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.js";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
@@ -63,6 +68,8 @@ export function hereFolder() {
  * an open one gives way to this one even when it's the same (a menu's ask).
  */
 export function openSpacePicker({ at = null, space = null, wasOpen = false, replace = false } = {}) {
+  // The dock (dock.js) keeps no folder: nothing attaches it, from any menu or palette.
+  if (space && isDock(spaces().find((s) => s.id === space))) return null;
   const open = shared(OPEN);
   if (open?.id) {
     setShared(OPEN, null);
@@ -327,6 +334,7 @@ export default class NewSpace {
   make(folder, name, _cx) {
     if (this.done) return;
     if (this.space) {
+      if (isDock(this.space)) return this.close();
       run("space.folder", { id: this.space.id, folder: folder ?? this.home });
     } else {
       run("space.new", newArgs(folder, name, this.home));

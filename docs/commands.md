@@ -2,14 +2,15 @@
 
 # Commands
 
-Inspect the window with `herdr-app ls` and `herdr-app status`.
-`herdr-app commands` lists the app actions below, even without an open window.
+Inspect the window with `fireflies ls` and `fireflies status`.
+`fireflies commands` lists the app actions below, even without an open window.
+`herdr-app` is the same command and keeps working.
 
-Run an action in the open window with `herdr-app do`:
+Run an action in the open window with `fireflies do`:
 
 ```sh
-herdr-app do pane.split --direction right
-herdr-app do pane.split '{"direction":"right"}'
+fireflies do pane.split --direction right
+fireflies do pane.split '{"direction":"right"}'
 ```
 
 Arguments can be named flags or one JSON object. Required arguments are marked below.

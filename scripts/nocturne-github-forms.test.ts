@@ -114,7 +114,7 @@ const draw = (tab: any) => { rendering = true; try { return tab.render(theme, { 
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el,
   v_virtual_list: (_id: string, n: number, _s: unknown, key: (i: number) => string, render: Function) => { for (let i = 0; i < n; i++) key(i); render({ start: 0, end: n }, cx); return el; },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) }, ScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
   InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
   TextareaState: { new: (o: any) => new Input(o) }, Textarea: { new: () => el }, TextView: { markdown: () => el },
 }));
@@ -179,14 +179,15 @@ test("every field is reached by tab, typing goes in, pickers choose, enter revie
   await settle();
   const order: string[] = [];
   for (let i = 0; i < form.stops().length; i++) { order.push(at(form)); key(form, "tab"); }
-  expect(order).toEqual(["base", "head", "title", "body", "draft", "reviewers", "assignees", "labels", "milestone", "push", "form-review", "form-cancel"]);
+  // In the order they're drawn (form-layout.js): push sits beside draft, in the options.
+  expect(order).toEqual(["base", "head", "title", "body", "draft", "push", "reviewers", "assignees", "labels", "milestone", "form-review", "form-cancel"]);
   expect(at(form)).toBe("base"); // wraps
   key(form, "tab", { shift: true });
   expect(at(form)).toBe("form-cancel"); // and back
   key(form, "tab", { shift: true });
   expect(at(form)).toBe("form-review");
   key(form, "tab", { shift: true });
-  expect(at(form)).toBe("push");
+  expect(at(form)).toBe("milestone");
 
   form.go(2);
   expect(key(form, "a")).toBe("typing"); // the Input's
@@ -198,6 +199,7 @@ test("every field is reached by tab, typing goes in, pickers choose, enter revie
   key(form, "tab"); // draft
   key(form, "space");
   expect(form.value("draft")).toBe(true);
+  key(form, "tab"); // push
   key(form, "tab"); // reviewers: typing opens the list filtered
   key(form, "a");
   expect(form.picker.field.id).toBe("reviewers");
@@ -253,7 +255,7 @@ test("required fields stop the review; a failed create stays in the review with 
   const form = prs.form;
   await settle();
   form.go(2); type("");
-  form.go(9); key(form, "space"); // no push
+  form.go(form.fields.findIndex((f: any) => f.id === "push")); key(form, "space"); // no push
   key(form, "enter");
   expect(form.stage).toBe("edit");
   expect(form.errors.title).toBe("A pull request needs a title.");
@@ -472,4 +474,61 @@ test("cmd-enter in the body (the textarea types a new line and says submit): the
   expect(form.value("body")).toBe("Body");
   expect(form.stage).toBe("confirm");
   expect(world.writes).toEqual([]);
+});
+
+test("a list opens at its field: under it when there's room, upward near the footer, and closes on esc", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  draw(prs);
+  form.width = 638; form.viewH = 560; // the column's scrolled part, as the panel measures it
+  const ids = form.fields.map((f: any) => f.id);
+  // head: near the top, so under its field.
+  form.go(ids.indexOf("head"));
+  key(form, "space");
+  const head = form.pickerSpot();
+  const cell = form.lay().rows.flatMap((r: any) => r.cells ?? []).find((c: any) => c.field.id === "head");
+  expect(head.place.up).toBe(false);
+  expect(head.place.x).toBe(cell.x);
+  expect(head.place.y).toBeGreaterThan(cell.y);
+  expect(head.place.y + head.place.h).toBeLessThanOrEqual(form.viewH); // above the footer
+  draw(prs);
+  key(form, "escape");
+  expect(form.picker).toBeNull();
+  // labels: the last row, so the list opens upward and stays out of the footer.
+  form.go(ids.indexOf("labels"));
+  key(form, "space");
+  const labels = form.pickerSpot();
+  const lcell = form.lay().rows.flatMap((r: any) => r.cells ?? []).find((c: any) => c.field.id === "labels");
+  expect(labels.place.up).toBe(true);
+  expect(labels.place.y + labels.place.h).toBeLessThanOrEqual(lcell.y + 20);
+  expect(labels.place.y).toBeGreaterThanOrEqual(0);
+  // Every row shows (two labels) and the keyboard's row is among them.
+  expect(labels.end - labels.top).toBe(labels.n);
+  draw(prs);
+  key(form, "escape");
+  expect(form.picker).toBeNull();
+  expect(form.stops()[form.at].id).toBe("labels");
+});
+
+test("the form is drawn wide and narrow, in the review and while sending, without making inputs", async () => {
+  const app = makeApp();
+  const prs = new Prs(app, {});
+  app.tabObj = prs;
+  prs.newPr(cx);
+  const form = prs.form;
+  await settle();
+  const at = (w: number) => { rendering = true; try { return prs.render(theme, { width: w, height: 700 }); } finally { rendering = false; } };
+  at(1600); at(700);
+  form.go(2); type("T");
+  key(form, "enter");
+  expect(form.stage).toBe("confirm");
+  at(1600); at(700);
+  form.stage = "sending";
+  at(700);
+  form.stage = "confirm";
+  expect(prs.flow.summary()).toBe("2 commits · 2 files → main");
 });

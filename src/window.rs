@@ -351,7 +351,8 @@ enum OverlayKind {
     Popup,
     Toast,
     /// Stays until closed, moves where it's dropped, comes to the front when
-    /// pressed (`movable.rs`). Never holds the keyboard on its own.
+    /// pressed (`movable.rs`). Without a scrim it never holds the keyboard on
+    /// its own; with one it's modal while it shows (`Overlay::holds_keys`).
     Window,
 }
 
@@ -359,6 +360,15 @@ impl OverlayKind {
     /// Dialogs and popups hold the keyboard while open (Esc closes them).
     fn modal_keys(self) -> bool {
         matches!(self, OverlayKind::Dialog | OverlayKind::Popup)
+    }
+}
+
+impl Overlay {
+    /// It holds the keyboard over everything outside the overlays: a dialog or
+    /// popup, or a window with a scrim (Git, GitHub), which is modal while it
+    /// shows. No key reaches a pane or the layout behind it.
+    fn holds_keys(&self) -> bool {
+        self.kind.modal_keys() || (self.kind == OverlayKind::Window && self.scrim)
     }
 }
 
@@ -446,6 +456,9 @@ struct Overlay {
     /// The app's own screen (a `frame-` mod: What's new, the welcome): only
     /// its own close ends it, never a layout switch.
     frame: bool,
+    /// A dialog or popup: the window that held the keyboard when it opened,
+    /// which gets it back when it closes (the palette over the GitHub window).
+    back_to: Option<String>,
 }
 
 struct Drag {
@@ -580,6 +593,8 @@ pub struct AppWindow {
     _tasks: Vec<Task<()>>,
     /// Gives the keyboard back when what had it leaves the screen (`restore_focus`).
     _focus_lost: Option<Subscription>,
+    /// Keeps keys from panes behind a window with a scrim (`take_back_keys`).
+    _keys_guard: Option<Subscription>,
     /// Remembers where the window is (`place.rs`); the write waiting to settle.
     _place: Option<Subscription>,
     place_write: Option<Task<()>>,
@@ -689,10 +704,19 @@ impl AppWindow {
             focus: cx.focus_handle(),
             _tasks: Vec::new(),
             _focus_lost: None,
+            _keys_guard: None,
             _place: None,
             place_write: None,
         };
         w._focus_lost = Some(cx.on_focus_lost(window, |this, window, cx| this.restore_focus(window, cx)));
+        // Ahead of every binding and key handler: a key that finds the keyboard
+        // behind a window with a scrim is dropped, and the window takes it back.
+        let (me, handle) = (cx.weak_entity(), window.window_handle());
+        w._keys_guard = Some(cx.intercept_keystrokes(move |_, window, cx| {
+            if window.window_handle() == handle && me.update(cx, |this, cx| this.take_back_keys(window, cx)).unwrap_or(false) {
+                cx.stop_propagation();
+            }
+        }));
         w._place = Some(cx.observe_window_bounds(window, |this, window, cx| {
             if let Some(t) = crate::place::changed(window, cx) {
                 this.place_write = Some(t);
@@ -1714,7 +1738,9 @@ impl AppWindow {
         }
         self.synced_model_pane = model_pane;
         self.focused_pane = focused.clone();
-        let no_dialog = !self.overlays.iter().any(|o| o.kind.modal_keys());
+        // A dialog, popup or window with a scrim keeps the keyboard through any
+        // change behind it (agent.next, a tab switch, a pane closing).
+        let no_dialog = !self.keys_held();
         // GPUI focus alone does not change AppKit's first responder. A browser
         // page can keep receiving keys after a keyboard pane switch.
         if pane_changed {
@@ -1801,10 +1827,23 @@ impl AppWindow {
 
     /// The keyboard never ends up nowhere. When what had it leaves the screen (a
     /// mod hidden but kept alive, a closed pane, a hidden mod focusing itself on a
-    /// reload), it goes to the top dialog, else the shown agent or focused pane,
-    /// else the window, where the app's keys work.
+    /// reload, an input a window's mod stopped drawing), it goes to the top
+    /// dialog, else the top window with a scrim (modal: never the pane behind
+    /// it), else the shown agent or focused pane, else the window, where the
+    /// app's keys work.
     fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.restore_focus_to(None, window, cx);
+    }
+
+    /// `restore_focus`, with the window a closing dialog or popup opened over
+    /// (`back_to`) first in line after another dialog.
+    fn restore_focus_to(&mut self, back_to: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let dialog = self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.focus.clone());
+        if dialog.is_none()
+            && let Some(id) = back_to.filter(|id| self.overlays.iter().any(|o| o.id == *id && o.kind == OverlayKind::Window)).or_else(|| self.top_scrim_window())
+        {
+            return self.hand_window(&id, window, cx);
+        }
         // A mod block holding the keyboard gets it back (a popup over it closed).
         if dialog.is_none() && self.focused_block.as_ref().is_some_and(|b| self.mod_block_shown(b)) {
             self.focus.focus(window, cx);
@@ -1876,7 +1915,7 @@ impl AppWindow {
     /// Gives the focused pane the keyboard, unless something other than the
     /// window holds it: a dialog, a mod block, an input.
     fn refocus_pane(&mut self, window: &mut Window, cx: &mut App) {
-        let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
+        let dialog = self.keys_held();
         let window_holds_keys = window.focused(cx).is_none() || self.focus.is_focused(window);
         if dialog || self.focused_block.is_some() || !window_holds_keys {
             return;
@@ -2990,21 +3029,31 @@ impl AppWindow {
         }
         // Clicking the same link again shows the viewer already open on it: the
         // file a viewer shows now (it notes that by slot in shared `<mod>.paths`,
-        // having moved on from the one it opened with), else its props' file.
+        // having moved on from the one it opened with; a list when it holds
+        // several, the editor's tabs), else its props' file.
         let now = crate::mods::shared(&format!("{viewer_mod}.paths"));
         let shown = pane.as_ref().filter(|_| !tab).and_then(|p| self.model.tab_of(p)).and_then(|tab| {
             tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props }) if name == viewer_mod && {
-                let showing = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot)?.as_str())
-                    .or_else(|| props.get("path").and_then(Value::as_str));
-                showing == Some(path.as_str()) && props.get("on").and_then(Value::as_str) == on
+                let noted = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot).cloned());
+                let showing = match noted {
+                    Some(Value::String(p)) => p == path,
+                    Some(Value::Array(list)) => list.iter().any(|p| p.as_str() == Some(path.as_str())),
+                    _ => props.get("path").and_then(Value::as_str) == Some(path.as_str()),
+                };
+                showing && props.get("on").and_then(Value::as_str) == on
             })).map(|n| n.id.clone())
         });
         if let Some(id) = shown {
-            // The editor already on the file moves to the place asked for: it
-            // watches shared `nocturne-editor.goto` for its path.
-            if viewer == Viewer::Editor && extra.get("line").is_some() {
+            // The editor already on the file shows it (its tab) and moves to the
+            // place asked for: it watches shared `nocturne-editor.goto` for its paths.
+            if viewer == Viewer::Editor {
                 let n = crate::mods::shared("nocturne-editor.goto").and_then(|g| g.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
-                crate::mods::set_shared("nocturne-editor.goto".into(), json!({ "path": path, "line": extra["line"], "col": extra.get("col").cloned().unwrap_or(json!(1)), "n": n }));
+                let mut goto = json!({ "path": path, "n": n });
+                if extra.get("line").is_some() {
+                    goto["line"] = extra["line"].clone();
+                    goto["col"] = extra.get("col").cloned().unwrap_or(json!(1));
+                }
+                crate::mods::set_shared("nocturne-editor.goto".into(), goto);
             }
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
             return match r.get("error") {
@@ -3335,6 +3384,9 @@ impl AppWindow {
         if implicit_close && self.overlays.iter().any(|o| o.kind.modal_keys())
         {
             self.run("overlay.close", json!({}), window, cx);
+        } else if implicit_close && let Some(id) = self.top_scrim_window() {
+            // A window with a scrim is modal: cmd-w closes it, not the tab behind.
+            self.close_overlay(&id, window, cx);
         } else {
             self.run(name, args, window, cx);
         }
@@ -3826,7 +3878,7 @@ impl AppWindow {
                     self.focused_block = None;
                     self.focused_pane = Some(id.clone());
                     self.synced_model_pane = self.model.focused_pane();
-                    if !self.overlays.iter().any(|o| o.kind.modal_keys()) && let Some(f) = self.pane_focus(&id, cx) {
+                    if !self.keys_held() && let Some(f) = self.pane_focus(&id, cx) {
                         f.focus(window, cx);
                     }
                     self.publish(cx);
@@ -4428,11 +4480,44 @@ impl AppWindow {
         }
         self.focused_block = Some(id.to_owned());
         self.sync(window, cx);
-        if !self.overlays.iter().any(|o| o.kind.modal_keys()) {
+        if !self.keys_held() {
             crate::native_view::release_keyboard(window);
             self.focus.focus(window, cx);
             self.hand_keyboard();
         }
+    }
+
+    /// The keyboard is somewhere behind a window with a scrim: in a pane, the
+    /// layout or the window itself, outside every overlay. Only what was
+    /// drawn counts (a handle focused before its first frame is left to it).
+    fn keys_astray(&self, window: &Window, cx: &App) -> bool {
+        self.top_scrim_window().is_some()
+            && self.focus.contains_focused(window, cx)
+            && !self.overlays.iter().any(|o| o.kind != OverlayKind::Toast && o.focus.contains_focused(window, cx))
+    }
+
+    /// The guard behind `Overlay::holds_keys`: whatever moved the keyboard
+    /// behind a window with a scrim (a mod focusing itself, a terminal, a path
+    /// nobody thought of), it goes back to the overlays. True when it had to.
+    fn take_back_keys(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.keys_astray(window, cx) {
+            return false;
+        }
+        let pane = self.terms.iter().find(|(_, t)| t.focus.is_focused(window)).map(|(id, _)| id.clone());
+        tracing::warn!(?pane, block = ?self.focused_block, window = ?self.top_scrim_window(), "the keyboard was behind a window with a scrim: taken back");
+        self.restore_focus(window, cx);
+        true
+    }
+
+    /// A dialog, popup or window with a scrim is open: the keyboard stays in
+    /// the overlays, whatever changes behind them.
+    fn keys_held(&self) -> bool {
+        self.overlays.iter().any(Overlay::holds_keys)
+    }
+
+    /// The window with a scrim in front, if one shows.
+    fn top_scrim_window(&self) -> Option<String> {
+        self.overlays.iter().rev().find(|o| o.kind == OverlayKind::Window && o.scrim).map(|o| o.id.clone())
     }
 
     /// Its copy gets `focus` from `nextCommand()`.
@@ -4583,10 +4668,18 @@ impl AppWindow {
             _ => 5000.0,
         });
         let slot = format!("overlay:{id}");
-        // The frame takes the keyboard first, so a mod that focuses itself while loading wins.
+        // A dialog or popup over a window that has the keyboard gives it back there.
+        let back_to = kind.modal_keys().then(|| self.overlays.iter().rev().find(|o| o.kind == OverlayKind::Window && o.focus.contains_focused(window, cx)).map(|o| o.id.clone())).flatten();
+        let scrim = window_scrim(kind, &spec);
+        // The frame takes the keyboard first, so a mod that focuses itself while
+        // loading wins. A window with a scrim is modal: it takes it too, and a
+        // web page behind gives up AppKit's.
         let focus = cx.focus_handle();
-        if kind.modal_keys() {
+        if kind.modal_keys() || (kind == OverlayKind::Window && scrim) {
             focus.focus(window, cx);
+        }
+        if kind == OverlayKind::Window && scrim {
+            crate::native_view::release_keyboard(window);
         }
         if layout.is_none() {
             let copy = self.load(Instance { name, props }, window, cx);
@@ -4622,13 +4715,14 @@ impl AppWindow {
             fit,
             modal: spec.get("modal").and_then(Value::as_bool).unwrap_or(false),
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
-            scrim: window_scrim(kind, &spec),
+            scrim,
             place,
             opened: OVERLAYS_OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             key: key.clone(),
             resize,
             sizes,
             frame: app_screen,
+            back_to,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -4639,7 +4733,7 @@ impl AppWindow {
         }
         if has_layout {
             self.sync(window, cx);
-            if kind.modal_keys()
+            if (kind.modal_keys() || (kind == OverlayKind::Window && scrim))
                 && let Some(t) = first_term.and_then(|b| self.terms.get(&b))
             {
                 t.focus.focus(window, cx);
@@ -4816,11 +4910,12 @@ impl AppWindow {
                 self.publish_shown_copies();
             }
             // The keyboard never ends up nowhere: back to a dialog still open,
-            // else the pane, else the window (where the app's keys work). A
-            // window in the background had none to give back (one that had it:
+            // else the window it opened over, else a window with a scrim, else
+            // the pane, else the window (where the app's keys work). A window in
+            // the background had none to give back (one that had it:
             // `restore_focus` runs on its own when its focus goes).
             if o.kind.modal_keys() {
-                self.restore_focus(window, cx);
+                self.restore_focus_to(o.back_to, window, cx);
             }
             cx.notify();
         }
@@ -5293,7 +5388,7 @@ impl AppWindow {
     fn native_view_pressed(&mut self, copy: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(slot) = self.copies.iter().find(|(_, c)| c.id == copy).map(|(s, _)| s.clone()) else { return };
         self.focus_pressed(slot.clone(), window, cx);
-        let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
+        let dialog = self.keys_held();
         if !dialog && self.model.tab_of(&slot).is_some() && self.focusable(&slot) {
             // Kept as the block with the keyboard: it gets `focus` back after a popup over it.
             self.focused_block = Some(slot);
@@ -5479,6 +5574,32 @@ impl AppWindow {
         }
     }
 
+    /// The overlays in paint order, bottom first: windows under dialogs, popups
+    /// and toasts; each kind in the order opened (a window pressed last is
+    /// last: on top).
+    fn overlay_order(&self) -> impl Iterator<Item = &Overlay> {
+        self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).chain(self.overlays.iter().filter(|o| o.kind != OverlayKind::Window))
+    }
+
+    /// Each mod copy's native view layer (`native_view::Layer`): the overlay
+    /// it's drawn in (by `overlay_order`), and whether it's in a floating block.
+    fn native_layers(&self) -> HashMap<u64, crate::native_view::Layer> {
+        let order: Vec<&Overlay> = self.overlay_order().collect();
+        self.copies
+            .iter()
+            .filter(|(_, c)| c.id != 0)
+            .map(|(slot, c)| {
+                let float = slot.strip_prefix("float:").map(|f| f.split('#').next().unwrap_or(f));
+                let inside = |o: &&Overlay| {
+                    o.slot == *slot
+                        || o.layout.as_ref().is_some_and(|l| l.find(slot).is_some() || float.is_some_and(|f| l.find_float(f).is_some()))
+                };
+                let z = order.iter().position(|o| inside(o)).map_or(0, |i| i + 1);
+                (c.id, crate::native_view::Layer { z, float: float.is_some() })
+            })
+            .collect()
+    }
+
     fn render_overlays(&self, viewport: Size<Pixels>, scale: f32, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
         let mut toast_y = 16.0;
@@ -5487,11 +5608,11 @@ impl AppWindow {
         if pill.is_some() {
             toast_y += UPDATE_PILL_HEIGHT + 8.0;
         }
-        // Windows under dialogs, popups and toasts; each kind in the order opened
-        // (a window pressed last is last: on top).
-        let order = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).chain(self.overlays.iter().filter(|o| o.kind != OverlayKind::Window));
-        for o in order {
+        for (i, o) in self.overlay_order().enumerate() {
             let id = o.id.clone();
+            // HUP: what this overlay paints (its backdrop, card and grips) is on
+            // its own layer, above the tree's and every overlay painted before it.
+            out.push(crate::native_view::layer(i + 1).into_any_element());
             // Up to 1: a share of the window (terminals in overlays want room, not px).
             let span = |v: f32, full: Pixels| if v <= 1.0 { full * v } else { settings::z(v) };
             let (w, h) = (span(o.size.width, viewport.width), span(o.size.height, viewport.height));
@@ -5515,7 +5636,7 @@ impl AppWindow {
                 .when(o.kind != OverlayKind::Window, |d| d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
                 // HUP: native views below keep rendering, with a hole here.
                 .relative()
-                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }))
+                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }, crate::native_view::By::Overlay))
                 .child(content);
             match o.kind {
                 OverlayKind::Window => {
@@ -6244,12 +6365,21 @@ impl Render for AppWindow {
         crate::terminal::next_frame();
         window.set_rem_size(px(settings::ui_font_size()));
         gpui::set_square_corners(self.chrome.corners == Some(crate::layout::CornerStyle::Square));
-        // A terminal the person clicked into becomes the focused pane.
+        // The keyboard behind a window with a scrim: taken back once this frame is drawn.
+        let astray = self.keys_astray(window, cx);
+        if astray {
+            cx.defer_in(window, |this, window, cx| {
+                this.take_back_keys(window, cx);
+            });
+        }
+        // A terminal the person clicked into becomes the focused pane (not one
+        // that took the keyboard behind a window with a scrim).
         let clicked = self
             .terms
             .iter()
             .find(|(_, t)| t.focus.is_focused(window))
-            .map(|(id, _)| id.clone());
+            .map(|(id, _)| id.clone())
+            .filter(|_| !astray);
         if clicked.is_some() && self.focused_block.take().is_some() {
             self.publish(cx);
         }
@@ -6359,22 +6489,20 @@ impl Render for AppWindow {
                     this.flush_documents(false, window, cx);
                 }
             }))
+            .child(crate::native_view::layer(0))
             .child(tree)
             .children(overlays)
             .children(tracker)
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
-            // HUP: native views follow their elements; overlays and floats above
-            // them cut holes (cover_probe), and they step aside while a pane is dragged.
+            // HUP: native views follow their elements; overlays and floats painted
+            // above them cut holes (cover_probe), a backdrop above them dims them,
+            // and they step aside while a pane is dragged.
             .child(crate::native_view::frame_end(
                 self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
                 mods::shown_copies(),
-                self.copies
-                    .iter()
-                    .filter(|(slot, _)| slot.starts_with("overlay:") || slot.starts_with("float:") || self.overlays.iter().any(|o| o.layout.as_ref().is_some_and(|l| l.find(slot.as_str()).is_some())))
-                    .map(|(_, c)| c.id)
-                    .collect(),
+                self.native_layers(),
                 self.pane_drag.is_some(),
             ))
     }
@@ -7712,6 +7840,7 @@ export default class Probe extends View {
 
     include!("window/pane_size_tests.rs");
     include!("window/drag_tests.rs");
+    include!("window/floatfocus_tests.rs");
 
     /// The whole path, in a real window: a layout names the toast mod, a
     /// notification opens it with its props, and it can close itself (as one
@@ -8224,4 +8353,181 @@ export default class SystemToast extends View {
         assert!(!super::adoptable(&record("live"), "sp1", Some("tb2"), None));
     }
 
+
+    #[test]
+    fn native_views_are_cut_by_the_overlays_painted_above_them() {
+        in_own_process("native_layers");
+    }
+
+    /// A video player window, a window opened over it with a dim, a popup on
+    /// top: each copy's native views get the cards and dims painted above
+    /// its own overlay, never its own; raising a window swaps the cuts.
+    #[gpui::test]
+    fn native_layers(cx: &mut gpui::TestAppContext) {
+        use crate::native_view::{Layer, last_frame};
+        use serde_json::json;
+        if !running_alone("native_layers") {
+            return;
+        }
+        let main = r#"import { View, div } from "gpui-kit";
+export default class Viewer extends View { render() { return div().size_full(); } }
+"#;
+        let layout = json!({ "id": "root", "type": "row", "children": [
+            { "id": "viewer", "type": "block", "content": { "mod": "viewer" } }
+        ] });
+        let (view, cx) = open_window(cx, "viewer", main, layout);
+        let open = |spec: serde_json::Value, cx: &mut gpui::VisualTestContext| {
+            view.update_in(cx, |this, window, cx| {
+                this.sync_folders(window, cx);
+                let id = crate::mods::new_overlay_id();
+                this.open_overlay(id.clone(), spec, window, cx);
+                id
+            })
+        };
+        let copy = |slot: &str, cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.copies[slot].id);
+        // What the last frame gave a copy: its layer, its holes' x and its dim.
+        let seen = |c: u64, cx: &mut gpui::VisualTestContext| {
+            view.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            let (layer, covers, dim) = last_frame(c).expect("drawn");
+            let mut xs: Vec<i64> = covers.iter().map(|c| c.rect.x.round() as i64).collect();
+            xs.sort();
+            (layer, xs, dim)
+        };
+        let player = open(json!({ "mod": "viewer", "kind": "window", "key": "player", "frame": "none", "width": 300, "height": 200 }), cx);
+        view.update(cx, |this, _| this.overlays.iter_mut().find(|o| o.id == player).unwrap().place = Some(point(px(10.0), px(10.0))));
+        cx.run_until_parked();
+        let pane = view.update(cx, |this, _| this.copies.iter().find(|(s, c)| !s.starts_with("overlay:") && c.inst.name == "viewer").map(|(_, c)| c.id).unwrap());
+        let player_copy = copy(&format!("overlay:{player}"), cx);
+        let base = Layer { z: 0, float: false };
+        let on = |z| Layer { z, float: false };
+        assert_eq!(seen(pane, cx), (base, vec![10], false), "the player cuts the pane under it");
+        assert_eq!(seen(player_copy, cx), (on(1), vec![], false), "the player's own card doesn't");
+
+        // A window opened over the player, with its dim (like the git window).
+        let git = open(json!({ "mod": "viewer", "kind": "window", "key": "git", "frame": "none", "scrim": true, "width": 300, "height": 200 }), cx);
+        view.update(cx, |this, _| this.overlays.iter_mut().find(|o| o.id == git).unwrap().place = Some(point(px(200.0), px(10.0))));
+        let git_copy = copy(&format!("overlay:{git}"), cx);
+        assert_eq!(seen(player_copy, cx), (on(1), vec![200], true), "the git window cuts and dims the player");
+        assert_eq!(seen(git_copy, cx), (on(2), vec![], false));
+        assert_eq!(seen(pane, cx), (base, vec![10, 200], true));
+
+        // A popup (a menu, the notification center) over both.
+        let popup = open(json!({ "mod": "viewer", "kind": "popup", "at": { "x": 400, "y": 300 }, "frame": "none", "width": 100, "height": 50 }), cx);
+        let popup_copy = copy(&format!("overlay:{popup}"), cx);
+        let (_, xs, _) = seen(player_copy, cx);
+        assert_eq!(xs.len(), 2, "the git window and the popup cut the player: {xs:?}");
+        assert_eq!(seen(popup_copy, cx).1, Vec::<i64>::new(), "nothing is above the popup");
+        assert_eq!(seen(popup_copy, cx).0, on(3));
+
+        // The player raised (pressed, overlay.focus): it's above the git window and its dim now, still under the popup.
+        view.update(cx, |this, cx| this.raise_window(&player, cx));
+        let (layer, xs, dim) = seen(player_copy, cx);
+        assert_eq!((layer, xs.len(), dim), (on(2), 1, false), "only the popup is above the raised player");
+        assert_eq!(seen(git_copy, cx).0, on(1));
+        assert!(seen(git_copy, cx).1.contains(&10), "the raised player cuts the git window");
+
+        // Closed: nothing above the player.
+        view.update_in(cx, |this, window, cx| {
+            this.close_overlay(&popup, window, cx);
+            this.close_overlay(&git, window, cx);
+        });
+        assert_eq!(seen(player_copy, cx), (on(1), vec![], false));
+    }
+
+    #[test]
+    fn a_layouts_update_note_closes_from_its_close_button() {
+        in_own_process("update_note_close");
+    }
+
+    /// The update note a layout's mod draws (dialog_mods.update, as Nocturne's):
+    /// a real click on its × hides it.
+    #[gpui::test]
+    fn update_note_close(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("update_note_close") {
+            return;
+        }
+        let note = r#"import { View, div } from "gpui-kit";
+import { props, shared, setShared } from "herdr";
+export default class Note extends View {
+  render() {
+    const p = props() ?? {};
+    if (!p.label || shared("note.dismissed") === p.dismissal) { setShared("note.drawn", "gone"); return div(); }
+    setShared("note.drawn", "shown");
+    return div().size_full().flex().justify_end()
+      .child(div().id("upd-x").w(30).h_full().on_click(() => setShared("note.dismissed", p.dismissal)));
+  }
+}
+"#;
+        let layout = json!({ "id": "root", "type": "row", "dialog_mods": { "update": "note" }, "children": [] });
+        let (view, cx) = open_window(cx, "note", note, layout);
+        view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            this.update_success = true;
+            this.sync(window, cx);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert!(view.update(cx, |this, _| this.copies.contains_key(super::UPDATE_NOTE)), "the note's copy is made");
+        let shown = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.update_note().is_some()) && crate::mods::shared("note.dismissed").is_none();
+        assert!(shown(cx));
+        assert_eq!(crate::mods::shared("note.drawn"), Some(json!("shown")));
+        // The ×: the note's right end, 16 px from the window's bottom right.
+        let viewport = cx.update(|window, _| window.viewport_size());
+        let at = point(viewport.width - px(16.0 + 15.0), viewport.height - px(16.0 + super::UPDATE_PILL_HEIGHT / 2.0));
+        cx.simulate_click(at, gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(crate::mods::shared("note.dismissed"), Some(json!(format!("Updated to {}", env!("CARGO_PKG_VERSION")))), "the click reached the ×");
+        assert_eq!(crate::mods::shared("note.drawn"), Some(json!("gone")), "the note drew itself again, gone");
+    }
+
+    #[test]
+    fn a_windows_close_button_closes_it() {
+        in_own_process("window_close_button");
+    }
+
+    /// A window overlay drawn by a layout's mod (Nocturne's What's New): its
+    /// header's ×, which stops the press (no window drag) and closes on click.
+    #[gpui::test]
+    fn window_close_button(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("window_close_button") {
+            return;
+        }
+        let main = r#"import { View, div } from "gpui-kit";
+import { props, closeOverlay } from "herdr";
+export default class W extends View {
+  render() {
+    return div().size_full().flex().flex_col()
+      .child(div().h(40).flex().justify_end()
+        .child(div().id("scr-close").w(24).h(24).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click(() => closeOverlay(props().overlay))));
+  }
+}
+"#;
+        let layout = json!({ "id": "root", "type": "row", "children": [] });
+        let (view, cx) = open_window(cx, "win", main, layout);
+        let id = view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            let id = crate::mods::new_overlay_id();
+            this.open_overlay(id.clone(), json!({ "mod": "win", "kind": "window", "width": 400, "height": 300 }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
+            id
+        });
+        cx.run_until_parked();
+        cx.run_until_parked();
+        let open = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == id));
+        assert!(open(cx));
+        // Another window opened after it (a kept Git or PiP window, say), beside it: a press raises ours first.
+        view.update_in(cx, |this, window, cx| {
+            let other = crate::mods::new_overlay_id();
+            this.open_overlay(other.clone(), json!({ "mod": "win", "kind": "window", "width": 200, "height": 200 }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == other).unwrap().place = Some(point(px(600.0), px(400.0)));
+        });
+        cx.run_until_parked();
+        // The ×: 12 px in from the window's right edge, 12 px down (a 1 px border around the body).
+        cx.simulate_click(point(px(100.0 + 400.0 - 13.0), px(100.0 + 13.0)), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert!(!open(cx), "the × closed the window");
+    }
 }

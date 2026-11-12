@@ -41,11 +41,11 @@ export class PrForm {
     this.gen = 0;
     this.form = new Form(app, {
       title: "New pull request",
-      right: () => repo.full,
       sendWord: "Create pull request",
       confirmTitle: "Create this pull request?",
       fields: this.fields(head ?? repo.branch ?? "", repo.base ?? ""),
       side: (t, size) => this.side(t, size),
+      summary: () => this.summary(),
       check: (v) => prErrors({ ...v, headOwner: this.headOwner }, { commits: this.range?.head === v.head && this.range?.base === v.base ? this.range.commits : null }),
       commands: () => this.commands(),
       send: (cx) => this.send(cx),
@@ -56,21 +56,30 @@ export class PrForm {
 
   fields(head, base) {
     const branchRow = (name, where) => ({ value: name, label: name, sub: where });
+    // Sections (form-layout.js): base ← head on one row, the words, the toggles, the people and tags two to a row.
     return [
-      { id: "base", label: "base", kind: "choice", value: base, required: true, hint: `merged into, on ${this.repo.full}`,
+      { id: "base", label: "base", kind: "choice", value: base, required: true, hint: "merged into", group: "branches", pair: true, join: "←",
         options: () => this.remoteBranches?.map((b) => branchRow(b, b === this.repo.base ? "default branch" : "")) ?? null,
         onChange: (_v, cx) => this.reread(cx) },
       { id: "head", label: "head", kind: "choice", value: head, required: true, free: true, hint: this.headOwner ? `from your fork, ${this.headRepo}` : "the branch with the changes",
         options: () => this.local?.map((b) => branchRow(b.name, b.upstream ? `${b.upstream}${b.ahead ? ` · ${b.ahead} to push` : ""}` : "not pushed")) ?? null,
         onChange: (_v, cx) => this.reread(cx) },
-      { id: "title", label: "title", kind: "text", value: "", required: true, placeholder: "what this pull request does" },
-      { id: "body", label: "body", kind: "area", value: "", placeholder: "markdown: why, and how to check it" },
-      { id: "draft", label: "draft", kind: "toggle", value: false, note: "open it as a draft" },
-      { id: "reviewers", label: "reviewers", kind: "multi", value: [], placeholder: "none", options: () => this.people(false) },
-      { id: "assignees", label: "assignees", kind: "multi", value: [], placeholder: "none", options: () => this.people(true) },
-      { id: "labels", label: "labels", kind: "multi", value: [], placeholder: "none", options: () => this.choices?.labels.map((l) => ({ value: l.name, label: l.name, sub: l.description ?? "" })) ?? null },
-      { id: "milestone", label: "milestone", kind: "choice", value: "", placeholder: "none", options: () => this.choices?.milestones.map((m) => ({ value: m.title, label: m.title, right: m.dueOn ? `due ${m.dueOn.slice(0, 10)}` : "" })) ?? null },
+      { id: "title", label: "title", kind: "text", value: "", required: true, placeholder: "what this pull request does", group: "pull request" },
+      { id: "body", label: "body", kind: "area", value: "", placeholder: "why, and how to check it", hint: "markdown" },
+      { id: "draft", label: "draft", kind: "toggle", value: false, note: "open it as a draft pull request", group: "options" },
+      { id: "reviewers", label: "reviewers", kind: "multi", value: [], placeholder: "none", group: "people and tags", half: true, options: () => this.people(false) },
+      { id: "assignees", label: "assignees", kind: "multi", value: [], placeholder: "none", half: true, display: (v) => (v === "@me" ? this.choices?.me ?? "me" : v), options: () => this.people(true) },
+      { id: "labels", label: "labels", kind: "multi", value: [], placeholder: "none", half: true, options: () => this.choices?.labels.map((l) => ({ value: l.name, label: l.name, sub: l.description ?? "" })) ?? null },
+      { id: "milestone", label: "milestone", kind: "choice", value: "", placeholder: "none", half: true, options: () => this.choices?.milestones.map((m) => ({ value: m.title, label: m.title, right: m.dueOn ? `due ${m.dueOn.slice(0, 10)}` : "" })) ?? null },
     ];
+  }
+
+  /** The footer's line: what the pull request will hold, and where it goes. */
+  summary() {
+    const r = this.range, base = this.form?.value("base");
+    if (!r?.commits) return base ? `into ${base}` : "";
+    const n = r.commits.length, files = r.stat?.files.length ?? 0;
+    return `${n} commit${n === 1 ? "" : "s"} · ${files} file${files === 1 ? "" : "s"} → ${base}`;
   }
 
   /** Reviewers can't include you; assignees put you first ("@me"). */
@@ -181,10 +190,11 @@ export class PrForm {
     return pushPlan({ remote: this.remote, head, onRemote: s.onRemote, ahead: tracking ? b.ahead : 0, tracking });
   }
 
+  /** The push toggle goes right after draft, in the options (the side panel says why it's there). */
   syncPush() {
     const plan = this.plan();
     const list = this.form.fields.filter((f) => f.id !== "push");
-    if (plan) list.push({ id: "push", label: "push first", kind: "toggle", value: true, note: shellLine("git", plan.args), hint: plan.why, tone: "ansi3" });
+    if (plan) list.splice(list.findIndex((f) => f.id === "draft") + 1, 0, { id: "push", label: "push first", kind: "toggle", value: true, note: shellLine("git", plan.args), hint: plan.why });
     this.form.setFields(list);
   }
 

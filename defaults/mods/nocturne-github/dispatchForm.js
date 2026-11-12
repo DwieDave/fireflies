@@ -34,12 +34,12 @@ export class DispatchForm {
     this.gen = 0;
     this.form = new Form(app, {
       title: "Run a workflow",
-      right: () => repo.full,
       sendWord: "Run workflow",
       confirmTitle: "Run this workflow?",
       confirmNote: () => "Once GitHub takes it, the run shows in the list and is selected.",
       fields: this.fields(),
       side: (t, size) => this.side(t, size),
+      summary: () => this.summary(),
       check: (v) => this.check(v),
       commands: () => this.commands(),
       send: () => this.send(),
@@ -52,19 +52,22 @@ export class DispatchForm {
 
   fields() {
     const base = [
-      { id: "workflow", label: "workflow", kind: "choice", value: "", required: true,
-        display: (path) => { const w = this.workflows?.find((x) => x.path === path); return w ? `${w.name} · ${workflowFile(w.path)}` : String(path ?? ""); },
+      { id: "workflow", label: "workflow", kind: "choice", value: "", required: true, group: "what runs", pair: true, join: "@",
+        hint: this.workflow() ? workflowFile(this.workflow().path) : "",
+        display: (path) => { const w = this.workflows?.find((x) => x.path === path); return w ? w.name : String(path ?? ""); },
         options: () => this.workflows?.map((w) => ({ value: w.path, label: w.name, sub: workflowFile(w.path), right: w.inputs.length ? `${w.inputs.length} input${w.inputs.length === 1 ? "" : "s"}` : "" })) ?? null,
         onChange: (_v, cx) => this.reread(cx) },
-      { id: "ref", label: "ref", kind: "choice", value: this.repo.base ?? "", required: true, free: true, hint: "the branch or tag whose workflow file runs",
+      { id: "ref", label: "ref", kind: "choice", value: this.repo.base ?? "", required: true, free: true, hint: "branch or tag",
         options: () => this.refs?.map((r) => ({ value: r.name, label: r.name, sub: r.kind === "tag" ? "tag" : r.name === this.repo.base ? "default branch" : r.name === this.repo.branch ? "your branch" : "" })) ?? null,
         onChange: (_v, cx) => this.reread(cx) },
     ];
     const w = this.workflow();
     if (!w || !this.inputs) return base;
+    // The inputs as the file orders them, in one section: lists and numbers two to a row, text full width.
+    const group = `inputs · ${this.inputs.length}`;
     return [...base, ...this.inputs.map((i) => {
       const kind = KIND[i.type] ?? "text";
-      const f = { id: `in:${w.id}:${i.name}`, name: i.name, spec: i, label: i.name, kind, required: i.required && i.type !== "boolean",
+      const f = { id: `in:${w.id}:${i.name}`, name: i.name, spec: i, label: i.name, kind, required: i.required && i.type !== "boolean", group, half: kind !== "text",
         value: startValue(i), hint: [i.description, i.type === "number" ? "a number" : i.type === "environment" ? "an environment" : ""].filter(Boolean).join(" · ") };
       if (kind === "toggle") { f.note = i.description || "on / off"; f.hint = ""; }
       if (i.type === "choice") f.options = () => i.options.map((o) => ({ value: o, label: o, right: o === String(i.default ?? "") ? "default" : "" }));
@@ -132,6 +135,14 @@ export class DispatchForm {
       this.envs = (data?.environments ?? []).map((e) => e.name);
     }
     cx?.notify?.();
+  }
+
+  /** The footer's line: the command it will run. */
+  summary() {
+    const w = this.workflow(), ref = String(this.form?.value("ref") ?? "").trim();
+    if (!w) return this.workflows?.length === 0 ? "nothing here can be run by hand" : "pick a workflow";
+    const n = this.inputs?.length ?? 0;
+    return `gh workflow run ${workflowFile(w.path)}${ref ? ` --ref ${ref}` : ""}${n ? ` · ${n} input${n === 1 ? "" : "s"}` : ""}`;
   }
 
   check(v) {
