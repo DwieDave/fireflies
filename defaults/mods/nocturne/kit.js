@@ -2,8 +2,8 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
-import { settings, window as appWindow, terminals, hc, home, run, agents, focused } from "herdr";
-import { AT_LABEL, isPinned, sortAgents, moveInJar } from "./pins.js";
+import { settings, window as appWindow, terminals, hc, home, run, agents, focused, panes, shared, setShared } from "herdr";
+import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -53,8 +53,8 @@ export const labelsOf = (terminal) => terminals().find((x) => x.address === term
 /** Pinned to the jar at the top of the sky (pins.js: Herdr's herdr.pinned label). */
 export const pinned = (terminal) => isPinned(labelsOf(terminal));
 
-/** Pins a terminal's agent to the top of the sky, or unpins it: Herdr's
- *  terminal.pin, and the time it joined the jar (its order there). */
+/** Pins a terminal (an agent's, or a plain shell's) to the top of the sky, or
+ *  unpins it: Herdr's terminal.pin, and the time it joined the jar (its order there). */
 export function pin(terminal, on = !pinned(terminal)) {
   if (!terminal) return;
   run("terminal.pin", { terminal, pinned: on });
@@ -64,13 +64,79 @@ export function pin(terminal, on = !pinned(terminal)) {
 /** The sidebar's agent order (pins.js sortAgents): { pinned, rest, all }. */
 export const sortedAgents = () => sortAgents([...agents()], agentRank, labelsOf);
 
-/** Moves a pinned agent one step up (-1) or down (+1) in the jar. */
-export function movePin(terminal, dir) {
-  for (const [t, kv] of moveInJar(sortedAgents().pinned, terminal, dir, Date.now())) hc(["label", t, kv]).catch(() => {});
+/** The mod panes' pins (pins.js PANES_KEY), as stored. */
+export const paneRecordsNow = () => paneRecords(shared(PANES_KEY));
+
+/** Everything in the jar, in its order (pins.js jarItems): agents, plain terminals, mod panes. */
+export const jar = () => jarItems({ agents: [...agents()], terminals: terminals(), panes: panes(), records: paneRecordsNow() });
+
+/** A pane's key in the jar: its terminal's address, or "pane:<id>" for a mod pane.
+ *  `p`: { pane, terminal } (a PaneInfo, or a menu's target). */
+export const pinKey = (p) => (p?.terminal ?? (p?.pane ? paneKey(p.pane) : null));
+
+/** A pane (`p`: { pane, terminal }) is in the jar. */
+export function panePinnedNow(p) {
+  if (p?.terminal) return pinned(p.terminal);
+  return Boolean(p?.pane) && panePinned(paneRecordsNow(), p.pane);
+}
+
+/** Pins any pane (`p`: { pane, terminal }) to the top of the sky, or unpins it:
+ *  a terminal through its labels (pin), a mod pane in PANES_KEY. */
+export function pinPane(p, on = !panePinnedNow(p)) {
+  if (p?.terminal) return pin(p.terminal, on);
+  const info = p?.pane && panes().find((x) => x.pane === p.pane);
+  if (!info) return;
+  setShared(PANES_KEY, pinPaneRecord(paneRecordsNow(), info, on, Date.now()));
+}
+
+/** Moves a pin (its jar key: a terminal's address or "pane:<id>") one step up
+ *  (-1) or down (+1) in the jar, past pins of any kind. */
+export function movePin(key, dir) {
+  if (!key) return;
+  const times = reorder(jar(), key, dir, Date.now());
+  if (!times.length) return;
+  for (const [k, at] of times) if (!isPaneKey(k)) hc(["label", k, `${AT_LABEL}=${at}`]).catch(() => {});
+  if (times.some(([k]) => isPaneKey(k))) setShared(PANES_KEY, retime(paneRecordsNow(), times));
 }
 
 /** The focused pane's terminal (keys and the palette pin it). */
 export const focusedTerminal = () => focused()?.terminal ?? null;
+
+/** The focused pane as a pin target, { pane, terminal }: a mod pane has no
+ *  terminal; a terminal shown in a layout block has no pane. Null: none. */
+export function focusedPane() {
+  const f = focused();
+  if (!f) return null;
+  if (f.pane) {
+    const p = panes().find((x) => x.pane === f.pane);
+    if (p) return { pane: p.pane, terminal: p.terminal ?? null };
+  }
+  return f.terminal ? { pane: null, terminal: f.terminal } : null;
+}
+
+/** nocturne.pin: pins the focused pane (any kind), or unpins it. */
+export function pinFocused() {
+  const p = focusedPane();
+  if (p) pinPane(p);
+}
+
+/** nocturne.pin-up / pin-down: moves the focused pane's pin in the jar. */
+export function moveFocused(dir) {
+  movePin(pinKey(focusedPane()), dir);
+}
+
+/** Goes to a pin of any kind (a jar item, pins.js jarItems): in whatever tab
+ *  and space it is; a parked pane comes back (pane.focus). */
+export function goToPin(it) {
+  if (it.kind === "pane" || (it.kind === "terminal" && it.pane)) return run("pane.focus", { pane: it.pane.pane });
+  run("agent.focus", { terminal: it.key });
+}
+
+/** Takes a jar item out of the jar. */
+export function unpin(it) {
+  if (it.kind === "pane") return pinPane({ pane: it.pane.pane, terminal: null }, false);
+  pin(it.key, false);
+}
 
 /** Program keys with a dithered logo in art/logo-*.svg. */
 export const LOGO = { claude: "claude", "claude-code": "claude", opencode: "opencode", pi: "pi", codex: "codex" };

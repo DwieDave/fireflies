@@ -14,12 +14,13 @@
 // or a tab of its own.
 
 import { svg, div } from "gpui-kit";
-import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay, agents } from "herdr";
+import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
 import { keysView, keysKey, keysHeight } from "./keyhelp.js";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
 import { openWorktrees } from "./git.js";
-import { ART, spaceFolder, pinned, pin, movePin, sortedAgents } from "./kit.js";
+import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey } from "./kit.js";
+import { onShelf } from "./pins.js";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
 function shortcut(name, args) {
@@ -69,16 +70,22 @@ function layoutKey(action) {
   return keys().find((b) => b.section === "layout:nocturne" && b.action === action)?.keys ?? "";
 }
 
-/** "Pin to the top" / "Unpin" for a terminal's agent, and moving it in the
- *  jar (pins.js) while there's a neighbor to swap with. */
-export function pinItems(t, terminal) {
-  if (!terminal) return [];
-  if (!pinned(terminal)) return [{ id: "pin", mark: icon(t, "pin"), name: "Pin to the top", hint: layoutKey("nocturne.pin"), go: () => pin(terminal, true) }];
-  const jar = sortedAgents().pinned, i = jar.findIndex((a) => a.address === terminal);
+/** "Pin to the top" / "Unpin" for any pane (`p`: { pane, terminal }: an
+ *  agent's, a plain terminal's, a web page's, an editor's...), and moving it
+ *  in the jar (pins.js) while there's a neighbor of its kind to swap with: a
+ *  firefly up and down, a tile on the shelf left and right. */
+export function pinItems(t, p) {
+  const key = pinKey(p);
+  if (!key) return [];
+  if (!panePinnedNow(p)) return [{ id: "pin", mark: icon(t, "pin"), name: "Pin to the top", hint: layoutKey("nocturne.pin"), go: () => pinPane(p, true) }];
+  const all = jar(), it = all.find((x) => x.key === key);
+  const group = it ? all.filter((x) => onShelf(x) === onShelf(it)) : [], i = group.indexOf(it);
+  const shelf = it && onShelf(it);
+  const glyph = (name) => svg(`${name.startsWith("chevron-up") ? ART : "mods/workspace-chrome"}/${name}.svg`).size(14).flex_none().text_color(t.accent);
   return [
-    { id: "unpin", mark: icon(t, "pin-off"), name: "Unpin", hint: layoutKey("nocturne.pin"), go: () => pin(terminal, false) },
-    ...(i > 0 ? [{ id: "pin-up", mark: svg(`${ART}/chevron-up.svg`).size(14).flex_none().text_color(t.accent), name: "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(terminal, -1) }] : []),
-    ...(i >= 0 && i < jar.length - 1 ? [{ id: "pin-down", mark: icon(t, "chevron-down"), name: "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(terminal, 1) }] : []),
+    { id: "unpin", mark: icon(t, "pin-off"), name: "Unpin", hint: layoutKey("nocturne.pin"), go: () => pinPane(p, false) },
+    ...(i > 0 ? [{ id: "pin-up", mark: glyph(shelf ? "chevron-left" : "chevron-up"), name: shelf ? "Move left on the shelf" : "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(key, -1) }] : []),
+    ...(i >= 0 && i < group.length - 1 ? [{ id: "pin-down", mark: glyph(shelf ? "chevron-right" : "chevron-down"), name: shelf ? "Move right on the shelf" : "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(key, 1) }] : []),
   ];
 }
 
@@ -139,7 +146,7 @@ export function menuItems(t, p) {
     return [
       item(t, "focus", "terminal", "Focus", "agent.focus", { terminal: tg.address }),
       { id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_AGENT, { address: tg.address, at: Date.now() }) },
-      ...pinItems(t, tg.address),
+      ...pinItems(t, { pane: null, terminal: tg.address }),
       ...(mine ? moveItems(t, mine.pane) : []),
       ...(mine ? [{ rule: true }, item(t, "close", "x", alone ? "Close pane & tab" : "Close pane", "pane.close", { pane: mine.pane }, t.blocked)] : []),
     ];
@@ -185,8 +192,8 @@ export function menuItems(t, p) {
   const parkable = !!mine && !mine.parked && ps.filter((p) => p.tab === mine.tab && !p.parked).length > 1;
   return [
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_PANE, { terminal: term.address, at: Date.now() }) }] : []),
-    // An agent's pane: pin it to the top of the sky too.
-    ...(term && agents().some((a) => a.address === term.address) ? pinItems(t, term.address) : []),
+    // Any pane can be pinned to the top of the sky: an agent's, a shell's, a web page, an editor.
+    ...pinItems(t, { pane: tg.pane, terminal: term ? term.address : null }),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane: tg.pane }),
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane: tg.pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),

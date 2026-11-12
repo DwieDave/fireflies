@@ -15,7 +15,8 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, setShared, window as win, agents, panes, terminals, updates } from "herdr";
-import { dither, eyebrow, focusedTerminal, pinned, pin, movePin, sortedAgents } from "./kit.js";
+import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar } from "./kit.js";
+import { onShelf } from "./pins.js";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";
 import { toggleDeck, lastFailed } from "./scripts.js";
 import { gitOpen, openWorktrees } from "./git.js";
@@ -223,19 +224,25 @@ function openEntries() {
   }
   out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/nocturne-equalize-panes/grid.svg", bind: "nocturne.gridify",
     title: "Gridify panes", words: "grid tile arrange rearrange even out equalize layout", go: () => run("nocturne.gridify") });
-  // Pinning the focused pane's agent to the top of the sky (kit.js pin; Herdr's terminal.pin).
+  // Pinning the focused pane to the top of the sky, whatever it shows: an agent,
+  // a shell, a web page, an editor (kit.js pinPane; menu.js pinItems).
   // (Not named `here`: that is panels.js's, called above.)
-  const agent = focusedTerminal();
-  if (agent && agents().some((a) => a.address === agent)) {
-    const on = pinned(agent);
-    out.push({ name: "nocturne", args: { pin: true }, group: "Agent", icon: on ? "pin-off" : "pin", bind: "nocturne.pin",
-      title: on ? "Unpin this agent" : "Pin this agent to the top", words: "pin unpin keep top jar sidebar fireflies watch orchestrator", go: () => pin(agent, !on) });
-    // Its place in the jar, while it has a neighbor to swap with (menu.js pinItems).
-    const jar = on ? sortedAgents().pinned : [], i = jar.findIndex((a) => a.address === agent);
-    if (i > 0) out.push({ name: "nocturne.pin-up", args: {}, group: "Agent", icon: "pin", title: "Move this agent up in the jar",
-      words: "pin order jar sidebar top", go: () => movePin(agent, -1) });
-    if (i >= 0 && i < jar.length - 1) out.push({ name: "nocturne.pin-down", args: {}, group: "Agent", icon: "pin", title: "Move this agent down in the jar",
-      words: "pin order jar sidebar bottom", go: () => movePin(agent, 1) });
+  const target = focusedPane();
+  if (target) {
+    const on = panePinnedNow(target), key = pinKey(target);
+    const what = target.terminal && agents().some((a) => a.address === target.terminal) ? "agent" : "pane";
+    const group = what === "agent" ? "Agent" : "Pane";
+    out.push({ name: "nocturne", args: { pin: true }, group, icon: on ? "pin-off" : "pin", bind: "nocturne.pin",
+      title: on ? `Unpin this ${what}` : `Pin this ${what} to the top`, words: "pin unpin keep top jar sidebar fireflies watch orchestrator dock web page editor files terminal", go: () => pinPane(target, !on) });
+    // Its place in the jar, while it has a neighbor to swap with.
+    // A firefly moves up and down in the jar, a pane's tile left and right on its shelf.
+    const all = on ? jar() : [], it = all.find((x) => x.key === key);
+    const kin = it ? all.filter((x) => onShelf(x) === onShelf(it)) : [], i = kin.indexOf(it);
+    const [up, down] = what === "agent" ? ["up in the jar", "down in the jar"] : ["left on the shelf", "right on the shelf"];
+    if (i > 0) out.push({ name: "nocturne.pin-up", args: {}, group, icon: "pin", title: `Move this ${what} ${up}`,
+      words: "pin order jar shelf sidebar top left", go: () => movePin(key, -1) });
+    if (i >= 0 && i < kin.length - 1) out.push({ name: "nocturne.pin-down", args: {}, group, icon: "pin", title: `Move this ${what} ${down}`,
+      words: "pin order jar shelf sidebar bottom right", go: () => movePin(key, 1) });
   }
   // The newest toast on screen (toast.js): run what it offers, or dismiss it.
   if ((Array.isArray(shared(TOASTS)) ? shared(TOASTS) : []).length) {

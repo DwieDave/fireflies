@@ -1054,10 +1054,26 @@ right-click its menu, double-click renames it. Pinned agents
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
 a sheen down its glass, never shorter than a jar with room under one firefly;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
-made elsewhere gets one when the sky sees it), keeping their status. Pin or
-unpin from a firefly's or an agent pane's right-click menu (open sky and
-rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move it in the jar. Toasts by key:
+made elsewhere gets one when the sky sees it), keeping their status. Any other
+pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
+sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
+foot (on the rail 18 px tiles two abreast), in the order pinned, its own order
+apart from the fireflies'. A tile is moonlit while its pane is on screen, the
+focused one wears the corner ticks; the caption line under the shelf names
+the tile under the pointer or the keyboard's cursor (else the focused one):
+its name, then its kind, its space when it's another one, "parked". A click
+or enter goes to it in whatever tab and space (a parked pane comes back);
+right-click opens its pane's menu. A shell's pin is its terminal's
+(`terminal.pin`, ends with it); a mod pane's is kept in shared
+`nocturne.pinned-panes` (`[{pane, mod, props, at}]`), found again by its mod
+and props if a restart gives the pane a new id, and gone once the pane has
+been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
+its page's title when nocturne-browser notes it in shared
+`nocturne-browser.titles` (by slot), else the host it opened on. Pin or unpin
+from a firefly's or any pane's right-click menu (open sky and rail), the
+palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
+`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
+firefly up or down in the jar, a tile left or right on the shelf. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.

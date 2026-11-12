@@ -64,12 +64,19 @@ const PROGRAMS = { nvim: "file-text", vim: "file-text", hx: "file-text", htop: "
 /** The pane's mark: an agent's dithered logo, else its mod's or program's icon. */
 export function mark(t, p) {
   const color = p.focused ? t.accent : t.dim;
-  const logo = LOGO[p.program?.key];
-  const path = logo ? `${ART}/logo-${logo}.svg`
-    : p.program?.agent ? `${ART}/logo-agent.svg`
-    : `mods/workspace-chrome/${MODS[p.mod]?.[1] ?? PROGRAMS[p.program?.key] ?? "terminal"}.svg`;
-  return svg(path).size(11).flex_none().text_color(color);
+  return svg(markPath(p)).size(11).flex_none().text_color(color);
 }
+
+/** The svg of a pane's mark (mark()): also the jar's for a pinned pane (sky.js). */
+export function markPath(p) {
+  const logo = LOGO[p?.program?.key];
+  return logo ? `${ART}/logo-${logo}.svg`
+    : p?.program?.agent ? `${ART}/logo-agent.svg`
+    : `mods/workspace-chrome/${MODS[p?.mod]?.[1] ?? PROGRAMS[p?.program?.key] ?? "terminal"}.svg`;
+}
+
+/** A mod pane's kind in a word ("web", "editor", "files"), null for a terminal. */
+export const modKind = (p) => (p?.mod ? (MODS[p.mod]?.[0] ?? p.mod).toLowerCase() : null);
 
 /** What a pane is called: the name a person gave its terminal, its mod's
  *  name, its agent's or shell's, its title, its program's. */

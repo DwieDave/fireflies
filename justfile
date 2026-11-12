@@ -102,6 +102,8 @@ test:
     bun test scripts/nocturne-preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
+    # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
+    bun test scripts/nocturne-pane-pins.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view
