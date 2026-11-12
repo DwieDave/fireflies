@@ -126,11 +126,12 @@ Split a pane (default: the focused one) "right", "down", "left", "up" or "auto" 
 
 ## `pane.close`
 
-Close a pane and end its terminal.
+Close a pane and end its terminal. A mod pane holding unsaved work (an editor) asks the person first; a script passes confirmed.
 
 | Argument | Required |
 |---|---|
 | `pane` | no |
+| `confirmed` | no |
 
 ## `terminal.open`
 
@@ -356,6 +357,16 @@ Give panes even shares of their tab (default: the focused pane's): scope "all" (
 | `scope` | no |
 | `pane` | no |
 
+## `pane.resize`
+
+Move a pane's divider one step (default: the focused pane; step: a share of the tab, default 0.05) "left", "right", "up" or "down": with a neighbor that way the pane grows, at the tab's edge its other divider moves and it shrinks. Panes keep a drag's minimum; a zoomed or one-pane tab stays.
+
+| Argument | Required |
+|---|---|
+| `direction` | yes |
+| `step` | no |
+| `pane` | no |
+
 ## `terminal.peek`
 
 Peek at a running terminal over the tab, with keep-as-tab, dock-right and close controls (float true: as a floating terminal, bigger; view and show as terminal.open's float; the one floating already just shows `show`).
@@ -497,6 +508,14 @@ Hide a layout node.
 |---|---|
 | `id` | yes |
 
+## `layout.focus`
+
+Give the keyboard to a shown layout block whose mod.json says "focusable": true (it gets "focus" from nextCommand(); pane.go leaves it).
+
+| Argument | Required |
+|---|---|
+| `id` | yes |
+
 ## `layout.resize`
 
 Size a layout node.
@@ -539,6 +558,27 @@ Close an overlay (default: the top dialog or popup).
 | Argument | Required |
 |---|---|
 | `id` | no |
+
+## `overlay.focus`
+
+Give a window (kind "window": GitHub, Git, a floating terminal) the keyboard and bring it to the front: id, or the next one (dir "next", default) or "prev" in the order they opened; past the last, or dir "none", the keyboard goes back to the pane.
+
+| Argument | Required |
+|---|---|
+| `dir` | no |
+| `id` | no |
+
+## `overlay.move`
+
+Move a window by dx/dy px and, when it resizes, size it by dw/dh (its right and bottom edges, within its limits). Default: the window holding the keyboard, else the top one. Kept like a drag.
+
+| Argument | Required |
+|---|---|
+| `id` | no |
+| `dx` | no |
+| `dy` | no |
+| `dw` | no |
+| `dh` | no |
 
 ## `overlay.resizable`
 
@@ -598,9 +638,44 @@ Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default:
 | `pane` | no |
 | `on` | no |
 
+## `editor.open`
+
+Edit a text or source file in the editor (nocturne-editor) beside the pane (default: the focused one), or the editor already open on it there; line and col (one-based) put the caret there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+
+| Argument | Required |
+|---|---|
+| `path` | yes |
+| `line` | no |
+| `col` | no |
+| `in` | no |
+| `pane` | no |
+| `on` | no |
+
+## `preview.open`
+
+Open a file you look at but don't edit (a picture, PDF, CSV/TSV, SQLite database, patch; on macOS also fonts, audio, video) in the preview (nocturne-preview) beside the pane (default: the focused one), or the preview already showing it there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+
+| Argument | Required |
+|---|---|
+| `path` | yes |
+| `in` | no |
+| `pane` | no |
+| `on` | no |
+
+## `files.open`
+
+Open a folder in a new files pane (nocturne-files) beside the pane (default: the focused one), or focus the files pane already rooted there; in "tab": a tab of its own; in "system": the system's file manager. A relative path is the pane's folder's; on: the machine the folder is on.
+
+| Argument | Required |
+|---|---|
+| `path` | yes |
+| `in` | no |
+| `pane` | no |
+| `on` | no |
+
 ## `image.open`
 
-Open an image (png, jpg, gif, webp, svg, heic, ...) in the viewer (nocturne-image) beside the pane (default: the focused one), or the viewer already showing it there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+The same as preview.open (its name when the preview showed pictures only).
 
 | Argument | Required |
 |---|---|
