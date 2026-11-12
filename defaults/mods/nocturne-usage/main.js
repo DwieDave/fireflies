@@ -355,6 +355,7 @@ export default class Usage extends View {
   message(t, n) {
     const who = provider();
     const [title, sub] = !n ? ["asking the moon how much night is left…", ""]
+      : n.state === "off" ? ["usage is off in a scratch app", "it would ask with this machine's login; HERDR_APP_USAGE=1 turns it on"]
       : n.state === "nologin" ? [`no ${who.name} login on this machine`, `sign in to ${who.agent} and the moon will know you`]
       : n.state === "expired" ? ["the login is napping", `${who.agent} wakes it the next time it runs; this pane only reads it`]
       : n.state === "busy" ? ["the moon asked us to wait a moment", "trying again in a few minutes"]
