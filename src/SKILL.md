@@ -210,6 +210,11 @@ those files or the generated guide. The app rewrites them on start.
   into its native view (a web page), so the mod's keys.json section applies.
   `layout.focus {id}` does the same for a layout block by id; `focused().block`
   names the block holding the keyboard.
+- Native views (web, PDF, video; macOS) sit above Herdr's own drawing and
+  don't appear in `shot`. Every overlay painted after the one a view is in
+  (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
+  backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
+  layer, holes and dim, so check those instead of a screenshot.
 - Shipped mods belong to Herdr: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.

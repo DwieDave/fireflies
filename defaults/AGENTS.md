@@ -1442,6 +1442,11 @@ The main ones:
   page in place without reloading it.
   Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
   instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
+  That holds for a native view inside an overlay too (the picture-in-picture player's
+  window): every overlay painted after its own one cuts it and dims it (windows first, in
+  the order raised, then dialogs, popups and toasts, each in the order opened), never its
+  own overlay nor those under it; floating blocks cut the panes below them. `native.debug`'s
+  `layers` shows, per mod copy, its layer (`z`, `float`), its holes and its dim.
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
