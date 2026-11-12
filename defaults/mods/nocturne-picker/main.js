@@ -28,6 +28,8 @@
 import { div } from "gpui-kit";
 import { View } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import * as herdr from "herdr";
+import { openInEditor } from "./editor-route.js";
 import { props, theme, settings, closeOverlay, shared, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
 import { PathBuilder, Background } from "gpui-kit";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote } from "./logic.js";
@@ -254,8 +256,8 @@ export default class Picker extends View {
     if (!r || r.head) return;
     const path = `${this.root}/${r.path}`;
     this.dismiss();
-    if (r.match) run("editor.open", { path, line: r.match.line, col: r.match.col + 1 });
-    else run("editor.open", { path });
+    // The focused editor, else the shown tab's, takes it as a tab; with none, a new one (editor-route.js).
+    openInEditor(herdr, { path, ...(r.match ? { line: r.match.line, col: r.match.col + 1 } : {}) });
   }
 
   // ---- drawing

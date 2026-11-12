@@ -1,8 +1,28 @@
-// Nocturne editor: one file, edited, in a pane beside where it was opened
+// Nocturne editor: files, edited, in a pane beside where it was opened
 // from: a source link clicked in a terminal (`path:42:7` goes there), a file
 // picked in the files pane or the picker (cmd-p, cmd-shift-f), an "edit" in the
 // Markdown viewer or the preview, or `editor.open {path, line?, col?}`.
-// Props: { path, line?, col?, on?, slot }.
+// Props: { path, line?, col?, on?, slot } (the file it opened on).
+//
+// File tabs: the pane holds several files, a tab each on the strip along its
+// top (tabs.js decides placement, closing, labels, what fits). Each tab is a
+// record (newDoc) with its own code editor (text, undo, caret, scroll), what's
+// on disk, unsaved changes, server document, problems and Markdown preview;
+// `this.path`, `this.editor`, ... are the shown tab's (TAB_FIELDS at the end),
+// and what runs in the background for a tab (reading, watching, saving, its
+// server) takes the tab. Definition, references, a card link and `:e` open
+// files as tabs here; the files pane, the picker and the Markdown viewer send
+// them through shared `nocturne-editor.open` (editor-route.js); the app's
+// `editor.open` finds a file in any tab through shared `nocturne-editor.paths`
+// and shows it with `nocturne-editor.goto`. Closing an edited tab asks on a
+// line under the bar; the last tab closes the pane; the tabs come back after
+// a restart (localStorage `tabs`). Keys: vim gt / gT, ]b / [b, :bn :bp :bd
+// :b N :ls, space b; next-tab / prev-tab / close-tab commands.
+//
+// Links in the hover card (cardlinks.js) open on a click, and a keyboard
+// card rings them with tab (enter follows): web pages in the shown tab's
+// browser pane (`nocturne-browser.open:{url, slot}`) or a new one beside,
+// files as tabs here.
 //
 // The text is gpui-kit's code editor (undo, selection, clipboard, multiple
 // carets, folding) with tree-sitter colors in moonfly's roles. Around it,
@@ -22,7 +42,7 @@
 // an edited one. Closing an edited editor asks first.
 //
 // Markdown files get a live preview beside the text (under it when the pane
-// is narrow), drawn as it's typed by the Markdown viewer's renderer
+// is narrow; each tab keeps its view, an "edit" from the viewer turns it on), drawn as it's typed by the Markdown viewer's renderer
 // (markdown.js): math, mermaid, colored code, tables, callouts, footnotes,
 // local images. It follows the text's scrolling and the text follows it;
 // ticking a task box writes the [x] into the text; links go where they point
@@ -37,9 +57,9 @@
 // cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
 // cmd-alt-f replace, cmd-l go to line, cmd-k n / cmd-k p next / previous
 // problem, cmd-k m problems, cmd-k d definition, cmd-i hover, ctrl-= / ctrl--
-// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-k w word
+// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-k z word
 // wrap on / off (vim: space u w, :set wrap / nowrap; the bar's "wrap" chip;
-// this editor only), cmd-k ? (vim: space ?) the keys over the hint bar, whose
+// the shown tab only), cmd-k ? (vim: space ?) the keys over the hint bar, whose
 // last entry it is, cmd-shift-v the Markdown preview. Without vim:
 // cmd-z / cmd-shift-z undo / redo, ctrl-g go to line.
 
@@ -62,6 +82,9 @@ import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
+import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE } from "./tabs.js";
+import { OPEN, LAST, PATHS, filesOf } from "./editor-route.js";
+import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -93,7 +116,7 @@ const envCache = {
     await writeTextFile(path, JSON.stringify({ dir, ...value }), was).catch(() => {});
   },
 };
-const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24;
+const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24, TABS = 26;
 // The line numbers' room from the pane's left edge, as the top bar's inset (px):
 // the gutter right-aligns them, so a 4-digit file's touched the border.
 export const GUTTER_INSET = 12;
@@ -105,6 +128,8 @@ const SIDE_BY_SIDE = 760;
 const PREVIEWED = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|csv|tsv|sqlite3?|db3?|diff|patch|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
 const IMAGE_EXT = /\.(png|jpe?g|gif|svg|webp|bmp|ico)$/i;
 const CARD_W = 520;
+// A tab's name is cut past this (px); its full path is in the bar.
+const MAX_TAB_NAME = 180;
 // A server that reported work within this long (ms) is still loading the
 // workspace: rust-analyzer goes quiet for a moment between its phases, and
 // an empty answer then means "not yet", not "nothing here".
@@ -139,40 +164,24 @@ function diff(a, b) {
 export default class EditorPane extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
-    this.path = pr.path ?? "";
-    this.openedAt = Date.now(); // the language server's timeline counts from here (mark)
     this.on = pr.on ?? null;
-    // Renamed, moved or deleted from the files pane (follow.js): only what
-    // comes after this start counts. A pane that followed its file before a
-    // restart opens it where it went (its props keep the first path).
-    this.firstPath = this.path;
-    this.seenChange = newestId(shared(CHANGES));
-    this.deleted = false; // the file was deleted (the files pane): a save writes it again
-    try { const m = JSON.parse(localStorage.getItem("moved") ?? "null"); if (m?.from === this.path && m.to) this.path = m.to; } catch { /* a nicety */ }
     this.slot = pr.slot ?? null;
-    this.lang = languageOf(this.path) ?? "text";
-    this.opts = languageSettings(settings()?.editor, this.lang);
-    this.saved = null; // the text as on disk, when last read or written
-    this.state = "loading"; // loading | ready | missing | error
-    this.error = null;
-    this.dirty = false;
-    this.conflict = false; // the file changed on disk while edited
-    this.problems = []; // diagnostics()
+    // Renamed, moved or deleted from the files pane (follow.js): only what
+    // comes after this start counts.
+    this.seenChange = newestId(shared(CHANGES));
+    // Files sent here as tabs (editor-route.js): only requests after this start.
+    this.seenOpen = shared(OPEN)?.n ?? 0;
     this.drawer = false;
     this.mode = null; // null | "find" | "replace" | "line"
-    this.find = { count: 0, current: null };
     this.caseSensitive = false;
-    this.server = null; // { id, argv, root, status: "starting" | "ready" | "exited" | "none", note }
-    this.version = 1;
-    this.sent = null; // the text the server has (its last didOpen / didChange)
-    this.progress = new Map(); // the server's work under way ($/progress): token -> { title, message, percentage }
-    this.hovers = new Map(); // answers by place, level and version: asking again is instant
-    // The hover card: { line, col, keyboard, problems, parts, level, more, pending, note, scroll }.
+    // The hover card: { line, col, keyboard, problems, parts, level, more, pending, note, scroll, link }.
     // It sits at its place in the text (editor.bounds), under the word or above it.
     this.card = null;
     this.overCard = false;
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
+    this.asking = null; // closing a tab with unsaved changes: { doc, at } (the question's line)
+    this.listening = new Set(); // the servers this pane hears (one queue per server for every tab)
     this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
     // Vim: the pane's own switch, else settings.json editor.vim (default on).
@@ -180,52 +189,17 @@ export default class EditorPane extends View {
     this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
     this.which = null; // the leader's next keys
     this.pending = ""; // keys typed toward a command
-    this.text = ""; // the text as last read from the editor (vim reads it)
-    this.searchMark = null;
-
-    const t = theme();
-    this.colors = syntaxColors(t);
-    // Word wrap in this editor: the language's soft_wrap until cmd-k w / space u w
-    // / :set wrap / the bar's chip switch it (this editor only, not written to settings).
-    this.softWrap = !!this.opts.soft_wrap;
-    this.editor = EditorState.new({
-      language: this.lang, value: "", font_family: settings()?.font_family || "JetBrains Mono", font_size: 13,
-      line_numbers: true, folding: true, soft_wrap: this.softWrap, syntax: this.colors,
-      // The theme's selection is moonfly's border tone, hard to see on its
-      // background: moonfly blue at 40% stands out and keeps text readable.
-      selection: selectionColor(t),
-    });
-    this.editor.set_tab_size(this.opts.tab_size, this.opts.insert_spaces === false);
-    this.vim.indent = this.opts.insert_spaces === false ? "\t" : " ".repeat(this.opts.tab_size);
-    this.editor.on("key", (e, cx) => this.vimKey(e, cx));
     // This pane's own vim switch, if it was flipped here before.
     try { const v = localStorage.getItem("vim"); this.paneVim = v === "on" ? true : v === "off" ? false : null; } catch { this.paneVim = null; }
-    this.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
     this.vimWas = this.vimOn();
-    this.editor.on("change", (_e, cx) => this.changed(cx));
-    this.editor.on("hover", (e, cx) => this.hovered(e, cx));
-    // The editor losing the keyboard closes the card (and watchFocus, while
-    // one is open: the editor's blur doesn't reach mods every time).
-    this.editor.on("blur", (_e, cx) => this.closeCard(cx));
-    // Markdown: the live preview and how it shows (the pane remembers).
-    this.markdown = this.lang === "markdown";
-    this.preview = new MarkdownDoc("pv");
-    this.images = new Map(); // abs path -> cache name | null (can't) | undefined (copying)
+    this.colors = syntaxColors(theme());
+    // Markdown: how the preview shows (the pane remembers; each tab keeps its own after).
     let view = null;
     try { view = localStorage.getItem("preview"); } catch { /* the default */ }
-    this.view = VIEWS.includes(view) ? view : "split";
-    this.driver = "editor"; // which side scrolled last: the other follows
+    this.defaultView = VIEWS.includes(view) ? view : "split";
     this.previewHandle = cx.focus_handle();
     // The keys overview takes the keyboard while it's open (? would type into the file).
     this.keysHandle = cx.focus_handle();
-    this.editor.on("scroll", (_e, cx) => {
-      // The card stays at its word: drawn again where the word went (and once
-      // more a frame later, when the scrolled text has been laid out).
-      if (this.card) { cx.notify(); cx.timer.after(16, (cx) => cx.notify()); }
-      if (Date.now() - (this.previewDrove ?? 0) < 150) return;
-      this.driver = "editor";
-      if (this.markdown && this.view === "split") cx.notify();
-    });
     this.findInput = InputState.new({ placeholder: "find" });
     this.findInput.on("change", (_e, cx) => this.search(cx));
     this.findInput.on("submit", (e, cx) => this.step(e?.shift ? -1 : 1, cx));
@@ -237,10 +211,26 @@ export default class EditorPane extends View {
     this.lineInput = InputState.new({ placeholder: "line or line:column" });
     this.lineInput.on("submit", (_e, cx) => this.goLine(cx));
 
-    this.title();
-    this.load(cx, pr.line ? { line: pr.line, col: pr.col ?? 1 } : null);
-    if (this.on) cx.timer.every(POLL, (cx) => this.load(cx, null, true));
-    else if (this.path) this.watch(cx);
+    // The tabs: as kept (a restart), else the props' file (where the files
+    // pane moved it: its props keep the first path).
+    let kept = null, moved = null;
+    try { kept = JSON.parse(localStorage.getItem("tabs") ?? "null"); } catch { /* none kept */ }
+    try { moved = JSON.parse(localStorage.getItem("moved") ?? "null"); } catch { /* a nicety */ }
+    const start = restoreTabs(kept, pr.path ?? "", moved);
+    this.docs = start.paths.map((path) => this.newDoc(path));
+    this.cur = this.docs[start.active];
+    // The props' line goes to the props' file (editor.open opened this pane on it).
+    let go = null;
+    if (pr.line) {
+      const d = this.docs.find((x) => x.path === pr.path) ?? this.cur;
+      this.cur = d;
+      go = { line: pr.line, col: pr.col ?? 1 };
+    }
+    // An "edit" from the Markdown viewer asked for the preview (editor-route.js: slot null).
+    const req = shared(OPEN);
+    if (req && req.slot == null && req.view && req.path === this.cur.path && Date.now() - (req.at ?? 0) < 10000) this.cur.view = req.view;
+    this.select(this.cur, cx, go, true);
+    if (this.on) cx.timer.every(POLL, (cx) => { for (const d of this.docs) if (d.state !== "unloaded" && d.state !== "loading") this.load(cx, null, true, d); });
     // A newly opened editor takes the keyboard.
     for (const ms of [0, 120, 400]) cx.timer.after(ms, () => this.editor.focus());
     cx.spawn(async (cx) => {
@@ -252,8 +242,205 @@ export default class EditorPane extends View {
     });
   }
 
+  /** A file's record: its own code editor (text, undo, caret, scroll,
+   *  folds), what's on disk, unsaved changes, its server document, problems
+   *  and Markdown preview. Read when first shown (`state` "unloaded" till then). */
+  newDoc(path) {
+    const lang = languageOf(path) ?? "text";
+    const opts = languageSettings(settings()?.editor, lang);
+    const d = {
+      path, firstPath: path, lang, opts,
+      openedAt: Date.now(), // the language server's timeline counts from here (mark)
+      deleted: false, // the file was deleted (the files pane): a save writes it again
+      saved: null, // the text as on disk, when last read or written
+      state: "unloaded", // unloaded | loading | ready | missing | error
+      error: null, dirty: false,
+      conflict: false, // the file changed on disk while edited
+      problems: [], // diagnostics()
+      server: null, // { id, argv, root, status: "starting" | "ready" | "exited" | "none", note }
+      version: 1,
+      sent: null, // the text the server has (its last didOpen / didChange)
+      progress: new Map(), // the server's work under way ($/progress): token -> { title, message, percentage }
+      hovers: new Map(), // answers by place, level and version: asking again is instant
+      text: "", // the text as last read from the editor (vim reads it)
+      find: { count: 0, current: null }, searchMark: null,
+      markdown: lang === "markdown", preview: new MarkdownDoc("pv"),
+      images: new Map(), // abs path -> cache name | null (can't) | undefined (copying)
+      view: this.defaultView ?? "split",
+      driver: "editor", // which side scrolled last: the other follows
+    };
+    const t = theme();
+    // Word wrap in this tab: the language's soft_wrap until cmd-k z / space u w
+    // / :set wrap / the bar's chip switch it (this tab only, not written to settings).
+    d.softWrap = !!opts.soft_wrap;
+    d.editor = EditorState.new({
+      language: lang, value: "", font_family: settings()?.font_family || "JetBrains Mono", font_size: 13,
+      line_numbers: true, folding: true, soft_wrap: d.softWrap, syntax: this.colors,
+      // The theme's selection is moonfly's border tone, hard to see on its
+      // background: moonfly blue at 40% stands out and keeps text readable.
+      selection: selectionColor(t),
+    });
+    d.editor.set_tab_size(opts.tab_size, opts.insert_spaces === false);
+    d.editor.on("key", (e, cx) => this.vimKey(e, cx));
+    d.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
+    d.editor.on("change", (_e, cx) => this.changed(cx, d));
+    d.editor.on("hover", (e, cx) => { if (d === this.cur) this.hovered(e, cx); });
+    // The editor losing the keyboard closes the card (and watchFocus, while
+    // one is open: the editor's blur doesn't reach mods every time).
+    d.editor.on("blur", (_e, cx) => this.closeCard(cx));
+    d.editor.on("scroll", (_e, cx) => {
+      if (d !== this.cur) return;
+      // The card stays at its word: drawn again where the word went (and once
+      // more a frame later, when the scrolled text has been laid out).
+      if (this.card) { cx.notify(); cx.timer.after(16, (cx) => cx.notify()); }
+      if (Date.now() - (d.previewDrove ?? 0) < 150) return;
+      d.driver = "editor";
+      if (d.markdown && d.view === "split") cx.notify();
+    });
+    return d;
+  }
+
+  /** Every file record (a pane built without init has the one it was given). */
+  allDocs() {
+    return this.docs ?? (this.cur ? [this.cur] : []);
+  }
+
+  // ---- the tabs
+
+  /** Shows tab `d`: the card, find line and vim's pending keys go; read the
+   *  first time; `go` { line, col } (one-based) puts the caret there. */
+  select(d, cx, go = null, first = false) {
+    if (d !== this.cur || first) {
+      if (!first) {
+        this.closeCard(cx);
+        if (this.mode === "find" || this.mode === "replace") this.editor.find_close();
+        this.mode = null;
+        this.asking = null;
+        this.keysShown = false;
+      }
+      this.cur = d;
+      this.vimSettled(this.vimOn());
+    }
+    this.vim.indent = d.opts.insert_spaces === false ? "\t" : " ".repeat(d.opts.tab_size);
+    if (d.state === "unloaded") {
+      d.state = "loading";
+      this.load(cx, go, false, d);
+      if (!this.on && d.path) this.watch(cx, d);
+    } else if (go && d.state !== "loading") this.goto(go.line - 1, (go.col ?? 1) - 1, cx);
+    else if (go) d.go = go;
+    this.title();
+    this.keepTabs();
+    if (!first) {
+      if (d.markdown && d.view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
+      else this.editor.focus();
+    }
+    cx?.notify?.();
+  }
+
+  /** Opens `path` here as a tab (the one showing it, if open) and shows it;
+   *  `line` / `col` one-based; `view` a Markdown file's preview. */
+  openFile(path, cx, { line = null, col = null, view = null } = {}) {
+    if (!path) return;
+    const at = placeTab(this.docs.map((d) => d.path), this.docs.indexOf(this.cur), path);
+    if (at.added) this.docs.splice(at.index, 0, this.newDoc(path));
+    const d = this.docs[at.index];
+    if (view && d.markdown) d.view = view;
+    this.select(d, cx, line ? { line, col: col ?? 1 } : null);
+    this.publish();
+  }
+
+  /** The next (1) or previous (-1) tab. */
+  stepTab(dir, cx) {
+    if (this.docs.length < 2) return this.say("one tab");
+    this.select(this.docs[stepTab(this.docs.length, this.docs.indexOf(this.cur), dir)], cx);
+  }
+
+  /** Closes tab `d` (the shown one by default): with unsaved changes it
+   *  asks first (the question's line: save, discard, keep), unless
+   *  `confirmed`. The last tab closes the pane. */
+  closeTab(cx, d = this.cur, confirmed = false) {
+    if (!d) return;
+    if (d.dirty && !confirmed) {
+      if (d !== this.cur) this.select(d, cx);
+      this.asking = { doc: d, at: "save" };
+      cx?.notify?.();
+      return;
+    }
+    this.asking = null;
+    if (this.docs.length <= 1) {
+      d.dirty = false;
+      this.noteUnsaved();
+      const me = this.me();
+      return run("pane.close", { ...(me ? { pane: me.pane } : {}), confirmed: true });
+    }
+    const i = this.docs.indexOf(d), next = afterClose(this.docs.length, this.docs.indexOf(this.cur), i);
+    this.releaseDoc(d);
+    this.docs.splice(i, 1);
+    const show = this.docs[next] ?? this.docs[0];
+    if (show !== this.cur || d === this.cur) this.select(show, cx);
+    this.noteUnsaved();
+    this.title();
+    this.keepTabs();
+    this.publish();
+    cx?.notify?.();
+  }
+
+  /** The question on closing an edited tab: save and close, discard, or keep it open. */
+  answerClose(choice, cx) {
+    const a = this.asking;
+    if (!a) return;
+    this.asking = null;
+    if (choice === "keep") { this.editor.focus(); cx?.notify?.(); return; }
+    if (choice === "discard") return this.closeTab(cx, a.doc, true);
+    // Save, then close if it was written.
+    this.later(cx, async (cx) => {
+      await this.saveNow(cx, a.doc);
+      if (!a.doc.dirty) this.closeTab(cx, a.doc, true);
+      cx.notify();
+    });
+  }
+
+  /** A tab going: its server document closes, the server is let go when no
+   *  other tab uses it, its folder watch ends. */
+  releaseDoc(d) {
+    d.watchGen = (d.watchGen ?? 0) + 1;
+    d.gone = true;
+    const id = d.server?.id;
+    if (id == null) return;
+    lspNotify(id, "textDocument/didClose", { textDocument: { uri: uri(d.path) } });
+    if (!this.allDocs().some((x) => x !== d && x.server?.id === id)) { lspRelease(id); this.listening?.delete(id); }
+  }
+
+  /** This copy's own pane (found by its slot). */
+  me() {
+    return panes().find((p) => p.mod === MOD && p.props?.slot === this.slot) ?? null;
+  }
+
+  /** The tabs as kept for a restart (localStorage). */
+  keepTabs() {
+    if (!this.docs) return;
+    try { localStorage.setItem("tabs", JSON.stringify(keptTabs(this.docs.map((d) => d.path), this.docs.indexOf(this.cur)))); } catch { /* a nicety */ }
+  }
+
+  /** Every file here, for the files pane, the picker and the app's
+   *  editor.open to find the editor holding one (shared PATHS by slot). */
+  publish() {
+    if (!this.slot) return;
+    const live = new Set(panes().filter((p) => p.mod === MOD).map((p) => p.props?.slot).filter(Boolean));
+    const was = shared(PATHS) ?? {};
+    const mine = this.allDocs().map((d) => d.path);
+    if (JSON.stringify(was[this.slot]) === JSON.stringify(mine) && Object.keys(was).every((k) => live.has(k) || k === this.slot)) return;
+    setShared(PATHS, { ...Object.fromEntries(Object.entries(was).filter(([k]) => live.has(k))), [this.slot]: mine });
+  }
+
+  /** What closing the pane asks: every tab with unsaved changes, once. */
+  noteUnsaved() {
+    setUnsaved(unsavedNote(this.allDocs()));
+  }
+
   // ---- the file
 
+  /** The pane header's name (nocturne/header.js): the shown tab's. */
   title() {
     if (!this.slot) return;
     const name = basename(this.path) + (this.dirty ? " ●" : "");
@@ -263,170 +450,182 @@ export default class EditorPane extends View {
 
   // ---- the files pane's renames, moves and deletes (follow.js)
 
-  /** Acts on the change record's entries newer than the last seen (from a task, never a render). */
+  /** Acts on the change record's entries newer than the last seen, for every
+   *  tab (from a task, never a render). */
   followChanges(cx) {
-    const r = followFiles(shared(CHANGES), this.seenChange, this.path, this.on);
-    this.seenChange = r.seen;
-    if (r.path !== this.path) this.moveTo(r.path, cx);
-    if (r.deleted && !this.deleted) this.markDeleted(cx);
+    const list = shared(CHANGES), from = this.seenChange;
+    let seen = from;
+    for (const d of this.allDocs()) {
+      const r = followFiles(list, from, d.path, this.on);
+      seen = Math.max(seen, r.seen);
+      if (r.path !== d.path) this.moveTo(r.path, cx, d);
+      if (r.deleted && !d.deleted) this.markDeleted(cx, d);
+    }
+    this.seenChange = seen;
     cx.notify();
   }
 
   /** The file is at `to` now: the buffer, its edits, caret, scroll and undo
    *  stay; the name, the folder, the language and the server's document follow. */
-  moveTo(to, cx) {
-    const from = this.path, s = this.server;
+  moveTo(to, cx, d = this.cur) {
+    const from = d.path, s = d.server;
     if (s?.id != null) lspNotify(s.id, "textDocument/didClose", { textDocument: { uri: uri(from) } });
-    this.path = to;
-    this.deleted = false;
-    try { localStorage.setItem("moved", JSON.stringify({ from: this.firstPath, to })); } catch { /* a nicety */ }
+    d.path = to;
+    d.deleted = false;
+    if (d.firstPath === (props()?.path ?? d.firstPath)) try { localStorage.setItem("moved", JSON.stringify({ from: d.firstPath, to })); } catch { /* a nicety */ }
     const lang = languageOf(to) ?? "text";
-    if (lang !== this.lang) {
+    if (lang !== d.lang) {
       // Another language: its grammar, settings and server.
-      this.lang = lang;
-      this.opts = languageSettings(settings()?.editor, lang);
-      this.editor.set_language(lang);
-      this.markdown = lang === "markdown";
-      if (s?.id != null) lspRelease(s.id);
-      this.server = null;
-      this.setProblems([]);
-      if (this.state === "ready") this.startServer(cx);
+      d.lang = lang;
+      d.opts = languageSettings(settings()?.editor, lang);
+      d.editor.set_language(lang);
+      d.markdown = lang === "markdown";
+      if (s?.id != null && !this.allDocs().some((x) => x !== d && x.server?.id === s.id)) { lspRelease(s.id); this.listening?.delete(s.id); }
+      d.server = null;
+      this.setProblems([], d);
+      if (d.state === "ready") this.startServer(cx, false, d);
     } else if (s?.id != null) {
-      this.version += 1;
-      this.sent = this.editor.value();
-      lspNotify(s.id, "textDocument/didOpen", { textDocument: { uri: uri(to), languageId: languageId(lang, to), version: this.version, text: this.sent } });
+      d.version += 1;
+      d.sent = d.editor.value();
+      lspNotify(s.id, "textDocument/didOpen", { textDocument: { uri: uri(to), languageId: languageId(lang, to), version: d.version, text: d.sent } });
     }
-    if (!this.on) this.watch(cx);
-    setUnsaved(this.dirty ? `${basename(to)}: unsaved changes` : null);
+    if (!this.on && d.state !== "unloaded") this.watch(cx, d);
+    this.noteUnsaved();
     this.title();
-    this.say(`moved to ${tilde(dirname(to), home())}`);
+    this.keepTabs();
+    this.publish();
+    if (d === this.cur) this.say(`moved to ${tilde(dirname(to), home())}`);
   }
 
   /** The file was deleted: the editor keeps its text and says so; a save writes it again. */
-  markDeleted(cx) {
-    this.deleted = true;
-    this.saved = null; // a save creates it (writeTextFile's "new file")
-    this.conflict = false;
-    this.dirty = this.editor.value() !== "";
-    setUnsaved(this.dirty ? `${basename(this.path)}: deleted, unsaved` : null);
+  markDeleted(cx, d = this.cur) {
+    d.deleted = true;
+    d.saved = null; // a save creates it (writeTextFile's "new file")
+    d.conflict = false;
+    d.dirty = d.editor.value() !== "";
+    this.noteUnsaved();
     this.title();
     cx?.notify?.();
   }
 
-  /** Reads the file; `go`: the place to put the caret after. `quiet`: a poll
-   *  or a change on disk, which leaves an edited buffer alone. */
-  load(cx, go, quiet) {
-    if (!this.path) { this.state = "error"; this.error = "No file given: editor.open {path}."; return; }
+  /** Reads tab `d`'s file; `go`: the place to put the caret after. `quiet`: a
+   *  poll or a change on disk, which leaves an edited buffer alone. */
+  load(cx, go, quiet, d = this.cur) {
+    if (!d.path) { d.state = "error"; d.error = "No file given: editor.open {path}."; return; }
     cx.spawn(async (cx) => {
       let text = null, error = null;
       try {
-        text = await readTextFile(this.path, { on: this.on });
+        text = await readTextFile(d.path, { on: this.on });
         if (text != null && text.includes("\0")) { text = null; error = "Not a text file: it holds binary data."; }
       } catch (e) { error = String(e?.message ?? e); }
+      if (d.gone) return;
       if (quiet) {
-        if (text == null || text === this.saved) return;
-        if (this.dirty) { if (text !== this.editor.value()) this.conflict = true; cx.notify(); return; }
-        const at = this.editor.cursor();
-        this.saved = text;
-        this.editor.set_value(text);
-        this.text = text;
-        if (this.markdown) this.refreshPreview(cx, true);
-        this.editor.set_cursor(at.line, at.col);
-        this.say("reloaded: it changed on disk");
-        this.didChange(cx, true);
+        if (text == null || text === d.saved) return;
+        if (d.dirty) { if (text !== d.editor.value()) d.conflict = true; cx.notify(); return; }
+        const at = d.editor.cursor();
+        d.saved = text;
+        d.editor.set_value(text);
+        d.text = text;
+        if (d.markdown) this.refreshPreview(cx, true, d);
+        d.editor.set_cursor(at.line, at.col);
+        if (d === this.cur) this.say("reloaded: it changed on disk");
+        this.didChange(cx, true, d);
         // What's in the editor is what's on disk now: saved, as far as the
         // server goes (rust-analyzer runs cargo check on a save, so an agent's
         // edit shows its errors as one of Developer's would).
-        if (this.server?.id != null) lspNotify(this.server.id, "textDocument/didSave", { textDocument: { uri: uri(this.path) }, text });
+        if (d.server?.id != null) lspNotify(d.server.id, "textDocument/didSave", { textDocument: { uri: uri(d.path) }, text });
         cx.notify();
         return;
       }
-      if (error) { this.state = "error"; this.error = error; cx.notify(); return; }
-      if (text == null) { this.state = "missing"; this.saved = null; this.editor.set_value(""); }
-      else { this.state = "ready"; this.saved = text; this.editor.set_value(text); }
-      this.text = text ?? "";
-      if (this.markdown) this.refreshPreview(cx, true);
-      this.dirty = false; this.conflict = false;
-      setUnsaved(null);
+      if (error) { d.state = "error"; d.error = error; cx.notify(); return; }
+      if (text == null) { d.state = "missing"; d.saved = null; d.editor.set_value(""); }
+      else { d.state = "ready"; d.saved = text; d.editor.set_value(text); }
+      d.text = text ?? "";
+      if (d.markdown) this.refreshPreview(cx, true, d);
+      d.dirty = false; d.conflict = false;
+      this.noteUnsaved();
       this.title();
-      if (go) this.goto(go.line - 1, go.col - 1, cx);
+      go ??= d.go;
+      d.go = null;
+      if (go && d === this.cur) this.goto(go.line - 1, (go.col ?? 1) - 1, cx);
       cx.notify();
-      if (this.state === "ready" && !this.server) this.startServer(cx);
+      if (d.state === "ready" && !d.server) this.startServer(cx, false, d);
     });
   }
 
-  /** Waits for the file's folder to change, and reads the file again. */
-  watch(cx) {
-    const dir = dirname(this.path);
-    // A moved file's editor watches its new folder; the old loop ends.
-    const gen = this.watchGen = (this.watchGen ?? 0) + 1;
+  /** Waits for tab `d`'s folder to change, and reads its file again. */
+  watch(cx, d = this.cur) {
+    const dir = dirname(d.path);
+    // A moved file's tab watches its new folder; the old loop ends (and a closed tab's).
+    const gen = d.watchGen = (d.watchGen ?? 0) + 1;
     cx.spawn(async (cx) => {
       for (;;) {
         let changed;
         try { changed = await watchFolder(dir); } catch { return; }
-        if (gen !== this.watchGen) return;
-        if (!changed.some((p) => basename(p) === basename(this.path) || p === dir)) continue;
-        this.load(cx, null, true);
+        if (gen !== d.watchGen || d.gone) return;
+        if (!changed.some((p) => basename(p) === basename(d.path) || p === dir)) continue;
+        this.load(cx, null, true, d);
       }
     });
   }
 
-  changed(cx) {
-    this.text = this.editor.value();
-    this.hovers.clear();
+  changed(cx, d = this.cur) {
+    d.text = d.editor.value();
+    d.hovers.clear();
     // Typing closes the card.
-    if (this.card) this.closeCard(cx);
-    if (this.markdown) this.refreshPreview(cx);
-    const dirty = this.text !== (this.saved ?? "");
-    if (dirty !== this.dirty) {
-      this.dirty = dirty;
-      setUnsaved(dirty ? `${basename(this.path)}: unsaved changes` : null);
+    if (this.card && d === this.cur) this.closeCard(cx);
+    if (d.markdown) this.refreshPreview(cx, false, d);
+    const dirty = d.text !== (d.saved ?? "");
+    if (dirty !== d.dirty) {
+      d.dirty = dirty;
+      this.noteUnsaved();
       this.title();
     }
-    this.didChange(cx);
+    this.didChange(cx, false, d);
     cx.notify();
   }
 
   save(cx) {
-    return this.later(cx, (cx) => this.saveNow(cx));
+    const d = this.cur;
+    return this.later(cx, (cx) => this.saveNow(cx, d));
   }
 
-  async saveNow(cx) {
-    if (this.state === "error") return;
-    let text = this.editor.value();
-    if (this.opts.format_on_save && this.opts.format) text = await this.format(text, cx) ?? text;
+  async saveNow(cx, d = this.cur) {
+    if (d.state === "error" || d.state === "unloaded" || d.state === "loading") return;
+    let text = d.editor.value();
+    if (d.opts.format_on_save && d.opts.format) text = await this.format(text, cx, d) ?? text;
     try {
       // Only over what was read: a file someone else changed isn't overwritten.
-      await writeTextFile(this.path, text, this.saved);
-      this.saved = text;
-      this.state = "ready";
-      this.deleted = false;
-      this.dirty = this.editor.value() !== text;
-      this.conflict = false;
-      setUnsaved(this.dirty ? `${basename(this.path)}: unsaved changes` : null);
+      await writeTextFile(d.path, text, d.saved);
+      d.saved = text;
+      d.state = "ready";
+      d.deleted = false;
+      d.dirty = d.editor.value() !== text;
+      d.conflict = false;
+      this.noteUnsaved();
       this.title();
-      this.say("saved");
-      if (this.server?.id != null) lspNotify(this.server.id, "textDocument/didSave", { textDocument: { uri: uri(this.path) }, text });
-      else if (!this.server) this.startServer(cx);
+      this.say(d === this.cur ? "saved" : `saved ${basename(d.path)}`);
+      if (d.server?.id != null) lspNotify(d.server.id, "textDocument/didSave", { textDocument: { uri: uri(d.path) }, text });
+      else if (!d.server) this.startServer(cx, false, d);
     } catch (e) {
       this.say(String(e?.message ?? e), true);
-      if (/changed outside/.test(String(e?.message ?? e))) this.conflict = true;
+      if (/changed outside/.test(String(e?.message ?? e))) d.conflict = true;
     }
     cx.notify();
   }
 
   /** Runs settings.json's `format` on the text (it reads stdin, prints the
    *  result); puts the result in as one undoable edit. Null when it fails. */
-  async format(text, cx) {
+  async format(text, cx, d = this.cur) {
     const tmp = `${appHome()}/cache/nocturne-editor/format-${Date.now()}-${Math.random().toString(36).slice(2)}`;
     try {
       await writeTextFile(tmp, text, null);
-      const r = await exec("sh", ["-c", 'f="$1"; shift; "$@" < "$f"', "format", tmp, ...this.opts.format], { cwd: dirname(this.path) });
+      const r = await exec("sh", ["-c", 'f="$1"; shift; "$@" < "$f"', "format", tmp, ...d.opts.format], { cwd: dirname(d.path) });
       exec("rm", ["-f", tmp]).catch(() => {});
       if (r.code !== 0 || !r.stdout) { this.say(`formatter failed: ${(r.stderr || "").split("\n")[0]}`, true); return null; }
       if (r.stdout !== text) {
         const lines = text.split("\n");
-        this.editor.edit([{ start: { line: 0, col: 0 }, end: { line: lines.length - 1, col: lines[lines.length - 1].length }, text: r.stdout }]);
+        d.editor.edit([{ start: { line: 0, col: 0 }, end: { line: lines.length - 1, col: lines[lines.length - 1].length }, text: r.stdout }]);
       }
       return r.stdout;
     } catch (e) {
@@ -443,76 +642,94 @@ export default class EditorPane extends View {
 
   /** A step of the way to the server's answers, for a look at where the time
    *  goes: `HERDR_APP_LOG=info,gpui_shell::script=debug` prints them. */
-  mark(what) {
-    console.debug(`lsp ${basename(this.path)} +${Date.now() - this.openedAt}ms ${what}`);
+  mark(what, d = this.cur) {
+    console.debug(`lsp ${basename(d?.path ?? "")} +${Date.now() - (d?.openedAt ?? Date.now())}ms ${what}`);
   }
 
-  /** Starts (or joins) the file's language server as the editor opens, so it
-   *  is warm by the time anything is asked: the project's environment from
-   *  disk when nothing it depends on changed (envrc.js), the lookups side by
-   *  side, then herdr's session for this server and workspace. `fresh`: the
-   *  kept environment's server is gone (garbage-collected): load it anew. */
-  async startServer(cx, fresh = false) {
-    if (this.on) { this.server = { status: "none", why: "remote" }; return; }
-    const candidates = serverCandidates(this.lang, this.opts);
-    if (!candidates.length) { this.server = { status: "none", why: this.opts.server === false ? "off" : "unknown" }; cx.notify(); return; }
+  /** Starts (or joins) tab `d`'s language server as it opens, so it is warm
+   *  by the time anything is asked: the project's environment from disk when
+   *  nothing it depends on changed (envrc.js), the lookups side by side, then
+   *  herdr's session for this server and workspace (one per project: every
+   *  tab and editor of it shares it). `fresh`: the kept environment's server
+   *  is gone (garbage-collected): load it anew. */
+  async startServer(cx, fresh = false, d = this.cur) {
+    const redraw = () => { if (d === this.cur) this.cardState(cx); cx.notify(); };
+    if (this.on) { d.server = { status: "none", why: "remote" }; return; }
+    const candidates = serverCandidates(d.lang, d.opts);
+    if (!candidates.length) { d.server = { status: "none", why: d.opts.server === false ? "off" : "unknown" }; cx.notify(); return; }
     const names = candidates.map((c) => basename(c.argv[0]));
-    const dir = dirname(this.path);
+    const dir = dirname(d.path);
     // The workspace's own environment first (envrc.js): its .envrc, through direnv.
-    this.mark("start");
+    this.mark("start", d);
     const env = await projectEnv(exec, dir, {
       cache: envCache, fresh,
-      loading: (at) => { this.server = { status: "env", envrc: at, names }; this.mark("environment: loading with direnv"); cx.notify(); },
+      loading: (at) => { d.server = { status: "env", envrc: at, names }; this.mark("environment: loading with direnv", d); cx.notify(); },
     });
-    this.mark(`environment: ${env.kind}${env.cached ? " (kept on disk; refreshing behind)" : ""}`);
+    if (d.gone) return;
+    this.mark(`environment: ${env.kind}${env.cached ? " (kept on disk; refreshing behind)" : ""}`, d);
     const inEnv = env.kind === "ready" ? env.env : null;
     // Every candidate's path and the workspace root at once: each is a process.
-    const markers = ROOTS[this.lang]?.markers ?? [];
+    const markers = ROOTS[d.lang]?.markers ?? [];
     const [paths, r] = await Promise.all([
       Promise.all(candidates.map((c) => (c.argv[0].startsWith("/") ? c.argv[0] : lookup(exec, c.argv[0], inEnv)))),
       exec("sh", ["-c", rootScript(markers), "root", dir]).catch(() => null),
     ]);
+    if (d.gone) return;
     const at = paths.findIndex(Boolean);
     const pick = at >= 0 ? candidates[at] : null, path = paths[at] ?? null;
-    if (!pick && env.cached && !fresh) return this.startServer(cx, true);
+    if (!pick && env.cached && !fresh) return this.startServer(cx, true, d);
     // Not there: why, for the bar and the hover card (logic.js serverNote).
     const envNote = env.kind === "none" ? {} : { envrc: env.dir, envKind: env.kind, envNote: env.note ?? null, denied: env.denied ?? false };
-    if (!pick) { this.server = { status: "none", why: "missing", names, ...envNote }; this.cardState(cx); cx.notify(); return; }
-    this.mark(`lookup: ${path ?? "none"}`);
-    const root = pickRoot(this.lang, r?.stdout, dir);
+    if (!pick) { d.server = { status: "none", why: "missing", names, ...envNote }; redraw(); return; }
+    this.mark(`lookup: ${path ?? "none"}`, d);
+    const root = pickRoot(d.lang, r?.stdout, dir);
     const argv = wrap(pick.argv, path, inEnv);
-    this.server = { status: "starting", argv, root, name: basename(pick.argv[0]), ...envNote };
-    this.progress.clear();
+    d.server = { status: "starting", argv, root, name: basename(pick.argv[0]), ...envNote };
     cx.notify();
     let started;
-    this.mark("lspStart");
+    this.mark("lspStart", d);
     try { started = await lspStart({ argv, root, settings: pick.settings, idle: SERVER_IDLE }); }
-    catch (e) { this.server = { ...this.server, status: "exited", note: String(e?.message ?? e) }; this.cardState(cx); cx.notify(); return; }
-    this.server = { ...this.server, id: started.id, caps: started.capabilities ?? {}, status: "ready" };
-    this.mark("initialized");
-    this.lastWork = Date.now();
-    this.version = 1;
-    this.sent = this.editor.value();
-    lspNotify(started.id, "textDocument/didOpen", { textDocument: { uri: uri(this.path), languageId: languageId(this.lang, this.path), version: this.version, text: this.sent } });
+    catch (e) { d.server = { ...d.server, status: "exited", note: String(e?.message ?? e) }; redraw(); return; }
+    if (d.gone) {
+      // Closed while it started: let go unless another tab holds it.
+      if (!this.allDocs().some((x) => x.server?.id === started.id)) lspRelease(started.id);
+      return;
+    }
+    d.server = { ...d.server, id: started.id, caps: started.capabilities ?? {}, status: "ready" };
+    this.mark("initialized", d);
+    // The server's work is the server's: tabs sharing it share what's under way.
+    const sibling = this.allDocs().find((x) => x !== d && x.server?.id === started.id);
+    if (sibling) { d.progress = sibling.progress; d.lastWork = sibling.lastWork; }
+    else { d.progress.clear(); d.lastWork = Date.now(); }
+    d.version = 1;
+    d.sent = d.editor.value();
+    lspNotify(started.id, "textDocument/didOpen", { textDocument: { uri: uri(d.path), languageId: languageId(d.lang, d.path), version: d.version, text: d.sent } });
     this.listen(started.id, cx);
-    this.cardState(cx);
-    cx.notify();
+    redraw();
   }
 
+  /** The server's messages, once per server however many tabs use it
+   *  (herdr keeps one queue per copy): diagnostics go to the tab of their
+   *  file, work and an exit to every tab on it. */
   listen(id, cx) {
+    this.listening ??= new Set();
+    if (this.listening.has(id)) return;
+    this.listening.add(id);
+    const on = () => this.allDocs().filter((d) => d.server?.id === id);
     cx.spawn(async (cx) => {
       for (;;) {
         let m;
-        try { m = await lspNextMessage(id); } catch { return; }
-        if (this.server?.id !== id) return;
-        if (m.method === "textDocument/publishDiagnostics" && m.params?.uri === uri(this.path)) {
-          this.setProblems(diagnostics(m.params.diagnostics));
-          cx.notify();
+        try { m = await lspNextMessage(id); } catch { this.listening.delete(id); return; }
+        if (!this.listening.has(id) || !on().length) { this.listening.delete(id); return; }
+        if (m.method === "textDocument/publishDiagnostics") {
+          const d = on().find((x) => uri(x.path) === m.params?.uri);
+          if (d) { this.setProblems(diagnostics(m.params.diagnostics), d); cx.notify(); }
         } else if (m.method === "$/progress") {
-          this.progressed(m.params, cx);
+          this.progressed(m.params, cx, id);
         } else if (m.method === "$/exit") {
-          this.server = { ...this.server, status: "exited", id: null, note: (m.params?.stderr ?? []).slice(-1)[0] ?? "it stopped" };
-          this.progress.clear();
+          const note = (m.params?.stderr ?? []).slice(-1)[0] ?? "it stopped";
+          for (const d of on()) { d.server = { ...d.server, status: "exited", id: null, note }; d.progress.clear(); }
+          this.listening.delete(id);
           this.cardState(cx);
           cx.notify();
           return;
@@ -522,52 +739,58 @@ export default class EditorPane extends View {
   }
 
   /** The server's work under way, for the bar ("indexing 120/340") and a
-   *  waiting card, which asks again once the work answers wait on is done. */
-  progressed(params, cx) {
+   *  waiting card, which asks again once the work answers wait on is done.
+   *  `id`: the server (default: the shown tab's). */
+  progressed(params, cx, id = this.server?.id) {
+    const docs = this.allDocs().filter((d) => d.server?.id === id);
+    const d0 = docs.find((d) => d === this.cur) ?? docs[0] ?? this.cur;
+    const progress = d0.progress;
     const token = String(params?.token), v = params?.value ?? {};
-    const wasBusy = busy(this.progress);
-    if (!/\b(cargo check|check|clippy|flycheck)\b/i.test(v.title ?? this.progress.get(token)?.title ?? "")) this.lastWork = Date.now();
-    if (v.kind === "begin") { this.progress.set(token, { title: v.title ?? "", message: v.message ?? "", percentage: v.percentage }); this.mark(`begin ${v.title}`); }
-    else if (v.kind === "report" && this.progress.has(token)) Object.assign(this.progress.get(token), v.message != null ? { message: v.message } : {}, v.percentage != null ? { percentage: v.percentage } : {});
-    else if (v.kind === "end") { this.mark(`end ${this.progress.get(token)?.title ?? token}`); this.progress.delete(token); }
+    const wasBusy = busy(progress);
+    if (!/\b(cargo check|check|clippy|flycheck)\b/i.test(v.title ?? progress.get(token)?.title ?? "")) { const now = Date.now(); for (const d of docs.length ? docs : [d0]) d.lastWork = now; }
+    if (v.kind === "begin") { progress.set(token, { title: v.title ?? "", message: v.message ?? "", percentage: v.percentage }); this.mark(`begin ${v.title}`, d0); }
+    else if (v.kind === "report" && progress.has(token)) Object.assign(progress.get(token), v.message != null ? { message: v.message } : {}, v.percentage != null ? { percentage: v.percentage } : {});
+    else if (v.kind === "end") { this.mark(`end ${progress.get(token)?.title ?? token}`, d0); progress.delete(token); }
     else return;
-    if (v.kind === "end" && !busy(this.progress)) { this.hovers.clear(); if (wasBusy) this.cardState(cx); }
+    if (v.kind === "end" && !busy(progress)) { for (const d of docs.length ? docs : [d0]) d.hovers.clear(); if (wasBusy && d0 === this.cur) this.cardState(cx); }
     // Reports come by the hundred while it indexes: one redraw per frame or so.
     if (this.redrawSoon) return;
     this.redrawSoon = true;
     cx.timer.after(50, (cx) => { this.redrawSoon = false; cx.notify(); });
   }
 
-  setProblems(list) {
-    this.problems = list;
+  setProblems(list, d = this.cur) {
+    d.problems = list;
     const t = theme();
     const colors = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
-    this.editor.set_diagnostics(list);
-    this.editor.set_line_notes(lineNotes(list, colors).map((n) => ({ ...n, color: n.color + "bb" })));
+    d.editor.set_diagnostics(list);
+    d.editor.set_line_notes(lineNotes(list, colors).map((n) => ({ ...n, color: n.color + "bb" })));
   }
 
   /** Tells the server about an edit: what changed since it last heard, as one
    *  ranged change (the whole text for servers that want it, or when another
    *  editor has the file open too: their buffers differ), a moment after the
    *  typing, or at once (`now`; before every question). */
-  didChange(cx, now) {
-    if (this.server?.id == null) return;
-    if (now) return this.flush();
-    if (this.flushDue) return;
-    this.flushDue = true;
-    cx.timer.after(CHANGE_DELAY, () => this.flush());
+  didChange(cx, now, d = this.cur) {
+    if (d.server?.id == null) return;
+    if (now) return this.flush(d);
+    if (d.flushDue) return;
+    d.flushDue = true;
+    cx.timer.after(CHANGE_DELAY, () => this.flush(d));
   }
 
-  flush() {
-    this.flushDue = false;
-    const s = this.server;
+  flush(d = this.cur) {
+    d.flushDue = false;
+    const s = d.server;
     if (s?.id == null) return;
-    const text = this.editor.value();
-    if (text === this.sent) return;
-    const alone = panes().filter((p) => p.mod === MOD && p.props?.path === this.firstPath).length <= 1;
-    const change = this.sent != null && alone && incremental(s.caps) ? changeBetween(this.sent, text) : { text };
-    this.sent = text;
-    lspNotify(s.id, "textDocument/didChange", { textDocument: { uri: uri(this.path), version: ++this.version }, contentChanges: [change] });
+    const text = d.editor.value();
+    if (text === d.sent) return;
+    // Another editor pane holding the file (any of its tabs): their buffers differ.
+    const paths = shared(PATHS);
+    const alone = !panes().some((p) => p.mod === MOD && p.props?.slot !== this.slot && filesOf(p, paths).includes(d.path));
+    const change = d.sent != null && alone && incremental(s.caps) ? changeBetween(d.sent, text) : { text };
+    d.sent = text;
+    lspNotify(s.id, "textDocument/didChange", { textDocument: { uri: uri(d.path), version: ++d.version }, contentChanges: [change] });
   }
 
   /** A question about a place (the caret by default). `key`: a newer question
@@ -597,8 +820,9 @@ export default class EditorPane extends View {
       return;
     }
     this.closeCard(cx);
+    // Another file: a tab of this editor (the one showing it, if open).
     if (loc.path === this.path) this.goto(loc.line, loc.col, cx);
-    else run("editor.open", { path: loc.path, line: loc.line + 1, col: loc.col + 1 });
+    else this.openFile(loc.path, cx, { line: loc.line + 1, col: loc.col + 1 });
   }
 
   // ---- the hover card
@@ -712,6 +936,9 @@ export default class EditorPane extends View {
     card.waitingOn = false;
     card.parts = answer.parts.map((p) => ({ ...p }));
     card.more = answer.more;
+    // Its links (the docs' web pages, files): tab walks them, enter follows (cardKey).
+    card.links = cardLinks(card.parts);
+    card.link = null;
     // Nothing here: asked for, the card says so; passing over, it goes.
     if (!card.parts.length && !card.problems.length) {
       if (card.keyboard) card.note = this.serverNote(true); else if (this.card === card) this.card = null;
@@ -776,6 +1003,15 @@ export default class EditorPane extends View {
     if (["shift", "control", "alt", "platform", "function", "capslock"].includes(k)) return false;
     const plain = !m.platform && !m.control && !m.alt;
     if (k === "escape" && plain && !m.shift) { this.closeCard(cx); return true; }
+    // A card asked for with the keyboard: tab / shift-tab ring its links, enter follows the ringed one.
+    const links = c.links ?? [];
+    if (c.keyboard && links.length && k === "tab" && !m.platform && !m.control && !m.alt) {
+      const n = links.length;
+      c.link = c.link == null ? (m.shift ? n - 1 : 0) : (c.link + (m.shift ? n - 1 : 1)) % n;
+      cx.notify();
+      return true;
+    }
+    if (c.link != null && links[c.link] && k === "enter" && plain && !m.shift) { this.followLink(links[c.link].url, cx); return true; }
     const page = Math.max(40, Math.round((c.viewH ?? 200) * 0.6));
     const scroll = m.control && !m.platform && !m.alt && (k === "d" || k === "u") ? (k === "d" ? page : -page)
       : plain && (k === "pagedown" || k === "pageup") ? (k === "pagedown" ? page : -page) : 0;
@@ -814,6 +1050,31 @@ export default class EditorPane extends View {
     if (!bound) return false;
     run(bound.command, ...(bound.args === undefined ? [] : [bound.args]));
     return true;
+  }
+
+  /** A link from the hover card: a web page in the shown tab's browser pane
+   *  (a new one beside this editor when there's none), a file as a tab of
+   *  this editor at its line (a picture, a PDF: the preview beside), mailto:
+   *  and the like through the system. */
+  followLink(url, cx) {
+    const to = linkTarget(url, this.path);
+    if (!to) return;
+    this.closeCard(cx);
+    if (to.kind === "web") this.openWeb(to.url);
+    else if (to.kind === "other") run("app.open_url", { url: to.url, in: "system" });
+    else if (PREVIEWED.test(to.path)) { const me = this.me(); run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) }); }
+    else this.openFile(to.path, cx, { line: to.line, col: to.col });
+    cx?.notify?.();
+  }
+
+  /** A web page in a browser pane: the one in this editor's tab (nocturne-browser's
+   *  `open` command, by its slot: a new tab there, in front, with the keyboard),
+   *  else a new browser pane beside this editor (app.open_url in the app). */
+  openWeb(url) {
+    const me = this.me();
+    const browser = me && panes().find((p) => p.mod === "nocturne-browser" && p.tab === me.tab && !p.parked && p.props?.slot);
+    if (browser) return run(`nocturne-browser.open:${JSON.stringify({ url, slot: browser.props.slot })}`);
+    run("app.open_url", { url, in: "app" });
   }
 
   /** Whether a card is drawn: the keyboard's always, the pointer's once it has something. */
@@ -939,7 +1200,7 @@ export default class EditorPane extends View {
     cx.notify();
   }
 
-  /** Word wrap on or off in this editor (cmd-k w, space u w, :set wrap, the bar's chip). */
+  /** Word wrap on or off in the shown tab (cmd-k z, space u w, :set wrap, the bar's chip). */
   setWrap(on, cx) {
     this.softWrap = on == null ? !this.softWrap : Boolean(on);
     this.editor.set_soft_wrap(this.softWrap);
@@ -957,6 +1218,7 @@ export default class EditorPane extends View {
 
   /** A keystroke, before the editor sees it: vim's, or the editor's (false). */
   vimKey(e, cx) {
+    if (this.asking && this.askKey(e, cx)) return true;
     if (this.cardKey(e, cx)) return true;
     if (this.appKey(e)) return true;
     if (!this.vimOn() || this.state === "loading" || this.mode) return false;
@@ -1005,15 +1267,24 @@ export default class EditorPane extends View {
 
   vimCommand(c, cx) {
     const [name, arg] = c.includes(":") ? [c.slice(0, c.indexOf(":")), c.slice(c.indexOf(":") + 1)] : [c, null];
-    const me = () => panes().find((p) => p.mod === MOD && p.props?.slot === this.slot);
+    const me = () => this.me();
+    // :q closes the pane with every tab: none may hold unsaved changes (:q! drops them).
+    const edited = () => this.allDocs().filter((d) => d.dirty).map((d) => basename(d.path));
     switch (name) {
       case "save": return this.save(cx);
-      case "save-quit": return this.save(cx).then(() => { if (!this.dirty) run("pane.close", { ...(me() ? { pane: me().pane } : {}) }); });
-      case "quit": if (this.dirty) return this.say("E37: unsaved changes (:q! discards them)", true); return run("pane.close", { ...(me() ? { pane: me().pane } : {}) });
-      case "quit!": setUnsaved(null); this.dirty = false; return run("pane.close", { ...(me() ? { pane: me().pane } : {}), confirmed: true });
+      case "save-quit": return this.save(cx).then(() => { if (!edited().length) run("pane.close", { ...(me() ? { pane: me().pane } : {}) }); else this.say(`E37: unsaved changes in ${edited().join(", ")}`, true); });
+      case "quit": if (edited().length) return this.say(`E37: unsaved changes in ${edited().join(", ")} (:q! discards them)`, true); return run("pane.close", { ...(me() ? { pane: me().pane } : {}) });
+      case "quit!": for (const d of this.allDocs()) d.dirty = false; setUnsaved(null); return run("pane.close", { ...(me() ? { pane: me().pane } : {}), confirmed: true });
       case "reload": if (this.dirty) return this.say("E37: unsaved changes (:e! discards them)", true); return this.load(cx, null, false);
       case "reload!": this.dirty = false; return this.load(cx, null, false);
-      case "edit": return run("editor.open", { path: arg.startsWith("/") ? arg : `${dirname(this.path)}/${arg}` });
+      // :e file opens it as a tab here.
+      case "edit": return this.openFile(arg.startsWith("/") ? arg : arg.startsWith("~/") ? `${home()}/${arg.slice(2)}` : join(dirname(this.path), arg), cx);
+      case "next-tab": return this.stepTab(1, cx);
+      case "prev-tab": return this.stepTab(-1, cx);
+      case "tab": { const n = Number(arg); if (!(n >= 1 && n <= this.docs.length)) return this.say(`E86: no tab ${arg}`, true); return this.select(this.docs[n - 1], cx); }
+      case "close-tab": return this.closeTab(cx);
+      case "close-tab!": return this.closeTab(cx, this.cur, true);
+      case "tabs": return this.say(this.docs.map((d, i) => `${i + 1}${d === this.cur ? "%" : ""} ${basename(d.path)}${d.dirty ? " +" : ""}`).join("  "));
       case "undo": return this.editor.undo();
       case "redo": return this.editor.redo();
       case "nohlsearch": this.editor.find_close(); this.searchMark = null; return;
@@ -1051,7 +1322,7 @@ export default class EditorPane extends View {
     this.say(`${list.length} reference${list.length === 1 ? "" : "s"}: going to the first`);
     const loc = firstLocation(list);
     if (loc.path === this.path) this.goto(loc.line, loc.col, cx);
-    else run("editor.open", { path: loc.path, line: loc.line + 1, col: loc.col + 1 });
+    else this.openFile(loc.path, cx, { line: loc.line + 1, col: loc.col + 1 });
     cx.notify();
   }
 
@@ -1060,11 +1331,12 @@ export default class EditorPane extends View {
   }
 
   async formatting(cx) {
-    if (this.opts.format) { await this.format(this.editor.value(), cx); cx.notify(); return; }
-    if (this.server?.id == null) return this.say("no formatter: settings.json editor format");
+    const d = this.cur;
+    if (d.opts.format) { await this.format(d.editor.value(), cx, d); cx.notify(); return; }
+    if (d.server?.id == null) return this.say("no formatter: settings.json editor format");
     try {
-      const edits = await lspRequest(this.server.id, "textDocument/formatting", { textDocument: { uri: uri(this.path) }, options: { tabSize: this.opts.tab_size, insertSpaces: this.opts.insert_spaces !== false } });
-      if (edits?.length) this.editor.edit(edits.map((e) => ({ start: { line: e.range.start.line, col: e.range.start.character }, end: { line: e.range.end.line, col: e.range.end.character }, text: e.newText })));
+      const edits = await lspRequest(d.server.id, "textDocument/formatting", { textDocument: { uri: uri(d.path) }, options: { tabSize: d.opts.tab_size, insertSpaces: d.opts.insert_spaces !== false } });
+      if (edits?.length) d.editor.edit(edits.map((e) => ({ start: { line: e.range.start.line, col: e.range.start.character }, end: { line: e.range.end.line, col: e.range.end.character }, text: e.newText })));
       this.say("formatted");
     } catch (e) { this.say(String(e?.message ?? e), true); }
     cx.notify();
@@ -1095,28 +1367,41 @@ export default class EditorPane extends View {
     if (c === "preview-split") return this.setView("split", cx);
     if (c === "preview-only") return this.setView("preview", cx);
     if (c === "preview-text") return this.setView("text", cx);
+    if (c === "next-tab") return this.stepTab(1, cx);
+    if (c === "prev-tab") return this.stepTab(-1, cx);
+    if (c === "close-tab") return this.closeTab(cx);
+    // `nocturne-editor.open:{"path","line"?,"col"?,"view"?}`: a file as a tab of the focused editor.
+    if (c.startsWith("open:")) {
+      let a = null;
+      try { a = JSON.parse(c.slice(5)); } catch { return this.say("open: needs {\"path\": …}", true); }
+      const path = String(a?.path ?? "");
+      if (!path) return;
+      return this.openFile(path.startsWith("/") ? path : join(dirname(this.path), path), cx, { line: a.line ?? null, col: a.col ?? null, view: a.view ?? null });
+    }
   }
 
   // ---- the Markdown preview
 
   /** Splits the text into the preview's blocks again (now, or after a moment of typing). */
-  refreshPreview(cx, now) {
+  refreshPreview(cx, now, d = this.cur) {
     const apply = (cx) => {
-      this.previewDue = false;
-      this.preview.setText(this.text);
-      this.loadImages(cx);
+      d.previewDue = false;
+      d.preview.setText(d.text);
+      this.loadImages(cx, d);
       cx.notify();
     };
     if (now) return apply(cx);
-    if (this.previewDue) return;
-    this.previewDue = true;
+    if (d.previewDue) return;
+    d.previewDue = true;
     cx.timer.after(40, (cx) => apply(cx));
   }
 
-  /** Split, preview only or text only; the pane remembers. */
+  /** Split, preview only or text only: this tab's, and what the pane's new
+   *  Markdown tabs start with (it remembers). */
   setView(view, cx) {
     if (!this.markdown) return this.say("the preview is for Markdown files");
     this.view = view;
+    this.defaultView = view;
     try { localStorage.setItem("preview", view); } catch { /* a nicety */ }
     this.driver = "editor";
     if (view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
@@ -1126,17 +1411,17 @@ export default class EditorPane extends View {
   }
 
   /** Copies the document's local images where they can be drawn. */
-  loadImages(cx) {
+  loadImages(cx, d = this.cur) {
     if (this.on) return;
-    for (const part of this.preview.parts) {
+    for (const part of d.preview.parts) {
       if (part.kind !== "images") continue;
       for (const img of part.images) {
         if (!isLocalSource(img.src)) continue;
-        const abs = join(dirname(this.path), decodeURI(img.src.split(/[?#]/)[0]));
-        if (this.images.has(abs)) continue;
-        if (!IMAGE_EXT.test(abs)) { this.images.set(abs, null); continue; }
-        this.images.set(abs, undefined);
-        cx.spawn(async (cx) => { this.images.set(abs, await cacheImage(abs, MOD)); cx.notify(); });
+        const abs = join(dirname(d.path), decodeURI(img.src.split(/[?#]/)[0]));
+        if (d.images.has(abs)) continue;
+        if (!IMAGE_EXT.test(abs)) { d.images.set(abs, null); continue; }
+        d.images.set(abs, undefined);
+        cx.spawn(async (cx) => { d.images.set(abs, await cacheImage(abs, MOD)); cx.notify(); });
       }
     }
   }
@@ -1164,10 +1449,10 @@ export default class EditorPane extends View {
     if (to.kind === "anchor") here(to.anchor);
     else if (to.kind === "markdown") {
       if (to.path === this.path) { if (to.anchor) here(to.anchor); }
-      else run("editor.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+      else this.openFile(to.path, cx);
     } else if (to.kind === "web") run("app.open_url", { url: to.url });
     else if (to.kind === "file" && PREVIEWED.test(to.path)) run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
-    else if (to.kind === "file" && languageOf(to.path)) run("editor.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    else if (to.kind === "file" && languageOf(to.path)) this.openFile(to.path, cx);
     else if (!this.on) {
       const opener = appWindow()?.platform === "windows" ? null : appWindow()?.platform === "macos" ? "open" : "xdg-open";
       if (opener) exec(opener, [to.kind === "file" ? to.path : to.url]).catch(() => null);
@@ -1244,15 +1529,22 @@ export default class EditorPane extends View {
   }
 
   async close() {
-    if (this.server?.id != null) {
-      lspNotify(this.server.id, "textDocument/didClose", { textDocument: { uri: uri(this.path) } });
-      lspRelease(this.server.id);
+    const ids = new Set();
+    for (const d of this.allDocs()) {
+      d.gone = true;
+      if (d.server?.id == null) continue;
+      lspNotify(d.server.id, "textDocument/didClose", { textDocument: { uri: uri(d.path) } });
+      ids.add(d.server.id);
     }
+    for (const id of ids) lspRelease(id);
     setUnsaved(null);
     if (this.slot) {
-      const all = { ...(shared(TITLES) ?? {}) };
-      delete all[this.slot];
-      setShared(TITLES, all);
+      for (const key of [TITLES, PATHS]) {
+        const all = { ...(shared(key) ?? {}) };
+        if (!(this.slot in all)) continue;
+        delete all[this.slot];
+        setShared(key, all);
+      }
     }
   }
 
@@ -1264,10 +1556,19 @@ export default class EditorPane extends View {
     const goto = shared(GOTO);
     // A newer rename, move or delete from the files pane: answered after this render.
     if (newestId(shared(CHANGES)) > this.seenChange) cx.timer.after(0, (cx) => this.followChanges(cx));
-    if (goto && goto.path === this.path && goto.n !== this.seenGoto) {
+    // The app's editor.open on a file one of the tabs holds: that tab, at the line asked for.
+    if (goto && goto.n !== this.seenGoto && this.allDocs().some((d) => d.path === goto.path)) {
       this.seenGoto = goto.n;
-      if (this.state !== "loading") this.goto(goto.line - 1, (goto.col ?? 1) - 1, cx);
+      cx.timer.after(0, (cx) => { this.openFile(goto.path, cx, { line: goto.line ?? null, col: goto.col ?? null }); cx.notify(); });
     }
+    // A file sent to this editor as a tab (editor-route.js: the files pane, the picker, the Markdown viewer).
+    const req = shared(OPEN);
+    if (req && req.slot === this.slot && this.slot && req.n !== this.seenOpen) {
+      this.seenOpen = req.n;
+      cx.timer.after(0, (cx) => { this.openFile(req.path, cx, { line: req.line ?? null, col: req.col ?? null, view: req.view ?? null }); cx.notify(); });
+    }
+    // The editor that last had the keyboard, for the files pane and the picker to send files to.
+    if (this.slot && this.editor.focused?.() && shared(LAST) !== this.slot) cx.timer.after(0, () => { if (shared(LAST) !== this.slot) setShared(LAST, this.slot); });
     const code = settings()?.font_family || "JetBrains Mono";
     return v_flex().id("nocturne-editor").relative().size_full().bg(t.background).text_size(11)
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
@@ -1280,7 +1581,9 @@ export default class EditorPane extends View {
       })
       // A click outside the card closes it (the card keeps its own).
       .on_mouse_down("left", (_e, cx) => this.closeCard(cx))
+      .child(this.tabStrip(t))
       .child(this.bar(t))
+      .when(Boolean(this.asking), (el) => el.child(this.askLine(t)))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
       .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
@@ -1322,9 +1625,6 @@ export default class EditorPane extends View {
         .child(div().absolute().inset_0().opacity(0.3).child(dither(modeColor, 1)))
         .child(div().relative().text_color(modeColor).child(MODE_NAME[this.vim.mode] ?? "NORMAL"))))
       .when(vim && !!this.vim.recording, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`rec @${this.vim.recording.reg}`)))
-      .child(div().relative().size(8).flex_none().border(1).border_color(this.dirty ? t.ansi3 : t.ansi0)
-        .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))))
-      .child(div().flex_none().text_color(t.foreground).child(basename(this.path) || "untitled"))
       .when(this.deleted, (el) => el.child(div().id("bar-deleted").flex_none().text_color(t.ansi1).child("deleted · cmd-s writes it again")))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(narrow ? "" : dir))
       .when(!!msg, (el) => el.child(div().flex_none().text_color(msg.bad ? t.ansi1 : t.ansi2).truncate().max_w(260).child(msg.text)))
@@ -1345,6 +1645,81 @@ export default class EditorPane extends View {
       .child(div().id("bar-vim").flex_none().h(18).px(6).flex().items_center().border(1).border_color(vim ? t.accent : t.ansi0)
         .text_color(vim ? t.accent : t.dim).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.toggleVim(cx)).child("vim"));
+  }
+
+  /** The file tabs along the pane's top: each file's unsaved mark, name
+   *  (with the folder that tells two of the same name apart) and ×; the
+   *  shown one lit (a dithered band, an accent edge). Those that don't fit
+   *  fold into ‹ n / n › at the ends, the shown one always in view. */
+  tabStrip(t) {
+    const docs = this.allDocs();
+    const labels = tabLabels(docs.map((d) => d.path));
+    const z = zoom();
+    const room = this.size.width / z - 8;
+    const active = docs.indexOf(this.cur);
+    const fit = visibleTabs(labels.map(tabWidth), active, room);
+    const more = (id, text, dir) => h_flex().id(id).relative().h_full().w(MORE).flex_none().justify_center().items_center().text_color(t.dim)
+      .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { this.stepTab(dir, cx); cx.notify(); }).child(text);
+    const tab = (d, i) => {
+      const on = d === this.cur, l = labels[i];
+      const bad = d.state === "error" || d.deleted;
+      return h_flex().id(`editor-tab-${i}`).relative().h_full().flex_none().pl(10).pr(6).gap(6).items_center().border_r(1).border_color(t.ansi0)
+        .text_color(on ? t.foreground : t.muted)
+        .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.45).child(dither(t.ansi0, 1)))
+          .child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent)))
+        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
+        .on_click((_e, cx) => { this.select(d, cx); cx.notify(); })
+        // Unsaved: the bar's yellow dithered square; nothing when clean.
+        .child(div().id(`editor-tab-mark-${i}`).relative().size(7).flex_none().border(1)
+          .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
+          .when(d.dirty, (el) => el.child(dither(t.ansi3, 1))))
+        .child(div().relative().flex_none().max_w(MAX_TAB_NAME).truncate().child(l.name))
+        .when(Boolean(l.hint), (el) => el.child(div().relative().flex_none().max_w(120).truncate().text_color(t.dim).child(l.hint)))
+        .child(div().id(`editor-tab-close-${i}`).relative().flex_none().size(14).flex().items_center().justify_center()
+          .text_color(on ? t.muted : t.ansi8).hover((s) => s.text_color(t.ansi1))
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => { cx.stop_propagation(); this.closeTab(cx, d); cx.notify(); })
+          .child("×"));
+    };
+    return h_flex().id("editor-tabs").relative().h(TABS).flex_none().items_center().overflow_hidden().bg(t.background)
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+      .when(fit.before > 0, (el) => el.child(more("editor-tabs-before", `‹ ${fit.before}`, -1)))
+      .children(docs.slice(fit.from, fit.to).map((d, j) => tab(d, fit.from + j)))
+      .when(fit.after > 0, (el) => el.child(more("editor-tabs-after", `${fit.after} ›`, 1)));
+  }
+
+  /** Closing a tab with unsaved changes asks here: save and close, discard, or keep. */
+  askLine(t) {
+    const a = this.asking;
+    const chip = (id, label, k) => div().id(`editor-ask-${id}`).flex_none().h(18).px(6).flex().items_center().gap(6).border(1)
+      .border_color(a.at === id ? t.accent : t.ansi0).text_color(a.at === id ? t.foreground : t.muted)
+      .when(a.at === id, (el) => el.bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { this.answerClose(id, cx); cx.notify(); })
+      .child(div().child(label)).child(div().text_color(t.accent).child(k));
+    return h_flex().id("editor-ask").relative().h(FIND).flex_none().px(12).gap(10).items_center()
+      .child(div().absolute().inset_0().opacity(0.25).child(dither(t.ansi3, 1)))
+      .child(div().relative().flex_1().min_w(0).truncate().text_color(t.ansi3).child(`${basename(a.doc.path)} has unsaved changes. Close it?`))
+      .child(chip("save", "save & close", "s"))
+      .child(chip("discard", "discard", "d"))
+      .child(chip("keep", "keep open", "esc"));
+  }
+
+  /** The question's keys (it holds the keyboard while it shows): s / d / esc
+   *  (n) answer, tab / ← → move between the answers, enter / space press. */
+  askKey(e, cx) {
+    const a = this.asking, k = e.key, m = e.modifiers ?? {};
+    if (["shift", "control", "alt", "platform", "function", "capslock"].includes(k)) return false;
+    if (m.platform) return false;
+    const order = ["save", "discard", "keep"];
+    const i = order.indexOf(a.at);
+    if (k === "escape" || k === "n") this.answerClose("keep", cx);
+    else if (k === "s" || k === "y") this.answerClose("save", cx);
+    else if (k === "d") this.answerClose("discard", cx);
+    else if (k === "enter" || k === "space") this.answerClose(a.at, cx);
+    else if (k === "tab" || k === "right" || k === "l") a.at = order[(i + (m.shift && k === "tab" ? order.length - 1 : 1)) % order.length];
+    else if (k === "left" || k === "h") a.at = order[(i + order.length - 1) % order.length];
+    cx.notify();
+    return true;
   }
 
   /** Vim's ex line (`:`, `/`, `?`), under the bar. */
@@ -1532,10 +1907,35 @@ export default class EditorPane extends View {
         div().id(`card-run-${i}-${j}`).text_color(color ?? t.foreground).child(piece)))));
   }
 
+  /** The card's links under its text: an arrow for where it goes (↗ the web,
+   *  → a file), its words, and the host or file:line; the ringed one (tab)
+   *  wears the dialogs' ring, enter follows it; a click follows any. */
+  cardLinksView(t, c) {
+    const list = c.links.slice(0, 12);
+    return v_flex().id("card-links").relative().px(8).pt(6).pb(8).gap(1)
+      .child(h_flex().relative().h(16).px(4).gap(8).items_center().text_size(10).text_color(t.dim)
+        .child(div().flex_none().child("LINKS"))
+        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .when(c.links.length > list.length, (el) => el.child(div().flex_none().child(`${list.length} of ${c.links.length}`))))
+      .children(list.map((l, i) => {
+        const to = linkTarget(l.url, this.path), on = c.link === i;
+        const color = to?.kind === "web" ? t.ansi4 : to?.kind === "file" ? t.ansi5 : t.dim;
+        return h_flex().id(`card-link-${i}`).relative().h(20).px(4).gap(8).items_center().border(1)
+          .border_color(on ? t.accent : t.background).text_color(on ? t.foreground : t.muted)
+          .when(on, (el) => el.bg(t.ansi0))
+          .hover((s) => s.text_color(t.foreground).border_color(t.ansi0))
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => this.followLink(l.url, cx))
+          .child(div().flex_none().w(12).text_color(color).child(to?.kind === "web" ? "↗" : to?.kind === "file" ? "→" : "·"))
+          .child(div().flex_1().min_w(0).truncate().child(l.label))
+          .child(div().flex_none().max_w(200).truncate().text_color(t.dim).child(linkWhere(to)));
+      }));
+  }
+
   /** How far down the pane the text starts: the bar, and whatever lines sit
    *  between it and the text (a conflict, find / replace, vim's ex line). */
   textTop() {
-    return BAR + (this.conflict ? FIND : 0) + (this.mode === "replace" ? 2 * FIND : this.mode ? FIND : 0) + (this.vim.ex != null ? FIND : 0);
+    return TABS + BAR + (this.asking ? FIND : 0) + (this.conflict ? FIND : 0) + (this.mode === "replace" ? 2 * FIND : this.mode ? FIND : 0) + (this.vim.ex != null ? FIND : 0);
   }
 
   /** The card's word in pane coordinates (unzoomed), from where the editor
@@ -1563,12 +1963,13 @@ export default class EditorPane extends View {
     const footH = 24;
     // The pane's size comes in window pixels (zoomed); the card is placed in layout units.
     const z = zoom();
-    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W }, { top: BAR, bottom: HINTS });
+    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W }, { top: TABS + BAR, bottom: HINTS });
     const sevColor = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
     const lang = this.lang === "tsx" ? "typescript" : this.lang;
     const parts = c.parts.map((p, i) => p.code != null
       ? this.codeBlock(t, p, p.lang ? (languageOf(p.lang) ?? lang) : lang, code)
-      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted).child(TextView.markdown(`card-md-${i}`, p.md ??= cardMarkdown(p.text))));
+      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted)
+        .child(TextView.markdown(`card-md-${i}`, p.md ??= cardMarkdown(p.text)).on_link_click((url, cx) => this.followLink(url, cx))));
     const expandable = (lang === "typescript" || lang === "javascript") && c.parts.length > 0;
     const ctrl = (id, label, on, go) => div().id(id).flex_none().w(18).h(18).flex().items_center().justify_center().border(1)
       .border_color(on ? t.ansi0 : t.background).text_color(on ? t.foreground : t.dim)
@@ -1595,7 +1996,8 @@ export default class EditorPane extends View {
       .when(Boolean(c.note), (el) => el.child(v_flex().id("card-note").px(12).py(8).gap(4)
         .child(div().text_color(t.foreground).child(c.note.text))
         .when(Boolean(c.note.fix), (e2) => e2.child(div().text_color(t.dim).child(c.note.fix)))))
-      .children(parts);
+      .children(parts)
+      .when((c.links ?? []).length > 0, (el) => el.child(this.cardLinksView(t, c)));
     const box = v_flex().id("editor-card").absolute().left(place.left).w(place.width).max_h(place.maxH)
       .bg(t.background).border(1).border_color(waiting ? t.ansi8 : t.ansi0).shadow_lg().overflow_hidden()
       .on_hover((h, cx) => { this.overCard = h; if (!h && !c.keyboard) cx.timer.after(250, (cx) => { if (!this.overCard && this.card === c) { this.card = null; cx.notify(); } }); })
@@ -1619,9 +2021,25 @@ export default class EditorPane extends View {
           .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx)))
           .child(div().flex_none().text_color(t.accent).child("ctrl-−/=")))
         .when(c.parts.length > 0 && this.server?.id != null, (el) => el.child(key(vim ? "gd" : "cmd-k d", "definition")))
+        .when(c.keyboard && (c.links ?? []).length > 0, (el) => el.child(key("tab", "links")))
         .when(overflow, (el) => el.child(key("ctrl-d ctrl-u", "scroll")))
         .child(div().flex_1())
         .child(key("esc", "close")));
     return place.above ? box.bottom(place.bottom) : box.top(place.top);
   }
+}
+
+// What each tab keeps for its file (newDoc): the pane's `this.path`,
+// `this.editor`, `this.dirty`, ... are the shown tab's. Methods that run for a
+// tab in the background (reading, watching, saving, its server) take the tab.
+export const TAB_FIELDS = ["path", "firstPath", "lang", "opts", "openedAt", "deleted", "saved", "state", "error", "dirty", "conflict",
+  "problems", "server", "version", "sent", "progress", "hovers", "text", "find", "searchMark", "markdown", "preview", "images",
+  "view", "driver", "previewDrove", "previewDue", "flushDue", "lastWork", "watchGen", "editor", "softWrap"];
+for (const f of TAB_FIELDS) {
+  Object.defineProperty(EditorPane.prototype, f, {
+    configurable: true,
+    // A pane put together without init (the tests) gets one tab on first use.
+    get() { return (this.cur ??= {})[f]; },
+    set(v) { (this.cur ??= {})[f] = v; },
+  });
 }

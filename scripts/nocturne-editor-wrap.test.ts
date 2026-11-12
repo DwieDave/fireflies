@@ -1,5 +1,5 @@
 // The editor's word wrap toggle (nocturne-editor/main.js setWrap): a new
-// editor wraps as its language's soft_wrap says; cmd-k w (the command
+// editor wraps as its language's soft_wrap says; cmd-k z (the command
 // nocturne-editor.wrap), vim's space u w, :set wrap / nowrap / wrap! and the
 // bar's "wrap" chip switch this editor only, nothing written to settings. A
 // whole pane is built through init with herdr and gpui stand-ins (mock.module
@@ -78,6 +78,8 @@ function cx(): any {
 const flush = async () => { for (let i = 0; i < 6; i++) await Promise.resolve(); };
 
 async function pane(vim = true): Promise<any> {
+  // A new pane keeps no tabs yet (each pane's localStorage is its own; the editor keeps its tabs there).
+  delete storage.tabs;
   const p: any = new EditorPane();
   p.init({}, cx());
   await flush();
@@ -99,7 +101,7 @@ test("a new editor wraps as its language says: rust not, Markdown yes, settings.
   expect([(await pane()).softWrap, ed.opts.soft_wrap]).toEqual([true, true]);
 });
 
-test("cmd-k w (the wrap command) switches this editor's wrap and says so; nothing is written to settings", async () => {
+test("cmd-k z (the wrap command) switches the shown tab's wrap and says so; nothing is written to settings", async () => {
   const p = await pane(false);
   written.length = 0;
   const kept = JSON.stringify(storage);
@@ -154,7 +156,7 @@ test("the bar's wrap chip shows the state and switches it; a narrow bar shows it
 });
 
 test("the keys lists name the toggle with and without vim", () => {
-  expect(editorKeys(false)).toContainEqual(["cmd-k w", "word wrap on / off"]);
+  expect(editorKeys(false)).toContainEqual(["cmd-k z", "word wrap on / off"]);
   expect(editorKeys(true)).toContainEqual(["space u w", "word wrap"]);
   expect(editorKeys(false).at(-1)).toEqual(["cmd-k ?", "keys"]);
   expect(editorKeys(true).at(-1)).toEqual(["space ?", "keys"]);

@@ -139,6 +139,9 @@ const WORDS = {
   "nocturne-editor.wrap": "Word wrap on or off",
   "nocturne-editor.keys": "The editor's keys",
   "nocturne-editor.preview": "Markdown preview on or off",
+  "nocturne-editor.next-tab": "Next file tab",
+  "nocturne-editor.prev-tab": "Previous file tab",
+  "nocturne-editor.close-tab": "Close the file tab",
   // The web pane (mod:nocturne-browser).
   "nocturne-browser.url": "The address bar",
   "nocturne-browser.reload": "Reload the page",

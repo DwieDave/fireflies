@@ -61,8 +61,8 @@ same.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens
-it in the editor beside the focused pane, the caret there (an editor already on
-that file goes there instead). It reloads by itself when you change a file it
+it in the editor beside the focused pane, the caret there (an editor already
+holding that file in one of its tabs shows that tab and goes there instead). It reloads by itself when you change a file it
 shows unedited; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.

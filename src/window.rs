@@ -3029,21 +3029,31 @@ impl AppWindow {
         }
         // Clicking the same link again shows the viewer already open on it: the
         // file a viewer shows now (it notes that by slot in shared `<mod>.paths`,
-        // having moved on from the one it opened with), else its props' file.
+        // having moved on from the one it opened with; a list when it holds
+        // several, the editor's tabs), else its props' file.
         let now = crate::mods::shared(&format!("{viewer_mod}.paths"));
         let shown = pane.as_ref().filter(|_| !tab).and_then(|p| self.model.tab_of(p)).and_then(|tab| {
             tab.root.panes().into_iter().find(|n| matches!(n.content(), Some(Content::Mod { name, props }) if name == viewer_mod && {
-                let showing = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot)?.as_str())
-                    .or_else(|| props.get("path").and_then(Value::as_str));
-                showing == Some(path.as_str()) && props.get("on").and_then(Value::as_str) == on
+                let noted = props.get("slot").and_then(Value::as_str).and_then(|slot| now.as_ref()?.get(slot).cloned());
+                let showing = match noted {
+                    Some(Value::String(p)) => p == path,
+                    Some(Value::Array(list)) => list.iter().any(|p| p.as_str() == Some(path.as_str())),
+                    _ => props.get("path").and_then(Value::as_str) == Some(path.as_str()),
+                };
+                showing && props.get("on").and_then(Value::as_str) == on
             })).map(|n| n.id.clone())
         });
         if let Some(id) = shown {
-            // The editor already on the file moves to the place asked for: it
-            // watches shared `nocturne-editor.goto` for its path.
-            if viewer == Viewer::Editor && extra.get("line").is_some() {
+            // The editor already on the file shows it (its tab) and moves to the
+            // place asked for: it watches shared `nocturne-editor.goto` for its paths.
+            if viewer == Viewer::Editor {
                 let n = crate::mods::shared("nocturne-editor.goto").and_then(|g| g.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
-                crate::mods::set_shared("nocturne-editor.goto".into(), json!({ "path": path, "line": extra["line"], "col": extra.get("col").cloned().unwrap_or(json!(1)), "n": n }));
+                let mut goto = json!({ "path": path, "n": n });
+                if extra.get("line").is_some() {
+                    goto["line"] = extra["line"].clone();
+                    goto["col"] = extra.get("col").cloned().unwrap_or(json!(1));
+                }
+                crate::mods::set_shared("nocturne-editor.goto".into(), goto);
             }
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
             return match r.get("error") {
