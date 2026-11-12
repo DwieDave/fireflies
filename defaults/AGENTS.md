@@ -629,8 +629,9 @@ the highlighted line shows where it will land.
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
   switches under the toolbar) hide or show dotfiles and git-ignored files
-  (`git ls-files --ignored`), each pane keeping its choice (shared
-  `nocturne-files.filters` by slot; new panes take settings.json `files`).
+  (`git ls-files --ignored`; both hidden by default), each pane keeping its
+  choice (shared `nocturne-files.filters` by slot, written only once you
+  switch one; new panes take settings.json `files`).
   Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
@@ -1656,9 +1657,9 @@ list or a machine's rename first.
                      "go": { "server": false }, "markdown": { "soft_wrap": true } } } }
   ```
 - `files`: what a new files pane lists (Nocturne's `nocturne-files`, see Files
-  panes): `{ "hidden": false }` leaves dotfiles out, `{ "ignored": false }`
-  files git ignores; both are listed when unset. A pane's `H` / `I` switch
-  overrides it for that pane.
+  panes): `{ "hidden": true }` lists dotfiles, `{ "ignored": true }` files
+  git ignores; both are left out when unset (the eye switches count what is
+  left out). A pane's `H` / `I` switch overrides it for that pane.
 - `pane_scrollbars`: `false` hides the scroll position thumb at a terminal
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and

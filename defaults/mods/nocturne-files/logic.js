@@ -6,10 +6,11 @@ export const parent = (p) => p.replace(/\/[^/]+$/, "") || "/";
 export const base = (p) => p.slice(p.lastIndexOf("/") + 1);
 export const dirOf = (p) => (p.includes("/") ? p.slice(0, p.lastIndexOf("/")) : "");
 
-/** settings.json `files`: what a new pane lists (both, unless set). */
+/** settings.json `files`: what a new pane lists. Unset, dotfiles and
+ *  git-ignored files are left out (H and I show them; the chips count them). */
 export function filterDefaults(settings) {
   const f = settings?.files ?? {};
-  return { hidden: f.hidden !== false, ignored: f.ignored !== false };
+  return { hidden: f.hidden === true, ignored: f.ignored === true };
 }
 
 /** `git ls-files -z --others --ignored --exclude-standard --directory` (run in

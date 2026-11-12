@@ -8,8 +8,9 @@
 // `files.open`, Nocturne's "+ new" > Files) opens a pane of its own instead, props { path, on, slot }:
 // beside the pane it came from, closed with q / esc, opening files beside itself.
 //
-// Each pane keeps its filters (dotfiles, git-ignored files; new panes take
-// settings.json `files`) in shared `nocturne-files.filters` by slot. `/`
+// Each pane keeps its filters (dotfiles, git-ignored files: both left out
+// unless settings.json `files` or H / I say otherwise; written once toggled)
+// in shared `nocturne-files.filters` by slot. `/`
 // filters the tree as you type: fff's fuzzy index of the root (findFiles),
 // hits under their folders; elsewhere (home, /, another machine) the folders
 // already listed.

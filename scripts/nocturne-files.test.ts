@@ -97,10 +97,12 @@ const TREE: Record<string, [string, boolean][]> = {
 
 // ---- logic
 
-test("new panes list everything unless settings.json files says otherwise", () => {
-  expect(filterDefaults({})).toEqual({ hidden: true, ignored: true });
-  expect(filterDefaults({ files: { hidden: false } })).toEqual({ hidden: false, ignored: true });
-  expect(filterDefaults({ files: { ignored: false, hidden: true } })).toEqual({ hidden: true, ignored: false });
+test("new panes leave dotfiles and git-ignored files out unless settings.json files says otherwise", () => {
+  expect(filterDefaults({})).toEqual({ hidden: false, ignored: false });
+  expect(filterDefaults(undefined)).toEqual({ hidden: false, ignored: false });
+  expect(filterDefaults({ files: { hidden: true } })).toEqual({ hidden: true, ignored: false });
+  expect(filterDefaults({ files: { ignored: true, hidden: false } })).toEqual({ hidden: false, ignored: true });
+  expect(filterDefaults({ files: { hidden: false, ignored: false } })).toEqual({ hidden: false, ignored: false });
 });
 
 test("git's ignored list covers what is in an ignored folder; dotfiles by any part", () => {
@@ -164,7 +166,7 @@ test("the menu's key column fits its widest key", () => {
 test("filters hide dotfiles and ignored files, count them, and are kept per pane", () => {
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   world.shared = {};
-  world.settings = { zoom: 1, files: { hidden: false } };
+  world.settings = { zoom: 1, files: { ignored: true } };
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   view.ignored = parseIgnored("target/\0src/app.log\0");
   view.folders.add("src");
@@ -181,6 +183,25 @@ test("filters hide dotfiles and ignored files, count them, and are kept per pane
   // A pane opened again with that slot takes its own choice, not the settings'.
   expect(pane({ path: "/repo", slot: "s1" }).filters).toEqual({ hidden: true, ignored: false });
   world.settings = { zoom: 1 };
+});
+
+test("a pane nobody toggled stores no choice and opens with the new defaults; a toggled one keeps its own", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }, { pane: "pg", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s2" } }];
+  world.shared = {};
+  world.settings = { zoom: 1 };
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.ignored = parseIgnored("target/\0src/app.log\0");
+  view.folders.add("src");
+  expect(view.filters).toEqual({ hidden: false, ignored: false });
+  expect(view.rows().map((r: any) => r.path)).toEqual(["src", "src/main.rs", "README.md"]);
+  expect(view.cut).toEqual({ hidden: 2, ignored: 2 });
+  expect(world.shared["nocturne-files.filters"]).toBeUndefined();
+  // Toggled to the old default (both shown): that is now this pane's choice.
+  view.key({ key: "H" }, cx);
+  view.key({ key: "I" }, cx);
+  expect(world.shared["nocturne-files.filters"]).toEqual({ s1: { hidden: true, ignored: true } });
+  expect(pane({ path: "/repo", slot: "s1" }).filters).toEqual({ hidden: true, ignored: true });
+  expect(pane({ path: "/repo", slot: "s2" }).filters).toEqual({ hidden: false, ignored: false });
 });
 
 test("/ filters through the index: hits under folders, enter opens beside the pane, a folder shows in the tree", async () => {
@@ -1070,6 +1091,7 @@ test("t marks and steps, V marks a range while moving, shift-↑↓ mark while m
   world.shared = {};
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.filters = { hidden: true, ignored: true };
   view.folders.add("src");
   const rows = () => view.shown().map((r: any) => r.path);
   view.sel = "src";
