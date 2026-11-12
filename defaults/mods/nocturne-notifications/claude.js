@@ -34,7 +34,8 @@ function lastIndex(ls, re, before = ls.length) {
 
 /**
  * The dialog at the bottom of a Claude Code screen, or null:
- *   { kind: "permission", title, body, question, options: [{ n, label }], cursor, amend: "yes"|"no"|null, canAmend }
+ *   { kind: "permission", title, body, question, options: [{ n, label }], cursor, amend: "yes"|"no"|null, amendText, canAmend }
+ *     amend: the note line is open on Yes or No (Tab); amendText: what is typed in it
  *   { kind: "question", headers: [{ header, done }] | null, submit, question, rows: [Row], cursor }
  *     Row { kind: "option", n, label, desc, checked: bool|null } | { kind: "next" } | { kind: "chat", n, label }
  *   { kind: "review", answers: [{ question, answer }], options: [{ n, label }], cursor }
@@ -86,9 +87,10 @@ function parsePermission(ls, foot, canAmend) {
   const cursor = options.findIndex((o) => o.cursor);
   const rule = lastIndex(ls, RULE, top + 1);
   if (rule < 0) return null;
-  const head = ls.slice(rule + 1, top).filter((l) => l.trim() && !DASH.test(l));
+  // Claude's own "Tip: …" line (auto mode) isn't part of the request.
+  const head = ls.slice(rule + 1, top).filter((l) => l.trim() && !DASH.test(l) && !TIP.test(l));
   const question = norm(head[head.length - 1] ?? "");
-  const amended = options[cursor]?.label ?? "";
+  const { amend, amendText } = amendOf(options[cursor]?.label ?? "", cursor, canAmend);
   return {
     kind: "permission",
     title: norm(head[0] ?? ""),
@@ -96,9 +98,24 @@ function parsePermission(ls, foot, canAmend) {
     question,
     options: options.map(({ n, label }) => ({ n, label })),
     cursor,
-    amend: /^Yes, and tell Claude what to do next$/.test(amended) ? "yes" : /^No, and tell Claude what to do differently$/.test(amended) ? "no" : null,
+    amend,
+    amendText,
     canAmend,
   };
+}
+
+const TIP = /^\s*Tip: /;
+
+/** The note line under the cursor (Tab): empty, Claude shows its placeholder
+ *  as the option ("Yes, and tell Claude what to do next"); with text typed,
+ *  the option reads "Yes, <text>" / "No, <text>" (Claude Code 2.1.322), and
+ *  the footer has no "Tab to amend" while it's open. */
+function amendOf(label, cursor, canAmend) {
+  if (/^Yes, and tell Claude what to do next$/.test(label)) return { amend: "yes", amendText: "" };
+  if (/^No, and tell Claude what to do differently$/.test(label)) return { amend: "no", amendText: "" };
+  if (!canAmend && cursor === 0 && /^Yes, /.test(label)) return { amend: "yes", amendText: label.slice(5) };
+  if (!canAmend && cursor > 0 && /^No, /.test(label) && !/\(esc\)$/.test(label)) return { amend: "no", amendText: label.slice(4) };
+  return { amend: null, amendText: "" };
 }
 
 function parseQuestion(ls, foot) {
@@ -240,6 +257,12 @@ function questionMatches(s, qs) {
   return true;
 }
 
+/** The dialog as drawn, as one string: it changes when a key changed the
+ *  dialog, not when the rest of a busy screen (a spinner, a status line) did. */
+export function dialog(screen) {
+  return JSON.stringify(parseScreen(screen));
+}
+
 /** Same request: what an answer was made for is still what the screen asks. */
 export function sameRequest(a, b) {
   if (!a || !b || a.type !== b.type) return false;
@@ -254,7 +277,8 @@ export function sameRequest(a, b) {
  * the driver between steps ({} at first). Returns one of
  *   { keys: [names] }      press these (hc keys)
  *   { paste: text }        paste text and press Enter (hc send --force)
- *   { wait: true }         nothing yet: read the screen again
+ *   { wait: true, reason } nothing yet: read the screen again (reason: what
+ *                          to say if it never comes)
  *   { done: true }         answered
  *   { refuse: reason }     stop: the screen isn't what the answer was for
  *
@@ -279,7 +303,18 @@ function permissionStep(goal, screen, state) {
   const now = describe(screen, goal.record);
   if (state.sent) {
     // Answered: done once the screen no longer shows this request.
-    return now && sameRequest(now, goal.request) ? { wait: true } : { done: true };
+    if (!now || !sameRequest(now, goal.request)) return { done: true };
+    const s = parseScreen(screen);
+    if (goal.amend != null && s?.amend) {
+      // The note is in the line but its Enter didn't land: press it, once.
+      if (norm(s.amendText) === norm(oneLine(goal.amend))) {
+        state.waited = (state.waited ?? 0) + 1;
+        if (state.waited >= 2 && !state.entered) { state.entered = true; return { keys: ["enter"] }; }
+        return { wait: true, reason: "The note is typed in the terminal but wasn't sent: press enter there." };
+      }
+      if (!s.amendText) return { wait: true, reason: "The note didn't arrive in the terminal: nothing was sent." };
+    }
+    return { wait: true, reason: "Sent, but the request is still showing: look at the terminal." };
   }
   if (!now || now.type !== "permission") return { refuse: "The request is gone: it was answered or withdrawn." };
   if (!sameRequest(now, goal.request)) return { refuse: "The request changed: look at it again." };
@@ -296,9 +331,15 @@ function permissionStep(goal, screen, state) {
     const kind = want.kind === "no" ? "no" : t === 0 ? "yes" : null;
     if (!kind) return { refuse: "Only Yes and No take a note." };
     if (s.amend !== kind) {
+      if (s.amend) return { refuse: "Someone is typing in that request: answer it there." };
+      // Tab opens the note line and closes it again: pressed once, then
+      // waited for (another change on the screen may draw first).
+      if (state.tabbed) return { wait: true, reason: "The note line didn't open in the terminal: nothing was sent." };
       if (!s.canAmend) return { refuse: "This request doesn't take a note." };
+      state.tabbed = true;
       return { keys: ["tab"] };
     }
+    if (s.amendText) return { refuse: "Someone is typing in that request: answer it there." };
     state.sent = true;
     return { paste: oneLine(goal.amend) };
   }

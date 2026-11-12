@@ -335,7 +335,10 @@ the highlighted line shows where it will land.
   a review that submits all of them, cmd-enter from anywhere). Answers go
   into the agent's terminal as keys, the way a person answers there, and the
   screen is read again before every key: a request that changed or went away
-  is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
+  is refused ("Not sent"), never answered blindly; each key waits for the
+  dialog itself to change (not the rest of a busy screen), and when a step
+  doesn't take (the note line didn't open, the note didn't arrive) it says
+  so in place of the answer. Herdr's "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
   x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,

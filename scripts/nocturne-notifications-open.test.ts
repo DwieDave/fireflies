@@ -203,3 +203,24 @@ test("the empty overview is EMPTY_H tall (a center's height, not its note's), ne
   // Its ? keys still make it taller when they need more.
   expect(settle(900, true).height).toBeGreaterThanOrEqual(EMPTY_H);
 });
+
+// ---- answering: the driver waits for the dialog, not for any change on a busy screen
+
+test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
+  const { settled } = await import("../defaults/mods/nocturne-notifications/drive.js");
+  const { dialog } = await import("../defaults/mods/nocturne-notifications/claude.js");
+  const rule = "─".repeat(80);
+  const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
+  const before = dlg("Yes", "Esc to cancel · Tab to amend");
+  const after = dlg("Yes, and tell Claude what to do next", "Esc to cancel");
+  // Three reads where only the status line ticks, then the note line drawn.
+  const reads = [`${before}\n◐ 1`, `${before}\n◐ 2`, `${before}\n◐ 3`, `${after}\n◐ 4`, `${after}\n◐ 5`];
+  let i = 0;
+  const read = async () => reads[Math.min(i++, reads.length - 1)];
+  const sleepy = { sleep: async () => {} };
+  const got = await settled(sleepy, "t1", `${before}\n◐ 0`, dialog, read);
+  expect(got).toContain("tell Claude what to do next");
+  // Compared whole (no dialog view), the first tick would have counted.
+  i = 0;
+  expect(await settled(sleepy, "t1", `${before}\n◐ 0`, undefined, read)).toBe(`${before}\n◐ 2`);
+});
