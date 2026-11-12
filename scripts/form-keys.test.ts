@@ -261,44 +261,31 @@ test("confirm: tab wraps between confirm and keep, enter on keep keeps, cmd-ente
 
 // ---- the sidebar's inline space forms
 
-test("new space: name → folder → browse → esc, wrapping; enter on browse picks, on esc cancels; enter in a field saves", async () => {
+test("rename a space: name → esc, wrapping; enter in the field saves; new and folder open the picker instead", () => {
   const s: any = new Spaces();
   s.init(cx());
   let host = 0;
   s.focusHost = () => host++;
-  let picked = 0;
-  s.pick = () => picked++;
-  s.start({ kind: "new" }, cx());
+  const sp = { id: "s1", name: "web", named: true, tabs: [] };
+  s.start({ kind: "rename", s: sp }, cx());
   expect(s.at).toBe("name");
+  expect(s.input.value()).toBe("web");
   const k = (name: string) => s.confirmKey(key(name), cx());
-  s.tab(false, cx()); // the field's tab (inline.js field)
-  expect(s.at).toBe("folder");
   s.tab(false, cx());
-  expect([s.at, host]).toEqual(["browse", 1]);
-  let r = s.render(t, null);
-  expect(find(r, "space-new-folder")!.nodes.some((n: any) => n?.calls?.border_color?.[0] === t.accent)).toBe(true); // ringed
-  expect(k("enter")).toBe(true);
-  expect(picked).toBe(1);
-  expect(k("tab")).toBe(true);
-  expect(s.at).toBe("cancel");
+  expect([s.at, host]).toEqual(["cancel", 1]);
   expect(k("tab")).toBe(true);
   expect(s.at).toBe("name"); // wraps
-  expect(k("down")).toBe(true); // ↓ in a one-line field: the next stop, as tab
-  expect(s.at).toBe("folder");
-  s.tab(true, cx()); // the field's shift-tab
-  s.tab(true, cx());
-  expect(s.at).toBe("cancel"); // shift-tab past the first
-  expect(k("a")).toBe(true); // a chip has the keys: nothing types
-  expect(k("enter")).toBe(true);
+  expect(k("enter")).toBe(false); // the input's own submit
+  s.input.set_value("site");
+  s.submit(cx());
+  expect(state.runs).toEqual([["space.rename", { id: "s1", name: "site" }]]);
   expect(s.mode).toBeNull();
-  // In a field a plain enter is the input's submit; cmd-enter saves from anywhere.
+  // A new space and a space's folder: the folder picker (newspace.js), no inline form.
   s.start({ kind: "new" }, cx());
-  expect(k("enter")).toBe(false);
-  s.input.set_value("work");
-  s.tab(false, cx()); s.tab(false, cx());
-  k("cmd-enter");
-  expect(s.mode.busy).toBe(true); // saving: it looks for the folder first (the stand-ins run no spawn: nothing is made)
-  expect(state.runs).toEqual([]);
+  expect(s.mode).toBeNull();
+  expect(state.opened.at(-1)).toMatchObject({ kind: "dialog", props: { role: "newspace" } });
+  s.start({ kind: "folder", s: sp }, cx());
+  expect(state.opened.at(-1)).toMatchObject({ props: { role: "newspace", space: "s1" } });
 });
 
 test("delete a space: delete has the keyboard, tab wraps to keep, enter on keep keeps, y deletes", () => {

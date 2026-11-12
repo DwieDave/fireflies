@@ -28,7 +28,7 @@ import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, g
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";
-/** shared() key: the open picker's overlay id. */
+/** shared() key: the open picker, { id: its overlay, space: the one it attaches, or null }. */
 export const OPEN = "nocturne.newspace-open";
 
 export const WIDTH = 452;
@@ -53,21 +53,28 @@ export function hereFolder() {
 /**
  * Opens the picker: making a space, or (space: an id) attaching that one to
  * another folder. `at`: where it hangs (kit.js dropBelow); centered without.
- * Open already: closes it (a second press on "+ new").
+ * Open already: closes it (a second key press). `wasOpen`: "+ new" was lit
+ * when pressed, so the press closed it already; it stays closed. `replace`:
+ * an open one gives way to this one even when it's the same (a menu's ask).
  */
-export function openSpacePicker({ at = null, space = null } = {}) {
+export function openSpacePicker({ at = null, space = null, wasOpen = false, replace = false } = {}) {
   const open = shared(OPEN);
-  if (open) {
+  if (open?.id) {
     setShared(OPEN, null);
-    closeOverlay(open);
-    if (!space) return null;
+    closeOverlay(open.id);
+    // The same picker asked for again: that closes it. Another one replaces it.
+    if (!replace && (open.space ?? null) === (space ?? null)) return null;
   }
+  if (wasOpen && !space) return null;
   const id = openOverlay({ mod: "nocturne", kind: at ? "popup" : "dialog", frame: "none", width: WIDTH,
     ...(at ? { at, height: HEAD + LIST_MAX + 4 * SEC + FOOT + 12 } : {}),
     props: { role: "newspace", here: hereFolder(), ...(space ? { space } : {}) } });
-  setShared(OPEN, id);
+  setShared(OPEN, { id, space: space ?? null });
   return id;
 }
+
+/** The picker is open ("+ new" stays lit). */
+export const pickerOpen = () => Boolean(shared(OPEN)?.id);
 
 export default class NewSpace {
   init(p, cx) {
@@ -109,13 +116,13 @@ export default class NewSpace {
 
   close() {
     this.done = true;
-    if (shared(OPEN) === props()?.overlay) setShared(OPEN, null);
+    if (shared(OPEN)?.id === props()?.overlay) setShared(OPEN, null);
     closeOverlay(props()?.overlay);
   }
 
   /** The overlay is going (esc, a click beside it, a pick). */
   closing() {
-    if (shared(OPEN) === props()?.overlay) setShared(OPEN, null);
+    if (shared(OPEN)?.id === props()?.overlay) setShared(OPEN, null);
   }
 
   // ---- the folders

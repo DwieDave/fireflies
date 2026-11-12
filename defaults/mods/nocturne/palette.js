@@ -469,8 +469,9 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
   "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
-// Nocturne runs these in place of Herdr's: the same key, the sidebar's order.
-const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev" };
+// Nocturne runs these in place of Herdr's: the same key, the sidebar's order;
+// "New space" is the folder picker (newspace.js).
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
 
 /** Every entry for the state we're in now. */
 function entries() {

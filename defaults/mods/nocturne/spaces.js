@@ -7,51 +7,50 @@
 // nocturne.next / nocturne.prev (keys.json) walk the rows in this order.
 //
 //   click a row   shows it
-//   + new         a name (optional: unnamed, Herdr names it after its folder)
-//                 and the folder it's attached to (typed, or "browse";
-//                 empty: home); opens it
+//   + new         the new-space picker (newspace.js) hangs under it: a list
+//                 of folders (here, the spaces', the checkouts beside them,
+//                 recent ones) and a field to filter it or type a path; enter
+//                 makes the space there, called after its folder (cmd-enter
+//                 names it first); its last row, "no folder", makes a space
+//                 in ~ that belongs to no project
 //   right-click   a menu (menu.js): show, new tab here, rename, change
 //                 folder, new worktree (a branch checked out as a new space), delete
 //   rename        inline; an empty name gives it Herdr's name back
-//   folder        inline; attaches the space to another folder (space.folder)
+//   folder        the same picker, hanging under the row, attaches the space
+//                 to another folder (space.folder); "no folder" detaches it
 //   delete        ends its terminals and agents (asks first, inline, saying
 //                 how many); it stays in Herdr's recent spaces
-// The inline forms (new, rename, folder, delete) take keys as every form does
-// (form-keys.js): tab / shift-tab walk name → folder → browse → esc (delete:
-// delete ↔ keep), wrapping; the focused chip wears the blue ring; enter in a
-// field saves (cmd-enter from anywhere), enter / space press a chip, esc cancels.
+// The inline forms (rename, delete) take keys as every form does
+// (form-keys.js): tab / shift-tab walk name → esc (delete: delete ↔ keep),
+// wrapping; the focused chip wears the blue ring; enter in a field saves
+// (cmd-enter from anywhere), enter / space press a chip, esc cancels.
 // The menu asks through shared(EDIT_SPACE); on the folded rail Herdr's own
-// (Nocturne-skinned) prompt and confirm dialogs, and the folder picker, do it instead.
+// (Nocturne-skinned) prompt and confirm dialogs, and the centered picker, do it instead.
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared } from "herdr";
-import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks } from "./kit.js";
+import { spaces, panes, agents, run, exec, shared } from "herdr";
+import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
 import { formKey } from "./form-keys.js";
-import { openSpacePicker } from "./newspace.js";
+import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.js";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
 import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
 
 const stop = (_e, cx) => cx.stop_propagation();
-const tilde = (p) => { const h = home(); return p === h ? "~" : p.startsWith(h + "/") ? "~" + p.slice(h.length) : p; };
-// A typed folder as a path: ~ is home, a relative one is under home.
-const untilde = (p) => { const h = home(); return p === "~" ? h : p.startsWith("~/") ? h + p.slice(1) : p.startsWith("/") || /^[A-Za-z]:[\\/]/.test(p) ? p : `${h}/${p}`; };
 // How often to look for spaces in folders not yet placed in a repo.
 const SCAN = 1500;
 
 export default class Spaces {
   init(cx) {
-    this.mode = null; // null | { kind: "new" } | { kind: "rename" | "folder" | "delete", s }
-    this.error = ""; // why the last new / folder didn't go
+    this.mode = null; // null | { kind: "rename" | "delete", s }
     this.at = null; // the inline form's stop with the keyboard (stops())
     this.input = InputState.new({ placeholder: "name" });
     this.input.on("submit", (_e, cx) => this.submit(cx));
-    this.folderInput = InputState.new({ placeholder: "folder (empty: ~)" });
-    this.folderInput.on("submit", (_e, cx) => this.submit(cx));
-    this.folderInput.on("change", (_e, cx) => { if (this.error) { this.error = ""; cx.notify(); } });
+    // Where the last right-click on a row was: "Change folder…" hangs the picker there.
+    this.pressed = null; // { id, at }
     // folder key -> { main, top } (a git checkout) | null (not one); asked
     // once per folder, so drawing and switching never wait on git.
     this.repos = new Map();
@@ -63,7 +62,8 @@ export default class Spaces {
   }
 
   /** A space's right-click menu (`centered`: opened from the keyboard). */
-  menu(s, centered = false) {
+  menu(s, centered = false, e = null) {
+    this.pressed = e ? { id: s.id, at: dropBelow(e, PICKER_WIDTH), when: Date.now() } : null;
     openMenu({ tab: "space", target: { id: s.id } }, { centered });
   }
 
@@ -73,7 +73,7 @@ export default class Spaces {
       go: () => run("space.select", { id: s.id }),
       menu: () => this.menu(s, true),
       rename: (cx) => this.start({ kind: "rename", s }, cx),
-      folder: (cx) => this.start({ kind: "folder", s }, cx),
+      folder: () => this.folder(s),
       delete: (cx) => this.start({ kind: "delete", s }, cx),
       tab: () => run("tab.new", { space: s.id }),
       worktree: () => newWorktree(s.id),
@@ -87,7 +87,12 @@ export default class Spaces {
     this.editAsked = ask.at;
     const s = spaces().find((x) => x.id === ask.id);
     if (!s) return;
-    if (folded && ask.kind === "folder") return this.pick(cx, s);
+    if (ask.kind === "folder") {
+      // Hanging under the row right-clicked for it a moment ago; else centered (a key, the palette).
+      const p = this.pressed;
+      this.pressed = null;
+      return this.folder(s, !folded && p?.id === s.id && Date.now() - p.when < 30000 ? p.at : null);
+    }
     if (folded) return run(ask.kind === "rename" ? "space.rename" : "space.close", { id: s.id });
     this.start({ kind: ask.kind, s }, cx);
   }
@@ -164,67 +169,36 @@ export default class Spaces {
 
   // ---- editing
 
+  /** A new space: the picker (newspace.js), hanging under the press that asked (`at`), else centered. */
+  create(at = null, wasOpen = false) {
+    this.press = null;
+    return openSpacePicker({ at, wasOpen });
+  }
+
+  /** Space `s` to another folder: the same picker, attaching. */
+  folder(s, at = null) {
+    return openSpacePicker({ space: s.id, at, replace: true });
+  }
+
   start(mode, cx) {
-    // New and folder: the picker (newspace.js), not an inline form.
-    if (mode?.kind === "new") return void openSpacePicker();
-    if (mode?.kind === "folder") return void openSpacePicker({ space: mode.s.id });
+    if (mode?.kind === "new") return void this.create();
+    if (mode?.kind === "folder") return void this.folder(mode.s);
     const was = this.mode;
     this.mode = mode;
-    this.error = "";
     this.at = this.stops()[0]?.id ?? null;
     if (was && !mode) this.onDone?.(cx);
-    if (mode?.kind === "new" || mode?.kind === "rename") {
-      this.input.set_value(mode.kind === "rename" && mode.s.named ? mode.s.name : "");
+    if (mode?.kind === "rename") {
+      this.input.set_value(mode.s.named ? mode.s.name : "");
       this.input.focus();
-    }
-    if (mode?.kind === "new") this.folderInput.set_value("");
-    if (mode?.kind === "folder") {
-      const f = spaceFolder(mode.s, panes());
-      this.folderInput.set_value(f ? tilde(f) : "");
-      this.folderInput.focus();
     }
     cx.notify();
   }
 
   submit(cx) {
     const m = this.mode;
-    if (m?.kind === "rename") {
-      run("space.rename", { id: m.s.id, name: this.input.value().trim() });
-      return this.start(null, cx);
-    }
-    if (m?.kind !== "new" && m?.kind !== "folder") return;
-    if (m.busy) return;
-    const name = this.input.value().trim();
-    const typed = this.folderInput.value().trim();
-    const folder = typed ? untilde(typed) : home();
-    const on = m.kind === "folder" ? m.s.machine ?? null : null;
-    m.busy = true;
-    cx.spawn(async (cx) => {
-      // A folder that isn't there would leave the space nowhere: say so in place.
-      let there = true;
-      try { there = (await exec("test", ["-d", folder], { on })).code === 0; } catch {}
-      m.busy = false;
-      if (this.mode !== m) return;
-      if (!there) { this.error = `no folder ${tilde(folder)}`; return cx.notify(); }
-      if (m.kind === "new") run("space.new", { ...(name ? { name } : {}), folder, machine: "" });
-      else run("space.folder", { id: m.s.id, folder });
-      this.start(null, cx);
-    });
-  }
-
-  /** The folder picker: into the form's folder field, or (s: the folded rail) straight onto that space. */
-  pick(cx, s) {
-    const m = this.mode;
-    cx.spawn(async (cx) => {
-      const folder = await pickFolder({ prompt: s || m?.kind === "folder" ? "Attach the space to" : "Start the new space in" });
-      if (!folder) return;
-      if (s) return run("space.folder", { id: s.id, folder });
-      if (this.mode !== m) return;
-      this.folderInput.set_value(tilde(folder));
-      this.error = "";
-      this.folderInput.focus();
-      cx.notify();
-    });
+    if (m?.kind !== "rename") return;
+    run("space.rename", { id: m.s.id, name: this.input.value().trim() });
+    this.start(null, cx);
   }
 
   remove(s, cx) {
@@ -235,8 +209,6 @@ export default class Spaces {
   /** The inline form's stops in tab order (form-keys.js). */
   stops() {
     const k = this.mode?.kind;
-    if (k === "new") return [{ id: "name", kind: "text" }, { id: "folder", kind: "text" }, { id: "browse", kind: "button" }, { id: "cancel", kind: "button" }];
-    if (k === "folder") return [{ id: "folder", kind: "text" }, { id: "browse", kind: "button" }, { id: "cancel", kind: "button" }];
     if (k === "rename") return [{ id: "name", kind: "text" }, { id: "cancel", kind: "button" }];
     if (k === "delete") return [{ id: "go", kind: "button", submit: true }, { id: "keep", kind: "button" }];
     return [];
@@ -246,7 +218,6 @@ export default class Spaces {
   goStop(id) {
     this.at = id;
     if (id === "name") this.input.focus();
-    else if (id === "folder") this.folderInput.focus();
     else this.focusHost?.();
   }
 
@@ -275,7 +246,6 @@ export default class Spaces {
     const id = stops[i].id;
     if (a.act === "move") this.goStop(stops[a.to].id);
     else if (a.act === "cancel" || (a.act === "press" && (id === "cancel" || id === "keep"))) this.start(null, cx);
-    else if (a.act === "press" && id === "browse") this.pick(cx);
     else if (a.act === "submit" || a.act === "press") del ? this.remove(this.mode.s, cx) : this.submit(cx);
     return true;
   }
@@ -305,17 +275,6 @@ export default class Spaces {
         .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
         .child(this.chipAt(t, "cancel", `${id}-cancel`, "esc", (cx) => this.start(null, cx)));
     }
-    if (m?.kind === "folder") {
-      return v_flex().id(id).px(16).gap(2)
-        .child(h_flex().h(24).gap(8).items_center()
-          .when(depth > 0, (el) => el.child(this.indent(t, depth)))
-          .child(pip(t, s.status))
-          .child(div().min_w(0).max_w(90).truncate().text_size(11).text_color(t.muted).child(s.name))
-          .child(field(t, "space-folder-input", this.folderInput, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
-          .child(this.chipAt(t, "browse", `${id}-browse`, "browse", (cx) => this.pick(cx)))
-          .child(this.chipAt(t, "cancel", `${id}-cancel`, "esc", (cx) => this.start(null, cx))))
-        .when(Boolean(this.error), (el) => el.child(div().pl(14).text_size(11).text_color(t.blocked).child(this.error)));
-    }
     if (m?.kind === "delete") {
       const tabs = new Set(s.tabs.map((c) => c.id));
       const terms = panes().filter((p) => tabs.has(p.tab) && p.terminal).length;
@@ -336,7 +295,7 @@ export default class Spaces {
     }
     return h_flex().id(id).relative().h(24).px(16).gap(8).items_center().text_size(11)
       .on_mouse_down("left", stop)
-      .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.menu(s); })
+      .on_mouse_down("right", (e, cx) => { cx.stop_propagation(); this.menu(s, false, e); })
       .on_click(() => run("space.select", { id: s.id }))
       .hover((st) => st.bg(t.ansi0 + "55"))
       // Shown: a plate of the ground, in from the sidebar's edges, with the
@@ -357,28 +316,16 @@ export default class Spaces {
       .child(div().min_w(0).truncate().text_color(t.ansi8).child(r.header));
   }
 
-  newRow(t) {
-    return v_flex().id("space-new").px(16).gap(2)
-      .child(h_flex().h(24).gap(8).items_center()
-        .child(div().w(6).flex_none().text_size(11).text_color(t.accent).child("+"))
-        .child(field(t, "space-input", this.input, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
-        .child(this.chipAt(t, "cancel", "space-new-cancel", "esc", (cx) => this.start(null, cx))))
-      .child(h_flex().pl(14).h(24).gap(4).items_center().text_size(11)
-        .child(div().flex_none().text_color(t.dim).child("in"))
-        .child(field(t, "space-new-folder-input", this.folderInput, (cx) => this.start(null, cx), (back, cx) => this.tab(back, cx)))
-        .child(this.chipAt(t, "browse", "space-new-folder", "browse", (cx) => this.pick(cx))))
-      .when(Boolean(this.error), (el) => el.child(div().pl(14).text_size(11).text_color(t.blocked).child(this.error)));
-  }
-
   /** `nav` (sky.js): registers a control with the keyboard's cursor, true while it's on it. */
   render(t, nav) {
-    const startNew = (cx) => this.start({ kind: "new" }, cx);
-    const newOn = this.mode?.kind !== "new" && (nav?.("space-new", "spaces", { go: startNew }) ?? false);
+    const newOn = nav?.("space-new", "spaces", { go: () => this.create() }) ?? false;
     return v_flex().id("spaces").pt(22).pb(10).flex_none()
       .child(h_flex().px(16).pb(4).items_center()
         .child(div().flex_1().child(eyebrow(t, "spaces")))
-        .when(this.mode?.kind !== "new", (el) => el.child(navRing(t, chip(t, "space-new-start", "+ new", startNew), newOn))))
-      .children(this.rows().map((r) => r.s ? this.row(t, r.s, r.depth, nav) : this.header(t, r)))
-      .when(this.mode?.kind === "new", (el) => el.child(this.newRow(t)));
+        .child(navRing(t, chip(t, "space-new-start", "+ new", () => this.create(dropBelow(this.press?.e, PICKER_WIDTH), Boolean(this.press?.open)), pickerOpen() ? t.foreground : null)
+          // The press: where the picker hangs, and whether it was open (the press closed it: it stays closed).
+          .on_mouse_down("left", (e) => { this.press = { e, open: pickerOpen() }; })
+          .when(pickerOpen(), (el) => el.bg(t.ansi0)), newOn)))
+      .children(this.rows().map((r) => r.s ? this.row(t, r.s, r.depth, nav) : this.header(t, r)));
   }
 }

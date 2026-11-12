@@ -100,6 +100,7 @@ const WORDS = {
   "nocturne.toast-dismiss": "Dismiss the newest toast",
   "nocturne.next": "Next space, in the sidebar's order",
   "nocturne.prev": "Previous space, in the sidebar's order",
+  "nocturne.space-new": "New space: pick its folder",
   "nocturne.fold": "Fold the sidebar into a rail, or open it",
   "nocturne.new": "New: a terminal, an agent or a panel, as a tab or a pane",
   "nocturne.git": "Git window",
@@ -164,7 +165,7 @@ function groupOf(section, action) {
   if (section.startsWith("mod:")) return `in ${section.slice(4)}`;
   const name = action.split(":")[0];
   if (/^nocturne\.(sidebar|focus|tabstrip|header|toast)/.test(name) || name === "pane.go" || name.startsWith("overlay.")) return "keyboard focus";
-  if (/^space\./.test(name) || /^nocturne\.(next|prev)$/.test(name)) return "spaces";
+  if (/^space\./.test(name) || /^nocturne\.(next|prev|space-new)$/.test(name)) return "spaces";
   if (/^tab\./.test(name) || name === "nocturne.new") return "tabs";
   if (/^pane\./.test(name) || name === "nocturne.gridify") return "panes";
   if (/^agent\./.test(name) || /^nocturne\.pin/.test(name)) return "agents";

@@ -108,7 +108,8 @@ export function rank(rows, q, home) {
     .map((r, i) => {
       const name = fuzzy(s, r.name);
       const path = name ? null : fuzzy(s, tilde(r.path, home));
-      const best = name ? { score: name.score + 10, hits: name.hits } : path && { score: path.score, hits: [] };
+      // Path-only matches all rank alike: they keep the sources' order (here first).
+      const best = name ? { score: name.score + 10, hits: name.hits } : path && { score: 0, hits: [] };
       return best && { ...r, hits: best.hits, score: best.score, i };
     })
     .filter(Boolean)
