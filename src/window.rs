@@ -351,7 +351,8 @@ enum OverlayKind {
     Popup,
     Toast,
     /// Stays until closed, moves where it's dropped, comes to the front when
-    /// pressed (`movable.rs`). Never holds the keyboard on its own.
+    /// pressed (`movable.rs`). Without a scrim it never holds the keyboard on
+    /// its own; with one it's modal while it shows (`Overlay::holds_keys`).
     Window,
 }
 
@@ -359,6 +360,15 @@ impl OverlayKind {
     /// Dialogs and popups hold the keyboard while open (Esc closes them).
     fn modal_keys(self) -> bool {
         matches!(self, OverlayKind::Dialog | OverlayKind::Popup)
+    }
+}
+
+impl Overlay {
+    /// It holds the keyboard over everything outside the overlays: a dialog or
+    /// popup, or a window with a scrim (Git, GitHub), which is modal while it
+    /// shows. No key reaches a pane or the layout behind it.
+    fn holds_keys(&self) -> bool {
+        self.kind.modal_keys() || (self.kind == OverlayKind::Window && self.scrim)
     }
 }
 
@@ -1717,7 +1727,9 @@ impl AppWindow {
         }
         self.synced_model_pane = model_pane;
         self.focused_pane = focused.clone();
-        let no_dialog = !self.overlays.iter().any(|o| o.kind.modal_keys());
+        // A dialog, popup or window with a scrim keeps the keyboard through any
+        // change behind it (agent.next, a tab switch, a pane closing).
+        let no_dialog = !self.keys_held();
         // GPUI focus alone does not change AppKit's first responder. A browser
         // page can keep receiving keys after a keyboard pane switch.
         if pane_changed {
@@ -1892,7 +1904,7 @@ impl AppWindow {
     /// Gives the focused pane the keyboard, unless something other than the
     /// window holds it: a dialog, a mod block, an input.
     fn refocus_pane(&mut self, window: &mut Window, cx: &mut App) {
-        let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
+        let dialog = self.keys_held();
         let window_holds_keys = window.focused(cx).is_none() || self.focus.is_focused(window);
         if dialog || self.focused_block.is_some() || !window_holds_keys {
             return;
@@ -3842,7 +3854,7 @@ impl AppWindow {
                     self.focused_block = None;
                     self.focused_pane = Some(id.clone());
                     self.synced_model_pane = self.model.focused_pane();
-                    if !self.overlays.iter().any(|o| o.kind.modal_keys()) && let Some(f) = self.pane_focus(&id, cx) {
+                    if !self.keys_held() && let Some(f) = self.pane_focus(&id, cx) {
                         f.focus(window, cx);
                     }
                     self.publish(cx);
@@ -4444,11 +4456,17 @@ impl AppWindow {
         }
         self.focused_block = Some(id.to_owned());
         self.sync(window, cx);
-        if !self.overlays.iter().any(|o| o.kind.modal_keys()) {
+        if !self.keys_held() {
             crate::native_view::release_keyboard(window);
             self.focus.focus(window, cx);
             self.hand_keyboard();
         }
+    }
+
+    /// A dialog, popup or window with a scrim is open: the keyboard stays in
+    /// the overlays, whatever changes behind them.
+    fn keys_held(&self) -> bool {
+        self.overlays.iter().any(Overlay::holds_keys)
     }
 
     /// The window with a scrim in front, if one shows.
@@ -5318,7 +5336,7 @@ impl AppWindow {
     fn native_view_pressed(&mut self, copy: u64, window: &mut Window, cx: &mut Context<Self>) {
         let Some(slot) = self.copies.iter().find(|(_, c)| c.id == copy).map(|(s, _)| s.clone()) else { return };
         self.focus_pressed(slot.clone(), window, cx);
-        let dialog = self.overlays.iter().any(|o| o.kind.modal_keys());
+        let dialog = self.keys_held();
         if !dialog && self.model.tab_of(&slot).is_some() && self.focusable(&slot) {
             // Kept as the block with the keyboard: it gets `focus` back after a popup over it.
             self.focused_block = Some(slot);

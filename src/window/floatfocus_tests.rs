@@ -152,3 +152,45 @@ fn floatfocus_popup_back(cx: &mut gpui::TestAppContext) {
     assert!(pane_has_keys(&view, "p1", cx));
 }
 
+#[test]
+fn changes_behind_a_scrim_window_leave_the_keyboard_in_it() {
+    in_own_process("floatfocus_behind");
+}
+
+/// Path 3: the focused pane changing behind the window (agent.next, a tab or
+/// space switch, a pane closing, `pane.focus` from an agent, a focusable mod
+/// pane) handed the keyboard to the new pane while the window still showed.
+#[gpui::test]
+fn floatfocus_behind(cx: &mut gpui::TestAppContext) {
+    use serde_json::json;
+    if !running_alone("floatfocus_behind") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    open(&view, "w", scrim_window(), cx);
+    assert!(window_has_keys(&view, "w", cx));
+    let step = |what: &str, cx: &mut gpui::VisualTestContext, f: &dyn Fn(&mut super::AppWindow, &mut gpui::Window, &mut gpui::Context<super::AppWindow>)| {
+        cx.update(|window, cx| view.update(cx, |this, cx| f(this, window, cx)));
+        settle(cx);
+        assert!(window_has_keys(&view, "w", cx), "after {what}");
+    };
+    step("a tab switch", cx, &|this, window, cx| this.run("tab.select", json!({ "id": "tb2" }), window, cx));
+    assert!(!pane_has_keys(&view, "p2", cx));
+    step("a switch back", cx, &|this, window, cx| this.run("tab.select", json!({ "id": "tb1" }), window, cx));
+    step("pane.focus", cx, &|this, window, cx| this.run("pane.focus", json!({ "pane": "p1" }), window, cx));
+    step("a focusable mod pane focused", cx, &|this, window, cx| { this.model.focus_pane("pk"); this.sync(window, cx); });
+    step("a pane closing", cx, &|this, window, cx| { this.model.remove_pane("pk"); this.sync(window, cx); });
+    assert!(!pane_has_keys(&view, "p1", cx));
+    // Without a scrim the pane may take it back (the PiP player stays up beside the work).
+    cx.update(|window, cx| view.update(cx, |this, cx| this.close_overlay("w", window, cx)));
+    settle(cx);
+    let mut pip = scrim_window();
+    pip["scrim"] = json!(false);
+    open(&view, "pip", pip, cx);
+    cx.update(|window, cx| view.update(cx, |this, cx| this.focus_window_cmd(Some("pip".into()), "next", window, cx))).unwrap();
+    settle(cx);
+    cx.update(|window, cx| view.update(cx, |this, cx| this.run("tab.select", json!({ "id": "tb2" }), window, cx)));
+    settle(cx);
+    assert!(pane_has_keys(&view, "p2", cx), "a window without a scrim isn't modal");
+}
+

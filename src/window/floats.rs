@@ -312,7 +312,7 @@ impl AppWindow {
 
     /// Gives the keyboard back to what the layout shows (a press on a mod takes it).
     fn refocus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.overlays.iter().any(|o| o.kind.modal_keys()) {
+        if self.keys_held() {
             return;
         }
         let term = match self.agent_block() {
