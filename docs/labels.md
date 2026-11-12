@@ -1,6 +1,6 @@
 # Shared state in labels
 
-Herdr clients (the desktop app, the phone app, a terminal UI) share two
+Clients of herdr-core (Fireflies, Herdr's desktop app, the phone app, a terminal UI) share two
 things through herdr-core terminal labels: which agents a person has seen,
 and which are pinned. Look at an agent on one client and it stops being
 "done" on all of them; pin it on one and it's pinned everywhere.

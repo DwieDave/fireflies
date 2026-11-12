@@ -247,7 +247,7 @@ impl AppWindow {
                     (false, true, _) => d.cursor_ew_resize(),
                     (false, false, _) => d.cursor_ns_resize(),
                 };
-                d.child(crate::native_view::cover_probe(0.0))
+                d.child(crate::native_view::cover_probe(0.0, crate::native_view::By::Overlay))
                     .on_mouse_down(
                         MouseButton::Left,
                         cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
@@ -295,7 +295,7 @@ impl AppWindow {
         cx.notify();
     }
 
-    fn raise_window(&mut self, id: &str, cx: &mut Context<Self>) {
+    pub(super) fn raise_window(&mut self, id: &str, cx: &mut Context<Self>) {
         let Some(i) = self.overlays.iter().position(|o| o.id == id) else { return };
         if i + 1 < self.overlays.len() {
             let o = self.overlays.remove(i);

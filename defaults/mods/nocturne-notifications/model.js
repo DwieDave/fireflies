@@ -37,6 +37,7 @@ export const ADAPTERS = [
     handles: (t) => /claude/.test(String(t?.report?.app ?? t?.program?.key ?? "")),
     describe: claude.describe,
     step: claude.step,
+    dialog: claude.dialog,
     hook: true,
   },
   generic,

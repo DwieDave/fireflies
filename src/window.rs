@@ -5564,6 +5564,32 @@ impl AppWindow {
         }
     }
 
+    /// The overlays in paint order, bottom first: windows under dialogs, popups
+    /// and toasts; each kind in the order opened (a window pressed last is
+    /// last: on top).
+    fn overlay_order(&self) -> impl Iterator<Item = &Overlay> {
+        self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).chain(self.overlays.iter().filter(|o| o.kind != OverlayKind::Window))
+    }
+
+    /// Each mod copy's native view layer (`native_view::Layer`): the overlay
+    /// it's drawn in (by `overlay_order`), and whether it's in a floating block.
+    fn native_layers(&self) -> HashMap<u64, crate::native_view::Layer> {
+        let order: Vec<&Overlay> = self.overlay_order().collect();
+        self.copies
+            .iter()
+            .filter(|(_, c)| c.id != 0)
+            .map(|(slot, c)| {
+                let float = slot.strip_prefix("float:").map(|f| f.split('#').next().unwrap_or(f));
+                let inside = |o: &&Overlay| {
+                    o.slot == *slot
+                        || o.layout.as_ref().is_some_and(|l| l.find(slot).is_some() || float.is_some_and(|f| l.find_float(f).is_some()))
+                };
+                let z = order.iter().position(|o| inside(o)).map_or(0, |i| i + 1);
+                (c.id, crate::native_view::Layer { z, float: float.is_some() })
+            })
+            .collect()
+    }
+
     fn render_overlays(&self, viewport: Size<Pixels>, scale: f32, cx: &mut Context<Self>) -> Vec<AnyElement> {
         let mut out = Vec::new();
         let mut toast_y = 16.0;
@@ -5572,11 +5598,11 @@ impl AppWindow {
         if pill.is_some() {
             toast_y += UPDATE_PILL_HEIGHT + 8.0;
         }
-        // Windows under dialogs, popups and toasts; each kind in the order opened
-        // (a window pressed last is last: on top).
-        let order = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).chain(self.overlays.iter().filter(|o| o.kind != OverlayKind::Window));
-        for o in order {
+        for (i, o) in self.overlay_order().enumerate() {
             let id = o.id.clone();
+            // HUP: what this overlay paints (its backdrop, card and grips) is on
+            // its own layer, above the tree's and every overlay painted before it.
+            out.push(crate::native_view::layer(i + 1).into_any_element());
             // Up to 1: a share of the window (terminals in overlays want room, not px).
             let span = |v: f32, full: Pixels| if v <= 1.0 { full * v } else { settings::z(v) };
             let (w, h) = (span(o.size.width, viewport.width), span(o.size.height, viewport.height));
@@ -5600,7 +5626,7 @@ impl AppWindow {
                 .when(o.kind != OverlayKind::Window, |d| d.on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation()))
                 // HUP: native views below keep rendering, with a hole here.
                 .relative()
-                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }))
+                .child(crate::native_view::cover_probe(if o.bare { 0.0 } else { f32::from(settings::z(8.0)) }, crate::native_view::By::Overlay))
                 .child(content);
             match o.kind {
                 OverlayKind::Window => {
@@ -6453,22 +6479,20 @@ impl Render for AppWindow {
                     this.flush_documents(false, window, cx);
                 }
             }))
+            .child(crate::native_view::layer(0))
             .child(tree)
             .children(overlays)
             .children(tracker)
             .children(win_tracker)
             .child(pane_drag)
             .child(crate::bench::frame_end())
-            // HUP: native views follow their elements; overlays and floats above
-            // them cut holes (cover_probe), and they step aside while a pane is dragged.
+            // HUP: native views follow their elements; overlays and floats painted
+            // above them cut holes (cover_probe), a backdrop above them dims them,
+            // and they step aside while a pane is dragged.
             .child(crate::native_view::frame_end(
                 self.copies.values().map(|c| c.id).filter(|id| *id != 0).collect(),
                 mods::shown_copies(),
-                self.copies
-                    .iter()
-                    .filter(|(slot, _)| slot.starts_with("overlay:") || slot.starts_with("float:") || self.overlays.iter().any(|o| o.layout.as_ref().is_some_and(|l| l.find(slot.as_str()).is_some())))
-                    .map(|(_, c)| c.id)
-                    .collect(),
+                self.native_layers(),
                 self.pane_drag.is_some(),
             ))
     }
@@ -8319,4 +8343,85 @@ export default class SystemToast extends View {
         assert!(!super::adoptable(&record("live"), "sp1", Some("tb2"), None));
     }
 
+
+    #[test]
+    fn native_views_are_cut_by_the_overlays_painted_above_them() {
+        in_own_process("native_layers");
+    }
+
+    /// A video player window, a window opened over it with a dim, a popup on
+    /// top: each copy's native views get the cards and dims painted above
+    /// its own overlay, never its own; raising a window swaps the cuts.
+    #[gpui::test]
+    fn native_layers(cx: &mut gpui::TestAppContext) {
+        use crate::native_view::{Layer, last_frame};
+        use serde_json::json;
+        if !running_alone("native_layers") {
+            return;
+        }
+        let main = r#"import { View, div } from "gpui-kit";
+export default class Viewer extends View { render() { return div().size_full(); } }
+"#;
+        let layout = json!({ "id": "root", "type": "row", "children": [
+            { "id": "viewer", "type": "block", "content": { "mod": "viewer" } }
+        ] });
+        let (view, cx) = open_window(cx, "viewer", main, layout);
+        let open = |spec: serde_json::Value, cx: &mut gpui::VisualTestContext| {
+            view.update_in(cx, |this, window, cx| {
+                this.sync_folders(window, cx);
+                let id = crate::mods::new_overlay_id();
+                this.open_overlay(id.clone(), spec, window, cx);
+                id
+            })
+        };
+        let copy = |slot: &str, cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.copies[slot].id);
+        // What the last frame gave a copy: its layer, its holes' x and its dim.
+        let seen = |c: u64, cx: &mut gpui::VisualTestContext| {
+            view.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            let (layer, covers, dim) = last_frame(c).expect("drawn");
+            let mut xs: Vec<i64> = covers.iter().map(|c| c.rect.x.round() as i64).collect();
+            xs.sort();
+            (layer, xs, dim)
+        };
+        let player = open(json!({ "mod": "viewer", "kind": "window", "key": "player", "frame": "none", "width": 300, "height": 200 }), cx);
+        view.update(cx, |this, _| this.overlays.iter_mut().find(|o| o.id == player).unwrap().place = Some(point(px(10.0), px(10.0))));
+        cx.run_until_parked();
+        let pane = view.update(cx, |this, _| this.copies.iter().find(|(s, c)| !s.starts_with("overlay:") && c.inst.name == "viewer").map(|(_, c)| c.id).unwrap());
+        let player_copy = copy(&format!("overlay:{player}"), cx);
+        let base = Layer { z: 0, float: false };
+        let on = |z| Layer { z, float: false };
+        assert_eq!(seen(pane, cx), (base, vec![10], false), "the player cuts the pane under it");
+        assert_eq!(seen(player_copy, cx), (on(1), vec![], false), "the player's own card doesn't");
+
+        // A window opened over the player, with its dim (like the git window).
+        let git = open(json!({ "mod": "viewer", "kind": "window", "key": "git", "frame": "none", "scrim": true, "width": 300, "height": 200 }), cx);
+        view.update(cx, |this, _| this.overlays.iter_mut().find(|o| o.id == git).unwrap().place = Some(point(px(200.0), px(10.0))));
+        let git_copy = copy(&format!("overlay:{git}"), cx);
+        assert_eq!(seen(player_copy, cx), (on(1), vec![200], true), "the git window cuts and dims the player");
+        assert_eq!(seen(git_copy, cx), (on(2), vec![], false));
+        assert_eq!(seen(pane, cx), (base, vec![10, 200], true));
+
+        // A popup (a menu, the notification center) over both.
+        let popup = open(json!({ "mod": "viewer", "kind": "popup", "at": { "x": 400, "y": 300 }, "frame": "none", "width": 100, "height": 50 }), cx);
+        let popup_copy = copy(&format!("overlay:{popup}"), cx);
+        let (_, xs, _) = seen(player_copy, cx);
+        assert_eq!(xs.len(), 2, "the git window and the popup cut the player: {xs:?}");
+        assert_eq!(seen(popup_copy, cx).1, Vec::<i64>::new(), "nothing is above the popup");
+        assert_eq!(seen(popup_copy, cx).0, on(3));
+
+        // The player raised (pressed, overlay.focus): it's above the git window and its dim now, still under the popup.
+        view.update(cx, |this, cx| this.raise_window(&player, cx));
+        let (layer, xs, dim) = seen(player_copy, cx);
+        assert_eq!((layer, xs.len(), dim), (on(2), 1, false), "only the popup is above the raised player");
+        assert_eq!(seen(git_copy, cx).0, on(1));
+        assert!(seen(git_copy, cx).1.contains(&10), "the raised player cuts the git window");
+
+        // Closed: nothing above the player.
+        view.update_in(cx, |this, window, cx| {
+            this.close_overlay(&popup, window, cx);
+            this.close_overlay(&git, window, cx);
+        });
+        assert_eq!(seen(player_copy, cx), (on(1), vec![], false));
+    }
 }
