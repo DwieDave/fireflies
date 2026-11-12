@@ -85,6 +85,29 @@ export function rowWindow(n, top, px, rowH) {
   return { vis, top: Math.max(0, Math.min(top, Math.max(0, n - vis))) };
 }
 
+/** A busy row's mark, over the row (it keeps its width): a dithered sweep
+ *  running through it and the command log's spinner at its right end. */
+export function busyMark(t, id) {
+  return [
+    div().absolute().top(0).bottom(0).w(40).opacity(0.45).child(dither(t.working, 1)).loop("left", { from: -40, to: 360, period: 1600, easing: "linear" }),
+    h_flex().id(id).absolute().top(0).bottom(0).right(0).w(22).items_center().justify_center().bg(t.background).text_size(11)
+      .child(div().text_color(t.working).frames(["░", "▒", "▓", "█", "▓", "▒"], 120)),
+  ];
+}
+
+/** A list row's identity for busy marks: the same thing in any list (a
+ *  branch, a commit, a file), so a row keeps its mark through a reload. */
+export function rowKey(ctx, x) {
+  if (!x) return null;
+  if (ctx === "commits" || ctx === "subCommits" || ctx === "reflog") return x.hash ? `commit:${x.hash}` : null;
+  if (ctx === "branches") return `branch:${x.name}`;
+  if (ctx === "files" || ctx === "review" || ctx === "commitFiles") return x.path != null ? `file:${x.path}` : null;
+  if (ctx === "worktrees") return `wt:${x.path}`;
+  if (ctx === "stash") return `stash:${x.ref ?? x.hash ?? x.index}`;
+  if (ctx === "tags" || ctx === "remotes" || ctx === "remoteBranches") return `${ctx}:${x.name}`;
+  return null;
+}
+
 /** A job queue a long-lived task drains: async work keeps that task's cx. */
 class Queue {
   constructor() { this.items = []; this.wake = null; }
@@ -139,6 +162,7 @@ export default class GitView extends View {
     this.shellHistory = [];
     this.draft = null;
     this.noteText = null; this.busyText = null;
+    this.busyRows = new Map(); // rowKey -> operations acting on that row (spawn)
     this.size = { width: 1000, height: 700 };
     this.sideW = kept.sideW ?? null; this.railW = kept.railW ?? null; this.midW = kept.midW ?? null; this.logH = kept.logH ?? 110;
     this.resizing = null;
@@ -258,7 +282,30 @@ export default class GitView extends View {
   focusSelf() { if (!this.closed) this.handle.focus(); }
 
   /** Runs `fn(cx)` on the action queue (git actions run one at a time). */
-  spawn(fn) { this.acts.push(fn); }
+  /** Queues an operation. While it's queued and running, the row it acts on
+   *  (`row`: a rowKey; by default the shown panel's selected row, taken now,
+   *  at the key; null: none, as fetch all) shows a spinner in the row. */
+  spawn(fn, { row } = {}) {
+    const done = this.hold(row === undefined ? this.selectedRow() : row);
+    this.acts.push(async (cx) => { try { await fn(cx); } finally { done(); } });
+  }
+
+  /** The shown panel's selected row, as a rowKey (null for Status). */
+  selectedRow() { const ctx = this.ctxOf(this.panel); return rowKey(ctx, this.item(ctx)); }
+
+  /** Marks a row busy until the returned function is called (counted: two
+   *  operations on one row keep it busy until both are done). */
+  hold(key) {
+    if (!key) return () => {};
+    this.busyRows.set(key, (this.busyRows.get(key) ?? 0) + 1);
+    let held = true;
+    return () => {
+      if (!held) return;
+      held = false;
+      const n = (this.busyRows.get(key) ?? 1) - 1;
+      if (n > 0) this.busyRows.set(key, n); else this.busyRows.delete(key);
+    };
+  }
 
   /** `fn(cx)` shortly after the next frame (focusing a new input). */
   later(fn, ms = 40) { this.reads.push(async (cx) => { cx.timer.after(ms, (cx2) => fn(cx2)); }); }
@@ -327,12 +374,12 @@ export default class GitView extends View {
   }
 
   /** A git action: runs, then reads everything again; a failure opens lazygit's error popup. */
-  exec(title, args, opts = {}) {
+  exec(title, args, { row, ...opts } = {}) {
     this.spawn(async () => {
       const r = await this.git.run(title, args, opts);
       if (!r.ok) this.error(r.err);
       await this.loadAll();
-    });
+    }, { row });
   }
 
   copy(text, cx) {
@@ -1255,7 +1302,8 @@ export default class GitView extends View {
         .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.rowPress(ctx, i, e, cx); })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.rowMenu(ctx, i, cx); })
         .when(isSel || inRange, (el) => el.children(band(t, active && this.focus === "side")))
-        .child(draw(r, i, isSel).relative().size_full());
+        .child(draw(r, i, isSel).relative().size_full())
+        .when(this.busyRows.size > 0 && this.busyRows.has(rowKey(ctx, r)), (el) => el.children(busyMark(t, `${ctx}-busy-${i}`)));
     });
     const bar = n > vis ? div().absolute().right(0).w(2).top(Math.round((top / n) * 100) + "%").h(Math.max(4, Math.round((vis / n) * 100)) + "%").bg(active ? t.accent + "aa" : t.ansi8 + "66") : null;
     return div().id(`${ctx}-list`).relative().size_full().overflow_hidden()
