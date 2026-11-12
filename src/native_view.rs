@@ -27,6 +27,9 @@ thread_local! {
     /// replayed without running closures, so nothing here relies on them).
     static COVERS: RefCell<Vec<herdr_native_view::Cover>> = const { RefCell::new(Vec::new()) };
     static DIM: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// Under a backdrop last frame (a dialog, a window with a scrim): the copies
+    /// drawn in overlays, the only ones whose views may take AppKit's keyboard.
+    static HELD: RefCell<Option<HashSet<u64>>> = const { RefCell::new(None) };
     /// Mod copies whose native view was pressed, for the window to focus their pane.
     static PRESSES: (async_channel::Sender<u64>, async_channel::Receiver<u64>) = async_channel::unbounded();
 }
@@ -176,6 +179,7 @@ pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, in_overlay: HashSet<u
             EVENTS.with(|e| e.borrow_mut().retain(|c, tx| alive.contains(c) && !tx.is_closed()));
             let covers = COVERS.with(|c| std::mem::take(&mut *c.borrow_mut()));
             let dim = DIM.with(|d| d.replace(false));
+            HELD.with(|h| *h.borrow_mut() = dim.then(|| in_overlay.clone()));
             #[cfg(target_os = "macos")]
             if let Some(v) = gpui_ns_view(window) {
                 let is_alive = |k: &str| copy_of(k).is_some_and(|c| alive.contains(&c));
@@ -196,9 +200,19 @@ pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, in_overlay: HashSet<u
     .size_full()
 }
 
-/// `nativeViewCall(id, action, args)` from a mod: only its own views.
+/// `nativeViewCall(id, action, args)` from a mod: only its own views. A page
+/// behind a backdrop doesn't take the keyboard (`focus` does nothing): a web
+/// pane claiming it on a timer would get the keys typed into the window above.
 pub fn call(copy: u64, id: &str, action: &str, args: &Value) -> Result<Value, String> {
+    if !HELD.with(|h| may_take_keyboard(action, copy, h.borrow().as_ref())) {
+        return Ok(Value::Null);
+    }
     call_key(&key(copy, id), action, args)
+}
+
+/// `focus` from a copy outside the overlays while a backdrop is up: refused.
+fn may_take_keyboard(action: &str, copy: u64, held: Option<&HashSet<u64>>) -> bool {
+    action != "focus" || held.is_none_or(|in_overlay| in_overlay.contains(&copy))
 }
 
 /// `herdr-app do native.call {key, action, args}` (the test harness).
@@ -218,4 +232,19 @@ pub fn debug() -> Value {
     return herdr_native_view::macos::debug();
     #[cfg(not(target_os = "macos"))]
     json!({ "interface": herdr_native_view::INTERFACE, "views": {}, "available": false })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::may_take_keyboard;
+    use std::collections::HashSet;
+
+    #[test]
+    fn a_page_behind_a_backdrop_never_takes_the_keyboard() {
+        let in_overlay: HashSet<u64> = [7].into();
+        assert!(may_take_keyboard("focus", 3, None), "no backdrop: any page");
+        assert!(!may_take_keyboard("focus", 3, Some(&in_overlay)), "a pane's page behind a window with a scrim");
+        assert!(may_take_keyboard("focus", 7, Some(&in_overlay)), "a page in the overlay itself");
+        assert!(may_take_keyboard("browser.navigate", 3, Some(&in_overlay)), "only the keyboard is held back");
+    }
 }
