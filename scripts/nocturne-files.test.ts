@@ -64,7 +64,8 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 const logic = await load("nocturne-files/logic.js");
 const keyhelp = await load("nocturne-files/keyhelp.js");
-const { default: Files } = await load("nocturne-files/main.js", { ...logic, ...keyhelp });
+const route = await load("nocturne-files/editor-route.js");
+const { default: Files } = await load("nocturne-files/main.js", { ...logic, ...keyhelp, openInEditor: route.openInEditor, herdr });
 const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
 
 const later: ((cx: any) => void)[] = [];

@@ -470,14 +470,41 @@ the highlighted line shows where it will land.
   (Nocturne's: double click or `e`; `E` and folders: $EDITOR in a terminal beside), the
   Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
-  One file per pane, beside the pane it came from; an editor already on the
-  file there goes to the line instead. The text is the code editor of
+  **File tabs**: an editor pane holds several files, each a tab on the strip
+  along its top (an unsaved mark, the name, the folder that tells two of the
+  same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
+  n › at the ends). Each tab keeps its text, undo, caret, scroll, folds,
+  unsaved changes and Markdown view. Where a file goes: go to definition and
+  references into another file, `:e <file>` and a
+  Markdown preview's link open it as a tab of the same editor; the files pane
+  (its edit) sends it to the editor it sent files to before, else the shown
+  tab's editor; the file picker to the focused editor, else the shown tab's
+  (else, for both, the one that last had the keyboard, the tab's first); with
+  no editor in the shown tab, a new one opens beside the pane as before. A
+  file already open shows its tab (at the line asked for), from any of these
+  and from `editor.open` (a terminal's link). Mods send a file to an editor
+  through shared `nocturne-editor.open` `{ slot, path, line?, col?, view?, n }`
+  (n counting up; `view` a Markdown file's split / preview / text) and focus
+  its pane; each editor notes its files by slot in shared
+  `nocturne-editor.paths` (`editor.open` reads it to find the editor holding a
+  file in any tab) and the last one with the keyboard in `nocturne-editor.last`
+  (see `defaults/mods/nocturne-editor/editor-route.js`). Closing a tab with
+  unsaved changes asks on a line under the bar (s save and close, d discard,
+  esc keep; tab / ← → and enter too); closing the last tab closes the pane;
+  closing the pane asks once, naming every edited tab. Tabs come back after a
+  restart (each read when first shown). Tab keys: vim's gt / gT (a count: that
+  tab), ]b / [b, `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls`
+  (also `:tabn` `:tabp` `:tabc`), space b n / b p / b d / b l; the commands
+  `nocturne-editor.next-tab`, `.prev-tab`, `.close-tab`. `:q` closes the pane
+  with all its tabs and refuses while any has unsaved changes. A language
+  server serves every tab of its project (one per project as before; each
+  tab's document opened and closed with it). The text is the code editor of
   gpui-kit (undo / redo cmd-z / cmd-shift-z, selection, multiple carets, copy /
   paste, folding) colored by tree-sitter in moonfly's roles (a curated set of
   grammars: Rust, TypeScript / TSX / JavaScript, Python, Go, Nix, Lua, Bash,
-  JSON, YAML, TOML, Markdown, CSS, HTML, C, Zig; other text plain). Its bar:
-  unsaved mark (also `●` in the pane header), name, folder, the problems'
-  counts (click: the problems drawer), the language server, language and
+  JSON, YAML, TOML, Markdown, CSS, HTML, C, Zig; other text plain). Its bar
+  (under the tabs): the file's folder, the problems'
+  counts (the shown tab's name and unsaved `●` in the pane header) (click: the problems drawer), the language server, language and
   indent, line:col. Saving writes only over what was read: a file changed
   outside while edited says so (reload theirs / keep mine), a clean one
   reloads by itself, keeping the caret. Closing an edited editor's pane or tab
@@ -485,8 +512,8 @@ the highlighted line shows where it will land.
   `mod:nocturne-editor`, macOS; no function keys): cmd-s save, cmd-f find
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
-  the problems drawer, cmd-k d definition (another file opens in its own
-  editor), cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
+  the problems drawer, cmd-k d definition (another file opens as a tab),
+  cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
   deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
   Markdown preview (below). The app's keys win over the code editor's own
   keymap: a chord keys.json binds in `global` or `layout:nocturne` and not in
@@ -526,10 +553,11 @@ the highlighted line shows where it will land.
   renderer (math, mermaid, colored code, tables, callouts, footnotes, local
   images: see Markdown files). It follows the text's scrolling and the text
   follows it; ticking a task box puts `[x]` into the text (undoable); links go
-  where they point: a heading in it (the text too), another `.md` in the
-  editor beside, pictures and the like in the preview, web pages per `links`.
+  where they point: a heading in it (the text too), another `.md` as a tab,
+  pictures and the like in the preview, web pages per `links`.
   The bar's chip (split / preview / text), cmd-shift-v and space `m p` go
-  split → preview only → text only; the pane keeps its choice. In preview
+  split → preview only → text only; the tab keeps its choice and new Markdown
+  tabs start with the last one picked. In preview
   only: j / k / d / u / gg / G scroll, `e` or esc back to the text.
   Resting the pointer on a word shows the hover card:
   the server's signature and docs, and every problem there with its whole
@@ -601,7 +629,8 @@ the highlighted line shows where it will land.
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
-  `.preview-split`, `.preview-only`, `.preview-text`.
+  `.preview-split`, `.preview-only`, `.preview-text`, `.next-tab`, `.prev-tab`,
+  `.close-tab`.
 - **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
   button toggles the panel down the tab's right edge at the focused pane's
   folder ("+ new" > Files opens a files pane of its own instead, beside the
@@ -1496,7 +1525,8 @@ The main ones:
   `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
   `"system"` the system's browser; default: the `links` setting; the reply says `opened`),
   `editor.open {path, line?, col?, in?, pane?, on?}` (text or source in the editor beside `pane`,
-  default the focused one, or the editor there already on it, going to `line` / `col`, one-based;
+  default the focused one, or the editor there already holding it in one of its tabs (that tab
+  shows), going to `line` / `col`, one-based;
   `in: "system"` the system's app; see Editing files),
   `markdown.open {path, anchor?, in?, pane?, on?}` (a Markdown file rendered in the viewer beside
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a

@@ -32,6 +32,7 @@ export const LEADER = {
   e: ["files-pane", "files pane"],
   w: ["save", "save"],
   q: ["quit", "close"],
+  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"] },
   d: ["problems", "problems"],
   h: ["hover", "hover"],
   c: { name: "code", a: ["code-action", "code action"], f: ["format", "format"] },
@@ -780,6 +781,10 @@ function normalCommand(vim, cmd, b, doc, out) {
       return false;
     }
     case "gd": out.commands.push("definition"); return false;
+    // The pane's file tabs: gt / gT (a count: that tab), ]b / [b.
+    case "gt": out.commands.push(cmd.has ? `tab:${n}` : "next-tab"); return false;
+    case "gT": case "[b": out.commands.push(...Array(n).fill("prev-tab")); return false;
+    case "]b": out.commands.push(...Array(n).fill("next-tab")); return false;
     case "gr": out.commands.push("references"); return false;
     case "K": out.commands.push("hover"); return false;
     case "]d": out.commands.push("next-problem"); return false;
@@ -1051,6 +1056,12 @@ export function runEx(vim, line, doc, out) {
     case "wa": case "wall": out.commands.push("save"); return out;
     case "e": case "edit": out.commands.push(arg ? `edit:${arg}` : bang ? "reload!" : "reload"); return out;
     case "noh": case "nohlsearch": out.commands.push("nohlsearch"); return out;
+    // The pane's file tabs, as buffers: :bn :bp :bd(!) :b N :ls, and :tabn :tabp :tabc.
+    case "bn": case "bnext": case "tabn": case "tabnext": out.commands.push("next-tab"); return out;
+    case "bp": case "bprevious": case "bN": case "bNext": case "tabp": case "tabprevious": case "tabN": out.commands.push("prev-tab"); return out;
+    case "bd": case "bdelete": case "bw": case "bwipeout": case "tabc": case "tabclose": out.commands.push(bang ? "close-tab!" : "close-tab"); return out;
+    case "b": case "buffer": if (!/^\d+$/.test(arg.trim())) { out.message = "E94: :b takes a tab number (:ls lists them)"; return out; } out.commands.push(`tab:${arg.trim()}`); return out;
+    case "ls": case "buffers": case "files": out.commands.push("tabs"); return out;
     case "u": case "undo": out.commands.push("undo"); return out;
     case "red": case "redo": out.commands.push("redo"); return out;
     case "d": case "delete": {

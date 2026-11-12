@@ -94,6 +94,8 @@ test:
     bun test scripts/nocturne-editor-env.test.ts
     # The editor's hover card (its place, every way it closes in each vim mode, a card that waits and fills in), progress words, ranged edits, kept answers: a whole pane with herdr and gpui stand-ins (mocks herdr).
     bun test scripts/nocturne-editor-card.test.ts
+    # The editor's file tabs (own text, undo, caret, unsaved changes; switch, close asking, the last closing the pane, a restart) and where files go as tabs (definition, files pane, picker, Markdown viewer; editor-route.js copies identical), one server listener for every tab, vim's gt / :bn / :bd (mocks herdr).
+    bun test scripts/nocturne-editor-tabs.test.ts
     # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
     bun test scripts/nocturne-editor-follow.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.

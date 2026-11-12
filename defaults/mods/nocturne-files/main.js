@@ -102,6 +102,7 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import * as herdr from "herdr";
+import { openInEditor } from "./editor-route.js";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
@@ -599,7 +600,10 @@ export default class Files extends View {
     const row = this.shown().find((r) => r.path === path);
     if (this.on || !path || row?.dir) return this.terminalEdit(path, cx);
     const beside = this.beside();
-    run("editor.open", { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}) });
+    // As a tab of the editor this pane sent files to, else the shown tab's
+    // editor; with none, a new one beside (editor-route.js).
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null });
+    if (to) this.editorSlot = to.props.slot;
   }
 
   /** Opens a file or folder (relative to the root; "" is the root) in $EDITOR: in this

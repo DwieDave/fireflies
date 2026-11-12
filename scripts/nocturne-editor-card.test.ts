@@ -153,9 +153,9 @@ test("the caret's card (cmd-i) opens at the caret's word: window coordinates, un
   await flush();
   const card = p.cardView(theme, "mono");
   // The word's spot in the editor (270, 180 zoomed: 300, 200), plus the
-  // gutter's inset and the bar above the text.
+  // gutter's inset and the tab strip (26) and the bar (30) above the text.
   expect(card.calls.left[0][0]).toBeCloseTo(300 + 12, 5);
-  expect(card.calls.top[0][0]).toBeCloseTo(200 + 30 + 20 + 2, 5);
+  expect(card.calls.top[0][0]).toBeCloseTo(200 + 26 + 30 + 20 + 2, 5);
   expect(texts(card)).toContain("let x: i32");
 });
 
@@ -168,8 +168,8 @@ test("near the pane's foot the card goes above its word, its bottom just over it
   await flush();
   const card = p.cardView(theme, "mono");
   expect(card.calls.top).toBeUndefined();
-  // 800 px pane: the word's top at 700 + 30 (the bar), the card's bottom 2 px over it.
-  expect(card.calls.bottom[0][0]).toBeCloseTo(800 - (730 - 2), 5);
+  // 800 px pane: the word's top at 700 + 26 + 30 (the tab strip, the bar), the card's bottom 2 px over it.
+  expect(card.calls.bottom[0][0]).toBeCloseTo(800 - (756 - 2), 5);
   expect(card.calls.max_h[0][0]).toBe(400);
 });
 
@@ -182,7 +182,7 @@ test("the pointer's card opens under the word the pointer rests on", async () =>
   expect(requests.at(-1)[1].position).toEqual({ line: 1, character: 8 });
   const card = p.cardView(theme, "mono");
   expect(card.calls.left[0][0]).toBeCloseTo(250 + 12, 5);
-  expect(card.calls.top[0][0]).toBeCloseTo(100 + 30 + 20 + 2, 5);
+  expect(card.calls.top[0][0]).toBeCloseTo(100 + 26 + 30 + 20 + 2, 5);
   // Over an editor without the keyboard (another pane's), it stays while the pointer rests.
   ed.hasKeys = false;
   later = [];
@@ -693,7 +693,7 @@ const LONG = { contents: { kind: "markdown", value: "```rust\npub fn spawn<F, T>
 test("item 8: near the pane's foot, waiting then filled with a long answer: every seen frame is at the settled place", async () => {
   const p = await pane();
   // The word 500 px down an 800 px pane: 250 px below it, 460 above.
-  ed.drawn = { x: 40 + 90, y: 60 + (500 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  ed.drawn = { x: 40 + 90, y: 60 + (500 - 56) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
   const d = deferred();
   answer = () => d.promise;
   p.command("hover", cx());
@@ -715,7 +715,7 @@ test("item 8: near the pane's foot, waiting then filled with a long answer: ever
 test("item 8: a card below its line that fills and grows taller than the room stays below and scrolls: no flip, no frame elsewhere", async () => {
   const p = await pane();
   // The word 100 px down: 680 px below it.
-  ed.drawn = { x: 40 + 90, y: 60 + (100 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  ed.drawn = { x: 40 + 90, y: 60 + (100 - 56) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
   const d = deferred();
   answer = () => d.promise;
   p.command("hover", cx());
@@ -732,7 +732,7 @@ test("item 8: a card below its line that fills and grows taller than the room st
 
 test("item 8: a short answer near the foot opens above at once, as a long one does (the side never waits on a height)", async () => {
   const p = await pane();
-  ed.drawn = { x: 40 + 90, y: 60 + (600 - 30) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
+  ed.drawn = { x: 40 + 90, y: 60 + (600 - 56) * zoomNow, width: 27, height: 18 * zoomNow, view: { x: 40, y: 60, width: 900, height: 700 } };
   answer = () => HOVER;
   p.command("hover", cx());
   await flush();
