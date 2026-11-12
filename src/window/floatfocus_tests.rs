@@ -113,6 +113,37 @@ fn floatfocus_focus_lost(cx: &mut gpui::TestAppContext) {
 }
 
 #[test]
+fn a_scrim_window_takes_the_keyboard_when_it_opens() {
+    in_own_process("floatfocus_takes_keys");
+}
+
+/// A window with a scrim holds the keyboard from the start, even if its mod
+/// doesn't focus itself, and keeps it when another of the same name replaces
+/// it (GitHub's PR diff opening in its place).
+#[gpui::test]
+fn floatfocus_takes_keys(cx: &mut gpui::TestAppContext) {
+    use serde_json::json;
+    if !running_alone("floatfocus_takes_keys") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    crate::mods::set_shared("win.passive".into(), json!(true));
+    let mut spec = scrim_window();
+    spec["key"] = json!("gh");
+    open(&view, "w", spec.clone(), cx);
+    assert!(window_has_keys(&view, "w", cx), "taken at open");
+    assert!(!pane_has_keys(&view, "p1", cx));
+    open(&view, "w2", spec, cx);
+    assert!(cx.update(|_, cx| !view.read(cx).overlays.iter().any(|o| o.id == "w")), "replaced");
+    assert!(window_has_keys(&view, "w2", cx), "the window in its place has it");
+    // Without a scrim (the PiP player): it doesn't take the keyboard on its own.
+    cx.update(|window, cx| view.update(cx, |this, cx| this.close_overlay("w2", window, cx)));
+    settle(cx);
+    open(&view, "pip", json!({ "mod": "win", "kind": "window", "width": 300, "height": 200 }), cx);
+    assert!(!window_has_keys(&view, "pip", cx));
+}
+
+#[test]
 fn a_dialog_or_popup_closed_over_a_window_gives_it_the_keyboard_back() {
     in_own_process("floatfocus_popup_back");
 }

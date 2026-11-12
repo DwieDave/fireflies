@@ -4627,10 +4627,16 @@ impl AppWindow {
         let slot = format!("overlay:{id}");
         // A dialog or popup over a window that has the keyboard gives it back there.
         let back_to = kind.modal_keys().then(|| self.overlays.iter().rev().find(|o| o.kind == OverlayKind::Window && o.focus.contains_focused(window, cx)).map(|o| o.id.clone())).flatten();
-        // The frame takes the keyboard first, so a mod that focuses itself while loading wins.
+        let scrim = window_scrim(kind, &spec);
+        // The frame takes the keyboard first, so a mod that focuses itself while
+        // loading wins. A window with a scrim is modal: it takes it too, and a
+        // web page behind gives up AppKit's.
         let focus = cx.focus_handle();
-        if kind.modal_keys() {
+        if kind.modal_keys() || (kind == OverlayKind::Window && scrim) {
             focus.focus(window, cx);
+        }
+        if kind == OverlayKind::Window && scrim {
+            crate::native_view::release_keyboard(window);
         }
         if layout.is_none() {
             let copy = self.load(Instance { name, props }, window, cx);
@@ -4666,7 +4672,7 @@ impl AppWindow {
             fit,
             modal: spec.get("modal").and_then(Value::as_bool).unwrap_or(false),
             bare: spec.get("frame").and_then(Value::as_str) == Some("none"),
-            scrim: window_scrim(kind, &spec),
+            scrim,
             place,
             opened: OVERLAYS_OPENED.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
             key: key.clone(),
@@ -4684,7 +4690,7 @@ impl AppWindow {
         }
         if has_layout {
             self.sync(window, cx);
-            if kind.modal_keys()
+            if (kind.modal_keys() || (kind == OverlayKind::Window && scrim))
                 && let Some(t) = first_term.and_then(|b| self.terms.get(&b))
             {
                 t.focus.focus(window, cx);
