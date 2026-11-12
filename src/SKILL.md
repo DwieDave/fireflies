@@ -209,7 +209,9 @@ those files or the generated guide. The app rewrites them on start.
   `agent.next`, a pane closing), as a terminal gets the keyboard, and on a click
   into its native view (a web page), so the mod's keys.json section applies.
   `layout.focus {id}` does the same for a layout block by id; `focused().block`
-  names the block holding the keyboard.
+  names the block holding the keyboard. None of this moves the keyboard out of an
+  open dialog, popup or window opened with `scrim: true` (Git, GitHub): those keep
+  it until they close, and a key that finds it behind one is dropped.
 - Shipped mods belong to Herdr: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.

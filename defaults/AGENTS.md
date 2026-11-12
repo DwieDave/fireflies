@@ -1952,6 +1952,14 @@ All of it is in `herdr.d.ts`. In short:
   layout switch closes windows; kept ones come back with their layout.
   `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
   window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
+  Such a window is modal while it shows, like a dialog: it takes the keyboard when it
+  opens and no key reaches a pane or the layout behind it, whatever happens there (a
+  tab switch, an agent finishing, a pane closing, a mod or web page behind focusing
+  itself); cmd-w / cmd-shift-w close it, not the tab or pane behind. When the
+  element holding the keyboard inside it goes away (a row or input no longer drawn),
+  or a dialog or popup over it closes, the keyboard goes back to the window and its
+  mod gets `focus`. A window without a scrim (the PiP player) only takes the keyboard
+  when asked and may give it back to the pane.
   A popup may ask for it too, when it's modal rather than hanging from a button
   (the command palette does in a layout with a `"scrim"`). Dialogs always have
   it: the floating terminal, centered menus, the scripts deck opened by key, the
@@ -1964,7 +1972,10 @@ All of it is in `herdr.d.ts`. In short:
   height at its width now (a player learning its video's real shape).
   By keyboard: `overlay.focus` gives the next window the keyboard and brings it to the
   front (`dir: "prev"` the one before, in the order they opened; past the last, or
-  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). A mod gets
+  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). While a window
+  with a scrim shows there is no pane to go back to: the cycle goes round the windows
+  and `dir: "none"` is refused. A dialog or popup opened over a window gives the
+  keyboard back to that window when it closes. A mod gets
   `focus` from `nextCommand()`: take the keyboard then (`handle.focus()`), and show it.
   `overlay.move {dx, dy}` moves the window holding the keyboard (else the top one) and
   `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag. A video player:
