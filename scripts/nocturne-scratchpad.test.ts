@@ -11,7 +11,7 @@ const HOME = "/Users/dev/.config/herdr-app";
 /** A fake `exec` for `git rev-parse --git-common-dir` by folder: what git prints (relative in a main worktree). */
 const git = (answers: Record<string, string | null>) => async (cmd: string, args: string[], o: any) => {
   expect(cmd).toBe("git");
-  expect(args).toEqual(["rev-parse", "--git-common-dir"]);
+  expect(args).toEqual(["rev-parse", "--path-format=absolute", "--git-common-dir"]);
   const a = answers[o.cwd];
   return a == null ? { code: 128, stdout: "", stderr: "fatal: not a git repository" } : { code: 0, stdout: a + "\n", stderr: "" };
 };
@@ -68,6 +68,13 @@ test("isNote and noteName: what the editor knows from a path", () => {
   expect(isNote(`${HOME}/scratchpad/index.json`, HOME)).toBe(false);
   expect(noteName(p)).toBe("app");
   expect(noteName(`${HOME}/scratchpad/my-repo-0a1b2c3d.md`)).toBe("my-repo");
+});
+
+test("git older than 2.31 (no --path-format): asked again without it", async () => {
+  const asked: string[][] = [];
+  const old = async (_c: string, args: string[]) => { asked.push(args); return args.includes("--path-format=absolute") ? { code: 129, stdout: "", stderr: "error: unknown option `path-format=absolute'" } : { code: 0, stdout: ".git\n", stderr: "" }; };
+  expect(await owner(old as any, "/code/app")).toEqual({ name: "app", dir: "/code/app/.git", repo: true });
+  expect(asked.length).toBe(2);
 });
 
 describe("locate: the note and the index", () => {

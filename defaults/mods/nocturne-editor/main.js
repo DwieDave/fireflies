@@ -1141,6 +1141,9 @@ export default class EditorPane extends View {
     this.editor.set_cursor(line, col);
     // Before the first layout there's nothing to scroll: try again once drawn.
     cx.timer.after(60, () => this.editor.set_cursor(line, col));
+    // The rendered view lights the block holding that line.
+    const d = this.cur;
+    if (d?.markdown && d.view === "rendered" && d.rendered) { d.rendered.open(cx); d.rendered.focus(); return; }
     this.editor.focus();
   }
 
@@ -1487,6 +1490,7 @@ export default class EditorPane extends View {
 
   /** Runs a Markdown command (mdedit.js) on the shown tab's text and selection, as one undoable edit. */
   mdRun(name, cx) {
+    this.mdMenu = null;
     const d = this.cur;
     if (!d?.markdown) return this.say("the Markdown commands are for Markdown files");
     if (d.state !== "ready" && d.state !== "missing") return;
@@ -1567,7 +1571,7 @@ export default class EditorPane extends View {
   renderedView(t) {
     const d = this.cur;
     const empty = d.scratch && !d.editor.value().trim()
-      ? { title: `A page for ${noteName(d.path)}`, detail: "Kept under the app's folder, out of the repository; every worktree of it opens this one.", hint: "type, or cmd-. for the Markdown commands" }
+      ? { title: `A page for ${noteName(d.path)}`, detail: "Kept under the app's folder, out of the repository; every worktree of it opens this one.", hint: `type, or ${this.vimOn() ? "space ." : "cmd-."} for the Markdown commands` }
       : null;
     return d.rendered.view({
       t, focused: d.rendered.focused(), empty, maxWidth: 760, unzoom: (v) => v / zoom(),
@@ -1591,15 +1595,21 @@ export default class EditorPane extends View {
         .child(div().flex_none().pl(12).text_color(t.dim).child(mark));
     };
     const group = (name) => div().text_size(10.5).text_color(t.dim).mt(4).child(name);
-    const top = d.view === "rendered" ? Math.max(BAR + 24, Math.min(this.size.height / zoom() - 260, (d.rendered.litTop ?? 0) + this.textTop() + 34)) : BAR + 30;
+    // Under the lit block (rendered), above it when it doesn't fit there; under the bar in the text views.
+    const MENU_H = 210, paneH = this.size.height / zoom();
+    let top = this.textTop() + 8;
+    if (d.view === "rendered") {
+      const litTop = this.textTop() + (d.rendered.litTop ?? 0), litBottom = litTop + d.rendered.litHeight();
+      top = litBottom + 6 + MENU_H < paneH - HINTS ? litBottom + 6 : Math.max(this.textTop() + 4, litTop - MENU_H - 6);
+    }
     return v_flex().id("editor-md-menu").absolute().right(16).top(top).w(400).bg(t.background).border(1).border_color(t.ansi0).shadow_lg()
       .child(h_flex().relative().h(24).px(12).gap(10).items_center()
-        .child(div().text_color(t.accent).child("cmd-.  markdown"))
+        .child(div().text_color(t.accent).child(this.vimOn() ? "space .  markdown" : "cmd-.  markdown"))
         .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.ansi8, 1)))
         .child(div().text_color(t.dim).child("esc")))
       .child(h_flex().px(12).pb(10).gap(22).items_start()
         .child(v_flex().flex_1().gap(2).child(group("inline")).children(inline.map(row)).child(group("heading")).children(heads.map(row))
-          .child(h_flex().gap(10).child(div().w(18).flex_none().text_color(t.accent).child("0-6")).child(div().text_color(t.foreground).child("text, level 1-6"))))
+          .child(h_flex().gap(10).child(div().w(28).flex_none().text_color(t.accent).child("0-6")).child(div().text_color(t.foreground).child("text, level 1-6"))))
         .child(v_flex().flex_1().gap(2).child(group("blocks")).children(blocks.map(row))));
   }
 

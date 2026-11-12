@@ -136,6 +136,8 @@ test("a Markdown file opens rendered (the pane remembers the view); the block ho
   const words = texts(v);
   expect(words).toContain("First **para**\ngoes on.");
   expect(words).toContain("heading 1");
+  // The lit unit is drawn once: as its source, not rendered as well.
+  expect(words.filter((w) => w.includes("# Notes")).length).toBe(0);
   expect(byId(v, "rendered-lit")).toBeTruthy();
 });
 
@@ -193,6 +195,7 @@ test("cmd-. then a letter runs a Markdown command at the caret (b: bold the word
   expect(block(p).handlers.key(key(".", { platform: true }), cx())).toBe(true);
   expect(p.mdMenu).toBeTruthy();
   expect(texts(p.mdMenuView(theme))).toContain("cmd-.  markdown");
+  expect(byId(p.mdMenuView(theme), "editor-md-menu").calls.top[0][0]).toBeGreaterThan(p.textTop() + (p.cur.rendered.litTop ?? 0));
   block(p).handlers.key(key("b"), cx());
   expect(p.mdMenu).toBeNull();
   expect(main(p).value()).toBe(NOTE.replace("goes on.", "**goes** on."));

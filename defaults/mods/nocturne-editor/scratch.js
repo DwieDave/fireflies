@@ -8,7 +8,8 @@
 // Where a note lives: `<app home>/scratchpad/<name>-<hash>.md`, one per
 // repository. The repository is found by git's common dir (`git rev-parse
 // --git-common-dir`), which every worktree of a repository shares, so each
-// worktree opens the same note. `name` is the repository's folder name,
+// worktree opens the same note (git's resolved path: a symlinked folder and its
+// target are one repository). `name` is the repository's folder name,
 // `hash` a short hash of the common dir (and the machine, for a space on
 // another machine), so two repositories with one name keep two notes. A
 // folder outside any repository gets a note of its own the same way.
@@ -60,8 +61,11 @@ export function repoName(commonDir) {
  *  repository holds it; dir: its common dir, else the folder). `exec` is
  *  herdr's; `on`: the machine of a space on another one. */
 export async function owner(exec, folder, on = null) {
-  let r = null;
-  try { r = await exec("git", ["rev-parse", "--git-common-dir"], { cwd: folder, ...(on ? { on } : {}) }); } catch { /* no git */ }
+  // Absolute and resolved (git 2.31+): a main worktree's ".git" and a linked
+  // worktree's /private/var/… path name one folder only so. Older git: as printed.
+  const ask = (args) => exec("git", ["rev-parse", ...args, "--git-common-dir"], { cwd: folder, ...(on ? { on } : {}) }).catch(() => null);
+  let r = await ask(["--path-format=absolute"]);
+  if (r?.code !== 0 && /path-format/.test(r?.stderr ?? "")) r = await ask([]);
   const out = r?.code === 0 ? r.stdout.trim() : "";
   if (out) {
     const dir = absolute(out, folder);

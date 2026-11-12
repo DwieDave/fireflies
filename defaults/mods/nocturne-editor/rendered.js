@@ -104,6 +104,10 @@ export class Rendered {
     this.block.set_cursor(line, Math.min(at?.col ?? 0, (lines[line] ?? "").length));
     this.blockH = null;
     this.reveal = true;
+    // The lit lines aren't drawn as well.
+    const kind = u;
+    this.recut();
+    if (kind.kind === "blank") this.unit = kind;
   }
 
   /** The block was edited: its lines into the file as one edit. */
