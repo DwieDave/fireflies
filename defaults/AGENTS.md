@@ -1118,7 +1118,10 @@ palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
 it to the shelf; "New web pane in the dock" (the palette, the shelf's last
 "+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
-`nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
+`nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it, or with no
+toast on show Nocturne's update note ("Updated to …", bottom right), which
+`nocturne.update-close` closes too. The note keeps a press on it to itself (a
+terminal under it doesn't start a selection) and its × closes it on the press. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
 While the pointer is over the sky (open or folded) it carries a firefly's
 light: a small dithered diamond in the theme's ansi11 around a pixel + that
@@ -1134,7 +1137,7 @@ and cmd-alt-up from a top pane the tab strip; `nocturne.sidebar`,
 `nocturne.tabstrip` and `nocturne.header` (the focused pane's header controls)
 go straight there and, pressed again, back (macOS: cmd-alt-s, cmd-alt-t,
 cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
-cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
+cmd-alt-shift-n dismisses it, or with none the update note (`nocturne.toast-close`). Floating windows:
 ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
 `"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the

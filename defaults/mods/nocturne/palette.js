@@ -26,6 +26,7 @@ import { togglePicker } from "./picker.js";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
 import { TOASTS, toastKey } from "./toast.js";
+import { updateShown, dismissUpdate } from "./screens.js";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -265,6 +266,11 @@ function openEntries() {
       words: "toast notification act open click newest", go: () => toastKey("toast") });
     out.push({ name: "nocturne.toast-close", args: {}, group: "App", icon: "x", title: "Dismiss the toast",
       words: "toast notification close hide dismiss newest", go: () => toastKey("toast-close") });
+  }
+  // The update note ("Updated to …", bottom right; screens.js), while it shows.
+  if (updateShown()) {
+    out.push({ name: "nocturne.update-close", args: {}, group: "App", icon: "x", title: "Close the update note",
+      words: "update updated version note close hide dismiss what changed", go: () => dismissUpdate() });
   }
   out.push({ name: "nocturne-notifications.open", args: {}, group: "Agent", icon: "layers", title: "Notifications",
     words: "notifications inbox agents waiting needs you permission questions bell overview", go: () => run("nocturne-notifications.open") });

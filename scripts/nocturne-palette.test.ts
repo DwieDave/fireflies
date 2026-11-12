@@ -215,6 +215,8 @@ const COVER_STATES: (() => void)[] = [
   () => { state.shared[GIT_WINDOW] = { id: "o9", beat: Date.now() }; state.shared["nocturne-github.window"] = { id: "o8", beat: Date.now() }; },
   () => { state.shared["nocturne-pip.player"] = { t: 1 }; },
   () => { state.panes.push({ pane: "p3", tab: "c1", focused: false, mod: "nocturne-pip" }); },
+  // The update note ("Updated to …") on show: its close is offered.
+  () => { state.shared["nocturne.update-shown"] = "Updated to 0.1.15"; },
   () => { state.shared["nocturne.toasts"] = [{ overlay: "o3", action: null, at: Date.now() }];
     state.shared["nocturne-scripts.ended"] = { r1: { address: "r1", labels: { "nocturne.script": "test" }, state: "finished", exit_code: 1, finished_ms: 5 } };
     state.updates = { app: { ready: "9.9.9", updates: true }, core: { ready: "1.2.3", managed: null }, checks: true }; },
