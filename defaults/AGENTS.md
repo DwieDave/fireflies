@@ -377,14 +377,34 @@ the highlighted line shows where it will land.
   keyboard (whenever its pane is focused: a click on the bar, `pane.go`, a tab
   switch, agent.next, Cmd-Esc in the page): Enter / `i` into the page, `o` / `/` the address, `H` `L`
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
-  inspector, `O` the system's browser, Tab / Shift-Tab its buttons (Enter
-  presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
+  inspector, `O` the system's browser, `t` a new tab, `x` close the tab, `J` / `K`
+  the tab left / right, `1`–`9` a tab (9 the last), Tab / Shift-Tab its buttons
+  and tabs (Enter presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
   Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
   Cmd-Alt-I the inspector) applies in the bar, the address field, the page
   (after a click into it, or Enter from the bar) and its inspector pane, over
   Nocturne's and the global keys (Cmd-P is not the picker there, Cmd-[ / Cmd-]
   not agents), and only in the focused web pane. Enter in the address goes
   and puts the keyboard into the page; Esc leaves the address the same way.
+  **Web tabs**: one web pane holds several pages, each alive (its video, scroll
+  and forms survive a switch); from two on, a strip over the bar shows them
+  (number, title, ×, and + for a blank one). A middle click or Cmd-click on a
+  link, and the link menu's "Open Link in New Tab", open it in a tab behind
+  (Shift: in front); `target=_blank` and `window.open` open one in front, after
+  the page's earlier links. A click shows a tab, × or a middle click closes it;
+  closing the last leaves a blank tab (the pane stays). The bar, the address,
+  zoom, picture in picture and the inspector act on the shown tab; the tabs come
+  back after a restart (the others load when first shown). Commands
+  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev` (the
+  palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
+  `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
+  `slot` matches (none: the one other commands reach) opens the page in a new
+  tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
+  that file, its folder readable (css, scripts, images beside it) and its scripts on;
+  typed in the address it does the same. A mod finds a web pane and its
+  slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`). Each web pane with a slot
+  publishes its shown tab's title (else its host) in shared `nocturne-browser.titles`
+  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name.
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
@@ -1492,9 +1512,19 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
-  A web view sends `web.location` (its state: `href`, `canGoBack`, …) whenever its address or
-  history changes, also within a page (links in single-page apps, pushState, #fragments), so an
-  address bar can follow it; `load.*` alone misses those.
+  A web view sends `web.location` (its state: `href`, `title`, `canGoBack`, …) whenever its
+  address, history or title changes, also within a page (links in single-page apps, pushState,
+  #fragments), so an address bar can follow it; `load.*` alone misses those.
+  `load.error` carries `message`, `domain`, `code` and `failingUrl` (the address that failed;
+  the view may still show the page before it). Not every one is a failure: NSURLErrorDomain
+  -999 is a load cut short by the next one (a redirect, a click while loading), WebKitErrorDomain
+  102 a download or a cancelled policy; Nocturne's browser shows neither and words the rest
+  ("You're offline.", "a.example doesn't answer."), with retry (`r`) going to `failingUrl`.
+  A web view created with `tabs: true` is for a mod that keeps tabs: what would open a window
+  (`target=_blank`, `window.open`, the link menu's "… in New Window" items, which then read
+  "… in New Tab"), a middle click and a Cmd click on a link are not loaded but sent as
+  `web.newTab { url, background, from }` (`from`: `"window"` in front, `"click"` behind unless
+  Shift is held, `"menu"` behind), for the mod to open. Without it a new window loads in place.
   Picture in picture (no macOS Picture in Picture): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`

@@ -79,6 +79,10 @@ const PANE = {
     ["zoom_in", "Page zoom in", "bigger larger text"],
     ["zoom_out", "Page zoom out", "smaller text"],
     ["zoom_reset", "Page zoom back to normal", "reset size text"],
+    ["tab_new", "New tab", "web browser tab open blank page"],
+    ["tab_close", "Close the tab", "web browser tab shut"],
+    ["tab_next", "Next tab", "web browser tab right switch"],
+    ["tab_prev", "Previous tab", "web browser tab left switch"],
     ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-markdown": ["Markdown", [
@@ -423,6 +427,7 @@ export const OUT = {
   "nocturne-editor.hover-less": "acts on the open hover card (ctrl-- while it's up)",
   "nocturne-browser.focus": "internal: hands the web pane's bar the keyboard",
   "nocturne-browser.web": "hands the keyboard to the page: click it",
+  "nocturne-browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
   "nocturne-agents.focus": "internal: hands the agents graph the keyboard",
   "nocturne-usage.focus": "internal: hands the usage pane the keyboard",
   "nocturne-pip.focus": "internal: hands the player the keyboard",
