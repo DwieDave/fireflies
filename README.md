@@ -13,7 +13,9 @@ It is a fork of [Herdr](https://github.com/herdrdev/herdr-app), the desktop app,
 - **More from panes**: splits left, up or along a tab's edge, font zoom per pane, and floating terminals.
 - **Layout roles for the dialogs**, so a layout can draw the prompt, confirm, palette, peek, toasts, the welcome and the update note in its own look.
 
-Under the name it is still Herdr: the same `herdr-app` command, the same app home (`~/.config/herdr-app`), the same [herdr-core](https://github.com/herdrdev/herdr-core) and the same mod API. Mods written for Herdr run here. [FIREFLIES.md](FIREFLIES.md) lists what the fork changes and how it follows Herdr.
+Under the name it is still Herdr: the same app home (`~/.config/herdr-app`), the same [herdr-core](https://github.com/herdrdev/herdr-core) and the same mod API. Mods written for Herdr run here.
+
+The command is `fireflies`. Herdr's name for it, `herdr-app`, is the same program and keeps working: scripts, agent skills and setups that call it don't change. [FIREFLIES.md](FIREFLIES.md) lists what the fork changes and how it follows Herdr.
 
 ## Install
 
@@ -33,7 +35,7 @@ just test
 just install
 ```
 
-On macOS `just install` builds a release, puts the app in `~/Applications/Herdr.app` and links the command to `~/.local/bin/herdr-app`. Add that folder to your PATH. Quit and reopen the app to use a new build.
+On macOS `just install` builds a release, puts the app in `~/Applications/Herdr.app` and links both commands, `~/.local/bin/fireflies` and `~/.local/bin/herdr-app`, to it. Add that folder to your PATH. Quit and reopen the app to use a new build.
 
 `scripts/install-fork-macos` installs into `/Applications/Herdr.app` instead, the place the official app uses, so Dock pins and settings that point there keep working. It refuses to overwrite an official Herdr: uninstall that first with `brew uninstall --cask herdr-app`, without `--zap` (zap deletes `~/.config/herdr-app`).
 
@@ -81,18 +83,18 @@ Fireflies collects no usage data. Send feedback opens a prefilled GitHub issue o
 ## For agents
 
 ```sh
-herdr-app --skill
+fireflies --skill
 ```
 
 This prints the agent guide for driving the window. The herdr-core skill points agents here. Use herdr-core for running and coordinating programs; use the app to change what you see.
 
 ```sh
-herdr-app ls
-herdr-app status
-herdr-app commands
+fireflies ls
+fireflies status
+fireflies commands
 ```
 
-The first two inspect the open window. The command list also works without one. See the [command reference](docs/commands.md) for arguments.
+The first two inspect the open window. The command list also works without one. See the [command reference](docs/commands.md) for arguments. Every example works with `herdr-app` in place of `fireflies`.
 
 ## Contributing
 

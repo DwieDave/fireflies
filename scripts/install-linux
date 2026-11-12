@@ -1,5 +1,5 @@
 #!/bin/bash
-# Points ~/.local/bin/herdr-app at this checkout's release build and adds the
+# Points ~/.local/bin/herdr-app and ~/.local/bin/fireflies at this checkout's release build and adds the
 # launcher entry with the Herdr icon. Re-run after moving the checkout.
 set -euo pipefail
 
@@ -10,6 +10,8 @@ cargo build --release
 data=${XDG_DATA_HOME:-$HOME/.local/share}
 mkdir -p "$HOME/.local/bin" "$data/applications" "$data/icons/hicolor/scalable/apps"
 ln -sfn "$PWD/target/release/herdr-app" "$HOME/.local/bin/herdr-app"
+# The app's other name, the one its docs lead with; a `fireflies` that isn't a link is someone else's.
+[[ -e "$HOME/.local/bin/fireflies" && ! -L "$HOME/.local/bin/fireflies" ]] || ln -sfn "$PWD/target/release/herdr-app" "$HOME/.local/bin/fireflies"
 cp assets/icons/herdr-ui-icon-clean.svg "$data/icons/hicolor/scalable/apps/herdr-app.svg"
 cat > "$data/applications/herdr-app.desktop" <<EOF
 [Desktop Entry]

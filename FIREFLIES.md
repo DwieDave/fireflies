@@ -1,9 +1,8 @@
 # Fireflies
 
 Fireflies is a fork of [Herdr](https://github.com/herdrdev/herdr-app) (the
-desktop app). Under the name it is still Herdr: same command (`herdr-app`), same
-config folder (`~/.config/herdr-app`), same core, same mod API. On top of Herdr
-it adds:
+desktop app). Under the name it is still Herdr: same config folder
+(`~/.config/herdr-app`), same core, same mod API. On top of Herdr it adds:
 
 - **Native views for mods**: a mod can host a native view in its pane (a
   WKWebView browser, Safari's Web Inspector). `nativeView`, `nativeViewCall`,
@@ -36,8 +35,9 @@ it adds:
 - **Branding**: the name Fireflies in the window and the app's text, and its own
   icon (`assets/icons/fireflies`, the README's `assets/icons/Fireflies.svg`).
   The Nix build names the bundle Fireflies.app; the install scripts here still
-  install `Herdr.app`. The identifiers stay Herdr's (the command, the app home,
-  `HERDR_APP_*`, the mods' `herdr` module, labels): they are shared with
+  install `Herdr.app`. The command is `fireflies`; `herdr-app` is the same
+  program and stays for good. The other identifiers stay Herdr's (the app
+  home, `HERDR_APP_*`, the mods' `herdr` module, labels): they are shared with
   upstream and with installed setups.
 - **Mods beside the binary**: besides the built-in default mods, the app installs
   whole mod folders from `Fireflies.app/Contents/Resources/mods/` (replacing a

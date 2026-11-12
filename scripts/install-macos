@@ -36,5 +36,7 @@ PLIST
 /usr/libexec/PlistBuddy -c "Add :LSEnvironment:PATH string $HOME/.local/bin:/opt/homebrew/bin:$PATH" "$app/Contents/Info.plist"
 codesign --force --sign - "$app"
 ln -sfn "$app/Contents/MacOS/Herdr" "$HOME/.local/bin/herdr-app"
+# The app's other name, the one its docs lead with; a `fireflies` that isn't a link is someone else's.
+[[ -e "$HOME/.local/bin/fireflies" && ! -L "$HOME/.local/bin/fireflies" ]] || ln -sfn "$app/Contents/MacOS/Herdr" "$HOME/.local/bin/fireflies"
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$app"
 echo "Installed $app. Quit and reopen Herdr to use the new build."
