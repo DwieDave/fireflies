@@ -44,6 +44,13 @@ nocturne-browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them).
 
+To show them what runs and what listens (a dev server you started, a stuck
+build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
+manager centered (`nocturne.ports` on its ports, where they can open a port in
+a web pane, copy its address or end its process; its system tab graphs CPU,
+GPU, memory, disk and network). It only shows and asks: ending a process is
+theirs to confirm in it.
+
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
 pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It

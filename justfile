@@ -120,6 +120,14 @@ test:
     bun test scripts/nocturne-usage-limits.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/nocturne-usage-poll.test.ts
+    # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
+    bun test scripts/nocturne-procs.test.ts
+    # Its deck and the strip's tree mark: every key, the cursor across refreshes, ask / TERM / KILL against a fake exec.
+    bun test scripts/nocturne-procs-deck.test.ts
+    # Its system graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
+    bun test scripts/nocturne-procs-sys.test.ts
+    # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
+    bun test scripts/nocturne-usage-limits.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view

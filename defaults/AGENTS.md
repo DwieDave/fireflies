@@ -312,6 +312,32 @@ the highlighted line shows where it will land.
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
+- **Processes and ports** (Nocturne's manager, the `nocturne-procs` mod): the
+  tab strip's tree mark beside ▶, with `:n` in teal when processes in this
+  app's terminals listen on n TCP ports. A click hangs the deck under it (a
+  second closes it); `nocturne.procs` opens it centered or closes it,
+  `nocturne.ports` on its ports tab (no keys by default). This machine only.
+  Three tabs (tab / shift-tab, 1 2 3):
+  processes, a tree of space › tab › terminal › the terminal's process and all
+  it started (terminals without a pane under "no pane"; `a` switches to every
+  process of yours, rooted where the parent isn't yours), each row name,
+  arguments, its listening ports, cpu, memory, uptime and pid, the selected
+  one with its whole command line and its own cpu / memory graphs; ports, the
+  TCP ports your processes listen on (this app's first, with their tab and
+  terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
+  the focused tab's web pane (`nocturne-browser.open`) or a web pane beside the
+  focused one (`app.open_url`), `c` copies that address; system, dithered
+  graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
+  (and its pressure), disk (MB/s, how full) and network (in above the line,
+  out below), read every 2 s while the deck is open and never while it's
+  closed; a source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
+  pane (a group folds), `x` ends the process (`X` with everything under it):
+  it asks in the deck, sends TERM, and two seconds on names what still runs,
+  where `K` sends KILL; `c` copies a process's command line, `/` finds, `r`
+  reads again, `?` lists the keys, `q`/esc close. The app itself, herdr-core,
+  its holders, launchd and other users' processes carry a shield and can't be
+  ended there. It reads `ps` and `lsof` every 2 s while open.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
@@ -1252,7 +1278,7 @@ the open sidebar, its initials on the folded rail), the focused agent in the sky
 in the jar too; its name stands in the moonlit path) and on the rail.
 
 Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
-files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
+the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
 layout without it gets "+ new" in the strip before the bell). The strip's

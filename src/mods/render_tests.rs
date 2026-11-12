@@ -196,6 +196,15 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 {
                     Some(json!({"code":3,"stdout":"","stderr":""}))
                 }
+                // nocturne-procs reads processes, ports and the system graphs' sources: nothing here.
+                "exec"
+                    if first == "sh"
+                        && a.get(1).map(from_host).and_then(|v| {
+                            v.get(1).and_then(Value::as_str).map(|s| s.contains("@@nocturne-procs@@") || s.contains("@@nocturne-sys@@"))
+                        }) == Some(true) =>
+                {
+                    Some(json!({"code":0,"stdout":"","stderr":""}))
+                }
                 "exec"
                     if first == "git"
                         && [

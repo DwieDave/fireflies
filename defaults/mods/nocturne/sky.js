@@ -59,6 +59,7 @@ import { focusFiles } from "./files.js";
 import { togglePicker } from "./picker.js";
 import { toggleGithub, githubForm } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
+import { toggleProcs } from "./procs.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
 import { gridify } from "./gridify.js";
@@ -223,6 +224,8 @@ export default class Sky {
     // on that run's output; nocturne.scripts-again runs the folder's last
     // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
     // that Herdr Core's missing App Management stopped, opens that setting),
+    // nocturne.procs the processes and ports manager (procs.js; nocturne.ports
+    // on its ports tab),
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
@@ -253,6 +256,8 @@ export default class Sky {
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "scripts-grant") grantAppManagement();
+        else if (c === "procs") toggleProcs({ centered: true });
+        else if (c === "ports") toggleProcs({ centered: true, tab: "ports" });
         else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
         else if (c === "pin") pinFocused();

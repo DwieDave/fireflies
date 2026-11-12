@@ -20,6 +20,7 @@ import { isDock } from "./dock.js";
 import { onShelf } from "./pins.js";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";
 import { toggleDeck, lastFailed } from "./scripts.js";
+import { toggleProcs } from "./procs.js";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.js";
@@ -204,6 +205,10 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  out.push({ name: "nocturne", args: { procs: true }, group: "Open", icon: "terminal", bind: "nocturne.procs",
+    title: "Processes and ports…", words: "processes tree kill end stop pid ps top activity monitor ports listening server", go: () => toggleProcs({ centered: true }) });
+  out.push({ name: "nocturne", args: { procs: "ports" }, group: "Open", icon: "terminal", bind: "nocturne.ports",
+    title: "Listening ports…", words: "ports listening localhost server dev open browser copy address kill lsof", go: () => toggleProcs({ centered: true, tab: "ports" }) });
   if (lastFailed()) {
     out.push({ name: "nocturne.scripts-failed", args: {}, group: "Open", icon: "terminal",
       title: "Show the last failed script", words: "scripts runner failed error exit output log", go: () => toggleDeck({ centered: true, focus: "runs", show: lastFailed() }) });
@@ -438,6 +443,8 @@ export const OUT = {
   "nocturne-git.focus": "internal: hands the git window the keyboard",
   "nocturne-scripts.focus": "internal: hands the script runner the keyboard",
   "nocturne-scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
+  "nocturne-procs.focus": "internal: hands the processes and ports manager the keyboard",
+  "nocturne-procs.keys": "the open processes and ports manager's ?: it lists its keys in place",
   "nocturne-git.back": "the git window's esc (closes its popup)",
   "nocturne-git.commit-ok": "the git window's enter in its commit popup",
   "nocturne-git.confirm-yes": "the git window's enter in its confirm popup",

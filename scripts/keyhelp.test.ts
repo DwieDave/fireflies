@@ -62,7 +62,7 @@ test("every nocturne mod's keyhelp.js is the source, byte for byte", () => {
     && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
   expect(users.filter((m) => m !== "nocturne").sort()).toEqual(copies.sort());
   expect(users.sort()).toEqual(["nocturne", "nocturne-agents", "nocturne-browser", "nocturne-editor", "nocturne-files", "nocturne-git", "nocturne-github",
-    "nocturne-markdown", "nocturne-notifications", "nocturne-pip", "nocturne-preview", "nocturne-scripts", "nocturne-usage"]);
+    "nocturne-markdown", "nocturne-notifications", "nocturne-pip", "nocturne-preview", "nocturne-procs", "nocturne-scripts", "nocturne-usage"]);
 });
 
 const kh = await import("../defaults/mods/nocturne/keyhelp.js");
