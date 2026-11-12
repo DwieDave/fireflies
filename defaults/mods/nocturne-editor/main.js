@@ -49,6 +49,24 @@
 // (a heading in it, another .md file in the editor). The bar's chip, cmd-shift-v
 // and space m p go split -> preview -> text; space m s / m v / m t pick one.
 //
+// Rendered (rendered.js, live.js): the fourth Markdown view, the document
+// drawn and typed into. The block the caret is in is its own Markdown in a
+// second code editor (lit: dithered ground, accent rail, its kind at the
+// corner); every keystroke goes into the tab's code editor as one edit of
+// those lines, so save, undo and the unsaved mark are the text view's and
+// untouched lines stay byte for byte. Up / down past a block's edge step into
+// the next; enter continues a list; vim works over the whole text. The view
+// switch goes rendered -> split -> preview -> text (space m r: rendered).
+// The Markdown commands (mdedit.js) in every view but preview only: cmd-.
+// (vim: space .) opens their list, a letter runs one (b i ` k h H l n t x q c
+// r, 0-6); commands md-<name>, md-menu.
+//
+// The scratchpad (scratch.js): a tab on a note under `<app home>/scratchpad/`
+// opens rendered, saves itself 600 ms after the typing and at once on close
+// (never unsaved, never asks), titles itself "Scratchpad · <repo>"; its pane
+// sends other files to an editor beside it (editor-route.js skips it).
+// nocturne.scratchpad opens it.
+//
 // Vim (vim.js): new editors start as settings.json `editor.vim` says (default
 // on); the pane's "vim" chip, `:novim` and cmd-k v switch this pane only, and
 // the pane keeps that choice (its localStorage) over the default. Its leader is space (settings.json
@@ -1395,7 +1413,7 @@ export default class EditorPane extends View {
   // ---- commands (keys.json mod:nocturne-editor)
 
   command(c, cx) {
-    if (c === "focus") return this.focusText();
+    if (c === "focus") return this.view === "rendered" && this.cur?.rendered ? this.cur.rendered.focus() : this.editor.focus();
     if (c === "save") return this.save(cx);
     if (c === "find") return this.openFind(false);
     if (c === "replace") return this.openFind(true);
