@@ -381,9 +381,13 @@ fn run(cmd: &mut Command) -> Result<(), String> {
     }
 }
 
+/// The executable of this folder or bundle. macOS: `Fireflies.app/Contents/
+/// MacOS/Fireflies` from this fork's installers, else Herdr's name (its
+/// release bundles, and fork builds from before the rename).
 fn exe_in(app: &Path) -> PathBuf {
     if cfg!(target_os = "macos") {
-        app.join("Contents/MacOS/Herdr")
+        let fireflies = app.join("Contents/MacOS/Fireflies");
+        if fireflies.is_file() { fireflies } else { app.join("Contents/MacOS/Herdr") }
     } else {
         app.join(format!("herdr-app{}", std::env::consts::EXE_SUFFIX))
     }
@@ -547,7 +551,7 @@ fn relaunch_expected(expected: Option<&str>) -> bool {
     let Some(root) = root() else { return false };
     // LaunchServices need not preserve the startup guard or an isolated home.
     let open = if cfg!(target_os = "macos") {
-        if expected.is_some() { "exec \"$1/Contents/MacOS/Herdr\"" } else { "open \"$1\"" }
+        if expected.is_some() { "exec \"$2\"" } else { "open \"$1\"" }
     } else {
         "exec \"$1/herdr-app\""
     };
@@ -563,6 +567,7 @@ fn relaunch_expected(expected: Option<&str>) -> bool {
             .arg(script)
             .arg(std::process::id().to_string())
             .arg(&root)
+            .arg(exe_in(&root))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -777,6 +782,22 @@ mod tests {
             assert!(path.status.success());
             assert!(String::from_utf8_lossy(&path.stdout).contains("/opt/homebrew/bin"));
         }
+        std::fs::remove_dir_all(work).unwrap();
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn the_executable_is_firefly_named_in_a_fireflies_bundle_and_herdr_named_otherwise() {
+        let work = std::env::temp_dir().join(format!("herdr-exe-in-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&work);
+        let herdr = work.join("Herdr.app");
+        std::fs::create_dir_all(herdr.join("Contents/MacOS")).unwrap();
+        std::fs::write(herdr.join("Contents/MacOS/Herdr"), "").unwrap();
+        assert_eq!(exe_in(&herdr), herdr.join("Contents/MacOS/Herdr"));
+        let fireflies = work.join("Fireflies.app");
+        std::fs::create_dir_all(fireflies.join("Contents/MacOS")).unwrap();
+        std::fs::write(fireflies.join("Contents/MacOS/Fireflies"), "").unwrap();
+        assert_eq!(exe_in(&fireflies), fireflies.join("Contents/MacOS/Fireflies"));
         std::fs::remove_dir_all(work).unwrap();
     }
 

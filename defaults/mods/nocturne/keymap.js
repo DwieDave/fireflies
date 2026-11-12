@@ -117,9 +117,11 @@ const WORDS = {
   "nocturne.grep": "Search in the files",
   "nocturne.scratchpad": "Scratchpad: this repository's note, kept out of it",
   "nocturne.gridify": "Arrange the tab's panes in an even grid",
-  "nocturne.pin": "Pin the focused agent to the top, or unpin it",
-  "nocturne.pin-up": "Move the pinned agent up in the jar",
-  "nocturne.pin-down": "Move the pinned agent down in the jar",
+  "nocturne.pin": "Pin the focused pane (an agent, a web page, an editor...) to the top, or unpin it",
+  "nocturne.pin-up": "Move the pinned agent up in the jar, a pinned pane left on its shelf",
+  "nocturne.pin-down": "Move the pinned agent down in the jar, a pinned pane right on its shelf",
+  "nocturne.dock": "Move the focused pane to the dock (a space tied to no folder) and pin it to the shelf",
+  "nocturne.dock-web": "New web pane in the dock, pinned to the shelf",
   "nocturne-notifications.open": "Notifications: what your agents ask, answered from one place",
   // The editor (mod:nocturne-editor).
   "nocturne-editor.save": "Save",
@@ -135,14 +137,22 @@ const WORDS = {
   "nocturne-editor.hover-less": "Hover: say less",
   "nocturne-editor.reload": "Read the file again from disk",
   "nocturne-editor.vim": "Vim keys on or off",
+  "nocturne-editor.wrap": "Word wrap on or off",
   "nocturne-editor.keys": "The editor's keys",
   "nocturne-editor.preview": "Markdown preview on or off",
+  "nocturne-editor.next-tab": "Next file tab",
+  "nocturne-editor.prev-tab": "Previous file tab",
+  "nocturne-editor.close-tab": "Close the file tab",
   // The web pane (mod:nocturne-browser).
   "nocturne-browser.url": "The address bar",
   "nocturne-browser.reload": "Reload the page",
   "nocturne-browser.back": "Back a page",
   "nocturne-browser.forward": "Forward a page",
   "nocturne-browser.inspect": "The web inspector",
+  "nocturne-browser.tab_new": "New web tab",
+  "nocturne-browser.tab_close": "Close the web tab",
+  "nocturne-browser.tab_next": "Next web tab",
+  "nocturne-browser.tab_prev": "Previous web tab",
 };
 
 // A group's rows in this order (keys() comes sorted by key): the blocks first in

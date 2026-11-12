@@ -29,7 +29,7 @@ mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () =
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} release() { return true; } set_auto_grow() {} }
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el, v_virtual_list: () => el, TextView: { markdown: () => el },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) }, ScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
   InputState: { new: () => new Input() }, Input: { new: () => el }, TextareaState: { new: () => new Input() }, Textarea: { new: () => el },
 }));
 globalThis.window = { paint_path: () => el } as any;

@@ -298,6 +298,7 @@ test("the document view: source lines to heights and back, anchors, and measurin
 test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
   const extra = {
     ...(await load("nocturne-editor/logic.js")), ...(await load("nocturne-editor/vim.js")), ...md, ...(await load("nocturne-editor/paths.js")),
+    ...(await load("nocturne-editor/tabs.js", await load("nocturne-editor/logic.js"))), ...(await load("nocturne-editor/editor-route.js")),
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
   };
@@ -312,6 +313,9 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   });
   view.preview.setText(text);
   view.changed = () => {};
+  // Other files open as tabs of this editor (its tabs: nocturne-editor-tabs.test.ts).
+  const tabs: string[] = [];
+  view.openFile = (path: string) => tabs.push(path);
   const cx = { notify() {}, timer: { after: (_ms: number, f: any) => f(cx) } };
 
   view.tick(2, cx);
@@ -328,9 +332,8 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   view.previewLink("../src/main.rs", cx);
   view.previewLink("shot.png", cx);
   view.previewLink("https://example.org", cx);
+  expect(tabs).toEqual(["/repo/docs/other.md", "/repo/src/main.rs"]);
   expect(commands).toEqual([
-    ["editor.open", { path: "/repo/docs/other.md", pane: "pe" }],
-    ["editor.open", { path: "/repo/src/main.rs", pane: "pe" }],
     ["preview.open", { path: "/repo/docs/shot.png", pane: "pe" }],
     ["app.open_url", { url: "https://example.org" }],
   ]);

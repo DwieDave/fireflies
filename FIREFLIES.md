@@ -1,9 +1,8 @@
 # Fireflies
 
 Fireflies is a fork of [Herdr](https://github.com/herdrdev/herdr-app) (the
-desktop app). Under the name it is still Herdr: same command (`herdr-app`), same
-config folder (`~/.config/herdr-app`), same core, same mod API. On top of Herdr
-it adds:
+desktop app). Under the name it is still Herdr: same config folder
+(`~/.config/herdr-app`), same core, same mod API. On top of Herdr it adds:
 
 - **Native views for mods**: a mod can host a native view in its pane (a
   WKWebView browser, Safari's Web Inspector). `nativeView`, `nativeViewCall`,
@@ -35,9 +34,10 @@ it adds:
   Herdr's `main` and its other layouts are still there (cmd-shift-l).
 - **Branding**: the name Fireflies in the window and the app's text, and its own
   icon (`assets/icons/fireflies`, the README's `assets/icons/Fireflies.svg`).
-  The Nix build names the bundle Fireflies.app; the install scripts here still
-  install `Herdr.app`. The identifiers stay Herdr's (the command, the app home,
-  `HERDR_APP_*`, the mods' `herdr` module, labels): they are shared with
+  The bundle is Fireflies.app (`just install`, `scripts/install-fork-macos`
+  and the Nix build); its bundle id stays `dev.herdr.app`. The command is `fireflies`; `herdr-app` is the same
+  program and stays for good. The other identifiers stay Herdr's (the app
+  home, `HERDR_APP_*`, the mods' `herdr` module, labels): they are shared with
   upstream and with installed setups.
 - **Mods beside the binary**: besides the built-in default mods, the app installs
   whole mod folders from `Fireflies.app/Contents/Resources/mods/` (replacing a
@@ -60,8 +60,8 @@ merges stay small.
 
 ## Build
 
-`scripts/install-fork-macos` builds and installs it as `/Applications/Herdr.app`
-(Rust 1.95, Zig 0.16); `just install` puts it in `~/Applications/Herdr.app`.
+`scripts/install-fork-macos` builds and installs it as `/Applications/Fireflies.app`
+(Rust 1.95, Zig 0.16); `just install` puts it in `~/Applications/Fireflies.app`.
 With Nix, build it from source with crane, as `modules/herdr-app.nix` in
 [dwiedave/config](https://github.com/dwiedave/config) does.
 

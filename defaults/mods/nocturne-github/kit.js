@@ -85,9 +85,10 @@ export function eyebrow(t, text) {
 export function panel(t, id, title, active, body, { right } = {}) {
   const edge = active ? t.accent : t.ansi0;
   return v_flex().id(id).relative().min_h(0).min_w(0).border(1).border_color(edge)
-    .child(h_flex().relative().h(20).flex_none().px(8).gap(8).items_center().text_size(11)
+    // A long title ends in an ellipsis inside its own panel; the right label (short) keeps its room.
+    .child(h_flex().relative().h(20).flex_none().min_w(0).px(8).gap(8).items_center().text_size(11).overflow_hidden()
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge, 1)))
-      .child(div().relative().text_color(active ? t.foreground : t.muted).child(title))
+      .child(div().relative().flex_shrink(1).min_w(0).truncate().text_color(active ? t.foreground : t.muted).child(title))
       .child(div().flex_1())
       .when(Boolean(right), (el) => el.child(div().relative().flex_none().text_color(t.dim).child(right))))
     .child(div().relative().flex_1().min_h(0).child(body));

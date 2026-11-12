@@ -325,11 +325,12 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
 export function editorKeys(vim) {
   const app = [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-alt-f", "replace"], ["cmd-l ctrl-g", "go to line"], ["cmd-k n / p", "next / prev problem"],
     ["cmd-k m", "problems"], ["cmd-k d", "definition"], ["cmd-i", "hover"], ["ctrl-= ctrl--", "hover more / less"], ["cmd-r", "reload"],
-    ["cmd-k v", "vim on / off"], ["cmd-shift-v", "Markdown preview"], ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
+    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown preview"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k w", "close tab"],
+    ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (!vim) return [...app, ["cmd-k ?", "keys"]];
   return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],
-    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
-    ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space d", "problems"], ["space m p", "Markdown preview"],
+    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gt gT :bn :bp", "next / prev tab"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
+    ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space b", "tabs"], ["space d", "problems"], ["space m p", "Markdown preview"], ["space u w", "word wrap"],
     ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
 }
 

@@ -72,7 +72,7 @@ export function toggleUsage() {
 /** Picks provider `id` and asks it for its usage if its answer is old. */
 function pick(id, cx) {
   pickProvider(id);
-  cx.spawn(async () => { await refreshUsage(false, id); });
+  cx.spawn(async () => { await refreshUsage("open", id); });
 }
 
 export class UsageSection {
@@ -204,6 +204,9 @@ export class UsageSection {
       .when(Boolean(s), (el) => el.child(this.row(t, "usage-5h", this.hourglass(t, s), windowName(s, "5h"), s,
         s.resets ? (left(s) === 0 ? `turned at ${clock(s.resets)}` : `fresh in ${span(s.resets - now)}`) : null, nav)))
       .when(Boolean(wk), (el) => el.child(this.row(t, "usage-wk", this.moon(t, wk, 20), windowName(wk, "week"), wk,
-        wk.resets ? `full ${DAYS[new Date(wk.resets).getDay()]} ${clock(wk.resets)} · in ${span(wk.resets - now)}` : null, nav)));
+        wk.resets ? `full ${DAYS[new Date(wk.resets).getDay()]} ${clock(wk.resets)} · in ${span(wk.resets - now)}` : null, nav)))
+      // Backing off (limits.js): the numbers stay, with their age.
+      .when((note?.until ?? 0) > now, (el) => el.child(div().id("usage-stale").px(16).pt(2).text_size(10).text_color(t.dim)
+        .child(`${note.state === "busy" ? "rate limited" : "couldn't read"} · from ${span(now - d.at)} ago`)));
   }
 }

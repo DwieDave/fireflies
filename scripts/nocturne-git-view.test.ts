@@ -2,7 +2,7 @@
 // gpui are stand-ins, but exec runs the real git, so reading, the panels,
 // keys and actions run through the window's code down to git.
 import { test, expect, mock, beforeAll, afterAll } from "bun:test";
-import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync } from "node:fs";
+import { mkdtempSync, writeFileSync, rmSync, mkdirSync, realpathSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -19,11 +19,12 @@ function sh(cmd: string, cwd = repo) {
 // ---- stand-ins
 
 let sharedState: Record<string, unknown> = {};
+let zoomNow = 1;
 let propsNow: any = null;
 let spacesNow: any[] = [], panesNow: any[] = [], agentsNow: any[] = [], homeNow = "/home/u";
 const commands: [string, any][] = [];
 mock.module("herdr", () => ({
-  settings: () => ({ zoom: 1, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
+  settings: () => ({ zoom: zoomNow, font_family: "Mono" }), window: () => ({ platform: "linux" }), theme: () => theme,
   shared: (k: string) => sharedState[k] ?? null,
   setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   props: () => propsNow,
@@ -339,10 +340,10 @@ test("opened from GitHub ({pr, back}): q and esc put the GitHub window back", as
   expect(reopened?.mod).toBe("nocturne-github");
 });
 
-test("a log cut at its limit: the rows that fit follow the row height, the open lanes run to the bottom", async () => {
-  // 310 commits with a side branch open across the cut: more than the branch
-  // log (200) and the Commits panel (300) read.
+/** 310 commits with a side branch open across the cut (made once). */
+function longRepo() {
   const long = join(dir, "long");
+  if (existsSync(long)) return long;
   mkdirSync(long);
   let stream = "";
   for (let i = 1; i <= 310; i++) {
@@ -351,6 +352,13 @@ test("a log cut at its limit: the rows that fit follow the row height, the open 
   }
   writeFileSync(join(dir, "long.fi"), stream);
   sh("git init -q -b main && git fast-import --quiet < ../long.fi && git checkout -q main", long);
+  return long;
+}
+
+test("a log cut at its limit: the rows that fit follow the row height, the open lanes run to the bottom", async () => {
+  // 310 commits with a side branch open across the cut: more than the branch
+  // log (200) and the Commits panel (300) read.
+  const long = longRepo();
   sharedState = {};
   const v = new GitView();
   v.init({ folder: long }, cx);
@@ -385,6 +393,143 @@ test("a log cut at its limit: the rows that fit follow the row height, the open 
   expect(v.vis.commits).toBe(Math.floor(360 / 32));
   v.mode = "normal"; v.render();
   expect(v.vis.commits).toBe(Math.floor(360 / 18));
+});
+
+// The end of every view is reachable with its last row whole, at Developer's
+// zoom (0.9) and at 1: a list's height arrives in window px (on_size_change),
+// is unzoomed to layout units, and fits whole rows of the list's row height.
+for (const zoom of [0.9, 1]) {
+  test(`zoom ${zoom}: at the end of every list the last row ends inside the list`, async () => {
+    zoomNow = zoom;
+    try {
+      const { rowWindow } = await import("../defaults/mods/nocturne-git/main.js");
+      const { unzoom } = await import("../defaults/mods/nocturne-git/draw.js");
+      // Each row height the window draws: side lists, wide commits, diffs, the branch log.
+      for (const rowH of [18, 32, 16]) {
+        for (const raw of [137, 300, 745, 735.5, 1203.3]) { // measured window px
+          for (const n of [1, 5, 57, 61, 400]) {
+            const { top, vis } = rowWindow(n, 1e9, unzoom(raw), rowH);
+            expect(top).toBe(Math.max(0, n - vis)); // G / bottom / the wheel stop here
+            const lastBottom = (n - top) * rowH * zoom; // where the last row ends, in window px
+            expect(lastBottom).toBeLessThanOrEqual(raw + 0.01);
+            if (n > vis) expect(lastBottom + rowH * zoom).toBeGreaterThan(raw); // and no whole row's gap is left
+          }
+        }
+      }
+    } finally { zoomNow = 1; }
+  });
+}
+
+test("a history cut at its limit reads further when its end comes into view: the Commits panel, a branch's commits, the branch log", async () => {
+  const long = longRepo();
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: long }, cx);
+  await settle(v);
+  v.listPx = { commits: 360 }; v.mainPx = { main: 320 };
+  v.setPanel("commits"); await settle(v); v.render(); await settle(v);
+  expect(v.data.commits.length).toBe(300); // the top in view: nothing more read
+  // To the end (end, >): the panel reads on, down to the root; the selection stays.
+  await press(v, "end");
+  expect(v.sel.commits).toBe(299);
+  v.render(); await settle(v); v.render();
+  expect(v.data.commits.length).toBe(310);
+  expect(v.cut("commits")).toBe(false);
+  expect(v.items("commits").at(-1).subject).toBe("c1");
+  expect(v.graph.rows[309].after.every((c: any) => c == null)).toBe(true); // the lanes end at the root
+  v.render(); await settle(v);
+  expect(v.data.commits.length).toBe(310); // read once: the whole history is in
+
+  // The branch log in the main view (200 at a time): scrolled to its end, it reads on.
+  v.setPanel("branches"); await settle(v); v.render();
+  expect(v.main.title).toBe("Log · main");
+  expect(v.main.more).toBe("main");
+  const before = v.main.rows.length;
+  v.focusMain();
+  for (let i = 0; i < 400 && v.mainTop + v.mainVis < v.main.rows.length - 1; i++) { v.scrollMain(1); v.render(); }
+  const top = v.mainTop;
+  await settle(v); v.render(); await settle(v);
+  expect(v.main.rows.length).toBeGreaterThan(before);
+  expect(v.main.more).toBe(null); // all 310 read
+  expect(v.main.rows.some((r: any) => r.parts?.[0]?.[0] === "    c1")).toBe(true);
+  expect(v.mainTop).toBe(top); // what was in view stays in view
+  // To the very end: the root's last row is in view.
+  for (let i = 0; i < 400; i++) { v.scrollMain(1); v.render(); }
+  expect(v.mainTop + v.mainVis).toBeGreaterThanOrEqual(v.main.rows.length);
+
+  // enter on the branch: its commits (300), to the end, read on.
+  v.focus = "side"; v.setPanel("branches"); await settle(v);
+  v.listPx.subCommits = 360;
+  await press(v, "enter");
+  expect(v.items("subCommits").length).toBe(300);
+  await press(v, "end");
+  v.render(); await settle(v); v.render();
+  expect(v.items("subCommits").length).toBe(310);
+  expect(v.cut("subCommits")).toBe(false);
+
+  // A filtered list's end isn't the history's: no read.
+  const v2 = new GitView();
+  sharedState = {};
+  v2.init({ folder: long }, cx);
+  await settle(v2);
+  v2.listPx = { commits: 360 };
+  v2.setPanel("commits"); v2.filters.commits = "c30"; v2.render(); await settle(v2);
+  expect(v2.data.commits.length).toBe(300);
+});
+
+test("an operation's row spins from the key to its end: push marks the pushed branch, a failure and a throw release it too", async () => {
+  const { rowKey } = await import("../defaults/mods/nocturne-git/main.js");
+  // A clone: main tracks origin/main on a bare remote.
+  const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
+  sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);
+  sh("git commit -q --allow-empty -m 'to push'", work);
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: work }, cx);
+  await settle(v);
+  v.setPanel("commits"); await settle(v); v.render(); // another row is selected: the mark follows the branch, not the selection
+  expect(v.selectedRow()).toMatch(/^commit:/);
+
+  v.run("push", cx);
+  expect([...v.busyRows.keys()]).toEqual(["branch:main"]); // at once, before git runs
+  v.setPanel("branches"); v.render(); // the row draws its mark (busyMark) without throwing
+  expect(v.busyRows.has(rowKey("branches", v.items("branches").find((b: any) => b.name === "main")))).toBe(true);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0); // done
+  expect(sh("git log -1 --format=%s main", remote).trim()).toBe("to push");
+
+  // A push that fails (the remote is gone): marked while it runs, released after, the error shown.
+  sh(`git commit -q --allow-empty -m 'second' && git remote set-url origin ${join(dir, "nowhere.git")}`, work);
+  await v.reloadNow(); await settle(v);
+  v.run("push", cx);
+  expect(v.busyRows.get("branch:main")).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  expect(v.popups.kind).toBe("confirm"); // the error popup
+  v.popups.close();
+
+  // A row action (the selected commit's revert, refused here) and an operation that throws.
+  v.setPanel("commits"); await settle(v);
+  const row = v.selectedRow();
+  v.exec("Revert", ["revert", "--no-edit", "no-such-commit"]);
+  expect(v.busyRows.get(row)).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.popups.close();
+  v.spawn(async () => { throw new Error("boom"); });
+  expect(v.busyRows.get(row)).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.popups.close();
+
+  // Two operations on one row: busy until both end. Fetch all marks no row.
+  v.spawn(async () => {}); v.spawn(async () => {});
+  expect(v.busyRows.get(row)).toBe(2);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.run("fetch", cx);
+  expect(v.busyRows.size).toBe(0);
+  await settle(v); v.popups.close();
 });
 
 test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as a space; space goes to its space; d removes it", async () => {

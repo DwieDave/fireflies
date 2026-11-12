@@ -41,7 +41,7 @@ mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () 
 (globalThis as any).window = { paint_path: el };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const { default: Overview } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const { default: Overview, EMPTY_H } = await import("../defaults/mods/nocturne-notifications/overview.js");
 const notif = await import("../defaults/mods/nocturne-notifications/open.js");
 const { ITEMS } = await import("../defaults/mods/nocturne-notifications/engine.js");
 
@@ -95,9 +95,9 @@ for (const [name, items] of [["with a request", [permission]], ["empty", []]] as
     const frames = [frame(v), frame(v), frame(v)];
     const settled = frames.at(-1)!;
     expect(settled.seen).toBe(true);
-    // With a request: the popup's most, all the room it has. Empty: as tall as its note.
+    // With a request: the popup's most, all the room it has. Empty: EMPTY_H, more than its note.
     if (items.length) expect(settled.height).toBe(580);
-    else expect(settled.height).toBeLessThan(580);
+    else expect(settled.height).toBe(EMPTY_H);
     expect(frames[1]).toEqual(settled);
     const seen = frames.filter((f) => f.seen);
     expect(seen[0]).toEqual(settled);
@@ -174,10 +174,53 @@ for (const [how, press] of [["by a key: centered", null], ["by a click on the be
       const settled = frames.at(-1)!;
       expect(frames.filter((f) => f.seen)[0]).toEqual(settled);
       if (items.length) expect(settled.height).toBe(spec.props.most);
-      else expect(settled.height).toBeLessThan(spec.props.most);
+      else expect(settled.height).toBe(EMPTY_H);
       // The taller size, both ways: under the bell, the room below the strip; centered, 85% of the window.
       expect(spec.props.most).toBe(Math.min(notif.OVERVIEW_H, press ? notif.OVERVIEW_H : Math.floor(1000 * 0.85 / 0.9)));
       expect(spec.props.most).toBeGreaterThan(580);
     });
   }
 }
+
+// ---- empty: a center, not a sliver around its note
+
+test("the empty overview is EMPTY_H tall (a center's height, not its note's), never more than its room", () => {
+  sharedState[ITEMS] = [];
+  const settle = (most: number, keys = false) => {
+    propsNow = { overlay: "o1", most };
+    const v: any = new Overview();
+    v.init({}, cx);
+    v.keysShown = keys;
+    frame(v); frame(v);
+    return frame(v);
+  };
+  // The note and the list would make it about 250 (what it was): EMPTY_H now, seen from its first frame.
+  expect(EMPTY_H).toBeGreaterThanOrEqual(500);
+  expect(settle(900).height).toBe(EMPTY_H);
+  expect(settle(900).seen).toBe(true);
+  // A small window's room is the most.
+  expect(settle(300).height).toBe(300);
+  // Its ? keys still make it taller when they need more.
+  expect(settle(900, true).height).toBeGreaterThanOrEqual(EMPTY_H);
+});
+
+// ---- answering: the driver waits for the dialog, not for any change on a busy screen
+
+test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
+  const { settled } = await import("../defaults/mods/nocturne-notifications/drive.js");
+  const { dialog } = await import("../defaults/mods/nocturne-notifications/claude.js");
+  const rule = "─".repeat(80);
+  const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
+  const before = dlg("Yes", "Esc to cancel · Tab to amend");
+  const after = dlg("Yes, and tell Claude what to do next", "Esc to cancel");
+  // Three reads where only the status line ticks, then the note line drawn.
+  const reads = [`${before}\n◐ 1`, `${before}\n◐ 2`, `${before}\n◐ 3`, `${after}\n◐ 4`, `${after}\n◐ 5`];
+  let i = 0;
+  const read = async () => reads[Math.min(i++, reads.length - 1)];
+  const sleepy = { sleep: async () => {} };
+  const got = await settled(sleepy, "t1", `${before}\n◐ 0`, dialog, read);
+  expect(got).toContain("tell Claude what to do next");
+  // Compared whole (no dialog view), the first tick would have counted.
+  i = 0;
+  expect(await settled(sleepy, "t1", `${before}\n◐ 0`, undefined, read)).toBe(`${before}\n◐ 2`);
+});

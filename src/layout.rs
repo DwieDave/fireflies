@@ -625,6 +625,10 @@ impl Node {
         self.children_mut()?.iter_mut().find_map(|c| c.find_mut(id))
     }
 
+    pub fn find_float(&self, id: &str) -> Option<&Float> {
+        self.floating.iter().find(|f| f.id == id).or_else(|| self.children().iter().find_map(|c| c.find_float(id)))
+    }
+
     pub fn find_float_mut(&mut self, id: &str) -> Option<&mut Float> {
         if let Some(i) = self.floating.iter().position(|f| f.id == id) {
             return self.floating.get_mut(i);

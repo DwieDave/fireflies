@@ -4,7 +4,7 @@
 // j / k inside one; J / K scroll the PR from anywhere.
 
 import { div, svg } from "gpui-kit";
-import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, TextareaState, Textarea } from "gpui-base";
+import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import { ghJson, ghRun, api, graphql } from "./gh.js";
 import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn } from "./model.js";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
@@ -39,6 +39,8 @@ export default class Prs {
     this.contentH = 0;
     this.viewH = 400;
     this.listScroll = VirtualListScrollHandle.new();
+    this.checksScroll = ScrollHandle.new(); // the checks list follows its cursor
+    this.checksAt = null; // `${pr}:${index}` the checks list last scrolled to
     this.composer = null; // TextareaState while writing a comment
     this.error = "";
     this.sizes = { ...(kept.sizes ?? {}) }; // dragged splitters: left (width), top (height, narrow), checks (height)
@@ -354,6 +356,9 @@ export default class Prs {
     const checks = this.checks(), active = this.focus === "checks";
     if (!checks.length) return null;
     this.checkSel = Math.min(this.checkSel, checks.length - 1);
+    // The cursor stays in view as j / k walk past the panel's edge.
+    const at = `${this.sel}:${this.checkSel}`;
+    if (at !== this.checksAt) { this.checksAt = at; this.checksScroll.scroll_to_item(this.checkSel); }
     const passed = checks.filter((c) => c.tone === "done").length;
     const rows = checks.map((c, i) => {
       const sel = active && i === this.checkSel;
@@ -369,7 +374,7 @@ export default class Prs {
     });
     const h = this.checksH ?? Math.min(checks.length, 8) * CHECK_ROW + 26;
     return panel(t, "pr-checks", "Checks", active,
-      div().id("checks-body").size_full().overflow_y_scroll().pt(2).children(rows),
+      div().id("checks-body").size_full().overflow_y_scroll().track_scroll(this.checksScroll).pt(2).children(rows),
       { right: `${passed}/${checks.length} passed` }).h(h).flex_none();
   }
 
