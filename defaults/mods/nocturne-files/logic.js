@@ -89,7 +89,7 @@ export function nvimLaunch(abs, dir) {
  *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
  *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
  *  split is open (its entry hides it). */
-export function menuItems(row, { pane = false, clip = false, look = false } = {}) {
+export function menuItems(row, { pane = false, clip = false, look = false, web = true } = {}) {
   const root = row.dir && !row.path;
   const items = row.dir
     ? [
@@ -101,6 +101,7 @@ export function menuItems(row, { pane = false, clip = false, look = false } = {}
       ]
     : [
         { key: "enter", label: "Open", act: "open" },
+        ...(web && isHtml(row.path) ? [{ key: "w", label: "Open in a web pane", act: "web" }] : []),
         { key: "e", label: "Edit as text", act: "other" },
         { key: "E", label: "Open in $EDITOR", act: "terminal" },
         { key: "v", label: "Open in Neovim", act: "nvim" },
@@ -114,6 +115,24 @@ export function menuItems(row, { pane = false, clip = false, look = false } = {}
   items.push({ key: "space", label: look ? "Hide the preview" : "Show the preview", act: "look" });
   if (pane) items.push({ key: "q", label: "Close this pane", act: "close" });
   return items;
+}
+
+// ---- a page in the web pane
+
+/** An HTML page: w (and the menu's "Open in a web pane") shows it in nocturne-browser. */
+export const isHtml = (path) => /\.html?$/i.test(String(path ?? ""));
+
+/** A local file's file:// URL, each part of its path percent-encoded. */
+export const fileUrl = (abs) => `file://${String(abs).split("/").map(encodeURIComponent).join("/")}`;
+
+/** Where `w` sends a page: the shown tab's web pane (a new front tab in it,
+ *  nocturne-browser.open), else a new web pane split beside `from` (the files
+ *  pane; with none, the focused one). `browsers`: nocturne-browser panes in
+ *  the shown tab; `slot`: a new pane's. A run() call as [name, args]. */
+export function webOpen(url, { browsers = [], from = null, slot }) {
+  const b = browsers.find((p) => p.props?.slot);
+  if (b) return [`nocturne-browser.open:${JSON.stringify({ url, slot: b.props.slot })}`];
+  return ["pane.split", { direction: "auto", ...(from ? { pane: from } : {}), mod: "nocturne-browser", props: { url, slot } }];
 }
 
 // ---- file operations: names, paths, the shell that does them
@@ -309,7 +328,7 @@ const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cu
 export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
   ["space", "preview on / off"], ["J K", "scroll the preview"], ["< >", "preview smaller / bigger"],
   ["t", "mark · unmark"], ["V", "mark a range (V ends)"], ["⇧↑ ⇧↓", "mark while moving"],
-  ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
+  ["v", "Neovim"], ["w", "HTML: in a web pane"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
   ["tab ⇧tab", "switches, + file"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],

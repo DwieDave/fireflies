@@ -731,6 +731,50 @@ test("the rest of the operations' logic: the neighbour after a delete, unfolded 
   expect(deleteQuestion("a.rs", false, false)).toBe("Delete “a.rs” permanently?");
 });
 
+test("w and the menu's Open in a web pane show an HTML file in the web pane: the shown tab's (a new front tab), else a new one beside the files pane", () => {
+  const { menuItems, isHtml, fileUrl, webOpen } = logic;
+  expect([isHtml("index.html"), isHtml("a/B.HTM"), isHtml("x.htmlx"), isHtml("notes.md")]).toEqual([true, true, false, false]);
+  expect(fileUrl("/repo/my site/index.html")).toBe("file:///repo/my%20site/index.html");
+  expect(fileUrl("/r/#1/ä.html")).toBe("file:///r/%231/%C3%A4.html");
+  // The menu: right under Open, w its key; not for other files, folders, or another machine's.
+  const acts = (row: any, o: any = {}) => menuItems(row, o).map((x: any) => `${x.key}:${x.act}`);
+  expect(acts({ path: "site/index.html", dir: false }).slice(0, 3)).toEqual(["enter:open", "w:web", "e:other"]);
+  expect(acts({ path: "a.rs", dir: false })).not.toContain("w:web");
+  expect(acts({ path: "site.html", dir: true })).not.toContain("w:web");
+  expect(acts({ path: "index.html", dir: false }, { web: false })).not.toContain("w:web");
+  // Where it goes.
+  expect(webOpen("file:///a.html", { browsers: [{ pane: "pb", props: { slot: "w1" } }], from: "pf", slot: "new" }))
+    .toEqual(['nocturne-browser.open:{"url":"file:///a.html","slot":"w1"}']);
+  expect(webOpen("file:///a.html", { browsers: [], from: "pf", slot: "new" }))
+    .toEqual(["pane.split", { direction: "auto", pane: "pf", mod: "nocturne-browser", props: { url: "file:///a.html", slot: "new" } }]);
+
+  const tree = { "": [["site", true], ["README.md", false]], site: [["index.html", false], ["style.css", false]] } as any;
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  // No web pane in the tab: one beside this files pane.
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, tree);
+  view.folders.add("site");
+  view.sel = "site/index.html";
+  commands.length = 0;
+  view.key({ key: "w", key_char: "w", modifiers: {} }, cx);
+  expect(commands).toHaveLength(1);
+  expect(commands[0][0]).toBe("pane.split");
+  expect(commands[0][1]).toMatchObject({ direction: "auto", pane: "pf", mod: "nocturne-browser", props: { url: "file:///repo/site/index.html" } });
+  expect(typeof commands[0][1].props.slot).toBe("string");
+  // A web pane in the shown tab (another tab's doesn't count): a new tab in it.
+  world.panes.push({ pane: "pw", tab: "t2", mod: "nocturne-browser", props: { slot: "other" } }, { pane: "pb", tab: "t1", mod: "nocturne-browser", props: { slot: "w1" } });
+  commands.length = 0;
+  view.openMenu(view.shown().find((r: any) => r.path === "site/index.html"), cx);
+  view.menuKey({ key: "w", modifiers: {} }, cx);
+  expect(commands).toEqual([['nocturne-browser.open:{"url":"file:///repo/site/index.html","slot":"w1"}', undefined]]);
+  // Enter still opens it as before (not the web pane); w on a stylesheet says why not.
+  commands.length = 0;
+  view.sel = "site/style.css";
+  view.key({ key: "w", key_char: "w", modifiers: {} }, cx);
+  expect(commands).toEqual([]);
+  expect(view.msg?.text).toContain("HTML");
+});
+
 const byId = (root: any, id: string) => walk(root).find((e: any) => e.calls.some(([k, a]: [string, any[]]) => k === "id" && a?.[0] === id));
 const clickOn = (el: any) => el.calls.find(([k]: [string]) => k === "on_click")[1][0]({}, cx);
 const ringed = (el: any) => walk(el).some((e: any) => e !== el && e.calls.some(([k, a]: [string, any[]]) => k === "border_color" && a?.[0] === herdr.theme().accent));

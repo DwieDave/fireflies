@@ -635,7 +635,10 @@ the highlighted line shows where it will land.
   (`git ls-files --ignored`; both hidden by default), each pane keeping its
   choice (shared `nocturne-files.filters` by slot, written only once you
   switch one; new panes take settings.json `files`).
-  Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
+  Right-click a row or press `m` for its menu: open, Open in a web pane (an
+  `.html` / `.htm` file, also `w`: its `file://` URL as a new front tab in the
+  shown tab's web pane, else a new web pane beside; not for another machine's
+  files; enter still opens it as before), edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
   (`y`), the file operations below, close; on the empty space below the rows:

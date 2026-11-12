@@ -41,6 +41,7 @@
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   o              a folder in a new files pane  y  copy the path
+//   w              an HTML file as a page in the web pane (the shown tab's: a new front tab; else one beside)
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
 //                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens;
@@ -107,7 +108,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import * as herdr from "herdr";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -560,6 +561,20 @@ export default class Files extends View {
     cx?.notify();
   }
 
+  /** w, the menu's "Open in a web pane": an HTML file (relative to the root) as
+   *  a page in the web pane (logic.js webOpen): a new front tab in the shown
+   *  tab's one, else a new one beside this pane. Enter keeps opening it as before. */
+  openWeb(path, cx) {
+    if (!isHtml(path)) return this.say(`w opens HTML pages in a web pane: “${base(path)}” isn't one`, cx);
+    if (this.on) return this.say("A page on another machine can't open in the web pane", cx);
+    const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    const browsers = panes().filter((p) => p.tab === tab && p.mod === "nocturne-browser");
+    const from = (this.me() ?? (this.alone ? null : this.panel()))?.pane ?? null;
+    const slot = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const [name, args] = webOpen(fileUrl(`${this.root}/${path}`), { browsers, from, slot });
+    run(name, ...(args === undefined ? [] : [args]));
+  }
+
   /** The filter line's stop `stop` pressed (enter / space on its ring). */
   pressStop(stop, cx) {
     if (stop === "hidden" || stop === "ignored") this.setFilter(stop, cx);
@@ -734,7 +749,7 @@ export default class Files extends View {
     // On a marked row (with others marked): the set's entries first.
     const set = row.path && this.marked?.has(row.path) ? this.setOf(row) : [];
     let items = set.length > 1 ? setMenuItems(row, set.length, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on })
-      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on });
+      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -752,6 +767,7 @@ export default class Files extends View {
     else if (act === "open") this.openFile(p, cx);
     else if (act === "other") viewerFor(p)?.other === "system" ? this.openFile(p, cx, true) : this.edit(p, cx);
     else if (act === "terminal") this.terminalEdit(p, cx);
+    else if (act === "web") this.openWeb(p, cx);
     else if (act === "copy") this.copy(p, cx);
     else if (act === "close") this.closePane();
     else if (act === "new-file") this.startDraft("file", row, cx);
@@ -1393,6 +1409,7 @@ export default class Files extends View {
     else if (k === "E" || (low === "e" && m.shift)) this.terminalEdit(row?.path ?? "", cx);
     else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "v") this.nvim(row ?? null);
+    else if (k === "w" && row && !row.dir) this.openWeb(row.path, cx);
     else if (k === "p") this.preview(row, cx);
     else if (k === "o") this.openPane(row?.dir ? row.path : "");
     else if (k === "y") this.copy(row?.path ?? "", cx);
