@@ -3363,6 +3363,9 @@ impl AppWindow {
         if implicit_close && self.overlays.iter().any(|o| o.kind.modal_keys())
         {
             self.run("overlay.close", json!({}), window, cx);
+        } else if implicit_close && let Some(id) = self.top_scrim_window() {
+            // A window with a scrim is modal: cmd-w closes it, not the tab behind.
+            self.close_overlay(&id, window, cx);
         } else {
             self.run(name, args, window, cx);
         }

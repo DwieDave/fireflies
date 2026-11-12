@@ -194,3 +194,29 @@ fn floatfocus_behind(cx: &mut gpui::TestAppContext) {
     assert!(pane_has_keys(&view, "p2", cx), "a window without a scrim isn't modal");
 }
 
+#[test]
+fn close_keys_close_a_scrim_window_not_the_tab_behind_it() {
+    in_own_process("floatfocus_close_keys");
+}
+
+/// Path 4: cmd-w / cmd-shift-w with the GitHub window up closed the tab or
+/// pane behind it (with its agent), and the window stayed.
+#[gpui::test]
+fn floatfocus_close_keys(cx: &mut gpui::TestAppContext) {
+    use serde_json::json;
+    if !running_alone("floatfocus_close_keys") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    for name in ["tab.close", "pane.close"] {
+        open(&view, "w", scrim_window(), cx);
+        cx.update(|window, cx| view.update(cx, |this, cx| this.run_key(name, json!({}), window, cx)));
+        settle(cx);
+        cx.update(|_, cx| {
+            let this = view.read(cx);
+            assert!(!this.overlays.iter().any(|o| o.id == "w"), "{name} closed the window");
+            assert!(this.model.tab("tb1").is_some() && this.model.tab_of("p1").is_some(), "{name} left the tab and pane");
+        });
+    }
+}
+
