@@ -5,7 +5,7 @@ layer) and a flat Fireflies.svg of the same scene. build compiles the
 bundle with actool into Fireflies.car (the app's Assets.car, macOS 26+)
 and Fireflies.icns (earlier macOS).
 
-The art follows Nocturne's (the Herdr layout mod's art/generate.py): a grid of
+The art follows Nocturne's (the Fireflies layout mod's art/generate.py): a grid of
 cells ordered-dithered with a 4x4 Bayer matrix, every color from the moonfly
 palette, kept to one shape so it reads in the Dock: a firefly, glass wings and
 its lantern lit, under a crescent moon over one moonlit hill. Four glass

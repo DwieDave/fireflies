@@ -301,7 +301,7 @@ test("dock.js: the dock is found by its id (local only); a making adopts the new
   // A space named dock that was there before isn't the new one.
   expect(dockMod.adopt({ making: { at: 0, before: ["s1", "s7"], then } }, all, 1)).toBe(null);
   expect(dockMod.adopt({ making: { at: 0, before: ["s1"], then } }, all, 1)).toEqual({ id: "s7", then });
-  // An unnamed space (Herdr's name after its folder) isn't it either.
+  // An unnamed space (Fireflies' name after its folder) isn't it either.
   expect(dockMod.adopt({ making: { at: 0, before: [] } }, [{ id: "s9", name: "dock", named: false }], 1)).toBe(null);
   expect(dockMod.adopt({ making: { at: 0, before: [] } }, [], dockMod.MAKING + 1)).toEqual({ id: null, then: null });
   expect(dockMod.adopt({ id: "s7" }, all, 1)).toBe(null);

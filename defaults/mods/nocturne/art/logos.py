@@ -1,7 +1,7 @@
-"""Firefly logos: Herdr's own agent icons as 16x16 1-bit dithered masks.
+"""Firefly logos: Fireflies' own agent icons as 16x16 1-bit dithered masks.
 
 The fireflies wear their agent's mark, tinted by status at draw time
-(svg(...).text_color()). Source: the icons Herdr writes to
+(svg(...).text_color()). Source: the icons Fireflies writes to
 ~/.config/herdr-app/icons. Needs rsvg-convert and ImageMagick:
 
     nix shell nixpkgs#librsvg nixpkgs#imagemagick -c python3 -I logos.py
@@ -20,7 +20,7 @@ OUT = os.path.dirname(os.path.abspath(__file__))
 # key -> how to read the icon. Every fill and stroke is painted white, so
 # coverage is the mark; "untile" first drops the icon's backing tile (Codex:
 # its body then carries the >_ cut out of it). Hermes isn't here: its mark is
-# too fine for 16 1-bit pixels, so the mod draws Herdr's own icon for it.
+# too fine for 16 1-bit pixels, so the mod draws Fireflies' own icon for it.
 LOGOS = {
     "claude": "shape",
     "opencode": "shape",

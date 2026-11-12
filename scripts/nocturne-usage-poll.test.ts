@@ -1,7 +1,7 @@
 // How many usage requests leave this machine (nocturne/limits.js, the same
 // file as nocturne-usage/limits.js): one reading per machine, at the pace of
 // what's happening, backing off after a 429. A simulated hour: each "app" is
-// its own module instance with its own shared() store (as each Herdr app is),
+// its own module instance with its own shared() store (as each Fireflies app is),
 // all on one fake file store (the machine's ~/.cache/herdr-app) and one fake
 // endpoint that counts. Every copy (the sidebar, each usage pane) ticks every
 // 30 s as the real timers do, all at once. No real request, no real file.

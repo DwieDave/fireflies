@@ -558,7 +558,7 @@ test("items: types from the adapter, else from herdr-core's kind; grouped and co
   const g = group(items);
   expect(g.permission.map((i: any) => i.address)).toEqual(["t1", "vps/t3"]);
   expect(g.question.map((i: any) => i.address)).toEqual(["t2"]);
-  // A finished agent (t4) isn't an item: the sidebar and Herdr's toast tell about it.
+  // A finished agent (t4) isn't an item: the sidebar and Fireflies' toast tell about it.
   expect(g.other.map((i: any) => [i.address, i.status])).toEqual([["t5", "error"], ["t7", "blocked"]]);
   expect(counts(items)).toEqual({ permission: 2, question: 1, other: 2, needs: 3 });
   const t1 = g.permission[0];

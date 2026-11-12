@@ -128,7 +128,7 @@ test("success refreshes the list and clears the typed target without opening any
   expect(s.overlays).toEqual([]);
 });
 
-// The ssh config reading with real files and a real sh, started the way Herdr
+// The ssh config reading with real files and a real sh, started the way Fireflies
 // starts programs, so a Windows home (C:\Users\...) behaves as it does there.
 async function hostsUnder(prefix: string) {
   const home = await mkdtemp(join(tmpdir(), prefix));

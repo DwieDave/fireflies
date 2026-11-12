@@ -13,12 +13,12 @@
 //   menu   right-click menus: a tab's, and a terminal's (the layout's terminal_menu)
 //   keyshelp  the keys overview of the sidebar, tab strip, header and parked chips (menu.js openKeys)
 //   toast  notifications (the layout's toast_mod, on the DwieDave fork)
-//   prompt, confirm  Herdr's name prompt and confirm dialog (dialog.js; the
+//   prompt, confirm  Fireflies' name prompt and confirm dialog (dialog.js; the
 //          layout's prompt_mod / confirm_mod, on the DwieDave fork)
 //   palette  the command palette (palette.js; the layout's palette_mod)
 //   peek     the bar over a floating or peeked terminal (peek.js; the
 //          layout's peek_mod, fork-only)
-//   welcome, whats_new, help, update  Herdr's welcome, release notes, keys
+//   welcome, whats_new, help, update  Fireflies' welcome, release notes, keys
 //          and update note (screens.js; the layout's dialog_mods, fork-only)
 
 import { View, div } from "gpui-kit";
@@ -47,7 +47,7 @@ const ROLES = {
 export default class Nocturne extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
-    // The layout's terminal_menu and toast_mod open this mod with Herdr's own
+    // The layout's terminal_menu and toast_mod open this mod with Fireflies' own
     // props, no role: a menu's { tab, target }, a notification's { title, ... }.
     // Its prompt_mod / confirm_mod / palette_mod say which with `dialog`.
     const R = ROLES[pr.role ?? pr.dialog ?? (pr.tab ? "menu" : "title" in pr ? "toast" : undefined)];
@@ -60,7 +60,7 @@ export default class Nocturne extends View {
     return this.role.render(cx);
   }
 
-  /** Herdr's last call before the copy goes: passed on to its role as
+  /** Fireflies' last call before the copy goes: passed on to its role as
    *  closing() (several roles' close() closes their own overlay). */
   async close(cx) {
     await this.role?.closing?.(cx);

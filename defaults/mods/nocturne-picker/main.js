@@ -134,7 +134,7 @@ export default class Picker extends View {
     closeOverlay(props()?.overlay);
   }
 
-  /** Herdr's last call: nocturne's cmd-p noted the open picker
+  /** Fireflies' last call: nocturne's cmd-p noted the open picker
    *  (nocturne/picker.js); it's gone now, if the note is this one's. */
   async close() {
     const open = shared(OPEN), me = props()?.overlay;

@@ -124,20 +124,20 @@ function moonPhase(list) {
   return Math.round((rest / list.length) * 8);
 }
 
-// Herdr shows a hidden tab's terminals at 54x52 for a moment before their
+// Fireflies shows a hidden tab's terminals at 54x52 for a moment before their
 // real size, and Claude Code's renderer is left half-drawn by the double
 // resize until something makes it draw again. So when a tab comes into view,
 // once the sizes have settled, idle Claude Codes there get an "x" and a
 // backspace: a redraw that leaves the prompt as it was. Working ones get it
 // too (their spinner only redraws its own line); blocked ones show a dialog
 // where a letter can be an answer, so they're left alone. Only on stock
-// Herdr: the DwieDave fork (the one with native views) holds a new size until
+// Fireflies: the DwieDave fork (the one with native views) holds a new size until
 // the layout settles, so programs never see the placeholder.
 const REDRAW_ON_SHOW = typeof herdrAll.nativeView === "undefined";
 
 // Agents with a dithered mark in art/ (art/logos.py), by program key or the
-// agent's own app name. Others wear Herdr's icon for them.
-// Herdr's shipped check (lucide), the done mark.
+// agent's own app name. Others wear Fireflies' icon for them.
+// Fireflies' shipped check (lucide), the done mark.
 const CHECK = "mods/workspace-chrome/check.svg";
 // How long a mark's scanline takes there and back, by status; still otherwise.
 const SWEEP = { working: 2400, blocked: 900 };
@@ -427,7 +427,7 @@ export default class Sky {
   /** The sidebar has the keyboard (pane.go or layout.focus gave it the block). */
   get navOn() { const b = this.block; return Boolean(b) && focused()?.block === b; }
 
-  /** "focus" from Herdr: the keyboard is the sidebar's. */
+  /** "focus" from Fireflies: the keyboard is the sidebar's. */
   takeKeys() {
     this.handle.focus();
     this.placeCursor();
@@ -490,7 +490,7 @@ export default class Sky {
     };
   }
 
-  /** The verbs on a space's rail row: Herdr's own dialogs, as the folded menu uses. */
+  /** The verbs on a space's rail row: Fireflies' own dialogs, as the folded menu uses. */
   railActs(s) {
     return {
       go: () => run("space.select", { id: s.id }),
@@ -571,7 +571,7 @@ export default class Sky {
       .child(svg(CHECK).size(8).text_color(t.done));
   }
 
-  /** The agent's mark, 16 px: a dithered logo (art/logo-*.svg), else Herdr's own icon, else a bot. */
+  /** The agent's mark, 16 px: a dithered logo (art/logo-*.svg), else Fireflies' own icon, else a bot. */
   mark(a, color) {
     const p = a.program ?? {};
     const key = LOGO[p.key] ?? LOGO[a.app];

@@ -14,7 +14,7 @@ import { dither, eyebrow } from "./kit.js";
 
 export const ROW = 26;
 
-/** A 14 px icon in the accent color (Herdr's shipped icon set). */
+/** A 14 px icon in the accent color (Fireflies' shipped icon set). */
 export function icon(t, name, color) {
   return svg(`mods/workspace-chrome/${name}.svg`).size(14).flex_none().text_color(color ?? t.accent);
 }

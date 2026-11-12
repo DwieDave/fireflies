@@ -87,7 +87,7 @@ pub fn find(configured: Option<&str>) -> Option<PathBuf> {
     if let Some(found) = pick(configured.map(|c| vec![expand(c, &home)]).unwrap_or_default()) {
         return Some(found);
     }
-    // Tests: HERDR_CORE_DIRS replaces every place Herdr would look.
+    // Tests: HERDR_CORE_DIRS replaces every place Fireflies would look.
     if let Some(dirs) = std::env::var_os("HERDR_CORE_DIRS") {
         return pick(std::env::split_paths(&dirs).flat_map(|d| names(&d)).collect());
     }

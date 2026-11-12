@@ -311,7 +311,7 @@ export default class NewMenu {
         .child(div().max_w_full().truncate().text_size(11).text_color(color).child(on && open ? "close" : x.p.name)));
   }
 
-  /** An agent's mark: its dithered logo, else Herdr's icon for it. */
+  /** An agent's mark: its dithered logo, else Fireflies' icon for it. */
   mark(t, a, color) {
     const key = LOGO[a.key] ?? LOGO[a.app];
     if (key) return svg(`${ART}/logo-${key}.svg`).size(14).flex_none().text_color(color);

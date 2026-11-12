@@ -366,7 +366,7 @@ const NAMED = [
   ["space.next", {}, "Space", "Next space", "workspace"],
   ["space.prev", {}, "Space", "Previous space", "workspace"],
   ["layout.switch", {}, "Layout", "Next layout", "look switch"],
-  ["layout.reset", {}, "Layout", "Reset layout", "new version default restore herdr's"],
+  ["layout.reset", {}, "Layout", "Reset layout", "new version default restore fireflies'"],
   ["layout.clone", {}, "Layout", "Duplicate layout", "clone copy customize"],
   ["mod.clone", {}, "Layout", "Duplicate mod", "clone copy customize"],
   ["terminal.open", {}, "Terminal", "New terminal", "shell"],
@@ -397,10 +397,10 @@ const NAMED = [
   ["app.zoom_out", {}, "App", "Zoom out", "smaller font size"],
   ["app.zoom_reset", {}, "App", "Reset zoom", "font size"],
   ["app.feedback", {}, "App", "Send feedback…", "bug report issue github idea problem"],
-  ["app.hide", {}, "App", "Hide Herdr", "macos minimize away"],
+  ["app.hide", {}, "App", "Hide Fireflies", "macos minimize away"],
   ["app.hide_others", {}, "App", "Hide other apps", "macos"],
   ["app.show_all", {}, "App", "Show all apps", "macos unhide"],
-  ["app.quit", {}, "App", "Quit Herdr", "exit"],
+  ["app.quit", {}, "App", "Quit Fireflies", "exit"],
   ...["graphite", "ink", "moss", "atom-one-dark"].map((n) => ["app.theme", { name: n }, "App", `Theme: ${n.replace(/-/g, " ")}`, "colors look"]),
 ];
 
@@ -526,7 +526,7 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
   "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
-// Nocturne runs these in place of Herdr's: the same key, the sidebar's order;
+// Nocturne runs these in place of Fireflies': the same key, the sidebar's order;
 // "New space" is the folder picker (newspace.js).
 const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
 
@@ -541,7 +541,7 @@ function entries() {
       ? { name, args, group, title, words, bind: IN_PLACE[name], go: () => run(IN_PLACE[name]) }
       : { name, args, group, title, words }), ...stateEntries()];
   for (const l of layouts()) {
-    const t = { main: "Herdr", terminals: "Terminals", win98: "Herdr 98" }[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
+    const t = { main: "Fireflies", terminals: "Terminals", win98: "Fireflies 98" }[l] ?? l.charAt(0).toUpperCase() + l.slice(1);
     list.push({ name: "layout.switch", args: { name: l }, group: "Layout", title: `Layout: ${t}`, words: `look ${l}` });
   }
   // Anything new in the app shows up too, until it gets a better name here.
@@ -563,7 +563,7 @@ function sections() {
 
 /** The key bound to an entry (`bind`, else `name` or `name:value` in
  *  keys.json), in macOS glyphs. A key a stronger section binds to something
- *  else isn't this entry's (cmd-p is the file picker in Nocturne, not Herdr's). */
+ *  else isn't this entry's (cmd-p is the file picker in Nocturne, not Fireflies'). */
 export function keyOf(e, bound, mac, order = sections()) {
   const v = Object.values(e.args)[0];
   const want = e.bind ?? (v === undefined ? e.name : `${e.name}:${v}`);

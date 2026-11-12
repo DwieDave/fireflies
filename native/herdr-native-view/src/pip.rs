@@ -2,7 +2,7 @@
 //!
 //! No macOS Picture in Picture: its window belongs to another process
 //! (PIPAgent) and can't be hidden or styled. Instead the page's whole web view
-//! moves into the player (a `pip` view in Herdr, or the popped-out panel) and
+//! moves into the player (a `pip` view in Fireflies, or the popped-out panel) and
 //! a fixed script lifts the page's video into the top layer, filling it. Back
 //! or close: the web view goes home and the lift is undone.
 //!
@@ -231,7 +231,7 @@ struct Session {
     frame: Option<Retained<WKFrameInfo>>,
     /// The web view is out of its pane and the video lifted.
     lifted: bool,
-    /// The popped-out window, while the video is out of Herdr.
+    /// The popped-out window, while the video is out of Fireflies.
     popped: Option<Popped>,
 }
 
@@ -508,7 +508,7 @@ fn place(web_key: &str) {
     if lift {
         set_lift(mtm, &web, frame.as_deref(), true, false);
     }
-    // The player it left (popped into a pane, or out of Herdr) can go; the
+    // The player it left (popped into a pane, or out of Fireflies) can go; the
     // page hears where its video is now.
     if let Some(from) = from {
         let left: Vec<(String, u64)> = ATTACHED.with(|a| {
@@ -561,7 +561,7 @@ pub(crate) fn attach(key: &str, generation: u64, of: &str, host: &NSView) {
     ATTACHED.with(|a| {
         a.borrow_mut().insert(key.to_owned(), Attached { of: of.to_owned(), generation, host: Weak::from(host), seq })
     });
-    // Back into Herdr: the popped-out window goes.
+    // Back into Fireflies: the popped-out window goes.
     if let Some(Some(p)) = with_session(of, |s| s.popped.take()) {
         p.panel.orderOut(None);
     }
@@ -642,7 +642,7 @@ fn web_in(key: &str, host: &NSView) -> Option<Retained<WKWebView>> {
 }
 
 /// A `pip` view went. If it was showing the video, the video goes home:
-/// nothing would show it (a player closed by Herdr, e.g. a layout switch).
+/// nothing would show it (a player closed by Fireflies, e.g. a layout switch).
 pub(crate) fn detach(key: &str) {
     RESIZING.with(|r| r.borrow_mut().remove(key));
     let Some(p) = ATTACHED.with(|a| a.borrow_mut().remove(key)) else { return };
@@ -718,7 +718,7 @@ const BAR: f64 = 22.0;
 /// The window's 1 px border, and the bar: what isn't video.
 const CHROME_W: f64 = 2.0;
 const CHROME_H: f64 = BAR + 2.0;
-/// The title keeps this much before the buttons (as the Herdr player's bar).
+/// The title keeps this much before the buttons (as the Fireflies player's bar).
 const TITLE_MIN: f64 = 70.0;
 const TITLE: &str = "picture in picture";
 // Copies of nocturne-pip's icons: the Nix app build leaves defaults/mods out of
@@ -726,7 +726,7 @@ const TITLE: &str = "picture in picture";
 const VOLUME_SVG: &str = include_str!("../icons/volume.svg");
 const VOLUME_X_SVG: &str = include_str!("../icons/volume-x.svg");
 
-/// The popped-out player: the video under the Herdr player's bar, the same
+/// The popped-out player: the video under the Fireflies player's bar, the same
 /// controls in the same order (↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕; ⇲ in the place of ⇱),
 /// Nocturne's colors, square corners. It resizes keeping the video's shape.
 struct Popped {
@@ -752,7 +752,7 @@ struct Colors {
     hover: Retained<NSColor>,
 }
 
-/// One control of the bar, as the Herdr player draws it: a glyph or an icon,
+/// One control of the bar, as the Fireflies player draws it: a glyph or an icon,
 /// dim; hovered: bright on the hover color, its name in the bar's title.
 pub struct ButtonIvars {
     id: &'static str,
@@ -832,7 +832,7 @@ impl PipButton {
                 set_title(self, &i.glyph.borrow(), color);
             }
         }
-        // Its name where the title is, as the Herdr player does (a tooltip would
+        // Its name where the title is, as the Fireflies player does (a tooltip would
         // be drawn under the video there).
         if let Some(t) = i.title.load() {
             if on {
@@ -880,7 +880,7 @@ define_class!(
                 "toggle" => self.media(Media::Toggle),
                 "forward" => self.media(Media::Seek(10.0)),
                 "mute" => self.media(Media::Mute(None)),
-                // Back into Herdr (as a window, or then into a pane or a chip):
+                // Back into Fireflies (as a window, or then into a pane or a chip):
                 // the page's mod opens a player again; it takes the video.
                 "home" | "pane" | "park" => {
                     let g = with_session(&k, |s| s.generation).unwrap_or(0);
@@ -965,7 +965,7 @@ fn icon(svg: &str) -> Option<Retained<NSImage>> {
 }
 
 impl Popped {
-    /// `rect`: the Herdr player's video on screen; the window adds the bar
+    /// `rect`: the Fireflies player's video on screen; the window adds the bar
     /// and border around it.
     fn new(mtm: MainThreadMarker, source: &str, rect: NSRect, colors: &Value) -> Popped {
         let colors = Colors::parse(colors);
@@ -992,7 +992,7 @@ impl Popped {
         let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - CHROME_W, h - CHROME_H)));
         host.setAutoresizingMask(sizing);
         content.addSubview(&host);
-        // The bar (22 px with its rule, as in Herdr): the title, then the controls flush right.
+        // The bar (22 px with its rule, as in Fireflies): the title, then the controls flush right.
         let bar = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, h - 1.0 - BAR), NSSize::new(w - CHROME_W, BAR)));
         bar.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin);
         content.addSubview(&bar);
@@ -1011,7 +1011,7 @@ impl Popped {
             ("mute", "", Some(VOLUME_SVG), "Sound off"),
             ("pane", "◧", None, "Into a pane"),
             ("park", "⤓", None, "Park as a chip"),
-            ("home", "⇲", None, "Back into Herdr"),
+            ("home", "⇲", None, "Back into Fireflies"),
             ("close", "✕", None, "Close"),
         ];
         let inner = w - CHROME_W;

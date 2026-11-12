@@ -1,6 +1,6 @@
-// Herdr's own screens in Nocturne's look, drawn for the layout's dialog_mods
+// Fireflies' own screens in Nocturne's look, drawn for the layout's dialog_mods
 // (nocturne.json): square, 1-bit, dithered horizons, a pip for every mark.
-// Herdr opens this mod with the shipped screen's props plus `dialog`:
+// Fireflies opens this mod with the shipped screen's props plus `dialog`:
 //   welcome    the first-run welcome (a movable window): Fireflies, on herdr-core;
 //              records frame.welcomed ("finished" / "skipped") like the shipped one.
 //              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc skips

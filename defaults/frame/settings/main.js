@@ -23,7 +23,7 @@ const SECTIONS = [
   { id: "updates", title: "Updates", icon: "refresh" },
 ];
 
-const LOOKS = { main: "Herdr", terminals: "Terminals", win98: "Herdr 98" };
+const LOOKS = { main: "Fireflies", terminals: "Terminals", win98: "Fireflies 98" };
 const APPEARANCES = [
   [null, "System"],
   ["light", "Light"],
@@ -870,7 +870,7 @@ export default class Settings extends View {
   alerts(t) {
     const sounds = this.person.sounds ?? {};
     const on = sounds.enabled !== false;
-    const file = (f) => (f ? f.split(/[\\/]/).pop() : "Herdr's sound");
+    const file = (f) => (f ? f.split(/[\\/]/).pop() : "Fireflies' sound");
     return [
       this.b(this.heading(t, "Sounds")),
       this.b(
@@ -935,14 +935,14 @@ export default class Settings extends View {
               ? [result, () => check("st-check-core")]
               : ["Not checked: a build from source looks for no updates.", null];
     return [
-      this.b(this.heading(t, "Herdr")),
-      this.b(this.row(t, `Herdr ${u.app.version}`, app[0], h_flex().gap(8).flex_none()
+      this.b(this.heading(t, "Fireflies")),
+      this.b(this.row(t, `Fireflies ${u.app.version}`, app[0], h_flex().gap(8).flex_none()
         .child(this.button(t, "st-whats-new", "What's new", () => { closeOverlay(props()?.overlay); run("app.whats_new"); }))
         .when(Boolean(app[1]), (el) => { const c = app[1](); return c ? el.child(c) : el; }))),
       this.b(div().h(18)),
       this.b(this.heading(t, "herdr-core")),
       this.b(this.row(t, `herdr-core ${c.version ?? ""}`, core[0], core[1]?.() ?? div())),
-      this.b(div().pt(12).text_size(12.5).line_height("18px").text_color(t.dim).child("Herdr looks for both every hour and tells you in the corner. herdr-core runs your terminals, so they keep running through its updates.")),
+      this.b(div().pt(12).text_size(12.5).line_height("18px").text_color(t.dim).child("Fireflies looks for both every hour and tells you in the corner. herdr-core runs your terminals, so they keep running through its updates.")),
     ];
   }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 // The editor's way from opening a file to its first hover answer, timed: the
 // same steps nocturne-editor's startServer takes (envrc.js, logic.js), then
-// the server spoken to as Herdr's core speaks to it (src/lsp.rs: the same
+// the server spoken to as Fireflies' core speaks to it (src/lsp.rs: the same
 // initialize), with its `$/progress` and a hover asked every 100 ms until one
 // answers with something.
 //

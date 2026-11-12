@@ -1,11 +1,11 @@
-# Herdr app
+# Fireflies app
 
-<!-- Written by the Herdr app on every start. Edits here are overwritten. -->
+<!-- Written by the Fireflies app on every start. Edits here are overwritten. -->
 
-This folder is **the Herdr app's whole interface, as files**. The Herdr app
+This folder is **the Fireflies app's whole interface, as files**. The Fireflies app
 is a desktop app for terminals and coding agents, and it redraws itself from
 these files while it runs: change a layout, a key or a panel here and the
-window follows within a second. Shipped layouts and mods are Herdr's:
+window follows within a second. Shipped layouts and mods are Fireflies':
 change settings for look, or clone before editing structure/code (see Layouts).
 When someone asks for something ("a sidebar
 of my PRs", "give ctrl+1 back to the shell", "make it warmer", "move the
@@ -20,7 +20,7 @@ from the same parts you have.
 - **herdr-core (`hc`)**, which runs every terminal and agent. They keep
   running when the window closes or updates. You can use `hc` yourself:
   start a terminal, read its screen, send it text, wait for an agent
-  (`hc --help`). The Herdr app is one client of it.
+  (`hc --help`). The Fireflies app is one client of it.
 
 `herdr-app` controls this app; `hc` controls herdr-core.
 
@@ -41,7 +41,7 @@ draws text; read or change other mods' code at run time.
 Mods use **gpui-kit** (its gpui-shell): JavaScript that describes **GPUI**
 elements, a native GPU UI (`div()`, flex, children,
 `.on_click`). There's no DOM: the script describes, Rust draws. Background:
-https://gpui-kit.com. The Herdr app carries its own copy with additions
+https://gpui-kit.com. The Fireflies app carries its own copy with additions
 (`frames`, `loop`), so **the type files here are the truth**:
 `gpui-kit.d.ts` for elements and `herdr.d.ts` for the app's data and
 commands. They're rewritten on every start to match this version.
@@ -67,7 +67,7 @@ and prints its absolute path (default: `herdr-shot.png` in your current
 folder). Use it when debugging mod UIs: inspect spacing, colors, terminal
 images, overlays, popups and floats. It captures the app, not the desktop,
 at the window’s physical pixel size, even when covered or minimized. No
-screen-recording permission is needed. Herdr must be running; before its
+screen-recording permission is needed. Fireflies must be running; before its
 first frame or during GPU recovery it reports an error instead of a PNG.
 `HERDR_APP_HOME` selects which running window to ask, as with `status`.
 
@@ -80,13 +80,13 @@ first frame or during GPU recovery it reports an error instead of a PNG.
 | `settings.json` | the person: zoom, sounds, fonts for every layout | live |
 | `mods/<name>/` | panels: small JavaScript programs | live (hot reload) |
 | `programs.json` | how programs show (name, icon, tile), on top of the built-in table | live |
-| `icons/` | the shipped program icons | written by Herdr (put your own elsewhere) |
-| `frame/` | the app's own screens (welcome, ...) | rewritten by Herdr on every start: don't edit, it won't stick |
-| `view.json` | this screen's selected space/tab/pane, zoom, settled tabs, recent spaces and seen attention | written by Herdr |
-| `shared.json`, `data/`, `seen.json`, `installed.json`, `window.json`, `windows.json` | mod state, bookkeeping, where the window was (size, maximized), mods' windows (spots, kept ones) | written by Herdr |
+| `icons/` | the shipped program icons | written by Fireflies (put your own elsewhere) |
+| `frame/` | the app's own screens (welcome, ...) | rewritten by Fireflies on every start: don't edit, it won't stick |
+| `view.json` | this screen's selected space/tab/pane, zoom, settled tabs, recent spaces and seen attention | written by Fireflies |
+| `shared.json`, `data/`, `seen.json`, `installed.json`, `window.json`, `windows.json` | mod state, bookkeeping, where the window was (size, maximized), mods' windows (spots, kept ones) | written by Fireflies |
 
 Shared state is saved atomically in the background, with the latest change winning.
-If `shared.json` is invalid, Herdr logs a warning and keeps it as
+If `shared.json` is invalid, Fireflies logs a warning and keeps it as
 `shared.json.corrupt-<time>` before starting empty.
 `herdr-app check` uses empty shared state in memory and leaves this file untouched.
 Nocturne's GitHub window keeps what it last read of each repo (pull requests,
@@ -110,7 +110,7 @@ it back), `e` edits fields, `a` adds a draft, `i` makes a draft an issue,
 `x` archives, `enter` docks the card's detail, `o` opens it on GitHub, `-`
 folds a column, `z` a swimlane, `w` sets a column's limit. Edits show at once
 and roll back if GitHub refuses them. GitHub's API keeps no column limits or
-hidden columns, so limits and folds are Herdr's, per project, in shared state
+hidden columns, so limits and folds are Fireflies', per project, in shared state
 `nocturne-github.boards`. Reading needs gh's `read:project` scope and editing
 `project` (`gh auth refresh -s project`); the tab says which is missing.
 It also writes, always after a last step that shows the exact commands
@@ -212,9 +212,9 @@ In the expanded Spaces sidebar, drag a space to reorder it within its machine;
 the highlighted line shows where it will land.
 
 - A **space** is a place to work, on one machine: this one, or another
-  from `hc machine ls` (`spaces()[i].machine`). Herdr leaves out machines
+  from `hc machine ls` (`spaces()[i].machine`). Fireflies leaves out machines
   added with `--temp` (an agent's short-lived sandbox): no spaces, not in
-  `machines()`, and mods listing machines skip `temporary`. Names work as in Herdr:
+  `machines()`, and mods listing machines skip `temporary`. Names work as in Fireflies:
   a space nobody named is called after where its first terminal is now
   (its repo, else its folder, `~` at home) and follows it; once named
   (`space.rename`), the name stays; renaming to "" goes back.
@@ -251,7 +251,7 @@ the highlighted line shows where it will land.
   makes an ordinary space, not the dock.
 - A **tab** is a piece of work in a space: its terminals and how they're
   split right and down. One nobody named is called by its place (1, 2,
-  ...), as in Herdr; `tab.rename` names it ("fix login"). A space
+  ...), as in Fireflies; `tab.rename` names it ("fix login"). A space
   has one or more; closing the last one closes the space (it stays in
   `recent`).
 - A tab can be **settled** (`tab.settle`): put away on this screen, still running;
@@ -263,13 +263,13 @@ the highlighted line shows where it will land.
   mod pane splits, zooms, closes and gets a header like any pane, keeps
   the keyboard when clicked, and is saved with its tab; its `props` tell
   it what to show (a file, a folder). Closing a terminal pane ends its
-  terminal, and a program exiting closes its pane, even if Herdr was closed.
+  terminal, and a program exiting closes its pane, even if Fireflies was closed.
   Terminal panes are kept by their machine's core (`keep: true`). A lost
   terminal (core crash, reboot, logout) gets a shell in its last folder,
   with the same address; its original command is never run again. Splits,
   mod panes and parked panes stay. An exited or killed terminal is closed, not restarted.
   Focus, zoom, recent spaces, settled tabs and seen attention stay on this screen.
-- Every terminal is a core terminal. Herdr labels the ones it starts with
+- Every terminal is a core terminal. Fireflies labels the ones it starts with
   `herdr.space=<id>` and `herdr.tab=<id>`. **A terminal with those
   labels shows up there**, even one you start yourself:
   `hc run --keep --label herdr.space=<id> --label herdr.tab=<id> -- claude`.
@@ -279,9 +279,9 @@ the highlighted line shows where it will land.
   When a core change is needed, `terminal.keep` / `terminal.park` acknowledge
   with `pending: true`, then apply after the machine replies; failures show a toast.
   Normal quit waits for pending terminal changes and layout writes; remote waits are bounded.
-  An id Herdr doesn't know becomes a new space or tab (unnamed: Herdr's names).
-  Terminals without the labels (another app's) stay out of Herdr's
-  screens, and so do other machines' terminals, unless Herdr started them
+  An id Fireflies doesn't know becomes a new space or tab (unnamed: Fireflies' names).
+  Terminals without the labels (another app's) stay out of Fireflies'
+  screens, and so do other machines' terminals, unless Fireflies started them
   for a space on that machine.
 - **Agents** are terminals whose program reports a status (OSC 7501):
   `working`, `blocked`, `idle`, or `done` = finished while the user wasn't
@@ -319,7 +319,7 @@ the highlighted line shows where it will land.
   run as "cancelled". A run you already float keeps its float (type there); with Touch ID
   for sudo, its own dialog asks, and a cached sudo doesn't ask. If nix-darwin still says "permission denied when trying to
   update apps", Herdr Core lacks App Management (the core runs the terminals, not
-  Herdr): the toast and output say so, with a button that opens System Settings >
+  Fireflies): the toast and output say so, with a button that opens System Settings >
   Privacy & Security > App Management and shows
   `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; if it's on already,
   remove it and add it again. A picked script runs in a pane-less
@@ -372,7 +372,7 @@ the highlighted line shows where it will land.
   click opens it centered on that agent's request. The overview lists Permissions, Questions and, when there are any, Needs a look (an
   error, or waiting for input that is neither), each with the agent, its
   space / tab and how long it has waited. Finished agents aren't listed: the
-  sidebar and Herdr's toast tell about them.
+  sidebar and Fireflies' toast tell about them.
   A permission shows the exact tool call and the options its terminal lists;
   answer with one (↑↓ enter, or its number), or with "yes, but…" / "no, but…"
   (tab / shift-tab): a line sent with the answer as the agent's next
@@ -385,7 +385,7 @@ the highlighted line shows where it will land.
   is refused ("Not sent"), never answered blindly; each key waits for the
   dialog itself to change (not the rest of a busy screen), and when a step
   doesn't take (the note line didn't open, the note didn't arrive) it says
-  so in place of the answer. Herdr's "needs you" toast
+  so in place of the answer. Fireflies' "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
   x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
@@ -704,7 +704,7 @@ the highlighted line shows where it will land.
   started as the first editor of that language and workspace opens. **A
   server's lifetime**: it runs while an editor uses it, and 15 minutes after
   the last one closes (coming back is instant); of the servers no editor uses,
-  Herdr keeps at most 2, stopping the least recently used first. Nothing starts
+  Fireflies keeps at most 2, stopping the least recently used first. Nothing starts
   for a project no editor has opened. rust-analyzer builds in its own target
   folder (`target/rust-analyzer`: `cargo.targetDir`), so it never waits on a
   `cargo build`'s lock nor rebuilds what that built; `server_settings`
@@ -720,7 +720,7 @@ the highlighted line shows where it will land.
   again. The Markdown viewer follows a rename or move the same way. Changes
   made elsewhere (a terminal's `mv`, git) aren't followed: the editor keeps
   the old path, and a save there is refused ("the file changed outside
-  Herdr"), the draft kept. Found means: in the workspace's own
+  Fireflies"), the draft kept. Found means: in the workspace's own
   environment when the file's folder or one above it (up to the repository)
   has an `.envrc` that direnv allows (looked up and started inside what
   `direnv export` gives, loaded once per folder, a flake's first load
@@ -900,7 +900,7 @@ the highlighted line shows where it will land.
 
 Each file is one whole window. `layout.switch` (`ctrl-shift-l`) cycles
 through them, `layout.switch {name}` picks one; `shared("layout")` is the
-shown one's name. Herdr ships `main` ("Herdr": spaces by machine and the
+shown one's name. Fireflies ships `main` ("Fireflies": spaces by machine and the
 agents list on the left, `workspace-chrome`; tabs as pills with a + menu
 that starts a terminal or any installed agent, `new-menu`; panes as cards
 with a header; Files and Changes panels on the right, `files` and
@@ -908,16 +908,16 @@ with a header; Files and Changes panels on the right, `files` and
 shared `"workspace.panels"`, set by the welcome); a status bar,
 `workspace-status`), and as examples `terminals` ("Terminals": tabs in
 the title bar, panes as cards, a space picker) and `win98`
-("Herdr 98": a whole desktop in one mod, `win98`). Add a layout by
+("Fireflies 98": a whole desktop in one mod, `win98`). Add a layout by
 writing a new file. The Files panel supports Windows folder paths with spaces,
 parentheses and apostrophes, and preserves Unicode file and folder names
 (including Chinese). Directory links expand as folders; their contents load
 only when expanded.
 
-**Herdr's own layouts and mods are read-only.** They are replaced whole
+**Fireflies' own layouts and mods are read-only.** They are replaced whole
 on every start. Use settings.json for look (fonts, sizes, theme, colors,
-sounds), where the layout leaves them unset. Herdr (main) has no look of
-its own, so your settings decide it; Herdr 98 and Terminals bring their own
+sounds), where the layout leaves them unset. Fireflies (main) has no look of
+its own, so your settings decide it; Fireflies 98 and Terminals bring their own
 look. The theme picker overrides any layout. To change a shipped layout's
 look beyond that, or its structure/code, clone it and edit the clone:
 
@@ -937,7 +937,7 @@ overlay names to the new name.
 
 If you edit a shipped file anyway, the next start moves it to
 `<name>-edited` (a mod folder or layout JSON; a number is added if taken),
-copies its layout clicks, restores Herdr's version and shows a toast.
+copies its layout clicks, restores Fireflies' version and shows a toast.
 No-longer-shipped things go if
 untouched, otherwise they stay.
 
@@ -998,7 +998,7 @@ Properties any node can have:
   an unknown mod logs a warning and falls back to `menu`. Clone a shipped
   layout before changing this field. Other menus are unchanged.
 - Root only: `"toast": "my-toast"` chooses the mod that shows notifications
-  (Herdr's own and every `notify()`), in place of the shipped `toast`; an
+  (Fireflies' own and every `notify()`), in place of the shipped `toast`; an
   unknown mod logs a warning and falls back to `toast`. It gets the same
   `props()`: `{title, body, level, icon, action, timeout, overlay}` (`timeout`
   is optional). A mod that hands them to the system instead
@@ -1016,11 +1016,11 @@ Properties any node can have:
   unknown mod logs a warning and keeps the shipped one.
 - Root only: `"peek_mod"` (this fork) draws the 34 px bar over a peeked or
   floating terminal in place of the shipped `peek`, with its props
-  (`terminal`, `float`, `views`, `overlay`) plus `dialog: "peek"`. Herdr still frames
+  (`terminal`, `float`, `views`, `overlay`) plus `dialog: "peek"`. Fireflies still frames
   the overlay; read `defaults/mods/peek` for the keep / dock / end / close controls
   and the switch between a float's views (`views`: their names, or null; run
   `float.view {index}`; `terminals()`' `floating_view` says which one shows).
-- Root only: `"dialog_mods"` (this fork) maps Herdr's other screens to the mods
+- Root only: `"dialog_mods"` (this fork) maps Fireflies' other screens to the mods
   that draw them instead: `welcome`, `whats_new`, `help` (the keys), `worktree`,
   `machine_add`, `update` (the update note, bottom right), and `prompt`,
   `confirm`, `palette` (as the fields above, which win). Each gets the shipped
@@ -1098,21 +1098,21 @@ layout's look and a block can differ:
   writing hex when a layout should work light and dark.
 - `themes/<name>.json`: `{ "background", "foreground", "selection",
   "cursor"?, "ansi": [16 colors], "colors"?: {...} }`, all `#rrggbb`; panel
-  colors are derived from these, `colors` overrides them. Herdr ships
+  colors are derived from these, `colors` overrides them. Fireflies ships
   `atom-one-dark`. The original unedited Atom One Dark and Win98 theme files
   are upgraded to readable terminal colors; edited theme files are kept.
   A theme named like a layout (`themes/win98.json`) is
   that layout's own: Settings offers it only there.
 - `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
   (their text sizes are their own, in px, and follow zoom). Optional: without
-  them a layout uses settings.json's, else Herdr's (JetBrains Mono 14, Geist).
-  Herdr (main) leaves these unset; Terminals sets text size 15, and Herdr 98
+  them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).
+  Fireflies (main) leaves these unset; Terminals sets text size 15, and Fireflies 98
   brings its own fonts.
-  JetBrains Mono, Geist Mono and Geist ship with Herdr; any installed font
+  JetBrains Mono, Geist Mono and Geist ship with Fireflies; any installed font
   works (a terminal font the machine lacks falls back to JetBrains Mono).
   A layout brings its own fonts: `.ttf`/`.otf` files in a mod's `fonts/`
   folder (or the home's `fonts/`) load at start and on the next look change,
-  so a layout and its mod folder travel together (Herdr 98's do: its pixel
+  so a layout and its mod folder travel together (Fireflies 98's do: its pixel
   fonts are in `mods/win98/fonts/`).
 - `pane_scrollbars` in settings.json (default `true`): show terminal scrollback
   with a slim thumb and track. Drag the thumb or click the track to jump there.
@@ -1168,7 +1168,7 @@ The tab block says how each pane of the shown tab is wrapped:
 A floating block sits over its node, `edge` (`top`, `right`, `bottom`,
 `left`) and `align` along it (`start`, `center`, `end`), 12 px in. It sizes
 to its content (render nothing to hide it). People drag it anywhere; on
-release it springs to the nearest edge and third, and Herdr saves the new
+release it springs to the nearest edge and third, and Fireflies saves the new
 spot. Clicks and hovers on it never reach what's underneath.
 
 `peek` (side edges only) makes it a drawer: only that many px next to the
@@ -1177,7 +1177,7 @@ moment after the pointer leaves. The mod draws one full layout and never
 changes it on hover (that's what keeps it smooth): put what should peek
 (status, icons) on the edge side of each row.
 
-Herdr draws the frame around a floating mod (theme background, border,
+Fireflies draws the frame around a floating mod (theme background, border,
 rounded corners, shadow; accent border while dragged), like a dialog's,
 with 5 px above and below. The mod draws only its content, no panel: on a
 side, rows can run edge to edge. It reads `placement()`:
@@ -1374,7 +1374,7 @@ folder on GitHub):
    `hc`) or reads files outside its own folder.
 2. Copy the layout file to `layouts/` and each mod folder to `mods/`. Leave
    the recipe and preview out. Never overwrite: if a name is taken (yours
-   or Herdr's), rename the new one: its file or folder, the `mod` names in
+   or Fireflies'), rename the new one: its file or folder, the `mod` names in
    the layout, and the mod's own `mods/<name>/` paths.
 3. Fit it to this setup only where its assumptions don't hold (a missing
    program, a name clash) or the person asks. If the files don't work on
@@ -1480,7 +1480,7 @@ The main ones:
   The space lives there, its
   terminals start in that machine's home unless folder, and its tabs and
   splits stay there; `spaces()` gives each space's `machine`, null here),
-  `space.close {id?, confirmed?}`, `space.rename {id?, name}` ("": Herdr's name again),
+  `space.close {id?, confirmed?}`, `space.rename {id?, name}` ("": Fireflies' name again),
   `space.folder {folder, id?}` (attach a space to a folder; its open terminals stay where they are),
   `space.move {id, index}`, `space.select {index | id}`, `space.next`, `space.prev`.
   With no `argv`, the target core chooses that machine's default shell (PowerShell 7 when available on Windows).
@@ -1615,13 +1615,13 @@ The main ones:
   images are converted to PNG before sending,
   `terminal.right_click {to: "program" | "menu", terminal?}` (where right-clicks go
   when the program takes the mouse; kept as its label `herdr.right-click=program`;
-  Shift+right-click is always Herdr's menu),
-  `terminal.scroll {lines | pages | to: "top" | "bottom", terminal?}` (moves Herdr's view of the
+  Shift+right-click is always Fireflies' menu),
+  `terminal.scroll {lines | pages | to: "top" | "bottom", terminal?}` (moves Fireflies' view of the
   history, not the program: negative lines or pages go up, toward history; pages may be
   fractional, one page is the terminal's rows; on the alternate screen, such as vim or less,
   there is no history, so nothing moves),
   `terminal.pin {terminal, pinned}` (pins an agent to the top of the agent lists;
-  kept on the terminal as `herdr.pinned`, so every Herdr client shows it, and
+  kept on the terminal as `herdr.pinned`, so every herdr-core client shows it, and
   gone when the terminal ends; read it as `agents()` `pinned`). Copy, paste, paste-image and implicit
   right-click targeting follow keyboard focus, including peek and floating terminals;
   with no terminal holding keyboard focus, they use the focused pane or block.
@@ -1688,7 +1688,7 @@ The main ones:
   corner, with the Nocturne player's bar in its order, ↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕, keeping the
   video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn { of, then }` (`then`:
   null, `"pane"` or `"park"`, for the player to go on with); the view may go). The newest `pip` view of a page holds its video: when another takes it (a pane, out
-  of Herdr), the old one and the page get `pip.moved` (the page's with `{ popped }`). Event
+  of Fireflies), the old one and the page get `pip.moved` (the page's with `{ popped }`). Event
   `pip.ended`: the page went home (also on a new page, a crash, a closed pane, or the video
   leaving the page). One video at a time.
   Nocturne's browser does this with its ⧉ button (command `nocturne-browser.pip`) and the
@@ -1702,7 +1702,7 @@ The main ones:
   shown before); ↩ and ✕ show the tab again, into a pane puts it back in the tab bar. The
   only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
-  shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Herdr)
+  shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Fireflies)
   ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
@@ -1730,7 +1730,7 @@ The main ones:
   `files.open {path, in?, pane?, on?}` (a folder in a new files pane beside `pane`, or the one
   there already rooted at it; `in: "tab"` a tab of its own, `"system"` the system's file manager;
   see Files panes),
-  `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Herdr sends nothing itself), `app.reset`,
+  `app.feedback {message?, from?}` (from `"person"` or `"agent"`; opens a review window that drafts a GitHub issue with the message and the app, herdr-core and OS versions; Open on GitHub opens the prefilled new-issue page like `app.open_url`, where the person adds screenshots and submits; Fireflies sends nothing itself), `app.reset`,
   `app.theme {name}`, `app.zoom_in`, `app.zoom_out`, `app.zoom_reset`,
   `app.update` (restart into a downloaded update).
   Add machine lists all named ssh-config hosts in a scrollable list. Machines
@@ -1745,7 +1745,7 @@ The main ones:
 - Window: `window.minimize`, `window.maximize` (or back), `window.close`.
 - macOS: `app.quit`, `app.hide`, `app.hide_others`, `app.show_all`.
 
-When the user runs a command without a required name (a key, a click), Herdr
+When the user runs a command without a required name (a key, a click), Fireflies
 asks them. **You never get a dialog**: pass every required argument, or the
 command says what's missing.
 
@@ -1780,15 +1780,15 @@ list or a machine's rename first.
   (0.5 to 3; the zoom keys change it). Write sizes as designed at zoom 1.
 - `sounds`: `{ "enabled": true, "done": "<file>", "blocked": "<file>" }`.
   When an agent needs the person, or finishes while they aren't looking at
-  it, Herdr plays a sound and (unless they're looking) posts a toast that
+  it, Fireflies plays a sound and (unless they're looking) posts a toast that
   goes there when clicked. `done` / `blocked` replace the bundled MP3s
   (path absolute or relative to `~/.config/herdr-app`). Changes apply live,
   including the Play buttons in Settings > Alerts.
-- `core`: the herdr-core binary to use, when it isn't where Herdr looks
+- `core`: the herdr-core binary to use, when it isn't where Fireflies looks
   (PATH, the login shell's PATH, `~/.local/bin`, Homebrew, mise, Nix,
   cargo). Read at start.
 - `font`, `font_size`, `ui_font`: used where the layout doesn't set its
-  own. Herdr (main) leaves these unset. Bigger panels: `zoom`.
+  own. Fireflies (main) leaves these unset. Bigger panels: `zoom`.
 - `font_ligatures`: programming ligatures are off by default; set `true` to
   enable them in terminal fonts such as JetBrains Mono and Fira Code. The cursor
   and background changes (including selections) break ligatures so individual cells stay clear.
@@ -1832,7 +1832,7 @@ list or a machine's rename first.
   apps' links alone. Disk-image and translocated launches don't create it.
   Finder launches load the login shell's PATH, with the usual install
   folders as a fallback.
-- `links`: `"app"` (default) opens web links in a web pane in Herdr (macOS,
+- `links`: `"app"` (default) opens web links in a web pane in Fireflies (macOS,
   the `nocturne-browser` mod), `"system"` in the system's default browser
   (see Links above). Other schemes always go to the system. Applies at once.
 - `option_as_alt`: macOS only, `"auto"` (default), `"on"`, `"off"`, `"left"`, or `"right"`.
@@ -1967,7 +1967,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   Leave with `run("pane.go", {direction})` or `run("pane.focus", {pane})`.
   Without this opt-in, navigation and clicks stay unchanged.
 
-- The first time Herdr sees a folder, it docks one copy per `mod.json` into
+- The first time Fireflies sees a folder, it docks one copy per `mod.json` into
   the shown layout (`"none"`: only where a layout or another mod puts it).
   After that, the layouts decide. Saving any file reloads every copy in place
   (not files the app writes: `jsconfig.json`, `.d.ts`, hidden ones,
@@ -1995,7 +1995,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   props: {space, folder?, action, branch?, tab?, argv?}})` into the git
   window with the same request. The `spaces` sidebar nests worktree spaces
   under their repo's and shows each space's repo, branch, ahead/behind and
-  uncommitted changes. Shipped mods are Herdr's; duplicate with `mod.clone`
+  uncommitted changes. Shipped mods are Fireflies'; duplicate with `mod.clone`
   before editing.
 
 ### Check before you finish
@@ -2047,7 +2047,7 @@ export default class Branches extends View {
 Rules:
 - `main.js` default-exports a class extending `View`. `init(props, cx)` runs
   once; `render(cx)` describes the UI and runs again after `cx.notify()` and
-  whenever Herdr's live data changes (spaces, agents, terminals, focus,
+  whenever Fireflies' live data changes (spaces, agents, terminals, focus,
   theme, shared state). Don't poll those.
 - Module code runs once per source version and is shared by copies, even after all
   copies close. Keep instance state and host calls in constructor/init, not module
@@ -2137,7 +2137,7 @@ All of it is in `herdr.d.ts`. In short:
   the first read even if it fails, and offline machines are unavailable),
   `agents()` (status, app, space, tab, pinned, focused, command: working but
   waiting on a shell command it started; "done" turns "idle"
-  once someone looks at it on any Herdr client), `terminals()`
+  once someone looks at it on any herdr-core client), `terminals()`
   (every core terminal), `focused()`, `layout()`, `theme()` (every color by
   name: background (the terminals', cards), canvas (behind cards), chrome
   (sidebars, bars), surface, popover, raised, hover, selected, border,
@@ -2164,7 +2164,7 @@ All of it is in `herdr.d.ts`. In short:
 - Overlays: `openOverlay({ mod, props, kind: "dialog" | "popup" | "window", width, height, at, frame })`
   returns an id; the mod gets `props().overlay` and closes itself with
   `closeOverlay(id)`; Esc closes the top dialog or popup. `frame: "none"`
-  drops Herdr's border, corners and shadow so the mod draws its own.
+  drops Fireflies' border, corners and shadow so the mod draws its own.
   `notify({ title, body, level, icon, timeout })` posts a notification, drawn
   by the layout-chosen mod (default: `toast`).
 - Windows (`kind: "window"`): stay open until closed, over the layout and

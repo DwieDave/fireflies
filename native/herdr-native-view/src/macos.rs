@@ -316,7 +316,7 @@ fn inspector_step(key: &str) -> bool {
             // It may open docked into the page (WebKit remembers the last
             // choice, e.g. a right-click "Inspect Element"), and docking can
             // finish after an early detach. Take its page only from a window
-            // of its own: while it's in Herdr's window, it's docked: undock it.
+            // of its own: while it's in Fireflies' window, it's docked: undock it.
             // (Taken while docked, WebKit keeps shrinking the page for it.)
             let page: Option<Retained<NSView>> = msg_send![&*i, inspectorWebView];
             let mine = e.view.window();
@@ -717,7 +717,7 @@ pub fn painted(key: &str, rect: Rect) {
 /// Applies frames and visibility at the end of a window's frame.
 /// `alive(key)`: its mod copy still exists (else the view is disposed).
 /// `shown(key)`: its copy is on screen now. `suppressed`: native views step
-/// aside (state kept), e.g. while a pane is dragged. `covers(key)`: the Herdr
+/// aside (state kept), e.g. while a pane is dragged. `covers(key)`: the Fireflies
 /// overlays drawn above that view, and whether a dialog dims it: the view
 /// stays and those parts are cut away so the overlays show through.
 pub fn frame_end(
@@ -899,7 +899,7 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
             return Ok(Value::Null);
         }
         // Cut-outs where the mod draws over the view (a menu card): the view
-        // isn't drawn there and clicks there go to Herdr.
+        // isn't drawn there and clicks there go to Fireflies.
         "setHoles" => {
             let holes = parse_holes(args)?;
             VIEWS.with(|v| {
@@ -1145,7 +1145,7 @@ fn layer_masked(view: &NSView) -> bool {
 }
 
 /// For the self-check: a click at each hole's centre, hit-tested by the window
-/// like a real one, lands outside this view (on Herdr). `None` without holes.
+/// like a real one, lands outside this view (on Fireflies). `None` without holes.
 fn hole_clicks_reach_herdr(e: &Entry) -> Option<bool> {
     let holes = e.host.ivars().holes.borrow().clone();
     if holes.is_empty() || e.view.isHidden() {
@@ -1254,7 +1254,7 @@ pub fn debug() -> Value {
     json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()) })
 }
 
-/// Returns the keyboard to GPUI after Herdr selects a different pane. AppKit
+/// Returns the keyboard to GPUI after Fireflies selects a different pane. AppKit
 /// can otherwise leave a web view as first responder after GPUI focus moves.
 pub fn release_keyboard(gpui_view: *mut c_void) {
     let Some(_mtm) = MainThreadMarker::new() else { return };
@@ -1354,7 +1354,7 @@ fn install_focus_monitor(_mtm: MainThreadMarker) {
 }
 
 /// The browser chords in a web view that has the keyboard: the page would
-/// take them before Herdr's keys see them, so its mod hears an event instead:
+/// take them before Fireflies' keys see them, so its mod hears an event instead:
 /// ⌥⌘I `web.inspectKey`, ⌘R `web.reloadKey`.
 /// The way out of any native view: ⌘Esc, and plain Esc in views that don't use
 /// it (PDF, media, Quick Look; a page keeps plain Esc for itself). The keyboard
@@ -1700,7 +1700,7 @@ unsafe extern "C" {
 
 pub struct HostIvars {
     holes: RefCell<Vec<Hole>>,
-    /// Holes for Herdr overlays above the view (frame_end), beside the mod's own.
+    /// Holes for Fireflies overlays above the view (frame_end), beside the mod's own.
     cover: RefCell<Vec<Hole>>,
     /// A dialog's backdrop over the view: a dimming layer on the page.
     dimmed: Cell<bool>,
@@ -1712,7 +1712,7 @@ pub struct HostIvars {
 
 define_class!(
     /// Holds one native view. Where the mod draws a card over it, a hole lets
-    /// Herdr's drawing (below) show and receive the clicks.
+    /// Fireflies' drawing (below) show and receive the clicks.
     // SAFETY: NSView subclass; overrides keep NSView's contracts (super is called).
     #[unsafe(super(NSView, NSResponder, NSObject))]
     #[thread_kind = MainThreadOnly]
@@ -1749,7 +1749,7 @@ define_class!(
 
 /// Whether a view takes a click: not in a hole cut for an overlay above it,
 /// nor under a backdrop (a dialog's, a window's scrim). There the click goes to
-/// Herdr, which closes what the backdrop is under, and the page can't become
+/// Fireflies, which closes what the backdrop is under, and the page can't become
 /// AppKit's first responder (and take the keys) behind a window that still shows.
 fn takes_click(dimmed: bool, in_hole: bool) -> bool {
     !dimmed && !in_hole
@@ -1801,7 +1801,7 @@ impl HoleHost {
         self.update_mask();
     }
 
-    /// A dialog's backdrop, continued over the page (Herdr draws it below).
+    /// A dialog's backdrop, continued over the page (Fireflies draws it below).
     fn update_dim(&self, layer: &AnyObject) {
         let dim = self.ivars().dimmed.get();
         let mut slot = self.ivars().dim.borrow_mut();
@@ -1812,7 +1812,7 @@ impl HoleHost {
             let Some(cls) = AnyClass::get(c"CALayer") else { return };
             let d: Retained<AnyObject> = unsafe { msg_send![cls, layer] };
             unsafe {
-                // The same black at 35% as the backdrop in Herdr's window.
+                // The same black at 35% as the backdrop in Fireflies' window.
                 let color = CGColorCreateGenericGray(0.0, 0.35);
                 let _: () = msg_send![&*d, setBackgroundColor: color.cast_const()];
                 CGColorRelease(color);

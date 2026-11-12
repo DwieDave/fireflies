@@ -584,8 +584,8 @@ test("drawn at 280 px with filters on, the header has no long labels; at 120 onl
   expect(narrow).not.toContain("edit");
 });
 
-test("Herdr's cleanup call when the pane goes closes nothing more (it used to close the pane a second time: 'no pane' toast)", () => {
-  // Herdr calls close() on the copy while its last panes() still lists the pane.
+test("Fireflies' cleanup call when the pane goes closes nothing more (it used to close the pane a second time: 'no pane' toast)", () => {
+  // Fireflies calls close() on the copy while its last panes() still lists the pane.
   world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
   world.shared = { "nocturne-files.from": "p1" };
   world.focused = { pane: "pp" };

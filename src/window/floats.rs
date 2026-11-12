@@ -4,7 +4,7 @@
 //! horizontal; its mod reads that with `placement()`.
 //!
 //! A block with `peek` on a side edge is a drawer: the mod draws one full
-//! layout, Herdr shows only the `peek` px next to the edge and slides the rest
+//! layout, Fireflies shows only the `peek` px next to the edge and slides the rest
 //! out on hover. Nothing inside moves; only the cut does.
 
 use super::*;
@@ -180,7 +180,7 @@ impl AppWindow {
             .absolute()
             .size_full()
         };
-        // Herdr draws the frame (like a dialog's), so a closed drawer is a whole
+        // Fireflies draws the frame (like a dialog's), so a closed drawer is a whole
         // slim panel; the mod draws only what's inside, edge to edge.
         let pad = settings::z(FRAME_PAD);
         let border = px(1.0);

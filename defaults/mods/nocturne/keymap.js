@@ -1,6 +1,6 @@
 // The keys dialog's map (screens.js Keys): every binding keys() lists, in
 // plain words, grouped so the dialog reads as a map of the window, plus the
-// keys Herdr's core handles outside keys.json and what works once the
+// keys Fireflies' core handles outside keys.json and what works once the
 // keyboard is in the sidebar, the tab strip, a pane's header, the parked
 // chips, the toasts or a menu (nav.js's ? lists).
 //
@@ -89,7 +89,7 @@ const WORDS = {
   "send:\u0001": "To the line's start",
   "send:\u0005": "To the line's end",
   "send:\u0015": "Delete to the line's start",
-  "terminal": "Goes to the program (Herdr leaves it alone here)",
+  "terminal": "Goes to the program (Fireflies leaves it alone here)",
   // Nocturne (layout:nocturne, sky.js's command loop).
   "nocturne.sidebar": "Focus the sidebar (again: back to the pane)",
   "nocturne.focus": "Focus the sidebar",
@@ -222,7 +222,7 @@ export function hasWords(action) {
 /** A key as the dialog shows it: keys.json's spelling, "shift-/" as "?". */
 export const pretty = (keys) => String(keys).replace(/shift-\//g, "?");
 
-/** Keys Herdr's core handles itself, outside keys.json. */
+/** Keys Fireflies' core handles itself, outside keys.json. */
 export const CORE = [
   { keys: "escape", action: "overlay.close", section: "core", group: "windows and panels", label: "Close the floating window or dialog in front" },
   { keys: "escape", action: "pane.drag", section: "core", group: "panes", label: "Stop dragging a pane (it stays where it was)" },

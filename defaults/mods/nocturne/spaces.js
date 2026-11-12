@@ -1,7 +1,7 @@
 // Spaces: one row each, the shown one on a dithered band, with inline
 // create / rename / folder / delete. A space's folder is the one it's attached
 // to (kit.js spaceFolder), else where its first terminal is. Spaces stay top
-// level in Herdr's order; only a space on a linked worktree is indented, under
+// level in Fireflies' order; only a space on a linked worktree is indented, under
 // the space on its repo's main checkout (or under the repo's name when the
 // main checkout has no space).
 // nocturne.next / nocturne.prev (keys.json) walk the rows in this order.
@@ -15,16 +15,16 @@
 //                 in ~ that belongs to no project
 //   right-click   a menu (menu.js): show, new tab here, rename, change
 //                 folder, new worktree (a branch checked out as a new space), delete
-//   rename        inline; an empty name gives it Herdr's name back
+//   rename        inline; an empty name gives it Fireflies' name back
 //   folder        the same picker, hanging under the row, attaches the space
 //                 to another folder (space.folder); "no folder" detaches it
 //   delete        ends its terminals and agents (asks first, inline, saying
-//                 how many); it stays in Herdr's recent spaces
+//                 how many); it stays in Fireflies' recent spaces
 // The inline forms (rename, delete) take keys as every form does
 // (form-keys.js): tab / shift-tab walk name → esc (delete: delete ↔ keep),
 // wrapping; the focused chip wears the blue ring; enter in a field saves
 // (cmd-enter from anywhere), enter / space press a chip, esc cancels.
-// The menu asks through shared(EDIT_SPACE); on the folded rail Herdr's own
+// The menu asks through shared(EDIT_SPACE); on the folded rail Fireflies' own
 // (Nocturne-skinned) prompt and confirm dialogs, and the centered picker, do it instead.
 
 import { div, svg } from "gpui-kit";
@@ -80,7 +80,7 @@ export default class Spaces {
     };
   }
 
-  /** Answers the menu's rename / delete, once per request: inline, or with Herdr's dialogs when folded. */
+  /** Answers the menu's rename / delete, once per request: inline, or with Fireflies' dialogs when folded. */
   answer(folded, cx) {
     const ask = shared(EDIT_SPACE);
     if (!ask || ask.at === this.editAsked) return;
@@ -133,7 +133,7 @@ export default class Spaces {
     // Only a linked worktree nests; any other space, in a repo or not, is top level.
     const linked = (s) => { const r = repoOf(s); return Boolean(r && r.top !== r.main); };
     const mains = new Map(); // repo -> the first space on its main checkout
-    const kids = new Map(); // repo -> its worktree spaces, in Herdr's order
+    const kids = new Map(); // repo -> its worktree spaces, in Fireflies' order
     for (const s of sp) {
       const g = group(s);
       if (!g) continue;

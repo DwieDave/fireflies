@@ -70,7 +70,7 @@ export default class Tabs {
     this.row = "tabs";
     this.cursor = null;
     this.rows = { tabs: [], head: [], parked: [] };
-    // "focus" from Herdr (pane.go, layout.focus, a popup over the strip closed);
+    // "focus" from Fireflies (pane.go, layout.focus, a popup over the strip closed);
     // nocturne.tabstrip / nocturne.header (keys.json): into the strip on that
     // row, or back out. Every nocturne.* command reaches every copy: the sky
     // takes its own.

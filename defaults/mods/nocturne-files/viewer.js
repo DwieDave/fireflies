@@ -65,7 +65,7 @@ const unzoom = (v) => v / zoom();
 const platform = () => appWindow()?.platform ?? "linux";
 const dpr = () => (platform() === "macos" ? 2 : 1);
 const code = () => settings()?.font_family || "JetBrains Mono";
-/** This Herdr places macOS views (the fork's native-view/0). */
+/** This Fireflies places macOS views (the fork's native-view/0). */
 const nativeViews = () => typeof herdr.nativeView?.new === "function" && herdr.nativeViewCapabilities?.()?.available === true;
 /** A 50% checker filling the parent, `cell` px squares (as ../nocturne/kit.js dither). */
 function checker(color, cell = 1) {

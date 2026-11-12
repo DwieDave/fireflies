@@ -168,7 +168,7 @@ test("the drop lands exactly where the stake stood, for every tab and every gap,
       const moved = commands.find(([n]) => n === "tab.move");
       if (!mark) { expect(moved).toBeUndefined(); continue; }
       expect(moved).toBeDefined();
-      // Apply the move as Herdr does (remove, insert at index - 1) and look at the strip.
+      // Apply the move as Fireflies does (remove, insert at index - 1) and look at the strip.
       const order = ["a", "b", "c", "d", "e"].filter((x) => x !== from);
       order.splice(moved![1].index - 1, 0, from);
       const strip2 = order.filter((x) => x !== "e");

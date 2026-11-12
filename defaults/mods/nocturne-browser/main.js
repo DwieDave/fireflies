@@ -1,5 +1,5 @@
 // Nocturne browser: a real WebKit view in a pane, on the native-view element
-// of the DwieDave/herdr-app fork (stock Herdr has none: the pane says so).
+// of the DwieDave/fireflies fork (stock Herdr has none: the pane says so).
 //
 //   bar      back, forward, reload / stop, the address (host bright, path dim)
 //   cmd+p    edit the address (also cmd+l, or click it); Enter goes, Esc
@@ -16,7 +16,7 @@
 //   tab / shift-tab  the tabs and the bar's buttons (a ring shows which), enter presses it
 //   esc  the ring, then the keys strip, away
 //   ⧉        (only while the page has a <video>)
-//            the page's video in the nocturne-pip player, a Herdr window over
+//            the page's video in the nocturne-pip player, a Fireflies window over
 //            every tab and space (command nocturne-browser.pip); the page goes
 //            with it, and comes back with ↩ or ✕ (or ⧉ again). Meanwhile this
 //            pane is parked, and shown again when the video comes back or goes
@@ -466,7 +466,7 @@ export default class Browser extends View {
     if (e.event === "view.escapeKey") { this.claim(); this.handle.focus(); }
     // Right-click "Inspect Element": WebKit opened the inspector; give it its pane.
     if (e.event === "web.inspector" && d.of) this.openInspector(d.of, cx);
-    // ⌥⌘I while the page has the keyboard (it never reaches Herdr's keys).
+    // ⌥⌘I while the page has the keyboard (it never reaches Fireflies' keys).
     if (e.event === "web.inspectKey") this.inspector(cx);
     // ⌘R while the page has the keyboard: reload (or stop, while it loads).
     if (e.event === "web.reloadKey") this.command("reload");
@@ -486,9 +486,9 @@ export default class Browser extends View {
       const f = loadFailure(d);
       if (f) { tab.error = f.message; tab.failed = { url: f.url }; }
     }
-    // The page's video goes to the player (⧉), or comes back into Herdr from
+    // The page's video goes to the player (⧉), or comes back into Fireflies from
     // its popped-out window: the player shows it. Meanwhile the page is away.
-    // From the window out of Herdr's ◧ / ⤓, `then`: the player goes on into a pane or a chip.
+    // From the window out of Fireflies' ◧ / ⤓, `then`: the player goes on into a pane or a chip.
     if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of, ...(d.then ? { then: d.then } : {}) } });
     if (e.event === "pip.enter") { this.away = true; this.pipOf = d.of; this.hide(); }
     if (e.event === "pip.leave") { this.away = false; this.unhide(true); }
@@ -735,7 +735,7 @@ export default class Browser extends View {
       .text_color(ringed ? t.foreground : enabled ? t.muted : t.ansi0)
       .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .when(enabled, (el) => el.hover((s) => s.text_color(t.foreground).bg(t.ansi0)))
-      // focus: the press goes on to the pane too, which Herdr then focuses.
+      // focus: the press goes on to the pane too, which Fireflies then focuses.
       .on_mouse_down("left", (e, cx) => (focus ? this.claim() : this.stop(e, cx)))
       .on_click((_e, cx) => { if (enabled) { this.claim(); action(cx); cx.notify(); } })
       .child(svg(`${ICONS}/${name}.svg`).size(13));
@@ -834,7 +834,7 @@ export default class Browser extends View {
           .child(this.blank(t, "Opening the inspector…", null))));
     }
     let body;
-    if (!available()) body = this.blank(t, "This Herdr has no native views", "The browser needs the DwieDave/herdr-app build (native-view/0).");
+    if (!available()) body = this.blank(t, "This Herdr has no native views", "The browser needs the DwieDave/fireflies build (native-view/0).");
     else if (!this.start) body = this.blank(t, "Nothing open", "Type an address or a search, then Enter.");
     else {
       body = div().flex_1().min_h(0).relative().child(this.webView(t, this.tab));
@@ -858,7 +858,7 @@ export default class Browser extends View {
   }
 
   /** Tab `tab`'s page: a WebKit view of its own (id: the tab's). The mod's
-   *  children sit under it: seen while it loads, or while a Herdr menu or
+   *  children sit under it: seen while it loads, or while a Fireflies menu or
    *  dialog makes the view step aside. `tabs`: what would open a window
    *  comes as web.newTab. */
   webView(t, tab) {

@@ -1,4 +1,4 @@
-// Herdr's own dialogs in Nocturne's look: square, 1-bit, a title over a
+// Fireflies' own dialogs in Nocturne's look: square, 1-bit, a title over a
 // dithered horizon line. The layout's prompt_mod and confirm_mod (DwieDave
 // fork) open this mod with the shipped dialogs' props plus `dialog`:
 //   prompt   { title, value, hint, command }  a name (rename tab / space);

@@ -25,7 +25,7 @@ use std::collections::BTreeMap;
 pub const ESCAPE_HATCH: &str = "ctrl-alt-shift-escape";
 
 /// The shipped keys: prefix-free; plain ctrl+letter always stays with the
-/// program. Herdr uses ctrl+shift (defaults/keys.json), or cmd on macOS
+/// program. Fireflies uses ctrl+shift (defaults/keys.json), or cmd on macOS
 /// (defaults/keys.macos.json, with Mac terminal editing keys).
 #[cfg(not(target_os = "macos"))]
 pub const DEFAULTS: &str = include_str!("../defaults/keys.json");
@@ -246,7 +246,7 @@ pub fn parse(text: &str) -> Result<Vec<KeyBinding>, String> {
                 }
             }
             if keys == ESCAPE_HATCH {
-                problems.push(format!("{ESCAPE_HATCH} is reserved for resetting Herdr"));
+                problems.push(format!("{ESCAPE_HATCH} is reserved for resetting Fireflies"));
                 continue;
             }
             let predicate = match KeyBindingContextPredicate::parse(&ctx) {

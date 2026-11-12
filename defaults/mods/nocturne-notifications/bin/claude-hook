@@ -2,7 +2,7 @@
 # Claude Code's PermissionRequest hook for Nocturne's notifications
 # (nocturne-notifications): keeps the request Claude Code is about to ask
 # (the tool and its input; for AskUserQuestion every question of the block)
-# where the Herdr app reads it, so it can show and answer it exactly.
+# where the Fireflies app reads it, so it can show and answer it exactly.
 #
 # It never answers: it prints nothing and exits 0, so Claude Code asks in its
 # terminal as always. Outside a herdr-core terminal it does nothing at all.

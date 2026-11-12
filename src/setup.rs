@@ -95,7 +95,7 @@ pub fn open(need: Need, requests: async_channel::Receiver<Request>, cx: &mut App
     };
     let icon = Arc::new(Image::from_bytes(ImageFormat::Png, ICON.to_vec()));
     cx.open_window(options, |_, cx| cx.new(|_| Setup { need, state: State::Ready, requests: Some(requests), icon }))
-        .expect("cannot open the Herdr window");
+        .expect("cannot open the Fireflies window");
     cx.activate(true);
 }
 
@@ -165,7 +165,7 @@ impl Setup {
                     cx.notify();
                     return;
                 }
-                // Remembered: next time Herdr looks there first.
+                // Remembered: next time Fireflies looks there first.
                 let mut person = settings::load_person().unwrap_or_default();
                 person.core = Some(bin.to_string_lossy().into_owned());
                 let _ = settings::write_person(&person);
@@ -180,28 +180,28 @@ impl Setup {
     fn words(&self) -> (String, String, String) {
         match &self.need {
             Need::Install => (
-                "Herdr needs herdr-core".into(),
-                "herdr-core runs your terminals and agents, and keeps them alive when this window closes. Herdr couldn't find it on this computer.".into(),
+                "Fireflies needs herdr-core".into(),
+                "herdr-core runs your terminals and agents, and keeps them alive when this window closes. Fireflies couldn't find it on this computer.".into(),
                 format!("Install it for me puts it in {CORE_PLACE} (with hc), like its own installer: {CORE_INSTALL}"),
             ),
             Need::Connect(error) => (
-                "Herdr can't connect to herdr-core".into(),
+                "Fireflies can't connect to herdr-core".into(),
                 error.clone(),
                 "Once you've resolved this, try again.".into(),
             ),
             Need::Fix(Mismatch::TooOld { have, need }) => (
-                "Herdr needs a newer herdr-core".into(),
-                format!("Yours is {have}; this Herdr needs {need} or newer. Updating keeps your terminals running."),
+                "Fireflies needs a newer herdr-core".into(),
+                format!("Yours is {have}; this Fireflies needs {need} or newer. Updating keeps your terminals running."),
                 "Or update it yourself: hc update".into(),
             ),
             Need::Fix(Mismatch::Missing(methods)) => (
-                "Herdr needs a newer herdr-core".into(),
-                format!("Your herdr-core can't do everything this Herdr needs ({}). Updating keeps your terminals running.", methods.join(", ")),
+                "Fireflies needs a newer herdr-core".into(),
+                format!("Your herdr-core can't do everything this Fireflies needs ({}). Updating keeps your terminals running.", methods.join(", ")),
                 "Or update it yourself: hc update".into(),
             ),
             Need::Fix(Mismatch::Newer { generation }) => (
-                "This Herdr is older than your herdr-core".into(),
-                format!("Your herdr-core speaks a newer protocol (generation {generation}) than this Herdr understands. Build a newer one; your terminals keep running."),
+                "This Fireflies is older than your herdr-core".into(),
+                format!("Your herdr-core speaks a newer protocol (generation {generation}) than this Fireflies understands. Build a newer one; your terminals keep running."),
                 // Upstream Herdr's installer would replace this fork with upstream Herdr, and the fork has no releases.
                 "Fireflies has no releases yet: pull and build it again (just install).".into(),
             ),

@@ -1,6 +1,6 @@
 //! Feedback goes to GitHub issues: a new-issue page prefilled with the
 //! person's words and the versions, opened for them to read, add screenshots
-//! and submit there. Herdr itself uploads nothing.
+//! and submit there. Fireflies itself uploads nothing.
 
 /// Where new issues are filed.
 pub const ISSUES: &str = "https://github.com/DwieDave/fireflies/issues/new";
@@ -52,7 +52,7 @@ fn footer(from: &str, core: Option<&str>) -> String {
     if from == "agent" {
         f.push_str("_Drafted by an agent._\n");
     }
-    f.push_str(&format!("- Herdr: {}\n", env!("CARGO_PKG_VERSION")));
+    f.push_str(&format!("- Fireflies: {}\n", env!("CARGO_PKG_VERSION")));
     f.push_str(&format!("- herdr-core: {}\n", core.map(release_version).unwrap_or_else(|| "unknown".into())));
     f.push_str(&format!("- OS: {} {}\n", std::env::consts::OS, std::env::consts::ARCH));
     f.push_str("\nScreenshots help: paste or drop them into this issue.");
@@ -115,7 +115,7 @@ mod tests {
         let i = issue("", "  Tabs flicker\nwhen I resize & drag  ", "agent", Some("hc 0.4.2"));
         assert_eq!(i.title, "Tabs flicker");
         assert!(i.body.starts_with("Tabs flicker\nwhen I resize & drag\n\n---\n"), "{}", i.body);
-        for part in ["Drafted by an agent", concat!("- Herdr: ", env!("CARGO_PKG_VERSION")), "- herdr-core: 0.4.2", std::env::consts::OS, "Screenshots"] {
+        for part in ["Drafted by an agent", concat!("- Fireflies: ", env!("CARGO_PKG_VERSION")), "- herdr-core: 0.4.2", std::env::consts::OS, "Screenshots"] {
             assert!(i.body.contains(part), "{part}: {}", i.body);
         }
         let (head, query) = i.url.split_once('?').unwrap();

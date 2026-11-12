@@ -1,5 +1,5 @@
 // Nocturne picture in picture: the video a browser pane put in Picture in
-// Picture, in a Herdr window (drag it by its bar, resize it by its edges and
+// Picture, in a Fireflies window (drag it by its bar, resize it by its edges and
 // corners: the video keeps its shape) that stays over every tab and space.
 // Square, like the rest of Nocturne.
 //
@@ -11,7 +11,7 @@
 //        (nocturne-pip.pane); the video plays on there
 //   ⤓    park: a chip in the shown tab's parked row (nocturne-pip.park); the
 //        video plays on, unparking the chip brings the window back
-//   ⇱    out of Herdr: a window above every app and space, in the screen's
+//   ⇱    out of Fireflies: a window above every app and space, in the screen's
 //        bottom right corner (nocturne-pip.out; its ⇲ brings it back)
 //   ✕    close: the video goes back to its page, paused (nocturne-pip.close)
 //   ⋯    when the bar is too narrow for them all: the rest, as a menu.
@@ -19,7 +19,7 @@
 // Keys while it has the keyboard (overlay.focus to the window, pane.go to its
 // pane, a click on it; its bar's edge turns blue meanwhile):
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
-//   p  into a pane   P  park   o  out of Herdr   x q  close
+//   p  into a pane   P  park   o  out of Fireflies   x q  close
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
 //   ?    these keys (KEYS), keyhelp.js's overview in a popup: the video is a
 //        native view, drawn over the panes and the overlays opened before it
@@ -70,14 +70,14 @@ const CONTROLS = [
   { id: "mute", keep: 2, icon: (s) => (s.muted ? "volume-x" : "volume"), name: (s) => (s.muted ? "Sound on" : "Sound off") },
   { id: "pane", keep: 7, glyph: "◧", name: "Into a pane", window: true },
   { id: "park", keep: 4, glyph: "⤓", name: "Park as a chip" },
-  { id: "out", keep: 8, glyph: "⇱", name: "Out of Herdr" },
+  { id: "out", keep: 8, glyph: "⇱", name: "Out of Fireflies" },
   { id: "keys", keep: 9, glyph: "?", name: "Keys" },
   { id: "close", keep: 1, glyph: "✕", name: "Close" },
 ];
 
 /** What ? lists: every key keyControl() takes, ? keys last. */
 export const KEYS = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
-  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Herdr"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
+  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
 const available = () => typeof herdr.nativeView?.new === "function";
 const val = (v, s) => (typeof v === "function" ? v(s) : v);
@@ -139,7 +139,7 @@ export default class Pip extends View {
         let e;
         try { e = JSON.parse(await herdr.nextNativeViewEvent()); } catch { return; }
         // The video went home (here, in its page or elsewhere), or into
-        // another player (a pane, a chip, out of Herdr): nothing left to show here.
+        // another player (a pane, a chip, out of Fireflies): nothing left to show here.
         if (e.event === "pip.moved") this.noteMade();
         if (e.event === "pip.ended" || e.event === "pip.moved") return this.leave();
         if (e.event === "pip.state" && e.data?.result && e.data.result !== "none") {
@@ -152,7 +152,7 @@ export default class Pip extends View {
     });
     // How the video is (playing, sound), once the view holds it.
     cx.timer.after(500, () => { try { herdr.nativeViewCall(ID, "pip.sync", {}); } catch {} });
-    // Popped back in by the window out of Herdr's ◧ or ⤓: on into a pane or a chip.
+    // Popped back in by the window out of Fireflies' ◧ or ⤓: on into a pane or a chip.
     const then = props()?.then;
     if (!this.inPane && (then === "pane" || then === "park")) cx.timer.after(400, () => this.command(then));
     if (this.inPane) {
@@ -253,7 +253,7 @@ export default class Pip extends View {
     }
   }
 
-  /** The copy ends (its window or pane closed, by us or by Herdr). */
+  /** The copy ends (its window or pane closed, by us or by Fireflies). */
   async close() {
     if (!this.menu && !this.inPane && shared(PLAYER) === props()?.of) setShared(PLAYER, null);
   }
@@ -271,7 +271,7 @@ export default class Pip extends View {
     if (pane) run("pane.close", { pane: pane.pane });
   }
 
-  /** Out of Herdr: the popped-out window takes the video, this player goes. */
+  /** Out of Fireflies: the popped-out window takes the video, this player goes. */
   popOut() {
     const t = theme();
     this.call("pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0 } });

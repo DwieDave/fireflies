@@ -5,7 +5,7 @@
 //
 // A terminal's pin (an agent's or a plain shell's) lives on the terminal, so
 // every window, the agents mod and the CLI see it, and it ends with the terminal:
-//   herdr.pinned        set by Herdr's terminal.pin {terminal, pinned} ("1" or gone)
+//   herdr.pinned        set by Fireflies' terminal.pin {terminal, pinned} ("1" or gone)
 //   nocturne.pinned-at  when it was pinned (ms), Nocturne's order in the jar;
 //                       a pin made elsewhere (CLI, the agents mod) gets one
 //                       stamped when the sky first sees it (stamps())

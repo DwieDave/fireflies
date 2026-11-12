@@ -1,5 +1,5 @@
 //! Mods: folders of JavaScript under ~/.config/herdr-app/mods that agents write and
-//! Herdr runs live (gpui-shell), plus the `herdr` module they import.
+//! Fireflies runs live (gpui-shell), plus the `herdr` module they import.
 
 use crate::layout::Node;
 use gpui::App;
@@ -354,7 +354,7 @@ fn as_shipped(dir: &Path, files: &Files) -> bool {
 
 /// File path (inside the mod) to content fingerprint.
 type Files = std::collections::BTreeMap<String, String>;
-/// Default mods Herdr installed, with the files as installed.
+/// Default mods Fireflies installed, with the files as installed.
 type Installed = std::collections::BTreeMap<String, Files>;
 
 /// FNV-1a: stable across builds, unlike std's hasher.
@@ -363,7 +363,7 @@ fn fingerprint(bytes: &[u8]) -> String {
     format!("{h:016x}")
 }
 
-/// Whether every file Herdr installed is still there as installed.
+/// Whether every file Fireflies installed is still there as installed.
 fn untouched(dir: &Path, files: &Files) -> bool {
     files.iter().all(|(path, want)| std::fs::read(dir.join(path)).is_ok_and(|b| fingerprint(&b) == *want))
 }

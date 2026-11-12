@@ -1,9 +1,9 @@
 // Notifications ({ role: "toast" }), in Nocturne's look: a square card with
 // a dithered edge in the level's color, a pip, the title and one body line.
-// Herdr opens one per notify() with the notification as props
+// Fireflies opens one per notify() with the notification as props
 // ({ title, body, level, icon, action, overlay }), 340 x 72, bottom right.
 // Click runs its action (e.g. go to the agent) and dismisses it.
-// An agent's own toast (Herdr's "… needs you", going to the agent) says what
+// An agent's own toast (Fireflies' "… needs you", going to the agent) says what
 // it asks when the notifications mod knows (shared ITEMS: "wants to run a
 // command", the command), and a click opens that request in its overview.
 //

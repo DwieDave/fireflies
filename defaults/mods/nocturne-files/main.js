@@ -1,5 +1,5 @@
 // Nocturne files: a folder's tree in a pane, in Nocturne's 1-bit look, that
-// hands what you pick to $EDITOR. Herdr's shipped files mod, reworked: the
+// hands what you pick to $EDITOR. Fireflies' shipped files mod, reworked: the
 // same lazy listing, folder watch and git marks (a mod can't import another
 // mod's files, so it isn't wrapped), but rooted where it was opened instead
 // of following focus, and opening files in the editor instead of a preview.
@@ -708,7 +708,7 @@ export default class Files extends View {
   }
 
   /** Closes this pane (the panel too); from the panel, the keyboard goes back where it came from.
-   *  Not close(): Herdr calls that as cleanup once the pane is gone. */
+   *  Not close(): Fireflies calls that as cleanup once the pane is gone. */
   closePane() {
     const me = this.me() ?? (this.alone ? null : this.panel());
     if (!me) return;

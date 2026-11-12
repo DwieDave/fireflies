@@ -1,6 +1,6 @@
 # herdr-app: drive the person's window
 
-Herdr shows spaces, tabs and panes. herdr-core (`hc`) runs their terminals
+Fireflies shows spaces, tabs and panes. herdr-core (`hc`) runs their terminals
 and keeps them alive when the window closes. Use `herdr-app` only to change
 what the person sees. For starting, reading, messaging, waiting on or cleaning
 up agents and programs, read `hc --skill` and use hc.
@@ -219,7 +219,7 @@ with a nonzero code within two seconds, the window shows an error toast with
 the exit code and last output lines.
 
 A terminal started with hc opts into the window with `herdr.space=<id>`.
-`herdr.tab=<id>` chooses its tab; without it, Herdr creates a tab in that space.
+`herdr.tab=<id>` chooses its tab; without it, Fireflies creates a tab in that space.
 Unlabeled workers stay hidden. Do not add labels just to run a background
 worker. Use app commands when the
 user wants to see a new tab or split, hc for orchestration that need not change
@@ -244,12 +244,12 @@ those files or the generated guide. The app rewrites them on start.
   names the block holding the keyboard. None of this moves the keyboard out of an
   open dialog, popup or window opened with `scrim: true` (Git, GitHub): those keep
   it until they close, and a key that finds it behind one is dropped.
-- Native views (web, PDF, video; macOS) sit above Herdr's own drawing and
+- Native views (web, PDF, video; macOS) sit above Fireflies' own drawing and
   don't appear in `shot`. Every overlay painted after the one a view is in
   (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
   backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
   layer, holes and dim, so check those instead of a screenshot.
-- Shipped mods belong to Herdr: duplicate with `mod.clone` before editing.
+- Shipped mods belong to Fireflies: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.
 - Save to reload. A broken save keeps the old version running and reports
@@ -286,8 +286,8 @@ capture or permissions. It needs a running window that has drawn a frame;
 
 ## Problems and safety
 
-If Herdr misbehaves, `herdr-app feedback "<what happened>"` drafts a GitHub issue.
-With Herdr open, the person reviews it in a window and opens it on GitHub; without, the
+If Fireflies misbehaves, `herdr-app feedback "<what happened>"` drafts a GitHub issue.
+With Fireflies open, the person reviews it in a window and opens it on GitHub; without, the
 prefilled issue page opens in the browser and its link is printed. Nothing is filed
 until the person submits it on GitHub.
 

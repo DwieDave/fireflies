@@ -107,7 +107,7 @@ test("open sidebar: a space's menu asks to delete it; the render that sees it dr
   expect(timers).toEqual([]);
 });
 
-test("folded rail: the same ask goes to Herdr's confirm (space.close) from the task, not the render", () => {
+test("folded rail: the same ask goes to Fireflies' confirm (space.close) from the task, not the render", () => {
   ran.length = 0;
   const s: any = new Sky();
   s.init({ role: "sky" }, cx);

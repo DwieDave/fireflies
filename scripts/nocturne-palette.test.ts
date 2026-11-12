@@ -121,7 +121,7 @@ test("the file picker and grep are entries with their keys", () => {
   const grep = open("grep").rows().find((r: any) => r.e.name === "nocturne.grep");
   expect(grep?.e.title).toBe("Grep the project…");
   expect(keyOf(grep.e, keys, true)).toBe("shift-⌘F");
-  // Herdr's cmd-p (the places picker) is the layout's file picker in Nocturne: that row shows no key.
+  // Fireflies' cmd-p (the places picker) is the layout's file picker in Nocturne: that row shows no key.
   const places = open().rows().find((r: any) => r.e.name === "mod.open");
   expect(keyOf(places.e, keys, true)).toBe(null);
   // A mod's key shows while its pane is focused; shift-/ reads ?, as the keys lists spell it.

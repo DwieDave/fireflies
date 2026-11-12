@@ -1,7 +1,7 @@
-// Right-click menus in Nocturne's look (popup.js), with Herdr's items:
+// Right-click menus in Nocturne's look (popup.js), with Fireflies' items:
 //   tab    the tab strip's tabs (tabs.js opens it, props { role: "menu", tab: "tab", target })
 //   pane   a terminal's menu: the layout's `terminal_menu` is "nocturne", and
-//          Herdr opens it with props { tab: "pane", target: { pane, terminal } };
+//          Fireflies opens it with props { tab: "pane", target: { pane, terminal } };
 //          renaming happens inline in the pane's header, asked for through shared(NAME_PANE)
 //   fly    a sidebar firefly's (sky.js opens it, props { tab: "fly", target: { id, address } }):
 //          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT);

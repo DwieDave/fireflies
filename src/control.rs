@@ -20,7 +20,7 @@ fn socket() -> PathBuf {
 pub fn listen(tx: async_channel::Sender<Request>) {
     let path = socket();
     if UnixStream::connect(&path).is_ok() {
-        tracing::warn!("another Herdr is serving {}; `herdr-app do` goes there", path.display());
+        tracing::warn!("another Fireflies is serving {}; `herdr-app do` goes there", path.display());
         return;
     }
     let _ = std::fs::remove_file(&path);
@@ -53,7 +53,7 @@ fn serve(stream: UnixStream, tx: async_channel::Sender<Request>) {
     let _ = (&stream).write_all(format!("{reply}\n").as_bytes());
 }
 
-/// One Herdr per home: a second launch brings the running window to the
+/// One Fireflies per home: a second launch brings the running window to the
 /// front and quits. True when one is running (even one too busy to answer:
 /// a second window would ring every alert twice).
 pub fn raise_running() -> bool {
@@ -104,10 +104,10 @@ pub fn client(args: &[String]) -> i32 {
             let issue = crate::feedback::issue("", &args[1], "agent", core.as_deref());
             println!("{}", issue.url);
             crate::links::open(&crate::links::Target::Url(issue.url));
-            eprintln!("Herdr isn't open: opened a prefilled GitHub issue in the browser. Nothing is filed until the person submits it there.");
+            eprintln!("Fireflies isn't open: opened a prefilled GitHub issue in the browser. Nothing is filed until the person submits it there.");
             return 0;
         }
-        Err(e) => return fail(&format!("no Herdr window at {}: {e}", socket().display())),
+        Err(e) => return fail(&format!("no Fireflies window at {}: {e}", socket().display())),
     };
     let _ = stream.set_read_timeout(Some(Duration::from_secs(35)));
     let mut line = String::new();

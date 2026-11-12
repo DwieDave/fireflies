@@ -63,7 +63,7 @@ const STALE = 15000;
 const stop = (_e, cx) => cx.stop_propagation();
 const PAN_STEP = 80;
 const CACHE = "nocturne-agents.cache";
-// Herdr shows a hidden tab's panes at a placeholder size for a moment before
+// Fireflies shows a hidden tab's panes at a placeholder size for a moment before
 // their real one; sizes under this are ignored, so the graph doesn't jump.
 const PLACEHOLDER = 120;
 

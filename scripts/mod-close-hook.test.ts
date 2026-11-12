@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { readFile, readdir } from "node:fs/promises";
 
-// A mod's exported View may have `async close(cx)`: Herdr calls it as cleanup
+// A mod's exported View may have `async close(cx)`: Fireflies calls it as cleanup
 // when the copy's pane, tab or overlay has already gone. A View that names its
 // own "close this pane" action close() closes the pane a second time and the
 // person gets a "pane.close failed: no pane" toast (nocturne-files did).

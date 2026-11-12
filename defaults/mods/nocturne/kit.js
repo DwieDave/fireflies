@@ -51,11 +51,11 @@ export function nameTerminal(terminal, name) {
 /** A terminal's labels (an address), {} if it's gone. */
 export const labelsOf = (terminal) => terminals().find((x) => x.address === terminal)?.labels ?? {};
 
-/** Pinned to the jar at the top of the sky (pins.js: Herdr's herdr.pinned label). */
+/** Pinned to the jar at the top of the sky (pins.js: Fireflies' herdr.pinned label). */
 export const pinned = (terminal) => isPinned(labelsOf(terminal));
 
 /** Pins a terminal (an agent's, or a plain shell's) to the top of the sky, or
- *  unpins it: Herdr's terminal.pin, and the time it joined the jar (its order there). */
+ *  unpins it: Fireflies' terminal.pin, and the time it joined the jar (its order there). */
 export function pin(terminal, on = !pinned(terminal)) {
   if (!terminal) return;
   run("terminal.pin", { terminal, pinned: on });

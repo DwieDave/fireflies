@@ -171,7 +171,7 @@ export function remember(list, path) {
 }
 
 /** The space.new arguments for `folder` (null: no folder, a space in home)
- *  and a typed `name` (its folder's name, or empty: unnamed, so Herdr calls
+ *  and a typed `name` (its folder's name, or empty: unnamed, so Fireflies calls
  *  it after its folder). */
 export function newArgs(folder, name, home) {
   const n = (name ?? "").trim();

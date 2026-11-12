@@ -92,7 +92,7 @@ fn main() {
     if args.len() > 1 {
         attach_console();
     }
-    // `herdr-app check <mod>` / `herdr-app types <mod>`: gpui-shell's own checker, with Herdr's module installed.
+    // `herdr-app check <mod>` / `herdr-app types <mod>`: gpui-shell's own checker, with Fireflies' module installed.
     if matches!(args.get(1).map(String::as_str), Some("check" | "types")) {
         mods::install_check_policy();
         gpui_shell::host::main_with_components(gpui_shell::FrozenComponentRegistry::default());
@@ -236,6 +236,6 @@ pub fn open_main(core: std::sync::Arc<hc::Core>, requests: async_channel::Receiv
                 ..Default::default()
             };
             cx.open_window(options, |window, cx| cx.new(|cx| window::AppWindow::new(core, requests, window, cx)))
-                .expect("cannot open the Herdr window");
+                .expect("cannot open the Fireflies window");
             cx.activate(true);
 }

@@ -1,6 +1,6 @@
 //! Language servers for mods: a server process per argv and workspace root,
 //! spoken to in LSP's JSON-RPC over its stdin and stdout, and shared by every
-//! mod copy that asks for the same one. Herdr only carries messages: it starts
+//! mod copy that asks for the same one. Fireflies only carries messages: it starts
 //! the server, initializes it once, answers the requests a server makes of its
 //! client generically, and stops it a while after the last copy lets go (the
 //! starter says how long; a cap on servers nobody uses stops the least
@@ -181,7 +181,7 @@ impl Session {
         self.subscribers.lock().unwrap().retain(|_, tx| tx.try_send(message.clone()).is_ok() || !tx.is_closed());
     }
 
-    /// What Herdr answers when the server asks its client something.
+    /// What Fireflies answers when the server asks its client something.
     fn answer(&self, method: &str, params: &Value) -> Result<Value, (i64, String)> {
         match method {
             // Each item's section of the person's server_settings, else null.
@@ -809,7 +809,7 @@ while True:
         let one = next_message(1, id).unwrap();
         assert_eq!(one.recv_blocking().unwrap()["params"]["value"]["kind"], "begin");
         assert_eq!(one.recv_blocking().unwrap()["params"]["value"]["message"], "3/9");
-        // The configuration answer came back from Herdr's reply to the server.
+        // The configuration answer came back from Fireflies' reply to the server.
         assert_eq!(one.recv_blocking().unwrap(), json!({ "method": "echo/config", "params": [3] }));
         // A second copy shares it, and its idle time is the longest asked for.
         let again = start(2, argv.clone(), root.clone(), settings, None).recv_blocking().unwrap().unwrap();

@@ -1,5 +1,5 @@
 //! Embeds the default mods (defaults/mods/**), the program icons
-//! (defaults/icons/*) and the frame's mods (defaults/frame/**) so Herdr can
+//! (defaults/icons/*) and the frame's mods (defaults/frame/**) so Fireflies can
 //! install them.
 //!
 //! Worktrees may share one target dir, and with it this script and its output.

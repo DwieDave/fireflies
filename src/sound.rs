@@ -1,5 +1,5 @@
-//! Attention sounds, as Herdr plays them: one when an agent needs you, one
-//! when it finished while you weren't looking. Bundled sounds (Herdr's), or a
+//! Attention sounds, as Fireflies plays them: one when an agent needs you, one
+//! when it finished while you weren't looking. Bundled sounds (Fireflies'), or a
 //! file from settings.json; played with whichever MP3-capable player exists
 //! (Windows plays them itself).
 

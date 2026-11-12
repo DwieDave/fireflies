@@ -6,7 +6,7 @@
 //! AVPlayerView, QLPreviewView — live in the `herdr-native-view` crate; this
 //! file only connects them to GPUI: it records where each element was painted
 //! and, at the end of every window frame, moves the views there, hides views
-//! whose mod is off screen, cuts holes where Herdr overlays are drawn above
+//! whose mod is off screen, cuts holes where Fireflies overlays are drawn above
 //! them (so the page keeps rendering around a menu or dialog), and drops views
 //! whose mod copy is gone.
 

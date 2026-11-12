@@ -4,7 +4,7 @@ version = "0.0.1"
 edition = "2024"
 license = "Apache-2.0"
 publish = false
-description = "Native macOS content views (web, PDF, media, Quick Look) hosted inside Herdr's window; interface native-view/0"
+description = "Native macOS content views (web, PDF, media, Quick Look) hosted inside Fireflies' window; interface native-view/0"
 
 [features]
 # Upstream's Chromium (CEF) engine is not vendored in this fork: WebKit only.

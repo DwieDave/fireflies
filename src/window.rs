@@ -177,7 +177,7 @@ fn launch_failure(record: &Value, output: &str) -> Option<String> {
     Some(if tail.is_empty() { format!("Exit code {code}") } else { format!("Exit code {code}\n{tail}") })
 }
 
-/// The shipped layouts (defaults/layouts): `main` is Herdr's window (spaces
+/// The shipped layouts (defaults/layouts): `main` is Fireflies' window (spaces
 /// sidebar, tab bar); `nocturne` is Fireflies' (its nocturne* mods).
 const LAYOUTS: &[(&str, &str)] = &[
     ("main", include_str!("../defaults/layouts/main.json")),
@@ -204,7 +204,7 @@ fn shipped_layout(name: &str) -> &'static str {
     LAYOUTS.iter().find(|(n, _)| *n == name).unwrap_or(&LAYOUTS[0]).1
 }
 
-/// A layout as shipped (main for names Herdr doesn't ship).
+/// A layout as shipped (main for names Fireflies doesn't ship).
 fn default_layout(name: &str) -> Node {
     serde_json::from_str(shipped_layout(name)).expect("defaults/layouts are valid")
 }
@@ -549,7 +549,7 @@ pub struct AppWindow {
     cwds: HashMap<String, String>,
     /// When each terminal's repo and branch were last read, and what it was doing.
     folders_checked: HashMap<String, FolderCheck>,
-    /// When Herdr started each terminal: a listing already in flight can't know them yet.
+    /// When Fireflies started each terminal: a listing already in flight can't know them yet.
     born: RefCell<HashMap<String, Instant>>,
     /// Connection epoch: ignore replies from an old connection.
     core_generation: u64,
@@ -743,13 +743,13 @@ impl AppWindow {
         install_layouts();
         let name = mods::shared("layout").and_then(|v| v.as_str().map(str::to_owned)).filter(|n| layout_path(n).exists());
         // A layout whose mods are gone (Zen, T4, ADE after the update took
-        // theirs) starts on Herdr's instead of a wall of "did not load".
+        // theirs) starts on Fireflies' instead of a wall of "did not load".
         let gone = name.as_deref().map(missing_mods).unwrap_or_default();
         w.load_layout(if gone.is_empty() { name.as_deref().unwrap_or(FIRST_LAYOUT) } else { "main" });
         w.apply_look(window, cx);
         w.show_layout_notes(window, cx);
         if let (Some(n), false) = (&name, gone.is_empty()) {
-            let note = json!({ "title": format!("{n} needs mods that aren't here"), "body": format!("Showing Herdr instead. Missing: {}. Your {n} layout file is still there.", gone.join(", ")), "level": "info", "timeout": 12000 });
+            let note = json!({ "title": format!("{n} needs mods that aren't here"), "body": format!("Showing Fireflies instead. Missing: {}. Your {n} layout file is still there.", gone.join(", ")), "level": "info", "timeout": 12000 });
             w.open_overlay(mods::new_overlay_id(), json!({ "kind": "toast", "notification": note }), window, cx);
         }
 
@@ -1302,7 +1302,7 @@ impl AppWindow {
     /// What installing layouts kept of the person's own, as toasts.
     fn show_layout_notes(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         for clone in mods::take_sync_notes() {
-            let n = json!({ "title": format!("Your edits are in {clone}"), "body": "Herdr's own layouts and mods can't be changed: clone one to make it yours.", "level": "info", "timeout": 12000 });
+            let n = json!({ "title": format!("Your edits are in {clone}"), "body": "Fireflies' own layouts and mods can't be changed: clone one to make it yours.", "level": "info", "timeout": 12000 });
             self.open_overlay(mods::new_overlay_id(), json!({ "kind": "toast", "notification": n }), window, cx);
         }
     }
@@ -2519,7 +2519,7 @@ impl AppWindow {
         }
         self.written_seen.retain(|a, _| self.live.contains_key(a));
         changed |= self.share_seen(cx);
-        // Changes already made before Herdr started aren't news.
+        // Changes already made before Fireflies started aren't news.
         if self.listed_once {
             for (addr, alert, looking) in alerts {
                 self.alert(&addr, alert, looking, window, cx);
@@ -2540,7 +2540,7 @@ impl AppWindow {
         }
     }
 
-    /// Tells the person an agent needs them or finished: Herdr's sounds, and a
+    /// Tells the person an agent needs them or finished: Fireflies' sounds, and a
     /// toast (drawn by the `toast` mod; click it to go there) unless they're
     /// looking at that agent.
     fn alert(&mut self, addr: &str, alert: model::Alert, looking: bool, window: &mut Window, cx: &mut Context<Self>) {
@@ -2643,12 +2643,12 @@ impl AppWindow {
 
     /// Puts a live terminal where its labels say, without changing what's
     /// shown. A space or tab the app doesn't know is made under the label's
-    /// id, unnamed (called Herdr's way).
+    /// id, unnamed (called Fireflies' way).
     fn adopt(&mut self, addr: &str, space: &str, ctx: Option<&str>) {
         let machine = addr.split_once('/').map(|(m, _)| m.to_owned());
         let pane = self.model.fresh_id_on("p", machine.as_deref());
         let ctx_id = ctx.map(str::to_owned).unwrap_or_else(|| self.model.fresh_id_on("tb", machine.as_deref()));
-        // Found by its labels: no names, so they're called Herdr's way.
+        // Found by its labels: no names, so they're called Fireflies' way.
         let new_ctx = Tab::new(&ctx_id, "", &pane, addr);
         if self.model.space(space).is_none() {
             // Its live folder may not be read yet: the core's record has it.
@@ -2804,7 +2804,7 @@ impl AppWindow {
     // ---- creating terminals ------------------------------------------------
 
     /// The folder new terminals in `space` start in: where its shown tab's focused
-    /// pane is now (Herdr's "follow"), else the folder the space was made in.
+    /// pane is now (Fireflies' "follow"), else the folder the space was made in.
     fn folder_for(&self, space: &str) -> String {
         let p = self.model.space(space);
         let here = p.and_then(|p| p.active_tab()).and_then(|c| c.focused_pane()).and_then(|f| self.model.address_of(&f)).and_then(|a| self.cwds.get(&a).cloned());
@@ -2817,7 +2817,7 @@ impl AppWindow {
             Some(slot) if slot.available => Ok(()),
             Some(slot) => Err(slot.error.clone().unwrap_or_else(|| "This machine's layout is unavailable. Try again when it reconnects.".into())),
             None => Err(match machine {
-                Some(m) => format!("Herdr has no machine called {m}. See hc machine ls; machines added with --temp stay out of Herdr."),
+                Some(m) => format!("Fireflies has no machine called {m}. See hc machine ls; machines added with --temp stay out of Fireflies."),
                 None => "This machine's layout is unavailable. Try again when it reconnects.".into(),
             }),
         }
@@ -4163,7 +4163,7 @@ impl AppWindow {
                     Err(e) => return self.fail(format!("layout: {e}")),
                 };
                 if layout_sync::without_clicks(&self.chrome, &n) != self.chrome {
-                    return self.fail("Only supported click/look fields can change on Herdr's own layouts: clone one for other changes");
+                    return self.fail("Only supported click/look fields can change on Fireflies' own layouts: clone one for other changes");
                 }
                 let mut state = layout_sync::State::between(&self.file_chrome, &n);
                 if n.look.theme == self.chrome.look.theme {
@@ -4225,7 +4225,7 @@ impl AppWindow {
             "layout.reset" => {
                 let name = Self::owned(a, "name").unwrap_or_else(|| self.layout_name.clone());
                 let Some((_, text)) = LAYOUTS.iter().find(|(n, _)| *n == name) else {
-                    return self.fail(format!("{name:?} isn't a layout Herdr ships"));
+                    return self.fail(format!("{name:?} isn't a layout Fireflies ships"));
                 };
                 // Theirs is kept under a name nothing else has (never over an older one).
                 if layout_path(&name).exists() {
@@ -4555,7 +4555,7 @@ impl AppWindow {
 
     /// The layout's `prompt_mod` / `confirm_mod` / `palette_mod`, like
     /// `toast_mod`: that mod draws the overlay instead of the shipped one, with
-    /// no frame of Herdr's (it draws its own) and `dialog` (`"prompt"`,
+    /// no frame of Fireflies' (it draws its own) and `dialog` (`"prompt"`,
     /// `"confirm"`, `"palette"`) added to its props so one mod can play
     /// several parts. An unknown mod logs a warning and keeps the shipped one.
     fn skin_dialog(&self, spec: &mut Value, chosen: Option<String>, dialog: &str) {
@@ -4972,7 +4972,7 @@ impl AppWindow {
         if cmd.get("commands").is_some() {
             return crate::commands::listing();
         }
-        // Herdr was launched again: this window comes to the front instead.
+        // Fireflies was launched again: this window comes to the front instead.
         if cmd.get("raise").is_some() {
             cx.activate(true);
             window.activate_window();
@@ -5473,7 +5473,7 @@ impl AppWindow {
                 .child(if *missing {
                     format!("The {} mod isn't installed (no folder ~/.config/herdr-app/mods/{}).\n\nClose this pane, or put the mod back.", inst.name, inst.name)
                 } else {
-                    format!("{} did not load:\n\n{}\n\nFix the files; Herdr retries on save.", inst.name, error.as_deref().unwrap_or("?"))
+                    format!("{} did not load:\n\n{}\n\nFix the files; Fireflies retries on save.", inst.name, error.as_deref().unwrap_or("?"))
                 })
                 .into_any_element(),
             None => div().into_any_element(),
@@ -5717,14 +5717,14 @@ const UPDATE_NOTE: &str = "update-note";
 const UPDATE_NOTE_WIDTH: f32 = 460.0;
 
 impl AppWindow {
-    /// "Herdr 0.2.0 is ready · Restart": the frame's, so no layout or mod can hide it.
+    /// "Fireflies 0.2.0 is ready · Restart": the frame's, so no layout or mod can hide it.
     /// What's waiting, in words: the pill shows it until clicked or dismissed.
     fn update_label() -> Option<String> {
         let core = crate::update::core();
         let core = core.ready.filter(|_| !core.updating);
         match (crate::update::ready(), core) {
-            (Some(a), Some(c)) => Some(format!("Herdr {a} and herdr-core {c} are ready")),
-            (Some(a), None) => Some(format!("Herdr {a} is ready")),
+            (Some(a), Some(c)) => Some(format!("Fireflies {a} and herdr-core {c} are ready")),
+            (Some(a), None) => Some(format!("Fireflies {a} is ready")),
             (None, Some(c)) => Some(format!("herdr-core {c} is ready")),
             (None, None) => None,
         }
@@ -5912,7 +5912,7 @@ struct FolderCheck {
     repo: bool,
 }
 
-/// Changes made outside Herdr (a commit in another app): looked for this often,
+/// Changes made outside Fireflies (a commit in another app): looked for this often,
 /// in repos, while the window is in front.
 const FOLDER_FALLBACK: Duration = Duration::from_secs(60);
 
@@ -7880,7 +7880,7 @@ export default class SystemToast extends View {
                 (id.clone(), this.copies[&format!("overlay:{id}")].inst.name.clone())
             })
         };
-        // Herdr's own notes ("Your edits are in …") may show up too.
+        // Fireflies' own notes ("Your edits are in …") may show up too.
         let shown = |id: &str, cx: &mut gpui::VisualTestContext| {
             cx.run_until_parked();
             view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == id))
@@ -8302,7 +8302,7 @@ export default class SystemToast extends View {
         }).collect();
         mods.extend([&nocturne.toast, &nocturne.prompt_mod, &nocturne.confirm_mod, &nocturne.palette_mod, &nocturne.peek_mod, &nocturne.terminal_menu].into_iter().flatten().cloned());
         assert!(mods.len() > 6, "{mods:?}");
-        // Its own screens, square corners and a dithered dim; the others keep Herdr's.
+        // Its own screens, square corners and a dithered dim; the others keep Fireflies'.
         for screen in ["welcome", "whats_new", "help", "update"] {
             assert!(nocturne.dialog_mods.contains_key(screen), "nocturne draws no {screen}");
         }

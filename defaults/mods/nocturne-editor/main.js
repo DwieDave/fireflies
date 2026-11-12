@@ -120,7 +120,7 @@ const GOTO = "nocturne-editor.goto";
 const POLL = 4000; // a file on another machine can't be watched
 const CHANGE_DELAY = 40; // ms: edits typed together go to the server as one change (and before any question)
 // How long a server runs on once its last editor closes (s): coming back to
-// the project within it is instant. Herdr keeps at most a few unused servers
+// the project within it is instant. Fireflies keeps at most a few unused servers
 // (least recently used stop first), so this is a ceiling, not a promise.
 export const SERVER_IDLE = 15 * 60;
 // The project environments kept on disk (envrc.js): a second app start runs no nix.

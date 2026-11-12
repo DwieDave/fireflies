@@ -104,7 +104,7 @@ fn children(pid: u32) -> Vec<Proc> {
     pids.into_iter()
         .filter_map(|p| {
             let (name, _, ticks) = stat(p)?;
-            // Clock ticks are 100 a second on every Linux Herdr runs on.
+            // Clock ticks are 100 a second on every Linux Fireflies runs on.
             Some(Proc { pid: p, name, start_ms: boot? + ticks * 10 })
         })
         .collect()

@@ -224,7 +224,7 @@ pub struct FocusLook {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum HeaderContent {
-    /// `"tabs"`: Herdr's plain built-in tab strip (fallback).
+    /// `"tabs"`: Fireflies' plain built-in tab strip (fallback).
     Builtin(String),
     Mod {
         #[serde(rename = "mod")]
@@ -426,7 +426,7 @@ pub struct Node {
     /// Root only: the mod that draws the bar over a peeked or floating terminal (default: `peek`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub peek_mod: Option<String>,
-    /// Root only: the mods that draw Herdr's other screens instead of the
+    /// Root only: the mods that draw Fireflies' other screens instead of the
     /// shipped ones, by screen: `welcome`, `whats_new`, `help` (the keys),
     /// `worktree`, `machine_add`, `update` (the update note), and `prompt`,
     /// `confirm`, `palette` (as `prompt_mod` / `confirm_mod` / `palette_mod`).

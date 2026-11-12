@@ -17,7 +17,7 @@ import { spaceFolder } from "./kit.js";
  *  another machine (`on`) whatever it has on its PATH. */
 export const lazygitArgv = (on) => (on ? ["sh", "-c", 'exec "$(command -v nocturne-lazygit || echo lazygit)"'] : [`${appHome()}/mods/nocturne/bin/nocturne-lazygit`]);
 
-/** The pane runs lazygit (Herdr's program table knows it; the wrapper execs it). */
+/** The pane runs lazygit (Fireflies' program table knows it; the wrapper execs it). */
 export const isLazygit = (p) => p?.program?.key === "lazygit";
 
 /** The lazygit pane in the shown tab, if any. */

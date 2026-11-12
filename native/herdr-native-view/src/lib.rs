@@ -1,4 +1,4 @@
-//! Native content views hosted inside a Herdr window (interface `native-view/0`).
+//! Native content views hosted inside a Fireflies window (interface `native-view/0`).
 //!
 //! This crate knows nothing about GPUI. The host glue (patches/herdr-app) gives
 //! it, per view: a key, the window's GPUI `NSView`, a JSON spec and, each frame,
@@ -27,9 +27,9 @@ mod resize;
 /// The interface version mods check before using any of this.
 pub const INTERFACE: &str = "native-view/0";
 
-/// A Herdr overlay drawn above a native view, in window points (top-left).
+/// A Fireflies overlay drawn above a native view, in window points (top-left).
 /// The view stays visible and this part of it is cut away, so the overlay
-/// (drawn by Herdr underneath) shows through and gets the clicks there.
+/// (drawn by Fireflies underneath) shows through and gets the clicks there.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Cover {
     pub rect: Rect,

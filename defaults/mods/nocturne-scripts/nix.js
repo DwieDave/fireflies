@@ -142,7 +142,7 @@ export function buildStep(attr) {
 /** A switch, in two steps: build as the person (evaluating a flake the
  *  person owns: as root, git refuses another user's repository), then
  *  activate the result as root through sudo in the same terminal. That
- *  terminal is in the person's desktop session, so macOS credits Herdr
+ *  terminal is in the person's desktop session, so macOS credits Fireflies
  *  Core's permissions (App Management) to nix-darwin's activation.
  *  `plan`: "darwin-rebuild:<name>" or "nixos-rebuild:<name>". */
 export function switchPlan(plan) {

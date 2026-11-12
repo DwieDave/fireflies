@@ -14,7 +14,7 @@
 //             <agent>.js with describe/step and list it in ADAPTERS.
 //   types     "permission", "question", "other" (an error, or waiting for
 //             input that is neither): the overview's groups. A finished agent
-//             isn't one: the sidebar and Herdr's own toast tell about it.
+//             isn't one: the sidebar and Fireflies' own toast tell about it.
 //
 // Pure: no herdr imports (scripts/nocturne-notifications.test.ts).
 
@@ -108,7 +108,7 @@ export function collect({ terminals = [], agents = [], info = {}, names = {}, di
       place = byAddr.get(p);
       p = terminals.find((x) => x.address === p)?.parent;
     }
-    // Herdr's screens leave out terminals that aren't in a space (another app's): so does this.
+    // Fireflies' screens leave out terminals that aren't in a space (another app's): so does this.
     if (!place && !t.labels?.["herdr.space"]) continue;
     const app = t.report?.app ?? place?.app ?? null;
     const { machine } = splitAddress(t.address);
