@@ -22,6 +22,15 @@ import { DispatchForm } from "./dispatchForm.js";
 const ROW = 38, STEP = 24, LINE = 18;
 const PANELS = ["runs", "graph", "steps", "log"];
 
+/** The job graph panel's height in a right column `rightH` tall: the one
+ *  Developer dragged (`stored`, kept in sizes.graph), else 55 % of the column
+ *  (220..520), room for a column of six jobs (wires.js NH, GAP_Y) without
+ *  panning; the steps and the log take the rest, never less than 120. */
+export function graphHeight(stored, rightH) {
+  const want = stored ?? Math.max(220, Math.min(rightH * 0.55, 520));
+  return Math.round(Math.min(Math.max(100, rightH - 120), Math.max(100, want)));
+}
+
 export default class Actions {
   constructor(app, kept = {}) {
     this.app = app;
@@ -515,7 +524,7 @@ export default class Actions {
     const rh = clamp(this.sizes.runsH ?? size.height * 0.3, 100, size.height - 260);
     const rightW = wide ? size.width - rw - 6 : size.width;
     const rightH = wide ? size.height : size.height - rh - 6;
-    const gh = clamp(this.sizes.graph ?? Math.max(170, Math.min(rightH * 0.42, 340)), 100, rightH - 120);
+    const gh = graphHeight(this.sizes.graph, rightH);
     const sw = clamp(this.sizes.steps ?? Math.max(240, Math.min(360, size.width * 0.3)), 160, rightW - 200);
     const runs = this.runsPanel(t);
     const right = v_flex().flex_1().min_w(0).min_h(0).h_full()

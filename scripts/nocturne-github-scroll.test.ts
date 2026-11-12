@@ -1,6 +1,6 @@
 // The GitHub window's lists keep their cursor in view, at zoom 0.9 and 1:
 // the Actions view's runs, steps and log, a PR's list and checks, and the
-// window's picker. herdr and gpui are
+// window's picker; and the job graph's default height. herdr and gpui are
 // stand-ins: every scroll handle records what it was asked to reveal (the
 // real one scrolls only as far as it takes to show that row). Its own
 // process: it stands in for "herdr".
@@ -39,7 +39,7 @@ mock.module("gpui-base", () => ({
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }), timer: { after() {}, every() {} }, bind_keys() {} };
 
-const { default: Actions } = await import("../defaults/mods/nocturne-github/actions.js");
+const { default: Actions, graphHeight } = await import("../defaults/mods/nocturne-github/actions.js");
 const { default: Prs } = await import("../defaults/mods/nocturne-github/prs.js");
 const { default: GitHub } = await import("../defaults/mods/nocturne-github/main.js");
 
@@ -156,3 +156,20 @@ for (const zoom of [0.9, 1]) {
     g.pickerKey("G", cx); g.pickerPanel(theme); expect(last(g.pickerScroll)).toBe(30);
   });
 }
+
+test("the job graph: 55 % of the column by default (220..520), a dragged height stays", () => {
+  expect(graphHeight(undefined, 680)).toBe(374); // the window at zoom 0.9: a column of six jobs fits
+  expect(graphHeight(undefined, 300)).toBe(180); // short: the steps and log keep 120
+  expect(graphHeight(undefined, 400)).toBe(220);
+  expect(graphHeight(undefined, 1200)).toBe(520);
+  expect(graphHeight(200, 680)).toBe(200); // dragged: Developer's
+  expect(graphHeight(170, 680)).toBe(170); // the old default only exists once dragged there
+  expect(graphHeight(900, 680)).toBe(560); // never past the column
+  expect(graphHeight(40, 680)).toBe(100);
+  // Six jobs in one column (wires.js: NH 44, GAP_Y 10, PAD 18 above and below) plus the panel's frame fit 374.
+  expect(6 * 44 + 5 * 10 + 2 * 18 + 20).toBeLessThanOrEqual(374);
+  // Kept per window in sizes.graph only when dragged.
+  const a: any = new Actions(app(), {});
+  expect(a.save().sizes).toEqual({});
+  expect(new (Actions as any)(app(), { sizes: { graph: 210 } }).sizes.graph).toBe(210);
+});
