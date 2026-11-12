@@ -177,7 +177,7 @@ test("the pane menu: a web pane gets Pin to the top, then Unpin and left / right
   expect(ids().slice(0, 1)).toEqual([["pin", "Pin to the top"]]);
   menuItems(theme, { tab: "pane", target: { pane: "p2", terminal: null } })[0].go();
   expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
-  expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["split-right", "Split right"]]);
+  expect(ids().slice(0, 3)).toEqual([["unpin", "Unpin"], ["dock", "Move to the dock"], ["split-right", "Split right"]]);
   // A second tile: the first can move right, the second left; an agent moves in the jar, not past tiles.
   sharedState[pins.PANES_KEY] = [...records(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
   expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["pin-down", "Move right"]]);
@@ -185,7 +185,7 @@ test("the pane menu: a web pane gets Pin to the top, then Unpin and left / right
   expect(files.slice(0, 2).map((r: any) => r.name)).toEqual(["Unpin", "Move left"]);
   pinTerminal("t1", 1);
   const agent = menuItems(theme, { tab: "pane", target: { pane: "p1", terminal: "t1" } }).filter((r: any) => !r.rule);
-  expect(agent.slice(0, 3).map((r: any) => r.name)).toEqual(["Rename", "Unpin", "Split right"]);
+  expect(agent.slice(0, 3).map((r: any) => r.name)).toEqual(["Rename", "Unpin", "Move to the dock"]);
   // A plain shell's pane pins through its terminal.
   const shell = menuItems(theme, { tab: "pane", target: { pane: "p5", terminal: "t5" } }).filter((r: any) => !r.rule);
   expect(shell.slice(0, 2).map((r: any) => r.name)).toEqual(["Rename", "Pin to the top"]);
@@ -285,4 +285,116 @@ test("a closed pane's pin goes after a while; a pane missing at first (loading) 
     for (const f of timers.splice(0)) f(cx);
     expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
   } finally { Date.now = real; }
+});
+
+// ---- the dock: a space tied to no folder for panes that belong to no project (dock.js)
+
+const dockMod = await import("../defaults/mods/nocturne/dock.js");
+
+test("dock.js: the dock is found by its id (local only); a making adopts the new space named dock, or gives up", () => {
+  const all = [{ id: "s1", name: "one", named: true }, { id: "s7", name: "dock", named: true }, { id: "m/s8", name: "dock", named: true, machine: "m" }];
+  expect(dockMod.findDock({ id: "s7" }, all)).toBe(all[1]);
+  expect(dockMod.findDock({ id: "gone" }, all)).toBe(null);
+  expect(dockMod.findDock({ id: "m/s8" }, all)).toBe(null);
+  expect(dockMod.findDock(null, all)).toBe(null);
+  const then = { kind: "web", slot: "x" };
+  // A space named dock that was there before isn't the new one.
+  expect(dockMod.adopt({ making: { at: 0, before: ["s1", "s7"], then } }, all, 1)).toBe(null);
+  expect(dockMod.adopt({ making: { at: 0, before: ["s1"], then } }, all, 1)).toEqual({ id: "s7", then });
+  // An unnamed space (Herdr's name after its folder) isn't it either.
+  expect(dockMod.adopt({ making: { at: 0, before: [] } }, [{ id: "s9", name: "dock", named: false }], 1)).toBe(null);
+  expect(dockMod.adopt({ making: { at: 0, before: [] } }, [], dockMod.MAKING + 1)).toEqual({ id: null, then: null });
+  expect(dockMod.adopt({ id: "s7" }, all, 1)).toBe(null);
+});
+
+test("a new web pane in the dock: the dock is made first (in ~, named dock), then the page opens there, pinned to the shelf", () => {
+  kit.dockWeb("https://docs.rs");
+  expect(commands).toEqual([["space.new", { name: "dock", folder: "/home/a", machine: "" }]]);
+  const slot = records()[0].props.slot;
+  expect(records()[0]).toEqual({ pane: `new:${slot}`, mod: "nocturne-browser", props: { slot, url: "https://docs.rs" }, at: expect.any(Number) });
+  // Asked again while it's being made: no second space, no stray pin.
+  kit.dockWeb();
+  expect(commands.filter(([n]) => n === "space.new").length).toBe(1);
+  expect(records().length).toBe(1);
+  // The space appears: the sky adopts it and opens the page there.
+  spacesNow = [...spacesNow, { id: "s9", name: "dock", named: true, folder: "/home/a", attached: true, active: true, tabs: [{ id: "c99", index: 1, active: true }] }];
+  expect(dockMod.adoptDock()).toBe(true);
+  expect(sharedState[dockMod.DOCK_KEY]).toEqual({ id: "s9" });
+  expect(commands.at(-1)).toEqual(["tab.new", { space: "s9", mod: "nocturne-browser", props: { slot, url: "https://docs.rs" } }]);
+  // The pane shows up under its own id: the pin finds it by its props and takes the id.
+  panesNow = [...panesNow, { pane: "p99", tab: "c100", terminal: null, mod: "nocturne-browser", props: { slot, url: "https://docs.rs" } }];
+  expect(kit.jar().map((x: any) => x.key)).toContain("pane:p99");
+  expect(pins.tidy(records(), panesNow, new Map(), 0)!.map((r: any) => r.pane)).toEqual(["p99"]);
+  // With the dock there, the next one opens at once.
+  commands = [];
+  kit.dockWeb();
+  expect(commands[0][0]).toBe("tab.new");
+  expect(commands[0][1].space).toBe("s9");
+});
+
+test("moving a pane to the dock pins it and moves it into a tab of its own there; a remote or docked pane isn't offered", () => {
+  sharedState[dockMod.DOCK_KEY] = { id: "s2" }; // infra plays the dock
+  kit.dockPane(WEB);
+  expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
+  expect(commands.at(-1)).toEqual(["pane.move", { pane: "p2", space: "s2" }]);
+  // The pane menu: "Move to the dock" on a pane outside it, not on one inside it.
+  const rows = (pane: string, terminal: string | null = null) => menuItems(theme, { tab: "pane", target: { pane, terminal } }).filter((r: any) => !r.rule).map((r: any) => r.id);
+  expect(rows("p4")).toContain("dock");
+  expect(rows("p3")).not.toContain("dock"); // the editor sits in infra, the dock here
+  panesNow = [...panesNow, { pane: "m/p1", tab: "m/c1", terminal: null, mod: "nocturne-browser", props: {} }];
+  expect(rows("m/p1")).not.toContain("dock");
+  // nocturne.dock: the focused pane, if it's outside the dock.
+  commands = [];
+  focusedNow = { ...focusedNow, pane: "p4", terminal: null };
+  kit.dockFocused();
+  expect(commands.at(-1)).toEqual(["pane.move", { pane: "p4", space: "s2" }]);
+  commands = [];
+  focusedNow = { ...focusedNow, pane: "p3", terminal: null };
+  kit.dockFocused();
+  expect(commands).toEqual([]);
+});
+
+test("the dock keeps no folder: no repo for git, no folder / worktree / delete in its menu or by key", () => {
+  sharedState[dockMod.DOCK_KEY] = { id: "s2" };
+  spacesNow[1] = { ...spacesNow[1], folder: "/home/a", attached: true };
+  panesNow = [...panesNow, { pane: "p8", tab: "c9", terminal: "t8", cwd: "/src/repo" }];
+  expect(kit.spaceFolder(spacesNow[1], panesNow)).toBe(null);
+  expect(kit.spaceFolder({ ...spacesNow[1], id: "s3", attached: false }, panesNow)).toBe("/src/repo");
+  const ids = (id: string) => menuItems(theme, { tab: "space", target: { id } }).filter((r: any) => !r.rule).map((r: any) => r.id);
+  expect(ids("s2")).toEqual(["select", "new", "rename"]);
+  expect(ids("s1")).toEqual(["select", "new", "rename", "folder", "worktree", "delete"]);
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  const acts = s.spaces.acts(spacesNow[1]);
+  expect(acts.folder).toBe(undefined);
+  expect(acts.delete).toBe(undefined);
+  expect(acts.worktree).toBe(undefined);
+  expect(typeof s.spaces.acts(spacesNow[0]).delete).toBe("function");
+  expect(s.railActs(spacesNow[1]).delete).toBe(undefined);
+});
+
+test("the palette opens a web pane in the dock, and moves the focused pane there", () => {
+  const rows = () => { const p: any = new (palette as any).default(); p.init({}, cx); p.query = ""; return p.rows().map((r: any) => r.e); };
+  const web = rows().find((e: any) => e.title === "New web pane in the dock");
+  expect(web).toBeTruthy();
+  expect(rows().some((e: any) => e.title === "Move this pane to the dock")).toBe(true);
+  web.go();
+  expect(commands.at(-1)![0]).toBe("space.new");
+});
+
+test("the shelf ends in a + tile: a new web pane in the dock, in the keyboard's walk", () => {
+  sharedState[pins.PANES_KEY] = [{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 2 }];
+  sharedState[dockMod.DOCK_KEY] = { id: "s2" };
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  focusedNow = { ...focusedNow, block: "sidebar" };
+  s.render(cx);
+  s.takeKeys();
+  s.render(cx);
+  const ids = s.navList.map((x: any) => x.id);
+  expect(ids.indexOf("shelf-new")).toBe(ids.indexOf("pin:pane:p2") + 1);
+  s.cursor = "shelf-new";
+  s.key({ key: "enter", key_char: null, modifiers: { control: false, platform: false, alt: false, shift: false } }, cx);
+  expect(commands.at(-1)![0]).toBe("tab.new");
+  expect(commands.at(-1)![1].space).toBe("s2");
 });

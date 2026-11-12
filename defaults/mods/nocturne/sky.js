@@ -42,9 +42,10 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
+import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.js";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
+import { isDock, adoptDock, DOCK_KEY } from "./dock.js";
 import { field } from "./inline.js";
 import Spaces from "./spaces.js";
 
@@ -225,6 +226,8 @@ export default class Sky {
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
+    // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
+    // opens a web pane there (dock.js);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
     // (alias nocturne.toast-dismiss) dismisses it (toast.js).
     // A saved file doesn't restart this loop: changes to it need the layout
@@ -253,6 +256,8 @@ export default class Sky {
         else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
         else if (c === "pin") pinFocused();
+        else if (c === "dock") dockFocused();
+        else if (c === "dock-web") dockWeb();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
         else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") toastKey(c);
@@ -477,10 +482,9 @@ export default class Sky {
       go: () => run("space.select", { id: s.id }),
       menu: () => this.spaces.menu(s, true),
       rename: () => run("space.rename", { id: s.id }),
-      folder: (cx) => this.spaces.pick(cx, s),
-      delete: () => run("space.close", { id: s.id }),
       tab: () => run("tab.new", { space: s.id }),
-      worktree: () => newWorktree(s.id),
+      // The dock (dock.js) keeps no folder and isn't deleted by a key.
+      ...(isDock(s) ? {} : { folder: (cx) => this.spaces.pick(cx, s), delete: () => run("space.close", { id: s.id }), worktree: () => newWorktree(s.id) }),
     };
   }
 
@@ -840,7 +844,7 @@ export default class Sky {
     const resting = free.filter(atRest);
     const ground = hgt - 96; // above the far ridge (hills-rim), so labels stay on clear sky
     const jarOn = jarred.length > 0 || kept.length > 0;
-    const shelfW = w - 2 * JAR_INSET, shelfH = kept.length ? shelfHeight(kept.length, shelfW) : 0;
+    const shelfW = w - 2 * JAR_INSET, shelfH = kept.length ? shelfHeight(kept.length + 1, shelfW) : 0; // + the "+" tile
     let lane = 40, restLane = 28;
     const laneOf = (a) => (a.status === "idle" ? restLane : lane);
     const jarNeed = jarOn ? Math.max(JAR.min, JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + (kept.length ? SHELF_ABOVE + shelfH : 0) + JAR.bottom) : 0;
@@ -954,13 +958,34 @@ export default class Sky {
       .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
   }
 
+  /** The shelf's last tile, "+": a new web pane in the dock (dock.js), pinned
+   *  here. Dimmer than the tiles, a dotted frame: a place, not a pane. */
+  newTile(t, size = TILE) {
+    const on = this.nav("shelf-new", "flies", { go: () => dockWeb() });
+    if (on) this.tileOn = "shelf-new";
+    const hot = this.tileHover === "shelf-new";
+    return div().id("shelf-new").relative().size(size).flex_none().flex().items_center().justify_center()
+      .tooltip("New web pane in the dock")
+      .on_hover((h, cx) => {
+        if (h ? this.tileHover !== "shelf-new" : this.tileHover === "shelf-new") { this.tileHover = h ? "shelf-new" : null; cx.notify(); }
+      })
+      .on_mouse_down("left", stop)
+      .on_click(() => dockWeb())
+      .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(t.ansi0 + "88")))
+      .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
+      .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))
+      .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none().text_color(hot || on ? t.foreground : t.dim))
+      .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+  }
+
   /** The shelf at the jar's foot, `w` wide: a dithered board, the tiles in
    *  rows in the order pinned, and a caption naming the tile under the pointer
    *  or the keyboard's cursor, else the focused one, else how many it keeps. */
   shelf(t, kept, w) {
     this.tileOn = null;
-    const tiles = kept.map((it) => this.pinTile(t, it));
-    const named = kept.find((it) => it.key === this.tileHover) ?? kept.find((it) => it.key === this.tileOn) ?? kept.find((it) => this.pinFocus(it));
+    const tiles = [...kept.map((it) => this.pinTile(t, it)), this.newTile(t)];
+    const adding = [this.tileHover, this.tileOn].includes("shelf-new");
+    const named = adding ? null : kept.find((it) => it.key === this.tileHover) ?? kept.find((it) => it.key === this.tileOn) ?? kept.find((it) => this.pinFocus(it));
     const where = named ? this.pinWhere(named) : "";
     return v_flex().id("shelf").w(w)
       .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.ansi8, 1)))
@@ -969,7 +994,8 @@ export default class Sky {
         .when(Boolean(named), (el) => el
           .child(div().flex_none().max_w(w - 2 * SHELF_PAD - 40).truncate().text_color(t.foreground).child(this.pinName(named)))
           .when(Boolean(where), (el) => el.child(div().min_w(0).truncate().text_color(t.dim).child(where))))
-        .when(!named, (el) => el.child(div().text_color(t.dim).child(`${kept.length} ${kept.length === 1 ? "pane" : "panes"} kept`))));
+        .when(!named, (el) => el.child(div().text_color(t.dim)
+          .child(adding ? "new web pane in the dock" : `${kept.length} ${kept.length === 1 ? "pane" : "panes"} kept`))));
   }
 
   /** Keeps the mod panes' pins true to panes() (pins.js tidy): a pane that came
@@ -1145,6 +1171,8 @@ export default class Sky {
     setAgentOrder(list.map((a) => a.address));
     this.stamp();
     this.tidyPins(cx);
+    // A dock being made (dock.js) that has appeared: its id, then what was asked of it.
+    if (shared(DOCK_KEY)?.making) cx.timer.after(0, () => adoptDock());
     this.glint([...jarred, ...kept], cx);
     const sp = spaces();
     this.shownSpace = sp.find((s) => s.active)?.id ?? null;

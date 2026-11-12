@@ -19,7 +19,8 @@ import { keysView, keysKey, keysHeight } from "./keyhelp.js";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
 import { openWorktrees } from "./git.js";
-import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey } from "./kit.js";
+import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane } from "./kit.js";
+import { isDock } from "./dock.js";
 import { onShelf } from "./pins.js";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
@@ -68,6 +69,11 @@ export function moveItems(t, pane) {
 /** The layout:nocturne key for a Nocturne command ("nocturne.pin"), as keys.json spells it. */
 function layoutKey(action) {
   return keys().find((b) => b.section === "layout:nocturne" && b.action === action)?.keys ?? "";
+}
+
+/** The pane is in the dock's space (dock.js). */
+function inDock(p) {
+  return isDock(spaces().find((s) => s.tabs.some((c) => c.id === p.tab)));
 }
 
 /** "Pin to the top" / "Unpin" for any pane (`p`: { pane, terminal }: an
@@ -153,6 +159,13 @@ export function menuItems(t, p) {
   }
   if (p?.tab === "space") {
     const edit = (kind) => () => setShared(EDIT_SPACE, { id: tg.id, kind, at: Date.now() });
+    // The dock (dock.js) stays tied to no folder and isn't deleted by a slip:
+    // no folder, worktree or delete rows (`herdr-app do space.close` still closes it).
+    if (isDock(spaces().find((s) => s.id === tg.id))) return [
+      item(t, "select", "layers", "Show", "space.select", { id: tg.id }),
+      item(t, "new", "plus", "New tab here", "tab.new", { space: tg.id }),
+      { id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: edit("rename") },
+    ];
     return [
       item(t, "select", "layers", "Show", "space.select", { id: tg.id }),
       item(t, "new", "plus", "New tab here", "tab.new", { space: tg.id }),
@@ -194,6 +207,8 @@ export function menuItems(t, p) {
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => setShared(NAME_PANE, { terminal: term.address, at: Date.now() }) }] : []),
     // Any pane can be pinned to the top of the sky: an agent's, a shell's, a web page, an editor.
     ...pinItems(t, { pane: tg.pane, terminal: term ? term.address : null }),
+    // Or kept in the dock (dock.js: the space tied to no folder), pinned to the shelf.
+    ...(mine && !mine.pane.includes("/") && !inDock(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane: tg.pane }),
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane: tg.pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),

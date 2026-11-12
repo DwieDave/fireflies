@@ -1073,7 +1073,15 @@ its page's title when nocturne-browser notes it in shared
 from a firefly's or any pane's right-click menu (open sky and rail), the
 palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
-firefly up or down in the jar, a tile left or right on the shelf. Toasts by key:
+firefly up or down in the jar, a tile left or right on the shelf. The dock
+(dock.js) is a space tied to no folder for panes that belong to no project:
+made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
+`nocturne.dock-space`), never a repo for the git and GitHub windows, with no
+folder, worktree or delete in its menu or keys (`space.close` still closes it;
+the next use makes a new one). "Move to the dock" (any pane's menu, the
+palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
+it to the shelf; "New web pane in the dock" (the palette, the shelf's last
+"+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
