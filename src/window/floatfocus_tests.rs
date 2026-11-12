@@ -220,3 +220,38 @@ fn floatfocus_close_keys(cx: &mut gpui::TestAppContext) {
     }
 }
 
+#[test]
+fn overlay_focus_never_leaves_a_scrim_window_for_the_pane() {
+    in_own_process("floatfocus_overlay_focus");
+}
+
+/// Path 5: `overlay.focus` (ctrl-`) went past the last window to the pane,
+/// and `dir: "none"` handed it the keyboard, with a window with a scrim up.
+#[gpui::test]
+fn floatfocus_overlay_focus(cx: &mut gpui::TestAppContext) {
+    use serde_json::json;
+    if !running_alone("floatfocus_overlay_focus") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    open(&view, "w", scrim_window(), cx);
+    // The player doesn't focus itself on start (the test mod would).
+    crate::mods::set_shared("win.passive".into(), json!(true));
+    let mut pip = scrim_window();
+    pip["scrim"] = json!(false);
+    open(&view, "pip", pip, cx);
+    let focus =|dir: &str, cx: &mut gpui::VisualTestContext| {
+        let r = cx.update(|window, cx| view.update(cx, |this, cx| this.focus_window_cmd(None, dir, window, cx)));
+        settle(cx);
+        r
+    };
+    assert!(window_has_keys(&view, "w", cx));
+    assert!(focus("next", cx).is_ok());
+    assert!(window_has_keys(&view, "pip", cx), "next: the other window");
+    assert!(focus("next", cx).is_ok());
+    assert!(window_has_keys(&view, "w", cx), "past the last: round to the first, not the pane");
+    assert!(focus("none", cx).is_err(), "no pane to go back to");
+    assert!(window_has_keys(&view, "w", cx));
+    assert!(!pane_has_keys(&view, "p1", cx));
+}
+
