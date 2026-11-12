@@ -1,8 +1,13 @@
 // A form in the GitHub window, for what writes to GitHub (a new pull
 // request: prForm.js; running a workflow: dispatchForm.js). It takes the
-// tab's body: the fields in a panel on the left, what will be sent beside
-// it (the flow's `side`), and a last step that shows the exact commands
-// before anything runs.
+// tab's body: the fields in a column on the left (COLUMN wide, the whole
+// body when it's narrow), what will be sent beside it in the width that's
+// left (the flow's `side`), and a last step that shows the exact commands
+// in the column's place before anything runs. Where fields sit is
+// form-layout.js: sections under eyebrows, labels above the fields with the
+// hint on the label line, pairs and halves two to a row, the body growing
+// into the free room, the buttons in a footer on the panel's bottom edge,
+// a list opening under its field (upward without room below).
 //
 // Keyboard first, the way every form is (form-keys.js): tab / shift-tab
 // (or ↓ ↑ outside the body) walk the fields, then Review and Cancel,
@@ -16,20 +21,22 @@
 //
 // Field: { id, label, kind: "text" | "area" | "number" | "toggle" | "choice" | "multi",
 //   value, required, hint, placeholder, note (beside a toggle), free (a list
-//   field takes what's typed too), display(value) (a list value in words), options(): [{ value, label, sub, right }] | null (reading) }
+//   field takes what's typed too), display(value) (a list value in words), options(): [{ value, label, sub, right }] | null (reading),
+//   group (starts a section), half (two to a row), pair + join (shares its row with the next field, `join` between them) }
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { window as appWindow } from "herdr";
-import { dither, panel, stop, band, sweep, empty, unzoom, popupScrim } from "./kit.js";
+import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.js";
 import { formKey, formHints, submitKey, wrap } from "./form-keys.js";
+import { layout, cellOf, columns, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, TOP, FOOTER, PICK_MAX, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.js";
 
-const ROW = 28, AREA = 150, NOTE = 16, GAP = 8, LABEL = 96, PICK_ROWS = 12, BUTTONS = 48;
+const PICK_ROWS = PICK_MAX;
 const TEXT = new Set(["text", "area", "number"]);
 const LIST = new Set(["choice", "multi"]);
 
 export class Form {
-  /** spec: { title, right, fields, side(t, size), commands() -> [{ cmd, args, label }], send(cx) -> Promise<{ ok, err }>, cancel(), sendWord } */
+  /** spec: { title, fields, side(t, size), summary() (the footer's line), commands() -> [{ cmd, args, label }], send(cx) -> Promise<{ ok, err }>, cancel(), sendWord } */
   constructor(app, spec) {
     this.app = app;
     this.spec = spec;
@@ -40,7 +47,7 @@ export class Form {
     this.errors = {}; // field id -> words
     this.sendError = "";
     this.picker = null; // { field, query: InputState, at }
-    this.scrollY = 0; this.viewH = 400;
+    this.scrollY = 0; this.viewH = 400; this.width = 638; // the scrolled part's size, as last drawn
     this.setFields(spec.fields ?? []);
   }
 
@@ -128,25 +135,22 @@ export class Form {
     } else this.app.focusSelf();
   }
 
-  /** The focused stop's top and height in the scrolled form (the buttons are one row under the fields). */
-  place(i) {
-    let y = 0;
-    for (let k = 0; k < this.fields.length; k++) {
-      const h = this.heightOf(this.fields[k]);
-      if (k === i) return { y, h };
-      y += h + GAP;
-    }
-    return { y, h: i >= this.fields.length && i < this.stops().length ? BUTTONS : 0 };
+  /** The fields laid out for the panel's last known size (form-layout.js). */
+  lay() {
+    return layout(this.fields, { width: this.width, viewH: this.viewH, errors: this.errors });
   }
 
-  heightOf(f) {
-    return (f.kind === "area" ? AREA : ROW) + (f.hint ? NOTE : 0) + (this.errors[f.id] ? NOTE : 0);
+  /** Stop i's top and height in the scrolled form; null for the buttons (the footer doesn't scroll). */
+  place(i) {
+    const c = cellOf(this.lay(), i);
+    return c ? { y: c.y, h: c.h } : null;
   }
 
   reveal() {
-    const { y, h } = this.place(this.at);
-    if (y < this.scrollY) this.scrollY = Math.max(0, y - 4);
-    else if (y + h > this.scrollY + this.viewH - 8) this.scrollY = y + h - this.viewH + 12;
+    const p = this.place(this.at);
+    if (!p) return;
+    if (p.y < this.scrollY) this.scrollY = Math.max(0, p.y - TOP);
+    else if (p.y + p.h > this.scrollY + this.viewH - 8) this.scrollY = p.y + p.h - this.viewH + 12;
   }
 
   // ---- keys
@@ -312,48 +316,81 @@ export class Form {
 
   // ---- drawing
 
+  /** The tab's body: the form panel (a column, COLUMN wide) and, from WIDE, what it will send beside it. */
   render(t, size) {
-    const wide = size.width >= 860;
-    const sideW = wide ? Math.round(Math.min(520, Math.max(320, size.width * 0.4))) : 0;
-    const left = panel(t, "form", this.spec.title, this.stage === "edit" || Boolean(this.picker), this.body(t), { right: this.spec.right?.() ?? "" }).flex_1().h_full();
+    const cols = columns(size.width);
+    const review = this.stage !== "edit";
+    const title = !review ? this.spec.title : this.stage === "sending" ? "Sending…" : this.spec.confirmTitle ?? "Send to GitHub?";
+    const step = review ? "2 of 2 · check" : "1 of 2 · fill in";
+    const left = panel(t, "form", title, true, review ? this.reviewBody(t) : this.body(t), { right: step }).h_full()
+      .when(this.stage === "sending", (el) => el.border_color(t.working))
+      .when(cols.side > 0, (el) => el.w(cols.form).flex_none())
+      .when(!cols.side, (el) => el.flex_1());
     return div().id("form-wrap").relative().size_full()
       .child(h_flex().size_full().gap(6)
         .child(left)
-        .when(wide, (el) => el.child(v_flex().w(sideW).flex_none().h_full().child(this.spec.side?.(t, { width: sideW, height: size.height }) ?? div()))))
-      .when(this.stage !== "edit", (el) => el.child(this.confirmBox(t, size)))
-      .when(Boolean(this.picker), (el) => el.child(this.pickerBox(t, size)));
+        .when(cols.side > 0, (el) => el.child(v_flex().flex_1().min_w(0).h_full().child(this.spec.side?.(t, { width: cols.side, height: size.height }) ?? div()))));
   }
 
   isAt(id) { return this.stage === "edit" && !this.picker && this.stops()[this.at]?.id === id; }
 
+  /** The fields (scrolled when they don't fit) over the footer with the buttons. */
   body(t) {
-    const rows = this.fields.map((f, i) => this.fieldRow(t, f, i));
-    const content = v_flex().absolute().left(0).right(0).top(-this.scrollY).px(12).pt(10).gap(GAP).children(rows)
-      .child(h_flex().pt(10).pb(14).gap(8).items_center()
-        .child(button(t, "form-review", "Review", submitKey(this.stops(), this.at, this.mac), true, (cx) => this.review(cx), false, this.isAt("form-review")))
-        .child(button(t, "form-cancel", "Cancel", "esc", false, () => this.cancel(), false, this.isAt("form-cancel")))
-        .child(div().flex_1())
-        .when(Boolean(this.spec.footer), (el) => el.child(this.spec.footer(t))));
-    return div().id("form-view").relative().size_full().overflow_hidden()
+    const lay = this.lay();
+    const parts = [];
+    for (const r of lay.rows) {
+      if (r.kind === "section") { parts.push(this.section(t, r, lay)); continue; }
+      for (const c of r.cells) parts.push(this.fieldCell(t, c, lay));
+      if (r.join && r.cells.length === 2) {
+        const a = r.cells[0];
+        parts.push(div().absolute().left(a.x + a.w).top(r.y + LABEL + LABEL_GAP).w(JOIN).h(CONTROL).flex().items_center().justify_center()
+          .text_size(12).text_color(t.dim).child(r.join));
+      }
+    }
+    const view = div().id("form-view").relative().flex_1().min_h(0).overflow_hidden()
       .on_size_change((s, cx) => {
-        const h = unzoom(s.height);
-        if (Math.abs(h - this.viewH) > 1) {
-          this.viewH = h;
-          // Scrolled before the panel's height was known: keep the focused stop in view, scrolling no further than the form needs.
+        const h = unzoom(s.height), w = unzoom(s.width);
+        if (Math.abs(h - this.viewH) > 1 || Math.abs(w - this.width) > 1) {
+          this.viewH = h; this.width = w;
+          // Scrolled before the panel's size was known: keep the focused stop in view, scrolling no further than the form needs.
           this.scrollY = 0;
           this.reveal();
           cx.notify();
         }
       })
       .on_scroll_wheel((e, cx) => {
-        const end = this.place(this.fields.length).y + 80;
-        this.scrollY = Math.max(0, Math.min(Math.max(0, end - this.viewH), this.scrollY - unzoom(e.delta?.y ?? 0)));
+        this.scrollY = Math.max(0, Math.min(Math.max(0, this.lay().height - this.viewH), this.scrollY - unzoom(e.delta?.y ?? 0)));
         cx.notify();
       })
-      .child(content);
+      .child(div().id("form-fields").absolute().left(0).right(0).top(-this.scrollY).h(lay.height).children(parts))
+      .when(Boolean(this.picker), (el) => el.children(this.pickerBox(t, lay)));
+    const foot = this.footer(t, lay.pad, this.spec.summary?.() ?? "", [
+      button(t, "form-review", "Review", submitKey(this.stops(), this.at, this.mac), true, (cx) => this.review(cx), false, this.isAt("form-review")),
+      button(t, "form-cancel", "Cancel", "esc", false, () => this.cancel(), false, this.isAt("form-cancel")),
+    ]);
+    return v_flex().size_full().child(view).child(foot);
   }
 
-  fieldRow(t, f, i) {
+  /** The bar on the panel's bottom edge: a dithered horizon (a running sweep while sending), a line of summary, the buttons. */
+  footer(t, pad, summary, buttons) {
+    const sending = this.stage === "sending";
+    return h_flex().id("form-foot").relative().h(FOOTER).flex_none().px(pad).gap(8).items_center()
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(sending ? t.working : t.ansi0, 1)))
+      .when(sending, (el) => el.child(div().absolute().left(0).right(0).top(0).bottom(0).overflow_hidden().child(sweep(t, t.working, this.width))))
+      .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(summary))
+      .children(buttons);
+  }
+
+  /** A section's eyebrow over a dithered rule. */
+  section(t, r, lay) {
+    return h_flex().absolute().left(lay.pad).top(r.y).w(lay.inner).h(r.h).gap(8).items_center()
+      .child(div().flex_none().text_size(10).text_color(t.ansi8).child(String(r.title).toUpperCase()))
+      .child(div().relative().flex_1().h(1).child(dither(t.ansi0, 1)));
+  }
+
+  /** One field at its place in the column: its label line (label, *, hint), the control, what's wrong under it. */
+  fieldCell(t, c, lay) {
+    const f = c.field, i = c.index;
     const on = i === this.at && this.stage === "edit";
     const err = this.errors[f.id];
     const edge = err ? t.blocked : on ? t.accent : t.ansi0;
@@ -365,83 +402,107 @@ export class Form {
       if (!this.picker) this.focusField(cx);
       cx.notify();
     };
+    const errLine = () => div().h(ERROR).pt(3).text_size(10).text_color(t.blocked).truncate().child(err);
+    const cell = v_flex().id(`frow-${f.id}`).absolute().left(c.x).top(c.y).w(c.w);
+    if (f.kind === "toggle") {
+      return cell
+        .child(h_flex().id(`ff-${f.id}`).relative().h(TOGGLE).gap(8).items_center().cursor_pointer().on_mouse_down("left", click)
+          .child(div().relative().size(12).flex_none().border(1).border_color(on ? t.accent : f.value ? t.foreground : t.ansi8)
+            .when(Boolean(f.value), (el) => el.child(div().absolute().top(2).left(2).size(6).bg(on ? t.accent : t.foreground))))
+          .child(div().flex_none().text_size(12).text_color(on || f.value ? t.foreground : t.muted).child(f.label))
+          .when(Boolean(f.note), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(f.tone && f.value ? t[f.tone] ?? t.dim : t.dim).child(f.note))))
+        .when(Boolean(err), (el) => el.child(errLine()));
+    }
+    const label = h_flex().h(LABEL).gap(4).items_center().text_size(11)
+      .child(div().flex_none().max_w(Math.max(60, Math.floor(c.w * 0.62))).truncate().text_color(on ? t.foreground : t.muted).child(f.label))
+      .when(Boolean(f.required), (el) => el.child(div().flex_none().text_color(on ? t.accent : t.dim).child("*")))
+      .child(div().flex_1().min_w(0).pl(8).truncate().text_right().text_size(10).text_color(t.dim).child(f.hint ?? ""));
     let control;
     if (TEXT.has(f.kind)) {
-      const box = div().id(`ff-${f.id}`).relative().flex_1().min_w(0).border(1).border_color(edge).px(7)
+      const box = div().id(`ff-${f.id}`).relative().w_full().border(1).border_color(edge).px(7)
         .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(t.ansi0, 1))))
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.at = i; this.focusField(cx); cx.notify(); });
       control = f.kind === "area"
-        ? box.h(AREA).py(5).child(Textarea.new(this.inputOf(f)).relative().w_full().h_full().text_size(12).text_color(t.foreground))
-        : box.h(ROW).flex().items_center().child(Input.new(this.inputOf(f)).relative().w_full().text_size(12).text_color(t.foreground));
-    } else if (f.kind === "toggle") {
-      control = h_flex().id(`ff-${f.id}`).relative().flex_1().min_w(0).h(ROW).gap(8).items_center().cursor_pointer()
-        .on_mouse_down("left", click)
-        .child(div().relative().size(12).flex_none().border(1).border_color(on ? t.accent : f.value ? t.foreground : t.ansi8)
-          .when(Boolean(f.value), (el) => el.child(div().absolute().top(2).left(2).size(6).bg(on ? t.accent : t.foreground))))
-        .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(f.value ? t.foreground : t.muted).child(f.note ?? (f.value ? "on" : "off")));
+        ? box.h(lay.area).py(5).child(Textarea.new(this.inputOf(f)).relative().w_full().h_full().text_size(12).text_color(t.foreground))
+        : box.h(CONTROL).flex().items_center().child(Input.new(this.inputOf(f)).relative().w_full().text_size(12).text_color(t.foreground));
     } else {
       const list = f.kind === "multi" ? f.value ?? [] : null;
-      const text = list ? list.join(", ") : f.display ? f.display(f.value) : String(f.value ?? "");
-      const shown = text || f.placeholder || (list ? "none" : "pick one");
-      control = h_flex().id(`ff-${f.id}`).relative().flex_1().min_w(0).h(ROW).px(7).gap(8).items_center().border(1).border_color(edge).cursor_pointer()
+      const text = list ? "" : f.display ? f.display(f.value) : String(f.value ?? "");
+      const open = this.picker?.field === f;
+      const shown = list?.length ? null : text || f.placeholder || (list ? "none" : "pick one");
+      control = h_flex().id(`ff-${f.id}`).relative().w_full().h(CONTROL).px(7).gap(6).items_center().border(1).border_color(open ? t.accent : edge).cursor_pointer()
         .hover((s) => s.border_color(on ? t.accent : t.ansi8))
         .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(t.ansi0, 1))))
         .on_mouse_down("left", click)
-        .child(div().relative().flex_1().min_w(0).truncate().text_size(12).text_color(text ? (f.tone ? t[f.tone] ?? t.foreground : t.foreground) : t.dim).child(shown))
+        .when(Boolean(list?.length), (el) => el.child(h_flex().relative().flex_1().min_w(0).gap(6).overflow_hidden()
+          .children(list.map((v, k) => chipOf(t, `fc-${f.id}-${k}`, f.display ? f.display(v) : v)))))
+        .when(shown != null, (el) => el.child(div().relative().flex_1().min_w(0).truncate().text_size(12)
+          .text_color(text ? (f.tone ? t[f.tone] ?? t.foreground : t.foreground) : t.dim).child(shown)))
         .when(Boolean(f.right), (el) => el.child(div().relative().flex_none().text_size(10).text_color(t.dim).child(f.right)))
-        .child(div().relative().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(list ? `${list.length || ""} ▾` : on ? "‹ ›  ▾" : "▾"));
+        .child(div().relative().flex_none().text_size(10).text_color(on || open ? t.accent : t.dim)
+          .child(list ? `${list.length || ""} ▾` : on ? "‹ › ▾" : "▾"));
     }
-    return v_flex().id(`frow-${f.id}`).relative().flex_none()
-      .child(h_flex().items_start().gap(10)
-        .child(h_flex().w(LABEL).flex_none().h(ROW).items_center().gap(4).text_size(11)
-          .when(on, (el) => el.child(div().absolute().left(-12).top(6).bottom(6).w(2).bg(t.accent)))
-          .child(div().truncate().text_color(on ? t.foreground : t.muted).child(f.label))
-          .when(Boolean(f.required), (el) => el.child(div().flex_none().text_color(on ? t.accent : t.dim).child("*"))))
-        .child(control))
-      .when(Boolean(f.hint), (el) => el.child(div().h(NOTE).pl(LABEL + 10).pt(2).text_size(10).text_color(t.dim).truncate().child(f.hint)))
-      .when(Boolean(err), (el) => el.child(div().h(NOTE).pl(LABEL + 10).pt(2).text_size(10).text_color(t.blocked).truncate().child(err)));
+    return cell.child(label).child(div().h(LABEL_GAP)).child(control).when(Boolean(err), (el) => el.child(errLine()));
   }
 
-  /** The last step: the exact commands, in order, before they run. */
-  confirmBox(t, size) {
+  /** The review, in place of the fields: the exact commands, in order, before they run; Send and Back in the footer. */
+  reviewBody(t) {
     const cmds = this.spec.commands?.() ?? [];
     const sending = this.stage === "sending";
-    const w = Math.min(720, size.width - 40);
-    const lines = cmds.map((c, i) => v_flex().id(`fc-${i}`).relative().gap(3)
+    const pad = this.lay().pad;
+    const lines = cmds.map((c, i) => v_flex().id(`fc-${i}`).relative().gap(4)
       .child(h_flex().gap(8).text_size(10).text_color(t.ansi8)
         .child(div().flex_none().text_color(t.accent).child(String(i + 1)))
         .child(div().flex_1().min_w(0).truncate().child(c.label)))
       .child(div().relative().px(8).py(6).text_size(11).text_color(t.foreground)
         .child(div().absolute().inset_0().opacity(0.6).child(dither(t.ansi0, 1)))
         .child(div().relative().child(c.line))));
-    return div().id("form-confirm").absolute().inset_0().flex().items_center().justify_center()
-      .on_mouse_down("left", stop)
-      .child(popupScrim("form-confirm-scrim"))
-      .child(v_flex().id("form-confirm-box").relative().w(w).max_h(size.height - 30).bg(t.background).border(1).border_color(sending ? t.working : t.accent).overflow_y_scroll()
-        .child(h_flex().relative().h(24).flex_none().px(10).items_center().text_size(11)
-          .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(sending ? t.working : t.accent, 1)))
-          .when(sending, (el) => el.child(div().absolute().inset_0().overflow_hidden().child(sweep(t, t.working, w))))
-          .child(div().relative().text_color(t.foreground).child(sending ? "Sending…" : this.spec.confirmTitle ?? "Send to GitHub?"))
-          .child(div().flex_1())
-          .child(div().relative().text_color(t.dim).child(`${cmds.length} command${cmds.length === 1 ? "" : "s"}, in this order`)))
-        .child(v_flex().relative().p(12).gap(12).children(lines)
-          .when(Boolean(this.spec.confirmNote), (el) => el.child(div().text_size(11).text_color(t.muted).child(this.spec.confirmNote())))
-          .when(Boolean(this.sendError), (el) => el.child(h_flex().gap(8).items_start().text_size(11)
-            .child(div().flex_none().text_color(t.blocked).child("failed"))
-            .child(div().flex_1().min_w(0).text_color(t.blocked).child(this.sendError))))
-          .child(h_flex().gap(8).pt(2)
-            .child(button(t, "form-send", this.sendError ? "Try again" : this.spec.sendWord ?? "Send", submitKey(this.stops(), this.confirmAt, this.mac), true, (cx) => { if (!sending) this.send(cx); }, sending, !sending && this.confirmAt === 0))
-            .child(button(t, "form-back", "Back", "esc", false, (cx) => this.back(cx), sending, !sending && this.confirmAt === 1)))));
+    const view = v_flex().id("form-confirm").relative().flex_1().min_h(0).overflow_y_scroll().px(pad).pt(12).pb(12).gap(14)
+      .children(lines)
+      .when(Boolean(this.spec.confirmNote), (el) => el.child(div().text_size(11).text_color(t.muted).child(this.spec.confirmNote())))
+      .when(Boolean(this.sendError), (el) => el.child(h_flex().gap(8).items_start().text_size(11)
+        .child(div().flex_none().text_color(t.blocked).child("failed"))
+        .child(div().flex_1().min_w(0).text_color(t.blocked).child(this.sendError))));
+    const foot = this.footer(t, pad, sending ? "sending…" : `${cmds.length} command${cmds.length === 1 ? "" : "s"}, in this order`, [
+      button(t, "form-send", this.sendError ? "Try again" : this.spec.sendWord ?? "Send", submitKey(this.stops(), this.confirmAt, this.mac), true, (cx) => { if (!sending) this.send(cx); }, sending, !sending && this.confirmAt === 0),
+      button(t, "form-back", "Back", "esc", false, (cx) => this.back(cx), sending, !sending && this.confirmAt === 1),
+    ]);
+    return v_flex().size_full().child(view).child(foot);
   }
 
-  pickerBox(t, size) {
-    const p = this.picker, f = p.field;
+  /** Where the open list sits and which of its rows show: { rows, n, place, top, end, hOf }, or null. */
+  pickerSpot(lay = this.lay()) {
+    const p = this.picker;
+    if (!p) return null;
+    const f = p.field;
     const rows = this.rows(f, p.query.value());
     const n = rows?.length ?? 0;
     p.at = Math.max(0, Math.min(p.at, n - 1));
-    const top = Math.max(0, Math.min(p.at - Math.floor(PICK_ROWS / 2), n - PICK_ROWS));
+    const cell = cellOf(lay, this.fields.indexOf(f));
+    if (!cell) return null;
+    const place = pickerPlace(cell, { scrollY: this.scrollY, viewH: this.viewH, want: pickerHeight(rows), width: this.width });
+    // The rows that fit, scrolled so the one with the keyboard shows.
+    const room = place.h - PICK_HEAD - 8;
+    const hOf = (r) => (r.sub ? PICK_ROW_SUB : PICK_ROW);
+    const fits = (from) => { let h = 0, k = from; while (k < n && h + hOf(rows[k]) <= room) h += hOf(rows[k++]); return k; };
+    let top = 0;
+    if (n) {
+      top = Math.min(p.top ?? 0, p.at);
+      while (fits(top) <= p.at && top < p.at) top++;
+      p.top = top;
+    }
+    return { rows, n, place, top, end: n ? Math.max(fits(top), top + 1) : 0, hOf };
+  }
+
+  /** The open list, under its field at the field's width (form-layout.js pickerPlace: upward without room below,
+   *  never over the footer), over a catcher that closes it on a click outside. */
+  pickerBox(t, lay) {
+    const spot = this.pickerSpot(lay);
+    if (!spot) return [];
+    const p = this.picker, f = p.field;
+    const { rows, n, place, top, end, hOf } = spot;
     const chosen = (r) => (f.kind === "multi" ? (f.value ?? []).includes(r.value) : f.value === r.value);
-    const row = (r, i) => h_flex().id(`fp-${i}`).relative().h(r.sub ? 32 : 22).flex_none().px(10).gap(8).items_center().cursor_pointer()
+    const row = (r, i) => h_flex().id(`fp-${i}`).relative().h(hOf(r)).flex_none().px(8).gap(8).items_center().cursor_pointer()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .when(i === p.at, (el) => el.children(band(t, true)))
       .on_mouse_down("left", stop)
@@ -452,26 +513,30 @@ export class Form {
         .child(div().truncate().text_size(12).text_color(i === p.at ? t.foreground : r.typed ? t.accent : t.muted).child(r.label))
         .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub))))
       .when(Boolean(r.right) || (f.kind === "choice" && chosen(r)), (el) => el.child(div().relative().flex_none().text_size(10).text_color(t.dim).child(r.right ?? "current")));
-    const body = rows == null ? div().h(80).child(empty(t, "Reading…", null, { small: true }))
-      : !n ? div().px(10).py(10).text_size(11).text_color(t.dim).child(f.free ? "Nothing matches: type a name." : "Nothing matches.")
-      : v_flex().py(4).children(rows.slice(top, top + PICK_ROWS).map((r, i) => row(r, top + i)));
-    const w = Math.min(560, size.width - 40);
-    return div().id("form-picker").absolute().inset_0().flex().justify_center().pt(40)
-      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); p.query.release?.(); this.picker = null; this.focusField(); cx.notify(); })
-      .child(popupScrim("form-picker-scrim"))
-      .child(v_flex().id("form-picker-box").w(w).max_h(PICK_ROWS * 32 + 60).bg(t.background).border(1).border_color(t.accent)
+    const body = rows == null ? div().h(60).child(empty(t, "Reading…", null, { small: true }))
+      : !n ? div().px(8).py(9).text_size(11).text_color(t.dim).child(f.free ? "Nothing matches: type a name." : "Nothing matches.")
+      : v_flex().py(4).children(rows.slice(top, end).map((r, k) => row(r, top + k)));
+    const count = f.kind === "multi" ? `${(f.value ?? []).length} chosen` : rows ? `${n}` : "";
+    return [
+      div().id("form-picker").absolute().inset_0()
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); p.query.release?.(); this.picker = null; this.focusField(cx); cx.notify(); }),
+      v_flex().id("form-picker-box").absolute().left(place.x).top(place.y).w(place.w).h(place.h).overflow_hidden().bg(t.background).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
-        .child(h_flex().relative().h(24).flex_none().px(10).items_center().text_size(11)
-          .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.accent, 1)))
-          .child(div().relative().text_color(t.foreground).child(f.label))
-          .child(div().flex_1())
-          .child(div().relative().text_color(t.dim).child(f.kind === "multi" ? `${(f.value ?? []).length} chosen` : rows ? `${n}` : "")))
-        .child(h_flex().h(28).flex_none().px(10).gap(6).items_center()
-          .child(div().text_size(11).text_color(t.accent).child(">"))
-          .child(Input.new(p.query).flex_1().h_full().text_size(12).text_color(t.foreground)))
+        .child(h_flex().relative().h(PICK_HEAD - 1).flex_none().px(8).gap(6).items_center()
+          .child(div().text_size(11).text_color(t.accent).child("›"))
+          .child(Input.new(p.query).flex_1().h_full().text_size(12).text_color(t.foreground))
+          .child(div().flex_none().text_size(10).text_color(t.dim).child(count)))
         .child(div().h(1).flex_none().bg(t.ansi0))
-        .child(body));
+        .child(body),
+    ];
   }
+}
+
+/** A chosen value in a list field: a small dithered chip. */
+function chipOf(t, id, word) {
+  return div().id(id).relative().flex_none().h(18).px(5).flex().items_center().text_size(11).text_color(t.foreground)
+    .child(div().absolute().inset_0().child(dither(t.ansi0, 1)))
+    .child(div().relative().child(String(word)));
 }
 
 /** A form button: the key it answers to beside its word; `main` is the accent one.

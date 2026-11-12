@@ -48,6 +48,8 @@ test:
     bun test scripts/nocturne-github-projects-tab.test.ts
     # The GitHub window's new pull request and run workflow forms by their keys, gh and git faked (writes recorded, never sent).
     bun test scripts/nocturne-github-forms.test.ts
+    # Where those forms' fields sit: the column, sections, pairs, the body's growth, a list opening at its field (upward without room).
+    bun test scripts/nocturne-github-form-layout.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/nocturne-git-view.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
