@@ -104,11 +104,31 @@ export function restore(text, zoom) {
   return { list, active, next: Math.max(Number(s.next) || 0, top + 1) };
 }
 
-/** A tab's name in the strip: its page's title, else its host, else "new tab". */
+/** A file:// address's path (decoded), or null for any other address. */
+export function filePath(url) {
+  const m = /^file:\/\/(?:localhost)?(\/[^?#]*)/i.exec(url ?? "");
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]); } catch { return m[1]; }
+}
+
+/** Where a tab's view loads from: an http(s) address as `url`; a file://
+ *  one (an HTML file from the files pane) as the file itself, with its
+ *  folder readable (css, scripts, images beside it) and its scripts on. The
+ *  native view takes no file:// `url`. */
+export function source(url) {
+  const path = filePath(url);
+  return path ? { path, trust: "interactive" } : { url };
+}
+
+/** A tab's name in the strip: its page's title, else its host (a file: its
+ *  name), else "new tab". */
 export function label(tab) {
   const title = tab.page.title?.trim();
   if (title) return title;
-  const m = /^[a-z]+:\/\/([^/?#]+)/i.exec(tab.page.href ?? tab.start ?? "");
+  const href = tab.page.href ?? tab.start ?? "";
+  const file = filePath(href);
+  if (file) return file.split("/").filter(Boolean).at(-1) ?? file;
+  const m = /^[a-z]+:\/\/([^/?#]+)/i.exec(href);
   return m ? m[1].replace(/^www\./, "") : "new tab";
 }
 

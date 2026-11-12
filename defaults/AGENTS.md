@@ -393,7 +393,9 @@ the highlighted line shows where it will land.
   palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
   `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
   `slot` matches (none: the one other commands reach) opens the page in a new
-  tab in front and its pane takes the keyboard. A mod finds a web pane and its
+  tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
+  that file, its folder readable (css, scripts, images beside it) and its scripts on;
+  typed in the address it does the same. A mod finds a web pane and its
   slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`).
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.

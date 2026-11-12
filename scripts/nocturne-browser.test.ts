@@ -872,3 +872,34 @@ test("the error line: none for a cut-short load, retry goes to the address that 
   press(view, cx, "r", char("r"));
   expect(native).toEqual([["web", "browser.reload", {}]]);
 });
+
+// ---- item 3: HTML files (the files pane opens them here through nocturne-browser.open)
+
+test("a file:// page loads as the file, its folder readable and its scripts on: as a pane's page, by open, typed in the address, after a restart", async () => {
+  expect(Tabs.source("https://a.example/x")).toEqual({ url: "https://a.example/x" });
+  expect(Tabs.source("file:///Users/d/site/index%20page.html")).toEqual({ path: "/Users/d/site/index page.html", trust: "interactive" });
+  expect(Tabs.source("file://localhost/tmp/a.html#top")).toEqual({ path: "/tmp/a.html", trust: "interactive" });
+  expect(Tabs.filePath("file:///tmp/%E0%A4%A.html")).toBe("/tmp/%E0%A4%A.html");
+  expect(Tabs.label(Tabs.makeTab("web", "file:///Users/d/site/index.html", 1))).toBe("index.html");
+  // Kept across a restart as its address.
+  expect(Tabs.source(Tabs.restore('{"tabs":[{"id":"web","href":"file:///a/b.html"}]}', 1)!.list[0].start)).toEqual({ path: "/a/b.html", trust: "interactive" });
+  reset();
+  // The pane's own page.
+  const { view, cx, native, send } = await webPane({ slot: "f1", url: "file:///Users/d/site/index.html", copy: 1 });
+  const props = (root: any) => viewsOf(root).map(([id, p]) => [id, p]);
+  expect(props(view.render())).toEqual([["web", { kind: "web", path: "/Users/d/site/index.html", trust: "interactive", persist: true, zoom: 0.9, pip: true, tabs: true }]]);
+  // The files pane's open: a tab of its own.
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "f1" }, tab: "t1", focused: true }];
+  app.focusedPane = "p1";
+  await send(`open:${JSON.stringify({ url: "file:///Users/d/site/b.html", slot: "f1" })}`);
+  expect(props(view.render()).map(([id, p]: any) => [id, p.path ?? p.url])).toEqual([["web-2", "/Users/d/site/b.html"], ["web", "/Users/d/site/index.html"]]);
+  // Typed in the address of a page: the tab's view loads the file in place (navigate takes http only).
+  native.length = 0;
+  view.go("https://a.example/", cx);
+  expect(native[0]).toEqual(["web-2", "browser.navigate", { url: "https://a.example/" }]);
+  native.length = 0;
+  view.go("file:///Users/d/other.html", cx);
+  expect(native.filter(([, a]) => a === "browser.navigate")).toEqual([]);
+  expect(props(view.render())[0]).toEqual(["web-2", expect.objectContaining({ path: "/Users/d/other.html", trust: "interactive" })]);
+  expect(view.tabs.list.find((t: any) => t.id === "web-2").start).toBe("file:///Users/d/other.html");
+});

@@ -43,6 +43,8 @@
 // the others when first shown. Commands tab_new, tab_close, tab_next, tab_prev,
 // tab:<n>, and open:<{ url, slot? } as JSON, or a URL> (the editor's links):
 // the copy whose slot it names opens it in front and its pane takes the keyboard.
+// A file:// address (an HTML file from the files pane) loads as the file
+// (props path, trust "interactive": its folder readable, scripts on).
 //
 // Several can be open, in one tab or many: each pane is its own mod copy
 // (its own view, events and localStorage, when its props carry a `slot`).
@@ -556,6 +558,9 @@ export default class Browser extends View {
     this.tab.failed = null;
     const first = !this.start;
     if (first) this.start = url; // the view is created on it
+    // A file (file://): the view's source changes (it loads the file in
+    // place); navigate takes http(s) only.
+    else if (Tabs.filePath(url)) this.start = url;
     else this.call("browser.navigate", { url });
     this.page = { ...this.page, href: url, loading: true, progress: 0.05 };
     // The keyboard into the page, as a browser does (the first page's view
@@ -834,7 +839,7 @@ export default class Browser extends View {
    *  dialog makes the view step aside. `tabs`: what would open a window
    *  comes as web.newTab. */
   webView(t, tab) {
-    return herdr.nativeView.new(tab.id, { kind: "web", url: tab.start, persist: true, zoom: tab.zoom, pip: true, tabs: true })
+    return herdr.nativeView.new(tab.id, { kind: "web", ...Tabs.source(tab.start), persist: true, zoom: tab.zoom, pip: true, tabs: true })
       .child(this.away && tab === this.tab
         ? this.blank(t, "Playing in picture in picture", "↩ in the player brings it back here.")
         : this.blank(t, tab.page.loading ? "Loading…" : "", tab.page.href));
