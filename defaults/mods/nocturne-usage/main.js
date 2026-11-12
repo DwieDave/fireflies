@@ -128,18 +128,18 @@ export default class Usage extends View {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-usage\./, "");
         if (c === "focus") this.handle.focus();
-        else if (c === "refresh") this.read(cx, true);
+        else if (c === "refresh") this.read(cx, "force");
         else if (c === "keys") this.keysShown = !this.keysShown;
         cx.notify();
       }
     });
-    this.read(cx);
+    this.read(cx, "open");
     cx.timer.every(TICK, (cx) => { this.read(cx); cx.notify(); });
   }
 
-  /** Asks again when the shared answer is old (or now, forced); shared() redraws every copy. */
-  read(cx, force = false) {
-    cx.spawn(async (cx) => { await refreshUsage(force); cx.notify(); });
+  /** Asks again when it's due (limits.js due: "tick", "open", "force"); shared() redraws every copy. */
+  read(cx, why = "tick") {
+    cx.spawn(async (cx) => { await refreshUsage(why); cx.notify(); });
     cx.notify();
   }
 
@@ -149,7 +149,7 @@ export default class Usage extends View {
     const help = keysKey(e, this.keysShown);
     if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
     else if (this.keysShown) return;
-    else if (e.keystroke === "r") this.read(cx, true);
+    else if (e.keystroke === "r") this.read(cx, "force");
     else if (e.keystroke === "p") {
       const i = PROVIDERS.findIndex((p) => p.id === provider().id);
       this.pick(PROVIDERS[(i + 1) % PROVIDERS.length].id, cx);
@@ -167,7 +167,7 @@ export default class Usage extends View {
   /** Shows provider `id` here and in the sidebar, asking it if its answer is old. */
   pick(id, cx) {
     pickProvider(id);
-    this.read(cx);
+    this.read(cx, "open");
   }
 
   /** Color for how much of a window is used. */
@@ -318,7 +318,7 @@ export default class Usage extends View {
   toolbar(t, d, note) {
     const busy = asking();
     const status = busy ? "asking the moon…"
-      : note?.state === "busy" ? "asked too often, trying later"
+      : note?.state === "busy" || (note?.until ?? 0) > Date.now() ? `${note.state === "busy" ? "rate limited" : "couldn't read"}${d ? ` · read ${span(Date.now() - d.at)} ago` : ""} · next try in ${span(Math.max(0, note.until - Date.now()))}`
       : d ? `read ${span(Date.now() - d.at)} ago` : "";
     return h_flex().id("us-toolbar").relative().h(BAR).flex_none().px(12).gap(8).items_center().text_size(11)
       .child(div().flex_none().text_color(t.ansi8).child("USAGE"))
@@ -358,7 +358,7 @@ export default class Usage extends View {
       : n.state === "off" ? ["usage is off in a scratch app", "it would ask with this machine's login; HERDR_APP_USAGE=1 turns it on"]
       : n.state === "nologin" ? [`no ${who.name} login on this machine`, `sign in to ${who.agent} and the moon will know you`]
       : n.state === "expired" ? ["the login is napping", `${who.agent} wakes it the next time it runs; this pane only reads it`]
-      : n.state === "busy" ? ["the moon asked us to wait a moment", "trying again in a few minutes"]
+      : n.state === "busy" ? ["the moon asked us to wait a moment", `rate limited · trying again in ${span(Math.max(0, (n.until ?? Date.now()) - Date.now()))}`]
       : ["couldn't reach the moon", n.message ?? ""];
     return v_flex().flex_1().items_center().justify_center().gap(6).px(16).pb(120).text_size(11)
       .child(div().text_color(t.foreground).child(title))

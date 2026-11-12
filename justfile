@@ -118,6 +118,8 @@ test:
     bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
     bun test scripts/nocturne-usage-limits.test.ts
+    # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
+    bun test scripts/nocturne-usage-poll.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view
