@@ -345,8 +345,8 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
 
   const seen: string[] = [];
   view.say = (m: string) => seen.push(m);
-  for (let i = 0; i < 3; i++) { view.command("preview", cx); seen.push(view.view); }
-  expect(seen.filter((s) => !s.includes(" "))).toEqual(["preview", "text", "split"]);
+  for (let i = 0; i < 4; i++) { view.command("preview", cx); seen.push(view.view); }
+  expect(seen.filter((s) => !s.includes(" ") && !s.includes(":"))).toEqual(["preview", "text", "rendered", "split"]);
   view.markdown = false;
   view.command("preview-only", cx);
   expect(view.view).toBe("split");

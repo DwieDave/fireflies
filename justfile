@@ -116,6 +116,8 @@ test:
     bun test scripts/nocturne-editor-mdedit.test.ts
     # The editor's rendered view model: units by source line, the caret's walk, a round trip on a Markdown corpus.
     bun test scripts/nocturne-editor-live.test.ts
+    # The editor's rendered view and the scratchpad as a whole pane (mocks herdr): the block written back byte for byte, arrows across blocks, cmd-. and a letter, vim, undo, autosave and close.
+    bun test scripts/nocturne-editor-rendered.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
     bun test scripts/nocturne-scratchpad.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.

@@ -122,7 +122,7 @@ export async function locate(io, folder, on = null) {
 
 /** Saving as it's typed: `touch()` on every change writes `delay` ms after the
  *  last one; `flush()` writes now (closing the pane). `write()` is the save
- *  (async); `timer(ms, fn)` schedules and returns a cancel function. The
+ *  (async); `timer(ms, fn)` schedules `fn` (it returns the write) and returns a cancel function. The
  *  state: "saved" | "pending" (waiting out the delay) | "saving" | "error". */
 export class Autosave {
   constructor({ write, timer, delay = AUTOSAVE, onState }) {
@@ -143,7 +143,7 @@ export class Autosave {
   touch() {
     this.cancel?.();
     this.set("pending");
-    this.cancel = this.timer(this.delay, () => { this.cancel = null; this.run(); });
+    this.cancel = this.timer(this.delay, () => { this.cancel = null; return this.run(); });
   }
 
   /** Writes now if anything waits; resolves once what's typed is written. */

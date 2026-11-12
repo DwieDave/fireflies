@@ -40,7 +40,16 @@ export const LEADER = {
   g: { name: "go", d: ["definition", "definition"], r: ["references", "references"] },
   "?": ["keys", "keys"],
   u: { name: "toggle", w: ["wrap", "word wrap"] },
-  m: { name: "markdown", p: ["preview", "preview: split / only / text"], s: ["preview-split", "preview beside"], v: ["preview-only", "preview only"], t: ["preview-text", "text only"] },
+  m: { name: "markdown", p: ["preview", "view: rendered / split / preview / text"], r: ["preview-rendered", "rendered"], s: ["preview-split", "preview beside"], v: ["preview-only", "preview only"], t: ["preview-text", "text only"] },
+  // The Markdown commands (mdedit.js), by the letters cmd-. takes.
+  ".": {
+    name: "markdown commands",
+    b: ["md-bold", "bold"], i: ["md-italic", "italic"], "`": ["md-code", "inline code"], k: ["md-link", "link"],
+    h: ["md-heading-up", "heading up"], H: ["md-heading-down", "heading down"],
+    l: ["md-bullets", "bullet list"], n: ["md-numbers", "numbered list"], t: ["md-task", "task box"], x: ["md-tick", "tick"],
+    q: ["md-quote", "quote"], c: ["md-fence", "code block"], r: ["md-rule", "rule"],
+    0: ["md-heading-0", "text"], 1: ["md-heading-1", "heading 1"], 2: ["md-heading-2", "heading 2"], 3: ["md-heading-3", "heading 3"],
+  },
 };
 
 export function createVim(options = {}) {

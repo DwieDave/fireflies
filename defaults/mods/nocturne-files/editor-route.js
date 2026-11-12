@@ -7,7 +7,7 @@
 // An editor already showing the file in the shown tab shows it (its tab);
 // else the editor the caller prefers (the one it sent files to before), the
 // focused one, the one that last had the keyboard, the tab's first: the file
-// opens there as a new tab, through shared `nocturne-editor.open`
+// opens there as a new tab (never in a scratchpad's pane), through shared `nocturne-editor.open`
 // { slot, path, line?, col?, view?, n } (the editor whose slot it names opens
 // it, n counts up). With no editor in the shown tab, `editor.open` opens one
 // beside the pane, as before; a `view` then waits for it in the same record
@@ -20,6 +20,13 @@ export const LAST = "nocturne-editor.last";
 // Every editor's files by slot (its tabs), for the app's `editor.open` too.
 export const PATHS = "nocturne-editor.paths";
 
+/** A scratchpad's editor (it opened on a note under the app's folder,
+ *  `…/scratchpad/<name>-<hash>.md`, nocturne-editor/scratch.js): a pane of its
+ *  own that other files don't go to. */
+export function isScratchpad(pane) {
+  return /\/scratchpad\/[^/]+-[0-9a-f]{8}\.md$/.test(String(pane?.props?.path ?? ""));
+}
+
 /** The files an editor pane holds: what it noted, else its props' file. */
 export function filesOf(pane, paths) {
   const noted = paths?.[pane.props?.slot];
@@ -30,7 +37,7 @@ export function filesOf(pane, paths) {
  *  `panes`: herdr's panes(); `focused`: the focused pane's id; `prefer`: a
  *  slot the caller sent files to; `last`: shared LAST; `paths`: shared PATHS. */
 export function editorFor({ panes, tab, focused = null, prefer = null, last = null, paths = null, path, on = null }) {
-  const eds = (panes ?? []).filter((p) => p.mod === EDITOR && p.tab === tab && !p.parked && p.props?.slot && (p.props?.on ?? null) === (on ?? null));
+  const eds = (panes ?? []).filter((p) => p.mod === EDITOR && p.tab === tab && !p.parked && p.props?.slot && (p.props?.on ?? null) === (on ?? null) && !isScratchpad(p));
   if (!eds.length) return null;
   return eds.find((p) => filesOf(p, paths).includes(path))
     ?? eds.find((p) => p.props.slot === prefer)

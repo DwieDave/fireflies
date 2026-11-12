@@ -317,7 +317,10 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
   const list = vim
     ? [[":", "ex"], ["space", "leader"], ["/", "search"], ["]d", "problem"], ...(server ? [["gd", "definition"], ["K", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]]
     : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(server ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
-  if (markdown) list.splice(Math.min(list.length, 3), 0, view === "preview" ? ["e", "text"] : [vim ? "space m p" : "cmd-shift-v", "preview"]);
+  if (markdown) list.splice(Math.min(list.length, 3), 0, view === "preview" ? ["e", "text"] : [vim ? "space m p" : "cmd-shift-v", "view"]);
+  // The rendered view: the Markdown commands first, the arrows walk the blocks.
+  if (markdown && view === "rendered") list.splice(0, 0, [vim ? "space ." : "cmd-.", "markdown"], ["↑↓", "blocks"]);
+  else if (markdown && view !== "preview") list.splice(0, 0, [vim ? "space ." : "cmd-.", "markdown"]);
   return [...list, vim ? ["space ?", "keys"] : ["cmd-k ?", "keys"]];
 }
 
@@ -325,12 +328,12 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
 export function editorKeys(vim) {
   const app = [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-alt-f", "replace"], ["cmd-l ctrl-g", "go to line"], ["cmd-k n / p", "next / prev problem"],
     ["cmd-k m", "problems"], ["cmd-k d", "definition"], ["cmd-i", "hover"], ["ctrl-= ctrl--", "hover more / less"], ["cmd-r", "reload"],
-    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown preview"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k w", "close tab"],
+    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown: rendered / split / preview / text"], ["cmd-.", "Markdown commands (then b i ` k h H l n t x q c r, 0-6)"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k w", "close tab"],
     ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (!vim) return [...app, ["cmd-k ?", "keys"]];
   return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],
     ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gt gT :bn :bp", "next / prev tab"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
-    ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space b", "tabs"], ["space d", "problems"], ["space m p", "Markdown preview"], ["space u w", "word wrap"],
+    ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space b", "tabs"], ["space d", "problems"], ["space m p", "Markdown view"], ["space m r", "Markdown rendered"], ["space .", "Markdown commands"], ["space u w", "word wrap"],
     ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
 }
 
