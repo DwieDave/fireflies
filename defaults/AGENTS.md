@@ -159,6 +159,9 @@ Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
 graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
 Its keys are lazygit's defaults (`?` lists them in the window; `+` / `_`
 widen the focused panel: half gives Commits a wide graph column, then full).
+History comes in pages, as in lazygit: Commits (and a branch's commits)
+read 300 at a time, the branch log in the main view 200; when the end of a
+cut history comes into view the next page is read below it.
 Review (`nocturne.diff`, the git button's ▾ > Diff) is what nocturne-diff was:
 uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 (space, `a`) and hidden tests / config / assets / docs (ctrl-b). Open it in a
