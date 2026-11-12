@@ -454,8 +454,8 @@ pub struct Person {
 }
 
 /// settings.json `files`: what a files pane lists when it opens (each pane
-/// keeps its own choice after that). Unset: hidden files and git-ignored
-/// files are listed.
+/// keeps its own choice after that). Unset: dotfiles and git-ignored files
+/// are left out.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct FilesSettings {

@@ -96,6 +96,8 @@ test:
     bun test scripts/nocturne-editor-card.test.ts
     # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
     bun test scripts/nocturne-editor-follow.test.ts
+    # The editor's word wrap toggle (cmd-k w, space u w, :set wrap, the bar's chip): this editor only, from the language's soft_wrap, with stand-ins (mocks herdr).
+    bun test scripts/nocturne-editor-wrap.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
     bun test scripts/nocturne-files-preview.test.ts
     # nocturne-files ships the preview's viewer and what it imports: each copy is nocturne-preview's byte for byte.

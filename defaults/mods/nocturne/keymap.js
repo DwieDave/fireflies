@@ -136,6 +136,7 @@ const WORDS = {
   "nocturne-editor.hover-less": "Hover: say less",
   "nocturne-editor.reload": "Read the file again from disk",
   "nocturne-editor.vim": "Vim keys on or off",
+  "nocturne-editor.wrap": "Word wrap on or off",
   "nocturne-editor.keys": "The editor's keys",
   "nocturne-editor.preview": "Markdown preview on or off",
   // The web pane (mod:nocturne-browser).
