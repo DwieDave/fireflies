@@ -376,7 +376,7 @@ export class Form {
     const sending = this.stage === "sending";
     return h_flex().id("form-foot").relative().h(FOOTER).flex_none().px(pad).gap(8).items_center()
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(sending ? t.working : t.ansi0, 1)))
-      .when(sending, (el) => el.child(div().absolute().left(0).right(0).top(0).bottom(0).overflow_hidden().child(sweep(t, t.working, this.width))))
+      .when(sending, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).overflow_hidden().child(sweep(t, t.working, this.width))))
       .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(summary))
       .children(buttons);
   }
