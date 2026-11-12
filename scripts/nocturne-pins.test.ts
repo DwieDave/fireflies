@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { PIN_LABEL, AT_LABEL, GRACE, isPinned, pinnedAt, sortAgents, stamps, moveInJar } from "../defaults/mods/nocturne/pins.js";
+import { PIN_LABEL, AT_LABEL, GRACE, isPinned, pinnedAt, sortAgents, stamps, moveInJar, PANES_KEY, GONE_AFTER, paneRecords, findPane, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime, tidy, onShelf } from "../defaults/mods/nocturne/pins.js";
 
 const RANK: Record<string, number> = { blocked: 0, working: 1, done: 2, idle: 3 };
 const rank = (a: any) => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status] ?? 3);
@@ -79,4 +79,119 @@ test("moving in the jar swaps neighbors and renumbers every pin, ties and all", 
   const labels: Record<string, Record<string, string>> = { a: { [PIN_LABEL]: "1" }, b: { [PIN_LABEL]: "1" }, c: { [PIN_LABEL]: "1" } };
   for (const [t, kv] of moveInJar(jar, "b", -1, 7)) labels[t][AT_LABEL] = kv.split("=")[1];
   expect(sortAgents(jar.map((a) => ({ ...a, status: "idle" })), rank, of(labels)).pinned.map((a: any) => a.address)).toEqual(["b", "a", "c"]);
+});
+
+// ---- panes that aren't agents: a plain terminal, a web page, an editor, files
+
+const web = { pane: "p1", terminal: null, mod: "nocturne-browser", props: { slot: "w1", url: "https://x" }, tab: "c1" };
+const editor = { pane: "p2", terminal: null, mod: "nocturne-editor", props: { file: "/a/PLAN.md" }, tab: "c2" };
+const shellPane = { pane: "p3", terminal: "t9", tab: "c1" };
+
+test("the panes' pin store: well formed records only, pin and unpin by pane id", () => {
+  expect(PANES_KEY).toBe("nocturne.pinned-panes");
+  expect(paneRecords(null)).toEqual([]);
+  expect(paneRecords({ pane: "p1" })).toEqual([]);
+  expect(paneRecords([{ pane: "p1", at: 1 }, null, { pane: "" }, { at: 2 }, "x"])).toEqual([{ pane: "p1", at: 1 }]);
+  let recs = pinPaneRecord([], web, true, 500);
+  expect(recs).toEqual([{ pane: "p1", mod: "nocturne-browser", props: { slot: "w1", url: "https://x" }, at: 500 }]);
+  expect(panePinned(recs, "p1")).toBe(true);
+  expect(panePinned(recs, "p2")).toBe(false);
+  // Pinning again renews it (once per pane); unpinning removes only it.
+  recs = pinPaneRecord(pinPaneRecord(recs, editor, true, 600), web, true, 700);
+  expect(recs.map((r: any) => [r.pane, r.at])).toEqual([["p2", 600], ["p1", 700]]);
+  expect(pinPaneRecord(recs, web, false, 800).map((r: any) => r.pane)).toEqual(["p2"]);
+  expect(paneKey("p1")).toBe("pane:p1");
+  expect(isPaneKey("pane:p1")).toBe(true);
+  expect(isPaneKey("t1")).toBe(false);
+});
+
+test("a record finds its pane by id, else by the same mod and props when that's unique", () => {
+  const rec = { pane: "old", mod: "nocturne-browser", props: { url: "https://x", slot: "w1" } };
+  expect(findPane({ pane: "p1" }, [web])).toBe(web);
+  // A restart gave it a new id: the same mod and props (any key order) find it.
+  expect(findPane(rec, [editor, web])).toBe(web);
+  // Two alike: no guess.
+  expect(findPane(rec, [web, { ...web, pane: "p9" }])).toBe(null);
+  // No props to go by, or another mod: not found.
+  expect(findPane({ pane: "old", mod: "nocturne-files", props: {} }, [{ pane: "p5", terminal: null, mod: "nocturne-files", props: {} }])).toBe(null);
+  expect(findPane({ ...rec, mod: "nocturne-editor" }, [web])).toBe(null);
+  // A terminal pane never answers for a mod pane's record.
+  expect(findPane({ pane: "p3" }, [shellPane])).toBe(null);
+});
+
+test("the jar mixes agents, plain terminals and mod panes in the order pinned", () => {
+  const agents = [
+    { address: "t1", status: "working" },
+    { address: "t2", status: "idle" },
+    { address: "t3", status: "blocked" }, // not pinned
+  ];
+  const terminals = [
+    { address: "t1", state: "live", labels: { [PIN_LABEL]: "1", [AT_LABEL]: "100" } },
+    { address: "t2", state: "live", labels: { [PIN_LABEL]: "1", [AT_LABEL]: "400" } },
+    { address: "t3", state: "live", labels: {} },
+    { address: "t9", state: "live", labels: { [PIN_LABEL]: "1", [AT_LABEL]: "300" } }, // a plain shell
+    { address: "t8", state: "exited", labels: { [PIN_LABEL]: "1", [AT_LABEL]: "50" } }, // gone
+    { address: "t7", state: "live", labels: { [PIN_LABEL]: "1" } }, // pinned from the CLI, no time yet
+  ];
+  const records = [
+    { pane: "p1", mod: "nocturne-browser", props: web.props, at: 200 },
+    { pane: "p2", mod: "nocturne-editor", props: editor.props, at: 500 },
+    { pane: "gone", mod: "nocturne-files", props: { path: "/x" }, at: 150 }, // closed
+  ];
+  const jar = jarItems({ agents, terminals, panes: [web, editor, shellPane], records });
+  expect(jar.map((x: any) => [x.kind, x.key])).toEqual([
+    ["agent", "t1"], ["pane", "pane:p1"], ["terminal", "t9"], ["agent", "t2"], ["pane", "pane:p2"], ["terminal", "t7"],
+  ]);
+  expect(jar[1].pane).toBe(web);
+  expect(jar[2].pane).toBe(shellPane);
+  expect(jar[5].pane).toBe(null); // a terminal without a pane still goes in
+  expect(jar[0].agent).toBe(agents[0]);
+});
+
+test("reordering keeps to its own kind: fireflies up and down, tiles left and right", () => {
+  const jar = [{ key: "t1", kind: "agent" }, { key: "pane:p1", kind: "pane" }, { key: "t2", kind: "agent" }, { key: "t9", kind: "terminal" }, { key: "pane:p2", kind: "pane" }];
+  expect(onShelf(jar[0])).toBe(false);
+  expect(onShelf(jar[1])).toBe(true);
+  expect(onShelf(jar[3])).toBe(true);
+  // A tile moves past tiles only (a shell's too), not the fireflies between them.
+  expect(reorder(jar, "t9", -1, 10)).toEqual([["t9", 10], ["pane:p1", 11], ["pane:p2", 12]]);
+  expect(reorder(jar, "pane:p1", 1, 10)).toEqual([["t9", 10], ["pane:p1", 11], ["pane:p2", 12]]);
+  expect(reorder(jar, "pane:p1", -1, 10)).toEqual([]);
+  expect(reorder(jar, "pane:p2", 1, 10)).toEqual([]);
+  // A firefly past fireflies.
+  expect(reorder(jar, "t2", -1, 10)).toEqual([["t2", 10], ["t1", 11]]);
+  expect(reorder(jar, "t2", 1, 10)).toEqual([]);
+  expect(reorder(jar, "nope", 1, 10)).toEqual([]);
+  const records = [{ pane: "p1", at: 5 }, { pane: "p2", at: 6 }];
+  expect(retime(records, [["pane:p1", 10], ["t1", 11]])).toEqual([{ pane: "p1", at: 10 }, { pane: "p2", at: 6 }]);
+});
+
+test("tidy: a pane found under a new id takes it, a closed one goes after GONE_AFTER, an away machine's stay", () => {
+  const missing = new Map<string, number>();
+  const now = 1_000_000;
+  const recs = [
+    { pane: "old", mod: "nocturne-browser", props: web.props, at: 1 }, // came back as p1
+    { pane: "p2", mod: "nocturne-editor", props: editor.props, at: 2 }, // there
+    { pane: "p4", mod: "nocturne-files", props: { path: "/x" }, at: 3 }, // closed
+    { pane: "m/p7", mod: "nocturne-browser", props: { slot: "r" }, at: 4 }, // on a machine that's away
+  ];
+  // No panes at all (the app is still loading): nothing changes.
+  expect(tidy(recs, [], missing, now)).toBe(null);
+  const out = tidy(recs, [web, editor], missing, now);
+  expect(out!.map((r: any) => r.pane)).toEqual(["p1", "p2", "p4", "m/p7"]);
+  expect(missing.get("p4")).toBe(now);
+  expect(tidy(out!, [web, editor], missing, now + GONE_AFTER - 1)).toBe(null);
+  const later = tidy(out!, [web, editor], missing, now + GONE_AFTER);
+  expect(later!.map((r: any) => r.pane)).toEqual(["p1", "p2", "m/p7"]);
+  expect(missing.has("p4")).toBe(false);
+  // Back before its time is up: the clock starts over.
+  const m2 = new Map<string, number>();
+  tidy([{ pane: "p2", at: 1 }], [web], m2, now);
+  expect(tidy([{ pane: "p2", at: 1 }], [editor], m2, now + 5)).toBe(null);
+  expect(m2.has("p2")).toBe(false);
+  // The away machine's panes back but this one closed: it goes in time too.
+  const m3 = new Map<string, number>();
+  const remote = { pane: "m/p8", terminal: null, mod: "x", props: {}, tab: "m/c1" };
+  tidy([recs[3]], [remote], m3, now);
+  expect(tidy([recs[3]], [remote], m3, now + GONE_AFTER)).toEqual([]);
 });

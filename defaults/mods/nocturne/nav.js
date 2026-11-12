@@ -52,7 +52,7 @@ export const SIDEBAR_HELP = [
   ["⏎  space", "open: show the space, focus the agent, press the button"],
   ["m  .", "the row's menu"], ["r", "rename"], ["n", "new space"], ["t", "new tab in the space"],
   ["f", "change the space's folder"], ["w", "new worktree"], ["d", "delete the space (asks)"],
-  ["p", "pin / unpin the agent"], ["J K", "move it in the jar"],
+  ["p", "pin / unpin the agent or pane"], ["J K", "move it in the jar / on the shelf"],
   ["l  →", "to the panes"], ["esc  q", "back to the pane"], ["?", "keys"],
 ];
 export const STRIP_HELP = [
