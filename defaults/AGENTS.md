@@ -396,7 +396,9 @@ the highlighted line shows where it will land.
   tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
   that file, its folder readable (css, scripts, images beside it) and its scripts on;
   typed in the address it does the same. A mod finds a web pane and its
-  slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`).
+  slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`). Each web pane with a slot
+  publishes its shown tab's title (else its host) in shared `nocturne-browser.titles`
+  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name.
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a

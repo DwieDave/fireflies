@@ -96,6 +96,9 @@ const ACTIVE = "nocturne-browser.active";
 const CONTEXT = "NocturneBrowser", TAB = "nocturne_browser::tab", TAB_BACK = "nocturne_browser::tab_back";
 /** The key event a bound tab stands for. */
 const tabEvent = (shift) => ({ key: "tab", keystroke: shift ? "shift-tab" : "tab", key_char: null, modifiers: { shift, control: false, alt: false, platform: false, function: false } });
+// What each web pane shows, for the dock's shelf: { [props.slot]: the shown
+// tab's page title (else its host) }, as the viewers keep theirs.
+const TITLES = "nocturne-browser.titles";
 // The open inspector panes: { [web view key]: pane id }, one per page.
 const INSPECTORS = "nocturne-browser.inspectors";
 const INSPECTOR = "inspector";
@@ -215,6 +218,7 @@ export default class Browser extends View {
     // tab's view is created on its `start`; later pages go through navigate
     // calls (new props would rebuild the view).
     this.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(pr.url ? target(pr.url) : saved, zoom);
+    this.publishTitle();
     this.barW = 600;
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "address or search" });
@@ -281,6 +285,22 @@ export default class Browser extends View {
       localStorage.setItem("tabs", Tabs.save(this.tabs));
       if (this.page.href) localStorage.setItem("url", this.page.href);
     } catch {}
+    this.publishTitle();
+  }
+
+  /** The shown tab's name in shared TITLES under this pane's slot (a blank
+   *  tab: none, the shelf says the host or "Web"); slots of panes that are
+   *  gone go. Written only when something changed. */
+  publishTitle() {
+    if (!this.ownSlot || this.inspect) return;
+    const live = new Set(panes().filter((p) => p.mod === "nocturne-browser").map((p) => p.props?.slot).filter((x) => x != null).map(String));
+    const was = shared(TITLES) ?? {};
+    const name = this.page.href || this.page.title ? Tabs.label(this.tab) : null;
+    const stale = Object.keys(was).some((k) => !live.has(k) && k !== this.slot);
+    if ((was[this.slot] ?? null) === name && !stale) return;
+    const next = Object.fromEntries(Object.entries(was).filter(([k]) => live.has(k) && k !== this.slot));
+    if (name) next[this.slot] = name;
+    setShared(TITLES, next);
   }
 
   /** A new tab on `url` (null: blank, its address open). In front unless
@@ -382,6 +402,9 @@ export default class Browser extends View {
   async close() {
     if (this.inspect) return;
     if (shared(ACTIVE) === this.slot) setShared(ACTIVE, null);
+    // The pane is gone (or the mod reloads: its first title comes back with init).
+    const titles = shared(TITLES) ?? {};
+    if (this.ownSlot && this.slot in titles) { const { [this.slot]: _gone, ...rest } = titles; setShared(TITLES, rest); }
   }
 
   /** The page's inspector pane, if one is open. */

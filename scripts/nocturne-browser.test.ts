@@ -903,3 +903,48 @@ test("a file:// page loads as the file, its folder readable and its scripts on: 
   expect(props(view.render())[0]).toEqual(["web-2", expect.objectContaining({ path: "/Users/d/other.html", trust: "interactive" })]);
   expect(view.tabs.list.find((t: any) => t.id === "web-2").start).toBe("file:///Users/d/other.html");
 });
+
+// ---- the dock's shelf: each web pane's shown title, by slot
+
+test("nocturne-browser.titles: the shown tab's title by the pane's slot, on a title change and a tab switch; gone panes drop out", async () => {
+  reset();
+  const titles = () => app.store["nocturne-browser.titles"];
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" }, { pane: "p2", mod: "nocturne-browser", props: { slot: "s2" }, tab: "t1" }];
+  app.store["nocturne-browser.titles"] = { gone: "Old page", s2: "Other pane" };
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/x" });
+  // At start: its host until the page says its title; a gone pane's entry goes, another pane's stays.
+  expect(titles()).toEqual({ s2: "Other pane", s1: "a.example" });
+  view.onEvent({ id: "web", event: "web.location", data: { href: "https://a.example/x", title: "A page" } }, cx);
+  expect(titles()).toEqual({ s2: "Other pane", s1: "A page" });
+  // The page renames itself.
+  view.onEvent({ id: "web", event: "web.location", data: { href: "https://a.example/x", title: "A page (2)" } }, cx);
+  expect(titles().s1).toBe("A page (2)");
+  // A tab behind loading doesn't change it; switching to it does, and back.
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://b.example/", title: "Bee" } }, cx);
+  expect(titles().s1).toBe("A page (2)");
+  view.showTab("web-2", cx);
+  expect(titles().s1).toBe("Bee");
+  // Closing the shown tab: the one shown next.
+  view.closeTab("web-2", cx);
+  expect(titles().s1).toBe("A page (2)");
+  // A blank tab shown: no entry (the shelf falls back to the host or "Web").
+  view.openTab(null, {}, cx);
+  expect("s1" in titles()).toBe(false);
+  // Unchanged: not written again.
+  let writes = 0;
+  const set = app.store;
+  view.showTab("web", cx);
+  app.store = new Proxy(set, { set: (o, k, v) => { writes++; o[k as any] = v; return true; } });
+  view.publishTitle();
+  expect(writes).toBe(0);
+  app.store = set;
+  // The pane closes: its entry goes.
+  await view.close();
+  expect(titles()).toEqual({ s2: "Other pane" });
+  // A pane without its own slot publishes nothing.
+  reset();
+  const bare = await webPane({ url: "https://c.example/" });
+  bare.view.onEvent({ id: "web", event: "web.location", data: { href: "https://c.example/", title: "C" } }, bare.cx);
+  expect(app.store["nocturne-browser.titles"]).toBe(undefined);
+});
