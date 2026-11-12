@@ -820,3 +820,55 @@ test("the tabs come back after a restart: the shown one loads, the others when f
     expect([ids(old.view), old.view.start]).toEqual([["web"], "https://b.example/"]);
   } finally { store.done(); }
 });
+
+// ---- load errors: only real failures reach the line under the bar
+
+test("a load cut short (another navigation, a download, a tab instead) shows nothing; a real failure says what in words, with retry", async () => {
+  const { mod } = await load("nocturne-browser/main.js");
+  const f = mod.loadFailure;
+  const generic = (domain: string, code: number) => ({ domain, code, message: `The operation couldn’t be completed. (${domain} error ${code}.)`, failingUrl: "https://www.a.example/x" });
+  // Not failures: NSURLErrorCancelled, WebKit's "Frame load interrupted", a plug-in's load (also from a build that sends no domain).
+  expect([f(generic("NSURLErrorDomain", -999)), f(generic("WebKitErrorDomain", 102)), f(generic("WebKitErrorDomain", 204)),
+    f({ code: -999, message: "cancelled" }), f({ code: 102, message: "Frame load interrupted" })]).toEqual([null, null, null, null, null]);
+  // Failures, in words, with the address that failed.
+  expect(f(generic("NSURLErrorDomain", -1009))).toEqual({ message: "You're offline.", url: "https://www.a.example/x" });
+  expect(f(generic("NSURLErrorDomain", -1003))!.message).toBe("Can't find a.example: no such site, or no name server.");
+  expect(f(generic("NSURLErrorDomain", -1004))!.message).toBe("a.example doesn't answer.");
+  expect(f(generic("NSURLErrorDomain", -1202))!.message).toBe("a.example's certificate isn't trusted.");
+  expect(f(generic("WebKitErrorDomain", 101))!.message).toBe("This page can't be shown here: ↗ opens it in the system's browser.");
+  // Unknown: WebKit's own words, unless they're the generic "couldn't be completed" (then the code).
+  expect(f({ domain: "NSURLErrorDomain", code: -1234, message: "Something specific happened." })!.message).toBe("Something specific happened.");
+  expect(f(generic("NSURLErrorDomain", -1234))).toEqual({ message: "The page didn't load (error -1234).", url: "https://www.a.example/x" });
+  // A view that couldn't be made (no code): its message as is.
+  expect(f({ message: "this window has no native view" })).toEqual({ message: "this window has no native view", url: null });
+});
+
+test("the error line: none for a cut-short load, retry goes to the address that failed, the next page clears it", async () => {
+  reset();
+  const { view, cx, native } = await webPane({ slot: "b1", url: "https://a.example/", copy: 1 });
+  view.page = { ...view.page, href: "https://a.example/", loading: true };
+  view.onEvent({ id: "web", event: "load.error", data: { domain: "NSURLErrorDomain", code: -999, message: "The operation couldn’t be completed. (NSURLErrorDomain error -999.)" } }, cx);
+  expect([view.error, view.page.loading]).toEqual([null, false]);
+  expect(strings(view.render()).some((x: string) => /NSURL/.test(x))).toBe(false);
+  // Offline while going to b: the line says so, retry (and r) go to b, not a again.
+  view.onEvent({ id: "web", event: "load.error", data: { domain: "NSURLErrorDomain", code: -1009, message: "The Internet connection appears to be offline.", failingUrl: "https://b.example/" } }, cx);
+  expect(view.error).toBe("You're offline.");
+  const root = view.render();
+  expect(strings(root)).toEqual(expect.arrayContaining(["You're offline.", "retry  r"]));
+  native.length = 0;
+  press(view, cx, "r", char("r"));
+  expect(native).toEqual([["web", "browser.navigate", { url: "https://b.example/" }]]);
+  expect(view.error).toBe(null);
+  // Failing again, then the next page starts: the line goes by itself.
+  view.onEvent({ id: "web", event: "load.error", data: { domain: "NSURLErrorDomain", code: -1001, failingUrl: "https://b.example/" } }, cx);
+  expect(view.error).toBe("b.example took too long to answer.");
+  view.onEvent({ id: "web", event: "load.start", data: { href: "https://c.example/", loading: true } }, cx);
+  expect([view.error, view.tab.failed]).toEqual([null, null]);
+  // Not a load (picture in picture): no retry, and r reloads as ever.
+  view.page.loading = false;
+  view.onEvent({ id: "web", event: "pip.start", data: { result: "none" } }, cx);
+  expect(strings(view.render())).not.toContain("retry  r");
+  native.length = 0;
+  press(view, cx, "r", char("r"));
+  expect(native).toEqual([["web", "browser.reload", {}]]);
+});

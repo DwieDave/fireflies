@@ -3,11 +3,12 @@
 // one shows. main.js draws them and keeps one web view per tab.
 //
 //   tabs    { list: [tab], active: id, next: n }   n: the next tab's number
-//   tab     { id, start, page, error, video, zoom, live, opener, of }
+//   tab     { id, start, page, error, failed, video, zoom, live, opener, of }
 //           id      the native view's id: "web" for the first, then "web-2", …
 //           start   the address the view is created on (null: a blank tab,
 //                   its address field open); later pages are navigations
 //           page    { href, title, loading, progress, canGoBack, canGoForward }
+//           failed  { url }: its last load failed (error says how); r retries url
 //           live    its view exists: a restored tab gets one when first shown
 //           opener  the tab whose link opened it (it goes after its siblings)
 
@@ -17,7 +18,7 @@ export const tabId = (n) => (n <= 1 ? "web" : `web-${n}`);
 /** A tab on `url` (null: blank). */
 export function makeTab(id, url, zoom, { title = null, live = true, opener = null } = {}) {
   return { id, start: url ?? null, page: { href: url ?? null, title, loading: false, progress: 0, canGoBack: false, canGoForward: false },
-    error: null, video: false, zoom, live, opener, of: null };
+    error: null, failed: null, video: false, zoom, live, opener, of: null };
 }
 
 /** One tab on `url`. */

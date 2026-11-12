@@ -1461,6 +1461,11 @@ The main ones:
   A web view sends `web.location` (its state: `href`, `title`, `canGoBack`, …) whenever its
   address, history or title changes, also within a page (links in single-page apps, pushState,
   #fragments), so an address bar can follow it; `load.*` alone misses those.
+  `load.error` carries `message`, `domain`, `code` and `failingUrl` (the address that failed;
+  the view may still show the page before it). Not every one is a failure: NSURLErrorDomain
+  -999 is a load cut short by the next one (a redirect, a click while loading), WebKitErrorDomain
+  102 a download or a cancelled policy; Nocturne's browser shows neither and words the rest
+  ("You're offline.", "a.example doesn't answer."), with retry (`r`) going to `failingUrl`.
   A web view created with `tabs: true` is for a mod that keeps tabs: what would open a window
   (`target=_blank`, `window.open`, the link menu's "… in New Window" items, which then read
   "… in New Tab"), a middle click and a Cmd click on a link are not loaded but sent as

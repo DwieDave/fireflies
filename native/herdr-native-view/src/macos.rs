@@ -671,6 +671,24 @@ fn media_state(player: Option<&AVPlayer>) -> Value {
     }
 }
 
+/// `load.error`: the page's state, and the error: `message` (WebKit's words),
+/// `domain` and `code` (to tell a real failure from a load that was only cut
+/// short: NSURLErrorDomain -999 when another navigation replaced it,
+/// WebKitErrorDomain 102 for a download or a cancelled policy), and
+/// `failingUrl`, the address that failed (not the page still shown).
+fn load_error(web: &WKWebView, error: &NSError) -> Value {
+    let mut s = web_state(web);
+    s["message"] = json!(error.localizedDescription().to_string());
+    s["code"] = json!(error.code());
+    s["domain"] = json!(error.domain().to_string());
+    let failing: Option<Retained<AnyObject>> = unsafe {
+        let info = error.userInfo();
+        msg_send![&*info, objectForKey: &*NSString::from_str("NSErrorFailingURLStringKey")]
+    };
+    s["failingUrl"] = json!(failing.and_then(|f| f.downcast_ref::<NSString>().map(|n| n.to_string())));
+    s
+}
+
 fn web_state(view: &WKWebView) -> Value {
     unsafe {
         json!({
@@ -1468,10 +1486,7 @@ define_class!(
 
         #[unsafe(method(webView:didFailNavigation:withError:))]
         fn did_fail(&self, web: &WKWebView, _nav: Option<&WKNavigation>, error: &NSError) {
-            let mut s = web_state(web);
-            s["message"] = json!(error.localizedDescription().to_string());
-            s["code"] = json!(error.code());
-            self.report("load.error", s);
+            self.report("load.error", load_error(web, error));
         }
 
         #[unsafe(method(webView:didFailProvisionalNavigation:withError:))]
@@ -1481,10 +1496,7 @@ define_class!(
             _nav: Option<&WKNavigation>,
             error: &NSError,
         ) {
-            let mut s = web_state(web);
-            s["message"] = json!(error.localizedDescription().to_string());
-            s["code"] = json!(error.code());
-            self.report("load.error", s);
+            self.report("load.error", load_error(web, error));
         }
 
         // A middle or Cmd click on a link opens a tab, when the mod keeps them (crate::tabs).

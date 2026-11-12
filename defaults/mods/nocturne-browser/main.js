@@ -121,6 +121,43 @@ function target(text) {
   return hostish ? s : SEARCH + encodeURIComponent(s);
 }
 
+/** A load.error in words a person reads, or null when nothing failed: a load
+ *  cut short (NSURLErrorDomain -999: the next navigation replaced it, a
+ *  redirect, a click while loading; WebKitErrorDomain 102: a download, or a
+ *  tab opened instead; 204: a plug-in took it). `url`: the address to retry
+ *  (the one that failed, not the page still shown). */
+export function loadFailure(d) {
+  const code = Number(d?.code), domain = d?.domain ?? null;
+  const url = typeof d?.failingUrl === "string" && d.failingUrl ? d.failingUrl : null;
+  const web = domain === "WebKitErrorDomain" || (domain == null && code === 102);
+  if ((domain === "NSURLErrorDomain" || domain == null) && code === -999) return null;
+  if (web && (code === 102 || code === 204)) return null;
+  const host = /^[a-z]+:\/\/([^/?#]+)/i.exec(url ?? d?.href ?? "")?.[1]?.replace(/^www\./, "") ?? "The site";
+  const words = domain === "NSURLErrorDomain" || domain == null ? {
+    [-1009]: "You're offline.",
+    [-1020]: "No network may be used for this.",
+    [-1003]: `Can't find ${host}: no such site, or no name server.`,
+    [-1004]: `${host} doesn't answer.`,
+    [-1001]: `${host} took too long to answer.`,
+    [-1005]: "The connection went down.",
+    [-1007]: `${host} redirects in a loop.`,
+    [-1011]: `${host} answered something unreadable.`,
+    [-1202]: `${host}'s certificate isn't trusted.`,
+    [-1201]: `${host}'s certificate has expired or isn't valid yet.`,
+    [-1200]: `A secure connection to ${host} failed.`,
+    [-1206]: `${host} wants a client certificate.`,
+    [-1022]: `${host} has to be opened over https.`,
+    [-1002]: "This kind of address can't open here.",
+    [-1100]: "There's no such file.",
+    [-1102]: "That file can't be read.",
+  }[code] : web && (code === 100 || code === 101) ? "This page can't be shown here: ↗ opens it in the system's browser." : null;
+  const said = String(d?.message ?? "").trim();
+  // WebKit's generic "The operation couldn't be completed. (… error N.)" says nothing.
+  const vague = !said || /couldn.t be completed|NSURLErrorDomain|WebKitErrorDomain/i.test(said);
+  const message = words ?? (vague ? `The page didn't load${Number.isFinite(code) ? ` (error ${code})` : ""}.` : said);
+  return { message, url };
+}
+
 /** An address split for the bar: host, then the rest. */
 function parts(href) {
   const m = /^[a-z]+:\/\/([^/?#]+)(.*)$/i.exec(href ?? "");
@@ -412,12 +449,18 @@ export default class Browser extends View {
     // single-page apps, pushState, #fragments, back/forward within a page).
     if ((e.event?.startsWith("load.") && e.event !== "load.error") || e.event === "web.location") {
       tab.page = { ...tab.page, ...d, href: d.href ?? d.url ?? tab.page.href };
-      if (e.event === "load.start") tab.error = null;
+      // The next page: the last one's error line goes.
+      if (e.event === "load.start" || e.event === "load.commit") { tab.error = null; tab.failed = null; }
       if ((e.event === "load.finish" || e.event === "web.location") && tab.page.href) this.saveTabs();
     }
     // ⧉ shows while the page has a <video> (it comes and goes with the page).
     if (e.event === "web.video") tab.video = Boolean(d.present);
-    if (e.event === "load.error") { tab.page = { ...tab.page, loading: false }; tab.error = d.message ?? "The page didn't load."; }
+    // A load cut short (another page, a download, a tab instead) isn't one.
+    if (e.event === "load.error") {
+      tab.page = { ...tab.page, loading: false };
+      const f = loadFailure(d);
+      if (f) { tab.error = f.message; tab.failed = { url: f.url }; }
+    }
     // The page's video goes to the player (⧉), or comes back into Herdr from
     // its popped-out window: the player shows it. Meanwhile the page is away.
     // From the window out of Herdr's ◧ / ⤓, `then`: the player goes on into a pane or a chip.
@@ -510,6 +553,7 @@ export default class Browser extends View {
     if (!url) return;
     this.editing = false;
     this.error = null;
+    this.tab.failed = null;
     const first = !this.start;
     if (first) this.start = url; // the view is created on it
     else this.call("browser.navigate", { url });
@@ -520,6 +564,16 @@ export default class Browser extends View {
     if (first) cx?.timer?.after(300, () => this.focusPage());
     else this.focusPage();
     cx?.notify();
+  }
+
+  /** After a failed load: that address again (the page shown may be the one
+   *  before it), else the page. */
+  retry() {
+    const url = this.tab.failed?.url;
+    this.error = null;
+    this.tab.failed = null;
+    if (url) { this.call("browser.navigate", { url }); this.page = { ...this.page, loading: true, progress: 0.05 }; }
+    else this.call("browser.reload");
   }
 
   /** The page takes AppKit's keyboard (quietly: no view yet is no error). */
@@ -561,6 +615,7 @@ export default class Browser extends View {
     else if (c === "inspect") { if (this.start) this.inspector(cx); }
     // Nothing open yet: no page to move (a call would only say there's no view).
     else if ((c === "reload" || c === "back" || c === "forward" || c === "web") && !(this.start && available())) return;
+    else if (c === "reload" && this.tab.failed && !this.page.loading) this.retry();
     else if (c === "reload") this.call(this.page.loading ? "browser.stop" : "browser.reload");
     else if (c === "back") this.call("browser.back");
     else if (c === "forward") this.call("browser.forward");
@@ -704,6 +759,18 @@ export default class Browser extends View {
         .child(dither(t.accent, 1))));
   }
 
+  /** What went wrong, under the bar, with "retry" (r too) when a page failed. */
+  errorLine(t) {
+    const page = Boolean(this.start && available() && this.tab.failed);
+    return h_flex().id("error").flex_none().px(10).py(4).gap(10).items_center().text_size(11)
+      .child(div().flex_1().min_w(0).text_color(t.blocked).child(this.error))
+      .when(page, (el) => el.child(div().id("retry").flex_none().px(4).text_color(t.muted)
+        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .on_mouse_down("left", (e, cx) => this.stop(e, cx))
+        .on_click((_e, cx) => { this.retry(); cx.notify(); })
+        .child("retry  r")));
+  }
+
   /** ? keys, the bar's last control (keyhelp.js); tab rings it like the others. */
   keysButton(t) {
     const toggle = () => { this.keysShown = !this.keysShown; };
@@ -756,7 +823,7 @@ export default class Browser extends View {
       .on_key_down((e, cx) => this.key(e, cx))
       .when(this.tabs.list.length > 1, (el) => el.child(this.strip(t)))
       .child(this.bar(t))
-      .when(Boolean(this.error), (el) => el.child(div().flex_none().px(10).py(4).text_size(11).text_color(t.blocked).child(this.error)))
+      .when(Boolean(this.error), (el) => el.child(this.errorLine(t)))
       .when(Boolean(this.keysShown), (el) => el.child(this.keysStrip(t)))
       .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(body) : body)
       .children(behind);
