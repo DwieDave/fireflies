@@ -65,6 +65,7 @@ import { newWorktree } from "./menu.js";
 import { openSpacePicker } from "./newspace.js";
 import { gridify } from "./gridify.js";
 import { toastKey } from "./toast.js";
+import { dismissUpdate } from "./screens.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.js";
 import { bindTab, tabActions } from "./form-keys.js";
@@ -233,7 +234,8 @@ export default class Sky {
     // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
     // opens a web pane there (dock.js);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
-    // (alias nocturne.toast-dismiss) dismisses it (toast.js).
+    // (alias nocturne.toast-dismiss) dismisses it (toast.js), or with none the
+    // update note; nocturne.update-close closes the update note (screens.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -267,7 +269,9 @@ export default class Sky {
         else if (c === "dock-web") dockWeb();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
-        else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") toastKey(c);
+        // With no toast on show, closing one closes the update note.
+        else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") { if (!toastKey(c) && c !== "toast") dismissUpdate(); }
+        else if (c === "update-close") dismissUpdate();
         cx.notify();
       }
     });
