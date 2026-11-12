@@ -477,6 +477,61 @@ test("a history cut at its limit reads further when its end comes into view: the
   expect(v2.data.commits.length).toBe(300);
 });
 
+test("an operation's row spins from the key to its end: push marks the pushed branch, a failure and a throw release it too", async () => {
+  const { rowKey } = await import("../defaults/mods/nocturne-git/main.js");
+  // A clone: main tracks origin/main on a bare remote.
+  const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
+  sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);
+  sh("git commit -q --allow-empty -m 'to push'", work);
+  sharedState = {};
+  const v = new GitView();
+  v.init({ folder: work }, cx);
+  await settle(v);
+  v.setPanel("commits"); await settle(v); v.render(); // another row is selected: the mark follows the branch, not the selection
+  expect(v.selectedRow()).toMatch(/^commit:/);
+
+  v.run("push", cx);
+  expect([...v.busyRows.keys()]).toEqual(["branch:main"]); // at once, before git runs
+  v.setPanel("branches"); v.render(); // the row draws its mark (busyMark) without throwing
+  expect(v.busyRows.has(rowKey("branches", v.items("branches").find((b: any) => b.name === "main")))).toBe(true);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0); // done
+  expect(sh("git log -1 --format=%s main", remote).trim()).toBe("to push");
+
+  // A push that fails (the remote is gone): marked while it runs, released after, the error shown.
+  sh(`git commit -q --allow-empty -m 'second' && git remote set-url origin ${join(dir, "nowhere.git")}`, work);
+  await v.reloadNow(); await settle(v);
+  v.run("push", cx);
+  expect(v.busyRows.get("branch:main")).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  expect(v.popups.kind).toBe("confirm"); // the error popup
+  v.popups.close();
+
+  // A row action (the selected commit's revert, refused here) and an operation that throws.
+  v.setPanel("commits"); await settle(v);
+  const row = v.selectedRow();
+  v.exec("Revert", ["revert", "--no-edit", "no-such-commit"]);
+  expect(v.busyRows.get(row)).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.popups.close();
+  v.spawn(async () => { throw new Error("boom"); });
+  expect(v.busyRows.get(row)).toBe(1);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.popups.close();
+
+  // Two operations on one row: busy until both end. Fetch all marks no row.
+  v.spawn(async () => {}); v.spawn(async () => {});
+  expect(v.busyRows.get(row)).toBe(2);
+  await settle(v);
+  expect(v.busyRows.size).toBe(0);
+  v.run("fetch", cx);
+  expect(v.busyRows.size).toBe(0);
+  await settle(v); v.popups.close();
+});
+
 test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as a space; space goes to its space; d removes it", async () => {
   homeNow = join(dir, "home");
   commands.length = 0;

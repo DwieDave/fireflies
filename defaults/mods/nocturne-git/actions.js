@@ -731,7 +731,7 @@ function undoRedo(v, what) {
         shown: `git ${step.args.join(" ")}`,
       }),
     });
-  });
+  }, { row: null }); // the whole repo moves, not one row
 }
 
 function push(v) {
