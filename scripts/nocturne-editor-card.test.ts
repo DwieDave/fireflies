@@ -68,7 +68,7 @@ class Ed {
 let ed: Ed;
 mock.module("gpui-base", () => ({
   h_flex: () => new El(), v_flex: () => new El(), InputState: { new: () => new Input() }, Input: { new: () => new El() },
-  TextView: { html: () => new El(), markdown: (_id: string, md: string) => md }, EditorState: { new: () => (ed = new Ed()) }, Editor: { new: () => new El() },
+  TextView: { html: () => new El(), markdown: (_id: string, md: string) => { const e: any = new El(); e.kids.push(md); return e; } }, EditorState: { new: () => (ed = new Ed()) }, Editor: { new: () => new El() },
   ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
 }));
 (globalThis as any).window = { paint_path: () => new El() };

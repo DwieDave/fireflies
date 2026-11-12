@@ -19,6 +19,11 @@
 // a restart (localStorage `tabs`). Keys: vim gt / gT, ]b / [b, :bn :bp :bd
 // :b N :ls, space b; next-tab / prev-tab / close-tab commands.
 //
+// Links in the hover card (cardlinks.js) open on a click, and a keyboard
+// card rings them with tab (enter follows): web pages in the shown tab's
+// browser pane (`nocturne-browser.open:{url, slot}`) or a new one beside,
+// files as tabs here.
+//
 // The text is gpui-kit's code editor (undo, selection, clipboard, multiple
 // carets, folding) with tree-sitter colors in moonfly's roles. Around it,
 // Nocturne's way (the diff pane's): a bar (unsaved mark, name, folder, the
@@ -78,6 +83,7 @@ import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE } from "./tabs.js";
 import { OPEN, LAST, PATHS, filesOf } from "./editor-route.js";
+import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -167,7 +173,7 @@ export default class EditorPane extends View {
     this.drawer = false;
     this.mode = null; // null | "find" | "replace" | "line"
     this.caseSensitive = false;
-    // The hover card: { line, col, keyboard, problems, parts, level, more, pending, note, scroll }.
+    // The hover card: { line, col, keyboard, problems, parts, level, more, pending, note, scroll, link }.
     // It sits at its place in the text (editor.bounds), under the word or above it.
     this.card = null;
     this.overCard = false;
@@ -926,6 +932,9 @@ export default class EditorPane extends View {
     card.waitingOn = false;
     card.parts = answer.parts.map((p) => ({ ...p }));
     card.more = answer.more;
+    // Its links (the docs' web pages, files): tab walks them, enter follows (cardKey).
+    card.links = cardLinks(card.parts);
+    card.link = null;
     // Nothing here: asked for, the card says so; passing over, it goes.
     if (!card.parts.length && !card.problems.length) {
       if (card.keyboard) card.note = this.serverNote(true); else if (this.card === card) this.card = null;
@@ -990,6 +999,15 @@ export default class EditorPane extends View {
     if (["shift", "control", "alt", "platform", "function", "capslock"].includes(k)) return false;
     const plain = !m.platform && !m.control && !m.alt;
     if (k === "escape" && plain && !m.shift) { this.closeCard(cx); return true; }
+    // A card asked for with the keyboard: tab / shift-tab ring its links, enter follows the ringed one.
+    const links = c.links ?? [];
+    if (c.keyboard && links.length && k === "tab" && !m.platform && !m.control && !m.alt) {
+      const n = links.length;
+      c.link = c.link == null ? (m.shift ? n - 1 : 0) : (c.link + (m.shift ? n - 1 : 1)) % n;
+      cx.notify();
+      return true;
+    }
+    if (c.link != null && links[c.link] && k === "enter" && plain && !m.shift) { this.followLink(links[c.link].url, cx); return true; }
     const page = Math.max(40, Math.round((c.viewH ?? 200) * 0.6));
     const scroll = m.control && !m.platform && !m.alt && (k === "d" || k === "u") ? (k === "d" ? page : -page)
       : plain && (k === "pagedown" || k === "pageup") ? (k === "pagedown" ? page : -page) : 0;
@@ -1028,6 +1046,31 @@ export default class EditorPane extends View {
     if (!bound) return false;
     run(bound.command, ...(bound.args === undefined ? [] : [bound.args]));
     return true;
+  }
+
+  /** A link from the hover card: a web page in the shown tab's browser pane
+   *  (a new one beside this editor when there's none), a file as a tab of
+   *  this editor at its line (a picture, a PDF: the preview beside), mailto:
+   *  and the like through the system. */
+  followLink(url, cx) {
+    const to = linkTarget(url, this.path);
+    if (!to) return;
+    this.closeCard(cx);
+    if (to.kind === "web") this.openWeb(to.url);
+    else if (to.kind === "other") run("app.open_url", { url: to.url, in: "system" });
+    else if (PREVIEWED.test(to.path)) { const me = this.me(); run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) }); }
+    else this.openFile(to.path, cx, { line: to.line, col: to.col });
+    cx?.notify?.();
+  }
+
+  /** A web page in a browser pane: the one in this editor's tab (nocturne-browser's
+   *  `open` command, by its slot: a new tab there, in front, with the keyboard),
+   *  else a new browser pane beside this editor (app.open_url in the app). */
+  openWeb(url) {
+    const me = this.me();
+    const browser = me && panes().find((p) => p.mod === "nocturne-browser" && p.tab === me.tab && !p.parked && p.props?.slot);
+    if (browser) return run(`nocturne-browser.open:${JSON.stringify({ url, slot: browser.props.slot })}`);
+    run("app.open_url", { url, in: "app" });
   }
 
   /** Whether a card is drawn: the keyboard's always, the pointer's once it has something. */
@@ -1842,6 +1885,31 @@ export default class EditorPane extends View {
         div().id(`card-run-${i}-${j}`).text_color(color ?? t.foreground).child(piece)))));
   }
 
+  /** The card's links under its text: an arrow for where it goes (↗ the web,
+   *  → a file), its words, and the host or file:line; the ringed one (tab)
+   *  wears the dialogs' ring, enter follows it; a click follows any. */
+  cardLinksView(t, c) {
+    const list = c.links.slice(0, 12);
+    return v_flex().id("card-links").relative().px(8).pt(6).pb(8).gap(1)
+      .child(h_flex().relative().h(16).px(4).gap(8).items_center().text_size(10).text_color(t.dim)
+        .child(div().flex_none().child("LINKS"))
+        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .when(c.links.length > list.length, (el) => el.child(div().flex_none().child(`${list.length} of ${c.links.length}`))))
+      .children(list.map((l, i) => {
+        const to = linkTarget(l.url, this.path), on = c.link === i;
+        const color = to?.kind === "web" ? t.ansi4 : to?.kind === "file" ? t.ansi5 : t.dim;
+        return h_flex().id(`card-link-${i}`).relative().h(20).px(4).gap(8).items_center().border(1)
+          .border_color(on ? t.accent : t.background).text_color(on ? t.foreground : t.muted)
+          .when(on, (el) => el.bg(t.ansi0))
+          .hover((s) => s.text_color(t.foreground).border_color(t.ansi0))
+          .on_mouse_down("left", stop)
+          .on_click((_e, cx) => this.followLink(l.url, cx))
+          .child(div().flex_none().w(12).text_color(color).child(to?.kind === "web" ? "↗" : to?.kind === "file" ? "→" : "·"))
+          .child(div().flex_1().min_w(0).truncate().child(l.label))
+          .child(div().flex_none().max_w(200).truncate().text_color(t.dim).child(linkWhere(to)));
+      }));
+  }
+
   /** How far down the pane the text starts: the bar, and whatever lines sit
    *  between it and the text (a conflict, find / replace, vim's ex line). */
   textTop() {
@@ -1878,7 +1946,8 @@ export default class EditorPane extends View {
     const lang = this.lang === "tsx" ? "typescript" : this.lang;
     const parts = c.parts.map((p, i) => p.code != null
       ? this.codeBlock(t, p, p.lang ? (languageOf(p.lang) ?? lang) : lang, code)
-      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted).child(TextView.markdown(`card-md-${i}`, p.md ??= cardMarkdown(p.text))));
+      : div().id(`card-text-${i}`).px(12).py(8).text_color(t.muted)
+        .child(TextView.markdown(`card-md-${i}`, p.md ??= cardMarkdown(p.text)).on_link_click((url, cx) => this.followLink(url, cx))));
     const expandable = (lang === "typescript" || lang === "javascript") && c.parts.length > 0;
     const ctrl = (id, label, on, go) => div().id(id).flex_none().w(18).h(18).flex().items_center().justify_center().border(1)
       .border_color(on ? t.ansi0 : t.background).text_color(on ? t.foreground : t.dim)
@@ -1905,7 +1974,8 @@ export default class EditorPane extends View {
       .when(Boolean(c.note), (el) => el.child(v_flex().id("card-note").px(12).py(8).gap(4)
         .child(div().text_color(t.foreground).child(c.note.text))
         .when(Boolean(c.note.fix), (e2) => e2.child(div().text_color(t.dim).child(c.note.fix)))))
-      .children(parts);
+      .children(parts)
+      .when((c.links ?? []).length > 0, (el) => el.child(this.cardLinksView(t, c)));
     const box = v_flex().id("editor-card").absolute().left(place.left).w(place.width).max_h(place.maxH)
       .bg(t.background).border(1).border_color(waiting ? t.ansi8 : t.ansi0).shadow_lg().overflow_hidden()
       .on_hover((h, cx) => { this.overCard = h; if (!h && !c.keyboard) cx.timer.after(250, (cx) => { if (!this.overCard && this.card === c) { this.card = null; cx.notify(); } }); })
@@ -1929,6 +1999,7 @@ export default class EditorPane extends View {
           .child(ctrl("card-more", "+", c.more, (cx) => this.hoverLevel(1, cx)))
           .child(div().flex_none().text_color(t.accent).child("ctrl-−/=")))
         .when(c.parts.length > 0 && this.server?.id != null, (el) => el.child(key(vim ? "gd" : "cmd-k d", "definition")))
+        .when(c.keyboard && (c.links ?? []).length > 0, (el) => el.child(key("tab", "links")))
         .when(overflow, (el) => el.child(key("ctrl-d ctrl-u", "scroll")))
         .child(div().flex_1())
         .child(key("esc", "close")));

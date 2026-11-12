@@ -475,7 +475,7 @@ the highlighted line shows where it will land.
   same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
   n › at the ends). Each tab keeps its text, undo, caret, scroll, folds,
   unsaved changes and Markdown view. Where a file goes: go to definition and
-  references into another file, `:e <file>` and a
+  references into another file, a card link to a file, `:e <file>` and a
   Markdown preview's link open it as a tab of the same editor; the files pane
   (its edit) sends it to the editor it sent files to before, else the shown
   tab's editor; the file picker to the focused editor, else the shown tab's
@@ -572,7 +572,15 @@ the highlighted line shows where it will land.
   text scrolls (hidden while the word is off screen). Its keys: esc closes it
   and does nothing else (in every vim mode and without vim), cmd-i again
   closes it, ctrl-d / ctrl-u and page down / up scroll a long one, gd (cmd-k d)
-  goes to the definition; its footer lists them. Moving the caret, typing, a
+  goes to the definition; its footer lists them. **Links** in it (the docs'
+  web pages: rust-analyzer's doc.rust-lang.org / docs.rs; TypeScript's
+  `file://…#L12%2C5`; relative paths and `path:12:5`) open on a click, and are
+  listed under its text (↗ a web page with its host, → a file with its name
+  and line): in a card asked for with the keyboard, tab / shift-tab ring them
+  and enter follows the ringed one. A web page opens in the shown tab's
+  browser pane (`nocturne-browser.open:{"url","slot"}`: a new tab there, in
+  front), else in a new browser pane beside the editor; a file as a tab of
+  this editor at its line (a picture or PDF in the preview beside). Moving the caret, typing, a
   click outside it and the editor losing the keyboard close it. Asked before
   the server can answer (loading the `.envrc`, starting, loading or indexing
   the workspace), it opens at once saying what it waits for ("rust-analyzer:

@@ -431,3 +431,99 @@ test("the pane runs vim's tab commands and the app's next-tab / prev-tab / close
   // Two b.rs: the strip tells them apart.
   expect(texts(p.tabStrip(theme))).toEqual(expect.arrayContaining(["src", "lib"]));
 });
+
+// ---- links in the hover card (cardlinks.js)
+
+const links = await import("../defaults/mods/nocturne-editor/cardlinks.js");
+
+test("card links: inline (not images), reference definitions, <autolinks> and bare addresses, each once, in order", () => {
+  const parts = [
+    { code: "fn push(&mut self, value: T)", lang: "rust" },
+    { text: "Appends to the back of a [`Vec`](https://doc.rust-lang.org/std/vec/struct.Vec.html). ![logo](logo.png)\nSee <https://docs.rs/x> and https://example.org/a_b. Also [`Vec`](https://doc.rust-lang.org/std/vec/struct.Vec.html) again." },
+    { text: "[helper]: file:///p/src/util.ts#L12%2C5\n[local](../lib/b.rs:3:2)" },
+  ];
+  expect(links.cardLinks(parts)).toEqual([
+    { label: "Vec", url: "https://doc.rust-lang.org/std/vec/struct.Vec.html" },
+    { label: "https://docs.rs/x", url: "https://docs.rs/x" },
+    { label: "https://example.org/a_b", url: "https://example.org/a_b" },
+    { label: "helper", url: "file:///p/src/util.ts#L12%2C5" },
+    { label: "local", url: "../lib/b.rs:3:2" },
+  ]);
+  expect(links.cardLinks([{ code: "https://not.a.link" }, { text: "[top](#heading)" }])).toEqual([]);
+  // Underscores inside a name stay; emphasis around words goes.
+  expect(links.cardLinks([{ text: "[`with_capacity`](https://a/b) and [**bold** _it_](https://c)" }]).map((l: any) => l.label)).toEqual(["with_capacity", "bold it"]);
+});
+
+test("card links: where each goes: web pages, file:// with #L12 / #L12,5 / %2C, relative paths, path:line:col, mailto, anchors", () => {
+  const from = "/p/src/a.rs";
+  expect(links.linkTarget("https://doc.rust-lang.org/std/", from)).toEqual({ kind: "web", url: "https://doc.rust-lang.org/std/" });
+  expect(links.linkTarget("file:///p/src/util.ts#L12%2C5", from)).toEqual({ kind: "file", path: "/p/src/util.ts", line: 12, col: 5 });
+  expect(links.linkTarget("file:///p/src/util.ts#L7", from)).toEqual({ kind: "file", path: "/p/src/util.ts", line: 7, col: null });
+  expect(links.linkTarget("file:///p/My%20Docs/x.ts#L3,9", from)).toEqual({ kind: "file", path: "/p/My Docs/x.ts", line: 3, col: 9 });
+  expect(links.linkTarget("../lib/b.rs", from)).toEqual({ kind: "file", path: "/p/lib/b.rs", line: null, col: null });
+  expect(links.linkTarget("../lib/b.rs:3:2", from)).toEqual({ kind: "file", path: "/p/lib/b.rs", line: 3, col: 2 });
+  expect(links.linkTarget("/abs/notes.md", from)).toEqual({ kind: "file", path: "/abs/notes.md", line: null, col: null });
+  expect(links.linkTarget("https://x.example:8080", from)).toEqual({ kind: "web", url: "https://x.example:8080" });
+  expect(links.linkTarget("mailto:a@b.c", from)).toEqual({ kind: "other", url: "mailto:a@b.c" });
+  expect(links.linkTarget("#section", from)).toBe(null);
+  expect([links.linkWhere(links.linkTarget("https://docs.rs/x/1", from)), links.linkWhere(links.linkTarget("../lib/b.rs:3", from))]).toEqual(["docs.rs", "b.rs:3"]);
+});
+
+/** A pane with a keyboard card open on an answer holding links. */
+async function cardWithLinks(): Promise<any> {
+  const p = await pane();
+  answer = (method) => (method === "textDocument/hover" ? { contents: { kind: "markdown", value: "```rust\nfn x()\n```\nSee [`Vec`](https://doc.rust-lang.org/std/vec/struct.Vec.html) and [util](file:///p/src/b.rs#L3%2C2)." } } : null);
+  p.command("hover", cx());
+  await flush();
+  return p;
+}
+
+test("the card's links: tab rings them (wrapping, shift-tab back), enter follows the ringed one; the list draws the ring", async () => {
+  const p = await cardWithLinks();
+  expect(p.card.links.map((l: any) => l.label)).toEqual(["Vec", "util"]);
+  expect(p.vimKey(key("tab"), cx())).toBe(true);
+  expect(p.card.link).toBe(0);
+  p.vimKey(key("tab"), cx());
+  p.vimKey(key("tab"), cx());
+  expect(p.card.link).toBe(0);
+  p.vimKey(key("tab", { shift: true }), cx());
+  expect(p.card.link).toBe(1);
+  const view = p.cardLinksView(theme, p.card);
+  expect(texts(view)).toEqual(expect.arrayContaining(["LINKS", "↗", "Vec", "doc.rust-lang.org", "→", "util", "b.rs:3"]));
+  // The ringed row: the accent edge and the band.
+  expect(byId(view, "card-link-1").calls.border_color[0][0]).toBe(theme.accent);
+  expect(byId(view, "card-link-1").calls.bg).toBeDefined();
+  expect(byId(view, "card-link-0").calls.bg).toBeUndefined();
+  // enter: the file opens as a tab of this editor, at its line; the card closes.
+  expect(p.vimKey(key("enter"), cx())).toBe(true);
+  await flush();
+  expect([p.card, p.path, p.editor.cursor()]).toEqual([null, "/p/src/b.rs", { line: 2, col: 1 }]);
+  expect(p.docs.length).toBe(2);
+});
+
+test("a web link: the shown tab's browser pane gets it (nocturne-browser.open by slot); with none, a browser pane beside", async () => {
+  const p = await cardWithLinks();
+  paneList.push({ pane: "w1", tab: "t1", mod: "nocturne-browser", props: { slot: "web1", url: "https://x" } });
+  p.followLink("https://doc.rust-lang.org/std/vec/struct.Vec.html", cx());
+  expect(ran.at(-1)).toEqual([`nocturne-browser.open:${JSON.stringify({ url: "https://doc.rust-lang.org/std/vec/struct.Vec.html", slot: "web1" })}`]);
+  expect(p.card).toBe(null);
+  // A browser in another tab doesn't count.
+  paneList[1].tab = "t2";
+  p.followLink("https://docs.rs/x", cx());
+  expect(ran.at(-1)).toEqual(["app.open_url", { url: "https://docs.rs/x", in: "app" }]);
+  // The pointer: TextView's link click goes the same way.
+  const c2 = await cardWithLinks();
+  const md = all(c2.cardView(theme, "mono") ?? new El()).find((x: any) => x.calls?.on_link_click);
+  void md; // (the card isn't drawn without a word on screen; the handler is wired in cardView, checked below)
+  const src = readFileSync(new URL("../defaults/mods/nocturne-editor/main.js", import.meta.url), "utf8");
+  expect(src).toMatch(/\.on_link_click\(\(url, cx\) => this\.followLink\(url, cx\)\)/);
+});
+
+test("a pointer's card doesn't ring links on tab (the key goes on to vim / the text); a picture link opens in the preview beside", async () => {
+  const p = await cardWithLinks();
+  p.card.keyboard = false;
+  p.vimKey(key("tab"), cx());
+  expect(p.card?.link ?? null).toBe(null);
+  p.followLink("../shot.png", cx());
+  expect(ran.at(-1)).toEqual(["preview.open", { path: "/p/shot.png", pane: "p1" }]);
+});
