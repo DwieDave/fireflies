@@ -2,9 +2,9 @@
 // under the tab strip's tree mark (../nocturne/procs.js), or centered from
 // nocturne.procs / nocturne.ports and the palette. This machine only.
 //
-//   head       the tree mark, "Processes", its two tabs (processes | ports,
-//              each with its count), and what's listed: "fireflies" (this
-//              app's terminals) or "all of <user>'s" (a switches)
+//   head       the tree mark, its three tabs (processes and ports with their
+//              counts, system with the CPU now), and what's listed:
+//              "fireflies" (this app's terminals) or "all of <user>'s" (a switches)
 //   processes  a tree: space › tab › terminal › the terminal's process and
 //              everything it started (shells, agents, dev servers, builds);
 //              terminals without a pane under "no pane"; spaces on another
@@ -136,7 +136,9 @@ export default class ProcsDeck extends View {
     this.refresh(cx);
     this.sample(cx);
     cx.timer.every(REFRESH, (cx) => { this.beat(); this.refresh(cx); });
-    cx.timer.every(STEP, (cx) => this.sample(cx));
+    // Checked every half second: a reading starts once STEP has passed since the last began
+    // (the probe itself takes a second or more, so a plain 2 s timer would skip every other beat).
+    cx.timer.every(500, (cx) => { if (Date.now() - (this.sampled ?? 0) >= STEP) this.sample(cx); });
   }
 
   /** The strip learns the deck is open (and which tab); a tab the strip asked for (nocturne.ports) is taken. */
@@ -182,6 +184,7 @@ export default class ProcsDeck extends View {
   sample(cx) {
     if (this.sampling) return;
     this.sampling = true;
+    this.sampled = Date.now();
     cx.spawn(async (cx) => {
       try {
         const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 10000 });
@@ -582,7 +585,8 @@ export default class ProcsDeck extends View {
   /** A process's own readings since the deck opened: SPARK thin dithered bars, 12 px tall. */
   spark(t, id, values, color, max) {
     const v = values ?? [];
-    const hs = scale(v, { max: max == null ? null : Math.max(max, ...v), floor: 1 });
+    // Memory (no max) against a quarter more than its peak, so a steady one reads as a level, not a block.
+    const hs = scale(v, { max: max == null ? Math.max(1, ...v) * 1.25 : Math.max(max, ...v), floor: 1 });
     return div().id(id).relative().w(SPARK * 2).h(12).flex_none()
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
       .children(hs.map((h, i) => div().absolute().bottom(0).left((SPARK - hs.length + i) * 2).w(2).h(Math.max(1, Math.round((h ?? 0) * 12)))
@@ -612,7 +616,7 @@ export default class ProcsDeck extends View {
 
   /** One graph's block: its name and value now, the graph, a line of detail. */
   meter(t, id, name, value, valueColor, graph, sub) {
-    return v_flex().id(`m-${id}`).flex_none().px(12).pt(6).gap(3)
+    return v_flex().id(`m-${id}`).flex_none().px(12).pt(10).gap(3)
       .child(h_flex().h(16).gap(8).items_center()
         .child(div().flex_none().text_size(11).text_color(t.ansi8).child(name.toUpperCase()))
         .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
@@ -750,8 +754,7 @@ export default class ProcsDeck extends View {
     };
     return h_flex().relative().h(HEAD).flex_none().pl(12).pr(12).gap(10).items_center()
       .child(svg(`${ART}/tree.svg`).size(9).flex_none().text_color(t.accent))
-      .child(div().flex_none().text_size(12).text_color(t.foreground).child("Processes"))
-      .child(h_flex().h_full().flex_none().ml(4).child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts))
+      .child(h_flex().h_full().flex_none().child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts))
         .child(tabBtn("tab-system", "system", "system", this.now?.cpu ? `${Math.round(this.now.cpu.pct)}%` : "")))
       .child(div().flex_1())
       .child(div().id("scope").flex_none().text_size(11).text_color(t.dim).cursor_pointer()
