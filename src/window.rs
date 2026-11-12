@@ -593,6 +593,8 @@ pub struct AppWindow {
     _tasks: Vec<Task<()>>,
     /// Gives the keyboard back when what had it leaves the screen (`restore_focus`).
     _focus_lost: Option<Subscription>,
+    /// Keeps keys from panes behind a window with a scrim (`take_back_keys`).
+    _keys_guard: Option<Subscription>,
     /// Remembers where the window is (`place.rs`); the write waiting to settle.
     _place: Option<Subscription>,
     place_write: Option<Task<()>>,
@@ -702,10 +704,19 @@ impl AppWindow {
             focus: cx.focus_handle(),
             _tasks: Vec::new(),
             _focus_lost: None,
+            _keys_guard: None,
             _place: None,
             place_write: None,
         };
         w._focus_lost = Some(cx.on_focus_lost(window, |this, window, cx| this.restore_focus(window, cx)));
+        // Ahead of every binding and key handler: a key that finds the keyboard
+        // behind a window with a scrim is dropped, and the window takes it back.
+        let (me, handle) = (cx.weak_entity(), window.window_handle());
+        w._keys_guard = Some(cx.intercept_keystrokes(move |_, window, cx| {
+            if window.window_handle() == handle && me.update(cx, |this, cx| this.take_back_keys(window, cx)).unwrap_or(false) {
+                cx.stop_propagation();
+            }
+        }));
         w._place = Some(cx.observe_window_bounds(window, |this, window, cx| {
             if let Some(t) = crate::place::changed(window, cx) {
                 this.place_write = Some(t);
@@ -4466,6 +4477,28 @@ impl AppWindow {
         }
     }
 
+    /// The keyboard is somewhere behind a window with a scrim: in a pane, the
+    /// layout or the window itself, outside every overlay. Only what was
+    /// drawn counts (a handle focused before its first frame is left to it).
+    fn keys_astray(&self, window: &Window, cx: &App) -> bool {
+        self.top_scrim_window().is_some()
+            && self.focus.contains_focused(window, cx)
+            && !self.overlays.iter().any(|o| o.kind != OverlayKind::Toast && o.focus.contains_focused(window, cx))
+    }
+
+    /// The guard behind `Overlay::holds_keys`: whatever moved the keyboard
+    /// behind a window with a scrim (a mod focusing itself, a terminal, a path
+    /// nobody thought of), it goes back to the overlays. True when it had to.
+    fn take_back_keys(&mut self, window: &mut Window, cx: &mut Context<Self>) -> bool {
+        if !self.keys_astray(window, cx) {
+            return false;
+        }
+        let pane = self.terms.iter().find(|(_, t)| t.focus.is_focused(window)).map(|(id, _)| id.clone());
+        tracing::warn!(?pane, block = ?self.focused_block, window = ?self.top_scrim_window(), "the keyboard was behind a window with a scrim: taken back");
+        self.restore_focus(window, cx);
+        true
+    }
+
     /// A dialog, popup or window with a scrim is open: the keyboard stays in
     /// the overlays, whatever changes behind them.
     fn keys_held(&self) -> bool {
@@ -6296,12 +6329,21 @@ impl Render for AppWindow {
         crate::terminal::next_frame();
         window.set_rem_size(px(settings::ui_font_size()));
         gpui::set_square_corners(self.chrome.corners == Some(crate::layout::CornerStyle::Square));
-        // A terminal the person clicked into becomes the focused pane.
+        // The keyboard behind a window with a scrim: taken back once this frame is drawn.
+        let astray = self.keys_astray(window, cx);
+        if astray {
+            cx.defer_in(window, |this, window, cx| {
+                this.take_back_keys(window, cx);
+            });
+        }
+        // A terminal the person clicked into becomes the focused pane (not one
+        // that took the keyboard behind a window with a scrim).
         let clicked = self
             .terms
             .iter()
             .find(|(_, t)| t.focus.is_focused(window))
-            .map(|(id, _)| id.clone());
+            .map(|(id, _)| id.clone())
+            .filter(|_| !astray);
         if clicked.is_some() && self.focused_block.take().is_some() {
             self.publish(cx);
         }

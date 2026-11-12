@@ -286,3 +286,49 @@ fn floatfocus_overlay_focus(cx: &mut gpui::TestAppContext) {
     assert!(!pane_has_keys(&view, "p1", cx));
 }
 
+#[test]
+fn keys_that_find_the_keyboard_behind_a_scrim_window_never_reach_the_pane() {
+    in_own_process("floatfocus_guard");
+}
+
+/// The guard: whatever moves the keyboard behind a window with a scrim (here
+/// a mod pane focusing itself, a terminal focused directly), the next frame
+/// or the next key takes it back, and no key reaches the pane.
+#[gpui::test]
+fn floatfocus_guard(cx: &mut gpui::TestAppContext) {
+    if !running_alone("floatfocus_guard") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    let typed = || crate::mods::shared("typed").and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+    // No window: the mod pane that takes the keyboard gets the keys.
+    send(&view, "pk", "grab", cx);
+    cx.simulate_keystrokes("a");
+    assert_eq!(typed(), "a", "the pane's keys reach it without a window");
+    open(&view, "w", scrim_window(), cx);
+    assert!(window_has_keys(&view, "w", cx));
+    // A mod behind takes the keyboard and a key comes before any frame: dropped.
+    let copy = cx.update(|_, cx| view.read(cx).copies["pk"].id);
+    assert!(crate::mods::send_command_to(copy, "grab"));
+    cx.run_until_parked();
+    cx.simulate_keystrokes("b");
+    cx.run_until_parked();
+    assert_eq!(typed(), "a", "no key reached the pane behind the window");
+    settle(cx);
+    assert!(window_has_keys(&view, "w", cx), "taken back");
+    // The key itself takes it back, ahead of any frame's check (those run after
+    // this update): a terminal behind focused and a key dispatched at once.
+    cx.update(|window, cx| {
+        let f = view.read(cx).pane_focus("p1", cx).unwrap();
+        f.focus(window, cx);
+        window.dispatch_keystroke(gpui::Keystroke::parse("c").unwrap(), cx);
+        assert!(view.read(cx).window_has_keys("w", window, cx), "the key found the keyboard behind and took it back");
+    });
+    settle(cx);
+    // A terminal behind focused directly: the next frame takes it back.
+    cx.update(|window, cx| view.update(cx, |this, cx| this.pane_focus("p1", cx).unwrap().focus(window, cx)));
+    settle(cx);
+    assert!(window_has_keys(&view, "w", cx));
+    assert!(!pane_has_keys(&view, "p1", cx));
+    cx.update(|_, cx| assert_eq!(view.read(cx).model.focused_pane().as_deref(), Some("p1"), "nor did it become the focused pane"));
+}
