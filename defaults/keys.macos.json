@@ -104,7 +104,10 @@
     "cmd-alt-t": "nocturne.tabstrip",
     "cmd-alt-.": "nocturne.header",
     "cmd-alt-n": "nocturne.toast",
-    "cmd-alt-shift-n": "nocturne.toast-close"
+    "cmd-alt-shift-n": "nocturne.toast-close",
+    "cmd-shift-n": "nocturne.space-new",
+    "cmd-shift-o": "nocturne.procs",
+    "cmd-shift-;": "nocturne.scratchpad"
   },
   "mod:nocturne-editor": {
     "cmd-s": "nocturne-editor.save",
@@ -122,7 +125,11 @@
     "cmd-r": "nocturne-editor.reload",
     "cmd-k v": "nocturne-editor.vim",
     "cmd-k shift-/": "nocturne-editor.keys",
-    "cmd-shift-v": "nocturne-editor.preview"
+    "cmd-shift-v": "nocturne-editor.preview",
+    "cmd-k ]": "nocturne-editor.next-tab",
+    "cmd-k [": "nocturne-editor.prev-tab",
+    "cmd-k w": "nocturne-editor.close-tab",
+    "cmd-k z": "nocturne-editor.wrap"
   },
   "mod:nocturne-browser": {
     "cmd-p": "nocturne-browser.url",

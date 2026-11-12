@@ -73,6 +73,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // With cmd-k ? for the editor's key list, before cmd-ctrl-arrows resized panes, cmd-alt-shift-[ / ] moved a pinned
     // agent in the jar, and cmd-alt-r / cmd-alt-shift-r renamed the tab / space in place of f2 / shift-f2.
     include_str!("keys/shipped/fireflies-keylist-keys.macos.json"),
+    // With the resize, jar and rename keys, before cmd-shift-n / o / ; opened the folder list, the processes deck and
+    // the scratchpad, and cmd-k ] / [ / w / z stepped and closed the editor's tabs and switched its word wrap.
+    include_str!("keys/shipped/fireflies-resize-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

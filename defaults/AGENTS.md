@@ -233,7 +233,8 @@ the highlighted line shows where it will land.
   If starting in an inherited folder fails, new spaces, tabs and splits retry in
   that machine's home. Explicit invalid folders still fail.
   Nocturne makes spaces folder first: the sidebar's "+ new" (or `n` in the
-  sidebar, "+ new" > New space, the palette's New space, `nocturne.space-new`)
+  sidebar, "+ new" > New space, the palette's New space, cmd-shift-n
+  `nocturne.space-new`)
   opens a folder list hanging under it (centered from a key): the focused
   pane's folder (its checkout's top), the spaces' folders, the git checkouts
   and worktrees beside them, then folders spaces were made in before (shared
@@ -331,8 +332,9 @@ the highlighted line shows where it will land.
 - **Processes and ports** (Nocturne's manager, the `nocturne-procs` mod): the
   tab strip's tree mark beside ▶, with `:n` in teal when processes in this
   app's terminals listen on n TCP ports. A click hangs the deck under it (a
-  second closes it); `nocturne.procs` opens it centered or closes it,
-  `nocturne.ports` on its ports tab (no keys by default). This machine only.
+  second closes it); cmd-shift-o, `nocturne.procs`, opens it centered or
+  closes it, `nocturne.ports` on its ports tab (no key by default). This
+  machine only.
   Three tabs (tab / shift-tab, 1 2 3):
   processes, a tree of space › tab › terminal › the terminal's process and all
   it started (terminals without a pane under "no pane"; `a` switches to every
@@ -565,7 +567,8 @@ the highlighted line shows where it will land.
   restart (each read when first shown). Tab keys: vim's gt / gT (a count: that
   tab), ]b / [b, `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls`
   (also `:tabn` `:tabp` `:tabc`), space b n / b p / b d / b l; the commands
-  `nocturne-editor.next-tab`, `.prev-tab`, `.close-tab`. `:q` closes the pane
+  `nocturne-editor.next-tab`, `.prev-tab`, `.close-tab` (cmd-k ] / cmd-k [ /
+  cmd-k w). `:q` closes the pane
   with all its tabs and refuses while any has unsaved changes. A language
   server serves every tab of its project (one per project as before; each
   tab's document opened and closed with it). The text is the code editor of
@@ -742,8 +745,8 @@ the highlighted line shows where it will land.
   `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
-- **The scratchpad** (`nocturne.scratchpad`: the palette's "Scratchpad", the
-  "+ new" menu's row): a Markdown note that belongs to the shown space's
+- **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
+  "Scratchpad", the "+ new" menu's row): a Markdown note that belongs to the shown space's
   repository but isn't in it, opened rendered in an editor pane of its own
   beside the focused pane. One note per repository, found by git's common dir
   (`git rev-parse --git-common-dir`), so every worktree of a repository opens
