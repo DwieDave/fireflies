@@ -1801,10 +1801,17 @@ impl AppWindow {
 
     /// The keyboard never ends up nowhere. When what had it leaves the screen (a
     /// mod hidden but kept alive, a closed pane, a hidden mod focusing itself on a
-    /// reload), it goes to the top dialog, else the shown agent or focused pane,
-    /// else the window, where the app's keys work.
+    /// reload, an input a window's mod stopped drawing), it goes to the top
+    /// dialog, else the top window with a scrim (modal: never the pane behind
+    /// it), else the shown agent or focused pane, else the window, where the
+    /// app's keys work.
     fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let dialog = self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.focus.clone());
+        if dialog.is_none()
+            && let Some(id) = self.top_scrim_window()
+        {
+            return self.hand_window(&id, window, cx);
+        }
         // A mod block holding the keyboard gets it back (a popup over it closed).
         if dialog.is_none() && self.focused_block.as_ref().is_some_and(|b| self.mod_block_shown(b)) {
             self.focus.focus(window, cx);
@@ -4433,6 +4440,11 @@ impl AppWindow {
             self.focus.focus(window, cx);
             self.hand_keyboard();
         }
+    }
+
+    /// The window with a scrim in front, if one shows.
+    fn top_scrim_window(&self) -> Option<String> {
+        self.overlays.iter().rev().find(|o| o.kind == OverlayKind::Window && o.scrim).map(|o| o.id.clone())
     }
 
     /// Its copy gets `focus` from `nextCommand()`.
@@ -7712,6 +7724,7 @@ export default class Probe extends View {
 
     include!("window/pane_size_tests.rs");
     include!("window/drag_tests.rs");
+    include!("window/floatfocus_tests.rs");
 
     /// The whole path, in a real window: a layout names the toast mod, a
     /// notification opens it with its props, and it can close itself (as one

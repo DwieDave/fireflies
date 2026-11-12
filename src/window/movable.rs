@@ -403,6 +403,12 @@ impl AppWindow {
 
     fn give_window_keys(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.raise_window(id, cx);
+        self.hand_window(id, window, cx);
+    }
+
+    /// The keyboard to a window, where it is in the stack: its first terminal,
+    /// else its frame, and its mod gets `focus` (`nextCommand()`).
+    pub(super) fn hand_window(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if id == "terminal-peek" {
             return self.focus_float_view(window, cx);
         }
