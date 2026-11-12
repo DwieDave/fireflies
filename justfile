@@ -102,6 +102,10 @@ test:
     bun test scripts/nocturne-preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
+    # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
+    bun test scripts/nocturne-procs.test.ts
+    # Its deck and the strip's tree mark: every key, the cursor across refreshes, ask / TERM / KILL against a fake exec.
+    bun test scripts/nocturne-procs-deck.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view

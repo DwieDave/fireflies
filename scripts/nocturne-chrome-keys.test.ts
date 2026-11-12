@@ -294,7 +294,7 @@ test("the strip's row: tabs, the buttons and the bell; enter selects, H/L move, 
   const s = strip();
   expect(s.row).toBe("tabs");
   expect(s.cursor).toBe("tab:t1");
-  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab:t2", "tab:t3", "tab-scripts-run", "tab-files", "tab-git", "tab-git-more", "tab-new", "bell"]);
+  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab:t2", "tab:t3", "tab-scripts-run", "tab-procs", "tab-files", "tab-git", "tab-git-more", "tab-new", "bell"]);
   press(s, "enter");
   expect(commands.at(-1)).toEqual(["pane.focus", { pane: "p1" }]); // the shown tab: back to its pane
   press(s, "l");

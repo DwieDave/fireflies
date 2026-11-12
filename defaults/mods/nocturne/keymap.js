@@ -112,6 +112,8 @@ const WORDS = {
   "nocturne.scripts": "Script runner",
   "nocturne.scripts-again": "Run the folder's last script again",
   "nocturne.scripts-failed": "The last failed script's output",
+  "nocturne.procs": "Processes and ports",
+  "nocturne.ports": "Processes and ports, on the ports",
   "nocturne.files": "Files pane, with the keyboard in it",
   "nocturne.picker": "Find a file",
   "nocturne.grep": "Search in the files",
