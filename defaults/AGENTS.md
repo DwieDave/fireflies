@@ -142,7 +142,7 @@ field editor walks the item's fields with tab / shift-tab too.
 
 Every form takes keys the same way: the GitHub window's, the git window's
 commit message and confirms, Nocturne's prompt and confirm dialogs, the
-sidebar's new / rename / folder / delete space forms, the ask dialog, the
+sidebar's rename / delete space forms, the ask dialog, the
 editor's find line, Add a machine and Send feedback. It opens on its first
 field; tab / shift-tab go to the next / previous field or button, wrapping
 at both ends (↑ ↓ too, outside a multi-line field), and the focused one has
@@ -229,6 +229,20 @@ the highlighted line shows where it will land.
   its own folder as such a space, from the git window's Worktrees tab.
   If starting in an inherited folder fails, new spaces, tabs and splits retry in
   that machine's home. Explicit invalid folders still fail.
+  Nocturne makes spaces folder first: the sidebar's "+ new" (or `n` in the
+  sidebar, "+ new" > New space, the palette's New space, `nocturne.space-new`)
+  opens a folder list hanging under it (centered from a key): the focused
+  pane's folder (its checkout's top), the spaces' folders, the git checkouts
+  and worktrees beside them, then folders spaces were made in before (shared
+  `nocturne.recent-folders`, newest first, 20). Typing filters it by name,
+  then path; a field starting with `~` or `/` lists that folder's subfolders
+  (git ones marked) and tab puts the row's path in the field, stepping inside;
+  shift-tab goes one folder up. Enter makes the space there, unnamed so it's
+  called after its folder; cmd-enter asks for a name first. "browse…" is the
+  system's folder browser. The last row, "no folder" (↑ from the top), makes
+  a space in ~ that belongs to no project (attached to home: its repo goes by
+  its terminals). Change folder… (and `f` on a space) opens the same list to
+  attach the space elsewhere; there "no folder" detaches it.
 - A **tab** is a piece of work in a space: its terminals and how they're
   split right and down. One nobody named is called by its place (1, 2,
   ...), as in Herdr; `tab.rename` names it ("fix login"). A space
@@ -1100,7 +1114,7 @@ also opens by command: `<mod>.keys` (nocturne-agents, -browser, -editor,
 -usage). The drawing is `mods/nocturne/keyhelp.js`, copied byte for byte into
 each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
-The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
+The sidebar walks the fold key, spaces (n new: the folder list, t new tab, f folder: the same list, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
 rows are the tabs (x close, H/L move, 1-9), its buttons, the bell and "+ new"; the
 focused pane's header (name, text size, float, splits, even out, gridify,
@@ -1149,7 +1163,7 @@ open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9; the ones that aren't installed hide behind a dim
 "2 not installed · show" row: enter or a click shows them, again hides them,
 remembered in shared `nocturne.newShowMissing`; the numbers never move), then
-New space, New worktree… and Open worktree….
+New space (the folder list, centered), New worktree… and Open worktree….
 
 ### Layouts and mods other people made
 

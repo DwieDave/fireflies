@@ -83,7 +83,10 @@ herdr-app do space.new --name "remote api" --machine vps --folder /srv/api
 The folder is on that machine; tabs and splits in the space stay there.
 A space made with `--folder` is attached to it: its GitHub and git windows use
 that repo. `herdr-app do space.folder --id <space> --folder <path>` attaches a
-space to another folder later.
+space to another folder later. A person in the Nocturne layout makes spaces
+from a folder list instead (`herdr-app do nocturne.space-new` opens it for
+them: recent and nearby folders, a path field, "no folder" for a space in ~);
+scripts keep using `space.new --folder`.
 New-space keys and clicks follow the focused space's machine. Script commands
 without `--machine` still use this computer; `--machine ''` explicitly chooses it.
 The agent menu checks and starts agents in the remote Unix user's
