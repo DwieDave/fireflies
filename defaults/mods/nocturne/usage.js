@@ -195,7 +195,7 @@ export class UsageSection {
       .on_size_change((size, cx) => { if (size.height !== this.height) { this.height = size.height; cx.notify(); } });
     if (folded) return box;
     if (!d) {
-      const say = !note ? "asking the moon…" : note.state === "nologin" ? `no ${who.name} login here` : note.state === "expired" ? "the login is napping" : "couldn't reach the moon";
+      const say = !note ? "asking the moon…" : note.state === "off" ? "usage is off in a scratch app" : note.state === "nologin" ? `no ${who.name} login here` : note.state === "expired" ? "the login is napping" : "couldn't reach the moon";
       return box.child(div().px(16).py(4).text_size(11).text_color(t.dim).child(say));
     }
     const now = Date.now();

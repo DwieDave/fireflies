@@ -1126,6 +1126,12 @@ a key: `herdr-app do app.help`, then `herdr-app do nocturne.keys-filter.focus-si
 (the filter, `-` for spaces) or `nocturne.keys-open.sidebar` (unfolds that block:
 sidebar, tabstrip, header, parked, toasts, menus, panes).
 
+Nocturne's usage (the sidebar's USAGE section and the nocturne-usage pane)
+reads Claude's or Codex's limits with this machine's login. A scratch app
+(`HERDR_APP_HOME` set to another home than the default) asks nothing and
+says "usage is off in a scratch app"; `HERDR_APP_USAGE=1` in its environment
+turns it on.
+
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the

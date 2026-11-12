@@ -108,6 +108,8 @@ test:
     bun test scripts/nocturne-editor-live.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
     bun test scripts/nocturne-scratchpad.test.ts
+    # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
+    bun test scripts/nocturne-usage-limits.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p herdr-native-view
