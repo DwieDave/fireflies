@@ -12,6 +12,12 @@
 // column and the others fold into a rail; Commits draws its wide graph
 // there) and full. Narrower than NARROW: one thing at a time.
 //
+// History comes in pages (lazygit's): the Commits panel and a branch's
+// commits read LOG_LIMIT commits, the branch log LOG_FULL_LIMIT; when the end
+// of a cut history comes into view, more() reads the next page below it.
+// Every list is windowed (rowWindow): whole rows that fit its height, the
+// last one ending inside the list.
+//
 // Keys: lazygit's defaults (keys.js holds them all; ? lists them). Mouse:
 // click focuses and selects, double-click drills in (enter), right-click
 // opens that row's menu (its actions with their keys), the wheel scrolls
@@ -39,7 +45,7 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder, home } from "herdr";
-import { Git, LOG_LIMIT } from "./git.js";
+import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.js";
 import { layoutGraph, usedWidth, widthOf } from "./graph.js";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
 import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.js";
@@ -69,6 +75,15 @@ const CONTEXT_NAMES = {
   tags: "tags", commits: "commits", reflog: "reflog", subCommits: "commits", commitFiles: "commit files", stash: "stash", staging: "staging", main: "main view",
   menu: "menu", confirm: "confirm", prompt: "prompt", commit: "commit", filter: "filter",
 };
+
+/** The rows a windowed list draws: `vis` whole rows fit `px` (its height in
+ *  layout units: the measured window px over the zoom, draw.js unzoom), and
+ *  `top` is clamped so the last row ends inside the list, never under its
+ *  edge. Shared by the side lists and the main view. */
+export function rowWindow(n, top, px, rowH) {
+  const vis = Math.max(1, Math.floor(px / rowH));
+  return { vis, top: Math.max(0, Math.min(top, Math.max(0, n - vis))) };
+}
 
 /** A job queue a long-lived task drains: async work keeps that task's cx. */
 class Queue {
@@ -115,6 +130,10 @@ export default class GitView extends View {
     this.context = 3; this.ws = false;
     this.diffBase = null; this.diffReverse = false;
     this.main = null; this.mainTop = 0; this.mainGen = 0;
+    // How far back history is read: the Commits panel, and each ref's log in
+    // the main view. Reaching the end of a history cut at its limit reads
+    // further (more()), as lazygit does.
+    this.commitLimit = LOG_LIMIT; this.logLimits = {}; this.moreBusy = new Set();
     this.staging = null;
     this.logs = []; this.showLog = kept.showLog ?? true;
     this.shellHistory = [];
@@ -269,10 +288,11 @@ export default class GitView extends View {
     ]);
     if (this.data.main === null) this.data.main = (await g.mainBranch()) ?? undefined;
     const main = this.data.main || null;
-    const commits = await g.log("HEAD", { all: this.allBranches });
+    const limit = this.commitLimit;
+    const commits = await g.log("HEAD", { all: this.allBranches, limit });
     const [unpushed, notMain] = await Promise.all([
-      status.upstream ? g.only("HEAD", "@{u}") : Promise.resolve(new Set(commits.filter(() => !status.upstream).map((c) => c.hash))),
-      main && status.head !== main ? g.only("HEAD", main) : Promise.resolve(new Set()),
+      status.upstream ? g.only("HEAD", "@{u}", limit) : Promise.resolve(new Set(commits.filter(() => !status.upstream).map((c) => c.hash))),
+      main && status.head !== main ? g.only("HEAD", main, limit) : Promise.resolve(new Set()),
     ]);
     Object.assign(this.data, { status, branches, remotes, remoteBranches, tags, stash, worktrees, state, commits, unpushed, notMain });
     this.graph = layoutGraph(commits);
@@ -286,7 +306,7 @@ export default class GitView extends View {
 
   async loadSub(s) {
     const g = this.git;
-    if (s.kind === "subCommits") { s.items = await g.log(s.ref); s.graph = layoutGraph(s.items); }
+    if (s.kind === "subCommits") { s.items = await g.log(s.ref, { limit: s.limit ?? LOG_LIMIT }); s.graph = layoutGraph(s.items); }
     else if (s.kind === "remoteBranches") s.items = this.data.remoteBranches.filter((r) => r.remote === s.remote);
     else if (s.kind === "commitFiles") s.items = await g.commitFiles(s.hash);
   }
@@ -933,11 +953,37 @@ export default class GitView extends View {
     });
   }
 
+  /** The end of a history cut at its limit came into view (`what`: "commits",
+   *  "subCommits" or "main"): read as far again, the rows already shown stay
+   *  where they are. Once per end: a read already going isn't asked twice. */
+  more(what) {
+    if (this.moreBusy.has(what) || !this.git) return;
+    this.moreBusy.add(what);
+    this.reads.push(async () => {
+      try {
+        if (what === "commits") {
+          this.commitLimit += LOG_LIMIT;
+          const commits = await this.git.log("HEAD", { all: this.allBranches, limit: this.commitLimit });
+          this.data.commits = commits; this.graph = layoutGraph(commits);
+        } else if (what === "subCommits") {
+          const s = this.subOfKind("subCommits");
+          if (s?.kind === "subCommits") { s.limit = (s.limit ?? LOG_LIMIT) + LOG_LIMIT; await this.loadSub(s); }
+        } else if (what === "main" && this.main?.more) {
+          const ref = this.main.more;
+          this.logLimits[ref] = (this.logLimits[ref] ?? LOG_FULL_LIMIT) + LOG_FULL_LIMIT;
+          const gen = this.mainGen, m = await this.mainContent();
+          if (gen === this.mainGen && m) this.main = m; // top stays: the new rows come below
+        }
+      } finally { this.moreBusy.delete(what); }
+    });
+  }
+
   /** lazygit's branch log (git log --graph with whole headers): a block of
    *  rows per commit, the commit line on the lane graph's node, the others
    *  with the lanes running through, in the Commits panel's colors. */
   async logRows(ref) {
-    const commits = await this.git.logFull(ref);
+    const limit = this.logLimits[ref] ?? LOG_FULL_LIMIT;
+    const commits = await this.git.logFull(ref, limit);
     const graph = layoutGraph(commits);
     const head = this.data.status?.oid;
     const refColor = { head: "ansi6", branch: "ansi2", ref: "ansi1", tag: "ansi3", detached: "ansi6" };
@@ -953,7 +999,9 @@ export default class GitView extends View {
       for (const l of c.message.split("\n")) line([[`    ${l}`, "foreground"]]);
       line([]);
     });
-    return rows.length ? rows : [text("No commits.", "muted")];
+    const out = rows.length ? rows : [text("No commits.", "muted")];
+    out.more = commits.length >= limit ? ref : null; // cut: the ref whose log goes further
+    return out;
   }
 
   /** A worktree in the main view: where it is, what's in it (spaces,
@@ -975,7 +1023,7 @@ export default class GitView extends View {
     rows.push(text(""));
     const ref = w.branch ?? w.head;
     const log = ref && !w.prunable ? await this.logRows(ref) : [];
-    return { title: `Worktree · ${WT.label(w)}`, rows: [...rows, ...log], rowH: LOG_ROW };
+    return { title: `Worktree · ${WT.label(w)}`, rows: [...rows, ...log], rowH: LOG_ROW, more: log.more ?? null };
   }
 
   /** A ctrl-p pane's one diff (show kinds other than review). */
@@ -1010,7 +1058,7 @@ export default class GitView extends View {
       const files = (await g.stashShow(s.ref, opts)).filter((f) => !s.path || f.path === s.path);
       return { title: `Stash · ${short(s.ref)}${s.path ? ` · ${s.path}` : ""}`, rows: files.length ? flat(files) : [text("Empty stash entry.", "muted")] };
     }
-    if (s.kind === "log") return { title: `Log · ${s.ref}`, rows: await this.logRows(s.ref), rowH: LOG_ROW };
+    if (s.kind === "log") { const rows = await this.logRows(s.ref); return { title: `Log · ${s.ref}`, rows, rowH: LOG_ROW, more: rows.more }; }
     if (s.kind === "range") {
       const files = await g.between(s.a, s.b, opts);
       return { title: `Diff ${short(s.a)}..${short(s.b)}`, rows: files.length ? flat(files) : [text("No differences.", "muted")] };
@@ -1067,7 +1115,7 @@ export default class GitView extends View {
       }
       case "worktrees": return this.worktreeContent(x);
       case "remotes": return { title: x.name, rows: [text(`fetch ${x.url}`, "foreground"), text(`push  ${x.push}`, "muted"), text(""), ...this.data.remoteBranches.filter((r) => r.remote === x.name).slice(0, 40).map((r) => text(`${r.branch}  ${r.subject}`, "muted"))] };
-      case "branches": case "remoteBranches": case "tags": return { title: `Log · ${x.name}`, rows: await this.logRows(x.name), rowH: LOG_ROW };
+      case "branches": case "remoteBranches": case "tags": { const rows = await this.logRows(x.name); return { title: `Log · ${x.name}`, rows, rowH: LOG_ROW, more: rows.more }; }
       case "commits": case "subCommits": case "reflog": {
         const c = await g.show(x.hash, opts);
         if (!c) return { title: short(x.hash), rows: [text("Not a commit.", "muted")] };
@@ -1186,7 +1234,7 @@ export default class GitView extends View {
     // without a resize (Commits going wide), so a count kept from the last
     // resize would leave the bottom of the list empty.
     const px = this.listPx?.[ctx];
-    const vis = px ? Math.max(1, Math.floor(px / rowH)) : Math.max(1, this.vis[ctx] ?? 12);
+    const vis = px ? rowWindow(n, 0, px, rowH).vis : Math.max(1, this.vis[ctx] ?? 12);
     this.vis[ctx] = vis;
     let top = this.top[ctx] ?? 0;
     const sel = Math.min(this.sel[ctx] ?? 0, Math.max(0, n - 1));
@@ -1197,6 +1245,8 @@ export default class GitView extends View {
     }
     top = Math.max(0, Math.min(top, Math.max(0, n - vis)));
     this.top[ctx] = top;
+    // The end of a history cut at its limit is in view: read further.
+    if (n && top + vis >= n - 1 && this.cut(ctx)) this.more(ctx);
     const range = this.range?.ctx === ctx ? [Math.min(this.range.anchor, sel), Math.max(this.range.anchor, sel)] : null;
     const shown = rows.slice(top, top + vis + 1).map((r, k) => {
       const i = top + k, isSel = i === sel, inRange = range && i >= range[0] && i <= range[1];
@@ -1218,6 +1268,18 @@ export default class GitView extends View {
       .child(v_flex().size_full().children(shown).children([n > 0 && top + vis >= n - 1 ? this.listTail(t, ctx, n - 1, rowH) : null].filter(Boolean)))
       .when(Boolean(bar), (el) => el.child(bar))
       .when(!n, (el) => el.child(div().absolute().inset_0().child(empty(t, this.emptyText(ctx), null, { small: true }))));
+  }
+
+  /** The newest drill-in list of a kind (enter on a branch: its commits). */
+  subOfKind(kind) { return Object.values(this.subs).flat().reverse().find((x) => x.kind === kind) ?? null; }
+
+  /** Whether a list holds a history cut at its limit (it goes further back).
+   *  Not while filtered: the end of a filtered list isn't the history's. */
+  cut(ctx) {
+    if (this.filters[ctx]) return false;
+    if (ctx === "commits") return this.data.commits.length >= this.commitLimit;
+    if (ctx === "subCommits") { const s = this.subOfKind("subCommits"); return s?.kind === "subCommits" && (s.items?.length ?? 0) >= (s.limit ?? LOG_LIMIT); }
+    return false;
   }
 
   /** Below a commit list's last row: its open lanes run on to the bottom
@@ -1456,7 +1518,7 @@ export default class GitView extends View {
     const isCommits = ctx === "commits" || ctx === "subCommits";
     const rowH = wide && isCommits ? WIDE_ROW : ROW;
     const filtering = this.filtering?.ctx === ctx;
-    let foot = n ? `${Math.min((this.sel[ctx] ?? 0) + 1, n)} of ${n}${ctx === "commits" && n >= LOG_LIMIT ? "+" : ""}` : null;
+    let foot = n ? `${Math.min((this.sel[ctx] ?? 0) + 1, n)} of ${n}${this.cut(ctx) ? "+" : ""}` : null;
     if (ctx === "review" && this.review.files.length) foot = `${this.review.scopeName()} · ${this.review.summary()}`;
     if (this.filters[ctx] && !filtering) foot = `/${this.filters[ctx]} · ${foot ?? "0"}`;
     const body = v_flex().size_full()
@@ -1524,7 +1586,7 @@ export default class GitView extends View {
     // As list(): the rows that fit come from the height, at this list's row
     // height (a diff's and the branch log's differ).
     const px = this.mainPx?.[key];
-    const vis = px ? Math.max(1, Math.floor(px / rowH)) : 30;
+    const vis = px ? rowWindow(rows.length, 0, px, rowH).vis : 30;
     let top = key === "staging" ? (this.staging.top ?? 0) : key === "main" ? this.mainTop : (this.otherTop?.[key] ?? 0);
     if (follow != null) {
       if (follow < top + 1) top = Math.max(0, follow - 2);
@@ -1533,6 +1595,7 @@ export default class GitView extends View {
     top = Math.max(0, Math.min(top, Math.max(0, rows.length - vis)));
     if (key === "staging") this.staging.top = top; else if (key === "main") this.mainTop = top; else (this.otherTop ??= {})[key] = top;
     if (key === "main" || key === "staging") this.mainVis = vis;
+    if (key === "main" && this.main?.more && rows === this.main.rows && top + vis >= rows.length - 1) this.more("main");
     return div().id(id).relative().size_full().overflow_hidden()
       .on_size_change((size, cx) => {
         const h = unzoom(size.height);
