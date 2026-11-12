@@ -76,7 +76,11 @@ terminal and ends with it. In the nocturne layout any pane can be pinned to the
 jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
-mods' shared `nocturne.pinned-panes`; it ends when the pane closes).
+mods' shared `nocturne.pinned-panes`; it ends when the pane closes). For a pane
+that belongs to no project (a docs page, a dashboard), `herdr-app do
+nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
+repo for git or GitHub, terminals start in ~), pinned to the shelf;
+`herdr-app do nocturne.dock` moves the focused pane there.
 
 For a remote space:
 
