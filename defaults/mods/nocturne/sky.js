@@ -52,6 +52,7 @@ import { toggleGit, openWorktrees } from "./git.js";
 import { UsageSection } from "./usage.js";
 import { focusFiles } from "./files.js";
 import { togglePicker } from "./picker.js";
+import { openScratchpad } from "./scratchpad.js";
 import { toggleGithub, githubForm } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
@@ -195,6 +196,7 @@ export default class Sky {
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
+    // nocturne.scratchpad the repository's note in the editor (scratchpad.js);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
     // (alias nocturne.toast-dismiss) dismisses it (toast.js).
     // A saved file doesn't restart this loop: changes to it need the layout
@@ -213,6 +215,7 @@ export default class Sky {
         else if (c === "files") focusFiles();
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
+        else if (c === "scratchpad") openScratchpad();
         else if (c === "github") toggleGithub();
         else if (c === "github-pr") githubForm("pr");
         else if (c === "github-run") githubForm("workflow");

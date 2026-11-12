@@ -21,6 +21,7 @@ import { toggleDeck, lastFailed } from "./scripts.js";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.js";
+import { openScratchpad } from "./scratchpad.js";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
 import { TOASTS, toastKey } from "./toast.js";
@@ -159,6 +160,8 @@ function findEntries() {
       words: "open file picker fuzzy go to file quick open search name path", go: () => togglePicker("files") },
     { name: "nocturne.grep", args: {}, group: "Find", icon: "search", title: "Grep the project…",
       words: "grep search text in files find content ripgrep rg project folder", go: () => togglePicker("grep") },
+    { name: "nocturne.scratchpad", args: {}, group: "Open", icon: "file-text", title: "Scratchpad",
+      words: "scratchpad note notes scratch pad markdown repository repo jot todo memo", go: () => { openScratchpad(); } },
   ];
 }
 
