@@ -555,3 +555,23 @@ test("the Markdown viewer's edit: the viewer closes and the editor takes its pla
   expect(ran).toEqual([["pane.focus", { pane: "e1" }], ["pane.close", { pane: "pm" }]]);
   expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: "s1", path: "/p/docs/n.md", view: "split" });
 });
+
+// ---- word wrap per tab (edfiles' toggle: cmd-k z, space u w, :set wrap, the bar's chip)
+
+test("word wrap belongs to the shown tab: each starts from its language, the toggle flips only the shown one", async () => {
+  const p = await pane();
+  const rs = p.editor;
+  rs.set_soft_wrap = function (on: boolean) { (this as any).wrap = on; };
+  expect(p.softWrap).toBe(false);
+  p.openFile("/p/docs/n.md", cx());
+  await flush();
+  const md = p.editor;
+  md.set_soft_wrap = function (on: boolean) { (this as any).wrap = on; };
+  expect(p.softWrap).toBe(true); // Markdown starts wrapped
+  p.command("wrap", cx());
+  expect([p.softWrap, md.wrap]).toEqual([false, false]);
+  p.select(p.docs[0], cx());
+  expect([p.softWrap, rs.wrap]).toEqual([false, undefined]);
+  p.vimCommand("set:wrap", cx());
+  expect([p.softWrap, rs.wrap, p.docs[1].softWrap]).toEqual([true, true, false]);
+});

@@ -48,8 +48,14 @@ test:
     bun test scripts/nocturne-github-projects-tab.test.ts
     # The GitHub window's new pull request and run workflow forms by their keys, gh and git faked (writes recorded, never sent).
     bun test scripts/nocturne-github-forms.test.ts
+    # Where those forms' fields sit: the column, sections, pairs, the body's growth, a list opening at its field (upward without room).
+    bun test scripts/nocturne-github-form-layout.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/nocturne-git-view.test.ts
+    # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.
+    bun test scripts/nocturne-github-scroll.test.ts
+    # A panel's long title ends in an ellipsis inside its panel (GitHub window, git window), with recording gpui stand-ins.
+    bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
     bun test scripts/nocturne-chrome-keys.test.ts
     # The floating tool windows' keys, with herdr and gpui stand-ins.
@@ -98,12 +104,18 @@ test:
     bun test scripts/nocturne-editor-tabs.test.ts
     # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
     bun test scripts/nocturne-editor-follow.test.ts
+    # The editor's word wrap toggle (cmd-k z, space u w, :set wrap, the bar's chip): the shown tab only, from the language's soft_wrap, with stand-ins (mocks herdr).
+    bun test scripts/nocturne-editor-wrap.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
     bun test scripts/nocturne-files-preview.test.ts
     # nocturne-files ships the preview's viewer and what it imports: each copy is nocturne-preview's byte for byte.
     bun test scripts/nocturne-preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
+    # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
+    bun test scripts/nocturne-pane-pins.test.ts
+    # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.
+    bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
     bun test scripts/nocturne-usage-limits.test.ts
     cargo test --locked

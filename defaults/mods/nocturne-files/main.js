@@ -8,8 +8,9 @@
 // `files.open`, Nocturne's "+ new" > Files) opens a pane of its own instead, props { path, on, slot }:
 // beside the pane it came from, closed with q / esc, opening files beside itself.
 //
-// Each pane keeps its filters (dotfiles, git-ignored files; new panes take
-// settings.json `files`) in shared `nocturne-files.filters` by slot. `/`
+// Each pane keeps its filters (dotfiles, git-ignored files: both left out
+// unless settings.json `files` or H / I say otherwise; written once toggled)
+// in shared `nocturne-files.filters` by slot. `/`
 // filters the tree as you type: fff's fuzzy index of the root (findFiles),
 // hits under their folders; elsewhere (home, /, another machine) the folders
 // already listed.
@@ -40,9 +41,12 @@
 //   gg / G         top / bottom                  r  refresh
 //   /              filter (esc clears)           H  dotfiles  I  ignored files
 //   o              a folder in a new files pane  y  copy the path
+//   w              an HTML file as a page in the web pane (the shown tab's: a new front tab; else one beside)
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
-//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens)
+//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens;
+//                  the filter line's + file / + folder chips and an empty folder's + new file do the same)
+//   tab ⇧tab       ring the filter line's switches, + file, + folder, ? in turn; enter / space presses
 //   R              rename: the name in an input, its stem selected; a path in it moves the item
 //   x / P          cut the row / paste it in the selected folder (beside a selected file; the root with none)
 //   d              delete: asks first (y or enter; anything else keeps it); the machine's trash, else permanently
@@ -105,7 +109,7 @@ import * as herdr from "herdr";
 import { openInEditor } from "./editor-route.js";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -163,6 +167,8 @@ function dither(color, cell = 1) {
 }
 
 const stop = (_e, cx) => cx.stop_propagation();
+/** The ring the filter line's stop wears under tab: a 1 px accent edge over it. */
+const ring = (t) => div().absolute().inset_0().border(1).border_color(t.accent);
 const tilde = (p) => {
   const h = home();
   return !p ? "" : p === h ? "~" : p.startsWith(h + "/") ? "~" + p.slice(h.length) : p;
@@ -186,12 +192,14 @@ export default class Files extends View {
     // A pane of its own (a folder link, files.open): closes itself, opens files beside itself.
     this.alone = Boolean(pr.path);
     this.filters = (this.slot && shared(FILTERS)?.[this.slot]) || filterDefaults(settings());
-    this.query = ""; this.hits = null; this.seq = 0; this.typing = false;
+    this.query = ""; this.hits = null; this.seq = 0; this.typing = false; this.finding = false;
+    // The filter line's stop tab / shift-tab rings (logic.js lensStops), null: the list.
+    this.stop = null; this.lensAdd = "both";
     this.menu = null; this.mouse = { x: 40, y: 40 }; this.size = { width: 400, height: 600 };
     this.input = InputState.new({ placeholder: "filter files" });
     this.input.on("change", (_e, cx) => { this.query = this.input.value(); this.search(cx); });
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
-    this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
+    this.input.on("blur", (_e, cx) => { this.typing = false; this.finding = false; cx.notify(); });
     this.input.on("submit", (_e, cx) => { this.enter(cx); cx.notify(); });
     // The name a new file or folder gets, or a rename's: an input row in the tree.
     this.draft = null; this.ask = null; this.msg = null;
@@ -215,7 +223,7 @@ export default class Files extends View {
     // Opened as the focused pane (cmd-e, files.open): the keyboard comes here,
     // which the app leaves with the window for a mod pane. Again a little
     // later, as the editor does, in case the window took it back meanwhile.
-    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing) this.takeKeys(cx); });
+    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing && !this.finding) this.takeKeys(cx); });
     // Remote folders can't be watched: poll those instead.
     cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
@@ -544,8 +552,48 @@ export default class Files extends View {
     return out.sort((a, b) => spread(a) - spread(b));
   }
 
+  /** `/` and a click on the filter line: draws the filter's input, then gives
+   *  it the keyboard. An input that isn't drawn can't take the focus (and its
+   *  "focus" event, which turns `typing` on and so draws it, never comes), so
+   *  the focus waits for the frames after this one. */
+  startFind(cx) {
+    this.finding = true;
+    for (const ms of [16, 60, 200]) cx?.timer?.after?.(ms, () => { if (this.finding && !this.typing) this.input.focus(); });
+    cx?.notify();
+  }
+
+  /** w, the menu's "Open in a web pane": an HTML file (relative to the root) as
+   *  a page in the web pane (logic.js webOpen): a new front tab in the shown
+   *  tab's one, else a new one beside this pane. Enter keeps opening it as before. */
+  openWeb(path, cx) {
+    if (!isHtml(path)) return this.say(`w opens HTML pages in a web pane: “${base(path)}” isn't one`, cx);
+    if (this.on) return this.say("A page on another machine can't open in the web pane", cx);
+    const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+    const browsers = panes().filter((p) => p.tab === tab && p.mod === "nocturne-browser");
+    const from = (this.me() ?? (this.alone ? null : this.panel()))?.pane ?? null;
+    const slot = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const [name, args] = webOpen(fileUrl(`${this.root}/${path}`), { browsers, from, slot });
+    run(name, ...(args === undefined ? [] : [args]));
+  }
+
+  /** The filter line's stop `stop` pressed (enter / space on its ring). */
+  pressStop(stop, cx) {
+    if (stop === "hidden" || stop === "ignored") this.setFilter(stop, cx);
+    else if (stop === "keys") this.keysShown = !this.keysShown;
+    else if (stop.startsWith("add-")) this.addNew(stop.slice(4), cx);
+  }
+
+  /** + file / + folder (the filter line's chips, the empty folder's line):
+   *  `a` / `A`'s name row, in the selected folder (beside a selected file),
+   *  in the root with nothing selected. */
+  addNew(kind, cx) {
+    this.stop = null;
+    const row = this.shown().find((r) => r.path === this.sel && !r.head) ?? null;
+    this.startDraft(kind, row, cx);
+  }
+
   clearSearch(cx) {
-    this.query = ""; this.hits = null; this.note = null; this.seq++;
+    this.query = ""; this.hits = null; this.note = null; this.seq++; this.finding = false;
     this.input.set_value("");
     this.handle.focus();
     cx?.notify();
@@ -706,7 +754,7 @@ export default class Files extends View {
     // On a marked row (with others marked): the set's entries first.
     const set = row.path && this.marked?.has(row.path) ? this.setOf(row) : [];
     let items = set.length > 1 ? setMenuItems(row, set.length, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on })
-      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on });
+      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -724,6 +772,7 @@ export default class Files extends View {
     else if (act === "open") this.openFile(p, cx);
     else if (act === "other") viewerFor(p)?.other === "system" ? this.openFile(p, cx, true) : this.edit(p, cx);
     else if (act === "terminal") this.terminalEdit(p, cx);
+    else if (act === "web") this.openWeb(p, cx);
     else if (act === "copy") this.copy(p, cx);
     else if (act === "close") this.closePane();
     else if (act === "new-file") this.startDraft("file", row, cx);
@@ -1301,6 +1350,17 @@ export default class Files extends View {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
       cx.stop_propagation(); cx.notify(); return;
     }
+    // tab / shift-tab ring the filter line's switches, + file / + folder and ? keys
+    // in turn, then the list again; enter or space presses the ringed one, esc
+    // leaves it, any other key leaves it and does what it does in the list.
+    if (k === "tab") { this.stop = lensStep(lensStops(this.lensAdd), this.stop, m.shift ? -1 : 1); cx.stop_propagation(); cx.notify(); return; }
+    if (this.stop) {
+      if (k === "enter" || k === "space" || k === "escape") {
+        if (k === "escape") this.stop = null; else this.pressStop(this.stop, cx);
+        cx.stop_propagation(); cx.notify(); return;
+      }
+      this.stop = null;
+    }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     // A move ends a shift-range; in V's range it grows the range.
@@ -1331,7 +1391,7 @@ export default class Files extends View {
     else if (low === "p" && upper) this.paste(row ?? null, cx);
     else if (k === "x") this.cutRow(row, cx);
     else if (k === "d") this.askDelete(row, cx);
-    else if (k === "/") this.input.focus();
+    else if (k === "/" || e.key_char === "/") this.startFind(cx);
     else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.closePane(); else this.leave(); }
     else if (k === "q") this.closePane();
     else if (k === "[" || k === "backspace") this.back(cx);
@@ -1354,6 +1414,7 @@ export default class Files extends View {
     else if (k === "E" || (low === "e" && m.shift)) this.terminalEdit(row?.path ?? "", cx);
     else if (k === "e") row && !row.dir && viewerFor(row.path)?.other === "system" ? this.openFile(row.path, cx, true) : this.edit(row?.path ?? "", cx);
     else if (k === "v") this.nvim(row ?? null);
+    else if (k === "w" && row && !row.dir) this.openWeb(row.path, cx);
     else if (k === "p") this.preview(row, cx);
     else if (k === "o") this.openPane(row?.dir ? row.path : "");
     else if (k === "y") this.copy(row?.path ?? "", cx);
@@ -1457,8 +1518,9 @@ export default class Files extends View {
 
   /** A filter's switch: an open eye while that kind is listed; a shut one,
    *  the label struck through and how many it leaves out, while it's hidden. */
-  filterChip(t, id, label, on, cut, action) {
+  filterChip(t, id, label, on, cut, action, ringed = false) {
     return h_flex().id(id).relative().h(20).px(4).gap(4).flex_none().items_center()
+      .when(ringed, (el) => el.child(ring(t)))
       .hover((s) => s.bg(t.ansi0 + "55"))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => action(cx))
@@ -1467,28 +1529,44 @@ export default class Files extends View {
       .when(!on && cut > 0, (el) => el.child(div().relative().text_color(t.ansi3).child(String(cut))));
   }
 
+  /** + file / + folder (or a bare +): `a` / `A`'s name row; the accent +, a muted word. */
+  addChip(t, kind, label, ringed) {
+    const word = label.replace(/^\+\s*/, "");
+    return h_flex().id(`nf-add-${kind}`).relative().h(20).px(4).gap(7).flex_none().items_center().text_color(t.muted)
+      .hover((s) => s.bg(t.ansi0 + "55").text_color(t.foreground))
+      .when(ringed, (el) => el.child(ring(t)))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { this.addNew(kind, cx); cx.notify(); })
+      .child(div().relative().text_color(t.accent).child("+"))
+      .when(Boolean(word), (el) => el.child(div().relative().child(word)));
+  }
+
   /** The line under the toolbar: the filter as you type, and the two switches. */
   lens(t, w, found) {
-    const live = this.typing || Boolean(this.query);
+    const live = this.typing || this.finding || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
     const searching = Boolean(this.query.trim());
     // What fits this width: the placeholder shortens, then the switches' labels.
     const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
     const [hLabel, iLabel] = fit.labels;
+    this.lensAdd = fit.add;
+    const at = this.stop;
     return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
       .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
       .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
-        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.input.focus(); })
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
         .child(live
           ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
           : h_flex().min_w(0).gap(5).text_color(t.dim)
             .child(div().flex_none().text_color(t.accent).child("/"))
             .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
       .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
-      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
+      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"))
+      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"))
+      .children(ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)))
       // ? keys: the line's last item (keyhelp.js).
-      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).h(20).px(4))
+      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
+        .when(at === "keys", (el) => el.child(ring(t))))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
@@ -1622,11 +1700,17 @@ export default class Files extends View {
     return line().child(div().text_color(this.msg?.error ? t.ansi1 : t.dim).child(text));
   }
 
-  empty(t, title, hint) {
+  empty(t, title, hint, add = false) {
     return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(16).text_size(11)
       .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
       .child(div().text_color(t.foreground).child(title))
-      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)));
+      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)))
+      // An empty folder: its first file, as a / + file make it.
+      .when(add, (el) => el.child(h_flex().id("nf-empty-add").relative().h(20).px(6).gap(7).items_center().text_color(t.muted)
+        .hover((s) => s.bg(t.ansi0 + "55").text_color(t.foreground))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { this.addNew("file", cx); cx.notify(); })
+        .child(div().text_color(t.accent).child("+")).child(div().child("new file")).child(div().text_color(t.ansi8).child("a"))));
   }
 
   render(cx) {
@@ -1658,7 +1742,7 @@ export default class Files extends View {
     if (searching && this.hits && !rows.length) body = this.empty(t, "No files match", this.note ?? `“${this.query.trim()}” under ${tilde(this.root)}`);
     else if (searching && !this.hits) body = this.empty(t, "Searching…", null);
     else if (this.error && !list.length) body = this.empty(t, "Can't read this folder", this.error);
-    else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root));
+    else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root), !this.loading);
     else body = div().id("nf-tree").relative().flex_1().min_h(0).py(4).text_size(12)
       // A drop below the rows goes into the root: the list framed in the accent.
       .when(Boolean(this.drag?.ok) && this.drag.into === "", (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))

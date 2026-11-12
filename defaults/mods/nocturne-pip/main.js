@@ -22,8 +22,9 @@
 //   p  into a pane   P  park   o  out of Herdr   x q  close
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
 //   ?    these keys (KEYS), keyhelp.js's overview in a popup: the video is a
-//        native view, drawn over anything in the window but an overlay; the
-//        bar's ? (before ✕) opens it too
+//        native view, drawn over the panes and the overlays opened before it
+//        (a popup, a dialog or a window raised after it cuts a hole in it and
+//        its backdrop dims it); the bar's ? (before ✕) opens it too
 // The ⋯ menu: ↑ ↓ (j k) move, enter picks, esc q close. The keys popup: esc q ? close.
 //
 // Opened by nocturne-browser (`openOverlay` WINDOW below, props { of: the
@@ -126,7 +127,7 @@ export default class Pip extends View {
     this.error = null;
     this.width = 384;
     // The control under the pointer: its name shows in the title (a tooltip
-    // would be drawn under the video, a native view).
+    // isn't an overlay: it would be drawn under the video, a native view).
     this.hover = null;
     this.aspect = null;
     this.inPane = Boolean(props()?.pane);

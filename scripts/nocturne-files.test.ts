@@ -41,14 +41,16 @@ const kit = {
   View: class {}, div: () => new Element(), svg: (p: string) => new Element("svg", p),
   PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) },
 };
+// As GPUI: focus() takes only on an input drawn in the last frame (Input.new),
+// and only then does its "focus" event come.
 const input = () => {
   let v = ""; const on: Record<string, any> = {};
-  const state: any = { selected: null, on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; state.selected = null; }, set_selected_range: (r: any) => { state.selected = r; }, focus() {}, fire: (e: string) => on[e]?.({}, cx) };
+  const state: any = { selected: null, drawn: false, focused: false, on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; state.selected = null; }, set_selected_range: (r: any) => { state.selected = r; }, focus() { if (state.drawn && !state.focused) { state.focused = true; on.focus?.({}, cx); } }, fire: (e: string) => on[e]?.({}, cx) };
   return state;
 };
 const base = {
   h_flex: () => new Element(), v_flex: () => new Element(), v_virtual_list: () => new Element(), Scrollbar: { vertical: () => new Element() },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item(i: number) { scrolled.push(i); }, offset: () => ({ x: 0, y: -scrollTop.y }) }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item(i: number) { scrolled.push(i); }, offset: () => ({ x: 0, y: -scrollTop.y }) }) }, InputState: { new: input }, Input: { new: (s: any) => { if (s) s.drawn = true; return new Element("input"); } },
 };
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
@@ -98,10 +100,12 @@ const TREE: Record<string, [string, boolean][]> = {
 
 // ---- logic
 
-test("new panes list everything unless settings.json files says otherwise", () => {
-  expect(filterDefaults({})).toEqual({ hidden: true, ignored: true });
-  expect(filterDefaults({ files: { hidden: false } })).toEqual({ hidden: false, ignored: true });
-  expect(filterDefaults({ files: { ignored: false, hidden: true } })).toEqual({ hidden: true, ignored: false });
+test("new panes leave dotfiles and git-ignored files out unless settings.json files says otherwise", () => {
+  expect(filterDefaults({})).toEqual({ hidden: false, ignored: false });
+  expect(filterDefaults(undefined)).toEqual({ hidden: false, ignored: false });
+  expect(filterDefaults({ files: { hidden: true } })).toEqual({ hidden: true, ignored: false });
+  expect(filterDefaults({ files: { ignored: true, hidden: false } })).toEqual({ hidden: false, ignored: true });
+  expect(filterDefaults({ files: { hidden: false, ignored: false } })).toEqual({ hidden: false, ignored: false });
 });
 
 test("git's ignored list covers what is in an ignored folder; dotfiles by any part", () => {
@@ -165,7 +169,7 @@ test("the menu's key column fits its widest key", () => {
 test("filters hide dotfiles and ignored files, count them, and are kept per pane", () => {
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   world.shared = {};
-  world.settings = { zoom: 1, files: { hidden: false } };
+  world.settings = { zoom: 1, files: { ignored: true } };
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   view.ignored = parseIgnored("target/\0src/app.log\0");
   view.folders.add("src");
@@ -184,6 +188,25 @@ test("filters hide dotfiles and ignored files, count them, and are kept per pane
   world.settings = { zoom: 1 };
 });
 
+test("a pane nobody toggled stores no choice and opens with the new defaults; a toggled one keeps its own", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }, { pane: "pg", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s2" } }];
+  world.shared = {};
+  world.settings = { zoom: 1 };
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.ignored = parseIgnored("target/\0src/app.log\0");
+  view.folders.add("src");
+  expect(view.filters).toEqual({ hidden: false, ignored: false });
+  expect(view.rows().map((r: any) => r.path)).toEqual(["src", "src/main.rs", "README.md"]);
+  expect(view.cut).toEqual({ hidden: 2, ignored: 2 });
+  expect(world.shared["nocturne-files.filters"]).toBeUndefined();
+  // Toggled to the old default (both shown): that is now this pane's choice.
+  view.key({ key: "H" }, cx);
+  view.key({ key: "I" }, cx);
+  expect(world.shared["nocturne-files.filters"]).toEqual({ s1: { hidden: true, ignored: true } });
+  expect(pane({ path: "/repo", slot: "s1" }).filters).toEqual({ hidden: true, ignored: true });
+  expect(pane({ path: "/repo", slot: "s2" }).filters).toEqual({ hidden: false, ignored: false });
+});
+
 test("/ filters through the index: hits under folders, enter opens beside the pane, a folder shows in the tree", async () => {
   world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
@@ -192,8 +215,10 @@ test("/ filters through the index: hits under folders, enter opens beside the pa
   world.find = async (root, q) => { asked.push(`${root}:${q}`); return { files: [{ path: "src/main.rs", ranges: [[4, 8]], git: null }, { path: ".github/main.yml", ranges: [[8, 12]] }], scanning: false }; };
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   view.filters = { hidden: false, ignored: true };
-  view.key({ key: "/" }, cx);
-  view.input.fire("focus");
+  later.length = 0;
+  view.key({ key: "/", key_char: "/", modifiers: {} }, cx);
+  view.render();
+  for (const f of later.splice(0)) f(cx);
   expect(view.typing).toBe(true);
   // Typing j goes to the filter, not the tree.
   view.key({ key: "j" }, cx);
@@ -219,6 +244,76 @@ test("/ filters through the index: hits under folders, enter opens beside the pa
   expect(view.folders.has("src")).toBe(true);
   expect(view.want).toBe("src");
 });
+
+// What GPUI's macOS keystroke carries for / and ?: on a US layout / is its
+// own key and ? is shift-/; on a German one / is shift-7 and ? shift-ß. A
+// shifted key that types punctuation arrives as that character with shift
+// cleared (gpui-pre-macos events.rs); the last shape covers a layout that
+// reports the key's own name with the typed character beside it.
+const SLASH = {
+  us: { key: "/", key_char: "/", modifiers: { shift: false } },
+  de: { key: "/", key_char: "/", modifiers: { shift: false } },
+  named: { key: "7", key_char: "/", modifiers: { shift: true } },
+};
+const QUESTION = {
+  us: { key: "?", key_char: "?", modifiers: { shift: false } },
+  de: { key: "?", key_char: "?", modifiers: { shift: false } },
+  named: { key: "ß", key_char: "?", modifiers: { shift: true } },
+};
+
+for (const [layout, slash] of Object.entries(SLASH)) {
+  test(`/ (${layout}) draws the filter, gives it the keyboard on the next frame, and typing goes to it`, () => {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+    world.shared = {};
+    const view = pane({ path: "/repo", slot: "s1" }, TREE);
+    later.length = 0;
+    view.render();
+    expect(view.input.drawn).toBe(false);
+    let stopped = 0;
+    const kcx = { ...cx, stop_propagation() { stopped++; } };
+    view.key(slash, kcx);
+    // Not drawn yet, so not focused yet: the old way (focus at once) never took.
+    expect([view.finding, view.typing, view.input.focused]).toEqual([true, false, false]);
+    view.render();
+    for (const f of later.splice(0)) f(cx);
+    expect([view.input.focused, view.typing]).toEqual([true, true]);
+    // Letters, digits and a German ö go on to the input: the pane doesn't stop them.
+    stopped = 0;
+    for (const k of ["j", "k", "q", "d", "7", "ö", "H"]) view.key({ key: k, key_char: k, modifiers: {} }, kcx);
+    view.key(slash, kcx);
+    expect(stopped).toBe(0);
+    view.input.set_value("main"); view.input.fire("change");
+    expect(view.query).toBe("main");
+    // esc clears and ends it; the input is no longer drawn.
+    view.key({ key: "escape", modifiers: {} }, kcx);
+    expect([view.query, view.finding]).toEqual(["", false]);
+  });
+}
+
+test("a click on the filter line draws the input and focuses it, in the panel and in a pane of its own, with the preview split on", () => {
+  for (const props of [{ slot: "s1" }, { path: "/repo", slot: "s2" }]) {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props }];
+    world.shared = props.path ? { "nocturne-files.look": { s2: { on: true } } } : {};
+    const view = pane(props, TREE);
+    later.length = 0;
+    const find = walk(view.render()).find((e: any) => e.calls.some(([k, a]: [string, any]) => k === "id" && a?.[0] === "nf-find"));
+    const down = find.calls.find(([k]: [string]) => k === "on_mouse_down");
+    down[1][1]({}, cx);
+    view.render();
+    for (const f of later.splice(0)) f(cx);
+    expect([view.input.focused, view.typing]).toEqual([true, true]);
+  }
+});
+
+for (const [layout, q] of Object.entries(QUESTION)) {
+  test(`? (${layout}) opens and closes the keys overview, not the filter`, () => {
+    const view = pane({ path: "/repo", slot: "s1" }, TREE);
+    view.key(q, cx);
+    expect([view.keysShown, view.finding]).toEqual([true, false]);
+    view.key(q, cx);
+    expect(view.keysShown).toBe(false);
+  });
+}
 
 test("where the index can't go (another machine), the search covers the folders listed so far", async () => {
   world.find = async () => { throw new Error("not here"); };
@@ -309,7 +404,11 @@ test("the header shows both filters, the search hint and a close button in a pan
   view.filters = { hidden: false, ignored: true };
   const els = walk(view.render());
   const text = els.flatMap((e: any) => e.nodes).filter((n: any) => typeof n === "string");
-  expect(text).toEqual(expect.arrayContaining(["dotfiles", "ignored", "filter files", "/", "2"]));
+  // 400 px: a labelled "+ file" before the long labels ("+ folder" needs more).
+  expect(text).toEqual(expect.arrayContaining([".*", "ign", "+", "file", "filter files", "/", "2"]));
+  expect(text).not.toContain("folder");
+  view.size = { width: 560, height: 600 };
+  expect(walk(view.render()).flatMap((e: any) => e.nodes)).toEqual(expect.arrayContaining(["dotfiles", "ignored", "file", "folder"]));
   const svgs = els.filter((e: any) => e.kind === "svg").map((e: any) => e.arg);
   expect(svgs).toEqual(expect.arrayContaining(["mods/nocturne-files/eye-off.svg", "mods/workspace-chrome/eye.svg", "mods/workspace-chrome/x.svg", "mods/workspace-chrome/search.svg"]));
   // It names its folder in the pane header, and tells files.open where it's rooted.
@@ -446,14 +545,19 @@ test("the header fits every width from the narrowest panel up: nothing overlaps,
     // Its estimate fits the width (CH px a character at size 11).
     const chip = (label: string, n: number) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (fit.cuts && n ? 4 + String(n).length * CH : 0);
     const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
-    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...(fit.count ? [3 * CH] : [])];
+    const adds = ({ both: ["+ file", "+ folder"], file: ["+ file"], plus: ["+"] } as any)[fit.add].map((l: string) => 8 + l.length * CH);
+    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...adds, ...(fit.count ? [3 * CH] : [])];
     expect(16 + parts.reduce((a: number, b: number) => a + b, 0) + 6 * (parts.length - 1)).toBeLessThanOrEqual(w);
     last = fit.chips;
   }
   expect(last).toBe("full");
   // The panel's 280 px (the screenshot's overlap): short labels, the whole placeholder or most of it.
   expect(lensFit(280, { cut }).chips).toBe("short");
-  expect(lensFit(400, {}).labels).toEqual(["dotfiles", "ignored"]);
+  expect(lensFit(420, {}).labels).toEqual(["dotfiles", "ignored"]);
+  // "+ file" stays labelled in the 280 px panel; "+ folder" goes first, then the word.
+  expect(lensFit(280, { cut }).add).toBe("file");
+  expect(lensFit(500, {}).add).toBe("both");
+  expect(lensFit(150, { cut }).add).toBe("plus");
   expect(lensFit(150, { cut }).chips).toBe("icon");
   // The toolbar drops its extras before the name gets too small.
   const narrow = toolbarFit(160, { branch: "main", changed: 3, name: "fireflies" });
@@ -626,6 +730,146 @@ test("the rest of the operations' logic: the neighbour after a delete, unfolded 
   expect(cleanError("mv: rename /a to /b: Permission denied\n")).toBe("mv: rename /a to /b: Permission denied");
   expect(deleteQuestion("src", true, true)).toBe("Move “src/” and everything in it to the Trash?");
   expect(deleteQuestion("a.rs", false, false)).toBe("Delete “a.rs” permanently?");
+});
+
+test("w and the menu's Open in a web pane show an HTML file in the web pane: the shown tab's (a new front tab), else a new one beside the files pane", () => {
+  const { menuItems, isHtml, fileUrl, webOpen } = logic;
+  expect([isHtml("index.html"), isHtml("a/B.HTM"), isHtml("x.htmlx"), isHtml("notes.md")]).toEqual([true, true, false, false]);
+  expect(fileUrl("/repo/my site/index.html")).toBe("file:///repo/my%20site/index.html");
+  expect(fileUrl("/r/#1/ä.html")).toBe("file:///r/%231/%C3%A4.html");
+  // The menu: right under Open, w its key; not for other files, folders, or another machine's.
+  const acts = (row: any, o: any = {}) => menuItems(row, o).map((x: any) => `${x.key}:${x.act}`);
+  expect(acts({ path: "site/index.html", dir: false }).slice(0, 3)).toEqual(["enter:open", "w:web", "e:other"]);
+  expect(acts({ path: "a.rs", dir: false })).not.toContain("w:web");
+  expect(acts({ path: "site.html", dir: true })).not.toContain("w:web");
+  expect(acts({ path: "index.html", dir: false }, { web: false })).not.toContain("w:web");
+  // Where it goes.
+  expect(webOpen("file:///a.html", { browsers: [{ pane: "pb", props: { slot: "w1" } }], from: "pf", slot: "new" }))
+    .toEqual(['nocturne-browser.open:{"url":"file:///a.html","slot":"w1"}']);
+  expect(webOpen("file:///a.html", { browsers: [], from: "pf", slot: "new" }))
+    .toEqual(["pane.split", { direction: "auto", pane: "pf", mod: "nocturne-browser", props: { url: "file:///a.html", slot: "new" } }]);
+
+  const tree = { "": [["site", true], ["README.md", false]], site: [["index.html", false], ["style.css", false]] } as any;
+  world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }] }];
+  // No web pane in the tab: one beside this files pane.
+  world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, tree);
+  view.folders.add("site");
+  view.sel = "site/index.html";
+  commands.length = 0;
+  view.key({ key: "w", key_char: "w", modifiers: {} }, cx);
+  expect(commands).toHaveLength(1);
+  expect(commands[0][0]).toBe("pane.split");
+  expect(commands[0][1]).toMatchObject({ direction: "auto", pane: "pf", mod: "nocturne-browser", props: { url: "file:///repo/site/index.html" } });
+  expect(typeof commands[0][1].props.slot).toBe("string");
+  // A web pane in the shown tab (another tab's doesn't count): a new tab in it.
+  world.panes.push({ pane: "pw", tab: "t2", mod: "nocturne-browser", props: { slot: "other" } }, { pane: "pb", tab: "t1", mod: "nocturne-browser", props: { slot: "w1" } });
+  commands.length = 0;
+  view.openMenu(view.shown().find((r: any) => r.path === "site/index.html"), cx);
+  view.menuKey({ key: "w", modifiers: {} }, cx);
+  expect(commands).toEqual([['nocturne-browser.open:{"url":"file:///repo/site/index.html","slot":"w1"}', undefined]]);
+  // Enter still opens it as before (not the web pane); w on a stylesheet says why not.
+  commands.length = 0;
+  view.sel = "site/style.css";
+  view.key({ key: "w", key_char: "w", modifiers: {} }, cx);
+  expect(commands).toEqual([]);
+  expect(view.msg?.text).toContain("HTML");
+});
+
+const byId = (root: any, id: string) => walk(root).find((e: any) => e.calls.some(([k, a]: [string, any[]]) => k === "id" && a?.[0] === id));
+const clickOn = (el: any) => el.calls.find(([k]: [string]) => k === "on_click")[1][0]({}, cx);
+const ringed = (el: any) => walk(el).some((e: any) => e !== el && e.calls.some(([k, a]: [string, any[]]) => k === "border_color" && a?.[0] === herdr.theme().accent));
+
+test("+ file and + folder on the filter line start a's / A's name row: in the selected folder, beside a selected file, in the root with nothing selected", () => {
+  for (const props of [{ folder: "/repo" }, { path: "/repo", slot: "s1" }]) {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props }];
+    const view = pane(props, TREE);
+    view.size = { width: 560, height: 600 };
+    view.folders.add("src");
+    // Nothing selected: the root.
+    clickOn(byId(view.render(), "nf-add-file"));
+    expect(view.draft).toMatchObject({ kind: "file", dir: "", after: null });
+    view.endDraft(cx);
+    view.sel = "src";
+    clickOn(byId(view.render(), "nf-add-folder"));
+    expect(view.draft).toMatchObject({ kind: "folder", dir: "src", after: "src" });
+    view.endDraft(cx);
+    view.sel = "src/main.rs";
+    clickOn(byId(view.render(), "nf-add-file"));
+    expect(view.draft).toMatchObject({ kind: "file", dir: "src", after: "src/main.rs" });
+    view.endDraft(cx);
+  }
+});
+
+test("the 280 px panel keeps a labelled + file; at 150 a bare + that still makes a file", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/repo" } }];
+  const view = pane({ folder: "/repo" }, TREE);
+  view.size = { width: 280, height: 600 };
+  let el = view.render();
+  expect(byId(el, "nf-add-file").nodes.flatMap((n: any) => n.nodes)).toEqual(["+", "file"]);
+  expect(byId(el, "nf-add-folder")).toBeUndefined();
+  view.size = { width: 150, height: 600 };
+  el = view.render();
+  expect(byId(el, "nf-add-file").nodes.flatMap((n: any) => n.nodes)).toEqual(["+"]);
+  clickOn(byId(el, "nf-add-file"));
+  expect(view.draft).toMatchObject({ kind: "file", dir: "" });
+});
+
+test("tab rings dotfiles, ignored, + file, + folder, ? in turn and then the list; shift-tab goes back; enter presses; esc and other keys leave", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  world.shared = {};
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.size = { width: 560, height: 600 };
+  view.render();
+  const tab = (shift = false) => view.key({ key: "tab", key_char: "\t", modifiers: { shift } }, cx);
+  const seen: any[] = [];
+  for (let i = 0; i < 6; i++) { tab(); seen.push(view.stop); }
+  expect(seen).toEqual(["hidden", "ignored", "add-file", "add-folder", "keys", null]);
+  tab(true);
+  expect(view.stop).toBe("keys");
+  tab(true); tab(true);
+  expect(view.stop).toBe("add-file");
+  // The ring is drawn on the stop, on no other chip.
+  const el = view.render();
+  expect([ringed(byId(el, "nf-add-file")), ringed(byId(el, "nf-add-folder")), ringed(byId(el, "nf-hidden"))]).toEqual([true, false, false]);
+  view.key({ key: "enter", modifiers: {} }, cx);
+  expect([view.draft?.kind, view.stop]).toEqual(["file", null]);
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect(view.draft).toBeNull();
+  // enter on a switch flips it; space too.
+  tab();
+  view.key({ key: "enter", modifiers: {} }, cx);
+  expect(view.filters.hidden).toBe(true);
+  view.key({ key: "space", key_char: " ", modifiers: {} }, cx);
+  expect(view.filters.hidden).toBe(false);
+  // esc leaves the ring; the pane stays.
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect(view.stop).toBeNull();
+  // Another key leaves it and does what it does in the list.
+  tab();
+  view.key({ key: "j", modifiers: {} }, cx);
+  expect([view.stop, view.sel]).toEqual([null, "src"]);
+  // A narrow pane has no + folder: the ring skips it.
+  view.size = { width: 280, height: 600 };
+  view.render();
+  view.stop = "add-file";
+  tab();
+  expect(view.stop).toBe("keys");
+});
+
+test("an empty folder offers its first file: + new file starts the name row in the root", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/empty" } }];
+  const view = pane({ folder: "/empty" }, { "": [] });
+  view.loading = false;
+  const el = view.render();
+  const add = byId(el, "nf-empty-add");
+  expect(add.nodes.flatMap((n: any) => n.nodes)).toEqual(["+", "new file", "a"]);
+  clickOn(add);
+  expect(view.draft).toMatchObject({ kind: "file", dir: "" });
+  // Still listing: no offer yet.
+  view.endDraft(cx);
+  view.loading = true;
+  expect(byId(view.render(), "nf-empty-add")).toBeUndefined();
 });
 
 test("a: a new file in the selected folder, parents made for slashes, opened as enter would; from the menu beside a file", async () => {
@@ -1071,6 +1315,7 @@ test("t marks and steps, V marks a range while moving, shift-↑↓ mark while m
   world.shared = {};
   world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.filters = { hidden: true, ignored: true };
   view.folders.add("src");
   const rows = () => view.shown().map((r: any) => r.path);
   view.sel = "src";

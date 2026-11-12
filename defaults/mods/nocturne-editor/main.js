@@ -57,9 +57,10 @@
 // cmd-s save, cmd-f find (enter / shift-enter next / previous, esc closes),
 // cmd-alt-f replace, cmd-l go to line, cmd-k n / cmd-k p next / previous
 // problem, cmd-k m problems, cmd-k d definition, cmd-i hover, ctrl-= / ctrl--
-// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-k ? (vim:
-// space ?) the keys over the hint bar, whose last entry it is, cmd-shift-v the
-// Markdown preview. Without vim:
+// hover type more / less, cmd-r reload, cmd-k v vim on / off, cmd-k z word
+// wrap on / off (vim: space u w, :set wrap / nowrap; the bar's "wrap" chip;
+// the shown tab only), cmd-k ? (vim: space ?) the keys over the hint bar, whose
+// last entry it is, cmd-shift-v the Markdown preview. Without vim:
 // cmd-z / cmd-shift-z undo / redo, ctrl-g go to line.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
@@ -269,9 +270,12 @@ export default class EditorPane extends View {
       driver: "editor", // which side scrolled last: the other follows
     };
     const t = theme();
+    // Word wrap in this tab: the language's soft_wrap until cmd-k z / space u w
+    // / :set wrap / the bar's chip switch it (this tab only, not written to settings).
+    d.softWrap = !!opts.soft_wrap;
     d.editor = EditorState.new({
       language: lang, value: "", font_family: settings()?.font_family || "JetBrains Mono", font_size: 13,
-      line_numbers: true, folding: true, soft_wrap: !!opts.soft_wrap, syntax: this.colors,
+      line_numbers: true, folding: true, soft_wrap: d.softWrap, syntax: this.colors,
       // The theme's selection is moonfly's border tone, hard to see on its
       // background: moonfly blue at 40% stands out and keeps text readable.
       selection: selectionColor(t),
@@ -1196,6 +1200,14 @@ export default class EditorPane extends View {
     cx.notify();
   }
 
+  /** Word wrap on or off in the shown tab (cmd-k z, space u w, :set wrap, the bar's chip). */
+  setWrap(on, cx) {
+    this.softWrap = on == null ? !this.softWrap : Boolean(on);
+    this.editor.set_soft_wrap(this.softWrap);
+    this.say(this.softWrap ? "word wrap on" : "word wrap off");
+    cx?.notify();
+  }
+
   /** Vim's state when it's turned on or off. */
   vimSettled(on) {
     this.vim.mode = "normal"; this.vim.keys = []; this.vim.ex = null; this.vim.pendingLeader = null;
@@ -1287,7 +1299,13 @@ export default class EditorPane extends View {
       case "vim": return this.toggleVim(cx);
       case "keys": return this.command("keys", cx);
       case "preview": case "preview-split": case "preview-only": case "preview-text": return this.command(name, cx);
-      case "set": return this.say(`:set ${arg ?? ""}: only :novim is known`);
+      case "set": {
+        const opt = String(arg ?? "").trim();
+        if (opt === "wrap" || opt === "nowrap") return this.setWrap(opt === "wrap", cx);
+        if (opt === "wrap!" || opt === "invwrap") return this.setWrap(null, cx);
+        return this.say(`:set ${opt}: only :set wrap / nowrap / wrap! and :novim are known`);
+      }
+      case "wrap": return this.setWrap(null, cx);
       case "write": return this.say("E: :w <file> isn't supported; :w saves this file", true);
       default: return;
     }
@@ -1343,6 +1361,7 @@ export default class EditorPane extends View {
     if (c === "hover-less") return this.hoverLevel(-1, cx);
     if (c === "reload") { this.dirty = false; return this.load(cx, null, false); }
     if (c === "vim") return this.toggleVim(cx);
+    if (c === "wrap") return this.setWrap(null, cx);
     if (c === "keys") return this.toggleKeys(!this.keysShown);
     if (c === "preview") return this.setView(VIEWS[(VIEWS.indexOf(this.view) + 1) % VIEWS.length], cx);
     if (c === "preview-split") return this.setView("split", cx);
@@ -1620,6 +1639,9 @@ export default class EditorPane extends View {
       .when(this.markdown, (el) => el.child(div().id("bar-preview").flex_none().h(18).px(6).flex().items_center().border(1)
         .border_color(this.view === "text" ? t.ansi0 : t.ansi5).text_color(this.view === "text" ? t.dim : t.ansi5).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.command("preview", cx)).child(this.view)))
+      .when(!narrow || this.softWrap, (el) => el.child(div().id("bar-wrap").flex_none().h(18).px(6).flex().items_center().border(1)
+        .border_color(this.softWrap ? t.ansi4 : t.ansi0).text_color(this.softWrap ? t.ansi4 : t.dim).hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => this.setWrap(null, cx)).child("wrap")))
       .child(div().id("bar-vim").flex_none().h(18).px(6).flex().items_center().border(1).border_color(vim ? t.accent : t.ansi0)
         .text_color(vim ? t.accent : t.dim).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.toggleVim(cx)).child("vim"));
@@ -2012,7 +2034,7 @@ export default class EditorPane extends View {
 // tab in the background (reading, watching, saving, its server) take the tab.
 export const TAB_FIELDS = ["path", "firstPath", "lang", "opts", "openedAt", "deleted", "saved", "state", "error", "dirty", "conflict",
   "problems", "server", "version", "sent", "progress", "hovers", "text", "find", "searchMark", "markdown", "preview", "images",
-  "view", "driver", "previewDrove", "previewDue", "flushDue", "lastWork", "watchGen", "editor"];
+  "view", "driver", "previewDrove", "previewDue", "flushDue", "lastWork", "watchGen", "editor", "softWrap"];
 for (const f of TAB_FIELDS) {
   Object.defineProperty(EditorPane.prototype, f, {
     configurable: true,

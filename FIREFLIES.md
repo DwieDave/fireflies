@@ -1,13 +1,14 @@
 # Fireflies
 
 Fireflies is a fork of [Herdr](https://github.com/herdrdev/herdr-app) (the
-desktop app). It stays a Herdr build: same config folder (`~/.config/herdr-app`),
-same core, same mod API. On top of Herdr it adds:
+desktop app). Under the name it is still Herdr: same command (`herdr-app`), same
+config folder (`~/.config/herdr-app`), same core, same mod API. On top of Herdr
+it adds:
 
 - **Native views for mods**: a mod can host a native view in its pane (a
   WKWebView browser, Safari's Web Inspector). `nativeView`, `nativeViewCall`,
   `nextNativeViewEvent` in `defaults/herdr.d.ts`; `native/herdr-native-view`.
-- **Layout roles** for the dialogs Herdr draws: `prompt_mod`, `confirm_mod`,
+- **Layout roles** for the dialogs the app draws: `prompt_mod`, `confirm_mod`,
   `palette_mod`, `peek_mod` (and upstream's `toast`, which also reads the fork's
   older `toast_mod`), `dialog_mods` for the welcome, what's new, keys, worktree,
   add-machine and update note, plus `corners: "square"` and a `scrim`. See
@@ -15,7 +16,7 @@ same core, same mod API. On top of Herdr it adds:
 - **Panes**: `pane.split` left/up/auto and along a tab's edge, per-pane font
   zoom, floating terminals with a second view (`terminal.open {place: "float"}`).
 - **Nocturne**, the layout a first start shows: a 1-bit night meadow in the
-  moonfly palette. Its parts ship as ordinary Herdr mods in `defaults/mods`,
+  moonfly palette. Its parts ship as ordinary mods in `defaults/mods`,
   installed and updated like Herdr's own:
 
   | mod | what it is |
@@ -31,8 +32,13 @@ same core, same mod API. On top of Herdr it adds:
   `defaults/themes/moonfly.json`, and its keys in `defaults/keys.macos.json`
   (`layout:nocturne`, `mod:nocturne-browser`). The git pane needs `lazygit`
   on PATH; the files pane uses `$EDITOR` (nvim gets one instance per tab).
-  `main` and the other Herdr layouts are still there (cmd-shift-l).
-- **Branding**: Fireflies.app with its own icon (`assets/icons/fireflies`).
+  Herdr's `main` and its other layouts are still there (cmd-shift-l).
+- **Branding**: the name Fireflies in the window and the app's text, and its own
+  icon (`assets/icons/fireflies`, the README's `assets/icons/Fireflies.svg`).
+  The Nix build names the bundle Fireflies.app; the install scripts here still
+  install `Herdr.app`. The identifiers stay Herdr's (the command, the app home,
+  `HERDR_APP_*`, the mods' `herdr` module, labels): they are shared with
+  upstream and with installed setups.
 - **Mods beside the binary**: besides the built-in default mods, the app installs
   whole mod folders from `Fireflies.app/Contents/Resources/mods/` (replacing a
   built-in one of the same name). A packager can ship the mods there and change
@@ -54,7 +60,8 @@ merges stay small.
 
 ## Build
 
-`scripts/install-fork-macos` builds and installs it (Rust 1.95, Zig 0.16).
+`scripts/install-fork-macos` builds and installs it as `/Applications/Herdr.app`
+(Rust 1.95, Zig 0.16); `just install` puts it in `~/Applications/Herdr.app`.
 With Nix, build it from source with crane, as `modules/herdr-app.nix` in
 [dwiedave/config](https://github.com/dwiedave/config) does.
 

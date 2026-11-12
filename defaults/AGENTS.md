@@ -159,6 +159,9 @@ Worktrees, 3 Local branches / Remotes / Tags, 4 Commits (with the lane
 graph) / Reflog, 5 Stash, the main view, the command log, the options bar.
 Its keys are lazygit's defaults (`?` lists them in the window; `+` / `_`
 widen the focused panel: half gives Commits a wide graph column, then full).
+History comes in pages, as in lazygit: Commits (and a branch's commits)
+read 300 at a time, the branch log in the main view 200; when the end of a
+cut history comes into view the next page is read below it.
 Review (`nocturne.diff`, the git button's ▾ > Diff) is what nocturne-diff was:
 uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 (space, `a`) and hidden tests / config / assets / docs (ctrl-b). Open it in a
@@ -335,7 +338,10 @@ the highlighted line shows where it will land.
   a review that submits all of them, cmd-enter from anywhere). Answers go
   into the agent's terminal as keys, the way a person answers there, and the
   screen is read again before every key: a request that changed or went away
-  is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
+  is refused ("Not sent"), never answered blindly; each key waits for the
+  dialog itself to change (not the rest of a busy screen), and when a step
+  doesn't take (the note line didn't open, the note didn't arrive) it says
+  so in place of the answer. Herdr's "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
   x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
@@ -371,14 +377,34 @@ the highlighted line shows where it will land.
   keyboard (whenever its pane is focused: a click on the bar, `pane.go`, a tab
   switch, agent.next, Cmd-Esc in the page): Enter / `i` into the page, `o` / `/` the address, `H` `L`
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
-  inspector, `O` the system's browser, Tab / Shift-Tab its buttons (Enter
-  presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
+  inspector, `O` the system's browser, `t` a new tab, `x` close the tab, `J` / `K`
+  the tab left / right, `1`–`9` a tab (9 the last), Tab / Shift-Tab its buttons
+  and tabs (Enter presses), `?` the keys. Its keys.json section (`mod:nocturne-browser`:
   Cmd-P / Cmd-L the address, Cmd-R reload, Cmd-[ / Cmd-] back / forward,
   Cmd-Alt-I the inspector) applies in the bar, the address field, the page
   (after a click into it, or Enter from the bar) and its inspector pane, over
   Nocturne's and the global keys (Cmd-P is not the picker there, Cmd-[ / Cmd-]
   not agents), and only in the focused web pane. Enter in the address goes
   and puts the keyboard into the page; Esc leaves the address the same way.
+  **Web tabs**: one web pane holds several pages, each alive (its video, scroll
+  and forms survive a switch); from two on, a strip over the bar shows them
+  (number, title, ×, and + for a blank one). A middle click or Cmd-click on a
+  link, and the link menu's "Open Link in New Tab", open it in a tab behind
+  (Shift: in front); `target=_blank` and `window.open` open one in front, after
+  the page's earlier links. A click shows a tab, × or a middle click closes it;
+  closing the last leaves a blank tab (the pane stays). The bar, the address,
+  zoom, picture in picture and the inspector act on the shown tab; the tabs come
+  back after a restart (the others load when first shown). Commands
+  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev` (the
+  palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
+  `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
+  `slot` matches (none: the one other commands reach) opens the page in a new
+  tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
+  that file, its folder readable (css, scripts, images beside it) and its scripts on;
+  typed in the address it does the same. A mod finds a web pane and its
+  slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`). Each web pane with a slot
+  publishes its shown tab's title (else its host) in shared `nocturne-browser.titles`
+  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name.
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
@@ -516,8 +542,10 @@ the highlighted line shows where it will land.
   to line (`42`, `42:7`), cmd-k n / cmd-k p next / previous problem, cmd-k m
   the problems drawer, cmd-k d definition (another file opens as a tab),
   cmd-i the hover card at the caret (again: closes it), ctrl-= / ctrl-- the type a level
-  deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-shift-v the
-  Markdown preview (below). The app's keys win over the code editor's own
+  deeper / shallower, cmd-r reload, cmd-k v vim on / off, cmd-k z word wrap
+  on / off (vim: space u w, `:set wrap` / `nowrap` / `wrap!`; the bar's `wrap`
+  chip, lit while on; the shown tab only, settings.json's `soft_wrap` is where it
+  starts), cmd-shift-v the Markdown preview (below). The app's keys win over the code editor's own
   keymap: a chord keys.json binds in `global` or `layout:nocturne` and not in
   `mod:nocturne-editor` runs the app's command with an editor focused (in
   every vim mode, card open or not) and the editor does nothing with it:
@@ -540,13 +568,13 @@ the highlighted line shows where it will land.
   app's copy); `.`; macros q / @ / @@; marks m / ` / '; search / ? n N * #;
   undo u and redo ctrl-r; the ex line drawn under the bar: `:w` `:q` `:q!`
   `:wq` `:x` `:e` `:e!` `:e <file>` `:<line>` `:s/a/b/g` `:%s/(\w+)/[\1]/g`
-  (JS regex; `&`, `\1`), `:'<,'>d`, `:d` `:y` `:j`, `:noh`, `:novim`. Typing in
+  (JS regex; `&`, `\1`), `:'<,'>d`, `:d` `:y` `:j`, `:noh`, `:novim`, `:set wrap` / `nowrap`. Typing in
   insert mode stays the editor's (IME, auto-pairs, indentation): vim reads what
   was typed back from the text for `.` and macros. gd definition, gr
   references, K hover, ]d / [d next / previous problem. The **leader** (space;
   settings.json `editor.leader`) opens a which-key popup of the keys after it:
   `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
-  `h` hover, `cf` format, `?` the keys, `gd` definition, `gr` references (`ca` code action and
+  `h` hover, `cf` format, `uw` word wrap, `?` the keys, `gd` definition, `gr` references (`ca` code action and
   `rn` rename are listed, not done yet), `mp` the Markdown preview's next
   view, `ms` / `mv` / `mt` split / preview only / text only. cmd combinations
   stay the app's in every mode.
@@ -641,7 +669,7 @@ the highlighted line shows where it will land.
   machine open without a language server. Commands for the shown editors:
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
-  `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
+  `.hover-less`, `.reload`, `.vim`, `.wrap` (word wrap on / off), `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`, `.next-tab`, `.prev-tab`,
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
@@ -671,16 +699,23 @@ the highlighted line shows where it will land.
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
-  switches under the toolbar) hide or show dotfiles and git-ignored files
-  (`git ls-files --ignored`), each pane keeping its choice (shared
-  `nocturne-files.filters` by slot; new panes take settings.json `files`).
-  Right-click a row or press `m` for its menu: open, edit, $EDITOR, Open in
+  switches under the toolbar; tab / shift-tab ring them, `+ file`, `+ folder`
+  and `? keys` in turn, enter or space presses, esc leaves) hide or show dotfiles and git-ignored files
+  (`git ls-files --ignored`; both hidden by default), each pane keeping its
+  choice (shared `nocturne-files.filters` by slot, written only once you
+  switch one; new panes take settings.json `files`).
+  Right-click a row or press `m` for its menu: open, Open in a web pane (an
+  `.html` / `.htm` file, also `w`: its `file://` URL as a new front tab in the
+  shown tab's web pane, else a new web pane beside; not for another machine's
+  files; enter still opens it as before), edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
   (`y`), the file operations below, close; on the empty space below the rows:
   new file / folder and paste in the root. File operations, one row at a time:
-  `a` new file, `A` new folder (a name row in the selected folder or beside the
-  selected file; slashes make the folders on the way, a trailing `/` makes a
+  `a` new file, `A` new folder (also the filter line's `+ file` / `+ folder`
+  chips, `+ folder` only where it fits, and an empty folder's `+ new file`: a
+  name row in the selected folder or beside the selected file, the root with
+  nothing selected; slashes make the folders on the way, a trailing `/` makes a
   folder, a new file opens as enter would), `R` rename (the stem selected; a
   path in the name, `../x` or `docs/`, moves it), `x` cut and `P` paste into the
   selected folder (shared `nocturne-files.cut`: any files pane on that machine),
@@ -1097,10 +1132,34 @@ right-click its menu, double-click renames it. Pinned agents
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
 a sheen down its glass, never shorter than a jar with room under one firefly;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
-made elsewhere gets one when the sky sees it), keeping their status. Pin or
-unpin from a firefly's or an agent pane's right-click menu (open sky and
-rail), the palette or cmd-alt-p (`nocturne.pin`: the focused pane's agent);
-`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move it in the jar. Toasts by key:
+made elsewhere gets one when the sky sees it), keeping their status. Any other
+pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
+sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
+foot (on the rail 18 px tiles two abreast), in the order pinned, its own order
+apart from the fireflies'. A tile is moonlit while its pane is on screen, the
+focused one wears the corner ticks; the caption line under the shelf names
+the tile under the pointer or the keyboard's cursor (else the focused one):
+its name, then its kind, its space when it's another one, "parked". A click
+or enter goes to it in whatever tab and space (a parked pane comes back);
+right-click opens its pane's menu. A shell's pin is its terminal's
+(`terminal.pin`, ends with it); a mod pane's is kept in shared
+`nocturne.pinned-panes` (`[{pane, mod, props, at}]`), found again by its mod
+and props if a restart gives the pane a new id, and gone once the pane has
+been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
+its page's title when nocturne-browser notes it in shared
+`nocturne-browser.titles` (by slot), else the host it opened on. Pin or unpin
+from a firefly's or any pane's right-click menu (open sky and rail), the
+palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
+`nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
+firefly up or down in the jar, a tile left or right on the shelf. The dock
+(dock.js) is a space tied to no folder for panes that belong to no project:
+made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
+`nocturne.dock-space`), never a repo for the git and GitHub windows, with no
+folder, worktree or delete in its menu or keys (`space.close` still closes it;
+the next use makes a new one). "Move to the dock" (any pane's menu, the
+palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
+it to the shelf; "New web pane in the dock" (the palette, the shelf's last
+"+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
@@ -1488,12 +1547,27 @@ The main ones:
   page in place without reloading it.
   Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
   instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
+  That holds for a native view inside an overlay too (the picture-in-picture player's
+  window): every overlay painted after its own one cuts it and dims it (windows first, in
+  the order raised, then dialogs, popups and toasts, each in the order opened), never its
+  own overlay nor those under it; floating blocks cut the panes below them. `native.debug`'s
+  `layers` shows, per mod copy, its layer (`z`, `float`), its holes and its dim.
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
-  A web view sends `web.location` (its state: `href`, `canGoBack`, …) whenever its address or
-  history changes, also within a page (links in single-page apps, pushState, #fragments), so an
-  address bar can follow it; `load.*` alone misses those.
+  A web view sends `web.location` (its state: `href`, `title`, `canGoBack`, …) whenever its
+  address, history or title changes, also within a page (links in single-page apps, pushState,
+  #fragments), so an address bar can follow it; `load.*` alone misses those.
+  `load.error` carries `message`, `domain`, `code` and `failingUrl` (the address that failed;
+  the view may still show the page before it). Not every one is a failure: NSURLErrorDomain
+  -999 is a load cut short by the next one (a redirect, a click while loading), WebKitErrorDomain
+  102 a download or a cancelled policy; Nocturne's browser shows neither and words the rest
+  ("You're offline.", "a.example doesn't answer."), with retry (`r`) going to `failingUrl`.
+  A web view created with `tabs: true` is for a mod that keeps tabs: what would open a window
+  (`target=_blank`, `window.open`, the link menu's "… in New Window" items, which then read
+  "… in New Tab"), a middle click and a Cmd click on a link are not loaded but sent as
+  `web.newTab { url, background, from }` (`from`: `"window"` in front, `"click"` behind unless
+  Shift is held, `"menu"` behind), for the mod to open. Without it a new window loads in place.
   Picture in picture (no macOS Picture in Picture): a web view
   created with `pip: true` can hand its page's video to a player. Its `web.pip` action marks the
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
@@ -1688,7 +1762,8 @@ list or a machine's rename first.
   language id (`languageOf(path)`: `rust`, `typescript`, `tsx`, `javascript`,
   `python`, `go`, `nix`, `lua`, `bash`, `json`, `yaml`, `toml`, `markdown`,
   `css`, `html`, `c`, `zig`, `csv`, `text`). Each takes `tab_size` (1–16),
-  `insert_spaces`, `soft_wrap`, `format` (an argv that reads the file on stdin
+  `insert_spaces`, `soft_wrap` (where an editor's wrap starts: off, on for
+  `markdown` and `text`; cmd-k z switches it in one editor tab), `format` (an argv that reads the file on stdin
   and prints it formatted), `format_on_save` (off unless set), `server` (the
   language server's argv, or `false` for none) and `server_settings` (what the
   server gets as `workspace/configuration` and `initializationOptions`).
@@ -1706,9 +1781,9 @@ list or a machine's rename first.
                      "go": { "server": false }, "markdown": { "soft_wrap": true } } } }
   ```
 - `files`: what a new files pane lists (Nocturne's `nocturne-files`, see Files
-  panes): `{ "hidden": false }` leaves dotfiles out, `{ "ignored": false }`
-  files git ignores; both are listed when unset. A pane's `H` / `I` switch
-  overrides it for that pane.
+  panes): `{ "hidden": true }` lists dotfiles, `{ "ignored": true }` files
+  git ignores; both are left out when unset (the eye switches count what is
+  left out). A pane's `H` / `I` switch overrides it for that pane.
 - `pane_scrollbars`: `false` hides the scroll position thumb at a terminal
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and
@@ -2002,6 +2077,14 @@ All of it is in `herdr.d.ts`. In short:
   layout switch closes windows; kept ones come back with their layout.
   `scrim: true` (this fork) draws the layout's dialog dim (its `"scrim"`) behind the
   window; a click on it closes the window, like a dialog's (the mod's `close()` runs).
+  Such a window is modal while it shows, like a dialog: it takes the keyboard when it
+  opens and no key reaches a pane or the layout behind it, whatever happens there (a
+  tab switch, an agent finishing, a pane closing, a mod or web page behind focusing
+  itself); cmd-w / cmd-shift-w close it, not the tab or pane behind. When the
+  element holding the keyboard inside it goes away (a row or input no longer drawn),
+  or a dialog or popup over it closes, the keyboard goes back to the window and its
+  mod gets `focus`. A window without a scrim (the PiP player) only takes the keyboard
+  when asked and may give it back to the pane.
   A popup may ask for it too, when it's modal rather than hanging from a button
   (the command palette does in a layout with a `"scrim"`). Dialogs always have
   it: the floating terminal, centered menus, the scripts deck opened by key, the
@@ -2014,7 +2097,10 @@ All of it is in `herdr.d.ts`. In short:
   height at its width now (a player learning its video's real shape).
   By keyboard: `overlay.focus` gives the next window the keyboard and brings it to the
   front (`dir: "prev"` the one before, in the order they opened; past the last, or
-  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). A mod gets
+  `dir: "none"`, the keyboard goes back to the pane; `id` a given one). While a window
+  with a scrim shows there is no pane to go back to: the cycle goes round the windows
+  and `dir: "none"` is refused. A dialog or popup opened over a window gives the
+  keyboard back to that window when it closes. A mod gets
   `focus` from `nextCommand()`: take the keyboard then (`handle.focus()`), and show it.
   `overlay.move {dx, dy}` moves the window holding the keyboard (else the top one) and
   `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag. A video player:

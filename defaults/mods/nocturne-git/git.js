@@ -15,7 +15,8 @@ const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.a
 const DIFF = ["--no-ext-diff", "--no-textconv", "--no-color", "-M", "--src-prefix=a/", "--dst-prefix=b/"];
 // Never wait for a password or an editor: a prompt would hang the call.
 const QUIET = ["GIT_TERMINAL_PROMPT=0", "GIT_EDITOR=true", "GIT_MERGE_AUTOEDIT=no", "GCM_INTERACTIVE=never", "GIT_SSH_COMMAND=ssh -o BatchMode=yes"];
-export const LOG_LIMIT = 300;
+export const LOG_LIMIT = 300; // commits a list reads at a time (more as its end comes into view)
+export const LOG_FULL_LIMIT = 200; // the branch log's, with whole messages
 const UNTRACKED_MAX = 40;
 
 /** Quotes an argument for the command log (and a pasted shell). */
@@ -102,7 +103,7 @@ export class Git {
   }
 
   /** A ref's history with whole messages, for the branch log in the main view. */
-  async logFull(ref, limit = 200) {
+  async logFull(ref, limit = LOG_FULL_LIMIT) {
     const r = await this.read(["log", ref, "--topo-order", "--decorate=full", `-${limit}`, `--format=${LOG_FULL_FORMAT}`, "--"]);
     return r.code === 0 ? parseLogFull(r.stdout) : [];
   }

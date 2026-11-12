@@ -97,7 +97,7 @@ const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const { default: Deck } = await import("../defaults/mods/nocturne-scripts/main.js");
 const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
-const { default: Overview } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const { default: Overview, EMPTY_H } = await import("../defaults/mods/nocturne-notifications/overview.js");
 const notif = await import("../defaults/mods/nocturne-notifications/open.js");
 
 // Each view's own close hook, as the app runs it once its overlay is gone.
@@ -360,7 +360,7 @@ test("a note of an open center left by a restart doesn't swallow a press", () =>
   expect(shown()).toHaveLength(1);
 });
 
-test("the center with a request is the popup's most; with nothing waiting, as tall as its note (as it measures)", () => {
+test("the center with a request is the popup's most; with nothing waiting, EMPTY_H or its note, up to the most", () => {
   const o: any = Object.create(Overview.prototype);
   o.sizes = {};
   propsNow = { overlay: "o1", most: 500 };
@@ -374,11 +374,16 @@ test("the center with a request is the popup's most; with nothing waiting, as ta
   expect(o.height(it)).toBe(500);
   o.measure("detail")({ height: 2000 }, cx1);
   expect(o.height(it)).toBe(500);
-  // Nothing waits: the most until the note measures, then the note and the key bar.
+  // Nothing waits: the most until the note measures, then EMPTY_H (a short
+  // note), the note and the key bar (a tall one), never more than the most.
   o.sizes = { list: 70 };
   expect(o.height(null)).toBe(500);
   o.measure("empty")({ height: 200 * 0.9 }, cx1);
-  expect(o.height(null)).toBe(200 + 30);
+  expect(o.height(null)).toBe(Math.min(500, EMPTY_H));
+  propsNow = { overlay: "o1", most: 900 };
+  expect(o.height(null)).toBe(EMPTY_H);
+  o.measure("empty")({ height: 700 * 0.9 }, cx1);
+  expect(o.height(null)).toBe(700 + 30);
 });
 
 // ---- the center's key bar: under both columns, ? keys last, whatever fits

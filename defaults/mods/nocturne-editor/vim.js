@@ -39,6 +39,7 @@ export const LEADER = {
   r: { name: "refactor", n: ["rename", "rename"] },
   g: { name: "go", d: ["definition", "definition"], r: ["references", "references"] },
   "?": ["keys", "keys"],
+  u: { name: "toggle", w: ["wrap", "word wrap"] },
   m: { name: "markdown", p: ["preview", "preview: split / only / text"], s: ["preview-split", "preview beside"], v: ["preview-only", "preview only"], t: ["preview-text", "text only"] },
 };
 
