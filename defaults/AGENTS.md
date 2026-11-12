@@ -575,8 +575,9 @@ the highlighted line shows where it will land.
   settings.json `editor.leader`) opens a which-key popup of the keys after it:
   `ff` files, `fg` grep, `e` the files pane, `w` save, `q` close, `d` problems,
   `h` hover, `cf` format, `uw` word wrap, `?` the keys, `gd` definition, `gr` references (`ca` code action and
-  `rn` rename are listed, not done yet), `mp` the Markdown preview's next
-  view, `ms` / `mv` / `mt` split / preview only / text only. cmd combinations
+  `rn` rename are listed, not done yet), `mp` the Markdown view's next
+  one, `mr` / `ms` / `mv` / `mt` rendered / split / preview only / text only,
+  `.` and a letter the Markdown commands (as cmd-. below). cmd combinations
   stay the app's in every mode.
   **Markdown files** get a live preview beside the text (under it in a pane
   narrower than 760 px), redrawn as you type with the Markdown viewer's
@@ -585,9 +586,32 @@ the highlighted line shows where it will land.
   follows it; ticking a task box puts `[x]` into the text (undoable); links go
   where they point: a heading in it (the text too), another `.md` as a tab,
   pictures and the like in the preview, web pages per `links`.
-  The bar's chip (split / preview / text), cmd-shift-v and space `m p` go
-  split → preview only → text only; the tab keeps its choice and new Markdown
-  tabs start with the last one picked. The Markdown viewer's edit (its chip,
+  The bar's chip (rendered / split / preview / text), cmd-shift-v and space `m p` go
+  rendered → split → preview only → text only; the tab keeps its choice and new Markdown
+  tabs start with the last one picked.
+  **Rendered** is the document drawn as in the preview and typed into: the
+  block the caret is in (a heading, a paragraph, one list item or task, a
+  quote, a code block, a table) shows as its own Markdown, in place, on a
+  dithered ground with the accent rail and its kind at the corner; every
+  other block stays drawn. Up / down past a block's first or last row step
+  into the next block (blank lines between are passed over); a click on a
+  drawn block puts the caret in it; enter on a list item, task or quote starts
+  the next one (on an empty one it ends the list); a task box ticks with a
+  click. The file's own editor holds the whole text, so saving, undo (cmd-z,
+  vim's u), the unsaved mark and the language server are the text view's, and
+  lines that aren't edited stay byte for byte. Vim works over the whole text:
+  j / k walk out of a block and the block follows. What it can't do: a block
+  being typed into is code-font source (a heading isn't heading-size then), a
+  click lands on a block's first line, not the character clicked; find and
+  replace work in the text view.
+  **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
+  space .) opens their list at the caret, lit for what's on there, and a
+  letter runs one: b bold, i italic, \` inline code, k link, h / H heading level
+  up / down, 0-6 text or that heading level, l bullet list, n numbered list,
+  t task box, x tick, q quote, c code block, r rule. Running one where it's
+  on takes it off again; with a caret in the rendered view, list, task,
+  tick, quote and code block take the caret's whole block. The palette lists
+  each ("Markdown: bold" ...). The Markdown viewer's edit (its chip,
   `e`) closes the viewer and opens the file in the editor with the preview
   split on, in the viewer's place (as a tab when the tab has an editor); the
   files pane's edit of a Markdown file opens it with the preview on too. In preview
@@ -670,9 +694,27 @@ the highlighted line shows where it will land.
   `nocturne-editor.save`, `.find`, `.replace`, `.line`, `.next-problem`,
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.wrap` (word wrap on / off), `.preview` (split → preview → text),
-  `.preview-split`, `.preview-only`, `.preview-text`, `.next-tab`, `.prev-tab`,
+  `.preview-split`, `.preview-only`, `.preview-text`, `.preview-rendered`, `.md-menu` (the
+  Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
+  `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
+  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
+- **The scratchpad** (`nocturne.scratchpad`: the palette's "Scratchpad", the
+  "+ new" menu's row): a Markdown note that belongs to the shown space's
+  repository but isn't in it, opened rendered in an editor pane of its own
+  beside the focused pane. One note per repository, found by git's common dir
+  (`git rev-parse --git-common-dir`), so every worktree of a repository opens
+  the same note; a folder outside git gets its own. It lives at
+  `~/.config/herdr-app/scratchpad/<repo>-<hash>.md` (the app's folder;
+  `scratchpad/index.json` maps each file to its repository: `{ name, dir,
+  repo, machine? }`). It saves itself: 600 ms after the last key, and at once
+  when its pane or tab closes; it never shows unsaved or asks on close, and
+  the bar says saving… / saved (not saved, red, when a write failed). The
+  pane's tab reads "scratchpad" and its repository; other files (a picker's,
+  a link's) open in an editor beside it, never as its tabs. Agents may read
+  and write the note like any file (`writeTextFile` semantics: an open pane
+  reloads it).
 - **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
   button toggles the panel down the tab's right edge at the focused pane's
   folder ("+ new" > Files opens a files pane of its own instead, beside the

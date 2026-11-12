@@ -67,6 +67,15 @@ shows unedited; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.
 
+Each repository has a scratchpad: the person's Markdown note for it, kept out
+of the repository at `~/.config/herdr-app/scratchpad/<repo>-<hash>.md`
+(`$HERDR_APP_HOME/scratchpad/` when set), one per repository and shared by its
+worktrees; `scratchpad/index.json` names the repository of each file
+(`{ "<file>": { "name", "dir": "<git common dir>", "repo" } }`). Read it for
+what they noted about the work; write to it only when they ask (an open
+scratchpad pane reloads it). `herdr-app do nocturne.scratchpad` opens the
+shown space's note beside the focused pane.
+
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
 there beside the focused pane (`--in tab` for a tab of its own). Cmd/Ctrl-click

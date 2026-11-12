@@ -550,7 +550,8 @@ export default class EditorPane extends View {
       if (d.gone) return;
       if (quiet) {
         if (text == null || text === d.saved) return;
-        if (d.dirty) { if (text !== d.editor.value()) d.conflict = true; cx.notify(); return; }
+        // Edited (a scratchpad: typed but not written yet): it asks, never drops what's typed.
+        if (d.dirty || (d.scratch && d.saveState !== "saved")) { if (text !== d.editor.value()) d.conflict = true; cx.notify(); return; }
         const at = d.editor.cursor();
         d.saved = text;
         d.editor.set_value(text);
@@ -2002,7 +2003,9 @@ export default class EditorPane extends View {
   keepMine(cx) {
     cx.spawn(async (cx) => {
       try { this.saved = await readTextFile(this.path, { on: this.on }); } catch { /* saved stays */ }
-      this.say("yours is kept: cmd-s writes it over theirs");
+      // A scratchpad writes yours over theirs by itself.
+      if (this.scratch) { this.timerCx = cx; this.autosave.touch(); this.say("yours is kept: written in a moment"); }
+      else this.say("yours is kept: cmd-s writes it over theirs");
       cx.notify();
     });
   }
