@@ -57,3 +57,44 @@ export const SPACES = [
   { id: "s1", name: "fireflies", folder: "/w", machine: null, tabs: [{ id: "tA", index: 1, name: "claude" }, { id: "tB", index: 2, name: "api" }] },
   { id: "s2", name: "homelab", folder: "/srv", machine: "box", tabs: [{ id: "tC", index: 1, name: "x" }] },
 ];
+
+// The system probe (nocturne-procs/sys.js SYS_PROBE) on a Mac, trimmed, addresses scrubbed.
+const S = "@@nocturne-sys@@";
+export const SYS = `10
+34359738368
+16384
+1
+${S}
+Mach Virtual Memory Statistics: (page size of 16384 bytes)
+Pages free:                                    12958.
+Pages active:                                 660263.
+Pages inactive:                               650508.
+Pages wired down:                             271923.
+Pages purgeable:                                4455.
+"Translation faults":                     3231391271.
+Anonymous pages:                             1000893.
+Pages stored in compressor:                   971757.
+Pages occupied by compressor:                 459103.
+${S}
+Name       Mtu   Network       Address            Ipkts Ierrs     Ibytes    Opkts Oerrs     Obytes  Coll
+lo0        16384 <Link#1>                       1571308     0  184554271  1571308     0  184554271     0
+lo0        16384 127           localhost        1571308     -  184554271  1571308     -  184554271     -
+gif0*      1280  <Link#2>                             0     0          0        0     0          0     0
+utun0      1380  <Link#20>                            0     0          0        3     0        260     0
+en1        1500  <Link#16>   02:00:00:00:00:00 12106332     0 12944968792  1576563     0  232230661     0
+en1        1500  10/24         10.0.0.16       12106332     - 12944968792  1576563     -  232230661     -
+en12       1500  <Link#11>   02:00:00:00:00:00  4580550     0 5424149797   732778     0  363662454     0
+${S}
+Filesystem     1024-blocks      Used Available Capacity iused     ifree %iused  Mounted on
+/dev/disk3s1s1   482797652  13338384  53264692    21%  484019 532646920    0%   /
+${S}
+"Device Utilization %"=53
+${S}
+              disk0               disk6               disk8       cpu    load average
+    KB/t  tps  MB/s     KB/t  tps  MB/s     KB/t  tps  MB/s  us sy id   1m   5m   15m
+   22.98  219  4.92    37.04  284 10.28    25.68    3  0.07  13  5 82  104.18 138.27 138.06
+   13.16 1001 12.86    33.68  481 15.80     0.00    0  0.00  62 18 20  104.18 138.27 138.06
+`;
+
+// The same probe on a machine with none of these tools (Linux without them): sysctl alone fails too.
+export const SYS_NONE = `${S}\n${S}\n${S}\n${S}\n${S}\n`;

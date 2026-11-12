@@ -106,6 +106,8 @@ test:
     bun test scripts/nocturne-procs.test.ts
     # Its deck and the strip's tree mark: every key, the cursor across refreshes, ask / TERM / KILL against a fake exec.
     bun test scripts/nocturne-procs-deck.test.ts
+    # Its system graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
+    bun test scripts/nocturne-procs-sys.test.ts
     # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
     bun test scripts/nocturne-usage-limits.test.ts
     cargo test --locked

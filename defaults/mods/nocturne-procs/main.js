@@ -16,7 +16,14 @@
 //   ports      the TCP ports his processes listen on, those in this app's
 //              terminals first: port, process, where it runs; on the cursor's
 //              row open ↗ (a web pane), copy (http://localhost:<port>), end
+//   system     live graphs, dithered, the last minute and a half (a reading
+//              every 2 s while the deck is open, none while it's closed):
+//              CPU, GPU, memory, disk and network, each with its value now
+//              (sys.js has the sources); a source this machine lacks says so
 //   foot       what the cursor is on and its keys
+//
+// The selected process's detail block carries its own CPU and memory over
+// the readings since the deck opened, as two small graphs.
 //
 // Ending asks first, in the deck: a red band under the row names what ends
 // (and what's under it, for X). enter sends TERM; two seconds on, the ones
@@ -32,7 +39,7 @@
 //   h ← fold, or up to the parent · l → unfold, or into the first child
 //   space fold or unfold · enter: a group folds, a process or terminal shows
 //   its terminal's pane, a port opens
-//   tab 1 2 processes / ports · a this app's terminals / all of yours
+//   tab 1 2 3 processes / ports / system · a this app's terminals / all of yours
 //   x end · X end it and everything under it · K kill -9 what held on
 //   o open the port in a web pane · c copy the address (a process: its
 //   command line) · r read again now · / find (esc clears, again: back)
@@ -44,6 +51,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, focused, home, nextCommand, notify, panes, props, run, settings, shared, setShared, spaces, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, index, buildTree, flatten, place, targets, guardOf, endGently, signal, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count } from "./logic.js";
+import { SYS_PROBE, KEEP, STEP, parseSys, measure, push, rate, size, scale } from "./sys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const ART = "mods/nocturne/art";
@@ -58,6 +66,9 @@ export const GRACE = 2000;
 const W = 480, H = 560;
 const HEAD = 36, COLS = 18, ROW = 24, PROW = 30, FOOT = 26, IND = 14, DETAIL = 66, CONFIRM = 76;
 const LIST_H = H - 2 - HEAD - COLS - FOOT;
+// The system tab: five graphs, KEEP bars each, the newest at the right.
+const GRAPH_W = W - 2 - 24, GRAPH_H = 48, SLOT = Math.floor(GRAPH_W / KEEP), BAR = SLOT - 2;
+const SPARK = 30;
 const PORTS_H = H - 2 - HEAD - FOOT;
 
 // The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
@@ -79,7 +90,7 @@ export const deckKeys = () => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"],
   ["h ←", "fold, or up to the parent"], ["l →", "unfold, or into the first child"], ["space", "fold or unfold"],
   ["enter", "a group: fold · a process: show its terminal · a port: open it"],
-  ["tab 1 2", "processes / ports"], ["a", "this app's terminals / all of yours"],
+  ["tab 1 2 3", "processes / ports / system"], ["a", "this app's terminals / all of yours"],
   ["x", "end it (TERM, asks first)"], ["X", "end it and everything under it"], ["K", "kill -9 what held on"],
   ["o", "open the port in a web pane"], ["c", "copy the address · a process: its command line"],
   ["r", "read again now"], ["/", "find (esc clears, again: back)"], ["q esc", "close"], ["?", "keys"],
@@ -88,14 +99,18 @@ export const deckKeys = () => [
 export default class ProcsDeck extends View {
   init(_p, cx) {
     const p = props() ?? {};
-    this.tab = p.tab === "ports" ? "ports" : "procs";
+    this.tab = ["ports", "system"].includes(p.tab) ? p.tab : "procs";
+    // The system graphs' histories (sys.js), the last reading's values, and each process's own.
+    this.sys = { cpu: [], gpu: [], mem: [], disk: [], rx: [], tx: [] };
+    this.now = null;
+    this.hist = new Map(); // pid -> { cpu: [], rss: [] }
     this.all = false;
     this.snap = null; // { me, procs, ports }
     this.failed = null;
     this.folds = {};
     this.query = "";
     this.typing = false;
-    this.cur = { procs: { key: null, at: 0 }, ports: { key: null, at: 0 } };
+    this.cur = { procs: { key: null, at: 0 }, ports: { key: null, at: 0 }, system: { key: null, at: 0 } };
     this.scroll = { procs: 0, ports: 0 };
     this.ask = null; // { pids, key, tree, phase: ask | ending | held, left, name, tab }
     this.note = null; // { text, tone, until }
@@ -119,7 +134,9 @@ export default class ProcsDeck extends View {
     }
     this.beat();
     this.refresh(cx);
+    this.sample(cx);
     cx.timer.every(REFRESH, (cx) => { this.beat(); this.refresh(cx); });
+    cx.timer.every(STEP, (cx) => this.sample(cx));
   }
 
   /** The strip learns the deck is open (and which tab); a tab the strip asked for (nocturne.ports) is taken. */
@@ -140,12 +157,46 @@ export default class ProcsDeck extends View {
         const r = await exec("sh", ["-c", PROBE], { timeout: 10000 });
         this.snap = parseProbe(r?.stdout ?? "");
         this.ix = index(this.snap.procs);
+        this.track(this.snap.procs);
         this.failed = this.snap.procs.length ? null : (r?.stderr || "ps printed nothing").trim();
         setShared(COUNT, { at: Date.now(), n: this.portList().filter((x) => x.term).length });
       } catch (e) {
         this.failed = String(e?.message ?? e);
       }
       this.reading = false;
+      cx.notify();
+    });
+  }
+
+  /** Each process's cpu and memory, a reading a refresh (the gone ones forgotten). */
+  track(procs) {
+    const next = new Map();
+    for (const p of procs) {
+      const h = this.hist.get(p.pid);
+      next.set(p.pid, { cpu: push(h?.cpu, p.cpu, 30), rss: push(h?.rss, p.rss, 30) });
+    }
+    this.hist = next;
+  }
+
+  /** One system reading (sys.js SYS_PROBE, about a second: iostat measures one). */
+  sample(cx) {
+    if (this.sampling) return;
+    this.sampling = true;
+    cx.spawn(async (cx) => {
+      try {
+        const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 10000 });
+        const reading = parseSys(r?.stdout ?? "");
+        const m = measure(reading, this.sysReading);
+        this.sysReading = reading;
+        this.now = m;
+        const s = this.sys;
+        s.cpu = push(s.cpu, m.cpu?.pct ?? null);
+        s.gpu = push(s.gpu, m.gpu?.pct ?? null);
+        s.mem = push(s.mem, m.mem?.pct ?? null);
+        s.disk = push(s.disk, m.disk?.mbps ?? null);
+        if (m.netSeen) { s.rx = push(s.rx, m.net?.rx ?? null); s.tx = push(s.tx, m.net?.tx ?? null); }
+      } catch { /* the graphs keep what they had */ }
+      this.sampling = false;
       cx.notify();
     });
   }
@@ -190,7 +241,7 @@ export default class ProcsDeck extends View {
       .sort((a, b) => Number(Boolean(b.term)) - Number(Boolean(a.term)) || a.port - b.port);
   }
 
-  list() { return this.tab === "ports" ? this.portList() : this.rows(); }
+  list() { return this.tab === "ports" ? this.portList() : this.tab === "system" ? [] : this.rows(); }
 
   /** The cursor's index in `items`, kept on its key. */
   at(items) {
@@ -292,7 +343,8 @@ export default class ProcsDeck extends View {
   }
 
   switchTab(to) {
-    this.tab = to ?? (this.tab === "procs" ? "ports" : "procs");
+    const order = ["procs", "ports", "system"];
+    this.tab = to ?? order[(order.indexOf(this.tab) + 1) % order.length];
     this.ask = null;
     this.beat();
   }
@@ -331,6 +383,7 @@ export default class ProcsDeck extends View {
     const page = Math.max(1, Math.floor((this.tab === "ports" ? PORTS_H / PROW : LIST_H / ROW)) - 1);
     if (k === "down" || k === "up") return this.moveTo(items, i + (k === "down" ? 1 : -1)), done();
     if (k === "pagedown" || k === "pageup") return this.moveTo(items, i + (k === "pagedown" ? page : -page)), done();
+    if (k === "tab" && m.shift) return this.switchTab(["procs", "ports", "system"][(["procs", "ports", "system"].indexOf(this.tab) + 2) % 3]), done();
     if (k === "tab") return this.switchTab(), done();
     if (this.typing) {
       if (k === "backspace") { this.query = [...this.query].slice(0, -1).join(""); return done(); }
@@ -353,6 +406,7 @@ export default class ProcsDeck extends View {
     }
     else if (k === "1") this.switchTab("procs");
     else if (k === "2") this.switchTab("ports");
+    else if (k === "3") this.switchTab("system");
     else if (k === "a") { this.all = !this.all; this.cur.procs = { key: this.cur.procs.key, at: 0 }; }
     else if (k === "x") this.begin(item, Boolean(m.shift));
     else if (k === "o" && this.tab === "ports") return cx.stop_propagation(), this.open(item);
@@ -456,7 +510,9 @@ export default class ProcsDeck extends View {
         .child(meta("pid", String(p.pid)))
         .when(Boolean(up), (el) => el.child(meta("parent", `${up.name} ${up.pid}`)))
         .child(meta("cpu", `${p.cpu.toFixed(1)}%`, p.cpu >= 20 ? t.working : null))
+        .child(this.spark(t, "sp-cpu", this.hist.get(pid)?.cpu, t.working, 100))
         .child(meta("mem", memory(p.rss)))
+        .child(this.spark(t, "sp-mem", this.hist.get(pid)?.rss, t.accent, null))
         .when(Boolean(guard), (el) => el.child(h_flex().gap(4).items_center().child(svg(`${ART}/shield.svg`).size(8).text_color(t.dim)).child(div().text_color(t.dim).child(guard)))));
   }
 
@@ -521,6 +577,76 @@ export default class ProcsDeck extends View {
           .on_scroll_wheel((e, cx) => { this.scroll.procs = Math.max(0, Math.min(this.scroll.procs - e.delta.y, max)); cx.notify(); })
           .children(kids)
         : this.empty(t, LIST_H));
+  }
+
+  /** A process's own readings since the deck opened: SPARK thin dithered bars, 12 px tall. */
+  spark(t, id, values, color, max) {
+    const v = values ?? [];
+    const hs = scale(v, { max: max == null ? null : Math.max(max, ...v), floor: 1 });
+    return div().id(id).relative().w(SPARK * 2).h(12).flex_none()
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+      .children(hs.map((h, i) => div().absolute().bottom(0).left((SPARK - hs.length + i) * 2).w(2).h(Math.max(1, Math.round((h ?? 0) * 12)))
+        .child(dither(color, 1))));
+  }
+
+  /** One bar: a dithered column in `color` with a solid 1 px head; `down` hangs it from its top. */
+  bar(t, x, h, color, down = false) {
+    const px = Math.max(1, Math.round(h));
+    const el = div().absolute().left(x).w(BAR).h(px).child(dither(color, 1))
+      .child(div().absolute().left(0).right(0).h(1).bg(color).map((c) => (down ? c.bottom(0) : c.top(0))));
+    return el;
+  }
+
+  /** A graph: the history `values` (0..1, null: no reading) as bars, the newest at the right.
+   *  `down`: a second series hung under a midline (network out). `none`: what to say instead. */
+  graph(t, id, values, color, { down = null, color2 = null, none = null } = {}) {
+    const box = div().id(id).relative().w(GRAPH_W).h(GRAPH_H).flex_none()
+      .child(div().absolute().left(0).right(0).bottom(down ? GRAPH_H / 2 : 0).h(1).child(dither(t.ansi0, 1)));
+    if (none) return box.child(div().absolute().left(0).right(0).top(0).bottom(0).flex().items_center().justify_center().text_size(11).text_color(t.dim).child(none));
+    const x = (i, n) => GRAPH_W - (n - i) * SLOT + 1;
+    const half = down ? GRAPH_H / 2 : GRAPH_H;
+    const up = values.map((v, i) => (v == null ? null : this.bar(t, x(i, values.length), v * (half - 1), color).bottom(down ? half : 0))).filter(Boolean);
+    const under = (down ?? []).map((v, i) => (v == null ? null : this.bar(t, x(i, down.length), v * (half - 1), color2, true).top(half + 1))).filter(Boolean);
+    return box.children(up).children(under);
+  }
+
+  /** One graph's block: its name and value now, the graph, a line of detail. */
+  meter(t, id, name, value, valueColor, graph, sub) {
+    return v_flex().id(`m-${id}`).flex_none().px(12).pt(6).gap(3)
+      .child(h_flex().h(16).gap(8).items_center()
+        .child(div().flex_none().text_size(11).text_color(t.ansi8).child(name.toUpperCase()))
+        .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().flex_none().text_size(12).text_color(valueColor).child(value)))
+      .child(graph)
+      .child(div().h(14).flex_none().truncate().text_size(11).text_color(t.dim).child(sub));
+  }
+
+  /** The system tab: CPU, GPU, memory, disk and network. */
+  systemView(t) {
+    const n = this.now, s = this.sys;
+    const pct = (v) => (v == null ? "" : `${Math.round(v)}%`);
+    const missing = (what) => `no ${what} reading on this machine`;
+    const waiting = !n ? "reading…" : null;
+    const pressure = n?.mem?.pressure;
+    const netTop = Math.max(10e3, ...s.rx.filter((v) => v != null), ...s.tx.filter((v) => v != null));
+    const net = n?.net;
+    return v_flex().id("system").h(PORTS_H).flex_none().overflow_hidden()
+      .child(this.meter(t, "cpu", "cpu", pct(n?.cpu?.pct), t.accent,
+        this.graph(t, "g-cpu", scale(s.cpu, { max: 100 }), t.accent, { none: waiting ?? (n.cpu ? null : missing("CPU")) }),
+        n?.cpu ? `user ${n.cpu.us}% · system ${n.cpu.sy}%${this.sysReading?.sysctl?.ncpu ? ` · ${this.sysReading.sysctl.ncpu} cores` : ""}` : ""))
+      .child(this.meter(t, "gpu", "gpu", pct(n?.gpu?.pct), t.ansi5,
+        this.graph(t, "g-gpu", scale(s.gpu, { max: 100 }), t.ansi5, { none: waiting ?? (n.gpu ? null : missing("GPU")) }),
+        n?.gpu ? "busy, as the graphics processor reports it" : ""))
+      .child(this.meter(t, "mem", "memory", n?.mem ? `${size(n.mem.used)} of ${size(n.mem.total)}` : "", t.done,
+        this.graph(t, "g-mem", scale(s.mem, { max: 100 }), t.done, { none: waiting ?? (n.mem ? null : missing("memory")) }),
+        n?.mem ? `${pct(n.mem.pct)} used${pressure ? ` · pressure ${pressure}` : ""}` : ""))
+      .child(this.meter(t, "disk", "disk", n?.disk?.mbps != null ? `${n.disk.mbps.toFixed(1)} MB/s` : "", t.working,
+        this.graph(t, "g-disk", scale(s.disk, { floor: 1 }), t.working, { none: waiting ?? (n.disk?.mbps != null ? null : missing("disk")) }),
+        n?.disk?.full != null ? `the startup disk is ${n.disk.full}% full` : ""))
+      .child(this.meter(t, "net", "network", net ? `↓ ${rate(net.rx)}  ↑ ${rate(net.tx)}` : "", t.ansi6,
+        this.graph(t, "g-net", scale(s.rx, { max: netTop }), t.ansi6, { down: scale(s.tx, { max: netTop }), color2: t.ansi11,
+          none: waiting ?? (!n.netSeen ? missing("network") : s.rx.some((v) => v != null) ? null : "measuring…") }),
+        net ? "in above the line, out below · every interface but loopback" : ""));
   }
 
   portRow(t, x, i, on) {
@@ -593,6 +719,7 @@ export default class ProcsDeck extends View {
         .child(keys(k("k-enter", "enter", "keep"), k("k-esc", "esc", this.query ? "clear" : "back"), help));
     }
     const note = this.note && Date.now() < this.note.until ? word(this.note.text, t[this.note.tone] ?? t.done) : null;
+    if (this.tab === "system") return bar.child(left(arrow, word("a reading every 2 s while this is open", t.dim))).child(keys(k("k-tabs", "tab", "processes"), help));
     const q = this.query ? div().flex_none().text_color(t.accent).child(`/${this.query}`) : null;
     if (this.tab === "ports") {
       if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes"), help));
@@ -624,7 +751,8 @@ export default class ProcsDeck extends View {
     return h_flex().relative().h(HEAD).flex_none().pl(12).pr(12).gap(10).items_center()
       .child(svg(`${ART}/tree.svg`).size(9).flex_none().text_color(t.accent))
       .child(div().flex_none().text_size(12).text_color(t.foreground).child("Processes"))
-      .child(h_flex().h_full().flex_none().ml(4).child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts)))
+      .child(h_flex().h_full().flex_none().ml(4).child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts))
+        .child(tabBtn("tab-system", "system", "system", this.now?.cpu ? `${Math.round(this.now.cpu.pct)}%` : "")))
       .child(div().flex_1())
       .child(div().id("scope").flex_none().text_size(11).text_color(t.dim).cursor_pointer()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -652,6 +780,7 @@ export default class ProcsDeck extends View {
         .child(keysView(t, { id: "procs-keys", title: "processes and ports", list: deckKeys(), close: () => { this.help = false; } }))))
       .when(!this.help && this.tab === "procs", (el) => el.child(this.procsView(t, items, ci)))
       .when(!this.help && this.tab === "ports", (el) => el.child(this.portsView(t, items, ci)))
+      .when(!this.help && this.tab === "system", (el) => el.child(this.systemView(t)))
       .child(this.foot(t, items[ci]));
   }
 }

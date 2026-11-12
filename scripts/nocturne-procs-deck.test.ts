@@ -5,7 +5,7 @@
 // actions, against a fake exec that never signals a real process. herdr and
 // gpui stand-ins (mock.module is process-wide: this file runs alone).
 import { test, expect, mock, beforeEach } from "bun:test";
-import { COMM, PS, LSOF, TERMS, PANES, SPACES } from "./fixtures/procs.ts";
+import { COMM, PS, LSOF, TERMS, PANES, SPACES, SYS } from "./fixtures/procs.ts";
 
 class El {
   kids: any[] = [];
@@ -37,6 +37,7 @@ let ran: any[] = [];
 let calls: string[][] = [];
 let propsNow: any = {};
 let probeText = "";
+let sysText = SYS;
 let focusedNow: any = { tab: "tB", pane: "p2", terminal: "t7" };
 let alive = new Set<number>();
 let stubborn = new Set<number>();
@@ -49,7 +50,7 @@ const herdr: Record<string, any> = {
   closeOverlay: (id: string) => { closed.push(id); },
   exec: async (cmd: string, args: string[]) => {
     calls.push([cmd, ...args]);
-    if (cmd === "sh") return { code: 0, stdout: probeText, stderr: "" };
+    if (cmd === "sh") return { code: 0, stdout: args[1].includes("nocturne-sys") ? sysText : probeText, stderr: "" };
     if (cmd === "kill") {
       const sig = args[0];
       for (const p of args.slice(1).map(Number)) if (sig === "-KILL" || !stubborn.has(p)) alive.delete(p);
@@ -102,6 +103,7 @@ beforeEach(() => {
   shared = {}; overlays = []; closed = []; ran = []; calls = []; ids = {}; clip = []; timers = [];
   propsNow = { overlay: "o1", tab: "procs" };
   probeText = probe();
+  sysText = SYS;
   alive = new Set([50112, 50118, 50121, 52214, 52391, 41872]);
   stubborn = new Set();
 });
@@ -223,6 +225,10 @@ test("keys: j k move, g G first / last, h l fold and step, space toggles, tab 1 
   await press("tab"); expect(d.tab).toBe("ports");
   await press("1"); expect(d.tab).toBe("procs");
   await press("2"); expect(d.tab).toBe("ports");
+  await press("3"); expect(d.tab).toBe("system");
+  await press("tab"); expect(d.tab).toBe("procs");
+  await press("tab", { mods: { shift: true } }); expect(d.tab).toBe("system");
+  await press("2");
   expect(shared["nocturne-procs.deck"].tab).toBe("ports");
   await press("1");
   await press("a"); expect(d.all).toBe(true);
@@ -358,4 +364,48 @@ test("the foot names the cursor's row and its keys", async () => {
   expect(words(draw())).toEqual(expect.arrayContaining(["↳", "node", "x", "end", "/", "find", "?", "keys"]));
   await press("x");
   expect(words(draw())).toEqual(expect.arrayContaining(["end node", "enter", "esc", "keep"]));
+});
+
+// ---- the system graphs
+
+test("system (3): CPU, GPU, memory, disk and network graphs with their values; a reading every 2 s while open", async () => {
+  const { d, press, draw } = await deck();
+  await press("3");
+  expect(d.tab).toBe("system");
+  // A second reading, so the network has a rate.
+  const a = SYS.replace("12944968792", "12946968792");
+  sysText = a;
+  d.sample(cx);
+  await flush();
+  const el = draw();
+  const w = words(el);
+  expect(w).toEqual(expect.arrayContaining(["CPU", "80%", "GPU", "53%", "MEMORY", "26.4G of 32.0G", "DISK", "28.7 MB/s", "NETWORK"]));
+  expect(w).toContain("82% used · pressure normal");
+  expect(w).toContain("the startup disk is 21% full");
+  expect(w.some((x) => /^↓ .*B\/s  ↑ /.test(x))).toBe(true);
+  expect(d.sys.cpu).toEqual([80, 80]);
+  expect(d.sys.rx.length).toBe(2); // the first reading has no rate yet
+  expect(d.sys.rx[0]).toBe(null);
+  // Bars: one per reading in the CPU graph.
+  expect(ids["g-cpu"].kids.length).toBe(1 + 2);
+  expect(words(ids["tab-system"])).toEqual(["system", "80%"]);
+});
+
+test("system: a source this machine lacks says so instead of drawing zero", async () => {
+  sysText = SYS.replace('"Device Utilization %"=53', "");
+  const { press, draw } = await deck();
+  await press("3");
+  expect(words(draw())).toContain("no GPU reading on this machine");
+  expect(words(ids["g-cpu"])).toEqual([]);
+});
+
+test("the selected process's detail carries its own CPU and memory over the refreshes", async () => {
+  const { d, press, cur, draw } = await deck();
+  while (cur() !== "p:52391") await press("j");
+  d.refresh(cx); await flush();
+  d.refresh(cx); await flush();
+  expect(d.hist.get(52391)).toEqual({ cpu: [98.2, 98.2, 98.2], rss: [1992294, 1992294, 1992294] });
+  draw();
+  expect(ids["sp-cpu"].kids.length).toBe(1 + 3);
+  expect(ids["sp-mem"].kids.length).toBe(1 + 3);
 });
