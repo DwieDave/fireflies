@@ -403,7 +403,11 @@ test("the header shows both filters, the search hint and a close button in a pan
   view.filters = { hidden: false, ignored: true };
   const els = walk(view.render());
   const text = els.flatMap((e: any) => e.nodes).filter((n: any) => typeof n === "string");
-  expect(text).toEqual(expect.arrayContaining(["dotfiles", "ignored", "filter files", "/", "2"]));
+  // 400 px: a labelled "+ file" before the long labels ("+ folder" needs more).
+  expect(text).toEqual(expect.arrayContaining([".*", "ign", "+", "file", "filter files", "/", "2"]));
+  expect(text).not.toContain("folder");
+  view.size = { width: 560, height: 600 };
+  expect(walk(view.render()).flatMap((e: any) => e.nodes)).toEqual(expect.arrayContaining(["dotfiles", "ignored", "file", "folder"]));
   const svgs = els.filter((e: any) => e.kind === "svg").map((e: any) => e.arg);
   expect(svgs).toEqual(expect.arrayContaining(["mods/nocturne-files/eye-off.svg", "mods/workspace-chrome/eye.svg", "mods/workspace-chrome/x.svg", "mods/workspace-chrome/search.svg"]));
   // It names its folder in the pane header, and tells files.open where it's rooted.
@@ -540,14 +544,19 @@ test("the header fits every width from the narrowest panel up: nothing overlaps,
     // Its estimate fits the width (CH px a character at size 11).
     const chip = (label: string, n: number) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (fit.cuts && n ? 4 + String(n).length * CH : 0);
     const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
-    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...(fit.count ? [3 * CH] : [])];
+    const adds = ({ both: ["+ file", "+ folder"], file: ["+ file"], plus: ["+"] } as any)[fit.add].map((l: string) => 8 + l.length * CH);
+    const parts = [11, find, chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...adds, ...(fit.count ? [3 * CH] : [])];
     expect(16 + parts.reduce((a: number, b: number) => a + b, 0) + 6 * (parts.length - 1)).toBeLessThanOrEqual(w);
     last = fit.chips;
   }
   expect(last).toBe("full");
   // The panel's 280 px (the screenshot's overlap): short labels, the whole placeholder or most of it.
   expect(lensFit(280, { cut }).chips).toBe("short");
-  expect(lensFit(400, {}).labels).toEqual(["dotfiles", "ignored"]);
+  expect(lensFit(420, {}).labels).toEqual(["dotfiles", "ignored"]);
+  // "+ file" stays labelled in the 280 px panel; "+ folder" goes first, then the word.
+  expect(lensFit(280, { cut }).add).toBe("file");
+  expect(lensFit(500, {}).add).toBe("both");
+  expect(lensFit(150, { cut }).add).toBe("plus");
   expect(lensFit(150, { cut }).chips).toBe("icon");
   // The toolbar drops its extras before the name gets too small.
   const narrow = toolbarFit(160, { branch: "main", changed: 3, name: "fireflies" });
@@ -720,6 +729,102 @@ test("the rest of the operations' logic: the neighbour after a delete, unfolded 
   expect(cleanError("mv: rename /a to /b: Permission denied\n")).toBe("mv: rename /a to /b: Permission denied");
   expect(deleteQuestion("src", true, true)).toBe("Move “src/” and everything in it to the Trash?");
   expect(deleteQuestion("a.rs", false, false)).toBe("Delete “a.rs” permanently?");
+});
+
+const byId = (root: any, id: string) => walk(root).find((e: any) => e.calls.some(([k, a]: [string, any[]]) => k === "id" && a?.[0] === id));
+const clickOn = (el: any) => el.calls.find(([k]: [string]) => k === "on_click")[1][0]({}, cx);
+const ringed = (el: any) => walk(el).some((e: any) => e !== el && e.calls.some(([k, a]: [string, any[]]) => k === "border_color" && a?.[0] === herdr.theme().accent));
+
+test("+ file and + folder on the filter line start a's / A's name row: in the selected folder, beside a selected file, in the root with nothing selected", () => {
+  for (const props of [{ folder: "/repo" }, { path: "/repo", slot: "s1" }]) {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props }];
+    const view = pane(props, TREE);
+    view.size = { width: 560, height: 600 };
+    view.folders.add("src");
+    // Nothing selected: the root.
+    clickOn(byId(view.render(), "nf-add-file"));
+    expect(view.draft).toMatchObject({ kind: "file", dir: "", after: null });
+    view.endDraft(cx);
+    view.sel = "src";
+    clickOn(byId(view.render(), "nf-add-folder"));
+    expect(view.draft).toMatchObject({ kind: "folder", dir: "src", after: "src" });
+    view.endDraft(cx);
+    view.sel = "src/main.rs";
+    clickOn(byId(view.render(), "nf-add-file"));
+    expect(view.draft).toMatchObject({ kind: "file", dir: "src", after: "src/main.rs" });
+    view.endDraft(cx);
+  }
+});
+
+test("the 280 px panel keeps a labelled + file; at 150 a bare + that still makes a file", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/repo" } }];
+  const view = pane({ folder: "/repo" }, TREE);
+  view.size = { width: 280, height: 600 };
+  let el = view.render();
+  expect(byId(el, "nf-add-file").nodes.flatMap((n: any) => n.nodes)).toEqual(["+", "file"]);
+  expect(byId(el, "nf-add-folder")).toBeUndefined();
+  view.size = { width: 150, height: 600 };
+  el = view.render();
+  expect(byId(el, "nf-add-file").nodes.flatMap((n: any) => n.nodes)).toEqual(["+"]);
+  clickOn(byId(el, "nf-add-file"));
+  expect(view.draft).toMatchObject({ kind: "file", dir: "" });
+});
+
+test("tab rings dotfiles, ignored, + file, + folder, ? in turn and then the list; shift-tab goes back; enter presses; esc and other keys leave", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+  world.shared = {};
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.size = { width: 560, height: 600 };
+  view.render();
+  const tab = (shift = false) => view.key({ key: "tab", key_char: "\t", modifiers: { shift } }, cx);
+  const seen: any[] = [];
+  for (let i = 0; i < 6; i++) { tab(); seen.push(view.stop); }
+  expect(seen).toEqual(["hidden", "ignored", "add-file", "add-folder", "keys", null]);
+  tab(true);
+  expect(view.stop).toBe("keys");
+  tab(true); tab(true);
+  expect(view.stop).toBe("add-file");
+  // The ring is drawn on the stop, on no other chip.
+  const el = view.render();
+  expect([ringed(byId(el, "nf-add-file")), ringed(byId(el, "nf-add-folder")), ringed(byId(el, "nf-hidden"))]).toEqual([true, false, false]);
+  view.key({ key: "enter", modifiers: {} }, cx);
+  expect([view.draft?.kind, view.stop]).toEqual(["file", null]);
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect(view.draft).toBeNull();
+  // enter on a switch flips it; space too.
+  tab();
+  view.key({ key: "enter", modifiers: {} }, cx);
+  expect(view.filters.hidden).toBe(true);
+  view.key({ key: "space", key_char: " ", modifiers: {} }, cx);
+  expect(view.filters.hidden).toBe(false);
+  // esc leaves the ring; the pane stays.
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect(view.stop).toBeNull();
+  // Another key leaves it and does what it does in the list.
+  tab();
+  view.key({ key: "j", modifiers: {} }, cx);
+  expect([view.stop, view.sel]).toEqual([null, "src"]);
+  // A narrow pane has no + folder: the ring skips it.
+  view.size = { width: 280, height: 600 };
+  view.render();
+  view.stop = "add-file";
+  tab();
+  expect(view.stop).toBe("keys");
+});
+
+test("an empty folder offers its first file: + new file starts the name row in the root", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { folder: "/empty" } }];
+  const view = pane({ folder: "/empty" }, { "": [] });
+  view.loading = false;
+  const el = view.render();
+  const add = byId(el, "nf-empty-add");
+  expect(add.nodes.flatMap((n: any) => n.nodes)).toEqual(["+", "new file", "a"]);
+  clickOn(add);
+  expect(view.draft).toMatchObject({ kind: "file", dir: "" });
+  // Still listing: no offer yet.
+  view.endDraft(cx);
+  view.loading = true;
+  expect(byId(view.render(), "nf-empty-add")).toBeUndefined();
 });
 
 test("a: a new file in the selected folder, parents made for slashes, opened as enter would; from the menu beside a file", async () => {

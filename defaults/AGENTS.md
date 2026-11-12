@@ -630,7 +630,8 @@ the highlighted line shows where it will land.
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
   `/` and other machines search the folders listed so far); `H` / `I` (the eye
-  switches under the toolbar) hide or show dotfiles and git-ignored files
+  switches under the toolbar; tab / shift-tab ring them, `+ file`, `+ folder`
+  and `? keys` in turn, enter or space presses, esc leaves) hide or show dotfiles and git-ignored files
   (`git ls-files --ignored`; both hidden by default), each pane keeping its
   choice (shared `nocturne-files.filters` by slot, written only once you
   switch one; new panes take settings.json `files`).
@@ -639,8 +640,10 @@ the highlighted line shows where it will land.
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
   (`y`), the file operations below, close; on the empty space below the rows:
   new file / folder and paste in the root. File operations, one row at a time:
-  `a` new file, `A` new folder (a name row in the selected folder or beside the
-  selected file; slashes make the folders on the way, a trailing `/` makes a
+  `a` new file, `A` new folder (also the filter line's `+ file` / `+ folder`
+  chips, `+ folder` only where it fits, and an empty folder's `+ new file`: a
+  name row in the selected folder or beside the selected file, the root with
+  nothing selected; slashes make the folders on the way, a trailing `/` makes a
   folder, a new file opens as enter would), `R` rename (the stem selected; a
   path in the name, `../x` or `docs/`, moves it), `x` cut and `P` paste into the
   selected folder (shared `nocturne-files.cut`: any files pane on that machine),

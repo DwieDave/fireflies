@@ -305,38 +305,61 @@ export function navForward(nav, root) {
 export const CH = 7;
 const chipW = (label, cut) => 8 + 11 + (label ? 4 + label.length * CH : 0) + (cut > 0 ? 4 + String(cut).length * CH : 0);
 
-/** The filter line's parts that fit `w`, richest first: the input's
- *  placeholder ("filter files", "filter" or only the /) and the two switches'
- *  labels ("full": dotfiles / ignored, "short": .* / ign, "icon": the eye
- *  alone). `cut`: how many each switch leaves out; `count`: the hits shown. */
 /** What ? lists under the filter line, ? keys last. */
 export const KEYS = [["j k  ↑ ↓", "move"], ["h l  ← →", "fold / open"], ["enter", "open"], ["e", "edit"], ["E", "$EDITOR"], ["p", "viewer"],
   ["space", "preview on / off"], ["J K", "scroll the preview"], ["< >", "preview smaller / bigger"],
   ["t", "mark · unmark"], ["V", "mark a range (V ends)"], ["⇧↑ ⇧↓", "mark while moving"],
   ["v", "Neovim"], ["o", "new pane"], ["y", "copy path"], ["a A", "new file / folder"], ["R", "rename · move"], ["x P", "cut / paste"],
   ["d", "delete"], ["m", "menu"], ["/", "filter"], ["↑↓ ctrl-n ctrl-p", "filter: pick"], ["tab ⇧tab", "filter: to list"], ["H I", "dotfiles / ignored"],
+  ["tab ⇧tab", "switches, + file"],
   ["- .", "root up / here"], ["[ ]  ⌫", "back / forward"], ["alt-← alt-→", "back / forward"], ["ctrl-o ctrl-i", "back / forward"], ["gg G", "top / bottom"],
   ["r", "refresh"], ["esc", "unmark · clear filter · leave"], ["q", "close"], ["?", "keys"]];
+/** The filter line's stops for tab / shift-tab (`add`: lensFit's): its two
+ *  switches, the new-item chips drawn, the keys chip. */
+export function lensStops(add = "both") {
+  return ["hidden", "ignored", ...ADDS[add].map(([kind]) => `add-${kind}`), "keys"];
+}
+
+/** tab (+1) / shift-tab (-1) from stop `at` (null: the list) over `stops`;
+ *  past either end it's the list again (null). */
+export function lensStep(stops, at, dir) {
+  const i = at == null ? (dir > 0 ? -1 : stops.length) : stops.indexOf(at);
+  const next = i + dir;
+  return next < 0 || next >= stops.length ? null : stops[next];
+}
+
 /** "? keys" on the filter line (keyhelp.js), px: 4 + "?" + 4 + "keys" + 4 at 7 px a character. */
 const KEYS_CHIP = 47;
 
+/** The new-item chips by `fit.add`: "+ file" and "+ folder", "+ file" alone, or "+". */
+export const ADDS = { both: [["file", "+ file"], ["folder", "+ folder"]], file: [["file", "+ file"]], plus: [["file", "+"]] };
+/** A new-item chip's width (px 4 each side). */
+export const addW = (label) => 8 + label.length * CH;
+
+/** The filter line's parts that fit `w`, richest first: the input's
+ *  placeholder ("filter files", "filter" or only the /), the two switches'
+ *  labels ("full": dotfiles / ignored, "short": .* / ign, "icon": the eye
+ *  alone) and the new-item chips (`add`, ADDS: "+ folder" goes first, then
+ *  "+ file" shortens to "+"). `cut`: how many each switch leaves out;
+ *  `count`: the hits shown. */
 export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {}) {
   const LABELS = { full: ["dotfiles", "ignored"], short: [".*", "ign"], icon: ["", ""] };
   const variants = [
-    ["filter files", "full", true], ["filter files", "short", true], ["filter", "short", true],
-    ["", "short", true], ["", "icon", true], ["", "icon", false],
+    ["filter files", "full", true, "both"], ["filter files", "full", true, "file"], ["filter files", "short", true, "both"], ["filter files", "short", true, "file"],
+    ["filter", "short", true, "file"], ["", "short", true, "file"], ["", "short", true, "plus"],
+    ["", "icon", true, "plus"], ["", "icon", false, "plus"],
   ];
-  for (const [find, chips, cuts] of variants) {
-    const fit = { find, chips, cuts, count: count != null };
+  for (const [find, chips, cuts, add] of variants) {
+    const fit = { find, chips, cuts, add, count: count != null };
     if (lensWidth(fit, LABELS[chips], cut, count) <= w) return { ...fit, labels: LABELS[chips] };
   }
-  return { find: "", chips: "icon", cuts: false, count: false, labels: LABELS.icon };
+  return { find: "", chips: "icon", cuts: false, add: "plus", count: false, labels: LABELS.icon };
 }
 
 /** How wide the filter line is with `fit` (logical px); the ? chip ends it. */
 function lensWidth(fit, [h, i], cut, count) {
   const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
-  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), KEYS_CHIP];
+  const parts = [11, find, chipW(h, fit.cuts ? cut.hidden : 0), chipW(i, fit.cuts ? cut.ignored : 0), ...ADDS[fit.add].map(([, l]) => addW(l)), KEYS_CHIP];
   if (fit.count) parts.push(String(count).length * CH);
   return 16 + parts.reduce((a, b) => a + b, 0) + 6 * (parts.length - 1);
 }

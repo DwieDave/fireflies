@@ -43,7 +43,9 @@
 //   o              a folder in a new files pane  y  copy the path
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
-//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens)
+//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens;
+//                  the filter line's + file / + folder chips and an empty folder's + new file do the same)
+//   tab ⇧tab       ring the filter line's switches, + file, + folder, ? in turn; enter / space presses
 //   R              rename: the name in an input, its stem selected; a path in it moves the item
 //   x / P          cut the row / paste it in the selected folder (beside a selected file; the root with none)
 //   d              delete: asks first (y or enter; anything else keeps it); the machine's trash, else permanently
@@ -105,7 +107,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import * as herdr from "herdr";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -163,6 +165,8 @@ function dither(color, cell = 1) {
 }
 
 const stop = (_e, cx) => cx.stop_propagation();
+/** The ring the filter line's stop wears under tab: a 1 px accent edge over it. */
+const ring = (t) => div().absolute().inset_0().border(1).border_color(t.accent);
 const tilde = (p) => {
   const h = home();
   return !p ? "" : p === h ? "~" : p.startsWith(h + "/") ? "~" + p.slice(h.length) : p;
@@ -187,6 +191,8 @@ export default class Files extends View {
     this.alone = Boolean(pr.path);
     this.filters = (this.slot && shared(FILTERS)?.[this.slot]) || filterDefaults(settings());
     this.query = ""; this.hits = null; this.seq = 0; this.typing = false; this.finding = false;
+    // The filter line's stop tab / shift-tab rings (logic.js lensStops), null: the list.
+    this.stop = null; this.lensAdd = "both";
     this.menu = null; this.mouse = { x: 40, y: 40 }; this.size = { width: 400, height: 600 };
     this.input = InputState.new({ placeholder: "filter files" });
     this.input.on("change", (_e, cx) => { this.query = this.input.value(); this.search(cx); });
@@ -552,6 +558,22 @@ export default class Files extends View {
     this.finding = true;
     for (const ms of [16, 60, 200]) cx?.timer?.after?.(ms, () => { if (this.finding && !this.typing) this.input.focus(); });
     cx?.notify();
+  }
+
+  /** The filter line's stop `stop` pressed (enter / space on its ring). */
+  pressStop(stop, cx) {
+    if (stop === "hidden" || stop === "ignored") this.setFilter(stop, cx);
+    else if (stop === "keys") this.keysShown = !this.keysShown;
+    else if (stop.startsWith("add-")) this.addNew(stop.slice(4), cx);
+  }
+
+  /** + file / + folder (the filter line's chips, the empty folder's line):
+   *  `a` / `A`'s name row, in the selected folder (beside a selected file),
+   *  in the root with nothing selected. */
+  addNew(kind, cx) {
+    this.stop = null;
+    const row = this.shown().find((r) => r.path === this.sel && !r.head) ?? null;
+    this.startDraft(kind, row, cx);
   }
 
   clearSearch(cx) {
@@ -1307,6 +1329,17 @@ export default class Files extends View {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
       cx.stop_propagation(); cx.notify(); return;
     }
+    // tab / shift-tab ring the filter line's switches, + file / + folder and ? keys
+    // in turn, then the list again; enter or space presses the ringed one, esc
+    // leaves it, any other key leaves it and does what it does in the list.
+    if (k === "tab") { this.stop = lensStep(lensStops(this.lensAdd), this.stop, m.shift ? -1 : 1); cx.stop_propagation(); cx.notify(); return; }
+    if (this.stop) {
+      if (k === "enter" || k === "space" || k === "escape") {
+        if (k === "escape") this.stop = null; else this.pressStop(this.stop, cx);
+        cx.stop_propagation(); cx.notify(); return;
+      }
+      this.stop = null;
+    }
     const upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const rows = this.shown(), i = rows.findIndex((r) => r.path === this.sel), row = rows[i];
     // A move ends a shift-range; in V's range it grows the range.
@@ -1463,14 +1496,27 @@ export default class Files extends View {
 
   /** A filter's switch: an open eye while that kind is listed; a shut one,
    *  the label struck through and how many it leaves out, while it's hidden. */
-  filterChip(t, id, label, on, cut, action) {
+  filterChip(t, id, label, on, cut, action, ringed = false) {
     return h_flex().id(id).relative().h(20).px(4).gap(4).flex_none().items_center()
+      .when(ringed, (el) => el.child(ring(t)))
       .hover((s) => s.bg(t.ansi0 + "55"))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => action(cx))
       .child(svg(on ? `${ICONS}/eye.svg` : `mods/${MOD}/eye-off.svg`).relative().size(11).flex_none().text_color(on ? t.dim : t.ansi3))
       .when(Boolean(label), (el) => el.child(div().relative().text_color(t.muted).when(!on, (el) => el.line_through()).child(label)))
       .when(!on && cut > 0, (el) => el.child(div().relative().text_color(t.ansi3).child(String(cut))));
+  }
+
+  /** + file / + folder (or a bare +): `a` / `A`'s name row; the accent +, a muted word. */
+  addChip(t, kind, label, ringed) {
+    const word = label.replace(/^\+\s*/, "");
+    return h_flex().id(`nf-add-${kind}`).relative().h(20).px(4).gap(7).flex_none().items_center().text_color(t.muted)
+      .hover((s) => s.bg(t.ansi0 + "55").text_color(t.foreground))
+      .when(ringed, (el) => el.child(ring(t)))
+      .on_mouse_down("left", stop)
+      .on_click((_e, cx) => { this.addNew(kind, cx); cx.notify(); })
+      .child(div().relative().text_color(t.accent).child("+"))
+      .when(Boolean(word), (el) => el.child(div().relative().child(word)));
   }
 
   /** The line under the toolbar: the filter as you type, and the two switches. */
@@ -1481,6 +1527,8 @@ export default class Files extends View {
     // What fits this width: the placeholder shortens, then the switches' labels.
     const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
     const [hLabel, iLabel] = fit.labels;
+    this.lensAdd = fit.add;
+    const at = this.stop;
     return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
       .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
       .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
@@ -1491,10 +1539,12 @@ export default class Files extends View {
             .child(div().flex_none().text_color(t.accent).child("/"))
             .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
       .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx)))
-      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx)))
+      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"))
+      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"))
+      .children(ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)))
       // ? keys: the line's last item (keyhelp.js).
-      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).h(20).px(4))
+      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
+        .when(at === "keys", (el) => el.child(ring(t))))
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
   }
 
@@ -1628,11 +1678,17 @@ export default class Files extends View {
     return line().child(div().text_color(this.msg?.error ? t.ansi1 : t.dim).child(text));
   }
 
-  empty(t, title, hint) {
+  empty(t, title, hint, add = false) {
     return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(16).text_size(11)
       .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
       .child(div().text_color(t.foreground).child(title))
-      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)));
+      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)))
+      // An empty folder: its first file, as a / + file make it.
+      .when(add, (el) => el.child(h_flex().id("nf-empty-add").relative().h(20).px(6).gap(7).items_center().text_color(t.muted)
+        .hover((s) => s.bg(t.ansi0 + "55").text_color(t.foreground))
+        .on_mouse_down("left", stop)
+        .on_click((_e, cx) => { this.addNew("file", cx); cx.notify(); })
+        .child(div().text_color(t.accent).child("+")).child(div().child("new file")).child(div().text_color(t.ansi8).child("a"))));
   }
 
   render(cx) {
@@ -1664,7 +1720,7 @@ export default class Files extends View {
     if (searching && this.hits && !rows.length) body = this.empty(t, "No files match", this.note ?? `“${this.query.trim()}” under ${tilde(this.root)}`);
     else if (searching && !this.hits) body = this.empty(t, "Searching…", null);
     else if (this.error && !list.length) body = this.empty(t, "Can't read this folder", this.error);
-    else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root));
+    else if (!list.length) body = this.empty(t, this.loading ? "Listing files…" : "Nothing here", this.loading ? null : tilde(this.root), !this.loading);
     else body = div().id("nf-tree").relative().flex_1().min_h(0).py(4).text_size(12)
       // A drop below the rows goes into the root: the list framed in the accent.
       .when(Boolean(this.drag?.ok) && this.drag.into === "", (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
