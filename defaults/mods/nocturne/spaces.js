@@ -29,6 +29,7 @@ import { spaces, panes, agents, run, exec, home, pickFolder, openOverlay, shared
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
 import { formKey } from "./form-keys.js";
+import { openSpacePicker } from "./newspace.js";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
@@ -164,6 +165,9 @@ export default class Spaces {
   // ---- editing
 
   start(mode, cx) {
+    // New and folder: the picker (newspace.js), not an inline form.
+    if (mode?.kind === "new") return void openSpacePicker();
+    if (mode?.kind === "folder") return void openSpacePicker({ space: mode.s.id });
     const was = this.mode;
     this.mode = mode;
     this.error = "";

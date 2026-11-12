@@ -31,6 +31,7 @@ import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, wind
 import { ART, LOGO, dither, eyebrow } from "./kit.js";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
+import { openSpacePicker } from "./newspace.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
 const KNOWN = "new-menu.agents";
@@ -111,7 +112,7 @@ function items(agents) {
   return [
     ...menuPanels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
-    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a space in your home folder" },
+    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => openSpacePicker(), say: "a space in a folder you pick" },
     { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a new branch, as a space" },
     { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree, as a space" },
   ];

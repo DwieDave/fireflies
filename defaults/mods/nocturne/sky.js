@@ -56,6 +56,7 @@ import { toggleGithub, githubForm } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
+import { openSpacePicker } from "./newspace.js";
 import { gridify } from "./gridify.js";
 import { toastKey } from "./toast.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
@@ -222,6 +223,7 @@ export default class Sky {
         else if (c === "scripts-grant") grantAppManagement();
         else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
+        else if (c === "space-new") openSpacePicker();
         else if (c === "pin") pin(focusedTerminal());
         else if (c === "pin-up") movePin(focusedTerminal(), -1);
         else if (c === "pin-down") movePin(focusedTerminal(), 1);
@@ -435,7 +437,7 @@ export default class Sky {
       go: () => run("space.select", { id: s.id }),
       menu: () => this.spaces.menu(s, true),
       rename: () => run("space.rename", { id: s.id }),
-      folder: (cx) => this.spaces.pick(cx, s),
+      folder: () => openSpacePicker({ space: s.id }),
       delete: () => run("space.close", { id: s.id }),
       tab: () => run("tab.new", { space: s.id }),
       worktree: () => newWorktree(s.id),
@@ -460,7 +462,7 @@ export default class Sky {
       case "right": return run("pane.go", { direction: "right" });
       case "back": return this.back();
       case "help": return openKeys("sidebar keys", SIDEBAR_HELP);
-      case "new": if (this.folded) run("space.new"); else this.spaces.start({ kind: "new" }, cx); break;
+      case "new": openSpacePicker(); break;
       default: item?.[verb]?.(cx);
     }
     this.navAt = Math.max(0, items.findIndex((x) => x.id === this.cursor));
