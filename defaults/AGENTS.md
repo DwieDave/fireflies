@@ -1130,10 +1130,19 @@ a key: `herdr-app do app.help`, then `herdr-app do nocturne.keys-filter.focus-si
 sidebar, tabstrip, header, parked, toasts, menus, panes).
 
 Nocturne's usage (the sidebar's USAGE section and the nocturne-usage pane)
-reads Claude's or Codex's limits with this machine's login. A scratch app
-(`HERDR_APP_HOME` set to another home than the default) asks nothing and
-says "usage is off in a scratch app"; `HERDR_APP_USAGE=1` in its environment
-turns it on.
+reads Claude's or Codex's limits with this machine's login: one reading per
+machine, whatever number of panes, windows or apps show it. The answer, its
+time and any back-off are kept in `~/.cache/herdr-app/usage-<provider>.json`
+(`$XDG_CACHE_HOME`, or `HERDR_USAGE_DIR`), and one app at a time asks. Only
+the picked provider is asked: every 3 min while a usage pane is shown in the
+active window, every 10 min while an agent works or the window is active,
+every 30 min otherwise; opening a pane asks when the last try is over a
+minute old, refresh (`r`, `nocturne-usage.refresh`) at most every 10 s. After
+a failed request (a 429 among them) it waits Retry-After when given, else 5,
+10, 20 … min up to 2 h, refresh included, and keeps showing the last numbers
+with their age. A scratch app (`HERDR_APP_HOME` set to another home than the
+default) asks nothing and says "usage is off in a scratch app";
+`HERDR_APP_USAGE=1` in its environment turns it on.
 
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
