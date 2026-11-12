@@ -138,7 +138,7 @@ test:
     bun test scripts/nocturne-newspace.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
-    cargo test --locked -p herdr-native-view
+    cargo test --locked -p fireflies-native-view
 
 docs-generate: build
     bun scripts/docs.ts generate

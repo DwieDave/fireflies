@@ -3,7 +3,7 @@
 //! The `herdr` module gains a `nativeView(id, props)` element plus
 //! `nativeViewCapabilities`, `nativeViewCall` and `nextNativeViewEvent`
 //! (interface `native-view/0`). The views themselves — WKWebView, PDFView,
-//! AVPlayerView, QLPreviewView — live in the `herdr-native-view` crate; this
+//! AVPlayerView, QLPreviewView — live in the `fireflies-native-view` crate; this
 //! file only connects them to GPUI: it records where each element was painted
 //! and, at the end of every window frame, moves the views there, hides views
 //! whose mod is off screen, cuts holes where Fireflies overlays are drawn above
@@ -30,7 +30,7 @@ thread_local! {
     static Z: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
     /// What the last frame gave each copy's views: its layer, covers and dim
     /// (`native.debug`, tests).
-    static LAST: RefCell<HashMap<u64, (Layer, Vec<herdr_native_view::Cover>, bool)>> = RefCell::new(HashMap::new());
+    static LAST: RefCell<HashMap<u64, (Layer, Vec<fireflies_native_view::Cover>, bool)>> = RefCell::new(HashMap::new());
     /// Mod copies whose native view was pressed, for the window to focus their pane.
     static PRESSES: (async_channel::Sender<u64>, async_channel::Receiver<u64>) = async_channel::unbounded();
 }
@@ -64,7 +64,7 @@ pub enum By {
 pub struct Painted {
     pub z: usize,
     pub by: By,
-    pub cover: herdr_native_view::Cover,
+    pub cover: fireflies_native_view::Cover,
 }
 
 /// Whether what `by` painted on layer `z` is drawn above a view on `view`:
@@ -76,7 +76,7 @@ pub fn is_above(view: Layer, z: usize, by: By) -> bool {
 
 /// The holes and the dim a view on `view` gets from this frame's covers and
 /// backdrops (`dims`: their layers; a backdrop sits under its own overlay).
-pub fn cut(view: Layer, covers: &[Painted], dims: &[usize]) -> (Vec<herdr_native_view::Cover>, bool) {
+pub fn cut(view: Layer, covers: &[Painted], dims: &[usize]) -> (Vec<fireflies_native_view::Cover>, bool) {
     let holes = covers.iter().filter(|p| is_above(view, p.z, p.by)).map(|p| p.cover).collect();
     (holes, dims.iter().any(|z| *z > view.z))
 }
@@ -93,7 +93,7 @@ pub fn cover_probe(radius: f32, by: By) -> impl IntoElement {
     canvas(
         |_, _, _| {},
         move |b, _, _, _| {
-            let cover = herdr_native_view::Cover { rect: rect(b), radius: f64::from(radius) };
+            let cover = fireflies_native_view::Cover { rect: rect(b), radius: f64::from(radius) };
             let z = Z.with(|l| l.get());
             COVERS.with(|c| c.borrow_mut().push(Painted { z, by, cover }));
         },
@@ -133,7 +133,7 @@ pub fn register_events(copy: u64, tx: async_channel::Sender<String>) {
     EVENTS.with(|e| e.borrow_mut().insert(copy, tx));
     #[cfg(target_os = "macos")]
     if !SINK_SET.with(|s| s.replace(true)) {
-        herdr_native_view::macos::set_event_sink(|ev| {
+        fireflies_native_view::macos::set_event_sink(|ev| {
             let Some(copy) = copy_of(&ev.key) else { return };
             if ev.name == "view.press" {
                 PRESSES.with(|(tx, _)| {
@@ -152,7 +152,7 @@ pub fn register_events(copy: u64, tx: async_channel::Sender<String>) {
 }
 
 pub fn capabilities() -> Value {
-    herdr_native_view::capabilities()
+    fireflies_native_view::capabilities()
 }
 
 #[cfg(target_os = "macos")]
@@ -170,12 +170,12 @@ fn gpui_ns_view(window: &Window) -> Option<*mut std::ffi::c_void> {
 pub fn release_keyboard(window: &Window) {
     #[cfg(target_os = "macos")]
     if let Some(view) = gpui_ns_view(window) {
-        herdr_native_view::macos::release_keyboard(view);
+        fireflies_native_view::macos::release_keyboard(view);
     }
 }
 
-fn rect(b: Bounds<Pixels>) -> herdr_native_view::Rect {
-    herdr_native_view::Rect { x: f64::from(b.origin.x), y: f64::from(b.origin.y), w: f64::from(b.size.width), h: f64::from(b.size.height) }
+fn rect(b: Bounds<Pixels>) -> fireflies_native_view::Rect {
+    fireflies_native_view::Rect { x: f64::from(b.origin.x), y: f64::from(b.origin.y), w: f64::from(b.size.width), h: f64::from(b.size.height) }
 }
 
 /// The `nativeView` element: the mod's children (drawn underneath, e.g. a
@@ -185,7 +185,7 @@ pub fn element(copy: u64, id: &str, props: Value, children: Vec<AnyElement>, win
     let key = key(copy, id);
     #[cfg(target_os = "macos")]
     let status: Result<u64, String> = match gpui_ns_view(window) {
-        Some(v) => herdr_native_view::macos::ensure(&key, v, &props),
+        Some(v) => fireflies_native_view::macos::ensure(&key, v, &props),
         None => Err("this window has no native view".into()),
     };
     #[cfg(not(target_os = "macos"))]
@@ -204,7 +204,7 @@ pub fn element(copy: u64, id: &str, props: Value, children: Vec<AnyElement>, win
                 eprintln!("hup native paint {key}: bounds={b:?} clip={clip:?}");
             }
             #[cfg(target_os = "macos")]
-            herdr_native_view::macos::painted(&key, visible);
+            fireflies_native_view::macos::painted(&key, visible);
             #[cfg(not(target_os = "macos"))]
             let _ = (&key, visible);
         },
@@ -246,7 +246,7 @@ pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, layers: HashMap<u64, 
                 let is_alive = |k: &str| copy_of(k).is_some_and(|c| alive.contains(&c));
                 let is_shown = |k: &str| copy_of(k).is_some_and(|c| shown.contains(&c));
                 let above = |k: &str| cut(copy_of(k).map(layer_of).unwrap_or_default(), &covers, &dims);
-                herdr_native_view::macos::frame_end(v, &is_alive, &is_shown, suppressed, &above);
+                fireflies_native_view::macos::frame_end(v, &is_alive, &is_shown, suppressed, &above);
             }
             #[cfg(not(target_os = "macos"))]
             let _ = (window, &shown, suppressed);
@@ -258,7 +258,7 @@ pub fn frame_end(alive: HashSet<u64>, shown: HashSet<u64>, layers: HashMap<u64, 
 
 /// What the last frame gave a copy's views: its layer, the holes cut in them
 /// and whether a backdrop dims them.
-pub fn last_frame(copy: u64) -> Option<(Layer, Vec<herdr_native_view::Cover>, bool)> {
+pub fn last_frame(copy: u64) -> Option<(Layer, Vec<fireflies_native_view::Cover>, bool)> {
     LAST.with(|l| l.borrow().get(&copy).cloned())
 }
 
@@ -282,7 +282,7 @@ fn may_take_keyboard(action: &str, dimmed: bool) -> bool {
 /// `herdr-app do native.call {key, action, args}` (the test harness).
 pub fn call_key(key: &str, action: &str, args: &Value) -> Result<Value, String> {
     #[cfg(target_os = "macos")]
-    return herdr_native_view::macos::call(key, action, args);
+    return fireflies_native_view::macos::call(key, action, args);
     #[cfg(not(target_os = "macos"))]
     {
         let _ = (key, action, args);
@@ -295,9 +295,9 @@ pub fn call_key(key: &str, action: &str, args: &Value) -> Result<Value, String> 
 /// views (`covers`: [x, y, w, h] in window points) and whether it dims them.
 pub fn debug() -> Value {
     #[cfg(target_os = "macos")]
-    let mut out = herdr_native_view::macos::debug();
+    let mut out = fireflies_native_view::macos::debug();
     #[cfg(not(target_os = "macos"))]
-    let mut out = json!({ "interface": herdr_native_view::INTERFACE, "views": {}, "available": false });
+    let mut out = json!({ "interface": fireflies_native_view::INTERFACE, "views": {}, "available": false });
     let layers: serde_json::Map<String, Value> = LAST.with(|l| {
         l.borrow()
             .iter()
@@ -314,7 +314,7 @@ pub fn debug() -> Value {
 #[cfg(test)]
 mod tests {
     use super::{By, Layer, Painted, cut, is_above, may_take_keyboard};
-    use herdr_native_view::{Cover, Rect};
+    use fireflies_native_view::{Cover, Rect};
 
     fn at(z: usize, by: By, x: f64) -> Painted {
         Painted { z, by, cover: Cover { rect: Rect { x, y: 0.0, w: 10.0, h: 10.0 }, radius: 0.0 } }

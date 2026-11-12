@@ -92,7 +92,7 @@ gpui_linux = { package = "gpui-pre-linux", version = "=0.3.8", features = ["rend
 gpui_macos = { package = "gpui-pre-macos", version = "=0.3.8", features = ["render-to-image"] }
 libc = "0.2"
 # Native content views (from herdr-universal-preview), interface native-view/0.
-herdr-native-view = { path = "native/herdr-native-view" }
+fireflies-native-view = { path = "native/fireflies-native-view" }
 raw-window-handle = "0.6"
 
 [target.'cfg(windows)'.dependencies]

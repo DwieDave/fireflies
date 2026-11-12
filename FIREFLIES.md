@@ -6,7 +6,7 @@ desktop app). Under the name it is still Herdr: same config folder
 
 - **Native views for mods**: a mod can host a native view in its pane (a
   WKWebView browser, Safari's Web Inspector). `nativeView`, `nativeViewCall`,
-  `nextNativeViewEvent` in `defaults/herdr.d.ts`; `native/herdr-native-view`.
+  `nextNativeViewEvent` in `defaults/herdr.d.ts`; `native/fireflies-native-view`.
 - **Layout roles** for the dialogs the app draws: `prompt_mod`, `confirm_mod`,
   `palette_mod`, `peek_mod` (and upstream's `toast`, which also reads the fork's
   older `toast_mod`), `dialog_mods` for the welcome, what's new, keys, worktree,

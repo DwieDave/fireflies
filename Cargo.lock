@@ -2530,6 +2530,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d45db016d36b838f563236e9193d0ee6ce38f3f68b6c94e914b4929c96bbb890"
 
 [[package]]
+name = "fireflies-native-view"
+version = "0.0.1"
+dependencies = [
+ "block2 0.6.2",
+ "objc2 0.6.4",
+ "objc2-app-kit 0.3.2",
+ "objc2-av-foundation",
+ "objc2-av-kit",
+ "objc2-core-media",
+ "objc2-foundation 0.3.2",
+ "objc2-pdf-kit",
+ "objc2-quick-look-ui",
+ "objc2-web-kit",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "fixedbitset"
 version = "0.5.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3927,6 +3945,7 @@ dependencies = [
  "base64",
  "fancy-regex 0.19.2",
  "fff-search",
+ "fireflies-native-view",
  "ghostty-sys",
  "git2",
  "gpui-base",
@@ -3937,7 +3956,6 @@ dependencies = [
  "gpui-pre-wgpu",
  "gpui-pre-windows",
  "gpui-shell",
- "herdr-native-view",
  "image",
  "libc",
  "mermaid-rs-renderer",
@@ -3979,24 +3997,6 @@ dependencies = [
  "uds_windows",
  "windows-sys 0.61.2",
  "winresource",
-]
-
-[[package]]
-name = "herdr-native-view"
-version = "0.0.1"
-dependencies = [
- "block2 0.6.2",
- "objc2 0.6.4",
- "objc2-app-kit 0.3.2",
- "objc2-av-foundation",
- "objc2-av-kit",
- "objc2-core-media",
- "objc2-foundation 0.3.2",
- "objc2-pdf-kit",
- "objc2-quick-look-ui",
- "objc2-web-kit",
- "serde",
- "serde_json",
 ]
 
 [[package]]
