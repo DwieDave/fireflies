@@ -52,7 +52,7 @@ export const letterColor = (t, ch, staged) => (ch === " " ? t.dim : ch === "?" ?
  *  `right` are the labels (elements, or null). */
 export function edgeRow(t, id, edge, where, left, right) {
   const line = () => div().h(1).bg(edge);
-  const label = (el) => h_flex().flex_none().min_w(0).px(4).gap(5).items_center().child(el);
+  const label = (el) => h_flex().flex_none().min_w(0).px(4).gap(5).items_center().overflow_hidden().child(el);
   return h_flex().id(id).absolute().left(0).right(0).h(13).items_center().text_size(11)
     .when(where === "top", (el) => el.top(-6)).when(where === "bottom", (el) => el.bottom(-6))
     .child(line().w(left ? 8 : 0).flex_none())
@@ -66,7 +66,8 @@ export function edgeRow(t, id, edge, where, left, right) {
  *  top and bottom edges on the right. */
 export function panel(t, id, title, active, body, { foot = null, right = null, onTitle = null } = {}) {
   const edge = active ? t.accent : t.ansi0;
-  const head = h_flex().gap(5).items_center().children(title)
+  // A long title ends in an ellipsis inside the frame, before the right chip.
+  const head = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(title.map((el) => el?.min_w ? el.min_w(0).truncate() : el))
     .when(Boolean(onTitle), (el) => el.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); }));
   return div().id(id).relative().flex().flex_col().min_h(0).min_w(0).border_l(1).border_r(1).border_color(edge)
     .child(div().relative().flex_1().min_h(0).pt(7).pb(2).overflow_hidden().child(body))
