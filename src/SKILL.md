@@ -41,6 +41,13 @@ To show the person a web page, `herdr-app do app.open_url --url https://...`
 opens it in a web pane beside the focused one (or the system's browser, per
 their `links` setting).
 
+To show them what runs and what listens (a dev server you started, a stuck
+build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
+manager centered (`nocturne.ports` on its ports, where they can open a port in
+a web pane, copy its address or end its process; its system tab graphs CPU,
+GPU, memory, disk and network). It only shows and asks: ending a process is
+theirs to confirm in it.
+
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
 pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It
