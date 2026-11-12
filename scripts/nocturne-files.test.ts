@@ -41,14 +41,16 @@ const kit = {
   View: class {}, div: () => new Element(), svg: (p: string) => new Element("svg", p),
   PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) },
 };
+// As GPUI: focus() takes only on an input drawn in the last frame (Input.new),
+// and only then does its "focus" event come.
 const input = () => {
   let v = ""; const on: Record<string, any> = {};
-  const state: any = { selected: null, on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; state.selected = null; }, set_selected_range: (r: any) => { state.selected = r; }, focus() {}, fire: (e: string) => on[e]?.({}, cx) };
+  const state: any = { selected: null, drawn: false, focused: false, on: (e: string, f: any) => { on[e] = f; }, value: () => v, set_value: (x: string) => { v = x; state.selected = null; }, set_selected_range: (r: any) => { state.selected = r; }, focus() { if (state.drawn && !state.focused) { state.focused = true; on.focus?.({}, cx); } }, fire: (e: string) => on[e]?.({}, cx) };
   return state;
 };
 const base = {
   h_flex: () => new Element(), v_flex: () => new Element(), v_virtual_list: () => new Element(), Scrollbar: { vertical: () => new Element() },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item(i: number) { scrolled.push(i); }, offset: () => ({ x: 0, y: -scrollTop.y }) }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item(i: number) { scrolled.push(i); }, offset: () => ({ x: 0, y: -scrollTop.y }) }) }, InputState: { new: input }, Input: { new: (s: any) => { if (s) s.drawn = true; return new Element("input"); } },
 };
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
@@ -212,8 +214,10 @@ test("/ filters through the index: hits under folders, enter opens beside the pa
   world.find = async (root, q) => { asked.push(`${root}:${q}`); return { files: [{ path: "src/main.rs", ranges: [[4, 8]], git: null }, { path: ".github/main.yml", ranges: [[8, 12]] }], scanning: false }; };
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   view.filters = { hidden: false, ignored: true };
-  view.key({ key: "/" }, cx);
-  view.input.fire("focus");
+  later.length = 0;
+  view.key({ key: "/", key_char: "/", modifiers: {} }, cx);
+  view.render();
+  for (const f of later.splice(0)) f(cx);
   expect(view.typing).toBe(true);
   // Typing j goes to the filter, not the tree.
   view.key({ key: "j" }, cx);
@@ -239,6 +243,76 @@ test("/ filters through the index: hits under folders, enter opens beside the pa
   expect(view.folders.has("src")).toBe(true);
   expect(view.want).toBe("src");
 });
+
+// What GPUI's macOS keystroke carries for / and ?: on a US layout / is its
+// own key and ? is shift-/; on a German one / is shift-7 and ? shift-ß. A
+// shifted key that types punctuation arrives as that character with shift
+// cleared (gpui-pre-macos events.rs); the last shape covers a layout that
+// reports the key's own name with the typed character beside it.
+const SLASH = {
+  us: { key: "/", key_char: "/", modifiers: { shift: false } },
+  de: { key: "/", key_char: "/", modifiers: { shift: false } },
+  named: { key: "7", key_char: "/", modifiers: { shift: true } },
+};
+const QUESTION = {
+  us: { key: "?", key_char: "?", modifiers: { shift: false } },
+  de: { key: "?", key_char: "?", modifiers: { shift: false } },
+  named: { key: "ß", key_char: "?", modifiers: { shift: true } },
+};
+
+for (const [layout, slash] of Object.entries(SLASH)) {
+  test(`/ (${layout}) draws the filter, gives it the keyboard on the next frame, and typing goes to it`, () => {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { path: "/repo", slot: "s1" } }];
+    world.shared = {};
+    const view = pane({ path: "/repo", slot: "s1" }, TREE);
+    later.length = 0;
+    view.render();
+    expect(view.input.drawn).toBe(false);
+    let stopped = 0;
+    const kcx = { ...cx, stop_propagation() { stopped++; } };
+    view.key(slash, kcx);
+    // Not drawn yet, so not focused yet: the old way (focus at once) never took.
+    expect([view.finding, view.typing, view.input.focused]).toEqual([true, false, false]);
+    view.render();
+    for (const f of later.splice(0)) f(cx);
+    expect([view.input.focused, view.typing]).toEqual([true, true]);
+    // Letters, digits and a German ö go on to the input: the pane doesn't stop them.
+    stopped = 0;
+    for (const k of ["j", "k", "q", "d", "7", "ö", "H"]) view.key({ key: k, key_char: k, modifiers: {} }, kcx);
+    view.key(slash, kcx);
+    expect(stopped).toBe(0);
+    view.input.set_value("main"); view.input.fire("change");
+    expect(view.query).toBe("main");
+    // esc clears and ends it; the input is no longer drawn.
+    view.key({ key: "escape", modifiers: {} }, kcx);
+    expect([view.query, view.finding]).toEqual(["", false]);
+  });
+}
+
+test("a click on the filter line draws the input and focuses it, in the panel and in a pane of its own, with the preview split on", () => {
+  for (const props of [{ slot: "s1" }, { path: "/repo", slot: "s2" }]) {
+    world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props }];
+    world.shared = props.path ? { "nocturne-files.look": { s2: { on: true } } } : {};
+    const view = pane(props, TREE);
+    later.length = 0;
+    const find = walk(view.render()).find((e: any) => e.calls.some(([k, a]: [string, any]) => k === "id" && a?.[0] === "nf-find"));
+    const down = find.calls.find(([k]: [string]) => k === "on_mouse_down");
+    down[1][1]({}, cx);
+    view.render();
+    for (const f of later.splice(0)) f(cx);
+    expect([view.input.focused, view.typing]).toEqual([true, true]);
+  }
+});
+
+for (const [layout, q] of Object.entries(QUESTION)) {
+  test(`? (${layout}) opens and closes the keys overview, not the filter`, () => {
+    const view = pane({ path: "/repo", slot: "s1" }, TREE);
+    view.key(q, cx);
+    expect([view.keysShown, view.finding]).toEqual([true, false]);
+    view.key(q, cx);
+    expect(view.keysShown).toBe(false);
+  });
+}
 
 test("where the index can't go (another machine), the search covers the folders listed so far", async () => {
   world.find = async () => { throw new Error("not here"); };

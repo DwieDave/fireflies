@@ -186,12 +186,12 @@ export default class Files extends View {
     // A pane of its own (a folder link, files.open): closes itself, opens files beside itself.
     this.alone = Boolean(pr.path);
     this.filters = (this.slot && shared(FILTERS)?.[this.slot]) || filterDefaults(settings());
-    this.query = ""; this.hits = null; this.seq = 0; this.typing = false;
+    this.query = ""; this.hits = null; this.seq = 0; this.typing = false; this.finding = false;
     this.menu = null; this.mouse = { x: 40, y: 40 }; this.size = { width: 400, height: 600 };
     this.input = InputState.new({ placeholder: "filter files" });
     this.input.on("change", (_e, cx) => { this.query = this.input.value(); this.search(cx); });
     this.input.on("focus", (_e, cx) => { this.typing = true; cx.notify(); });
-    this.input.on("blur", (_e, cx) => { this.typing = false; cx.notify(); });
+    this.input.on("blur", (_e, cx) => { this.typing = false; this.finding = false; cx.notify(); });
     this.input.on("submit", (_e, cx) => { this.enter(cx); cx.notify(); });
     // The name a new file or folder gets, or a rename's: an input row in the tree.
     this.draft = null; this.ask = null; this.msg = null;
@@ -215,7 +215,7 @@ export default class Files extends View {
     // Opened as the focused pane (cmd-e, files.open): the keyboard comes here,
     // which the app leaves with the window for a mod pane. Again a little
     // later, as the editor does, in case the window took it back meanwhile.
-    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing) this.takeKeys(cx); });
+    for (const ms of [0, 120, 400]) cx.timer.after(ms, (cx) => { if (this.isFocusedPane() && !this.typing && !this.finding) this.takeKeys(cx); });
     // Remote folders can't be watched: poll those instead.
     cx.timer.every(this.on ? 15000 : 30000, (cx) => this.refresh(cx));
     cx.spawn(async (cx) => {
@@ -544,8 +544,18 @@ export default class Files extends View {
     return out.sort((a, b) => spread(a) - spread(b));
   }
 
+  /** `/` and a click on the filter line: draws the filter's input, then gives
+   *  it the keyboard. An input that isn't drawn can't take the focus (and its
+   *  "focus" event, which turns `typing` on and so draws it, never comes), so
+   *  the focus waits for the frames after this one. */
+  startFind(cx) {
+    this.finding = true;
+    for (const ms of [16, 60, 200]) cx?.timer?.after?.(ms, () => { if (this.finding && !this.typing) this.input.focus(); });
+    cx?.notify();
+  }
+
   clearSearch(cx) {
-    this.query = ""; this.hits = null; this.note = null; this.seq++;
+    this.query = ""; this.hits = null; this.note = null; this.seq++; this.finding = false;
     this.input.set_value("");
     this.handle.focus();
     cx?.notify();
@@ -1327,7 +1337,7 @@ export default class Files extends View {
     else if (low === "p" && upper) this.paste(row ?? null, cx);
     else if (k === "x") this.cutRow(row, cx);
     else if (k === "d") this.askDelete(row, cx);
-    else if (k === "/") this.input.focus();
+    else if (k === "/" || e.key_char === "/") this.startFind(cx);
     else if (k === "escape") { if (this.query) this.clearSearch(cx); else if (this.alone) this.closePane(); else this.leave(); }
     else if (k === "q") this.closePane();
     else if (k === "[" || k === "backspace") this.back(cx);
@@ -1465,7 +1475,7 @@ export default class Files extends View {
 
   /** The line under the toolbar: the filter as you type, and the two switches. */
   lens(t, w, found) {
-    const live = this.typing || Boolean(this.query);
+    const live = this.typing || this.finding || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
     const searching = Boolean(this.query.trim());
     // What fits this width: the placeholder shortens, then the switches' labels.
@@ -1474,7 +1484,7 @@ export default class Files extends View {
     return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
       .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
       .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
-        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.input.focus(); })
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
         .child(live
           ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
           : h_flex().min_w(0).gap(5).text_color(t.dim)
