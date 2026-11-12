@@ -11,18 +11,22 @@ import { readScreen } from "./engine.js";
 const STEPS = 60; // a block of questions takes ~20
 const SETTLE_MS = 1600; // how long one key may take to show
 
-/** Waits until the screen differs from `before` (or a while passed). */
-async function settled(cx, address, before) {
+/** Waits until the dialog on screen differs from the one in `before` (or a
+ *  while passed). `view` picks the dialog out of a screen: the rest of a busy
+ *  agent's screen changes all the time, and taking that for the key's effect
+ *  would press the next key (a second Tab shuts the note line) too soon. */
+export async function settled(cx, address, before, view = (s) => s, read = readScreen) {
+  const was = view(before);
   for (let waited = 0; waited < SETTLE_MS; waited += 80) {
     await cx.sleep(80);
-    const now = await readScreen(address);
-    if (now != null && now !== before) {
+    const now = await read(address);
+    if (now != null && view(now) !== was) {
       // One more short look: Claude draws a change in a few frames.
       await cx.sleep(60);
-      return (await readScreen(address)) ?? now;
+      return (await read(address)) ?? now;
     }
   }
-  return readScreen(address);
+  return read(address);
 }
 
 /**
@@ -41,7 +45,8 @@ export async function answer(cx, item, goal, progress = () => {}) {
     if (a.done) return { ok: true };
     if (a.refuse) return { ok: false, reason: a.refuse };
     if (a.wait) {
-      if (++quiet > 6) return { ok: false, reason: "Sent, but the request is still showing: look at the terminal." };
+      // ~3 s: a busy agent's terminal may take a while to draw.
+      if (++quiet > 12) return { ok: false, reason: a.reason ?? "Sent, but the request is still showing: look at the terminal." };
       await cx.sleep(250);
       screen = await readScreen(item.address);
       continue;
@@ -57,7 +62,7 @@ export async function answer(cx, item, goal, progress = () => {}) {
       const r = await hc(["send", "--force", item.address, a.paste]).catch((e) => ({ code: 1, stderr: String(e) }));
       if (r?.code !== 0) return { ok: false, reason: `The text didn't go through: ${(r?.stderr ?? "").trim() || "hc send failed"}` };
     }
-    screen = await settled(cx, item.address, before);
+    screen = await settled(cx, item.address, before, adapter.dialog);
   }
   return { ok: false, reason: "That took too many steps: look at the terminal." };
 }

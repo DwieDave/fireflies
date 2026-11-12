@@ -335,7 +335,10 @@ the highlighted line shows where it will land.
   a review that submits all of them, cmd-enter from anywhere). Answers go
   into the agent's terminal as keys, the way a person answers there, and the
   screen is read again before every key: a request that changed or went away
-  is refused ("Not sent"), never answered blindly. Herdr's "needs you" toast
+  is refused ("Not sent"), never answered blindly; each key waits for the
+  dialog itself to change (not the rest of a busy screen), and when a step
+  doesn't take (the note line didn't open, the note didn't arrive) it says
+  so in place of the answer. Herdr's "needs you" toast
   says what the agent asks and opens it here. p peeks, g goes to the agent;
   x puts an error away; ? lists the overview's keys (the key bar's last item). The overview and the question dialog also take
   `nocturne-notifications.<key>` commands for keys.json: `next`, `prev`, `up`,
@@ -1439,6 +1442,11 @@ The main ones:
   page in place without reloading it.
   Overlays (menus, dialogs, windows, toasts) drawn above a native view cut a hole in it
   instead of hiding it, and a dialog's backdrop dims it; only a pane drag hides it.
+  That holds for a native view inside an overlay too (the picture-in-picture player's
+  window): every overlay painted after its own one cuts it and dims it (windows first, in
+  the order raised, then dialogs, popups and toasts, each in the order opened), never its
+  own overlay nor those under it; floating blocks cut the panes below them. `native.debug`'s
+  `layers` shows, per mod copy, its layer (`z`, `float`), its holes and its dim.
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.

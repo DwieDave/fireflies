@@ -2,7 +2,8 @@
 // questions, other), the selected one in full on the right. A drop-down
 // under the bell, or centered from a key (open.js). With a request it is the popup's most
 // (props.most: the room below the strip, up to open.js OVERVIEW_H), so the
-// list and the request have room; with nothing waiting, as tall as its note.
+// list and the request have room; with nothing waiting, as tall as its note
+// and EMPTY_H at the least.
 // It sets its own height: a popup is as tall as its content, and a scroll
 // area has none of its own, so without that the list and the request would
 // be nothing. It measures its parts (on_size_change) for the empty note and
@@ -28,6 +29,10 @@ import { group, age, headline, summary, where, TYPES } from "./model.js";
 import { answer } from "./drive.js";
 import { openAsk, forget, followCommands, overviewBeat, BEAT, OVERVIEW_H } from "./open.js";
 import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.js";
+
+// How tall it is at the least with nothing waiting (layout px, up to the
+// popup's most): a center, not a sliver around its note.
+export const EMPTY_H = 560;
 import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 /** What ? lists, ? keys last. */
@@ -197,7 +202,7 @@ export default class Overview {
   /** Its height (layout px): with a request, the popup's most (all the room
    *  it has). With nothing waiting, the taller of the list and the empty note
    *  as they measured, and the key bar under both (with the ? list when
-   *  open), up to the most; the most until they have. */
+   *  open), EMPTY_H at the least, up to the most; the most until they have. */
   height(it) {
     const most = Number(props()?.most) || OVERVIEW_H;
     if (it) return most;
@@ -207,7 +212,7 @@ export default class Overview {
     const bar = 30;
     // With its keys open, tall enough for them (keyhelp.js: a 26 px head, 20 px rows).
     const keys = this.keysShown ? 26 + 22 + KEYS.length * 20 : 0;
-    return Math.max(120, Math.min(most, Math.ceil(Math.max(34 + m.list + 8, main, keys) + bar)));
+    return Math.min(most, Math.max(EMPTY_H, Math.ceil(Math.max(34 + m.list + 8, main, keys) + bar)));
   }
 
   render() {
