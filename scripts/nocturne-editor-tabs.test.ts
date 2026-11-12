@@ -428,6 +428,11 @@ test("the pane runs vim's tab commands and the app's next-tab / prev-tab / close
   p.vimCommand("edit:../lib/b.rs", cx());
   await flush();
   expect(p.path).toBe("/p/lib/b.rs");
+  // The command with its file: a tab, at its line (a relative path: the shown file's folder's).
+  p.command('open:{"path":"../docs/n.md","line":1,"view":"text"}', cx());
+  await flush();
+  expect([p.path, p.view]).toEqual(["/p/docs/n.md", "text"]);
+  p.command('open:{"path":"/p/lib/b.rs"}', cx());
   // Two b.rs: the strip tells them apart.
   expect(texts(p.tabStrip(theme))).toEqual(expect.arrayContaining(["src", "lib"]));
 });

@@ -643,7 +643,8 @@ the highlighted line shows where it will land.
   `.prev-problem`, `.problems`, `.definition`, `.hover`, `.hover-more`,
   `.hover-less`, `.reload`, `.vim`, `.preview` (split → preview → text),
   `.preview-split`, `.preview-only`, `.preview-text`, `.next-tab`, `.prev-tab`,
-  `.close-tab`.
+  `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
+  tab of the focused editor; a relative path is its file's folder's).
 - **Files panes** (Nocturne's `nocturne-files`): the tab strip's files
   button toggles the panel down the tab's right edge at the focused pane's
   folder ("+ new" > Files opens a files pane of its own instead, beside the
