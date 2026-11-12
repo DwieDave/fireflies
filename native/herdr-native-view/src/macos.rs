@@ -1732,7 +1732,7 @@ define_class!(
             // `point` is in the superview's coordinates.
             if let Some(sup) = unsafe { self.superview() } {
                 let local = self.convertPoint_fromView(point, Some(&sup));
-                if self.in_hole(local) {
+                if !takes_click(self.ivars().dimmed.get(), self.in_hole(local)) {
                     return std::ptr::null_mut();
                 }
             }
@@ -1746,6 +1746,14 @@ define_class!(
         }
     }
 );
+
+/// Whether a view takes a click: not in a hole cut for an overlay above it,
+/// nor under a backdrop (a dialog's, a window's scrim). There the click goes to
+/// Herdr, which closes what the backdrop is under, and the page can't become
+/// AppKit's first responder (and take the keys) behind a window that still shows.
+fn takes_click(dimmed: bool, in_hole: bool) -> bool {
+    !dimmed && !in_hole
+}
 
 impl HoleHost {
     fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
@@ -1911,5 +1919,12 @@ mod tests {
         assert!(parse_holes(&json!({ "holes": [{ "w": -1, "h": 2 }] })).is_err());
         assert!(parse_holes(&json!({ "holes": [{ "w": 1 }] })).is_err());
         assert!(parse_holes(&json!({})).is_err());
+    }
+
+    #[test]
+    fn a_page_under_a_backdrop_takes_no_click() {
+        assert!(takes_click(false, false));
+        assert!(!takes_click(false, true), "a hole: the overlay's");
+        assert!(!takes_click(true, false), "dimmed: the backdrop's, so the page can't take the keyboard");
     }
 }

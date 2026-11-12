@@ -374,18 +374,22 @@ impl AppWindow {
     /// previous one (`dir`) in the order they opened; past the last (or
     /// `dir: "none"`) back to the pane. It comes to the front; a mod gets
     /// `focus` from `nextCommand()`. Not while a dialog or popup holds the keys.
+    /// While a window with a scrim shows there's no pane to go back to: the
+    /// cycle stays among the windows and `dir: "none"` is refused.
     pub(super) fn focus_window_cmd(&mut self, id: Option<String>, dir: &str, window: &mut Window, cx: &mut Context<Self>) -> Result<(), String> {
         if self.overlays.iter().any(|o| o.kind.modal_keys()) {
             return Err("a dialog holds the keyboard".into());
         }
         let mut wins: Vec<(u64, String)> = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window).map(|o| (o.opened, o.id.clone())).collect();
         wins.sort();
+        let modal = self.top_scrim_window().is_some();
         let to = match id {
             Some(id) if wins.iter().any(|(_, w)| *w == id) => Some(id),
             Some(id) => return Err(format!("no window {id:?}")),
             None => {
                 let at = wins.iter().position(|(_, w)| self.window_has_keys(w, window, cx));
-                cycle(at, wins.len(), dir)?.map(|i| wins[i].1.clone())
+                let next = if modal { cycle_modal(at, wins.len(), dir)? } else { cycle(at, wins.len(), dir)? };
+                next.map(|i| wins[i].1.clone())
             }
         };
         match to {
@@ -403,6 +407,12 @@ impl AppWindow {
 
     fn give_window_keys(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         self.raise_window(id, cx);
+        self.hand_window(id, window, cx);
+    }
+
+    /// The keyboard to a window, where it is in the stack: its first terminal,
+    /// else its frame, and its mod gets `focus` (`nextCommand()`).
+    pub(super) fn hand_window(&mut self, id: &str, window: &mut Window, cx: &mut Context<Self>) {
         if id == "terminal-peek" {
             return self.focus_float_view(window, cx);
         }
@@ -508,9 +518,31 @@ fn cycle(at: Option<usize>, n: usize, dir: &str) -> Result<Option<usize>, String
     })
 }
 
+/// `cycle` while a window with a scrim shows: round the windows, never out
+/// to the pane behind them.
+fn cycle_modal(at: Option<usize>, n: usize, dir: &str) -> Result<Option<usize>, String> {
+    if dir == "none" {
+        return Err("a window with a scrim holds the keyboard: close it to get back to the pane".into());
+    }
+    Ok(cycle(at, n, dir)?.or_else(|| match dir {
+        "prev" => n.checked_sub(1),
+        _ => (n > 0).then_some(0),
+    }))
+}
+
 #[cfg(test)]
 mod cycle_tests {
-    use super::cycle;
+    use super::{cycle, cycle_modal};
+
+    #[test]
+    fn with_a_scrim_window_cycling_stays_among_the_windows() {
+        assert_eq!(cycle_modal(Some(2), 3, "next"), Ok(Some(0)), "after the last: the first, not the pane");
+        assert_eq!(cycle_modal(Some(0), 3, "prev"), Ok(Some(2)));
+        assert_eq!(cycle_modal(Some(0), 1, "next"), Ok(Some(0)), "one window keeps the keys");
+        assert_eq!(cycle_modal(None, 2, "next"), Ok(Some(0)));
+        assert!(cycle_modal(Some(0), 2, "none").is_err(), "no pane to go back to");
+        assert!(cycle_modal(Some(0), 2, "sideways").is_err());
+    }
 
     #[test]
     fn cycling_goes_through_every_window_then_back_to_the_pane() {

@@ -262,10 +262,22 @@ pub fn last_frame(copy: u64) -> Option<(Layer, Vec<herdr_native_view::Cover>, bo
     LAST.with(|l| l.borrow().get(&copy).cloned())
 }
 
-/// `nativeViewCall(id, action, args)` from a mod: only its own views.
+/// `nativeViewCall(id, action, args)` from a mod: only its own views. A page
+/// a backdrop dimmed last frame (behind a dialog or a window with a scrim)
+/// doesn't take the keyboard (`focus` does nothing): a web pane claiming it on
+/// a timer would get the keys typed into the window above.
 pub fn call(copy: u64, id: &str, action: &str, args: &Value) -> Result<Value, String> {
+    if !may_take_keyboard(action, last_frame(copy).is_some_and(|(_, _, dim)| dim)) {
+        return Ok(Value::Null);
+    }
     call_key(&key(copy, id), action, args)
 }
+
+/// `focus` from a copy whose views are under a backdrop: refused.
+fn may_take_keyboard(action: &str, dimmed: bool) -> bool {
+    action != "focus" || !dimmed
+}
+
 
 /// `herdr-app do native.call {key, action, args}` (the test harness).
 pub fn call_key(key: &str, action: &str, args: &Value) -> Result<Value, String> {
@@ -301,7 +313,7 @@ pub fn debug() -> Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{By, Layer, Painted, cut, is_above};
+    use super::{By, Layer, Painted, cut, is_above, may_take_keyboard};
     use herdr_native_view::{Cover, Rect};
 
     fn at(z: usize, by: By, x: f64) -> Painted {
@@ -352,5 +364,12 @@ mod tests {
         assert_eq!(cut(Layer { z: 1, float: false }, &[], &[1]), (vec![], false), "the dialog's own views aren't dimmed");
         assert_eq!(cut(Layer { z: 1, float: false }, &[], &[2]), (vec![], true), "a dialog over the player dims it");
         assert_eq!(cut(PANE, &[], &[]), (vec![], false));
+    }
+
+    #[test]
+    fn a_page_behind_a_backdrop_never_takes_the_keyboard() {
+        assert!(may_take_keyboard("focus", false), "no backdrop over it: any page");
+        assert!(!may_take_keyboard("focus", true), "a pane's page behind a window with a scrim");
+        assert!(may_take_keyboard("browser.navigate", true), "only the keyboard is held back");
     }
 }
