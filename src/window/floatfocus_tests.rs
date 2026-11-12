@@ -112,3 +112,43 @@ fn floatfocus_focus_lost(cx: &mut gpui::TestAppContext) {
     assert!(crate::mods::shared("win.focus").and_then(|v| v.as_u64()).unwrap_or(0) >= 1, "its mod was told to take the keyboard");
 }
 
+#[test]
+fn a_dialog_or_popup_closed_over_a_window_gives_it_the_keyboard_back() {
+    in_own_process("floatfocus_popup_back");
+}
+
+/// Path 2: a dialog or popup opened over a window (the palette, a confirm, a
+/// menu) gave the keyboard to the pane behind when it closed.
+#[gpui::test]
+fn floatfocus_popup_back(cx: &mut gpui::TestAppContext) {
+    use serde_json::json;
+    if !running_alone("floatfocus_popup_back") {
+        return;
+    }
+    let (view, cx) = floatfocus_window(cx);
+    for (id, scrim) in [("w", true), ("pip", false)] {
+        let mut spec = scrim_window();
+        spec["scrim"] = json!(scrim);
+        open(&view, id, spec, cx);
+        cx.update(|window, cx| view.update(cx, |this, cx| this.focus_window_cmd(Some(id.into()), "next", window, cx))).unwrap();
+        settle(cx);
+        assert!(window_has_keys(&view, id, cx), "{id} has the keys");
+        for kind in ["popup", "dialog"] {
+            open(&view, "menu", json!({ "kind": kind }), cx);
+            assert!(!window_has_keys(&view, id, cx), "the {kind} has them");
+            cx.update(|window, cx| view.update(cx, |this, cx| this.close_overlay("menu", window, cx)));
+            settle(cx);
+            assert!(window_has_keys(&view, id, cx), "back to {id} after the {kind}");
+            assert!(!pane_has_keys(&view, "p1", cx));
+        }
+        cx.update(|window, cx| view.update(cx, |this, cx| this.close_overlay(id, window, cx)));
+        settle(cx);
+    }
+    // A popup over the pane: back to the pane, as before.
+    cx.update(|window, cx| view.update(cx, |this, cx| this.pane_focus("p1", cx).unwrap().focus(window, cx)));
+    open(&view, "menu", json!({ "kind": "popup" }), cx);
+    cx.update(|window, cx| view.update(cx, |this, cx| this.close_overlay("menu", window, cx)));
+    settle(cx);
+    assert!(pane_has_keys(&view, "p1", cx));
+}
+

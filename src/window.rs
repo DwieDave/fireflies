@@ -446,6 +446,9 @@ struct Overlay {
     /// The app's own screen (a `frame-` mod: What's new, the welcome): only
     /// its own close ends it, never a layout switch.
     frame: bool,
+    /// A dialog or popup: the window that held the keyboard when it opened,
+    /// which gets it back when it closes (the palette over the GitHub window).
+    back_to: Option<String>,
 }
 
 struct Drag {
@@ -1806,9 +1809,15 @@ impl AppWindow {
     /// it), else the shown agent or focused pane, else the window, where the
     /// app's keys work.
     fn restore_focus(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.restore_focus_to(None, window, cx);
+    }
+
+    /// `restore_focus`, with the window a closing dialog or popup opened over
+    /// (`back_to`) first in line after another dialog.
+    fn restore_focus_to(&mut self, back_to: Option<String>, window: &mut Window, cx: &mut Context<Self>) {
         let dialog = self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.focus.clone());
         if dialog.is_none()
-            && let Some(id) = self.top_scrim_window()
+            && let Some(id) = back_to.filter(|id| self.overlays.iter().any(|o| o.id == *id && o.kind == OverlayKind::Window)).or_else(|| self.top_scrim_window())
         {
             return self.hand_window(&id, window, cx);
         }
@@ -4595,6 +4604,8 @@ impl AppWindow {
             _ => 5000.0,
         });
         let slot = format!("overlay:{id}");
+        // A dialog or popup over a window that has the keyboard gives it back there.
+        let back_to = kind.modal_keys().then(|| self.overlays.iter().rev().find(|o| o.kind == OverlayKind::Window && o.focus.contains_focused(window, cx)).map(|o| o.id.clone())).flatten();
         // The frame takes the keyboard first, so a mod that focuses itself while loading wins.
         let focus = cx.focus_handle();
         if kind.modal_keys() {
@@ -4641,6 +4652,7 @@ impl AppWindow {
             resize,
             sizes,
             frame: app_screen,
+            back_to,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -4828,11 +4840,12 @@ impl AppWindow {
                 self.publish_shown_copies();
             }
             // The keyboard never ends up nowhere: back to a dialog still open,
-            // else the pane, else the window (where the app's keys work). A
-            // window in the background had none to give back (one that had it:
+            // else the window it opened over, else a window with a scrim, else
+            // the pane, else the window (where the app's keys work). A window in
+            // the background had none to give back (one that had it:
             // `restore_focus` runs on its own when its focus goes).
             if o.kind.modal_keys() {
-                self.restore_focus(window, cx);
+                self.restore_focus_to(o.back_to, window, cx);
             }
             cx.notify();
         }
