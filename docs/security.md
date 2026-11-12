@@ -2,7 +2,7 @@
 
 ## Mods have your access
 
-A mod is trusted JavaScript running inside Herdr. It can run programs with your environment, fetch URLs and read files.
+A mod is trusted JavaScript running inside Fireflies. It can run programs with your environment, fetch URLs and read files.
 The built-in file API limits writes to the app home, but a mod can run a program to write elsewhere. That is not a security boundary.
 Mods can also run programs on connected machines.
 
@@ -16,7 +16,7 @@ The default app home is `~/.config/herdr-app`, including on macOS and Windows (u
 
 This folder holds your settings, keys, layouts, mods, generated agent guide and API types.
 It also holds mod data, shared state, window positions, this screen's focus and zoom, update notes and cached media.
-Mods may store sensitive data here. Herdr does not encrypt this folder.
+Mods may store sensitive data here. Fireflies does not encrypt this folder.
 The [installed guide's file map](../defaults/AGENTS.md#the-files) explains the files.
 
 Spaces, tabs and splits are stored in each machine's core document, not in the app home.
@@ -29,14 +29,15 @@ Remote connections use SSH through the core.
 
 ## Updates and signing
 
-Installed releases check the Herdr release service, download an update, and check its SHA-256 checksum against the release manifest before unpacking it.
-The app switches to the downloaded version on quit. Source builds do not update themselves.
+Fireflies has no releases yet, and a build from source does not update itself.
+The updater it keeps from Herdr serves Herdr's installed releases: it checks Herdr's release service, downloads an update, and checks its SHA-256 checksum against the release manifest before unpacking it.
+The app switches to the downloaded version on quit.
 Core updates are handled separately by the core's updater.
 
 A checksum from the same service detects a damaged download; it is not an independent signature on the manifest.
 The app does not verify a separate cryptographic signature on update manifests.
 
-The release pipeline supports Apple Developer ID signing on macOS and Azure artifact signing on Windows when their credentials are configured.
+Herdr's release pipeline supports Apple Developer ID signing on macOS and Azure artifact signing on Windows when their credentials are configured.
 Without them, packages can be unsigned or ad hoc signed.
 On macOS the installer and updater verify certificate-signed bundles and preserve their signatures.
 Apple notarization is tested separately; it is not required for publishing a release.
@@ -44,11 +45,11 @@ Do not assume every download is notarized or signed.
 
 ## Telemetry
 
-Herdr collects and sends no usage data: no reports, no install ID.
-Earlier versions kept an install ID and unsent reports in a `telemetry` folder in the app home; Herdr deletes it on start.
+Fireflies collects and sends no usage data: no reports, no install ID.
+Earlier versions kept an install ID and unsent reports in a `telemetry` folder in the app home; Fireflies deletes it on start.
 A `telemetry` key left in `settings.json` is ignored.
 
-On its own, Herdr only goes online for update checks (release info, notes and their media); mods and web panes make their own requests.
-Feedback is not uploaded by Herdr: Send feedback opens a prefilled GitHub issue that you review and submit on GitHub.
+On its own, Fireflies only goes online for update checks (release info, notes and their media); mods and web panes make their own requests.
+Feedback is not uploaded by Fireflies: Send feedback opens a prefilled GitHub issue on DwieDave/fireflies that you review and submit on GitHub.
 
-[Back to Herdr](../README.md)
+[Back to Fireflies](../README.md)
