@@ -8,7 +8,7 @@ use std::io;
 use std::path::Path;
 
 /// Bundle and executable names of an install: `Fireflies.app` from this
-/// fork's installers, `Herdr.app` from earlier ones and from Herdr itself.
+/// fork's installers, `Herdr.app` from earlier ones and from upstream Herdr.
 const NAMES: [&str; 2] = ["Fireflies", "Herdr"];
 /// The commands linked to the running bundle.
 const LINKS: [&str; 2] = ["fireflies", "herdr-app"];

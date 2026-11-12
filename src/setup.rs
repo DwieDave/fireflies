@@ -17,10 +17,6 @@ use std::sync::Arc;
 
 const ICON: &[u8] = include_bytes!("../assets/icons/fireflies-ui-icon.png");
 #[cfg(not(windows))]
-const APP_INSTALL: &str = "curl -fsSL https://releases.herdr.dev/app/install.sh | sh";
-#[cfg(windows)]
-const APP_INSTALL: &str = "powershell -c \"irm https://releases.herdr.dev/app/install.ps1 | iex\"";
-#[cfg(not(windows))]
 const CORE_INSTALL: &str = "curl -fsSL https://releases.herdr.dev/core/install.sh | sh";
 #[cfg(windows)]
 const CORE_INSTALL: &str = "powershell -c \"irm https://releases.herdr.dev/core/install.ps1 | iex\"";
@@ -44,7 +40,24 @@ impl Need {
 
 #[cfg(test)]
 mod tests {
-    use super::Need;
+    use super::{Mismatch, Need, Setup, State};
+    use gpui::{Image, ImageFormat};
+    use std::sync::Arc;
+
+    #[test]
+    fn a_newer_core_asks_for_a_fresh_build_not_herdrs_installer() {
+        let setup = Setup {
+            need: Need::Fix(Mismatch::Newer { generation: 9 }),
+            state: State::Ready,
+            requests: None,
+            icon: Arc::new(Image::from_bytes(ImageFormat::Png, Vec::new())),
+        };
+        let (_, body, hint) = setup.words();
+        assert!(hint.contains("pull and build it again"), "{hint}");
+        for text in [&body, &hint] {
+            assert!(!text.contains("releases.herdr.dev") && !text.contains("install.sh") && !text.contains("install.ps1"), "{text}");
+        }
+    }
 
     #[test]
     fn unreadable_core_connections_offer_installation_instead_of_retry() {
@@ -188,8 +201,9 @@ impl Setup {
             ),
             Need::Fix(Mismatch::Newer { generation }) => (
                 "This Herdr is older than your herdr-core".into(),
-                format!("Your herdr-core speaks a newer protocol (generation {generation}) than this Herdr understands. Update Herdr; your terminals keep running."),
-                format!("Update Herdr: {APP_INSTALL}"),
+                format!("Your herdr-core speaks a newer protocol (generation {generation}) than this Herdr understands. Build a newer one; your terminals keep running."),
+                // Upstream Herdr's installer would replace this fork with upstream Herdr, and the fork has no releases.
+                "Fireflies has no releases yet: pull and build it again (just install).".into(),
             ),
         }
     }
