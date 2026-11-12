@@ -67,7 +67,9 @@ fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
 there beside the focused pane (`--in tab` for a tab of its own). Cmd/Ctrl-click
-on a folder path in terminal output does the same.
+on a folder path in terminal output does the same. It leaves dotfiles and
+git-ignored files out unless settings.json `files` says otherwise (H / I show
+them): to show a `.github/` or `target/` folder, open that folder itself.
 
 When the person wants to keep an eye on an agent (an orchestrator, say),
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'` pins it to the
