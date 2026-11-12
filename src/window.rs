@@ -8434,4 +8434,100 @@ export default class Viewer extends View { render() { return div().size_full(); 
         });
         assert_eq!(seen(player_copy, cx), (on(1), vec![], false));
     }
+
+    #[test]
+    fn a_layouts_update_note_closes_from_its_close_button() {
+        in_own_process("update_note_close");
+    }
+
+    /// The update note a layout's mod draws (dialog_mods.update, as Nocturne's):
+    /// a real click on its × hides it.
+    #[gpui::test]
+    fn update_note_close(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("update_note_close") {
+            return;
+        }
+        let note = r#"import { View, div } from "gpui-kit";
+import { props, shared, setShared } from "herdr";
+export default class Note extends View {
+  render() {
+    const p = props() ?? {};
+    if (!p.label || shared("note.dismissed") === p.dismissal) { setShared("note.drawn", "gone"); return div(); }
+    setShared("note.drawn", "shown");
+    return div().size_full().flex().justify_end()
+      .child(div().id("upd-x").w(30).h_full().on_click(() => setShared("note.dismissed", p.dismissal)));
+  }
+}
+"#;
+        let layout = json!({ "id": "root", "type": "row", "dialog_mods": { "update": "note" }, "children": [] });
+        let (view, cx) = open_window(cx, "note", note, layout);
+        view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            this.update_success = true;
+            this.sync(window, cx);
+            cx.notify();
+        });
+        cx.run_until_parked();
+        assert!(view.update(cx, |this, _| this.copies.contains_key(super::UPDATE_NOTE)), "the note's copy is made");
+        let shown = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.update_note().is_some()) && crate::mods::shared("note.dismissed").is_none();
+        assert!(shown(cx));
+        assert_eq!(crate::mods::shared("note.drawn"), Some(json!("shown")));
+        // The ×: the note's right end, 16 px from the window's bottom right.
+        let viewport = cx.update(|window, _| window.viewport_size());
+        let at = point(viewport.width - px(16.0 + 15.0), viewport.height - px(16.0 + super::UPDATE_PILL_HEIGHT / 2.0));
+        cx.simulate_click(at, gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert_eq!(crate::mods::shared("note.dismissed"), Some(json!(format!("Updated to {}", env!("CARGO_PKG_VERSION")))), "the click reached the ×");
+        assert_eq!(crate::mods::shared("note.drawn"), Some(json!("gone")), "the note drew itself again, gone");
+    }
+
+    #[test]
+    fn a_windows_close_button_closes_it() {
+        in_own_process("window_close_button");
+    }
+
+    /// A window overlay drawn by a layout's mod (Nocturne's What's New): its
+    /// header's ×, which stops the press (no window drag) and closes on click.
+    #[gpui::test]
+    fn window_close_button(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("window_close_button") {
+            return;
+        }
+        let main = r#"import { View, div } from "gpui-kit";
+import { props, closeOverlay } from "herdr";
+export default class W extends View {
+  render() {
+    return div().size_full().flex().flex_col()
+      .child(div().h(40).flex().justify_end()
+        .child(div().id("scr-close").w(24).h(24).on_mouse_down("left", (_e, cx) => cx.stop_propagation()).on_click(() => closeOverlay(props().overlay))));
+  }
+}
+"#;
+        let layout = json!({ "id": "root", "type": "row", "children": [] });
+        let (view, cx) = open_window(cx, "win", main, layout);
+        let id = view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            let id = crate::mods::new_overlay_id();
+            this.open_overlay(id.clone(), json!({ "mod": "win", "kind": "window", "width": 400, "height": 300 }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
+            id
+        });
+        cx.run_until_parked();
+        cx.run_until_parked();
+        let open = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == id));
+        assert!(open(cx));
+        // Another window opened after it (a kept Git or PiP window, say), beside it: a press raises ours first.
+        view.update_in(cx, |this, window, cx| {
+            let other = crate::mods::new_overlay_id();
+            this.open_overlay(other.clone(), json!({ "mod": "win", "kind": "window", "width": 200, "height": 200 }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == other).unwrap().place = Some(point(px(600.0), px(400.0)));
+        });
+        cx.run_until_parked();
+        // The ×: 12 px in from the window's right edge, 12 px down (a 1 px border around the body).
+        cx.simulate_click(point(px(100.0 + 400.0 - 13.0), px(100.0 + 13.0)), gpui::Modifiers::default());
+        cx.run_until_parked();
+        assert!(!open(cx), "the × closed the window");
+    }
 }
