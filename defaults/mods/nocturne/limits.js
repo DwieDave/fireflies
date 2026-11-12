@@ -14,6 +14,12 @@
 // token stays inside the shell: printf is a builtin and curl reads the header
 // from stdin, so it is never in a process's arguments.
 //
+// Off in a scratch app (HERDR_APP_HOME set to another home than the default
+// ~/.config/herdr-app): its login is still this machine's, so every scratch
+// app would ask the same account's endpoint on top of the real app's.
+// HERDR_APP_USAGE=1 turns it on there. Checked by the scripts themselves,
+// before the login is read: no request leaves a scratch app.
+//
 // Two mods show it (Nocturne's sidebar and the nocturne-usage pane), and a
 // mod can't import another's files: this file is in both, byte for byte.
 // Edit one, copy it over the other. They share one reading per provider
@@ -46,7 +52,8 @@ export const provider = () => PROVIDERS.find((p) => p.id === shared(PICK)) ?? PR
 /** Picks a provider by id; every copy redraws. */
 export const pickProvider = (id) => setShared(PICK, id);
 
-export const lastUsage = (p = provider().id) => shared(key(CACHE, p)) ?? null;
+/** The last good answer; none while usage is off (a scratch app keeps no stale numbers on show). */
+export const lastUsage = (p = provider().id) => (usageNote(p)?.state === "off" ? null : shared(key(CACHE, p)) ?? null);
 export const usageNote = (p = provider().id) => shared(key(NOTE, p)) ?? null;
 export const asking = (p = provider().id) => Date.now() - (Number(shared(key(ASKING, p))) || 0) < 30_000;
 
@@ -71,7 +78,14 @@ const HOUR = 3600_000, DAY = 24 * HOUR;
 
 // ---- Claude
 
-const CLAUDE = String.raw`
+// Exit 5: a scratch app (see the top), nothing read, nothing asked.
+const OFF = String.raw`
+def=$XDG_CONFIG_HOME; [ -n "$def" ] || def=$HOME/.config; def=$def/herdr-app
+here=$(printf %s "$HERDR_APP_HOME" | sed 's:/*$::')
+if [ -n "$here" ] && [ "$here" != "$def" ] && [ "$HERDR_APP_USAGE" != 1 ]; then exit 5; fi
+`;
+
+const CLAUDE = OFF + String.raw`
 creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
 [ -n "$creds" ] || creds=$(cat "$HOME/.claude/.credentials.json" 2>/dev/null)
 oauth=$(printf %s "$creds" | tr -d '\n' | sed 's/.*"claudeAiOauth"[[:space:]]*:[[:space:]]*{//')
@@ -113,7 +127,7 @@ function claudeWindows(d, plan) {
 
 // ---- Codex
 
-const CODEX = String.raw`
+const CODEX = OFF + String.raw`
 home=$CODEX_HOME; [ -n "$home" ] || home=$HOME/.codex
 auth=$(tr -d '\n' < "$home/auth.json" 2>/dev/null)
 field() { printf %s "$auth" | grep -o "\"$1\"[[:space:]]*:[[:space:]]*\"[^\"]*" | head -1 | sed 's/.*"//'; }
@@ -141,6 +155,7 @@ const READERS = { claude: [CLAUDE, claudeWindows], codex: [CODEX, codexWindows] 
 /**
  * One read of provider `p`. Resolves { state, ... }:
  *   ok        { session, week, scoped, plan, at }
+ *   off       a scratch app: usage isn't asked there (see the top)
  *   nologin   no login for it on this machine
  *   expired   the login's token ran out (the agent renews it when it next runs)
  *   busy      the endpoint asked us to slow down
@@ -149,6 +164,7 @@ const READERS = { claude: [CLAUDE, claudeWindows], codex: [CODEX, codexWindows] 
 export async function readUsage(p = provider().id) {
   const [script, windows] = READERS[p] ?? READERS.claude;
   const r = await exec("sh", ["-c", script]);
+  if (r.code === 5) return { state: "off" };
   if (r.code === 3) return { state: "nologin" };
   if (r.code === 4) return { state: "expired" };
   const lines = r.stdout.split("\n");
