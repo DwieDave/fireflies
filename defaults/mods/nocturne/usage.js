@@ -22,6 +22,8 @@ import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, 
 
 const FOLDED = "nocturne.usageFolded";
 const TICK = 30_000;
+/** The first read, this long after the section first draws (ms). */
+const FIRST = 1000;
 const stop = (_e, cx) => cx.stop_propagation();
 const pad = (n) => String(n).padStart(2, "0");
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -82,7 +84,8 @@ export class UsageSection {
     // Ask when the shared answer is old (whichever copy is shown first asks);
     // the tick also keeps the countdowns and the clock's plus moving.
     const tick = (cx) => { cx.spawn(async () => { await refreshUsage(); }); cx.notify(); };
-    tick(cx);
+    // The first read after the first frame: drawing never waits on (or runs) the machine's cache script.
+    cx.spawn(async (cx) => { await cx.sleep(FIRST); await refreshUsage(); cx.notify(); });
     cx.timer.every(TICK, tick);
   }
 
