@@ -601,8 +601,9 @@ export default class Files extends View {
     if (this.on || !path || row?.dir) return this.terminalEdit(path, cx);
     const beside = this.beside();
     // As a tab of the editor this pane sent files to, else the shown tab's
-    // editor; with none, a new one beside (editor-route.js).
-    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null });
+    // editor; with none, a new one beside (editor-route.js). Markdown edited
+    // as text opens with its preview beside it.
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : null });
     if (to) this.editorSlot = to.props.slot;
   }
 

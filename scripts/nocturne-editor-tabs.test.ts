@@ -527,3 +527,26 @@ test("a pointer's card doesn't ring links on tab (the key goes on to vim / the t
   p.followLink("../shot.png", cx());
   expect(ran.at(-1)).toEqual(["preview.open", { path: "/p/shot.png", pane: "p1" }]);
 });
+
+// ---- edit from the Markdown viewer
+
+test("the Markdown viewer's edit: the viewer closes and the editor takes its place with the preview on (a tab when the tab has an editor)", async () => {
+  const { default: Markdown } = await import("../defaults/mods/nocturne-markdown/main.js");
+  const viewer: any = Object.create(Markdown.prototype);
+  Object.assign(viewer, { path: "/p/docs/n.md", on: null, slot: "m1" });
+  // No editor in the tab: a new one beside the viewer (asked for the preview), then the viewer closes.
+  paneList = [{ pane: "pm", tab: "t1", mod: "nocturne-markdown", props: { slot: "m1", path: "/p/docs/n.md" } }];
+  viewer.edit();
+  expect(ran.slice(-2)).toEqual([["editor.open", { path: "/p/docs/n.md", pane: "pm" }], ["pane.close", { pane: "pm" }]]);
+  expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: null, path: "/p/docs/n.md", view: "split" });
+  // The new editor starts on the preview's split view.
+  storage.preview = "text";
+  const p = await pane("/p/docs/n.md");
+  expect(p.view).toBe("split");
+  // An editor in the tab: the file goes to it as a tab, preview on; the viewer closes.
+  paneList = [{ pane: "pm", tab: "t1", mod: "nocturne-markdown", props: { slot: "m1", path: "/p/docs/n.md" } }, ed("e1", "s1", "t1", "/p/src/a.rs")];
+  ran.length = 0;
+  viewer.edit();
+  expect(ran).toEqual([["pane.focus", { pane: "e1" }], ["pane.close", { pane: "pm" }]]);
+  expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: "s1", path: "/p/docs/n.md", view: "split" });
+});

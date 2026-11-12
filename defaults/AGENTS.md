@@ -406,7 +406,9 @@ the highlighted line shows where it will land.
   front matter as a YAML block. Ticking a task box writes `[x]` into the file
   (local files). A formula or diagram that can't be drawn shows its source and
   why. Its bar: raw / rendered,
-  edit (the editor beside; another machine's file: $EDITOR in a terminal), files.
+  edit (the viewer closes and the editor opens in its place with the preview
+  split on, or as a tab of the tab's editor; another machine's file: $EDITOR in
+  a terminal), files.
   Keys: `j k` scroll, `d u` half pages, `gg G`, Tab / Shift-Tab the next /
   previous link or picture (its block marked, where it goes at the foot),
   Enter follows, `] [` headings, `h` back, `r` raw, `e` edit, `f` files, `y`
@@ -557,7 +559,10 @@ the highlighted line shows where it will land.
   pictures and the like in the preview, web pages per `links`.
   The bar's chip (split / preview / text), cmd-shift-v and space `m p` go
   split → preview only → text only; the tab keeps its choice and new Markdown
-  tabs start with the last one picked. In preview
+  tabs start with the last one picked. The Markdown viewer's edit (its chip,
+  `e`) closes the viewer and opens the file in the editor with the preview
+  split on, in the viewer's place (as a tab when the tab has an editor); the
+  files pane's edit of a Markdown file opens it with the preview on too. In preview
   only: j / k / d / u / gg / G scroll, `e` or esc back to the text.
   Resting the pointer on a word shows the hover card:
   the server's signature and docs, and every problem there with its whole
