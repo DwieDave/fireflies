@@ -5,9 +5,12 @@
 // (ETag'd, model.js pollEvery); running things breathe, pulse and tick.
 // A running job's log only exists once it finishes (GitHub doesn't hand out
 // partial logs), so its steps move live and the log arrives at the end.
+// The runs and steps lists follow their cursor (scroll handles: they move
+// only as far as it takes to show the row); j / k in the log scroll it by
+// lines from where the wheel left it.
 
 import { div } from "gpui-kit";
-import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
+import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import { settings } from "herdr";
 import { api, ghRun, fileAt } from "./gh.js";
 import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.js";
@@ -39,7 +42,10 @@ export default class Actions {
     this.extra = new Map(); // runs opened from a PR's checks that the list doesn't hold
     this.runsScroll = VirtualListScrollHandle.new();
     this.logScroll = VirtualListScrollHandle.new();
-    this.logAt = 0;
+    this.stepsScroll = ScrollHandle.new(); // the steps list follows the chosen step
+    this.stepsAt = null; // `${job}:${index}` the steps list last scrolled to
+    this.logAt = 0; // the log's top line
+    this.logVis = 20; // log lines that fit, from its height
     this.graphSize = { width: 600, height: 240 };
     this.pan = null; // { x, y } once dragged or scrolled
     this.drag = null; // { x, y, from } while the graph is dragged
@@ -245,11 +251,23 @@ export default class Actions {
     this.stepSel = s[i].number; this.logAt = 0; this.logScroll.scroll_to_item(0);
   }
 
+  /** The log's top line now: the wheel moves it too, so it's read from the list. */
+  logTop() {
+    const y = this.logScroll.offset?.()?.y;
+    return Number.isFinite(y) ? Math.max(0, Math.round(-unzoom(y) / LINE)) : this.logAt;
+  }
+
+  /** Scrolls the log by `d` lines (J/K a page, g/G the ends). A scroll to an
+   *  item only moves as far as it takes to show that line, so going down asks
+   *  for the line that ends up at the bottom edge. */
   scrollLog(d) {
     const n = this.logLines().length;
     if (!n) return;
-    this.logAt = Math.max(0, Math.min(n - 1, this.logAt + d));
-    this.logScroll.scroll_to_item(this.logAt, "top");
+    const vis = Math.max(1, this.logVis);
+    const top = Math.max(0, Math.min(Math.max(0, n - vis), this.logTop() + d));
+    this.logAt = top;
+    if (d < 0) this.logScroll.scroll_to_item(top, "top");
+    else this.logScroll.scroll_to_item(Math.min(n - 1, top + vis - 1), "top");
   }
 
   /** The chosen step's log lines, formatted. */
@@ -450,8 +468,12 @@ export default class Actions {
         .child(div().relative().flex_none().text_color(k === "working" ? t.working : k === "failed" ? t.blocked : t.dim).child(k === "skipped" ? "skipped" : duration(s.started_at, s.completed_at)));
     });
     const k = tone(j.status, j.conclusion);
+    // The chosen step stays in view: j / k past the edge, a new job whose
+    // running or failed step is further down.
+    const at = steps.indexOf(cur), key = `${j.id}:${at}`;
+    if (at >= 0 && key !== this.stepsAt) { this.stepsAt = key; this.stepsScroll.scroll_to_item(at); }
     const body = !steps.length ? empty(t, k === "queued" ? "Waiting for a runner…" : "No steps", null, { small: true })
-      : div().id("steps-body").size_full().overflow_y_scroll().py(2).children(rows);
+      : div().id("steps-body").size_full().overflow_y_scroll().track_scroll(this.stepsScroll).py(2).children(rows);
     return panel(t, "steps", j.name, active, body, { right: `${steps.filter((s) => s.status === "completed").length}/${steps.length}` });
   }
 
@@ -473,6 +495,7 @@ export default class Actions {
       const color = { group: t.accent, error: t.blocked, warning: t.ansi3, notice: t.ansi4, debug: t.dim, plain: t.muted };
       body = !lines.length ? empty(t, sk === "skipped" ? "Skipped" : "Nothing logged for this step", null, { small: true })
         : div().size_full().px(8).py(2)
+          .on_size_change((s, cx) => { const v = Math.max(1, Math.floor((unzoom(s.height) - 4) / LINE)); if (v !== this.logVis) { this.logVis = v; cx.notify(); } })
           .on_mouse_down("left", (_e, cx) => { this.focus = "log"; this.app.focusSelf(); cx.stop_propagation(); })
           .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(i),
             (range) => lines.slice(range.start, range.end).map((l, n) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)

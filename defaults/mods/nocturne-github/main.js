@@ -36,7 +36,7 @@
 // in a web pane beside the pane underneath and closes the window.
 
 import { View, div, svg } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import { repoOf, viewRepo } from "./gh.js";
 import { readAgo } from "./model.js";
@@ -94,6 +94,7 @@ export default class GitHub extends View {
     this.note = null; // { text, tone, at }
     this.help = false;
     this.picker = null; // { title, rows: [{ label, sub, go(cx) }], at }: L's list of links
+    this.pickerScroll = ScrollHandle.new(); // the picker's box follows its cursor
     this.size = { width: 1000, height: 700 };
     this.resizing = null; // { key, axis, at, from, set, min, max, sign } while a splitter is dragged
     this.next = 0; // when to read GitHub again
@@ -534,6 +535,8 @@ export default class GitHub extends View {
 
   pickerPanel(t) {
     const p = this.picker;
+    // The cursor stays in view in a long list (the box's first child is the title).
+    if (p.shownAt !== p.at) { p.shownAt = p.at; this.pickerScroll.scroll_to_item(p.at + 1); }
     const rows = p.rows.map((r, i) => h_flex().id(`pick-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
       .hover((s) => s.bg(t.ansi0 + "55"))
       .when(i === p.at, (el) => el.children(band(t, true)))
@@ -546,7 +549,7 @@ export default class GitHub extends View {
     return div().id("gh-picker").absolute().inset_0().flex().items_center().justify_center().text_size(12)
       .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.picker = null; cx.notify(); })
       .child(popupScrim("gh-picker-scrim"))
-      .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
+      .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(this.pickerScroll)
         .on_mouse_down("left", stop)
         .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).child(p.title))
         .children(rows));

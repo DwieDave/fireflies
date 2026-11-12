@@ -114,7 +114,7 @@ const draw = (tab: any) => { rendering = true; try { return tab.render(theme, { 
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el,
   v_virtual_list: (_id: string, n: number, _s: unknown, key: (i: number) => string, render: Function) => { for (let i = 0; i < n; i++) key(i); render({ start: 0, end: n }, cx); return el; },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) }, ScrollHandle: { new: () => ({ scroll_to_item() {}, release() {} }) },
   InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
   TextareaState: { new: (o: any) => new Input(o) }, Textarea: { new: () => el }, TextView: { markdown: () => el },
 }));

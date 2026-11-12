@@ -50,6 +50,8 @@ test:
     bun test scripts/nocturne-github-forms.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/nocturne-git-view.test.ts
+    # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, with herdr and gpui stand-ins.
+    bun test scripts/nocturne-github-scroll.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
     bun test scripts/nocturne-chrome-keys.test.ts
     # The floating tool windows' keys, with herdr and gpui stand-ins.
