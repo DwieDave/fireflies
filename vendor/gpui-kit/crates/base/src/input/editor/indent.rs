@@ -4,7 +4,7 @@ use crate::input::{
     element::TextElement, layout::LastLayout, mode::LayoutMode,
 };
 use gpui::{
-    Bounds, Context, Hsla, Path, PathBuilder, Pixels, SharedString, TextRun, TextStyle, Window,
+    Bounds, Context, Path, PathBuilder, Pixels, SharedString, TextStyle, Window,
     point, px,
 };
 use ropey::RopeSlice;
@@ -80,41 +80,48 @@ impl LayoutMode {
     }
 }
 
-impl<M: InputModeKind> TextElement<M> {
-    /// Measure the indent width in pixels for given column count.
-    fn measure_indent_width(&self, style: &TextStyle, column: usize, window: &Window) -> Pixels {
-        let font_size = style.font_size.to_pixels(window.rem_size());
-        let layout = window.text_system().shape_line(
-            SharedString::from(" ".repeat(column)),
-            font_size,
-            &[TextRun {
-                len: column,
-                font: style.font(),
-                color: Hsla::default(),
-                background_color: None,
-                strikethrough: None,
-                underline: None,
-            }],
-            None,
-        );
-
-        layout.width
+/// Byte offsets in `line` where each indent level of its leading whitespace
+/// starts: one guide per level.
+///
+/// A level starts wherever the column, counted with tabs advancing to the next
+/// tab stop, is a multiple of `tab_size`. The guide is then drawn at the laid-out
+/// x of that byte rather than at `column * space width`: the text system draws a
+/// tab at its own stop (CoreText's is 28pt), not `tab_size` spaces wide, so
+/// guides computed from columns drift off tab-indented lines.
+pub(crate) fn indent_level_offsets(line: &RopeSlice, tab_size: usize) -> Vec<usize> {
+    let tab_size = tab_size.max(1);
+    let mut offsets = vec![];
+    let mut column = 0;
+    let mut byte = 0;
+    for ch in line.chars() {
+        if !matches!(ch, ' ' | '\t') {
+            break;
+        }
+        if column % tab_size == 0 {
+            offsets.push(byte);
+        }
+        column = if ch == '\t' {
+            (column / tab_size + 1) * tab_size
+        } else {
+            column + 1
+        };
+        byte += 1;
     }
+    offsets
+}
 
+impl<M: InputModeKind> TextElement<M> {
     pub(super) fn layout_indent_guides(
         &self,
         state: &InputBaseState<M>,
         bounds: &Bounds<Pixels>,
         last_layout: &LastLayout,
-        text_style: &TextStyle,
-        window: &mut Window,
+        _text_style: &TextStyle,
+        _window: &mut Window,
     ) -> Option<Path<Pixels>> {
         if !state.is_multi_line() || !state.mode.has_indent_guides() {
             return None;
         }
-
-        let indent_width =
-            self.measure_indent_width(text_style, state.mode.tab_size().tab_size, window);
 
         let tab_size = state.mode.tab_size();
         let line_height = last_layout.line_height;
@@ -128,27 +135,25 @@ impl<M: InputModeKind> TextElement<M> {
             .zip(last_layout.lines.iter())
         {
             let line = state.text.slice_line(buffer_line);
+            // Soft-wrapped rows continue at the first row's indent, so the
+            // guides run down the whole wrapped line.
+            let height = line_height * line_layout.wrapped_lines.len().max(1) as f32;
             let mut current_indents = vec![];
             if line.len() > 0 {
-                let indent_count = tab_size.indent_count(&line);
-                for offset in (0..indent_count).step_by(tab_size.tab_size) {
-                    let x = if indent_count > 0 {
-                        indent_width * offset as f32 / tab_size.tab_size as f32
-                    } else {
-                        px(0.)
-                    };
-
+                let first_row = line_layout.wrapped_lines.first();
+                for offset in indent_level_offsets(&line, tab_size.tab_size) {
+                    let x = first_row.map_or(px(0.), |row| row.x_for_index(offset));
                     let pos = point(x + last_layout.line_number_width, offset_y);
 
                     builder.move_to(pos);
-                    builder.line_to(point(pos.x, pos.y + line_height));
+                    builder.line_to(point(pos.x, pos.y + height));
                     current_indents.push(pos.x);
                 }
             } else if last_indents.len() > 0 {
                 for x in &last_indents {
                     let pos = point(*x, offset_y);
                     builder.move_to(pos);
-                    builder.line_to(point(pos.x, pos.y + line_height));
+                    builder.line_to(point(pos.x, pos.y + height));
                 }
                 current_indents = last_indents.clone();
             }
@@ -445,7 +450,45 @@ enum IndentDirection {
 mod tests {
     use ropey::RopeSlice;
 
-    use super::TabSize;
+    use super::{TabSize, indent_level_offsets};
+
+    fn levels(line: &str, tab_size: usize) -> Vec<usize> {
+        indent_level_offsets(&RopeSlice::from(line), tab_size)
+    }
+
+    #[test]
+    fn test_indent_guide_offsets_tabs() {
+        // One guide per tab, whatever the tab size: the guide sits where the
+        // tab is drawn, not `tab_size` spaces in (Developer's tsx files).
+        for tab_size in [2, 4, 8] {
+            assert_eq!(levels("<App />", tab_size), Vec::<usize>::new());
+            assert_eq!(levels("\t<StrictMode>", tab_size), vec![0]);
+            assert_eq!(levels("\t\t<App />", tab_size), vec![0, 1]);
+            assert_eq!(levels("\t\t\tx", tab_size), vec![0, 1, 2]);
+        }
+    }
+
+    #[test]
+    fn test_indent_guide_offsets_spaces() {
+        assert_eq!(levels("    fn x()", 4), vec![0]);
+        assert_eq!(levels("        x", 4), vec![0, 4]);
+        assert_eq!(levels("        x", 2), vec![0, 2, 4, 6]);
+        assert_eq!(levels("        x", 8), vec![0]);
+        assert_eq!(levels("  x", 4), vec![0]);
+        assert_eq!(levels("      x", 4), vec![0, 4]);
+    }
+
+    #[test]
+    fn test_indent_guide_offsets_mixed() {
+        // Spaces then a tab: the tab finishes the partial level.
+        assert_eq!(levels("  \tx", 4), vec![0]);
+        assert_eq!(levels("  \t\tx", 4), vec![0, 3]);
+        // A tab then spaces: the spaces make the next level once full.
+        assert_eq!(levels("\t    x", 4), vec![0, 1]);
+        assert_eq!(levels("\t  x", 2), vec![0, 1]);
+        // A whitespace-only line still carries its guides.
+        assert_eq!(levels("\t\t", 4), vec![0, 1]);
+    }
 
     #[test]
     fn test_tab_size() {
