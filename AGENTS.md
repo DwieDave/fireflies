@@ -66,7 +66,7 @@ checked on those systems, not only by cross-compiling.
 `just build`, `just test` (what CI runs, on Linux), `just check` (the tests).
 `just install` builds and installs the desktop app using the platform installer.
 On Windows it updates `%LOCALAPPDATA%\Programs\herdr-app` and the Start menu;
-quit and reopen Herdr to use the new build. Windows recipes use PowerShell by default;
+quit and reopen Fireflies to use the new build. Windows recipes use PowerShell by default;
 `just --shell pwsh --shell-arg -Command <recipe>` uses pwsh.
 
 Never run a bare `target/*/herdr-app` (no arguments) on a machine where you
@@ -84,7 +84,8 @@ down` when done.
 
 ## Contributing
 
-Work on a branch; Developer merges it into `integrate` and ships `main`.
+Work on a branch; Developer merges it into `integrate` and ships `main`
+once every `bun test` and `cargo test` line of the justfile passes.
 Commit messages: lowercase conventional commits, single line, no AI co-author
 lines. This fork publishes no releases. A fix that Herdr needs too goes
 upstream as a pull request to Herdr's `master`, where Herdr's maintainer
@@ -92,7 +93,7 @@ reviews it and releases (a `v*` tag).
 
 CHANGELOG.md: every release gets a `## [x.y.z] - YYYY-MM-DD` section
 (`### New` / `### Fixed`), written at release time from the commits since the
-last tag; Herdr shows it as the update notes. One line per change, in user
+last tag; the app shows it as the update notes. One line per change, in user
 words (what a person notices, not code), with the issue or PR number and
 `thanks @name` for contributors. Leave out internal changes and fixes for bugs
 that never shipped.
