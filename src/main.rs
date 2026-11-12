@@ -49,19 +49,20 @@ mod window;
 use gpui::*;
 
 const HELP: &str = "\
-herdr-app: the Herdr desktop app. With no arguments it opens the window.
+fireflies: the Fireflies desktop app. With no arguments it opens the window.
+`herdr-app` is the same command and keeps working.
 
 Usage:
-  herdr-app                        open the window
-  herdr-app ls                     spaces, their tabs and terminals, in the open window
-  herdr-app do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
-  herdr-app feedback <text>        draft a GitHub issue for the person to review and submit
-  herdr-app commands               every command, its arguments, what it does
-  herdr-app status                 what the window shows, and any errors
-  herdr-app shot [file.png]        save the last window frame (default: herdr-shot.png)
-  herdr-app check <mod folder>     load a mod once and report what's wrong
-  herdr-app --skill                Agent Skill: driving the window, and where hc fits
-  herdr-app --version
+  fireflies                        open the window
+  fireflies ls                     spaces, their tabs and terminals, in the open window
+  fireflies do <command> [args]    run a command: --name api --argv '[\"pi\"]', or one JSON object
+  fireflies feedback <text>        draft a GitHub issue for the person to review and submit
+  fireflies commands               every command, its arguments, what it does
+  fireflies status                 what the window shows, and any errors
+  fireflies shot [file.png]        save the last window frame (default: herdr-shot.png)
+  fireflies check <mod folder>     load a mod once and report what's wrong
+  fireflies --skill                Agent Skill: driving the window, and where hc fits
+  fireflies --version
 
 The terminals run in herdr-core (`hc`), which keeps them alive when the
 window closes. `hc --help`: start, read, wait on and talk to terminals and
