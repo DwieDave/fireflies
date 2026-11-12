@@ -12,7 +12,8 @@
 //              typing filters by key and words; ↑↓ / ctrl-n ctrl-p / page up
 //              and down move through the list, esc closes
 //   update     the update note, bottom right ({ label, restart, success, dismissal });
-//              × hides it until the next update (shared UPDATE_DISMISSED)
+//              × (or nocturne.update-close, or nocturne.toast-close with no toast
+//              on show) hides it until the next update (shared UPDATE_DISMISSED)
 // Colors from theme() only (the moonfly theme).
 
 import { div, svg, image } from "gpui-kit";
@@ -28,6 +29,19 @@ const ASK = "Read ~/.config/herdr-app/AGENTS.md, then tell me what you can chang
 
 /** shared() key: the update note's `dismissal` someone closed. */
 export const UPDATE_DISMISSED = "nocturne.update-dismissed";
+/** shared() key: the `dismissal` of the update note on show, for its key (dismissUpdate). */
+const UPDATE_SHOWN = "nocturne.update-shown";
+
+/** Whether an update note is on show (not closed yet). */
+export const updateShown = () => Boolean(shared(UPDATE_SHOWN)) && shared(UPDATE_DISMISSED) !== shared(UPDATE_SHOWN);
+
+/** Closes the update note on show (nocturne.update-close, or nocturne.toast-close with no toast). */
+export function dismissUpdate() {
+  const d = shared(UPDATE_SHOWN);
+  if (!d || shared(UPDATE_DISMISSED) === d) return false;
+  setShared(UPDATE_DISMISSED, d);
+  return true;
+}
 
 /** A square button: `strong` fills on hover in its color, the other is a quiet chip. */
 function button(t, id, label, color, strong, action) {
@@ -434,19 +448,24 @@ export class UpdateNote {
     const t = theme();
     const p = props() ?? {};
     if (!p.label || shared(UPDATE_DISMISSED) === p.dismissal) return div();
+    if (shared(UPDATE_SHOWN) !== p.dismissal) setShared(UPDATE_SHOWN, p.dismissal);
     const link = (id, label, action) => div().id(id).px(6).h_full().flex().items_center().cursor_pointer().text_size(11).text_color(t.accent)
       .hover((s) => s.text_color(t.foreground)).on_click(action).child(label);
     // Hugs the right of its slot (the app's, bottom right); the rest lets clicks through.
-    return h_flex().size_full().justify_end().child(h_flex().id("nocturne-update").relative().h_full().gap(6).pr(4).items_center()
+    // A press on the note stays with it: what's under it (a terminal starting a
+    // selection, whose release would never reach the ×) doesn't see it.
+    return h_flex().size_full().justify_end().child(h_flex().id("nocturne-update").relative().h_full().gap(6).items_center()
+      .on_mouse_down("left", stop)
       .bg(t.background).border(1).border_color(t.ansi0)
       .child(div().relative().w(6).h_full().flex_none().child(dither(p.success ? t.done : t.accent, 1)))
       .child(div().pl(6).flex_none().child(pip(t, p.success ? "done" : "working", 7)))
       .child(div().pl(2).pr(4).flex_none().text_size(12).text_color(t.foreground).child(p.label))
       .when(Boolean(p.restart), (el) => el.child(button(t, "upd-restart", "restart", t.accent, true, () => run("app.update", {}))))
       .child(link("upd-notes", p.restart || p.success ? "what changed" : "updates", () => run("app.settings", { section: "updates" })))
-      .child(div().id("upd-x").size(22).flex().items_center().justify_center().cursor_pointer().text_color(t.dim)
+      // The ×: the note's full height, 30 wide; closes on the press itself.
+      .child(div().id("upd-x").w(30).h_full().flex().items_center().justify_center().cursor_pointer().text_color(t.dim)
         .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-        .on_click(() => setShared(UPDATE_DISMISSED, p.dismissal))
+        .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); setShared(UPDATE_DISMISSED, p.dismissal); })
         .child(svg(W("x")).size(12))));
   }
 }

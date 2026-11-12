@@ -179,8 +179,10 @@ jobs:
             sleep 30
           done
 
-  # Signs herdr-app.exe with Azure Artifact Signing and repacks it, on Can's
-  # tag pushes and manual runs (to test signing without publishing). Azure
+  # Signs herdr-app.exe with Azure Artifact Signing and repacks it, on the
+  # releaser's tag pushes and manual runs (to test signing without
+  # publishing). The releaser is the repository variable RELEASE_ACTOR (a
+  # GitHub login); while it's unset nothing signs or publishes. Azure
   # trusts only jobs in the signing environment (v* tags and master). The
   # Azure IDs are signing environment variables; the certificate profile is a
   # repository variable (job-level `if` can't see environment ones), and
@@ -188,7 +190,7 @@ jobs:
   sign-windows:
     needs: build
     if: >-
-      github.triggering_actor == 'ogulcancelik' && vars.AZURE_SIGNING_PROFILE != ''
+      vars.RELEASE_ACTOR != '' && github.triggering_actor == vars.RELEASE_ACTOR && vars.AZURE_SIGNING_PROFILE != ''
       && ((github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'workflow_dispatch')
     environment: signing
     runs-on: windows-2022
@@ -236,7 +238,7 @@ jobs:
   # A website download, never a dependency of update publishing below.
   mac-dmg:
     needs: [build, ci-passed]
-    if: github.event_name == 'push' && github.ref_type == 'tag' && github.triggering_actor == 'ogulcancelik'
+    if: github.event_name == 'push' && github.ref_type == 'tag' && vars.RELEASE_ACTOR != '' && github.triggering_actor == vars.RELEASE_ACTOR
     environment: release
     runs-on: macos-15
     timeout-minutes: 40
@@ -275,13 +277,13 @@ jobs:
 
   publish:
     needs: [build, sign-windows, ci-passed]
-    # Only a tag push by Can publishes: anyone with write access can re-run an
+    # Only a tag push by the releaser (repository variable RELEASE_ACTOR) publishes: anyone with write access can re-run an
     # old tag's run, which would point latest.json back at that version.
     # sign-windows may be skipped, not failed.
     if: >-
       !cancelled() && needs.build.result == 'success' && needs.sign-windows.result != 'failure'
       && needs.ci-passed.result == 'success'
-      && github.event_name == 'push' && github.ref_type == 'tag' && github.triggering_actor == 'ogulcancelik'
+      && github.event_name == 'push' && github.ref_type == 'tag' && vars.RELEASE_ACTOR != '' && github.triggering_actor == vars.RELEASE_ACTOR
     # The R2 keys live here, usable only from v* tags.
     environment: release
     runs-on: ubuntu-latest

@@ -96,10 +96,12 @@ const WORDS = {
   "nocturne.tabstrip": "Focus the tab strip (again: back to the pane)",
   "nocturne.header": "Focus the pane's header (again: back to the pane)",
   "nocturne.toast": "Act on the newest toast: go to its agent, open its request",
-  "nocturne.toast-close": "Dismiss the newest toast",
-  "nocturne.toast-dismiss": "Dismiss the newest toast",
+  "nocturne.toast-close": "Dismiss the newest toast (none: the update note)",
+  "nocturne.toast-dismiss": "Dismiss the newest toast (none: the update note)",
+  "nocturne.update-close": "Close the update note (\"Updated to …\")",
   "nocturne.next": "Next space, in the sidebar's order",
   "nocturne.prev": "Previous space, in the sidebar's order",
+  "nocturne.space-new": "New space: pick its folder",
   "nocturne.fold": "Fold the sidebar into a rail, or open it",
   "nocturne.new": "New: a terminal, an agent or a panel, as a tab or a pane",
   "nocturne.git": "Git window",
@@ -112,6 +114,8 @@ const WORDS = {
   "nocturne.scripts": "Script runner",
   "nocturne.scripts-again": "Run the folder's last script again",
   "nocturne.scripts-failed": "The last failed script's output",
+  "nocturne.procs": "Processes and ports",
+  "nocturne.ports": "Processes and ports, on the ports",
   "nocturne.files": "Files pane, with the keyboard in it",
   "nocturne.picker": "Find a file",
   "nocturne.grep": "Search in the files",
@@ -175,7 +179,7 @@ function groupOf(section, action) {
   if (section.startsWith("mod:")) return `in ${section.slice(4)}`;
   const name = action.split(":")[0];
   if (/^nocturne\.(sidebar|focus|tabstrip|header|toast)/.test(name) || name === "pane.go" || name.startsWith("overlay.")) return "keyboard focus";
-  if (/^space\./.test(name) || /^nocturne\.(next|prev)$/.test(name)) return "spaces";
+  if (/^space\./.test(name) || /^nocturne\.(next|prev|space-new)$/.test(name)) return "spaces";
   if (/^tab\./.test(name) || name === "nocturne.new") return "tabs";
   if (/^pane\./.test(name) || name === "nocturne.gridify") return "panes";
   if (/^agent\./.test(name) || /^nocturne\.pin/.test(name)) return "agents";

@@ -1,22 +1,23 @@
-# Herdr app
+# Fireflies
 
-The Herdr 2 desktop app (`herdr-app`): a native GPUI client of
-[herdr-core](https://github.com/herdrdev/herdr-core). Can (`ogulcancelik`)
-maintains it.
+Fireflies, Developer's fork of the Herdr 2 desktop app (command `fireflies`,
+also `herdr-app`): a native GPUI client of
+[herdr-core](https://github.com/herdrdev/herdr-core). Developer maintains it;
+FIREFLIES.md says what it adds to Herdr.
 
-If AGENTS.local.md exists, read it too: the maintainer's local rules.
+If AGENTS.local.md exists, read it too: Developer's local rules.
 
 ## Compatibility
 
 Preserve compatibility with released versions and installed user data.
-Discuss breaking changes and removal of compatibility code with the maintainer
+Discuss breaking changes and removal of compatibility code with Developer
 before changing documented behavior.
 
-## Before you grow the app's core: ask Can
+## Before you grow the app's core: ask Developer
 
 The app's core (the model, machine layout documents, commands, and shared mod APIs)
 stays small; everything else is mods. Before adding anything to it, answer
-these three, then discuss with Can and wait for his go:
+these three, then discuss with Developer and wait for his go:
 
 1. Does the app itself act on it (it changes what the app does, not only
    how something looks)?
@@ -26,7 +27,7 @@ these three, then discuss with Can and wait for his go:
 
 If all three are no, it belongs in mods (their shared storage, their own
 code), even at the price of some repetition. Same for herdr-core: what the
-app asks of it goes through Can too.
+app asks of it is upstream's decision, so it goes to herdr-core's maintainers.
 
 `herdr-app --skill` prints the window manual in `src/SKILL.md`.
 Keep it current when changing agent-facing behavior.
@@ -65,7 +66,7 @@ checked on those systems, not only by cross-compiling.
 `just build`, `just test` (what CI runs, on Linux), `just check` (the tests).
 `just install` builds and installs the desktop app using the platform installer.
 On Windows it updates `%LOCALAPPDATA%\Programs\herdr-app` and the Start menu;
-quit and reopen Herdr to use the new build. Windows recipes use PowerShell by default;
+quit and reopen Fireflies to use the new build. Windows recipes use PowerShell by default;
 `just --shell pwsh --shell-arg -Command <recipe>` uses pwsh.
 
 Never run a bare `target/*/herdr-app` (no arguments) on a machine where you
@@ -83,13 +84,16 @@ down` when done.
 
 ## Contributing
 
-Work on a branch and open a pull request to `master`. CI must pass and Can
-approves; merges are squashed. Commit messages: lowercase conventional
-commits, single line, no AI co-author lines. Only Can releases (a `v*` tag).
+Work on a branch; Developer merges it into `integrate` and ships `main`
+once every `bun test` and `cargo test` line of the justfile passes.
+Commit messages: lowercase conventional commits, single line, no AI co-author
+lines. This fork publishes no releases. A fix that Herdr needs too goes
+upstream as a pull request to Herdr's `master`, where Herdr's maintainer
+reviews it and releases (a `v*` tag).
 
 CHANGELOG.md: every release gets a `## [x.y.z] - YYYY-MM-DD` section
 (`### New` / `### Fixed`), written at release time from the commits since the
-last tag; Herdr shows it as the update notes. One line per change, in user
+last tag; the app shows it as the update notes. One line per change, in user
 words (what a person notices, not code), with the issue or PR number and
 `thanks @name` for contributors. Leave out internal changes and fixes for bugs
 that never shipped.

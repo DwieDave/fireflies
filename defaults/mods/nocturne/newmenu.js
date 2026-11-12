@@ -32,6 +32,7 @@ import { ART, LOGO, dither, eyebrow } from "./kit.js";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
 import { openScratchpad } from "./scratchpad.js";
+import { openSpacePicker } from "./newspace.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
 const KNOWN = "new-menu.agents";
@@ -56,13 +57,13 @@ const FOOT = 26;
 const stop = (_e, cx) => cx.stop_propagation();
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 
-/** The key bound to a global command, in macOS glyphs. */
-export function shortcut(name) {
+/** The key bound to a command (in `section`, default global), in macOS glyphs. */
+export function shortcut(name, section = "global") {
   const all = keys();
-  const k = all.find((b) => b.section === "global" && b.action === name);
+  const k = all.find((b) => b.section === section && b.action === name);
   if (!k?.keys.trim()) return "";
   // Taken by the Nocturne layout for something else (cmd-n opens this menu).
-  if (all.some((b) => b.section === "layout:nocturne" && b.keys.trim() === k.keys.trim() && b.action !== name)) return "";
+  if (section === "global" && all.some((b) => b.section === "layout:nocturne" && b.keys.trim() === k.keys.trim() && b.action !== name)) return "";
   const mac = appWindow()?.platform === "macos";
   const names = mac ? { ctrl: "⌃", alt: "⌥", shift: "⇧", cmd: "⌘" } : { ctrl: "Ctrl", alt: "Alt", shift: "Shift", cmd: "Super" };
   const alias = { secondary: mac ? "cmd" : "ctrl", super: "cmd", win: "cmd" };
@@ -112,7 +113,7 @@ function items(agents) {
   return [
     ...menuPanels().map((p) => ({ kind: "tile", id: p.id, p, key: p.key, off: !space && p.id !== "terminal" })),
     ...agentRows(agents),
-    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("space.new"), go: () => run("space.new"), say: "a space in your home folder" },
+    { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("nocturne.space-new", "layout:nocturne") || shortcut("space.new"), go: () => openSpacePicker(), say: "pick its folder first" },
     { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a new branch, as a space" },
     { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree, as a space" },
     { kind: "row", id: "scratchpad", icon: "file-text", name: "Scratchpad", hint: shortcut("nocturne.scratchpad"), go: () => { openScratchpad(); }, say: "this repository's note, kept out of it" },

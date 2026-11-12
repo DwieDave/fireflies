@@ -60,10 +60,13 @@ import { togglePicker } from "./picker.js";
 import { openScratchpad } from "./scratchpad.js";
 import { toggleGithub, githubForm } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
+import { toggleProcs } from "./procs.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
+import { openSpacePicker } from "./newspace.js";
 import { gridify } from "./gridify.js";
 import { toastKey } from "./toast.js";
+import { dismissUpdate } from "./screens.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.js";
 import { bindTab, tabActions } from "./form-keys.js";
@@ -224,6 +227,8 @@ export default class Sky {
     // on that run's output; nocturne.scripts-again runs the folder's last
     // script again; nocturne.scripts-grant, the toast of a nix-darwin switch
     // that Herdr Core's missing App Management stopped, opens that setting),
+    // nocturne.procs the processes and ports manager (procs.js; nocturne.ports
+    // on its ports tab),
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
@@ -231,7 +236,8 @@ export default class Sky {
     // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
     // opens a web pane there (dock.js);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
-    // (alias nocturne.toast-dismiss) dismisses it (toast.js).
+    // (alias nocturne.toast-dismiss) dismisses it (toast.js), or with none the
+    // update note; nocturne.update-close closes the update note (screens.js).
     // A saved file doesn't restart this loop: changes to it need the layout
     // shown again (another layout and back) or the app restarted.
     cx.spawn(async (cx) => {
@@ -256,14 +262,19 @@ export default class Sky {
         else if (c === "scripts-again") toggleDeck({ centered: true, again: true });
         else if (c === "scripts-failed") toggleDeck({ centered: true, focus: "runs", show: lastFailed() });
         else if (c === "scripts-grant") grantAppManagement();
+        else if (c === "procs") toggleProcs({ centered: true });
+        else if (c === "ports") toggleProcs({ centered: true, tab: "ports" });
         else if (c === "gridify") gridify(cx);
         else if (c === "new") openNewMenu({ centered: true });
+        else if (c === "space-new") openSpacePicker();
         else if (c === "pin") pinFocused();
         else if (c === "dock") dockFocused();
         else if (c === "dock-web") dockWeb();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
-        else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") toastKey(c);
+        // With no toast on show, closing one closes the update note.
+        else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") { if (!toastKey(c) && c !== "toast") dismissUpdate(); }
+        else if (c === "update-close") dismissUpdate();
         cx.notify();
       }
     });
@@ -487,7 +498,7 @@ export default class Sky {
       rename: () => run("space.rename", { id: s.id }),
       tab: () => run("tab.new", { space: s.id }),
       // The dock (dock.js) keeps no folder and isn't deleted by a key.
-      ...(isDock(s) ? {} : { folder: (cx) => this.spaces.pick(cx, s), delete: () => run("space.close", { id: s.id }), worktree: () => newWorktree(s.id) }),
+      ...(isDock(s) ? {} : { folder: () => this.spaces.folder(s), delete: () => run("space.close", { id: s.id }), worktree: () => newWorktree(s.id) }),
     };
   }
 
@@ -509,7 +520,7 @@ export default class Sky {
       case "right": return run("pane.go", { direction: "right" });
       case "back": return this.back();
       case "help": return openKeys("sidebar keys", SIDEBAR_HELP);
-      case "new": if (this.folded) run("space.new"); else this.spaces.start({ kind: "new" }, cx); break;
+      case "new": openSpacePicker(); break;
       default: item?.[verb]?.(cx);
     }
     this.navAt = Math.max(0, items.findIndex((x) => x.id === this.cursor));

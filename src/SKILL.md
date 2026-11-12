@@ -44,6 +44,13 @@ nocturne-browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them).
 
+To show them what runs and what listens (a dev server you started, a stuck
+build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
+manager centered (`nocturne.ports` on its ports, where they can open a port in
+a web pane, copy its address or end its process; its system tab graphs CPU,
+GPU, memory, disk and network). It only shows and asks: ending a process is
+theirs to confirm in it.
+
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
 pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It
@@ -105,7 +112,10 @@ herdr-app do space.new --name "remote api" --machine vps --folder /srv/api
 The folder is on that machine; tabs and splits in the space stay there.
 A space made with `--folder` is attached to it: its GitHub and git windows use
 that repo. `herdr-app do space.folder --id <space> --folder <path>` attaches a
-space to another folder later.
+space to another folder later. A person in the Nocturne layout makes spaces
+from a folder list instead (`herdr-app do nocturne.space-new` opens it for
+them: recent and nearby folders, a path field, "no folder" for a space in ~);
+scripts keep using `space.new --folder`.
 New-space keys and clicks follow the focused space's machine. Script commands
 without `--machine` still use this computer; `--machine ''` explicitly chooses it.
 The agent menu checks and starts agents in the remote Unix user's

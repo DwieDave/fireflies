@@ -142,7 +142,7 @@ field editor walks the item's fields with tab / shift-tab too.
 
 Every form takes keys the same way: the GitHub window's, the git window's
 commit message and confirms, Nocturne's prompt and confirm dialogs, the
-sidebar's new / rename / folder / delete space forms, the ask dialog, the
+sidebar's rename / delete space forms, the ask dialog, the
 editor's find line, Add a machine and Send feedback. It opens on its first
 field; tab / shift-tab go to the next / previous field or button, wrapping
 at both ends (↑ ↓ too, outside a multi-line field), and the focused one has
@@ -232,6 +232,22 @@ the highlighted line shows where it will land.
   its own folder as such a space, from the git window's Worktrees tab.
   If starting in an inherited folder fails, new spaces, tabs and splits retry in
   that machine's home. Explicit invalid folders still fail.
+  Nocturne makes spaces folder first: the sidebar's "+ new" (or `n` in the
+  sidebar, "+ new" > New space, the palette's New space, `nocturne.space-new`)
+  opens a folder list hanging under it (centered from a key): the focused
+  pane's folder (its checkout's top), the spaces' folders, the git checkouts
+  and worktrees beside them, then folders spaces were made in before (shared
+  `nocturne.recent-folders`, newest first, 20). Typing filters it by name,
+  then path; a field starting with `~` or `/` lists that folder's subfolders
+  (git ones marked) and tab puts the row's path in the field, stepping inside;
+  shift-tab goes one folder up. Enter makes the space there, unnamed so it's
+  called after its folder; cmd-enter asks for a name first. "browse…" is the
+  system's folder browser. The last row, "no folder" (↑ from the top), makes
+  a space in ~ that belongs to no project (attached to home: its repo goes by
+  its terminals). Change folder… (and `f` on a space) opens the same list to
+  attach the space elsewhere; there "no folder" detaches it. The dock is
+  never attached (asked anyway, the list doesn't open), and "no folder"
+  makes an ordinary space, not the dock.
 - A **tab** is a piece of work in a space: its terminals and how they're
   split right and down. One nobody named is called by its place (1, 2,
   ...), as in Herdr; `tab.rename` names it ("fix login"). A space
@@ -312,6 +328,32 @@ the highlighted line shows where it will land.
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
   nocturne.script=dev --label nocturne.script.name=dev -- "bun run dev"`.
+- **Processes and ports** (Nocturne's manager, the `nocturne-procs` mod): the
+  tab strip's tree mark beside ▶, with `:n` in teal when processes in this
+  app's terminals listen on n TCP ports. A click hangs the deck under it (a
+  second closes it); `nocturne.procs` opens it centered or closes it,
+  `nocturne.ports` on its ports tab (no keys by default). This machine only.
+  Three tabs (tab / shift-tab, 1 2 3):
+  processes, a tree of space › tab › terminal › the terminal's process and all
+  it started (terminals without a pane under "no pane"; `a` switches to every
+  process of yours, rooted where the parent isn't yours), each row name,
+  arguments, its listening ports, cpu, memory, uptime and pid, the selected
+  one with its whole command line and its own cpu / memory graphs; ports, the
+  TCP ports your processes listen on (this app's first, with their tab and
+  terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
+  the focused tab's web pane (`nocturne-browser.open`) or a web pane beside the
+  focused one (`app.open_url`), `c` copies that address; system, dithered
+  graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
+  (and its pressure), disk (MB/s, how full) and network (in above the line,
+  out below), read every 2 s while the deck is open and never while it's
+  closed; a source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
+  pane (a group folds), `x` ends the process (`X` with everything under it):
+  it asks in the deck, sends TERM, and two seconds on names what still runs,
+  where `K` sends KILL; `c` copies a process's command line, `/` finds, `r`
+  reads again, `?` lists the keys, `q`/esc close. The app itself, herdr-core,
+  its holders, launchd and other users' processes carry a shield and can't be
+  ended there. It reads `ps` and `lsof` every 2 s while open.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
@@ -1203,7 +1245,10 @@ palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
 it to the shelf; "New web pane in the dock" (the palette, the shelf's last
 "+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
-`nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it. Scripts:
+`nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it, or with no
+toast on show Nocturne's update note ("Updated to …", bottom right), which
+`nocturne.update-close` closes too. The note keeps a press on it to itself (a
+terminal under it doesn't start a selection) and its × closes it on the press. Scripts:
 `herdr-app do terminal.pin '{"terminal":"t7","pinned":true}'`.
 While the pointer is over the sky (open or folded) it carries a firefly's
 light: a small dithered diamond in the theme's ansi11 around a pixel + that
@@ -1219,7 +1264,7 @@ and cmd-alt-up from a top pane the tab strip; `nocturne.sidebar`,
 `nocturne.tabstrip` and `nocturne.header` (the focused pane's header controls)
 go straight there and, pressed again, back (macOS: cmd-alt-s, cmd-alt-t,
 cmd-alt-.). cmd-alt-n does what the newest toast offers (`nocturne.toast`),
-cmd-alt-shift-n dismisses it (`nocturne.toast-close`). Floating windows:
+cmd-alt-shift-n dismisses it, or with none the update note (`nocturne.toast-close`). Floating windows:
 ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
 `"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
@@ -1244,7 +1289,7 @@ also opens by command: `<mod>.keys` (nocturne-agents, -browser, -editor,
 -usage). The drawing is `mods/nocturne/keyhelp.js`, copied byte for byte into
 each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
-The sidebar walks the fold key, spaces (n new, t new tab, f folder, w worktree,
+The sidebar walks the fold key, spaces (n new: the folder list, t new tab, f folder: the same list, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
 rows are the tabs (x close, H/L move, 1-9), its buttons, the bell and "+ new"; the
 focused pane's header (name, text size, float, splits, even out, gridify,
@@ -1294,7 +1339,7 @@ the open sidebar, its initials on the folded rail), the focused agent in the sky
 in the jar too; its name stands in the moonlit path) and on the rail.
 
 Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
-files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
+the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
 layout without it gets "+ new" in the strip before the bell). The strip's
@@ -1308,7 +1353,7 @@ open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9; the ones that aren't installed hide behind a dim
 "2 not installed · show" row: enter or a click shows them, again hides them,
 remembered in shared `nocturne.newShowMissing`; the numbers never move), then
-New space, New worktree… and Open worktree….
+New space (the folder list, centered), New worktree… and Open worktree….
 
 ### Layouts and mods other people made
 

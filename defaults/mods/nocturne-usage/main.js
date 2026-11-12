@@ -31,6 +31,7 @@ import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, 
 import { keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const TICK = 30_000; // countdowns, and asking again once the answer is old
+const FIRST = 1000; // the first read, this long after the pane first draws (ms)
 const SESSION_MS = 5 * 3600_000;
 const WEEK_MS = 7 * 86400_000;
 /** A window's length as the card's small print: "5 h", "7 d". */
@@ -133,7 +134,8 @@ export default class Usage extends View {
         cx.notify();
       }
     });
-    this.read(cx, "open");
+    // The first read after the first frame (drawing never runs the machine's cache script).
+    cx.spawn(async (cx) => { await cx.sleep(FIRST); await refreshUsage("open"); cx.notify(); });
     cx.timer.every(TICK, (cx) => { this.read(cx); cx.notify(); });
   }
 

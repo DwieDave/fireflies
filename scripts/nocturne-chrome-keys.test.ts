@@ -209,7 +209,7 @@ test("tab jumps to the fireflies; enter focuses the agent, p pins it, m opens it
   expect(press(s, "j")).toBe(false);
 });
 
-test("on a space: rename, folder, new tab, worktree, menu; delete asks and y deletes", () => {
+test("on a space: rename, folder (the picker), new tab, worktree, menu; delete asks and y deletes; n opens the picker", () => {
   const s = sky();
   press(s, "m");
   expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { tab: "space", target: { id: "s1" } } });
@@ -227,8 +227,12 @@ test("on a space: rename, folder, new tab, worktree, menu; delete asks and y del
   press(s, "d");
   press(s, "y", {}, "y");
   expect(commands.at(-1)).toEqual(["space.close", { id: "s1", confirmed: true }]);
-  press(s, "n");
-  expect(s.spaces.mode).toMatchObject({ kind: "new" });
+  press(s, "f"); // its folder: the picker, attaching it
+  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "newspace", space: "s1" } });
+  press(s, "n"); // a new space: the picker
+  expect(s.spaces.mode).toBe(null);
+  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "newspace" } });
+  expect(overlays.at(-1).props.space).toBeUndefined();
 });
 
 test("l goes back to the panes, esc and q to the pane it came from, ? lists the keys", () => {
@@ -294,7 +298,7 @@ test("the strip's row: tabs, the buttons and the bell; enter selects, H/L move, 
   const s = strip();
   expect(s.row).toBe("tabs");
   expect(s.cursor).toBe("tab:t1");
-  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab:t2", "tab:t3", "tab-scripts-run", "tab-files", "tab-git", "tab-git-more", "tab-new", "bell"]);
+  expect(s.rows.tabs.map((x: any) => x.id)).toEqual(["tab:t1", "tab:t2", "tab:t3", "tab-scripts-run", "tab-procs", "tab-files", "tab-git", "tab-git-more", "tab-new", "bell"]);
   press(s, "enter");
   expect(commands.at(-1)).toEqual(["pane.focus", { pane: "p1" }]); // the shown tab: back to its pane
   press(s, "l");

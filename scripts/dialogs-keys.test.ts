@@ -184,7 +184,7 @@ test("settings: updates keeps what's new before the check button", () => {
 
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.js");
 const { Popup } = await import("../defaults/mods/nocturne/popup.js");
-const { Keys, WhatsNew, Welcome } = await import("../defaults/mods/nocturne/screens.js");
+const { Keys, WhatsNew, Welcome, UpdateNote, dismissUpdate, UPDATE_DISMISSED } = await import("../defaults/mods/nocturne/screens.js");
 const { default: Toast, toastKey, TOASTS } = await import("../defaults/mods/nocturne/toast.js");
 const MachineAdd = (await import("../defaults/mods/machine-add/main.js")).default;
 
@@ -354,4 +354,48 @@ test("machine-add: ↓ walks the ssh hosts, enter adds the highlighted one", () 
   expect(added).toEqual(["two"]);
   press(root, "up"); press(root, "up");
   expect(m.at).toBe(-1);
+});
+
+// ---- the update note ("Updated to 0.1.15 · what changed ×", bottom right)
+
+const NOTE = { label: "Updated to 0.1.15", dismissal: "Updated to 0.1.15", success: true, restart: false };
+
+test("update note: the × closes it on the press itself, a 30 px target the note's full height", () => {
+  state.props = { ...NOTE };
+  const n: any = new UpdateNote();
+  const root = n.render();
+  const x: any = find(root, "upd-x");
+  expect(x.calls.w[0]).toBe(30);
+  expect("h_full" in x.calls).toBe(true);
+  const c = cx();
+  expect(x.calls.on_mouse_down[0]).toBe("left");
+  x.calls.on_mouse_down[1]({}, c);
+  expect(state.shared[UPDATE_DISMISSED]).toBe("Updated to 0.1.15");
+  expect(c.stopped).toBe(1);
+  // Drawn again: gone.
+  expect(find(n.render(), "upd-x")).toBeUndefined();
+});
+
+test("update note: a press anywhere on it stays with it (a terminal under it never starts a selection)", () => {
+  state.props = { ...NOTE };
+  const note: any = find(new UpdateNote().render(), "nocturne-update");
+  const c = cx();
+  expect(note.calls.on_mouse_down[0]).toBe("left");
+  note.calls.on_mouse_down[1]({}, c);
+  expect(c.stopped).toBe(1);
+});
+
+test("update note: a key closes it (nocturne.update-close; nocturne.toast-close when no toast is up)", () => {
+  state.props = { ...NOTE };
+  new UpdateNote().render();
+  // No toast on show: toast-close has nothing to close, so the sky closes the note.
+  expect(toastKey("toast-close")).toBe(false);
+  expect(dismissUpdate()).toBe(true);
+  expect(state.shared[UPDATE_DISMISSED]).toBe("Updated to 0.1.15");
+  expect(dismissUpdate()).toBe(false);
+  // A newer note shows again until it's closed too.
+  state.props = { ...NOTE, label: "Updated to 0.1.16", dismissal: "Updated to 0.1.16" };
+  expect(find(new UpdateNote().render(), "upd-x")).toBeTruthy();
+  expect(dismissUpdate()).toBe(true);
+  expect(state.shared[UPDATE_DISMISSED]).toBe("Updated to 0.1.16");
 });

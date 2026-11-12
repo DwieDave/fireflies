@@ -20,6 +20,7 @@ import { isDock } from "./dock.js";
 import { onShelf } from "./pins.js";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";
 import { toggleDeck, lastFailed } from "./scripts.js";
+import { toggleProcs } from "./procs.js";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.js";
@@ -27,6 +28,7 @@ import { openScratchpad } from "./scratchpad.js";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
 import { TOASTS, toastKey } from "./toast.js";
+import { updateShown, dismissUpdate } from "./screens.js";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -222,6 +224,10 @@ function openEntries() {
     title: "Run a script…", words: "scripts runner tasks npm bun just make cargo test build dev background stop", go: () => toggleDeck({ centered: true }) });
   out.push({ name: "nocturne", args: { scripts: "again" }, group: "Open", icon: "terminal", bind: "nocturne.scripts-again",
     title: "Run the last script again", words: "scripts runner repeat rerun last again", go: () => toggleDeck({ centered: true, again: true }) });
+  out.push({ name: "nocturne", args: { procs: true }, group: "Open", icon: "terminal", bind: "nocturne.procs",
+    title: "Processes and ports…", words: "processes tree kill end stop pid ps top activity monitor ports listening server", go: () => toggleProcs({ centered: true }) });
+  out.push({ name: "nocturne", args: { procs: "ports" }, group: "Open", icon: "terminal", bind: "nocturne.ports",
+    title: "Listening ports…", words: "ports listening localhost server dev open browser copy address kill lsof", go: () => toggleProcs({ centered: true, tab: "ports" }) });
   if (lastFailed()) {
     out.push({ name: "nocturne.scripts-failed", args: {}, group: "Open", icon: "terminal",
       title: "Show the last failed script", words: "scripts runner failed error exit output log", go: () => toggleDeck({ centered: true, focus: "runs", show: lastFailed() }) });
@@ -286,6 +292,11 @@ function openEntries() {
       words: "toast notification act open click newest", go: () => toastKey("toast") });
     out.push({ name: "nocturne.toast-close", args: {}, group: "App", icon: "x", title: "Dismiss the toast",
       words: "toast notification close hide dismiss newest", go: () => toastKey("toast-close") });
+  }
+  // The update note ("Updated to …", bottom right; screens.js), while it shows.
+  if (updateShown()) {
+    out.push({ name: "nocturne.update-close", args: {}, group: "App", icon: "x", title: "Close the update note",
+      words: "update updated version note close hide dismiss what changed", go: () => dismissUpdate() });
   }
   out.push({ name: "nocturne-notifications.open", args: {}, group: "Agent", icon: "layers", title: "Notifications",
     words: "notifications inbox agents waiting needs you permission questions bell overview", go: () => run("nocturne-notifications.open") });
@@ -456,6 +467,8 @@ export const OUT = {
   "nocturne-git.focus": "internal: hands the git window the keyboard",
   "nocturne-scripts.focus": "internal: hands the script runner the keyboard",
   "nocturne-scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
+  "nocturne-procs.focus": "internal: hands the processes and ports manager the keyboard",
+  "nocturne-procs.keys": "the open processes and ports manager's ?: it lists its keys in place",
   "nocturne-git.back": "the git window's esc (closes its popup)",
   "nocturne-git.commit-ok": "the git window's enter in its commit popup",
   "nocturne-git.confirm-yes": "the git window's enter in its confirm popup",
@@ -513,8 +526,9 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
   "pane.font_bigger", "pane.font_smaller", "pane.font_reset", "pane.float"]);
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
-// Nocturne runs these in place of Herdr's: the same key, the sidebar's order.
-const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev" };
+// Nocturne runs these in place of Herdr's: the same key, the sidebar's order;
+// "New space" is the folder picker (newspace.js).
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
 
 /** Every entry for the state we're in now. */
 function entries() {
