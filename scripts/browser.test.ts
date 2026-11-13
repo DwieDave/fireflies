@@ -104,8 +104,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   Object.assign(scope, await keyhelpOf(path, source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
-  // `import * as Tabs from "./tabs.ts"`: the real module (it imports nothing).
-  if (/import \* as Tabs from "\.\/tabs\.js"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.js")}`);
+  // `import * as Tabs from "./tabs.ts"`: the real module (it imports guard.ts alone).
+  if (/import \* as Tabs from "\.\/tabs\.ts"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.ts")}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
   const send = async (c: string) => {
     if (waiting) { const w = waiting; waiting = null; w(c); } else queue.push(c);
@@ -133,7 +133,7 @@ function context() {
 /** A web pane copy, started as the app starts it (init with its props). */
 async function webPane(opts: { slot?: string; url?: string; copy?: number; props?: any } = {}) {
   const props = opts.props ?? { ...(opts.slot ? { slot: opts.slot } : {}), ...(opts.url ? { url: opts.url } : {}) };
-  const loaded = await load("browser/main.js", { props, copy: opts.copy });
+  const loaded = await load("browser/main.ts", { props, copy: opts.copy });
   const cx = context();
   const view: any = new loaded.mod.default();
   view.init(props, cx);
@@ -511,9 +511,9 @@ test("entering the address (cmd-l, cmd-p, a click) selects all of it, so typing 
   void cx;
 });
 
-// ---- tabs (tabs.js): one web view per tab, a strip over the bar from two on
+// ---- tabs (tabs.ts): one web view per tab, a strip over the bar from two on
 
-const Tabs = await import("../defaults/mods/browser/tabs.js");
+const Tabs = await import("../defaults/mods/browser/tabs.ts");
 /** The web views a render draws: [id, props, hidden (in no room)]. */
 const viewsOf = (root: any) => {
   const out: [string, any, boolean][] = [];
@@ -869,7 +869,7 @@ test("< and > move the tab (the ring's, else the shown one) in the bar's keys; t
     expect(ids(view)).toEqual(["web-2", "web-3", "web"]);
     expect(JSON.parse(store.m.get("tabs")!).tabs.map((t: any) => t.id)).toEqual(["web-2", "web-3", "web"]);
     // Listed under ?.
-    expect(view.constructor && (await load("browser/main.js")).mod.KEYS.some(([k]: any) => k === "< >")).toBe(true);
+    expect(view.constructor && (await load("browser/main.ts")).mod.KEYS.some(([k]: any) => k === "< >")).toBe(true);
   } finally { store.done(); }
 });
 
@@ -960,7 +960,7 @@ test("the tabs come back after a restart: the shown one loads, the others when f
 // ---- load errors: only real failures reach the line under the bar
 
 test("a load cut short (another navigation, a download, a tab instead) shows nothing; a real failure says what in words, with retry", async () => {
-  const { mod } = await load("browser/main.js");
+  const { mod } = await load("browser/main.ts");
   const f = mod.loadFailure;
   const generic = (domain: string, code: number) => ({ domain, code, message: `The operation couldn’t be completed. (${domain} error ${code}.)`, failingUrl: "https://www.a.example/x" });
   // Not failures: NSURLErrorCancelled, WebKit's "Frame load interrupted", a plug-in's load (also from a build that sends no domain).
@@ -1095,7 +1095,7 @@ const on = (el: any, name: string, button?: string) => callOf(el, name).find((a:
 /** The tab menu's copy, opened with the props an overlay spec gave it. */
 async function menuCopy(spec: any) {
   const props = { ...spec.props, overlay: "o-menu" };
-  const loaded = await load("browser/main.js", { props });
+  const loaded = await load("browser/main.ts", { props });
   const cx = context();
   const view: any = new loaded.mod.default();
   view.init(props, cx);
@@ -1252,4 +1252,36 @@ test("a pinned tab: closing it drops its pin (the pane's other pins stay); a res
     again.view.openTabMenu("web-3", false);
     expect(app.overlays.at(-1).props.tabMenu.pinned).toBe(true);
   } finally { store.done(); }
+});
+
+test("the shelf's records, as nocturne keeps them: a tab pinned or unpinned writes the others back as they were (their own fields too); one nocturne drops goes here too", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  const { view } = await webPane({ slot: "s1", url: "https://a.example/" });
+  const editor = { pane: "p7", mod: "editor", props: { path: "/a.md", view: { look: "split", n: 2 } }, at: "12", extra: [1, 2] };
+  const terminalOld = { pane: "p8", mod: null, at: null };
+  app.store[PINS] = [editor, terminalOld, { mod: "browser", at: 1 }];
+  view.togglePin("web");
+  expect(app.store[PINS]).toEqual([editor, terminalOld, { pane: "p1", mod: "browser", props: { slot: "s1" }, at: expect.any(Number), tab: "web" }]);
+  view.togglePin("web");
+  expect(app.store[PINS]).toEqual([editor, terminalOld]);
+});
+
+test("the web view's events are parsed where they come in: one in another shape, or not read here, is skipped", async () => {
+  reset();
+  const { view, cx, mod } = await webPane({ slot: "b1", url: "https://a.example/" });
+  const feed = (e: any) => { const parsed = mod.parseEvent(JSON.stringify(e)); if (parsed) view.onEvent(parsed, cx); return parsed !== undefined; };
+  // A page state with a title that isn't text: skipped, the page keeps what it had.
+  expect(feed({ id: "web", generation: 1, event: "web.location", data: { href: "https://a.example/b", title: 7 } })).toBe(false);
+  expect([view.page.href, view.page.title]).toEqual(["https://a.example/", null]);
+  expect(feed({ id: "web", generation: 1, event: "web.location", data: { href: "https://a.example/b", title: "B", url: "https://a.example/b" } })).toBe(true);
+  expect([view.page.href, view.page.title]).toEqual(["https://a.example/b", "B"]);
+  // A new tab without an address, an event not read here, text that isn't JSON: nothing.
+  expect([feed({ id: "web", event: "web.newTab", data: { url: 5 } }), feed({ id: "web", event: "view.created", data: {} }), mod.parseEvent("{")]).toEqual([false, false, undefined]);
+  expect(ids(view)).toEqual(["web"]);
+  // pip.popIn's `then`: neither pane nor park, a plain player; park goes on into a chip.
+  feed({ id: "web", event: "pip.popIn", data: { of: "1:web", then: "elsewhere" } });
+  expect(app.overlays.at(-1).props).toEqual({ of: "1:web" });
+  feed({ id: "web", event: "pip.popIn", data: { of: "1:web", then: "park" } });
+  expect(app.overlays.at(-1).props).toEqual({ of: "1:web", after: "park" });
 });
