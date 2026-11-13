@@ -887,7 +887,9 @@ the highlighted line shows where it will land.
   already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
-  with `q` / `esc`. In every files pane a click on a file selects it (the
+  with `q` / `esc`. A file's row (the tree, the filter's hits, a folder's look)
+  and the preview split's bar show its type mark, as the editor's tabs do;
+  folders keep the folder mark. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
   click (or enter) opens it as a tab of the editor whatever its kind, the same
   editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
