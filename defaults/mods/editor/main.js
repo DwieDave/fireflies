@@ -145,7 +145,7 @@ import Viewer from "./viewer.ts";
 import { OPEN, LAST, PATHS, HANDOVER, filesOf, editorPaths, isScratchpad } from "./editor-route.ts";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import { Rendered, editBetween } from "./rendered.js";
-import { units as liveUnits, unitFor } from "./live.js";
+import { units as liveUnits, unitFor } from "./live.ts";
 import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.js";
 import { isNote, noteName, Autosave } from "./scratch.ts";
 import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.ts";

@@ -1,4 +1,4 @@
-// Pictures in a Markdown file (editor's images.js, live.js's image
+// Pictures in a Markdown file (editor's images.ts, live.ts's image
 // unit, rendered.js's image block, main.js's paste and pick): an image line
 // drawn as its own block (a broken path says so, a web one is drawn by the
 // Markdown view, the copy for drawing made once), pasting a screenshot or a
@@ -202,7 +202,7 @@ let store: Record<string, string> = {};
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const { KINDS } = await import("../defaults/mods/editor/rendered.js");
 const images = await import("../defaults/mods/editor/images.ts");
-const live = await import("../defaults/mods/editor/live.js");
+const live = await import("../defaults/mods/editor/live.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {
