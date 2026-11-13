@@ -147,7 +147,10 @@ commit message and confirms, Nocturne's prompt and confirm dialogs, the
 sidebar's rename / delete space forms, the ask dialog, the
 editor's find line, Add a machine and Send feedback. It opens on its first
 field; tab / shift-tab go to the next / previous field or button, wrapping
-at both ends (↑ ↓ too, outside a multi-line field), and the focused one has
+at both ends (↑ ↓ too, outside a multi-line field), ctrl-tab /
+ctrl-shift-tab the same from any text field, also out of a multi-line one
+(whose tab indents) and, in the GitHub window's forms, from any stop (outside
+a form they switch the window's tabs), and the focused one has
 the accent ring; ← → step a choice and flip a toggle, typing on a list field
 opens it filtered; enter submits from a one-line field, a choice or a toggle
 and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
@@ -468,6 +471,13 @@ the highlighted line shows where it will land.
   publishes its shown tab's title (else its host) in shared `browser.titles`
   (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
   and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
+  Each tab on the strip shows its page's favicon before its title (the web
+  pane's mark until one is known): the page's own `link[rel~=icon]`, else its
+  origin's `/favicon.ico` (no icon service is asked), fetched once per origin
+  into `cache/browser-icons/<host>` under the app's folder, where it stays
+  (delete the folder to fetch them again). Published like the titles:
+  `browser.icons` (`{ [slot]: path }`, the shown tab's) and `browser.tab-icons`
+  (`{ [slot]: { [tab id]: path } }`), each path as `image()` takes it.
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
@@ -580,11 +590,14 @@ the highlighted line shows where it will land.
   hit, definitions) opens its text. Another machine's pictures open in the
   preview pane, as before.
   **File tabs**: an editor pane holds several files, each a tab on the strip
-  along its top (an unsaved mark, the name, the folder that tells two of the
+  along its top (an unsaved mark, the file's type mark (a pixel mark tinted
+  by kind: Markdown, code, settings, a picture, a PDF, a table, video or
+  audio, text, other; a scratchpad's own; dimmed on a tab not shown), the
+  name, the folder that tells two of the
   same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
   n › at the ends; the wheel over it steps tabs, a middle click closes one).
   The strip shows from two files on: with one, the bar names the file with
-  its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
+  its unsaved mark and type mark. Drag a tab along the strip to move it (it lifts, a stake
   marks where it lands; dropped on the pane below the strip it pops out; off
   the pane it stays); the order is kept. A right-click on a tab (or space b m,
   `editor.tab-menu`) opens its menu: pop out into its own pane, pop
@@ -707,9 +720,12 @@ the highlighted line shows where it will land.
   into the next block (blank lines between are passed over); a click on a
   drawn block puts the caret in it; enter on a list item, task or quote starts
   the next one (on an empty one it ends the list); enter on the last line of
-  any other block starts a new paragraph under it (the text after the caret
-  goes with it; shift-enter is a line break inside the block; inside a code
-  block enter is a new line, at its closing line's end a new block); a task
+  any other block, or anywhere in a paragraph, starts a new paragraph under it
+  (the text after the caret goes with it; shift-enter is a line break inside
+  the block; inside a code block enter is a new line, at its closing line's
+  end a new block; on an empty new block it stays as it is); with vim in
+  normal mode, enter makes the new block under the lit one and types into it
+  (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
   the block under the pointer, and the "add a block" line under the last
   block, put an empty paragraph there. An empty block made so offers the
@@ -1341,8 +1357,9 @@ its page's title when browser notes it in shared
 web pane can be pinned on its own (the tab's right-click menu or `m` in the
 bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
 a record with `tab` (the web tab's id, kept across restarts), its own tile named
-by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`),
-keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
+by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`)
+and wearing its favicon (`browser.tab-icons`; a whole web pane's tile its
+shown tab's, `browser.icons`), keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
 whole, can each have a tile. Going to it focuses the pane, then
 `browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
 screen yet takes the same wish from shared `browser.show` when it
@@ -1802,7 +1819,9 @@ The main ones:
   biggest (playing) `<video>` (main frame, else the frame that last played one), returns `{ of }`
   and sends `pip.enter { of }` (`pip.start { result | error }`: `"none"` when there is no video);
   again: back. Such a page also sends `web.video { present }` when it gains its first or loses its
-  last `<video>` (any frame; `state` has `video`), e.g. to show a PiP button only then.
+  last `<video>` (any frame; `state` has `video`), e.g. to show a PiP button only then,
+  and `web.icon { href }` once a page's main document is parsed: its `link[rel~=icon]`
+  (an http(s) URL; 32 px or 16 px when it says, else an SVG, else the first), null for none.
   A native view `{ kind: "pip", of }` then takes the page's whole web view and
   lifts the video into the page's top layer to fill it, with the rest of the page hidden, in
   any of the site's layouts (a site moving its player, as YouTube does when the width
@@ -2099,7 +2118,11 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   an `on_key_down` (key bindings run first and the root binds tab to move the
   focus): call `bindTab(cx)` in `init` and wrap the root that tracks your
   focus handle, above the inputs, in `tabActions(el, (e, cx) => this.key(e,
-  cx))`; tab and shift-tab then reach your handler as key events. A
+  cx))`; tab and shift-tab then reach your handler as key events, and so do
+  ctrl-tab / ctrl-shift-tab from a text field under that root (a text area
+  takes plain tab as an indent). A pane that shows a form only at times
+  passes a third argument, true while the form has the keyboard: ctrl-tab
+  then moves from any stop, and otherwise switches the window's tabs. A
   multi-line field types cmd-enter as a new line and fires `submit` with
   `secondary`: listen for that to submit from it.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.

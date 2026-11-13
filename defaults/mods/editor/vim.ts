@@ -1215,6 +1215,13 @@ function clipboardTo(out: FeedResult, vim: Vim): void {
   if (vim.clipboard) out.clipboard = vim.clipboard;
 }
 
+/** Insert mode begun from outside vim's keys (the rendered view's enter in normal mode: a new
+ *  block typed into), from `text` with the caret at `cursor`; `keys` stand for it in `.`. */
+export function beginInsert(vim: Vim, text: string, cursor: Pos, keys: readonly Key[]): void {
+  vim.mode = "insert";
+  vim.insertStart = { text, cursor: { ...cursor }, keys: [...keys] };
+}
+
 function enterInsert(vim: Vim, b: Buffer, mode: Mode = "insert"): void {
   vim.mode = mode;
   vim.insertStart = { text: b.all(), cursor: { ...b.cursor }, keys: [] };

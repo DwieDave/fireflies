@@ -15,6 +15,7 @@ import type { EditorView } from "./editor-route.ts";
 import { HANDOVER, isEditorView } from "./editor-route.ts";
 import { isList } from "./guards.ts";
 import type { KeyRow } from "./keyhelp.ts";
+import { ICON_SIZE } from "./file-icons.ts";
 import { kindOf } from "./kinds.ts";
 import { basename, dirname } from "./logic.ts";
 
@@ -146,7 +147,8 @@ export interface TabLabel {
 }
 
 /** A tab's width on the strip (px, unzoomed): its padding, the unsaved mark,
- *  the name (cut at MAX_NAME), the folder hint and the close box. */
+ *  the file's type mark (file-icons.ts), the name (cut at MAX_NAME), the
+ *  folder hint and the close box. */
 export const TAB_PAD = 10;
 
 export const MAX_NAME = 26;
@@ -156,7 +158,7 @@ export const CHAR_W = 6.6;
 export function tabWidth(label: TabLabel): number {
   const chars = Math.min(label.name.length, MAX_NAME) + (label.hint ? Math.min(label.hint.length, 18) + 3 : 0);
 
-  return Math.round(TAB_PAD * 2 + 8 + 6 + chars * CHAR_W + 6 + 14);
+  return Math.round(TAB_PAD * 2 + 8 + 6 + ICON_SIZE + 6 + chars * CHAR_W + 6 + 14);
 }
 
 /** Which tabs fit in `room` px with the shown one among them: [from, to)

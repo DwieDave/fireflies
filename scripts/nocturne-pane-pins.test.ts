@@ -465,6 +465,23 @@ test("a web tab's tile is named by that tab's title (browser.tab-titles), the pa
   expect(webName(WEB, "web-9")).toBe("Web");
 });
 
+test("a web tile wears its page's favicon (browser.icons, browser.tab-icons by tab), else the web mark", async () => {
+  const { webIcon } = await import("../defaults/mods/nocturne/sky.ts");
+  delete sharedState["browser.icons"];
+  delete sharedState["browser.tab-icons"];
+  expect(webIcon(WEB)).toBe(null);
+  expect(webIcon(WEB, "web-2")).toBe(null);
+  sharedState["browser.icons"] = { w1: "cache/browser-icons/a.example" };
+  sharedState["browser.tab-icons"] = { w1: { web: "cache/browser-icons/a.example", "web-2": "cache/browser-icons/www.youtube.com" } };
+  expect(webIcon(WEB)).toBe("cache/browser-icons/a.example");
+  expect(webIcon(WEB, "web-2")).toBe("cache/browser-icons/www.youtube.com");
+  expect(webIcon(WEB, "web-9")).toBe(null);
+  // A pane without a slot, or a path outside the browser's cache: none.
+  expect(webIcon({ props: {} })).toBe(null);
+  sharedState["browser.icons"] = { w1: "/etc/passwd" };
+  expect(webIcon(WEB)).toBe(null);
+});
+
 test("a closed pane's pins go together, its tab pins too; a pane back under a new id keeps them all", () => {
   const recs = parsed([
     { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 1, tab: "web" },

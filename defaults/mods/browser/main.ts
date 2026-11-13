@@ -34,7 +34,8 @@
 // Tabs (tabs.ts has the rules): one pane, several pages, each its own web view
 // (id "web", "web-2", …) kept alive while another shows, in no room at all
 // (which hides a native view). From two on, a strip over the bar: number,
-// title, × (a middle click closes too), + a blank tab. Drag a tab along it to
+// favicon (favicons.ts; the web pane's mark until one is cached), title, ×
+// (a middle click closes too), + a blank tab. Drag a tab along it to
 // move it: it lifts where it is and a marker stands in the gap it drops into
 // (the pointer's half of the tab under it; past the last tab, the end). The
 // view is made with `tabs: true`, so what would open a window comes as web.newTab: a middle or
@@ -54,7 +55,9 @@
 // A pinned tab (nocturne's PANES_KEY record with `tab`, tabs.ts has the rules)
 // is its own tile on the shelf, named from shared browser.tab-titles
 // ({ [slot]: { [tab]: title } }); the tile sends show:<{ slot, tab }> (or leaves
-// browser.show for when this pane comes on screen). Closing the tab
+// browser.show for when this pane comes on screen), its mark the tab's favicon
+// from shared browser.tab-icons ({ [slot]: { [tab]: "cache/browser-icons/<host>" }};
+// browser.icons: { [slot]: the shown tab's }). Closing the tab
 // drops its pin; it keeps it across restarts (tab ids are kept).
 // A file:// address (an HTML file from the files pane) loads as the file
 // (props path, trust "interactive": its folder readable, scripts on).
@@ -85,7 +88,7 @@
 // is per props).
 // { inspect }: an inspector pane for the web view with that key.
 
-import { View, div, svg, PathBuilder, Background } from "gpui-kit";
+import { View, div, svg, image, PathBuilder, Background } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Point } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
@@ -97,9 +100,13 @@ import { isBoolean, isNull, isNumber, isString, literal, nullable, object, oneOf
 import type { KeyRow } from "./keyhelp.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import * as Tabs from "./tabs.ts";
+import * as Favicons from "./favicons.ts";
 import type { Gap, MenuRow, Page, Tab } from "./tabs.ts";
 
 const ICONS = "mods/browser/icons";
+
+// A web pane's mark (nocturne/header.ts markPath): a tab's while its favicon is unknown.
+const WEB_MARK = "mods/workspace-chrome/monitor.svg";
 const SEARCH = "https://duckduckgo.com/?q=";
 
 // What `?` lists.
@@ -139,13 +146,20 @@ const isStoredTitles = (value: unknown): value is StoredTitles =>
 
 const TAB_TITLES = sharedMapKey("browser.tab-titles", isStoredTitles);
 
-/** Every pane's tab titles, by slot, then by tab. */
-const tabTitlesNow = (): ReadonlyMap<string, ReadonlyMap<string, string>> =>
-  new Map([...readSharedMap(shared, TAB_TITLES)].map(([slot, titles]) => [slot, new Map(Object.entries(titles))]));
+/** Every pane's tab titles (or icons), by slot, then by tab. */
+const tabTitlesNow = (key: SharedMapKey<StoredTitles> = TAB_TITLES): ReadonlyMap<string, ReadonlyMap<string, string>> =>
+  new Map([...readSharedMap(shared, key)].map(([slot, titles]) => [slot, new Map(Object.entries(titles))]));
 
-/** Writes every pane's tab titles (by slot, then by tab) as stored. */
-const writeTabTitles = (all: ReadonlyMap<string, ReadonlyMap<string, string>>) =>
-  writeSharedMap(setShared, TAB_TITLES, new Map([...all].map(([slot, titles]) => [slot, Object.fromEntries(titles)])));
+/** Writes every pane's tab titles (or icons; by slot, then by tab) as stored. */
+const writeTabTitles = (all: ReadonlyMap<string, ReadonlyMap<string, string>>, key: SharedMapKey<StoredTitles> = TAB_TITLES) =>
+  writeSharedMap(setShared, key, new Map([...all].map(([slot, titles]) => [slot, Object.fromEntries(titles)])));
+
+// Favicons (favicons.ts), for the shelf: the shown tab's by slot, and every
+// tab's by slot, then by tab, as the titles. A value is the icon's file as
+// image() takes it ("cache/browser-icons/<host>", under the app's folder); a
+// tab without a known icon has none.
+const PAGE_ICONS = sharedMapKey("browser.icons", isString);
+const TAB_ICONS = sharedMapKey("browser.tab-icons", isStoredTitles);
 
 /** Same titles, in the same order. */
 const sameTitles = (a: ReadonlyMap<string, string>, b: ReadonlyMap<string, string>) =>
@@ -256,6 +270,7 @@ const isWebEvent = oneOf(
   object({ event: literal("load.start", "load.commit", "load.finish", "web.location"), data: isPageState }, FROM),
   object({ event: literal("load.error"), data: isLoadError }, FROM),
   object({ event: literal("web.video") }, { ...FROM, data: object({}, { present: isBoolean }) }),
+  object({ event: literal("web.icon") }, { ...FROM, data: object({}, { href: nullable(isString) }) }),
   object({ event: literal("pip.start") }, { ...FROM, data: object({}, { result: isString, error: isString }) }),
   object({ event: literal("view.click", "view.escapeKey", "web.inspectKey", "web.reloadKey", "pip.leave", "pip.moved") }, { ...FROM, data: isNoData }),
 );
@@ -418,6 +433,13 @@ export default class Browser extends View {
   controls: Control[] = [];
   ring: string | null = null;
   barFocused = false;
+  // The origins whose favicon is in the cache folder (Favicons.originOf's key), the ones
+  // asked for this run (fetched once at most), and the listing of the folder at start.
+  icons = new Set<string>();
+  iconAsked = new Set<string>();
+  iconsListed: Promise<void> = Promise.resolve();
+  // Closed: what finishes later (an icon fetched) publishes nothing.
+  gone = false;
 
   override init(p: Props | undefined, cx: AsyncContext) {
     const pr = browserProps(p);
@@ -468,6 +490,7 @@ export default class Browser extends View {
     // calls (new props would rebuild the view).
     this.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(pr.url ? target(pr.url) : saved, zoom);
     this.publishTitle();
+    this.listIcons(cx);
 
     const handle = cx.focus_handle();
     const input = InputState.new({ placeholder: "address or search" });
@@ -686,11 +709,12 @@ export default class Browser extends View {
    *  tab: none, the shelf says the host or "Web"); slots of panes that are
    *  gone go. Written only when something changed. */
   publishTitle() {
-    if (!this.ownSlot || this.inspect) return;
+    if (!this.ownSlot || this.inspect || this.gone) return;
 
     const live = this.liveSlots();
 
     this.publishTabTitles(live);
+    this.publishIcons(live);
 
     const was = readSharedMap(shared, TITLES);
     const name = this.page.href || this.page.title ? Tabs.label(this.tab) : null;
@@ -708,9 +732,8 @@ export default class Browser extends View {
   /** Every tab's name in shared TAB_TITLES under this pane's slot (a tab
    *  pinned to the shelf is named by it); gone panes' entries go. Written
    *  only when something changed. */
-  publishTabTitles(live: ReadonlySet<string>) {
-    const was = tabTitlesNow();
-    const mine = Tabs.tabTitles(this.tabs);
+  publishTabTitles(live: ReadonlySet<string>, key: SharedMapKey<StoredTitles> = TAB_TITLES, mine: ReadonlyMap<string, string> = Tabs.tabTitles(this.tabs)) {
+    const was = tabTitlesNow(key);
     const same = sameTitles(was.get(this.slot) ?? new Map(), mine);
     const stale = [...was.keys()].some((k) => !live.has(k) && k !== this.slot);
 
@@ -720,7 +743,75 @@ export default class Browser extends View {
 
     if (mine.size) next.set(this.slot, mine);
 
-    writeTabTitles(next);
+    writeTabTitles(next, key);
+  }
+
+  // ---- favicons (favicons.ts)
+
+  /** Tab `t`'s favicon file (image()'s path), or null: none cached for its origin. */
+  tabIcon(t: Tab): string | null {
+    return Favicons.tabIcons([t], this.icons).get(t.id) ?? null;
+  }
+
+  /** Every tab's icon in shared TAB_ICONS, the shown tab's in PAGE_ICONS, under
+   *  this pane's slot, as the titles (written only when something changed). */
+  publishIcons(live: ReadonlySet<string>) {
+    const mine = Favicons.tabIcons(this.tabs.list, this.icons);
+
+    this.publishTabTitles(live, TAB_ICONS, mine);
+
+    const was = readSharedMap(shared, PAGE_ICONS);
+    const icon = mine.get(this.tab.id) ?? null;
+    const stale = [...was.keys()].some((k) => !live.has(k) && k !== this.slot);
+
+    if ((was.get(this.slot) ?? null) === icon && !stale) return;
+
+    const next = new Map([...was].filter(([k]) => live.has(k) && k !== this.slot));
+
+    if (icon) next.set(this.slot, icon);
+
+    writeSharedMap(setShared, PAGE_ICONS, next);
+  }
+
+  /** The origins cached at start (the cache folder's names): their tabs show
+   *  their icons at once, after a restart too, with no page loaded. */
+  listIcons(cx: AsyncContext) {
+    this.iconsListed = new Promise((done) => {
+      cx.spawn(async (cx) => {
+        const r = await herdr.exec("ls", ["-1", `${herdr.appHome()}/${Favicons.ICON_DIR}`]).catch(() => null);
+
+        for (const k of r?.code === 0 ? Favicons.listed(r.stdout) : []) this.icons.add(k);
+
+        done();
+        this.publishTitle();
+        cx.notify();
+      });
+    });
+  }
+
+  /** The page in tab `t` named its icon (`link`, null: none): fetched into the cache
+   *  folder for its origin, once a run, unless it is there already. Until it is (or
+   *  when it can't be), the tab wears the web pane's mark. */
+  fetchIcon(t: Tab, link: string | null, cx: Context) {
+    const o = Favicons.originOf(t.page.href);
+
+    if (!o || this.iconAsked.has(o.key)) return;
+
+    this.iconAsked.add(o.key);
+    cx.spawn(async (cx) => {
+      await this.iconsListed;
+
+      if (this.icons.has(o.key)) return;
+
+      const args = ["-c", Favicons.FETCH, "favicon", `${herdr.appHome()}/${Favicons.ICON_DIR}`, o.key, ...Favicons.iconUrls(o, link)];
+      const r = await herdr.exec("sh", args, { timeout: 30000 }).catch(() => null);
+
+      if (r?.code !== 0) return;
+
+      this.icons.add(o.key);
+      this.publishTitle();
+      cx.notify();
+    });
   }
 
   // ---- a tab pinned to the shelf (Tabs.pinTab; nocturne's shelf draws it)
@@ -1028,11 +1119,15 @@ export default class Browser extends View {
   override async close() {
     if (this.inspect || this.menu) return;
 
+    this.gone = true;
+
     if (readShared(shared, ACTIVE, null) === this.slot) writeShared(setShared, ACTIVE, null);
 
     // The pane is gone (or the mod reloads: its first titles come back with init).
     this.dropSlot(TITLES);
     this.dropSlot(TAB_TITLES);
+    this.dropSlot(PAGE_ICONS);
+    this.dropSlot(TAB_ICONS);
   }
 
   /** This pane's entry out of a record keyed by slot. */
@@ -1183,6 +1278,11 @@ export default class Browser extends View {
         return;
       }
 
+      // The page's icon link (none: null): fetched for its origin unless cached.
+      case "web.icon":
+        this.fetchIcon(tab, e.data?.href ?? null, cx);
+
+        return;
       // ⧉ shows while the page has a <video> (it comes and goes with the page).
       case "web.video":
         tab.video = Boolean(e.data?.present);
@@ -1829,6 +1929,14 @@ export default class Browser extends View {
         : this.blank(t, tab.page.loading ? "Loading…" : "", tab.page.href));
   }
 
+  /** A tab's favicon before its title, else the web pane's mark in the tab's colour. */
+  tabMark(t: Theme, tab: Tab, bright: boolean): Element {
+    const icon = this.tabIcon(tab);
+
+    return icon ? image(icon).id(`webtab-icon-${tab.id}`).size(12).flex_none()
+      : svg(WEB_MARK).id(`webtab-icon-${tab.id}`).size(12).flex_none().text_color(bright ? t.foreground : t.dim);
+  }
+
   /** The tabs, over the bar (two or more): number, title, ×, and + at the
    *  end; the shown one bright on a dithered accent line, as the app's tabs.
    *  A click shows a tab, a middle click or × closes it; tab rings them. */
@@ -1876,6 +1984,7 @@ export default class Browser extends View {
         // Pinned to the shelf: a small square in its corner, as the shelf's tiles.
         .when(pinned(tab.id), (el) => el.child(div().absolute().left(2).top(4).size(4).bg(on ? t.foreground : t.muted)))
         .child(div().flex_none().text_color(on || tab.page.loading ? t.accent : t.dim).child(i < 9 ? String(i + 1) : "·"))
+        .child(this.tabMark(t, tab, on || lifted))
         .child(div().flex_1().min_w(0).truncate().child(Tabs.label(tab)))
         .child(div().id(`webtab-x-${tab.id}`).size(16).flex_none().flex().items_center().justify_center().text_color(t.dim)
           .hover((s) => s.text_color(t.foreground).bg(t.ansi0))

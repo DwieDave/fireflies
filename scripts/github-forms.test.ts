@@ -381,7 +381,12 @@ test("new pull request, keyboard first: ← → change a choice, buttons are sto
   key(form, "down");
   expect(at(form)).toBe("body");
   expect(key(form, "down")).toBe("typing"); // the body keeps its lines
-  expect(form.hints().map((h: any) => h[0])).toEqual(["tab ⇧tab", "enter", "ctrl-enter", "esc"]); // enter: a new line
+  expect(form.hints().map((h: any) => h[0])).toEqual(["ctrl-tab ctrl-shift-tab", "enter", "ctrl-enter", "esc"]); // enter: a new line; tab indents
+  // ctrl-tab / ctrl-shift-tab leave the body, forward and back.
+  key(form, "tab", { control: true });
+  expect(at(form)).not.toBe("body");
+  key(form, "tab", { control: true, shift: true });
+  expect(at(form)).toBe("body");
   // The draft toggle: ← → and space flip it.
   key(form, "tab");
   key(form, "right");
