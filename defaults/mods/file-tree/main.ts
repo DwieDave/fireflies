@@ -128,6 +128,7 @@ import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.ts).
 import Viewer from "./viewer.ts";
 import type { ViewerProps } from "./viewer.ts";
+import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 
 const ROW = 22;
 const PER_FOLDER = 500;
@@ -2544,7 +2545,7 @@ export default class Files extends View {
     const list = v_flex().flex_1().min_h(0).overflow_hidden().py(4).text_size(12)
       .children(d.error ? [div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)] : [])
       .children(entries.slice(0, 120).map((e, i) => h_flex().id(`nf-lk-${i}`).h(20).flex_none().px(12).gap(6).items_center()
-        .child(svg(`mods/files/${e.dir ? "folder" : "file"}.svg`).relative().size(12).flex_none().text_color(e.dir ? t.ansi4 : t.dim))
+        .child(e.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(t.ansi4) : typeMark(t, e.name, `nf-lk-icon-${i}`))
         .child(div().min_w(0).truncate().text_color(e.dir ? t.foreground : t.muted).child(e.name))));
 
     return v_flex().id("nf-look-dir").size_full().bg(t.background).child(bar).child(list);
@@ -2732,8 +2733,7 @@ export default class Files extends View {
       // Indent guides: one dotted rule per level.
       .children(Array.from({ length: r.depth }, (_, d) => div().absolute().top(0).bottom(0).left(14 + d * 14).w(1).opacity(0.5).child(dither(t.ansi0, 1))))
       .child(r.head ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
-      .child(svg(`mods/files/${r.dir ? "folder" : "file"}.svg`).relative().size(12).flex_none()
-        .text_color(r.dir ? (open ? t.accent : t.ansi4) : t.dim))
+      .child(r.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(open ? t.accent : t.ansi4) : typeMark(t, r.name, `nf-icon-${r.path}`))
       .child(name)
       .children(mark && !editing ? [div().relative().flex_none().when(mark !== "cut", (el) => el.w(8))
         .text_color(mark === "•" || mark === "cut" ? t.ansi3 : markColor(t, mark) ?? t.ansi3).child(mark)] : []);
@@ -3098,4 +3098,12 @@ export default class Files extends View {
       .child(svg(`mods/files/${n === 1 && !this.rowAt(first)?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
       .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(first) : `${n} items`));
   }
+}
+
+/** A file's type mark (file-icons.ts) in place of the one generic file mark:
+ *  a row of the tree or the search's hits, an entry of a folder's look. */
+function typeMark(t: Theme, name: string, id: string): Element {
+  const icon = fileIcon(name);
+
+  return div().id(id).relative().flex_none().size(ICON_SIZE).child(svg(iconSvg(icon, MOD)).size(ICON_SIZE).text_color(iconColor(icon, t)));
 }

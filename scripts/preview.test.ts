@@ -76,7 +76,8 @@ const { parse: parseTable, ...tableRest } = tableLogic;
 const { parse: parsePatch, ...diffRest } = diffLogic;
 /** Everything main.js imports, as its imports name it. */
 const keyLogic = await load("preview/keys.ts");
-const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
+const fileIcons = await load("preview/file-icons.ts", kinds);
+const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...fileIcons, herdr: { ...herdr } };
 const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
 const { extension, siblings, stepIn, fileSize } = kinds;
 
@@ -454,3 +455,17 @@ test("the bar by keys: tab rings its controls in order, enter presses one, ? lis
   view.key({ key: "=", key_char: "+", modifiers: { shift: true } }, cx);
   expect(view.view.fit).toBe(false);
 });
+
+test("the look split's bar (an embedded viewer) leads with the file's type mark, from preview's icons/", async () => {
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
+  Object.assign(view, { path: "/p/notes.md", kind: "markdown", embedded: true, port: { width: 600, height: 400 } });
+  const bar = view.lookBar(herdr.theme());
+  const box = walk(bar).find((e) => call(e, "id")?.[0] === "look-bar-icon");
+  const mark = box?.nodes.find((n: any) => n?.kind === "svg");
+  expect(mark?.arg).toBe("mods/preview/icons/markdown.svg");
+  expect(call(mark, "text_color")).toEqual([fileIcons.iconColor("markdown", herdr.theme())]);
+  // Before the kind's tag and the name.
+  expect(bar.nodes.indexOf(box)).toBe(0);
+});
+

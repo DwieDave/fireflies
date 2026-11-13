@@ -36,6 +36,7 @@ import type { Patch, PatchRow } from "./diff.ts";
 import { parse as parsePatch, fileStarts, nextFile } from "./diff.ts";
 import { keyOf, keyList, cycle } from "./keys.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
+import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 
 const MOD = "preview";
 
@@ -2336,8 +2337,11 @@ export default class Viewer extends View {
     const kind = lang ? lang.toUpperCase() : tag(this.kind, this.path);
     const facts = this.error ? "" : this.facts(w);
     const note = this.error || this.busy ? null : this.note;
+    const icon = fileIcon(this.path);
 
     return h_flex().id("look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
+      // The file's type mark (file-icons.ts; the copies in preview's icons/).
+      .child(div().id("look-bar-icon").relative().flex_none().size(ICON_SIZE).child(svg(iconSvg(icon, MOD)).size(ICON_SIZE).text_color(iconColor(icon, t))))
       .child(div().flex_none().text_color(t.ansi8).child(kind))
       .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.foreground).child(basename(this.path)))
       .when(Boolean(facts) && w >= 220, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(facts)))

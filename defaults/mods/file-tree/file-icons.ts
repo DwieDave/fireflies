@@ -1,10 +1,11 @@
 // A file's type mark: which of the marks in icons/ (a 16 grid of crisp
 // squares as nocturne's art, one colour, tinted by the theme; drawn at 12 px)
 // stands for a path, and the theme colour it takes. Plain functions over
-// kinds.ts and nothing else of a mod's. Shared: editor (its tabs and bar) and
-// file-tree (its rows) ship this file and icons/*.svg byte for byte
-// (scripts/editor-tabs.test.ts fails when they differ): edit editor's and
-// copy them over.
+// kinds.ts and nothing else of a mod's. Shared: editor (its tabs and bar),
+// file-tree (its rows) and preview (viewer.ts's look bar; viewer.ts is a copy
+// in all three) ship this file and icons/*.svg byte for byte
+// (scripts/editor-tabs.test.ts and preview-shared.test.ts fail when they
+// differ): edit editor's and copy them over.
 
 import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
