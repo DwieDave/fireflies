@@ -84,7 +84,7 @@ export interface KeysViewOptions {
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
-/** The dither fill, as nocturne/kit.ts has it. */
+/** The dither fill, as nocturne/kit.js has it. */
 function dither(color: Color, cell = 1): Element {
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
