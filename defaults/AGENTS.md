@@ -1368,13 +1368,16 @@ what it holds centered in the glass when it's that short;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
-sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (clear of the last firefly's halo, the tiles and caption in from the
-glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
-apart from the fireflies'. A tile is moonlit while its pane is on screen, the
-focused one wears the corner ticks; the caption line under the shelf names
-the tile under the pointer or the keyboard's cursor (else the focused one):
-its name, then its kind, its space when it's another one, "parked". A click
+sits as a 28 px tile on a dithered shelf at the jar's foot (clear of the
+last firefly's halo, the tiles in from the glass as far as the fireflies'
+squares; on the rail 18 px tiles two abreast), in the order pinned, its own
+order apart from the fireflies'. A tile wears the pane's icon: a web page its
+favicon, an editor, Markdown or preview pane its shown file's type mark in its
+tint (as the editor's tabs wear it), a files pane the folder, a terminal its
+program's logo (an agent's in its status colour), another mod its mark. A tile is moonlit while its pane is on screen, the
+focused one wears the corner ticks; the shelf has no caption line: a tile's
+tooltip names it (its name, then its kind, its space when it's another one,
+"parked"). A click
 or enter goes to it in whatever tab and space (a parked pane comes back);
 right-click opens its pane's menu. A shell's pin is its terminal's
 (`terminal.pin`, ends with it); a mod pane's is kept in shared
@@ -1407,10 +1410,18 @@ goes. The dock
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
 folder, worktree or delete in its menu or keys (`space.close` still closes it;
-the next use makes a new one). "Move to the dock" (any pane's menu, the
-palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
-it to the shelf; "New web pane in the dock" (the palette, the shelf's last
-"+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
+the next use makes a new one). Any local pane docks: a terminal (an agent's
+too: it then flies in the jar), an editor, a files pane, a Markdown or preview
+pane, a web page. "Move to the dock" (any pane's menu, the palette,
+`nocturne.dock`) moves the pane into a tab of its own there with its state (a
+terminal runs on in the core, a mod pane keeps its props) and pins it; its tile
+goes back to it, its menu's Close closes it (the app asks first for a running
+terminal or unsaved work). A pane on another machine doesn't dock: the dock is
+this computer's space. The shelf's last "+" tile opens the dock's menu (at the
+pointer; enter on it from the keyboard): the focused pane, a new web pane
+(`nocturne.dock-web`), a new shell in ~ (`nocturne.dock-shell`, pinned once its
+terminal is there: shared `nocturne.dock-shell` holds the ask) or a new files
+pane at ~ (`nocturne.dock-files`), each pinned; the palette has the same rows. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it, or with no
 toast on show Nocturne's update note ("Updated to …", bottom right), which
@@ -1497,10 +1508,14 @@ with their age. A scratch app (`HERDR_APP_HOME` set to another home than the
 default) asks nothing and says "usage is off in a scratch app";
 `HERDR_APP_USAGE=1` in its environment turns it on.
 
-An agent's tab on Nocturne's strip and its pane's header wear a small winged
-firefly (the app icon's, 13 x 11 px) in the colour the sidebar gives its status
-(working, needs you, done; idle muted): it breathes while working and blinks
-while it needs you. Tabs and panes without an agent have none.
+An agent's tab on Nocturne's strip and its pane's header wear one mark: the
+one its firefly wears in the sidebar, its program's logo with the little
+wings (`winged.ts`, one helper for the sidebar, the tabs and the headers; a
+12 px mark there), in the colour the sidebar gives its status (working, needs
+you, done; idle muted). While it works its wings beat a little and slowly
+(only while the window is in front and more motion is fine); it blinks while
+it needs you; done and resting hold still. A plain terminal's tab and header
+keep its plain mark, without wings.
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the

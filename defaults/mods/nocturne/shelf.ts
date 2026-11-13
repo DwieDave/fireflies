@@ -1,18 +1,21 @@
 // The shelf at the jar's foot (sky.ts, meadow.ts): pinned panes that aren't
 // agents as tiles, their names (a web pane's by its page, webName) and
-// favicons (webIcon), where each is, the "+" tile for a web pane in the dock.
+// favicons (webIcon), where each is, the "+" tile and its menu of what can go
+// into the dock (any pane: the focused one, a new web pane, shell or files pane).
 
 import { div, svg, image } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, focused } from "herdr";
-import type { Theme } from "herdr";
+import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, dockWeb, cornerTicks } from "./kit.ts";
+import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
+import { openMenu } from "./menu.ts";
 import type { JarItem } from "./pins.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
-import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, CAPTION, paneOf } from "./sky-plan.ts";
+import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
 import { pinActs } from "./sky-keys.ts";
 import type Sky from "./sky.ts";
 
@@ -60,6 +63,67 @@ export function webIcon(p: { readonly props?: unknown } | null | undefined, tab:
   return isString(icon) && icon.startsWith("cache/browser-icons/") ? icon : null;
 }
 
+/** The viewers whose tile wears their file's type mark (file-icons.ts): each
+ *  notes its shown file's name by slot in shared `<mod>.titles` (editor adds
+ *  " ●" while unsaved, its scratchpad "Scratchpad · "), else props.path. */
+const FILE_VIEWERS: ReadonlySet<string> = new Set(["editor", "markdown", "preview"]);
+
+/** A viewer's props, as far as its file goes. */
+const isFileProps = object({}, { slot: isString, path: isString });
+
+/** The file a viewer pane shows (its name will do: the mark goes by its
+ *  extension), or null: not a viewer. */
+export function shownFile(p: PaneInfo | null | undefined): string | null {
+  if (!p?.mod || !FILE_VIEWERS.has(p.mod)) return null;
+
+  const pr = isFileProps(p.props) ? p.props : {};
+  const title = pr.slot ? readSharedMap(shared, sharedMapKey(`${p.mod}.titles`, isString)).get(pr.slot) : undefined;
+
+  if (title?.startsWith("Scratchpad · ")) return "scratchpad.md";
+
+  return title?.replace(/ ●$/, "") || pr.path || (p.mod === "markdown" ? "note.md" : null);
+}
+
+/** What a tile wears, `size` px, `bright` (lit, focused, under the pointer or
+ *  the cursor) or dimmed:
+ *    web page      its favicon (webIcon), else the web mark
+ *    editor, Markdown, preview   its file's type mark in its tint (file-icons.ts)
+ *    files pane    the folder mark
+ *    terminal      its program's logo (an agent's art logo in its status colour,
+ *                  else the program's own icon, else header.ts markPath)
+ *    other mods    their mark (header.ts markPath) */
+export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): Element {
+  const p = paneOf(it);
+  const id = `pin-icon-${it.key}`;
+  const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
+
+  if (icon) return image(icon).id(id).size(size).flex_none().opacity(bright ? 1 : 0.75);
+
+  const file = shownFile(p);
+
+  if (file) {
+    const kind = fileIcon(file);
+
+    return svg(iconSvg(kind, "nocturne")).id(id).size(size).flex_none().text_color(iconColor(kind, t)).opacity(bright ? 1 : 0.75);
+  }
+
+  const color = bright ? t.foreground : t.muted;
+
+  if (p?.mod === "file-tree") return svg("mods/workspace-chrome/folder.svg").id(id).size(size).flex_none().text_color(color);
+
+  const prog = p?.program;
+  const tint = p?.status ? statusColor(t, p.status) : color;
+
+  if (prog && !LOGO.has(prog.key) && prog.icon) {
+    return (prog.tint ? svg(prog.icon).text_color(tint) : image(prog.icon).opacity(bright ? 1 : 0.75)).id(id).size(size).flex_none();
+  }
+
+  // A terminal shown in no pane (a layout block's) goes by the listing's program.
+  const marked = p ?? (it.kind === "terminal" ? { program: it.terminal.program } : null);
+
+  return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
+}
+
 /** On screen now: its tab is the shown one of the shown space, not parked. */
 export function pinLit(sky: Sky, it: JarItem): boolean {
   const p = paneOf(it);
@@ -98,8 +162,8 @@ export function pinWhere(sky: Sky, it: JarItem): string {
 }
 
 /**
- * A pinned pane's tile, `size` px: its mark (header.ts markPath; a web page's
- * favicon, webIcon) on the dark
+ * A pinned pane's tile, `size` px: its mark (tileMark: a web page's favicon, a
+ * file's type mark, the folder, a program's logo) on the dark
  * plate in a square frame. Lit (on screen now) the frame brightens and the
  * tile is moonlit; under the pointer a grey plate; the focused one wears the
  * corner ticks, the keyboard's cursor a blue ring. A click goes to it, a
@@ -119,7 +183,6 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
   const at = (size - plate) / 2;
   const where = pinWhere(sky, it);
   const p = paneOf(it);
-  const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
   const bright = lit || on || focus || hot;
 
   return div().id(`pin-${it.key}`).relative().size(size).flex_none().flex().items_center().justify_center()
@@ -141,24 +204,30 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
     .child(div().absolute().top(0).left(0).size_full().border(1).border_color(lit ? t.ansi8 : t.ansi0))
     .child(div().absolute().top(at).left(at).size(plate).bg(t.background))
-    // A web page's favicon (its own colours, a little dimmer while not lit), else the pane's mark.
-    .child(icon ? image(icon).id(`pin-icon-${it.key}`).size(glyph).flex_none().opacity(bright ? 1 : 0.75)
-      : svg(markPath(p)).size(glyph).flex_none().text_color(bright ? t.foreground : t.muted))
+    // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
+    .child(tileMark(t, it, glyph, bright))
     .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
 }
 
-/** The shelf's last tile, "+": a new web pane in the dock (dock.ts), pinned
- *  here. Dimmer than the tiles, a dotted frame: a place, not a pane. */
+/** The dock's menu (menu.ts dockItems): what can go into the dock, pinned
+ *  here. At the pointer, or `centered` (from the keyboard). */
+export function dockMenu(centered = false): void {
+  openMenu({ tab: "dock" }, { width: 240, centered });
+}
+
+/** The shelf's last tile, "+": what can go into the dock (dock.ts), pinned
+ *  here (dockMenu: the focused pane, a new web pane, shell or files pane).
+ *  Dimmer than the tiles, a dotted frame: a place, not a pane. */
 export function newTile(sky: Sky, t: Theme, size = TILE): Element {
-  const on = sky.nav("shelf-new", "flies", { go: () => dockWeb() });
+  const on = sky.nav("shelf-new", "flies", { go: () => dockMenu(true), menu: () => dockMenu(true) });
 
   if (on) sky.tileOn = "shelf-new";
 
   const hot = sky.tileHover === "shelf-new";
 
   return div().id("shelf-new").relative().size(size).flex_none().flex().items_center().justify_center()
-    .tooltip("New web pane in the dock")
+    .tooltip("Into the dock: this pane, a web page, a shell, files")
     .on_hover((h, cx) => {
       if (h ? sky.tileHover !== "shelf-new" : sky.tileHover === "shelf-new") {
         sky.tileHover = h ? "shelf-new" : null;
@@ -166,7 +235,7 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
       }
     })
     .on_mouse_down("left", stop)
-    .on_click(() => dockWeb())
+    .on_click(() => dockMenu())
     .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
     .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
     .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))
@@ -174,24 +243,15 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
 }
 
-/** The shelf at the jar's foot, `w` wide: a dithered board, the tiles in
- *  rows in the order pinned, and a caption naming the tile under the pointer
- *  or the keyboard's cursor, else the focused one, else how many it keeps. */
+/** The shelf at the jar's foot, `w` wide: a dithered board and the tiles in
+ *  rows in the order pinned, the "+" tile last. Each tile names itself in its
+ *  tooltip; the shelf has no caption line. */
 export function shelfView(sky: Sky, t: Theme, kept: readonly JarItem[], w: number): Element {
   sky.tileOn = null;
 
   const tiles = [...kept.map((it) => pinTile(sky, t, it)), newTile(sky, t)];
-  const adding = sky.tileHover === "shelf-new" || sky.tileOn === "shelf-new";
-  const named = adding ? undefined : kept.find((it) => it.key === sky.tileHover) ?? kept.find((it) => it.key === sky.tileOn) ?? kept.find((it) => pinFocus(it));
-  const where = named ? pinWhere(sky, named) : "";
 
   return v_flex().id("shelf").w(w)
     .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.ansi8, 1)))
-    .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles))
-    .child(h_flex().h(CAPTION.h).mt(CAPTION.gap).px(SHELF_PAD).gap(6).items_center().min_w(0).text_size(11)
-      .when(Boolean(named), (el) => (named ? el
-        .child(div().flex_none().max_w(w - 2 * SHELF_PAD - 40).truncate().text_color(t.foreground).child(pinName(named)))
-        .when(Boolean(where), (e2) => e2.child(div().min_w(0).truncate().text_color(t.dim).child(where))) : el))
-      .when(!named, (el) => el.child(div().text_color(t.dim)
-        .child(adding ? "new web pane in the dock" : `${kept.length} ${kept.length === 1 ? "pane" : "panes"} kept`))));
+    .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles));
 }

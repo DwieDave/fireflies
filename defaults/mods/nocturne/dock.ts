@@ -14,14 +14,20 @@
 // Space ids come back from space.new only through spaces(): the record holds
 // { making: { at, before, next } } until the sky sees a new space named
 // "dock" that wasn't there before (adopt()), then { id }; `next` is what to
-// do once it's there (move a pane in, open a web page).
-import { spaces, run, shared, setShared, home } from "herdr";
-import type { SpaceInfo } from "herdr";
+// do once it's there: move any local pane in (a terminal, an agent's too, or
+// a mod pane: kit.ts dockPane), open a web page, a files pane at ~, or a shell.
+// A new shell's terminal has no address until it's there: SHELL_KEY holds
+// { at, before } (the dock's panes when it was asked for) until the sky sees
+// a terminal pane in the dock that wasn't there before (newShell()), and pins it.
+import { spaces, run, shared, setShared, home, panes as panesNow } from "herdr";
+import type { PaneInfo, SpaceInfo } from "herdr";
 import { arrayOf, isNumber, isString, literal, nullable, object, oneOf, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 
-/** What to do in the dock once it's there: move a pane in, or open a web page there. */
-const isDockThen = oneOf(object({ kind: literal("move"), pane: isString }), object({ kind: literal("web") }, { slot: isString, url: isString }));
+/** What to do in the dock once it's there: move a pane in, or open a web page,
+ *  a files pane (at `path`, its slot `slot`: how its pin finds it) or a shell there. */
+const isDockThen = oneOf(object({ kind: literal("move"), pane: isString }), object({ kind: literal("web") }, { slot: isString, url: isString }),
+  object({ kind: literal("files"), slot: isString, path: isString }), object({ kind: literal("shell") }));
 
 export type DockThen = Guarded<typeof isDockThen>;
 
@@ -101,6 +107,19 @@ export function act(id: string | null, next: DockThen | null): void {
     return;
   }
 
+  if (next.kind === "files") {
+    run("tab.new", { space: id, mod: "file-tree", props: { path: next.path, slot: next.slot } });
+
+    return;
+  }
+
+  if (next.kind === "shell") {
+    writeShared(setShared, SHELL, { at: Date.now(), before: dockPanes(id, spaces(), panesNow()).map((p) => p.pane) });
+    run("tab.new", { space: id });
+
+    return;
+  }
+
   const slot = next.slot ?? newSlot();
 
   run("tab.new", { space: id, mod: "browser", props: next.url ? { slot, url: next.url } : { slot } });
@@ -142,4 +161,51 @@ export function adoptDock(): boolean {
   act(r.id, r.next);
 
   return true;
+}
+
+// ---- a new shell in the dock, pinned once its terminal is there
+
+/** shared() key: a shell asked for in the dock, { at, before: [pane ids in the dock then] }. */
+export const SHELL_KEY = "nocturne.dock-shell";
+const SHELL = sharedKey(SHELL_KEY, nullable(object({ at: isNumber, before: arrayOf(isString) })));
+
+export type ShellAsk = { readonly at: number; readonly before: readonly string[] };
+
+/** The panes in space `id` (`all`: spaces(), `list`: panes()). */
+export function dockPanes(id: string, all: readonly Pick<SpaceInfo, "id" | "tabs">[], list: readonly PaneInfo[]): PaneInfo[] {
+  const tabs = new Set(all.find((s) => s.id === id)?.tabs.map((c) => c.id) ?? []);
+
+  return list.filter((p) => tabs.has(p.tab));
+}
+
+/**
+ * What a shell asked for in the dock (`ask`) has become: the new terminal's
+ * address once a terminal pane is in the dock (`inDock`) that wasn't there
+ * when it was asked for and its terminal runs (`live`: the core's live
+ * terminals; a pane shows before its terminal does, and terminal.pin takes
+ * only a running one); "gone" once it waited past MAKING ms; null: not yet.
+ */
+export function newShell(ask: ShellAsk | null, inDock: readonly PaneInfo[], live: ReadonlySet<string>, now: number): string | "gone" | null {
+  if (!ask) return null;
+
+  const before = new Set(ask.before);
+  const made = inDock.find((p) => p.terminal && !before.has(p.pane) && live.has(p.terminal));
+
+  if (made?.terminal) return made.terminal;
+
+  return now - ask.at > MAKING ? "gone" : null;
+}
+
+/** A shell asked for in the dock is on its way. */
+export const shellWaiting = (): boolean => Boolean(readShared(shared, SHELL, null));
+
+/** The sky calls this from a task after drawing (`live`: the core's live
+ *  terminals): the new shell's terminal once it runs (the ask is then done), else null. */
+export function adoptShell(live: ReadonlySet<string>): string | null {
+  const d = dock();
+  const r = newShell(readShared(shared, SHELL, null), d ? dockPanes(d.id, spaces(), panesNow()) : [], live, Date.now());
+
+  if (r) writeShared(setShared, SHELL, null);
+
+  return r === "gone" ? null : r;
 }
