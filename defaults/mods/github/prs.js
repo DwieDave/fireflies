@@ -7,7 +7,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import { ghJson, ghRun, api, graphql } from "./gh.js";
 import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn } from "./model.ts";
-import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.js";
+import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.js";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize, chip } from "./kit.js";

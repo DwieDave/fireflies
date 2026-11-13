@@ -41,8 +41,8 @@ import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared
 import { repoOf, viewRepo } from "./gh.js";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
-import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
-import * as store from "./store.js";
+import { lookup, entryFor, repoKey, slimRepo } from "./cache.ts";
+import * as store from "./store.ts";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
 import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";

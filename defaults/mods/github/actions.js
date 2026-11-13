@@ -16,7 +16,7 @@ import { api, ghRun, fileAt } from "./gh.js";
 import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.ts";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
-import { slimRun, slimJob, newest, LIMITS } from "./cache.js";
+import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
 import { DispatchForm } from "./dispatchForm.js";
 
 const ROW = 38, STEP = 24, LINE = 18;

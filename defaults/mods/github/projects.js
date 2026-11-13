@@ -19,7 +19,7 @@ import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, InputState, In
 import { shared, setShared } from "herdr";
 import { graphql } from "./gh.js";
 import { readAgo, ago, SLOW, linksIn } from "./model.ts";
-import { repoKey, newest, LIMITS } from "./cache.js";
+import { repoKey, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";
 import {

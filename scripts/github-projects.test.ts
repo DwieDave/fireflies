@@ -5,7 +5,7 @@ import {
   apply, overlay, valueFor, setFieldMutation, positionMutation, archiveMutation, addDraftMutation, convertMutation, toggleMutation,
   cardFields, editableFields, initials, valueText, slimBoard, MAX_ITEMS, isItemNode, isBoardAnswer, isProjectListAnswer, isDetailAnswer, isChoicesAnswer, isStoredBoard, boardOf,
 } from "../defaults/mods/github/board.ts";
-import { merge, parse, prune, fit, entryFor, LIMITS, VERSION } from "../defaults/mods/github/cache.js";
+import { merge, parse, prune, fit, entryFor, LIMITS, VERSION } from "../defaults/mods/github/cache.ts";
 
 const dir = `${import.meta.dir}/fixtures/github-projects`;
 const load = async (f: string) => JSON.parse(await Bun.file(`${dir}/${f}`).text()).data;

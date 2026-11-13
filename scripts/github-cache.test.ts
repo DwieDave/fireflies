@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import {
   blank, parse, lookup, merge, prune, fit, scrub, scrubUrl, newest, entryFor, repoKey, folderKey,
   slimRun, slimJob, slimPr, slimPrRow, slimReviewComment, MAX_BYTES, LIMITS, VERSION,
-} from "../defaults/mods/github/cache.js";
+} from "../defaults/mods/github/cache.ts";
 import { prListQuery, prRows, rowTone, readAgo } from "../defaults/mods/github/model.ts";
 
 const repo = (full: string, on: string | null = null) => ({ owner: full.split("/")[0], name: full.split("/")[1], full, root: `/src/${full}`, on, url: `https://github.com/${full}`, base: "main", branch: "dev" });

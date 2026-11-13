@@ -79,7 +79,7 @@ export type ReviewComment = Guarded<typeof isReviewComment>;
 export const isPrRow = object({
   number: isNumber, title: isString, isDraft: isBoolean, headRefName: nullable(isString), additions: isNumber, deletions: isNumber,
   reviewDecision: nullable(isString), updatedAt: nullable(isString), author: nullable(isActor), labels: arrayOf(isLabel), rollup: nullable(isString),
-}, { tone: nullable(isTone) });
+}, { tone: maybe(isTone) });
 
 export type PrRow = Guarded<typeof isPrRow>;
 
