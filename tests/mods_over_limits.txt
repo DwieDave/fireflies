@@ -25,7 +25,6 @@ defaults/mods/editor/main.ts tabStrip
 defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
-defaults/mods/editor/mdedit.ts
 defaults/mods/editor/rendered.ts
 defaults/mods/editor/rendered.ts unitView
 defaults/mods/editor/rendered.ts view

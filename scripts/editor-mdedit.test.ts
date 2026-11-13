@@ -3,7 +3,8 @@
 // for a caret and «…» for a selection; running one again takes it off; the
 // lines a command isn't about stay byte for byte.
 import { test, expect, describe } from "bun:test";
-import { run, enter, active, spans, links, tickLine, COMMANDS } from "../defaults/mods/editor/mdedit.ts";
+import { run, enter, active, tickLine, COMMANDS } from "../defaults/mods/editor/mdedit.ts";
+import { spans, links } from "../defaults/mods/editor/md-inline.ts";
 
 type P = { line: number; col: number };
 /** "a «b» c" or "a|b" -> { text, sel }. */

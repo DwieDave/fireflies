@@ -165,7 +165,7 @@ import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import type { Picture, RenderedHost } from "./rendered.ts";
 import { Rendered, editBetween } from "./rendered.ts";
 import { units as liveUnits, unitFor } from "./live.ts";
-import type { Sel } from "./mdedit.ts";
+import type { Sel } from "./md-text.ts";
 import { run as mdCommand, tickLine, commandInfo, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.ts";
 import type { AutosaveState } from "./scratch.ts";
 import { isNote, noteName, Autosave } from "./scratch.ts";
