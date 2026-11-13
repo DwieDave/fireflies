@@ -4,7 +4,7 @@
 // asked-for hover (cmd-i) says when no server answers (logic.ts serverNote).
 // `exec` is a fake that answers as sh and direnv would.
 import { test, expect, beforeEach } from "bun:test";
-import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName } from "../defaults/mods/editor/envrc.ts";
+import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName, keptEnv, keptEnvText } from "../defaults/mods/editor/envrc.ts";
 import { serverNote } from "../defaults/mods/editor/logic.ts";
 
 type Call = { cmd: string; args: string[]; opts?: any };
@@ -34,7 +34,9 @@ function fake(world: { envrc?: string | null; direnv?: boolean; allowed?: number
   };
   return { exec, calls };
 }
-const SHELL = { PATH: "/nix/store/shell/bin:/usr/bin", RUST_SRC_PATH: "/nix/store/src", OLD: null };
+// direnv's export (JSON) and the environment it comes to (a Map).
+const SHELL_JSON = { PATH: "/nix/store/shell/bin:/usr/bin", RUST_SRC_PATH: "/nix/store/src", OLD: null };
+const SHELL = new Map(Object.entries(SHELL_JSON));
 
 beforeEach(() => forgetEnvs());
 
@@ -53,7 +55,7 @@ test("the probe finds the nearest .envrc up to the repository's top, never above
 });
 
 test("an allowed .envrc: loaded once, the server found in it and started inside it", async () => {
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL, bins: { "rust-analyzer": "/nix/store/shell/bin" } });
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL_JSON, bins: { "rust-analyzer": "/nix/store/shell/bin" } });
   const env = await projectEnv(exec, "/w/repo/src");
   expect(env).toEqual({ kind: "ready", dir: "/w/repo", env: SHELL, cached: false });
   // The export runs in that folder, with room for a flake's first build.
@@ -97,7 +99,7 @@ test("direnv missing: nothing loaded; the note says to install it", async () => 
 test("a slow first load: one load for every editor of the folder, the loading note meanwhile, reused after", async () => {
   let release!: () => void;
   const slow = new Promise<void>((r) => { release = r; });
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL, slow });
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL_JSON, slow });
   const loading: string[] = [];
   const first = projectEnv(exec, "/w/repo/a", { loading: (d) => loading.push(d) });
   const second = projectEnv(exec, "/w/repo/b", { loading: (d) => loading.push(d) });
@@ -158,7 +160,7 @@ const tick = () => new Promise((r) => setTimeout(r, 1));
 
 test("environment cache, miss: direnv loads it, and it's kept under the watched files' sums", async () => {
   const d = disk();
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: { ...SHELL, DIRENV_DIFF: "x", DIRENV_WATCHES: "y" }, sums: LOCK_A });
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: { ...SHELL_JSON, DIRENV_DIFF: "x", DIRENV_WATCHES: "y" }, sums: LOCK_A });
   const loading: string[] = [];
   const env = await projectEnv(exec, "/w/repo/src", { cache: d.cache, loading: (x) => loading.push(x) });
   // direnv's own bookkeeping is left out: it changes every load, and would make every start a new server.
@@ -172,8 +174,9 @@ test("environment cache, hit: ready before direnv runs; direnv refreshes it behi
   const d = disk({ "/w/repo": { key: LOCK_A.join("\n"), env: SHELL } });
   let release!: () => void;
   const slow = new Promise<void>((r) => { release = r; });
-  const changed = { ...SHELL, PATH: "/nix/store/newer/bin:/usr/bin" };
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: changed, sums: LOCK_A, slow });
+  const changedJson = { ...SHELL_JSON, PATH: "/nix/store/newer/bin:/usr/bin" };
+  const changed = new Map(Object.entries(changedJson));
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: changedJson, sums: LOCK_A, slow });
   const loading: string[] = [], refreshed: any[] = [];
   const env = await projectEnv(exec, "/w/repo/src", { cache: d.cache, loading: (x) => loading.push(x), refreshed: (e) => refreshed.push(e) });
   // No wait on nix: the kept environment, at once, and no loading note.
@@ -194,7 +197,7 @@ test("environment cache, hit: ready before direnv runs; direnv refreshes it behi
 
 test("environment cache, hit with nothing changed: the refresh writes nothing and says nothing", async () => {
   const d = disk({ "/w/repo": { key: LOCK_A.join("\n"), env: SHELL } });
-  const { exec } = fake({ envrc: "/w/repo", exported: SHELL, sums: LOCK_A });
+  const { exec } = fake({ envrc: "/w/repo", exported: SHELL_JSON, sums: LOCK_A });
   const refreshed: any[] = [];
   await projectEnv(exec, "/w/repo", { cache: d.cache, refreshed: (e) => refreshed.push(e) });
   await tick();
@@ -203,8 +206,9 @@ test("environment cache, hit with nothing changed: the refresh writes nothing an
 
 test("environment cache, a changed flake.lock: the kept one isn't used, direnv loads the new one", async () => {
   const d = disk({ "/w/repo": { key: LOCK_A.join("\n"), env: SHELL } });
-  const newer = { ...SHELL, PATH: "/nix/store/newer/bin" };
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: newer, sums: LOCK_B });
+  const newerJson = { ...SHELL_JSON, PATH: "/nix/store/newer/bin" };
+  const newer = new Map(Object.entries(newerJson));
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: newerJson, sums: LOCK_B });
   const loading: string[] = [];
   const env = await projectEnv(exec, "/w/repo", { cache: d.cache, loading: (x) => loading.push(x) });
   expect(env).toEqual({ kind: "ready", dir: "/w/repo", env: newer, cached: false });
@@ -212,14 +216,14 @@ test("environment cache, a changed flake.lock: the kept one isn't used, direnv l
   expect(d.files["/w/repo"].key).toBe(LOCK_B.join("\n"));
   expect(calls.filter((c) => c.cmd === "direnv").length).toBe(1);
   // Within one app run, too: flake.lock edited back loads again (in memory and on disk it's B's).
-  const { exec: later, calls: again } = fake({ envrc: "/w/repo", exported: SHELL, sums: LOCK_A });
+  const { exec: later, calls: again } = fake({ envrc: "/w/repo", exported: SHELL_JSON, sums: LOCK_A });
   expect(await projectEnv(later, "/w/repo", { cache: d.cache })).toEqual({ kind: "ready", dir: "/w/repo", env: SHELL, cached: false });
   expect(again.filter((c) => c.cmd === "direnv").length).toBe(1);
 });
 
 test("environment cache: fresh skips what's kept (its server was garbage-collected)", async () => {
   const d = disk({ "/w/repo": { key: LOCK_A.join("\n"), env: SHELL } });
-  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL, sums: LOCK_A });
+  const { exec, calls } = fake({ envrc: "/w/repo", exported: SHELL_JSON, sums: LOCK_A });
   expect((await projectEnv(exec, "/w/repo", { cache: d.cache, fresh: true })).cached).toBe(false);
   expect(calls.filter((c) => c.cmd === "direnv").length).toBe(1);
 });
@@ -231,4 +235,15 @@ test("a blocked .envrc stays blocked with an environment kept from before; the k
   expect(cacheName("/w/repo")).toBe(cacheName("/w/repo"));
   expect(cacheName("/w/repo")).not.toBe(cacheName("/w/repo2"));
   expect(cacheName("/w/repo")).toMatch(/^env-[0-9a-f]{8}\.json$/);
+});
+
+test("the kept environment's file: { dir, key, env } as JSON, read back as a Map for its folder only", () => {
+  const text = keptEnvText("/w/repo", { key: "1 10 .envrc", env: SHELL });
+  expect(JSON.parse(text)).toEqual({ dir: "/w/repo", key: "1 10 .envrc", env: SHELL_JSON });
+  expect(keptEnv(text, "/w/repo")).toEqual({ key: "1 10 .envrc", env: SHELL });
+  expect(keptEnv(text, "/w/other")).toBe(null);
+  expect(keptEnv(null, "/w/repo")).toBe(null);
+  expect(keptEnv("not json", "/w/repo")).toBe(null);
+  // A value that isn't a string or null: not an environment.
+  expect(keptEnv(JSON.stringify({ dir: "/w/repo", key: "k", env: { PATH: 3 } }), "/w/repo")).toBe(null);
 });

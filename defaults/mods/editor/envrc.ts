@@ -17,7 +17,6 @@
 // behind the scenes then, and replaced when it changed.
 
 import type * as Herdr from "herdr";
-import type { Guarded } from "./guard.ts";
 import { isNumber, isString, nullable, object, parseJson } from "./guard.ts";
 import { isList } from "./guards.ts";
 
@@ -43,12 +42,11 @@ export const LOAD_TIMEOUT = 600000;
 
 /** direnv's change to the environment by variable name (names are data):
  *  a value, or null to unset it. */
-export interface EnvVars {
-  readonly [name: string]: string | null;
-}
+export type EnvVars = ReadonlyMap<string, string | null>;
 
-/** An environment as direnv exports it (`direnv export json`): every value a string or null. */
-export function isEnvVars(value: unknown): value is EnvVars {
+/** An environment as JSON has it (`direnv export json`, the disk's copy): every value a
+ *  string or null. Only the parse's result: it's a Map past here (envOf). */
+function isEnvJson(value: unknown): value is { readonly [name: string]: string | null } {
   if (typeof value !== "object" || value === null || isList(value)) return false;
 
   return Object.keys(value).every((name) => {
@@ -58,15 +56,35 @@ export function isEnvVars(value: unknown): value is EnvVars {
   });
 }
 
-/** What the disk keeps for a folder (main.ts's cache): its watched files' sums and its environment. */
-export const isKeptEnv = object({ dir: isString, key: isString, env: isEnvVars });
+/** The environment of a proven JSON object. */
+const envOf = (json: { readonly [name: string]: string | null }): EnvVars => new Map(Object.entries(json));
 
-export type KeptEnv = Guarded<typeof isKeptEnv>;
+/** An environment the disk keeps for a folder: its watched files' sums and the variables. */
+export interface KeptEnv {
+  readonly key: string;
+  readonly env: EnvVars;
+}
+
+/** What the disk keeps for a folder (main.ts's cache file): { dir, key, env }. */
+const isKeptJson = object({ dir: isString, key: isString, env: isEnvJson });
+
+/** A cache file's text as the environment kept for `dir` (null: none, another folder's, or
+ *  not in that shape). */
+export function keptEnv(text: string | null, dir: string): KeptEnv | null {
+  const kept = text ? parseJson(text, isKeptJson) : undefined;
+
+  return kept?.dir === dir ? { key: kept.key, env: envOf(kept.env) } : null;
+}
+
+/** The cache file's text for `dir`'s kept environment. */
+export function keptEnvText(dir: string, value: KeptEnv): string {
+  return JSON.stringify({ dir, key: value.key, env: Object.fromEntries(value.env) });
+}
 
 /** The disk's environments by folder. */
 export interface EnvCache {
-  read(dir: string): Promise<{ readonly key: string; readonly env: EnvVars } | null>;
-  write(dir: string, value: { readonly key: string; readonly env: EnvVars }): Promise<void>;
+  read(dir: string): Promise<KeptEnv | null>;
+  write(dir: string, value: KeptEnv): Promise<void>;
 }
 
 /** A loaded environment of a folder: the sums it's for, and the load (editors opened meanwhile wait on it). */
@@ -228,18 +246,15 @@ async function exportEnv(exec: Exec, dir: string): Promise<EnvVars> {
 
   if (r.code !== 0) throw new Error(lastWords(r.stderr) || `direnv exited with ${r.code}`);
 
-  const all = r.stdout.trim() ? parseJson(r.stdout, isEnvVars) : {};
+  const all = r.stdout.trim() ? parseJson(r.stdout, isEnvJson) : {};
 
   if (all === undefined) throw new Error("direnv's environment isn't JSON of names and values");
 
-  return Object.fromEntries(Object.entries(all).filter(([k]) => !k.startsWith("DIRENV_")));
+  return new Map([...envOf(all)].filter(([k]) => !k.startsWith("DIRENV_")));
 }
 
 function same(a: EnvVars, b: EnvVars): boolean {
-  const ka = Object.keys(a);
-  const kb = Object.keys(b);
-
-  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
+  return a.size === b.size && [...a].every(([k, v]) => b.has(k) && b.get(k) === v);
 }
 
 /** The last line direnv wrote that says something (its errors end its output). */
@@ -253,7 +268,7 @@ function lastWords(stderr: string): string {
 
 /** The program's absolute path in `env`'s PATH (else the app's), or null. */
 export async function lookup(exec: Exec, program: string, env: EnvVars | null = null): Promise<string | null> {
-  const path = env?.["PATH"];
+  const path = env?.get("PATH");
   const script = path ? 'PATH=$1; command -v "$2"' : 'command -v "$2"';
   const r = await exec("sh", ["-c", script, "lookup", path ?? "", program]).catch(() => null);
   const found = r?.code === 0 ? r.stdout.trim() : "";
@@ -263,7 +278,7 @@ export async function lookup(exec: Exec, program: string, env: EnvVars | null = 
 
 /** argv that runs the server at `path` with `env`'s variables (null: unset). */
 export function wrap(argv: readonly string[], path: string, env: EnvVars | null = null): string[] {
-  const vars = Object.entries(env ?? {});
+  const vars = [...(env ?? [])];
 
   if (!vars.length) return [path, ...argv.slice(1)];
 

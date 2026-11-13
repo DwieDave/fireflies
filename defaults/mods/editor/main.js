@@ -136,7 +136,7 @@ import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.t
 import { follow, join } from "./paths.ts";
 import { formKey, bindTab, tabActions } from "./form-keys.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
-import { projectEnv, lookup, wrap, cacheName } from "./envrc.ts";
+import { projectEnv, lookup, wrap, cacheName, keptEnv, keptEnvText } from "./envrc.ts";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.ts";
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
@@ -172,14 +172,12 @@ export const SERVER_IDLE = 15 * 60;
 const envCache = {
   file: (dir) => `${appHome()}/cache/editor/${cacheName(dir)}`,
   async read(dir) {
-    const text = await readTextFile(this.file(dir));
-    const kept = text ? JSON.parse(text) : null;
-    return kept?.dir === dir ? kept : null;
+    return keptEnv(await readTextFile(this.file(dir)), dir);
   },
   async write(dir, value) {
     const path = this.file(dir);
     const was = await readTextFile(path).catch(() => null);
-    await writeTextFile(path, JSON.stringify({ dir, ...value }), was).catch(() => {});
+    await writeTextFile(path, keptEnvText(dir, value), was).catch(() => {});
   },
 };
 const BAR = 30, FIND = 28, HINTS = 22, DRAWER = 132, ROW = 24, TABS = 26;
