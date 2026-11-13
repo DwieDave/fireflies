@@ -76,6 +76,15 @@ test("esc leaves a pane open; q closes its own pane (by slot); over the tab q cl
   expect(st.closed).toContain("d1");
 });
 
+test("the foot names q close on a script, not while the filter types (q is a letter there)", () => {
+  const o = open({ folder: "/src", overlay: "d1" });
+  let r: any = o.draw();
+  expect(texts(find(r, "k-close"))).toEqual(["q", "close"]);
+  o.d.typing = true;
+  r = o.draw();
+  expect(find(r, "k-close")).toBeUndefined();
+});
+
 test("ctrl-t moves the deck into a pane and back out, with its filter and cursor", () => {
   st.focused = { pane: "p1" };
   const w = open({ folder: "/src", on: "vps", overlay: "d1" });

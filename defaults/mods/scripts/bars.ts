@@ -58,7 +58,10 @@ export function footBar(v: ScriptsDeck, t: Theme, cur: Item | undefined) {
       .child(keys(keyHint(t, "k-enter", "enter", cur?.kind === "run" ? "watch" : "run"), keyHint(t, "k-esc", "esc", v.query ? "clear" : "list"), help));
   }
 
-  if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(v.folder ? "" : "no folder here"))).child(keys(help));
+  // q closes the deck (a pane: the pane) wherever the filter isn't typing.
+  const close = keyHint(t, "k-close", "q", "close");
+
+  if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(v.folder ? "" : "no folder here"))).child(keys(close, help));
 
   if (cur.kind === "run") {
     const r = cur.r;
@@ -73,7 +76,7 @@ export function footBar(v: ScriptsDeck, t: Theme, cur: Item | undefined) {
   return bar
     .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
       .child(cur.row.s.admin ? "asks for your password" : "in the background")))
-    .child(keys(keyHint(t, "k-run", "enter", "run"), keyHint(t, "k-watch", "⇧enter", "& watch"), help));
+    .child(keys(keyHint(t, "k-run", "enter", "run"), keyHint(t, "k-watch", "⇧enter", "& watch"), close, help));
 }
 
 /** ? : every key of the deck, in place of the scripts (keyhelp.ts). */
