@@ -89,7 +89,8 @@ const keyhelp = await load(`${F}/keyhelp.js`);
 const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.js`)), ...keyhelp };
 const { default: Viewer } = await load(`${F}/viewer.js`, shared);
 const logic = await load(`${F}/logic.js`);
-const { default: Files } = await load(`${F}/main.js`, { ...logic, ...keyhelp, Viewer });
+const route = await load(`${F}/editor-route.js`);
+const { default: Files } = await load(`${F}/main.js`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 
 // ---- a context: tasks run, timers wait until `tick()`, nested views record their props
@@ -317,13 +318,14 @@ test("the menu sets a native view aside while it's open; the key help sits in th
   expect(walk(col).some((e) => e.calls.some(([k, a]: [string, any[]]) => k === "id" && a[0] === "nf-keys-strip"))).toBe(true);
   expect(byId(tree, "nf-look").nodes).toContain(view.look);
   key(view, "?");
-  // enter, p, e, v: as before, the preview is only a look.
+  // enter, p, e, v: as before, the preview is only a look. enter: a tab of the
+  // editor to look at (no editor here: a new one); p: the viewer's own pane.
   commands.length = 0;
   key(view, "enter");
   key(view, "p");
   view.sel = "logo.png";
   key(view, "p");
-  expect(commands.map(([c, a]) => [c, a.path])).toEqual([["markdown.open", "/repo/README.md"], ["markdown.open", "/repo/README.md"], ["preview.open", "/repo/logo.png"]]);
+  expect(commands.map(([c, a]) => [c, a.path, a.look ?? null])).toEqual([["editor.open", "/repo/README.md", true], ["markdown.open", "/repo/README.md", null], ["preview.open", "/repo/logo.png", null]]);
   // The name row (a) and the delete question (d) are in the tree's column.
   view.sel = "README.md";
   key(view, "a");
@@ -652,7 +654,8 @@ test("a click on a file selects it and opens nothing; a double click opens it as
   click("README.md"); click("README.md");
   click("logo.png"); click("logo.png");
   expect(edits).toEqual(["src/m00.rs"]);
-  expect(commands.map(([c, a]) => [c, a.path, a.in ?? null])).toEqual([["markdown.open", "/repo/README.md", null], ["preview.open", "/repo/logo.png", null]]);
+  // Markdown and a picture: tabs of the editor, to look at (no editor in the tab: editor.open beside).
+  expect(commands.map(([c, a]) => [c, a.path, a.look ?? null])).toEqual([["editor.open", "/repo/README.md", true], ["editor.open", "/repo/logo.png", true]]);
   // alt-double-click: Markdown as text, a picture in the system's app; a text file is edited either way.
   commands.length = 0; edits.length = 0;
   click("README.md", true); click("README.md", true);

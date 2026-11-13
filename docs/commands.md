@@ -640,13 +640,14 @@ Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default:
 
 ## `editor.open`
 
-Edit a text or source file in the editor (nocturne-editor) beside the pane (default: the focused one), or the editor already open on it there; line and col (one-based) put the caret there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+Open a file in the editor (nocturne-editor) beside the pane (default: the focused one): the editor already open on it there shows its tab, else an editor in that tab takes it as a new tab (in "pane": a new editor); line and col (one-based) put the caret there; look: to be looked at (a picture, PDF or table drawn, Markdown in its preview); in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
 
 | Argument | Required |
 |---|---|
 | `path` | yes |
 | `line` | no |
 | `col` | no |
+| `look` | no |
 | `in` | no |
 | `pane` | no |
 | `on` | no |

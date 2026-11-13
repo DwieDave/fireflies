@@ -102,9 +102,12 @@ function cx(): any {
     notified: 0, stop_propagation() {}, notify() { this.notified++; },
     timer: { after: (ms: number, fn: any) => later.push([ms, fn]), every() {} },
     spawn: (fn: any) => { fn(cx()); }, focus_handle: () => ({ focus() {}, is_focused: () => true }),
-    read_from_clipboard: () => null, write_to_clipboard() {},
+    read_from_clipboard: () => null, write_to_clipboard(t: string) { clip.push(t); },
+    // A nested view (the drawn tabs' viewer): its class and the props it was given.
+    new: (C: any, props: any) => ({ C, props, set_props(p: any) { this.props = p; } }),
   };
 }
+const clip: string[] = [];
 const tick = () => { const due = later; later = []; for (const [, fn] of due) fn(cx()); };
 const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
 
@@ -524,13 +527,14 @@ test("a web link: the shown tab's browser pane gets it (nocturne-browser.open by
   expect(src).toMatch(/\.on_link_click\(\(url, cx\) => this\.followLink\(url, cx\)\)/);
 });
 
-test("a pointer's card doesn't ring links on tab (the key goes on to vim / the text); a picture link opens in the preview beside", async () => {
+test("a pointer's card doesn't ring links on tab (the key goes on to vim / the text); a picture link opens as a drawn tab here", async () => {
   const p = await cardWithLinks();
   p.card.keyboard = false;
   p.vimKey(key("tab"), cx());
   expect(p.card?.link ?? null).toBe(null);
   p.followLink("../shot.png", cx());
-  expect(ran.at(-1)).toEqual(["preview.open", { path: "/p/shot.png", pane: "p1" }]);
+  expect([p.path, p.look]).toEqual(["/p/shot.png", true]);
+  expect(ran.some((r) => r[0] === "preview.open")).toBe(false);
 });
 
 // ---- edit from the Markdown viewer
@@ -574,4 +578,378 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
   expect([p.softWrap, rs.wrap]).toEqual([false, undefined]);
   p.vimCommand("set:wrap", cx());
   expect([p.softWrap, rs.wrap, p.docs[1].softWrap]).toEqual([true, true, false]);
+});
+
+// ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands); H / L
+
+test("a scratchpad (one tab) has no strip either: the bar says scratchpad, no unsaved mark (it saves itself)", async () => {
+  const note = "/tmp/app/scratchpad/repo-0123abcd.md";
+  disk[note] = "# note\n";
+  const p = await pane(note);
+  const view = p.render(cx());
+  const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
+  expect(ids(view)).not.toContain("editor-tabs");
+  expect(texts(byId(view, "bar-name"))).toEqual(["scratchpad"]);
+  expect(byId(view, "bar-mark")).toBeUndefined();
+});
+
+test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
+  const p = await pane();
+  const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
+  expect(tabs.showStrip(1)).toBe(false);
+  expect(tabs.showStrip(2)).toBe(true);
+  let view = p.render(cx());
+  expect(ids(view)).not.toContain("editor-tabs");
+  expect(texts(byId(view, "bar-name"))).toEqual(["a.rs"]);
+  expect(byId(view, "bar-mark").kids.length).toBe(0);
+  p.editor.type("x");
+  expect(byId(p.render(cx()), "bar-mark").kids.length).toBe(1); // dithered: unsaved
+  // The card sits under the bar only: no strip's height above it.
+  expect(p.stripH()).toBe(0);
+  p.openFile("/p/src/b.rs", cx());
+  await flush();
+  view = p.render(cx());
+  expect(ids(view)).toContain("editor-tabs");
+  expect(ids(view)).not.toContain("bar-name");
+  expect(p.stripH()).toBe(26);
+  // Closing back to one: the strip goes again.
+  p.closeTab(cx());
+  expect(ids(p.render(cx()))).not.toContain("editor-tabs");
+});
+
+test("model: where a dragged tab lands and where its stake stands", () => {
+  // Four tabs, the second (1) dragged.
+  expect(tabs.gapAt(2, 10, 100)).toEqual({ index: 2, after: false });
+  expect(tabs.gapAt(2, 60, 100)).toEqual({ index: 2, after: true });
+  expect(tabs.dropIndex(4, 1, { index: 3, after: true })).toBe(3); // the end
+  expect(tabs.dropIndex(4, 1, { index: null })).toBe(3); // past the last tab
+  expect(tabs.dropIndex(4, 1, { index: 3, after: false })).toBe(2);
+  expect(tabs.dropIndex(4, 1, { index: 0, after: false })).toBe(0);
+  expect(tabs.dropIndex(4, 1, { index: 0, after: true })).toBe(null); // its own gap
+  expect(tabs.dropIndex(4, 1, { index: 2, after: false })).toBe(null); // its own gap
+  expect(tabs.dropIndex(4, 1, { index: 1, after: true })).toBe(null); // over itself
+  expect(tabs.stakeAt(4, 1, 3)).toEqual({ before: null });
+  expect(tabs.stakeAt(4, 1, 2)).toEqual({ before: 3 });
+  expect(tabs.stakeAt(4, 1, 0)).toEqual({ before: 0 });
+  expect(tabs.stakeAt(4, 1, null)).toBe(null);
+  expect(tabs.moved(["a", "b", "c", "d"], 1, 3)).toEqual(["a", "c", "d", "b"]);
+  expect(tabs.moved(["a", "b", "c", "d"], 3, 0)).toEqual(["d", "a", "b", "c"]);
+});
+
+/** Three tabs a, b, n (b shown), with the strip wide enough for all. */
+async function three(): Promise<any> {
+  const p = await pane();
+  p.openFile("/p/src/b.rs", cx());
+  p.openFile("/p/docs/n.md", cx());
+  p.select(p.docs[1], cx());
+  await flush();
+  p.size = { width: 1200, height: 600 };
+  return p;
+}
+const order = (p: any) => p.docs.map((d: any) => d.path.split("/").pop());
+const fire = (el: any, name: string, ...args: any[]) => el.calls[name].find((c: any[]) => typeof c[c.length - 1] === "function").at(-1)(...args);
+
+test("a drag along the strip: a press, a move past 4 px lifts the tab, a stake marks the gap, the drop moves it; kept for a restart", async () => {
+  const p = await three();
+  let strip = p.tabStrip(theme);
+  // Press on b (index 1), then move over n's right half.
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 202, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag).toBe(null); // 2 px: still a click
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 300, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag).toEqual({ from: 1, gap: { index: 2, after: true } });
+  // Drawn: b lifted (its plate), the stake at the end, the pointer grabbing.
+  strip = p.tabStrip(theme);
+  expect(byId(strip, "editor-tab-1").kids.length).toBeGreaterThan(byId(p.tabStrip(theme), "editor-tab-0").kids.length);
+  expect(byId(strip, "editor-tabs-end").kids.length).toBe(1);
+  expect(strip.calls.cursor_grabbing).toBeTruthy();
+  // The drop: b goes last, still shown; the order is kept and told.
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  expect(p.path).toBe("/p/src/b.rs");
+  expect(JSON.parse(storage.tabs)).toEqual({ paths: ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"], active: 2 });
+  expect(sharedNow["nocturne-editor.paths"].s1).toEqual(["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"]);
+  // A restart: the same order, the same tab shown.
+  const q = await pane();
+  expect([order(q), q.path]).toEqual([["a.rs", "n.md", "b.rs"], "/p/src/b.rs"]);
+});
+
+test("a drag that leaves the strip or drops on its own gap changes nothing; a press without a move is a click", async () => {
+  const p = await three();
+  let strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-0"), "on_mouse_move", { position: { x: 100, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag?.gap).toEqual({ index: 0, after: false });
+  fire(strip, "on_hover", false, cx());
+  expect(p.tabDrag).toBe(null);
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  // Over its own right gap (the left half of the next tab): no stake, no move.
+  strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 260, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(texts(p.tabStrip(theme)).length).toBeGreaterThan(0);
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  // A press and a click on a: shown.
+  strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-0"), "on_mouse_down", { position: { x: 20, y: 5 } }, cx());
+  click(byId(strip, "editor-tab-0"));
+  fire(strip, "on_mouse_up", {}, cx());
+  expect([p.path, order(p)]).toEqual(["/p/src/a.rs", ["a.rs", "b.rs", "n.md"]]);
+});
+
+test("the wheel over the strip steps the tabs; a middle click closes one", async () => {
+  const p = await three();
+  const strip = p.tabStrip(theme);
+  fire(strip, "on_scroll_wheel", { delta: { y: -3 } }, cx());
+  expect(p.path).toBe("/p/docs/n.md");
+  fire(strip, "on_scroll_wheel", { delta: { y: 3 } }, cx());
+  expect(p.path).toBe("/p/src/b.rs");
+  fire(byId(p.tabStrip(theme), "editor-tab-0"), "on_mouse_down", {}, cx()); // the left press (no-op), then
+  byId(p.tabStrip(theme), "editor-tab-0").calls.on_mouse_down.find((c: any[]) => c[0] === "middle")[1]({}, cx());
+  expect(order(p)).toEqual(["b.rs", "n.md"]);
+});
+
+test("moving by key: ]B / [B, :tabm N / +N / -N / (none), space b < / >, the commands; ends say so; kept for a restart", async () => {
+  const doc = { text: "abc\n", cursor: { line: 0, col: 0 }, clipboard: null, page: 10 };
+  const run = (keys: string[]) => { const v = createVim(); const out: string[] = []; for (const k of keys) out.push(...(feed(v, k, doc).commands ?? [])); return out; };
+  expect(run(["]", "B"])).toEqual(["move-tab-right"]);
+  expect(run(["2", "[", "B"])).toEqual(["move-tab-left", "move-tab-left"]);
+  const ex = (line: string) => run([":", ...line.split(""), "<cr>"]);
+  expect(ex("tabm 0")).toEqual(["move-tab:0"]);
+  expect(ex("tabm +1")).toEqual(["move-tab:+1"]);
+  expect(ex("tabmove -2")).toEqual(["move-tab:-2"]);
+  expect(ex("tabm")).toEqual(["move-tab:$"]);
+  expect(run([" ", "b", "<"])).toEqual(["move-tab-left"]);
+  expect(run([" ", "b", ">"])).toEqual(["move-tab-right"]);
+  const p = await three();
+  p.command("move-tab-right", cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  p.vimCommand("move-tab-right", cx());
+  expect([order(p), p.message.text]).toEqual([["a.rs", "n.md", "b.rs"], "the last tab"]);
+  p.vimCommand("move-tab:0", cx());
+  expect(order(p)).toEqual(["b.rs", "a.rs", "n.md"]);
+  p.command("move-tab-left", cx());
+  expect(p.message.text).toBe("the first tab");
+  p.vimCommand("move-tab:+2", cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  p.vimCommand("move-tab:-1", cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  p.vimCommand("move-tab:$", cx());
+  expect([order(p), p.path]).toEqual([["a.rs", "n.md", "b.rs"], "/p/src/b.rs"]);
+  expect(JSON.parse(storage.tabs)).toEqual({ paths: ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"], active: 2 });
+});
+
+test("H / L: the previous / next tab while there are several (a count: that many); with one, the screen's top / bottom line", async () => {
+  const text = Array.from({ length: 100 }, (_, i) => `  line ${i}`).join("\n");
+  const feedOne = (k: string[], d: any) => { const v = createVim(); let r: any; const cmds: string[] = []; for (const x of k) { r = feed(v, x, d); cmds.push(...(r.commands ?? [])); } return { cmds, cursor: r.cursor }; };
+  // Several tabs: commands, no move.
+  const many = { text, cursor: { line: 50, col: 2 }, clipboard: null, page: 10, top: 40, rows: 20, tabs: 3 };
+  expect(feedOne(["L"], many).cmds).toEqual(["next-tab"]);
+  expect(feedOne(["H"], many).cmds).toEqual(["prev-tab"]);
+  expect(feedOne(["2", "L"], many).cmds).toEqual(["next-tab", "next-tab"]);
+  // One tab: H the top line on screen, L the bottom, M the middle (first non-blank), 3H the third.
+  const one = { ...many, tabs: 1 };
+  expect(feedOne(["H"], one)).toEqual({ cmds: [], cursor: { line: 40, col: 2 } });
+  expect(feedOne(["L"], one)).toEqual({ cmds: [], cursor: { line: 59, col: 2 } });
+  expect(feedOne(["M"], one).cursor).toEqual({ line: 49, col: 2 });
+  expect(feedOne(["3", "H"], one).cursor).toEqual({ line: 42, col: 2 });
+  // With an operator H / L stay motions even with several tabs: dL deletes to the screen's bottom.
+  const v = createVim();
+  feed(v, "d", many);
+  const r = feed(v, "L", many);
+  expect(r.commands ?? []).toEqual([]);
+  expect(r.edits?.length).toBe(1);
+  // The pane hands vim its screen and tab count: H in a pane with three tabs steps back.
+  const p = await three();
+  p.vimKey(key("H", { shift: true }), cx());
+  expect(p.path).toBe("/p/src/a.rs");
+  p.vimKey(key("L", { shift: true }), cx());
+  expect(p.path).toBe("/p/src/b.rs");
+});
+
+// ---- every kind of file as a tab: drawn tabs (the preview's viewer), Markdown to read
+
+const { default: Viewer } = await import("../defaults/mods/nocturne-editor/viewer.js");
+const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
+const keyc = (c: string, mods: any = {}) => ({ key: c.length === 1 ? c.toLowerCase() : c, key_char: c.length === 1 ? c : null, modifiers: { shift: c.length === 1 && c !== c.toLowerCase(), control: false, alt: false, platform: false, ...mods } });
+
+test("model: which files are drawn, text, or either; how a new tab starts and a request moves an open one", () => {
+  expect(["/a.png", "/a.PDF", "/a.sqlite", "/a.ttf", "/a.mp4", "/a.mp3"].map(tabs.tabKind)).toEqual(Array(6).fill("look"));
+  expect(["/a.csv", "/a.tsv", "/a.patch", "/a.diff", "/a.svg"].map(tabs.tabKind)).toEqual(Array(5).fill("either"));
+  expect(["/a.rs", "/a.md", "/Makefile", "/a.json"].map(tabs.tabKind)).toEqual(Array(4).fill("text"));
+  // A picture is drawn however it's opened; a table when opened to look at, or asked for drawn.
+  expect(tabs.startsDrawn("/a.png")).toBe(true);
+  expect(tabs.startsDrawn("/a.csv")).toBe(false);
+  expect(tabs.startsDrawn("/a.csv", { look: true })).toBe(true);
+  expect(tabs.startsDrawn("/a.csv", { look: true, view: "text" })).toBe(false);
+  expect(tabs.startsDrawn("/a.csv", { view: "preview" })).toBe(true);
+  expect(tabs.startsDrawn("/a.md", { look: true })).toBe(false);
+  // An open tab: "text" / "preview" move a table; a bare look leaves it; a picture stays drawn.
+  expect(tabs.drawnAfter("/a.csv", { view: "text" })).toBe(false);
+  expect(tabs.drawnAfter("/a.csv", { view: "preview" })).toBe(true);
+  expect(tabs.drawnAfter("/a.csv", {})).toBe(null);
+  expect(tabs.drawnAfter("/a.png", { view: "text" })).toBe(true);
+  expect(tabs.drawnAfter("/a.rs", { view: "text" })).toBe(null);
+});
+
+test("model: a drawn tab's keys: H L gt gT ]b [b tabs, ]B [B move, j k J K scroll, e p o y d ?, cmd keys go on", () => {
+  const seq = (keys: any[]) => { let pending = ""; const acts: any[] = []; for (const k of keys) { const r = tabs.lookAction(pending, k); pending = r.pending; if (r.act) acts.push(r.act); } return acts; };
+  expect(seq([keyc("H"), keyc("L")])).toEqual(["prev-tab", "next-tab"]);
+  expect(seq([keyc("g"), keyc("t"), keyc("g"), keyc("T"), keyc("]"), keyc("b"), keyc("["), keyc("b")])).toEqual(["next-tab", "prev-tab", "next-tab", "prev-tab"]);
+  expect(seq([keyc("]"), keyc("B"), keyc("["), keyc("B")])).toEqual(["move-tab-right", "move-tab-left"]);
+  expect(seq([keyc("j"), keyc("K"), keyc("down"), keyc("up"), keyc("space")])).toEqual(["down", "up", "down", "up", "down"]);
+  expect(seq([keyc("e"), keyc("p"), keyc("o"), keyc("y"), keyc("d"), keyc("?")])).toEqual(["text", "pane", "system", "copy", "close", "keys"]);
+  // A German ? (shift-ß) comes as its character.
+  expect(tabs.lookAction("", { key: "ß", key_char: "?", modifiers: { shift: true } }).act).toBe("keys");
+  expect(tabs.lookAction("", keyc("w", { platform: true }))).toEqual({ act: null, taken: false, pending: "" });
+  expect(tabs.lookAction("g", keyc("escape"))).toEqual({ act: null, taken: true, pending: "" });
+  expect(tabs.lookAction("", keyc("z")).taken).toBe(false);
+});
+
+test("a picture opens as a drawn tab: nothing read as text, the viewer shows it, the viewer's bar instead of the editor's, its keys as hints", async () => {
+  disk["/p/img/logo.png"] = "\u0000PNG";
+  const p = await pane();
+  p.openFile("/p/img/logo.png", cx());
+  await flush();
+  expect([p.path, p.look, p.kind, p.state]).toEqual(["/p/img/logo.png", true, "look", "unloaded"]);
+  const view = p.render(cx());
+  expect(p.viewer.C).toBe(Viewer);
+  expect(p.viewer.props).toMatchObject({ embedded: true, path: "/p/img/logo.png" });
+  expect(ids(view)).toEqual(expect.arrayContaining(["editor-tabs", "editor-look", "editor-hints"]));
+  expect(ids(view)).not.toContain("editor-bar");
+  expect(texts(byId(view, "editor-hints"))).toEqual(expect.arrayContaining(["H L", "tabs", "p", "preview pane", "y", "path", "d", "close"]));
+  // Back to the text tab: the viewer lets go of the file; the editor's bar is back.
+  p.select(p.docs[0], cx());
+  expect(p.viewer.props.path).toBe(null);
+  expect(ids(p.render(cx()))).toContain("editor-bar");
+  // A file already open as a drawn tab shows it again.
+  p.openFile("/p/img/logo.png", cx(), { view: "text" });
+  expect([p.docs.length, p.look, p.viewer.props.path]).toEqual([2, true, "/p/img/logo.png"]);
+});
+
+test("a drawn tab's keys and hints: H / L tabs, j scrolls the viewer, p the preview pane, o the system's app, y the path, d closes; a click on a hint does the same", async () => {
+  const p = await pane();
+  p.openFile("/p/src/b.rs", cx());
+  p.openFile("/p/img/logo.png", cx());
+  await flush();
+  p.render(cx());
+  p.lookKey(keyc("H"), cx());
+  expect(p.path).toBe("/p/src/b.rs");
+  p.command("next-tab", cx());
+  p.lookKey(keyc("j"), cx());
+  expect(p.viewer.props.scroll).toMatchObject({ dir: 1 });
+  p.lookKey(keyc("k"), cx());
+  expect(p.viewer.props.scroll).toMatchObject({ dir: -1 });
+  ran.length = 0;
+  p.lookKey(keyc("p"), cx());
+  p.lookKey(keyc("o"), cx());
+  expect(ran).toEqual([["preview.open", { path: "/p/img/logo.png", pane: "p1" }], ["preview.open", { path: "/p/img/logo.png", in: "system" }]]);
+  clip.length = 0;
+  p.lookKey(keyc("y"), cx());
+  expect(clip).toEqual(["/p/img/logo.png"]);
+  // e on a picture: it says it's drawn only.
+  p.lookKey(keyc("e"), cx());
+  expect(p.message.text).toMatch(/drawn only/);
+  // ? shows the drawn tab's keys.
+  p.lookKey(keyc("?"), cx());
+  expect(texts(p.keysStrip(theme))).toEqual(expect.arrayContaining(["as text (a table, patch or SVG)"]));
+  p.toggleKeys(false);
+  // The close hint, clicked: the tab goes.
+  const hints = p.lookHints(theme);
+  const close = all(hints).find((x) => x.calls?.id?.[0]?.[0]?.startsWith("editor-look-hint") && texts(x).includes("close"));
+  click(close);
+  expect(p.docs.map((d: any) => d.path)).toEqual(["/p/src/a.rs", "/p/src/b.rs"]);
+});
+
+test("a table opened to look at is drawn; e shows its text (read then), the bar's chip and cmd-shift-v draw it again; an edit request opens the text", async () => {
+  disk["/p/data/rows.csv"] = "a,b\n1,2\n";
+  const p = await pane();
+  p.openFile("/p/data/rows.csv", cx(), { look: true });
+  await flush();
+  expect([p.look, p.kind, p.state]).toEqual([true, "either", "unloaded"]);
+  p.render(cx());
+  expect(texts(byId(p.render(cx()), "editor-hints"))).toEqual(expect.arrayContaining(["e", "text"]));
+  p.lookKey(keyc("e"), cx());
+  await flush();
+  expect([p.look, p.state, p.editor.value()]).toEqual([false, "ready", "a,b\n1,2\n"]);
+  expect(p.viewer.props.path).toBe(null);
+  // The bar's "drawn" chip.
+  click(byId(p.render(cx()), "bar-drawn"));
+  expect([p.look, p.viewer.props.path]).toEqual([true, "/p/data/rows.csv"]);
+  p.command("preview", cx());
+  expect(p.look).toBe(false);
+  p.command("preview", cx());
+  expect(p.look).toBe(true);
+  // The files pane's edit (view text) on the open tab: its text.
+  p.openFile("/p/data/rows.csv", cx(), { view: "text" });
+  expect(p.look).toBe(false);
+  // A bare look leaves the open tab as it is.
+  p.openFile("/p/data/rows.csv", cx(), { look: true });
+  expect(p.look).toBe(false);
+  // Edited as text from the start (an edit, the picker's grep hit): text.
+  p.openFile("/p/data/other.csv", cx());
+  expect(p.look).toBe(false);
+});
+
+test("Markdown opened to look at comes up in the editor's view for it (the pane's last pick, rendered too); an open Markdown tab keeps its view; an edit asks for the split", async () => {
+  disk["/p/docs/m.md"] = "# M\n";
+  storage.preview = "rendered"; // the pane's last pick
+  const p = await pane();
+  p.openFile("/p/docs/n.md", cx(), { look: true });
+  await flush();
+  expect([p.path, p.view, p.look, Boolean(p.cur.rendered)]).toEqual(["/p/docs/n.md", "rendered", false, true]);
+  p.setView("split", cx());
+  p.openFile("/p/docs/n.md", cx(), { look: true });
+  expect(p.view).toBe("split");
+  p.openFile("/p/docs/m.md", cx());
+  expect(p.view).not.toBe("preview");
+  p.openFile("/p/docs/m.md", cx(), { view: "split" });
+  expect(p.view).toBe("split");
+});
+
+test("files sent as tabs with look (the open record) and an editor opened on one (props look, a terminal's link) start drawn", async () => {
+  const p = await pane();
+  sharedNow["nocturne-editor.open"] = { slot: "s1", path: "/p/img/logo.png", look: true, n: 9, at: Date.now() };
+  p.render(cx());
+  tick();
+  expect([p.path, p.look]).toEqual(["/p/img/logo.png", true]);
+  sharedNow["nocturne-editor.open"] = { slot: "s1", path: "/p/docs/n.md", look: true, n: 10, at: Date.now() };
+  p.render(cx());
+  tick();
+  await flush();
+  expect([p.path, p.view, p.look]).toEqual(["/p/docs/n.md", "split", false]);
+  // A new editor on a table opened by a terminal's link: props { look: true }.
+  disk["/p/data/rows.csv"] = "a,b\n";
+  storage = {}; // a new pane keeps no tabs of its own yet
+  const q = await pane("/p/data/rows.csv", { look: true });
+  expect([q.path, q.look, q.state]).toEqual(["/p/data/rows.csv", true, "unloaded"]);
+  // A new editor for a files pane's open with no editor in the tab: the record with slot null.
+  sharedNow["nocturne-editor.open"] = { slot: null, path: "/p/docs/n.md", look: true, n: 11, at: Date.now() };
+  storage = {};
+  const r = await pane("/p/docs/n.md");
+  expect([r.view, r.look]).toEqual(["split", false]);
+});
+
+test("route: look rides along to the editor (the open record) and to editor.open when there's none; the picker looks at a picked file, edits a grep hit", () => {
+  paneList = [ed("e1", "s1", "t1", "/a.rs")];
+  route.openInEditor(herdr, { path: "/p/img/logo.png", look: true });
+  expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: "s1", path: "/p/img/logo.png", look: true });
+  paneList = [];
+  route.openInEditor(herdr, { path: "/p/img/logo.png", pane: "f", look: true });
+  expect(ran.at(-1)).toEqual(["editor.open", { path: "/p/img/logo.png", pane: "f", look: true }]);
+  expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: null, path: "/p/img/logo.png", look: true });
+  const pick = readFileSync(new URL("../defaults/mods/nocturne-picker/main.js", import.meta.url), "utf8");
+  expect(pick).toMatch(/r\.match \? \{ line: r\.match\.line, col: r\.match\.col \+ 1 \} : \{ look: true \}/);
+});
+
+test("a link to a picture in the Markdown preview opens as a drawn tab here; on another machine, the preview beside", async () => {
+  const p = await pane("/p/docs/n.md");
+  p.previewLink("../img/logo.png", cx());
+  expect([p.path, p.look]).toEqual(["/p/img/logo.png", true]);
+  p.on = "box";
+  ran.length = 0;
+  p.openLooked("/p/img/b.png", cx());
+  expect(ran).toEqual([["preview.open", { path: "/p/img/b.png", pane: "p1", on: "box" }]]);
 });

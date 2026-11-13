@@ -1663,8 +1663,12 @@ impl AppWindow {
                 TerminalEvent::OpenFile(path, place) => {
                     let Some(viewer) = Viewer::of(path) else { return };
                     let path = path.to_string_lossy().into_owned();
+                    // Markdown and what the preview shows open as a tab of the editor,
+                    // to be looked at (a picture drawn, Markdown in the editor's view for it).
+                    let (viewer, look) = editor_takes(viewer, this.folders.contains_key(Viewer::Editor.mod_name()));
                     // `path:42:7`: the editor goes there.
                     let extra = match place {
+                        _ if look => json!({ "look": true }),
                         Some((line, col)) if viewer == Viewer::Editor => json!({ "line": line, "col": col }),
                         _ => Value::Null,
                     };
@@ -3043,6 +3047,38 @@ impl AppWindow {
                 showing && props.get("on").and_then(Value::as_str) == on
             })).map(|n| n.id.clone())
         });
+        // An editor in the tab takes the file as a new tab (nocturne-editor's
+        // tabs, its editor-route.js): the one that last had the keyboard, else
+        // the first; never a scratchpad's. `in: "pane"`: a new editor beside.
+        let into = (viewer == Viewer::Editor && shown.is_none() && !tab && place != Some("pane"))
+            .then(|| pane.as_ref().and_then(|p| self.model.tab_of(p)))
+            .flatten()
+            .and_then(|t| {
+                let eds: Vec<(String, Value)> = t.root.panes().into_iter().filter_map(|n| match n.content() {
+                    Some(Content::Mod { name, props }) if name == viewer_mod => Some((n.id.clone(), props.clone())),
+                    _ => None,
+                }).collect();
+                let last = crate::mods::shared("nocturne-editor.last");
+                tab_editor(&eds, on, last.as_ref().and_then(Value::as_str), &crate::mods::app_dir().join("scratchpad"))
+            });
+        if let Some((id, slot)) = into {
+            let n = crate::mods::shared("nocturne-editor.open").and_then(|r| r.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+            let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+            let mut req = json!({ "slot": slot, "path": path, "n": n, "at": at });
+            if extra.get("line").is_some() {
+                req["line"] = extra["line"].clone();
+                req["col"] = extra.get("col").cloned().unwrap_or(json!(1));
+            }
+            if extra.get("look").and_then(Value::as_bool) == Some(true) {
+                req["look"] = json!(true);
+            }
+            crate::mods::set_shared("nocturne-editor.open".into(), req);
+            let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
+            return match r.get("error") {
+                Some(e) => Err(e.to_string()),
+                None => Ok(json!({ "pane": id, "opened": "app", "path": path, "as": "tab" })),
+            };
+        }
         if let Some(id) = shown {
             // The editor already on the file shows it (its tab) and moves to the
             // place asked for: it watches shared `nocturne-editor.goto` for its paths.
@@ -4316,10 +4352,14 @@ impl AppWindow {
                 let path = Self::owned(a, "path").unwrap_or_default();
                 // Numbers, or their text (`herdr-app do editor.open --line 42`).
                 let num = |k: &str| a.get(k).and_then(|v| v.as_u64().or_else(|| v.as_str()?.trim().parse().ok())).filter(|n| *n >= 1);
-                let extra = match num("line") {
+                let mut extra = match num("line") {
                     Some(line) => json!({ "line": line, "col": num("col").unwrap_or(1) }),
-                    None => Value::Null,
+                    None => json!({}),
                 };
+                // `look`: opened to be looked at (a new tab of a picture or table drawn); `--look true` too.
+                if a.get("look").is_some_and(|v| v.as_bool() == Some(true) || v.as_str() == Some("true")) {
+                    extra["look"] = json!(true);
+                }
                 let r = self.open_viewer(Viewer::Editor, &path, Self::owned(a, "pane"), Self::arg(a, "in"), Self::arg(a, "on"), extra, window, cx);
                 self.answer(r);
                 return;
@@ -6106,6 +6146,31 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 const WEB_MOD: &str = "nocturne-browser";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
+/// Where a terminal's link to a file goes: Markdown and what the preview shows
+/// open in the editor (when its mod is there) as a tab to look at (`true`):
+/// Markdown in the editor's view for it, a picture or a PDF drawn by the preview's viewer.
+fn editor_takes(viewer: Viewer, editor: bool) -> (Viewer, bool) {
+    match viewer {
+        Viewer::Markdown | Viewer::Preview if editor => (Viewer::Editor, true),
+        other => (other, false),
+    }
+}
+
+/// The editor pane of a tab that takes a file as a new tab: among `eds` (an
+/// editor's pane id and props, in the tab's order) on machine `on`, the one
+/// whose slot is `last` (it last had the keyboard), else the first; never a
+/// scratchpad's (its note, under `notes`, keeps its pane). -> (pane, slot).
+fn tab_editor(eds: &[(String, Value)], on: Option<&str>, last: Option<&str>, notes: &std::path::Path) -> Option<(String, String)> {
+    let notes = format!("{}/", notes.to_string_lossy().trim_end_matches('/'));
+    let fit: Vec<(String, String)> = eds.iter().filter_map(|(id, props)| {
+        let slot = props.get("slot").and_then(Value::as_str)?;
+        let here = props.get("on").and_then(Value::as_str).filter(|m| !m.is_empty()) == on;
+        let note = props.get("path").and_then(Value::as_str).is_some_and(|p| p.starts_with(&notes));
+        (here && !note).then(|| (id.clone(), slot.to_owned()))
+    }).collect();
+    fit.iter().find(|(_, slot)| Some(slot.as_str()) == last).or(fit.first()).cloned()
+}
+
 /// browser: `place` ("app" | "system") over the `links` setting, and never in
 /// the app without a web pane. Not a web page: an error.
 fn link_in_app(url: &str, place: Option<&str>, links: settings::Links, web_pane: bool) -> Result<bool, String> {
@@ -8111,6 +8176,42 @@ export default class SystemToast extends View {
         for name in ["pane.focus", "terminal.copy", "terminal.paste", "terminal.paste_image", "terminal.right_click"] {
             assert!(!super::needs_model_pane(name, &json!({})), "{name}");
         }
+    }
+
+    #[test]
+    fn a_terminals_markdown_and_preview_links_open_in_the_editor_to_look_at() {
+        use super::editor_takes;
+        use crate::links::Viewer;
+        assert_eq!(editor_takes(Viewer::Markdown, true), (Viewer::Editor, true));
+        assert_eq!(editor_takes(Viewer::Preview, true), (Viewer::Editor, true));
+        assert_eq!(editor_takes(Viewer::Editor, true), (Viewer::Editor, false));
+        assert_eq!(editor_takes(Viewer::Files, true), (Viewer::Files, false));
+        // Without the editor's mod: the viewers, as before.
+        assert_eq!(editor_takes(Viewer::Markdown, false), (Viewer::Markdown, false));
+        assert_eq!(editor_takes(Viewer::Preview, false), (Viewer::Preview, false));
+    }
+
+    #[test]
+    fn a_file_goes_to_the_tabs_editor_that_last_had_the_keyboard_else_its_first_never_a_scratchpad() {
+        use super::tab_editor;
+        use serde_json::json;
+        let notes = std::path::Path::new("/home/a/.config/herdr-app/scratchpad");
+        let ed = |id: &str, slot: &str, path: &str, on: Option<&str>| (id.to_owned(), json!({ "slot": slot, "path": path, "on": on }));
+        let eds = vec![
+            ed("p1", "s1", "/home/a/.config/herdr-app/scratchpad/repo-0123abcd.md", None),
+            ed("p2", "s2", "/r/a.rs", None),
+            ed("p3", "s3", "/r/b.rs", None),
+            ed("p4", "s4", "/r/c.rs", Some("box")),
+        ];
+        assert_eq!(tab_editor(&eds, None, None, notes), Some(("p2".into(), "s2".into())));
+        assert_eq!(tab_editor(&eds, None, Some("s3"), notes), Some(("p3".into(), "s3".into())));
+        // The last one is a scratchpad, or on another machine: the first that fits.
+        assert_eq!(tab_editor(&eds, None, Some("s1"), notes), Some(("p2".into(), "s2".into())));
+        assert_eq!(tab_editor(&eds, None, Some("s4"), notes), Some(("p2".into(), "s2".into())));
+        assert_eq!(tab_editor(&eds, Some("box"), None, notes), Some(("p4".into(), "s4".into())));
+        // Only a scratchpad, or no editor with a slot: none (a new editor opens beside).
+        assert_eq!(tab_editor(&eds[..1], None, None, notes), None);
+        assert_eq!(tab_editor(&[("p5".to_owned(), json!({ "path": "/r/a.rs" }))], None, None, notes), None);
     }
 
     #[test]

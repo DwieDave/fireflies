@@ -10,7 +10,11 @@
 //
 // Each pane keeps its filters (dotfiles, git-ignored files: both left out
 // unless settings.json `files` or H / I say otherwise; written once toggled)
-// in shared `nocturne-files.filters` by slot. `/`
+// in shared `nocturne-files.filters` by slot. The filter line holds the
+// filter, the two switches, + file / + folder and ? keys; narrower than the
+// filter's whole placeholder allows (the docked panel), the filter takes a
+// row of its own at full width and the rest the row under it (logic.js
+// lensLayout). `/`
 // filters the tree as you type: fff's fuzzy index of the root (findFiles),
 // hits under their folders; elsewhere (home, /, another machine) the folders
 // already listed.
@@ -22,10 +26,14 @@
 // so later picks open in that same nvim instead of a new pane.
 //
 // Click a file: select it (the keyboard comes here, the preview split follows).
-// Double-click a file: edit it in the app's editor (a Markdown file: read it in
-// the Markdown viewer, nocturne-markdown, alt-double-click edits it as text; a
-// picture, PDF, table, patch, font or clip: the preview, nocturne-preview,
-// alt-double-click opens the system's app, or edits a table or patch). Click a
+// Double-click a file (enter, the menu's Open): a tab of the app's editor,
+// whatever its kind (editor-route.js `look`): a Markdown file in the editor's view for it
+// (alt-double-click: as text), a picture, PDF, table, patch, font or clip
+// drawn in its tab by the preview's viewer (alt-double-click: the system's
+// app, or a table or patch as text). `p` (the menu's "Open in its viewer
+// pane") opens Markdown in the Markdown viewer (nocturne-markdown) and the
+// rest in the preview (nocturne-preview), panes of their own; so does
+// another machine's file. Click a
 // folder: fold it; double-click it: edit the folder in $EDITOR (the fold its
 // first click made is undone). cmd-click marks or unmarks a row; shift-click
 // marks every row from the last clicked one. Drag a row (or, pressed on a
@@ -44,7 +52,7 @@
 //   w              an HTML file as a page in the web pane (the shown tab's: a new front tab; else one beside)
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
-//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens;
+//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens as text;
 //                  the filter line's + file / + folder chips and an empty folder's + new file do the same)
 //   tab ⇧tab       ring the filter line's switches, + file, + folder, ? in turn; enter / space presses
 //   R              rename: the name in an input, its stem selected; a path in it moves the item
@@ -109,7 +117,7 @@ import * as herdr from "herdr";
 import { openInEditor } from "./editor-route.js";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensLayout, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -651,7 +659,17 @@ export default class Files extends View {
     // As a tab of the editor this pane sent files to, else the shown tab's
     // editor; with none, a new one beside (editor-route.js). Markdown edited
     // as text opens with its preview beside it.
-    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : null });
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : viewerFor(path) ? "text" : null });
+    if (to) this.editorSlot = to.props.slot;
+  }
+
+  /** Opens a file to look at it in the editor as a tab, whatever its kind (a
+   *  picture, a PDF, a table drawn in its tab, Markdown in the editor's view for it): the
+   *  editor this pane sent files to, else the shown tab's; with none, a new
+   *  one beside (editor-route.js). */
+  openLooked(path, cx) {
+    const beside = this.beside();
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, look: true });
     if (to) this.editorSlot = to.props.slot;
   }
 
@@ -717,22 +735,33 @@ export default class Files extends View {
     if (!this.alone && had && from && from !== me.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
   }
 
-  /** p: a file in the app's viewer for it (the preview, Markdown); others in the editor. */
+  /** p: a file in the app's viewer pane for it (the preview, Markdown), on
+   *  purpose; others in the editor. */
   preview(row, cx) {
-    if (row && !row.dir && !row.head) this.openFile(row.path, cx);
+    if (row && !row.dir && !row.head) this.openViewer(row.path, cx);
   }
 
-  /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
-   *  viewer, beside this tab's editor or its first other pane (else this one);
-   *  anything else in the editor. `other` (alt-double-click, `e`): Markdown as text in
-   *  the editor, a picture in the system's app. */
+  /** Opens a file as a tab of the editor, whatever its kind: Markdown in its
+   *  preview, a picture, PDF or table drawn (look), other text to edit; on
+   *  another machine the viewers' panes, as before (the editor's drawn tabs
+   *  read this computer's files). `other` (alt-double-click, `e`): Markdown,
+   *  tables and patches as text, a picture in the system's app. */
   openFile(path, cx, other) {
     const viewer = viewerFor(path);
-    const abs = `${this.root}/${path}`, on = this.on ? { on: this.on } : {};
     if (!viewer || (other && viewer.other === "edit")) return this.edit(path, cx);
-    if (other) return run(viewer.open, { path: abs, in: "system", ...on });
+    if (other) return run(viewer.open, { path: `${this.root}/${path}`, in: "system", ...(this.on ? { on: this.on } : {}) });
+    if (this.on) return this.openViewer(path, cx);
+    this.openLooked(path, cx);
+  }
+
+  /** A file in the app's viewer pane for it (the Markdown viewer, the
+   *  preview), beside this tab's editor or its first other pane (else this
+   *  one); a file without one in the editor. */
+  openViewer(path, cx) {
+    const viewer = viewerFor(path);
+    if (!viewer) return this.edit(path, cx);
     const beside = (this.alone && this.me()) || this.editorPane().pane || this.beside();
-    run(viewer.open, { path: abs, ...(beside ? { pane: beside.pane } : {}), ...on });
+    run(viewer.open, { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
   /** Tells the pane header which folder a pane of its own shows, and the app
@@ -754,7 +783,7 @@ export default class Files extends View {
     // On a marked row (with others marked): the set's entries first.
     const set = row.path && this.marked?.has(row.path) ? this.setOf(row) : [];
     let items = set.length > 1 ? setMenuItems(row, set.length, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on })
-      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on });
+      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on, viewer: !row.dir && Boolean(viewerFor(row.path ?? "")) });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -770,6 +799,7 @@ export default class Files extends View {
     else if (act === "edit") this.edit(p, cx);
     else if (act === "nvim") this.nvim(row);
     else if (act === "open") this.openFile(p, cx);
+    else if (act === "viewer") this.openViewer(p, cx);
     else if (act === "other") viewerFor(p)?.other === "system" ? this.openFile(p, cx, true) : this.edit(p, cx);
     else if (act === "terminal") this.terminalEdit(p, cx);
     else if (act === "web") this.openWeb(p, cx);
@@ -947,8 +977,8 @@ export default class Files extends View {
       if (ok && this.draft === d) this.endDraft(cx);
       if (ok) {
         const rel = this.landOn(r.abs, cx, "Made");
-        // A new file opens as enter on it would.
-        if (!folder && rel) this.openFile(rel, cx);
+        // A new file opens to be written: its text (a Markdown file with its preview beside).
+        if (!folder && rel) this.edit(rel, cx);
       }
       cx.notify();
     });
@@ -1081,7 +1111,7 @@ export default class Files extends View {
   treeBox() {
     const g = this.geo ?? {};
     return {
-      top: TREE_TOP - 4,
+      top: treeTop(this.lensRows ?? 1) - 4,
       bottom: this.size.height - (g.side === "bottom" && g.px != null ? g.px + DIVIDER : 0),
       right: this.size.width - (g.side === "right" && g.px != null ? g.px + DIVIDER : 0),
     };
@@ -1095,7 +1125,7 @@ export default class Files extends View {
     if (!at || this.keysShown || at.y < box.top || at.y > box.bottom || at.x > box.right) return null;
     const list = this.listed ?? [];
     const scrolled = -(this.scroll.offset?.()?.y ?? 0) / zoom();
-    const i = rowIndexAt(at.y, scrolled);
+    const i = rowIndexAt(at.y, scrolled, treeTop(this.lensRows ?? 1));
     if (i >= 0 && i < list.length) return { row: list[i] };
     return i >= list.length ? { root: true } : null;
   }
@@ -1541,33 +1571,52 @@ export default class Files extends View {
       .when(Boolean(word), (el) => el.child(div().relative().child(word)));
   }
 
-  /** The line under the toolbar: the filter as you type, and the two switches. */
+  /** The line under the toolbar: the filter as you type, the two switches,
+   *  the new-item chips and ? keys. Narrow (the docked panel), two rows
+   *  (logic.js lensLayout): the filter at full width, a click anywhere on its
+   *  row starts it; the switches and chips on the row under it. */
   lens(t, w, found) {
     const live = this.typing || this.finding || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
     const searching = Boolean(this.query.trim());
-    // What fits this width: the placeholder shortens, then the switches' labels.
-    const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
+    // What fits this width: the placeholder shortens, then the switches' labels; then two rows.
+    const fit = lensLayout(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
     const [hLabel, iLabel] = fit.labels;
     this.lensAdd = fit.add;
+    this.lensRows = fit.rows;
     const at = this.stop;
-    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
-      .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
-      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
+    const row = (id) => h_flex().id(id).relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden();
+    const find = h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
+      .child(live
+        ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
+        : h_flex().min_w(0).gap(5).text_color(t.dim)
+          .child(div().flex_none().text_color(t.accent).child("/"))
+          .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find))));
+    const icon = svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim);
+    const count = searching && fit.count ? div().flex_none().text_color(t.dim).child(`${found}`) : null;
+    const chips = [
+      this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"),
+      this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"),
+      ...ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)),
+    ];
+    // ? keys: the line's last item (keyhelp.js).
+    const keys = keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
+      .when(at === "keys", (el) => el.child(ring(t)));
+    const rule = () => div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1));
+    if (fit.rows === 1) {
+      return row("nf-lens").child(icon).child(find).when(Boolean(count), (el) => el.child(count)).children(chips).child(keys).child(rule());
+    }
+    // Two rows: the filter's own row takes a click anywhere (the icon, the gap, the count too).
+    return v_flex().id("nf-lens").relative().flex_none()
+      .child(row("nf-lens-find").cursor_text()
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
-        .child(live
-          ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
-          : h_flex().min_w(0).gap(5).text_color(t.dim)
-            .child(div().flex_none().text_color(t.accent).child("/"))
-            .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
-      .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"))
-      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"))
-      .children(ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)))
-      // ? keys: the line's last item (keyhelp.js).
-      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
-        .when(at === "keys", (el) => el.child(ring(t))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+        // Typing: the field's own frame, so it reads as a place to type.
+        .when(live, (el) => el.child(div().absolute().left(4).right(4).top(3).bottom(3).border(1).border_color(this.typing ? t.accent : t.ansi0)))
+        .child(icon).child(find).when(Boolean(count), (el) => el.child(count))
+        .when(Boolean(this.query), (el) => el.child(div().flex_none().text_color(t.dim).child("esc clears")))
+        .child(div().absolute().left(10).right(10).bottom(0).h(1).opacity(0.5).child(dither(t.ansi0, 1))))
+      .child(row("nf-lens-chips").children(chips).child(div().flex_1()).child(keys).child(rule()));
   }
 
   /** `?`: every key, in the list's place (keyhelp.js); one column at the panel's width. */

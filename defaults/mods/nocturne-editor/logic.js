@@ -328,11 +328,11 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
 export function editorKeys(vim) {
   const app = [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-alt-f", "replace"], ["cmd-l ctrl-g", "go to line"], ["cmd-k n / p", "next / prev problem"],
     ["cmd-k m", "problems"], ["cmd-k d", "definition"], ["cmd-i", "hover"], ["ctrl-= ctrl--", "hover more / less"], ["cmd-r", "reload"],
-    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown: rendered / split / preview / text"], ["cmd-.", "Markdown commands (then b i ` k h H l n t x q c r, 0-6; p an image file, v paste an image)"], ["cmd-v", "Markdown: a copied picture (a screenshot, a copied image file) saved beside the file, as an image block"], ["enter", "rendered: at a block's end, a new paragraph (shift-enter: a line break)"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k w", "close tab"],
+    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown: rendered / split / preview / text"], ["cmd-.", "Markdown commands (then b i ` k h H l n t x q c r, 0-6; p an image file, v paste an image)"], ["cmd-v", "Markdown: a copied picture (a screenshot, a copied image file) saved beside the file, as an image block"], ["enter", "rendered: at a block's end, a new paragraph (shift-enter: a line break)"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k shift-l / shift-h", "move tab right / left"], ["cmd-k w", "close tab"],
     ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (!vim) return [...app, ["cmd-k ?", "keys"]];
   return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],
-    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gt gT :bn :bp", "next / prev tab"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
+    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["L H gt gT :bn :bp", "next / prev tab"], ["]B [B :tabm", "move tab right / left"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
     ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space b", "tabs"], ["space d", "problems"], ["space m p", "Markdown view"], ["space m r", "Markdown rendered"], ["space .", "Markdown commands"], ["space u w", "word wrap"],
     ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
 }

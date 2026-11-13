@@ -69,6 +69,8 @@ const PANE = {
     ["next-tab", "Next file tab", "tab buffer switch bn gt"],
     ["prev-tab", "Previous file tab", "tab buffer switch bp gT"],
     ["close-tab", "Close the file tab", "tab buffer close bd"],
+    ["move-tab-left", "Move the file tab left", "tab buffer order reorder drag tabm"],
+    ["move-tab-right", "Move the file tab right", "tab buffer order reorder drag tabm"],
     ["preview", "Markdown: next view", "preview split text rendered cycle", (p) => MARKDOWN.test(p?.props?.path ?? "")],
     ["preview-split", "Markdown: preview beside the text", "preview split rendered", (p) => MARKDOWN.test(p?.props?.path ?? "")],
     ["preview-only", "Markdown: preview only", "preview rendered read", (p) => MARKDOWN.test(p?.props?.path ?? "")],

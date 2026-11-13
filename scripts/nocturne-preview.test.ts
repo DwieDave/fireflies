@@ -88,8 +88,9 @@ test("pictures are told apart by extension, any case", () => {
   expect(extension("/a.b/c")).toBe("");
 });
 
-test("nocturne-files: Markdown to its viewer, pictures to the preview (a double click), alt-double-click / e the other way", async () => {
-  const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
+test("nocturne-files: Markdown and pictures as tabs of the editor (a double click), p their viewer panes, alt-double-click / e the other way", async () => {
+  const route = await load("nocturne-files/editor-route.js");
+  const { default: Files, viewerFor, isMarkdown } = await load("nocturne-files/main.js", { ...(await load("nocturne-files/logic.js")), openInEditor: route.openInEditor, herdr: { run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } });
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
   expect([viewerFor("a.json"), viewerFor("a.yaml"), viewerFor("Cargo.toml")]).toEqual([null, null, null]);
@@ -112,10 +113,13 @@ test("nocturne-files: Markdown to its viewer, pictures to the preview (a double 
   view.sel = "shots/Screen Shot.png";
   view.key({ key: "e" }, cx);
   view.key({ key: "enter" }, cx);
+  view.key({ key: "p" }, cx);
+  // A double click and enter: a tab of the editor to look at (none in the tab: a new one beside); p: the preview pane.
   expect(commands).toEqual([
-    ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
+    ["editor.open", { path: "/repo/shots/Screen Shot.png", pane: "p1", look: true }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
+    ["editor.open", { path: "/repo/shots/Screen Shot.png", pane: "p1", look: true }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
   ]);
   expect(edits).toEqual([]);

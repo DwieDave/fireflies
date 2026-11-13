@@ -88,8 +88,9 @@ export function nvimLaunch(abs, dir) {
  *  pane's action. Folders and files differ; the root (empty space, `path` "")
  *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
  *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
- *  split is open (its entry hides it). */
-export function menuItems(row, { pane = false, clip = false, look = false, web = true } = {}) {
+ *  split is open (its entry hides it); `viewer`: the file has a viewer pane
+ *  (Markdown, the preview's kinds). */
+export function menuItems(row, { pane = false, clip = false, look = false, web = true, viewer = false } = {}) {
   const root = row.dir && !row.path;
   const items = row.dir
     ? [
@@ -101,6 +102,8 @@ export function menuItems(row, { pane = false, clip = false, look = false, web =
       ]
     : [
         { key: "enter", label: "Open", act: "open" },
+        // A file with a viewer pane (Markdown, a picture, a PDF): there, beside, instead of a tab of the editor.
+        ...(viewer ? [{ key: "p", label: "Open in its viewer pane", act: "viewer" }] : []),
         ...(web && isHtml(row.path) ? [{ key: "w", label: "Open in a web pane", act: "web" }] : []),
         { key: "e", label: "Edit as text", act: "other" },
         { key: "E", label: "Open in $EDITOR", act: "terminal" },
@@ -375,6 +378,30 @@ export function lensFit(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {
   return { find: "", chips: "icon", cuts: false, add: "plus", count: false, labels: LABELS.icon };
 }
 
+/** The filter line as it fits `w`: one line while the filter keeps its whole
+ *  placeholder ("filter files") beside the switches; narrower (the docked
+ *  panel, about 280 px), two rows, so there's room to type and to read what
+ *  was typed: the filter at full width (with its hit count), and under it
+ *  the switches, the new-item chips and ? keys, as they fit (chipsFit). */
+export function lensLayout(w, { cut = { hidden: 0, ignored: 0 }, count = null } = {}) {
+  const one = lensFit(w, { cut, count });
+  if (one.find === "filter files") return { rows: 1, ...one };
+  return { rows: 2, find: "filter files", count: count != null, ...chipsFit(w, cut) };
+}
+
+/** The second row of a two-row filter line: the switches' labels, their
+ *  counts and the new-item chips that fit `w`, richest first. */
+export function chipsFit(w, cut = { hidden: 0, ignored: 0 }) {
+  const LABELS = { full: ["dotfiles", "ignored"], short: [".*", "ign"], icon: ["", ""] };
+  const variants = [["full", true, "both"], ["full", true, "file"], ["short", true, "both"], ["short", true, "file"], ["short", true, "plus"], ["icon", true, "plus"], ["icon", false, "plus"]];
+  for (const [chips, cuts, add] of variants) {
+    const [h, i] = LABELS[chips];
+    const parts = [chipW(h, cuts ? cut.hidden : 0), chipW(i, cuts ? cut.ignored : 0), ...ADDS[add].map(([, l]) => addW(l)), KEYS_CHIP];
+    if (16 + parts.reduce((a, b) => a + b, 0) + 6 * (parts.length - 1) <= w) return { chips, cuts, add, labels: LABELS[chips] };
+  }
+  return { chips: "icon", cuts: false, add: "plus", labels: LABELS.icon };
+}
+
 /** How wide the filter line is with `fit` (logical px); the ? chip ends it. */
 function lensWidth(fit, [h, i], cut, count) {
   const find = CH + (fit.find ? 5 + fit.find.length * CH : 0);
@@ -533,10 +560,13 @@ export function setMenuItems(row, n, { pane = false, clip = false, look = false 
 }
 
 /** The tree's geometry for the pointer: rows start TREE_TOP px below the
- *  pane's top (toolbar, filter line, the list's padding), ROW px each. */
-export const TREE_TOP = 34 + 26 + 4;
+ *  pane's top (toolbar, filter line, the list's padding), ROW px each;
+ *  treeTop(2) with the filter line in two rows (lensLayout). */
+export const LENS_ROW = 26;
+export const treeTop = (rows = 1) => 34 + LENS_ROW * rows + 4;
+export const TREE_TOP = treeTop(1);
 export const ROW_H = 22;
 
 /** The index of the row under `y` (pane px) with the list scrolled `scrolled`
- *  px down: -1 above the rows. */
-export const rowIndexAt = (y, scrolled) => Math.floor((y - TREE_TOP + scrolled) / ROW_H);
+ *  px down: -1 above the rows. `top`: where the rows start (treeTop). */
+export const rowIndexAt = (y, scrolled, top = TREE_TOP) => Math.floor((y - top + scrolled) / ROW_H);

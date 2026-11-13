@@ -8,10 +8,12 @@
 // else the editor the caller prefers (the one it sent files to before), the
 // focused one, the one that last had the keyboard, the tab's first: the file
 // opens there as a new tab (never in a scratchpad's pane), through shared `nocturne-editor.open`
-// { slot, path, line?, col?, view?, n } (the editor whose slot it names opens
-// it, n counts up). With no editor in the shown tab, `editor.open` opens one
-// beside the pane, as before; a `view` then waits for it in the same record
-// with slot null.
+// { slot, path, line?, col?, view?, look?, n } (the editor whose slot it names
+// opens it, n counts up). Every kind of file goes: a picture, a PDF, a table
+// is drawn in its tab; `look` (opened to be looked at, not edited) starts a
+// new tab drawn (Markdown takes the editor's view for it). With no editor in the shown
+// tab, `editor.open` opens one beside the pane, as before; a `view` or `look`
+// then waits for it in the same record with slot null.
 
 export const EDITOR = "nocturne-editor";
 export const OPEN = "nocturne-editor.open";
@@ -55,17 +57,17 @@ export function shownTab(spaces) {
  *  through `editor.open` beside `pane`. `h`: herdr's { run, panes, spaces,
  *  focused, shared, setShared }. -> the editor pane it went to, or null (a
  *  new one). */
-export function openInEditor(h, { path, line = null, col = null, on = null, pane = null, prefer = null, view = null }) {
+export function openInEditor(h, { path, line = null, col = null, on = null, pane = null, prefer = null, view = null, look = false }) {
   const tab = shownTab(h.spaces());
   const target = editorFor({ panes: h.panes(), tab, focused: h.focused?.()?.pane ?? null, prefer, last: h.shared(LAST), paths: h.shared(PATHS), path, on });
   const n = (h.shared(OPEN)?.n ?? 0) + 1;
   const place = line ? { line, col: col ?? 1 } : {};
   if (target) {
-    h.setShared(OPEN, { slot: target.props.slot, path, ...place, ...(view ? { view } : {}), n, at: Date.now() });
+    h.setShared(OPEN, { slot: target.props.slot, path, ...place, ...(view ? { view } : {}), ...(look ? { look: true } : {}), n, at: Date.now() });
     h.run("pane.focus", { pane: target.pane });
     return target;
   }
-  if (view) h.setShared(OPEN, { slot: null, path, view, n, at: Date.now() });
-  h.run("editor.open", { path, ...place, ...(pane ? { pane } : {}), ...(on ? { on } : {}) });
+  if (view || look) h.setShared(OPEN, { slot: null, path, ...(view ? { view } : {}), ...(look ? { look: true } : {}), n, at: Date.now() });
+  h.run("editor.open", { path, ...place, ...(pane ? { pane } : {}), ...(on ? { on } : {}), ...(look ? { look: true } : {}) });
   return null;
 }

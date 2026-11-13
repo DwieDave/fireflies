@@ -470,12 +470,14 @@ the highlighted line shows where it will land.
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
   terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
-  the terminal's folder, or a bare `README.md` there) opens it rendered in the
-  Markdown viewer (`nocturne-markdown`) beside that pane; clicking it again
-  shows the viewer already open on it. The files panes do the same for a picked
-  `.md` (alt-click; in Nocturne's files pane a double click opens it, and
-  alt-double-click or `e` opens it as text in the editor).
-  `markdown.open {path, anchor?, in?, pane?, on?}` does it from a mod or an agent.
+  the terminal's folder, or a bare `README.md` there) opens it as a tab of the
+  editor, in the editor's view for Markdown (Editing files: the tab's editor, else a new one
+  beside that pane); clicking it again shows that tab. Nocturne's files pane
+  does the same on a double click or enter (alt-double-click or `e`: as text,
+  the preview beside; `p` or the menu's "Open in its viewer pane": the viewer).
+  The Markdown viewer (`nocturne-markdown`) is a pane of its own for whoever
+  opens it on purpose: `markdown.open {path, anchor?, in?, pane?, on?}` from a
+  mod or an agent, the files pane's `p`, another machine's file.
   The viewer re-reads the file when it changes on disk, keeping its scroll;
   web links in it follow `links`, relative `.md` links open in the same viewer
   (‹ back), `#anchors` scroll, local images are drawn. Besides GitHub's
@@ -509,12 +511,15 @@ the highlighted line shows where it will land.
   audio (`.mp3`, `.m4a`, `.aac`, `.wav`, `.aif` / `.aiff`, `.flac`, `.caf`) and
   video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
   above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
-  opens it in the preview (`nocturne-preview`, called `nocturne-image` before:
-  panes and keys saved with that name keep working) beside that pane, or shows
-  the preview already on it. The files panes open a picked one there
-  (alt-click, or in Nocturne's files pane alt-double-click or `e`: the
-  system's app; for a table or patch the editor); so do such links and drawn images in the Markdown viewer.
-  `preview.open {path, in?, pane?, on?}` does it from a mod or an agent
+  opens it as a tab of the editor, drawn by the preview's viewer (Editing
+  files: a drawn tab), or shows that tab; so does a double click or enter in
+  Nocturne's files pane (alt-double-click or `e`: the system's app; for a
+  table or patch its text), the file picker, and such links and drawn images
+  in the editor's Markdown preview. The preview pane (`nocturne-preview`,
+  called `nocturne-image` before: panes and keys saved with that name keep
+  working) is for whoever opens it on purpose: the files pane's `p`, a drawn
+  tab's `p`, links and drawn images in the Markdown viewer, another machine's
+  file, and `preview.open {path, in?, pane?, on?}` from a mod or an agent
   (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
   code and other text you edit open in the editor (Editing files). Per kind:
   - pictures fit the pane; `+` / `-` zoom, `0` fit, `1` 100%, `h j k l` /
@@ -559,10 +564,26 @@ the highlighted line shows where it will land.
   (Nocturne's: double click or `e`; `E` and folders: $EDITOR in a terminal beside), the
   Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
+  **Every kind of file is a tab**: a picture, PDF, table, patch, database,
+  font or clip opens as a drawn tab of the editor, shown by the preview's own
+  viewer (`viewer.js`, the files pane's split's: fitted pictures, PDFs, tables,
+  patches; its slim bar says kind, name and facts; clips never play by
+  themselves). Its keys: H / L, gt / gT, ]b / [b tabs, ]B / [B move it, j k
+  J K scroll, `e` its text (a table, patch or SVG: they switch between drawn
+  and text, also by the bar's "drawn" chip and cmd-shift-v), `p` the preview
+  pane, `o` the system's app, `y` the path, `d` close, `?` the keys; the hint
+  line along the bottom is clickable. A file opened to be looked at (a
+  terminal's link, the files pane's double click or enter, the picker's pick:
+  `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
+  hit, definitions) opens its text. Another machine's pictures open in the
+  preview pane, as before.
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the name, the folder that tells two of the
   same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
-  n › at the ends). Each tab keeps its text, undo, caret, scroll, folds,
+  n › at the ends; the wheel over it steps tabs, a middle click closes one).
+  The strip shows from two files on: with one, the bar names the file with
+  its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
+  marks where it lands; off the strip it stays); the order is kept. Each tab keeps its text, undo, caret, scroll, folds,
   unsaved changes and Markdown view. Where a file goes: go to definition and
   references into another file, a card link to a file, `:e <file>` and a
   Markdown preview's link open it as a tab of the same editor; the files pane
@@ -571,9 +592,13 @@ the highlighted line shows where it will land.
   (else, for both, the one that last had the keyboard, the tab's first); with
   no editor in the shown tab, a new one opens beside the pane as before. A
   file already open shows its tab (at the line asked for), from any of these
-  and from `editor.open` (a terminal's link). Mods send a file to an editor
-  through shared `nocturne-editor.open` `{ slot, path, line?, col?, view?, n }`
-  (n counting up; `view` a Markdown file's split / preview / text) and focus
+  and from `editor.open` (a terminal's link), which also hands a file no
+  editor holds to the shown tab's editor (the one that last had the keyboard,
+  else the first; never a scratchpad's) as a new tab. Mods send a file to an editor
+  through shared `nocturne-editor.open` `{ slot, path, line?, col?, view?, look?, n }`
+  (n counting up; `view` a Markdown file's split / preview / text, or
+  `preview` / `text` for a table, patch or SVG; `look` opened to be looked at:
+  a new tab starts drawn) and focus
   its pane; each editor notes its files by slot in shared
   `nocturne-editor.paths` (`editor.open` reads it to find the editor holding a
   file in any tab) and the last one with the keyboard in `nocturne-editor.last`
@@ -581,10 +606,14 @@ the highlighted line shows where it will land.
   unsaved changes asks on a line under the bar (s save and close, d discard,
   esc keep; tab / ← → and enter too); closing the last tab closes the pane;
   closing the pane asks once, naming every edited tab. Tabs come back after a
-  restart (each read when first shown). Tab keys: vim's gt / gT (a count: that
-  tab), ]b / [b, `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls`
-  (also `:tabn` `:tabp` `:tabc`), space b n / b p / b d / b l; the commands
-  `nocturne-editor.next-tab`, `.prev-tab`, `.close-tab` (cmd-k ] / cmd-k [ /
+  restart (in their order, each read when first shown). Tab keys: vim's
+  gt / gT (a count: that tab), H / L in normal mode while there are several
+  (with one, the screen's top / bottom line as in Vim; M the middle), ]b / [b,
+  `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls` (also `:tabn`
+  `:tabp` `:tabc`), space b n / b p / b d / b l; moving the shown tab: ]B / [B
+  (a count: that many places), `:tabm N` / `+N` / `-N` (`:tabm` alone: the
+  end), space b > / b <; the commands `nocturne-editor.next-tab`, `.prev-tab`,
+  `.close-tab`, `.move-tab-right`, `.move-tab-left` (cmd-k ] / cmd-k [ /
   cmd-k w). `:q` closes the pane
   with all its tabs and refuses while any has unsaved changes. A language
   server serves every tab of its project (one per project as before; each
@@ -825,7 +854,9 @@ the highlighted line shows where it will land.
   pane of this folder". It works as the panel (files open beside it) and closes
   with `q` / `esc`. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
-  click opens it (alt-double-click: the other way, as `e`). A click on a folder
+  click (or enter) opens it as a tab of the editor whatever its kind, the same
+  editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
+  alt-double-click: the other way, as `e`; `p`: its viewer pane). A click on a folder
   folds it; a double click opens the folder in $EDITOR (its first click's fold
   undone). Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
   `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`
@@ -833,7 +864,10 @@ the highlighted line shows where it will land.
   forward through the folders rooted at (back with none goes up), `r` refresh; `/` filters as you type (fff's fuzzy
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
-  `/` and other machines search the folders listed so far); `H` / `I` (the eye
+  `/` and other machines search the folders listed so far; in a narrow pane,
+  the docked panel, the filter has a row of its own at full width, a click
+  anywhere on it starts it, and the switches and chips sit on the row under
+  it); `H` / `I` (the eye
   switches under the toolbar; tab / shift-tab ring them, `+ file`, `+ folder`
   and `? keys` in turn, enter or space presses, esc leaves) hide or show dotfiles and git-ignored files
   (`git ls-files --ignored`; both hidden by default), each pane keeping its
@@ -851,7 +885,7 @@ the highlighted line shows where it will land.
   chips, `+ folder` only where it fits, and an empty folder's `+ new file`: a
   name row in the selected folder or beside the selected file, the root with
   nothing selected; slashes make the folders on the way, a trailing `/` makes a
-  folder, a new file opens as enter would), `R` rename (the stem selected; a
+  folder, a new file opens to be written: its text in the editor), `R` rename (the stem selected; a
   path in the name, `../x` or `docs/`, moves it), `x` cut and `P` paste into the
   selected folder (shared `nocturne-files.cut`: any files pane on that machine),
   `d` delete after asking (y / enter; anything else keeps it): to the machine's
@@ -1641,6 +1675,13 @@ The main ones:
   or beside that tab's focused pane; no tab or target: a new tab of its own (`name`, in
   `space`). Its terminal keeps running; the tab it leaves closes when emptied. The pane
   menus (shipped and Nocturne's, and a firefly's) list "Move to …" for every tab.
+  In Nocturne's (pane and firefly), up to three places stay flat rows; past that one
+  "Move to…" row opens a level in place: this space's tabs (a tab's number moves
+  there at once), "a new tab", then a row per other space (a space with one tab
+  moves at once, one with more opens a level of its tabs). → / l / enter open a
+  level, ← / h / esc go back one (a click on its "‹" head too), esc at the top
+  closes; a click on a row opens or moves. Any popup item can carry such a level
+  (popup.js `sub`).
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and
@@ -1796,9 +1837,10 @@ The main ones:
   never one a package manager owns), `app.welcome`, `app.whats_new`,
   `app.open_url {url, in?}` (an http(s) page: `in: "app"` a web pane beside the focused one,
   `"system"` the system's browser; default: the `links` setting; the reply says `opened`),
-  `editor.open {path, line?, col?, in?, pane?, on?}` (text or source in the editor beside `pane`,
+  `editor.open {path, line?, col?, look?, in?, pane?, on?}` (a file in the editor beside `pane`,
   default the focused one, or the editor there already holding it in one of its tabs (that tab
-  shows), going to `line` / `col`, one-based;
+  shows), else as a new tab of an editor in `pane`'s tab (`in: "pane"`: a new editor beside), going to `line` / `col`, one-based;
+  `look`: to be looked at, a picture or table drawn;
   `in: "system"` the system's app; see Editing files),
   `markdown.open {path, anchor?, in?, pane?, on?}` (a Markdown file rendered in the viewer beside
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a
