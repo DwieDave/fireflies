@@ -1,11 +1,11 @@
-// The scratchpad's note (editor/scratch.js, shipped again as
-// nocturne/scratch.js): one per repository under the app's folder, found by
+// The scratchpad's note (editor/scratch.ts, shipped again as
+// nocturne/scratch.ts): one per repository under the app's folder, found by
 // git's common dir so every worktree opens the same one; a folder outside
 // git gets its own; the index of notes; saving as it's typed (a wait after
 // the last change, at once on close, never two writes at a time).
 import { test, expect, describe } from "bun:test";
 import { readFileSync } from "node:fs";
-import { owner, notePath, fileName, isNote, noteName, repoName, absolute, locate, indexed, Autosave, AUTOSAVE } from "../defaults/mods/editor/scratch.js";
+import { owner, notePath, fileName, isNote, noteName, repoName, absolute, locate, indexed, Autosave, AUTOSAVE } from "../defaults/mods/editor/scratch.ts";
 
 const HOME = "/Users/dev/.config/herdr-app";
 /** A fake `exec` for `git rev-parse --git-common-dir` by folder: what git prints (relative in a main worktree). */
@@ -99,7 +99,7 @@ describe("locate: the note and the index", () => {
     expect((await locate(io, "/tmp/n")).path).toMatch(/\/scratchpad\/n-[0-9a-f]{8}\.md$/);
   });
   test("indexed keeps the same object when nothing changes", () => {
-    const i = indexed({}, "/h/scratchpad/a-1.md", { name: "a", dir: "/a/.git", repo: true });
+    const i = indexed(new Map(), "/h/scratchpad/a-1.md", { name: "a", dir: "/a/.git", repo: true });
     expect(indexed(i, "/h/scratchpad/a-1.md", { name: "a", dir: "/a/.git", repo: true })).toBe(i);
   });
 });
@@ -172,7 +172,7 @@ describe("autosave", () => {
   });
 });
 
-test("nocturne ships the same scratch.js byte for byte", () => {
-  const a = readFileSync("defaults/mods/editor/scratch.js", "utf8");
-  expect(readFileSync("defaults/mods/nocturne/scratch.js", "utf8")).toBe(a);
+test("nocturne ships the same scratch.ts byte for byte", () => {
+  const a = readFileSync("defaults/mods/editor/scratch.ts", "utf8");
+  expect(readFileSync("defaults/mods/nocturne/scratch.ts", "utf8")).toBe(a);
 });

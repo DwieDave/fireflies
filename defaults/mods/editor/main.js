@@ -99,7 +99,7 @@
 // (vim: space .) or the bar's "markdown" chip opens their list, a letter or a
 // click runs one (b i ` k h H l n t x q c r, 0-6); commands md-<name>, md-menu.
 //
-// The scratchpad (scratch.js): a tab on a note under `<app home>/scratchpad/`
+// The scratchpad (scratch.ts): a tab on a note under `<app home>/scratchpad/`
 // opens rendered, saves itself 600 ms after the typing and at once on close
 // (never unsaved, never asks), titles itself "Scratchpad · <repo>"; its pane
 // sends other files to an editor beside it (editor-route.ts skips it).
@@ -147,7 +147,7 @@ import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
 import { units as liveUnits, unitFor } from "./live.js";
 import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.js";
-import { isNote, noteName, Autosave } from "./scratch.js";
+import { isNote, noteName, Autosave } from "./scratch.ts";
 import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.js";
 // Read off the module when used (pickFile): test stand-ins for herdr needn't know them all.
 import * as herdr from "herdr";
@@ -404,7 +404,7 @@ export default class EditorPane extends View {
     // one is open: the editor's blur doesn't reach mods every time).
     d.editor.on("blur", (_e, cx) => this.closeCard(cx));
     // Markdown: the rendered view's block editor (rendered.js); a scratchpad
-    // note (scratch.js) opens rendered and saves itself as it's typed.
+    // note (scratch.ts) opens rendered and saves itself as it's typed.
     if (d.markdown) d.rendered = new Rendered(d, this.renderedHost());
     d.scratch = isNote(path, appHome());
     if (d.scratch) {

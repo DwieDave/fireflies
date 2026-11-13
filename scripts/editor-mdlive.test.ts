@@ -274,7 +274,7 @@ test("a change on disk from elsewhere while typing never replaces what's typed a
 });
 
 test("the autosave says pending, not saved, when a key came while it wrote", async () => {
-  const { Autosave } = await import("../defaults/mods/editor/scratch.js");
+  const { Autosave } = await import("../defaults/mods/editor/scratch.ts");
   let release: () => void = () => {};
   const timers: (() => any)[] = [];
   const a = new Autosave({ write: () => new Promise<void>((r) => { release = r; }), timer: (_ms: number, fn: any) => { timers.push(fn); return () => {}; } });

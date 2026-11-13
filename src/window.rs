@@ -3048,7 +3048,7 @@ impl AppWindow {
             })).map(|n| n.id.clone())
         });
         // An editor in the tab takes the file as a new tab (the editor mod's
-        // tabs, its editor-route.js): the one that last had the keyboard, else
+        // tabs, its editor-route.ts): the one that last had the keyboard, else
         // the first; never a scratchpad's. `in: "pane"`: a new editor beside.
         let into = (viewer == Viewer::Editor && shown.is_none() && !tab && place != Some("pane"))
             .then(|| pane.as_ref().and_then(|p| self.model.tab_of(p)))
