@@ -3,8 +3,8 @@ import {
   projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, parseItem, scopeProblem, parseDetail, parseChoices,
   parseFilter, filterTokens, matches, iterationAt, layout, columnField, grid, find, step, pickUp, carry, carried, drop,
   apply, overlay, valueFor, setFieldMutation, positionMutation, archiveMutation, addDraftMutation, convertMutation, toggleMutation,
-  cardFields, editableFields, initials, valueText, slimBoard, MAX_ITEMS,
-} from "../defaults/mods/github/board.js";
+  cardFields, editableFields, initials, valueText, slimBoard, MAX_ITEMS, isItemNode, isBoardAnswer, isProjectListAnswer, isDetailAnswer, isChoicesAnswer, isStoredBoard, boardOf,
+} from "../defaults/mods/github/board.ts";
 import { merge, parse, prune, fit, entryFor, LIMITS, VERSION } from "../defaults/mods/github/cache.js";
 
 const dir = `${import.meta.dir}/fixtures/github-projects`;
@@ -15,6 +15,16 @@ const NOW = Date.parse("2026-11-12T12:00:00Z");
 const ids = (items: any[]) => items.map((i) => i.content.number ?? i.content.title);
 
 // ---- reading
+
+test("GitHub's answers (the fixtures) pass the guards gh.ts reads them with", async () => {
+  expect(isProjectListAnswer(await load("list.json"))).toBe(true);
+  expect(isBoardAnswer(await load("board-1.json"))).toBe(true);
+  expect(isBoardAnswer(await load("board-2.json"))).toBe(true);
+  expect(isDetailAnswer(await load("detail.json"))).toBe(true);
+  expect(isChoicesAnswer(await load("choices.json"))).toBe(true);
+  // A node GitHub nulls out (one this login can't see) doesn't refuse the answer.
+  expect(isBoardAnswer({ node: { id: "P", items: { nodes: [null, { id: "x" }] } } })).toBe(true);
+});
 
 test("the picker lists the repo's projects, its parent's, then the owner's, each once, open first", async () => {
   const l = parseProjectList(await load("list.json"));
@@ -56,17 +66,18 @@ test("items: issues, pull requests and drafts with their values", async () => {
   expect(issue.content).toMatchObject({ kind: "issue", repo: "DwieDave/fireflies", state: "OPEN" });
   expect(issue.content.assignees.map((a: any) => a.login)).toEqual(["DwieDave", "lanternmoth"]);
   expect(issue.content.labels.map((l: any) => l.name)).toEqual(["bug", "sidebar"]);
-  expect(issue.values.F_status).toEqual({ optionId: "o_prog", name: "In progress" });
-  expect(issue.values.F_sprint).toMatchObject({ iterationId: "it4", title: "Sprint 4" });
-  expect(issue.values.F_est).toEqual({ number: 3 });
-  expect(issue.values.F_target).toEqual({ date: "2026-11-14" });
-  expect(issue.values.F_notes).toEqual({ text: "repro in the nocturne layout" });
+  expect(issue.values.get("F_status")).toEqual({ optionId: "o_prog", name: "In progress" });
+  expect(issue.values.get("F_sprint")).toMatchObject({ iterationId: "it4", title: "Sprint 4" });
+  expect(issue.values.get("F_est")).toEqual({ number: 3 });
+  expect(issue.values.get("F_target")).toEqual({ date: "2026-11-14" });
+  expect(issue.values.get("F_notes")).toEqual({ text: "repro in the nocturne layout" });
   const pr = b.items.find((i: any) => i.content.number === 219);
   expect(pr.content.kind).toBe("pr");
   const draft = b.items.find((i: any) => i.content.kind === "draft");
   expect(draft.content).toMatchObject({ state: "DRAFT", number: null, url: null });
   expect(parseItem({ id: "x", content: null }).content.kind).toBe("redacted");
-  expect(parseItem(null)).toBeNull();
+  // A node that isn't an item (null, no id) is left out where the page is read.
+  expect([isItemNode(null), isItemNode({ content: {} })]).toEqual([false, false]);
 });
 
 test("a board stops reading pages at the cap", async () => {
@@ -156,7 +167,7 @@ test("a view's columns follow its column field, with No Status only when used", 
 
 test("a view's own filter, the bar's text and local limits and folds", async () => {
   const b = await board();
-  const lay = layout(b, view(b, "Board"), "assignee:@me", { limits: { o_prog: 1 }, folded: ["o_done"] }, { now: NOW });
+  const lay = layout(b, view(b, "Board"), "assignee:@me", { limits: new Map([["o_prog", 1]]), folded: ["o_done"] }, { now: NOW });
   expect(lay.shown).toBe(6);
   const prog = lay.columns.find((c: any) => c.key === "o_prog");
   expect(prog).toMatchObject({ count: 2, limit: 1 });
@@ -272,8 +283,8 @@ test("edits apply to a copy; a failed one rolls back by leaving pending", async 
   ];
   const shown = overlay(b, pending);
   expect(shown.items[0].id).toBe(item.id);
-  expect(shown.items[0].values.F_status.name).toBe("In progress");
-  expect(b.items.find((i: any) => i.id === item.id).values.F_status.name).toBe("Ready"); // the read is untouched
+  expect(shown.items[0].values.get("F_status").name).toBe("In progress");
+  expect(b.items.find((i: any) => i.id === item.id).values.get("F_status").name).toBe("Ready"); // the read is untouched
   const lay = layout(shown, view(shown, "Board"), "", {}, { now: NOW });
   expect(ids(lay.columns.find((c: any) => c.key === "o_prog").items)).toEqual([212, 226, 219]);
   // The move failed: dropped from pending, the card is back.
@@ -285,9 +296,9 @@ test("each kind of edit", async () => {
   const b = await board();
   const id = b.items[0].id;
   expect(apply(b, { kind: "archive", item: id }).items.length).toBe(b.items.length - 1);
-  expect(apply(b, { kind: "field", item: id, field: "F_prio", value: null }).items[0].values.F_prio).toBeUndefined();
+  expect(apply(b, { kind: "field", item: id, field: "F_prio", value: null }).items[0].values.get("F_prio")).toBeUndefined();
   expect(apply(b, { kind: "content", item: id, patch: { title: "New" } }).items[0].content.title).toBe("New");
-  const draft = { id: "temp-1", values: {}, content: { kind: "draft", title: "x", assignees: [], labels: [] } };
+  const draft = { id: "temp-1", values: new Map(), content: { kind: "draft", title: "x", assignees: [], labels: [] } };
   const added = apply(b, { kind: "add", item: draft });
   expect(added.items.at(-1).id).toBe("temp-1");
   expect(apply(added, { kind: "add", item: draft }).items.length).toBe(added.items.length);
@@ -338,9 +349,12 @@ test("initials", () => {
 
 test("boards are cached slim, the last few per repo, and fit the budget", async () => {
   const b = await board();
-  const slim = slimBoard(apply(b, { kind: "add", item: { id: "temp-9", values: {}, content: { kind: "draft", title: "x", assignees: [], labels: [] } } }));
+  const slim = slimBoard(apply(b, { kind: "add", item: { id: "temp-9", values: new Map(), content: { kind: "draft", title: "x", assignees: [], labels: [] } } }));
   expect(slim.items.length).toBe(b.items.length); // edits on their way aren't kept
   expect(JSON.parse(JSON.stringify(slim))).toEqual(slim);
+  // What the cache keeps passes its guard and reads back as the board it was (its values a Map again).
+  expect(isStoredBoard(JSON.parse(JSON.stringify(slim)))).toBe(true);
+  expect(boardOf(JSON.parse(JSON.stringify(slim))).items).toEqual(b.items);
   const repo = { owner: "o", name: "r", full: "o/r", root: "/src", on: null };
   const boards: Record<string, unknown> = {};
   for (let i = 0; i < LIMITS.boards + 2; i++) boards[`P${i}`] = { board: slim, at: i };

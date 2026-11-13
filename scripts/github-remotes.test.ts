@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { candidates, parseRemoteUrl, parseConfig, githubHost, slug } from "../defaults/mods/github/remotes.js";
+import { candidates, parseRemoteUrl, parseConfig, githubHost, slug } from "../defaults/mods/github/remotes.ts";
 import { slimRepo, VERSION, parse } from "../defaults/mods/github/cache.js";
 
 // `git config --get-regexp '^(remote|branch)\.'` as git prints it (variables lowercased).

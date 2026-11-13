@@ -152,7 +152,7 @@ test("a persisted old entry is ignored at start; another machine's entry is igno
 });
 
 test("the Markdown viewer follows a move too, its scroll and its back history with it", async () => {
-  const { default: Markdown } = await import("../defaults/mods/markdown/main.js");
+  const { default: Markdown } = await import("../defaults/mods/markdown/main.ts");
   const m: any = Object.create(Markdown.prototype);
   const opened: any[] = [];
   Object.assign(m, { path: "/w/docs/a.md", on: null, history: [{ path: "/w/docs/index.md", scrollY: 40 }], seenChange: newestId(sharedNow[CHANGES] ?? []),

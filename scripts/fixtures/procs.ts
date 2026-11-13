@@ -58,7 +58,7 @@ export const SPACES = [
   { id: "s2", name: "homelab", folder: "/srv", machine: "box", tabs: [{ id: "tC", index: 1, name: "x" }] },
 ];
 
-// The system probe (procs/sys.js SYS_PROBE) on a Mac, trimmed, addresses scrubbed.
+// The system probe (procs/sys.ts SYS_PROBE) on a Mac, trimmed, addresses scrubbed.
 const S = "@@nocturne-sys@@";
 export const SYS = `10
 34359738368

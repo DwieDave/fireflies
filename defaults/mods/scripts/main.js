@@ -341,6 +341,15 @@ export default class ScriptsDeck extends View {
 
   // ---- parts
 
+  /** A word that acts on a click (‹ back, cancel): dim, lit under the pointer. */
+  action(t, id, label, color, go) {
+    return div().id(id).relative().flex_none().px(3).text_size(11).text_color(t.dim).cursor_pointer()
+      .hover((s) => s.text_color(color ?? t.foreground))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); go(cx); })
+      .child(label);
+  }
+
   pip(t, color, live) {
     const el = svg(`${ART}/pip.svg`).size(6).flex_none().text_color(color);
     return live ? el.loop("opacity", { from: 0.3, to: 1, period: 1600 }) : el;

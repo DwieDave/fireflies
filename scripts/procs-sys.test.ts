@@ -1,9 +1,9 @@
-// The deck's system graphs' readings (defaults/mods/procs/sys.js):
+// The deck's system graphs' readings (defaults/mods/procs/sys.ts):
 // each source's parser on a Mac's output, what a reading measures (network
 // per second between two), the history, the scales, and a machine without
 // the sources reading as null (the graph says so, not zero).
 import { test, expect } from "bun:test";
-import { SYS_PROBE, SEP, KEEP, STEP, STEP_SHOWN, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/procs/sys.js";
+import { SYS_PROBE, SEP, KEEP, STEP, STEP_SHOWN, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/procs/sys.ts";
 import { SYS, SYS_NONE } from "./fixtures/procs.ts";
 
 test("the probe: one shell line, sections apart, iostat last (it takes its second), no sudo", () => {

@@ -268,24 +268,12 @@ export interface AgentInfo {
 /** Terminals whose program reports a status (agents), in space, tab, pane order. Live. */
 export function agents(): AgentInfo[];
 
-export interface PaneInfo {
+/** What every pane has, a terminal's or a mod's. */
+interface PaneBase {
   pane: string;
-  /** null for a mod pane (`pane.split {mod}`): then `mod` names it, and only
-   *  pane, mod, props, tab, title, focused, zoomed, font_zoom and movable are set. */
-  terminal: string | null;
-  mod?: string;
-  /** A mod pane's props, as given (read-only): a copy can find its own pane by a unique prop. */
-  props?: unknown;
   tab: string;
   /** The terminal's title (what the program set), or the mod's name. */
   title: string;
-  /** Its live folder, and the git branch there. */
-  cwd: string | null;
-  branch: string | null;
-  /** Agent status if the program reports one, else null. */
-  status: Status | null;
-  app: string | null;
-  program: Program;
   focused: boolean;
   zoomed: boolean;
   /** This pane's terminal text size on top of the app's (pane.font_bigger/smaller/reset):
@@ -296,6 +284,37 @@ export interface PaneInfo {
   /** Parked in its tab's bottom row (pane.park): not on screen, still running. */
   parked: boolean;
 }
+
+/** A terminal's pane. */
+export interface TerminalPaneInfo extends PaneBase {
+  terminal: string;
+  mod?: undefined;
+  props?: undefined;
+  /** Its live folder, and the git branch there. */
+  cwd: string | null;
+  branch: string | null;
+  /** Agent status if the program reports one, else null. */
+  status: Status | null;
+  app: string | null;
+  program: Program;
+}
+
+/** A mod's pane (`pane.split {mod}`): `mod` names it; it has no terminal, so none of a
+ *  terminal's fields (cwd, branch, status, app, program). */
+export interface ModPaneInfo extends PaneBase {
+  terminal: null;
+  mod: string;
+  /** A mod pane's props, as given (read-only): a copy can find its own pane by a unique prop. */
+  props?: unknown;
+  cwd?: undefined;
+  branch?: undefined;
+  status?: undefined;
+  app?: undefined;
+  program?: undefined;
+}
+
+/** A pane: a terminal's or a mod's (`terminal` null; then `mod` names it). */
+export type PaneInfo = TerminalPaneInfo | ModPaneInfo;
 
 /** Every pane in every tab. A pane header mod finds its own with
  *  `panes().find((p) => p.pane === props().pane)`. Live. */

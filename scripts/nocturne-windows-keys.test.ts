@@ -48,7 +48,7 @@ beforeEach(() => { sharedState = {}; ran = []; closed = []; propsNow = {}; terms
 // ---- GitHub
 
 const { default: GitHub } = await import("../defaults/mods/github/main.js");
-const { linksIn } = await import("../defaults/mods/github/model.js");
+const { linksIn } = await import("../defaults/mods/github/model.ts");
 
 function github(tab = "prs") {
   propsNow = { folder: "/src", overlay: "o1", tab };
