@@ -7,9 +7,9 @@ import { settings, terminals, hc, home, run, agents, focused, panes, shared, set
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
-import type { Labels, Terminal } from "./guards.ts";
+import type { JsonMap, Labels, Terminal } from "./guards.ts";
 import { isDock, toDock, newSlot } from "./dock.ts";
-import { AT_LABEL, isPinned, sortAgents, paneRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY } from "./pins.ts";
+import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY } from "./pins.ts";
 import type { JarItem, PaneRecord, SortedAgents } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
@@ -114,7 +114,7 @@ export function panePinnedNow(p: PinTarget | null | undefined): boolean {
 const paneInfo = (pane: string | null | undefined): PaneInfo | undefined => (pane ? panes().find((x) => x.pane === pane) : undefined);
 
 /** Stores the mod panes' pins. */
-const storeRecords = (records: readonly PaneRecord[]) => setShared(PANES_KEY, records);
+const storeRecords = (records: readonly PaneRecord[]) => setShared(PANES_KEY, storedRecords(records));
 
 /** Pins any pane to the top of the sky, or unpins it: a terminal through its
  *  labels (pin), a mod pane in PANES_KEY. */
@@ -237,7 +237,7 @@ export function dockFocused(): void {
  *  props (a fresh slot), so it's found once the pane is there (pins.ts findPane). */
 export function dockWeb(url?: string): void {
   const slot = newSlot();
-  const props = url ? { slot, url } : { slot };
+  const props: JsonMap = new Map(url ? [["slot", slot], ["url", url]] : [["slot", slot]]);
 
   if (!toDock(url ? { kind: "web", slot, url } : { kind: "web", slot })) return;
 

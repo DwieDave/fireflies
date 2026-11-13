@@ -9,7 +9,7 @@
 
 import type { commands, keys } from "herdr";
 import { isString, object, parseJson } from "./guard.ts";
-import { isJson } from "./guards.ts";
+import { isRawJson } from "./guards.ts";
 import { SIDEBAR_HELP, STRIP_HELP, HEADER_HELP, PARKED_HELP, MENU_HELP } from "./nav.ts";
 import type { HelpLine } from "./nav.ts";
 
@@ -248,7 +248,7 @@ function fromAbout(about: string | undefined): string | null {
 }
 
 /** A binding of a command with arguments, as a user's keys.json spells it: { command, args }. */
-const isCommandCall = object({}, { command: isString, args: isJson });
+const isCommandCall = object({}, { command: isString, args: isRawJson });
 
 /** An action in plain words: shipped ones by hand, a user's by its command's own about, else its name. */
 export function keyLabel(action: string | null | undefined, commands: readonly CommandInfo[] = []): string {

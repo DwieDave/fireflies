@@ -26,7 +26,7 @@
 import type { AgentInfo, PaneInfo, shared } from "herdr";
 import { isNull, isNumber, isString, nullable, object, oneOf, readSharedList, sharedListKey } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { isJson, isJsonObject } from "./guards.ts";
+import { canonical, isJsonMap, isRawJson, jsonOf, rawOf } from "./guards.ts";
 import type { Json, Labels, Terminal } from "./guards.ts";
 
 export const PIN_LABEL = "herdr.pinned";
@@ -141,32 +141,48 @@ export const PANES_KEY = "nocturne.pinned-panes";
 export const GONE_AFTER = 15000;
 
 /** A mod pane's pin, as stored under PANES_KEY. `at` is written as a number;
- *  a number in a string reads as one too. Other browsers' fields are kept. */
-const isPaneRecord = object({ pane: isString }, { mod: nullable(isString), props: isJson, at: oneOf(isNumber, isString, isNull), tab: isString });
+ *  a number in a string reads as one too. */
+const isStoredRecord = object({ pane: isString }, { mod: nullable(isString), props: isRawJson, at: oneOf(isNumber, isString, isNull), tab: isString });
 
-export type PaneRecord = Guarded<typeof isPaneRecord>;
+/** A pin as stored (written back the same way). */
+export type StoredRecord = Guarded<typeof isStoredRecord>;
+
+/** A mod pane's pin: the pane, what it shows (its mod and props, to find it again if
+ *  its id changed), when it was pinned, and a web tab when it pins that tab alone. */
+export interface PaneRecord {
+  readonly pane: string;
+  readonly mod?: string | null;
+  readonly props?: Json;
+  readonly at?: number | string | null;
+  readonly tab?: string;
+}
 
 /** PANES_KEY, read entry by entry. */
-export const PANES = sharedListKey(PANES_KEY, isPaneRecord);
+export const PANES = sharedListKey(PANES_KEY, isStoredRecord);
+
+/** A stored pin as the jar reads it (other fields a record has stay with it). */
+function recordOf(r: StoredRecord): PaneRecord {
+  const { props, ...rest } = r;
+
+  return props === undefined ? rest : { ...rest, props: jsonOf(props) };
+}
+
+/** Pins as they're stored (shared(PANES_KEY)). */
+export function storedRecords(records: readonly PaneRecord[]): StoredRecord[] {
+  return records.map((r) => {
+    const { props, ...rest } = r;
+
+    return props === undefined ? rest : { ...rest, props: rawOf(props) };
+  });
+}
 
 /** The mod panes' pins as stored (shared(PANES_KEY), read with `read`), well formed only. */
 export function paneRecords(read: typeof shared): PaneRecord[] {
-  return readSharedList(read, PANES).filter((r) => r.pane !== "");
-}
-
-/** `value` with its objects' keys sorted, at every depth (to compare as JSON). */
-function sortedKeys(value: Json): Json {
-  if (isJsonObject(value)) return Object.fromEntries(Object.keys(value).sort().flatMap((k) => {
-    const v = value[k];
-
-    return v === undefined ? [] : [[k, sortedKeys(v)]];
-  }));
-
-  return Array.isArray(value) ? value.map((v: Json) => sortedKeys(v)) : value;
+  return readSharedList(read, PANES).flatMap((r) => (r.pane !== "" ? [recordOf(r)] : []));
 }
 
 /** Same props: equal as JSON with the keys sorted, at every depth. */
-const sameProps = (a: Json, b: Json) => JSON.stringify(sortedKeys(a)) === JSON.stringify(sortedKeys(b));
+const sameProps = (a: Json, b: Json) => canonical(a) === canonical(b);
 
 /** A pin made while its mod had its old name (nocturne-browser, src/layout.rs
  *  RENAMED_MODS) names the mod as it is called now. */
@@ -183,10 +199,10 @@ export function findPane(rec: PaneRecord, panes: readonly PaneInfo[]): PaneInfo 
 
   const props = rec.props;
 
-  if (!rec.mod || !isJsonObject(props) || !Object.keys(props).length) return null;
+  if (!rec.mod || props === undefined || !isJsonMap(props) || !props.size) return null;
 
   const mod = modNow(rec.mod);
-  const like = panes.filter((p) => !p.terminal && p.mod === mod && sameProps(isJson(p.props) ? p.props : null, props));
+  const like = panes.filter((p) => !p.terminal && p.mod === mod && sameProps(propsOf(p), props));
 
   return like.length === 1 ? (like[0] ?? null) : null;
 }
@@ -208,7 +224,7 @@ export interface PinnedPane {
 }
 
 /** What a pin record keeps of a pane's props: JSON, else null. */
-const propsOf = (p: PinnedPane): Json => (isJson(p.props) ? p.props : null);
+const propsOf = (p: PinnedPane): Json => (isRawJson(p.props) ? jsonOf(p.props) : null);
 
 /** The records with `p` (a PaneInfo of a mod pane) pinned (at `now`) or unpinned
  *  as a whole; its tab pins stay. */

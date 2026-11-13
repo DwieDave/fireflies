@@ -22,7 +22,8 @@ import { run, props, closeOverlay, theme, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import { isString, object } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { isJsonObject } from "./guards.ts";
+import { argsOf, commandOf, isStoredCommand } from "./guards.ts";
+import type { Command } from "./guards.ts";
 import { dither, tracked } from "./kit.ts";
 import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
 import type { FormHint, Stop } from "./form-keys.ts";
@@ -30,11 +31,9 @@ import type { FormHint, Stop } from "./form-keys.ts";
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 const cap = (s: string | undefined) => (s ?? "").replace(/^./, (c) => c.toUpperCase());
 
-/** The command a dialog runs: its name and arguments (the prompt adds { name }). */
-const isCommand = object({ name: isString }, { args: isJsonObject });
-
-/** The props Fireflies opens the dialogs with (the shipped dialogs' own). */
-const isDialogProps = object({}, { title: isString, value: isString, hint: isString, detail: isString, command: isCommand, overlay: isString });
+/** The props Fireflies opens the dialogs with (the shipped dialogs' own): the command
+ *  a dialog runs (the prompt adds { name } to its arguments). */
+const isDialogProps = object({}, { title: isString, value: isString, hint: isString, detail: isString, command: isStoredCommand, overlay: isString });
 
 type DialogProps = Guarded<typeof isDialogProps>;
 
@@ -43,6 +42,13 @@ const dialogProps = (): DialogProps => {
   const p = props();
 
   return isDialogProps(p) ? p : {};
+};
+
+/** The command this dialog runs, or null. */
+const commandNow = (): Command | null => {
+  const c = dialogProps().command;
+
+  return c ? commandOf(c) : null;
 };
 
 /** Closes this dialog's overlay. */
@@ -154,11 +160,12 @@ export class Prompt {
   }
 
   save(): void {
-    const command = dialogProps().command;
+    const command = commandNow();
+    const name = this.input?.value().trim() ?? "";
 
     this.close();
 
-    if (command) run(command.name, { ...command.args, name: this.input?.value().trim() ?? "" });
+    if (command) run(command.name, argsOf(command, new Map([["name", name]])));
   }
 
   render(): Element {
@@ -223,11 +230,11 @@ export class Confirm {
   }
 
   yes(): void {
-    const command = dialogProps().command;
+    const command = commandNow();
 
     this.close();
 
-    if (command) run(command.name, command.args ?? {});
+    if (command) run(command.name, argsOf(command));
   }
 
   render(): Element {

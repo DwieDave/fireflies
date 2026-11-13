@@ -89,6 +89,10 @@ beforeEach(() => {
 });
 
 const records = () => pins.paneRecords((k: string) => sharedState[k]);
+/** The pins as stored (props as plain objects). */
+const stored = () => pins.storedRecords(records());
+/** Records written here as stored, read as the jar reads them. */
+const parsed = (list: unknown[]) => pins.paneRecords(() => list);
 /** Applies the label writes the handlers sent through hc to terminalsNow. */
 function applyLabels() {
   for (const [addr, kv] of labels) {
@@ -105,7 +109,7 @@ function pinTerminal(addr: string, at: number) {
 
 test("nocturne.pin pins the focused web pane to the shelf, and again unpins it", () => {
   kit.pinFocused();
-  expect(records()).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: expect.any(Number) }]);
+  expect(stored()).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: expect.any(Number) }]);
   expect(commands).toEqual([]); // no terminal: no terminal.pin
   expect(kit.panePinnedNow({ pane: "p2", terminal: null })).toBe(true);
   expect(kit.jar().map((x: any) => x.key)).toEqual(["pane:p2"]);
@@ -179,7 +183,7 @@ test("the pane menu: a web pane gets Pin to the top, then Unpin and left / right
   expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
   expect(ids().slice(0, 3)).toEqual([["unpin", "Unpin"], ["dock", "Move to the dock"], ["split-right", "Split right"]]);
   // A second tile: the first can move right, the second left; an agent moves in the jar, not past tiles.
-  sharedState[pins.PANES_KEY] = [...records(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
+  sharedState[pins.PANES_KEY] = [...stored(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
   expect(ids().slice(0, 2)).toEqual([["unpin", "Unpin"], ["pin-down", "Move right"]]);
   const files = menuItems(theme, { tab: "pane", target: { pane: "p4", terminal: null } }).filter((r: any) => !r.rule);
   expect(files.slice(0, 2).map((r: any) => r.name)).toEqual(["Unpin", "Move left"]);
@@ -202,7 +206,7 @@ test("the palette pins the focused pane, whatever it shows, and moves its tile",
   expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
   expect(pin().title).toBe("Unpin this pane");
   expect(rows().some((e: any) => e.name === "nocturne.pin-down")).toBe(false); // alone on the shelf
-  sharedState[pins.PANES_KEY] = [...records(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
+  sharedState[pins.PANES_KEY] = [...stored(), { pane: "p4", mod: FILES.mod, props: FILES.props, at: Date.now() + 5 }];
   const down = rows().find((e: any) => e.name === "nocturne.pin-down");
   expect(down.title).toBe("Move this pane right on the shelf");
   down.go();
@@ -310,8 +314,8 @@ test("dock.js: the dock is found by its id (local only); a making adopts the new
 test("a new web pane in the dock: the dock is made first (in ~, named dock), then the page opens there, pinned to the shelf", () => {
   kit.dockWeb("https://docs.rs");
   expect(commands).toEqual([["space.new", { name: "dock", folder: "/home/a", machine: "" }]]);
-  const slot = records()[0].props.slot;
-  expect(records()[0]).toEqual({ pane: `new:${slot}`, mod: "browser", props: { slot, url: "https://docs.rs" }, at: expect.any(Number) });
+  const slot = (stored()[0] as any).props.slot;
+  expect(stored()[0]).toEqual({ pane: `new:${slot}`, mod: "browser", props: { slot, url: "https://docs.rs" }, at: expect.any(Number) });
   // Asked again while it's being made: no second space, no stray pin.
   kit.dockWeb();
   expect(commands.filter(([n]) => n === "space.new").length).toBe(1);
@@ -423,7 +427,7 @@ test("a web tab's pin: its own tile next to the pane's, keys and order of its ow
   expect(records().find((r: any) => r.tab === "web-2").at).not.toBe(records().find((r: any) => r.tab === "web").at);
   // The record helpers: pin and unpin one tab, the others stay.
   const one = pins.pinTabRecord([], WEB, "web-3", true, 5);
-  expect(one).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: 5, tab: "web-3" }]);
+  expect(pins.storedRecords(one)).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: 5, tab: "web-3" }]);
   expect(pins.pinTabRecord(records(), WEB, "web", false, 6).map((r: any) => pins.recordKey(r))).toEqual(["pane:p2#web-2", "pane:p3"]);
 });
 
@@ -453,12 +457,12 @@ test("a web tab's tile is named by that tab's title (browser.tab-titles), the pa
 });
 
 test("a closed pane's pins go together, its tab pins too; a pane back under a new id keeps them all", () => {
-  const recs = [
+  const recs = parsed([
     { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 1, tab: "web" },
     { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 2, tab: "web-2" },
     { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 3 },
     { pane: "p2", mod: WEB.mod, props: WEB.props, at: 4, tab: "web" },
-  ];
+  ]);
   const missing = new Map();
   expect(pins.tidy(recs, panesNow, missing, 0)).toBe(null);
   expect(pins.tidy(recs, panesNow, missing, pins.GONE_AFTER)!.map((r: any) => pins.recordKey(r))).toEqual(["pane:p2#web"]);

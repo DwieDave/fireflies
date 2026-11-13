@@ -19,28 +19,41 @@ import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
 import { isNumber, isString, nullable, object, readSharedList, sharedKey, sharedListKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { isJsonObject } from "./guards.ts";
+import { argsOf, commandOf, isStoredCommand, storedCommand } from "./guards.ts";
+import type { Command } from "./guards.ts";
 import { ART, dither } from "./kit.ts";
 
 // The level's theme color: the same words the fireflies use for status.
 const COLOR: ReadonlyMap<string, "blocked" | "working" | "done" | "accent"> = new Map([["error", "blocked"], ["warning", "working"], ["success", "done"], ["info", "accent"]]);
 
-/** A notification's action: a command and its arguments. */
-const isAction = object({ name: isString }, { args: isJsonObject });
-
 /** The props a toast is opened with: the notification (Fireflies' notify()); its level is
  *  info, success, warning or error (another reads as info). */
 const isToastProps = object({}, {
-  title: isString, body: isString, level: isString, icon: isString, action: nullable(isAction), overlay: isString,
+  title: isString, body: isString, level: isString, icon: isString, action: nullable(isStoredCommand), overlay: isString,
 });
 
-export type ToastProps = Guarded<typeof isToastProps>;
+/** A toast's notification, as the mod reads it: its action a command. */
+export interface ToastProps {
+  readonly title?: string;
+  readonly body?: string;
+  readonly level?: string;
+  readonly icon?: string;
+  readonly action: Command | null;
+  readonly overlay?: string;
+}
+
+/** A toast's props, read. */
+function toastOf(p: Guarded<typeof isToastProps>): ToastProps {
+  const { action, ...rest } = p;
+
+  return { ...rest, action: action ? commandOf(action) : null };
+}
 
 /** This toast's props, proven (else none). */
 const toastProps = (): ToastProps => {
   const p = props();
 
-  return isToastProps(p) ? p : {};
+  return isToastProps(p) ? toastOf(p) : { action: null };
 };
 
 // notifications' items and the request its overview opens on.
@@ -55,17 +68,22 @@ const OPEN = sharedKey("notifications.open", object({ terminal: isString, at: is
 /** shared() key: the toasts on screen, [{ overlay, action, at }], newest last. */
 export const TOASTS = "nocturne.toasts";
 
-const isListed = object({ overlay: isString, at: isNumber }, { action: nullable(isAction) });
+const isListed = object({ overlay: isString, at: isNumber }, { action: nullable(isStoredCommand) });
 
-type Listed = Guarded<typeof isListed>;
+/** A toast on screen: its overlay, its action, when it came. */
+interface Listed {
+  readonly overlay: string;
+  readonly action: Command | null;
+  readonly at: number;
+}
 
 const TOASTS_KEY = sharedListKey(TOASTS, isListed);
 
 // A toast that went without saying so (the app quit) is forgotten after this.
 const STALE = 10 * 60_000;
 
-const listed = (): Listed[] => readSharedList(shared, TOASTS_KEY).filter((x) => Date.now() - x.at < STALE);
-const store = (list: readonly Listed[]) => setShared(TOASTS, list);
+const listed = (): Listed[] => readSharedList(shared, TOASTS_KEY).flatMap((x) => (Date.now() - x.at < STALE ? [{ overlay: x.overlay, at: x.at, action: x.action ? commandOf(x.action) : null }] : []));
+const store = (list: readonly Listed[]) => setShared(TOASTS, list.map((x) => ({ overlay: x.overlay, action: x.action ? storedCommand(x.action) : null, at: x.at })));
 
 /** What a click on a toast does: its request's overview, else its action; then it goes. */
 export function act(p: Pick<ToastProps, "action" | "overlay">): void {
@@ -74,7 +92,7 @@ export function act(p: Pick<ToastProps, "action" | "overlay">): void {
   if (ask) {
     writeShared(setShared, OPEN, { terminal: ask.address, at: Date.now() });
     run("notifications.open");
-  } else if (p.action?.name) run(p.action.name, p.action.args ?? {});
+  } else if (p.action?.name) run(p.action.name, argsOf(p.action));
 
   if (p.overlay) closeOverlay(p.overlay);
 }
@@ -100,18 +118,18 @@ function request(p: Pick<ToastProps, "action">): Item | null {
 
   if (action?.name !== "agent.focus") return null;
 
-  const terminal = action.args?.["terminal"];
+  const terminal = action.args?.get("terminal");
 
   return readSharedList(shared, ITEMS).find((x) => x.address === terminal && x.type !== "other") ?? null;
 }
 
 export default class Toast {
-  init(p: Props | undefined): void {
-    if (!isToastProps(p) || !p.overlay) return;
+  init(raw: Props | undefined): void {
+    const overlay = isToastProps(raw) ? raw.overlay : undefined;
 
-    const overlay = p.overlay;
+    if (!overlay) return;
 
-    store([...listed().filter((x) => x.overlay !== overlay), { overlay, action: p.action ?? null, at: Date.now() }]);
+    store([...listed().filter((x) => x.overlay !== overlay), { overlay, action: isToastProps(raw) ? toastOf(raw).action : null, at: Date.now() }]);
   }
 
   /** The toast is going (timed out, clicked, dismissed): off the list. */
