@@ -370,7 +370,7 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
 
 const walk = (el: any): any[] => (el && typeof el === "object" && Array.isArray(el.nodes) ? [el, ...el.nodes.flatMap(walk)] : []);
 
-const linkLogic = await load("markdown/links.js");
+const linkLogic = await load("markdown/links.ts");
 const { linksOf, documentLinks, nextLink, nextHeading } = linkLogic;
 
 test("links in reading order: inline, reference, autolinks, bare addresses; none in code", () => {
@@ -404,7 +404,7 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
   const filesLog = await load("markdown/follow.ts");
-  const { default: Markdown } = await load("markdown/main.js", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
+  const { default: Markdown } = await load("markdown/main.ts", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
     fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
   const view: any = Object.create(Markdown.prototype);
   const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";

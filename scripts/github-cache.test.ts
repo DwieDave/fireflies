@@ -3,7 +3,7 @@ import {
   blank, parse, lookup, merge, prune, fit, scrub, scrubUrl, newest, entryFor, repoKey, folderKey,
   slimRun, slimJob, slimPr, slimPrRow, slimReviewComment, MAX_BYTES, LIMITS, VERSION,
 } from "../defaults/mods/github/cache.js";
-import { prListQuery, prRows, rowTone, readAgo } from "../defaults/mods/github/model.js";
+import { prListQuery, prRows, rowTone, readAgo } from "../defaults/mods/github/model.ts";
 
 const repo = (full: string, on: string | null = null) => ({ owner: full.split("/")[0], name: full.split("/")[1], full, root: `/src/${full}`, on, url: `https://github.com/${full}`, base: "main", branch: "dev" });
 const entry = (full: string, extra: Record<string, unknown> = {}) => ({ ...entryFor(repo(full)), ...extra });
@@ -127,13 +127,13 @@ test("slim keeps only what the window draws", () => {
 
 test("the PR list asks GitHub only for the rows' fields, by filter", () => {
   const all = prListQuery("all", "o/r");
-  expect(all.vars).toEqual({ owner: "o", name: "r", n: 60 });
+  expect(all.vars).toEqual([["owner", "o"], ["name", "r"], ["n", 60]]);
   expect(all.query).toContain("pullRequests(states: OPEN");
   expect(all.query).toContain("statusCheckRollup { state }");
   expect(all.query).not.toContain("contexts");
   expect(all.query).not.toContain("body");
-  expect(prListQuery("mine", "o/r").vars.q).toBe("repo:o/r is:pr is:open author:@me sort:created-desc");
-  expect(prListQuery("review", "o/r").vars.q).toContain("review-requested:@me");
+  expect(new Map(prListQuery("mine", "o/r").vars).get("q")).toBe("repo:o/r is:pr is:open author:@me sort:created-desc");
+  expect(new Map(prListQuery("review", "o/r").vars).get("q")).toContain("review-requested:@me");
   const rows = prRows({ repository: { pullRequests: { nodes: [
     { number: 5, title: "a", isDraft: false, headRefName: "h", additions: 1, deletions: 2, reviewDecision: "APPROVED", updatedAt: "u", author: { login: "x" }, labels: { nodes: [{ name: "l", color: "c" }] }, commits: { nodes: [{ commit: { statusCheckRollup: { state: "FAILURE" } } }] } },
     { number: 6, title: "b", author: null, labels: { nodes: [] }, commits: { nodes: [{ commit: { statusCheckRollup: null } }] } },

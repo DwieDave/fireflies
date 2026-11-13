@@ -8,7 +8,7 @@
 // implied by another need (a job needing `changes` and `build`, where
 // `build` needs `changes`) aren't drawn.
 
-import { tone } from "./model.js";
+import { tone } from "./model.ts";
 
 export const NW = 214, NH = 44, GAP_X = 56, GAP_Y = 10, PAD = 18, RW = 170;
 // Room in a gap: from each box to the first/last bus, and between buses.

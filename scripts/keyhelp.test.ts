@@ -150,7 +150,7 @@ test("usage: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("markdown: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/markdown/main.js");
+  const m = await import("../defaults/mods/markdown/main.ts");
   const v: any = surface(m.default, ["key", "keysStrip"], { sel: null, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) });
   opensAndCloses("markdown", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
 });
