@@ -181,13 +181,15 @@ export function dockPanes(id: string, all: readonly Pick<SpaceInfo, "id" | "tabs
 /**
  * What a shell asked for in the dock (`ask`) has become: the new terminal's
  * address once a terminal pane is in the dock (`inDock`) that wasn't there
- * when it was asked for; "gone" once it waited past MAKING ms; null: not yet.
+ * when it was asked for and its terminal runs (`live`: the core's live
+ * terminals; a pane shows before its terminal does, and terminal.pin takes
+ * only a running one); "gone" once it waited past MAKING ms; null: not yet.
  */
-export function newShell(ask: ShellAsk | null, inDock: readonly PaneInfo[], now: number): string | "gone" | null {
+export function newShell(ask: ShellAsk | null, inDock: readonly PaneInfo[], live: ReadonlySet<string>, now: number): string | "gone" | null {
   if (!ask) return null;
 
   const before = new Set(ask.before);
-  const made = inDock.find((p) => p.terminal && !before.has(p.pane));
+  const made = inDock.find((p) => p.terminal && !before.has(p.pane) && live.has(p.terminal));
 
   if (made?.terminal) return made.terminal;
 
@@ -197,11 +199,11 @@ export function newShell(ask: ShellAsk | null, inDock: readonly PaneInfo[], now:
 /** A shell asked for in the dock is on its way. */
 export const shellWaiting = (): boolean => Boolean(readShared(shared, SHELL, null));
 
-/** The sky calls this from a task after drawing: the new shell's terminal once
- *  it's there (the ask is then done), else null. */
-export function adoptShell(): string | null {
+/** The sky calls this from a task after drawing (`live`: the core's live
+ *  terminals): the new shell's terminal once it runs (the ask is then done), else null. */
+export function adoptShell(live: ReadonlySet<string>): string | null {
   const d = dock();
-  const r = newShell(readShared(shared, SHELL, null), d ? dockPanes(d.id, spaces(), panesNow()) : [], Date.now());
+  const r = newShell(readShared(shared, SHELL, null), d ? dockPanes(d.id, spaces(), panesNow()) : [], live, Date.now());
 
   if (r) writeShared(setShared, SHELL, null);
 

@@ -584,11 +584,15 @@ test("a new shell in the dock: tab.new there, and its terminal is pinned once it
   expect(commands.length).toBe(1);
   spacesNow[2].tabs.push({ id: "c32", index: 2, active: true, name: "2" });
   panesNow = [...panesNow, { pane: "p32", tab: "c32", terminal: "t32", program: { name: "zsh", shell: true } }];
+  // Its pane shows before its terminal runs: terminal.pin would fail, so it waits.
+  kit.pinDockShell();
+  expect(commands.length).toBe(1);
+  terminalsNow = [...terminalsNow, { address: "t32", state: "live", labels: {} }];
   kit.pinDockShell();
   expect(commands.at(-1)).toEqual(["terminal.pin", { terminal: "t32", pinned: true }]);
   expect(dockMod.shellWaiting()).toBe(false);
   // One that never comes is given up.
-  expect(dockMod.newShell({ at: 0, before: [] }, [], dockMod.MAKING + 1)).toBe("gone");
+  expect(dockMod.newShell({ at: 0, before: [] }, [], new Set(), dockMod.MAKING + 1)).toBe("gone");
   // Made with the dock: the shell opens once the sky adopts it.
   sharedState = {}; commands = [];
   spacesNow = spacesNow.slice(0, 2);

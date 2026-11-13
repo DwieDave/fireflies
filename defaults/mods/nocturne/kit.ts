@@ -280,7 +280,7 @@ export function dockShell(): void {
 
 /** After a draw (sky.ts): a shell asked for in the dock is pinned once it's there. */
 export function pinDockShell(): void {
-  const terminal = adoptShell();
+  const terminal = adoptShell(new Set(terminalsNow().flatMap((x) => (!x.state || x.state === "live" ? [x.address] : []))));
 
   if (terminal) pin(terminal, true);
 }
