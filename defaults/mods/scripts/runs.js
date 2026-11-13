@@ -20,7 +20,7 @@
 // import another mod's files).
 
 import { run, shared, setShared } from "herdr";
-import { shellLine, CANCELLED } from "./nix.js";
+import { shellLine, CANCELLED } from "./nix.ts";
 
 export const LABEL = "nocturne.script";
 // Ended runs' records, kept by the tab strip (../nocturne/scripts.js ENDED),

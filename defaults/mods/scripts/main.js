@@ -33,8 +33,8 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
-import { PROBE, parseProbe, detect, rank } from "./detect.js";
-import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
+import { PROBE, parseProbe, detect, rank } from "./detect.ts";
+import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.ts";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 

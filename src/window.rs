@@ -7788,8 +7788,8 @@ export default class Probe extends View {
         }));
         let folder = crate::mods::app_dir().join("mods/scripts");
         for (name, text) in [
-            ("detect.js", include_str!("../defaults/mods/scripts/detect.js")),
-            ("nix.js", include_str!("../defaults/mods/scripts/nix.js")),
+            ("detect.ts", include_str!("../defaults/mods/scripts/detect.ts")),
+            ("nix.ts", include_str!("../defaults/mods/scripts/nix.ts")),
             ("runs.js", include_str!("../defaults/mods/scripts/runs.js")),
         ] {
             std::fs::write(folder.join(name), text).unwrap();
