@@ -157,7 +157,7 @@ test("e edits a field through the menu", async () => {
   for (let i = 0; i < names.indexOf("Priority"); i++) press(tab, "j");
   press(tab, "l"); // its values, on the current one (P2)
   press(tab, "k", "enter"); // P1
-  expect(tab.board().items.find((i: any) => i.content.number === 240).values.F_prio.name).toBe("P1");
+  expect(tab.board().items.find((i: any) => i.content.number === 240).values.get("F_prio").name).toBe("P1");
   await settle();
   expect(gh.mutations[0]).toContain('singleSelectOptionId: "p1"');
   expect(app.note.text).toBe("Priority: P1");
@@ -201,7 +201,7 @@ test("e on a text field asks for the value; labels toggle", async () => {
   expect(tab.typing).toBe("value");
   tab.valueInput.set_value("8");
   tab.valueInput.fire("submit");
-  expect(tab.board().items.find((i: any) => i.content.number === 226).values.F_est).toEqual({ number: 8 });
+  expect(tab.board().items.find((i: any) => i.content.number === 226).values.get("F_est")).toEqual({ number: 8 });
   await settle();
   expect(gh.mutations.at(-1)).toContain("{ number: 8 }");
   // Labels: the repo's labels, bug is on; enter takes it off.

@@ -1,17 +1,16 @@
 // The GitHub window's own guards, beside guard.ts (a shared copy, frozen):
 // what gh's JSON and the window's cache file need that guard.ts doesn't have.
-// Types only at import: tests load it as it is.
+// It imports nothing at run time (types only), so a test can load it as it is.
 
 import type { Guard } from "./guard.ts";
-import { isNull, isUndefined, oneOf } from "./guard.ts";
 
 /** Any array: its items still to be proven one by one (a list that keeps the good ones). */
 export const isList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
 
 /** A field GitHub may leave out, send as null, or (in a copy this window slimmed) not have:
  *  a T, null or undefined. */
-export function maybe<T extends string | number | boolean | object>(guard: Guard<T>): Guard<T | null | undefined> {
-  return oneOf(guard, isNull, isUndefined);
+export function maybe<T>(guard: Guard<T>): Guard<T | null | undefined> {
+  return (value: unknown): value is T | null | undefined => value === null || value === undefined || guard(value);
 }
 
 /** A JSON object whose keys are data (ids, numbers, folders), as it comes off the disk: a key
