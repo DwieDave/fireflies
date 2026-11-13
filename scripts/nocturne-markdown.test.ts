@@ -159,8 +159,10 @@ test("path helpers", () => {
   expect(tilde("/homework/y.md", "/home/me")).toBe("/homework/y.md");
 });
 
-test("nocturne-files opens Markdown in the viewer beside the editor on a double click; alt-double-click and e open it as text", async () => {
-  const { default: Files, isMarkdown } = await load("nocturne-files/main.js", await load("nocturne-files/logic.js"));
+test("nocturne-files opens Markdown as a tab of the editor to read (its preview) on a double click; p in the viewer beside; alt-double-click and e open it as text", async () => {
+  const route = await load("nocturne-files/editor-route.js");
+  const { default: Files, isMarkdown } = await load("nocturne-files/main.js", { ...(await load("nocturne-files/logic.js")), openInEditor: route.openInEditor, herdr: { ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } });
+  const kept: Record<string, any> = {};
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }, { pane: "pf", tab: "tab1", mod: "nocturne-files" }];
@@ -176,7 +178,8 @@ test("nocturne-files opens Markdown in the viewer beside the editor on a double 
   view.pick("docs/My Plan.md", cx);
   expect(commands).toEqual([]);
   view.pick("docs/My Plan.md", cx);
-  expect(commands).toEqual([["markdown.open", { path: "/repo/docs/My Plan.md", pane: "p1" }]]);
+  // No editor in the tab: a new one beside, to look at (its preview).
+  expect(commands).toEqual([["editor.open", { path: "/repo/docs/My Plan.md", pane: "p1", look: true }]]);
   expect(edits).toEqual([]);
 
   view.alt = true;
@@ -191,6 +194,15 @@ test("nocturne-files opens Markdown in the viewer beside the editor on a double 
   expect(commands.length).toBe(1);
 
   view.key({ key: "enter" }, cx);
+  expect(commands.at(-1)).toEqual(["editor.open", { path: "/repo/docs/My Plan.md", pane: "p1", look: true }]);
+  // With an editor in the tab: a tab of it (the open record), the editor focused.
+  world.panes.push({ pane: "pe", tab: "tab1", mod: "nocturne-editor", props: { slot: "e1" } });
+  view.key({ key: "enter" }, cx);
+  expect(kept["nocturne-editor.open"]).toMatchObject({ slot: "e1", path: "/repo/docs/My Plan.md", look: true });
+  expect(commands.at(-1)).toEqual(["pane.focus", { pane: "pe" }]);
+  world.panes.pop();
+  // p: the Markdown viewer's own pane, on purpose.
+  view.key({ key: "p" }, cx);
   expect(commands.at(-1)).toEqual(["markdown.open", { path: "/repo/docs/My Plan.md", pane: "p1" }]);
   view.on = "box";
   view.openFile("docs/My Plan.md", cx);
@@ -332,9 +344,9 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   view.previewLink("../src/main.rs", cx);
   view.previewLink("shot.png", cx);
   view.previewLink("https://example.org", cx);
-  expect(tabs).toEqual(["/repo/docs/other.md", "/repo/src/main.rs"]);
+  // A picture: a drawn tab of this editor too.
+  expect(tabs).toEqual(["/repo/docs/other.md", "/repo/src/main.rs", "/repo/docs/shot.png"]);
   expect(commands).toEqual([
-    ["preview.open", { path: "/repo/docs/shot.png", pane: "pe" }],
     ["app.open_url", { url: "https://example.org" }],
   ]);
   // An anchor scrolls the preview (and the text to the heading).

@@ -63,13 +63,16 @@ preview.open --path /abs/path/shot.png` opens it beside the focused pane in the
 preview: pictures fitted, PDFs paged, CSV/TSV and database tables as tables,
 patches colored (on macOS fonts and audio/video too; `image.open` is the same).
 It shows the file again when you overwrite it, so open it once and keep saving
-to the same path. Cmd/Ctrl-click on such a path in terminal output does the
-same.
+to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
+terminal output opens it as a tab of their editor instead, drawn the same way
+(Markdown in its preview); `herdr-app do editor.open --path … --look true`
+does that too.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens
 it in the editor beside the focused pane, the caret there (an editor already
-holding that file in one of its tabs shows that tab and goes there instead). It reloads by itself when you change a file it
+holding that file in one of its tabs shows that tab and goes there instead;
+an editor in that tab takes it as a new tab; `--in pane` opens a new editor). It reloads by itself when you change a file it
 shows unedited; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.

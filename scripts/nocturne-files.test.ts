@@ -895,13 +895,13 @@ test("a: a new file in the selected folder, parents made for slashes, opened as 
     expect(view.draft).toBeNull();
     expect(view.sel).toBe("src/new file.rs");
     expect(commands).toEqual([["editor.open", { path: `${box.root}/src/new file.rs`, pane: "pf" }]]);
-    // Slashes make the folders on the way; a Markdown file opens in its viewer.
+    // Slashes make the folders on the way; a new Markdown file opens to be written (its text, the preview beside).
     view.key({ key: "a" }, cx);
     await name(view, "notes/2026/plan.md");
     expect(await exists(pjoin(box.root, "src", "notes", "2026", "plan.md"))).toBe(true);
     expect(view.folders.has("src/notes/2026")).toBe(true);
     expect(view.sel).toBe("src/notes/2026/plan.md");
-    expect(commands.at(-1)[0]).toBe("markdown.open");
+    expect(commands.at(-1)).toEqual(["editor.open", { path: `${box.root}/src/notes/2026/plan.md`, pane: "pf" }]);
     // The menu on a file: beside it. A leading dash, quotes and unicode are a name like any other.
     view.mouse = { x: 10, y: 10 };
     view.openMenu(row(view, "README.md"), cx);

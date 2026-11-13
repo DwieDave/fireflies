@@ -3,10 +3,12 @@
 // its text, undo, caret, scroll, unsaved changes, server document); these
 // decide where a new tab goes, which one shows after a close, what comes back
 // after a restart, what closing the pane asks, the names on the strip and
-// which of them fit, whether the strip shows (from two tabs on), and where a
-// dragged tab lands.
+// which of them fit, whether the strip shows (from two tabs on), where a
+// dragged tab lands, and whether a tab is text or drawn (the preview's
+// viewer: a picture, a PDF, a table).
 
 import { basename, dirname } from "./logic.js";
+import { kindOf } from "./kinds.js";
 
 /** Where a file opened in the pane goes: the index of its tab when it is
  *  open already, else a new tab right after the shown one. -> { index, added } */
@@ -148,4 +150,64 @@ export function moved(list, from, to) {
   const [item] = out.splice(from, 1);
   out.splice(to, 0, item);
   return out;
+}
+
+// ---- drawn tabs: what the preview shows, as a tab (viewer.js, kinds.js)
+
+/** What a file is as a tab: "look" (drawn only: pictures, PDFs, databases,
+ *  fonts, clips), "either" (drawn or as text: tables, patches, SVG) or "text". */
+export function tabKind(path) {
+  const kind = kindOf(path);
+  if (!kind) return "text";
+  if (kind === "table" || kind === "diff" || /\.svg$/i.test(String(path))) return "either";
+  return "look";
+}
+
+/** Whether a new tab of `path` starts drawn: always for "look" files; an
+ *  "either" one when it was opened to be looked at (`look`: a files pane's
+ *  open, a terminal's link) and no text view was asked for. */
+export function startsDrawn(path, { look = false, view = null } = {}) {
+  const k = tabKind(path);
+  if (k === "look") return true;
+  if (k === "either") return view === "preview" || (look && !["text", "split", "rendered"].includes(view));
+  return false;
+}
+
+/** Where a request takes an open tab: `view` "preview" draws an "either"
+ *  file, "text" / "split" / "rendered" show its text; a "look" file stays
+ *  drawn; `look` alone (an open, not an edit) leaves an open tab as it is.
+ *  -> true (drawn), false (text) or null (unchanged). */
+export function drawnAfter(path, { view = null } = {}) {
+  const k = tabKind(path);
+  if (k === "look") return true;
+  if (k === "text" || !view) return null;
+  return view === "preview" ? true : ["text", "split", "rendered"].includes(view) ? false : null;
+}
+
+/** A drawn tab's keys (the keys overview lists them). */
+export const LOOK_KEYS = [
+  ["H L gt gT", "previous / next tab"], ["]b [b", "next / previous tab"], ["]B [B", "move the tab right / left"],
+  ["j k J K", "scroll (tables, patches, a PDF's pages)"], ["e", "as text (a table, patch or SVG)"],
+  ["p", "in the preview pane"], ["o", "the system's app"], ["y", "copy the path"], ["d", "close the tab"], ["?", "keys"],
+];
+
+const LOOK_ACTS = {
+  H: "prev-tab", gT: "prev-tab", "[b": "prev-tab", L: "next-tab", gt: "next-tab", "]b": "next-tab",
+  "]B": "move-tab-right", "[B": "move-tab-left",
+  j: "down", J: "down", down: "down", pagedown: "down", space: "down", k: "up", K: "up", up: "up", pageup: "up",
+  e: "text", p: "pane", o: "system", y: "copy", d: "close", "?": "keys",
+};
+
+/** A key on a drawn tab, after `pending` (g, ] or [ waiting for the next):
+ *  -> { act, taken, pending }. Keys with cmd / ctrl / alt go on to the app. */
+export function lookAction(pending, e) {
+  const m = e?.modifiers ?? {}, key = String(e?.key ?? "");
+  if (["shift", "control", "alt", "platform", "function", "capslock"].includes(key)) return { act: null, taken: false, pending };
+  if (m.platform || m.control || m.alt) return { act: null, taken: false, pending: "" };
+  if (key === "escape") return { act: null, taken: Boolean(pending), pending: "" };
+  // The typed character (shift-h is H, a German ? is ?), else the key's name (down, space).
+  const ch = typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char !== " " ? e.key_char : key.length === 1 ? (m.shift ? key.toUpperCase() : key) : key;
+  if (!pending && (ch === "g" || ch === "]" || ch === "[")) return { act: null, taken: true, pending: ch };
+  const act = LOOK_ACTS[(pending ?? "") + ch] ?? null;
+  return { act, taken: Boolean(act) || Boolean(pending), pending: "" };
 }

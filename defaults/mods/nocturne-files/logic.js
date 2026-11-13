@@ -88,8 +88,9 @@ export function nvimLaunch(abs, dir) {
  *  pane's action. Folders and files differ; the root (empty space, `path` "")
  *  can't fold, reroot, be renamed, cut or deleted. `pane`: a pane of its own
  *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
- *  split is open (its entry hides it). */
-export function menuItems(row, { pane = false, clip = false, look = false, web = true } = {}) {
+ *  split is open (its entry hides it); `viewer`: the file has a viewer pane
+ *  (Markdown, the preview's kinds). */
+export function menuItems(row, { pane = false, clip = false, look = false, web = true, viewer = false } = {}) {
   const root = row.dir && !row.path;
   const items = row.dir
     ? [
@@ -101,6 +102,8 @@ export function menuItems(row, { pane = false, clip = false, look = false, web =
       ]
     : [
         { key: "enter", label: "Open", act: "open" },
+        // A file with a viewer pane (Markdown, a picture, a PDF): there, beside, instead of a tab of the editor.
+        ...(viewer ? [{ key: "p", label: "Open in its viewer pane", act: "viewer" }] : []),
         ...(web && isHtml(row.path) ? [{ key: "w", label: "Open in a web pane", act: "web" }] : []),
         { key: "e", label: "Edit as text", act: "other" },
         { key: "E", label: "Open in $EDITOR", act: "terminal" },

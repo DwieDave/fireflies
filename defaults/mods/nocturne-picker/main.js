@@ -257,7 +257,9 @@ export default class Picker extends View {
     const path = `${this.root}/${r.path}`;
     this.dismiss();
     // The focused editor, else the shown tab's, takes it as a tab; with none, a new one (editor-route.js).
-    openInEditor(herdr, { path, ...(r.match ? { line: r.match.line, col: r.match.col + 1 } : {}) });
+    // A file picked (no line): opened to be looked at, as a files pane's open: a picture or a
+    // table drawn, Markdown in its preview. A grep hit: the text at its line.
+    openInEditor(herdr, { path, ...(r.match ? { line: r.match.line, col: r.match.col + 1 } : { look: true }) });
   }
 
   // ---- drawing

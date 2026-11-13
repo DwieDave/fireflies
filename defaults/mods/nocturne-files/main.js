@@ -26,10 +26,14 @@
 // so later picks open in that same nvim instead of a new pane.
 //
 // Click a file: select it (the keyboard comes here, the preview split follows).
-// Double-click a file: edit it in the app's editor (a Markdown file: read it in
-// the Markdown viewer, nocturne-markdown, alt-double-click edits it as text; a
-// picture, PDF, table, patch, font or clip: the preview, nocturne-preview,
-// alt-double-click opens the system's app, or edits a table or patch). Click a
+// Double-click a file (enter, the menu's Open): a tab of the app's editor,
+// whatever its kind (editor-route.js `look`): a Markdown file in its preview
+// (alt-double-click: as text), a picture, PDF, table, patch, font or clip
+// drawn in its tab by the preview's viewer (alt-double-click: the system's
+// app, or a table or patch as text). `p` (the menu's "Open in its viewer
+// pane") opens Markdown in the Markdown viewer (nocturne-markdown) and the
+// rest in the preview (nocturne-preview), panes of their own; so does
+// another machine's file. Click a
 // folder: fold it; double-click it: edit the folder in $EDITOR (the fold its
 // first click made is undone). cmd-click marks or unmarks a row; shift-click
 // marks every row from the last clicked one. Drag a row (or, pressed on a
@@ -48,7 +52,7 @@
 //   w              an HTML file as a page in the web pane (the shown tab's: a new front tab; else one beside)
 //   m              the right-click menu          q  close
 //   a / A          new file / new folder: a name row in the selected folder, or beside the selected file
-//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens;
+//                  (slashes make the folders on the way; a ending in / makes a folder; a new file opens as text;
 //                  the filter line's + file / + folder chips and an empty folder's + new file do the same)
 //   tab ⇧tab       ring the filter line's switches, + file, + folder, ? in turn; enter / space presses
 //   R              rename: the name in an input, its stem selected; a path in it moves the item
@@ -655,7 +659,17 @@ export default class Files extends View {
     // As a tab of the editor this pane sent files to, else the shown tab's
     // editor; with none, a new one beside (editor-route.js). Markdown edited
     // as text opens with its preview beside it.
-    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : null });
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : viewerFor(path) ? "text" : null });
+    if (to) this.editorSlot = to.props.slot;
+  }
+
+  /** Opens a file to look at it in the editor as a tab, whatever its kind (a
+   *  picture, a PDF, a table drawn in its tab, Markdown in its preview): the
+   *  editor this pane sent files to, else the shown tab's; with none, a new
+   *  one beside (editor-route.js). */
+  openLooked(path, cx) {
+    const beside = this.beside();
+    const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, look: true });
     if (to) this.editorSlot = to.props.slot;
   }
 
@@ -721,22 +735,33 @@ export default class Files extends View {
     if (!this.alone && had && from && from !== me.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
   }
 
-  /** p: a file in the app's viewer for it (the preview, Markdown); others in the editor. */
+  /** p: a file in the app's viewer pane for it (the preview, Markdown), on
+   *  purpose; others in the editor. */
   preview(row, cx) {
-    if (row && !row.dir && !row.head) this.openFile(row.path, cx);
+    if (row && !row.dir && !row.head) this.openViewer(row.path, cx);
   }
 
-  /** Opens a file: one the app has a viewer for (Markdown, pictures) in that
-   *  viewer, beside this tab's editor or its first other pane (else this one);
-   *  anything else in the editor. `other` (alt-double-click, `e`): Markdown as text in
-   *  the editor, a picture in the system's app. */
+  /** Opens a file as a tab of the editor, whatever its kind: Markdown in its
+   *  preview, a picture, PDF or table drawn (look), other text to edit; on
+   *  another machine the viewers' panes, as before (the editor's drawn tabs
+   *  read this computer's files). `other` (alt-double-click, `e`): Markdown,
+   *  tables and patches as text, a picture in the system's app. */
   openFile(path, cx, other) {
     const viewer = viewerFor(path);
-    const abs = `${this.root}/${path}`, on = this.on ? { on: this.on } : {};
     if (!viewer || (other && viewer.other === "edit")) return this.edit(path, cx);
-    if (other) return run(viewer.open, { path: abs, in: "system", ...on });
+    if (other) return run(viewer.open, { path: `${this.root}/${path}`, in: "system", ...(this.on ? { on: this.on } : {}) });
+    if (this.on) return this.openViewer(path, cx);
+    this.openLooked(path, cx);
+  }
+
+  /** A file in the app's viewer pane for it (the Markdown viewer, the
+   *  preview), beside this tab's editor or its first other pane (else this
+   *  one); a file without one in the editor. */
+  openViewer(path, cx) {
+    const viewer = viewerFor(path);
+    if (!viewer) return this.edit(path, cx);
     const beside = (this.alone && this.me()) || this.editorPane().pane || this.beside();
-    run(viewer.open, { path: abs, ...(beside ? { pane: beside.pane } : {}), ...on });
+    run(viewer.open, { path: `${this.root}/${path}`, ...(beside ? { pane: beside.pane } : {}), ...(this.on ? { on: this.on } : {}) });
   }
 
   /** Tells the pane header which folder a pane of its own shows, and the app
@@ -758,7 +783,7 @@ export default class Files extends View {
     // On a marked row (with others marked): the set's entries first.
     const set = row.path && this.marked?.has(row.path) ? this.setOf(row) : [];
     let items = set.length > 1 ? setMenuItems(row, set.length, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on })
-      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on });
+      : menuItems(row, { pane: this.alone, clip: Boolean(this.clip()), look: this.lookState.on, web: !this.on, viewer: !row.dir && Boolean(viewerFor(row.path ?? "")) });
     if (row.head) items = items.filter((x) => x.act !== "root");
     this.sel = row.path || this.sel;
     this.menu = { row, items, at: { ...this.mouse }, n: 0 };
@@ -774,6 +799,7 @@ export default class Files extends View {
     else if (act === "edit") this.edit(p, cx);
     else if (act === "nvim") this.nvim(row);
     else if (act === "open") this.openFile(p, cx);
+    else if (act === "viewer") this.openViewer(p, cx);
     else if (act === "other") viewerFor(p)?.other === "system" ? this.openFile(p, cx, true) : this.edit(p, cx);
     else if (act === "terminal") this.terminalEdit(p, cx);
     else if (act === "web") this.openWeb(p, cx);
@@ -951,8 +977,8 @@ export default class Files extends View {
       if (ok && this.draft === d) this.endDraft(cx);
       if (ok) {
         const rel = this.landOn(r.abs, cx, "Made");
-        // A new file opens as enter on it would.
-        if (!folder && rel) this.openFile(rel, cx);
+        // A new file opens to be written: its text (a Markdown file with its preview beside).
+        if (!folder && rel) this.edit(rel, cx);
       }
       cx.notify();
     });

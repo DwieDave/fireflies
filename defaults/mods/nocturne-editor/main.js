@@ -23,6 +23,16 @@
 // (with one tab: the screen's top / bottom), ]b / [b, :bn :bp :bd :b N :ls,
 // space b; next-tab / prev-tab / close-tab / move-tab-left / -right commands.
 //
+// Every kind of file is a tab: what the preview shows (pictures, PDFs,
+// tables, patches, databases, fonts, clips) is drawn in its tab by the
+// preview's viewer (viewer.js, embedded: its slim bar, no keys of its own; a
+// copy of nocturne-preview's), the pane taking the keys (H / L, j / k scroll,
+// e as text, p the preview pane, o the system's app, y the path, d close).
+// Tables, patches and SVG switch between drawn and text (e, the bar's
+// "drawn" chip, cmd-shift-v). A file opened to be looked at (a files pane's
+// open, a terminal's link: `look`) starts drawn, a Markdown file in its
+// preview; an edit opens the text.
+//
 // Links in the hover card (cardlinks.js) open on a click, and a keyboard
 // card rings them with tab (enter follows): web pages in the shown tab's
 // browser pane (`nocturne-browser.open:{url, slot}`) or a new one beside,
@@ -104,7 +114,10 @@ import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
-import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved } from "./tabs.js";
+import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction } from "./tabs.js";
+// Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
+// of nocturne-preview/viewer.js and what it imports (scripts/nocturne-preview-shared.test.ts).
+import Viewer from "./viewer.js";
 import { OPEN, LAST, PATHS, filesOf } from "./editor-route.js";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
@@ -242,6 +255,10 @@ export default class EditorPane extends View {
     try { view = localStorage.getItem("preview"); } catch { /* the default */ }
     this.defaultView = VIEWS.includes(view) ? view : "split";
     this.previewHandle = cx.focus_handle();
+    // A drawn tab: the pane's keys while it shows, and the viewer's props (one viewer, the shown tab's file).
+    this.lookHandle = cx.focus_handle();
+    this.viewerProps = { embedded: true, path: null, on: this.on, scroll: null, reload: 0 };
+    this.lookPending = "";
     // The keys overview takes the keyboard while it's open (? would type into the file).
     this.keysHandle = cx.focus_handle();
     this.findInput = InputState.new({ placeholder: "find" });
@@ -261,7 +278,10 @@ export default class EditorPane extends View {
     try { kept = JSON.parse(localStorage.getItem("tabs") ?? "null"); } catch { /* none kept */ }
     try { moved = JSON.parse(localStorage.getItem("moved") ?? "null"); } catch { /* a nicety */ }
     const start = restoreTabs(kept, pr.path ?? "", moved);
-    this.docs = start.paths.map((path) => this.newDoc(path));
+    // The props' file opened to be looked at (a terminal's link: `look`) starts drawn, Markdown in its preview.
+    const req = shared(OPEN);
+    const asked = req && req.slot == null && req.path === pr.path && Date.now() - (req.at ?? 0) < 10000 ? req : null;
+    this.docs = start.paths.map((path) => this.newDoc(path, path === pr.path && !kept?.paths?.length ? { look: Boolean(pr.look || asked?.look), view: asked?.view ?? null } : {}));
     this.cur = this.docs[start.active];
     // The props' line goes to the props' file (editor.open opened this pane on it).
     let go = null;
@@ -271,8 +291,7 @@ export default class EditorPane extends View {
       go = { line: pr.line, col: pr.col ?? 1 };
     }
     // An "edit" from the Markdown viewer asked for the preview (editor-route.js: slot null).
-    const req = shared(OPEN);
-    if (req && req.slot == null && req.view && req.path === this.cur.path && Date.now() - (req.at ?? 0) < 10000) this.cur.view = req.view;
+    if (asked?.view && asked.path === this.cur.path && this.cur.markdown && VIEWS.includes(asked.view)) this.cur.view = asked.view;
     this.select(this.cur, cx, go, true);
     if (this.on) cx.timer.every(POLL, (cx) => { for (const d of this.docs) if (d.state !== "unloaded" && d.state !== "loading") this.load(cx, null, true, d); });
     // A newly opened editor takes the keyboard.
@@ -289,7 +308,7 @@ export default class EditorPane extends View {
   /** A file's record: its own code editor (text, undo, caret, scroll,
    *  folds), what's on disk, unsaved changes, its server document, problems
    *  and Markdown preview. Read when first shown (`state` "unloaded" till then). */
-  newDoc(path) {
+  newDoc(path, { look = false, view = null } = {}) {
     const lang = languageOf(path) ?? "text";
     const opts = languageSettings(settings()?.editor, lang);
     const d = {
@@ -312,7 +331,12 @@ export default class EditorPane extends View {
       images: new Map(), // abs path -> cache name | null (can't) | undefined (copying)
       view: this.defaultView ?? "split",
       driver: "editor", // which side scrolled last: the other follows
+      // Drawn by the preview's viewer (tabs.js tabKind): "look" files always, "either" ones until shown as text.
+      kind: tabKind(path), look: startsDrawn(path, { look, view }),
     };
+    // Markdown opened to be read starts in its preview; an asked-for view wins.
+    if (d.markdown && VIEWS.includes(view)) d.view = view;
+    else if (d.markdown && look) d.view = "preview";
     const t = theme();
     // Word wrap in this tab: the language's soft_wrap until cmd-k z / space u w
     // / :set wrap / the bar's chip switch it (this tab only, not written to settings).
@@ -375,7 +399,12 @@ export default class EditorPane extends View {
       this.vimSettled(this.vimOn());
     }
     this.vim.indent = d.opts.insert_spaces === false ? "\t" : " ".repeat(d.opts.tab_size);
-    if (d.state === "unloaded") {
+    if (d.look) this.mountViewer(cx);
+    this.syncViewer();
+    if (d.look) {
+      // Drawn: the viewer reads it; its folder's changes draw it again (load).
+      if (!d.watched && !this.on && d.path) { d.watched = true; this.watch(cx, d); }
+    } else if (d.state === "unloaded") {
       d.state = "loading";
       this.load(cx, go, false, d);
       if (!this.on && d.path) this.watch(cx, d);
@@ -383,8 +412,9 @@ export default class EditorPane extends View {
     else if (go) d.go = go;
     this.title();
     this.keepTabs();
-    if (!first) {
-      if (d.markdown && d.view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
+    if (!first || d.look) {
+      if (d.look) cx?.timer?.after?.(0, () => this.lookHandle.focus());
+      else if (d.markdown && d.view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
       else if (d.markdown && d.view === "rendered" && d.state !== "loading") { d.rendered.open(cx); this.focusText(); }
       else this.focusText();
     }
@@ -392,8 +422,10 @@ export default class EditorPane extends View {
   }
 
   /** Opens `path` here as a tab (the one showing it, if open) and shows it;
-   *  `line` / `col` one-based; `view` a Markdown file's preview. */
-  openFile(path, cx, { line = null, col = null, view = null } = {}) {
+   *  `line` / `col` one-based; `view` a Markdown file's view, or "preview" /
+   *  "text" for a table, patch or SVG (drawn or as text); `look`: opened to be
+   *  looked at (a new tab starts drawn, Markdown in its preview). */
+  openFile(path, cx, { line = null, col = null, view = null, look = false } = {}) {
     if (!path) return;
     // A scratchpad's pane is the note's own: other files open in an editor beside it.
     if (this.docs?.length && this.docs.every((d) => d.scratch) && !isNote(path, appHome())) {
@@ -401,11 +433,97 @@ export default class EditorPane extends View {
       return;
     }
     const at = placeTab(this.docs.map((d) => d.path), this.docs.indexOf(this.cur), path);
-    if (at.added) this.docs.splice(at.index, 0, this.newDoc(path));
+    if (at.added) this.docs.splice(at.index, 0, this.newDoc(path, { look, view }));
     const d = this.docs[at.index];
-    if (view && d.markdown) d.view = view;
-    this.select(d, cx, line ? { line, col: col ?? 1 } : null);
+    if (!at.added) {
+      if (view && d.markdown && VIEWS.includes(view)) d.view = view;
+      const drawn = drawnAfter(path, { view });
+      if (drawn != null && drawn !== d.look) this.setDrawn(d, drawn, cx, false);
+    }
+    this.select(d, cx, line && !d.look ? { line, col: col ?? 1 } : null);
     this.publish();
+  }
+
+  // ---- drawn tabs (the preview's viewer)
+
+  /** The viewer, made once, when a drawn tab first shows: a nested view, so
+   *  its reading and drawing redraw only it. */
+  mountViewer(cx) {
+    if (!this.viewer && cx?.new) this.viewer = cx.new(Viewer, this.viewerProps);
+  }
+
+  /** The viewer's props for the shown tab: its file when drawn, none
+   *  otherwise (a native view, a PDF's or a clip's, goes with it). */
+  syncViewer(change = {}) {
+    const d = this.cur;
+    const path = d?.look ? d.path : null;
+    if (path === this.viewerProps.path && !Object.keys(change).length) return;
+    this.viewerProps = { ...this.viewerProps, path, on: this.on, ...change };
+    this.viewer?.set_props?.(this.viewerProps);
+  }
+
+  /** Tab `d` drawn (true) or as text (false); a "look" file (a picture)
+   *  stays drawn. `focus`: the shown tab takes the keyboard after. */
+  setDrawn(d, on, cx, focus = true) {
+    if (d.kind === "look") on = true;
+    if (d.kind === "text") on = false;
+    if (on === d.look) return;
+    d.look = on;
+    if (d !== this.cur) return;
+    if (on) this.mountViewer(cx);
+    this.syncViewer();
+    if (!on && d.state === "unloaded") {
+      d.state = "loading";
+      this.load(cx, null, false, d);
+      if (!this.on && d.path) this.watch(cx, d);
+    }
+    if (focus) { if (on) this.lookHandle.focus(); else this.focusText(); }
+    cx?.notify?.();
+  }
+
+  /** e, the bar's chip, cmd-shift-v on a table, patch or SVG: drawn <-> text. */
+  toggleDrawn(cx) {
+    const d = this.cur;
+    if (d.kind === "look") return this.say(`This ${d.path.split(".").pop()} is drawn only: o opens the system's app`);
+    if (d.kind === "text") return this.say("Not a kind the preview draws");
+    this.setDrawn(d, !d.look, cx);
+  }
+
+  /** A key on a drawn tab (tabs.js lookAction): tabs, scrolling, as text,
+   *  the preview pane, the system's app, the path, close, the keys. */
+  lookKey(e, cx) {
+    if (this.keysShown) return;
+    const r = lookAction(this.lookPending, e);
+    this.lookPending = r.pending;
+    if (!r.taken) return;
+    cx?.stop_propagation?.();
+    if (r.act) this.lookAct(r.act, cx);
+    cx?.notify?.();
+  }
+
+  lookAct(act, cx) {
+    const d = this.cur, me = this.me(), on = this.on ? { on: this.on } : {};
+    switch (act) {
+      case "next-tab": return this.stepTab(1, cx);
+      case "prev-tab": return this.stepTab(-1, cx);
+      case "move-tab-right": return this.stepMove(1, cx);
+      case "move-tab-left": return this.stepMove(-1, cx);
+      case "down": case "up": this.scrollN = (this.scrollN ?? 0) + 1; return this.syncViewer({ scroll: { n: this.scrollN, dir: act === "down" ? 1 : -1 } });
+      case "text": return this.toggleDrawn(cx);
+      case "pane": return run("preview.open", { path: d.path, ...(me ? { pane: me.pane } : {}), ...on });
+      case "system": return run("preview.open", { path: d.path, in: "system", ...on });
+      case "copy": try { cx?.write_to_clipboard?.(this.on ? `${this.on}:${d.path}` : d.path); } catch { /* no clipboard */ } return this.say("path copied");
+      case "close": return this.closeTab(cx);
+      case "keys": return this.toggleKeys(!this.keysShown);
+    }
+  }
+
+  /** A file a link points at (a card's, the Markdown preview's, a drawn
+   *  picture's): drawn kinds as a drawn tab here, another machine's in the
+   *  preview beside (the viewer reads only this computer's pictures). */
+  openLooked(path, cx) {
+    if (this.on) { const me = this.me(); return run("preview.open", { path, ...(me ? { pane: me.pane } : {}), on: this.on }); }
+    this.openFile(path, cx, { look: true });
   }
 
   /** The next (1) or previous (-1) tab. */
@@ -591,6 +709,13 @@ export default class EditorPane extends View {
    *  stay; the name, the folder, the language and the server's document follow. */
   moveTo(to, cx, d = this.cur) {
     const from = d.path, s = d.server;
+    if (d.look) {
+      d.path = to; d.deleted = false; d.kind = tabKind(to);
+      if (d.kind === "text") { d.look = false; d.state = "unloaded"; }
+      if (d === this.cur) { this.syncViewer(); if (!d.look) this.select(d, cx, null, true); }
+      this.title(); this.keepTabs(); this.publish();
+      return;
+    }
     if (s?.id != null) lspNotify(s.id, "textDocument/didClose", { textDocument: { uri: uri(from) } });
     d.path = to;
     d.deleted = false;
@@ -633,6 +758,8 @@ export default class EditorPane extends View {
   /** Reads tab `d`'s file; `go`: the place to put the caret after. `quiet`: a
    *  poll or a change on disk, which leaves an edited buffer alone. */
   load(cx, go, quiet, d = this.cur) {
+    // Drawn: the viewer reads it; a change on disk draws it again.
+    if (d.look) { if (d === this.cur && quiet) this.syncViewer({ reload: (this.viewerProps.reload ?? 0) + 1 }); return; }
     if (!d.path) { d.state = "error"; d.error = "No file given: editor.open {path}."; return; }
     cx.spawn(async (cx) => {
       let text = null, error = null;
@@ -1195,7 +1322,7 @@ export default class EditorPane extends View {
     this.closeCard(cx);
     if (to.kind === "web") this.openWeb(to.url);
     else if (to.kind === "other") run("app.open_url", { url: to.url, in: "system" });
-    else if (PREVIEWED.test(to.path)) { const me = this.me(); run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) }); }
+    else if (PREVIEWED.test(to.path)) this.openLooked(to.path, cx);
     else this.openFile(to.path, cx, { line: to.line, col: to.col });
     cx?.notify?.();
   }
@@ -1512,6 +1639,7 @@ export default class EditorPane extends View {
     if (c === "vim") return this.toggleVim(cx);
     if (c === "wrap") return this.setWrap(null, cx);
     if (c === "keys") return this.toggleKeys(!this.keysShown);
+    if (c === "preview" && this.kind === "either") return this.toggleDrawn(cx);
     if (c === "preview") return this.setView(VIEWS[(VIEWS.indexOf(this.view) + 1) % VIEWS.length], cx);
     if (c === "preview-split") return this.setView("split", cx);
     if (c === "preview-only") return this.setView("preview", cx);
@@ -1539,7 +1667,8 @@ export default class EditorPane extends View {
   /** The keyboard to the shown tab's text: the rendered view's block, else the code editor. */
   focusText() {
     const d = this.cur;
-    if (d?.markdown && d.view === "rendered" && d.rendered) d.rendered.focus();
+    if (d?.look) this.lookHandle?.focus();
+    else if (d?.markdown && d.view === "rendered" && d.rendered) d.rendered.focus();
     else this.editor?.focus();
   }
 
@@ -1786,7 +1915,7 @@ export default class EditorPane extends View {
       if (to.path === this.path) { if (to.anchor) here(to.anchor); }
       else this.openFile(to.path, cx);
     } else if (to.kind === "web") run("app.open_url", { url: to.url });
-    else if (to.kind === "file" && PREVIEWED.test(to.path)) run("preview.open", { path: to.path, ...(me ? { pane: me.pane } : {}), ...(this.on ? { on: this.on } : {}) });
+    else if (to.kind === "file" && PREVIEWED.test(to.path)) this.openLooked(to.path, cx);
     else if (to.kind === "file" && languageOf(to.path)) this.openFile(to.path, cx);
     else if (!this.on) {
       const opener = appWindow()?.platform === "windows" ? null : appWindow()?.platform === "macos" ? "open" : "xdg-open";
@@ -1849,7 +1978,8 @@ export default class EditorPane extends View {
         onLink: (url, cx) => this.previewLink(url, cx),
         onTask: (line, cx) => this.tick(line, cx),
         image: (src) => this.image(src),
-        onImage: (abs) => { const me = panes().find((p) => p.mod === MOD && p.props?.slot === this.slot); run("preview.open", { path: abs, ...(me ? { pane: me.pane } : {}) }); },
+        // A drawn picture: a drawn tab here (through the open record, answered with a context in render).
+        onImage: (abs) => { if (this.slot) setShared(OPEN, { slot: this.slot, path: abs, look: true, n: (shared(OPEN)?.n ?? 0) + 1, at: Date.now() }); },
         dither: (color) => dither(color, 1),
         focused, size: 13, maxWidth: this.view === "preview" ? 780 : 720, unzoom: (v) => v / zoom(),
         notify: (cx) => cx.notify(),
@@ -1902,10 +2032,12 @@ export default class EditorPane extends View {
     const req = shared(OPEN);
     if (req && req.slot === this.slot && this.slot && req.n !== this.seenOpen) {
       this.seenOpen = req.n;
-      cx.timer.after(0, (cx) => { this.openFile(req.path, cx, { line: req.line ?? null, col: req.col ?? null, view: req.view ?? null }); cx.notify(); });
+      cx.timer.after(0, (cx) => { this.openFile(req.path, cx, { line: req.line ?? null, col: req.col ?? null, view: req.view ?? null, look: Boolean(req.look) }); cx.notify(); });
     }
     // The editor that last had the keyboard, for the files pane and the picker to send files to.
-    if (this.slot && this.editor.focused?.() && shared(LAST) !== this.slot) cx.timer.after(0, () => { if (shared(LAST) !== this.slot) setShared(LAST, this.slot); });
+    // The shown drawn tab's viewer, made once: a nested view, so its reading redraws only it.
+    if (this.cur?.look) this.mountViewer(cx);
+    if (this.slot && (this.editor.focused?.() || (this.look && this.lookHandle.is_focused?.())) && shared(LAST) !== this.slot) cx.timer.after(0, () => { if (shared(LAST) !== this.slot) setShared(LAST, this.slot); });
     const code = settings()?.font_family || "JetBrains Mono";
     return v_flex().id("nocturne-editor").relative().size_full().bg(t.background).text_size(11)
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
@@ -1919,15 +2051,16 @@ export default class EditorPane extends View {
       // A click outside the card closes it (the card keeps its own).
       .on_mouse_down("left", (_e, cx) => this.closeCard(cx))
       .when(showStrip(this.allDocs().length), (el) => el.child(this.tabStrip(t)))
-      .child(this.bar(t))
+      // A drawn tab: the viewer's slim bar says what it is; the editor's is for text.
+      .when(!this.look, (el) => el.child(this.bar(t)))
       .when(Boolean(this.asking), (el) => el.child(this.askLine(t)))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
       .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
       // ?: the keys in the file's place (the file folds away, kept), the bars stay (keyhelp.js).
       .when(Boolean(this.keysShown), (el) => el.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t))))
-      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(this.body(t, code)) : this.body(t, code))
-      .when(this.drawer && !this.keysShown, (el) => el.child(this.drawerView(t)))
+      .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(this.look ? this.lookView(t) : this.body(t, code)) : this.look ? this.lookView(t) : this.body(t, code))
+      .when(this.drawer && !this.keysShown && !this.look, (el) => el.child(this.drawerView(t)))
       .child(this.hints(t))
       .map((el) => { const card = this.card ? this.cardView(t, code) : null; return card ? el.child(card) : el; })
       .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)))
@@ -1990,6 +2123,10 @@ export default class EditorPane extends View {
       .when(this.markdown, (el) => el.child(div().id("bar-preview").flex_none().h(18).px(6).flex().items_center().border(1)
         .border_color(this.view === "text" ? t.ansi0 : t.ansi5).text_color(this.view === "text" ? t.dim : t.ansi5).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.command("preview", cx)).child(this.view)))
+      // A table, patch or SVG as text: drawn again (e in the drawn tab comes back here).
+      .when(this.kind === "either", (el) => el.child(div().id("bar-drawn").flex_none().h(18).px(6).flex().items_center().border(1)
+        .border_color(t.ansi0).text_color(t.dim).hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => { this.setDrawn(this.cur, true, cx); cx.notify(); }).child("drawn")))
       .when(!narrow || this.softWrap, (el) => el.child(div().id("bar-wrap").flex_none().h(18).px(6).flex().items_center().border(1)
         .border_color(this.softWrap ? t.ansi4 : t.ansi0).text_color(this.softWrap ? t.ansi4 : t.dim).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.setWrap(null, cx)).child("wrap")))
@@ -2243,6 +2380,7 @@ export default class EditorPane extends View {
   }
 
   hints(t) {
+    if (this.look) return this.lookHints(t);
     const list = hintList({ mode: this.mode, vim: this.vimOn(), vimMode: this.vim.mode, server: this.server?.id != null, markdown: this.markdown, view: this.view });
     // The keys entry (the last) is keyhelp.js's: its key is the chord that opens it here.
     const help = list.at(-1)?.[1] === "keys" ? list.at(-1) : null;
@@ -2253,10 +2391,38 @@ export default class EditorPane extends View {
       .when(Boolean(help), (el) => el.child(div().flex_1()).child(keysHint(t, "editor-hint-keys", Boolean(this.keysShown), () => this.toggleKeys(!this.keysShown), help[0])));
   }
 
+  /** A drawn tab's body: the viewer, the pane's keys (lookKey). */
+  lookView(t) {
+    return div().id("editor-look").relative().flex_1().min_h(0).min_w(0).flex().flex_col()
+      .track_focus(this.lookHandle)
+      .on_key_down((e, cx) => this.lookKey(e, cx))
+      .on_mouse_down("left", () => this.lookHandle.focus())
+      .child(this.viewer ? div().flex_1().min_h(0).child(this.viewer) : this.note(t, "Opening…", null));
+  }
+
+  /** A drawn tab's hints along the bottom: each one a button too. */
+  lookHints(t) {
+    const d = this.cur;
+    const list = [
+      ...(this.allDocs().length > 1 ? [["H L", "tabs", "next-tab"]] : []),
+      ...(d.kind === "either" ? [["e", "text", "text"]] : []),
+      ["p", "preview pane", "pane"], ["o", "open", "system"], ["y", "path", "copy"], ["d", "close", "close"],
+    ];
+    return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .children(list.map(([k, what, act], i) => h_flex().id(`editor-look-hint-${i}`).flex_none().gap(4).items_center().text_color(t.dim)
+        .hover((s) => s.text_color(t.foreground))
+        .on_click((_e, cx) => { this.lookAct(act, cx); cx.notify(); })
+        .child(div().text_color(t.accent).child(k)).child(div().child(what))))
+      .child(div().flex_1())
+      .child(keysHint(t, "editor-hint-keys", Boolean(this.keysShown), () => this.toggleKeys(!this.keysShown), "?"));
+  }
+
   /** Opens or closes the keys overview; it holds the keyboard while open, the file gets it back after. */
   toggleKeys(on) {
     this.keysShown = on;
     if (on) this.keysHandle.focus();
+    else if (this.look) this.lookHandle.focus();
     else if (this.view === "preview") this.previewHandle.focus();
     else if (this.view === "rendered" && this.cur?.rendered) this.cur.rendered.focus();
     else this.editor.focus();
@@ -2271,7 +2437,7 @@ export default class EditorPane extends View {
         cx.stop_propagation();
         cx.notify();
       })
-      .child(keysView(t, { id: "editor-keys", title: this.vimOn() ? "editor · vim" : "editor", list: editorKeys(this.vimOn()), close: () => this.toggleKeys(false) }));
+      .child(keysView(t, { id: "editor-keys", title: this.vimOn() ? "editor · vim" : "editor", list: this.look ? LOOK_KEYS : editorKeys(this.vimOn()), close: () => this.toggleKeys(false) }));
   }
 
   /** Highlighted code, line by line, in the card: colored once per answer
@@ -2422,7 +2588,7 @@ export default class EditorPane extends View {
 export const TAB_FIELDS = ["path", "firstPath", "lang", "opts", "openedAt", "deleted", "saved", "state", "error", "dirty", "conflict",
   "problems", "server", "version", "sent", "progress", "hovers", "text", "find", "searchMark", "markdown", "preview", "images",
   "view", "driver", "previewDrove", "previewDue", "flushDue", "lastWork", "watchGen", "editor", "softWrap",
-  "rendered", "scratch", "autosave", "saveState"];
+  "rendered", "scratch", "autosave", "saveState", "kind", "look", "watched"];
 for (const f of TAB_FIELDS) {
   Object.defineProperty(EditorPane.prototype, f, {
     configurable: true,
