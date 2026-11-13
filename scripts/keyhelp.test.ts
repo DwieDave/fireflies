@@ -224,7 +224,7 @@ test("Nocturne's chrome (sidebar, tab strip, header, parked chips): ? opens the 
   opened.length = 0;
   menu.openKeys("sidebar keys", [["j k", "move"], ["?", "keys"]]);
   expect(opened.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "keyshelp", title: "sidebar keys" } });
-  propsNow = opened.at(-1).props;
+  propsNow = { ...opened.at(-1).props, overlay: "o-keys" }; // Fireflies adds the overlay's id
   const d: any = new menu.KeysDialog();
   d.init({}, cx());
   const root = d.render();
