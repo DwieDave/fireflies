@@ -17,6 +17,8 @@
 //            the pointer or the cursor (shelf());
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
+//            nocturne.agent-next / agent-prev walk the agents, then the shelf's
+//            tiles, wrapping (walk.js; the layout's cmd-] / cmd-[);
 //            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -44,6 +46,7 @@ import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, s
 import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.js";
+import { walkStops, walkAt, walkNext } from "./walk.js";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.js";
 import { field } from "./inline.js";
@@ -293,6 +296,8 @@ export default class Sky {
         else if (c === "dock-web") dockWeb();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
+        else if (c === "agent-next") this.walk(1);
+        else if (c === "agent-prev") this.walk(-1);
         // With no toast on show, closing one closes the update note.
         else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") { if (!toastKey(c) && c !== "toast") dismissUpdate(); }
         else if (c === "update-close") dismissUpdate();
@@ -324,6 +329,18 @@ export default class Sky {
       const c = clock();
       if (c.time !== this.clock.time) { this.clock = c; cx.notify(); }
     });
+  }
+
+  /** nocturne.agent-next / agent-prev (walk.js): the next / previous agent in
+   *  the sidebar's order, then on through the shelf's tiles, wrapping. A tile
+   *  is gone to the way a click on it goes (kit.js goToPin). */
+  walk(dir) {
+    const stops = walkStops(sortedAgents().all.map((a) => a.address), jarNow().filter(onShelf));
+    const to = walkNext(stops, walkAt(stops, focused(), this.walkedTo), dir);
+    if (!to) return;
+    this.walkedTo = to.key;
+    if (to.item) goToPin(to.item);
+    else run("agent.focus", { terminal: to.agent });
   }
 
   /** A menu's ask ({ at }) this view hasn't answered yet. */

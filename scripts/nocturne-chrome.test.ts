@@ -67,6 +67,7 @@ const cx: any = {
 
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const pins = await import("../defaults/mods/nocturne/pins.js");
+const walk = await import("../defaults/mods/nocturne/walk.js");
 const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky.js");
 const { GLOW_SQUARE } = await import("../defaults/mods/nocturne/kit.js");
 
@@ -126,4 +127,89 @@ test("the shelf's tiles and caption start where a firefly's square does, clear o
   // a 232 px shelf still holds six 28 px tiles to a row
   expect(shelfHeight(6, 232)).toBe(shelfHeight(1, 232));
   expect(shelfHeight(7, 232)).toBeGreaterThan(shelfHeight(6, 232));
+});
+
+// ---- item 3: the walk, agents then the shelf's tiles
+
+const agentsOrder = ["t1", "t2", "t3"];
+const tile = (key: string, pane: string, kind = "pane") => ({ kind, key, pane: { pane } });
+const shelf = [
+  tile("pane:p7", "p7"),                    // a web pane
+  tile("pane:p8#tabA", "p8"),               // two pins of tabs in one web pane (webpip's records)
+  tile("pane:p8#tabB", "p8"),
+  { kind: "terminal", key: "t9", terminal: {}, pane: { pane: "p9" } }, // a plain shell
+];
+const stops = () => walk.walkStops(agentsOrder, shelf);
+const keyOf = (s: any) => s?.key;
+
+test("the walk's order: the agents, then every shelf tile in shelf order", () => {
+  expect(stops().map(keyOf)).toEqual(["t1", "t2", "t3", "pane:p7", "pane:p8#tabA", "pane:p8#tabB", "t9"]);
+});
+
+test("next wraps from the last tile to the first agent, previous from the first agent to the last tile", () => {
+  const s = stops();
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { terminal: "t3" }), 1))).toBe("pane:p7");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "p9", terminal: "t9" }), 1))).toBe("t1");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { terminal: "t1" }), -1))).toBe("t9");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "p7" }), -1))).toBe("t3");
+});
+
+test("tab pins sharing a pane are told apart by where the walk went last", () => {
+  const s = stops();
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "p8" }, "pane:p8#tabA"), 1))).toBe("pane:p8#tabB");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "p8" }, "pane:p8#tabB"), 1))).toBe("t9");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "p8" }, null), -1))).toBe("pane:p7"); // unknown: the first of them
+});
+
+test("from no stop next starts at the first agent, previous at the last tile; nothing to walk: nothing", () => {
+  const s = stops();
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, { pane: "elsewhere" }), 1))).toBe("t1");
+  expect(keyOf(walk.walkNext(s, walk.walkAt(s, null), -1))).toBe("t9");
+  expect(walk.walkNext([], -1, 1)).toBe(null);
+  // no agents: the tiles alone
+  expect(walk.walkStops([], shelf).map(keyOf)[0]).toBe("pane:p7");
+  // a terminal both an agent and on the shelf is walked once, as an agent
+  expect(walk.walkStops(["t9"], shelf).filter((x: any) => x.key === "t9")).toHaveLength(1);
+});
+
+test("the agent shown in a pane counts as that agent (terminal.show)", () => {
+  const s = stops();
+  expect(walk.walkAt(s, { pane: "p1", terminal: "t1", shown: "t2" })).toBe(1);
+});
+
+// The sky's command loop, end to end: real jar items from shared pins, the
+// keys going through the sky (nocturne.agent-next / agent-prev).
+async function send(c: string) {
+  await new Promise((r) => setTimeout(r, 0));
+  waiting.shift()!(c);
+  await new Promise((r) => setTimeout(r, 0));
+}
+
+test("nocturne.agent-next walks agents, a pinned web pane, and back; agent-prev the other way", async () => {
+  panesNow = [
+    { pane: "p1", tab: "c1", terminal: "t1", program: { agent: true }, focused: true },
+    { pane: "p2", tab: "c1", terminal: "t2", program: { agent: true }, focused: false },
+    { pane: "p3", tab: "c1", terminal: null, mod: "nocturne-browser", props: { slot: "w1" }, focused: false, parked: false },
+  ];
+  agentsNow = [
+    { address: "t1", status: "working", tab: "c1", space: "s1", focused: true },
+    { address: "t2", status: "working", tab: "c1", space: "s1", focused: false },
+  ];
+  terminalsNow = [{ address: "t1", state: "live", labels: {} }, { address: "t2", state: "live", labels: {} }];
+  sharedState[pins.PANES_KEY] = [{ pane: "p3", mod: "nocturne-browser", props: { slot: "w1" }, at: 1 }];
+
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  focusedNow = { pane: "p2", terminal: "t2" };
+  await send("nocturne.agent-next");
+  expect(commands.at(-1)).toEqual(["pane.focus", { pane: "p3" }]);
+  focusedNow = { pane: "p3", terminal: null };
+  await send("nocturne.agent-next");
+  expect(commands.at(-1)).toEqual(["agent.focus", { terminal: "t1" }]);
+  focusedNow = { pane: "p1", terminal: "t1" };
+  await send("nocturne.agent-prev");
+  expect(commands.at(-1)).toEqual(["pane.focus", { pane: "p3" }]);
+  focusedNow = { pane: "p3", terminal: null };
+  await send("nocturne.agent-prev");
+  expect(commands.at(-1)).toEqual(["agent.focus", { terminal: "t2" }]);
 });
