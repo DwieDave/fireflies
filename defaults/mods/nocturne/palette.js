@@ -27,7 +27,7 @@ import { togglePicker } from "./picker.ts";
 import { openNewMenu } from "./newmenu.ts";
 import { NAME_PANE, EDIT_SPACE } from "./menu.ts";
 import { TOASTS, toastKey } from "./toast.ts";
-import { updateShown, dismissUpdate } from "./screens.js";
+import { updateShown, dismissUpdate } from "./screens.ts";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;

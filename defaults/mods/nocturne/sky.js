@@ -69,7 +69,7 @@ import { newWorktree } from "./menu.ts";
 import { openSpacePicker } from "./newspace.ts";
 import { gridify } from "./gridify.ts";
 import { toastKey } from "./toast.ts";
-import { dismissUpdate } from "./screens.js";
+import { dismissUpdate } from "./screens.ts";
 import { calm, flash, dust, fly as flyPath } from "./flight.ts";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.ts";
 import { bindTab, tabActions } from "./form-keys.ts";

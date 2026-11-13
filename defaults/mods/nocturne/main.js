@@ -36,7 +36,7 @@ import NewButton from "./newbutton.ts";
 import NewSpace from "./newspace.ts";
 import Menu, { KeysDialog } from "./menu.ts";
 import Toast from "./toast.ts";
-import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";
+import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.ts";
 
 const ROLES = {
   sky: Sky, tabs: Tabs, pane: Header, parked: Parked, worktrees: WorktreesPanel, new: NewMenu, newbutton: NewButton, newspace: NewSpace, menu: Menu, keyshelp: KeysDialog, toast: Toast,

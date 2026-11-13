@@ -323,7 +323,7 @@ test("sidebar, tab strip, header and parked chips: each ? list names every key o
   }
 });
 
-const screens = await import("../defaults/mods/nocturne/screens.js");
+const screens = await import("../defaults/mods/nocturne/screens.ts");
 test("welcome and what's new: ? lists every key; their foot hints end with ? keys", () => {
   const press = (o: any, init: () => void) => () => { init(); return (e: any, cx: any) => o.render().calls.on_key_down[0](e, cx); };
   const w: any = new screens.Welcome();
