@@ -13,7 +13,8 @@ import { calm, flash } from "./flight.ts";
 import { stop, moonPhase, RAIL_RIDGE, RAIL_GROUND_ONE, RAIL_GROUND_MAX, RAIL_NECK, BODY, RAIL_REACH, PAIR_REACH, BOARD, RAIL_TILE, RAIL_TILE_GAP } from "./sky-plan.ts";
 import type { RailReach } from "./sky-plan.ts";
 import { flyActs, railActs } from "./sky-keys.ts";
-import { doneBadge, flyMark, railGlass } from "./meadow.ts";
+import { doneBadge, railGlass } from "./meadow.ts";
+import { flyMark } from "./winged.ts";
 import { pinTile } from "./shelf.ts";
 import type Sky from "./sky.ts";
 

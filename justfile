@@ -155,14 +155,22 @@ test:
     bun test scripts/mods-typescript.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/procs.test.ts
-    # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the system tab's second.
+    # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the readings strip and its second.
     bun test scripts/procs-deck.test.ts
-    # Its system graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
+    # Its graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
     bun test scripts/procs-sys.test.ts
+    # Its readings strip: the histories, a line's points (empty, one, a full window, a gap), the layout wide and narrow at zoom 0.9 and 1.0, a cell's numbers.
+    bun test scripts/procs-vitals.test.ts
+    # Its row menu: the entries per row kind, each act against a fake exec and fake herdr calls, the ends asking first, open / close / its place, every entry's key, a database's port to the Databases mod.
+    bun test scripts/procs-menu.test.ts
+    # Its sorting: the order per column and direction in the tree (a group by what's under it) and flat, the ports' columns, a click and the keys' steps, the kept record.
+    bun test scripts/procs-sort.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.
     bun test scripts/nocturne-chrome.test.ts
+    # The jar's shelf as drawn: no caption, a tile's icon by kind, the + tile's dock menu.
+    bun test scripts/nocturne-shelf.test.ts
     # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
     bun test scripts/nocturne-tab-seam.test.ts
     # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.
@@ -171,8 +179,8 @@ test:
     bun test scripts/scripts-chips.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
-    # An agent's status as the winged firefly in its tab and pane header (kit.ts statusFly): colour, motion, size.
-    bun test scripts/nocturne-status-fly.test.ts
+    # An agent's one mark in its tab and pane header, the sidebar's winged one (winged.ts): colour, motion only while working, size, no second mark.
+    bun test scripts/nocturne-winged.test.ts
     # The strip's drop-downs: a second press on the git mark's ▾ closes its menu (Developer's report).
     bun test scripts/nocturne-tool-dropdowns.test.ts
     cargo test --locked

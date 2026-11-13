@@ -6,6 +6,8 @@
 //   fly    a sidebar firefly's (sky.ts opens it, props { tab: "fly", target: { id, address } }):
 //          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT);
 //          moving and closing act on the agent's pane, not its whole tab
+//   dock   the jar shelf's "+" tile's (shelf.ts opens it, props { tab: "dock" }): the
+//          focused pane, a new web pane, shell or files pane into the dock (dock.ts)
 //   space  a sidebar space's (spaces.ts opens it, props { tab: "space", target: { id } }):
 //          rename, folder and delete happen inline in the sidebar, asked for through
 //          shared(EDIT_SPACE); "New worktree…" opens the worktree dialog on the space's folder
@@ -28,7 +30,7 @@ import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.ts";
-import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, tracked } from "./kit.ts";
+import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked } from "./kit.ts";
 import type { DropAt, PinTarget } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
@@ -172,9 +174,18 @@ function layoutKey(action: string): string {
   return keys().find((b) => b.section === "layout:nocturne" && b.action === action)?.keys ?? "";
 }
 
-/** The pane is in the dock's space (dock.ts). */
-function inDock(p: PaneInfo): boolean {
-  return isDock(spaces().find((s) => s.tabs.some((c) => c.id === p.tab)));
+/** The shelf's "+" tile (shelf.ts newTile): what can go into the dock (dock.ts),
+ *  pinned to the shelf. The focused pane first, when it can go (kit.ts dockable). */
+function dockItems(t: Theme): PopupItem[] {
+  const f = focusedPane();
+  const p = f?.pane ? panes().find((x) => x.pane === f.pane) : undefined;
+
+  return [
+    ...(dockable(p) ? [{ id: "dock-this", mark: icon(t, "archive"), name: "Move the focused pane here", hint: "", go: () => dockPane(p) }, { rule: true } as const] : []),
+    { id: "dock-web", mark: icon(t, "monitor"), name: "New web pane", hint: "", go: () => dockWeb() },
+    { id: "dock-shell", mark: icon(t, "terminal"), name: "New shell", hint: "", go: () => dockShell() },
+    { id: "dock-files", mark: icon(t, "files"), name: "New files pane", hint: "", go: () => dockFiles() },
+  ];
 }
 
 /** "Pin to the top" / "Unpin" for any pane (`p`: { pane, terminal }: an
@@ -215,7 +226,7 @@ export function newWorktree(id: string | undefined): void {
 const isMenuTarget = object({}, { id: isString, address: isString, space: nullable(isString), pane: nullable(isString), terminal: nullable(isString) });
 
 /** A menu's props: which (tab, pane, fly, space, git), on what (`target`), and its overlay. */
-const isMenuProps = object({}, { tab: literal("tab", "pane", "fly", "space", "git"), target: isMenuTarget, overlay: isString, role: isString });
+const isMenuProps = object({}, { tab: literal("tab", "pane", "fly", "space", "git", "dock"), target: isMenuTarget, overlay: isString, role: isString });
 
 export type MenuProps = Guarded<typeof isMenuProps>;
 
@@ -359,6 +370,8 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
     ];
   }
 
+  if (p?.tab === "dock") return dockItems(t);
+
   if (p?.tab === "git") {
     // The tab strip's git ▾: the git window, its review, its worktrees, the GitHub window.
     const bound = (cmd: string) => keys().find((b) => b.action === cmd)?.keys ?? "";
@@ -382,7 +395,12 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
     ];
   }
 
-  // pane
+  return paneItems(t, tg);
+}
+
+/** A pane's menu ("pane": { pane, terminal }): rename, pin, dock, split, zoom,
+ *  even out, park, right-clicks, send back, move, close. */
+function paneItems(t: Theme, tg: Guarded<typeof isMenuTarget>): PopupItem[] {
   const all = terminals().filter((x) => isTerminal(x));
   const term = all.find((x) => x.address === tg.terminal);
   const parent = term?.parent ? all.find((x) => x.address === term.parent) : undefined;
@@ -399,7 +417,7 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
     // Any pane can be pinned to the top of the sky: an agent's, a shell's, a web page, an editor.
     ...pinItems(t, { pane, terminal: term ? term.address : null }),
     // Or kept in the dock (dock.ts: the space tied to no folder), pinned to the shelf.
-    ...(mine && !mine.pane.includes("/") && !inDock(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
+    ...(dockable(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane }),
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane }),
