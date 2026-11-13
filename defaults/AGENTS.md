@@ -205,6 +205,7 @@ came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
 0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
+The keychain is macOS's; elsewhere a typed password is asked each time.
 
 **Window mods in panes.** Git, GitHub, the script runner, the processes deck and Databases open as
 their floating window or as a normal pane that stays beside terminals and
@@ -1046,7 +1047,10 @@ the highlighted line shows where it will land.
   Right-click a row or press `m` for its menu: open, Open in a web pane (an
   `.html` / `.htm` file, also `w`: its `file://` URL as a new front tab in the
   shown tab's web pane, else a new web pane beside; not for another machine's
-  files; enter still opens it as before), edit, $EDITOR, Open in
+  files; enter still opens it as before), Open in Databases (a `.db` /
+  `.db3` / `.sqlite` / `.sqlite3` file, also `b`, while the Databases mod is
+  installed: the window on that file, read only; the preview's table strip of
+  a database has the same "open in Databases"), edit, $EDITOR, Open in
   Neovim (`v`: `nvim` from PATH in a terminal beside, on a file in its folder,
   on a folder `nvim .` there), a folder in a new files pane (`o`), copy the path
   (`y`), the file operations below, close; on the empty space below the rows:

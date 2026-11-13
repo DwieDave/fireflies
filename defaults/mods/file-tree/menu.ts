@@ -16,6 +16,7 @@ import { closePane, copyPath, copySet, nvim, openPane, openViewer, terminalEdit 
 import type { default as Files } from "./main.ts";
 import { askDelete, clipNow, cutRow, paste, startDraft, startRename } from "./file-ops.ts";
 import { setOf } from "./drag.ts";
+import { openInDatabases } from "./viewer-table.ts";
 
 /** The empty space's row: the root. */
 export function rootRow(v: Files): TreeRow {
@@ -28,7 +29,7 @@ export function openMenu(v: Files, row: Row, cx: Context | null): void {
   const clip = Boolean(clipNow(v));
 
   const all = set.length > 1 ? setMenuItems(row, set.length, { pane: v.alone, clip, look: v.lookState.on })
-    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: !v.on, viewer: !row.dir && Boolean(viewerFor(row.path)) });
+    : menuItems(row, { pane: v.alone, clip, look: v.lookState.on, web: !v.on, viewer: !row.dir && Boolean(viewerFor(row.path)), databases: !v.on && v.dbMod });
 
   const items = row.head ? all.filter((x) => x.act !== "root") : all;
 
@@ -60,6 +61,7 @@ export function runAct(v: Files, act: Act, row: Row, cx: Context): void {
       break;
     case "terminal": terminalEdit(v, p, cx); break;
     case "web": openWeb(v, p, cx); break;
+    case "databases": openInDatabases(`${v.root}/${p}`, "the files pane"); break;
     case "copy": copyPath(v, p, cx); break;
     case "close": closePane(v); break;
     case "new-file": startDraft(v, "file", row, cx); break;

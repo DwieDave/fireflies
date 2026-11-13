@@ -69,6 +69,8 @@ export default class Viewer extends View {
   checker = true;
   names: string[] = [];
   copied = 0;
+  /** The Databases mod is installed (a database file offers "open in Databases"). */
+  dbMod = false;
   // The embedded viewer's props: asked (the latest), seen (applied from a render), done.
   asked: ViewerProps = {};
   seen: ViewerProps | null = null;

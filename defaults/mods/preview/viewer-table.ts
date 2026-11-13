@@ -6,6 +6,8 @@ import { div } from "gpui-kit";
 import type { Context, Element, Modifiers } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { exec } from "herdr";
+// The Databases hand-off's calls by name: a stand-in herdr (the tests') needn't have them all.
+import * as herdr from "herdr";
 import type { ExecResult, Theme } from "herdr";
 import { sniffKind, route, count } from "./kinds.ts";
 import { hexBytes } from "./image.ts";
@@ -15,6 +17,25 @@ import { nextFile } from "./diff.ts";
 import { held, sh, blank, STAMP, unzoom, CH, ROW, failure, GUTTER_MIN, CELL, checker, code } from "./viewer-state.ts";
 import { failWith, failed, tools } from "./viewer-load.ts";
 import type { default as Viewer } from "./viewer.ts";
+
+/** Whether the Databases mod is installed (its folder in the app's mods). */
+export async function hasDatabases(): Promise<boolean> {
+  // Asked from a pane's start: a failure of any kind means "not there", never a broken pane.
+  try {
+    return (await herdr.readTextFile(`${herdr.appHome()}/mods/databases/mod.json`)) !== null;
+  } catch {
+    return false;
+  }
+}
+
+/** A SQLite file in the Databases window (its contract: nocturne.databases:{kind, path} in the
+ *  nocturne layout, else its window opened on it), read only until the person says otherwise. */
+export function openInDatabases(path: string, from: string): void {
+  const args = { kind: "sqlite", path, readonly: true, from };
+
+  if (herdr.shared("layout") === "nocturne") herdr.run(`nocturne.databases:${JSON.stringify(args)}`);
+  else herdr.openOverlay({ mod: "databases", kind: "window", key: "databases", frame: "none", scrim: true, width: 0.88, height: 0.88, props: { connect: args } });
+}
 
 /** SQLite: its tables, then the chosen one's first rows (sqlite3, read only). */
 export async function loadDb(v: Viewer, cx: Context, gen: number): Promise<void> {
@@ -65,6 +86,9 @@ export async function loadDb(v: Viewer, cx: Context, gen: number): Promise<void>
   }
 
   const tables = tablesOf(list.stdout);
+
+  // A file here (not on another machine) opens in the Databases window when it's installed.
+  v.dbMod = !v.on && await hasDatabases();
   const was = v.db ? v.db.tables[v.db.at]?.name : undefined;
   const at = Math.max(0, tables.findIndex((x) => x.name === was));
 

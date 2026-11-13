@@ -15,6 +15,9 @@ import { parsePsql, parseSqlite, psqlError, resultWords, placeByName, placed, cl
 
 const FIX = new URL("./fixtures/databases/", import.meta.url).pathname;
 
+/** sqlite3 is here (CI's Linux image may lack it: those tests skip, the rest run). */
+const SQLITE = Bun.which("sqlite3") !== null;
+
 /** herdr's exec and writeTextFile, for real, recording every argv. */
 function realIo(seen: string[][] = []) {
   return {
@@ -188,7 +191,7 @@ describe("an error's words", () => {
 describe("the runner, for real with sqlite3", () => {
   const dbDir = mkdtempSync(join(tmpdir(), "ffdb-"));
   const db = join(dbDir, "t.db");
-  Bun.spawnSync(["sqlite3", db, "create table t(id integer primary key, name text, v real); insert into t values (1,'a,b',1.5),(2,null,null),(3,'',2);"]);
+  if (SQLITE) Bun.spawnSync(["sqlite3", db, "create table t(id integer primary key, name text, v real); insert into t values (1,'a,b',1.5),(2,null,null),(3,'',2);"]);
   const args = (ro = false) => ["-batch", "-bail", "-csv", "-header", "-nullvalue", "␀", "-cmd", ".changes on", ...(ro ? ["-readonly"] : []), db];
 
   test("the private folder is 0700 and goes away", async () => {
@@ -199,7 +202,7 @@ describe("the runner, for real with sqlite3", () => {
     expect(existsSync(dir)).toBe(false);
   });
 
-  test("rows, changes, an error placed in its statement, and nothing left behind", async () => {
+  test.skipIf(!SQLITE)("rows, changes, an error placed in its statement, and nothing left behind", async () => {
     const io = realIo();
     const dir = (await privateDir(io))!;
     const statements = ["select * from t order by id", "update t set v = 3 where id = 2", "select x from\n  t"];
@@ -216,7 +219,7 @@ describe("the runner, for real with sqlite3", () => {
     await removeDir(io, dir);
   });
 
-  test("read only refuses a write in sqlite3 itself", async () => {
+  test.skipIf(!SQLITE)("read only refuses a write in sqlite3 itself", async () => {
     const io = realIo();
     const dir = (await privateDir(io))!;
     const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(true), script: scriptOf("sqlite", [{ text: "delete from t", risk: "destructive" }]).text, readonly: true });
@@ -224,7 +227,7 @@ describe("the runner, for real with sqlite3", () => {
     await removeDir(io, dir);
   });
 
-  test("output past the limit is cut", async () => {
+  test.skipIf(!SQLITE)("output past the limit is cut", async () => {
     const io = realIo();
     const dir = (await privateDir(io))!;
     const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(), script: scriptOf("sqlite", [{ text: "with recursive n(i) as (select 1 union all select i + 1 from n limit 100000) select i, 'xxxxxxxxxx' from n", risk: "read" }]).text, limit: 4096 });

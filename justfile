@@ -203,6 +203,8 @@ test:
     bun test scripts/databases-data.test.ts
     # The Databases window's view: window and pane (no frame or ✕ in a pane, esc leaves it, the move both ways), narrow widths, keys and menus, the asks before a write, a connection another mod sends, no secret shared or on an argv.
     bun test scripts/databases-view.test.ts
+    # A database file leads to the Databases window: the files pane's "Open in Databases" (b), the preview's table strip, only with the mod installed.
+    bun test scripts/databases-open.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
