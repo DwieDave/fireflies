@@ -202,6 +202,7 @@ export class Rendered {
     if (force || r.from !== this.range.from || r.to !== this.range.to) this.light(r);
     else this.split();
     this.mirror();
+    this.measureSoon(cx);
     this.host.notify(cx);
   }
 
@@ -284,6 +285,7 @@ export class Rendered {
       // in place: vim's x, a command, undo keep the block's caret and scroll).
       this.light(this.wanted(), true);
       this.mirror();
+      this.measureSoon(cx);
       this.reveal = true;
       this.host.notify(cx);
       return;
@@ -442,6 +444,7 @@ export class Rendered {
     this.doc.editor.set_cursor(s.line, s.col);
     this.light(s.unit);
     this.mirror();
+    this.measureSoon(cx);
     this.host.notify(cx);
     return true;
   }
@@ -466,6 +469,7 @@ export class Rendered {
     this.doc.editor.set_cursor(line, end ? (ls[line] ?? "").length : 0);
     this.light(u);
     this.mirror();
+    this.measureSoon(cx);
     this.block.focus();
     this.host.notify(cx);
   }
@@ -565,7 +569,8 @@ export class Rendered {
    *  an empty block has its kinds under it. */
   litHeight() {
     const rows = wrappedRows(this.piece, this.litW, this.cw);
-    const est = rows * this.rowH + 2;
+    // A row's slack: an estimate a little short would let the editor scroll inside its box.
+    const est = rows * this.rowH + 6;
     const h = this.blockH == null ? est : this.blockHFor === this.piece ? this.blockH : Math.max(this.blockH, est);
     return Math.min(h, Math.max(ROW * 3, this.viewH - 60)) + 10 + (this.offersKinds() ? KINDS_H : 0);
   }
@@ -635,7 +640,7 @@ export class Rendered {
         .child(svg(PLUS).size(10).text_color(t.accent)))
       .child(div().flex_none().text_size(11.5).child("add a block"))
       .child(div().relative().flex_1().h(1).opacity(0.5).child(this.host.dither(t.ansi8)))
-      .child(div().flex_none().text_size(10.5).child(this.host.vim?.() ? "o · space ." : "enter at a block's end"));
+      .child(div().flex_none().text_size(10.5).child("or enter at a block's end"));
   }
 
   emptyView(o) {
