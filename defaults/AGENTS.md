@@ -1380,10 +1380,18 @@ goes. The dock
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
 folder, worktree or delete in its menu or keys (`space.close` still closes it;
-the next use makes a new one). "Move to the dock" (any pane's menu, the
-palette, `nocturne.dock`) moves the pane into a tab of its own there and pins
-it to the shelf; "New web pane in the dock" (the palette, the shelf's last
-"+" tile, `nocturne.dock-web`) opens one there, pinned. Toasts by key:
+the next use makes a new one). Any local pane docks: a terminal (an agent's
+too: it then flies in the jar), an editor, a files pane, a Markdown or preview
+pane, a web page. "Move to the dock" (any pane's menu, the palette,
+`nocturne.dock`) moves the pane into a tab of its own there with its state (a
+terminal runs on in the core, a mod pane keeps its props) and pins it; its tile
+goes back to it, its menu's Close closes it (the app asks first for a running
+terminal or unsaved work). A pane on another machine doesn't dock: the dock is
+this computer's space. The shelf's last "+" tile opens the dock's menu (at the
+pointer; enter on it from the keyboard): the focused pane, a new web pane
+(`nocturne.dock-web`), a new shell in ~ (`nocturne.dock-shell`, pinned once its
+terminal is there: shared `nocturne.dock-shell` holds the ask) or a new files
+pane at ~ (`nocturne.dock-files`), each pinned; the palette has the same rows. Toasts by key:
 `nocturne.toast` does what the newest toast on screen says (as a click would),
 `nocturne.toast-close` (or `nocturne.toast-dismiss`) dismisses it, or with no
 toast on show Nocturne's update note ("Updated to …", bottom right), which

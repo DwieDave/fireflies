@@ -146,6 +146,8 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["nocturne.agent-prev", "Previous agent, or back through the shelf's pinned panes"],
   ["nocturne.dock", "Move the focused pane to the dock (a space tied to no folder) and pin it to the shelf"],
   ["nocturne.dock-web", "New web pane in the dock, pinned to the shelf"],
+  ["nocturne.dock-shell", "New shell in the dock (it starts in ~), pinned to the shelf"],
+  ["nocturne.dock-files", "New files pane at ~ in the dock, pinned to the shelf"],
   ["notifications.open", "Notifications: what your agents ask, answered from one place"],
   // The editor (mod:editor).
   ["editor.save", "Save"],

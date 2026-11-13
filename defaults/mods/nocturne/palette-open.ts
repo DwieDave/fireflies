@@ -4,12 +4,11 @@
 // folder, the git window's diff, pins, the dock, the toast and update note, the
 // keyboard's ways into the chrome, the picture in picture player.
 
-import { run, shared, setShared, agents, panes, spaces } from "herdr";
+import { run, shared, setShared, agents, panes } from "herdr";
 import { writeShared } from "./guard.ts";
 import { isList } from "./guards.ts";
-import { focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.ts";
+import { focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb, dockShell, dockFiles, dockable } from "./kit.ts";
 import type { PinTarget } from "./kit.ts";
-import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
 import { panels, here, terminalPane, terminalTab } from "./panels.ts";
 import type { Here } from "./panels.ts";
@@ -187,9 +186,14 @@ function dockAndNoteEntries(target: PinTarget | null): Entry[] {
   out.push({ name: "nocturne.dock-web", args: {}, group: "Open", icon: "monitor", bind: "nocturne.dock-web", title: "New web pane in the dock",
     words: "dock web browser page pane default space no folder shelf pin keep", go: () => dockWeb() });
 
+  out.push({ name: "nocturne.dock-shell", args: {}, group: "Open", icon: "terminal", bind: "nocturne.dock-shell", title: "New shell in the dock",
+    words: "dock shell terminal default space no folder home shelf pin keep", go: () => dockShell() });
+  out.push({ name: "nocturne.dock-files", args: {}, group: "Open", icon: "files", bind: "nocturne.dock-files", title: "New files pane in the dock",
+    words: "dock files folder tree home default space no folder shelf pin keep", go: () => dockFiles() });
+
   const docked = target?.pane ? panes().find((p) => p.pane === target.pane) : undefined;
 
-  if (docked && !docked.pane.includes("/") && !isDock(spaces().find((s) => s.tabs.some((c) => c.id === docked.tab)))) {
+  if (dockable(docked)) {
     out.push({ name: "nocturne.dock", args: {}, group: "Pane", icon: "archive", bind: "nocturne.dock", title: "Move this pane to the dock",
       words: "dock move keep default space no folder shelf pin", go: () => dockPane(docked) });
   }

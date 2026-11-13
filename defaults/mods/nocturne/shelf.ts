@@ -1,6 +1,7 @@
 // The shelf at the jar's foot (sky.ts, meadow.ts): pinned panes that aren't
 // agents as tiles, their names (a web pane's by its page, webName) and
-// favicons (webIcon), where each is, the "+" tile for a web pane in the dock.
+// favicons (webIcon), where each is, the "+" tile and its menu of what can go
+// into the dock (any pane: the focused one, a new web pane, shell or files pane).
 
 import { div, svg, image } from "gpui-kit";
 import type { Element } from "gpui-kit";
@@ -9,7 +10,8 @@ import { shared, focused } from "herdr";
 import type { Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, dockWeb, cornerTicks } from "./kit.ts";
+import { dither, givenName, goToPin, cornerTicks } from "./kit.ts";
+import { openMenu } from "./menu.ts";
 import type { JarItem } from "./pins.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
@@ -148,17 +150,24 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
 }
 
-/** The shelf's last tile, "+": a new web pane in the dock (dock.ts), pinned
- *  here. Dimmer than the tiles, a dotted frame: a place, not a pane. */
+/** The dock's menu (menu.ts dockItems): what can go into the dock, pinned
+ *  here. At the pointer, or `centered` (from the keyboard). */
+export function dockMenu(centered = false): void {
+  openMenu({ tab: "dock" }, { width: 240, centered });
+}
+
+/** The shelf's last tile, "+": what can go into the dock (dock.ts), pinned
+ *  here (dockMenu: the focused pane, a new web pane, shell or files pane).
+ *  Dimmer than the tiles, a dotted frame: a place, not a pane. */
 export function newTile(sky: Sky, t: Theme, size = TILE): Element {
-  const on = sky.nav("shelf-new", "flies", { go: () => dockWeb() });
+  const on = sky.nav("shelf-new", "flies", { go: () => dockMenu(true), menu: () => dockMenu(true) });
 
   if (on) sky.tileOn = "shelf-new";
 
   const hot = sky.tileHover === "shelf-new";
 
   return div().id("shelf-new").relative().size(size).flex_none().flex().items_center().justify_center()
-    .tooltip("New web pane in the dock")
+    .tooltip("Into the dock: this pane, a web page, a shell, files")
     .on_hover((h, cx) => {
       if (h ? sky.tileHover !== "shelf-new" : sky.tileHover === "shelf-new") {
         sky.tileHover = h ? "shelf-new" : null;
@@ -166,7 +175,7 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
       }
     })
     .on_mouse_down("left", stop)
-    .on_click(() => dockWeb())
+    .on_click(() => dockMenu())
     .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
     .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
     .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))

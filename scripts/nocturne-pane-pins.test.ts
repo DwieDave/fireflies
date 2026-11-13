@@ -391,11 +391,12 @@ test("the palette opens a web pane in the dock, and moves the focused pane there
   const web = rows().find((e: any) => e.title === "New web pane in the dock");
   expect(web).toBeTruthy();
   expect(rows().some((e: any) => e.title === "Move this pane to the dock")).toBe(true);
+  expect(rows().filter((e: any) => /^New (shell|files pane) in the dock$/.test(e.title)).map((e: any) => e.name)).toEqual(["nocturne.dock-shell", "nocturne.dock-files"]);
   web.go();
   expect(commands.at(-1)![0]).toBe("space.new");
 });
 
-test("the shelf ends in a + tile: a new web pane in the dock, in the keyboard's walk", () => {
+test("the shelf ends in a + tile: the dock's menu, in the keyboard's walk", () => {
   sharedState[pins.PANES_KEY] = [{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 2 }];
   sharedState[dockMod.DOCK_KEY] = { id: "s2" };
   const s = new Sky();
@@ -408,6 +409,9 @@ test("the shelf ends in a + tile: a new web pane in the dock, in the keyboard's 
   expect(ids.indexOf("shelf-new")).toBe(ids.indexOf("pin:pane:p2") + 1);
   s.cursor = "shelf-new";
   s.key({ key: "enter", key_char: null, modifiers: { control: false, platform: false, alt: false, shift: false } }, cx);
+  // Enter opens the dock's menu (centered: from the keyboard); its web row opens the page in the dock.
+  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "menu", tab: "dock" } });
+  menuItems(theme, { tab: "dock" }).find((r: any) => r.id === "dock-web").go();
   expect(commands.at(-1)![0]).toBe("tab.new");
   expect(commands.at(-1)![1].space).toBe("s2");
 });
@@ -496,4 +500,114 @@ test("a closed pane's pins go together, its tab pins too; a pane back under a ne
   // After a restart the pane is p7 (same slot): every record of it follows.
   const back = pins.tidy(recs, [...panesNow, { pane: "p7", tab: "c1", terminal: null, mod: "browser", props: { slot: "zz" } }], new Map(), 0)!;
   expect(back.map((r: any) => pins.recordKey(r))).toEqual(["pane:p7#web", "pane:p7#web-2", "pane:p7", "pane:p2#web"]);
+});
+
+// ---- jarfly item 2: any pane docks, not only web panes
+
+const walkMod = await import("../defaults/mods/nocturne/walk.ts");
+
+/** The dock is s3, a space of its own (made earlier); s1 and s2 are projects. */
+function withDock() {
+  spacesNow = [...spacesNow, { id: "s3", name: "dock", named: true, folder: "/home/a", attached: true, active: false, tabs: [{ id: "c30", index: 1, active: true, name: "1" }] }];
+  sharedState[dockMod.DOCK_KEY] = { id: "s3" };
+}
+
+test("any pane docks: a shell, an agent, an editor, a files pane and a web pane each move into the dock, pinned, and their tile goes back to them", () => {
+  withDock();
+  for (const p of [SHELL, EDIT, FILES, WEB]) kit.dockPane(p);
+  kit.dockPane(panesNow[0]); // the agent's pane
+  expect(commands.filter(([n]) => n === "pane.move")).toEqual(["p5", "p3", "p4", "p2", "p1"].map((pane) => ["pane.move", { pane, space: "s3" }]));
+  // A terminal's pin is its terminal's (it runs on in the core); a mod pane's a record by its props (its slot and store stay).
+  expect(commands.filter(([n]) => n === "terminal.pin")).toEqual([["terminal.pin", { terminal: "t5", pinned: true }], ["terminal.pin", { terminal: "t1", pinned: true }]]);
+  expect(stored().map((r: any) => [r.pane, r.mod, r.props])).toEqual([["p3", "editor", EDIT.props], ["p4", "file-tree", FILES.props], ["p2", "browser", WEB.props]]);
+  applyLabels();
+  for (const a of ["t1", "t5"]) terminalsNow.find((x) => x.address === a).labels[pins.PIN_LABEL] = "1";
+  // The agent flies in the jar; the others sit on the shelf.
+  const jar = kit.jar();
+  expect(jar.filter((x: any) => !pins.onShelf(x)).map((x: any) => x.key)).toEqual(["t1"]);
+  expect(jar.filter(pins.onShelf).map((x: any) => x.key).sort()).toEqual(["pane:p2", "pane:p3", "pane:p4", "t5"]);
+  // A tile's click goes to its pane in the dock (a parked one comes back); the agent's firefly to the agent.
+  commands = [];
+  for (const it of jar) kit.goToPin(it);
+  const by = (x: any) => JSON.stringify(x);
+  expect(commands.map(by).sort()).toEqual([["agent.focus", { terminal: "t1" }], ...["p5", "p3", "p4", "p2"].map((pane) => ["pane.focus", { pane }])].map(by).sort());
+  // The walk: the agents, then every docked tile.
+  const shelf = jar.filter(pins.onShelf);
+  expect(walkMod.walkStops(["t1"], shelf).map((x: any) => x.key)).toEqual(["t1", ...shelf.map((x: any) => x.key)]);
+});
+
+
+test("a docked pane closes as any pane does: its menu's Close runs pane.close (the app asks first for a running terminal or unsaved work)", () => {
+  withDock();
+  kit.dockPane(SHELL);
+  const close = menuItems(theme, { tab: "pane", target: { pane: "p5", terminal: "t5" } }).find((r: any) => r.id === "close");
+  close.go();
+  expect(commands.at(-1)).toEqual(["pane.close", { pane: "p5" }]);
+  // Already in the dock: not offered again.
+  panesNow = panesNow.map((p) => (p.pane === "p5" ? { ...p, tab: "c30" } : p));
+  expect(menuItems(theme, { tab: "pane", target: { pane: "p5", terminal: "t5" } }).some((r: any) => r.id === "dock")).toBe(false);
+});
+
+test("the + tile's menu: the focused pane (when it can go), a new web pane, shell or files pane", () => {
+  withDock();
+  const ids = () => menuItems(theme, { tab: "dock" }).filter((r: any) => !r.rule).map((r: any) => r.id);
+  expect(ids()).toEqual(["dock-this", "dock-web", "dock-shell", "dock-files"]);
+  menuItems(theme, { tab: "dock" }).find((r: any) => r.id === "dock-this").go();
+  expect(commands.at(-1)).toEqual(["pane.move", { pane: "p2", space: "s3" }]);
+  // A pane in the dock already, or on another machine, isn't offered.
+  panesNow = [...panesNow, { pane: "p31", tab: "c30", terminal: null, mod: "browser", props: { slot: "d" } }, { pane: "m/p1", tab: "m/c1", terminal: null, mod: "browser", props: {} }];
+  for (const pane of ["p31", "m/p1"]) {
+    focusedNow = { ...focusedNow, pane };
+    expect(ids()).toEqual(["dock-web", "dock-shell", "dock-files"]);
+  }
+});
+
+test("a new files pane in the dock: at ~, pinned by its props until the pane is there", () => {
+  withDock();
+  kit.dockFiles();
+  const slot = (stored()[0] as any).props.slot;
+  expect(commands).toEqual([["tab.new", { space: "s3", mod: "file-tree", props: { path: "/home/a", slot } }]]);
+  expect(stored()[0]).toEqual({ pane: `new:${slot}`, mod: "file-tree", props: { path: "/home/a", slot }, at: expect.any(Number) });
+  panesNow = [...panesNow, { pane: "p40", tab: "c31", terminal: null, mod: "file-tree", props: { path: "/home/a", slot } }];
+  expect(kit.jar().map((x: any) => x.key)).toContain("pane:p40");
+});
+
+test("a new shell in the dock: tab.new there, and its terminal is pinned once it appears (not one that was there before)", () => {
+  withDock();
+  panesNow = [...panesNow, { pane: "p30", tab: "c30", terminal: "t30", program: { name: "zsh", shell: true } }];
+  kit.dockShell();
+  expect(commands).toEqual([["tab.new", { space: "s3" }]]);
+  expect(sharedState[dockMod.SHELL_KEY]).toEqual({ at: expect.any(Number), before: ["p30"] });
+  expect(dockMod.shellWaiting()).toBe(true);
+  // Not there yet: nothing pinned, still waiting.
+  kit.pinDockShell();
+  expect(commands.length).toBe(1);
+  spacesNow[2].tabs.push({ id: "c32", index: 2, active: true, name: "2" });
+  panesNow = [...panesNow, { pane: "p32", tab: "c32", terminal: "t32", program: { name: "zsh", shell: true } }];
+  kit.pinDockShell();
+  expect(commands.at(-1)).toEqual(["terminal.pin", { terminal: "t32", pinned: true }]);
+  expect(dockMod.shellWaiting()).toBe(false);
+  // One that never comes is given up.
+  expect(dockMod.newShell({ at: 0, before: [] }, [], dockMod.MAKING + 1)).toBe("gone");
+  // Made with the dock: the shell opens once the sky adopts it.
+  sharedState = {}; commands = [];
+  spacesNow = spacesNow.slice(0, 2);
+  kit.dockShell();
+  expect(commands).toEqual([["space.new", { name: "dock", folder: "/home/a", machine: "" }]]);
+  spacesNow = [...spacesNow, { id: "s9", name: "dock", named: true, folder: "/home/a", attached: true, active: true, tabs: [{ id: "c99", index: 1, active: true }] }];
+  expect(dockMod.adoptDock()).toBe(true);
+  expect(commands.at(-1)).toEqual(["tab.new", { space: "s9" }]);
+});
+
+test("after a restart: the dock is still the dock (its id kept), a docked editor found again under its new id, a docked shell by its terminal's own pin", () => {
+  withDock();
+  kit.dockPane(EDIT);
+  kit.dockPane(SHELL);
+  applyLabels();
+  terminalsNow.find((x) => x.address === "t5").labels[pins.PIN_LABEL] = "1";
+  // The app restarts: the core keeps the space and the terminal; the editor's pane comes back as p77.
+  panesNow = panesNow.map((p) => (p.pane === "p3" ? { ...p, pane: "p77", tab: "c30" } : p.pane === "p5" ? { ...p, tab: "c30" } : p));
+  expect(dockMod.dock()?.id).toBe("s3");
+  expect(kit.jar().filter(pins.onShelf).map((x: any) => x.key).sort()).toEqual(["pane:p77", "t5"]);
+  expect(pins.tidy(records(), panesNow, new Map(), 0)!.map((r: any) => r.pane)).toEqual(["p77"]);
 });

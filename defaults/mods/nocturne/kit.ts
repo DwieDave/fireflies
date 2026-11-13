@@ -8,7 +8,7 @@ import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "
 import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
-import { isDock, toDock, newSlot } from "./dock.ts";
+import { isDock, toDock, newSlot, adoptShell } from "./dock.ts";
 import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY } from "./pins.ts";
 import type { JarItem, PaneRecord, SortedAgents } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
@@ -225,32 +225,64 @@ export function unpin(it: JarItem): void {
   else pin(it.key, false);
 }
 
+/** A pane can go into the dock: a local one (the dock is this computer's space,
+ *  and a pane can't move to another machine's core) that isn't there already.
+ *  Any kind: a terminal (an agent's too), an editor, a files pane, a web page. */
+export function dockable(p: PaneInfo | null | undefined): p is PaneInfo {
+  return Boolean(p) && !p?.pane.includes("/") && !isDock(spaces().find((s) => s.tabs.some((c) => c.id === p?.tab)));
+}
+
 /** Moves a pane into the dock (dock.ts: a tab of its own in the space tied to
- *  no folder) and pins it to the shelf, so its tile goes to it from anywhere. */
+ *  no folder) and pins it, so its tile (a firefly for an agent) goes to it from
+ *  anywhere. It keeps its state: a terminal runs on in the core, a mod pane
+ *  keeps its props (and so its slot and store). */
 export function dockPane(p: PinTarget | null | undefined): void {
   const info = paneInfo(p?.pane);
 
-  if (!info) return;
+  if (!dockable(info)) return;
 
   if (toDock({ kind: "move", pane: info.pane }) && !panePinnedNow(info)) pinPane(info, true);
 }
 
-/** nocturne.dock: the focused pane into the dock (dockPane), if it's a local pane outside it. */
+/** nocturne.dock: the focused pane into the dock (dockPane), if it can go (dockable). */
 export function dockFocused(): void {
-  const p = paneInfo(focusedPane()?.pane);
-
-  if (p && !p.pane.includes("/") && !isDock(spaces().find((s) => s.tabs.some((c) => c.id === p.tab)))) dockPane(p);
+  dockPane(focusedPane());
 }
 
-/** A new web pane in the dock, pinned to the shelf: its pin is written by its
+/** A new mod pane in the dock, pinned to the shelf: its pin is written by its
  *  props (a fresh slot), so it's found once the pane is there (pins.ts findPane). */
+function dockMod(mod: string, props: JsonMap, slot: string): void {
+  storeRecords([...paneRecordsNow(), { pane: `new:${slot}`, mod, props, at: Date.now() }]);
+}
+
+/** nocturne.dock-web: a new web pane in the dock, pinned to the shelf. */
 export function dockWeb(url?: string): void {
   const slot = newSlot();
-  const props: JsonMap = new Map(url ? [["slot", slot], ["url", url]] : [["slot", slot]]);
 
   if (!toDock(url ? { kind: "web", slot, url } : { kind: "web", slot })) return;
 
-  storeRecords([...paneRecordsNow(), { pane: `new:${slot}`, mod: "browser", props, at: Date.now() }]);
+  dockMod("browser", new Map(url ? [["slot", slot], ["url", url]] : [["slot", slot]]), slot);
+}
+
+/** nocturne.dock-files: a new files pane at ~ in the dock, pinned to the shelf. */
+export function dockFiles(): void {
+  const slot = newSlot();
+  const path = home();
+
+  if (toDock({ kind: "files", slot, path })) dockMod("file-tree", new Map([["path", path], ["slot", slot]]), slot);
+}
+
+/** nocturne.dock-shell: a new shell in the dock (it starts in ~), pinned to the
+ *  shelf once its terminal is there (pinDockShell). */
+export function dockShell(): void {
+  toDock({ kind: "shell" });
+}
+
+/** After a draw (sky.ts): a shell asked for in the dock is pinned once it's there. */
+export function pinDockShell(): void {
+  const terminal = adoptShell();
+
+  if (terminal) pin(terminal, true);
 }
 
 /** Program keys with a dithered logo in art/logo-*.svg (keys are programs' own: data). */

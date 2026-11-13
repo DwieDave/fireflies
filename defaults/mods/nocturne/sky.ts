@@ -47,11 +47,11 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, onShelf, storedRecords, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
-import { adoptDock, dockMaking } from "./dock.ts";
+import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
 import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
@@ -159,8 +159,9 @@ export default class Sky {
     // nocturne.scratchpad the repository's note in the editor (scratchpad.ts;
     // nocturne.scratchpad-tab in a tab of its own; the palette and the "+ new"
     // menu run these: this copy outlives their overlays while git answers);
-    // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
-    // opens a web pane there (dock.ts);
+    // nocturne.dock moves the focused pane (any kind) into the dock and pins it,
+    // nocturne.dock-web / dock-shell / dock-files open a web pane, a shell or a
+    // files pane there (dock.ts);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
     // (alias nocturne.toast-dismiss) dismisses it (toast.ts), or with none the
     // update note; nocturne.update-close closes the update note (screens.ts).
@@ -197,6 +198,8 @@ export default class Sky {
         else if (c === "pin") pinFocused();
         else if (c === "dock") dockFocused();
         else if (c === "dock-web") dockWeb();
+        else if (c === "dock-shell") dockShell();
+        else if (c === "dock-files") dockFiles();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
         else if (c === "agent-next") this.walk(1);
@@ -589,6 +592,9 @@ export default class Sky {
 
     // A dock being made (dock.ts) that has appeared: its id, then what was asked of it.
     if (dockMaking()) cx.timer.after(0, () => adoptDock());
+
+    // A shell asked for in the dock that has appeared: pinned to the shelf.
+    if (shellWaiting()) cx.timer.after(0, () => pinDockShell());
 
     glint(this, [...jarred, ...kept], cx);
 
