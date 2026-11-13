@@ -165,6 +165,24 @@ export function webName(p: { readonly props?: unknown } | null | undefined, tab:
   }
 }
 
+/** The browser's favicons (browser/favicons.ts): the shown tab's by slot; every tab's by slot, then by tab. */
+const PAGE_ICONS = sharedMapKey("browser.icons", isString);
+const TAB_ICONS = sharedMapKey("browser.tab-icons", isRawObject);
+
+/** A web pane's favicon on the shelf, as image() takes it (a file in the browser's
+ *  cache folder): its shown tab's, or one tab's (`tab`, a tab pin). Null: none known
+ *  yet (the tile wears the web pane's mark). */
+export function webIcon(p: { readonly props?: unknown } | null | undefined, tab: string | null = null): string | null {
+  const slot = isWebProps(p?.props) ? p.props.slot : undefined;
+
+  if (slot === undefined) return null;
+
+  const tabs = tab ? readSharedMap(shared, TAB_ICONS).get(slot) : undefined;
+  const icon = tab ? (tabs ? mapOf(tabs).get(tab) : undefined) : readSharedMap(shared, PAGE_ICONS).get(slot);
+
+  return isString(icon) && icon.startsWith("cache/browser-icons/") ? icon : null;
+}
+
 /** The shelf's height for `n` tiles in `w` px (layout px): the board, the
  *  rows of tiles (as many to a row as fit), the caption line. */
 export function shelfHeight(n: number, w: number): number {
@@ -1369,7 +1387,8 @@ export default class Sky {
   }
 
   /**
-   * A pinned pane's tile, `size` px: its mark (header.ts markPath) on the dark
+   * A pinned pane's tile, `size` px: its mark (header.ts markPath; a web page's
+   * favicon, webIcon) on the dark
    * plate in a square frame. Lit (on screen now) the frame brightens and the
    * tile is moonlit; under the pointer a grey plate; the focused one wears the
    * corner ticks, the keyboard's cursor a blue ring. A click goes to it, a
@@ -1389,6 +1408,8 @@ export default class Sky {
     const at = (size - plate) / 2;
     const where = this.pinWhere(it);
     const p = paneOf(it);
+    const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
+    const bright = lit || on || focus || hot;
 
     return div().id(`pin-${it.key}`).relative().size(size).flex_none().flex().items_center().justify_center()
       .tooltip(`${this.pinName(it)}${where ? ` · ${where}` : ""}`)
@@ -1409,7 +1430,9 @@ export default class Sky {
       .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
       .child(div().absolute().top(0).left(0).size_full().border(1).border_color(lit ? t.ansi8 : t.ansi0))
       .child(div().absolute().top(at).left(at).size(plate).bg(t.background))
-      .child(svg(markPath(p)).size(glyph).flex_none().text_color(lit || on || focus || hot ? t.foreground : t.muted))
+      // A web page's favicon (its own colours, a little dimmer while not lit), else the pane's mark.
+      .child(icon ? image(icon).id(`pin-icon-${it.key}`).size(glyph).flex_none().opacity(bright ? 1 : 0.75)
+        : svg(markPath(p)).size(glyph).flex_none().text_color(bright ? t.foreground : t.muted))
       .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
       .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
   }
