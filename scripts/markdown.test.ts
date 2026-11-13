@@ -61,14 +61,19 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const md = await load("markdown/markdown.ts");
+// markdown.ts and its parser imported for real, with the stand-ins above.
+const mdStandins = { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
+const mdMain = await importMod("markdown/markdown.ts", mdStandins);
+const md = { ...mdMain, ...(await importMod("markdown/markdown-parse.ts", mdStandins)) };
 const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
 const { follow, join, dirname, basename, tilde } = await load("markdown/paths.ts");
 
-test("the GitHub window, the viewer and the editor ship the same markdown.ts (and the editor the viewer's paths.ts)", async () => {
+test("the GitHub window, the viewer and the editor ship the same markdown.ts and markdown-parse.ts (and the editor the viewer's paths.ts)", async () => {
   const read = (mod: string, file = "markdown.ts") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
-  expect(await read("github")).toBe(await read("markdown"));
-  expect(await read("editor")).toBe(await read("markdown"));
+  for (const file of ["markdown.ts", "markdown-parse.ts"]) {
+    expect(await read("github", file)).toBe(await read("markdown", file));
+    expect(await read("editor", file)).toBe(await read("markdown", file));
+  }
   expect(await read("editor", "paths.ts")).toBe(await read("markdown", "paths.ts"));
 });
 
@@ -311,12 +316,7 @@ test("the document view: source lines to heights and back, anchors, and measurin
   expect(doc.heights.get(a.key)).toBe(50);
 });
 
-test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
-  const guards = await load("editor/guards.ts");
-  const logic = await load("editor/logic.ts", guards);
-  const route = await load("editor/editor-route.ts");
-  // The editor's preview (ticks, links, the view switch): scripts/editor-tabs.test.ts.
-});
+// The editor's Markdown preview (ticks, links, the view switch): scripts/editor-tabs.test.ts.
 
 // ---- the viewer by keys
 

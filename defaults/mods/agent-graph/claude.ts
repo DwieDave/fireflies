@@ -189,6 +189,39 @@ type JournalLine = Guarded<typeof isJournalLine> & { readonly run: string };
 /** A run as the transcript or a journal first names it. */
 const newRun = (id: string, name: string, summary: string): Draft<Run> => ({ id, name, summary, phases: [], agents: [], status: "running", started: 0, ended: null });
 
+/** An `@agent` record of the snapshot script: the subagent its meta file
+ *  describes (half-written, no meta yet: its id and times only), or null when
+ *  the path names none. */
+function agentOf(f: readonly string[], now: number): Draft<Agent> | null {
+  const [rel = "", mtime = "", stop = "", t0 = "", json = ""] = f;
+  // Half-written: no meta yet.
+  const meta = parseJson(json, isAgentMeta) ?? {};
+  const id = rel.match(/agent-([a-z0-9]+)\.meta\.json$/)?.[1];
+
+  if (!id) return null;
+
+  const run = rel.match(/workflows\/(wf_[^/]+)\//)?.[1] ?? null;
+  const changed = Number(mtime) * 1000;
+
+  return {
+    id, run, file: "", changed,
+    // When it started: its transcript's first line (else when it last wrote).
+    started: Date.parse(t0) || Number(mtime) * 1000,
+    rel: rel.replace(/\.meta\.json$/, ".jsonl").replace(/^\.\//, ""),
+    label: meta.description || meta.agentType || id,
+    type: meta.agentType ?? "agent",
+    depth: meta.spawnDepth ?? 1,
+    toolUseId: meta.toolUseId ?? null,
+    phase: meta.workflowPhase ?? null,
+    model: meta.pickedEffortModel ?? null,
+    background: meta.requestShape === "background",
+    // Finished: its last turn ended, or long quiet with no tool call open.
+    status: now - changed < (stop === "end_turn" ? 4000 : QUIET_MS) ? "working" : stop === "tool_use" ? "idle" : "done",
+    // Set below, once every agent and run is known.
+    parent: "main",
+  };
+}
+
 /**
  * Everything the graph shows, for one session id: the main transcript, each
  * subagent (its parent "main", an agentId or a run id) and each workflow run.
@@ -211,33 +244,9 @@ export async function snapshot(sessionId: string): Promise<Snapshot | null> {
       mainChanged = Number(f[1]) * 1000;
       mainStarted = Date.parse(f[2] ?? "") || mainChanged;
     } else if (tag === "@agent") {
-      const [rel = "", mtime = "", stop = "", t0 = "", json = ""] = f;
-      // Half-written: no meta yet.
-      const meta = parseJson(json, isAgentMeta) ?? {};
-      const id = rel.match(/agent-([a-z0-9]+)\.meta\.json$/)?.[1];
+      const a = agentOf(f, now);
 
-      if (!id) continue;
-
-      const run = rel.match(/workflows\/(wf_[^/]+)\//)?.[1] ?? null;
-      const changed = Number(mtime) * 1000;
-
-      agents.set(id, {
-        id, run, file: "", changed,
-        // When it started: its transcript's first line (else when it last wrote).
-        started: Date.parse(t0) || Number(mtime) * 1000,
-        rel: rel.replace(/\.meta\.json$/, ".jsonl").replace(/^\.\//, ""),
-        label: meta.description || meta.agentType || id,
-        type: meta.agentType ?? "agent",
-        depth: meta.spawnDepth ?? 1,
-        toolUseId: meta.toolUseId ?? null,
-        phase: meta.workflowPhase ?? null,
-        model: meta.pickedEffortModel ?? null,
-        background: meta.requestShape === "background",
-        // Finished: its last turn ended, or long quiet with no tool call open.
-        status: now - changed < (stop === "end_turn" ? 4000 : QUIET_MS) ? "working" : stop === "tool_use" ? "idle" : "done",
-        // Set below, once every agent and run is known.
-        parent: "main",
-      });
+      if (a) agents.set(a.id, a);
     } else if (tag === "@journal") {
       // A partial line is left out.
       const e = parseJson(f.slice(1).join("\t"), isJournalLine);

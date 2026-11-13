@@ -4,21 +4,5 @@
 # This list only shrinks: take a line off when its file or function is split,
 # never add one. tests/mods_typescript.rs (mods_stay_under_the_size_limits)
 # checks it against `oxlint -c oxlint.size.json defaults/mods`.
-defaults/mods/agent-graph/claude.ts snapshot
-defaults/mods/agent-graph/main.ts
-defaults/mods/editor/diff.ts parse
-defaults/mods/editor/markdown.ts
-defaults/mods/editor/markdown.ts blocks
-defaults/mods/editor/viewer.ts
-defaults/mods/file-tree/diff.ts parse
-defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
-defaults/mods/github/markdown.ts
-defaults/mods/github/markdown.ts blocks
-defaults/mods/markdown/markdown.ts
-defaults/mods/markdown/markdown.ts blocks
 defaults/mods/nocturne/tabs.ts render
-defaults/mods/notifications/claude.ts
-defaults/mods/notifications/claude.ts questionStep
-defaults/mods/preview/diff.ts parse
-defaults/mods/preview/viewer.ts

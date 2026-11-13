@@ -189,7 +189,7 @@ function modCommands(): [string, string, string?][] {
       const text = read(`defaults/mods/${d}/${f}`);
       if (!text.includes("nextCommand()")) continue;
       // file-tree' copy of the preview's viewer: its commands are the preview's (embedded, it takes none).
-      if (d !== "preview" && f === "viewer.ts" && text === read(`defaults/mods/preview/${f}`)) continue;
+      if (d !== "preview" && /^viewer(-[a-z]+)?\.ts$/.test(f) && text === read(`defaults/mods/preview/${f}`)) continue;
       for (const [, c] of text.matchAll(/(?<!typeof )\bc === "([a-z0-9_-]+)"/g)) out.push([`${d}.${c}`, `defaults/mods/${d}/${f}`]);
     }
   }

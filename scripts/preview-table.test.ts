@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The preview's tables: CSV / TSV and SQLite (preview/table.ts and its view).
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
@@ -79,6 +79,13 @@ const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
 const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
+/** viewer.ts imported for real (the shared files it imports as the app loads
+ *  them), with the stand-ins above for the app's modules. */
+const viewerMod = (): Promise<any> => {
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const named: any = logic;
+  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+};
 const { separator, parse, table, numeric, columnName, oneLine, wholeLines, shownNote, tablesOf, sqliteError, rowsSql, countSql, quoteId, MAX_COLS, MIN_CH, MAX_CH } = T;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
 
@@ -158,7 +165,7 @@ test("SQLite: names quoted, tables read from sqlite3's CSV, errors in plain word
 
 /** A preview showing `grid`, in an 800 × 600 pane. */
 async function tableView(rows: string[][], extra: Record<string, any> = {}) {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, {
     path: "/data/people.csv", kind: "table", how: { how: "table" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true },

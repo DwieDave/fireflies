@@ -5,10 +5,10 @@
 
 import { terminals, agents, hc, exec, shared, setShared } from "herdr";
 import { arrayOf, isNumber, isString, literal, nullable, object, parseJson, readSharedList, readSharedMap, sharedKey, sharedListKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
-import { isHookPayload } from "./claude.ts";
-import type { HookRecord } from "./claude.ts";
 import { collect, adapterOf, isItem, isTerminal, statusOf, splitAddress } from "./model.ts";
 import type { Info, Item, Terminal } from "./model.ts";
+import { isHookPayload } from "./request.ts";
+import type { HookRecord } from "./request.ts";
 
 export const ITEMS = "notifications.items";
 export const OPEN = "notifications.open"; // { terminal, at }: what the overview opens on

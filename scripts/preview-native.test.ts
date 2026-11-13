@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The preview's PDFs, fonts, audio and video: macOS views where they exist, else pdftoppm or a plain "can't".
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
@@ -93,6 +93,13 @@ const nativeHerdr = {
 };
 const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
+/** viewer.ts imported for real (the shared files it imports as the app loads
+ *  them), with the stand-ins above for the app's modules. */
+const viewerMod = (): Promise<any> => {
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const named: any = logic;
+  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+};
 const { kindOf, sniffKind, route, rasterArgv, pageCount, duration, siblings, tag, noun, previewable } = kinds;
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
 
@@ -135,7 +142,7 @@ test("next / previous stays with the same kind (audio and video together)", () =
 });
 
 async function nativeView(extra: Record<string, any>) {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, {
     on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 900, height: 600 }, names: [], copied: 0, gen: 1,

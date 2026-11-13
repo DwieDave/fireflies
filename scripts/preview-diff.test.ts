@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The preview's patches (.diff, .patch): preview/diff.ts and its view.
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
@@ -82,6 +82,13 @@ const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typ
 const colors = { ...herdr.theme(), ansi1: "#ff5189", ansi2: "#36c692", ansi3: "#e3c78a" };
 const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
+/** viewer.ts imported for real (the shared files it imports as the app loads
+ *  them), with the stand-ins above for the app's modules. */
+const viewerMod = (): Promise<any> => {
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const named: any = logic;
+  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+};
 const { parse, fileStarts, nextFile } = D;
 
 const GIT = `diff --git a/src/a.rs b/src/a.rs
@@ -147,7 +154,7 @@ test("next / previous file from a row", () => {
 });
 
 test("the view: colored rows as the diff pane draws them, file heads with counts; } jumps files", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   const patch = parse(GIT);
   patch.starts = fileStarts(patch.rows);

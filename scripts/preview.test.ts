@@ -78,6 +78,13 @@ const { parse: parsePatch, ...diffRest } = diffLogic;
 const keyLogic = await load("preview/keys.ts");
 const fileIcons = await load("preview/file-icons.ts", kinds);
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...fileIcons, herdr: { ...herdr } };
+/** viewer.ts imported for real (the shared files it imports as the app loads
+ *  them), with the stand-ins above for the app's modules. */
+const viewerMod = (): Promise<any> => {
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const named: any = logic;
+  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+};
 const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
 const { extension, siblings, stepIn, fileSize } = kinds;
 
@@ -314,7 +321,7 @@ test("the wrapper SVG turns a picture (and its EXIF orientation) and draws vecto
 // ---- the view
 
 test("the viewer: a fitted picture, keys zoom, pan, step through the folder and toggle the background", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   const focus = { focus() {}, is_focused: () => true };
   Object.assign(view, {
@@ -372,7 +379,7 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, {
     path: "/shots/s.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
@@ -410,7 +417,7 @@ test("the bar's fit and 100% do what they say, in either state, and stay put", a
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, { path: "/x/a.heic", kind: "image", how: { how: "image" }, handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -419,7 +426,7 @@ test("the viewer says what's wrong instead of a picture", async () => {
 });
 
 test("the bar by keys: tab rings its controls in order, enter presses one, ? lists the keys, esc backs out", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, {
     path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,
@@ -460,7 +467,7 @@ test("the bar by keys: tab rings its controls in order, enter presses one, ? lis
 });
 
 test("the look split's bar (an embedded viewer) leads with the file's type mark, from preview's icons/", async () => {
-  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const { default: PreviewView } = await viewerMod();
   const view: any = new PreviewView();
   Object.assign(view, { path: "/p/notes.md", kind: "markdown", embedded: true, port: { width: 600, height: 400 } });
   const bar = view.lookBar(herdr.theme());
