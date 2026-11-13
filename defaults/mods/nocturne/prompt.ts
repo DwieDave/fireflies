@@ -1,5 +1,5 @@
 // A nix switch's password, typed where it's asked. A switch activates through
-// sudo in its run's own terminal (../scripts/nix.js switchPlan), and
+// sudo in its run's own terminal (../scripts/nix.ts switchPlan), and
 // that terminal has no pane: so when its last line is sudo's prompt
 // (SUDO_PROMPT), a small window shows it, the run's name and "password" in a
 // bar over the terminal itself, cut down to its last lines. The person types
@@ -19,7 +19,7 @@ import { isString, literal, nullable, object, oneOf, readSharedMap, sharedMapKey
 import type { Guarded } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 
-/** A copy of ../scripts/nix.js SUDO_PROMPT (a mod can't import another's files). */
+/** A copy of ../scripts/nix.ts SUDO_PROMPT (a mod can't import another's files). */
 export const SUDO_PROMPT = "password to activate (sudo): ";
 
 // The small windows open now: { address: { id } }, or { closed: true } once

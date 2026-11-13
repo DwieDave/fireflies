@@ -18,7 +18,7 @@ import { isList } from "./guards.ts";
 
 export const JOBS = "scripts.jobs";
 
-/** A job as the scripts mod queues it (scripts/runs.js enqueue). */
+/** A job as the scripts mod queues it (scripts/runs.ts enqueue). */
 const isJob = object({}, { at: isNumber, name: isString, watch: isBoolean, steps: arrayOf(object({ hc: arrayOf(isString) }, { start: isBoolean })) });
 
 type Job = Guarded<typeof isJob>;

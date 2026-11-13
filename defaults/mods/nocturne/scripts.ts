@@ -6,7 +6,7 @@
 // open. Stopping happens there.
 // cmd-shift-r (nocturne.scripts) opens the deck centered, or closes it.
 //
-// A run is a labeled pane-less terminal (scripts/runs.js); this file
+// A run is a labeled pane-less terminal (scripts/runs.ts); this file
 // reads the same labels. The strip also tells about failures: a run that
 // ended with a nonzero exit code, not stopped by a person, posts one toast
 // (shared(TOLD) keeps which, so two windows don't both tell).
@@ -41,7 +41,7 @@ const CELLS = 8;
 export const DECK_W = 420;
 export const DECK_H = 470;
 
-/** A run's terminal: labeled by the scripts mod (scripts/runs.js). */
+/** A run's terminal: labeled by the scripts mod (scripts/runs.ts). */
 const isRun = (t: Terminal) => Boolean(t.labels?.["nocturne.script"]);
 
 /** The live runs' terminals. */
@@ -219,7 +219,7 @@ const lastFailedRun = (): ScriptRun | null => scriptRuns().filter((r) => failed(
 export const lastFailed = (): string | null => lastFailedRun()?.address ?? null;
 
 // A nix-darwin switch fails when Herdr Core lacks App Management (a copy of
-// ../scripts/nix.js APP_MANAGEMENT: a mod can't import another's).
+// ../scripts/nix.ts APP_MANAGEMENT: a mod can't import another's).
 const APP_MANAGEMENT = {
   match: "permission denied when trying to update apps",
   hint: "Herdr Core needs App Management (System Settings > Privacy & Security). If it is already on, remove it and add it again",
@@ -260,7 +260,7 @@ export function tellFailures(list: readonly ScriptRun[]): void {
 
   for (const r of fresh) {
     const name = r.name ?? "";
-    // An admin run cancelled at its password prompt (scripts/nix.js CANCELLED).
+    // An admin run cancelled at its password prompt (scripts/nix.ts CANCELLED).
     const cancelled = Boolean(r.admin) && r.code === 130;
 
     if (!cancelled && r.plan) {
