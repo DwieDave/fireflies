@@ -147,7 +147,10 @@ commit message and confirms, Nocturne's prompt and confirm dialogs, the
 sidebar's rename / delete space forms, the ask dialog, the
 editor's find line, Add a machine and Send feedback. It opens on its first
 field; tab / shift-tab go to the next / previous field or button, wrapping
-at both ends (↑ ↓ too, outside a multi-line field), and the focused one has
+at both ends (↑ ↓ too, outside a multi-line field), ctrl-tab /
+ctrl-shift-tab the same from any text field, also out of a multi-line one
+(whose tab indents) and, in the GitHub window's forms, from any stop (outside
+a form they switch the window's tabs), and the focused one has
 the accent ring; ← → step a choice and flip a toggle, typing on a list field
 opens it filtered; enter submits from a one-line field, a choice or a toggle
 and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
@@ -2099,7 +2102,11 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   an `on_key_down` (key bindings run first and the root binds tab to move the
   focus): call `bindTab(cx)` in `init` and wrap the root that tracks your
   focus handle, above the inputs, in `tabActions(el, (e, cx) => this.key(e,
-  cx))`; tab and shift-tab then reach your handler as key events. A
+  cx))`; tab and shift-tab then reach your handler as key events, and so do
+  ctrl-tab / ctrl-shift-tab from a text field under that root (a text area
+  takes plain tab as an indent). A pane that shows a form only at times
+  passes a third argument, true while the form has the keyboard: ctrl-tab
+  then moves from any stop, and otherwise switches the window's tabs. A
   multi-line field types cmd-enter as a new line and fires `submit` with
   `secondary`: listen for that to submit from it.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
