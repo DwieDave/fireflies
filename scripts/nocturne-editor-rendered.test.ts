@@ -214,8 +214,11 @@ test("a command that makes the lines another kind lights them as that kind; the 
   block(p).handlers.key(key("down"), cx());
   p.command("md-heading-up", cx());
   expect(main(p).value()).toBe(NOTE.replace("First **para**", "# First **para**"));
+  // The heading is a block of its own now (the line under it a paragraph): lit alone.
+  expect(p.cur.rendered.unit.kind).toBe("heading");
+  expect(block(p).value()).toBe("# First **para**");
   p.command("md-quote", cx());
-  expect(main(p).value()).toContain("> # First **para**\n> goes on.");
+  expect(main(p).value()).toContain("> # First **para**\ngoes on.");
   expect(p.cur.rendered.unit.kind).toBe("quote");
 });
 

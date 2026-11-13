@@ -567,7 +567,8 @@ export default class EditorPane extends View {
       } catch (e) { error = String(e?.message ?? e); }
       if (d.gone) return;
       if (quiet) {
-        if (text == null || text === d.saved) return;
+        // Our own write (the autosave's, maybe read while it was under way) isn't news.
+        if (text == null || text === d.saved || text === d.writing) return;
         // Edited (a scratchpad: typed but not written yet): it asks, never drops what's typed.
         if (d.dirty || (d.scratch && d.saveState !== "saved")) { if (text !== d.editor.value()) d.conflict = true; cx.notify(); return; }
         const at = d.editor.cursor();
@@ -624,7 +625,10 @@ export default class EditorPane extends View {
     d.hovers.clear();
     // Typing closes the card.
     if (this.card && d === this.cur) this.closeCard(cx);
-    if (d.markdown) this.refreshPreview(cx, false, d);
+    // The preview's blocks are cut again only where they're shown (rendered draws its own):
+    // a keystroke in the rendered view doesn't re-split the whole document.
+    if (d.markdown && d.view !== "rendered") this.refreshPreview(cx, false, d);
+    else if (d.markdown) d.previewStale = true;
     if (d.markdown && d.view === "rendered") d.rendered.pull(cx);
     if (d.scratch) {
       // A scratchpad saves itself: never unsaved, written a moment after the typing.
@@ -1469,6 +1473,9 @@ export default class EditorPane extends View {
       onKey: (e, cx) => this.blockKey(e, cx),
       link: (url, cx) => this.previewLink(url, cx),
       notify: (cx) => cx?.notify?.(),
+      mdRun: (name, cx) => this.mdRun(name, cx),
+      mdMenu: (cx) => this.openMdMenu(cx),
+      vim: () => this.vimOn(),
     };
   }
 
@@ -1534,12 +1541,8 @@ export default class EditorPane extends View {
     if (e) d.editor.edit([e]);
     const { start, end } = r.sel;
     d.editor.set_cursor(start.line, start.col, start.line === end.line && start.col === end.col ? undefined : end);
-    if (rendered) {
-      rendered.pull(cx);
-      const off = rendered.range.from;
-      if (start.line >= off && end.line <= rendered.range.to) rendered.block.set_cursor(start.line - off, start.col, { line: end.line - off, col: end.col });
-      rendered.focus();
-    }
+    // The rendered view follows the file's caret and selection (its block, edited in place).
+    if (rendered) { rendered.pull(cx); rendered.focus(); }
     this.changed(cx, d);
   }
 
@@ -1558,9 +1561,11 @@ export default class EditorPane extends View {
    *  may have written it); a note changed elsewhere asks as a file does. */
   async autosaveWrite(d) {
     const text = d.editor.value();
+    d.writing = text;
     try {
       await writeTextFile(d.path, text, d.saved);
     } catch (e) {
+      d.writing = null;
       if (/changed outside/.test(String(e?.message ?? e))) {
         const disk = await readTextFile(d.path).catch(() => null);
         if (disk === text) { d.saved = text; return; }
@@ -1569,6 +1574,7 @@ export default class EditorPane extends View {
       throw e;
     }
     d.saved = text;
+    d.writing = null;
     d.state = "ready";
     d.deleted = false;
   }
@@ -1607,7 +1613,10 @@ export default class EditorPane extends View {
     const row = (n) => {
       const [title, key, mark] = MD_COMMANDS[n];
       const lit = on.has(n) || (n.startsWith("heading") && [...on].some((x) => /^heading-\d/.test(x)));
-      return h_flex().id(`md-menu-${n}`).gap(10)
+      // A click runs it too (the pointer's way; the letter is the keyboard's).
+      return h_flex().id(`md-menu-${n}`).gap(10).px(4).ml(-4).cursor_pointer().hover((s) => s.bg(t.ansi0))
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { cx.stop_propagation(); this.mdRun(n, cx); cx.notify(); })
         .child(div().w(18).flex_none().text_color(t.accent).child(key))
         .child(div().flex_1().text_color(lit ? t.ansi5 : t.foreground).child(title.replace(/^Heading level /, "level ")))
         .child(div().flex_none().pl(12).text_color(t.dim).child(mark));
@@ -1627,7 +1636,12 @@ export default class EditorPane extends View {
         .child(div().text_color(t.dim).child("esc")))
       .child(h_flex().px(12).pb(10).gap(22).items_start()
         .child(v_flex().flex_1().gap(2).child(group("inline")).children(inline.map(row)).child(group("heading")).children(heads.map(row))
-          .child(h_flex().gap(10).child(div().w(28).flex_none().text_color(t.accent).child("0-6")).child(div().text_color(t.foreground).child("text, level 1-6"))))
+          // 0-6: a digit each, clickable (0: back to text).
+          .child(h_flex().gap(4).items_center().child(div().pr(4).text_color(t.foreground).child("level"))
+            .children(MD_LEVELS.map((n) => div().id(`md-menu-level-${n}`).w(16).h(16).flex().items_center().justify_center().border(1).border_color(t.ansi0)
+              .text_color(t.accent).cursor_pointer().hover((s) => s.border_color(t.accent))
+              .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+              .on_click((_e, cx) => { cx.stop_propagation(); this.mdRun(`heading-${n}`, cx); cx.notify(); }).child(n)))))
         .child(v_flex().flex_1().gap(2).child(group("blocks")).children(blocks.map(row))));
   }
 
@@ -1656,6 +1670,7 @@ export default class EditorPane extends View {
     try { localStorage.setItem("preview", view); } catch { /* a nicety */ }
     this.driver = "editor";
     if (view === "rendered") this.cur?.rendered?.open(cx);
+    else if (this.cur?.previewStale) { this.cur.previewStale = false; this.refreshPreview(cx, true); }
     if (view === "preview") cx.timer.after(0, () => this.previewHandle.focus());
     else this.focusText();
     this.say(view === "rendered" ? "rendered: type into it" : view === "split" ? "preview beside the text" : view === "preview" ? "preview only (e: back to the text)" : "text only");
@@ -1692,6 +1707,7 @@ export default class EditorPane extends View {
     if (!to) return;
     const me = panes().find((p) => p.mod === MOD && p.props?.slot === this.slot);
     const here = (anchor) => {
+      if (this.cur?.previewStale) { this.cur.previewStale = false; this.cur.preview.setText(this.cur.text); }
       if (!this.preview.scrollTo(anchor)) return;
       // The text goes there too: the heading's line.
       const part = this.preview.parts.find((p) => p.anchor === anchor || p.anchors?.includes(anchor) || p.notes?.some((n) => n.anchor === anchor));
@@ -1899,6 +1915,12 @@ export default class EditorPane extends View {
         .child(`${this.lang} · ${this.opts.insert_spaces === false ? "tab" : `${this.opts.tab_size} sp`}`)))
       .when(vim && !!this.pending, (el) => el.child(div().flex_none().text_color(t.foreground).child(this.pending)))
       .when(!!at, (el) => el.child(div().flex_none().text_color(t.dim).child(`${at.line + 1}:${at.col + 1}`)))
+      // The Markdown commands' list (cmd-., vim: space .), found from the bar: a click opens it.
+      .when(this.markdown && this.view !== "preview" && !narrow, (el) => el.child(h_flex().id("bar-md").flex_none().h(18).px(6).gap(6).items_center().border(1)
+        .border_color(this.mdMenu ? t.accent : t.ansi0).text_color(this.mdMenu ? t.accent : t.muted).hover((s) => s.text_color(t.foreground).border_color(t.ansi8))
+        .tooltip("bold, headings, lists, tasks, quotes, code: the Markdown commands")
+        .on_click((_e, cx) => { if (this.mdMenu) { this.mdMenu = null; this.focusText(); cx.notify(); } else { this.openMdMenu(cx); this.focusText(); } })
+        .child("markdown").child(div().text_color(t.dim).child(vim ? "space ." : "cmd-."))))
       .when(this.markdown, (el) => el.child(div().id("bar-preview").flex_none().h(18).px(6).flex().items_center().border(1)
         .border_color(this.view === "text" ? t.ansi0 : t.ansi5).text_color(this.view === "text" ? t.dim : t.ansi5).hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => this.command("preview", cx)).child(this.view)))
@@ -2303,7 +2325,7 @@ export default class EditorPane extends View {
 export const TAB_FIELDS = ["path", "firstPath", "lang", "opts", "openedAt", "deleted", "saved", "state", "error", "dirty", "conflict",
   "problems", "server", "version", "sent", "progress", "hovers", "text", "find", "searchMark", "markdown", "preview", "images",
   "view", "driver", "previewDrove", "previewDue", "flushDue", "lastWork", "watchGen", "editor", "softWrap",
-  "rendered", "scratch", "autosave", "saveState"];
+  "rendered", "scratch", "autosave", "saveState", "writing", "previewStale"];
 for (const f of TAB_FIELDS) {
   Object.defineProperty(EditorPane.prototype, f, {
     configurable: true,
