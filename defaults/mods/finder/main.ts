@@ -26,7 +26,7 @@
 // virtual list), and each line is colored once, when it's first shown.
 
 import { div, View, PathBuilder, Background } from "gpui-kit";
-import type { AsyncContext, Color, Context, Element } from "gpui-kit";
+import type { AsyncContext, Color, Context, Element, KeyEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import * as herdr from "herdr";
@@ -483,6 +483,53 @@ export default class Picker extends View {
 
   // ---- drawing
 
+  /** The picker's keys: esc closes, ↑↓ (ctrl-p ctrl-n) and pages pick,
+   *  tab switches the mode, ctrl-r / ctrl-t grep's regex and fuzzy. */
+  onKey(e: KeyEvent, cx: Context): void {
+    const k = e.keystroke;
+
+    if (k === "escape") {
+      this.dismiss();
+
+      return;
+    }
+
+    if (k === "down" || k === "ctrl-n") this.pick(1, cx);
+    else if (k === "up" || k === "ctrl-p") this.pick(-1, cx);
+    else if (k === "pagedown") {
+      for (let i = 0; i < 10; i++) this.pick(1, cx);
+    } else if (k === "pageup") {
+      for (let i = 0; i < 10; i++) this.pick(-1, cx);
+    } else if (k === "tab" || k === "shift-tab") this.switchMode(cx);
+    else if (k === "ctrl-r" && this.mode === "grep") {
+      this.regex = !this.regex;
+      this.fuzzy = false;
+      this.query(cx);
+    } else if (k === "ctrl-t" && this.mode === "grep") {
+      this.fuzzy = !this.fuzzy;
+      this.regex = false;
+      this.query(cx);
+    } else return;
+
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  /** The keys line: picking, paging, enter, the other mode, grep's switches,
+   *  esc; the root and the last search's time at its end. */
+  keysLine(t: Theme, hint: (k: string, what: string) => Element, hint2: (a: string, b: string, what: string) => Element, key: (m: Mode) => string): Element {
+    const other = otherMode(this.mode);
+
+    return h_flex().relative().flex_wrap().min_h(26).flex_none().px(16).py(6).gap_x(14).gap_y(4).items_center().text_size(10)
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(hint2("↑↓", "ctrl-p ctrl-n", "pick")).child(hint("pgup pgdn", "page")).child(hint("enter", this.mode === "files" ? "edit" : "edit at line"))
+      .child(hint2("tab", key(other), other))
+      .when(this.mode === "grep", (el) => el.child(hint("ctrl-r", "regex")).child(hint("ctrl-t", "fuzzy")))
+      .child(hint("esc", "close"))
+      .child(div().flex_1())
+      .child(div().min_w(0).text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms === null ? "" : ` · ${this.ms} ms`}` : ""));
+  }
+
   override render(_cx: Context): Element {
     const t = theme();
     const wide = previewWidth(this.size.width) > 0;
@@ -494,7 +541,6 @@ export default class Picker extends View {
       return keyFor(bound, action, fallback);
     };
 
-    const other = otherMode(this.mode);
     const code = settings().font_family || "JetBrains Mono";
     const typed = this.value();
 
@@ -533,35 +579,7 @@ export default class Picker extends View {
         this.loadPreview(cx);
         cx.notify();
       })
-      .on_key_down((e, cx) => {
-        const k = e.keystroke;
-
-        if (k === "escape") {
-          this.dismiss();
-
-          return;
-        }
-
-        if (k === "down" || k === "ctrl-n") this.pick(1, cx);
-        else if (k === "up" || k === "ctrl-p") this.pick(-1, cx);
-        else if (k === "pagedown") {
-          for (let i = 0; i < 10; i++) this.pick(1, cx);
-        } else if (k === "pageup") {
-          for (let i = 0; i < 10; i++) this.pick(-1, cx);
-        } else if (k === "tab" || k === "shift-tab") this.switchMode(cx);
-        else if (k === "ctrl-r" && this.mode === "grep") {
-          this.regex = !this.regex;
-          this.fuzzy = false;
-          this.query(cx);
-        } else if (k === "ctrl-t" && this.mode === "grep") {
-          this.fuzzy = !this.fuzzy;
-          this.regex = false;
-          this.query(cx);
-        } else return;
-
-        cx.stop_propagation();
-        cx.notify();
-      })
+      .on_key_down((e, cx) => this.onKey(e, cx))
       .child(h_flex().relative().h(48).flex_none().px(16).gap(12).items_center()
         .child(div().relative().size(22).flex_none().flex().items_center().justify_center()
           .child(div().absolute().inset_0().opacity(0.35).child(dither(t.accent, 1)))
@@ -585,14 +603,7 @@ export default class Picker extends View {
             .child(this.mode === "files" ? (typed ? "No file matches." : "") : typed.trim() ? "No line matches." : "Type to search the text of every file."))))
         .children(shown ? [this.previewView(t, code, shown)] : []))
       // The keys wrap onto a second line in a narrow window rather than run off it.
-      .child(h_flex().relative().flex_wrap().min_h(26).flex_none().px(16).py(6).gap_x(14).gap_y(4).items_center().text_size(10)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(hint2("↑↓", "ctrl-p ctrl-n", "pick")).child(hint("pgup pgdn", "page")).child(hint("enter", this.mode === "files" ? "edit" : "edit at line"))
-        .child(hint2("tab", key(other), other))
-        .when(this.mode === "grep", (el) => el.child(hint("ctrl-r", "regex")).child(hint("ctrl-t", "fuzzy")))
-        .child(hint("esc", "close"))
-        .child(div().flex_1())
-        .child(div().min_w(0).text_color(t.dim).truncate().child(this.root ? `${tilde(this.root)} · .gitignore respected${this.ms === null ? "" : ` · ${this.ms} ms`}` : "")));
+      .child(this.keysLine(t, hint, hint2, key));
   }
 
   /** The rows, only those on screen drawn: files are one height, grep's
