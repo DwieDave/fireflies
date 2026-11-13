@@ -7783,14 +7783,17 @@ export default class Probe extends View {
             return;
         }
         cx.update(gpui_base::init);
-        let (view, cx) = open_window(cx, "scripts", include_str!("../defaults/mods/scripts/main.js"), json!({
+        let (view, cx) = open_window(cx, "scripts", "", json!({
             "id": "root", "type": "block", "content": { "tab": "active" }
         }));
         let folder = crate::mods::app_dir().join("mods/scripts");
+        // The deck is TypeScript: its main.ts runs once open_window's main.js is gone.
+        std::fs::remove_file(folder.join("main.js")).unwrap();
         for (name, text) in [
-            ("detect.js", include_str!("../defaults/mods/scripts/detect.js")),
-            ("nix.js", include_str!("../defaults/mods/scripts/nix.js")),
-            ("runs.js", include_str!("../defaults/mods/scripts/runs.js")),
+            ("main.ts", include_str!("../defaults/mods/scripts/main.ts")),
+            ("detect.ts", include_str!("../defaults/mods/scripts/detect.ts")),
+            ("nix.ts", include_str!("../defaults/mods/scripts/nix.ts")),
+            ("runs.ts", include_str!("../defaults/mods/scripts/runs.ts")),
         ] {
             std::fs::write(folder.join(name), text).unwrap();
         }

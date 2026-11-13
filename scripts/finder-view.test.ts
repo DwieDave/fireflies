@@ -1,4 +1,4 @@
-// The picker (finder/main.js) as the window drives it, with herdr and
+// The picker (finder/main.ts) as the window drives it, with herdr and
 // gpui stand-ins: what a render costs with a full page of grep lines, that
 // typing waits for a pause before it searches, and that an answer to an older
 // query never replaces a newer one. Its own process: mock.module is process-wide.
@@ -58,7 +58,7 @@ async function tick(ms: number) {
 }
 const type = async (text: string) => { input.v = text; input.handlers.change({}, cx); };
 
-const { default: Picker } = await import("../defaults/mods/finder/main.js");
+const { default: Picker } = await import("../defaults/mods/finder/main.ts");
 
 beforeEach(() => {
   calls.highlight = 0; calls.grep = []; calls.files = []; calls.drawn = 0;

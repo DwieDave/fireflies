@@ -2,8 +2,8 @@ import { test, expect } from "bun:test";
 import { mkdtempSync, writeFileSync, chmodSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { flakeOutputs, nixScripts, nixStatic, nixSystem, shellLine, switchPlan, attrName, sq, SUDO_PROMPT, CANCELLED, APP_MANAGEMENT, needsAppManagement } from "../defaults/mods/scripts/nix.js";
-import { detect, parseProbe } from "../defaults/mods/scripts/detect.js";
+import { flakeOutputs, nixScripts, nixStatic, nixSystem, shellLine, switchPlan, attrName, sq, SUDO_PROMPT, CANCELLED, APP_MANAGEMENT, needsAppManagement } from "../defaults/mods/scripts/nix.ts";
+import { detect, parseProbe } from "../defaults/mods/scripts/detect.ts";
 
 // `nix flake show --json`, classic shape.
 const CLASSIC = {
@@ -46,11 +46,13 @@ test("systems from uname", () => {
 });
 
 test("both shapes of flake show read the same", () => {
-  expect(flakeOutputs(CLASSIC).darwinConfigurations.work.leaf).toBe(true);
+  // Trees are Maps (their keys are data): `at` walks one by its names.
+  const at = (tree: any, ...path: string[]) => path.reduce((node, name) => node?.get?.(name), tree);
+  expect(at(flakeOutputs(CLASSIC), "darwinConfigurations", "work").leaf).toBe(true);
   const inv = flakeOutputs(INVENTORY);
-  expect(Object.keys(inv.darwinConfigurations)).toEqual(["homelab", "work"]);
-  expect(inv.packages["aarch64-darwin"].default.leaf).toBe(true);
-  expect(inv.checks["aarch64-darwin"].homelab.leaf).toBe(true);
+  expect([...at(inv, "darwinConfigurations").keys()]).toEqual(["homelab", "work"]);
+  expect(at(inv, "packages", "aarch64-darwin", "default").leaf).toBe(true);
+  expect(at(inv, "checks", "aarch64-darwin", "homelab").leaf).toBe(true);
 });
 
 test("a Mac: this system's outputs, nix-darwin and home-manager, this host first", () => {
@@ -92,12 +94,12 @@ test("the inventory shape on a Mac", () => {
 });
 
 test("a flake's static entries come with the probe, ids are unique", () => {
-  const p = { ls: new Set(["flake.nix", "flake.lock"]), exec: [], examples: [], cmd: [], files: {}, sys: MAC };
+  const p = { ls: new Set(["flake.nix", "flake.lock"]), exec: [], examples: [], cmd: [], files: new Map(), sys: MAC };
   expect(detect(p).map((s: any) => s.cmd)).toEqual(["nix flake check", "nix flake update"]);
   const ids = [...nixStatic(), ...nixScripts(CLASSIC, MAC)].map((s: any) => s.id);
   expect(new Set(ids).size).toBe(ids.length);
-  expect(nixScripts(null, MAC)).toEqual([]);
   expect(nixScripts({ garbage: 1 }, MAC)).toEqual([]);
+  expect(nixScripts({ packages: 7, darwinConfigurations: ["x"] }, MAC)).toEqual([]);
 });
 
 test("the probe says who and where", () => {
@@ -326,7 +328,7 @@ test("a darwin switch denied App Management is recognized, nothing else is", () 
   expect(needsAppManagement({ plan: "darwin-rebuild:homelab" }, "error: builder failed")).toBe(false);
   expect(needsAppManagement({ plan: "nixos-rebuild:box" }, DENIED)).toBe(false);
   expect(needsAppManagement({ plan: null }, DENIED)).toBe(false);
-  expect(needsAppManagement(null, null)).toBe(false);
+  expect(needsAppManagement({ plan: null }, null)).toBe(false);
 });
 
 test("the strip's copy of APP_MANAGEMENT matches the deck's", () => {

@@ -1,5 +1,5 @@
 // Which folder the picker searches (nocturne/picker.js and nocturne/folders.js
-// pick the candidates, finder/main.js the first one that's there),
+// pick the candidates, finder/main.ts the first one that's there),
 // with herdr and gpui stand-ins: a space's folder that was moved or deleted,
 // or a finished shell's, never reaches findFiles / grep; when no folder is
 // there the picker names the missing one and how to point the space elsewhere.
@@ -41,7 +41,7 @@ globalThis.window = { paint_path: () => el } as any;
 const cx: any = { spawn: (f: Function) => { Promise.resolve(f(cx)); }, notify() {}, stop_propagation() {}, bind_keys: () => 0, timer: { after() {}, every() {} } };
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
 
-const { default: Picker } = await import("../defaults/mods/finder/main.js");
+const { default: Picker } = await import("../defaults/mods/finder/main.ts");
 const { togglePicker, pickerFolder } = await import("../defaults/mods/nocturne/picker.ts");
 const { folderCandidates, modFolder } = await import("../defaults/mods/nocturne/folders.ts");
 
