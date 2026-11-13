@@ -73,7 +73,7 @@ export function noteWindow(size: Size | null | undefined) {
 }
 
 /** Where a press on the bell puts the drop-down's right edge and top (drawn
- *  px), as nocturne/kit.js dropBelow: its top on the strip's horizon (the
+ *  px), as nocturne/kit.ts dropBelow: its top on the strip's horizon (the
  *  row is 36 px, the bell 24 centered in it), its right edge on the bell's. */
 function fromPress(e: MouseButtonEvent | null): { readonly right: number; readonly top: number } | null {
   const b = e?.bounds, l = e?.local_position;

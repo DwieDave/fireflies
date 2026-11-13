@@ -1,7 +1,7 @@
 // Nocturne's look for the git window, copied (a mod can't import another
 // mod's files): the dither fill, lazygit's panels with their titles cut into
 // the 1-bit frame, the selected row's band, chips and the options bar (from
-// github/kit.js), the diff lines (diff's), and the commit
+// github/kit.ts), the diff lines (diff's), and the commit
 // graph drawn as dithered 2 px lines with square elbows.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
@@ -40,7 +40,7 @@ export function dither(color: Color, cell = 1): Element {
 
 /** The dim under a popup inside the window (a menu, a confirm, a prompt):
  *  black, dithered, light enough that the window stays readable under it.
- *  Every in-window popup dims with this one (github's kit.js too). */
+ *  Every in-window popup dims with this one (github's kit.ts too). */
 export const POPUP_SCRIM: Color = "#0000008c";
 
 /** The layer that dims the window under an in-window popup (POPUP_SCRIM). */

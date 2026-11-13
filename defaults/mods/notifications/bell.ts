@@ -47,7 +47,7 @@ const end = (): number => {
   return e !== undefined && e >= 0 ? e : END;
 };
 
-// Nocturne's keyboard cursor outside its tab strip (nocturne/nav.js CURSOR).
+// Nocturne's keyboard cursor outside its tab strip (nocturne/nav.ts CURSOR).
 const CHROME = sharedKey("nocturne.chrome", nullable(object({}, { region: nullable(isString) })));
 
 const isList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
@@ -177,7 +177,7 @@ export default class Bell {
         .hover((s) => s.bg(toolHover(t)).text_color(t.foreground))
         // No tooltip while open: it would sit on the drop-down.
         .when(!open, (el) => el.tooltip(tip))
-        // As the strip's buttons (nocturne/tabs.js tool): the click goes by
+        // As the strip's buttons (nocturne/tabs.ts tool): the click goes by
         // whether the bell was lit when pressed, since the press itself
         // closes an open drop-down before the click comes.
         .on_mouse_down("left", (e, cx) => {

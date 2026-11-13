@@ -11,7 +11,7 @@
 //
 // Keys: up / down (ctrl-p / ctrl-n) pick, enter opens (grep: at the line),
 // tab / shift-tab switch mode keeping the query, and so do the global keys
-// inside it (cmd-shift-f to grep, cmd-p to files: nocturne/picker.js sends
+// inside it (cmd-shift-f to grep, cmd-p to files: nocturne/picker.ts sends
 // "grep" / "files" to nextCommand()), ctrl-r regex (grep), ctrl-t fuzzy lines
 // (grep), esc closes. The hint bar lists every one of them: the box takes
 // typing, so there's no ? list here.
@@ -49,7 +49,7 @@ const SWITCH = "nocturne_picker::switch";
 /** The command and its default key that open each mode (what its chip names). */
 const GLOBAL = { files: ["nocturne.picker", "cmd-p"], grep: ["nocturne.grep", "cmd-shift-f"] } as const satisfies { readonly [M in Mode]: readonly [string, string] };
 
-/** What the picker is opened with (nocturne/picker.js, `openOverlay` adds `overlay`). */
+/** What the picker is opened with (nocturne/picker.ts, `openOverlay` adds `overlay`). */
 const isPickerProps = object({}, {
   mode: isString,
   folder: nullable(isString),
@@ -73,7 +73,7 @@ const pickerProps = (p?: Props): PickerProps => {
   return isPickerProps(p) ? p : {};
 };
 
-// nocturne/picker.js's note of the open picker: { id, mode }.
+// nocturne/picker.ts's note of the open picker: { id, mode }.
 const OPEN = sharedKey("nocturne.picker-open", nullable(object({ id: isString, mode: literal("files", "grep") })));
 
 /** fff's file row: its path in the root, and what fff says of it. */
@@ -193,7 +193,7 @@ export default class Picker extends View {
       }
     }
 
-    // cmd-shift-f / cmd-p while it's open (nocturne/picker.js): that mode, here.
+    // cmd-shift-f / cmd-p while it's open (nocturne/picker.ts): that mode, here.
     cx.spawn(async (cx) => {
       for (;;) {
         let c: string;
@@ -269,7 +269,7 @@ export default class Picker extends View {
   }
 
   /** Fireflies' last call: nocturne's cmd-p noted the open picker
-   *  (nocturne/picker.js); it's gone now, if the note is this one's. */
+   *  (nocturne/picker.ts); it's gone now, if the note is this one's. */
   override close(): void {
     const open = readShared(shared, OPEN, null);
     const me = pickerProps().overlay;
@@ -376,7 +376,7 @@ export default class Picker extends View {
     this.note = null;
     this.makeInput(this.value());
 
-    // nocturne/picker.js's note follows, so the same key again closes it.
+    // nocturne/picker.ts's note follows, so the same key again closes it.
     const open = readShared(shared, OPEN, null);
 
     if (open?.id) writeShared(setShared, OPEN, { ...open, mode });

@@ -3,7 +3,7 @@
 // terminals(): the core is the record, so runs outlive the deck, the window
 // and an app restart. The labels:
 //
-//   nocturne.script         the script's id (detect.js)
+//   nocturne.script         the script's id (detect.ts)
 //   nocturne.script.name    its name, runner, shell line and folder
 //   nocturne.script.runner
 //   nocturne.script.cmd
@@ -16,7 +16,7 @@
 // A finished run keeps its terminal (and its output) until it's dismissed
 // (`hc rm`) or restarted. Watching floats the terminal over the tab
 // (terminal.peek {float: true}); its bar's ✕ hides it again, still running.
-// ../nocturne/scripts.js reads the same labels for the tab strip (a mod can't
+// ../nocturne/scripts.ts reads the same labels for the tab strip (a mod can't
 // import another mod's files).
 
 import { run, shared, setShared, terminals } from "herdr";
@@ -37,7 +37,7 @@ const isLabels = object({}, {
   "nocturne.script.plan": isString,
 });
 
-/** A terminal as terminals() lists it (and ../nocturne/scripts.js keeps an
+/** A terminal as terminals() lists it (and ../nocturne/scripts.ts keeps an
  *  ended one in ENDED), the fields read here. */
 export const isTerminal = object({ address: isString, labels: isLabels }, {
   state: isString,
@@ -51,7 +51,7 @@ export const isTerminal = object({ address: isString, labels: isLabels }, {
 
 export type Terminal = Guarded<typeof isTerminal>;
 
-// Ended runs' records, kept by the tab strip (../nocturne/scripts.js ENDED),
+// Ended runs' records, kept by the tab strip (../nocturne/scripts.ts ENDED),
 // and the runs it follows until they end (TRACK, when it first saw each):
 // terminals() lists only live terminals, so a run that ends is read back with `hc get`.
 export const ENDED = "scripts.ended";
@@ -192,7 +192,7 @@ export function runArgs(s: Startable, folder: string | null, on: string | null) 
 
 // The deck doesn't run `hc` itself: it closes as soon as a script is picked,
 // and a closed overlay's tasks go with it. It queues jobs in shared(JOBS)
-// for the tab strip, which outlives it (../nocturne/jobs.js runs them).
+// for the tab strip, which outlives it (../nocturne/jobs.ts runs them).
 export const JOBS = "scripts.jobs";
 
 /** One `hc` call of a job; `start`: it starts a run (the strip follows it). */

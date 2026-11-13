@@ -1,5 +1,5 @@
 // Nix flakes for the script runner. A folder with flake.nix gets
-// `nix flake check` and `nix flake update` at once (detect.js); its outputs
+// `nix flake check` and `nix flake update` at once (detect.ts); its outputs
 // come from `nix flake show --json` (FLAKE_SHOW), which the deck runs in the
 // background and caches, so the picker never waits on an evaluation:
 //
@@ -13,7 +13,7 @@
 // user for home-manager) comes first, marked. A switch that needs root is
 // `admin: "sudo"`: it builds as the person, then activates through sudo in
 // the run's own terminal (switchPlan), with a prompt the tab strip knows
-// (SUDO_PROMPT): ../nocturne/prompt.js shows that line in a small window to
+// (SUDO_PROMPT): ../nocturne/prompt.ts shows that line in a small window to
 // type the password into. Builds stay unprivileged.
 //
 // Both shapes of `nix flake show --json` are read: the classic one
@@ -196,7 +196,7 @@ export function nixStatic(): Script[] {
 }
 
 /** sudo's prompt in a switch's terminal: the tab strip watches for it
- *  (../nocturne/prompt.js keeps a copy) to show it in a small window. */
+ *  (../nocturne/prompt.ts keeps a copy) to show it in a small window. */
 export const SUDO_PROMPT = "password to activate (sudo): ";
 
 const NIX = `nix --extra-experimental-features ${sq("nix-command flakes")}`;
@@ -272,7 +272,7 @@ export function shellLine(cmd: string, admin?: string | null, plan?: string | nu
 // owns the process: for a run, Herdr Core (the core holds terminals, not the
 // app). Activated through sudo in the run's terminal, that's credited; if it
 // still fails, the permission is off or stale (an updated core is a new
-// binary to macOS). ../nocturne/scripts.js keeps a copy for the failure toast.
+// binary to macOS). ../nocturne/scripts.ts keeps a copy for the failure toast.
 export const APP_MANAGEMENT = {
   match: "permission denied when trying to update apps",
   hint: "Herdr Core needs App Management (System Settings > Privacy & Security). If it is already on, remove it and add it again",

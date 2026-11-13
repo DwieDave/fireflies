@@ -276,7 +276,7 @@ function dither(color: Color, cell = 1): Element {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
 
-/** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.js):
+/** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.ts):
  *  a 2 px accent bar capped top and bottom, at the left edge of its box. */
 function stake(t: Theme): Element {
   return div().absolute().left(-3).top(3).bottom(2).w(8)

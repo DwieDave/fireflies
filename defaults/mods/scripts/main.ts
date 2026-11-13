@@ -1,5 +1,5 @@
 // The script runner's deck, in Nocturne's look: one square popover under the
-// tab strip's ▶ (../nocturne/scripts.js), or centered from cmd-shift-r.
+// tab strip's ▶ (../nocturne/scripts.ts), or centered from cmd-shift-r.
 //
 //   head     ▶ Scripts and the folder they come from: the space's own
 //            folder, else the focused pane's (props { folder, on })
@@ -51,8 +51,8 @@ import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 const ART = "mods/nocturne/art";
 
 /** What the deck is opened with: by the tab strip ({ folder, on, focus,
- *  show?, again? }, ../nocturne/scripts.js toggleDeck), or as the bar of a
- *  switch's password window ({ password: address, name }, ../nocturne/prompt.js). */
+ *  show?, again? }, ../nocturne/scripts.ts toggleDeck), or as the bar of a
+ *  switch's password window ({ password: address, name }, ../nocturne/prompt.ts). */
 const isDeckProps = object({}, {
   overlay: isString,
   folder: nullable(isString),
@@ -74,10 +74,10 @@ const deckProps = (): DeckProps => {
   return isDeckProps(p) ? p : NO_PROPS;
 };
 
-// The tab strip's note that the deck is open (../nocturne/scripts.js DECK).
+// The tab strip's note that the deck is open (../nocturne/scripts.ts DECK).
 const DECK = sharedKey("scripts.deck", nullable(object({ id: isString, beat: isNumber })));
 
-// The switch password windows ../nocturne/prompt.js opens, by run: this copy
+// The switch password windows ../nocturne/prompt.ts opens, by run: this copy
 // is the bar of one when props has { password: address, name }. Each is
 // { id } (the window, null while it opens) or { closed: true } (cancelled here).
 const PROMPTS = sharedMapKey("scripts.prompts", oneOf(object({ id: nullable(isString) }), object({ closed: literal(true) })));
@@ -122,7 +122,7 @@ function toneColor(t: Theme, k: Tone): Color {
   }
 }
 
-// The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
+// The dither fill, copied from ../nocturne/kit.ts (a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 function dither(color: Color, cell = 1): Element {
@@ -977,7 +977,7 @@ export default class ScriptsDeck extends View {
       .child(keysView(t, { id: "deck-keys", title: "scripts", list: rows, close: () => { this.help = false; } }));
   }
 
-  /** The bar of a switch's password window (../nocturne/prompt.js): its name,
+  /** The bar of a switch's password window (../nocturne/prompt.ts): its name,
    *  and cancel, which presses ctrl-c in the run (it ends "cancelled"). */
   passwordBar(t: Theme, bar: PasswordBar) {
     const { address, name } = bar;

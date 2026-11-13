@@ -190,7 +190,7 @@ export function move(m: Tabs, id: string, index: number): Tabs {
   return { ...m, list: [...rest.slice(0, to), { ...tab, opener: null }, ...rest.slice(to)] };
 }
 
-// ---- dragging a tab along the strip (as the app's own strip, nocturne/tabdrag.js)
+// ---- dragging a tab along the strip (as the app's own strip, nocturne/tabdrag.ts)
 
 /** How far (window px) a press moves before it's a drag rather than a click. */
 export const DRAG_START = 4;
@@ -336,7 +336,7 @@ export function openArgs(value: string): OpenArgs | null {
   return { url: v, slot: null };
 }
 
-// ---- one tab pinned to the shelf (nocturne's pins.js reads these records)
+// ---- one tab pinned to the shelf (nocturne's pins.ts reads these records)
 //
 // Nocturne keeps the shelf's pins in shared PINS: [{ pane, mod, props, at, tab? }].
 // A record with `tab` pins that one tab of a web pane: the shelf names it by the
@@ -347,7 +347,7 @@ export function openArgs(value: string): OpenArgs | null {
 
 export const PINS = "nocturne.pinned-panes";
 
-/** A record of PINS, as nocturne writes it (pins.js: its fields as nocturne
+/** A record of PINS, as nocturne writes it (pins.ts: its fields as nocturne
  *  reads them, so a record nocturne keeps is kept here too). */
 const isPinRecord = object({ pane: isString }, { mod: nullable(isString), props: isJson, at: oneOf(isNumber, isString, isNull), tab: isString });
 

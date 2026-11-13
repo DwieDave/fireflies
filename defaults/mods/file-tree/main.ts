@@ -110,7 +110,7 @@
 //
 // The keyboard: a copy takes it when its pane is the focused one as it opens
 // (cmd-e's panel, files.open's pane), from pane.go ("focus"), and from
-// cmd-e on an open panel (nocturne/files.js focusFiles: "take-panel").
+// cmd-e on an open panel (nocturne/files.ts focusFiles: "take-panel").
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, Entity, FocusHandle, KeyEvent, Modifiers, MouseButtonEvent } from "gpui-kit";
@@ -176,7 +176,7 @@ const ART = "mods/nocturne/art";
 const MOD = "file-tree";
 const ICONS = "mods/workspace-chrome";
 
-/** What a pane is opened with: the panel { folder, on, slot } (nocturne/files.js), a pane of
+/** What a pane is opened with: the panel { folder, on, slot } (nocturne/files.ts), a pane of
  *  its own { path, on, slot } (files.open, a folder link). */
 const isFilesProps = object({}, { folder: nullable(isString), path: nullable(isString), on: nullable(isString), slot: nullable(isString) });
 
@@ -199,7 +199,7 @@ const TITLES = sharedMapKey(`${MOD}.titles`, isString);
 
 const PATHS = sharedMapKey(`${MOD}.paths`, isString);
 
-/** The pane the keyboard came from into the panel (set by nocturne/files.js). */
+/** The pane the keyboard came from into the panel (set by nocturne/files.ts). */
 const FROM = sharedKey(`${MOD}.from`, nullable(isString));
 
 /** What `x` cut, for `P` in any files pane: { on, items: [{ abs, dir, name }] }. */
@@ -234,7 +234,7 @@ const zoom = (): number => settings().zoom || 1;
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
-/** A 50% checker dither filling the parent (same as ../nocturne/kit.js). */
+/** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
 function dither(color: Color, cell = 1): Element {
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

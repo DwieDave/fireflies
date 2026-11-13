@@ -179,7 +179,7 @@ const REPLACE_STOPS: readonly Stop[] = [...FIND_STOPS, { id: "with", kind: "text
 
 const MOD = "editor";
 
-// Each editor's file name by slot, for its pane header (nocturne/header.js).
+// Each editor's file name by slot, for its pane header (nocturne/header.ts).
 const TITLES = "editor.titles";
 const TITLES_KEY = sharedMapKey(TITLES, isString);
 
@@ -244,7 +244,7 @@ const RECT = (): ReturnType<ReturnType<typeof PathBuilder.fill>["build"]> => Pat
 
 const zoom = (): number => Number(settings().zoom) || 1;
 
-/** A 50% checker dither filling the parent (as nocturne/kit.js). */
+/** A 50% checker dither filling the parent (as nocturne/kit.ts). */
 function dither(color: Color, cell = 1): Element {
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
@@ -257,7 +257,7 @@ const stop = (_e: MouseButtonEvent, cx: Context): void => cx.stop_propagation();
 const newSlot = (): string => `ed-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** Where a dragged tab lands: a 2 px accent bar capped top and bottom, at the
- *  left edge of its box (as the app's tab strip, nocturne/tabdrag.js). */
+ *  left edge of its box (as the app's tab strip, nocturne/tabdrag.ts). */
 function tabStake(t: Theme): Element {
   return div()
     .absolute()
@@ -1925,7 +1925,7 @@ export default class EditorPane extends View {
 
   // ---- the file
 
-  /** The pane header's name (nocturne/header.js): the shown tab's. */
+  /** The pane header's name (nocturne/header.ts): the shown tab's. */
   title(): void {
     const slot = this.slot;
 

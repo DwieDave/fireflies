@@ -1,6 +1,6 @@
 // The pieces of Nocturne's look this pane needs (a mod can't import another
 // mod's files): the art folder, the dither fill and status pips. Same as
-// ../nocturne/kit.js.
+// ../nocturne/kit.ts.
 
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";

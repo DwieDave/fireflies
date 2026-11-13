@@ -1,5 +1,5 @@
 // The processes and ports manager, in Nocturne's look: one square popover
-// under the tab strip's tree mark (../nocturne/procs.js), or centered from
+// under the tab strip's tree mark (../nocturne/procs.ts), or centered from
 // nocturne.procs / nocturne.ports and the palette. This machine only.
 //
 //   head       the tree mark, its three tabs (processes and ports with their
@@ -138,7 +138,7 @@ const TABS: readonly Tab[] = ["procs", "ports", "system"];
 
 const isTab = literal("procs", "ports", "system");
 
-/** What the deck is opened with (nocturne/procs.js; `openOverlay` adds `overlay`). */
+/** What the deck is opened with (nocturne/procs.ts; `openOverlay` adds `overlay`). */
 const isDeckProps = object({}, { tab: isString, overlay: isString });
 
 type DeckProps = Guarded<typeof isDeckProps>;
@@ -149,14 +149,14 @@ const deckProps = (): DeckProps => {
   return isDeckProps(p) ? p : {};
 };
 
-// The strip's note that the deck is open, and which tab (../nocturne/procs.js DECK): the deck
+// The strip's note that the deck is open, and which tab (../nocturne/procs.ts DECK): the deck
 // renews it each refresh; the strip adds `want`, a tab it asks for (nocturne.ports).
 const DECK = sharedKey("procs.deck", nullable(object({ id: isString, tab: isString, beat: isNumber }, { want: isString })));
 
-// The ports in this app's terminals, for the strip's count (../nocturne/procs.js COUNT).
+// The ports in this app's terminals, for the strip's count (../nocturne/procs.ts COUNT).
 const COUNT = sharedKey("procs.count", nullable(object({ at: isNumber, n: isNumber })));
 
-// The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
+// The dither fill, copied from ../nocturne/kit.ts (a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 const zoom = (): number => settings().zoom || 1;
 

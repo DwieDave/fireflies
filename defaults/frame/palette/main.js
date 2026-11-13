@@ -5,7 +5,7 @@
 // a name ask for it. Enter runs, ↑/↓ move, Esc closes.
 // Every app command is an entry or in OUT with the reason it stays out
 // (scripts/palette-commands.test.ts holds that line); a layout's own mod
-// commands belong in its palette_mod (Nocturne's: mods/nocturne/palette.js).
+// commands belong in its palette_mod (Nocturne's: mods/nocturne/palette.ts).
 // The app's own mod: rewritten from the binary on every start.
 
 import { View, div, svg } from "gpui-kit";

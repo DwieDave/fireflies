@@ -568,7 +568,7 @@ the highlighted line shows where it will land.
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
   **Every kind of file is a tab**: a picture, PDF, table, patch, database,
   font or clip opens as a drawn tab of the editor, shown by the preview's own
-  viewer (`viewer.js`, the files pane's split's: fitted pictures, PDFs, tables,
+  viewer (`viewer.ts`, the files pane's split's: fitted pictures, PDFs, tables,
   patches; its slim bar says kind, name and facts; clips never play by
   themselves). Its keys: H / L, gt / gT, ]b / [b tabs, ]B / [B move it, j k
   J K scroll, `e` its text (a table, patch or SVG: they switch between drawn

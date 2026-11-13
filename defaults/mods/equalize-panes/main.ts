@@ -39,7 +39,7 @@ const equalizeProps = (): EqualizeProps => {
   return isEqualizeProps(p) ? p : {};
 };
 
-// The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
+// The dither fill, copied from ../nocturne/kit.ts (a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 function dither(color: Color, cell = 1): Element {

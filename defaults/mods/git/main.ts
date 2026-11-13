@@ -40,7 +40,7 @@
 // scope? } to start on Review (diff's props land here), { pr, repo,
 // back } a pull request's diff opened from the GitHub window: esc / q puts
 // that window back. As an overlay window it says so in shared(WINDOW), so
-// the toggle (nocturne's git.js) closes it.
+// the toggle (nocturne's git.ts) closes it.
 
 
 import { View, div, svg } from "gpui-kit";
@@ -76,10 +76,10 @@ import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, log
 
 export const WINDOW = "git.window"; // { id, beat }: the open window, for the toggle
 
-/** The open window, for the toggle (nocturne's git.js reads it). */
+/** The open window, for the toggle (nocturne's git.ts reads it). */
 const WINDOW_KEY = sharedKey(WINDOW, nullable(object({ id: isString }, { beat: isNumber, folder: nullable(isString) })));
 
-/** The GitHub window's note (github's main.js): this window holds its place when opened from it. */
+/** The GitHub window's note (github's main.ts): this window holds its place when opened from it. */
 const GITHUB_WINDOW = sharedKey("github.window", nullable(object({ id: isString }, { beat: isNumber })));
 
 /** The side panels, top to bottom. */
@@ -312,7 +312,7 @@ const isShow = oneOf(
 
 export type Show = Guarded<typeof isShow>;
 
-/** The GitHub window to put back (github's main.js: { mod, props }). */
+/** The GitHub window to put back (github's main.ts: { mod, props }). */
 const isBack = object({ mod: isString }, { props: object({}) });
 
 type Back = Guarded<typeof isBack>;

@@ -586,7 +586,7 @@ const ACTIONS = {
 
     if (b) gh(v, "Create pull request", ["pr", "create", "--web", "--head", b.name]);
   },
-  // The GitHub window's form (github's prForm.js) on this branch: it reads the branch from shared state.
+  // The GitHub window's form (github's prForm.ts) on this branch: it reads the branch from shared state.
   "pr-create-github": (v) => {
     const b = branchOf(v);
 

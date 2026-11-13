@@ -1,6 +1,6 @@
 // The pieces of Nocturne's look this mod needs (a mod can't import another
 // mod's files): the art folder, the dither fill, pips, logos, buttons. Same as
-// ../nocturne/kit.js.
+// ../nocturne/kit.ts.
 
 import { div, svg } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";

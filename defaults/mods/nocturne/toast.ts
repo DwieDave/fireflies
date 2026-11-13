@@ -57,7 +57,7 @@ const toastProps = (): ToastProps => {
 };
 
 // notifications' items and the request its overview opens on.
-/** An item of the notifications mod (its model.js), as far as a toast reads it. */
+/** An item of the notifications mod (its model.ts), as far as a toast reads it. */
 const isItem = object({ address: isString, type: isString }, { title: nullable(isString), line: nullable(isString) });
 
 type Item = Guarded<typeof isItem>;

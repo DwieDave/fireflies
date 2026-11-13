@@ -1,6 +1,6 @@
 // Reading git's plain output into the panels' rows. Pure: no herdr, so the
 // tests run them on fixtures (scripts/git.test.ts). The formats are
-// what git.js asks for: NUL-separated fields, porcelain v2 status.
+// what git.ts asks for: NUL-separated fields, porcelain v2 status.
 
 import { literal } from "./guard.ts";
 
