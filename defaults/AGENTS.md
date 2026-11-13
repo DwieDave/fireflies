@@ -504,7 +504,8 @@ the highlighted line shows where it will land.
   instruction. A question block opens a dialog like Claude Code's
   AskUserQuestion (j/k or ↑↓, enter / space, typed "other" answers, tab /
   shift-tab between questions and the review's submit / back, wrapping,
-  a review that submits all of them, cmd-enter from anywhere). Answers go
+  a review that submits all of them, cmd-enter from anywhere, esc or q
+  closes it: q only while no typed answer has the keyboard). Answers go
   into the agent's terminal as keys, the way a person answers there, and the
   screen is read again before every key: a request that changed or went away
   is refused ("Not sent"), never answered blindly; each key waits for the
@@ -1291,7 +1292,12 @@ Properties any node can have:
   menus and screens take the keyboard when they open and give it back when they
   close: tab / ← → between a dialog's field and buttons (the focused one lit),
   ↑↓ / j k (ctrl-n / ctrl-p in a list with a search field) move, enter / space
-  press, esc closes; a confirm also takes y / n. Keep that when drawing your own.
+  press, esc closes; a confirm also takes y / n. q closes too wherever no field
+  types it (a confirm, a rename's buttons, What's New, the welcome, menus,
+  "+ new", windows): it closes what's in front (a menu, an ask, the keys
+  overview) and otherwise the whole window, where esc steps back one level
+  first. Where a field or filter has the keyboard q is a letter: esc leaves it,
+  then q closes. Keep that when drawing your own.
   `{"dialog_mods": {"welcome": "my-screens", "help": "my-screens"}}`
 - Root only: `"corners": "square"` (this fork) paints every corner in the window
   square: dialogs, menus, toasts, buttons, inputs, scrollbars, images, mods' own
@@ -1845,7 +1851,7 @@ The main ones:
   nearest column; none: an error). Siblings keep their total weight; fixed `px` sizes stay.
   Replies `{ok, changed}`; saved like any layout change. Keys: `"pane.equalize:row"`.
   Nocturne's pane header ▦ button and pane menu open the `equalize-panes` popup
-  (all / row / column / as a grid); its palette has Equalize panes / this row / this column,
+  (all / row / column / as a grid, by letter; esc or q closes it); its palette has Equalize panes / this row / this column,
   and cmd-alt-e (macOS) evens all.
   `pane.resize {direction, step?, pane?}` moves a pane's divider one step (default: the
   focused pane, a mod pane too): `"left"` / `"right"` move the nearest side-by-side split

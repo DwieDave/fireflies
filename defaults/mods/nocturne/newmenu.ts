@@ -27,7 +27,7 @@
 //   footer    what the item under the cursor will do, in words
 //
 // Keys: the letter on a tile / 1..9 for an agent (shift: the other landing
-// spot, once); ← → ↑ ↓ move, enter picks, tab flips the landing, esc closes.
+// spot, once); ← → ↑ ↓ move, enter picks, tab flips the landing, esc or q closes.
 
 import { div, svg, image } from "gpui-kit";
 import type { ClickEvent, Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent } from "gpui-kit";
@@ -592,6 +592,14 @@ export default class NewMenu {
       if (x) {
         cx.stop_propagation();
         this.pick(x, m.shift ? other : destNow());
+
+        return;
+      }
+
+      // q closes, as esc does (a tile's own q would win above).
+      if (k === "q" && !m.shift) {
+        cx.stop_propagation();
+        this.dismiss();
 
         return;
       }

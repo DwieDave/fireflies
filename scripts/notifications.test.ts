@@ -534,6 +534,23 @@ test("dialog: esc stops typing first, then closes", () => {
   expect(a).toBe("close");
 });
 
+test("dialog: q closes, as esc does; while the typed answer's input has the keys, q is a letter", () => {
+  let s = start(BLOCK);
+  let a: any;
+  ({ action: a } = keys(BLOCK, s, "q"));
+  expect(a).toBe("close");
+  ({ action: a } = keys(BLOCK, s, "shift+q"));
+  expect(a).toBe(null);
+  ({ s } = keys(BLOCK, s, "up", "enter"));
+  expect(s.editing).toBe(true);
+  ({ s, action: a } = keys(BLOCK, s, "q"));
+  expect(a).toBe(null);
+  expect(s.editing).toBe(true);
+  ({ s } = keys(BLOCK, s, "escape"));
+  ({ action: a } = keys(BLOCK, s, "q"));
+  expect(a).toBe("close");
+});
+
 // ---- items: sources, types, grouping
 
 const T = (address: string, report: any, extra: any = {}) => ({ address, labels: { "herdr.space": "s1" }, state: "live", status: report?.state ?? null, report, status_ms: 1000, program: { key: "claude", name: "Claude Code" }, ...extra });

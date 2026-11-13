@@ -334,7 +334,7 @@ test("welcome and what's new: ? lists every key; their foot hints end with ? key
   expect(unnamed(screens.WHATS_NEW_KEYS, nk)).toEqual([]);
   for (const l of [screens.WELCOME_KEYS, screens.WHATS_NEW_KEYS]) expect(l.at(-1)).toEqual(["?", "keys"]);
   const foot = (o: any) => texts(o.render());
-  expect(foot(w).join(" ")).toMatch(/esc skip · \? keys/);
+  expect(foot(w).join(" ")).toMatch(/esc q skip · \? keys/);
   expect(foot(n).join(" ")).toMatch(/send feedback · \? keys/);
 });
 

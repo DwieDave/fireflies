@@ -252,6 +252,12 @@ test("m opens it under the selected row, and over the row near the deck's foot",
   expect(t.d.menu.at).toEqual({ x: 40, y: HEAD + STRIP_H + COLS + ROW });
   await t.press("escape");
   expect(t.d.menu).toBe(null);
+  // q closes it too (no entry is q's), and only it: the deck stays.
+  await t.press("m");
+  expect(t.d.menu).not.toBe(null);
+  await t.press("q");
+  expect(t.d.menu).toBe(null);
+  expect(closed).toEqual([]);
   // The last process, at the list's foot: the menu sits above it, inside the deck.
   const last = t.d.rows().filter((r: any) => r.kind === "proc").at(-1).key;
   await t.sel(last);

@@ -143,7 +143,8 @@ export default class EqualizePanes extends View {
           return;
         }
 
-        if (k === "escape") {
+        // q closes too, as in every menu (no row is q's).
+        if (k === "escape" || (k === "q" && !shift && !live.some((r) => r.key === "q"))) {
           this.close();
 
           return;

@@ -96,12 +96,13 @@ export function pick(v: ProcsDeck, n: number, cx: Context): void {
   runAct(v, e.act, at.item, at.items, cx);
 }
 
-/** A key while the menu is open: j k ↑ ↓ move, enter runs, an entry's key runs it, esc and m close. */
+/** A key while the menu is open: j k ↑ ↓ move, enter runs, an entry's key runs it, esc, m and q close. */
 export function menuKey(v: ProcsDeck, m: Menu, e: KeyEvent, cx: Context): void {
   const k = e.key.toLowerCase();
   const key = e.modifiers.shift && /^[a-z]$/.test(k) ? k.toUpperCase() : k === " " ? "space" : k;
 
-  if (k === "escape" || k === "m") v.menu = null;
+  // q closes it too, as in every menu (unless an entry is q's).
+  if (k === "escape" || k === "m" || (key === "q" && !m.entries.some((x) => x.key === "q"))) v.menu = null;
   else if (k === "j" || k === "down") m.n = Math.min(m.entries.length - 1, m.n + 1);
   else if ((k === "k" && !e.modifiers.shift) || k === "up") m.n = Math.max(0, m.n - 1);
   else if (k === "enter") pick(v, m.n, cx);
