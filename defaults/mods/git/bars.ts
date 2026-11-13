@@ -81,7 +81,7 @@ export function optionsBar(v: GitView, t: Theme) {
 
   const right = note ? div().text_color(note.tone === "failed" ? t.blocked : t.done).truncate().max_w(420).child(note.text)
     : v.copied.length ? div().text_color(t.ansi5).child(`${v.copied.length} copied · V paste`)
-    : div().text_color(t.dim).child(v.show ? "q closes v pane" : "1-5 panels · + widen");
+    : div().text_color(t.dim).child(v.show ? "q closes this pane" : "1-5 panels · + widen");
 
   return hints(t, [["", "", CONTEXT_NAMES[ctx].toUpperCase()], ...list], right, (key, cx) => {
     if (v.show && ctx === "main" && key === "?") return openKeys(v);

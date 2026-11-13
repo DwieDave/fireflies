@@ -171,7 +171,7 @@ export async function showContent(v: GitView, s: Exclude<Show, { kind: "review" 
   if (s.kind === "file") {
     const f = (v.data.status?.files ?? []).find((x) => x.path === s.path);
 
-    if (!f) return { title: s.path, path: s.path, rows: [text("No changes in v file now.", "muted")] };
+    if (!f) return { title: s.path, path: s.path, rows: [text("No changes in this file now.", "muted")] };
 
     const [un, st] = await Promise.all([f.unstaged ? g.fileDiff(f, opts) : null, f.staged ? g.fileDiff(f, { cached: true, ...opts }) : null]);
 

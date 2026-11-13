@@ -312,12 +312,12 @@ export function ghost(v: Files, t: Theme, d: Drag): Element {
 *  moving (the divider, a drag), the release, leaving, a new size. */
 export function withPointer(v: Files, el: Element): Element {
   return el
-      // A row's click comes after v: alt-double-click opens a Markdown file as text.
+      // A row's click comes after this: alt-double-click opens a Markdown file as text.
       .on_mouse_down("left", (e, cx) => {
         if (endDivider(v)) cx.notify();
 
         v.alt = e.modifiers.alt;
-        // A row's click comes after v: cmd and shift mark rather than open.
+        // A row's click comes after this: cmd and shift mark rather than open.
         v.mods = e.modifiers;
         pressAt(v, e);
 

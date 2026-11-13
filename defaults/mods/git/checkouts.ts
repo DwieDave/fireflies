@@ -32,7 +32,7 @@ export function worktreeIntent(v: GitView) {
 
   if (want.action === "new" || want.branch) newWorktree(v, { value: want.branch ?? "", now: Boolean(want.branch), tab: want.tab, argv: want.argv });
   else if (want.action === "remove") {
-    if (!at || at.main) v.error(at ? "This is the repository's main checkout, not a worktree." : "That space isn't on a worktree of v repo.");
+    if (!at || at.main) v.error(at ? "This is the repository's main checkout, not a worktree." : "That space isn't on a worktree of this repo.");
     else removeWorktrees(v, [at]);
   }
 }

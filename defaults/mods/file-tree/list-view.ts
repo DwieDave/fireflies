@@ -239,13 +239,13 @@ export function listBody(v: Files, t: Theme, rows: readonly Row[], list: readonl
 
   if (searching && v.hits && !rows.length) body = emptyView(v, t, "No files match", v.note ?? `“${v.query.trim()}” under ${tilde(v.root)}`);
   else if (searching && !v.hits) body = emptyView(v, t, "Searching…", null);
-  else if (v.error && !list.length) body = emptyView(v, t, "Can't read v folder", v.error);
+  else if (v.error && !list.length) body = emptyView(v, t, "Can't read this folder", v.error);
   else if (!list.length) body = emptyView(v, t, v.loading ? "Listing files…" : "Nothing here", v.loading ? null : tilde(v.root), !v.loading);
   else {
     const rowsList = v_virtual_list("nf-rows", list.length, ROW, (i) => list[i]?.path ?? "",
       (range) => list.slice(range.start, range.end).map((r) => v.row(t, r, focused)))
       .on_item_click((path, cx) => v.pick(path, cx))
-      // The pane's own right press comes after v and opens the menu for the row.
+      // The pane's own right press comes after this and opens the menu for the row.
       .on_item_secondary_click((path) => {
         v.pressed = rows.find((r) => r.path === path) ?? null;
       })
