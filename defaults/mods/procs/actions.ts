@@ -15,8 +15,9 @@ export function say(v: ProcsDeck, text: string, tone: Note["tone"] = "done"): vo
   v.note = { text, tone, until: Date.now() + 3000 };
 }
 
-/** x / X: ask before ending the cursor's process (with what's under it), or a port's. */
-export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean): void {
+/** x / X / K: ask before ending the cursor's process (with what's under it; `force`: KILL at
+ *  once), or a port's. */
+export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean, force = false): void {
   const snap = v.snap;
 
   if (!item || !snap) return;
@@ -49,14 +50,26 @@ export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean): void
   const pids = targets(pid, { tree, byPid: byPid(v), kids: v.ix?.kids ?? new Map(), me: snap.me });
   const ports = snap.ports.flatMap((x) => (pids.includes(x.pid) ? [x.port] : []));
 
-  v.ask = { pids, key: item.key, tab: v.tab, tree, phase: "ask", left: [], name: p.name, pid, ports: [...new Set(ports)] };
+  v.ask = { pids, key: item.key, tab: v.tab, tree, force, phase: "ask", left: [], name: p.name, pid, ports: [...new Set(ports)] };
 }
 
-/** enter on the band: TERM, the grace, then KILL is offered for the ones left. */
+/** enter on the band: TERM, the grace, then KILL is offered for the ones left; a force end
+ *  KILLs at once. */
 export function confirm(v: ProcsDeck, cx: Context): void {
   const a = v.ask;
 
   if (!a || a.phase !== "ask") return;
+
+  if (a.force) {
+    v.ask = null;
+    void signal(a.pids, "KILL", exec).then(() => {
+      say(v, `killed ${a.name}`);
+      v.refresh(cx);
+      cx.notify();
+    });
+
+    return;
+  }
 
   a.phase = "ending";
   cx.spawn(async (cx) => {
@@ -210,7 +223,8 @@ export function activate(v: ProcsDeck, items: readonly Item[], i: number): void 
 }
 
 export function escapeKey(v: ProcsDeck, cx: Context): void {
-  if (v.help) v.help = false;
+  if (v.menu) v.menu = null;
+  else if (v.help) v.help = false;
   else if (v.ask) v.ask = null;
   else if (v.typing && v.query) v.query = "";
   else if (v.typing) v.typing = false;

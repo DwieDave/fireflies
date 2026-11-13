@@ -121,6 +121,31 @@ Local main moves at ship. A commit he needs in his checkout at once (this file,
 reworded: resetting main is his to run
 (`! git -C ~/Documents/personal/coding/fireflies reset --hard integrate`).
 
+## Ecosystem
+
+The mods are meant to work as one system, not as windows side by side.
+Developer's words, when he asked for a Kubernetes mod (2026-11-13):
+
+> It should work with e.g. the tools, opening new shell terminals in panes,
+> port forward for databases or browser so it should be integrateable in the
+> rest of the app. So i want to open a database connection to a portforward or
+> even create it and view it you know it should feel like an ecosystem
+
+So every brief for a mod, new or changed, asks two things and puts the
+answers in both mods' briefs as a contract (the command's name and its JSON
+arguments):
+
+- **What it offers the others**: commands another mod can run to hand it
+  work (`databases.connect:{…}`, `browser.open:…`, `editor.open`, a terminal
+  in a pane), each working whether or not the caller is installed.
+- **What it uses of the others**: where its own rows lead on (a port to a web
+  pane or a database connection, a pod to a shell in a pane, a file to the
+  editor, a failing run to its log), offered only when the other mod is there.
+
+Optional mods live in their own repositories (`fireflies-k8s` is the first)
+and may not be assumed by the shipped ones: a shipped mod finds an optional
+one by its command, never by importing it.
+
 ## Keys
 
 - Agents never edit `defaults/keys.macos.json`; they **propose** global keys

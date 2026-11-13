@@ -1,9 +1,9 @@
-// The deck's system graphs' readings (defaults/mods/procs/sys.ts):
+// The readings behind the deck's graphs (defaults/mods/procs/sys.ts):
 // each source's parser on a Mac's output, what a reading measures (network
 // per second between two), the history, the scales, and a machine without
 // the sources reading as null (the graph says so, not zero).
 import { test, expect } from "bun:test";
-import { SYS_PROBE, SEP, KEEP, STEP, STEP_SHOWN, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/procs/sys.ts";
+import { SYS_PROBE, SEP, KEEP, STEP, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/procs/sys.ts";
 import { SYS, SYS_NONE } from "./fixtures/procs.ts";
 
 test("the probe: one shell line, sections apart, iostat last (it takes its second), no sudo", () => {
@@ -14,7 +14,7 @@ test("the probe: one shell line, sections apart, iostat last (it takes its secon
   expect(SYS_PROBE).toContain("iostat -n 8 -C -c 2 -w 1");
   // Numbers, not names: netstat -ib looks up a hostname for every address (5 s on a busy Mac).
   expect(SYS_PROBE).toContain("netstat -ibn");
-  expect([KEEP, STEP, STEP_SHOWN]).toEqual([90, 2000, 1000]);
+  expect([KEEP, STEP]).toEqual([90, 1000]);
 });
 
 test("each source's parser", () => {

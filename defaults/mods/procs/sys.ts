@@ -1,7 +1,7 @@
-// The system graphs' readings (the deck's system tab), free of the view
-// (tested in scripts/procs-sys.test.ts). One probe a second while
-// the system tab shows, every 2 s while the deck shows another tab, none
-// while it's closed; never two at once. macOS sources that need no sudo:
+// The readings behind the deck's graphs (vitals.ts, the strip at its top),
+// free of the view (tested in scripts/procs-sys.test.ts). One probe a
+// second while the deck is open, none while it's closed; never two at once.
+// macOS sources that need no sudo:
 //
 //   cpu      iostat -C -c 2 -w 1: its second line is the last second's
 //            user / system / idle (the probe takes that second)
@@ -15,8 +15,8 @@
 //            per second between two readings
 //   gpu      ioreg's IOAccelerator PerformanceStatistics "Device Utilization %"
 //
-// A source that prints nothing (no GPU entry, Linux) reads as null and its
-// graph says so instead of drawing zero.
+// A source that prints nothing (no GPU entry, Linux) reads as null: its
+// graph draws no point and says so instead of drawing zero.
 
 export const SEP = "@@nocturne-sys@@";
 
@@ -35,11 +35,10 @@ export const SYS_PROBE = [
 /** How many readings a graph keeps: 90 at a second, the last minute and a half. */
 export const KEEP = 90;
 
-/** Between readings: a second while the system tab shows, 2 s behind another tab. A reading
- *  takes about a second itself (iostat measures one), so at a second they run back to back. */
-export const STEP_SHOWN = 1000;
-
-export const STEP = 2000;
+/** Between readings: a second (Developer: "refresh every second" while the graphs show; they
+ *  always show now). A reading takes about a second itself (iostat measures one), so they run
+ *  back to back: about 4 % of one core, measured. */
+export const STEP = 1000;
 
 /** sysctl's four numbers: cores, memory and page size in bytes, the pressure level. */
 export interface Sysctl {

@@ -8,11 +8,13 @@ import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
-import { ART, FOOT, SYSTEM_PACE, HEAD } from "./state.ts";
+import { ART, FOOT, HEAD, PROW, ROW } from "./state.ts";
+import { vitalLine } from "./vitals.ts";
 import { dither } from "./paint.ts";
 import { procOf } from "./listing.ts";
 import { begin, confirm, copyRow, escapeKey, foldRow, killHard, openPortAt, showTerminal, switchTab, toggleAll } from "./actions.ts";
 import { badge } from "./procs-view.ts";
+import { openMenu } from "./menu-view.ts";
 import type { default as ProcsDeck } from "./main.ts";
 
 export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
@@ -68,6 +70,9 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
   const all = k("k-all", "a", v.all ? "this app" : "all", () => toggleAll(v));
 
+  // m: the row's menu, under the selected row.
+  const menu = k("k-menu", "m", "menu", () => openMenu(v, items, ci, { x: 40, y: v.selY }, v.selY - (v.tab === "ports" ? PROW : ROW)));
+
   const keep = (what: string): Element => k("k-no", "esc", what, () => {
     v.ask = null;
   });
@@ -78,7 +83,10 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
     }), help));
   }
 
-  if (v.ask?.phase === "ask") return bar.child(left(arrow, word(`end ${v.ask.name}`, t.blocked))).child(keys(k("k-yes", "enter", "end", (cx) => confirm(v, cx)), keep("keep")));
+  if (v.ask?.phase === "ask") {
+    return bar.child(left(arrow, word(`${v.ask.force ? "force end" : "end"} ${v.ask.name}`, t.blocked)))
+      .child(keys(k("k-yes", "enter", v.ask.force ? "kill -9" : "end", (cx) => confirm(v, cx)), keep("keep")));
+  }
 
   if (v.ask?.phase === "held") return bar.child(left(arrow, word("still running", t.blocked))).child(keys(k("k-kill", "K", "kill -9", (cx) => killHard(v, cx)), keep("leave")));
 
@@ -93,7 +101,8 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
   const note = v.note && Date.now() < v.note.until ? word(v.note.text, t[v.note.tone]) : null;
 
-  if (v.tab === "system") return bar.child(left(arrow, word(SYSTEM_PACE, t.dim))).child(keys(k("k-tabs", "tab", "processes", (cx) => switchTab(v, "procs", cx)), help));
+  // The pointer on a graph: its whole reading, in place of the row's name.
+  if (v.hoverVital) return bar.child(left(word(vitalLine(v.hoverVital, v.now, v.sysReading?.sysctl.ncpu ?? null), t.muted))).child(keys(help));
 
   const q = v.query ? queryChip(v, t) : null;
 
@@ -102,7 +111,7 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
     return bar.child(left(arrow, note ?? word(address(item.port)), q))
       .child(keys(k("k-open", "enter", "open", () => openPortAt(v, item)), k("k-copy", "c", "copy", (cx) => copyRow(v, item, cx)),
-        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), find, help));
+        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), menu, help));
   }
 
   if (!item || "port" in item) return bar.child(left(note ?? word(""), q)).child(keys(all, find, help));
@@ -113,15 +122,15 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
     const p = procOf(v, n.pid);
     const guard = guardOf(p, v.snap?.me);
 
-    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), all, help));
+    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), menu, help));
 
     return bar.child(left(arrow, note ?? word(p?.name ?? ""), q))
-      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, help));
+      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, menu, help));
   }
 
   return bar.child(left(arrow, note ?? word(n.name), q))
     .child(keys(n.kind === "term" ? k("k-show", "enter", "show", () => showTerminal(v, item)) : null,
-      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), all, help));
+      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), menu, help));
 }
 
 export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number): Element {
@@ -142,8 +151,7 @@ export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number):
 
   return h_flex().relative().h(HEAD).flex_none().pl(12).pr(12).gap(10).items_center()
     .child(svg(`${ART}/tree.svg`).size(9).flex_none().text_color(t.accent))
-    .child(h_flex().h_full().flex_none().child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts))
-      .child(tabBtn("tab-system", "system", "system", v.now?.cpu ? `${Math.round(v.now.cpu.pct)}%` : "")))
+    .child(h_flex().h_full().flex_none().child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts)))
     .child(div().flex_1())
     .child(div().id("scope").flex_none().text_size(11).text_color(t.dim).cursor_pointer()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
