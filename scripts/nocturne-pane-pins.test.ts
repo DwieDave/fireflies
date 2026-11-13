@@ -66,7 +66,7 @@ const cx: any = {
 };
 
 const kit = await import("../defaults/mods/nocturne/kit.js");
-const pins = await import("../defaults/mods/nocturne/pins.js");
+const pins = await import("../defaults/mods/nocturne/pins.ts");
 const { menuItems } = await import("../defaults/mods/nocturne/menu.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const palette = await import("../defaults/mods/nocturne/palette.js");
@@ -88,7 +88,7 @@ beforeEach(() => {
   focusedNow = { space: "s1", tab: "c1", pane: "p2", terminal: null, block: null };
 });
 
-const records = () => pins.paneRecords(sharedState[pins.PANES_KEY]);
+const records = () => pins.paneRecords((k: string) => sharedState[k]);
 /** Applies the label writes the handlers sent through hc to terminalsNow. */
 function applyLabels() {
   for (const [addr, kv] of labels) {
@@ -289,7 +289,7 @@ test("a closed pane's pin goes after a while; a pane missing at first (loading) 
 
 // ---- the dock: a space tied to no folder for panes that belong to no project (dock.js)
 
-const dockMod = await import("../defaults/mods/nocturne/dock.js");
+const dockMod = await import("../defaults/mods/nocturne/dock.ts");
 
 test("dock.js: the dock is found by its id (local only); a making adopts the new space named dock, or gives up", () => {
   const all = [{ id: "s1", name: "one", named: true }, { id: "s7", name: "dock", named: true }, { id: "m/s8", name: "dock", named: true, machine: "m" }];
@@ -297,13 +297,13 @@ test("dock.js: the dock is found by its id (local only); a making adopts the new
   expect(dockMod.findDock({ id: "gone" }, all)).toBe(null);
   expect(dockMod.findDock({ id: "m/s8" }, all)).toBe(null);
   expect(dockMod.findDock(null, all)).toBe(null);
-  const then = { kind: "web", slot: "x" };
+  const next = { kind: "web", slot: "x" };
   // A space named dock that was there before isn't the new one.
-  expect(dockMod.adopt({ making: { at: 0, before: ["s1", "s7"], then } }, all, 1)).toBe(null);
-  expect(dockMod.adopt({ making: { at: 0, before: ["s1"], then } }, all, 1)).toEqual({ id: "s7", then });
+  expect(dockMod.adopt({ making: { at: 0, before: ["s1", "s7"], next } }, all, 1)).toBe(null);
+  expect(dockMod.adopt({ making: { at: 0, before: ["s1"], next } }, all, 1)).toEqual({ id: "s7", next });
   // An unnamed space (Fireflies' name after its folder) isn't it either.
   expect(dockMod.adopt({ making: { at: 0, before: [] } }, [{ id: "s9", name: "dock", named: false }], 1)).toBe(null);
-  expect(dockMod.adopt({ making: { at: 0, before: [] } }, [], dockMod.MAKING + 1)).toEqual({ id: null, then: null });
+  expect(dockMod.adopt({ making: { at: 0, before: [] } }, [], dockMod.MAKING + 1)).toEqual({ id: null, next: null });
   expect(dockMod.adopt({ id: "s7" }, all, 1)).toBe(null);
 });
 

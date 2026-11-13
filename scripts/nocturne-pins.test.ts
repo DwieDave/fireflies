@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { PIN_LABEL, AT_LABEL, GRACE, isPinned, pinnedAt, sortAgents, stamps, moveInJar, PANES_KEY, GONE_AFTER, paneRecords, findPane, modNow, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime, tidy, onShelf } from "../defaults/mods/nocturne/pins.js";
+import { PIN_LABEL, AT_LABEL, GRACE, isPinned, pinnedAt, sortAgents, stamps, moveInJar, PANES_KEY, GONE_AFTER, paneRecords, findPane, modNow, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime, tidy, onShelf } from "../defaults/mods/nocturne/pins.ts";
 
 const RANK: Record<string, number> = { blocked: 0, working: 1, done: 2, idle: 3 };
 const rank = (a: any) => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status] ?? 3);
@@ -89,9 +89,9 @@ const shellPane = { pane: "p3", terminal: "t9", tab: "c1" };
 
 test("the panes' pin store: well formed records only, pin and unpin by pane id", () => {
   expect(PANES_KEY).toBe("nocturne.pinned-panes");
-  expect(paneRecords(null)).toEqual([]);
-  expect(paneRecords({ pane: "p1" })).toEqual([]);
-  expect(paneRecords([{ pane: "p1", at: 1 }, null, { pane: "" }, { at: 2 }, "x"])).toEqual([{ pane: "p1", at: 1 }]);
+  expect(paneRecords(() => null)).toEqual([]);
+  expect(paneRecords(() => ({ pane: "p1" }))).toEqual([]);
+  expect(paneRecords(() => [{ pane: "p1", at: 1 }, null, { pane: "" }, { at: 2 }, "x"])).toEqual([{ pane: "p1", at: 1 }]);
   let recs = pinPaneRecord([], web, true, 500);
   expect(recs).toEqual([{ pane: "p1", mod: "browser", props: { slot: "w1", url: "https://x" }, at: 500 }]);
   expect(panePinned(recs, "p1")).toBe(true);

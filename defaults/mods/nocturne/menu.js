@@ -22,8 +22,8 @@ import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
 import { openWorktrees } from "./git.js";
 import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane } from "./kit.js";
-import { isDock } from "./dock.js";
-import { onShelf } from "./pins.js";
+import { isDock } from "./dock.ts";
+import { onShelf } from "./pins.ts";
 
 /** The keys bound to a command (pane.split:right style too), as keys.json spells them. */
 function shortcut(name, args) {

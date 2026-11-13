@@ -3,8 +3,8 @@
 
 import { div, svg } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
-import { isDock, toDock, newSlot } from "./dock.js";
-import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
+import { isDock, toDock, newSlot } from "./dock.ts";
+import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
 import { dither } from "./toolground.ts";
@@ -59,7 +59,7 @@ export function pin(terminal, on = !pinned(terminal)) {
 export const sortedAgents = () => sortAgents([...agents()], agentRank, labelsOf);
 
 /** The mod panes' pins (pins.js PANES_KEY), as stored. */
-export const paneRecordsNow = () => paneRecords(shared(PANES_KEY));
+export const paneRecordsNow = () => paneRecords(shared);
 
 /** Everything in the jar, in its order (pins.js jarItems): agents, plain terminals, mod panes. */
 export const jar = () => jarItems({ agents: [...agents()], terminals: terminals(), panes: panes(), records: paneRecordsNow() });

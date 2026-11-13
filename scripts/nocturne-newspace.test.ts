@@ -535,7 +535,7 @@ test("Change folder… hangs it under the row right-clicked; from a key or the f
 // ---- the dock (dock.js) keeps its rules
 
 test("the dock is never attached: no picker opens for it, and an open one attaches nothing", async () => {
-  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.ts");
   st.spaces.push({ id: "dk", name: "dock", named: true, folder: HOME, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
   st.shared[DOCK_KEY] = { id: "dk" };
   expect(openSpacePicker({ space: "dk" })).toBeNull();
@@ -549,7 +549,7 @@ test("the dock is never attached: no picker opens for it, and an open one attach
 });
 
 test("the dock isn't a folder in the list, and no folder makes an ordinary unnamed space, not the dock", async () => {
-  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.ts");
   st.spaces.push({ id: "dk", name: "dock", named: true, folder: `${HOME}/code/scratch`, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
   st.shared[DOCK_KEY] = { id: "dk" };
   const { v, k } = await picker();
