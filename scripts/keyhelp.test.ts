@@ -156,7 +156,7 @@ test("markdown: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("preview: ? opens the overview in the file's place, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/preview/main.js");
+  const m = await import("../defaults/mods/preview/main.ts");
   const v: any = surface(m.default, ["key", "barKey", "keysStrip"], { how: { how: "image" }, kind: "image", keysShown: false, ring: null, chips: [], editable: () => true, db: null, pages: 1 });
   opensAndCloses("preview", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme).kids[0]);
 });
