@@ -425,7 +425,7 @@ export function tabMenuItems({ count, index, others = false, scratch = false }: 
 }
 
 /** A key in the tab menu: j k ↑ ↓ move (wrapping), enter / space run the
- *  marked entry, an entry's letter runs it, esc closes. -> { at, act, close } */
+ *  marked entry, an entry's letter runs it, esc or q closes. -> { at, act, close } */
 export function tabMenuKey(items: readonly MenuItem[], at: number, e: KeyEvent): MenuKey {
   const key = e.key;
   const m = e.modifiers;
@@ -444,7 +444,10 @@ export function tabMenuKey(items: readonly MenuItem[], at: number, e: KeyEvent):
   if (key === "enter" || key === "space") return { at, act: items[at]?.act ?? null, close: true, taken: true };
   const hit = items.find((x) => x.key === ch);
 
-  return hit ? { at, act: hit.act, close: true, taken: true } : { at, act: null, close: false, taken: true };
+  if (hit) return { at, act: hit.act, close: true, taken: true };
+
+  // q closes, as in every menu (no entry is q's).
+  return { at, act: null, close: ch === "q", taken: true };
 }
 
 /** What a tab hands to the editor it goes to (popped out, or moved into

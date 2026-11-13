@@ -1095,6 +1095,12 @@ test("the tab's menu: a right-click on a tab, its entries, j / k / enter and let
   p.openTabMenu(cx(), 0);
   p.tabMenuKeyDown(keyc("escape"), cx());
   expect(p.tabMenu).toBe(null);
+  // q closes it too (no entry is q's); shift-q (Q) is no entry either: it stays.
+  p.openTabMenu(cx(), 0);
+  p.tabMenuKeyDown(keyc("Q"), cx());
+  expect(p.tabMenu).not.toBe(null);
+  p.tabMenuKeyDown(keyc("q"), cx());
+  expect(p.tabMenu).toBe(null);
   p.openTabMenu(cx(), 0);
   ran.length = 0;
   click(byId(p.tabMenuView(theme), "editor-tab-menu-pop-out"));
