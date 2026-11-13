@@ -15,4 +15,3 @@ defaults/mods/editor/main.ts newDoc
 defaults/mods/editor/main.ts startServer
 defaults/mods/editor/main.ts tabStrip
 defaults/mods/editor/main.ts vimCommand
-defaults/mods/nocturne/tabs.ts render

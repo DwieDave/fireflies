@@ -60,7 +60,7 @@ import { procsControl, toggleProcs } from "./procs.ts";
 import { runJobs, pendingJobs } from "./jobs.ts";
 import { watchPrompts } from "./prompt.ts";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
-import type { Gap } from "./tabdrag.ts";
+import type { Gap, StakeAt } from "./tabdrag.ts";
 
 const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
@@ -621,6 +621,52 @@ export default class Tabs {
       : this.row === "parked" ? openKeys("parked pane keys", PARKED_HELP) : openKeys("tab strip keys", STRIP_HELP);
   }
 
+  /** A tab on the strip: its number, icon and name (an unnamed tab goes by its
+   *  lead pane), its status, lit when shown; pressed, dragged, closed with the
+   *  middle button, its menu on the right; the stake where a drag would land. */
+  tabItem(t: Theme, c: TabInfo, space: SpaceInfo | undefined, at: StakeAt | null): Element {
+    const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
+    const prog = lead?.program;
+    // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
+    const name = c.named ? c.name : givenName(lead?.terminal) ?? (prog?.agent ? prog.name : lead?.title || prog?.name || c.name);
+    const lifted = this.drag?.id === c.id;
+    const icon = prog?.icon;
+
+    return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
+      .text_size(11).text_color(c.active || lifted ? t.foreground : t.muted)
+      .hover((s) => s.text_color(t.foreground))
+      // Dragged: lifted where it is, behind its words.
+      .when(lifted, (el) => el.children(lift(t)))
+      .on_mouse_down("left", (e, cx) => {
+        cx.stop_propagation();
+        this.pressed = { id: c.id, x: e.position.x };
+
+        if (e.click_count === 2) run("tab.rename", { id: c.id });
+      })
+      .on_mouse_move((e, cx) => this.dragOver(gapAt(c.id, e.local_position.x, e.bounds.width), e, cx))
+      // A click (no drag) shows the tab; a drag drops in the strip's mouse up.
+      .on_mouse_up("left", () => {
+        if (!this.drag && this.pressed?.id === c.id) run("tab.select", { id: c.id });
+      })
+      // Middle click closes the tab, as in a browser.
+      .on_mouse_down("middle", (_e, cx) => {
+        cx.stop_propagation();
+        run("tab.close", { id: c.id });
+      })
+      .on_mouse_down("right", (_e, cx) => {
+        cx.stop_propagation();
+
+        if (space) openMenu({ tab: "tab", target: { id: c.id, space: space.id } });
+      })
+      .child(div().text_color(c.active || lifted ? t.accent : t.dim).child(String(c.index)))
+      .when(Boolean(icon), (el) => (icon ? el.child(prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : el))
+      .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
+      .when(Boolean(c.status), (el) => (c.status ? el.child(statusFly(t, c.status, `tab-fly-${c.id}`)) : el))
+      .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
+      .map((el) => navRing(t, el, this.at(`tab:${c.id}`)))
+      .when(at?.before === c.id, (el) => el.child(stake(t)));
+  }
+
   render(): Element {
     if (pendingJobs()) runJobs();
 
@@ -639,48 +685,7 @@ export default class Tabs {
     const drag = this.drag;
     const at = drag ? stakeAt(this.order, shown.map((c) => c.id), drag.id, dropIndex(this.order, drag.id, drag.gap)) : null;
 
-    const item = (c: TabInfo) => {
-      const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
-      const prog = lead?.program;
-      // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
-      const name = c.named ? c.name : givenName(lead?.terminal) ?? (prog?.agent ? prog.name : lead?.title || prog?.name || c.name);
-      const lifted = drag?.id === c.id;
-      const icon = prog?.icon;
-
-      return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
-        .text_size(11).text_color(c.active || lifted ? t.foreground : t.muted)
-        .hover((s) => s.text_color(t.foreground))
-        // Dragged: lifted where it is, behind its words.
-        .when(lifted, (el) => el.children(lift(t)))
-        .on_mouse_down("left", (e, cx) => {
-          cx.stop_propagation();
-          this.pressed = { id: c.id, x: e.position.x };
-
-          if (e.click_count === 2) run("tab.rename", { id: c.id });
-        })
-        .on_mouse_move((e, cx) => this.dragOver(gapAt(c.id, e.local_position.x, e.bounds.width), e, cx))
-        // A click (no drag) shows the tab; a drag drops in the strip's mouse up.
-        .on_mouse_up("left", () => {
-          if (!this.drag && this.pressed?.id === c.id) run("tab.select", { id: c.id });
-        })
-        // Middle click closes the tab, as in a browser.
-        .on_mouse_down("middle", (_e, cx) => {
-          cx.stop_propagation();
-          run("tab.close", { id: c.id });
-        })
-        .on_mouse_down("right", (_e, cx) => {
-          cx.stop_propagation();
-
-          if (space) openMenu({ tab: "tab", target: { id: c.id, space: space.id } });
-        })
-        .child(div().text_color(c.active || lifted ? t.accent : t.dim).child(String(c.index)))
-        .when(Boolean(icon), (el) => (icon ? el.child(prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : el))
-        .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
-        .when(Boolean(c.status), (el) => (c.status ? el.child(statusFly(t, c.status, `tab-fly-${c.id}`)) : el))
-        .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
-        .map((el) => navRing(t, el, this.at(`tab:${c.id}`)))
-        .when(at?.before === c.id, (el) => el.child(stake(t)));
-    };
+    const item = (c: TabInfo): Element => this.tabItem(t, c, space, at);
 
     // Past the last tab: the gap at the end, at least wide enough to aim at.
     const end = div().id("tab-end").relative().flex_1().min_w(24).h_full()
