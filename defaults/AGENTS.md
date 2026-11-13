@@ -2470,7 +2470,8 @@ All of it is in `herdr.d.ts`. In short:
   mod: `cx.spawn(async (cx) => { for (;;) { const c = await nextCommand(); …; cx.notify(); } })`).
 
 Mods are trusted code: commands and network access (including `fetch`) are unrestricted.
-Other built-ins: `localStorage` (per mod copy), `console.log`, `fetch`,
+Other built-ins: `localStorage` (per mod and props: a copy opened again with the same
+props, in any key order, after a restart too, finds what it kept), `console.log`, `fetch`,
 `import * as fs from "fs/promises"` (read in home, write under `~/.config/herdr-app`).
 
 ## herdr-core (`hc`)
