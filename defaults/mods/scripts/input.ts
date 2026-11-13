@@ -8,6 +8,7 @@ import type { Output } from "./state.ts";
 import { scrollOutput, filtered, escapeKey } from "./actions.ts";
 import { openGrant } from "./bars.ts";
 import { isControl } from "./runs.ts";
+import { quit } from "./place.ts";
 
 /** A key on a run's output: j k pages, g G, o the grant, esc back, q closes,
  *  ? keys, / filters. True when the deck should redraw. */
@@ -28,7 +29,7 @@ export function outputKey(v: ScriptsDeck, o: Output, e: KeyEvent, cx: Context): 
   else if (k === "escape" || k === "backspace" || k === "h" || k === "left") v.output = null;
   else if (k === "q") {
     cx.stop_propagation();
-    v.dismissDeck();
+    quit(v);
 
     return false;
   }

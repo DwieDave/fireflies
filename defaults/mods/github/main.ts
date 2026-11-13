@@ -54,20 +54,16 @@ import type { Axis, Hint, Note } from "./kit.ts";
 import { hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import type { Host, Picker, ReadOptions, ResizeOptions, RunFilter } from "./host.ts";
-import Prs, { isPrsKept } from "./prs.ts";
-import Actions, { isActionsKept } from "./actions.ts";
-import Projects, { isProjectsKept } from "./projects.ts";
+import Prs from "./prs.ts";
+import Actions from "./actions.ts";
+import Projects from "./projects.ts";
 import type { Confirm, TabId } from "./window-chrome.ts";
 import { isTabId, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
 import { windowKey, pickerKey, runCommand } from "./window-keys.ts";
 import { refresh, warm, persist, SAVE_EVERY } from "./window-reads.ts";
-
-/** The open window, for the toggle (nocturne's sky): its overlay id and when it last said so. */
-const isWindowNote = object({ id: isString, beat: isNumber });
+import { STATE, WINDOW_KEY, besidePane, keptFor, saveCopy } from "./place.ts";
 
 export const WINDOW = "github.window";
-
-const WINDOW_KEY = sharedKey(WINDOW, nullable(isWindowNote));
 
 // { folder, on, head, at }: the git window's branch for a new pull request (its branches panel),
 // read when github.new-pr arrives or the window opens with create "pr".
@@ -78,16 +74,11 @@ const CREATE_KEY = sharedKey(CREATE, nullable(object({}, { folder: nullable(isSt
 const CREATE_FRESH = 30000;
 const BEAT = 4000;
 
-/** What the window keeps in shared state (its folder, tab and each tab's own), so it comes back
- *  where it was (after git's review, say). */
-const STATE = sharedKey("github.state", object({}, {
-  folder: nullable(isString), tab: isTabId, prs: isPrsKept, actions: isActionsKept, projects: isProjectsKept,
-}));
 
 /** What the window is opened with (nocturne/github.ts, git's way back, + new): the folder and
  *  machine, its overlay, the tab, a form to open (and when it was asked). */
 const isGithubProps = object({}, {
-  folder: nullable(isString), on: nullable(isString), overlay: isString, tab: isTabId, create: literal("pr", "workflow"), at: isNumber,
+  folder: nullable(isString), on: nullable(isString), overlay: isString, slot: isString, tab: isTabId, create: literal("pr", "workflow"), at: isNumber,
 });
 
 type GithubProps = Guarded<typeof isGithubProps>;
@@ -133,6 +124,8 @@ function here(): Place {
 
 export default class GitHub extends View implements Host {
   overlay: string | null = null;
+  /** A pane's own id (props.slot, place.ts). */
+  slot: string | null = null;
   folder: string | null = null;
   on: string | null = null;
   tab: TabId = "prs";
@@ -201,13 +194,14 @@ export default class GitHub extends View implements Host {
     const pr = isGithubProps(given) ? given : NO_PROPS;
 
     this.overlay = pr.overlay ?? null;
+    this.slot = pr.slot ?? null;
 
     const h: Place = pr.folder ? { folder: pr.folder, on: pr.on ?? null } : here();
 
     this.folder = h.folder;
     this.on = h.on;
 
-    const kept = readShared(shared, STATE, {});
+    const kept = keptFor(this);
     const same = kept.folder === this.folder;
 
     this.tab = pr.tab ?? (same ? kept.tab : null) ?? "prs";
@@ -488,7 +482,10 @@ export default class GitHub extends View implements Host {
   }
 
   save(): void {
-    writeShared(setShared, STATE, { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() });
+    const kept = { folder: this.folder, tab: this.tab, prs: this.prs.save(), actions: this.actions.save(), projects: this.projects.save() };
+
+    writeShared(setShared, STATE, kept);
+    saveCopy(this, kept);
   }
 
   focusSelf(): void {
@@ -569,7 +566,9 @@ export default class GitHub extends View implements Host {
 
       writeShared(setShared, WINDOW_KEY, { id, beat: Date.now() }); // the review holds the window now (and renews this)
     } else {
-      run("pane.split", { direction: "auto", mod: "git", props: diff });
+      const pane = besidePane(this);
+
+      run("pane.split", pane ? { direction: "auto", pane, mod: "git", props: diff } : { direction: "auto", mod: "git", props: diff });
     }
   }
 
@@ -640,7 +639,7 @@ export default class GitHub extends View implements Host {
 
     if (this.help) return [["esc", "close keys"], ["?", "keys"]];
 
-    return this.state === "ready" ? this.shown().hints() : [["esc", "close"], ["?", "keys"]];
+    return this.state === "ready" ? this.shown().hints() : [[this.overlay ? "esc" : "q", "close"], ["?", "keys"]];
   }
 
   override render(): Element {
@@ -668,7 +667,9 @@ export default class GitHub extends View implements Host {
       : this.stale ? div().text_color(t.ansi8).truncate().max_w(420).child(this.stale) : null;
 
     const handle = this.handle, resizing = this.resizing, picker = this.picker, confirm = this.confirm;
-    const view = v_flex().id("github").size_full().bg(t.background).border(1).border_color(t.ansi8);
+    // A window draws its frame; a pane has the pane's (place.ts).
+    const root = v_flex().id("github").size_full().bg(t.background);
+    const view = this.overlay ? root.border(1).border_color(t.ansi8) : root;
     // A form open: ctrl-tab moves through it from any stop, not the app's tabs.
     const formOpen = !!this.shown().form;
 

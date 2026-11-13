@@ -15,6 +15,10 @@ import Prs from "./prs.ts";
 import Actions from "./actions.ts";
 import Projects from "./projects.ts";
 import type { default as GitHub } from "./main.ts";
+import { inPane, move } from "./place.ts";
+
+/** Narrower than this (a pane), the tabs not shown say only their number. */
+export const NARROW = 640;
 
 /** The window's tabs. */
 export const isTabId = literal("prs", "actions", "projects");
@@ -38,10 +42,12 @@ export function header(v: GitHub, t: Theme): Element {
   const where = v.repo ? v.repo.full : v.folder ?? "";
   const prs = v.prs.list?.length ?? 0;
 
+  const compact = v.size.width < NARROW;
+
   const tabs = TABS.map(([id, label], i) => chip(t, `tab-${id}`,
     h_flex().gap(6).items_center()
       .child(div().text_color(v.tab === id ? t.accent : t.dim).child(String(i + 1)))
-      .child(div().child(label))
+      .when(!compact || v.tab === id, (el) => el.child(div().child(label)))
       .when(id === "actions" && runningRuns > 0, (el) => el.child(pip(t, "working", 6)))
       .when(id === "prs" && prs > 0, (el) => el.child(div().text_color(t.dim).child(String(prs)))),
     v.tab === id, (cx) => v.setTab(id, cx)));
@@ -61,7 +67,13 @@ export function header(v: GitHub, t: Theme): Element {
   const r = v.repo;
 
   // The bar is where the window drags from: presses on it aren't stopped.
-  return h_flex().id("gh-head").relative().h(36).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
+  // Where the window's ✕ is, the move: ◧ into a pane, or from a pane ⧉ out to a window (place.ts).
+  const pane = inPane(v);
+
+  const moveChip = h_flex().id("gh-move-tip").relative().flex_none().tooltip(pane ? "Out to a window · ctrl-t" : "Into a pane · ctrl-t")
+    .child(chip(t, "gh-move", pane ? "⧉" : "◧", false, (cx) => move(v, cx)));
+
+  return h_flex().id("gh-head").relative().h(36).flex_none().overflow_hidden().pl(12).pr(6).gap(10).items_center().text_size(11)
     .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
     .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi8, 1)))
     // A firefly drifts along the bar while something runs.
@@ -71,7 +83,7 @@ export function header(v: GitHub, t: Theme): Element {
     .child(h_flex().relative().flex_none().gap(8).items_center()
       .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
       .child(div().text_color(t.foreground).child("GITHUB")))
-    .child(div().relative().flex_none().max_w(320).truncate().text_color(t.muted).child(where))
+    .child(div().relative().flex_shrink(1).min_w(0).max_w(320).truncate().text_color(t.muted).child(where))
     .when(Boolean(r?.parent || r?.child), (el) => el.child(chip(t, "gh-fork",
       r?.parent ? `fork of ${r.parent}` : `‹ ${r?.child ?? ""}`, false, (cx) => v.switchFork(cx), t.dim)))
     .when(Boolean(r?.branch), (el) => el.child(div().relative().flex_none().text_color(t.ansi5).child(r?.branch ?? "")))
@@ -79,6 +91,7 @@ export function header(v: GitHub, t: Theme): Element {
     .child(div().flex_1())
     .child(div().relative().flex_none().child(status))
     .child(chip(t, "gh-refresh", "↻", false, (cx) => v.refresh(cx, true)))
+    .child(moveChip)
     .when(Boolean(v.overlay), (el) => el.child(chip(t, "gh-close", "✕", false, () => v.closeWindow())));
 }
 
@@ -87,7 +100,7 @@ export function helpPanel(v: GitHub, t: Theme): Element {
   const fork = v.tab === "projects" ? "F" : "p F";
   const r = v.repo;
   const forkRow: Hint[] = r?.parent ? [[fork, `the parent, ${r.parent}`]] : r?.child ? [[fork, `back to the fork, ${r.child}`]] : [];
-  const all: Hint[] = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"], ...forkRow, ["esc q", "close (from the top)"], ["?", "keys"]];
+  const all: Hint[] = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"], ...forkRow, inPane(v) ? ["q", "close the pane (from the top)"] : ["esc q", "close (from the top)"], ["ctrl-t", inPane(v) ? "out to a window" : "into a pane"], ["?", "keys"]];
   const tab = v.tab === "prs" ? Prs.help() : v.tab === "projects" ? Projects.help() : Actions.help();
   const name = TAB_NAME[v.tab];
 

@@ -77,9 +77,12 @@ import { goBack, quit, showNow } from "./panes.ts";
 import { loadMain } from "./content.ts";
 import { focusMain, giveWay, moveTo, scrollMain, setPanel, setTab } from "./navigate.ts";
 import { loadAll, reload, reloadNow, reloadReview, start } from "./reads.ts";
+import { actsOnCommands, saveCopy, takeCopy, toPane, toWindow } from "./place.ts";
 
 export default class GitView extends View {
   overlay: string | null = null;
+  /** A whole-window pane's own id (props.slot, place.ts). */
+  slot: string | null = null;
   folder: string | null = null;
   on: string | null = null;
   /** The GitHub window to put back. */
@@ -162,6 +165,7 @@ export default class GitView extends View {
 
   override init(p: Props | undefined, cx: AsyncContext) {
     this.takeProps(p);
+    takeCopy(this);
 
     this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
@@ -201,6 +205,7 @@ export default class GitView extends View {
     const groups = isGroups(given) ? given : NO_GROUPS;
 
     this.overlay = pr.overlay ?? null;
+    this.slot = pr.slot ?? null;
 
     const h = pr.folder ? { folder: pr.folder, on: pr.on ?? null } : here();
 
@@ -283,8 +288,10 @@ export default class GitView extends View {
         }
         // keys.json can bind any key table action: git.<action>
         // (panel-commits for panel:commits).
-        // While a git window is open, commands are its keys: other copies (panes) leave them.
-        else if (this.notMine()) { /* the window's */ }
+        // One copy acts: the window while one is open, else the pane with the keyboard (place.ts).
+        else if (!actsOnCommands(this)) { /* another copy's */ }
+        else if (c === "to-pane") toPane(this);
+        else if (c === "to-window") toWindow(this);
         else if (this.popups.open) {
           if (c === "back") this.popups.close();
           else if (c === "menu-run" || c === "confirm-yes" || c === "prompt-ok" || c === "commit-ok") this.popups.ok(cx);
@@ -296,13 +303,6 @@ export default class GitView extends View {
   }
 
   // ---- life
-
-  /** A git window is open and this copy isn't it. */
-  notMine() {
-    const w = readShared(shared, WINDOW_KEY, null);
-
-    return Boolean(w?.id && Date.now() - (w.beat ?? 0) < 10000 && w.id !== this.overlay);
-  }
 
   beat() {
     if (!this.overlay || this.closed) return;
@@ -328,6 +328,7 @@ export default class GitView extends View {
 
     all.set(this.folder, { panel: this.panel, tabOf: this.tabOf, mode: this.mode, tree: this.tree, showLog: this.showLog, sideW: this.sideW, railW: this.railW, midW: this.midW, logH: this.logH });
     writeSharedMap(setShared, STATE, all);
+    saveCopy(this);
   }
 
   focusSelf() { if (!this.closed) this.handle?.focus(); }

@@ -101,6 +101,14 @@ pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
 `L` lists the links in the shown pull request or open card (j/k, enter opens
 one); `tab` / `shift-tab` walk the panels; `?` lists every key.
+The window also lives in a normal pane, beside terminals: props `{slot,
+folder, on?}` (`slot` unique: the pane finds itself and keeps its tab and
+each tab's selection across restarts). In a pane it has no frame or ✕, esc
+never closes it (q does), and narrower than 640 px only the shown tab says its
+name. ctrl-t (or the header's ◧ / ⧉, `github.to-pane` / `github.to-window`)
+moves the window into a pane beside the focused one, or a pane out to the
+window, keeping its tab and selection; commands (`github.<name>`) go to the
+window while one is open, else to the GitHub pane with the keyboard.
 Its third tab, Projects (`3`, or `github.projects` in keys.json), is
 a GitHub Projects board: the projects linked to the repo (and its parent, for
 a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
@@ -157,6 +165,21 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
+**Window mods in panes.** Git, GitHub and the script runner open as
+their floating window or as a normal pane that stays beside terminals and
+editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
+own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
+"vps"}`; the same for `nocturne.github` and `nocturne.scripts` (bare, each
+toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
+(beside or a tab, as its landing switch says), the palette "Git in a pane" and
+the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
+"git", props: {slot, folder, on?}}` (`slot` a unique word). ctrl-t in one (or
+its header's ◧ / ⧉) moves it between the window and a pane with its state.
+A mod of your own that opens as a window can do the same: a window has
+`props().overlay`, a pane doesn't; in a pane no frame, no close ✕, esc never closes it, the size
+is the pane's; a pane's props carry a unique `slot` to find itself in
+`panes()` and key its `localStorage`.
+
 Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
@@ -173,6 +196,15 @@ uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 pane or tab yourself with `pane.split` / `tab.new {mod: "git", props:
 {folder, on?, review?, scope?: "work" | "branch", pr?, repo?}}`. A
 `diff` pane or window (old saved tabs) hands over to it.
+The whole window also lives in a normal pane, beside terminals: props
+`{slot, folder, on?}` (`slot` unique, so the pane finds itself and keeps what
+it shows across restarts; `folder` fixed when it opens). In a pane it has no
+frame or ✕ (the pane's header closes it), esc never closes it (q does), and
+narrower than 640 px its panels stack in one column. ctrl-t (or the header's
+◧ / ⧉, `git.to-pane` / `git.to-window`) moves the window into a pane beside
+the focused one, or a pane out to the window, keeping its panel, tabs, mode
+and selection. Commands (`git.<action>`) go to the window while one is open,
+else to the git pane with the keyboard.
 In the window, ctrl-p (or the ⧉ in the main view's title, a right-click menu,
 the palette's "Git: open the diff as a pane") opens what the main view shows
 as a pane beside the focused pane, ctrl-shift-p in a new tab, and closes the
@@ -310,7 +342,12 @@ the highlighted line shows where it will land.
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
   leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
   shift-tab the next group; on a run `w` watches, `x` removes an ended one and stops a running one, `R` runs it again (ending a running one, `x` or `R`, asks: the same key again within 3 s does it);
-  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
+  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys.
+  The deck also lives in a normal pane (props `{slot, folder, on?}`): there it
+  stays open when a script runs, esc never closes it (q does), and its list
+  takes the pane's height; ctrl-t (or the head's ◧ / ⧉, `scripts.to-pane` /
+  `scripts.to-window`) moves it into a pane beside the focused one or back
+  over the tab, with its filter and cursor. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager

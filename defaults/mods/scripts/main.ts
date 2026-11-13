@@ -45,13 +45,14 @@ import type { Run } from "./runs.ts";
 import { allRuns } from "./runs.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { keysKey } from "./keyhelp.ts";
-import { CHORD, deckProps, FOUND, ESCAPE, CONTEXT, DECK, SECTION, ROW, FOOT, RUNS_SHOWN, H, HEAD, INPUT } from "./state.ts";
+import { CHORD, deckProps, FOUND, ESCAPE, CONTEXT, DECK, SECTION, ROW, FOOT, RUNS_SHOWN, HEAD, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Asking, Item, Act } from "./state.ts";
 import { lookForScripts, recent } from "./found.ts";
 import { enterRow, escapeKey, groups, runAct, showOutput } from "./actions.ts";
 import { emptyView, runRow, scriptRow, section, tally, placeRows } from "./rows-view.ts";
 import { footBar, helpView, outputView, passwordBar, deckHead, filterLine } from "./bars.ts";
 import { outputKey, typedKey } from "./input.ts";
+import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [
@@ -59,7 +60,7 @@ export const deckKeys = (cmd: string): KeyRow[] => [
   ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
   ["w", "watch the run · an ended one's output"], [`x ${cmd}⌫`, "remove an ended run · stop a running one (twice)"], [`R ${cmd}R`, "run it again (a running one: twice)"],
   ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
-  ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
+  ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close (in a pane: q)"], ["ctrl-t", "into a pane · out over the tab"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
 ];
 
 export default class ScriptsDeck extends View {
@@ -67,6 +68,12 @@ export default class ScriptsDeck extends View {
   static bound = false;
 
   bar: PasswordBar | null = null;
+  /** Over the tab (the overlay's id), or null: a pane (place.ts). */
+  overlay: string | null = null;
+  /** A pane's own id (props.slot). */
+  slot: string | null = null;
+  /** A pane's height, as drawn (an overlay is H tall). */
+  height = 0;
   folder: string | null = null;
   on: string | null = null;
   key = ":";
@@ -104,11 +111,14 @@ export default class ScriptsDeck extends View {
       return;
     }
 
+    this.overlay = p.overlay ?? null;
+    this.slot = p.slot ?? null;
     this.folder = p.folder ?? null;
     this.on = p.on ?? null;
     this.key = `${this.on ?? ""}:${this.folder ?? ""}`;
     this.scripts = readSharedMap(shared, FOUND).get(this.key) ?? null;
     this.cursor = p.focus === "runs" ? 0 : -1;
+    takeHandover(this);
     // Opened by nocturne.scripts-again: runs this folder's last script once it's found.
     this.again = p.again ?? false;
 
@@ -124,7 +134,8 @@ export default class ScriptsDeck extends View {
     this.handle = handle;
     handle.focus();
 
-    for (const ms of [60, 250, 600]) cx.timer.after(ms, () => handle.focus());
+    // A pane takes the keyboard as panes do (a click, pane.go): no grabbing it back.
+    if (!inPane(this)) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => handle.focus());
 
     // scripts.focus (overlay.focus hands it): the keyboard back here.
     // scripts.keys: its ? list, as ? (or cmd-k ?) shows it.
@@ -134,6 +145,8 @@ export default class ScriptsDeck extends View {
 
         if (c === "focus") handle.focus();
         else if (c === "keys") { this.help = !this.help; cx.notify(); }
+        else if (c === "to-pane") toPane(this, cx);
+        else if (c === "to-window") toWindow(this, cx);
       }
     });
 
@@ -259,6 +272,12 @@ export default class ScriptsDeck extends View {
       return done();
     }
 
+    if (m.control && k === "t") {
+      moveDeck(this, cx);
+
+      return done();
+    }
+
     if (this.typing) {
       if (typedKey(this, e, cx)) done();
 
@@ -285,7 +304,7 @@ export default class ScriptsDeck extends View {
     else if (k === "q") {
       cx.stop_propagation();
 
-      return this.dismissDeck();
+      return quit(this);
     }
     else if (ch === "?") this.help = true;
     else if (k === "/" || ch === "/") { this.output = null; this.typing = true; }
@@ -334,7 +353,7 @@ export default class ScriptsDeck extends View {
 
     // The runs: up to RUNS_SHOWN rows tall; the rest scroll.
     const runsH = all.length ? SECTION + Math.min(all.length, RUNS_SHOWN) * ROW + 4 : 0;
-    const listH = H - 2 - HEAD - runsH - INPUT - FOOT - 4;
+    const listH = Math.max(ROW, deckHeight(this) - 2 - HEAD - runsH - INPUT - FOOT - 4);
 
     this.page = Math.max(1, Math.floor(listH / ROW) - 1);
 
@@ -361,7 +380,9 @@ export default class ScriptsDeck extends View {
     });
 
     const handle = this.handle;
-    const deck = v_flex().id("scripts-deck").size_full().bg(t.background).border(1).border_color(t.ansi0);
+    // Over the tab it draws its frame; a pane has the pane's.
+    const root = v_flex().id("scripts-deck").size_full().bg(t.background);
+    const deck = inPane(this) ? root : root.border(1).border_color(t.ansi0);
 
     return (handle ? deck.track_focus(handle) : deck)
       .key_context(CONTEXT)
@@ -370,6 +391,14 @@ export default class ScriptsDeck extends View {
       .on_mouse_down("left", () => handle?.focus())
       .on_mouse_move(() => { this.moved = true; })
       .on_key_down((e, cx) => this.onKey(e, cx, items))
+      .on_size_change((drawn, cx) => {
+        const h = unzoom(drawn.height);
+
+        if (inPane(this) && Math.abs(h - this.height) > 1) {
+          this.height = h;
+          cx.notify();
+        }
+      })
       .child(deckHead(this, t))
       .when(all.length > 0, (el) => el
         .child(section(t, "runs", tally(this, t, all)))

@@ -115,11 +115,11 @@ function menuGrid() {
   return { m, rows, letters };
 }
 
-test("+ new menu: no tile floats over the tab; the six others three to a row, the scratchpad among them", () => {
+test("+ new menu: no tile floats over the tab; nine three to a row, the scratchpad among them, Git, GitHub and Scripts as panes", () => {
   const { rows, letters } = menuGrid();
-  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "scratchpad"]]);
+  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "scratchpad"], ["git", "github", "scripts"]]);
   // Each keeps its letter.
-  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u", scratchpad: "s" });
+  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u", scratchpad: "s", git: "l", github: "h", scripts: "r" });
   // No tile carries a spot label: not "float", and Files not "edge" (it opens a pane of its own).
   const tileWords = rows.flat().filter((id) => id !== "pad").flatMap((id) => words(ids[`nm-${id}`]));
   expect(tileWords).not.toContain("float");
@@ -128,11 +128,11 @@ test("+ new menu: no tile floats over the tab; the six others three to a row, th
   expect(menuPanels().every((p: any) => !p.fixed)).toBe(true);
 });
 
-test("+ new menu: its height has room for the two rows of tiles it shows", () => {
+test("+ new menu: its height has room for the three rows of tiles it shows", () => {
   sharedState["new-menu.agents"] = { "": [] };
   const h = newmenu.newMenuHeight();
-  // head, section, 2 rows of 64 and a gap, section, one agent row, section, 3 rows, padding, foot, border.
-  expect(h).toBe(44 + 24 + 2 * 64 + 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
+  // head, section, 3 rows of 64 and two gaps, section, one agent row, section, 3 rows, padding, foot, border.
+  expect(h).toBe(44 + 24 + 3 * 64 + 2 * 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
 });
 
 test("+ new menu: a little narrower than it was (352), each of three tiles wide enough for \"Terminal\"", () => {

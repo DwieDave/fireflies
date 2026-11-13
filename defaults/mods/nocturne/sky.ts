@@ -64,6 +64,7 @@ import { togglePicker } from "./picker.ts";
 import { openScratchpad } from "./scratchpad.ts";
 import { toggleGithub, githubForm } from "./github.ts";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.ts";
+import { openAsCommand } from "./inpane.ts";
 import { toggleProcs } from "./procs.ts";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.ts";
 import { openSpacePicker } from "./newspace.ts";
@@ -193,6 +194,8 @@ export default class Sky {
         else if (c === "next") this.spaces.step(1);
         else if (c === "prev") this.spaces.step(-1);
         else if (c === "fold") this.fold(later);
+        // nocturne.git:pane / :tab / :window or :{"as", folder?, on?} (github, scripts too): inpane.ts.
+        else if (openAsCommand(c)) { /* opened */ }
         else if (c === "git" || c === "lazygit") toggleGit();
         else if (c === "diff") toggleGit({ review: true });
         else if (c === "worktrees") openWorktrees();

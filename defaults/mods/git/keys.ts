@@ -30,6 +30,7 @@ export const BINDINGS = [
   ["global", ["?", "x"], "keys", "Keybindings menu", "bar"],
   ["global", ["q", "ctrl-c"], "quit", "Close the window", ""],
   ["global", ["escape"], "back", "Cancel / back", ""],
+  ["global", ["ctrl-t"], "move", "Into a pane / out to a window", ""],
   ["global", ["1"], "panel:status", "Status panel", "hidden"],
   ["global", ["2"], "panel:files", "Files panel", "hidden"],
   ["global", ["3"], "panel:branches", "Branches panel", "hidden"],

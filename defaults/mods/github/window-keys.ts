@@ -8,6 +8,7 @@ import { keysKey } from "./keyhelp.ts";
 import Actions from "./actions.ts";
 import { TABS, isTabId } from "./window-chrome.ts";
 import type { default as GitHub } from "./main.ts";
+import { actsOnCommands, leave, move, toPane, toWindow } from "./place.ts";
 
 /** The window's keys: a confirm, a form or a composer first, then the picker, ?, the window's own, the shown tab's. */
 export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
@@ -78,7 +79,8 @@ export function windowKey(v: GitHub, e: KeyEvent, cx: Context): void {
   else if (k === "L" && v.state === "ready") pickLink(v);
   else if (k === "r" && !m.control) v.refresh(cx, true);
   else if (v.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
-  else if (k === "escape" || k === "q") v.closeWindow();
+  else if (k === "t" && m.control) move(v, cx);
+  else if (k === "escape" || k === "q") leave(v, k);
   else return;
 
   cx.stop_propagation();
@@ -125,7 +127,12 @@ export function pickerKey(v: GitHub, k: string, cx: Context): void {
 
 /** A command sent to the window (github.<name>, keys.json's or the palette's); focus is init's. */
 export function runCommand(v: GitHub, c: string, cx: Context): void {
-  if (c === "refresh") v.refresh(cx, true);
+  // One copy acts: the window while one is open, else the pane with the keyboard (place.ts).
+  if (!actsOnCommands(v)) return;
+
+  if (c === "to-pane") toPane(v, cx);
+  else if (c === "to-window") toWindow(v, cx);
+  else if (c === "refresh") v.refresh(cx, true);
   else if (c === "keys") v.help = !v.help;
   else if (c === "fork") v.switchFork(cx);
   else if (isTabId(c)) v.setTab(c, cx);
