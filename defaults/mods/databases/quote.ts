@@ -134,13 +134,15 @@ export function bound(value: Cell, type: ColType): Bound | { readonly refused: s
   return { type: "text", value };
 }
 
-/** Whether a Postgres type is blank-padded (char(n)): its text drops the padding, so it's
- *  compared as itself. */
-const padded = (declared: string): boolean => /^(character|char|bpchar)\b(?! varying)/i.test(declared.trim());
+/** Postgres types without an equality operator: compared by their text (json's is its input as
+ *  typed, which is what psql prints). */
+const textCompared = (declared: string): boolean => /^(json|xml|point|line|lseg|box|path|polygon|circle)\b/i.test(declared.trim());
 
-/** The check that a column still holds `old` (as the client printed it): its text compared, so
- *  any type compares the way it was shown (Postgres' ::text, MySQL's CAST AS CHAR, SQLite's CAST
- *  AS TEXT, which is what sqlite3 prints). `param`: the old value is bound (Hrana), not pasted. */
+/** The check that a column still holds `old` (as the client printed it). Postgres reads the
+ *  printed text back as the column's type (its ::text isn't what psql prints: a boolean's is
+ *  'true', psql's t), only a type without equality is compared as text; MySQL compares CAST AS
+ *  CHAR and SQLite CAST AS TEXT, which is what their clients print. `param`: the old value is
+ *  bound (Hrana), not pasted. */
 export function stillHolds(kind: Kind, column: string, declared: string, old: Cell, param = false): string {
   const id = quoteName(kind, column);
 
@@ -148,7 +150,7 @@ export function stillHolds(kind: Kind, column: string, declared: string, old: Ce
 
   const value = param ? "?" : textLiteral(kind, old);
 
-  if (kind === "postgres") return padded(declared) ? `${id} = ${value}` : `${id}::text = ${value}`;
+  if (kind === "postgres") return textCompared(declared) ? `${id}::text = ${value}` : `${id} = ${value}`;
 
   if (kind === "mysql") return `CAST(${id} AS CHAR) = ${value}`;
 

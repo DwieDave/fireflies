@@ -99,9 +99,10 @@ describe("quoting per engine", () => {
   });
 
   test("the old value's check: compared as the client printed it", () => {
-    expect(stillHolds("postgres", "lit", "boolean", "t")).toBe("\"lit\"::text = 't'");
+    expect(stillHolds("postgres", "lit", "boolean", "t")).toBe("\"lit\" = 't'");
+    expect(stillHolds("postgres", "meta", "json", "{\"a\": 1}")).toBe("\"meta\"::text = '{\"a\": 1}'");
     expect(stillHolds("postgres", "code", "character(3)", "ab ")).toBe("\"code\" = 'ab '");
-    expect(stillHolds("postgres", "name", "character varying(40)", "x")).toBe("\"name\"::text = 'x'");
+    expect(stillHolds("postgres", "name", "character varying(40)", "x")).toBe("\"name\" = 'x'");
     expect(stillHolds("mysql", "name", "varchar(40)", "a\\b")).toBe("CAST(`name` AS CHAR) = _utf8mb4 X'615C62'");
     expect(stillHolds("sqlite", "v", "real", "0.3")).toBe("CAST(\"v\" AS TEXT) = '0.3'");
     expect(stillHolds("sqlite", "v", "real", null)).toBe("\"v\" IS NULL");
@@ -198,7 +199,7 @@ describe("the save's statements", () => {
     const e = { ...staged(), table: { schema: "public", name: "lanterns" } };
     const pg = saveStatements({ kind: "postgres", bind: false, types: TYPES }, e);
     if (!("statements" in pg)) throw new Error("refused");
-    expect(pg.statements[1]?.text).toBe("UPDATE \"public\".\"lanterns\" SET \"name\" = 'it''s lit' WHERE \"id\" = 1 AND \"name\"::text = 'Ember'");
+    expect(pg.statements[1]?.text).toBe("UPDATE \"public\".\"lanterns\" SET \"name\" = 'it''s lit' WHERE \"id\" = 1 AND \"name\" = 'Ember'");
     expect(pg.statements[2]?.text).toBe("SELECT 1 / :ROW_COUNT AS changed");
     const my = saveStatements({ kind: "mysql", bind: false, types: TYPES }, e);
     if (!("statements" in my)) throw new Error("refused");
@@ -331,4 +332,62 @@ describe("a real round trip on a throwaway SQLite file", () => {
     expect(out.code).toBe(0);
     expect(csvSet(sql("select body from notes order by rowid"))?.rows).toEqual([["a"], ["b!"]]);
   });
+});
+
+/** A throwaway PostgreSQL's bin folder (FF_TEST_PG_BIN; skipped without one): initdb in a temp
+ *  folder, a Unix socket only, stopped and removed after. */
+const PG_BIN = process.env.FF_TEST_PG_BIN ?? "";
+
+describe.skipIf(!PG_BIN)("a real round trip on a throwaway PostgreSQL", () => {
+  const base = mkdtempSync(join(tmpdir(), "ff-pg-"));
+  const data = join(base, "data");
+  const psqlArgs = ["-X", "-A", "--csv", "-w", "-v", "ON_ERROR_STOP=1", "-P", "null=␀", "-h", base, "-d", "postgres"];
+  const sh = (cmd: string, args: string[]) => Bun.spawnSync([join(PG_BIN, cmd), ...args], { stdout: "pipe", stderr: "pipe" });
+  const sql = (q: string) => csvSet(sh("psql", [...psqlArgs, "-c", q]).stdout.toString())?.rows;
+  const types = new Map([["id", "integer"], ["name", "text"], ["lit", "boolean"], ["code", "character(3)"], ["glow", "real"]]);
+
+  async function save(e: ReturnType<typeof noEdits>) {
+    const r = saveStatements({ kind: "postgres", bind: false, types }, e);
+    if (!("statements" in r)) throw new Error(r.refused);
+    const { parsePsql } = await import("../defaults/mods/databases/parse-out.ts");
+    const out = await run(io, { kind: "postgres", dir: base, program: join(PG_BIN, "psql"), args: psqlArgs, script: scriptOf("postgres", r.statements).text });
+    return saveError(r.statements, parsePsql(out.stdout, out.stderr, out.code, r.statements.map((s) => s.risk !== "read"), out.cut));
+  }
+
+  test("saved, a row changed elsewhere refused at its guard, a refused value rolled back", async () => {
+    expect(sh("initdb", ["-D", data, "-A", "trust", "-U", process.env.USER ?? "postgres"]).exitCode).toBe(0);
+    // The server keeps no pipe of ours open (its output goes to a log), so the start returns.
+    const started = Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", data, "-l", join(base, "log"), "-o", `-k ${base} -c listen_addresses=''`, "-w", "start"], { stdout: "ignore", stderr: "ignore" });
+    expect(started.exitCode).toBe(0);
+    try {
+      sh("psql", [...psqlArgs, "-c", "create table lanterns(id integer primary key, name text not null, lit boolean, code character(3), glow real); insert into lanterns values (1,'Ember',true,'ab',0.1),(2,'Wisp',null,'x',1.5);"]);
+      const read = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
+      if (!read) throw new Error("no rows");
+      let e = noEdits("x", TABLE, ["id"]);
+      e = stage(e, read, 0, "name", "it's a\\b 灯");
+      e = stage(e, read, 0, "lit", "no");
+      e = stage(e, read, 1, "code", "yz");
+      e = stage(e, read, 1, "glow", "2.25");
+      expect(await save(e)).toBe(null);
+      expect(sql("select id, name, lit, code, glow from lanterns order by id")).toEqual([["1", "it's a\\b 灯", "f", "ab ", "0.1"], ["2", "Wisp", null, "yz ", "2.25"]]);
+      // Changed elsewhere after it was read: the guard stops it, nothing written.
+      const again = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
+      if (!again) throw new Error("no rows");
+      let f = noEdits("x", TABLE, ["id"]);
+      f = stage(f, again, 0, "name", "mine");
+      f = stage(f, again, 1, "name", "mine too");
+      sh("psql", [...psqlArgs, "-c", "update lanterns set name = 'theirs' where id = 2"]);
+      expect(await save(f)).toBe("id = 2: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved");
+      expect(sql("select name from lanterns order by id")).toEqual([["it's a\\b 灯"], ["theirs"]]);
+      // NOT NULL refused by the server: rolled back, the row named.
+      const third = csvSet(sh("psql", [...psqlArgs, "-c", "select * from lanterns order by id"]).stdout.toString());
+      if (!third) throw new Error("no rows");
+      const g = stage(stage(noEdits("x", TABLE, ["id"]), third, 0, "lit", "yes"), third, 1, "name", null);
+      expect(await save(g)).toContain("id = 2: null value in column \"name\"");
+      expect(sql("select lit from lanterns where id = 1")).toEqual([["f"]]);
+    } finally {
+      Bun.spawnSync([join(PG_BIN, "pg_ctl"), "-D", data, "-m", "immediate", "stop"], { stdout: "ignore", stderr: "ignore" });
+      Bun.spawnSync(["rm", "-rf", base]);
+    }
+  }, 60000);
 });
