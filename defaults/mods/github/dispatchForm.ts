@@ -19,8 +19,9 @@ import { isEnvironments, isNamedList, isRunList, isWorkflows } from "./model.ts"
 import { slug } from "./remotes.ts";
 import type { Input, InputType } from "./dispatch.ts";
 import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.ts";
-import type { Command, Field, FormHost, Outcome, Values } from "./form.ts";
-import { Form, textIn } from "./form.ts";
+import type { Command, Field, FormHost, Outcome, Values } from "./form-fields.ts";
+import { textIn } from "./form-fields.ts";
+import { Form } from "./form.ts";
 import type { Note } from "./kit.ts";
 import { panel, empty, band, noteOf } from "./kit.ts";
 

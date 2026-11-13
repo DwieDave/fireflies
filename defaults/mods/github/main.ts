@@ -35,30 +35,32 @@
 // A link opened from the floating window (o, a check, a link in a PR) opens
 // in a web pane beside the pane underneath and closes the window.
 
-import { View, div, svg } from "gpui-kit";
-import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
+import { View, div } from "gpui-kit";
+import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { h_flex, v_flex, ScrollHandle } from "gpui-base";
+import { v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Ran, Repo } from "./gh.ts";
 import { repoOf, viewRepo } from "./gh.ts";
-import type { WebLink } from "./model.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
 import type { Doc, Entry } from "./cache.ts";
-import { lookup, entryFor, repoKey, slimRepo } from "./cache.ts";
+import { lookup, repoKey } from "./cache.ts";
 import * as store from "./store.ts";
 import type { Axis, Hint, Note } from "./kit.ts";
-import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim, noteOf } from "./kit.ts";
+import { hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
-import { keysView, keysKey } from "./keyhelp.ts";
 import type { Host, Picker, ReadOptions, ResizeOptions, RunFilter } from "./host.ts";
 import Prs, { isPrsKept } from "./prs.ts";
 import Actions, { isActionsKept } from "./actions.ts";
 import Projects, { isProjectsKept } from "./projects.ts";
+import type { Confirm, TabId } from "./window-chrome.ts";
+import { isTabId, header, helpPanel, pickerPanel, confirmBar } from "./window-chrome.ts";
+import { windowKey, pickerKey, runCommand } from "./window-keys.ts";
+import { refresh, warm, persist, SAVE_EVERY } from "./window-reads.ts";
 
 /** The open window, for the toggle (nocturne's sky): its overlay id and when it last said so. */
 const isWindowNote = object({ id: isString, beat: isNumber });
@@ -75,16 +77,6 @@ const CREATE_KEY = sharedKey(CREATE, nullable(object({}, { folder: nullable(isSt
 
 const CREATE_FRESH = 30000;
 const BEAT = 4000;
-const SAVE_EVERY = 10000; // the cache is written at most this often
-
-/** The window's tabs. */
-const isTabId = literal("prs", "actions", "projects");
-
-type TabId = Guarded<typeof isTabId>;
-
-const TABS: readonly (readonly [TabId, string])[] = [["prs", "Pull requests"], ["actions", "Actions"], ["projects", "Projects"]];
-
-const TAB_NAME = { prs: "pull requests", actions: "actions", projects: "projects" } as const satisfies { readonly [K in TabId]: string };
 
 /** What the window keeps in shared state (its folder, tab and each tab's own), so it comes back
  *  where it was (after git's review, say). */
@@ -118,12 +110,6 @@ interface Resizing {
   readonly min: number;
   readonly max: number;
   readonly sign: 1 | -1;
-}
-
-/** A yes / no asked in the bar. */
-interface Confirm {
-  readonly text: string;
-  readonly go: () => void;
 }
 
 /** A folder and the machine it's on. */
@@ -267,21 +253,7 @@ export default class GitHub extends View implements Host {
         const c = (await nextCommand()).replace(/^github\./, "");
 
         if (c === "focus") handle.focus();
-        else if (c === "refresh") this.refresh(cx, true);
-        else if (c === "keys") this.help = !this.help;
-        else if (c === "fork") this.switchFork(cx);
-        else if (isTabId(c)) this.setTab(c, cx);
-        else if (c === "diff") {
-          const p = this.prs.current();
-
-          if (this.repo && p) this.openDiff(p.number);
-        } else if (c === "new-pr") {
-          this.wantForm = "pr";
-          this.openForm(cx);
-        } else if (c === "run-workflow") {
-          this.wantForm = "workflow";
-          this.openForm(cx);
-        }
+        else runCommand(this, c, cx);
 
         cx.notify();
       }
@@ -476,112 +448,15 @@ export default class GitHub extends View implements Host {
   /** Reads the shown tab now. force (true, or { all, fresh }): all reads past the
    *  timers, fresh past the ETags too (r, after an action). */
   refresh(cx: Context, force: boolean | ReadOptions = false): void {
-    if (!this.repo) return;
-
-    const opts: ReadOptions = force === true ? { all: true, fresh: true } : force || {};
-
-    if (this.busy) {
-      this.again = true;
-
-      if (opts.all) this.againOpts = opts;
-
-      return;
-    }
-
-    this.busy = true;
-    this.next = Infinity; // the tick doesn't queue another read behind this one
-
-    const tab = this.shown();
-    // Worth a word in the bar: asked for, or what's shown is old (a cached opening).
-    const at = tab.readAt();
-
-    this.loud = Boolean(opts.all) || !at || Date.now() - at > Math.max(2 * tab.interval(), 30000);
-
-    const gen = ++this.gen;
-
-    cx.spawn(async (cx) => {
-      try {
-        await tab.warming;
-        await tab.poll(opts, cx);
-
-        if (gen !== this.gen) return;
-
-        this.stale = "";
-        this.dirty = true;
-      } catch (err) {
-        if (gen === this.gen) this.stale = err instanceof Error ? err.message : String(err);
-      } finally {
-        if (!this.closed && gen === this.gen) {
-          this.busy = false;
-          this.loud = false;
-          // A failed read waits a little longer, so a dropped network doesn't spin.
-          this.next = Date.now() + (this.stale ? Math.max(15000, tab.interval()) : tab.interval());
-          this.save();
-
-          if (this.dirty && Date.now() - this.savedAt >= SAVE_EVERY) void this.persist();
-
-          if (!this.stale) this.warm(cx);
-
-          cx.notify();
-
-          if (this.again) {
-            const o = this.againOpts ?? false;
-
-            this.again = false;
-            this.againOpts = null;
-            this.refresh(cx, o);
-          }
-        }
-      }
-    });
+    refresh(this, cx, force);
   }
 
-  /** Once the shown tab is read, the other one is read behind it, so switching shows fresh data. */
   warm(cx: Context): void {
-    const other = this.tab === "prs" ? this.actions : this.prs;
-
-    if (this.warmed?.has(other) || other.warming) return;
-
-    this.warmed ??= new Set();
-    this.warmed.add(other);
-
-    const repo = this.repo;
-
-    const warming = (async () => {
-      try {
-        await other.poll({}, null);
-
-        if (this.repo === repo) this.dirty = true;
-      } catch {
-        /* the tab's own read says it */
-      }
-    })();
-
-    other.warming = warming;
-    cx.spawn(async (cx) => {
-      await warming;
-      other.warming = null;
-
-      if (!this.closed) cx.notify();
-    });
+    warm(this, cx);
   }
 
-  /** Writes what's shown to the cache (store.ts), at most every SAVE_EVERY. */
   persist(): Promise<boolean> | null {
-    if (!this.repo || this.saving || this.state !== "ready") return this.saving;
-
-    this.dirty = false;
-    this.savedAt = Date.now();
-
-    const entry: Entry = { ...entryFor(this.repo), repo: slimRepo(this.repo), prs: this.prs.snapshot(), actions: this.actions.snapshot(), projects: this.projects.snapshot() };
-
-    const saving = store.save(this.folder, entry).catch(() => false).finally(() => {
-      this.saving = null;
-    });
-
-    this.saving = saving;
-
-    return saving;
+    return persist(this);
   }
 
   /** The bar's word for the shown data's age: "updated 2m ago". */
@@ -735,238 +610,24 @@ export default class GitHub extends View implements Host {
     });
   }
 
-  // ---- keys
+  // ---- keys (window-keys.ts)
 
   key(e: KeyEvent, cx: Context): void {
-    const m = e.modifiers;
-    const c = e.key_char;
-    const k = c && c.length === 1 && c.trim() && !m.platform && !m.control ? c : e.key;
-    const confirm = this.confirm;
-
-    if (confirm) {
-      this.confirm = null;
-
-      if (k === "y" || k === "enter") confirm.go();
-
-      cx.stop_propagation();
-      cx.notify();
-
-      return;
-    }
-
-    const tab = this.shown();
-    const form = tab.form;
-
-    if (form) {
-      if (form.key(k, e, cx) === true) {
-        cx.stop_propagation();
-        cx.notify();
-      }
-
-      return;
-    }
-
-    if (tab.composer) {
-      if (tab.key(k, e, cx) === true) {
-        cx.stop_propagation();
-        cx.notify();
-      }
-
-      return;
-    }
-
-    if ((m.platform || m.alt) && k !== "enter") return;
-
-    if (this.picker) {
-      this.pickerKey(k, cx);
-      cx.stop_propagation();
-      cx.notify();
-
-      return;
-    }
-
-    const help = keysKey(e, this.help);
-
-    if (help || this.help) {
-      if (help) this.help = help === "toggle" ? !this.help : false;
-
-      cx.stop_propagation();
-      cx.notify();
-
-      return;
-    }
-
-    const ids = TABS.map(([id]) => id);
-    const fork = Boolean(this.repo?.parent || this.repo?.child);
-
-    if (k === "1" || k === "2" || k === "3") this.setTab(ids[Number(k) - 1] ?? this.tab, cx);
-    else if (k === "[" || k === "]") this.setTab(ids[(ids.indexOf(this.tab) + (k === "]" ? 1 : ids.length - 1)) % ids.length] ?? this.tab, cx);
-    else if (((k === "p" && this.tab !== "projects") || k === "F") && fork) this.switchFork(cx);
-    else if (k === "L" && this.state === "ready") this.pickLink();
-    else if (k === "r" && !m.control) this.refresh(cx, true);
-    else if (this.state === "ready" && tab.key(k, e, cx)) { /* the tab's */ }
-    else if (k === "escape" || k === "q") this.closeWindow();
-    else return;
-
-    cx.stop_propagation();
-    cx.notify();
+    windowKey(this, e, cx);
   }
 
-  /** L: the shown PR's (or card's) links as a list: j/k, enter opens one, esc closes. */
-  pickLink(): void {
-    const tab = this.shown();
-    const links: WebLink[] = tab instanceof Actions ? [] : tab.links();
-
-    if (!links.length) {
-      this.note = noteOf("No links in what's shown.", "working");
-
-      return;
-    }
-
-    this.picker = { title: "LINKS", at: 0, rows: links.map((l) => ({ label: l.label, sub: l.label === l.url ? "" : l.url, go: (cx) => this.openUrl(l.url, cx) })) };
-  }
-
-  /** Keys while the picker is open: it keeps them all. */
   pickerKey(k: string, cx: Context): void {
-    const p = this.picker;
-
-    if (!p) return;
-
-    const n = p.rows.length;
-
-    const go = (i: number) => {
-      const r = p.rows[i];
-
-      this.picker = null;
-      r?.go(cx);
-    };
-
-    if (k === "escape" || k === "q") this.picker = null;
-    else if (k === "j" || k === "down" || k === "tab") p.at = Math.min(n - 1, p.at + 1);
-    else if (k === "k" || k === "up") p.at = Math.max(0, p.at - 1);
-    else if (k === "g" || k === "home") p.at = 0;
-    else if (k === "G" || k === "end") p.at = n - 1;
-    else if (k === "enter" || k === "o") go(p.at);
-    else if (/^[1-9]$/.test(k) && Number(k) <= n) go(Number(k) - 1);
+    pickerKey(this, k, cx);
   }
 
-  // ---- drawing
+  // ---- drawing (window-chrome.ts)
 
-  header(t: Theme): Element {
-    const live = this.state === "ready" && this.shown().interval() < 10000;
-    const runningRuns = (this.actions.runs ?? []).filter((r) => r.status === "in_progress").length;
-    const where = this.repo ? this.repo.full : this.folder ?? "";
-    const prs = this.prs.list?.length ?? 0;
-
-    const tabs = TABS.map(([id, label], i) => chip(t, `tab-${id}`,
-      h_flex().gap(6).items_center()
-        .child(div().text_color(this.tab === id ? t.accent : t.dim).child(String(i + 1)))
-        .child(div().child(label))
-        .when(id === "actions" && runningRuns > 0, (el) => el.child(pip(t, "working", 6)))
-        .when(id === "prs" && prs > 0, (el) => el.child(div().text_color(t.dim).child(String(prs)))),
-      this.tab === id, (cx) => this.setTab(id, cx)));
-
-    const said = this.readWord();
-
-    const word = (tone: "working" | "failed" | "done", color: Color, text: string, breathe = false) => h_flex().gap(5).items_center()
-      .child(breathe ? div().loop("opacity", { from: 0.35, to: 1, period: 1100 }).child(pip(t, tone, 6)) : pip(t, tone, 6))
-      .child(div().text_color(color).truncate().max_w(260).child(text));
-
-    // Quiet: what's shown is never taken away; the bar only says how old it is.
-    const status = this.busy && this.loud ? word("working", t.dim, said ? `updating… · ${said.replace(/^updated /, "")}` : "updating…", true)
-      : this.stale ? word("failed", t.dim, said ? `couldn't update · ${said}` : "couldn't update")
-      : live ? word("working", t.working, "live")
-      : said ? word("done", t.dim, said) : div();
-
-    const r = this.repo;
-
-    // The bar is where the window drags from: presses on it aren't stopped.
-    return h_flex().id("gh-head").relative().h(36).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
-      .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi8, 1)))
-      // A firefly drifts along the bar while something runs.
-      .when(live, (el) => el.child(svg(`${ART}/wings.svg`).absolute().top(4).size(10).text_color(t.working)
-        .loop("left", { from: 140, to: Math.max(300, this.size.width - 260), period: 9000 })
-        .loop("opacity", { from: 0.3, to: 1, period: 800 })))
-      .child(h_flex().relative().flex_none().gap(8).items_center()
-        .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
-        .child(div().text_color(t.foreground).child("GITHUB")))
-      .child(div().relative().flex_none().max_w(320).truncate().text_color(t.muted).child(where))
-      .when(Boolean(r?.parent || r?.child), (el) => el.child(chip(t, "gh-fork",
-        r?.parent ? `fork of ${r.parent}` : `‹ ${r?.child ?? ""}`, false, (cx) => this.switchFork(cx), t.dim)))
-      .when(Boolean(r?.branch), (el) => el.child(div().relative().flex_none().text_color(t.ansi5).child(r?.branch ?? "")))
-      .child(h_flex().relative().flex_none().gap(2).children(tabs))
-      .child(div().flex_1())
-      .child(div().relative().flex_none().child(status))
-      .child(chip(t, "gh-refresh", "↻", false, (cx) => this.refresh(cx, true)))
-      .when(Boolean(this.overlay), (el) => el.child(chip(t, "gh-close", "✕", false, () => this.closeWindow())));
-  }
-
-  /** ?: every key of the tab and the window (keyhelp.ts). */
   helpPanel(t: Theme): Element {
-    const fork = this.tab === "projects" ? "F" : "p F";
-    const r = this.repo;
-    const forkRow: Hint[] = r?.parent ? [[fork, `the parent, ${r.parent}`]] : r?.child ? [[fork, `back to the fork, ${r.child}`]] : [];
-    const all: Hint[] = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"], ...forkRow, ["esc q", "close (from the top)"], ["?", "keys"]];
-    const tab = this.tab === "prs" ? Prs.help() : this.tab === "projects" ? Projects.help() : Actions.help();
-    const name = TAB_NAME[this.tab];
-
-    return keysView(t, {
-      id: "gh-help", title: `GitHub · ${name}`, list: [{ title: name, keys: tab }, { title: "window", keys: all }], close: () => {
-        this.help = false;
-      },
-    });
+    return helpPanel(this, t);
   }
 
   pickerPanel(t: Theme): Element {
-    const p = this.picker;
-
-    if (!p) return div();
-
-    // The cursor stays in view in a long list (the box's first child is the title).
-    if (p.shownAt !== p.at) {
-      p.shownAt = p.at;
-      this.pickerScroll.scroll_to_item(p.at + 1);
-    }
-
-    const rows = p.rows.map((r, i) => h_flex().id(`pick-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
-      .hover((s) => s.bg(`${t.ansi0}55`))
-      .when(i === p.at, (el) => el.children(band(t, true)))
-      .on_mouse_down("left", stop)
-      .on_click((_e, cx) => {
-        this.picker = null;
-        r.go(cx);
-        cx.notify();
-      })
-      .child(div().relative().w(14).flex_none().text_color(i === p.at ? t.accent : t.dim).child(i < 9 ? String(i + 1) : ""))
-      .child(v_flex().relative().flex_1().min_w(0)
-        .child(div().truncate().text_color(i === p.at ? t.foreground : t.muted).child(r.label))
-        .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? "")))));
-
-    return div().id("gh-picker").absolute().inset_0().flex().items_center().justify_center().text_size(12)
-      .on_mouse_down("left", (_e, cx) => {
-        cx.stop_propagation();
-        this.picker = null;
-        cx.notify();
-      })
-      .child(popupScrim("gh-picker-scrim"))
-      .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(this.pickerScroll)
-        .on_mouse_down("left", stop)
-        .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).child(p.title))
-        .children(rows));
-  }
-
-  confirmBar(t: Theme, c: Confirm): Element {
-    return h_flex().id("gh-confirm").relative().h(30).flex_none().px(12).gap(12).items_center().text_size(12)
-      .child(dither(`${t.ansi3}44`, 1))
-      .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(c.text))
-      .child(chip(t, "gh-yes", "y  yes", false, () => {
-        this.confirm = null;
-        c.go();
-      }, t.ansi3))
-      .child(chip(t, "gh-no", "esc  no", false, () => {
-        this.confirm = null;
-      }));
+    return pickerPanel(this, t);
   }
 
   /** The key bar's entries now. */
@@ -1037,7 +698,7 @@ export default class GitHub extends View implements Host {
       .on_hover((h, cx) => {
         if (!h) endResize(cx);
       })
-      .child(this.header(t))
+      .child(header(this, t))
       .child(div().id("gh-body").relative().flex_1().min_h(0).p(8)
         .on_mouse_down("left", (_e, cx) => {
           this.focusSelf();
@@ -1046,7 +707,7 @@ export default class GitHub extends View implements Host {
         .child(body)
         .when(this.help, (el) => el.child(this.helpPanel(t)))
         .when(picker !== null, (el) => el.child(this.pickerPanel(t))))
-      .when(confirm !== null, (el) => (confirm ? el.child(this.confirmBar(t, confirm)) : el))
+      .when(confirm !== null, (el) => (confirm ? el.child(confirmBar(this, t, confirm)) : el))
       .child(hints(t, this.barHints(), right, {
         on: this.help, toggle: () => {
           this.help = !this.help;

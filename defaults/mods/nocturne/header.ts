@@ -32,7 +32,7 @@ import { panes, spaces, props, run, theme, home, shared, setShared, keys } from 
 import type { PaneInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { NAME_PANE, openMenu } from "./menu.ts";
-import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
+import { ART, LOGO, dither, statusFly, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
 import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
@@ -451,7 +451,7 @@ export default class Header {
 
     return this.buttons(t, this.frame(t, p)
       .child(this.mark(t, p))
-      .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))
+      .when(Boolean(st), (el) => (st ? el.child(statusFly(t, st, `h-fly-${p.pane ?? ""}`)) : el))
       .child(label)
       // The folder gives way long before the name does (shrinks 50x faster), then goes.
       .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && !this.cursor(p) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))

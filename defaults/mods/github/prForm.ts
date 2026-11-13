@@ -20,8 +20,9 @@ import { candidates } from "./remotes.ts";
 import type { Commit, LocalBranch, Numstat, PrFields, PushPlan } from "./pr-create.ts";
 import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.ts";
 import { shellLine } from "./dispatch.ts";
-import type { Choice, Command, Field, FormHost, Outcome, Values } from "./form.ts";
-import { Form, flagIn, listIn, textIn } from "./form.ts";
+import type { Choice, Command, Field, FormHost, Outcome, Values } from "./form-fields.ts";
+import { flagIn, listIn, textIn } from "./form-fields.ts";
+import { Form } from "./form.ts";
 import { panel, empty, dither } from "./kit.ts";
 
 const CHOICES = `query($owner: String!, $name: String!) { viewer { login }

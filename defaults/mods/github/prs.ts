@@ -12,16 +12,18 @@ import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { maybe } from "./guards.ts";
 import type { Repo } from "./gh.ts";
 import { ghJson, ghRun, api, graphql, slimmed } from "./gh.ts";
-import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, Tone, WebLink } from "./model.ts";
-import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
+import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "./model.ts";
+import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
 import type { Pieces } from "./cache.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.ts";
 import type { Hint } from "./kit.ts";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";
+import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";
 import type { Host, PickRow, ReadOptions } from "./host.ts";
 import type { KeyRow } from "./keyhelp.ts";
+import type { Said } from "./pr-draw.ts";
+import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
 const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
@@ -30,16 +32,11 @@ const FILTER_WORD = { all: "open", mine: "mine", review: "to review" } as const 
 
 // While the selected PR's checks still run, its view is read this often.
 const CHECKS_LIVE = 8000;
-const ROW = 38, CHECK_ROW = 22;
 
 /** The tab's panels, in h / l order. */
 type Panel = "list" | "checks" | "main";
 
 const PANELS: readonly Panel[] = ["list", "checks", "main"];
-
-const REVIEW = new Map<string, readonly [string, Tone]>([
-  ["APPROVED", ["approved", "done"]], ["CHANGES_REQUESTED", ["changes requested", "failed"]], ["REVIEW_REQUIRED", ["review required", "queued"]],
-]);
 
 /** What the tab keeps in shared state between openings (main.ts STATE): the filter, the PR, the dragged sizes. */
 export const isPrsKept = object({}, {
@@ -87,15 +84,6 @@ export interface PrsSnapshot {
   readonly lists: Map<string, Listed>;
   readonly details: Map<string, Detail>;
 }
-
-/** One entry of the conversation, oldest first: a comment, a review, a comment on a line. */
-type Said =
-  | { readonly kind: "comment"; readonly who: string | null; readonly body: string; readonly at: string | null; readonly url: string | null }
-  | { readonly kind: "review"; readonly state: string; readonly who: string | null; readonly body: string; readonly at: string | null }
-  | {
-    readonly kind: "line"; readonly who: string | null; readonly body: string; readonly at: string | null; readonly path: string;
-    readonly line: number | null; readonly reply: boolean; readonly url: string | null;
-  };
 
 export default class Prs {
   readonly app: Host;
@@ -568,27 +556,6 @@ export default class Prs {
 
   // ---- drawing
 
-  prRow(t: Theme, p: PrRow, sel: boolean, active: boolean): Element {
-    const tone = rowTone(p);
-    const [rev, revTone] = REVIEW.get(p.reviewDecision ?? "") ?? [null, null];
-
-    return v_flex().id(`pr-${p.number}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none()
-      .hover((s) => s.bg(`${t.ansi0}55`))
-      .when(sel, (el) => el.children(band(t, active)))
-      .child(h_flex().relative().gap(7).items_center().text_size(12)
-        .child(pip(t, tone ?? (p.isDraft ? "skipped" : null), 7))
-        .child(div().flex_none().text_color(sel ? t.accent : t.ansi8).child(`#${p.number}`))
-        .child(div().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : p.isDraft ? t.dim : t.muted).child(p.title)))
-      .child(h_flex().relative().gap(6).pl(14).items_center().text_size(10).text_color(t.dim)
-        .child(div().flex_none().child(p.author?.login ?? ""))
-        .child(div().flex_1().min_w(0).truncate().child(p.headRefName ?? ""))
-        .when(rev !== null, (el) => el.child(div().flex_none().text_color(toneColor(t, revTone)).child(rev ?? "")))
-        .when(p.isDraft, (el) => el.child(div().flex_none().child("draft")))
-        .child(div().flex_none().text_color(t.ansi2).child(`+${p.additions}`))
-        .child(div().flex_none().text_color(t.ansi1).child(`-${p.deletions}`))
-        .child(div().flex_none().child(ago(p.updatedAt))));
-  }
-
   listPanel(t: Theme): Element {
     const list = this.list ?? [], cur = this.current(), active = this.focus === "list";
 
@@ -601,7 +568,7 @@ export default class Prs {
           cx.stop_propagation();
         })
         .child(v_virtual_list("prs", list.length, ROW, (i) => String(list[i]?.number ?? i),
-          (range) => list.slice(range.start, range.end).map((p) => this.prRow(t, p, p === cur, active)))
+          (range) => list.slice(range.start, range.end).map((p) => prRow(t, p, p === cur, active)))
           .on_item_click((key, cx) => {
             this.focus = "list";
             this.select(list.findIndex((p) => String(p.number) === key), cx);
@@ -652,25 +619,13 @@ export default class Prs {
 
     const passed = checks.filter((c) => c.tone === "done").length;
 
-    const rows = checks.map((c, i) => {
-      const sel = active && i === this.checkSel;
-
-      return h_flex().id(`check-${i}`).relative().h(CHECK_ROW).px(10).gap(7).items_center().flex_none().text_size(11)
-        .hover((s) => s.bg(`${t.ansi0}55`))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => {
-          this.focus = "checks";
-          this.checkSel = i;
-          this.openCheck(c, cx);
-          this.app.focusSelf();
-          cx.notify();
-        })
-        .when(sel, (el) => el.children(band(t, true)))
-        .when(c.tone === "working", (el) => el.child(div().absolute().inset_0().overflow_hidden().child(sweepLite(t))))
-        .child(pip(t, c.tone, 7))
-        .child(div().relative().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : t.muted).child(c.workflow ? `${c.workflow} / ${c.name}` : c.name))
-        .child(div().relative().flex_none().text_color(c.tone === "working" ? t.working : t.dim).child(c.started ? duration(c.started, c.ended) : TONE_WORD[c.tone]));
-    });
+    const rows = checks.map((c, i) => checkRow(t, c, i, active && i === this.checkSel, (cx) => {
+      this.focus = "checks";
+      this.checkSel = i;
+      this.openCheck(c, cx);
+      this.app.focusSelf();
+      cx.notify();
+    }));
 
     const h = this.checksH ?? Math.min(checks.length, 8) * CHECK_ROW + 26;
 
@@ -687,46 +642,10 @@ export default class Prs {
 
     // Its view once read, else its row.
     const pr: PrView = d?.pr ?? p;
-    const [rev, revTone] = REVIEW.get(pr.reviewDecision ?? "") ?? [null, null];
-    const labels = pr.labels ?? [];
-    const opened = ago(pr.createdAt);
-
-    const head = v_flex().gap(6).pb(10)
-      .child(h_flex().gap(8).items_center()
-        .child(div().flex_none().text_size(15).text_color(t.accent).child(`#${pr.number}`))
-        .child(div().flex_1().min_w(0).text_size(15).text_color(t.foreground).child(pr.title)))
-      .child(h_flex().flex_wrap().gap_x(10).gap_y(3).items_center().text_size(11).text_color(t.muted)
-        .child(div().child(pr.author?.login ?? ""))
-        .child(h_flex().gap(4).child(div().text_color(t.ansi5).child(pr.headRefName ?? "")).child(div().text_color(t.dim).child("→")).child(div().text_color(t.ansi4).child(pr.baseRefName ?? "")))
-        .when(rev !== null, (el) => el.child(h_flex().gap(5).items_center().child(pip(t, revTone, 6)).child(div().text_color(toneColor(t, revTone)).child(rev ?? ""))))
-        .when(Boolean(pr.isDraft), (el) => el.child(div().text_color(t.dim).child("draft")))
-        .child(div().text_color(t.ansi2).child(`+${pr.additions ?? 0}`)).child(div().text_color(t.ansi1).child(`-${pr.deletions ?? 0}`))
-        .when(isNumber(pr.changedFiles), (el) => el.child(div().text_color(t.dim).child(`${pr.changedFiles ?? 0} files`)))
-        // A list row has no createdAt (the list's query doesn't ask): the words wait for the PR's view.
-        .when(opened !== "", (el) => el.child(div().text_color(t.dim).child(`opened ${opened} ago`))))
-      .when(labels.length > 0, (el) => el.child(h_flex().flex_wrap().gap(5).children(labels.map((l, i) =>
-        div().id(`label-${i}`).relative().px(6).h(18).flex().items_center().text_size(10).text_color(t.foreground)
-          .child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name))))))
-      .child(div().relative().h(2).mt(4).child(dither(t.ansi0, 1)));
+    const head = prHead(t, pr);
 
     const md = (id: string, text: string | null | undefined) => markdown(t, id, text?.trim() ? text : "_No description._", { onLink: (url, cx) => this.app.openUrl(url, cx) });
     const items = d ? this.timeline(d) : [];
-
-    const card = (c: Said, i: number) => {
-      const [what, tone] = c.kind === "review" ? REVIEW.get(c.state) ?? [c.state.toLowerCase().replace(/_/g, " "), null]
-        : c.kind === "line" ? [`on ${c.path}${c.line ? `:${c.line}` : ""}`, null] : ["", null];
-
-      const reply = c.kind === "line" && c.reply;
-
-      return v_flex().id(`c-${i}`).relative().gap(4).pl(reply ? 26 : 12).pr(4).py(8)
-        .child(div().absolute().left(reply ? 16 : 2).top(8).bottom(8).w(2).child(dither(tone ? toneColor(t, tone) : t.ansi0, 1)))
-        .child(h_flex().gap(8).items_center().text_size(11)
-          .child(div().text_color(t.accent).child(c.who ?? "ghost"))
-          .when(Boolean(what), (el) => el.child(h_flex().gap(4).items_center().when(tone !== null, (e2) => e2.child(pip(t, tone, 6))).child(div().text_color(tone ? toneColor(t, tone) : t.muted).truncate().child(what))))
-          .child(div().flex_1())
-          .child(div().text_color(t.dim).child(ago(c.at))))
-        .when(Boolean(c.body.trim()), (el) => el.child(md(`c-md-${i}`, c.body)));
-    };
 
     const composer = this.composer;
 
@@ -745,7 +664,7 @@ export default class Prs {
       .when(items.length > 0, (el) => el.child(h_flex().pt(18).pb(4).gap(8).items_center()
         .child(eyebrow(t, `Conversation · ${items.length}`))
         .child(div().flex_1().h(2).relative().child(dither(t.ansi0, 1)))))
-      .children(items.map(card))
+      .children(items.map((c, i) => saidCard(t, c, i, md)))
       .when(composer !== null, (el) => (composer ? el.child(v_flex().mt(12).gap(6).p(8).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
         .child(eyebrow(t, "Your comment"))
@@ -823,10 +742,4 @@ export default class Prs {
       }, { min: 220, max: size.width - 320 })))
       .child(this.mainPanel(t));
   }
-}
-
-/** A faint sweep for a running check's row. */
-function sweepLite(t: Theme): Element {
-  return div().absolute().top(0).bottom(0).w(40).opacity(0.35).child(dither(t.working, 1))
-    .loop("left", { from: -40, to: 600, period: 2200, easing: "linear" });
 }

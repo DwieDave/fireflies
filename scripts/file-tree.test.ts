@@ -68,7 +68,8 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 const logic = await load("file-tree/logic.ts");
 const keyhelp = await load("file-tree/keyhelp.ts");
 const route = await load("file-tree/editor-route.ts");
-const { default: Loaded } = await load("file-tree/main.ts", { ...logic, ...keyhelp, openInEditor: route.openInEditor, editorProps: route.editorProps, herdr, Viewer: class {} });
+const fileIcons = await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"));
+const { default: Loaded } = await load("file-tree/main.ts", { ...logic, ...keyhelp, ...fileIcons, openInEditor: route.openInEditor, editorProps: route.editorProps, herdr, Viewer: class {} });
 /** A key event as GPUI sends it, every modifier there (the tests write only the ones held). */
 const full = (e: any) => ({ ...e, modifiers: { shift: false, control: false, alt: false, platform: false, function: false, ...e.modifiers } });
 class Files extends Loaded { key(e: any, cx: any) { return super.key(full(e), cx); } }
@@ -1643,3 +1644,50 @@ test("the narrow panel draws the filter on its own row at full width; a click an
   expect(ids(el)).not.toContain("nf-lens-find");
   expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[0] });
 });
+
+// ---- file type marks (file-icons.ts, shared with the editor's tabs)
+
+/** The mark drawn at element `id`: its svg and its tint. */
+const markAt = (root: any, id: string) => {
+  const box = walk(root).find((e: any) => e.calls.some(([k, a]: [string, any[]]) => k === "id" && a?.[0] === id));
+  const svg = box?.nodes.find((n: any) => n?.kind === "svg");
+  return { src: svg?.arg, color: svg?.calls.find(([k]: [string]) => k === "text_color")?.[1]?.[0] };
+};
+/** The rows shown, each drawn (the list draws them lazily). */
+const drawnRows = (view: any) => { const box = new Element(); box.nodes.push(...view.shown().map((r: any) => view.row(herdr.theme(), r, true))); return box; };
+/** Every svg drawn, by path. */
+const svgs = (root: any) => walk(root).filter((e: any) => e.kind === "svg").map((e: any) => e.arg);
+
+test("the tree's rows show a file's type mark in place of the generic file mark; folders keep theirs", () => {
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.filters = { hidden: true, ignored: true };
+  view.folders.add("src");
+  const drawn = drawnRows(view);
+  const theme = herdr.theme();
+  expect(markAt(drawn, "nf-icon-README.md")).toEqual({ src: "mods/file-tree/icons/markdown.svg", color: theme.ansi4 });
+  expect(markAt(drawn, "nf-icon-src/main.rs")).toEqual({ src: "mods/file-tree/icons/code.svg", color: fileIcons.iconColor("code", theme) });
+  expect(markAt(drawn, "nf-icon-.env").src).toBe("mods/file-tree/icons/config.svg");
+  expect(markAt(drawn, "nf-icon-src/app.log").src).toBe("mods/file-tree/icons/text.svg");
+  expect(svgs(drawn)).not.toContain("mods/files/file.svg");
+  expect(svgs(drawn)).toContain("mods/files/folder.svg");
+});
+
+test("the search's hits show their type marks too", async () => {
+  world.find = async () => ({ files: [{ path: "src/main.rs", ranges: [[4, 8]], git: null }, { path: "docs/a.pdf", ranges: [[5, 6]], git: null }], scanning: false });
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.query = "a"; view.search(cx); await settle();
+  const drawn = drawnRows(view);
+  expect(markAt(drawn, "nf-icon-src/main.rs").src).toBe("mods/file-tree/icons/code.svg");
+  expect(markAt(drawn, "nf-icon-docs/a.pdf").src).toBe("mods/file-tree/icons/pdf.svg");
+  expect(svgs(drawn)).not.toContain("mods/files/file.svg");
+  world.find = async () => ({ files: [], scanning: false });
+});
+
+test("a folder's look lists its files with their type marks", () => {
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  const drawn = view.folderView(herdr.theme(), { abs: "/repo/src", rel: "src", entries: [{ name: "sub", dir: true }, { name: "main.rs", dir: false }, { name: "pic.png", dir: false }] });
+  expect(markAt(drawn, "nf-lk-icon-1").src).toBe("mods/file-tree/icons/code.svg");
+  expect(markAt(drawn, "nf-lk-icon-2").src).toBe("mods/file-tree/icons/image.svg");
+  expect(svgs(drawn).filter((p: string) => p.startsWith("mods/files/"))).toEqual(["mods/files/folder.svg"]);
+});
+

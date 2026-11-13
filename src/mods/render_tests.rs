@@ -746,7 +746,9 @@ fn settings_sections_and_updates(cx: &mut TestAppContext) {
     for section in ["look", "alerts", "updates"] {
         let mut p = props();
         p["section"] = json!(section);
-        describe(cx, &staged, "frame/settings", true, p, updates("current", "current"), None).unwrap();
+        let tree = describe(cx, &staged, "frame/settings", true, p, updates("current", "current"), None).unwrap();
+        // Alerts: the switch for system notifications (settings.json system_notifications).
+        assert_eq!(tree.contains("st-sysnote"), section == "alerts", "{section}: {tree}");
     }
     for app in ["source", "current", "ready"] {
         for core in ["current", "ready", "error", "managed", "updating"] {

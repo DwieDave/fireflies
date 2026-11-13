@@ -20,9 +20,18 @@ export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
 
-/** The tab strip's icon button (tabs.ts tool): its id, lit or not, a tooltip
- *  (null: none), what a press does (the press, and whether it was lit then), its contents. */
-export type ToolButton = (t: Theme, id: string, on: boolean, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
+/** A tool button whose lit look isn't its drop-down: `lit` draws it lit, `open`
+ *  (its drop-down is up) is what a press reports as `wasOpen` (the git mark's ▾:
+ *  lit for the GitHub panel, open for its menu). */
+export interface ToolState {
+  readonly lit: boolean;
+  readonly open: boolean;
+}
+
+/** The tab strip's icon button (tabs.ts tool): its id, lit or not (a boolean is
+ *  both lit and open; ToolState tells them apart), a tooltip (null: none), what a
+ *  press does (the press, and whether its drop-down was open then), its contents. */
+export type ToolButton = (t: Theme, id: string, on: boolean | ToolState, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
 
 /** Where a drop-down goes (window px). */
 export interface DropAt {
@@ -284,6 +293,25 @@ export function pip(t: Theme, status: Status | null | undefined, size = 6): Elem
   if (!status || status === "idle") return div().size(size).flex_none();
 
   const el = svg(`${ART}/pip.svg`).size(size).flex_none().text_color(t[status]);
+
+  if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
+
+  if (status === "blocked") return el.loop("opacity", { from: 0.15, to: 1, period: 700, easing: "linear" });
+
+  return el;
+}
+
+// An agent's status mark in a pane header and on its tab: art/firefly.svg, the
+// app icon's winged insect, one cell a layout px.
+export const FLY_W = 13;
+export const FLY_H = 11;
+
+/** An agent's status as Fireflies' winged firefly, in the colour the sidebar
+ *  gives it (sky.ts firefly: the status's own, idle muted). Working breathes and
+ *  blocked blinks, as the pip did; done and idle hold still. Only for an agent:
+ *  a pane or tab without a status draws none. */
+export function statusFly(t: Theme, status: Status, id: string): Element {
+  const el = svg(`${ART}/firefly.svg`).id(id).w(FLY_W).h(FLY_H).flex_none().text_color(status === "idle" ? t.muted : t[status]);
 
   if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
 

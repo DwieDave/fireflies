@@ -71,6 +71,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 
 const kinds = await load("preview/kinds.ts");
+const fileIcons = await load("preview/file-icons.ts", kinds);
 const imageLogic = await load("preview/image.ts", kinds);
 const T = await load("preview/table.ts");
 const D = await load("preview/diff.ts");
@@ -91,7 +92,7 @@ const nativeHerdr = {
   nextNativeViewEvent: () => new Promise(() => {}),
 };
 const keyLogic = await load("preview/keys.ts");
-const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
+const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
 const { kindOf, sniffKind, route, rasterArgv, pageCount, duration, siblings, tag, noun, previewable } = kinds;
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
 

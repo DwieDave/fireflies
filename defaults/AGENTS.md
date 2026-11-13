@@ -887,7 +887,9 @@ the highlighted line shows where it will land.
   already there); so do `files.open {path, in?, pane?, on?}` (`in: "tab"`: a tab
   of its own; `"system"`: the system's file manager) and the palette's "Files
   pane of this folder". It works as the panel (files open beside it) and closes
-  with `q` / `esc`. In every files pane a click on a file selects it (the
+  with `q` / `esc`. A file's row (the tree, the filter's hits, a folder's look)
+  and the preview split's bar show its type mark, as the editor's tabs do;
+  folders keep the folder mark. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
   click (or enter) opens it as a tab of the editor whatever its kind, the same
   editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
@@ -1468,6 +1470,10 @@ with their age. A scratch app (`HERDR_APP_HOME` set to another home than the
 default) asks nothing and says "usage is off in a scratch app";
 `HERDR_APP_USAGE=1` in its environment turns it on.
 
+An agent's tab on Nocturne's strip and its pane's header wear a small winged
+firefly (the app icon's, 13 x 11 px) in the colour the sidebar gives its status
+(working, needs you, done; idle muted): it breathes while working and blinks
+while it needs you. Tabs and panes without an agent have none.
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
@@ -1485,8 +1491,10 @@ lights a step above the plate, `toolHover`): ▶ and its runs (the script runner
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
-layout without it gets "+ new" in the strip before the bell). The strip's
-keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
+layout without it gets "+ new" in the strip before the bell). A drop-down
+(▶'s runs, the tree mark's, the ▾'s menu, the bell's, "+ new"'s) closes on a
+second press of what opened it (the ▾'s also on a second right-click on the git
+button). The strip's keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
 the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
@@ -2046,6 +2054,14 @@ list or a machine's rename first.
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and
   drags to move through it.
+- `system_notifications`: `false` keeps toasts inside the window (default
+  `true`). While Fireflies isn't the app in front, every toast (its own
+  "needs you" / "finished" notes and every `notify()`) also goes to the
+  system's notification center once, with the toast's title and body and no
+  sound (the app's own sound plays). A click brings Fireflies forward and
+  does the toast's `action` (an agent's note goes to its pane). macOS asks
+  for permission with the first one; a build run outside the app bundle
+  posts none. Settings > Alerts switches it.
 
 ## Programs: `programs.json`
 
