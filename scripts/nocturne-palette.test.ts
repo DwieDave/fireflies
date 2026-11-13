@@ -1,4 +1,4 @@
-// Nocturne's command palette (mods/nocturne/palette.js) through its real
+// Nocturne's command palette (mods/nocturne/palette.ts) through its real
 // module graph: herdr and gpui are stand-ins, and its entries and rows are
 // built in every state the "Open" group depends on (a folder or none, an agent
 // focused and pinned or not, the git window and the pip player open or not).
@@ -43,7 +43,7 @@ const herdr = {
   agents: () => state.agents, focused: () => state.focused, spaces: () => state.spaces, panes: () => state.panes,
   terminals: () => state.terminals, hc: async () => ({ code: 0, stdout: "", stderr: "" }), exec: async () => ({ code: 0, stdout: "", stderr: "" }),
   home: () => "/home/me", appHome: () => "/home/me/.config/herdr-app", notify: () => {}, pickFolder: async () => null,
-  knownAgents: () => [], setAgentOrder: () => {}, nextCommand: () => null, presentUpdateNotes: () => {}, updates: () => state.updates ?? null,
+  knownAgents: () => [], setAgentOrder: () => {}, nextCommand: () => null, presentUpdateNotes: () => {}, updates: () => state.updates ?? ({ app: { version: "1.0", ready: null, updates: false }, core: { version: null, managed: null, ready: null, updating: false, error: null }, checked: null, checks: true, checking: false, notes: [] }),
 };
 mock.module("herdr", () => herdr);
 mock.module("gpui-kit", () => ({ div: () => el, svg: () => el, image: () => el, View: class {}, PathBuilder: { fill: () => el, stroke: () => el }, Background: { checkerboard: () => el } }));
@@ -57,7 +57,7 @@ mock.module("gpui-base", () => ({
 globalThis.window = { paint_path: () => el } as any;
 globalThis.localStorage = { getItem: () => null, setItem: () => {} } as any;
 
-const { default: Palette, OUT, OUT_FAMILIES, keyOf } = await import("../defaults/mods/nocturne/palette.js");
+const { default: Palette, OUT, OUT_FAMILIES, keyOf } = await import("../defaults/mods/nocturne/palette.ts");
 const cx: any = { notify() {}, focus_handle: () => ({}), timer: { after() {} }, spawn() {}, stop_propagation() {} };
 
 function open(query = "") {

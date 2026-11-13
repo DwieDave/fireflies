@@ -263,6 +263,9 @@ export function menuHeight(agents: readonly KnownAgent[], show = showMissing()):
   return Math.min(MOST, HEAD + SECTION + tiles * TILE_H + (tiles - 1) * GAP + SECTION + n * ROW + SECTION + 3 * ROW + 8 + FOOT + 2);
 }
 
+/** The agents a machine ("": this one) last reported, as the menu keeps them. */
+export const lastKnownAgents = (machine: string): readonly KnownAgent[] => readSharedMap(shared, KNOWN).get(machine) ?? [];
+
 /** How tall the menu is for the agents it last found on the shown space's machine. */
 export function newMenuHeight(): number {
   const machine = spaces().find((s) => s.active)?.machine ?? "";
