@@ -114,7 +114,7 @@ export function documentLinks(parts: readonly Block[]): DocLink[] {
 }
 
 /** The index of the last item of `list` that `test` holds for, else -1. */
-function lastIndex<T>(list: readonly T[], test: (item: T) => boolean): number {
+export function lastIndex<T>(list: readonly T[], test: (item: T) => boolean): number {
   for (let i = list.length - 1; i >= 0; i--) {
     const item = list[i];
 

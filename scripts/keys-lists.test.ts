@@ -163,7 +163,7 @@ test("agents: ? lists every key; the bar ends with ? keys, the list open too", (
   expect(texts(a.hints(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const md = await import("../defaults/mods/markdown/main.js");
+const md = await import("../defaults/mods/markdown/main.ts");
 test("markdown: ? lists every key; the toolbar's last control is ? keys", () => {
   const make = (sel: number | null) => () => { const v = surface(md.default, ["key"], { sel, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(null)), ...taken(make(0))])];
