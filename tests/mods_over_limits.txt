@@ -51,7 +51,6 @@ defaults/mods/git/main.ts init
 defaults/mods/git/popups.ts key
 defaults/mods/github/actions.ts
 defaults/mods/github/board.ts
-defaults/mods/github/dispatch.ts parseYaml
 defaults/mods/github/form.ts
 defaults/mods/github/main.ts
 defaults/mods/github/markdown.ts
