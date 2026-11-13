@@ -18,6 +18,8 @@ fireflies status
 
 The check loads a mod and renders it once. It does not replace looking at the result in the window.
 
+Mods may be TypeScript: a `.ts` file runs with its types removed, so its errors point at its own lines. Check the types with `tsc` against the typings `fireflies types <mod folder>` writes; the guide's TypeScript section says what's allowed. The shipped mods' bar (full strictness, no `any`, oxlint with anti-slop) and how to convert one: [mods in TypeScript](mods-typescript.md).
+
 Mods can run programs, read files and use the network. Only install code you trust.
 See [security and privacy](security.md).
 

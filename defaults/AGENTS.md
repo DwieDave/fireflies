@@ -32,13 +32,15 @@ and terminals, open dialogs, popups and floating blocks, show a live
 terminal inside a block, run any app command, run programs (`exec`) and
 fetch URLs, keep state per mod or shared between mods, animate natively.
 
-You can't: use HTML, CSS, a web view, Node APIs or `setTimeout`; draw
+You can't: use HTML, CSS, a web view, Node APIs or `setTimeout`
+(`cx.timer`; `atob`, `btoa`, `URL`, `URLSearchParams`, `crypto`, `Buffer`,
+`fetch` and `queueMicrotask` are there, `TextDecoder` isn't); draw
 outside your block except through overlays; change how a terminal itself
 draws text; read or change other mods' code at run time.
 
 ## What mods are written in
 
-Mods use **gpui-kit** (its gpui-shell): JavaScript that describes **GPUI**
+Mods use **gpui-kit** (its gpui-shell): JavaScript or TypeScript (below) that describes **GPUI**
 elements, a native GPU UI (`div()`, flex, children,
 `.on_click`). There's no DOM: the script describes, Rust draws. Background:
 https://gpui-kit.com. The Fireflies app carries its own copy with additions
@@ -2055,9 +2057,9 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 
 ```
 ~/.config/herdr-app/mods/<name>/
-  main.js       the mod (required)
+  main.js       the mod (required; or main.ts, TypeScript: see below; main.js wins if both)
   mod.json    where it first appears: { "place": "right" | "left" | "top" | "bottom" | "none", "size": 320 }
-  *.js, *.svg   more modules ("./ui.js"), its own icons
+  *.js, *.ts, *.svg   more modules ("./ui.js", "./kit.ts"), its own icons
   bin/          programs its terminals run (a shipped mod's are installed executable;
                 start one as `${appHome()}/mods/<name>/bin/<program>`)
 ```
@@ -2091,7 +2093,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - The first time Fireflies sees a folder, it docks one copy per `mod.json` into
   the shown layout (`"none"`: only where a layout or another mod puts it).
   After that, the layouts decide. Saving any file reloads every copy in place
-  (not files the app writes: `jsconfig.json`, `.d.ts`, hidden ones,
+  (not files the app writes: `jsconfig.json`, `tsconfig.json`, `.d.ts`, hidden ones,
   `node_modules`). The old build's tasks and timers stop: a loop ends at its
   next `cx` use. A broken save keeps the old version running and shows in
   `herdr-app status`; its top-level code has already run, so keep side effects
@@ -2178,6 +2180,35 @@ Rules:
   `cx.timer.every(ms, (cx) => …)`.
 - No `setTimeout`/`setInterval` (use `cx.timer`), no top-level `await` (use
   `cx.spawn` in `init`). Anything slow goes through `exec` or `fetch`.
+
+### TypeScript
+
+A mod's files may be TypeScript (`.ts`, `.mts`): `main.ts` as the entry, any
+module beside it, mixed with `.js` files freely. Fireflies doesn't compile
+them: it blanks the types out and runs the rest, so lines and columns in errors
+and stack traces are the `.ts` file's. A `.js` file is read as it is. Stock
+Herdr runs only `.js`: a mod that should run there too stays JavaScript.
+
+- Only syntax that erases works: types, interfaces, generics, `as`,
+  `satisfies`, `!`, `import type`, `declare` fields, overloads. Not `enum`
+  (a `const` object), `namespace` (a module), constructor parameter
+  properties (declare the field, assign it) or `<T>x` (`x as T`): the mod
+  fails to load naming the file, line and construct, and the last good
+  version keeps running.
+- Imports name the file as it is: `import { dither } from "./kit.ts"`; a
+  `.js` file imports a `.ts` one the same way. Import types with
+  `import type` (or `import { type X }`): a plain import of a type stays in
+  the code and fails at load.
+- Nothing checks types at run time. Check them: `herdr-app types <mod folder>`
+  writes `gpui-kit.d.ts` there (every module, `herdr` included) and the app
+  writes a strict `tsconfig.json` into a `main.ts` mod's folder (never over
+  yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod in a
+  repository of its own does the same: run `herdr-app types .` in it after
+  each Fireflies update and keep both files out of git.
+- `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
+  parsed from `exec` or a file are `unknown`: another mod or an older version
+  may have written them, so prove what they are before using them (a type
+  guard: `isPane(x)`), never with `as`.
 - Size: put `.id("root").on_size_change((size, cx) => { this.size = size; cx.notify(); })`
   on the root `div()`, `h_flex()` or `v_flex()`. It reports `{width, height}`
   in logical pixels after the first layout and whenever the size changes,
@@ -2393,6 +2424,6 @@ including a small herdr-core skill you can install with the user's permission.
 
 - A task's `cx` belongs to the copy that started it: `cx.notify()` redraws
   that copy, even when another copy woke it (a shared promise).
-- One mod per idea. Don't edit `AGENTS.md` or the `.d.ts` files (the app
+- One mod per idea. Don't edit `AGENTS.md` or the generated `.d.ts` files (the app
   rewrites them). Don't touch other mods unless the request
   needs it.

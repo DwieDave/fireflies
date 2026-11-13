@@ -247,8 +247,11 @@ Read the generated `.d.ts` files beside it for full API details; do not edit
 those files or the generated guide. The app rewrites them on start.
 
 - Home defaults to `~/.config/herdr-app`; `HERDR_APP_HOME` selects another.
-- Mods live in `mods/<name>/` with `main.js` and optional `mod.json`.
-  They are trusted JavaScript with command and network access.
+- Mods live in `mods/<name>/` with `main.js` (or `main.ts`) and optional `mod.json`.
+  They are trusted JavaScript or TypeScript with command and network access;
+  a `.ts` file runs with its types removed (no enum, namespace, parameter
+  properties or `<T>x`; imports name the file, `./kit.ts`), so check its types
+  with `tsc` against `herdr-app types <folder>` (the guide's TypeScript section).
   `"focusable": true` in `mod.json` lets `pane.go` move onto a copy; it receives
   `"focus"` from `nextCommand()` and focuses its own keyboard handle. A
   focusable mod pane gets it whenever it becomes the focused pane (a tab switch,

@@ -61,6 +61,7 @@ Usage:
   fireflies status                 what the window shows, and any errors
   fireflies shot [file.png]        save the last window frame (default: herdr-shot.png)
   fireflies check <mod folder>     load a mod once and report what's wrong
+  fireflies types <mod folder>     write its typings (gpui-kit.d.ts) and editor config for tsc
   fireflies --skill                Agent Skill: driving the window, and where hc fits
   fireflies --version
 
