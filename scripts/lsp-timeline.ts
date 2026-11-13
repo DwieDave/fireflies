@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // The editor's way from opening a file to its first hover answer, timed: the
-// same steps editor's startServer takes (envrc.js, logic.js), then
+// same steps editor's startServer takes (envrc.ts, logic.ts), then
 // the server spoken to as Fireflies' core speaks to it (src/lsp.rs: the same
 // initialize), with its `$/progress` and a hover asked every 100 ms until one
 // answers with something.
@@ -9,8 +9,8 @@
 //
 // line and col are one-based (as the bar shows them). Prints a timeline and,
 // last, one JSON line with the phases' times (ms from the start).
-import { projectEnv, lookup, wrap, forgetEnvs } from "../defaults/mods/editor/envrc.js";
-import { serverCandidates, languageSettings, ROOTS, rootScript, pickRoot, uri, languageId } from "../defaults/mods/editor/logic.js";
+import { projectEnv, lookup, wrap, forgetEnvs } from "../defaults/mods/editor/envrc.ts";
+import { serverCandidates, languageSettings, ROOTS, rootScript, pickRoot, uri, languageId } from "../defaults/mods/editor/logic.ts";
 
 const [file, lineArg, colArg, ...rest] = process.argv.slice(2);
 if (!file || !lineArg) { console.error("usage: lsp-timeline.ts <file> <line> <col> [--settings json]"); process.exit(2); }
@@ -48,7 +48,7 @@ let pick: any = null, path: string | null = null;
 for (const c of candidates) { path = await lookup(exec, c.argv[0], inEnv); if (path) { pick = c; break; } }
 mark("lookup", path ?? "none");
 if (!pick) process.exit(1);
-const r = await exec("sh", ["-c", rootScript(ROOTS[lang]?.markers ?? []), "root", dir]);
+const r = await exec("sh", ["-c", rootScript(ROOTS.get(lang)?.markers ?? []), "root", dir]);
 const root = pickRoot(lang, r.stdout, dir);
 mark("root", root);
 const argv = wrap(pick.argv, path, inEnv);
