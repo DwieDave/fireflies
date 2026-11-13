@@ -18,7 +18,10 @@
 // The list is read from mods/*/mod.json when Nocturne starts and each time
 // "+ new" or the palette opens, and kept in shared `nocturne.launchers`.
 
-import { appHome, readTextFile, run, shared, setShared } from "herdr";
+// herdr as a namespace (as scratchpad.ts): the tests that stand in for it without its files
+// calls still load Nocturne; a read that can't run leaves the list as it was.
+import * as herdr from "herdr";
+import { run, shared, setShared } from "herdr";
 import * as fs from "fs/promises";
 import { arrayOf, isBoolean, isString, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
@@ -45,12 +48,12 @@ const plainName = (n: string): boolean => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(n)
 
 /** Reads every mod's mod.json for a launcher and keeps the list (written only when it changed). */
 export async function readLaunchers(): Promise<void> {
-  const dir = `${appHome()}/mods`;
+  const dir = `${herdr.appHome()}/mods`;
   const names = await fs.readdir(dir).catch(() => []);
   const found: Launcher[] = [];
 
   for (const mod of names.filter(plainName).sort()) {
-    const text = await readTextFile(`${dir}/${mod}/mod.json`).catch(() => null);
+    const text = await herdr.readTextFile(`${dir}/${mod}/mod.json`).catch(() => null);
     const l = text ? parseJson(text, isModJson)?.launcher : undefined;
 
     if (!l || (!l.window && !l.pane)) continue;
