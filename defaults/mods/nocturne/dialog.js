@@ -17,7 +17,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { run, props, closeOverlay, theme, window as appWindow } from "herdr";
-import { dither } from "./kit.js";
+import { dither } from "./kit.ts";
 import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();

@@ -27,7 +27,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
-import { dither, eyebrow, spaceFolder } from "./kit.js";
+import { dither, eyebrow, spaceFolder } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.js";
 

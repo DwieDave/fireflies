@@ -17,7 +17,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, shared, setShared } from "herdr";
-import { ART, dither, eyebrow, navRow, navRing } from "./kit.js";
+import { ART, dither, eyebrow, navRow, navRing } from "./kit.ts";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.ts";
 
 const FOLDED = "nocturne.usageFolded";

@@ -44,7 +44,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
-import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
+import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.js";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
@@ -615,7 +615,7 @@ export default class Sky {
   /** The agent's mark, 16 px: a dithered logo (art/logo-*.svg), else Fireflies' own icon, else a bot. */
   mark(a, color) {
     const p = a.program ?? {};
-    const key = LOGO[p.key] ?? LOGO[a.app];
+    const key = LOGO.get(p.key) ?? LOGO.get(a.app ?? "");
     if (key) return svg(`${ART}/logo-${key}.svg`).size(16).text_color(color);
     if (p.icon) return p.tint !== false ? svg(p.icon).size(16).text_color(color) : image(p.icon).size(16);
     return svg(`${ART}/logo-agent.svg`).size(16).text_color(color);

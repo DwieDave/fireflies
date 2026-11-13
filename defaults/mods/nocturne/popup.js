@@ -18,7 +18,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { closeOverlay, props } from "herdr";
-import { dither, eyebrow } from "./kit.js";
+import { dither, eyebrow } from "./kit.ts";
 
 export const ROW = 26;
 

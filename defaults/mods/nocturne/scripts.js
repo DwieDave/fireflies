@@ -14,7 +14,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { terminals, openOverlay, closeOverlay, shared, setShared, notify, hc, exec } from "herdr";
-import { ART, dither, dropBelow } from "./kit.js";
+import { ART, dither, dropBelow } from "./kit.ts";
 import { here } from "./panels.js";
 
 const LABEL = "nocturne.script";

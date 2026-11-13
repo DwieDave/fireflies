@@ -8,7 +8,7 @@
 // the dragged tab or its own gaps): the drop changes nothing.
 
 import { div } from "gpui-kit";
-import { dither } from "./kit.js";
+import { dither } from "./kit.ts";
 
 /** How far (window px) a press moves before it's a drag rather than a click. */
 export const DRAG_START = 4;

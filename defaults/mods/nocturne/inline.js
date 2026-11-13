@@ -4,7 +4,7 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
-import { ART } from "./kit.js";
+import { ART } from "./kit.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();
 

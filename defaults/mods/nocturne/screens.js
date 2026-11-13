@@ -20,7 +20,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, run, spaces, keys, commands, hc, setShared, shared, presentUpdateNotes, updates, nextCommand } from "herdr";
 import { rows } from "./keymap.js";
-import { ART, dither, pip } from "./kit.js";
+import { ART, dither, pip } from "./kit.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const W = (name) => `mods/workspace-chrome/${name}.svg`;

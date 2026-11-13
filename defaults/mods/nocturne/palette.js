@@ -15,7 +15,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, setShared, window as win, agents, panes, terminals, updates, spaces } from "herdr";
-import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.js";
+import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";

@@ -34,7 +34,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
-import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.js";
+import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.js";

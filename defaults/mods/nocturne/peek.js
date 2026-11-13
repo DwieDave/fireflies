@@ -10,7 +10,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { terminals, panes, spaces, props, run, theme, closeOverlay } from "herdr";
 import Header from "./header.js";
-import { dither } from "./kit.js";
+import { dither } from "./kit.ts";
 
 export default class Peek extends Header {
   /** The terminal as a pane-like record, focused: the float has the keyboard. */

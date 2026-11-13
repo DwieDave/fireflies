@@ -13,7 +13,7 @@
 
 import { div, svg } from "gpui-kit";
 import { terminals, openOverlay, closeOverlay, shared, setShared, exec } from "herdr";
-import { ART, dropBelow } from "./kit.js";
+import { ART, dropBelow } from "./kit.ts";
 
 export const DECK = "procs.deck";
 // { at, n }: listening ports in this app's terminals, from the deck or the strip.

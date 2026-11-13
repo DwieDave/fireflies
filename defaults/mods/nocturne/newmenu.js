@@ -29,7 +29,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, window as appWindow, keys, shared, setShared } from "herdr";
-import { ART, LOGO, dither, eyebrow } from "./kit.js";
+import { ART, LOGO, dither, eyebrow } from "./kit.ts";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
 import { openSpacePicker } from "./newspace.js";
@@ -312,7 +312,7 @@ export default class NewMenu {
 
   /** An agent's mark: its dithered logo, else Fireflies' icon for it. */
   mark(t, a, color) {
-    const key = LOGO[a.key] ?? LOGO[a.app];
+    const key = LOGO.get(a.key) ?? LOGO.get(a.app ?? "");
     if (key) return svg(`${ART}/logo-${key}.svg`).size(14).flex_none().text_color(color);
     if (!a.icon) return svg(`${ART}/logo-agent.svg`).size(14).flex_none().text_color(color);
     return a.tint ? svg(a.icon).size(14).flex_none().text_color(color) : image(a.icon).size(14).flex_none().opacity(a.installed ? 1 : 0.4);

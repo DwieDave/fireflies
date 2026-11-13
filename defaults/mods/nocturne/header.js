@@ -28,7 +28,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
 import { NAME_PANE, openMenu } from "./menu.js";
-import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.js";
+import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR } from "./nav.js";
 import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
@@ -69,7 +69,7 @@ export function mark(t, p) {
 
 /** The svg of a pane's mark (mark()): also the jar's for a pinned pane (sky.js). */
 export function markPath(p) {
-  const logo = LOGO[p?.program?.key];
+  const logo = LOGO.get(p?.program?.key ?? "");
   return logo ? `${ART}/logo-${logo}.svg`
     : p?.program?.agent ? `${ART}/logo-agent.svg`
     : `mods/workspace-chrome/${MODS[p?.mod]?.[1] ?? PROGRAMS[p?.program?.key] ?? "terminal"}.svg`;

@@ -8,7 +8,7 @@
 
 import { openOverlay, closeOverlay, shared, setShared, spaces, panes } from "herdr";
 import { here } from "./panels.js";
-import { spaceFolder } from "./kit.js";
+import { spaceFolder } from "./kit.ts";
 
 const WINDOW = "git.window";
 const FRESH = 10000;

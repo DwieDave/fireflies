@@ -65,7 +65,7 @@ const cx: any = {
   timer: { every() {}, after: (_ms: number, f: Function) => { timers.push(f); } },
 };
 
-const kit = await import("../defaults/mods/nocturne/kit.js");
+const kit = await import("../defaults/mods/nocturne/kit.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const { menuItems } = await import("../defaults/mods/nocturne/menu.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");

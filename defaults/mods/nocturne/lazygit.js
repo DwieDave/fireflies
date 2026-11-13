@@ -11,7 +11,7 @@
 // pane or float started by hand still gets its header and float bar.
 
 import { spaces, panes, terminals, run, exec, appHome } from "herdr";
-import { spaceFolder } from "./kit.js";
+import { spaceFolder } from "./kit.ts";
 
 /** How to start Nocturne's lazygit: the wrapper this mod ships, here; on
  *  another machine (`on`) whatever it has on its PATH. */

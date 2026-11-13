@@ -15,7 +15,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { props, closeOverlay, run, theme, shared, setShared } from "herdr";
-import { ART, dither } from "./kit.js";
+import { ART, dither } from "./kit.ts";
 
 // The level's theme color: the same words the fireflies use for status.
 const COLOR = { error: "blocked", warning: "working", success: "done", info: "accent" };

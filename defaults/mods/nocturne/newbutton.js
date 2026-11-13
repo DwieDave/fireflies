@@ -15,7 +15,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, shared, layout, run, settings } from "herdr";
-import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.js";
+import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { CURSOR } from "./nav.js";
 

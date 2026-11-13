@@ -24,7 +24,7 @@
 
 import { View, div, svg } from "gpui-kit";
 import { theme } from "herdr";
-import { ART, dither } from "./kit.js";
+import { ART, dither } from "./kit.ts";
 
 // The halo's half-width (fireglow-halo.svg is 48 px), the lit night's two
 // steps (half-width, opacity). Readable first: the halo's dots stay darker

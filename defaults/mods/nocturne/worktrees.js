@@ -9,7 +9,7 @@
 import { div, svg } from "gpui-kit";
 import { v_flex } from "gpui-base";
 import { panes, spaces, run, theme } from "herdr";
-import { spaceFolder } from "./kit.js";
+import { spaceFolder } from "./kit.ts";
 import { openWorktrees } from "./git.js";
 
 export class WorktreesPanel {
