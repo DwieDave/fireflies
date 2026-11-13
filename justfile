@@ -42,6 +42,21 @@ pre-release: test docs-check
 build:
     cargo build --locked
 
+# The mods' TypeScript (docs/mods-typescript.md): tsc at full strictness on every
+# .ts file under defaults/, against the typings the built app writes. The .js
+# mods are outside it until their migration. `cargo test` runs it too
+# (tests/mods_typescript.rs).
+typecheck:
+    bun install --frozen-lockfile
+    cargo run --locked -q -- types target/mod-types
+    node_modules/.bin/tsc -p defaults/tsconfig.json
+
+# oxlint with anti-slop (oxlint.config.ts) on the same files; `just lint --fix`
+# adds the blank lines require-readable-spacing asks for.
+lint *args:
+    bun install --frozen-lockfile
+    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods
+
 test:
     bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/nocturne-github.test.ts scripts/nocturne-github-graph.test.ts scripts/nocturne-github-cache.test.ts scripts/nocturne-github-remotes.test.ts scripts/nocturne-github-create.test.ts scripts/nocturne-equalize-panes.test.ts scripts/nocturne-scripts.test.ts scripts/nocturne-scripts-runs.test.ts scripts/nocturne-scripts-nix.test.ts scripts/nocturne-markdown.test.ts scripts/nocturne-notifications.test.ts scripts/nocturne-preview.test.ts scripts/nocturne-preview-table.test.ts scripts/nocturne-preview-diff.test.ts scripts/nocturne-preview-native.test.ts scripts/nocturne-github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/nocturne-git.test.ts scripts/nocturne-editor.test.ts scripts/nocturne-picker.test.ts scripts/nocturne-vim.test.ts scripts/nocturne-files.test.ts scripts/nocturne-browser.test.ts
     # Its own process: it stands in for "herdr" (mock.module is process-wide).
@@ -132,10 +147,12 @@ test:
     bun test scripts/nocturne-pip.test.ts
     # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.
     bun test scripts/nocturne-floatfocus.test.ts
-    # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
+    # Usage limits: a scratch app asks nothing; the two limits.ts copies are one file.
     bun test scripts/nocturne-usage-limits.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/nocturne-usage-poll.test.ts
+    # TypeScript mods: guard.ts and keyhelp.d.ts are one file each in every mod that has them; guard.ts proves or refuses data.
+    bun test scripts/mods-typescript.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/nocturne-procs.test.ts
     # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the system tab's second.

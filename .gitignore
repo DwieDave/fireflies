@@ -4,3 +4,4 @@
 /AGENTS.local.md
 /.env
 .direnv/
+/node_modules
