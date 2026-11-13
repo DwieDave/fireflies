@@ -139,7 +139,8 @@ import type { HoverPart, Problem, ProgressParams, SeverityColors, Work } from ".
 import { languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote, cardPlace, changeBetween, incremental, cardMarkdown, appBindings, chordOf, isServerCaps } from "./logic.ts";
 import { diagnostics, lineNotes, counts, diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, busy, progressWord, isHover, isLocations, isLspDiagnostic, isProgressParams, isPublishedDiagnostics } from "./lsp-replies.ts";
 import type { Doc as VimDoc, FeedResult, Mode, Played } from "./vim.ts";
-import { createVim, feed, play, token, beginInsert, CARET, MODE_NAME, applyEdits } from "./vim.ts";
+import { createVim, feed, play, token, CARET, MODE_NAME, applyEdits } from "./vim.ts";
+import { beginInsert } from "./vim-ops.ts";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import type { Stop } from "./form-keys.ts";
