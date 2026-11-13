@@ -5,7 +5,7 @@
 //! State lives in thread-locals; AppKit callbacks never borrow the registry
 //! while it is borrowed (events go through a separate sink).
 
-use crate::{Cover, Event, Kind, Rect, Source, Spec, Trust};
+use crate::{Cover, Event, Kind, Press, Rect, Source, Spec, Trust};
 use block2::RcBlock;
 use objc2::rc::{Retained, Weak};
 use objc2::encode::{Encoding, RefEncode};
@@ -195,6 +195,8 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
     let zero = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0));
     // The host goes into the window first, so a Chromium browser can be created inside it.
     let host = HoleHost::new(mtm, zero);
+    // Picture in picture's video gives its left presses to Fireflies: the window drags by it.
+    host.ivars().gives_left.set(spec.kind.gives_left_presses());
     let view: Retained<NSView> = Retained::into_super(host.clone());
     view.setHidden(true);
     container.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, Some(&gpui));
@@ -1129,6 +1131,9 @@ fn entry_state(key: &str, e: &Entry, r: &Renderer) -> Value {
         "wantedHidden": e.wanted_hidden,
         "holes": e.host.ivars().holes.borrow().len(),
         "holeClicksReachHerdr": hole_clicks_reach_herdr(e),
+        // Where a left / right press in the middle of the view goes: "view" or
+        // "fireflies" (picture in picture's video: a left press drags its window).
+        "pressAtCenter": press_at_center(e),
         "masked": layer_masked(&e.view),
         "shadow": e.host.ivars().shadow.borrow().as_ref().is_some_and(|sh| { let hidden: bool = unsafe { msg_send![&**sh, isHidden] }; !hidden }),
         "firstResponderInside": first,
@@ -1142,6 +1147,15 @@ fn layer_masked(view: &NSView) -> bool {
         let mask: Option<Retained<AnyObject>> = unsafe { msg_send![&*l, mask] };
         mask.is_some()
     })
+}
+
+/// For the self-check: where a left and a right press in the view's middle go
+/// (HoleHost::takes, the rule its hit test follows).
+fn press_at_center(e: &Entry) -> Value {
+    let b = e.host.bounds();
+    let mid = NSPoint::new(b.origin.x + b.size.width / 2.0, b.origin.y + b.size.height / 2.0);
+    let to = |p: Press| if e.host.takes(mid, p) { "view" } else { "fireflies" };
+    json!({ "left": to(Press::Left), "right": to(Press::Right) })
 }
 
 /// For the self-check: a click at each hole's centre, hit-tested by the window
@@ -1704,6 +1718,8 @@ pub struct HostIvars {
     cover: RefCell<Vec<Hole>>,
     /// A dialog's backdrop over the view: a dimming layer on the page.
     dimmed: Cell<bool>,
+    /// Left presses go to Fireflies, not the view (Kind::gives_left_presses).
+    gives_left: Cell<bool>,
     dim: RefCell<Option<Retained<AnyObject>>>,
     /// Soft shadow around the holes, drawn on the page (the hole itself is
     /// masked away, so the shadow only shows outside the card).
@@ -1732,7 +1748,7 @@ define_class!(
             // `point` is in the superview's coordinates.
             if let Some(sup) = unsafe { self.superview() } {
                 let local = self.convertPoint_fromView(point, Some(&sup));
-                if !takes_click(self.ivars().dimmed.get(), self.in_hole(local)) {
+                if !self.takes(local, current_press(self.mtm())) {
                     return std::ptr::null_mut();
                 }
             }
@@ -1747,20 +1763,29 @@ define_class!(
     }
 );
 
-/// Whether a view takes a click: not in a hole cut for an overlay above it,
-/// nor under a backdrop (a dialog's, a window's scrim). There the click goes to
-/// Fireflies, which closes what the backdrop is under, and the page can't become
-/// AppKit's first responder (and take the keys) behind a window that still shows.
-fn takes_click(dimmed: bool, in_hole: bool) -> bool {
-    !dimmed && !in_hole
+/// The mouse event AppKit is handing out now (hit tests run inside its
+/// dispatch), as a Press; none: Other.
+fn current_press(mtm: MainThreadMarker) -> Press {
+    let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
+    app.currentEvent().map_or(Press::Other, |e| {
+        Press::of_event(e.r#type().0 as u64, e.modifierFlags().contains(NSEventModifierFlags::Control))
+    })
 }
 
 impl HoleHost {
+    /// Whether this view takes `press` at `local` (crate::takes_press): picture
+    /// in picture's video gives a left press to Fireflies, so the window under
+    /// it is dragged by it (or, without a move, clicked: the player takes the keyboard).
+    fn takes(&self, local: NSPoint, press: Press) -> bool {
+        crate::takes_press(self.ivars().dimmed.get(), self.in_hole(local), self.ivars().gives_left.get(), press)
+    }
+
     fn new(mtm: MainThreadMarker, frame: NSRect) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(HostIvars {
             holes: RefCell::new(Vec::new()),
             cover: RefCell::new(Vec::new()),
             dimmed: Cell::new(false),
+            gives_left: Cell::new(false),
             dim: RefCell::new(None),
             shadow: RefCell::new(None),
         });
@@ -1923,6 +1948,10 @@ mod tests {
 
     #[test]
     fn a_page_under_a_backdrop_takes_no_click() {
+        // A view takes a click unless it's in a hole cut for an overlay above it, or under a
+        // backdrop (a dialog's, a window's scrim): there it goes to Fireflies, which closes
+        // what the backdrop is under, and the page can't take the keyboard behind it.
+        let takes_click = |dimmed, in_hole| crate::takes_press(dimmed, in_hole, false, Press::Left);
         assert!(takes_click(false, false));
         assert!(!takes_click(false, true), "a hole: the overlay's");
         assert!(!takes_click(true, false), "dimmed: the backdrop's, so the page can't take the keyboard");
