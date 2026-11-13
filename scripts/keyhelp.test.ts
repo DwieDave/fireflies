@@ -220,7 +220,7 @@ test("picture in picture: ? opens the overview in a popup (the video is native),
 });
 
 test("Nocturne's chrome (sidebar, tab strip, header, parked chips): ? opens the overview in a dialog, ? or esc closes it", async () => {
-  const menu = await import("../defaults/mods/nocturne/menu.js");
+  const menu = await import("../defaults/mods/nocturne/menu.ts");
   opened.length = 0;
   menu.openKeys("sidebar keys", [["j k", "move"], ["?", "keys"]]);
   expect(opened.at(-1)).toMatchObject({ mod: "nocturne", kind: "dialog", props: { role: "keyshelp", title: "sidebar keys" } });

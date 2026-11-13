@@ -106,6 +106,9 @@ export type Nav = (id: string, sec: string, acts?: NavActs) => boolean;
 /** A ? list's line: [keys, what]. */
 export type HelpLine = readonly [string, string];
 
+/** A ? list's line, as handed on in a dialog's props. */
+export const isHelpLine = (value: unknown): value is HelpLine => Array.isArray(value) && value.length === 2 && isString(value[0]) && isString(value[1]);
+
 // The ? lists: [keys, what] per line, every key its keymap takes, ? keys last.
 // The keys dialog (screens.js, keymap.js) shows them too.
 export const SIDEBAR_HELP: readonly HelpLine[] = [

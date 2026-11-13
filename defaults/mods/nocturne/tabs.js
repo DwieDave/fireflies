@@ -37,7 +37,7 @@ import { spaces, panes, run, theme, shared, setShared, layout, focused, nextComm
 import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
-import { openMenu, openKeys } from "./menu.js";
+import { openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
 import { headerControls, paneMenu, renamePane } from "./header.js";
 import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.ts";

@@ -37,7 +37,7 @@ import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.j
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
-import { EDIT_SPACE, openMenu, newWorktree } from "./menu.js";
+import { EDIT_SPACE, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();

@@ -27,7 +27,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
-import { NAME_PANE, openMenu } from "./menu.js";
+import { NAME_PANE, openMenu } from "./menu.ts";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR } from "./nav.ts";
 import { field } from "./inline.ts";

@@ -60,6 +60,8 @@ export const isTerminal = object(
     created_ms: oneOf(isNumber, isNull),
     finished_ms: oneOf(isNumber, isNull),
     argv: nullable(arrayOf(isString)),
+    parent: nullable(isString),
+    name: nullable(isString),
   },
 );
 

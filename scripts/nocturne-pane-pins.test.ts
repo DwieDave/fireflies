@@ -67,7 +67,7 @@ const cx: any = {
 
 const kit = await import("../defaults/mods/nocturne/kit.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
-const { menuItems } = await import("../defaults/mods/nocturne/menu.js");
+const { menuItems } = await import("../defaults/mods/nocturne/menu.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const palette = await import("../defaults/mods/nocturne/palette.js");
 

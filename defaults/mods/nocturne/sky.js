@@ -53,7 +53,7 @@ import { field } from "./inline.ts";
 import Spaces from "./spaces.js";
 
 export { GLOW_SQUARE };
-import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.js";
+import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.ts";
@@ -65,7 +65,7 @@ import { toggleGithub, githubForm } from "./github.ts";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
-import { newWorktree } from "./menu.js";
+import { newWorktree } from "./menu.ts";
 import { openSpacePicker } from "./newspace.js";
 import { gridify } from "./gridify.ts";
 import { toastKey } from "./toast.ts";
