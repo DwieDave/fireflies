@@ -138,7 +138,7 @@ test("script runner: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("notifications: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/notifications/overview.js");
+  const m = await import("../defaults/mods/notifications/overview.ts");
   const v: any = surface(m.default, ["key", "keysStrip"], { but: null, keysShown: false, cursor: 0, list: () => [], current: () => null });
   opensAndCloses("notifications", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
 });

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "fs";
-import { parseScreen, describe as describeClaude, step, reviewText, optionKind, dialog } from "../defaults/mods/notifications/claude.js";
+import { parseScreen, describe as describeClaude, step, reviewText, optionKind, dialog } from "../defaults/mods/notifications/claude.ts";
 
 const FIX = `${import.meta.dir}/fixtures/notifications`;
 const screen = (name: string) => readFileSync(`${FIX}/${name}.txt`, "utf8");
@@ -453,8 +453,8 @@ test("review text: picked labels in option order, then the typed answer", () => 
 
 // ---- the question dialog's keys
 
-import { start, press, setOther, answers, isReview } from "../defaults/mods/notifications/ask.js";
-import { collect, group, counts, tail, headline, adapterOf, splitAddress, age } from "../defaults/mods/notifications/model.js";
+import { start, press, setOther, answers, isReview } from "../defaults/mods/notifications/ask.ts";
+import { collect, group, counts, tail, headline, adapterOf, splitAddress, age } from "../defaults/mods/notifications/model.ts";
 
 const keys = (qs: any, s: any, ...ks: string[]) => {
   let action: any = null;
@@ -554,7 +554,7 @@ test("items: types from the adapter, else from herdr-core's kind; grouped and co
     T("t7", { app: "claude-code", state: "blocked", kind: "other", msg: "trust this folder?" }),
   ];
   const info = { t1: { screen: screen("perm-bash"), record: hook("hook-perm-bash") }, t2: { screen: screen("q-multi-1"), record: hook("hook-ask") } };
-  const items = collect({ terminals, agents: [AG("t1", "fireflies", "fix login")], info });
+  const items = collect({ terminals, agents: [AG("t1", "fireflies", "fix login")], info: new Map(Object.entries(info)) });
   const g = group(items);
   expect(g.permission.map((i: any) => i.address)).toEqual(["t1", "vps/t3"]);
   expect(g.question.map((i: any) => i.address)).toEqual(["t2"]);
@@ -573,7 +573,7 @@ test("items: a sub-agent goes by its parent's place; errors put away go", () => 
   const terminals = [T("t1", { app: "claude-code", state: "working" }), T("t9", { app: "claude-code", state: "error", msg: "API overloaded" }, { parent: "t1" })];
   const items = collect({ terminals, agents: [AG("t1", "fireflies", "fix login")] });
   expect(items[0].spaceName).toBe("fireflies");
-  expect(collect({ terminals, agents: [], dismissed: { [items[0].id]: true } })).toEqual([]);
+  expect(collect({ terminals, agents: [], dismissed: new Set([items[0].id]) })).toEqual([]);
 });
 
 test("adapters: Claude Code by its report, anything else generic", () => {
