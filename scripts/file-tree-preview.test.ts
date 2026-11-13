@@ -89,7 +89,9 @@ const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
 const keyhelp = await load(`${F}/keyhelp.ts`);
 const fileIcons = await load(`${F}/file-icons.ts`, kinds);
 const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
-const { default: Viewer } = await load(`${F}/viewer.ts`, shared);
+// The viewer imported for real (the shared files it imports as the app loads them).
+(globalThis as any).window = { paint_path: () => new Element() };
+const { default: Viewer } = await importMod(`${F}/viewer.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
 // The pure parts (logic.ts and the modules it was split into), as the pane imports them.
 const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`${F}/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const route = await load(`${F}/editor-route.ts`);
