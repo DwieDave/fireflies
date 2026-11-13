@@ -190,7 +190,7 @@ test("editor: its chord (the keys command) opens the overview, which holds the k
 });
 
 test("git: ? opens the keys overview, ? or esc closes it (its rows run as a menu's)", async () => {
-  const { Popups } = await import("../defaults/mods/git/popups.js");
+  const { Popups } = await import("../defaults/mods/git/popups.ts");
   let ran = 0;
   const p: any = new Popups({ focusSelf() {} });
   const open = () => p.keys({ title: "git · files", sections: [{ title: "files", keys: [Object.assign(["space", "Stage", () => { ran++; }], { key: "space" })] }] });

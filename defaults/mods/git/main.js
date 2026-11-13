@@ -45,18 +45,18 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder, home } from "herdr";
-import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.js";
-import { layoutGraph, usedWidth, widthOf } from "./graph.js";
-import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
-import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.js";
-import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
+import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.ts";
+import { layoutGraph, usedWidth, widthOf } from "./graph.ts";
+import { rows as diffRows, isChange, hunkKeys } from "./patch.ts";
+import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.ts";
+import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.ts";
 import { act } from "./actions.js";
-import { Popups } from "./popups.js";
+import { Popups } from "./popups.ts";
 import { keysHint } from "./keyhelp.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
-import * as WT from "./worktrees.js";
-import { Review } from "./review.js";
-import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
+import * as WT from "./worktrees.ts";
+import { Review } from "./review.ts";
+import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.ts";
 
 export const WINDOW = "git.window"; // { id, beat }: the open window, for the toggle
 const STATE = "git.state"; // where the window was, per folder
@@ -639,6 +639,12 @@ export default class GitView extends View {
   }
 
   /** The selected row of a context (the focused panel's by default). */
+  /** The review file under the cursor, when the cursor is on one (review.ts). */
+  reviewItem() {
+    const x = this.item();
+    return this.review.files.find((f) => f === x) ?? null;
+  }
+
   item(ctx = this.focus === "main" ? this.ctxOf(this.panel) : this.ctx()) {
     if (!LISTS.has(ctx)) ctx = this.ctxOf(this.panel);
     const list = this.items(ctx);

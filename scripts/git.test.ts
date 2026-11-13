@@ -6,11 +6,11 @@ import { spawnSync } from "node:child_process";
 import {
   parseStatus, letters, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseRefs,
   parseReflog, parseStash, parseWorktrees, repoState, age, initials, fileTree, trackOf, parseLogFull, relativeDate,
-} from "../defaults/mods/git/parse.js";
-import { layoutGraph, segments, usedWidth, widthOf } from "../defaults/mods/git/graph.js";
-import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/git/patch.js";
-import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/git/keys.js";
-import { rewrite, nextUndo, nextRedo, reflogAction, UNDO, REDO } from "../defaults/mods/git/history.js";
+} from "../defaults/mods/git/parse.ts";
+import { layoutGraph, segments, usedWidth, widthOf } from "../defaults/mods/git/graph.ts";
+import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/git/patch.ts";
+import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/git/keys.ts";
+import { rewrite, nextUndo, nextRedo, reflogAction, UNDO, REDO } from "../defaults/mods/git/history.ts";
 
 const US = "\x1f";
 
@@ -107,9 +107,9 @@ test("reflog, stash, worktrees, state", () => {
   expect(parseStash(["stash@{1}", "5", "On main: wip", "h"].join(US))[0]).toMatchObject({ index: 1, subject: "On main: wip" });
   const w = parseWorktrees("worktree /a\nHEAD abc\nbranch refs/heads/main\n\nworktree /b\nHEAD def\ndetached\n");
   expect(w).toMatchObject([{ path: "/a", branch: "main" }, { path: "/b", detached: true }]);
-  expect(repoState({ "rebase-merge": true })).toBe("rebasing");
-  expect(repoState({ MERGE_HEAD: true })).toBe("merging");
-  expect(repoState({})).toBe(null);
+  expect(repoState(new Set(["rebase-merge"]))).toBe("rebasing");
+  expect(repoState(new Set(["MERGE_HEAD"]))).toBe("merging");
+  expect(repoState(new Set())).toBe(null);
 });
 
 test("age and initials", () => {

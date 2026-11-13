@@ -36,7 +36,7 @@ mock.module("gpui-base", () => ({ h_flex: () => new El(), v_flex: () => new El()
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
 const gh = await import("../defaults/mods/github/kit.ts");
-const git = await import("../defaults/mods/git/draw.js");
+const git = await import("../defaults/mods/git/draw.ts");
 
 const LONG = "Deploy PR preview environment / Deploy preview namespace";
 

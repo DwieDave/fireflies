@@ -12,6 +12,19 @@
 // panel) takes space / a / s / ctrl-b for its own meaning there: lazygit's
 // stage / stage all / stash stay on the Files tab. See REVIEW_CLASHES.
 
+import type { KeyEvent } from "gpui-kit";
+import { literal } from "./guard.ts";
+
+/** Where a key applies: the panel (or popup) with the keyboard; "global" and
+ *  "list" under every panel. */
+export type KeyContext =
+  | "global" | "list" | "status" | "files" | "review" | "worktrees" | "branches" | "remotes" | "remoteBranches"
+  | "tags" | "commits" | "reflog" | "subCommits" | "commitFiles" | "stash" | "staging" | "main"
+  | "menu" | "confirm" | "prompt" | "commit";
+
+/** A row of the table as it's read: [context, keys, action, label, flags]. */
+type Row = readonly [KeyContext, readonly string[], string, string, string];
+
 export const BINDINGS = [
   // global
   ["global", ["?", "x"], "keys", "Keybindings menu", "bar"],
@@ -265,10 +278,31 @@ export const BINDINGS = [
   ["commit", ["enter"], "commit-ok", "Commit", "bar"],
   ["commit", ["tab"], "commit-switch", "Summary / description", "bar"],
   ["commit", ["escape"], "back", "Close (keeps the draft)", "bar"],
-];
+] as const satisfies readonly Row[];
+
+/** Everything a key can do: the table's action names ("panel:files" names its panel). */
+export type Action = (typeof BINDINGS)[number][2];
+
+/** A binding's flags (see the top). */
+export type Flag = "bar" | "menu" | "danger" | "hidden";
+
+const isFlag = literal("bar", "menu", "danger", "hidden");
+
+/** One binding of the table: `key` the first of its keys (the one shown). */
+export interface Binding {
+  readonly context: KeyContext;
+  readonly keys: readonly string[];
+  readonly key: string;
+  readonly action: Action;
+  readonly label: string;
+  readonly flags: ReadonlySet<Flag>;
+}
+
+/** The table, each row's keys and flags read as plain strings. */
+const TABLE: readonly (readonly [KeyContext, readonly string[], Action, string, string])[] = BINDINGS;
 
 /** Review's keys that mean something else on the Files tab, and why. */
-export const REVIEW_CLASHES = [
+export const REVIEW_CLASHES: readonly (readonly [key: string, review: string, files: string])[] = [
   ["space", "mark reviewed + next", "stage"],
   ["a", "all reviewed", "stage all"],
   ["s", "next scope", "stash"],
@@ -277,56 +311,79 @@ export const REVIEW_CLASHES = [
 ];
 
 /** Contexts that are lists (j/k, paging, filter apply). */
-export const LISTS = new Set(["status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash"]);
+export const LISTS: ReadonlySet<KeyContext> = new Set<KeyContext>(["status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash"]);
 
 /** The binding a key does in a context: the context's own first, then the
  *  list keys (for a list), then the global ones. */
-export function lookup(context, key) {
-  const order = [context, ...(LISTS.has(context) ? ["list"] : []), ...(isPopup(context) ? [] : ["global"])];
+export function lookup(context: KeyContext, key: string): Binding | null {
+  const order: KeyContext[] = [context, ...(LISTS.has(context) ? ["list" as const] : []), ...(isPopup(context) ? [] : ["global" as const])];
+
   for (const c of order) {
-    const b = BINDINGS.find(([ctx, keys]) => ctx === c && keys.includes(key));
+    const b = TABLE.find(([ctx, keys]) => ctx === c && keys.includes(key));
+
     if (b) return toBinding(b);
   }
+
   return null;
 }
 
-export const isPopup = (c) => c === "menu" || c === "confirm" || c === "prompt" || c === "commit";
+export const isPopup = (c: KeyContext) => c === "menu" || c === "confirm" || c === "prompt" || c === "commit";
 
-const toBinding = ([context, keys, action, label, flags]) => ({ context, keys, key: keys[0], action, label, flags: new Set(flags.split(" ").filter(Boolean)) });
+const toBinding = ([context, keys, action, label, flags]: (typeof TABLE)[number]): Binding => ({
+  context, keys, key: keys[0] ?? "", action, label, flags: new Set(flags.split(" ").filter(isFlag)),
+});
 
 /** A context's own bindings (no list / global ones), in table order. */
-export function bindings(context) {
-  return BINDINGS.filter(([c]) => c === context).map(toBinding);
+export function bindings(context: KeyContext): Binding[] {
+  return TABLE.flatMap((b) => (b[0] === context ? [toBinding(b)] : []));
 }
 
 /** The options bar: the context's "bar" keys, then a few global ones. */
-export function barKeys(context) {
+export function barKeys(context: KeyContext): Binding[] {
   const own = bindings(context).filter((b) => b.flags.has("bar"));
+
   if (isPopup(context)) return own;
+
   return [...own, ...bindings("global").filter((b) => b.flags.has("bar"))];
 }
 
 /** The right-click menu of a row: its context's "menu" bindings. */
-export function menuKeys(context) {
+export function menuKeys(context: KeyContext): Binding[] {
   return bindings(context).filter((b) => b.flags.has("menu"));
 }
+
+/** What keyName reads of a key event. */
+export type KeyPress = Pick<KeyEvent, "key" | "key_char" | "modifiers">;
 
 /** A key event's name as the table writes it: "j", "G", "?", "space",
  *  "enter", "ctrl-j", "alt-up", "shift-down". Null for keys the window
  *  leaves to the app (cmd-…). */
-export function keyName(e) {
-  const m = e.modifiers ?? {};
+export function keyName(e: KeyPress) {
+  const m = e.modifiers;
+
   if (m.platform || m.function) return null;
-  const k = String(e.key ?? "").toLowerCase();
+
+  const k = e.key.toLowerCase();
+
   if (m.control) return m.shift ? `ctrl-shift-${k}` : `ctrl-${k}`;
+
   if (m.alt) return k === "up" || k === "down" ? `alt-${k}` : null;
+
   const c = e.key_char;
+
   if (c && c.length === 1 && c.trim()) return c;
+
   if (m.shift && (k === "up" || k === "down" || k === "tab")) return `shift-${k}`;
+
   return k;
 }
 
 /** A key as the bar and menus write it. */
-export function keyLabel(k) {
-  return { escape: "esc", pageup: "pgup", pagedown: "pgdn", "ctrl-c": "ctrl-c" }[k] ?? k;
+export function keyLabel(k: string) {
+  switch (k) {
+    case "escape": return "esc";
+    case "pageup": return "pgup";
+    case "pagedown": return "pgdn";
+    default: return k;
+  }
 }
