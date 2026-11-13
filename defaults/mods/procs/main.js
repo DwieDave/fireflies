@@ -347,6 +347,8 @@ export default class ProcsDeck extends View {
     const pid = this.tab === "ports" ? item.pid : item.kind === "proc" ? item.node.pid : null;
     if (pid == null) return this.say("a process ends, not a group: move onto one", "dim");
     const p = this.proc(pid);
+    // A port's process that started after ps ran (lsof runs after it): nothing to end yet.
+    if (!p) return this.say(`${item.name ?? pid} (${pid}): not in the last reading, r reads again`, "dim");
     const why = guardOf(p, this.snap.me);
     if (why) return this.say(`${p?.name ?? pid}: ${why}, not ended from here`, "dim");
     const pids = targets(pid, { tree, byPid: this.ix.byPid, kids: this.ix.kids, me: this.snap.me });

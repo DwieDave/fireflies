@@ -361,6 +361,16 @@ test("ports: o on a port with no web pane in the focused tab opens one beside th
   } finally { focusedNow = { tab: "tB", pane: "p2", terminal: "t7" }; }
 });
 
+test("ports: x on a port whose process ps didn't list (it started between ps and lsof) says so and asks nothing", async () => {
+  probeText = probe(PS, `p77777\ncdeno\nf3\nn*:3000\n`);
+  const { d, press, cur } = await deck("ports");
+  expect(cur()).toBe("3000:77777");
+  await press("x");
+  expect(d.ask).toBe(null);
+  expect(d.note.text).toBe("deno (77777): not in the last reading, r reads again");
+  expect(calls.some((c) => c[0] === "kill")).toBe(false);
+});
+
 test("ports: none listening shows the empty note; the deck says so and the count is 0", async () => {
   probeText = probe(PS, "");
   const { d, draw } = await deck("ports");
