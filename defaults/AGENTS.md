@@ -1481,10 +1481,14 @@ with their age. A scratch app (`HERDR_APP_HOME` set to another home than the
 default) asks nothing and says "usage is off in a scratch app";
 `HERDR_APP_USAGE=1` in its environment turns it on.
 
-An agent's tab on Nocturne's strip and its pane's header wear a small winged
-firefly (the app icon's, 13 x 11 px) in the colour the sidebar gives its status
-(working, needs you, done; idle muted): it breathes while working and blinks
-while it needs you. Tabs and panes without an agent have none.
+An agent's tab on Nocturne's strip and its pane's header wear one mark: the
+one its firefly wears in the sidebar, its program's logo with the little
+wings (`winged.ts`, one helper for the sidebar, the tabs and the headers; a
+12 px mark there), in the colour the sidebar gives its status (working, needs
+you, done; idle muted). While it works its wings beat a little and slowly
+(only while the window is in front and more motion is fine); it blinks while
+it needs you; done and resting hold still. A plain terminal's tab and header
+keep its plain mark, without wings.
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the

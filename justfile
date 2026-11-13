@@ -173,8 +173,8 @@ test:
     bun test scripts/scripts-chips.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
-    # An agent's status as the winged firefly in its tab and pane header (kit.ts statusFly): colour, motion, size.
-    bun test scripts/nocturne-status-fly.test.ts
+    # An agent's one mark in its tab and pane header, the sidebar's winged one (winged.ts): colour, motion only while working, size, no second mark.
+    bun test scripts/nocturne-winged.test.ts
     # The strip's drop-downs: a second press on the git mark's ▾ closes its menu (Developer's report).
     bun test scripts/nocturne-tool-dropdowns.test.ts
     cargo test --locked

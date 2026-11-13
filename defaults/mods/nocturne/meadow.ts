@@ -2,13 +2,15 @@
 // wings and glow, landing at rest; the jar of pinned ones at the top, its glass
 // (open and on the rail) and its glint; the meadow that places them all.
 
-import { div, svg, image } from "gpui-kit";
+import { div, svg } from "gpui-kit";
+import { flyMark, wingedMark } from "./winged.ts";
+import type { Beat } from "./winged.ts";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { terminals, run, hc, settings } from "herdr";
 import type { AgentInfo, Theme } from "herdr";
 import { isTerminal } from "./guards.ts";
-import { ART, LOGO, WORD, atRest, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
+import { ART, WORD, atRest, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { field } from "./inline.ts";
@@ -25,34 +27,12 @@ export function doneBadge(t: Theme): Element {
     .child(svg(CHECK).size(8).text_color(t.done));
 }
 
-/** The agent's mark, 16 px: a dithered logo (art/logo-*.svg), else Fireflies' own icon, else a bot. */
-export function flyMark(a: AgentInfo, color: Color): Element {
-  const p = a.program;
-  const key = LOGO.get(p.key) ?? LOGO.get(a.app ?? "");
+/** How the sidebar's wings beat (sky-plan.ts FLAP): by status, a landing one
+ *  as a working one; 3 cells deep; resting ones and a calm sky hold them still. */
+function beatOf(a: AgentInfo, h: number, landing: Landing | undefined): Beat | null {
+  const beat = calm() ? undefined : landing ? FLAP.get("working") : FLAP.get(a.status);
 
-  if (key) return svg(`${ART}/logo-${key}.svg`).size(16).text_color(color);
-
-  if (p.icon) return p.tint !== false ? svg(p.icon).size(16).text_color(color) : image(p.icon).size(16);
-
-  return svg(`${ART}/logo-agent.svg`).size(16).text_color(color);
-}
-
-/** A pair of 1-bit wings over the mark's shoulders (art/wings.svg). They beat
- *  by folding: a clip anchored at their base shortens and grows, so the tips
- *  dip behind it, pixels kept whole. Resting ones hold them still. */
-export function wings(a: AgentInfo, h: number, color: Color, landing: Landing | undefined): Element {
-  const beat = calm() ? null : landing ? FLAP.get("working") : FLAP.get(a.status);
-
-  // Roots on the mark's shoulders: the mark sits at 12..28, its body's top edge near 15.
-  // The mark's own color: one creature, not a sprite with a costume.
-  const clip = div().absolute().left(8).top(10).w(25).h(8).overflow_hidden()
-    .child(svg(`${ART}/wings.svg`).absolute().bottom(0).left(0).w(25).h(8).text_color(color));
-
-  if (!beat) return clip;
-
-  const period = beat + (h % 60);
-
-  return clip.loop("top", { from: 10, to: 13, period, easing: "linear" }).loop("height", { from: 8, to: 5, period, easing: "linear" });
+  return beat ? { period: beat + (h % 60), fold: 3 } : null;
 }
 
 /** Notes agents that just went to rest; they're `landing` for LAND ms. */
@@ -93,9 +73,10 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
   // dots don't run into it.
   const body0 = div().relative().size(40).flex_none()
     .child(halo).child(div().absolute().top(10).left(10).size(20).bg(t.background))
-    .child(wings(a, h, color, landing))
+    // The winged mark (winged.ts, as the agent's tab and pane header wear it):
+    // its mark at 12..28, the wings' roots on its shoulders.
+    .child(div().absolute().top(10).left(8).child(wingedMark(a, color, 16, beatOf(a, h, landing))))
     .child(div().absolute().top(12).left(12).size(16).overflow_hidden()
-      .child(flyMark(a, color))
       .when(Boolean(landing), (el) => (landing ? el.child(fade(div().absolute().top(0).left(0).size(16).child(flyMark(a, landing.color)))) : el))
       // Alive: a band of night-colored dither sweeps across the mark. Over
       // the plate it vanishes, so only the mark's own pixels darken, like a

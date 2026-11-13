@@ -337,25 +337,6 @@ export function pip(t: Theme, status: Status | null | undefined, size = 6): Elem
   return el;
 }
 
-// An agent's status mark in a pane header and on its tab: art/firefly.svg, the
-// app icon's winged insect, one cell a layout px.
-export const FLY_W = 13;
-export const FLY_H = 11;
-
-/** An agent's status as Fireflies' winged firefly, in the colour the sidebar
- *  gives it (meadow.ts firefly: the status's own, idle muted). Working breathes and
- *  blocked blinks, as the pip did; done and idle hold still. Only for an agent:
- *  a pane or tab without a status draws none. */
-export function statusFly(t: Theme, status: Status, id: string): Element {
-  const el = svg(`${ART}/firefly.svg`).id(id).w(FLY_W).h(FLY_H).flex_none().text_color(status === "idle" ? t.muted : t[status]);
-
-  if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
-
-  if (status === "blocked") return el.loop("opacity", { from: 0.15, to: 1, period: 700, easing: "linear" });
-
-  return el;
-}
-
 /** Uppercase eyebrow label. */
 export function eyebrow(t: Theme, text: string): Element {
   return div().text_size(11).text_color(t.ansi8).child(text.toUpperCase());

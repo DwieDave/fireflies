@@ -14,10 +14,10 @@
 //
 // Narrow panes give way in order, never overlapping: the folder shrinks
 // first and goes under FOLDER_MIN px; the status word goes under WORD_MIN
-// (the pip still says it); the hover buttons fold into ⋯ (the pane menu):
+// (the winged mark's colour still says it); the hover buttons fold into ⋯ (the pane menu):
 // all of them from FULL_MIN, zoom, ⋯ and close from SOME_MIN, ⋯ alone
 // below. Close is always the rightmost, ⋯ right before it. The name and the
-// pip stay.
+// mark (winged for an agent) stay.
 //
 // Keys: the tab strip's cursor (tabs.ts, nav.ts) walks the focused pane's
 // header as its second row: the name (rename), every button here (the
@@ -32,7 +32,8 @@ import { panes, spaces, props, run, theme, home, shared, setShared, keys } from 
 import type { PaneInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { NAME_PANE, openMenu } from "./menu.ts";
-import { ART, LOGO, dither, statusFly, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
+import { statusMark } from "./winged.ts";
+import { ART, LOGO, dither, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
 import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
@@ -450,8 +451,8 @@ export default class Header {
         .child(name);
 
     return this.buttons(t, this.frame(t, p)
-      .child(this.mark(t, p))
-      .when(Boolean(st), (el) => (st ? el.child(statusFly(t, st, `h-fly-${p.pane ?? ""}`)) : el))
+      // An agent's one mark: the sidebar's winged one in its status colour (winged.ts).
+      .child(st ? statusMark(t, p, st, `h-mark-${p.pane ?? ""}`) : this.mark(t, p))
       .child(label)
       // The folder gives way long before the name does (shrinks 50x faster), then goes.
       .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && !this.cursor(p) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))
