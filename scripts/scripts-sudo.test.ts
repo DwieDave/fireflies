@@ -142,7 +142,16 @@ test("a switch started from the deck: its prompt opens the password window over 
   const holding = (text: string) => find(r, "pw-bar")!.nodes.find((n: any) => n?.nodes?.includes(text));
   expect(find(r, "pw-cancel")!.calls.flex_none).toBeDefined();
   expect(holding("switch homelab")!.calls.truncate).toBeDefined();
-  expect(holding("enter · ctrl-c")!.calls.truncate).toBeDefined();
+  // The hint is whole or gone, never cut mid-word: it gives up its room
+  // first, and wraps past a zero-wide item onto a line its height hides.
+  const hint = find(r, "pw-hint")!;
+  expect(hint.calls.flex_wrap).toBeDefined();
+  expect(hint.calls.overflow_hidden).toBeDefined();
+  expect(hint.calls.flex_shrink[0]).toBeGreaterThan(1);
+  expect(hint.calls.h[0]).toBe(hint.nodes[0].calls.h[0]);
+  expect(hint.nodes[0].calls.w[0]).toBe(0);
+  expect(hint.nodes[1].nodes).toEqual(["enter · ctrl-c"]);
+  expect(hint.nodes[1].calls.truncate).toBeUndefined();
 
   // Typed and enter: sudo takes it, the output moves on, the window closes.
   type(t, `${SECRET}\n`);

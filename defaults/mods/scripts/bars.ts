@@ -58,10 +58,9 @@ export function footBar(v: ScriptsDeck, t: Theme, cur: Item | undefined) {
       .child(keys(keyHint(t, "k-enter", "enter", cur?.kind === "run" ? "watch" : "run"), keyHint(t, "k-esc", "esc", v.query ? "clear" : "list"), help));
   }
 
-  // q closes the deck (a pane: the pane) wherever the filter isn't typing.
-  const close = keyHint(t, "k-close", "q", "close");
-
-  if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(v.folder ? "" : "no folder here"))).child(keys(close, help));
+  // q closes the deck (a pane: the pane) wherever the filter isn't typing; the
+  // bar names it where it has room (? lists it always).
+  if (!cur) return bar.child(left(div().truncate().text_color(t.dim).child(v.folder ? "" : "no folder here"))).child(keys(keyHint(t, "k-close", "q", "close"), help));
 
   if (cur.kind === "run") {
     const r = cur.r;
@@ -76,7 +75,7 @@ export function footBar(v: ScriptsDeck, t: Theme, cur: Item | undefined) {
   return bar
     .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted)
       .child(cur.row.s.admin ? "asks for your password" : "in the background")))
-    .child(keys(keyHint(t, "k-run", "enter", "run"), keyHint(t, "k-watch", "⇧enter", "& watch"), close, help));
+    .child(keys(keyHint(t, "k-run", "enter", "run"), keyHint(t, "k-watch", "⇧enter", "& watch"), help));
 }
 
 /** ? : every key of the deck, in place of the scripts (keyhelp.ts). */
@@ -106,9 +105,22 @@ export function passwordBar(t: Theme, bar: PasswordBar) {
     .child(div().min_w(0).truncate().text_color(t.foreground).child(name))
     .child(div().flex_none().text_color(t.dim).child("· password"))
     .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
-    // The hint gives way first with the name (a long one, a narrow window): cancel always shows.
-    .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child("enter · ctrl-c"))
+    .child(passwordHint(t))
+    // Cancel always shows; the name truncates (an ellipsis) once the hint has gone.
     .child(actionChip(t, "pw-cancel", "cancel", t.blocked, cancel));
+}
+
+/** The password bar's height for its hint, and the line the hint wraps onto (hidden) without room. */
+const HINT_H = 18;
+
+/** "enter · ctrl-c", whole or not at all: it gives up its room before the
+ *  name does (flex_shrink), and short of its full width it wraps past a
+ *  zero-wide first item onto a second line the row's height hides, so it's
+ *  never cut mid-word. */
+function passwordHint(t: Theme) {
+  return h_flex().id("pw-hint").flex_wrap().items_center().h(HINT_H).min_w(0).flex_shrink(1000).overflow_hidden()
+    .child(div().w(0).h(HINT_H).flex_none())
+    .child(div().flex_none().text_size(11).text_color(t.dim).child("enter · ctrl-c"));
 }
 
 /** The output panel: the run's state, then its lines, the last ones at the bottom. */
