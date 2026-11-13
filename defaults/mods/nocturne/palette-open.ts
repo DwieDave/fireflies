@@ -35,8 +35,20 @@ function panelEntries(): Entry[] {
   for (const p of panels()) {
     const where = p.fixed === "float" ? "floating over the tab" : p.fixed === "edge" ? "down the right edge" : "beside the focused pane";
 
-    out.push(bound({ name: "nocturne", args: { panel: p.id }, group: "Open", icon: p.icon,
-      title: p.open?.() ? `Close ${p.name.toLowerCase()}` : p.name, words: `open ${p.words} ${where}`, go: () => p.pane() }, BIND.get(p.id)));
+    // The script runner's window entry is toolEntries' "Run a script…".
+    if (p.id !== "scripts") {
+      out.push(bound({ name: "nocturne", args: { panel: p.id }, group: "Open", icon: p.icon,
+        title: p.open?.() ? `Close ${p.name.toLowerCase()}` : p.name, words: `open ${p.words} ${where}`, go: () => p.pane() }, BIND.get(p.id)));
+    }
+
+    const beside = p.beside;
+
+    // Git, GitHub, Scripts: a normal pane beside the focused one (inpane.ts).
+    if (beside) {
+      out.push({ name: "nocturne", args: { panel: p.id, in: "pane" }, group: "Open", icon: p.icon,
+        title: `${p.name} in a pane`, words: `open ${p.words} pane split beside`, go: () => beside() });
+    }
+
     out.push(bound({ name: "nocturne", args: { panel: p.id, tab: true }, group: "Open", icon: p.icon,
       title: `${p.name} in a new tab`, words: `open ${p.words} tab`, go: () => p.tab() }, BIND_TAB.get(p.id)));
   }

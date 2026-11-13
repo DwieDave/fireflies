@@ -165,6 +165,21 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
+**Window mods in panes.** Git, GitHub and the script runner open as
+their floating window or as a normal pane that stays beside terminals and
+editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
+own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
+"vps"}`; the same for `nocturne.github` and `nocturne.scripts` (bare, each
+toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
+(beside or a tab, as its landing switch says), the palette "Git in a pane" and
+the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
+"git", props: {slot, folder, on?}}` (`slot` a unique word). ctrl-t in one (or
+its header's ◧ / ⧉) moves it between the window and a pane with its state.
+A mod of your own that opens as a window can do the same: a window has
+`props().overlay`, a pane doesn't; in a pane no frame, no close ✕, esc never closes it, the size
+is the pane's; a pane's props carry a unique `slot` to find itself in
+`panes()` and key its `localStorage`.
+
 Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /

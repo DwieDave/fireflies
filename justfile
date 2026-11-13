@@ -131,6 +131,8 @@ test:
     bun test scripts/preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
+    # Git, GitHub and Scripts opened as normal panes: nocturne.<mod>:pane | :tab | :window | {as, folder?, on?}, the "+ new" tiles, the palette's "… in a pane".
+    bun test scripts/nocturne-inpane.test.ts
     # The editor's Markdown commands (bold … rule, enter in a list), each text and selection in and out, and off again.
     bun test scripts/editor-mdedit.test.ts
     # The editor's rendered view model: units by source line, the caret's walk, a round trip on a Markdown corpus.

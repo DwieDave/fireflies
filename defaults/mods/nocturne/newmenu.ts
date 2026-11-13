@@ -6,15 +6,16 @@
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
 //             usage, scratchpad (the repository's note, its own dithered
-//             page-and-moon mark), three to a row (COLS); a short last row
+//             page-and-moon mark), git, github, scripts, three to a row (COLS); a short last row
 //             keeps the columns, its cells empty. Each opens beside the focused pane or in a tab
 //             of its own; Files too (a files pane of its own, `files.open`:
 //             the panel docked down the tab's edge is the strip's files
 //             button and cmd-e). Agents and Usage, open in the shown tab,
-//             say so with a corner mark and close on a second pick. The
-//             panels that float over the tab (worktrees, Git, its diff,
-//             GitHub) aren't here: the strip's git button and its ▾, their
-//             keys and the palette open them.
+//             say so with a corner mark and close on a second pick. Git,
+//             GitHub and Scripts open here as a normal pane (or tab) of
+//             their own, a new one each pick (inpane.ts); their windows over
+//             the tab are the strip's buttons, their keys and the palette's.
+//             Worktrees and the diff aren't here (the git button's ▾).
 //   agents    every installed agent, started at the landing spot; the ones
 //             that aren't installed are hidden behind a dim last row, "2 not
 //             installed · show" (enter or a click shows them, again hides
@@ -185,11 +186,12 @@ function agentRows(agents: readonly KnownAgent[], show = showMissing()): NewItem
 }
 
 /** The menu's tiles: every panel (panels.ts) that lands in a pane or a tab,
- *  not the ones that float over the tab. Files is a files pane of its own
+ *  and the floating ones that also open in one (Git, GitHub, Scripts). Files is a files pane of its own
  *  here, beside the focused pane or in a tab, like Terminal (no corner mark,
  *  no close on a second pick); the docked panel is the strip's button's. */
 export const menuPanels = (): Panel[] => panels().flatMap((p): Panel[] => {
-  if (p.fixed === "float") return [];
+  // Git, GitHub, Scripts: a normal pane or tab of their own here (inpane.ts), a new one each pick.
+  if (p.fixed === "float") return p.beside ? [{ id: p.id, name: p.name, icon: p.icon, key: p.key, words: p.words, pane: p.beside, tab: p.tab }] : [];
 
   if (p.id !== "files") return [p];
 

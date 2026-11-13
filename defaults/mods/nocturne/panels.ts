@@ -4,8 +4,10 @@
 //   dest "pane"  beside the focused pane (across from its split, "auto")
 //   dest "tab"   a new tab of its own in the shown space
 //   fixed        a panel that always lands in one place: Git (git:
-//                lazygit's views and the review that was the diff) and GitHub
-//                float over the tab, files runs down the tab's right edge
+//                lazygit's views and the review that was the diff), GitHub and
+//                Scripts float over the tab, files runs down the tab's right edge
+//   beside       Git, GitHub and Scripts also open as a normal pane beside
+//                the focused pane, or a tab of their own (inpane.ts)
 //   scratchpad   the repository's note in the editor (scratchpad.ts), through
 //                its command: the menus that pick it close before git answers
 //
@@ -22,6 +24,8 @@ import { gitOpen, toggleGit, openWorktrees } from "./git.ts";
 import type { WorktreesAsk } from "./git.ts";
 import { githubOpen, toggleGithub } from "./github.ts";
 import { askScratchpad } from "./scratchpad.ts";
+import { deckOpen, toggleDeck } from "./scripts.ts";
+import { openAs } from "./inpane.ts";
 
 /** Where things would open now. */
 export interface Here {
@@ -151,6 +155,8 @@ export interface Panel {
   readonly open?: () => boolean;
   /** Opens it where it lives (toggles it, once per tab), or in a tab of its own. */
   readonly pane: () => void;
+  /** A panel that floats (Git, GitHub, Scripts) as a normal pane beside the focused one (inpane.ts). */
+  readonly beside?: () => void;
   readonly tab: () => void;
 }
 
@@ -179,10 +185,12 @@ export function panels(): Panel[] {
     { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches checkouts", fixed: "float", open: () => Boolean(gitOpen()),
       pane: () => (gitOpen() ? toggleGit() : openWorktrees()), tab: () => modTab("git", { folder: h.folder, on: h.on, worktrees: { action: "open" } }, "worktrees") },
     { id: "git", name: "Git", icon: "git-compare", key: "l", words: "git lazygit stage commit branches log graph rebase stash", fixed: "float", open: () => Boolean(gitOpen()),
-      pane: () => toggleGit(), tab: () => modTab("git", { folder: h.folder, on: h.on }, "git") },
+      pane: () => toggleGit(), tab: () => openAs("git", { as: "tab" }), beside: () => openAs("git", { as: "pane" }) },
     { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review reviewed", fixed: "float", open: () => Boolean(gitOpen()),
       pane: () => toggleGit({ review: true }), tab: () => modTab("git", { folder: h.folder, on: h.on, review: true }, "diff") },
     { id: "github", name: "GitHub", icon: `${ART}/github.svg`, key: "h", words: "pull requests prs actions ci runs checks workflows", fixed: "float", open: () => Boolean(githubOpen()),
-      pane: () => toggleGithub(), tab: () => modTab("github", { folder: h.folder, on: h.on }, "github") },
+      pane: () => toggleGithub(), tab: () => openAs("github", { as: "tab" }), beside: () => openAs("github", { as: "pane" }) },
+    { id: "scripts", name: "Scripts", icon: `${ART}/play.svg`, key: "r", words: "script runner run tasks npm bun just make cargo test build dev nix", bind: "nocturne.scripts", fixed: "float", open: () => Boolean(deckOpen()),
+      pane: () => toggleDeck({ centered: true }), tab: () => openAs("scripts", { as: "tab" }), beside: () => openAs("scripts", { as: "pane" }) },
   ];
 }
