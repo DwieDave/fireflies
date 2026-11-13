@@ -56,7 +56,7 @@ theirs to confirm in it.
 To put a repo's git, its GitHub (pull requests, runs, projects) or its
 scripts beside their terminals as a normal pane that stays, in Nocturne:
 `herdr-app do 'nocturne.git:pane'` (`nocturne.github:pane`,
-`nocturne.scripts:pane`; `:tab` a tab of its own, `:window` the floating
+`nocturne.scripts:pane`, `nocturne.procs:pane` for the processes deck; `:tab` a tab of its own, `:window` the floating
 window; `'nocturne.git:{"as":"pane","folder":"/abs/repo"}'` another folder).
 Without Nocturne: `herdr-app do pane.split
 '{"direction":"auto","mod":"git","props":{"slot":"s1","folder":"/abs/repo"}}'`

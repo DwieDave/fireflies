@@ -1,6 +1,7 @@
 // The processes and ports manager, in Nocturne's look: one square popover
 // under the tab strip's tree mark (../nocturne/procs.ts), or centered from
-// nocturne.procs / nocturne.ports and the palette. This machine only.
+// nocturne.procs / nocturne.ports and the palette, or a normal pane
+// (nocturne.procs:pane, ctrl-t; place.ts). This machine only.
 //
 //   head       the tree mark, its two tabs (processes and ports with their
 //              counts), and what's listed: "fireflies" (this app's terminals)
@@ -99,6 +100,8 @@ import type { Menu } from "./menu.ts";
 import { dbSeen, withDbCheck } from "./menu.ts";
 import { menuBox, rightPress } from "./menu-view.ts";
 import { deckKey } from "./keys.ts";
+import { actsOnCommands, inPane, saveCopy, takeShown, toPane, toWindow } from "./place.ts";
+import { unzoom } from "./paint.ts";
 import { dragTo } from "./pointer.ts";
 import { procsView } from "./procs-view.ts";
 import { vitalsStrip } from "./vitals-view.ts";
@@ -112,8 +115,10 @@ export default class ProcsDeck extends View {
   sys: History = emptyHistory();
   now: Measured | null = null;
   sysReading: Reading | null = null;
-  // The deck's inner width as drawn (layout px): the strip goes two by two when it's narrow.
+  // The deck's inner width as drawn (layout px): the strip goes two by two when it's narrow;
+  // a pane's height as drawn (an overlay is H).
   width = W - 2;
+  height = H;
   // The graph under the pointer: its whole reading shows in the foot.
   hoverVital: Vital | null = null;
   // A graph's line over a history, made again only when that history (a new array a reading) or its scale changes.
@@ -158,23 +163,29 @@ export default class ProcsDeck extends View {
     const tab = deckProps().tab;
 
     this.tab = tab === "ports" ? tab : "procs";
+    // A move's note, or (a pane) what it showed before a restart (place.ts).
+    takeShown(this);
 
     const handle = cx.focus_handle();
 
     this.handle = handle;
     handle.focus();
 
-    for (const ms of [60, 250, 600]) cx.timer.after(ms, () => handle.focus());
+    // A pane takes the keyboard as panes do (a click, pane.go): no grabbing it back.
+    if (!inPane()) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => handle.focus());
 
+    // procs.focus, procs.keys, procs.to-pane, procs.to-window: the window acts while open, else the focused pane.
     cx.spawn(async (cx) => {
       for (;;) {
         const c = (await nextCommand()).replace(/^procs\./, "");
 
         if (c === "focus") handle.focus();
+        else if (!actsOnCommands()) continue;
         else if (c === "keys") {
           this.help = !this.help;
           cx.notify();
-        }
+        } else if (c === "to-pane") toPane(this, cx);
+        else if (c === "to-window") toWindow(this, cx);
       }
     });
 
@@ -205,6 +216,8 @@ export default class ProcsDeck extends View {
 
   /** The strip learns the deck is open (and which tab); a tab the strip asked for (nocturne.ports) is taken. */
   beat(): void {
+    saveCopy(this);
+
     const id = deckProps().overlay;
 
     if (!id) return;
@@ -284,7 +297,7 @@ export default class ProcsDeck extends View {
   }
 
   listH(): number {
-    return listH(this.tab === "ports" ? PORTS_H : LIST_H, this.stripH());
+    return listH(this.tab === "ports" ? PORTS_H : LIST_H, this.stripH()) - (H - this.deckH());
   }
 
   /** One reading for the graphs (sys.ts SYS_PROBE, about a second: iostat measures one). */
@@ -312,14 +325,22 @@ export default class ProcsDeck extends View {
     });
   }
 
+  /** The overlay closes (after going to a terminal, opening a port …); a pane stays. */
   dismissDeck(): void {
     const id = deckProps().overlay;
 
     if (id) closeOverlay(id);
   }
 
-  /** The overlay is going, however it goes. */
+  /** The deck's height: a pane's as drawn, else the overlay's. */
+  deckH(): number {
+    return inPane() && this.height > 0 ? this.height : H;
+  }
+
+  /** The overlay or the pane is going, however it goes (a pane keeps what it shows). */
   override close(): void {
+    saveCopy(this);
+
     if (readShared(shared, DECK, null)?.id === deckProps().overlay) writeShared(setShared, DECK, null);
   }
 
@@ -356,8 +377,19 @@ export default class ProcsDeck extends View {
     const ci = this.at(items);
     const nProcs = procCount(this);
 
-    const el = v_flex().id("procs-deck").size_full().bg(t.background).border(1).border_color(t.ansi0)
+    // Over the tab it draws its frame; a pane has the pane's.
+    const root = v_flex().id("procs-deck").size_full().bg(t.background);
+
+    const el = (inPane() ? root : root.border(1).border_color(t.ansi0))
       .key_context(CONTEXT)
+      .on_size_change((drawn, cx) => {
+        const h = Math.round(unzoom(drawn.height));
+
+        if (inPane() && Math.abs(h - this.height) > 1) {
+          this.height = h;
+          cx.notify();
+        }
+      })
       .on_action(ESCAPE, (_e, cx) => escapeKey(this, cx))
       .on_mouse_down("left", () => this.focus())
       .on_mouse_down("right", (e, cx) => rightPress(this, e, cx))
@@ -371,7 +403,7 @@ export default class ProcsDeck extends View {
       .on_key_down((e, cx) => this.onKey(e, cx))
       .child(headBar(this, t, nProcs, ports.length))
       .child(vitalsStrip(this, t))
-      .when(this.help, (el) => el.child(div().id("procs-help").relative().h(H - 2 - HEAD - this.stripH() - FOOT).flex_none()
+      .when(this.help, (el) => el.child(div().id("procs-help").relative().h(this.deckH() - 2 - HEAD - this.stripH() - FOOT).flex_none()
         .child(keysView(t, { id: "procs-keys", title: "processes and ports", list: deckKeys(), close: () => {
           this.help = false;
         } }))))

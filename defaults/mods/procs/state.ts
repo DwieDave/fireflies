@@ -59,6 +59,17 @@ export const listH = (base: number, strip: number): number => base - (strip - ST
 // A process's own readings in its detail block: SPARK thin bars.
 export const SPARK = 30;
 
+/** The number columns a list `width` layout px wide shows: all four, then without UP, then
+ *  without PID too (the name keeps its room before it's cut: a narrow pane). */
+export function numCols(width: number): readonly ("cpu" | "mem" | "up" | "pid")[] {
+  if (width >= 420) return ["cpu", "mem", "up", "pid"];
+
+  return width >= 340 ? ["cpu", "mem", "pid"] : ["cpu", "mem"];
+}
+
+/** Each number column's width. */
+export const NUM_W = { cpu: 34, mem: 44, up: 54, pid: 44 } as const;
+
 /** The deck's tabs. */
 export type Tab = "procs" | "ports";
 
@@ -70,7 +81,7 @@ export const TABS: readonly Tab[] = ["procs", "ports"];
 export const isTab = literal("procs", "ports");
 
 /** What the deck is opened with (nocturne/procs.ts; `openOverlay` adds `overlay`). */
-export const isDeckProps = object({}, { tab: isString, overlay: isString });
+export const isDeckProps = object({}, { tab: isString, overlay: isString, slot: isString });
 
 export type DeckProps = Guarded<typeof isDeckProps>;
 

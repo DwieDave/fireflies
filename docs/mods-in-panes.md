@@ -2,8 +2,8 @@
 
 A mod that opens as a floating window can also live in a pane of a tab,
 beside terminals and editors, and stay there: the same view, the same keys,
-its state kept. Git, GitHub and the script runner do; a new window mod
-(databases, the optional Kubernetes mod, the processes deck) follows the same
+its state kept. Git, GitHub, the script runner and the processes deck do; a
+new window mod (databases, the optional Kubernetes mod) follows the same
 pattern. Each mod carries its own small `place.ts` for it (a mod can't import
 another's); `defaults/mods/github/place.ts` is the shortest to copy from.
 
@@ -92,4 +92,5 @@ Drawn as a pane (no frame, no ✕, the ⧉), esc at the top level leaves the
 pane (q closes its own), narrow widths draw, moved window → pane → window
 with its state, two copies (commands go to the focused one), a restart's
 props restoring its state. `scripts/git-pane.test.ts`,
-`github-pane.test.ts`, `scripts-pane.test.ts`, `databases-view.test.ts`, `nocturne-inpane.test.ts`.
+`github-pane.test.ts`, `scripts-pane.test.ts`, `procs-pane.test.ts`,
+`databases-view.test.ts`, `nocturne-inpane.test.ts`.

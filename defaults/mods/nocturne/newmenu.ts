@@ -15,6 +15,8 @@
 //             GitHub and Scripts open here as a normal pane (or tab) of
 //             their own, a new one each pick (inpane.ts); their windows over
 //             the tab are the strip's buttons, their keys and the palette's.
+//             Mods Nocturne doesn't ship follow, one tile each, when their
+//             mod.json declares a launcher (launchers.ts).
 //             Worktrees and the diff aren't here (the git button's ▾).
 //   agents    every installed agent, started at the landing spot; the ones
 //             that aren't installed are hidden behind a dim last row, "2 not
@@ -41,6 +43,7 @@ import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.ts"
 import type { Panel } from "./panels.ts";
 import { openWorktrees } from "./git.ts";
 import { openSpacePicker } from "./newspace.ts";
+import { readLaunchers } from "./launchers.ts";
 
 /** An agent as knownAgents() reports it (and the shipped new-menu keeps it). */
 const isKnownAgent = object(
@@ -239,6 +242,9 @@ export function openNewMenu({ centered = false, at = null, wasOpen = false }: Ne
   }
 
   if (wasOpen) return;
+
+  // An optional mod installed since the last look gets its tile (launchers.ts).
+  readLaunchers().catch(() => undefined);
 
   // It sets its own height (menuHeight) as it finds agents and shows or hides
   // the ones that aren't installed: a popup is as tall as its content up to

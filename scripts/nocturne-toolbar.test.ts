@@ -115,11 +115,11 @@ function menuGrid() {
   return { m, rows, letters };
 }
 
-test("+ new menu: no tile floats over the tab; nine three to a row, the scratchpad among them, Git, GitHub and Scripts as panes", () => {
+test("+ new menu: no tile floats over the tab; ten three to a row, the scratchpad among them, Git, GitHub, Scripts and Processes as panes", () => {
   const { rows, letters } = menuGrid();
-  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "scratchpad"], ["git", "github", "scripts"]]);
+  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "scratchpad"], ["git", "github", "scripts"], ["procs", "pad", "pad"]]);
   // Each keeps its letter.
-  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u", scratchpad: "s", git: "l", github: "h", scripts: "r" });
+  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u", scratchpad: "s", git: "l", github: "h", scripts: "r", procs: "p" });
   // No tile carries a spot label: not "float", and Files not "edge" (it opens a pane of its own).
   const tileWords = rows.flat().filter((id) => id !== "pad").flatMap((id) => words(ids[`nm-${id}`]));
   expect(tileWords).not.toContain("float");
@@ -128,11 +128,11 @@ test("+ new menu: no tile floats over the tab; nine three to a row, the scratchp
   expect(menuPanels().every((p: any) => !p.fixed)).toBe(true);
 });
 
-test("+ new menu: its height has room for the three rows of tiles it shows", () => {
+test("+ new menu: its height has room for the four rows of tiles it shows", () => {
   sharedState["new-menu.agents"] = { "": [] };
   const h = newmenu.newMenuHeight();
-  // head, section, 3 rows of 64 and two gaps, section, one agent row, section, 3 rows, padding, foot, border.
-  expect(h).toBe(44 + 24 + 3 * 64 + 2 * 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
+  // head, section, 4 rows of 64 and three gaps, section, one agent row, section, 3 rows, padding, foot, border.
+  expect(h).toBe(44 + 24 + 4 * 64 + 3 * 4 + 24 + 26 + 24 + 3 * 26 + 8 + 26 + 2);
 });
 
 test("+ new menu: a little narrower than it was (352), each of three tiles wide enough for \"Terminal\"", () => {
@@ -142,9 +142,9 @@ test("+ new menu: a little narrower than it was (352), each of three tiles wide 
   const inside = (NEW_W - 2 - 2 * 12 - 2 * 4) / 3 - 2 * 5 - 2;
   // "Terminal": 8 letters at 11 px, 7 px a letter (measured on screen at zoom 0.9).
   expect(inside).toBeGreaterThanOrEqual(8 * 7);
-  // The grid is full (six tiles): no pads.
+  // Ten tiles: the last row is Processes and two pads that keep the tiles' width.
   menuGrid();
-  expect(Object.keys(ids).filter((id) => id.startsWith("nm-pad-"))).toEqual([]);
+  expect(Object.keys(ids).filter((id) => id.startsWith("nm-pad-")).length).toBe(2);
 });
 
 test("+ new menu: nothing clipped at the new width: the head, every agent row and every footer line beside \"shift: other\"", () => {
@@ -485,8 +485,8 @@ test("not installed agents: enter on the row shows them (the numbers stay), agai
   live = liveOf(m);
   expect(live[m.cursor].id).toBe("agents-missing");
   expect(m.say(live[m.cursor], "pane")).toBe("hides 2 not installed");
-  // Taller by the two rows.
-  expect(ids["nocturne-new"].calls.h[0][0]).toBe(newmenu.menuHeight([...INSTALLED, ...MISSING_AGENTS], false) + 2 * 26);
+  // Taller by the two rows, up to the menu's most (640; its body scrolls past it).
+  expect(ids["nocturne-new"].calls.h[0][0]).toBe(Math.min(640, newmenu.menuHeight([...INSTALLED, ...MISSING_AGENTS], false) + 2 * 26));
   m.key({ key: "enter", modifiers: {} }, kx, live);
   expect(sharedState["nocturne.newShowMissing"]).toBe(false);
   expect(draw()).toEqual(["agent-claude", "agent-codex", "agent-pi", "agents-missing"]);

@@ -352,6 +352,8 @@ export const OUT = {
   "scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
   "procs.focus": "internal: hands the processes and ports manager the keyboard",
   "procs.keys": "the open processes and ports manager's ?: it lists its keys in place",
+  "procs.to-pane": "the processes deck's own ctrl-t or ◧ (into a pane); the palette's \"Processes in a pane\" opens a new one",
+  "procs.to-window": "a processes pane's own ctrl-t or ⧉ (back over the tab)",
   "git.back": "the git window's esc (closes its popup)",
   "git.commit-ok": "the git window's enter in its commit popup",
   "git.confirm-yes": "the git window's enter in its confirm popup",

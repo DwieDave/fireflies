@@ -24,11 +24,11 @@ export const menuH = (n: number): number => n * MENU_ROW + 16;
 
 /** The menu's corner, kept inside the deck (8 px from its edges): down from `at`, or, where
  *  that would leave the deck, up from `above` (the pointer, or the top of the row it's for). */
-export function menuPlace(m: Pick<Menu, "at" | "above">, n: number): At {
+export function menuPlace(m: Pick<Menu, "at" | "above">, n: number, deck: { readonly w: number; readonly h: number } = { w: W - 2, h: H - 2 }): At {
   const h = menuH(n);
-  const y = m.at.y + h <= H - 2 - 8 ? m.at.y : m.above - h;
+  const y = m.at.y + h <= deck.h - 8 ? m.at.y : m.above - h;
 
-  return { x: Math.max(8, Math.min(m.at.x, W - 2 - MENU_W - 8)), y: Math.max(8, Math.min(y, H - 2 - h - 8)) };
+  return { x: Math.max(8, Math.min(m.at.x, deck.w - MENU_W - 8)), y: Math.max(8, Math.min(y, deck.h - h - 8)) };
 }
 
 /** Opens the menu for the row at `i` of the shown list, at `at` (deck px; up from `above` where
@@ -119,7 +119,7 @@ export function menuKey(v: ProcsDeck, m: Menu, e: KeyEvent, cx: Context): void {
 
 /** The menu over the deck: a layer that closes it on a press outside, the box at its place. */
 export function menuBox(v: ProcsDeck, t: Theme, m: Menu): Element {
-  const at = menuPlace(m, m.entries.length);
+  const at = menuPlace(m, m.entries.length, { w: v.width, h: v.deckH() - 2 });
   const keyW = Math.max(30, ...m.entries.map((x) => x.key.length * 7 + 12));
   const found = menuItem(v, m);
   const it = found?.item;

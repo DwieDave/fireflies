@@ -23,6 +23,7 @@ import { dither, eyebrow } from "./kit.ts";
 import type { Binding } from "./keymap.ts";
 import { entries, keyOf, sections } from "./palette-entries.ts";
 import type { Listed } from "./palette-entries.ts";
+import { readLaunchers } from "./launchers.ts";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -137,6 +138,8 @@ export default class Palette {
     const query = (isPaletteProps(p) ? p.query : undefined) ?? "";
     const input = InputState.new({ placeholder: "type a command" });
 
+    // Optional mods' entries (launchers.ts), read again as the palette opens.
+    readLaunchers().catch(() => undefined);
     this.query = query;
     this.input = input;
 

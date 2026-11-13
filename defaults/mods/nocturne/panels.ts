@@ -25,8 +25,10 @@ import type { WorktreesAsk } from "./git.ts";
 import { githubOpen, toggleGithub } from "./github.ts";
 import { askScratchpad } from "./scratchpad.ts";
 import { deckOpen, toggleDeck } from "./scripts.ts";
+import { procsOpen, toggleProcs } from "./procs.ts";
 import { databasesOpen, toggleDatabases } from "./databases.ts";
 import { openAs } from "./inpane.ts";
+import { launcherPanels } from "./launchers.ts";
 
 /** Where things would open now. */
 export interface Here {
@@ -193,7 +195,11 @@ export function panels(): Panel[] {
       pane: () => toggleGithub(), tab: () => openAs("github", { as: "tab" }), beside: () => openAs("github", { as: "pane" }) },
     { id: "scripts", name: "Scripts", icon: `${ART}/play.svg`, key: "r", words: "script runner run tasks npm bun just make cargo test build dev nix", bind: "nocturne.scripts", fixed: "float", open: () => Boolean(deckOpen()),
       pane: () => toggleDeck({ centered: true }), tab: () => openAs("scripts", { as: "tab" }), beside: () => openAs("scripts", { as: "pane" }) },
+    { id: "procs", name: "Processes", icon: `${ART}/tree.svg`, key: "p", words: "processes ports tree kill end pid ps top activity monitor cpu memory graphs", fixed: "float", open: () => Boolean(procsOpen()),
+      pane: () => toggleProcs({ centered: true }), tab: () => openAs("procs", { as: "tab" }), beside: () => openAs("procs", { as: "pane" }) },
     { id: "databases", name: "Databases", icon: `${ART}/database.svg`, key: "b", words: "database db sql postgres mysql mariadb sqlite libsql turso tables query", bind: "nocturne.databases", fixed: "float", open: () => Boolean(databasesOpen()),
       pane: () => toggleDatabases(), tab: () => openAs("databases", { as: "tab" }), beside: () => openAs("databases", { as: "pane" }) },
+    // Mods Nocturne doesn't ship that declare a launcher in their mod.json (launchers.ts).
+    ...launcherPanels(),
   ];
 }

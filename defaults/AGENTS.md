@@ -206,12 +206,12 @@ to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
 0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
 
-**Window mods in panes.** Git, GitHub, the script runner and Databases open as
+**Window mods in panes.** Git, GitHub, the script runner, the processes deck and Databases open as
 their floating window or as a normal pane that stays beside terminals and
 editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
 own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
-"vps"}`; the same for `nocturne.github`, `nocturne.scripts` and `nocturne.databases` (bare, each
-toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
+"vps"}`; the same for `nocturne.github`, `nocturne.scripts`, `nocturne.procs` and `nocturne.databases` (bare, each
+toggles its window as before). "+ new" has Git, GitHub, Scripts, Processes and Databases tiles
 (beside or a tab, as its landing switch says), the palette "Git in a pane" and
 the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
 "git", props: {slot, folder, on?}}` (`slot` a unique word). ctrl-t in one (or
@@ -474,7 +474,12 @@ the highlighted line shows where it will land.
   space by what's under it: cpu and memory summed, the longest uptime, the
   lowest pid), with FLAT (`v`) beside the name while a number sorts: every
   process in one list, each with its terminal's badge; ports by port, process and where. The sort is kept
-  across the deck's opens (shared `procs.sort`).
+  across the deck's opens (shared `procs.sort`). In a pane (`nocturne.procs:pane`,
+  "+ new"'s Processes, the palette "Processes in a pane", ctrl-t or the head's
+  ◧ / ⧉ to move) it has no frame, its lists take the pane's height, a narrow
+  pane drops the UP and then the PID column, esc never closes it and `q`
+  closes its pane; going to a terminal or opening a port leaves it open. A
+  pane keeps its tab, cursors, find and scope by its slot.
 - **Notifications** (Nocturne's, the `notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
@@ -2284,6 +2289,15 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   then moves from any stop, and otherwise switches the window's tabs. A
   multi-line field types cmd-enter as a new line and fires `submit` with
   `secondary`: listen for that to submit from it.
+- `"launcher"` in `mod.json` puts a mod Nocturne doesn't ship (one installed from
+  its own repository) into "+ new" and the palette, nothing in Nocturne naming it:
+  `"launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
+  "window": true, "pane": true }`. `window`: it opens as its `mod.json` overlay
+  (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
+  (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
+  switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
+  mod's folder, tinted like the other tiles. Nocturne reads every `mods/*/mod.json`
+  at its start and whenever "+ new" or the palette opens.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`
