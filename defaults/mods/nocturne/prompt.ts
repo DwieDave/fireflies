@@ -13,11 +13,11 @@
 // it's typed there), nor without a prompt (sudo took a cached password, or
 // Touch ID's own dialog asks). The strip's timer calls watchPrompts.
 
-import { hc, shared, setShared, openOverlay, closeOverlay } from "herdr";
+import { hc, terminals, shared, setShared, openOverlay, closeOverlay } from "herdr";
 import type { OverlaySpec } from "herdr";
 import { isString, literal, nullable, object, oneOf, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { terminalsNow } from "./kit.ts";
+import { isTerminal } from "./guards.ts";
 
 /** A copy of ../scripts/nix.js SUDO_PROMPT (a mod can't import another's files). */
 export const SUDO_PROMPT = "password to activate (sudo): ";
@@ -44,8 +44,8 @@ export const PROMPT_H = 34 + 58;
 
 /** Whether a terminal's screen is waiting for the password: its last line is
  *  the prompt, or sudo's "Sorry, try again." just before it asks again. */
-export function asking(screen: string): boolean {
-  const lines = screen.split("\n").map((l) => l.replace(/\s+$/, "")).filter(Boolean);
+export function asking(screen: string | null | undefined): boolean {
+  const lines = (screen ?? "").split("\n").map((l) => l.replace(/\s+$/, "")).filter(Boolean);
   const last = lines[lines.length - 1] ?? "";
 
   return last.endsWith(SUDO_PROMPT.trim()) || /^Sorry, try again\.?$/.test(last);
@@ -69,7 +69,7 @@ let busy = false;
 
 /** Opens and closes the small windows for the live switch runs' prompts. */
 export async function watchPrompts(): Promise<void> {
-  const live = terminalsNow().filter((t) => t.labels?.["nocturne.script.plan"]);
+  const live = terminals().filter((t) => isTerminal(t)).filter((t) => t.labels?.["nocturne.script.plan"]);
 
   if (busy || (!live.length && !promptsNow().size)) return;
 
