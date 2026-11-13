@@ -39,7 +39,8 @@ import type { ScrollHandle as Scroll } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { isBoolean, readShared, writeShared } from "./guard.ts";
-import { dither, statusFly, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
+import { statusMark } from "./winged.ts";
+import { dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
@@ -632,6 +633,11 @@ export default class Tabs {
     const lifted = this.drag?.id === c.id;
     const icon = prog?.icon;
 
+    // An agent's tab wears its one mark: the sidebar's winged one in its status
+    // colour (winged.ts statusMark); any other tab its program's icon.
+    const mark = c.status ? statusMark(t, lead ?? {}, c.status, `tab-mark-${c.id}`)
+      : icon ? (prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : null;
+
     return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
       .text_size(11).text_color(c.active || lifted ? t.foreground : t.muted)
       .hover((s) => s.text_color(t.foreground))
@@ -659,9 +665,8 @@ export default class Tabs {
         if (space) openMenu({ tab: "tab", target: { id: c.id, space: space.id } });
       })
       .child(div().text_color(c.active || lifted ? t.accent : t.dim).child(String(c.index)))
-      .when(Boolean(icon), (el) => (icon ? el.child(prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : el))
+      .when(Boolean(mark), (el) => (mark ? el.child(mark) : el))
       .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
-      .when(Boolean(c.status), (el) => (c.status ? el.child(statusFly(t, c.status, `tab-fly-${c.id}`)) : el))
       .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
       .map((el) => navRing(t, el, this.at(`tab:${c.id}`)))
       .when(at?.before === c.id, (el) => el.child(stake(t)));

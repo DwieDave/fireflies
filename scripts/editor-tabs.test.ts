@@ -1201,11 +1201,13 @@ test("file marks: one tab (no strip): the bar's name has its mark; a scratchpad'
   expect(markOf(p.tabStrip(theme), "editor-tab-icon-1").src).toBe("mods/nocturne/art/scratchpad.svg");
 });
 
-test("file marks are shared: file-tree's and preview's file-icons.ts and icons/*.svg are editor's, byte for byte", () => {
+test("file marks are shared: file-tree's, preview's and nocturne's file-icons.ts and icons/*.svg are editor's, byte for byte", () => {
   const read = (mod: string, file: string) => readFileSync(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
-  for (const mod of ["file-tree", "preview"]) {
+  for (const mod of ["file-tree", "preview", "nocturne"]) {
     for (const file of ["file-icons.ts", ...icons.FILE_ICONS.map((i: string) => `icons/${i}.svg`)]) expect([mod, file, read(mod, file) === read("editor", file)]).toEqual([mod, file, true]);
   }
+  // nocturne (its shelf's tiles) carries kinds.ts for it, as editor's.
+  expect(read("nocturne", "kinds.ts") === read("editor", "kinds.ts")).toBe(true);
   // It imports only kinds.ts, itself a shared copy in both.
   expect([...read("editor", "file-icons.ts").matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1])).toEqual(["kinds.ts", "kinds.ts"]);
 });

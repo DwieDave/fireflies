@@ -3,13 +3,12 @@
 // the ports count), the keys ? lists, and the shapes the deck holds (the
 // cursors, scrolls, the question, a note, a drag, the histories).
 
-import type { Color } from "gpui-kit";
 import { home, props } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import type { Index, Port, ProcNode, Row } from "./logic.ts";
-import { KEEP } from "./sys.ts";
+import { stripLayout } from "./vitals.ts";
 
 export const ART = "mods/nocturne/art";
 export const CONTEXT = "NocturneProcsDeck";
@@ -18,8 +17,6 @@ export const ESCAPE = "nocturne_procs_escape";
 export const REFRESH = 2000;
 
 export const GRACE = 2000;
-
-export const SYSTEM_PACE = "a reading every second";
 
 export const W = 480;
 export const H = 560;
@@ -48,26 +45,29 @@ export const D_RIGHT = 12;
 // About how wide a character of the 11 px mono is, to guess a command's lines before it's drawn.
 export const CHAR_W = 7;
 
-export const LIST_H = H - 2 - HEAD - COLS - FOOT;
+// The readings strip under the head (vitals.ts), four across in the deck's own width.
+export const STRIP_H = stripLayout(W - 2).h;
 
-// The system tab: five graphs, KEEP bars each, the newest at the right.
-export const GRAPH_W = W - 2 - 24;
-export const GRAPH_H = 48;
-export const SLOT = Math.floor(GRAPH_W / KEEP);
-export const BAR = SLOT - 2;
+// The lists' heights under a strip four across; a narrower deck's strip takes two rows (listH).
+export const LIST_H = H - 2 - HEAD - STRIP_H - COLS - FOOT;
+
+export const PORTS_H = H - 2 - HEAD - STRIP_H - COLS - FOOT;
+
+/** A list's height under a strip `strip` px tall: what a two-row strip takes comes off it. */
+export const listH = (base: number, strip: number): number => base - (strip - STRIP_H);
+
+// A process's own readings in its detail block: SPARK thin bars.
 export const SPARK = 30;
 
-export const PORTS_H = H - 2 - HEAD - FOOT;
-
 /** The deck's tabs. */
-export type Tab = "procs" | "ports" | "system";
+export type Tab = "procs" | "ports";
 
 /** The tabs with a list that scrolls. */
-export type ListTab = "procs" | "ports";
+export type ListTab = Tab;
 
-export const TABS: readonly Tab[] = ["procs", "ports", "system"];
+export const TABS: readonly Tab[] = ["procs", "ports"];
 
-export const isTab = literal("procs", "ports", "system");
+export const isTab = literal("procs", "ports");
 
 /** What the deck is opened with (nocturne/procs.ts; `openOverlay` adds `overlay`). */
 export const isDeckProps = object({}, { tab: isString, overlay: isString });
@@ -108,9 +108,13 @@ export const deckKeys = (): KeyRow[] => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"],
   ["h ←", "fold, or up to the parent"], ["l →", "unfold, or into the first child"], ["space", "fold or unfold"],
   ["enter", "a group: fold · a process: show its terminal · a port: open it"],
-  ["tab 1 2 3", "processes / ports / system"], ["a", "this app's terminals / all of yours"],
-  ["x", "end it (TERM, asks first)"], ["X", "end it and everything under it"], ["K", "kill -9 what held on"],
+  ["t", "go to its terminal, tab or space"], ["m", "the row's menu (a right-click opens it too)"],
+  ["tab 1 2", "processes / ports"], ["a", "this app's terminals / all of yours"],
+  ["x", "end it (TERM, asks first) · a terminal, tab or space: what runs in it"], ["X", "end it and everything under it"],
+  ["K", "force end (kill -9, asks first) · on the band: kill what held on"],
   ["o", "open the port in a web pane"], ["c", "copy the address · a process: its command line"],
+  ["p", "copy the pid · a port: its number"], ["f", "open its folder in a files pane"],
+  ["s S", "sort by the next column · the other way (a click on a column's head too)"], ["v", "tree / flat while a number column sorts"],
   ["r", "read again now"], ["/", "find (esc clears, again: back)"], ["q esc", "close"], ["?", "keys"],
 ];
 
@@ -140,7 +144,6 @@ export interface Cursor {
 export interface Cursors {
   procs: Cursor;
   ports: Cursor;
-  system: Cursor;
 }
 
 /** How far each list is scrolled (layout px). */
@@ -156,9 +159,13 @@ export interface Command {
   h: number;
 }
 
-/** Ending a process, asked under its row: asked, TERM sent, or some held on (`left`). */
+/** Ending a process, asked under its row: asked, TERM sent, or some held on (`left`).
+ *  `force`: KILL at once (the menu's force end, K); `what`: a group's question (what runs in
+ *  a terminal, tab or space) instead of a process's. */
 export interface Ask {
   readonly pids: readonly number[];
+  readonly force?: boolean;
+  readonly what?: string;
   readonly key: string;
   readonly tab: Tab;
   readonly tree: boolean;
@@ -191,23 +198,6 @@ export interface Rect {
   readonly y: number;
   readonly w: number;
   readonly h: number;
-}
-
-/** How a graph draws: a second series under a midline, its color, what to say instead. */
-export interface GraphOptions {
-  readonly down?: readonly (number | null)[] | null;
-  readonly color2?: Color | null;
-  readonly none?: string | null;
-}
-
-/** The system graphs' histories. */
-export interface History {
-  cpu: (number | null)[];
-  gpu: (number | null)[];
-  mem: (number | null)[];
-  disk: (number | null)[];
-  rx: (number | null)[];
-  tx: (number | null)[];
 }
 
 /** A process's own readings since the deck opened. */

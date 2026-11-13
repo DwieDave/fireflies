@@ -3,7 +3,10 @@
 // switch tabs, all of yours or this app's, esc.
 
 import type { Context, Modifiers } from "gpui-kit";
-import { exec, focused, panes, run } from "herdr";
+import { exec, focused, panes, run, setShared } from "herdr";
+import { writeShared } from "./guard.ts";
+import type { PortCol, ProcCol, Sorts } from "./sort.ts";
+import { PORT_COLS, PROC_COLS, SORT, clickSort, stepSort, turnSort } from "./sort.ts";
 import type { Row } from "./logic.ts";
 import { targets, guardOf, endGently, signal, address, terminalOf, openPort } from "./logic.ts";
 import type { Tab, Note, Item, Ask } from "./state.ts";
@@ -15,8 +18,9 @@ export function say(v: ProcsDeck, text: string, tone: Note["tone"] = "done"): vo
   v.note = { text, tone, until: Date.now() + 3000 };
 }
 
-/** x / X: ask before ending the cursor's process (with what's under it), or a port's. */
-export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean): void {
+/** x / X / K: ask before ending the cursor's process (with what's under it; `force`: KILL at
+ *  once), or a port's. */
+export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean, force = false): void {
   const snap = v.snap;
 
   if (!item || !snap) return;
@@ -49,14 +53,26 @@ export function begin(v: ProcsDeck, item: Item | undefined, tree: boolean): void
   const pids = targets(pid, { tree, byPid: byPid(v), kids: v.ix?.kids ?? new Map(), me: snap.me });
   const ports = snap.ports.flatMap((x) => (pids.includes(x.pid) ? [x.port] : []));
 
-  v.ask = { pids, key: item.key, tab: v.tab, tree, phase: "ask", left: [], name: p.name, pid, ports: [...new Set(ports)] };
+  v.ask = { pids, key: item.key, tab: v.tab, tree, force, phase: "ask", left: [], name: p.name, pid, ports: [...new Set(ports)] };
 }
 
-/** enter on the band: TERM, the grace, then KILL is offered for the ones left. */
+/** enter on the band: TERM, the grace, then KILL is offered for the ones left; a force end
+ *  KILLs at once. */
 export function confirm(v: ProcsDeck, cx: Context): void {
   const a = v.ask;
 
   if (!a || a.phase !== "ask") return;
+
+  if (a.force) {
+    v.ask = null;
+    void signal(a.pids, "KILL", exec).then(() => {
+      say(v, `killed ${a.name}`);
+      v.refresh(cx);
+      cx.notify();
+    });
+
+    return;
+  }
 
   a.phase = "ending";
   cx.spawn(async (cx) => {
@@ -210,7 +226,8 @@ export function activate(v: ProcsDeck, items: readonly Item[], i: number): void 
 }
 
 export function escapeKey(v: ProcsDeck, cx: Context): void {
-  if (v.help) v.help = false;
+  if (v.menu) v.menu = null;
+  else if (v.help) v.help = false;
   else if (v.ask) v.ask = null;
   else if (v.typing && v.query) v.query = "";
   else if (v.typing) v.typing = false;
@@ -241,4 +258,34 @@ export function findKey(v: ProcsDeck, k: string, ch: string): boolean {
   else return false;
 
   return true;
+}
+
+// ---- sorting (sort.ts)
+
+/** The sorts changed: the cursor follows its row into sight, and they're kept for the next open. */
+function setSorts(v: ProcsDeck, next: Sorts): void {
+  v.sorts = next;
+  v.follow = true;
+  writeShared(setShared, SORT, next);
+}
+
+/** A click on a process column's head: by it, or the other way. */
+export function sortProcsBy(v: ProcsDeck, col: ProcCol): void {
+  setSorts(v, { ...v.sorts, procs: clickSort(v.sorts.procs, col) });
+}
+
+/** A click on a port column's head. */
+export function sortPortsBy(v: ProcsDeck, col: PortCol): void {
+  setSorts(v, { ...v.sorts, ports: clickSort(v.sorts.ports, col) });
+}
+
+/** s: the shown tab's next column (after the last, no sort); S: the other way. */
+export function sortKey(v: ProcsDeck, turn: boolean): void {
+  if (v.tab === "ports") setSorts(v, { ...v.sorts, ports: turn ? turnSort(v.sorts.ports) : stepSort(v.sorts.ports, PORT_COLS) });
+  else setSorts(v, { ...v.sorts, procs: turn ? turnSort(v.sorts.procs) : stepSort(v.sorts.procs, PROC_COLS) });
+}
+
+/** v: the processes as a tree or one flat list (while a number column sorts). */
+export function toggleFlat(v: ProcsDeck): void {
+  setSorts(v, { ...v.sorts, flat: !v.sorts.flat });
 }

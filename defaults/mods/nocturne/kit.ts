@@ -2,13 +2,13 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg } from "gpui-kit";
-import type { Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
+import type { Color, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
-import { isDock, toDock, newSlot } from "./dock.ts";
+import { isDock, toDock, newSlot, adoptShell } from "./dock.ts";
 import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY } from "./pins.ts";
 import type { JarItem, PaneRecord, SortedAgents } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
@@ -225,32 +225,64 @@ export function unpin(it: JarItem): void {
   else pin(it.key, false);
 }
 
+/** A pane can go into the dock: a local one (the dock is this computer's space,
+ *  and a pane can't move to another machine's core) that isn't there already.
+ *  Any kind: a terminal (an agent's too), an editor, a files pane, a web page. */
+export function dockable(p: PaneInfo | null | undefined): p is PaneInfo {
+  return Boolean(p) && !p?.pane.includes("/") && !isDock(spaces().find((s) => s.tabs.some((c) => c.id === p?.tab)));
+}
+
 /** Moves a pane into the dock (dock.ts: a tab of its own in the space tied to
- *  no folder) and pins it to the shelf, so its tile goes to it from anywhere. */
+ *  no folder) and pins it, so its tile (a firefly for an agent) goes to it from
+ *  anywhere. It keeps its state: a terminal runs on in the core, a mod pane
+ *  keeps its props (and so its slot and store). */
 export function dockPane(p: PinTarget | null | undefined): void {
   const info = paneInfo(p?.pane);
 
-  if (!info) return;
+  if (!dockable(info)) return;
 
   if (toDock({ kind: "move", pane: info.pane }) && !panePinnedNow(info)) pinPane(info, true);
 }
 
-/** nocturne.dock: the focused pane into the dock (dockPane), if it's a local pane outside it. */
+/** nocturne.dock: the focused pane into the dock (dockPane), if it can go (dockable). */
 export function dockFocused(): void {
-  const p = paneInfo(focusedPane()?.pane);
-
-  if (p && !p.pane.includes("/") && !isDock(spaces().find((s) => s.tabs.some((c) => c.id === p.tab)))) dockPane(p);
+  dockPane(focusedPane());
 }
 
-/** A new web pane in the dock, pinned to the shelf: its pin is written by its
+/** A new mod pane in the dock, pinned to the shelf: its pin is written by its
  *  props (a fresh slot), so it's found once the pane is there (pins.ts findPane). */
+function dockMod(mod: string, props: JsonMap, slot: string): void {
+  storeRecords([...paneRecordsNow(), { pane: `new:${slot}`, mod, props, at: Date.now() }]);
+}
+
+/** nocturne.dock-web: a new web pane in the dock, pinned to the shelf. */
 export function dockWeb(url?: string): void {
   const slot = newSlot();
-  const props: JsonMap = new Map(url ? [["slot", slot], ["url", url]] : [["slot", slot]]);
 
   if (!toDock(url ? { kind: "web", slot, url } : { kind: "web", slot })) return;
 
-  storeRecords([...paneRecordsNow(), { pane: `new:${slot}`, mod: "browser", props, at: Date.now() }]);
+  dockMod("browser", new Map(url ? [["slot", slot], ["url", url]] : [["slot", slot]]), slot);
+}
+
+/** nocturne.dock-files: a new files pane at ~ in the dock, pinned to the shelf. */
+export function dockFiles(): void {
+  const slot = newSlot();
+  const path = home();
+
+  if (toDock({ kind: "files", slot, path })) dockMod("file-tree", new Map([["path", path], ["slot", slot]]), slot);
+}
+
+/** nocturne.dock-shell: a new shell in the dock (it starts in ~), pinned to the
+ *  shelf once its terminal is there (pinDockShell). */
+export function dockShell(): void {
+  toDock({ kind: "shell" });
+}
+
+/** After a draw (sky.ts): a shell asked for in the dock is pinned once it's there. */
+export function pinDockShell(): void {
+  const terminal = adoptShell(new Set(terminalsNow().flatMap((x) => (!x.state || x.state === "live" ? [x.address] : []))));
+
+  if (terminal) pin(terminal, true);
 }
 
 /** Program keys with a dithered logo in art/logo-*.svg (keys are programs' own: data). */
@@ -288,30 +320,15 @@ export const atRest = (a: { readonly status: Status | null }): boolean => a.stat
  *  started (working, but waiting on a shell), done, resting. */
 export const agentRank = (a: Pick<AgentInfo, "status" | "command">): number => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status]);
 
+/** An agent's colour by its status, as the sidebar's fireflies wear it: the
+ *  status's own theme colour, resting ones muted. */
+export const statusColor = (t: Theme, status: Status): Color => (status === "idle" ? t.muted : t[status]);
+
 /** A small dithered diamond in the status color; working breathes, blocked blinks. */
 export function pip(t: Theme, status: Status | null | undefined, size = 6): Element {
   if (!status || status === "idle") return div().size(size).flex_none();
 
   const el = svg(`${ART}/pip.svg`).size(size).flex_none().text_color(t[status]);
-
-  if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
-
-  if (status === "blocked") return el.loop("opacity", { from: 0.15, to: 1, period: 700, easing: "linear" });
-
-  return el;
-}
-
-// An agent's status mark in a pane header and on its tab: art/firefly.svg, the
-// app icon's winged insect, one cell a layout px.
-export const FLY_W = 13;
-export const FLY_H = 11;
-
-/** An agent's status as Fireflies' winged firefly, in the colour the sidebar
- *  gives it (meadow.ts firefly: the status's own, idle muted). Working breathes and
- *  blocked blinks, as the pip did; done and idle hold still. Only for an agent:
- *  a pane or tab without a status draws none. */
-export function statusFly(t: Theme, status: Status, id: string): Element {
-  const el = svg(`${ART}/firefly.svg`).id(id).w(FLY_W).h(FLY_H).flex_none().text_color(status === "idle" ? t.muted : t[status]);
 
   if (status === "working") return el.loop("opacity", { from: 0.3, to: 1, period: 1600 });
 

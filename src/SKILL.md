@@ -48,8 +48,9 @@ the shown one).
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
 manager centered (`nocturne.ports` on its ports, where they can open a port in
-a web pane, copy its address or end its process; its system tab graphs CPU,
-GPU, memory, disk and network). It only shows and asks: ending a process is
+a web pane, copy its address or end its process; graphs of CPU, memory,
+network and disk sit over its lists; a right-click on a row offers what one
+does to it). It only shows and asks: ending a process is
 theirs to confirm in it.
 
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
@@ -113,8 +114,10 @@ browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
 wears its favicon, as the web pane's tab strip does. For a pane
 that belongs to no project (a docs page, a dashboard), `herdr-app do
 nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
-repo for git or GitHub, terminals start in ~), pinned to the shelf;
-`herdr-app do nocturne.dock` moves the focused pane there. There,
+repo for git or GitHub, terminals start in ~), pinned to the shelf (`nocturne.dock-shell` a shell in ~, `nocturne.dock-files`
+a files pane at ~); `herdr-app do nocturne.dock` moves the focused pane there,
+whatever it shows (a terminal, an agent, an editor, a files or web pane; not a
+pane on another machine). There,
 `nocturne.agent-next` / `nocturne.agent-prev` (cmd-] / cmd-[) walk the
 agents in the sidebar's order and then on through the shelf's tiles, wrapping;
 the core's `agent.next` / `agent.prev` visit agents only.
