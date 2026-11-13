@@ -13,6 +13,7 @@
 //   H L  back / forward   r  reload   + - 0  zoom   p  picture in picture
 //   d  the inspector   O  the system's browser   ?  the keys, under the bar
 //   t  new tab   x  close the tab   J K  the tab left / right   1-9  a tab (9 the last)
+//   < >  move the tab (the ring's, else the shown one) left / right
 //   tab / shift-tab  the tabs and the bar's buttons (a ring shows which), enter presses it
 //   esc  the ring, then the keys strip, away
 //   ⧉        (only while the page has a <video>)
@@ -33,16 +34,19 @@
 // Tabs (tabs.js has the rules): one pane, several pages, each its own web view
 // (id "web", "web-2", …) kept alive while another shows, in no room at all
 // (which hides a native view). From two on, a strip over the bar: number,
-// title, × (a middle click closes too), + a blank tab. The view is made with
-// `tabs: true`, so what would open a window comes as web.newTab: a middle or
+// title, × (a middle click closes too), + a blank tab. Drag a tab along it to
+// move it: it lifts where it is and a marker stands in the gap it drops into
+// (the pointer's half of the tab under it; past the last tab, the end). The
+// view is made with `tabs: true`, so what would open a window comes as web.newTab: a middle or
 // Cmd click on a link and the link menu's "Open Link in New Tab" behind (Shift:
 // in front), target=_blank / window.open in front, each after its page's
 // earlier links. The bar, zoom, picture in picture and the inspector act on the
 // shown tab. Closing the last tab leaves a blank one. Kept in localStorage
 // "tabs" (addresses, titles, zoom): after a restart only the shown tab loads,
-// the others when first shown. Commands tab_new, tab_close, tab_next, tab_prev,
-// tab:<n>, and open:<{ url, slot? } as JSON, or a URL> (the editor's links):
-// the copy whose slot it names opens it in front and its pane takes the keyboard.
+// the others when first shown, in the order last left. Commands tab_new,
+// tab_close, tab_next, tab_prev, tab_move_left, tab_move_right, tab:<n>, and
+// open:<{ url, slot? } as JSON, or a URL> (the editor's links): the copy
+// whose slot it names opens it in front and its pane takes the keyboard.
 // A file:// address (an HTML file from the files pane) loads as the file
 // (props path, trust "interactive": its folder readable, scripts on).
 //
@@ -86,6 +90,7 @@ const SEARCH = "https://duckduckgo.com/?q=";
 export const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /  ⌘l ⌘p", "address"], ["H L  ⌘[ ⌘]", "back / forward"],
   ["r  ⌘r", "reload"], ["+ - 0", "zoom"], ["p", "picture in picture"], ["d  ⌘⌥i", "inspector"], ["O", "system browser"],
   ["t", "new tab"], ["x", "close the tab"], ["J K", "tab left / right"], ["1-9", "tab 1 to 8, 9 the last"],
+  ["< >", "move the tab left / right (or drag it)"],
   ["tab ⇧tab", "buttons and tabs (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 /** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
@@ -113,6 +118,24 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 function dither(color, cell = 1) {
   const zoom = Number(settings()?.zoom) || 1, dpr = appWindow()?.platform === "macos" ? 2 : 1;
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
+}
+
+/** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.js):
+ *  a 2 px accent bar capped top and bottom, at the left edge of its box. */
+function stake(t) {
+  return div().absolute().left(-3).top(3).bottom(2).w(8)
+    .child(div().absolute().left(3).top(0).bottom(0).w(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent));
+}
+
+/** The dragged tab's lift, behind its words: a dither shadow, then a plate
+ *  edged in the accent, clear of the horizon. */
+function lift(t) {
+  return [
+    div().absolute().left(5).right(0).top(6).bottom(2).child(dither(t.ansi0, 1)),
+    div().absolute().left(2).right(3).top(3).bottom(4).bg(t.background).border(1).border_color(t.accent),
+  ];
 }
 
 const available = () => typeof herdr.nativeView?.new === "function";
@@ -220,6 +243,9 @@ export default class Browser extends View {
     this.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(pr.url ? target(pr.url) : saved, zoom);
     this.publishTitle();
     this.barW = 600;
+    // A left press on a tab ({ id, x }), and the drag it became ({ id, gap }: Tabs.dropIndex).
+    this.pressed = null;
+    this.drag = null;
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "address or search" });
     this.input.on("submit", (_e, cx) => { this.go(this.input.value(), cx); });
@@ -660,6 +686,63 @@ export default class Browser extends View {
     else if (c === "tab_close") this.closeTab(null, cx);
     else if (c === "tab_next" || c === "tab_prev") this.showTab(Tabs.step(this.tabs, c === "tab_next" ? 1 : -1), cx);
     else if (/^tab:\d$/.test(c)) this.showTab(Tabs.nth(this.tabs, Number(c.slice(4))), cx);
+    else if (c === "tab_move_left" || c === "tab_move_right") this.stepTab(this.keyTab(), c === "tab_move_right" ? 1 : -1);
+  }
+
+  /** The tab the bar's tab keys act on: the one the ring is on, else the shown one. */
+  keyTab() {
+    const ringed = this.ring?.startsWith("tab:") ? this.ring.slice(4) : null;
+    return ringed && this.tabs.list.some((t) => t.id === ringed) ? ringed : this.tabs.active;
+  }
+
+  /** Tab `id` to place `index` (Tabs.move), kept for the next start. */
+  moveTab(id, index) {
+    const next = Tabs.move(this.tabs, id, index);
+    if (next === this.tabs) return;
+    this.tabs = next;
+    this.saveTabs();
+  }
+
+  /** Tab `id` one place left (-1) or right (+1); at the end it stays. */
+  stepTab(id, by) {
+    const i = Tabs.indexOf(this.tabs, id);
+    if (i < 0 || i + by < 0 || i + by >= this.tabs.list.length) return;
+    this.moveTab(id, i + by);
+  }
+
+  // ---- dragging a tab along the strip (Tabs.dropIndex)
+
+  /** The pointer moved over a gap with a press down on a tab: past
+   *  DRAG_START it's a drag, and the gap it's over is where the marker stands. */
+  dragOver(gap, e, cx) {
+    const p = this.pressed;
+    if (!p) return;
+    if (!this.drag) {
+      if (Math.abs((e?.position?.x ?? p.x) - p.x) < Tabs.DRAG_START) return;
+      this.drag = { id: p.id, gap: null };
+    }
+    if (this.drag.gap?.id === gap.id && this.drag.gap?.after === gap.after) return;
+    this.drag.gap = gap;
+    cx?.notify();
+  }
+
+  /** The press let go in the strip: a drag drops where its marker stands. */
+  dropTab(cx) {
+    const d = this.drag;
+    this.drag = null;
+    this.pressed = null;
+    if (!d) return;
+    const at = Tabs.dropIndex(this.tabs, d.id, d.gap);
+    if (at != null) this.moveTab(d.id, at);
+    cx?.notify();
+  }
+
+  /** The pointer left the strip: the drag ends where it started. */
+  cancelDrag(cx) {
+    const dragging = Boolean(this.drag);
+    this.drag = null;
+    this.pressed = null;
+    if (dragging) cx?.notify();
   }
 
   key(e, cx) {
@@ -710,6 +793,8 @@ export default class Browser extends View {
     else if (k === "J") this.command("tab_prev", cx);
     else if (k === "K") this.command("tab_next", cx);
     else if (/^[1-9]$/.test(k)) this.command(`tab:${k}`, cx);
+    else if (k === "<") this.command("tab_move_left", cx);
+    else if (k === ">") this.command("tab_move_right", cx);
     else return false;
     return true;
   }
@@ -872,14 +957,21 @@ export default class Browser extends View {
    *  end; the shown one bright on a dithered accent line, as the app's tabs.
    *  A click shows a tab, a middle click or × closes it; tab rings them. */
   strip(t) {
+    const drag = this.drag;
+    const stakeAt = drag ? Tabs.stakeBefore(this.tabs, drag.id, Tabs.dropIndex(this.tabs, drag.id, drag.gap)) : undefined;
     const item = (tab, i) => {
       const on = tab.id === this.tabs.active;
+      const lifted = drag?.id === tab.id;
       const ringed = this.control(`tab:${tab.id}`, true, (cx) => this.showTab(tab.id, cx));
       return h_flex().id(`webtab-${tab.id}`).relative().flex_1().min_w(0).max_w(200).h_full().pl(8).pr(4).gap(6).items_center()
-        .text_size(11).text_color(on ? t.foreground : t.muted)
+        .text_size(11).text_color(on || lifted ? t.foreground : t.muted)
         .hover((s) => s.text_color(t.foreground))
-        .on_mouse_down("left", (e, cx) => this.stop(e, cx))
-        .on_click((_e, cx) => { this.claim(); this.showTab(tab.id, cx); cx.notify(); })
+        // Dragged: lifted where it is, behind its words.
+        .when(lifted, (el) => el.children(lift(t)))
+        // A press may become a drag (dragOver); let go without one, it shows the tab.
+        .on_mouse_down("left", (e, cx) => { this.stop(e, cx); this.pressed = { id: tab.id, x: e?.position?.x ?? 0 }; })
+        .on_mouse_move((e, cx) => this.dragOver(Tabs.gapAt(tab.id, e?.local_position?.x ?? 0, e?.bounds?.width ?? 1), e, cx))
+        .on_mouse_up("left", (_e, cx) => { if (!this.drag && this.pressed?.id === tab.id) { this.claim(); this.showTab(tab.id, cx); cx.notify(); } })
         // Middle click closes it, as in a browser.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.claim(); this.closeTab(tab.id, cx); cx.notify(); })
         .child(div().flex_none().text_color(on || tab.page.loading ? t.accent : t.dim).child(i < 9 ? String(i + 1) : "·"))
@@ -891,20 +983,29 @@ export default class Browser extends View {
           .child(svg(`${ICONS}/x.svg`).size(10)))
         // Loading: its line runs dim; shown: the accent line it stands on.
         .when(on || tab.page.loading, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(2).child(dither(on ? t.accent : t.ansi8, 1))))
-        .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
+        .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
+        .when(stakeAt === tab.id, (el) => el.child(stake(t)));
     };
     const items = this.tabs.list.map(item);
     const plusRinged = this.control("tab-new", true, (cx) => this.openTab(null, {}, cx));
-    return h_flex().id("webtabs").relative().h(26).flex_none().pl(2).pr(6).gap(1).items_center().overflow_hidden()
+    const end = (e, cx) => this.dragOver({ id: null, after: false }, e, cx);
+    return h_flex().id("webtabs").relative().h(26).flex_none().pl(4).pr(6).gap(1).items_center().overflow_hidden()
+      .on_mouse_up("left", (_e, cx) => this.dropTab(cx))
+      .on_hover((hovered, cx) => { if (!hovered) this.cancelDrag(cx); })
+      .when(Boolean(drag), (el) => el.cursor_grabbing())
       // The horizon the tabs stand on, as the app's tab strip.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .children(items)
+      // Past the last tab (+ and the room after it): the gap at the end.
       .child(div().id("webtab-new").relative().size(22).flex_none().flex().items_center().justify_center()
+        .on_mouse_move(end)
+        .when(stakeAt === null, (el) => el.child(stake(t)))
         .text_color(plusRinged ? t.foreground : t.muted)
         .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
         .when(plusRinged, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
         .on_mouse_down("left", (e, cx) => this.stop(e, cx))
         .on_click((_e, cx) => { this.claim(); this.openTab(null, {}, cx); cx.notify(); })
-        .child(svg(`${ICONS}/plus.svg`).size(12)));
+        .child(svg(`${ICONS}/plus.svg`).size(12)))
+      .child(div().id("webtab-end").flex_1().min_w(0).h_full().on_mouse_move(end));
   }
 }

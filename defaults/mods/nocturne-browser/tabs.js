@@ -84,6 +84,51 @@ export function nth(m, n) {
   return (n === 9 ? m.list.at(-1) : m.list[n - 1])?.id ?? null;
 }
 
+/** Tab `id` moved to place `index` (0-based: where it ends up, clamped). It
+ *  was put there by hand, so it leaves its row of links (opener). */
+export function move(m, id, index) {
+  const i = indexOf(m, id);
+  if (i < 0) return m;
+  const to = Math.max(0, Math.min(m.list.length - 1, Number(index) || 0));
+  if (to === i) return m;
+  const rest = m.list.filter((t) => t.id !== id);
+  return { ...m, list: [...rest.slice(0, to), { ...m.list[i], opener: null }, ...rest.slice(to)] };
+}
+
+// ---- dragging a tab along the strip (as the app's own strip, nocturne/tabdrag.js)
+
+/** How far (window px) a press moves before it's a drag rather than a click. */
+export const DRAG_START = 4;
+
+/** The gap the pointer is over: before tab `id`, or after it (its right
+ *  half); `id` null: the strip's end. `x`, `width`: the pointer's place in the tab. */
+export const gapAt = (id, x, width) => ({ id, after: id != null && x >= width / 2 });
+
+/** Where `dragged` ends up (move's index) dropped into `gap`, or null when the
+ *  drop leaves it where it is (over itself, or its own gaps). A gap after a
+ *  tab and the gap before the next one are the same place. */
+export function dropIndex(m, dragged, gap) {
+  const i = indexOf(m, dragged);
+  if (!gap || i < 0) return null;
+  const rest = m.list.map((t) => t.id).filter((x) => x !== dragged);
+  let at;
+  if (gap.id == null) at = rest.length;
+  else {
+    const j = rest.indexOf(gap.id);
+    if (j < 0) return null;
+    at = j + (gap.after ? 1 : 0);
+  }
+  return at === i ? null : at;
+}
+
+/** The tab the drop marker stands before for a drop at `index` (dropIndex's):
+ *  its left edge; null: the strip's end. Undefined: no marker. */
+export function stakeBefore(m, dragged, index) {
+  if (index == null) return undefined;
+  const rest = m.list.map((t) => t.id).filter((x) => x !== dragged);
+  return rest[index] ?? null;
+}
+
 /** What survives a restart: each tab's address, title and zoom. */
 export function save(m) {
   return JSON.stringify({ active: m.active, next: m.next,

@@ -715,7 +715,9 @@ test("tab and enter reach the strip's tabs and its +; a click shows a tab, × an
   root = view.render();
   const byId = (id: string) => walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === id));
   const handler = (el: any, name: string, button?: string) => callOf(el, name).find((a: any) => button == null || a[0] === button)?.at(-1);
-  handler(byId("webtab-web"), "on_click")({}, cx);
+  handler(byId("webtab-web"), "on_mouse_down", "left")({ position: { x: 10 } }, cx);
+  handler(byId("webtab-web"), "on_mouse_up", "left")({}, cx);
+  handler(byId("webtabs"), "on_mouse_up", "left")({}, cx);
   expect(view.tabs.active).toBe("web");
   // Its middle click closes the second.
   handler(byId("webtab-web-2"), "on_mouse_down", "middle")({}, cx);
@@ -731,10 +733,136 @@ test("tab and enter reach the strip's tabs and its +; a click shows a tab, × an
   native.length = 0;
   handler(x, "on_mouse_down", "left")({}, cx);
   handler(x, "on_click")({}, cx);
-  // Should the click reach the tab under the × too: that tab is gone, nothing more happens.
-  handler(byId("webtab-web-3"), "on_click")({}, cx);
+  // Should the release reach the tab under the × too: the press was the ×'s, nothing more happens.
+  handler(byId("webtab-web-3"), "on_mouse_up", "left")({}, cx);
   expect([ids(view), view.tabs.active]).toEqual([["web", "web-4"], "web-4"]);
   expect(native).toEqual([["web-3", "dispose", {}]]);
+});
+
+test("the tab model: a tab moved by hand, where a drag drops it, and the marker's place", () => {
+  let m = Tabs.single("https://a.example", 0.9);
+  [m] = Tabs.open(m, "https://b.example", { background: true, opener: "web" });
+  [m] = Tabs.open(m, "https://c.example", { background: true });
+  [m] = Tabs.open(m, "https://d.example", { background: true });
+  const order = (x: any) => x.list.map((t: any) => t.id);
+  expect(order(m)).toEqual(["web", "web-2", "web-3", "web-4"]);
+  // move: where it ends up, clamped; moved by hand it leaves its row of links.
+  const moved = Tabs.move(m, "web-2", 3);
+  expect([order(moved), moved.list[3].opener, moved.active]).toEqual([["web", "web-3", "web-4", "web-2"], null, "web"]);
+  expect(order(Tabs.move(m, "web-4", -5))).toEqual(["web-4", "web", "web-2", "web-3"]);
+  expect(Tabs.move(m, "web", 0)).toBe(m);
+  expect(Tabs.move(m, "nope", 1)).toBe(m);
+  // A drag: the pointer's half of the tab under it picks the gap before or after it.
+  expect(Tabs.gapAt("web-3", 10, 100)).toEqual({ id: "web-3", after: false });
+  expect(Tabs.gapAt("web-3", 60, 100)).toEqual({ id: "web-3", after: true });
+  expect(Tabs.gapAt(null, 60, 100)).toEqual({ id: null, after: false });
+  // web dragged: before web-3 = after web-2 = place 1; the end = place 3.
+  expect(Tabs.dropIndex(m, "web", { id: "web-3", after: false })).toBe(1);
+  expect(Tabs.dropIndex(m, "web", { id: "web-2", after: true })).toBe(1);
+  expect(Tabs.dropIndex(m, "web", { id: null, after: false })).toBe(3);
+  // Over itself, or its own gaps: no drop.
+  expect(Tabs.dropIndex(m, "web-3", { id: "web-3", after: true })).toBe(null);
+  expect(Tabs.dropIndex(m, "web-3", { id: "web-2", after: true })).toBe(null);
+  expect(Tabs.dropIndex(m, "web-3", { id: "web-4", after: false })).toBe(null);
+  expect(Tabs.dropIndex(m, "web-3", null)).toBe(null);
+  // Leftwards: before the first tab.
+  expect(Tabs.dropIndex(m, "web-4", { id: "web", after: false })).toBe(0);
+  // The marker: before the tab at the landing place, null at the end, none without a drop.
+  expect(Tabs.stakeBefore(m, "web", 1)).toBe("web-3");
+  expect(Tabs.stakeBefore(m, "web", 3)).toBe(null);
+  expect(Tabs.stakeBefore(m, "web-4", 0)).toBe("web");
+  expect(Tabs.stakeBefore(m, "web", null)).toBe(undefined);
+});
+
+test("dragging a web tab along the strip: it lifts, a marker shows the gap, the drop moves it and it stays moved after a restart", async () => {
+  reset();
+  const store = storage();
+  try {
+    const { view, cx } = await webPane({ slot: "b1", url: "https://a.example" });
+    for (const u of ["https://b.example/", "https://c.example/"]) view.onEvent({ id: "web", event: "web.newTab", data: { url: u, background: true } }, cx);
+    expect(ids(view)).toEqual(["web", "web-2", "web-3"]);
+    let root = view.render();
+    const byId = (id: string) => walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === id));
+    const handler = (el: any, name: string, button?: string) => callOf(el, name).find((a: any) => button == null || a[0] === button)?.at(-1);
+    const move = (id: string, x: number, width = 100, at = x) => handler(byId(id), "on_mouse_move")({ position: { x: at }, local_position: { x }, bounds: { width } }, cx);
+    // A press on tab 1, then a move under DRAG_START: still a click.
+    handler(byId("webtab-web"), "on_mouse_down", "left")({ position: { x: 20 } }, cx);
+    move("webtab-web", 22, 100, 22);
+    expect(view.drag).toBe(null);
+    // Past it, over the right half of tab 3: a drag to the end. Tab 1 lifts, the marker stands at the end (by +).
+    move("webtab-web-3", 70, 100, 260);
+    expect(view.drag).toEqual({ id: "web", gap: { id: "web-3", after: true } });
+    root = view.render();
+    const plates = (id: string) => walk(byId(id)).filter((e: any) => callOf(e, "border_color").length && callOf(e, "bg").length).length;
+    expect([plates("webtab-web"), plates("webtab-web-2")]).toEqual([1, 0]);
+    const staked = (id: string) => walk(byId(id)).some((e: any) => callOf(e, "w").some(([w]: any) => w === 8));
+    expect([staked("webtab-web-2"), staked("webtab-web-3"), staked("webtab-new")]).toEqual([false, false, true]);
+    expect(callOf(byId("webtabs"), "cursor_grabbing").length).toBe(1);
+    // Over the left half of tab 3: the marker before it.
+    move("webtab-web-3", 20, 100, 210);
+    root = view.render();
+    expect([staked("webtab-web-3"), staked("webtab-new")]).toEqual([true, false]);
+    // Let go (on tab 3, then the strip): the tab moves there and doesn't show; nothing else happens on the way.
+    handler(byId("webtab-web-3"), "on_mouse_up", "left")({}, cx);
+    handler(byId("webtabs"), "on_mouse_up", "left")({}, cx);
+    expect([ids(view), view.tabs.active, view.drag, view.pressed]).toEqual([["web-2", "web", "web-3"], "web", null, null]);
+    // The numbers follow the order: 2 is now web (shown).
+    root = view.render();
+    expect(strings(byId("webtab-web"))).toContain("2");
+    expect(JSON.parse(store.m.get("tabs")!).tabs.map((t: any) => t.id)).toEqual(["web-2", "web", "web-3"]);
+    press(view, cx, "1", char("1"));
+    expect(view.tabs.active).toBe("web-2");
+    // A drag past the end of the strip (the room after +): the end.
+    root = view.render();
+    handler(byId("webtab-web-2"), "on_mouse_down", "left")({ position: { x: 10 } }, cx);
+    handler(byId("webtab-end"), "on_mouse_move")({ position: { x: 400 }, local_position: { x: 5 }, bounds: { width: 80 } }, cx);
+    handler(byId("webtabs"), "on_mouse_up", "left")({}, cx);
+    expect(ids(view)).toEqual(["web", "web-3", "web-2"]);
+    // The pointer leaves the strip mid-drag: nothing moves.
+    root = view.render();
+    handler(byId("webtab-web"), "on_mouse_down", "left")({ position: { x: 10 } }, cx);
+    move("webtab-web-2", 70, 100, 300);
+    handler(byId("webtabs"), "on_hover")(false, cx);
+    handler(byId("webtabs"), "on_mouse_up", "left")({}, cx);
+    expect([ids(view), view.drag]).toEqual([["web", "web-3", "web-2"], null]);
+    // Restarted: the order comes back.
+    reset();
+    const again = await webPane({ slot: "b1", url: "https://a.example" });
+    expect(ids(again.view)).toEqual(["web", "web-3", "web-2"]);
+  } finally { store.done(); }
+});
+
+test("< and > move the tab (the ring's, else the shown one) in the bar's keys; the palette's commands do the same", async () => {
+  reset();
+  const store = storage();
+  try {
+    const { view, cx, send } = await webPane({ slot: "b1", url: "https://a.example" });
+    app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "b1" }, tab: "t1" }];
+    app.focusedPane = "p1";
+    for (const u of ["https://b.example/", "https://c.example/"]) view.onEvent({ id: "web", event: "web.newTab", data: { url: u, background: true } }, cx);
+    expect(press(view, cx, ">", char(">"))).toBe(true);
+    expect([ids(view), view.tabs.active]).toEqual([["web-2", "web", "web-3"], "web"]);
+    press(view, cx, ">", char(">"));
+    // At the end it stays.
+    press(view, cx, ">", char(">"));
+    expect(ids(view)).toEqual(["web-2", "web-3", "web"]);
+    press(view, cx, "<", char("<"));
+    expect(ids(view)).toEqual(["web-2", "web", "web-3"]);
+    // The ring on another tab: that one moves.
+    view.handle.is_focused = () => true;
+    view.render();
+    view.ring = "tab:web-3";
+    press(view, cx, "<", char("<"));
+    expect(ids(view)).toEqual(["web-2", "web-3", "web"]);
+    view.ring = null;
+    await send("nocturne-browser.tab_move_left");
+    expect(ids(view)).toEqual(["web-2", "web", "web-3"]);
+    await send("nocturne-browser.tab_move_right");
+    expect(ids(view)).toEqual(["web-2", "web-3", "web"]);
+    expect(JSON.parse(store.m.get("tabs")!).tabs.map((t: any) => t.id)).toEqual(["web-2", "web-3", "web"]);
+    // Listed under ?.
+    expect(view.constructor && (await load("nocturne-browser/main.js")).mod.KEYS.some(([k]: any) => k === "< >")).toBe(true);
+  } finally { store.done(); }
 });
 
 test("a long title is cut in the strip, not the strip; many tabs share its width", async () => {

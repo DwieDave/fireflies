@@ -104,6 +104,8 @@ const PANE = {
     ["tab_close", "Close the tab", "web browser tab shut"],
     ["tab_next", "Next tab", "web browser tab right switch"],
     ["tab_prev", "Previous tab", "web browser tab left switch"],
+    ["tab_move_left", "Move the tab left", "web browser tab reorder order drag"],
+    ["tab_move_right", "Move the tab right", "web browser tab reorder order drag"],
     ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-markdown": ["Markdown", [

@@ -157,6 +157,8 @@ const WORDS = {
   "nocturne-browser.tab_close": "Close the web tab",
   "nocturne-browser.tab_next": "Next web tab",
   "nocturne-browser.tab_prev": "Previous web tab",
+  "nocturne-browser.tab_move_left": "Move the web tab left",
+  "nocturne-browser.tab_move_right": "Move the web tab right",
 };
 
 // A group's rows in this order (keys() comes sorted by key): the blocks first in

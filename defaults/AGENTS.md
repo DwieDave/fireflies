@@ -436,11 +436,13 @@ the highlighted line shows where it will land.
   link, and the link menu's "Open Link in New Tab", open it in a tab behind
   (Shift: in front); `target=_blank` and `window.open` open one in front, after
   the page's earlier links. A click shows a tab, × or a middle click closes it;
-  closing the last leaves a blank tab (the pane stays). The bar, the address,
+  closing the last leaves a blank tab (the pane stays). Drag a tab along the
+  strip to move it (a marker shows where it lands; the numbers follow), or `<` /
+  `>` in the bar (the ringed tab, else the shown one); the order is kept. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
-  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev` (the
-  palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
+  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
+  `.tab_move_left`, `.tab_move_right` (the palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
   `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
   `slot` matches (none: the one other commands reach) opens the page in a new
   tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
