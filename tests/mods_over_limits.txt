@@ -51,8 +51,6 @@ defaults/mods/git/main.ts init
 defaults/mods/git/popups.ts key
 defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
-defaults/mods/github/projects.ts
-defaults/mods/github/projects.ts key
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
 defaults/mods/nocturne/newspace.ts
