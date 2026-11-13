@@ -65,10 +65,13 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const logic = await load("file-tree/logic.js");
+const logic = await load("file-tree/logic.ts");
 const keyhelp = await load("file-tree/keyhelp.ts");
 const route = await load("file-tree/editor-route.ts");
-const { default: Files } = await load("file-tree/main.js", { ...logic, ...keyhelp, openInEditor: route.openInEditor, herdr });
+const { default: Loaded } = await load("file-tree/main.ts", { ...logic, ...keyhelp, openInEditor: route.openInEditor, editorProps: route.editorProps, herdr, Viewer: class {} });
+/** A key event as GPUI sends it, every modifier there (the tests write only the ones held). */
+const full = (e: any) => ({ ...e, modifiers: { shift: false, control: false, alt: false, platform: false, function: false, ...e.modifiers } });
+class Files extends Loaded { key(e: any, cx: any) { return super.key(full(e), cx); } }
 const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
 
 const later: ((cx: any) => void)[] = [];
@@ -77,6 +80,8 @@ const cx: any = {
   spawn: (f: (cx: any) => Promise<void>) => { const p = f(cx); pending.push(p); return p; },
   timer: { every() {}, after: (_ms: number, f: any) => later.push(f) },
   write_to_clipboard: (s: string) => { clipboard.push(s); },
+  // A nested view (the preview split's viewer): a handle that takes its props.
+  new: () => ({ set_props() {}, release: () => true }),
 };
 const pending: Promise<void>[] = [];
 const clipboard: string[] = [];
@@ -84,7 +89,7 @@ const settle = async () => { while (pending.length) await pending.shift(); };
 
 /** A pane on /repo with its folders listed (no exec): `entries` by folder. */
 function pane(p: any = {}, entries: Record<string, [string, boolean][]> = {}) {
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   view.loadFolder = async () => {};
   view.refresh = () => {};
   world.props = p;
@@ -297,10 +302,10 @@ test("a click on the filter line draws the input and focuses it, in the panel an
     world.shared = props.path ? { "file-tree.look": { s2: { on: true } } } : {};
     const view = pane(props, TREE);
     later.length = 0;
-    const find = walk(view.render()).find((e: any) => e.calls.some(([k, a]: [string, any]) => k === "id" && a?.[0] === "nf-find"));
+    const find = walk(view.render(cx)).find((e: any) => e.calls.some(([k, a]: [string, any]) => k === "id" && a?.[0] === "nf-find"));
     const down = find.calls.find(([k]: [string]) => k === "on_mouse_down");
     down[1][1]({}, cx);
-    view.render();
+    view.render(cx);
     for (const f of later.splice(0)) f(cx);
     expect([view.input.focused, view.typing]).toEqual([true, true]);
   }
@@ -433,7 +438,7 @@ test("a copy opened as the focused pane takes the keyboard, with a row picked; p
   let focusedHandle = 0;
   const own = { ...cx, focus_handle: () => ({ focus() { focusedHandle++; }, is_focused: () => false }) };
   later.length = 0;
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   view.loadFolder = async () => {}; view.refresh = () => {};
   world.props = { folder: "/repo", slot: "s9" };
   view.init.call(view, world.props, own);
@@ -444,7 +449,7 @@ test("a copy opened as the focused pane takes the keyboard, with a row picked; p
   // Not the focused pane (a restart with the keyboard elsewhere): it leaves the keyboard be.
   world.focused = { pane: "p1" };
   focusedHandle = 0;
-  const other: any = Object.create(Files.prototype);
+  const other: any = new Files();
   other.loadFolder = async () => {}; other.refresh = () => {};
   other.init.call(other, world.props, own);
   for (const f of later.splice(0)) f(own);
@@ -670,7 +675,7 @@ async function realPane(root: string, extra: any = {}) {
   world.panes = [{ pane: "p1", tab: "t1", terminal: "x" }, { pane: "pf", tab: "t1", mod: "file-tree", props: { path: root, slot: "s1", ...extra } }];
   world.shared = {};
   world.props = { path: root, slot: "s1", ...extra };
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   view.refresh = () => {};
   view.init.call(view, world.props, cx);
   pending.length = 0;

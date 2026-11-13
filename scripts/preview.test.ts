@@ -91,14 +91,14 @@ test("pictures are told apart by extension, any case", () => {
 
 test("file-tree: Markdown and pictures as tabs of the editor (a double click), p their viewer panes, alt-double-click / e the other way", async () => {
   const route = await load("file-tree/editor-route.ts");
-  const { default: Files, viewerFor, isMarkdown } = await load("file-tree/main.js", { ...(await load("file-tree/logic.js")), openInEditor: route.openInEditor, herdr: { run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } });
+  const { default: Files, viewerFor, isMarkdown } = await load("file-tree/main.ts", { ...(await load("file-tree/logic.ts")), openInEditor: route.openInEditor, editorProps: route.editorProps, herdr: { run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } });
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
   expect([viewerFor("a.json"), viewerFor("a.yaml"), viewerFor("Cargo.toml")]).toEqual([null, null, null]);
   expect([isMarkdown("a.md"), isMarkdown("a.png")]).toEqual([true, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }, { pane: "pf", tab: "tab1", mod: "file-tree" }];
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   Object.assign(view, { root: "/repo", on: null, handle: { focus() {} }, folders: new Set(), lastClick: null });
   view.rows = () => [{ path: "shots/Screen Shot.png", dir: false, depth: 1 }, { path: "main.rs", dir: false, depth: 0 }];
   const edits: string[] = [];
@@ -112,9 +112,9 @@ test("file-tree: Markdown and pictures as tabs of the editor (a double click), p
   view.pick("shots/Screen Shot.png", cx);
   view.alt = false;
   view.sel = "shots/Screen Shot.png";
-  view.key({ key: "e" }, cx);
-  view.key({ key: "enter" }, cx);
-  view.key({ key: "p" }, cx);
+  view.key({ key: "e", modifiers: {} }, cx);
+  view.key({ key: "enter", modifiers: {} }, cx);
+  view.key({ key: "p", modifiers: {} }, cx);
   // A double click and enter: a tab of the editor to look at (none in the tab: a new one beside); p: the preview pane.
   expect(commands).toEqual([
     ["editor.open", { path: "/repo/shots/Screen Shot.png", pane: "p1", look: true }],
@@ -131,7 +131,7 @@ test("file-tree: Markdown and pictures as tabs of the editor (a double click), p
 
 test("the files mod opens pictures and PDFs in the preview; alt-click: the system's app", async () => {
   const { default: Files } = await load("files/main.js");
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   Object.assign(view, { root: "/repo", on: "box" });
   const shown: string[] = [];
   view.show = (path: string) => shown.push(path);

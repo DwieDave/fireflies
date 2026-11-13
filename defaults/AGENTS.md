@@ -940,7 +940,7 @@ the highlighted line shows where it will land.
   last file), and the keyboard stays in the tree: `J` / `K` scroll the preview
   (half a view; a PDF a page), `<` / `>` make it smaller / bigger, or drag the
   divider; both parts keep a usable least. It is the preview pane's own viewer
-  (`preview/viewer.js`; file-tree ships identical copies of it
+  (`preview/viewer.ts`; file-tree ships identical copies of it
   and its files), so every kind the preview shows looks the same here, and it
   adds text: code in the editor's colors, Markdown rendered, other text plain,
   the first 256 KB. A binary without a viewer or a file it can't read says why
