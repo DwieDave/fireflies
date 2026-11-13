@@ -5,7 +5,9 @@
 import { div } from "gpui-kit";
 import type { Context, Element, Modifiers } from "gpui-kit";
 import { h_flex } from "gpui-base";
-import { exec, appHome, readTextFile, shared, run, openOverlay } from "herdr";
+import { exec } from "herdr";
+// The Databases hand-off's calls by name: a stand-in herdr (the tests') needn't have them all.
+import * as herdr from "herdr";
 import type { ExecResult, Theme } from "herdr";
 import { sniffKind, route, count } from "./kinds.ts";
 import { hexBytes } from "./image.ts";
@@ -20,7 +22,7 @@ import type { default as Viewer } from "./viewer.ts";
 export async function hasDatabases(): Promise<boolean> {
   // Asked from a pane's start: a failure of any kind means "not there", never a broken pane.
   try {
-    return (await readTextFile(`${appHome()}/mods/databases/mod.json`)) !== null;
+    return (await herdr.readTextFile(`${herdr.appHome()}/mods/databases/mod.json`)) !== null;
   } catch {
     return false;
   }
@@ -31,8 +33,8 @@ export async function hasDatabases(): Promise<boolean> {
 export function openInDatabases(path: string, from: string): void {
   const args = { kind: "sqlite", path, readonly: true, from };
 
-  if (shared("layout") === "nocturne") run(`nocturne.databases:${JSON.stringify(args)}`);
-  else openOverlay({ mod: "databases", kind: "window", key: "databases", frame: "none", scrim: true, width: 0.88, height: 0.88, props: { connect: args } });
+  if (herdr.shared("layout") === "nocturne") herdr.run(`nocturne.databases:${JSON.stringify(args)}`);
+  else herdr.openOverlay({ mod: "databases", kind: "window", key: "databases", frame: "none", scrim: true, width: 0.88, height: 0.88, props: { connect: args } });
 }
 
 /** SQLite: its tables, then the chosen one's first rows (sqlite3, read only). */
