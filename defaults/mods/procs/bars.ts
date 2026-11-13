@@ -16,6 +16,7 @@ import { procOf } from "./listing.ts";
 import { begin, confirm, escapeKey, foldRow, killHard, openPortAt, showTerminal, sortKey, switchTab, toggleAll } from "./actions.ts";
 import { badge } from "./procs-view.ts";
 import { openMenu } from "./menu-view.ts";
+import { inPane, move } from "./place.ts";
 import type { default as ProcsDeck } from "./main.ts";
 
 export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
@@ -167,7 +168,24 @@ export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number):
       })
       .child(v.all ? `all of ${v.snap?.me ?? "yours"}` : "fireflies"))
     .child(badge(v, t, "a", false))
+    .child(moveChip(v, t))
     .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+}
+
+/** ◧ into a pane, or from a pane ⧉ out over the tab (place.ts), as ctrl-t. */
+function moveChip(v: ProcsDeck, t: Theme): Element {
+  const pane = inPane();
+
+  return h_flex().id("procs-move").flex_none().h(20).px(4).items_center().text_size(11).text_color(t.dim).cursor_pointer()
+    .hover((s) => s.text_color(t.foreground))
+    .tooltip(pane ? "Out over the tab · ctrl-t" : "Into a pane · ctrl-t")
+    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    .on_click((_e, cx) => {
+      cx.stop_propagation();
+      move(v, cx);
+      cx.notify();
+    })
+    .child(pane ? "⧉" : "◧");
 }
 
 /** A click that puts the find line back to typing. */

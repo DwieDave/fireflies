@@ -10,7 +10,7 @@ import type { Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import type { Dir, PortCol, ProcCol } from "./sort.ts";
 import { arrow, numeric } from "./sort.ts";
-import { COLS } from "./state.ts";
+import { COLS, NUM_W, numCols } from "./state.ts";
 import { isFlat } from "./listing.ts";
 import { sortPortsBy, sortProcsBy, toggleFlat } from "./actions.ts";
 import type { default as ProcsDeck } from "./main.ts";
@@ -52,7 +52,7 @@ export function procHeads(v: ProcsDeck, t: Theme): Element {
           cx.notify();
         })
         .child("FLAT"))))
-    .child(num(34, "cpu", "CPU")).child(num(44, "mem", "MEM")).child(num(54, "up", "UP")).child(num(44, "pid", "PID"));
+    .children(numCols(v.width).map((col) => num(NUM_W[col], col, col.toUpperCase())));
 }
 
 /** The ports' heads, over the rows' port, process and where. */

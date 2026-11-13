@@ -175,6 +175,8 @@ test:
     bun test scripts/procs-menu.test.ts
     # Its sorting: the order per column and direction in the tree (a group by what's under it) and flat, the ports' columns, a click and the keys' steps, the kept record.
     bun test scripts/procs-sort.test.ts
+    # Its pane (docs/mods-in-panes.md): drawn as a pane, esc / q, the pane's size and narrow columns, window → pane → window with the handover, the copy that acts, a restart's slot.
+    bun test scripts/procs-pane.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.

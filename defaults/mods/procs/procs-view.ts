@@ -9,7 +9,7 @@ import type { Theme } from "herdr";
 import type { Row } from "./logic.ts";
 import { guardOf, terminalOf, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.ts";
 import type { Ask, ProcRow, Rect } from "./state.ts";
-import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS, HEAD } from "./state.ts";
+import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS, HEAD, NUM_W, numCols } from "./state.ts";
 import { zoom, unzoom, dither, toneOf, dotCell } from "./paint.ts";
 import { byPid, isFlat, moveTo, procOf, termPids } from "./listing.ts";
 import { begin, confirm, copyRow, killHard, showTerminal } from "./actions.ts";
@@ -134,10 +134,14 @@ export function treeRow(v: ProcsDeck, t: Theme, r: Row, i: number, on: boolean, 
     .children(addr === undefined ? [] : [div().relative().child(badge(v, t, addr, on))])
     .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(oneLine(p.args)))
     .children(mine ? [div().relative().flex_none().text_size(11).text_color(t.ansi6).child(mine.map((x) => `:${x}`).join(" "))] : [])
-    .child(numCell(v, t, 34, p.cpu.toFixed(1), p.cpu >= 20 ? t.working : null))
-    .child(numCell(v, t, 44, memory(p.rss)))
-    .child(numCell(v, t, 54, uptime(p.secs)))
-    .child(numCell(v, t, 44, String(p.pid), t.ansi8));
+    .children(numCols(v.width).map((col) => {
+      switch (col) {
+        case "cpu": return numCell(v, t, NUM_W.cpu, p.cpu.toFixed(1), p.cpu >= 20 ? t.working : null);
+        case "mem": return numCell(v, t, NUM_W.mem, memory(p.rss));
+        case "up": return numCell(v, t, NUM_W.up, uptime(p.secs));
+        case "pid": return numCell(v, t, NUM_W.pid, String(p.pid), t.ansi8);
+      }
+    }));
 }
 
 /** How many lines the command takes in the block (1 to CMD_SHOWN): as drawn once it has been,
