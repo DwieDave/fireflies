@@ -12,7 +12,12 @@
 //              whose parent isn't his (launchd's children) a root. Each row:
 //              name, arguments (cut), the ports it listens on, cpu, memory,
 //              how long it has run, pid. The selected row opens a detail
-//              block: the whole command line, pid, parent, cpu, memory, up.
+//              block, set apart with air above and below, a fainter dither
+//              of its own and a dithered rule where it ends: the whole
+//              command line (up to three lines; the wheel scrolls a longer
+//              one), then pid and parent with show / copy / end / end
+//              tree, then its cpu and memory. Rows above it never move as the
+//              selection does; the ones below make room.
 //   ports      the TCP ports his processes listen on, those in this app's
 //              terminals first: port, process, where it runs; on the cursor's
 //              row open ↗ (a web pane), copy (http://localhost:<port>), end
@@ -79,7 +84,13 @@ const SYSTEM_PACE = "a reading every second";
 
 const W = 480, H = 560;
 export const ROW = 24, PROW = 30;
-const HEAD = 36, COLS = 18, FOOT = 26, IND = 14, DETAIL = 66, CONFIRM = 76;
+const HEAD = 36, COLS = 18, FOOT = 26, IND = 14, CONFIRM = 76;
+// The selected process's detail block, under its row: air, the command (1 to 3 lines), air, its
+// facts and its buttons, its live readings, air, a dithered rule where its ground ends, air.
+const D_TOP = 9, D_GAP = 9, D_LINE = 16, D_LINES_GAP = 4, D_FOOT = 10, D_AFTER = 7;
+const D_LEFT = 26, D_RIGHT = 12;
+// About how wide a character of the 11 px mono is, to guess a command's lines before it's drawn.
+const CHAR_W = 7;
 export const LIST_H = H - 2 - HEAD - COLS - FOOT;
 // The system tab: five graphs, KEEP bars each, the newest at the right.
 const GRAPH_W = W - 2 - 24, GRAPH_H = 48, SLOT = Math.floor(GRAPH_W / KEEP), BAR = SLOT - 2;
@@ -631,24 +642,56 @@ export default class ProcsDeck extends View {
       .child(this.num(t, 44, String(p.pid), t.ansi8));
   }
 
-  /** Under the selected process: its whole command line and its numbers. */
-  detail(t, pid) {
+  /** How many lines the command takes in the block (1 to CMD_SHOWN): as drawn once it has been,
+   *  else guessed from its length. */
+  cmdLines(pid, full) {
+    const drawn = this.cmd.pid === pid && this.cmd.h > 0 ? Math.round(this.cmd.h / CMD_LINE) : 0;
+    const guess = Math.ceil((full.length * CHAR_W) / (W - 2 - D_LEFT - D_RIGHT));
+    return Math.max(1, Math.min(CMD_SHOWN, drawn || guess));
+  }
+
+  /** The detail block's height under the selected process's row. */
+  blockH(pid) {
     const p = this.proc(pid);
-    if (!p) return div().h(DETAIL);
+    const lines = p ? this.cmdLines(pid, oneLine(p.cmd)) : 1;
+    return D_TOP + lines * CMD_LINE + D_GAP + D_LINE + D_LINES_GAP + D_LINE + D_FOOT + D_AFTER;
+  }
+
+  /** Under the selected process, set apart from the rows around it: a ground of its own (the
+   *  row's dither, fainter), its whole command line, then its pid and parent with what a click
+   *  can do to it, its own cpu and memory, and a dithered rule where it ends. */
+  detail(t, item) {
+    const pid = item.node.pid;
+    const h = this.blockH(pid);
+    const p = this.proc(pid);
+    if (!p) return div().h(h);
     const up = this.proc(p.ppid);
     const guard = guardOf(p, this.snap.me);
     const full = oneLine(p.cmd);
-    const meta = (k, v, c) => h_flex().flex_none().gap(4).child(div().text_color(t.dim).child(k)).child(div().text_color(c ?? t.muted).child(v));
-    return v_flex().id(`detail-${pid}`).relative().h(DETAIL).flex_none().pl(26).pr(12).pt(4).gap(4).text_size(11)
-      .child(this.command(t, pid, full, CMD_SHOWN * CMD_LINE))
-      .child(h_flex().h(14).flex_none().gap(12).items_center().overflow_hidden()
-        .child(meta("pid", String(p.pid)))
-        .when(Boolean(up), (el) => el.child(meta("parent", `${up.name} ${up.pid}`)))
-        .child(meta("cpu", `${p.cpu.toFixed(1)}%`, p.cpu >= 20 ? t.working : null))
-        .child(this.spark(t, "sp-cpu", this.hist.get(pid)?.cpu, t.working, 100))
-        .child(meta("mem", memory(p.rss)))
-        .child(this.spark(t, "sp-mem", this.hist.get(pid)?.rss, t.accent, null))
-        .when(Boolean(guard), (el) => el.child(h_flex().gap(4).items_center().child(svg(`${ART}/shield.svg`).size(8).text_color(t.dim)).child(div().text_color(t.dim).child(guard)))));
+    const here = terminalOf(pid, this.ix.byPid, this.termPids());
+    const meta = (k, v, c) => h_flex().flex_none().gap(5).child(div().text_color(t.dim).child(k)).child(div().text_color(c ?? t.muted).child(v));
+    return div().id(`detail-${pid}`).relative().h(h).flex_none().text_size(11)
+      .child(v_flex().id("block").absolute().left(0).right(0).top(0).bottom(D_AFTER).pl(D_LEFT).pr(D_RIGHT).pt(D_TOP)
+        .child(div().absolute().left(0).right(0).top(0).bottom(0).opacity(0.45).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(0).top(0).bottom(0).w(1).opacity(0.7).child(dither(t.accent, 1)))
+        .child(div().absolute().left(12).right(D_RIGHT).bottom(0).h(1).child(dither(t.ansi8, 1)))
+        .child(this.command(t, pid, full, this.cmdLines(pid, full) * CMD_LINE))
+        .child(h_flex().id("facts").relative().h(D_LINE).mt(D_GAP).flex_none().gap(14).items_center()
+          .child(meta("pid", String(p.pid), t.ansi8))
+          .when(Boolean(up), (el) => el.child(meta("parent", `${up.name} ${up.pid}`)))
+          .child(div().flex_1())
+          .when(Boolean(here), (el) => el.child(this.action(t, "d-show", "show", null, () => this.show(item))))
+          .child(this.action(t, "d-copy", "copy", null, (cx) => this.copy(item, cx)))
+          .when(!guard, (el) => el.child(this.action(t, "d-end", "end", t.blocked, () => this.begin(item, false))))
+          .when(!guard && item.node.kids.length > 0, (el) => el.child(this.action(t, "d-tree", "end tree", t.blocked, () => this.begin(item, true)))))
+        .child(h_flex().id("live").relative().h(D_LINE).mt(D_LINES_GAP).flex_none().gap(8).items_center()
+          .child(meta("cpu", `${p.cpu.toFixed(1)}%`, p.cpu >= 20 ? t.working : null).w(78))
+          .child(this.spark(t, "sp-cpu", this.hist.get(pid)?.cpu, t.working, 100))
+          .child(div().w(10).flex_none())
+          .child(meta("mem", memory(p.rss)).w(62))
+          .child(this.spark(t, "sp-mem", this.hist.get(pid)?.rss, t.accent, null))
+          .when(Boolean(guard), (el) => el.child(div().flex_1()).child(h_flex().flex_none().gap(4).items_center()
+            .child(svg(`${ART}/shield.svg`).size(8).text_color(t.dim)).child(div().text_color(t.dim).child(guard))))));
   }
 
   /** The detail block's whole command line in `box` px; one that runs longer scrolls under the
@@ -703,7 +746,7 @@ export default class ProcsDeck extends View {
     for (const x of this.snap?.ports ?? []) ports.set(x.pid, [...(ports.get(x.pid) ?? []), x.port].filter((v, i, s) => s.indexOf(v) === i));
     const tp = this.termPids();
     const sel = items[ci];
-    const extra = (r) => (this.ask && this.ask.tab === "procs" && this.ask.key === r.key ? CONFIRM : r === sel && r.kind === "proc" ? DETAIL : 0);
+    const extra = (r) => (this.ask && this.ask.tab === "procs" && this.ask.key === r.key ? CONFIRM : r === sel && r.kind === "proc" ? this.blockH(r.node.pid) : 0);
     const tops = [];
     let y = 0;
     for (const r of items) { tops.push(y); y += ROW + extra(r); }
@@ -726,7 +769,7 @@ export default class ProcsDeck extends View {
       const on = i === ci;
       kids.push(v_flex().id(`slot-${r.key}`).absolute().left(0).right(0).top(top - s).h(h)
         .child(this.treeRow(t, r, i, on, ports, tp))
-        .when(h > ROW, (el) => el.child(this.ask?.key === r.key ? this.confirmBand(t) : this.detail(t, r.node.pid))));
+        .when(h > ROW, (el) => el.child(this.ask?.key === r.key ? this.confirmBand(t) : this.detail(t, r))));
     });
     const head = (w, text) => div().w(w).flex_none().flex().justify_end().child(text);
     return v_flex().id("procs").h(COLS + LIST_H).flex_none()

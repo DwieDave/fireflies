@@ -340,7 +340,9 @@ the highlighted line shows where it will land.
   it started (terminals without a pane under "no pane"; `a` switches to every
   process of yours, rooted where the parent isn't yours), each row name,
   arguments, its listening ports, cpu, memory, uptime and pid, the selected
-  one with its whole command line and its own cpu / memory graphs; ports, the
+  one opening a block set apart by air, a ground and a dithered rule: its
+  whole command line, pid / parent with show, copy, end and end tree
+  buttons, and its own cpu / memory graphs; ports, the
   TCP ports your processes listen on (this app's first, with their tab and
   terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
   the focused tab's web pane (`nocturne-browser.open`) or a web pane beside the

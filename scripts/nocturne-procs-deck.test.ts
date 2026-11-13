@@ -716,6 +716,84 @@ test("system: the graphs hold 90 readings, the newest at the right, in bars half
   expect(words(draw())).toContain("a reading every second");
 });
 
+// ---- room around the selected row: Developer: "give the selected item some whitespace"
+
+test("the selected row's block: air above and below, a ground and a rule of its own, facts apart from the command", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:52391") await press("j"); // rustc
+  draw();
+  const block = ids["block"];
+  expect(block.css.pt[0]).toBeGreaterThanOrEqual(8); // air between the row and the command
+  expect(ids["facts"].css.mt[0]).toBeGreaterThanOrEqual(8); // the facts apart from the command
+  const slot = slotOf("p:52391");
+  // The ground stops short of the next row: air under the rule.
+  expect(block.css.bottom[0]).toBeGreaterThan(0);
+  expect(slot.css.h[0]).toBe(ROW + ids["detail-52391"].css.h[0]);
+  // Before it's drawn, its lines are guessed from its length (82 characters: two).
+  expect(ids["cmd"].css.h[0]).toBe(30);
+  // As drawn: one line makes a short block; a long command grows it to three lines, and no more.
+  ids["cmd-text"].on.size_change({ width: 396, height: 13.5 }, cx);
+  draw();
+  const short = ids["detail-52391"].css.h[0];
+  expect(ids["cmd"].css.h[0]).toBe(15);
+  ids["cmd-text"].on.size_change({ width: 396, height: 27 }, cx); // two lines, at 0.9
+  draw();
+  expect(ids["detail-52391"].css.h[0]).toBe(short + 15);
+  ids["cmd-text"].on.size_change({ width: 396, height: 108 }, cx);
+  draw();
+  expect(ids["detail-52391"].css.h[0]).toBe(short + 30);
+  expect(ids["cmd"].css.h[0]).toBe(45);
+  // Its facts and its buttons.
+  expect(words(ids["facts"])).toEqual(expect.arrayContaining(["pid", "52391", "parent", "cargo 52214", "show", "copy", "end"]));
+  expect(words(ids["live"])).toEqual(expect.arrayContaining(["cpu", "98.2%", "mem", "1.9G"]));
+});
+
+test("the block's buttons: show focuses its terminal, copy its command line, end and end tree ask", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:50112") await press("j"); // bun, with vite and esbuild under it
+  draw();
+  ids["d-copy"].on.click({}, cx);
+  expect(clip).toEqual(["bun run dev"]);
+  ids["d-tree"].on.click({}, cx);
+  expect(d.ask.pids).toEqual([50112, 50118, 50121]);
+  d.ask = null;
+  draw();
+  ids["d-end"].on.click({}, cx);
+  expect(d.ask.pids).toEqual([50112]);
+  d.ask = null;
+  draw();
+  ids["d-show"].on.click({}, cx);
+  expect(ran).toEqual([["pane.focus", { terminal: "t7" }]]);
+  // A shielded process has no end in its block.
+  await press("a");
+  await press("g"); // the app itself, first of all of dev's
+  draw();
+  expect(cur()).toBe("p:21416");
+  expect(ids["d-end"]).toBeUndefined();
+  expect(words(ids["live"])).toContain("the app itself");
+});
+
+test("moving the selection keeps every row above it where it was", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { draw, press, cur, d } = await deck();
+  while (cur() !== "p:70000") await press("j");
+  expect(d.scroll.procs).toBe(0);
+  draw();
+  const keys = d.rows().map((r: any) => r.key);
+  const at = keys.indexOf("p:70000");
+  const before = Object.fromEntries(keys.slice(0, at + 1).map((k: string) => [k, slotOf(k)?.css.top[0]]));
+  const scroll = d.scroll.procs;
+  await press("j");
+  draw();
+  expect(d.scroll.procs).toBe(scroll);
+  const shown = keys.slice(0, at + 1).filter((k: string) => before[k] != null);
+  expect(shown.length).toBeGreaterThan(5);
+  for (const k of shown) expect([k, slotOf(k)?.css.top[0]]).toEqual([k, before[k]]);
+  // The row it left is a plain row again, and the next starts right under it.
+  expect(slotOf("p:70000").css.h[0]).toBe(ROW);
+  expect(slotOf("p:70001").css.top[0]).toBe(slotOf("p:70000").css.top[0] + ROW);
+});
+
 test("the depth guides: one dithered path for the rows in sight, a 1 px line a level a row", async () => {
   const { d, draw } = await deck();
   draw();
