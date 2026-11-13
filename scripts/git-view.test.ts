@@ -1,4 +1,4 @@
-// The git window (git/main.js) on a real scratch repo: herdr and
+// The git window (git/main.ts) on a real scratch repo: herdr and
 // gpui are stand-ins, but exec runs the real git, so reading, the panels,
 // keys and actions run through the window's code down to git.
 import { test, expect, mock, beforeAll, afterAll } from "bun:test";
@@ -56,7 +56,7 @@ const cx: any = {
   timer: { every() {}, after() {} }, write_to_clipboard(t: string) { cx.clip = t; },
 };
 
-const { default: GitView } = await import("../defaults/mods/git/main.js");
+const { default: GitView } = await import("../defaults/mods/git/main.ts");
 
 /** Waits until both of the window's queues are drained. */
 async function settle(v: any) {
@@ -402,7 +402,7 @@ for (const zoom of [0.9, 1]) {
   test(`zoom ${zoom}: at the end of every list the last row ends inside the list`, async () => {
     zoomNow = zoom;
     try {
-      const { rowWindow } = await import("../defaults/mods/git/main.js");
+      const { rowWindow } = await import("../defaults/mods/git/main.ts");
       const { unzoom } = await import("../defaults/mods/git/draw.ts");
       // Each row height the window draws: side lists, wide commits, diffs, the branch log.
       for (const rowH of [18, 32, 16]) {
@@ -478,7 +478,7 @@ test("a history cut at its limit reads further when its end comes into view: the
 });
 
 test("an operation's row spins from the key to its end: push marks the pushed branch, a failure and a throw release it too", async () => {
-  const { rowKey } = await import("../defaults/mods/git/main.js");
+  const { rowKey } = await import("../defaults/mods/git/main.ts");
   // A clone: main tracks origin/main on a bare remote.
   const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
   sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);
@@ -570,6 +570,22 @@ test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as 
   expect(sh("git branch --list feat/wt").trim()).toBe("");
   expect(commands.some(([n, a]) => n === "space.close" && a.id === "s9")).toBe(true);
   spacesNow = [];
+});
+
+// The Agents line named every agent "agent": it read a.name, which herdr's agent listing doesn't have.
+test("worktrees: the main view names the agents in a checkout by their program", async () => {
+  homeNow = join(dir, "home");
+  sh(`git worktree add -q -b named ${join(homeNow, "wt-n")} HEAD`);
+  agentsNow = [{ pane: "p1", status: "working", title: "fix the parser", program: { key: "claude", name: "Claude Code" } }];
+  panesNow = [{ pane: "p1", tab: "t1", cwd: join(homeNow, "wt-n") }];
+  const v = await open();
+  v.setPanel("files"); v.setTab("worktrees"); await settle(v);
+  const i = v.items("worktrees").findIndex((w: any) => w.path === join(homeNow, "wt-n"));
+  v.moveTo(i); await settle(v);
+  const agents = v.main.rows.find((r: any) => r.kind === "text" && r.parts[0][0].startsWith("Agents"));
+  expect(agents.parts[1][0]).toBe("Claude Code (working)");
+  sh(`git worktree remove --force ${join(homeNow, "wt-n")} && git branch -D named`);
+  agentsNow = []; panesNow = [];
 });
 
 test("worktrees: the main checkout can't go; M picks merged ones, U unused ones, d removes the picked", async () => {
