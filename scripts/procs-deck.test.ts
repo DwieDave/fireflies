@@ -109,7 +109,8 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 const elapse = async (ms: number) => { const due = timers.filter((x) => x.ms === ms); timers = timers.filter((x) => x.ms !== ms); for (const x of due) x.f(cx); await flush(); };
 
 const procs = await import("../defaults/mods/nocturne/procs.ts");
-const { default: Deck, REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/procs/main.ts");
+const { default: Deck } = await import("../defaults/mods/procs/main.ts");
+const { REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/procs/state.ts");
 
 beforeEach(() => {
   shared = {}; overlays = []; closed = []; ran = []; calls = []; ids = {}; clip = []; timers = [];
