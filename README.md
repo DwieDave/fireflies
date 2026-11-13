@@ -57,6 +57,10 @@ These are screenshots of Fireflies with a made-up project, at zoom 1.7 (the whol
 
 ![The notification center: a permission request with its answers, a question and an agent waiting for input](docs/readme/notifications.png)
 
+**Databases.** A window for Postgres, MySQL, SQLite and libSQL: connections (also the ones a project's `.env` names), tables and their structure, rows in a grid with a WHERE filter, SQL with syntax colours and its results, and export to CSV, JSON or SQL. A statement that changes data asks first. It opens as a window or in a pane, like Git and GitHub.
+
+![The Databases window on a made-up SQLite database: connections, tables and a column's value on the left, a query with its ten result rows and the log on the right](docs/readme/databases.png)
+
 ## Install
 
 Fireflies has no release downloads yet. Build it from source on a Mac. Herdr's install scripts and its Homebrew cask install Herdr, not Fireflies.
