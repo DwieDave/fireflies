@@ -1,10 +1,9 @@
 import { test, expect } from "bun:test";
-import {
-  projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, parseItem, scopeProblem, parseDetail, parseChoices,
-  parseFilter, filterTokens, matches, iterationAt, layout, columnField, grid, find, step, pickUp, carry, carried, drop,
-  apply, overlay, valueFor, setFieldMutation, positionMutation, archiveMutation, addDraftMutation, convertMutation, toggleMutation,
-  cardFields, editableFields, initials, valueText, slimBoard, MAX_ITEMS, isItemNode, isBoardAnswer, isProjectListAnswer, isDetailAnswer, isChoicesAnswer, isStoredBoard, boardOf,
-} from "../defaults/mods/github/board.ts";
+import { projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, parseItem, scopeProblem, parseDetail, parseChoices, slimBoard, MAX_ITEMS, isItemNode, isBoardAnswer, isProjectListAnswer, isDetailAnswer, isChoicesAnswer, isStoredBoard, boardOf } from "../defaults/mods/github/board.ts";
+import { parseFilter, filterTokens, matches, iterationAt } from "../defaults/mods/github/board-filter.ts";
+import { layout, columnField, grid, find, step, pickUp, carry, carried, drop } from "../defaults/mods/github/board-layout.ts";
+import { apply, overlay, valueFor, setFieldMutation, positionMutation, archiveMutation, addDraftMutation, convertMutation, toggleMutation } from "../defaults/mods/github/board-edits.ts";
+import { cardFields, editableFields, initials, valueText } from "../defaults/mods/github/board-cards.ts";
 import { merge, parse, prune, fit, entryFor, LIMITS, VERSION } from "../defaults/mods/github/cache.ts";
 
 const dir = `${import.meta.dir}/fixtures/github-projects`;
