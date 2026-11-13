@@ -609,8 +609,8 @@ export const OUT = {
 
 // Whole families of mod commands that stay out (the test knows where each one's list lives).
 export const OUT_FAMILIES = {
-  "git": "the git window's key table (git/keys.js): each acts on the window's selection; its ? and menus list them",
-  "notifications": "the open overview's keys (open.js COMMAND_KEYS): they act on its selection; its key bar lists them",
+  "git": "the git window's key table (git/keys.ts): each acts on the window's selection; its ? and menus list them",
+  "notifications": "the open overview's keys (open.ts COMMAND_KEYS): they act on its selection; its key bar lists them",
 } as const;
 
 /** The commands OUT names: what stays out (data looks a command up here). */
