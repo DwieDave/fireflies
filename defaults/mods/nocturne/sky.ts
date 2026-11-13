@@ -593,8 +593,16 @@ export default class Sky {
     // A dock being made (dock.ts) that has appeared: its id, then what was asked of it.
     if (dockMaking()) cx.timer.after(0, () => adoptDock());
 
-    // A shell asked for in the dock that has appeared: pinned to the shelf.
-    if (shellWaiting()) cx.timer.after(0, () => pinDockShell());
+    // A shell asked for in the dock: pinned to the shelf once its terminal runs.
+    // Its pane shows first, and nothing draws again when the terminal starts,
+    // so the sky looks again shortly while one is awaited (dock.ts gives up after MAKING).
+    if (shellWaiting()) {
+      cx.timer.after(250, (later) => {
+        pinDockShell();
+
+        if (shellWaiting()) later.notify();
+      });
+    }
 
     glint(this, [...jarred, ...kept], cx);
 

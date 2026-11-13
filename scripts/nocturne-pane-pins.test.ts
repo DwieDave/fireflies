@@ -587,7 +587,8 @@ test("a new shell in the dock: tab.new there, and its terminal is pinned once it
   // Its pane shows before its terminal runs: terminal.pin would fail, so it waits.
   kit.pinDockShell();
   expect(commands.length).toBe(1);
-  terminalsNow = [...terminalsNow, { address: "t32", state: "live", labels: {} }];
+  // As the app lists a plain shell: no agent status (null), a program, a title.
+  terminalsNow = [...terminalsNow, { address: "t32", state: "live", labels: {}, status: null, title: "zsh", program: { key: "shell", name: "zsh", shell: true }, floating: false, floating_view: null }];
   kit.pinDockShell();
   expect(commands.at(-1)).toEqual(["terminal.pin", { terminal: "t32", pinned: true }]);
   expect(dockMod.shellWaiting()).toBe(false);
@@ -614,4 +615,11 @@ test("after a restart: the dock is still the dock (its id kept), a docked editor
   expect(dockMod.dock()?.id).toBe("s3");
   expect(kit.jar().filter(pins.onShelf).map((x: any) => x.key).sort()).toEqual(["pane:p77", "t5"]);
   expect(pins.tidy(records(), panesNow, new Map(), 0)!.map((r: any) => r.pane)).toEqual(["p77"]);
+});
+
+test("a plain shell as the app lists it (status null) is a terminal to nocturne: its pin puts a tile on the shelf", () => {
+  terminalsNow = [{ address: "t5", state: "live", labels: { [pins.PIN_LABEL]: "1", [pins.AT_LABEL]: "1" }, status: null, title: "zsh", report: null,
+    program: { key: "shell", name: "zsh", icon: null, tint: true, tile: null, color: null, shell: true, agent: false }, floating: false, floating_view: null, float_views: null }];
+  expect(kit.terminalsNow().map((x: any) => x.address)).toEqual(["t5"]);
+  expect(kit.jar().filter(pins.onShelf).map((x: any) => x.key)).toEqual(["t5"]);
 });
