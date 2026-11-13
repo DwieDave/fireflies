@@ -41,6 +41,11 @@ export const VIEWERS: readonly ViewerKind[] = [
 
 export const viewerFor = (name: string): ViewerKind | null => VIEWERS.find((v) => v.test.test(name)) ?? null;
 
+/** A preview file: one the preview draws and the editor doesn't edit (a
+ *  picture, SVG too, a PDF, a database, a font, a clip): from the files pane
+ *  it opens in the preview pane unless the pane's editor is there (routing.ts). */
+export const isPreviewFile = (name: string): boolean => viewerFor(name)?.other === "system";
+
 /** Markdown files open in the viewer (markdown.open), not the editor. */
 export const isMarkdown = (name: string): boolean => viewerFor(name)?.open === "markdown.open";
 

@@ -661,8 +661,9 @@ test("a click on a file selects it and opens nothing; a double click opens it as
   click("README.md"); click("README.md");
   click("logo.png"); click("logo.png");
   expect(edits).toEqual(["src/m00.rs"]);
-  // Markdown and a picture: tabs of the editor, to look at (no editor in the tab: editor.open beside).
-  expect(commands.map(([c, a]) => [c, a.path, a.look ?? null])).toEqual([["editor.open", "/repo/README.md", true], ["editor.open", "/repo/logo.png", true]]);
+  // Markdown: a tab of the editor, to look at (no editor in the tab: editor.open beside); a
+  // picture: the preview pane (that editor never came up here, so it isn't the files pane's).
+  expect(commands.map(([c, a]) => [c, a.path, a.look ?? null])).toEqual([["editor.open", "/repo/README.md", true], ["preview.open", "/repo/logo.png", null]]);
   // alt-double-click: Markdown as text, a picture in the system's app; a text file is edited either way.
   commands.length = 0; edits.length = 0;
   click("README.md", true); click("README.md", true);
