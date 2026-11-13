@@ -132,7 +132,7 @@ test("GitHub: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("script runner: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/scripts/main.js");
+  const m = await import("../defaults/mods/scripts/main.ts");
   const v: any = surface(m.default, ["onKey", "helpView"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0] });
   opensAndCloses("scripts", (e) => v.onKey(e, cx(), []), () => v.help, () => v.helpView(theme, 300).kids[0]);
 });
