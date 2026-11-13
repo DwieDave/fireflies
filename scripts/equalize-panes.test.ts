@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { SCOPES, rows, shortcut } from "../defaults/mods/equalize-panes/scopes.js";
+import { SCOPES, rows, shortcut } from "../defaults/mods/equalize-panes/scopes.ts";
 
 test("each row runs pane.equalize with its scope and the popup's pane; the grid row gridifies", () => {
   expect(rows("p3", 4).map((r) => [r.command, r.args])).toEqual([
