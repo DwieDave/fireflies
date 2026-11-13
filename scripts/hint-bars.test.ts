@@ -48,7 +48,7 @@ const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: 
 (globalThis as any).window = { paint_path: () => new El() };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const gh = await import("../defaults/mods/github/kit.js");
+const gh = await import("../defaults/mods/github/kit.ts");
 
 test("GitHub window: ? keys sits after the right-aligned note, at the bar's end", () => {
   const right = new El().child("loaded 2 min ago");

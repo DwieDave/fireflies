@@ -35,3 +35,26 @@ export function toMap<T>(json: JsonMap<T>): Map<string, T> {
 
 /** A Map as the JSON object it is written as. */
 export const toJson = <T>(map: ReadonlyMap<string, T>): JsonMap<T> => Object.fromEntries(map);
+
+/** A JSON value, keys and all as they come: what the cache's scrub walks. */
+export type Json = string | number | boolean | null | readonly Json[] | JsonObject;
+
+/** A JSON object whose keys aren't known (any JSON). */
+export interface JsonObject {
+  readonly [key: string]: Json | undefined;
+}
+
+/** Any JSON value (a finite number, a string, a boolean, null, and lists and objects of them). */
+export function isJson(value: unknown): value is Json {
+  if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+
+  if (typeof value === "number") return Number.isFinite(value);
+
+  if (isList(value)) return value.every((item) => isJson(item));
+
+  return isObject(value) && Object.keys(value).every((key) => isJson(Object.getOwnPropertyDescriptor(value, key)?.value));
+}
+
+export const isJsonList = (value: Json): value is readonly Json[] => Array.isArray(value);
+
+export const isJsonObject = (value: Json): value is JsonObject => typeof value === "object" && value !== null && !Array.isArray(value);

@@ -15,7 +15,7 @@
 // keys.json can bind github.prs / .actions / .projects / .refresh / .diff / .fork / .new-pr / .run-workflow (to a shown window).
 //   ?           every key        esc q  close the window (from its top level)
 //
-// Everything goes through the gh CLI (gh.js): its login, no token here.
+// Everything goes through the gh CLI (gh.ts): its login, no token here.
 // Live: a tick every second redraws what's running (timers, sweeps) and
 // reads GitHub again when the shown tab wants it: every few seconds while a
 // run, job or check is moving, every minute when all is still, never while
@@ -38,17 +38,17 @@
 import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
-import { repoOf, viewRepo } from "./gh.js";
+import { repoOf, viewRepo } from "./gh.ts";
 import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
-import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
-import * as store from "./store.js";
-import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
+import { lookup, entryFor, repoKey, slimRepo } from "./cache.ts";
+import * as store from "./store.ts";
+import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
-import Prs from "./prs.js";
-import Actions from "./actions.js";
-import Projects from "./projects.js";
+import Prs from "./prs.ts";
+import Actions from "./actions.ts";
+import Projects from "./projects.ts";
 
 export const WINDOW = "github.window"; // { id, beat }: the open window, for the toggle
 // { folder, on, head, at }: the git window's branch for a new pull request (its branches panel),
@@ -203,7 +203,7 @@ export default class GitHub extends View {
         if (to.child) next.parent = null; // from the parent, p goes back to the fork, not up again
         this.note = null;
         // From the cache when this folder showed it before.
-        this.show(next, cx, store.peek()?.repos?.[repoKey(next)] ?? null);
+        this.show(next, cx, store.peek()?.repos.get(repoKey(next)) ?? null);
         this.dirty = true;
       } catch (e) {
         this.note = { text: String(e?.message ?? e), tone: "failed", at: Date.now() };

@@ -1,7 +1,7 @@
 // Which GitHub repo a folder is, from its git remotes, without asking gh to
 // guess: `gh repo view` in a fork with an `upstream` remote answers the
 // parent. Plain functions over `git config` output: no herdr imports, so
-// scripts/ tests it. gh.js reads the config and asks GitHub about the pick.
+// scripts/ tests it. gh.ts reads the config and asks GitHub about the pick.
 //
 // The order:
 //   1. gh's own default, if the user set one (`gh repo set-default` writes
@@ -11,7 +11,7 @@
 //   3. origin;
 //   4. the other remotes, in the config's order.
 // Only remotes on GitHub count (github.com, its ssh host aliases, *.ghe.com,
-// hosts named github…); none at all means gh.js lets gh pick as before.
+// hosts named github…); none at all means gh.ts lets gh pick as before.
 
 /** A remote's GitHub repo. */
 export interface RemoteRepo {

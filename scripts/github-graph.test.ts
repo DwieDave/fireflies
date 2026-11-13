@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { route, reduceNeeds, NW, NH } from "../defaults/mods/github/wires.js";
+import { route, reduceNeeds, NW, NH } from "../defaults/mods/github/wires.ts";
 import { jobColumns, jobParents, needsFromWorkflow } from "../defaults/mods/github/model.ts";
 
 type Seg = { x: number; y: number; w: number; h: number; tone: string };

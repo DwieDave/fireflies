@@ -52,7 +52,7 @@ const work: Promise<unknown>[] = [];
 const cx: any = { spawn: (f: Function) => { work.push(Promise.resolve(f(cx))); }, notify() {}, stop_propagation() {} };
 const settle = async () => { while (work.length) await work.shift(); };
 
-const { default: Projects } = await import("../defaults/mods/github/projects.js");
+const { default: Projects } = await import("../defaults/mods/github/projects.ts");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {
@@ -341,7 +341,10 @@ test("what's cached comes back on the next opening, edits on their way don't", a
   const { tab } = await open();
   gh.fail = false;
   press(tab, "a"); tab.draft.set_value("temp one"); tab.draft.fire("submit");
-  const snap = JSON.parse(JSON.stringify(tab.snapshot()));
+  // Through the cache file and back, as the next opening reads it.
+  const { merge, parse, entryFor } = await import("../defaults/mods/github/cache.ts");
+  const repo = { owner: "o", name: "r", full: "o/r", root: "/r", on: null };
+  const snap = parse(merge("", "/r", { ...entryFor(repo), projects: tab.snapshot() })).repos.get("|o/r")?.projects;
   await settle();
   const again = new Projects(makeApp(), {});
   again.hydrate(snap);
