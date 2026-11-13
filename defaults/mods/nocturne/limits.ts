@@ -356,15 +356,18 @@ const when = (s: string | null | undefined) => (s ? Date.parse(s) : null);
 type Windows = Pick<Usage, "session" | "week" | "scoped" | "plan">;
 
 /** Claude's endpoint's answer, the fields read here. */
-const isClaudeWindow = object({}, { utilization: isNumber, resets_at: nullable(isString) });
+// Every field may be missing or null: the endpoint sends null for what doesn't apply (a limit's
+// `scope` is null on the session and the whole-week limits), and one field in another shape
+// must not cost the whole reading.
+const isClaudeWindow = object({}, { utilization: nullable(isNumber), resets_at: nullable(isString) });
 
 type ClaudeWindow = Guarded<typeof isClaudeWindow>;
 
 const isClaudeLimit = object({}, {
-  kind: isString,
-  percent: isNumber,
+  kind: nullable(isString),
+  percent: nullable(isNumber),
   resets_at: nullable(isString),
-  scope: object({}, { model: object({}, { display_name: isString }) }),
+  scope: nullable(object({}, { model: nullable(object({}, { display_name: nullable(isString) })) })),
 });
 
 const isClaudeAnswer = object({}, {
@@ -372,20 +375,20 @@ const isClaudeAnswer = object({}, {
   seven_day: nullable(isClaudeWindow),
   seven_day_opus: nullable(isClaudeWindow),
   seven_day_sonnet: nullable(isClaudeWindow),
-  limits: arrayOf(isClaudeLimit),
+  limits: nullable(arrayOf(isClaudeLimit)),
 });
 
 /** Claude's answer as the windows the views draw. `used` is 0–100, `length` ms. */
 function claudeWindows(d: Guarded<typeof isClaudeAnswer>, plan: readonly string[]): Windows {
   const win = (x: ClaudeWindow | null | undefined, length: number): UsageWindow | null =>
-    (x?.utilization !== undefined ? { used: x.utilization, resets: when(x.resets_at), length } : null);
+    (isNumber(x?.utilization) ? { used: x.utilization, resets: when(x.resets_at), length } : null);
 
   const scoped: ScopedWindow[] = [];
 
   for (const l of d.limits ?? []) {
     const name = l.kind === "weekly_scoped" ? l.scope?.model?.display_name : undefined;
 
-    if (name !== undefined && l.percent !== undefined) scoped.push({ name, used: l.percent, resets: when(l.resets_at), length: 7 * DAY });
+    if (isString(name) && isNumber(l.percent)) scoped.push({ name, used: l.percent, resets: when(l.resets_at), length: 7 * DAY });
   }
 
   // Older answers name the model windows as fields instead.
@@ -495,7 +498,7 @@ export async function readUsage(p: ProviderId = provider().id): Promise<Reading>
 
   const w = windows(body, plan);
 
-  return w ? { state: "ok", ...w, at: host.now() } : { state: "error", message: "the usage endpoint's answer wasn't JSON" };
+  return w ? { state: "ok", ...w, at: host.now() } : { state: "error", message: "the usage endpoint's answer wasn't in a shape this build reads" };
 }
 
 /** A window's short name from its length: "5h", "week", "30d". */

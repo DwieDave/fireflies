@@ -117,3 +117,31 @@ test("the default place is ~/.cache/herdr-app (XDG_CACHE_HOME respected)", async
   await refreshUsage();
   expect(existsSync(join(root, "xdgc/herdr-app/usage-claude.json"))).toBe(true);
 });
+
+// The endpoint's answer as it came on 2026-11-13: null for what doesn't apply (a limit's `scope` on
+// the session and whole-week limits, the model windows, fields this build doesn't read). A guard
+// that asked for an object there refused the whole answer ("couldn't read").
+test("claude: the real answer's nulls (a limit without a scope, absent windows) still read", async () => {
+  const real = {
+    five_hour: { utilization: 81.0, resets_at: "2026-11-13T13:30:00.063213+00:00", limit_dollars: null, locked_reason: null },
+    seven_day: { utilization: 48.0, resets_at: "2026-11-16T17:00:00.063233+00:00", limit_dollars: null, locked_reason: null },
+    seven_day_oauth_apps: null, seven_day_opus: null, seven_day_sonnet: null, pace: null, indicator: null,
+    extra_usage: { is_enabled: false, monthly_limit: null, utilization: null },
+    limits: [
+      { kind: "session", group: "session", percent: 81, severity: "warning", resets_at: "2026-11-13T13:30:00.063213+00:00", scope: null, is_active: true },
+      { kind: "weekly_all", group: "weekly", percent: 48, severity: "normal", resets_at: "2026-11-16T17:00:00.063233+00:00", scope: null, is_active: false },
+      { kind: "weekly_scoped", group: "weekly", percent: 30, severity: "normal", resets_at: "2026-11-16T17:00:00.063416+00:00", scope: { model: { id: null, display_name: "Fable" }, surface: null }, is_active: false },
+      { kind: "weekly_scoped", percent: null, resets_at: null, scope: { model: null, surface: null } },
+    ],
+  };
+  const before = readFileSync(join(bin, "curl"), "utf8");
+  stand("curl", `printf '%s\\n@code\\t200' '${JSON.stringify(real)}'`);
+
+  try {
+    const r = await readUsage("claude");
+    expect(r.state).toBe("ok");
+    expect(r).toMatchObject({ session: { used: 81 }, week: { used: 48 }, scoped: [{ name: "Fable", used: 30 }] });
+  } finally {
+    writeFileSync(join(bin, "curl"), before);
+  }
+});
