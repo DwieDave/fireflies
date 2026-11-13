@@ -1,5 +1,5 @@
-// The usage limits' readers (nocturne/limits.js, the same file as
-// nocturne-usage/limits.js): what they ask, and when they don't. The real
+// The usage limits' readers (nocturne/limits.ts, the same file as
+// nocturne-usage/limits.ts): what they ask, and when they don't. The real
 // shell scripts run, with stand-in `security`, `curl` and `cat`-able login
 // files on PATH and HOME, so no request leaves the machine. Its own process:
 // it stands in for "herdr".
@@ -31,15 +31,15 @@ mock.module("herdr", () => ({
     return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
   },
 }));
-const { readUsage, refreshUsage, lastUsage, usageNote } = await import("../defaults/mods/nocturne/limits.js");
+const { readUsage, refreshUsage, lastUsage, usageNote } = await import("../defaults/mods/nocturne/limits.ts");
 const cache = join(root, "cache");
 
 const asked = () => (existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n").filter(Boolean) : []);
 beforeEach(() => { rmSync(calls, { force: true }); rmSync(cache, { recursive: true, force: true }); env = { HERDR_USAGE_DIR: cache }; for (const k of Object.keys(store)) delete store[k]; });
 
-test("the two limits.js copies are the same file", () => {
-  const a = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne/limits.js`, "utf8");
-  const b = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne-usage/limits.js`, "utf8");
+test("the two limits.ts copies are the same file", () => {
+  const a = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne/limits.ts`, "utf8");
+  const b = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne-usage/limits.ts`, "utf8");
   expect(a).toBe(b);
 });
 
@@ -88,7 +88,7 @@ test("the machine's file: one app asks and writes it, another app adopts it with
   expect([rec.answer.state, rec.fails, rec.until]).toEqual(["ok", 0, 0]);
   expect(existsSync(join(cache, "usage-claude.json.lock"))).toBe(false);
   // Another app: its own shared() store, the same file.
-  const other: any = await import(`../defaults/mods/nocturne/limits.js?other=${Math.random()}`);
+  const other: any = await import(`../defaults/mods/nocturne/limits.ts?other=${Math.random()}`);
   const mine: Record<string, unknown> = {};
   other.setHost({ shared: (k: string) => mine[k] ?? null, setShared: (k: string, v: unknown) => { mine[k] = v; return null; } });
   await other.refreshUsage();

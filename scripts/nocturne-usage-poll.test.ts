@@ -1,5 +1,5 @@
-// How many usage requests leave this machine (nocturne/limits.js, the same
-// file as nocturne-usage/limits.js): one reading per machine, at the pace of
+// How many usage requests leave this machine (nocturne/limits.ts, the same
+// file as nocturne-usage/limits.ts): one reading per machine, at the pace of
 // what's happening, backing off after a 429. A simulated hour: each "app" is
 // its own module instance with its own shared() store (as each Fireflies app is),
 // all on one fake file store (the machine's ~/.cache/herdr-app) and one fake
@@ -41,9 +41,9 @@ mock.module("herdr", () => ({
 }));
 
 type Look = { active: boolean; working?: boolean; panes?: number };
-/** An app: its own limits.js instance and shared() store, and what its window shows. */
+/** An app: its own limits.ts instance and shared() store, and what its window shows. */
 async function app(name: string, look: Look) {
-  const m: any = await import(`../defaults/mods/nocturne/limits.js?app=${name}-${Math.random()}`);
+  const m: any = await import(`../defaults/mods/nocturne/limits.ts?app=${name}-${Math.random()}`);
   const store: Record<string, unknown> = {};
   const tab = "tb1";
   m.setHost({
@@ -153,7 +153,7 @@ test("refresh: at once, then at most every 10 s, however often it's pressed", as
 });
 
 test("the back-off grows to its cap and Retry-After 0 means none given", async () => {
-  const { backoff, BACKOFF, CAP } = await import("../defaults/mods/nocturne/limits.js");
+  const { backoff, BACKOFF, CAP } = await import("../defaults/mods/nocturne/limits.ts");
   expect([1, 2, 3, 4, 5, 6, 7].map((n) => backoff(n) / 60_000)).toEqual([5, 10, 20, 40, 80, 120, 120]);
   expect(backoff(1, 0)).toBe(BACKOFF);
   expect(backoff(9, 30)).toBe(30_000);

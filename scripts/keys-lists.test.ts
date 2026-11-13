@@ -213,7 +213,7 @@ test("preview: ? lists every key for each way it shows a file", () => {
   }
 });
 
-const usage = await import("../defaults/mods/nocturne-usage/main.js");
+const usage = await import("../defaults/mods/nocturne-usage/main.ts");
 test("usage: ? lists every key; the toolbar's last control is ? keys", () => {
   const keys = taken(() => { const u = surface(usage.default, ["key"], { keysShown: false }); return (e, cx) => u.key(e, cx); });
   expect(keys).toEqual(expect.arrayContaining(["r", "p", "?"]));
