@@ -202,7 +202,7 @@ test("+ new menu: the floating panels' letters pick nothing there (g l d h)", ()
 });
 
 test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys and the palette", () => {
-  // The palette lists every panel, floating ones too (palette.js openEntries goes over panels()).
+  // The palette lists every panel, floating ones too (palette-open.ts openEntries goes over panels()).
   const all = panels().map((p: any) => p.id);
   for (const id of ["git", "diff", "worktrees", "github"]) expect(all).toContain(id);
   // The strip's git ▾ (menu.js, tab "git"): each runs its command.

@@ -24,10 +24,10 @@
 // in the field and lists inside it; shift-tab goes one folder up; esc leaves
 // the name for the list, else closes. A click on a row picks it.
 
-import { div, svg } from "gpui-kit";
-import type { AsyncContext, Context, Element, MouseButtonEvent } from "gpui-kit";
+import { div } from "gpui-kit";
+import type { AsyncContext, Context, Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
+import { v_flex, InputState, ScrollHandle } from "gpui-base";
 import type { ScrollHandle as Scroll } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import type { ExecResult, SpaceInfo, Theme } from "herdr";
@@ -35,8 +35,10 @@ import { isString, nullable, object, readShared, readSharedList, sharedKey, shar
 import { dither, eyebrow, spaceFolder } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { isDock } from "./dock.ts";
-import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.ts";
+import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail } from "./folderlist.ts";
 import type { FolderRow, Near, RankedRow, RowFrom } from "./folderlist.ts";
+import { FOOT, HEAD, ROW, fieldBox, pickRow, pickerFoot, pickerHead, sayNow } from "./newspace-draw.ts";
+import type { PickRow } from "./newspace-draw.ts";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";
@@ -48,20 +50,12 @@ const OPEN_KEY = sharedKey(OPEN, nullable(object({ id: isString }, { space: null
 
 // Wide enough for a name, its path and its tag, and the footer's words beside its keys.
 export const WIDTH = 520;
-const ROW = 26;
 const SEC = 24;
-const HEAD = 34;
-const FOOT = 28;
 const LIST_MAX = 12 * ROW;
 const CONTEXT = "NewSpace";
 const TAB = "newspace::tab";
 const TAB_BACK = "newspace::tab_back";
 const ESC = "newspace::escape";
-const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
-const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
-
-/** A long name in the footer: its start. */
-const short = (n: string) => (n.length > 22 ? `${n.slice(0, 20)}…` : n);
 
 // A folder's subfolders, "::", then the ones that are checkouts (and ./.git when it is one).
 export const LIST_SCRIPT = 'cd "$1" 2>/dev/null || exit 1; find -L . -mindepth 1 -maxdepth 1 -type d 2>/dev/null; echo ::; find -L . -mindepth 2 -maxdepth 2 -name .git 2>/dev/null; if [ -e .git ]; then echo ./.git; fi; exit 0';
@@ -129,12 +123,6 @@ export const pickerOpen = (): boolean => {
   return Boolean(open?.id) && !open?.space;
 };
 
-/** A row of the picker: a folder, "browse…", or "no folder". */
-type PickRow =
-  | (RankedRow & { readonly id: string; readonly kind: "folder" })
-  | { readonly id: string; readonly kind: "browse"; readonly name: string; readonly say: string }
-  | { readonly id: string; readonly kind: "loose"; readonly name: string; readonly say: string };
-
 /** A folder's subfolders (path typing): their names, the checkouts among them, whether it could be listed. */
 interface Listing {
   readonly names: string[];
@@ -169,6 +157,12 @@ const overlayNow = (): string | undefined => {
 
   return isPickerProps(p) ? p.overlay : undefined;
 };
+
+/** The list's children, and which of them is the cursor's row (-1: none). */
+interface ListItems {
+  readonly items: Element[];
+  readonly cursorChild: number;
+}
 
 export default class NewSpace {
   static bound = false;
@@ -628,88 +622,36 @@ export default class NewSpace {
     return false;
   }
 
-  // ---- drawing
+  // ---- drawing (newspace-draw.ts)
 
-  /** A row's name, the matched letters in the accent. */
-  nameText(t: Theme, r: { readonly name: string; readonly hits?: readonly number[] }, on: boolean): Element {
-    const base = on ? t.foreground : t.muted;
-    const hits = r.hits ?? [];
+  /** The pointer over row `i` takes the cursor (one resting where the list opens doesn't move). */
+  hoverRow(i: number, cx: Context): void {
+    if (this.cursor !== i) {
+      this.cursor = i;
+      cx.notify();
+    }
+  }
 
-    if (!hits.length) return div().flex_none().text_color(base).child(r.name);
-
-    return h_flex().flex_none().children([...r.name].map((ch, i) => div().text_color(hits.includes(i) ? t.accent : base).child(ch)));
+  /** A click on row `i` picks it. */
+  pickRow(i: number, cx: Context): void {
+    this.cursor = i;
+    this.enter(false, cx);
   }
 
   row(t: Theme, r: PickRow, i: number, on: boolean): Element {
-    const folder = r.kind === "folder" ? r : null;
-    const icon = r.kind === "browse" ? "search" : r.kind === "loose" ? "square" : folder?.from === "here" ? "terminal" : folder?.tag === "worktree" ? "git-branch" : "folder";
-    const tag = folder?.tag ?? "";
-    const tagColor = tag === "now" ? t.accent : tag && !["git", "worktree"].includes(tag) ? t.done : t.dim;
-    // Where the folder is (its parent's path, the end of it in the room the name and
-    // tag leave); a typed path's own subfolders need none: the heading says it.
-    const room = 58 - r.name.length - tag.length;
-    const where = !folder || folder.from === "path" ? "" : folder.from === "self" || folder.from === "typed" ? tilde(folder.path, this.home) : `${tilde(parentOf(folder.path), this.home)}/`;
-    const words = folder ? (room >= 10 ? tail(where, room) : "") : r.kind === "folder" ? "" : r.say;
-
-    return h_flex().id(`ns-row-${i}`).relative().h(ROW).flex_none().px(12).gap(10).items_center().text_size(11)
-      .on_mouse_down("left", stop)
-      // The pointer moving over a row takes the cursor; one resting where the list
-      // opens doesn't (enter would pick the row under it, not "here").
-      .on_mouse_move((_e, cx) => {
-        if (this.cursor !== i) {
-          this.cursor = i;
-          cx.notify();
-        }
-      })
-      .on_click((_e, cx) => {
-        this.cursor = i;
-        this.enter(false, cx);
-      })
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-      .child(svg(chrome(icon)).size(12).flex_none().relative().text_color(on || !folder ? t.accent : t.ansi8))
-      .child(div().relative().flex_none().child(this.nameText(t, r, on)))
-      .child(div().relative().flex_1().min_w(0).truncate().text_color(t.dim).child(words))
-      .when(Boolean(tag), (el) => el.child(div().relative().flex_none().text_color(tagColor).child(tag)));
+    return pickRow(t, r, i, on, this.home, this);
   }
 
   /** What enter does now, in words (the footer). */
   say(all: readonly PickRow[]): string {
-    if (this.error) return this.error;
-
-    if (this.naming) {
-      const n = this.nameInput?.value().trim() ?? "";
-      const f = this.naming.folder;
-
-      return `"${short(n || (f ? folderName(f, this.home) : "~"))}" in ${f ? tail(tilde(f, this.home), 26) : "~"}`;
-    }
-
-    const r = all[this.cursor];
-
-    if (!r) return isPath(this.query) ? `in ${tail(this.query, 32)}` : "";
-
-    if (r.kind === "browse") return "pick a folder in the system's browser";
-
-    if (this.space) {
-      if (r.kind === "loose") return `${this.space.name} detaches, back to ~`;
-
-      if (r.from === "now") return `${this.space.name} stays where it is`;
-
-      return `${this.space.name} moves to ${tail(tilde(r.path, this.home), 24)}`;
-    }
-
-    if (r.kind === "loose") return "a space with no folder, in ~";
-
-    return `"${short(r.name)}" in ${tail(tilde(r.path, this.home), 26)}`;
+    return sayNow({ error: this.error, naming: this.naming, name: this.nameInput?.value().trim() ?? "", cursor: this.cursor, query: this.query, space: this.space, home: this.home }, all);
   }
 
-  render(): Element {
-    const t = theme();
-    const view = this.rows(null);
+  /** The list's children: the rows with their section heads, the rule before
+   *  browse and no folder; and which child the cursor's row is. */
+  listItems(t: Theme, view: FolderView & { readonly all: PickRow[] }): ListItems {
     const { all, path, asking } = view;
     const dir = view.dir ?? "";
-
-    this.cursor = Math.min(this.cursor, Math.max(0, all.length - 1));
-
     const items: Element[] = [];
     let lastFrom: RowFrom | "end" | null = null;
     let cursorChild = -1;
@@ -738,6 +680,18 @@ export default class NewSpace {
       items.push(this.row(t, r, i, i === this.cursor && !this.naming));
     });
 
+    return { items, cursorChild };
+  }
+
+  render(): Element {
+    const t = theme();
+    const view = this.rows(null);
+    const { all } = view;
+
+    this.cursor = Math.min(this.cursor, Math.max(0, all.length - 1));
+
+    const { items, cursorChild } = this.listItems(t, view);
+
     // The list's children are its rows and its section heads and rule, and
     // scroll_to_item counts children: the cursor's row goes by its child
     // index, whole; on the first row the list's top (its head) shows too.
@@ -746,17 +700,8 @@ export default class NewSpace {
       this.scroll?.scroll_to_item(this.cursor === 0 ? 0 : cursorChild);
     }
 
-    const title = this.space ? `attach ${this.space.name} to` : "new space";
-    const hint = (k: string, w: string) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(w));
     const cursorRow = all[this.cursor];
     const full = this.naming || !cursorRow || cursorRow.kind !== "folder" ? (this.naming ? "" : ghost(this.query, null, this.home)) : ghost(this.query, cursorRow, this.home);
-    const g = full.length > 16 ? `${full.slice(0, 14)}…/` : full;
-
-    const field = (state: InputState | null, label: string | null) => h_flex().id(label ? "ns-name-field" : "ns-field").flex_1().min_w(0).h(22).px(6).gap(6).items_center()
-      .border(1).border_color(t.accent).bg(t.background)
-      .when(Boolean(label), (el) => el.child(div().flex_none().text_size(11).text_color(t.dim).child(label ?? "")))
-      .when(Boolean(state), (el) => (state ? el.child(Input.new(state).flex_1().h_full().text_size(11).text_color(t.foreground)) : el));
-
     const naming = this.naming;
     const scroll = this.scroll;
     const list = v_flex().id("ns-list").py(2).max_h(LIST_MAX + 4 * SEC).overflow_y_scroll();
@@ -764,6 +709,11 @@ export default class NewSpace {
     const body = naming
       ? v_flex().id("ns-naming").py(4).child(this.row(t, { id: "in", kind: "folder", name: "in", path: naming.folder ?? this.home, from: "self", tag: "", hits: [] }, 0, false))
       : (scroll ? list.track_scroll(scroll) : list).children(items);
+
+    const escape = (cx: Context) => {
+      this.escape(cx);
+      cx.notify();
+    };
 
     return v_flex().id("nocturne-newspace").w_full().bg(t.background).border(1).border_color(t.ansi0)
       .key_context(CONTEXT)
@@ -775,35 +725,15 @@ export default class NewSpace {
         this.tab(true, cx);
         cx.notify();
       })
-      .on_action(ESC, (_e, cx) => {
-        this.escape(cx);
-        cx.notify();
-      })
+      .on_action(ESC, (_e, cx) => escape(cx))
       .on_key_down((e, cx) => {
         if (!this.key(e, cx)) return;
 
         cx.stop_propagation();
         cx.notify();
       })
-      .child(h_flex().relative().h(HEAD).flex_none().px(12).gap(8).items_center().text_size(11)
-        .child(div().flex_none().text_color(t.foreground).child(title))
-        .child(naming ? field(this.nameInput, "name") : field(this.input, null))
-        .child(div().id("ns-esc").flex_none().px(5).h(18).flex().items_center().text_color(t.muted)
-          .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-          .on_mouse_down("left", stop)
-          .on_click((_e, cx) => {
-            this.escape(cx);
-            cx.notify();
-          })
-          .child("esc"))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
+      .child(pickerHead(t, this.space ? `attach ${this.space.name} to` : "new space", naming ? fieldBox(t, this.nameInput, "name") : fieldBox(t, this.input, null), escape))
       .child(body)
-      .child(h_flex().id("ns-foot").relative().h(FOOT).flex_none().px(12).gap(12).items_center().text_size(11)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
-        .child(div().id("ns-say").flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : t.muted).child(this.say(all)))
-        .when(Boolean(g), (el) => el.child(hint("tab", g)))
-        .when(!g && !naming, (el) => el.child(hint("enter", this.space ? "attach" : "make")))
-        .when(!g && !naming && !this.space, (el) => el.child(hint("⌘enter", "name it")))
-        .when(Boolean(naming), (el) => el.child(hint("enter", "make")).child(hint("esc", "back"))));
+      .child(pickerFoot(t, { say: this.say(all), error: Boolean(this.error), ghost: full.length > 16 ? `${full.slice(0, 14)}…/` : full, naming: Boolean(naming), attaching: Boolean(this.space) }));
   }
 }

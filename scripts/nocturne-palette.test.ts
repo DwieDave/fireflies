@@ -57,7 +57,8 @@ mock.module("gpui-base", () => ({
 globalThis.window = { paint_path: () => el } as any;
 globalThis.localStorage = { getItem: () => null, setItem: () => {} } as any;
 
-const { default: Palette, OUT, OUT_FAMILIES, keyOf } = await import("../defaults/mods/nocturne/palette.ts");
+const { default: Palette } = await import("../defaults/mods/nocturne/palette.ts");
+const { OUT, OUT_FAMILIES, keyOf } = await import("../defaults/mods/nocturne/palette-entries.ts");
 const cx: any = { notify() {}, focus_handle: () => ({}), timer: { after() {} }, spawn() {}, stop_propagation() {} };
 
 function open(query = "") {
