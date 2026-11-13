@@ -45,6 +45,3 @@ defaults/mods/notifications/claude.ts
 defaults/mods/notifications/claude.ts questionStep
 defaults/mods/preview/diff.ts parse
 defaults/mods/preview/viewer.ts
-defaults/mods/scripts/main.ts
-defaults/mods/scripts/main.ts onKey
-defaults/mods/scripts/main.ts render

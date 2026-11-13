@@ -242,7 +242,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };
   const make = (state: Record<string, any>) => () => {
-    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], ...state });
+    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], items: [run, row], ...state });
     return (e: any, cx: any) => d.onKey(e, cx, [run, row]);
   };
   // ctrl-x is cmd-x off macOS (the list names the platform's own).
@@ -252,7 +252,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   // The output row spells its keys in its words: name them as the list does.
   const flat: [string, string][] = list.flatMap(([k, w]: [string, string]) => k === "output" ? [[w.split("·").map((x) => x.trim().split(" ").filter((y) => !/^[a-z]{4,}$/.test(y)).join(" ")).join(" "), ""]] : [[k, w]]);
   expect(unnamed(flat, keys)).toEqual([]);
-  const d: any = surface(deck.default, ["foot", "hint", "badge"], { help: false, output: null, typing: false, query: "", folder: "/f" });
+  const d: any = surface(deck.default, ["foot", "hint", "badge"], { help: false, output: null, typing: false, query: "", folder: "/f", asking: null });
   expect(texts(d.foot(theme, run)).slice(-2)).toEqual(["?", "keys"]);
   expect(texts(d.foot(theme, row)).slice(-2)).toEqual(["?", "keys"]);
   expect(texts(d.foot(theme, null)).slice(-2)).toEqual(["?", "keys"]);

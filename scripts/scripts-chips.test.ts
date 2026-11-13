@@ -29,7 +29,8 @@ beforeEach(() => {
 });
 
 const deck = await import("../defaults/mods/scripts/main.ts");
-const { default: Deck, CHIP, CHIPS_W, ASK_MS } = deck;
+const { default: Deck } = deck;
+const { CHIP, CHIPS_W, ASK_MS } = await import("../defaults/mods/scripts/state.ts");
 const { JOBS } = await import("../defaults/mods/scripts/runs.ts");
 
 function open() {
