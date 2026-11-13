@@ -68,7 +68,7 @@ const cx: any = {
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const walk = await import("../defaults/mods/nocturne/walk.ts");
-const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky-plan.ts");
+const { jarPlan, SHELF_PAD, shelfHeight, meadowPlan, MORE_H, JAR } = await import("../defaults/mods/nocturne/sky-plan.ts");
 const { GLOW_SQUARE } = await import("../defaults/mods/nocturne/kit.ts");
 
 beforeEach(() => {
@@ -139,6 +139,55 @@ test("the shelf is its board and its rows of tiles, no caption line under them",
   // a jar holding a firefly and the shelf ends 12 px (its base) under the tiles
   const under = jarPlan([28], shelfHeight(2, 232));
   expect(under.jarH - 12 - under.shelfY).toBe(36);
+});
+
+// ---- the jar's rows, its shelf and the count never collide, at any zoom
+
+const STATES = ["working", "blocked", "idle", "done"];
+const agent = (i: number) => ({ address: `t${i}`, status: STATES[i % 4] });
+type Span = readonly [string, number, number];
+const overlap = (a: Span, b: Span) => a[1] < b[2] && b[1] < a[2];
+
+/** Everything the meadow places as spans (top, bottom), checked against each other. */
+function collisions(jarred: number, free: number, kept: number, zoom: number, px: number): string[] {
+  const list = Array.from({ length: jarred + free }, (_, i) => agent(i));
+  const plan = meadowPlan(list, list.slice(0, jarred), kept, 252, px / zoom);
+  const inJar = new Set(list.slice(0, jarred).map((a) => a.address));
+  const spans: Span[] = plan.placed.map(([a, y, l]: any) => [`lane ${a.address}`, y, y + l]);
+  const out: string[] = [];
+  if (plan.shelfH) {
+    spans.push(["shelf", plan.shelfY, plan.shelfY + plan.shelfH]);
+    // inside the jar's glass, clear of the jar's lanes' halos (a 40 px firefly centered on its lane)
+    if (plan.shelfY + plan.shelfH > plan.jarH - JAR.bottom) out.push("shelf below the glass");
+    for (const [a, y, l] of plan.placed) if (inJar.has(a.address) && y + l + (40 - l) / 2 > plan.shelfY) out.push(`halo of ${a.address} on the shelf`);
+  }
+  if (plan.more) {
+    spans.push(["more", plan.moreY, plan.moreY + MORE_H]);
+    if (plan.jarH && plan.moreY < plan.jarH) out.push("the count inside the jar");
+  }
+  for (const [a, y] of plan.placed) if (!inJar.has(a.address) && plan.jarH && y < plan.jarH) out.push(`${a.address} inside the jar`);
+  for (let i = 0; i < spans.length; i++) for (let j = i + 1; j < spans.length; j++) if (overlap(spans[i], spans[j])) out.push(`${spans[i][0]} x ${spans[j][0]}`);
+  return out;
+}
+
+test("the jar's rows, its shelf and the \"+n more\" line never collide: zoom 0.9, 1.0 and 1.7, roomy and crowded", () => {
+  const bad: string[] = [];
+  for (const zoom of [0.9, 1, 1.7]) {
+    for (const px of [360, 480, 640, 875, 1200]) {
+      for (const jarred of [0, 1, 2, 3]) for (const free of [0, 1, 4, 9, 16]) for (const kept of [0, 1, 6, 7]) {
+        for (const c of collisions(jarred, free, kept, zoom, px)) bad.push(`zoom ${zoom}, ${px} px, jar ${jarred}, free ${free}, tiles ${kept}: ${c}`);
+      }
+    }
+  }
+  expect(bad).toEqual([]);
+});
+
+test("the orchestrator's shot (zoom 1.7): one firefly in the jar, a tile, four more in the grass: the count goes under the jar", () => {
+  const list = Array.from({ length: 5 }, (_, i) => agent(i));
+  const plan = meadowPlan(list, list.slice(0, 1), 1, 252, 400 / 1.7);
+  expect(plan.more).toBeGreaterThan(0);
+  expect(plan.moreY).toBeGreaterThanOrEqual(plan.jarH);
+  expect(plan.shelfY + plan.shelfH).toBeLessThanOrEqual(plan.jarH - JAR.bottom);
 });
 
 // ---- item 3: the walk, agents then the shelf's tiles

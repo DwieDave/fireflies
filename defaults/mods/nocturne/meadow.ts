@@ -10,13 +10,13 @@ import { h_flex, v_flex } from "gpui-base";
 import { terminals, run, hc, settings } from "herdr";
 import type { AgentInfo, Theme } from "herdr";
 import { isTerminal } from "./guards.ts";
-import { ART, WORD, atRest, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
+import { ART, WORD, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { field } from "./inline.ts";
 import { calm, flash, dust, fly as flyPath } from "./flight.ts";
-import { stop, laneReach, shelfHeight, jarPlan, CHECK, SWEEP, FLAP, LAND, JAR, JAR_SIDE, JAR_INSET, NECK, RAIL_NECK, BODY, LID, JAR_BODY, GLINT, SHELF_ABOVE, heldKey } from "./sky-plan.ts";
-import type { Reach, Landing, Placed } from "./sky-plan.ts";
+import { stop, laneReach, meadowPlan, MORE_H, CHECK, SWEEP, FLAP, LAND, JAR, JAR_SIDE, JAR_INSET, NECK, RAIL_NECK, BODY, LID, JAR_BODY, GLINT, heldKey } from "./sky-plan.ts";
+import type { Reach, Landing } from "./sky-plan.ts";
 import { flyActs } from "./sky-keys.ts";
 import { shelfView } from "./shelf.ts";
 import type Sky from "./sky.ts";
@@ -343,73 +343,11 @@ export function meadowView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarre
   const w = sky.field.width / zoom;
   const hgt = sky.field.height / zoom;
   const inJar = new Set(jarred.map((a) => a.address));
-  const free = list.filter((a) => !inJar.has(a.address));
-  const awake = free.filter((a) => !atRest(a));
-  const resting = free.filter(atRest);
-  const ground = hgt - 96; // above the far ridge (hills-rim), so labels stay on clear sky
-  const jarOn = jarred.length > 0 || kept.length > 0;
   const shelfW = w - 2 * JAR_INSET;
-  const shelfH = kept.length ? shelfHeight(kept.length + 1, shelfW) : 0; // + the "+" tile
-  let lane = 40;
-  const restLane = 28;
-  const laneOf = (a: AgentInfo) => (a.status === "idle" ? restLane : lane);
-  const jarNeed = jarOn ? jarPlan(jarred.map(laneOf), shelfH).jarH : 0;
-  const need = jarNeed + awake.length * lane + resting.length * restLane + 16;
-  const placed: Placed[] = [];
-  let more = 0;
-  let jarH = 0;
-  let shelfY = 0;
-
-  if (need <= ground) {
-    // Room to spare: the jar on top (the shelf at its foot), awake ones
-    // spread out under it, the rest settle on the ground.
-    if (jarOn) {
-      const plan = jarPlan(jarred.map(laneOf), shelfH);
-
-      jarred.forEach((a, i) => placed.push([a, plan.ys[i] ?? 0, laneOf(a)]));
-      shelfY = plan.shelfY;
-      jarH = plan.jarH;
-    }
-
-    const top = jarH ? jarH + JAR.gap : 8;
-    const restTop = ground - resting.length * restLane;
-    const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;
-
-    awake.forEach((a, i) => placed.push([a, Math.round(top + i * step), lane]));
-    resting.forEach((a, i) => placed.push([a, restTop + i * restLane, restLane]));
-  } else {
-    // Crowded: one tight list (the jar's first, its shelf whole), then a count.
-    lane = 24;
-
-    const fit = Math.max(1, Math.floor((ground - 8 - (jarOn ? JAR.top + JAR.bottom + JAR.gap - 8 + shelfH : 0)) / lane) - 1);
-    const shown = [...jarred, ...free].slice(0, fit);
-    let y = jarOn ? JAR.top : 8;
-
-    const closeJar = () => {
-      if (kept.length) {
-        shelfY = jarred.length ? y + SHELF_ABOVE : y;
-        y = shelfY + shelfH;
-      }
-
-      jarH = y + JAR.bottom;
-      y = jarH + JAR.gap;
-    };
-
-    shown.forEach((a, i) => {
-      if (i === jarred.length && jarOn) closeJar();
-
-      placed.push([a, y, lane]);
-      y += lane;
-    });
-
-    if (jarOn && !jarH) closeJar();
-
-    more = list.length - shown.length;
-  }
+  const { placed, jarH, shelfY, more, moreY } = meadowPlan(list, jarred, kept.length, w, hgt);
 
   const jarLanes = placed.filter(([a]) => inJar.has(a.address));
   const reaches = laneReach(placed.map(([a, y, l]) => ({ y, h: l, jar: inJar.has(a.address) })));
-  const last = placed.at(-1);
 
   return div().id("meadow").relative().flex_1().min_h(0).w_full()
     .on_size_change((size, cx) => {
@@ -422,7 +360,7 @@ export function meadowView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarre
       ? firefly(sky, t, a, y, l, w - 2 * JAR_INSET, reaches[i]).left(JAR_INSET)
       : firefly(sky, t, a, y, l, w, reaches[i]))))
     .when(kept.length > 0, (el) => el.child(div().absolute().left(JAR_INSET).top(shelfY).w(shelfW).child(shelfView(sky, t, kept, shelfW))))
-    .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(last ? last[1] + last[2] : 8)
+    .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(moreY).h(MORE_H).flex().items_center()
       .map((m) => navRing(t, m, sky.nav("more", "flies", { go: () => run("agent.next") })))
       .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(() => run("agent.next"))

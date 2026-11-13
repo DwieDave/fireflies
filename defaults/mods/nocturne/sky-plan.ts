@@ -7,7 +7,7 @@ import { settings, window as appWindow } from "herdr";
 import type { AgentInfo, PaneInfo, Status } from "herdr";
 import * as herdrAll from "herdr";
 import { isNumber, sharedKey } from "./guard.ts";
-import { GLOW_SQUARE } from "./kit.ts";
+import { GLOW_SQUARE, atRest } from "./kit.ts";
 import type { JarItem } from "./pins.ts";
 import type { NavActs } from "./nav.ts";
 import type { GlowProps } from "./glow.ts";
@@ -253,4 +253,113 @@ export const heldKey = (x: AgentInfo | JarItem): string => ("address" in x ? x.a
 export interface RailTops {
   clock?: number;
   key?: number;
+}
+
+// ---- the meadow's plan: where every lane, the jar, its shelf and the count go
+
+/** The "+n more in the grass" line's height (layout px): its 11 px text with room. */
+export const MORE_H = 16;
+
+/** The meadow laid out (layout px from its top): every lane placed, the jar's
+ *  height (0: none), the shelf's top and height, how many fireflies didn't fit
+ *  and where the line counting them goes (under the last lane, or the jar). */
+export interface MeadowPlan {
+  readonly placed: Placed[];
+  readonly jarH: number;
+  readonly shelfY: number;
+  readonly shelfH: number;
+  readonly more: number;
+  readonly moreY: number;
+}
+
+/** The meadow's room for things, all in layout px. */
+interface Room {
+  readonly list: readonly AgentInfo[];
+  readonly jarred: readonly AgentInfo[];
+  readonly shelfH: number;
+  readonly ground: number;
+}
+
+/**
+ * The sky's meadow (meadow.ts draws it), `w` x `hgt` layout px (the field as
+ * measured, over the zoom): `list` every agent in the sidebar's order,
+ * `jarred` the pinned ones (in the jar at the top), `kept` the tiles on its
+ * shelf (the "+" tile comes on top of them). With room, the jar on top,
+ * awake ones spread under it, resting ones on the ground; crowded, one tight
+ * list and a count of the rest under it, never inside the jar.
+ */
+export function meadowPlan(list: readonly AgentInfo[], jarred: readonly AgentInfo[], kept: number, w: number, hgt: number): MeadowPlan {
+  const room: Room = {
+    list, jarred,
+    shelfH: kept ? shelfHeight(kept + 1, w - 2 * JAR_INSET) : 0,
+    // above the far ridge (hills-rim), so labels stay on clear sky
+    ground: hgt - 96,
+  };
+
+  return roomyPlan(room) ?? crowdedPlan(room);
+}
+
+/** The roomy meadow, or null when it doesn't fit (crowdedPlan). */
+function roomyPlan({ list, jarred, shelfH, ground }: Room): MeadowPlan | null {
+  const inJar = new Set(jarred.map((a) => a.address));
+  const free = list.filter((a) => !inJar.has(a.address));
+  const awake = free.filter((a) => !atRest(a));
+  const resting = free.filter(atRest);
+  const lane = 40;
+  const restLane = 28;
+  const laneOf = (a: AgentInfo) => (a.status === "idle" ? restLane : lane);
+  const jarOn = jarred.length > 0 || shelfH > 0;
+  const jar = jarOn ? jarPlan(jarred.map(laneOf), shelfH) : null;
+
+  if ((jar?.jarH ?? 0) + awake.length * lane + resting.length * restLane + 16 > ground) return null;
+
+  const placed: Placed[] = [];
+
+  jarred.forEach((a, i) => placed.push([a, jar?.ys[i] ?? 0, laneOf(a)]));
+
+  const jarH = jar?.jarH ?? 0;
+  const top = jarH ? jarH + JAR.gap : 8;
+  const restTop = ground - resting.length * restLane;
+  const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;
+
+  awake.forEach((a, i) => placed.push([a, Math.round(top + i * step), lane]));
+  resting.forEach((a, i) => placed.push([a, restTop + i * restLane, restLane]));
+
+  return { placed, jarH, shelfY: jar?.shelfY ?? 0, shelfH, more: 0, moreY: 0 };
+}
+
+/** The crowded meadow: one tight list (the jar's first, its shelf whole), then
+ *  the count of the rest, under the last lane or under the jar, whichever is lower. */
+function crowdedPlan({ list, jarred, shelfH, ground }: Room): MeadowPlan {
+  const lane = 24;
+  const inJar = new Set(jarred.map((a) => a.address));
+  const jarOn = jarred.length > 0 || shelfH > 0;
+  const jarRoom = jarOn ? JAR.top + JAR.bottom + JAR.gap + (jarred.length ? SHELF_ABOVE : 0) + shelfH - 8 : 0;
+  const fit = Math.max(1, Math.floor((ground - 8 - jarRoom - MORE_H) / lane));
+  const shown = [...jarred, ...list.filter((a) => !inJar.has(a.address))].slice(0, fit);
+  const placed: Placed[] = [];
+  let y = jarOn ? JAR.top : 8;
+  let jarH = 0;
+  let shelfY = 0;
+
+  const closeJar = () => {
+    if (shelfH) {
+      shelfY = jarred.length ? y + SHELF_ABOVE : y;
+      y = shelfY + shelfH;
+    }
+
+    jarH = y + JAR.bottom;
+    y = jarH + JAR.gap;
+  };
+
+  shown.forEach((a, i) => {
+    if (i === jarred.length && jarOn) closeJar();
+
+    placed.push([a, y, lane]);
+    y += lane;
+  });
+
+  if (jarOn && !jarH) closeJar();
+
+  return { placed, jarH, shelfY, shelfH, more: list.length - shown.length, moreY: y };
 }
