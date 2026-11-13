@@ -41,6 +41,20 @@ export function toolGround(t, look = TOOL_LOOK) {
   ];
 }
 
+/** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either isn't one. */
+export function mix(a, b, k) {
+  const hex = (c) => (/^#[0-9a-f]{6}$/i.test(String(c)) ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null);
+  const x = hex(a), y = hex(b);
+  if (!x || !y) return a;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A tool's plate under the pointer: on the plate a step brighter than it
+ *  (ansi0 lifted toward ansi8, the text still reads on it); on the ledge ansi0. */
+export function toolHover(t, look = TOOL_LOOK) {
+  return look === "plate" ? mix(t.ansi0, t.ansi8, 0.3) : t.ansi0;
+}
+
 /** A small dithered diamond; `blink` for what needs the person. */
 export function pip(color, size = 6, blink = false) {
   const el = svg(`${ART}/pip.svg`).size(size).flex_none().text_color(color);

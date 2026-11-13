@@ -25,7 +25,7 @@ import { theme, terminals, nextCommand, shared, keys, layout, run, settings, pro
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
 import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.js";
-import { ART, dither, stop, toolGround } from "./kit.js";
+import { ART, dither, stop, toolGround, toolHover } from "./kit.js";
 
 const POLL = 1500;
 // Room after the bell, layout px: the main block's side padding, so its edge
@@ -112,7 +112,7 @@ export default class Bell {
       .children(toolGround(t))
       .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(open ? t.foreground : t.muted).cursor_pointer()
         .on_size_change((size) => fit(size.width))
-        .hover((s) => s.bg(t.ansi0).text_color(t.foreground))
+        .hover((s) => s.bg(toolHover(t)).text_color(t.foreground))
         // No tooltip while open: it would sit on the drop-down.
         .when(!open, (el) => el.tooltip(tip))
         // As the strip's buttons (nocturne/tabs.js tool): the click goes by

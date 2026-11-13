@@ -34,7 +34,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
-import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, TOOL_LOOK } from "./kit.js";
+import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.js";
@@ -341,7 +341,7 @@ export default class Tabs {
   tool(t, id, on, tip, action, ...kids) {
     return h_flex().id(id).relative().flex_none().h(24).px(7).gap(5).items_center().text_size(11)
       .text_color(on ? t.foreground : t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(toolHover(t)))
       .when(Boolean(tip), (el) => el.tooltip(tip))
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = { e, on }; })
       .on_click(() => action(this.press?.e, Boolean(this.press?.on)))

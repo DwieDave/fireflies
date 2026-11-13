@@ -15,7 +15,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, shared, layout, run, settings } from "herdr";
-import { dither, dropBelow, navRing, toolGround } from "./kit.js";
+import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { CURSOR } from "./nav.js";
 
@@ -49,7 +49,7 @@ export default class NewButton {
     const ring = shared(CURSOR)?.region === "new";
     const button = h_flex().id("tab-new").relative().flex_none().h(24).px(7).items_center().text_size(11)
       .text_color(open ? t.foreground : t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(toolHover(t)))
       // No tooltip while open: it would sit on the menu.
       .when(!open, (el) => el.tooltip("New (⌘N)"))
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); this.press = { e, open }; })

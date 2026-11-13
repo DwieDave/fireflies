@@ -180,10 +180,40 @@ for (const [what, list] of [
 }
 
 test("the two copies of toolGround (nocturne, nocturne-notifications) are the same", () => {
-  const cut = (p: string) => { const s = readFileSync(p, "utf8"); const i = s.indexOf("// ---- the toolbar's ground"); return s.slice(i, s.indexOf("\n}\n", s.indexOf("export function toolGround", i)) + 2); };
+  const cut = (p: string) => { const s = readFileSync(p, "utf8"); const i = s.indexOf("// ---- the toolbar's ground"); return s.slice(i, s.indexOf("\n}\n", s.indexOf("export function toolHover", i)) + 2); };
   expect(cut("defaults/mods/nocturne-notifications/kit.js")).toBe(cut("defaults/mods/nocturne/kit.js"));
   expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
   expect(nkit.toolGround(theme).map(shape)).toEqual(ground());
+  expect(nkit.toolHover(MOONFLY)).toBe(kit.toolHover(MOONFLY));
+});
+
+// ---- Developer chose the plate, "with the brighter hover on the plate".
+
+const MOONFLY = { ansi0: "#323437", ansi8: "#949494", foreground: "#c6c6c6", background: "#080808" };
+const lum = (c: string) => {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
+
+test("on the plate a hovered tool is a step brighter than the plain ansi0 hover, its text still readable", () => {
+  const hover = kit.toolHover(MOONFLY, "plate");
+  expect(hover).toMatch(/^#[0-9a-f]{6}$/);
+  expect(lum(hover)).toBeGreaterThan(lum(MOONFLY.ansi0)); // brighter than the old hover, so brighter than the plate (ansi0 dithered)
+  expect(contrast(MOONFLY.foreground, hover)).toBeGreaterThanOrEqual(4.5);
+  expect(kit.toolHover(MOONFLY, "ledge")).toBe(MOONFLY.ansi0);
+  expect(kit.mix("ansi0", "#ffffff", 0.5)).toBe("ansi0"); // a named color stays as it is
+});
+
+test("the tools, the bell and \"+ new\" all hover with it", () => {
+  const hoverBg = (e: any) => { let bg: any = null; const st: any = new Proxy({}, { get: (_t, k) => (...a: any[]) => { if (k === "bg") bg = a[0]; return st; } }); e.calls.hover[0](st); return bg; };
+  const want = kit.toolHover(theme);
+  const root = strip(3);
+  for (const id of ["tab-scripts-run", "tab-procs", "tab-files", "tab-git"]) expect(hoverBg(find(root, id))).toBe(want);
+  const b = new Bell(); b.init({ role: "bell" }, cx);
+  expect(hoverBg(find(b.render(cx), "bell"))).toBe(nkit.toolHover(theme));
+  const nb = new NewButton(); nb.init();
+  expect(hoverBg(find(nb.render(), "tab-new"))).toBe(want);
 });
 
 test("the fade takes no pointer: a press, click or drag on a tab under it reaches the tab", () => {
