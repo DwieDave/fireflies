@@ -48,9 +48,14 @@ const app = {
   ran: [] as [string, any][],
   overlays: [] as any[],
   closed: [] as any[],
+  // exec's calls, and what each answers (`answer`: by the call; none: code 1).
+  execs: [] as [string, string[]][],
+  answer: null as null | ((cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }),
 };
-const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; };
-const kit = { View: class {}, div: () => new Element(), svg: () => new Element(), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
+const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; app.execs = []; app.answer = null; };
+/** An element that remembers its source (svg / image). */
+const sourced = (kind: string) => (src: string) => { const el: any = new Element(); el[kind] = src; return el; };
+const kit = { View: class {}, div: () => new Element(), svg: sourced("svg"), image: sourced("image"), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
 
 /** A loaded copy of a mod: `props` its own, its commands from `send`, its native calls in `native`. */
 /** A mod file's keyhelp.ts exports (imports stripped), when the file imports it. */
@@ -89,6 +94,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
       return action === "web.inspect" ? { of: `${own.copy ?? 1}:${id}` } : null;
     },
     nextNativeViewEvent: () => new Promise(() => {}),
+    appHome: () => "/app",
+    exec: async (cmd: string, args: string[] = []) => { app.execs.push([cmd, args]); return app.answer?.(cmd, args) ?? { code: 1, stdout: "", stderr: "" }; },
   };
   const base = {
     h_flex: () => new Element(), v_flex: () => new Element(), Input: { new: () => new Element() },
@@ -105,8 +112,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
   // guards.ts and editor-route.ts only guard.ts): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts|guards\.ts|editor-route\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
-  // `import * as Tabs from "./tabs.ts"`: the real module (it imports guard.ts alone).
-  if (/import \* as Tabs from "\.\/tabs\.ts"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.ts")}`);
+  // `import * as Tabs from "./tabs.ts"` (and Favicons): the real modules (they import guard.ts alone).
+  for (const [, name, file] of source.matchAll(/^import \* as (Tabs|Favicons) from "\.\/(tabs\.ts|favicons\.ts)";$/gm)) scope[name!] = await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
   const send = async (c: string) => {
     if (waiting) { const w = waiting; waiting = null; w(c); } else queue.push(c);
@@ -1120,6 +1127,78 @@ test("browser.tab-titles: every tab's name by the pane's slot (blank tabs none);
   expect(Object.keys(tt().s1)).toEqual(["web", "web-2"]);
   await view.close();
   expect(tt()).toEqual({});
+});
+
+const settle = () => new Promise((r) => setTimeout(r, 0));
+const favicons = await import("../defaults/mods/browser/favicons.ts");
+
+test("favicons: an origin, where its icon is asked (its own link, else /favicon.ico; nothing else), the cache's names", () => {
+  expect(favicons.originOf("https://www.YouTube.com/watch?v=1")).toEqual({ origin: "https://www.youtube.com", key: "www.youtube.com" });
+  expect(favicons.originOf("http://localhost:5173/x")).toEqual({ origin: "http://localhost:5173", key: "localhost_5173" });
+  for (const no of [null, "", "about:blank", "file:///tmp/a.html", "data:text/html,x", "not a url"]) expect(favicons.originOf(no)).toBe(null);
+  const o = favicons.originOf("https://a.example/p")!;
+  expect(favicons.iconUrls(o, "https://cdn.example/i.svg")).toEqual(["https://cdn.example/i.svg", "https://a.example/favicon.ico"]);
+  expect(favicons.iconUrls(o, null)).toEqual(["https://a.example/favicon.ico"]);
+  expect(favicons.iconUrls(o, "https://a.example/favicon.ico")).toEqual(["https://a.example/favicon.ico"]);
+  expect(favicons.iconUrls(o, "javascript:alert(1)")).toEqual(["https://a.example/favicon.ico"]);
+  // A partial download (a dot file) isn't an icon.
+  expect([...favicons.listed("a.example\n.b.example.part\n\nlocalhost_5173\n")]).toEqual(["a.example", "localhost_5173"]);
+  expect(favicons.iconPath("a.example")).toBe("cache/browser-icons/a.example");
+});
+
+test("favicons: a tab shows its page's icon before its title once fetched, the web mark until then; the shelf's keys follow", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  // The cache has a.example from an earlier run.
+  app.answer = (cmd) => (cmd === "ls" ? { code: 0, stdout: "a.example\n", stderr: "" } : { code: 0, stdout: "", stderr: "" });
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/x" });
+  await settle();
+  expect(app.execs[0]).toEqual(["ls", ["-1", "/app/cache/browser-icons"]]);
+  // After a restart, with no page loaded: the cached icon, on the strip and for the shelf.
+  expect(app.store["browser.icons"]).toEqual({ s1: "cache/browser-icons/a.example" });
+  expect(app.store["browser.tab-icons"]).toEqual({ s1: { web: "cache/browser-icons/a.example" } });
+  // A page that is cached already isn't asked again.
+  view.onEvent({ id: "web", event: "web.icon", data: { href: "https://a.example/new.png" } }, cx);
+  await settle();
+  expect(app.execs.length).toBe(1);
+  // A second tab on another site: the web mark until its icon is in.
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://b.example/", title: "Bee" } }, cx);
+  const markOf = (id: string) => find(view.strip({}), `webtab-icon-${id}`);
+  expect(markOf("web").image).toBe("cache/browser-icons/a.example");
+  expect(markOf("web-2").svg).toBe("mods/workspace-chrome/monitor.svg");
+  expect(typeof markOf("web-2").image).toBe("function");
+  // Its page names its icon: fetched (its link, then the origin's) into the cache folder, once.
+  view.onEvent({ id: "web-2", event: "web.icon", data: { href: "https://b.example/i.svg" } }, cx);
+  view.onEvent({ id: "web-2", event: "web.icon", data: { href: "https://b.example/i.svg" } }, cx);
+  await settle();
+  const fetches = app.execs.filter(([c]) => c === "sh");
+  expect(fetches.length).toBe(1);
+  expect(fetches[0]![1].slice(3)).toEqual(["/app/cache/browser-icons", "b.example", "https://b.example/i.svg", "https://b.example/favicon.ico"]);
+  expect(markOf("web-2").image).toBe("cache/browser-icons/b.example");
+  expect(app.store["browser.tab-icons"]).toEqual({ s1: { web: "cache/browser-icons/a.example", "web-2": "cache/browser-icons/b.example" } });
+  expect(app.store["browser.icons"]).toEqual({ s1: "cache/browser-icons/a.example" });
+  view.showTab("web-2", cx);
+  expect(app.store["browser.icons"]).toEqual({ s1: "cache/browser-icons/b.example" });
+  // An icon that can't be had (the fetch fails): the web mark stays, and it isn't asked again this run.
+  app.answer = () => ({ code: 1, stdout: "", stderr: "" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://c.example/", background: true } }, cx);
+  view.onEvent({ id: "web-3", event: "web.location", data: { href: "https://c.example/", title: "Sea" } }, cx);
+  view.onEvent({ id: "web-3", event: "web.icon", data: { href: null } }, cx);
+  await settle();
+  view.onEvent({ id: "web-3", event: "web.icon", data: { href: null } }, cx);
+  await settle();
+  expect(app.execs.filter(([c, a]) => c === "sh" && a.includes("c.example")).length).toBe(1);
+  expect(markOf("web-3").svg).toBe("mods/workspace-chrome/monitor.svg");
+  expect("web-3" in app.store["browser.tab-icons"].s1).toBe(false);
+  // The pane closes: its entries go.
+  await view.close();
+  expect(app.store["browser.icons"]).toEqual({});
+  expect(app.store["browser.tab-icons"]).toEqual({});
+  // The event is read where it comes in.
+  const { parseEvent } = (await load("browser/main.ts")).mod;
+  expect(parseEvent(JSON.stringify({ id: "web", event: "web.icon", data: { href: null } }))?.event).toBe("web.icon");
+  expect(parseEvent(JSON.stringify({ id: "web", event: "web.icon", data: { href: 3 } }))).toBe(undefined);
 });
 
 test("a web tab pinned from its menu (a right-click, at the pointer): the record nocturne's shelf reads; unpinned the same way", async () => {
