@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { asJs, guard } from "./mod-source.ts";
 
-// The files pane's preview split: file-tree (main.js, logic.js) and the
+// The files pane's preview split: file-tree (main.ts, logic.ts) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.ts),
 // with stand-ins for the app's modules (as file-tree.test.ts).
 class Element {
@@ -89,9 +89,9 @@ const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
 const keyhelp = await load(`${F}/keyhelp.ts`);
 const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
 const { default: Viewer } = await load(`${F}/viewer.ts`, shared);
-const logic = await load(`${F}/logic.js`);
+const logic = await load(`${F}/logic.ts`);
 const route = await load(`${F}/editor-route.ts`);
-const { default: Files } = await load(`${F}/main.js`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor });
+const { default: Files } = await load(`${F}/main.ts`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor, editorProps: route.editorProps });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 
 // ---- a context: tasks run, timers wait until `tick()`, nested views record their props
@@ -117,7 +117,7 @@ const TREE: Record<string, [string, boolean][]> = {
 
 function pane(p: any = { path: "/repo", slot: "s1" }, entries = TREE) {
   world.panes = [{ pane: "pf", tab: "t1", mod: F, props: p }];
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   view.loadFolder = async () => {};
   view.refresh = () => {};
   world.props = p;

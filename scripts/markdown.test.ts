@@ -162,12 +162,12 @@ test("path helpers", () => {
 
 test("file-tree opens Markdown as a tab of the editor to read (its preview) on a double click; p in the viewer beside; alt-double-click and e open it as text", async () => {
   const route = await load("file-tree/editor-route.ts");
-  const { default: Files, isMarkdown } = await load("file-tree/main.js", { ...(await load("file-tree/logic.js")), openInEditor: route.openInEditor, herdr: { ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } });
+  const { default: Files, isMarkdown } = await load("file-tree/main.ts", { ...(await load("file-tree/logic.ts")), openInEditor: route.openInEditor, editorProps: route.editorProps, herdr: { ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } });
   const kept: Record<string, any> = {};
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];
   world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }, { pane: "pf", tab: "tab1", mod: "file-tree" }];
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   Object.assign(view, { root: "/repo", on: null, handle: { focus() {} }, folders: new Set(), lastClick: null });
   view.rows = () => [{ path: "docs/My Plan.md", dir: false, depth: 1 }, { path: "main.rs", dir: false, depth: 0 }];
   const edits: string[] = [];
@@ -190,20 +190,20 @@ test("file-tree opens Markdown as a tab of the editor to read (its preview) on a
   view.pick("main.rs", cx);
   view.pick("main.rs", cx);
   view.sel = "docs/My Plan.md";
-  view.key({ key: "e" }, cx);
+  view.key({ key: "e", modifiers: {} }, cx);
   expect(edits).toEqual(["docs/My Plan.md", "main.rs", "docs/My Plan.md"]);
   expect(commands.length).toBe(1);
 
-  view.key({ key: "enter" }, cx);
+  view.key({ key: "enter", modifiers: {} }, cx);
   expect(commands.at(-1)).toEqual(["editor.open", { path: "/repo/docs/My Plan.md", pane: "p1", look: true }]);
   // With an editor in the tab: a tab of it (the open record), the editor focused.
   world.panes.push({ pane: "pe", tab: "tab1", mod: "editor", props: { slot: "e1" } });
-  view.key({ key: "enter" }, cx);
+  view.key({ key: "enter", modifiers: {} }, cx);
   expect(kept["editor.open"]).toMatchObject({ slot: "e1", path: "/repo/docs/My Plan.md", look: true });
   expect(commands.at(-1)).toEqual(["pane.focus", { pane: "pe" }]);
   world.panes.pop();
   // p: the Markdown viewer's own pane, on purpose.
-  view.key({ key: "p" }, cx);
+  view.key({ key: "p", modifiers: {} }, cx);
   expect(commands.at(-1)).toEqual(["markdown.open", { path: "/repo/docs/My Plan.md", pane: "p1" }]);
   view.on = "box";
   view.openFile("docs/My Plan.md", cx);
@@ -212,7 +212,7 @@ test("file-tree opens Markdown as a tab of the editor to read (its preview) on a
 
 test("the files mod opens Markdown in the viewer; alt-click previews it as text", async () => {
   const { default: Files } = await load("files/main.js");
-  const view: any = Object.create(Files.prototype);
+  const view: any = new Files();
   Object.assign(view, { root: "/repo", on: null });
   const shown: string[] = [];
   view.show = (path: string) => shown.push(path);
