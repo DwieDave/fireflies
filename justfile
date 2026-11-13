@@ -122,6 +122,8 @@ test:
     bun test scripts/nocturne-scratchpad.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
     bun test scripts/nocturne-pane-pins.test.ts
+    # The picture in picture player's bar in sections (a dithered seam between), wide and narrow, and its ⋯ menu's sections.
+    bun test scripts/nocturne-pip.test.ts
     # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.
     bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.

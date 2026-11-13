@@ -16,6 +16,10 @@
 //   ✕    close: the video goes back to its page, paused (nocturne-pip.close)
 //   ⋯    when the bar is too narrow for them all: the rest, as a menu.
 //        Play/pause and close always stay on the bar.
+// The bar is in sections, a dithered seam between them: ↩ where it came from ·
+// « ❚❚ » 🔈 playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own (⋯ joins
+// these). A section with nothing left on a narrow bar takes its seam along; the
+// ⋯ menu lists what went into it in the same sections, a dithered rule between.
 // Keys while it has the keyboard (overlay.focus to the window, pane.go to its
 // pane, a click on it; its bar's edge turns blue meanwhile):
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
@@ -57,22 +61,26 @@ const PANE = "nocturne-pip.pane";
 const PLAYER = "nocturne-pip.player";
 const SKIP = 10;
 const ROW = 26;
+// The ⋯ menu's rule between two sections.
+const RULE = 9;
 // The keys popup's width.
 const KEYS_W = 340;
 
-// The bar's controls, in bar order. `keep`: the lower, the longer it stays
-// on a narrow bar (the rest go into ⋯).
+// The bar's controls, in bar order, in four sections with a dithered seam
+// between them: where the video came from (from), playback (play), where it
+// goes (to), and the player's own (window). `keep`: the lower, the longer it
+// stays on a narrow bar (the rest go into ⋯, in the same sections).
 const CONTROLS = [
-  { id: "back", keep: 3, glyph: "↩", name: "Back to the page" },
-  { id: "rewind", keep: 5, glyph: "«", name: `Back ${SKIP} seconds` },
-  { id: "toggle", keep: 0, glyph: (s) => (s.playing ? "❚❚" : "▶"), name: (s) => (s.playing ? "Pause" : "Play") },
-  { id: "forward", keep: 6, glyph: "»", name: `On ${SKIP} seconds` },
-  { id: "mute", keep: 2, icon: (s) => (s.muted ? "volume-x" : "volume"), name: (s) => (s.muted ? "Sound on" : "Sound off") },
-  { id: "pane", keep: 7, glyph: "◧", name: "Into a pane", window: true },
-  { id: "park", keep: 4, glyph: "⤓", name: "Park as a chip" },
-  { id: "out", keep: 8, glyph: "⇱", name: "Out of Fireflies" },
-  { id: "keys", keep: 9, glyph: "?", name: "Keys" },
-  { id: "close", keep: 1, glyph: "✕", name: "Close" },
+  { id: "back", section: "from", keep: 3, glyph: "↩", name: "Back to the page" },
+  { id: "rewind", section: "play", keep: 5, glyph: "«", name: `Back ${SKIP} seconds` },
+  { id: "toggle", section: "play", keep: 0, glyph: (s) => (s.playing ? "❚❚" : "▶"), name: (s) => (s.playing ? "Pause" : "Play") },
+  { id: "forward", section: "play", keep: 6, glyph: "»", name: `On ${SKIP} seconds` },
+  { id: "mute", section: "play", keep: 2, icon: (s) => (s.muted ? "volume-x" : "volume"), name: (s) => (s.muted ? "Sound on" : "Sound off") },
+  { id: "pane", section: "to", keep: 7, glyph: "◧", name: "Into a pane", window: true },
+  { id: "park", section: "to", keep: 4, glyph: "⤓", name: "Park as a chip" },
+  { id: "out", section: "to", keep: 8, glyph: "⇱", name: "Out of Fireflies" },
+  { id: "keys", section: "window", keep: 9, glyph: "?", name: "Keys" },
+  { id: "close", section: "window", keep: 1, glyph: "✕", name: "Close" },
 ];
 
 /** What ? lists: every key keyControl() takes, ? keys last. */
@@ -91,13 +99,38 @@ function dither(color, cell = 1) {
 
 // The bar keeps this much for its title before controls go into ⋯.
 const TITLE = 70;
+// A seam between two sections: 2 px of dither with 3 px either side.
+const SEAM = 8;
 
-/** The controls a `width` px bar shows, and those for ⋯ (which takes a place itself). */
+/** `list` cut into its sections, in order: [[control, …], …]; none empty. */
+export function sections(list) {
+  const out = [];
+  for (const c of list) {
+    if (out.length && out.at(-1)[0].section === c.section) out.at(-1).push(c);
+    else out.push([c]);
+  }
+  return out;
+}
+
+/** How wide a bar of these controls is (and ⋯, `more`), its title's room too:
+ *  a place per control, a seam between sections (⋯ sits in the last one). */
+const barWidth = (shown, more) => 8 + TITLE + (shown.length + (more ? 1 : 0)) * BAR + Math.max(0, sections(shown).length - 1) * SEAM;
+
+/** The controls a `width` px bar shows, and those for ⋯ (which takes a place
+ *  itself, before ✕). The lowest `keep`s stay, two at the least. */
 export function fit(controls, width) {
-  const room = Math.floor((width - 8 - TITLE) / BAR);
-  if (controls.length <= room) return { shown: controls, more: [] };
-  const keep = new Set([...controls].sort((a, b) => a.keep - b.keep).slice(0, Math.max(2, room - 1)).map((c) => c.id));
-  return { shown: controls.filter((c) => keep.has(c.id)), more: controls.filter((c) => !keep.has(c.id)) };
+  if (barWidth(controls, false) <= width) return { shown: controls, more: [] };
+  const order = [...controls].sort((a, b) => a.keep - b.keep);
+  for (let n = controls.length - 1; ; n--) {
+    const keep = new Set(order.slice(0, n).map((c) => c.id));
+    const shown = controls.filter((c) => keep.has(c.id));
+    if (n <= 2 || barWidth(shown, true) <= width) return { shown, more: controls.filter((c) => !keep.has(c.id)) };
+  }
+}
+
+/** The seam between two sections of the bar: a short dithered upright. */
+function seam(t) {
+  return div().relative().flex_none().w(2).h(12).mx((SEAM - 2) / 2).child(dither(t.ansi8, 1));
 }
 
 /** The player's control for a key event, or null. "unfocus": esc, the keyboard back to the pane. */
@@ -339,14 +372,15 @@ export default class Pip extends View {
   }
 
   openMore(ids) {
-    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 240, height: ids.length * ROW + 10,
+    const parts = sections(CONTROLS.filter((c) => ids.includes(c.id))).length;
+    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 240, height: ids.length * ROW + Math.max(0, parts - 1) * RULE + 10,
       props: { menu: ids, playing: this.playing, muted: this.muted } });
   }
 
   bar(t) {
     const { shown, more } = fit(this.controls(), this.width);
-    const items = shown.map((c) => this.button(t, c));
-    // The ⋯ goes before ✕, the last on the bar.
+    // Section by section, a seam between; the ⋯ goes before ✕, the last on the bar.
+    const items = sections(shown).flatMap((part, i) => [...(i ? [seam(t)] : []), ...part.map((c) => this.button(t, c))]);
     if (more.length) items.splice(items.length - 1, 0, this.more(t, more.map((c) => c.id)));
     // The bar's edge turns blue while the player has the keyboard.
     return h_flex().id("pip-bar").h(BAR).flex_none().pl(8).items_center().text_size(11).bg(t.background)
@@ -422,6 +456,9 @@ export default class Pip extends View {
         if (k === "enter" && items[this.cursor]) return this.pick(items[this.cursor]);
         if (k === "escape" || k === "q") closeOverlay(props()?.overlay);
       })
-      .children(items.map(row));
+      .children(sections(items).flatMap((part, n) => [
+        ...(n ? [div().relative().h(RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.ansi8, 1)))] : []),
+        ...part.map((c) => row(c, items.indexOf(c))),
+      ]));
   }
 }

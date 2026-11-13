@@ -1720,7 +1720,10 @@ The main ones:
   only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
   shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Fireflies)
-  ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). The
+  ? ✕, in four sections with a short dithered seam between them (↩ where it came from ·
+  « ❚❚ » sound, playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own); what doesn't fit a
+  narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
+  takes its seam along), which lists them in the same sections, a dithered rule between. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
