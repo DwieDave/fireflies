@@ -45,7 +45,7 @@ const FIXTURE = `${import.meta.dir}/fixtures/editor/moth.png`;
 let clip: { text?: string; image?: boolean; file?: string } = {};
 let picked: string | null = null;
 const ran: [string, string[]][] = [];
-/** herdr's exec, faked for what images.js and markdown.js run: the clipboard (osascript), the
+/** herdr's exec, faked for what images.js and markdown.ts run: the clipboard (osascript), the
  *  file into its place (sh paste-image), the cache copy (sh md-image), mkdir. Real files. */
 async function fakeExec(cmd: string, args: string[]) {
   ran.push([cmd, args]);

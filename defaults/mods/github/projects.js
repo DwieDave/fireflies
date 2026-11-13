@@ -20,7 +20,7 @@ import { shared, setShared } from "herdr";
 import { graphql } from "./gh.js";
 import { readAgo, ago, SLOW, linksIn } from "./model.js";
 import { repoKey, newest, LIMITS } from "./cache.js";
-import { markdown } from "./markdown.js";
+import { markdown } from "./markdown.ts";
 import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";
 import {
   projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices,

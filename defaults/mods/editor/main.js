@@ -67,7 +67,7 @@
 //
 // Markdown files get a live preview beside the text (under it when the pane
 // is narrow; each tab keeps its view, an "edit" from the viewer turns it on), drawn as it's typed by the Markdown viewer's renderer
-// (markdown.js): math, mermaid, colored code, tables, callouts, footnotes,
+// (markdown.ts): math, mermaid, colored code, tables, callouts, footnotes,
 // local images. It follows the text's scrolling and the text follows it;
 // ticking a task box writes the [x] into the text; links go where they point
 // (a heading in it, another .md file in the editor). The bar's chip, cmd-shift-v
@@ -132,7 +132,7 @@ import {
   cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown, appBindings, chordOf,
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
-import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
+import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import { formKey, bindTab, tabActions } from "./form-keys.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";

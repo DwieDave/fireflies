@@ -37,7 +37,7 @@
 // Image blocks: a line holding only images (live.js "image") draws each
 // picture fitting the column and keeping its shape (at most IMAGE_H tall),
 // from a copy under the app's cache made once per picture (main.js
-// loadImageSrcs, markdown.js cacheImage; gpui decodes it once), so a key
+// loadImageSrcs, markdown.ts cacheImage; gpui decodes it once), so a key
 // costs nothing for them; a picture on the web is drawn by the Markdown view,
 // one that can't be found is a block saying so. A paste the block finds no
 // text in (a screenshot) goes to the pane (main.js pasteImage, images.js).
@@ -46,7 +46,7 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, EditorState, Editor } from "gpui-base";
 import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.js";
 import { enter } from "./mdedit.js";
-import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.js";
+import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 
 const GAP = 10, TIGHT = 3; // between units; between two list items
 const PAD_TOP = 18, PAD_BOTTOM = 60;
@@ -729,7 +729,7 @@ export class Rendered {
     } else if (u.kind === "quote" && u.callout) {
       const lines = quoteBody(src, local).split("\n");
       const head = /^\[![A-Za-z-]+\][+-]?\s*(.*)$/.exec(lines[0]);
-      const [ck, name] = CALLOUTS[u.callout] ?? ["ansi4", u.callout];
+      const [ck, name] = CALLOUTS.get(u.callout) ?? ["ansi4", u.callout];
       const color = t[ck] ?? t.accent;
       const rest = lines.slice(1).join("\n");
       body = v_flex().relative().pl(14).pr(12).py(8).gap(4)

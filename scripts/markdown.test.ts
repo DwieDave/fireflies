@@ -61,12 +61,12 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const md = await load("markdown/markdown.js");
+const md = await load("markdown/markdown.ts");
 const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
 const { follow, join, dirname, basename, tilde } = await load("markdown/paths.ts");
 
-test("the GitHub window, the viewer and the editor ship the same markdown.js (and the editor the viewer's paths.ts)", async () => {
-  const read = (mod: string, file = "markdown.js") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
+test("the GitHub window, the viewer and the editor ship the same markdown.ts (and the editor the viewer's paths.ts)", async () => {
+  const read = (mod: string, file = "markdown.ts") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
   expect(await read("github")).toBe(await read("markdown"));
   expect(await read("editor")).toBe(await read("markdown"));
   expect(await read("editor", "paths.ts")).toBe(await read("markdown", "paths.ts"));
@@ -88,7 +88,7 @@ test("markdown() draws selectable Markdown in the theme's text and routes links"
 
 test("the GitHub window renders PR bodies and comments through the shared module", async () => {
   const prs = await readFile(new URL("../defaults/mods/github/prs.js", import.meta.url), "utf8");
-  expect(prs).toContain('import { markdown } from "./markdown.js"');
+  expect(prs).toContain('import { markdown } from "./markdown.ts"');
   expect(prs).not.toContain("TextView");
 });
 

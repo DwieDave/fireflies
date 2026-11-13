@@ -29,7 +29,7 @@ const TASK = /^(\s*)([-*+]|\d{1,9}[.)])\s+\[([ xX])\](?:\s|$)/;
 const QUOTE = /^ {0,3}>/;
 const CALLOUT = /^ {0,3}>\s?\[!([A-Za-z-]+)\]/;
 const REF = /^ {0,3}\[[^\]]+\]:/;
-// The same image line as markdown.js's imageLine (a module this one can't import: it draws).
+// The same image line as markdown.ts's imageLine (a module this one can't import: it draws).
 const MD_IMAGE = /\[?!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*["')])?\s*\)(?:\]\([^)]*\))?/g;
 const HTML_IMAGE = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
 const TABLE_RULE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;

@@ -33,7 +33,7 @@ import { h_flex, v_flex } from "gpui-base";
 import * as herdr from "herdr";
 import { openInEditor } from "./editor-route.ts";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
-import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
+import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.ts";
 import { follow, dirname, basename, join, tilde } from "./paths.ts";
 import { documentLinks, nextLink, nextHeading } from "./links.js";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";

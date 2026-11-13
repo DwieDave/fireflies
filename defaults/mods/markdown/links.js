@@ -47,7 +47,7 @@ export function linksOf(text) {
   return out;
 }
 
-/** Every link of a document's blocks (markdown.js `blocks`), each with its
+/** Every link of a document's blocks (markdown.ts `blocks`), each with its
  *  block's index: `{ text, href, part, image? }`. A line of images gives one
  *  entry per image. */
 export function documentLinks(parts) {
