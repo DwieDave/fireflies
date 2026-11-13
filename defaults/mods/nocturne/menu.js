@@ -11,7 +11,9 @@
 //          shared(EDIT_SPACE); "New worktree…" opens the worktree dialog on the space's folder
 //
 // A pane's menu can also move it (pane.move): to any other tab on its machine,
-// or a tab of its own.
+// or a tab of its own; past MOVE_FLAT places they gather under one "Move to…"
+// row whose levels (popup.js) list this space's tabs, then the other spaces
+// (moveItems).
 
 import { svg, div } from "gpui-kit";
 import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
@@ -42,28 +44,69 @@ export const NAME_PANE = "nocturne.name-pane";
 /** shared() key: { id, kind: "rename" | "folder" | "delete", at } asks the sidebar to edit that space inline. */
 export const EDIT_SPACE = "nocturne.edit-space";
 
-/** "Move to …" rows for a pane: the other tabs of its space, then the tabs of
- *  the other spaces on its machine (pane.move: any pane, the only one of its
- *  tab too, a parked one too), then a tab of its own. */
-export function moveItems(t, pane) {
-  const ps = panes();
+/** Up to this many places to move to in all, the "Move to" rows stay flat in
+ *  the menu; past it they gather under one "Move to…" row (moveItems). */
+export const MOVE_FLAT = 3;
+
+/**
+ * Where a pane can move (pane.move: any pane, the only one of its tab too, a
+ * parked one too): `here`, the other tabs of its space; `spaces`, the other
+ * spaces on its machine with their tabs ({ space, tabs }, those with none
+ * left out); `fresh`, a tab of its own (not for a pane alone in its tab);
+ * `count`, every place in all. Settled tabs aren't places. Null: no such pane.
+ */
+export function moveTargets(pane, ps = panes(), all = spaces()) {
   const p = ps.find((x) => x.pane === pane);
-  if (!p) return [];
-  const all = spaces();
+  if (!p) return null;
   const space = all.find((s) => s.tabs.some((c) => c.id === p.tab));
-  const alone = ps.filter((x) => x.tab === p.tab).length === 1;
-  const go = (args) => () => run("pane.move", { pane: p.pane, ...args });
-  const tabName = (c) => (c.named ? c.name : `tab ${c.index}`);
-  const here = (space?.tabs ?? []).filter((c) => c.id !== p.tab && !c.settled)
-    .map((c) => ({ id: `move-${c.id}`, mark: icon(t, "panel-right"), name: `Move to ${tabName(c)}`, hint: String(c.index), go: go({ tab: c.id }) }));
-  const there = all.filter((s) => s.id !== space?.id && (s.machine ?? null) === (space?.machine ?? null))
-    .flatMap((s) => s.tabs.filter((c) => !c.settled).map((c) => ({ id: `move-${c.id}`, mark: icon(t, "layers"), name: `Move to ${s.name} / ${tabName(c)}`, hint: "", go: go({ tab: c.id }) })));
-  return [
+  const here = (space?.tabs ?? []).filter((c) => c.id !== p.tab && !c.settled);
+  const others = all.filter((s) => s.id !== space?.id && (s.machine ?? null) === (space?.machine ?? null))
+    .map((s) => ({ space: s, tabs: s.tabs.filter((c) => !c.settled) })).filter((x) => x.tabs.length);
+  const fresh = ps.filter((x) => x.tab === p.tab).length > 1;
+  return { pane: p, here, spaces: others, fresh, count: here.length + others.reduce((n, x) => n + x.tabs.length, 0) + (fresh ? 1 : 0) };
+}
+
+const tabName = (c) => (c.named ? c.name : `tab ${c.index}`);
+/** A tab's number as its row's key, 1 to 9 (a number moves there at once). */
+const numKey = (c) => (c.index >= 1 && c.index <= 9 ? String(c.index) : undefined);
+
+/**
+ * "Move to …" rows for a pane, as few levels as it needs:
+ *   - MOVE_FLAT places or fewer: flat, as they are ("Move to <tab>", "Move to
+ *     <space> / <tab>", "Move to a new tab");
+ *   - more: one "Move to…" row. Its level lists this space's tabs (numbers
+ *     shown and keyed), "a new tab", then a row per other space: one with a
+ *     single tab moves there at once, one with more opens a level of its tabs.
+ */
+export function moveItems(t, pane) {
+  const m = moveTargets(pane);
+  if (!m || !m.count) return [];
+  const go = (args) => () => run("pane.move", { pane: m.pane.pane, ...args });
+  const mark = (n) => icon(t, n);
+  if (m.count <= MOVE_FLAT) return [
     { rule: true },
-    ...here,
-    ...there,
-    ...(alone ? [] : [{ id: "move-new", mark: icon(t, "plus"), name: "Move to a new tab", hint: "", go: go({}) }]),
+    ...m.here.map((c) => ({ id: `move-${c.id}`, mark: mark("panel-right"), name: `Move to ${tabName(c)}`, hint: String(c.index), go: go({ tab: c.id }) })),
+    ...m.spaces.flatMap(({ space: s, tabs }) => tabs.map((c) => ({ id: `move-${c.id}`, mark: mark("layers"), name: `Move to ${s.name} / ${tabName(c)}`, hint: "", go: go({ tab: c.id }) }))),
+    ...(m.fresh ? [{ id: "move-new", mark: mark("plus"), name: "Move to a new tab", hint: "", go: go({}) }] : []),
   ];
+  // The levels are worked out when shown, so they follow tabs coming and going.
+  const tabsOf = (sid) => () => {
+    const x = moveTargets(pane)?.spaces.find((y) => y.space.id === sid);
+    return (x?.tabs ?? []).map((c) => ({ id: `move-${c.id}`, mark: mark("panel-right"), name: tabName(c), hint: String(c.index), key: numKey(c), go: go({ tab: c.id }) }));
+  };
+  const level = () => {
+    const now = moveTargets(pane);
+    if (!now) return [];
+    return [
+      ...now.here.map((c) => ({ id: `move-${c.id}`, mark: mark("panel-right"), name: tabName(c), hint: String(c.index), key: numKey(c), go: go({ tab: c.id }) })),
+      ...(now.fresh ? [{ id: "move-new", mark: mark("plus"), name: "a new tab", hint: "", go: go({}) }] : []),
+      ...(now.spaces.length && (now.here.length || now.fresh) ? [{ rule: true }] : []),
+      ...now.spaces.map(({ space: s, tabs }) => (tabs.length === 1
+        ? { id: `move-space-${s.id}`, mark: mark("layers"), name: s.name, hint: tabName(tabs[0]), go: go({ tab: tabs[0].id }) }
+        : { id: `move-space-${s.id}`, mark: mark("layers"), name: s.name, hint: `${tabs.length} tabs`, title: `Move to ${s.name}`, sub: tabsOf(s.id) })),
+    ];
+  };
+  return [{ rule: true }, { id: "move", mark: mark("panel-right"), name: "Move to…", hint: "", title: "Move to", sub: level }];
 }
 
 /** The layout:nocturne key for a Nocturne command ("nocturne.pin"), as keys.json spells it. */
