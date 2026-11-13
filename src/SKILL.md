@@ -81,7 +81,10 @@ worktrees; `scratchpad/index.json` names the repository of each file
 (`{ "<file>": { "name", "dir": "<git common dir>", "repo" } }`). Read it for
 what they noted about the work; write to it only when they ask (an open
 scratchpad pane reloads it). `herdr-app do nocturne.scratchpad` opens the
-shown space's note beside the focused pane.
+shown space's note beside the focused pane (`nocturne.scratchpad-tab`: in a
+tab of its own). It's plain Markdown, kept byte for byte: write paragraphs
+and lists as you would in any .md (the person's rendered view adds blocks as
+paragraphs separated by a blank line).
 
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted

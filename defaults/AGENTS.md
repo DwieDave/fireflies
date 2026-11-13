@@ -641,17 +641,28 @@ the highlighted line shows where it will land.
   other block stays drawn. Up / down past a block's first or last row step
   into the next block (blank lines between are passed over); a click on a
   drawn block puts the caret in it; enter on a list item, task or quote starts
-  the next one (on an empty one it ends the list); a task box ticks with a
-  click. The file's own editor holds the whole text, so saving, undo (cmd-z,
+  the next one (on an empty one it ends the list); enter on the last line of
+  any other block starts a new paragraph under it (the text after the caret
+  goes with it; shift-enter is a line break inside the block; inside a code
+  block enter is a new line, at its closing line's end a new block); a task
+  box ticks with a click. Adding a block with the pointer: the "+" left of
+  the block under the pointer, and the "add a block" line under the last
+  block, put an empty paragraph there. An empty block made so offers the
+  kinds (heading, list, task, quote, code, rule): a click on one, or cmd-.
+  and its letter. The block being typed into stays one stable thing (its
+  height kept, edited in place), and a key costs the same in a long file.
+  The file's own editor holds the whole text, so saving, undo (cmd-z,
   vim's u), the unsaved mark and the language server are the text view's, and
-  lines that aren't edited stay byte for byte. Vim works over the whole text:
-  j / k walk out of a block and the block follows. What it can't do: a block
+  lines that aren't edited stay byte for byte. Vim works over the whole text
+  as on plain text (motions, counts, operators, . and u / ctrl-r cross
+  blocks): the lit block follows its caret, and a visual selection lights
+  every block it touches, drawn in the block. What it can't do: a block
   being typed into is code-font source (a heading isn't heading-size then), a
   click lands on a block's first line, not the character clicked; find and
   replace work in the text view.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
-  space .) opens their list at the caret, lit for what's on there, and a
-  letter runs one: b bold, i italic, \` inline code, k link, h / H heading level
+  space .), or the bar's "markdown" chip, opens their list at the caret, lit
+  for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
   t task box, x tick, q quote, c code block, r rule. Running one where it's
   on takes it off again; with a caret in the rendered view, list, task,
@@ -746,9 +757,13 @@ the highlighted line shows where it will land.
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
-  "Scratchpad", the "+ new" menu's row): a Markdown note that belongs to the shown space's
-  repository but isn't in it, opened rendered in an editor pane of its own
-  beside the focused pane. One note per repository, found by git's common dir
+  "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
+  `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
+  a new tab" or the tile with the menu set to new tab): a Markdown note that
+  belongs to the shown space's repository but isn't in it, opened rendered in
+  an editor pane of its own beside the focused pane. When it can't be found
+  or opened a toast says why (git not answering opens the folder's own note
+  and says so). One note per repository, found by git's common dir
   (`git rev-parse --git-common-dir`), so every worktree of a repository opens
   the same note; a folder outside git gets its own. It lives at
   `~/.config/herdr-app/scratchpad/<repo>-<hash>.md` (the app's folder;
@@ -1351,7 +1366,7 @@ the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
 the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
-u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
+u, Scratchpad s: the repository's note; the panels that float over the tab, Git, its diff, worktrees and GitHub,
 open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9; the ones that aren't installed hide behind a dim
 "2 not installed · show" row: enter or a click shows them, again hides them,

@@ -55,11 +55,15 @@
 // corner); every keystroke goes into the tab's code editor as one edit of
 // those lines, so save, undo and the unsaved mark are the text view's and
 // untouched lines stay byte for byte. Up / down past a block's edge step into
-// the next; enter continues a list; vim works over the whole text. The view
-// switch goes rendered -> split -> preview -> text (space m r: rendered).
+// the next; enter continues a list, at another block's end starts a paragraph
+// below; a "+" by a block and "add a block" under the last add one, an empty
+// one offers the kinds; vim works over the whole text as on plain text (the
+// lit lines follow its caret and visual selection). The preview's blocks
+// aren't cut while the rendered view is shown (previewStale: cut on the way
+// back). The view switch goes rendered -> split -> preview -> text (space m r: rendered).
 // The Markdown commands (mdedit.js) in every view but preview only: cmd-.
-// (vim: space .) opens their list, a letter runs one (b i ` k h H l n t x q c
-// r, 0-6); commands md-<name>, md-menu.
+// (vim: space .) or the bar's "markdown" chip opens their list, a letter or a
+// click runs one (b i ` k h H l n t x q c r, 0-6); commands md-<name>, md-menu.
 //
 // The scratchpad (scratch.js): a tab on a note under `<app home>/scratchpad/`
 // opens rendered, saves itself 600 ms after the typing and at once on close
