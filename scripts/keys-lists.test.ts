@@ -174,9 +174,10 @@ test("markdown: ? lists every key; the toolbar's last control is ? keys", () => 
   expect(texts(v.toolbar(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const browser = await import("../defaults/mods/browser/main.js");
+const browser = await import("../defaults/mods/browser/main.ts");
+const browserTabs = await import("../defaults/mods/browser/tabs.ts");
 test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?", () => {
-  const keys = taken(() => { const b = surface(browser.default, ["key", "barKey"], { editing: false, start: true, controls: [], ring: null, keysShown: false, video: true }); return (e, cx) => b.key(e, cx); });
+  const keys = taken(() => { const b = surface(browser.default, ["key", "barKey"], { tabs: browserTabs.single("https://a.example/", 0.9), editing: false, controls: [], ring: null, keysShown: false, video: true }); return (e, cx) => b.key(e, cx); });
   expect(keys).toEqual(expect.arrayContaining(["O", "cmd-l", "cmd-alt-i", "?"]));
   expect(unnamed(browser.KEYS, keys)).toEqual([]);
   expect(browser.KEYS.at(-1)).toEqual(["?", "keys"]);

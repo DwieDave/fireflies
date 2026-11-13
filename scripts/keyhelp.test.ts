@@ -162,8 +162,9 @@ test("preview: ? opens the overview in the file's place, ? or esc closes it", as
 });
 
 test("web pane: ? opens the overview in the page's place, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/browser/main.js");
-  const v: any = surface(m.default, ["key", "barKey", "keysStrip"], { editing: false, start: true, controls: [], ring: null, keysShown: false, video: true });
+  const m = await import("../defaults/mods/browser/main.ts");
+  const tabs = await import("../defaults/mods/browser/tabs.ts");
+  const v: any = surface(m.default, ["key", "barKey", "keysStrip"], { tabs: tabs.single("https://a.example/", 0.9), editing: false, controls: [], ring: null, keysShown: false, video: true });
   opensAndCloses("browser", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme).kids[0]);
 });
 
