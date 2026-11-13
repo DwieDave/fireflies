@@ -9,6 +9,7 @@ mod floats;
 mod movable;
 mod pane_drag;
 mod parking;
+mod sysnote;
 mod pane_size;
 mod titlebar;
 
@@ -578,6 +579,8 @@ pub struct AppWindow {
     tab_shown: bool,
     pane_history: Vec<String>,
     window_active: bool,
+    /// Toasts also posted to the system while the window wasn't in front (sysnote.rs).
+    system_notes: sysnote::Posted,
     /// The system's appearance; a layout with a light and a dark theme follows it.
     system_dark: bool,
     /// The OS tells us when files change (`files.rs`); else the disk is polled.
@@ -694,6 +697,7 @@ impl AppWindow {
             tab_shown: true,
             pane_history: Vec::new(),
             window_active: true,
+            system_notes: sysnote::Posted::default(),
             system_dark: is_dark(window.appearance()),
             file_events,
             polls: 0,
@@ -712,6 +716,7 @@ impl AppWindow {
         // Ahead of every binding and key handler: a key that finds the keyboard
         // behind a window with a scrim is dropped, and the window takes it back.
         let (me, handle) = (cx.weak_entity(), window.window_handle());
+        sysnote::listen(me.clone(), handle, cx);
         w._keys_guard = Some(cx.intercept_keystrokes(move |_, window, cx| {
             if window.window_handle() == handle && me.update(cx, |this, cx| this.take_back_keys(window, cx)).unwrap_or(false) {
                 cx.stop_propagation();
@@ -4666,6 +4671,9 @@ impl AppWindow {
                 None
             }
         });
+        if kind == OverlayKind::Toast {
+            self.post_system_note(&id, spec.get("notification"), window, cx);
+        }
         let (name, mut props) = if kind == OverlayKind::Toast {
             (self.toast_mod().to_owned(), spec.get("notification").cloned().unwrap_or(Value::Null))
         } else {
@@ -7966,6 +7974,60 @@ export default class SystemToast extends View {
         let (id, name) = notify(cx);
         assert_eq!(name, "toast");
         assert!(shown(&id, cx), "an unknown mod falls back to the shipped toast, which stays");
+    }
+
+    /// A toast goes to the system's notification center too only while the
+    /// window isn't in front (window/sysnote.rs), once, and not when switched
+    /// off; a click on it brings the window forward and does the toast's action.
+    #[test]
+    fn toasts_reach_the_system_only_from_behind() {
+        in_own_process("system_notes");
+    }
+
+    #[gpui::test]
+    fn system_notes(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("system_notes") {
+            return;
+        }
+        let probe = "import { View, div } from \"gpui-kit\";\nexport default class P extends View { render() { return div(); } }";
+        let (view, cx) = open_window(cx, "probe", probe, json!({ "id": "probe", "type": "block", "content": { "mod": "probe" } }));
+        cx.run_until_parked();
+        let toast = |cx: &mut gpui::VisualTestContext| {
+            view.update_in(cx, |this, window, cx| {
+                let id = crate::mods::new_overlay_id();
+                let n = json!({ "title": "Claude needs you", "body": "work / api", "level": "error", "action": { "name": "app.settings", "args": { "section": "alerts" } } });
+                this.open_overlay(id.clone(), json!({ "kind": "toast", "notification": n }), window, cx);
+                id
+            })
+        };
+        let posted = |cx: &mut gpui::VisualTestContext| cx.shown_system_notifications();
+        // main.rs names the app; without a name (a build outside its bundle) nothing posts.
+        cx.update(|_, cx| cx.set_app_identity("herdr-app", "Fireflies"));
+
+        cx.update(|window, _| window.activate_window());
+        cx.run_until_parked();
+        assert!(cx.update(|window, _| window.is_window_active()));
+        let before = posted(cx).len();
+        toast(cx);
+        assert_eq!(posted(cx).len(), before, "in front: the toast is enough");
+
+        cx.deactivate_window();
+        let id = toast(cx);
+        let shown = posted(cx);
+        assert_eq!(shown.len(), before + 1, "behind: one system notification for the toast");
+        let last = shown.last().unwrap();
+        assert_eq!((last.tag.as_ref(), last.title.as_ref(), last.body.as_ref()), (id.as_str(), "Claude needs you", "work / api"));
+
+        view.update(cx, |this, _| this.person.system_notifications = false);
+        toast(cx);
+        assert_eq!(posted(cx).len(), before + 1, "switched off: none");
+
+        assert!(!view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == "settings")));
+        cx.simulate_system_notification_response(gpui::SystemNotificationResponse { tag: id.into(), action_id: None });
+        cx.run_until_parked();
+        assert!(cx.update(|window, _| window.is_window_active()), "the click brings the window forward");
+        assert!(view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == "settings")), "and does what the toast's click does");
     }
 
     #[test]

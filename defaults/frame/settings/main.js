@@ -884,6 +884,17 @@ export default class Settings extends View {
       this.b(this.row(t, "An agent needs you", file(sounds.blocked), this.button(t, "st-play-blocked", "Play", () => playSound("blocked")))),
       this.b(this.row(t, "An agent finished", file(sounds.done), this.button(t, "st-play-done", "Play", () => playSound("done")))),
       this.b(div().pt(12).text_size(12.5).line_height("18px").text_color(t.dim).child("Want your own sounds? Ask your agent to set sounds.done and sounds.blocked in settings.json to an MP3.")),
+      this.b(this.heading(t, "Notifications")),
+      this.b(
+        this.row(
+          t,
+          "System notifications",
+          "While Fireflies isn't the app in front, its notes also go to the system's notification center. A click on one comes back here.",
+          this.toggle(t, "st-sysnote", this.person.system_notifications !== false, (_e, cx) =>
+            this.change((p) => (p.system_notifications = p.system_notifications === false), cx),
+          ),
+        ),
+      ),
     ];
   }
 

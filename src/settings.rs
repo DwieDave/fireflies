@@ -429,6 +429,10 @@ pub struct Person {
     /// A draggable scroll position thumb at a terminal pane's right edge.
     #[serde(skip_serializing_if = "is_true")]
     pub pane_scrollbars: bool,
+    /// A toast also goes to the system's notification center while the
+    /// window isn't the one in front (window/sysnote.rs).
+    #[serde(skip_serializing_if = "is_true")]
+    pub system_notifications: bool,
     /// Minimum terminal text contrast ratio; 1 leaves program colors unchanged.
     pub minimum_contrast: f32,
     /// Where web links open: a web pane in the app, or the system's browser.
@@ -597,6 +601,7 @@ impl Default for Person {
             ui_font: None,
             clipboard_write: true,
             pane_scrollbars: true,
+            system_notifications: true,
             minimum_contrast: 1.0,
             links: Links::App,
             option_as_alt: OptionAsAlt::Auto,

@@ -309,6 +309,10 @@ With Fireflies open, the person reviews it in a window and opens it on GitHub; w
 prefilled issue page opens in the browser and its link is printed. Nothing is filed
 until the person submits it on GitHub.
 
+A mod's `notify()` toast also reaches the system's notification center (and
+the lock screen) while Fireflies isn't in front: keep secrets out of its title
+and body. settings.json `system_notifications: false` keeps it in the window.
+
 Never experiment with pointer/key automation on the person's real display.
 When developing the app on Linux, its `scripts/sandbox` provides an isolated
 home, core and display: `up`, `do`, `status`, `shot`, then `down` when done.

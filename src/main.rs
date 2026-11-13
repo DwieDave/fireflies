@@ -236,6 +236,11 @@ pub fn open_main(core: std::sync::Arc<hc::Core>, requests: async_channel::Receiv
                 app_id: Some(std::env::var("HERDR_APP_ID").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "herdr-app".into())),
                 ..Default::default()
             };
+            // Linux and Windows name the app's system notifications by it
+            // (window/sysnote.rs); macOS takes the bundle's.
+            if let Some(id) = &options.app_id {
+                cx.set_app_identity(id, "Fireflies");
+            }
             cx.open_window(options, |window, cx| cx.new(|cx| window::AppWindow::new(core, requests, window, cx)))
                 .expect("cannot open the Fireflies window");
             cx.activate(true);
