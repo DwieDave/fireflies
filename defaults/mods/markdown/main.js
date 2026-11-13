@@ -36,7 +36,7 @@ import { props, theme, settings, exec, run, panes, shared, setShared, readTextFi
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
 import { documentLinks, nextLink, nextHeading } from "./links.js";
-import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 
 const MOD = "markdown";
@@ -333,7 +333,7 @@ export default class Markdown extends View {
   key(e, cx) {
     const k = keyOf(e), m = e.modifiers ?? {};
     if (m.platform || m.alt) return;
-    // ? opens the keys over the page, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    // ? opens the keys over the page, ? esc q close them; meanwhile they take every key (keyhelp.ts).
     const help = keysKey(e, this.keysShown);
     if (help || this.keysShown) {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
@@ -420,7 +420,7 @@ export default class Markdown extends View {
     return { abs: this.on ? null : abs, name: name ? `cache/${IMAGES}/${name}` : name };
   }
 
-  /** `?`: every key, in the page's place (keyhelp.js). */
+  /** `?`: every key, in the page's place (keyhelp.ts). */
   keysStrip(t) {
     return keysView(t, { id: "md-keys-strip", title: "markdown", list: KEYS, close: () => { this.keysShown = false; } });
   }
@@ -462,7 +462,7 @@ export default class Markdown extends View {
       .on_key_down((e, cx) => this.key(e, cx))
       .on_mouse_down("left", () => this.handle.focus())
       .child(this.toolbar(t))
-      // ?: the keys in the page's place, the toolbar stays (keyhelp.js).
+      // ?: the keys in the page's place, the toolbar stays (keyhelp.ts).
       .child(this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t)) : body);
   }
 }

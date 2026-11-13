@@ -9,7 +9,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import * as herdr from "herdr";
 import { segments } from "./graph.js";
-import { keysHint } from "./keyhelp.js";
+import { keysHint } from "./keyhelp.ts";
 
 export const ART = "mods/nocturne/art";
 export const stop = (_e, cx) => cx.stop_propagation();
@@ -108,7 +108,7 @@ export function hints(t, list, right, onPress, { ends = [], help = null } = {}) 
     .child(div().flex_1())
     .children(ends.map(hint("end")))
     .when(Boolean(right), (el) => el.child(right))
-    // ? keys last (keyhelp.js), as every Nocturne bar.
+    // ? keys last (keyhelp.ts), as every Nocturne bar.
     .when(Boolean(help), (el) => el.child(keysHint(t, "git-help-0", false, (cx) => onPress?.(help[0], cx), help[0])));
 }
 

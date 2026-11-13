@@ -62,7 +62,7 @@ the exact versions in `package.json` (`bun install` puts them in
    that stays. Types come in with `import type { X }` (a plain import of a
    type stays in the code and fails at load: `verbatimModuleSyntax` reports it).
 3. Copy `guard.ts` from `pip/` if the mod reads anything from
-   outside (it will). Copy `keyhelp.d.ts` beside `keyhelp.js` if it imports
+   outside (it will). Copy `keyhelp.d.ts` beside `keyhelp.ts` if it imports
    keyhelp.
 4. Type it. The view: fields with initializers instead of assignments in
    `init` (`playing = true;`, `handle: FocusHandle | null = null;`), methods
@@ -154,10 +154,10 @@ every mod that uses it, byte for byte, and a test fails when copies drift:
 - `guard.ts`, `keyhelp.d.ts`: `scripts/mods-typescript.test.ts` (it also
   checks that every mod importing guard.ts has the copy).
 - `limits.ts` (nocturne, usage): `scripts/usage-limits.test.ts`.
-- `keyhelp.js` (14 mods): `scripts/keyhelp.test.ts`. It stays `.js` until
+- `keyhelp.ts` (14 mods): `scripts/keyhelp.test.ts`. It stays `.js` until
   the migration converts all its copies in one commit; then `keyhelp.d.ts`
   goes, the test's paths turn `.ts`, and each importer's
-  `from "./keyhelp.js"` becomes `"./keyhelp.ts"`.
+  `from "./keyhelp.ts"` becomes `"./keyhelp.ts"`.
 
 Convert a shared file in all its copies at once, edit one, copy it over the
 others (`for m in ...; do cp ...; done`), and rename the paths in its test.

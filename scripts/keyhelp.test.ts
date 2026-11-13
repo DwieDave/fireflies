@@ -1,4 +1,4 @@
-// Nocturne's one key help (defaults/mods/nocturne/keyhelp.js): every copy
+// Nocturne's one key help (defaults/mods/nocturne/keyhelp.ts): every copy
 // in a nocturne mod is byte-identical to the source, and in every mod that
 // lists its keys ? opens the same overview and ? or esc closes it. herdr and
 // gpui stand-ins (mock.module is process-wide: this file runs alone).
@@ -53,20 +53,20 @@ mock.module("gpui-base", () => ({
 
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
-const SOURCE = readFileSync(`${MODS}/nocturne/keyhelp.js`, "utf8");
+const SOURCE = readFileSync(`${MODS}/nocturne/keyhelp.ts`, "utf8");
 
-test("every nocturne mod's keyhelp.js is the source, byte for byte", () => {
-  const copies = NOCTURNE_MODS.filter((m) => existsSync(`${MODS}/${m}/keyhelp.js`));
-  for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/keyhelp.js`, "utf8") === SOURCE]).toEqual([m, true]);
+test("every nocturne mod's keyhelp.ts is the source, byte for byte", () => {
+  const copies = NOCTURNE_MODS.filter((m) => existsSync(`${MODS}/${m}/keyhelp.ts`));
+  for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/keyhelp.ts`, "utf8") === SOURCE]).toEqual([m, true]);
   // Each mod that imports it has its copy, and every mod with a ? overview imports it.
-  const users = ["nocturne", ...NOCTURNE_MODS].filter((m) => readdirSync(`${MODS}/${m}`).some((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts") && f !== "keyhelp.js"
-    && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
+  const users = ["nocturne", ...NOCTURNE_MODS].filter((m) => readdirSync(`${MODS}/${m}`).some((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts") && f !== "keyhelp.ts"
+    && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.ts"')));
   expect(users.filter((m) => m !== "nocturne").sort()).toEqual(copies.sort());
   expect(users.sort()).toEqual(["agent-graph", "browser", "editor", "file-tree", "git", "github",
     "markdown", "nocturne", "notifications", "pip", "preview", "procs", "scripts", "usage"]);
 });
 
-const kh = await import("../defaults/mods/nocturne/keyhelp.js");
+const kh = await import("../defaults/mods/nocturne/keyhelp.ts");
 
 test("keysKey: ? toggles; esc and q close only while it's open; modifiers leave it alone", () => {
   const e = (key: string, key_char?: string, mods: any = {}) => ({ key, key_char, modifiers: { shift: false, control: false, alt: false, platform: false, ...mods } });

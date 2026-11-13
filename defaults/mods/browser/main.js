@@ -89,7 +89,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
 import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, closeOverlay, window as appWindow } from "herdr";
-import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import * as Tabs from "./tabs.js";
 
 const ICONS = "mods/browser/icons";
@@ -923,7 +923,7 @@ export default class Browser extends View {
     if (m.platform || m.control || m.alt) return false;
     const k = keyOf(e);
     const ready = Boolean(this.start && available());
-    // ? opens the keys in the page's place, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    // ? opens the keys in the page's place, ? esc q close them; meanwhile they take every key (keyhelp.ts).
     const help = keysKey(e, this.keysShown);
     if (help) { this.keysShown = help === "toggle" ? !this.keysShown : false; return true; }
     if (this.keysShown) return true;
@@ -1043,7 +1043,7 @@ export default class Browser extends View {
         .child("retry  r")));
   }
 
-  /** ? keys, the bar's last control (keyhelp.js); tab rings it like the others. */
+  /** ? keys, the bar's last control (keyhelp.ts); tab rings it like the others. */
   keysButton(t) {
     const toggle = () => { this.keysShown = !this.keysShown; };
     const ringed = this.control("keys", true, toggle);
@@ -1051,7 +1051,7 @@ export default class Browser extends View {
       .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
   }
 
-  /** `?`: every key, in the page's place (keyhelp.js): the page is a native
+  /** `?`: every key, in the page's place (keyhelp.ts): the page is a native
    *  view, drawn over anything laid on it, so it folds away meanwhile. */
   keysStrip(t) {
     return div().relative().flex_1().min_h(0)

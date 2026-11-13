@@ -3,7 +3,7 @@
 // view; the files pane's preview split (file-tree) mounts it as a nested
 // view with props { embedded: true, path, on }. A mod can import only its own
 // files, so file-tree ships this file and the ones it imports (kinds.js,
-// image.js, table.js, diff.js, keys.js, keyhelp.js) unchanged;
+// image.js, table.js, diff.js, keys.js, keyhelp.ts) unchanged;
 // scripts/preview-shared.test.ts fails when the copies differ: edit
 // preview's and copy them over.
 //
@@ -26,7 +26,7 @@ import { formatOf, hexBytes, sniff, sizeFromFile, plan, cantShow, fitted, fitSca
 import { MAX_BYTES, MAX_ROWS, separator, parse as parseTable, table, oneLine, wholeLines, shownNote, SQLITE_ARGS, TABLES_SQL, rowsSql, countSql, tablesOf, sqliteError } from "./table.js";
 import { parse as parsePatch, fileStarts, nextFile } from "./diff.js";
 import { keyOf, keyList, cycle } from "./keys.js";
-import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const MOD = "preview";
 // Each preview's shown file by slot: its name for the pane header
@@ -901,7 +901,7 @@ export default class Viewer extends View {
     if (m.platform || m.control || m.alt) return;
     const d = m.shift ? SHOVE : NUDGE;
     const how = this.how?.how;
-    // ? opens the keys in the file's place, ? esc q close them; meanwhile they take every key (keyhelp.js).
+    // ? opens the keys in the file's place, ? esc q close them; meanwhile they take every key (keyhelp.ts).
     const help = keysKey(e, this.keysShown);
     if (help || this.keysShown) {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
@@ -1016,7 +1016,7 @@ export default class Viewer extends View {
       .child(div().relative().child(label));
   }
 
-  /** ? keys, the bar's last control (keyhelp.js); tab rings it like the chips. */
+  /** ? keys, the bar's last control (keyhelp.ts); tab rings it like the chips. */
   keysChip(t) {
     const toggle = () => { this.keysShown = !this.keysShown; };
     (this.chips ??= []).push({ id: "img-keys", action: toggle });
@@ -1025,7 +1025,7 @@ export default class Viewer extends View {
       .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
   }
 
-  /** `?`: the keys that do something here, in the file's place (keyhelp.js): a
+  /** `?`: the keys that do something here, in the file's place (keyhelp.ts): a
    *  native view (a PDF, a video) would draw over anything laid on it. */
   keysStrip(t) {
     const list = keyList(this.how?.how, this.kind, {

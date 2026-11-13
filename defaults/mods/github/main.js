@@ -45,7 +45,7 @@ import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
 import { bindTab, tabActions } from "./form-keys.js";
-import { keysView, keysKey } from "./keyhelp.js";
+import { keysView, keysKey } from "./keyhelp.ts";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
@@ -522,7 +522,7 @@ export default class GitHub extends View {
       .when(Boolean(this.overlay), (el) => el.child(chip(t, "gh-close", "✕", false, () => this.closeWindow())));
   }
 
-  /** ?: every key of the tab and the window (keyhelp.js). */
+  /** ?: every key of the tab and the window (keyhelp.ts). */
   helpPanel(t) {
     const fork = this.tab === "projects" ? "F" : "p F";
     const all = [["1 2 3 [ ]", "pull requests / actions / projects"], ["r", "read again now"],

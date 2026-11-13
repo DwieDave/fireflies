@@ -32,9 +32,8 @@ import type { Theme } from "herdr";
 import { ART, OWN, dither } from "./kit.ts";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.ts";
 import type { Note, ProviderId, ScopedWindow, Usage, UsageWindow, Why } from "./limits.ts";
-// keyhelp.js is one file shared by every nocturne mod; keyhelp.d.ts types it until all its
-// copies turn .ts together.
-import { keysHint, keysView, keysKey } from "./keyhelp.js";
+// keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
+import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const TICK = 30_000; // countdowns, and asking again once the answer is old
 const FIRST = 1000; // the first read, this long after the pane first draws (ms)
@@ -215,7 +214,7 @@ export default class UsagePane extends View {
     cx.notify();
   }
 
-  /** ?: every key, under the toolbar (keyhelp.js). */
+  /** ?: every key, under the toolbar (keyhelp.ts). */
   keysStrip(t: Theme) {
     return keysView(t, { id: "us-keys", title: "usage", list: KEYS, close: () => { this.keysShown = false; } });
   }
@@ -416,7 +415,7 @@ export default class UsagePane extends View {
         .on_click((_e, cx) => { cx.stop_propagation(); this.read(cx, true); })
         .child(busy ? div().child("·").frames(["·", "✦", "✧", "·"], 220) : "↻")
         .child(div().ml(6).child(status)))
-      // ? keys: the toolbar's last item (keyhelp.js).
+      // ? keys: the toolbar's last item (keyhelp.ts).
       .child(keysHint(t, "us-keys-chip", this.keysShown, () => { this.keysShown = !this.keysShown; }).ml(6))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
   }
@@ -483,7 +482,7 @@ export default class UsagePane extends View {
       .children(layer("hills-rim", 144, t.ansi8, 0.5))
       .child(this.toolbar(t, d, note));
 
-    // ?: the keys in the meadow's place, the toolbar stays (keyhelp.js).
+    // ?: the keys in the meadow's place, the toolbar stays (keyhelp.ts).
     if (this.keysShown) return root.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t)));
 
     if (!d) return root.child(this.message(t, note));

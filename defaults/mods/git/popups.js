@@ -15,7 +15,7 @@ import { dither, stop, edgeRow, popupScrim } from "./draw.js";
 import { keyLabel } from "./keys.js";
 import { window as appWindow } from "herdr";
 import { formKey, formHints, ring } from "./form-keys.js";
-import { keysView, keysKey } from "./keyhelp.js";
+import { keysView, keysKey } from "./keyhelp.ts";
 
 const mac = () => appWindow?.()?.platform === "macos";
 
@@ -43,7 +43,7 @@ export class Popups {
     this.v.focusSelf();
   }
 
-  /** ?: every key here as keyhelp.js's overview, over the window; its rows
+  /** ?: every key here as keyhelp.ts's overview, over the window; its rows
    *  run as a menu's do (j k enter, or a row's own key). `sections`:
    *  [{ title, keys: [[label, words, go], ...] }] with `.key` and `.danger` on a row. */
   keys({ title, sections }) {

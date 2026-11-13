@@ -1,5 +1,5 @@
 // The TypeScript mods' shared files and their boundary parsing (docs/mods-typescript.md):
-// guard.ts and keyhelp.d.ts are one file each, copied byte for byte into every mod that
+// guard.ts is one file, copied byte for byte into every mod that
 // uses them (a mod can't import another mod's files); guard.ts proves what unknown
 // data is, or refuses it.
 import { test, expect } from "bun:test";
@@ -19,11 +19,8 @@ test("every copy of guard.ts is the same file, and every mod that imports it has
   expect(copies.sort()).toEqual(["nocturne", "pip", "usage"]);
 });
 
-test("every TypeScript mod that imports keyhelp.js has the same keyhelp.d.ts beside it", () => {
-  const source = readFileSync(`${MODS}/pip/keyhelp.d.ts`, "utf8");
-  const typed = mods.filter((m) => sources(m).some((f) => f.endsWith(".ts") && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
-  expect(typed.sort()).toEqual(["pip", "usage"]);
-  for (const m of typed) expect([m, readFileSync(`${MODS}/${m}/keyhelp.d.ts`, "utf8") === source]).toEqual([m, true]);
+test("no mod keeps a hand-written .d.ts for a shared file: the shared files are TypeScript", () => {
+  expect(mods.flatMap((m) => readdirSync(`${MODS}/${m}`).filter((f) => f.endsWith(".d.ts") && f !== "gpui-kit.d.ts").map((f) => `${m}/${f}`))).toEqual([]);
 });
 
 test("guards prove a value or refuse it", () => {

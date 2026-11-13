@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { asJs } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.js, logic.js) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.js),
@@ -70,7 +71,7 @@ const base = {
 };
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
-  const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  const source = asJs(path, await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = source
     .replace(/^import [^;]*;\n/gm, "")
@@ -85,7 +86,7 @@ const kinds = await load(`${F}/kinds.js`);
 const imageLogic = await load(`${F}/image.js`, kinds);
 const { parse: parseTable, ...tableRest } = await load(`${F}/table.js`);
 const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.js`);
-const keyhelp = await load(`${F}/keyhelp.js`);
+const keyhelp = await load(`${F}/keyhelp.ts`);
 const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.js`)), ...keyhelp };
 const { default: Viewer } = await load(`${F}/viewer.js`, shared);
 const logic = await load(`${F}/logic.js`);

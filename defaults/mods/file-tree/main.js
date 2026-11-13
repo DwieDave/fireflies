@@ -118,7 +118,7 @@ import { openInEditor } from "./editor-route.js";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensLayout, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
-import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
+import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.js).
 import Viewer from "./viewer.js";
 
@@ -1374,7 +1374,7 @@ export default class Files extends View {
     if ((m.alt && k === "right") || (m.control && k === "i")) { this.forward(cx); cx.stop_propagation(); cx.notify(); return; }
     if (m.platform || m.control || m.alt) return;
     // ? (shift-/ on most layouts: check what was typed before "/" filters).
-    // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+    // The keys overview (keyhelp.ts): ? opens it, ? esc q close it; meanwhile it takes every key.
     const help = keysKey(e, this.keysShown);
     if (help || this.keysShown) {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
@@ -1600,7 +1600,7 @@ export default class Files extends View {
       this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"),
       ...ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)),
     ];
-    // ? keys: the line's last item (keyhelp.js).
+    // ? keys: the line's last item (keyhelp.ts).
     const keys = keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
       .when(at === "keys", (el) => el.child(ring(t)));
     const rule = () => div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1));
@@ -1619,7 +1619,7 @@ export default class Files extends View {
       .child(row("nf-lens-chips").children(chips).child(div().flex_1()).child(keys).child(rule()));
   }
 
-  /** `?`: every key, in the list's place (keyhelp.js); one column at the panel's width. */
+  /** `?`: every key, in the list's place (keyhelp.ts); one column at the panel's width. */
   keysStrip(t, width = this.size.width) {
     return keysView(t, { id: "nf-keys-strip", title: "files", list: KEYS, narrow: width < 2 * SECTION, close: () => { this.keysShown = false; } });
   }
@@ -1812,7 +1812,7 @@ export default class Files extends View {
     const aside = Boolean(this.menu) && px != null;
     if (aside !== Boolean(this.aside)) { this.aside = aside; cx?.timer?.after(0, () => this.natives("setVisible", { visible: !aside })); }
     const treeW = side === "right" && px != null ? this.size.width - px - DIVIDER : this.size.width;
-    // ?: the keys in the list's place, the toolbar and filter line stay (keyhelp.js).
+    // ?: the keys in the list's place, the toolbar and filter line stay (keyhelp.ts).
     const area = this.keysShown ? div().relative().flex_1().min_h(0).child(this.keysStrip(t, treeW)) : body;
     const endDrag = () => {
       if (!this.dragging) return false;

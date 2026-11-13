@@ -17,7 +17,7 @@
 
 import { svg, div } from "gpui-kit";
 import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
-import { keysView, keysKey, keysHeight } from "./keyhelp.js";
+import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
 import { Popup, icon, popupHeight } from "./popup.js";
 import { openEqualize } from "./equalize.js";
 import { openWorktrees } from "./git.js";
@@ -159,7 +159,7 @@ export function openMenu(props, { width = 220, centered = false, at = null } = {
 // the folded rail and the tab strip have no body to draw it over.
 const KEYS_W = 460;
 
-/** The keys a chrome block takes (nav.js SIDEBAR_HELP, STRIP_HELP): keyhelp.js's overview, in a dialog. */
+/** The keys a chrome block takes (nav.js SIDEBAR_HELP, STRIP_HELP): keyhelp.ts's overview, in a dialog. */
 export function openKeys(title, lines) {
   return openOverlay({ mod: "nocturne", kind: "dialog", frame: "none", width: KEYS_W, height: keysHeight(lines, KEYS_W), props: { role: "keyshelp", title, lines } });
 }

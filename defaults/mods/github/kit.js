@@ -6,7 +6,7 @@
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
-import { hint, keysHint } from "./keyhelp.js";
+import { hint, keysHint } from "./keyhelp.ts";
 
 export const ART = "mods/nocturne/art";
 export const stop = (_e, cx) => cx.stop_propagation();
@@ -106,7 +106,7 @@ export function chip(t, id, label, on, action, color) {
 
 /** lazygit's options bar: the keys that do something now. */
 export function hints(t, list, right, keys = null) {
-  // The help entry (? keys, keyhelp.js) ends the bar, after the right-aligned note too.
+  // The help entry (? keys, keyhelp.ts) ends the bar, after the right-aligned note too.
   const help = list.filter(([key]) => key === "?"), rest = list.filter(([key]) => key !== "?");
   return h_flex().id("gh-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
     .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))

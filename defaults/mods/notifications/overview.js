@@ -33,7 +33,7 @@ import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.js";
 // How tall it is at the least with nothing waiting (layout px, up to the
 // popup's most): a center, not a sliver around its note.
 export const EMPTY_H = 560;
-import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.js";
+import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 /** What ? lists, ? keys last. */
 export const KEYS = [["j k [ ]", "requests"], ["↑↓", "options / requests"], ["↵ 1-9", "answer"], ["⇥ ⇧⇥", "yes, but… / no, but…"],
@@ -210,7 +210,7 @@ export default class Overview {
     const main = m.empty;
     if (m.list == null || main == null) return most;
     const bar = 30;
-    // With its keys open, tall enough for them (keyhelp.js: a 26 px head, 20 px rows).
+    // With its keys open, tall enough for them (keyhelp.ts: a 26 px head, 20 px rows).
     const keys = this.keysShown ? 26 + 22 + KEYS.length * 20 : 0;
     return Math.min(most, Math.max(EMPTY_H, Math.ceil(Math.max(34 + m.list + 8, main, keys) + bar)));
   }
@@ -461,7 +461,7 @@ export default class Overview {
     return out;
   }
 
-  /** `?`: every key, over the requests (keyhelp.js). */
+  /** `?`: every key, over the requests (keyhelp.ts). */
   keysStrip(t) {
     return keysView(t, { id: "notify-keys", title: "waiting on you", list: KEYS, close: () => { this.keysShown = false; } });
   }

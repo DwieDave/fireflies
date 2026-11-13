@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { asJs } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -37,10 +38,10 @@ const base = {
 /** A shipped mod file run with stand-ins for the app's modules (imports
  *  dropped, exports returned), the way picker.test.ts does it: no module mocks,
  *  which would leak into the other test files of the same run. */
-/** A mod file's keyhelp.js exports (imports stripped), when the file imports it. */
+/** A mod file's keyhelp.ts exports (imports stripped), when the file imports it. */
 async function keyhelpOf(path: string, source: string, scope: Record<string, any>): Promise<Record<string, unknown>> {
-  if (!/from "\.\/keyhelp\.js"/.test(source)) return {};
-  const src = await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.js")}`, import.meta.url), "utf8");
+  if (!/from "\.\/keyhelp\.ts"/.test(source)) return {};
+  const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
   const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
@@ -49,7 +50,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
 }
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
-  const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  const source = asJs(path, await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = source
     .replace(/^import [\s\S]*? from "[^"]+";\n/gm, "")

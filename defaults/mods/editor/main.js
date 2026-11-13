@@ -135,7 +135,7 @@ import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vi
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
 import { formKey, bindTab, tabActions } from "./form-keys.js";
-import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
+import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.js";
@@ -2405,7 +2405,7 @@ export default class EditorPane extends View {
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
       .when(this.mode != null, (el) => el.child(this.findLine(t)))
       .when(this.vim.ex != null, (el) => el.child(this.exLine(t, code)))
-      // ?: the keys in the file's place (the file folds away, kept), the bars stay (keyhelp.js).
+      // ?: the keys in the file's place (the file folds away, kept), the bars stay (keyhelp.ts).
       .when(Boolean(this.keysShown), (el) => el.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t))))
       .child(this.keysShown ? div().h(0).flex_none().overflow_hidden().child(this.look ? this.lookView(t) : this.body(t, code)) : this.look ? this.lookView(t) : this.body(t, code))
       .when(this.drawer && !this.keysShown && !this.look, (el) => el.child(this.drawerView(t)))
@@ -2742,7 +2742,7 @@ export default class EditorPane extends View {
   hints(t) {
     if (this.look) return this.lookHints(t);
     const list = hintList({ mode: this.mode, vim: this.vimOn(), vimMode: this.vim.mode, server: this.server?.id != null, markdown: this.markdown, view: this.view });
-    // The keys entry (the last) is keyhelp.js's: its key is the chord that opens it here.
+    // The keys entry (the last) is keyhelp.ts's: its key is the chord that opens it here.
     const help = list.at(-1)?.[1] === "keys" ? list.at(-1) : null;
     const rest = help ? list.slice(0, -1) : list;
     return h_flex().id("editor-hints").relative().h(HINTS).flex_none().px(10).gap(14).items_center().overflow_hidden()
@@ -2788,7 +2788,7 @@ export default class EditorPane extends View {
     else this.editor.focus();
   }
 
-  /** The keys entry (space ? / cmd-k ?): every key, in the file's place (keyhelp.js); ? esc q close it. */
+  /** The keys entry (space ? / cmd-k ?): every key, in the file's place (keyhelp.ts); ? esc q close it. */
   keysStrip(t) {
     return div().id("editor-keys-host").absolute().top(0).left(0).size_full().track_focus(this.keysHandle)
       .on_key_down((e, cx) => {

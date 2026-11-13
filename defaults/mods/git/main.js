@@ -52,7 +52,7 @@ import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./pa
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
-import { keysHint } from "./keyhelp.js";
+import { keysHint } from "./keyhelp.ts";
 import { bindTab, tabActions } from "./form-keys.js";
 import * as WT from "./worktrees.js";
 import { Review } from "./review.js";
@@ -871,7 +871,7 @@ export default class GitView extends View {
   }
 
   /** ?: every key of the focused context, the list's and the window's, as
-   *  keyhelp.js's overview; a row runs its action (j k enter, or its key). */
+   *  keyhelp.ts's overview; a row runs its action (j k enter, or its key). */
   openKeys() {
     const ctx = this.ctx();
     const own = bindings(LISTS.has(ctx) || ctx === "staging" || ctx === "main" ? ctx : this.ctxOf(this.panel));

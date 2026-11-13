@@ -21,7 +21,7 @@ import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, run, spaces, keys, commands, hc, setShared, shared, presentUpdateNotes, updates, nextCommand } from "herdr";
 import { rows } from "./keymap.js";
 import { ART, dither, pip } from "./kit.js";
-import { keysHint, keysView, keysKey } from "./keyhelp.js";
+import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const W = (name) => `mods/workspace-chrome/${name}.svg`;
 const stop = (_e, cx) => cx.stop_propagation();
@@ -212,7 +212,7 @@ export class Welcome {
     return frame(t, "nocturne-welcome").track_focus(this.handle)
       .on_key_down((e, cx) => {
         const k = e.key, m = e.modifiers;
-        // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+        // The keys overview (keyhelp.ts): ? opens it, ? esc q close it; meanwhile it takes every key.
         const help = keysKey(e, this.keysShown);
         if (help || this.keysShown) {
           if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
@@ -272,7 +272,7 @@ export class WhatsNew {
     const k = e.key, m = e.modifiers ?? {};
     if (m.control || m.platform || m.alt) return;
     const n = this.blocks;
-    // The keys overview (keyhelp.js): ? opens it, ? esc q close it; meanwhile it takes every key.
+    // The keys overview (keyhelp.ts): ? opens it, ? esc q close it; meanwhile it takes every key.
     const help = keysKey(e, this.keysShown);
     if (help || this.keysShown) {
       if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;

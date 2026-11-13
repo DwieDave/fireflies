@@ -1,5 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
+import { asJs } from "./mod-source.ts";
 
 // file-tree with stand-ins for the app's modules (as preview.test.ts):
 // they record the commands it runs and what it shares.
@@ -54,7 +55,7 @@ const base = {
 };
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
-  const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  const source = asJs(path, await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = source
     .replace(/^import .*;\n/gm, "")
@@ -65,7 +66,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 const logic = await load("file-tree/logic.js");
-const keyhelp = await load("file-tree/keyhelp.js");
+const keyhelp = await load("file-tree/keyhelp.ts");
 const route = await load("file-tree/editor-route.js");
 const { default: Files } = await load("file-tree/main.js", { ...logic, ...keyhelp, openInEditor: route.openInEditor, herdr });
 const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
@@ -608,7 +609,7 @@ test("? shows the keys over the files (? keys the filter line's last item), ? or
   world.shared = {};
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
   const texts = (el: any): string[] => typeof el === "string" ? [el] : el && typeof el === "object" && "nodes" in el ? el.nodes.flatMap(texts) : [];
-  // The filter line ends with "? keys" (keyhelp.js).
+  // The filter line ends with "? keys" (keyhelp.ts).
   expect(texts(view.lens(world.props, 400, 0)).slice(-2)).toEqual(["?", "keys"]);
   const q = { key: "/", key_char: "?", modifiers: { shift: true } };
   view.key(q, cx);

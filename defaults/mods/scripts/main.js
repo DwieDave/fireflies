@@ -36,7 +36,7 @@ import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, sha
 import { PROBE, parseProbe, detect, rank } from "./detect.js";
 import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.js";
 import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
-import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
+import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const ART = "mods/nocturne/art";
 // The tab strip's note that the deck is open (../nocturne/scripts.js DECK).
@@ -454,7 +454,7 @@ export default class ScriptsDeck extends View {
     return svg(`${ART}/lock.svg`).size(9).flex_none().text_color(on ? t.working : t.dim);
   }
 
-  /** A bar entry: the key in the accent, what it does dimmed (keyhelp.js, as every Nocturne bar). */
+  /** A bar entry: the key in the accent, what it does dimmed (keyhelp.ts, as every Nocturne bar). */
   hint(t, id, key, what) {
     return hint(t, id, key, what);
   }
@@ -629,7 +629,7 @@ export default class ScriptsDeck extends View {
     done();
   }
 
-  /** ? : every key of the deck, in place of the scripts (keyhelp.js). */
+  /** ? : every key of the deck, in place of the scripts (keyhelp.ts). */
   helpView(t, h) {
     const rows = deckKeys(appWindow()?.platform === "macos" ? "⌘" : "ctrl-");
     return div().id("deck-help").relative().h(h).flex_none()

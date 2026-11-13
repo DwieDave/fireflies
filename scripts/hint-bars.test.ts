@@ -97,6 +97,6 @@ test("notifications overview: ? keys ends its key bar, after the sent / not sent
   expect(texts(o.footer(theme, it)).slice(-2)).toEqual(["?", "keys"]);
   expect(OVERVIEW_KEYS.at(-1)[0]).toBe("?");
   o.keysShown = true;
-  // keyhelp.js's overview: its head, then every key.
+  // keyhelp.ts's overview: its head, then every key.
   expect(texts(o.keysStrip(theme))).toEqual(["KEYS", "waiting on you", "? esc", "close", ...OVERVIEW_KEYS.flat()]);
 });

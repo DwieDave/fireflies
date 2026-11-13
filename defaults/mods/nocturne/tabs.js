@@ -38,7 +38,7 @@ import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, to
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.js";
-import { keysHint } from "./keyhelp.js";
+import { keysHint } from "./keyhelp.ts";
 import { headerControls, paneMenu, renamePane } from "./header.js";
 import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
 import { gitState } from "./lazygit.js";
@@ -384,7 +384,7 @@ export default class Tabs {
       div().text_color(open ? t.foreground : t.muted).child("+ new"));
   }
 
-  /** ?: the keys of the row the cursor is on (menu.js openKeys, keyhelp.js's overview). */
+  /** ?: the keys of the row the cursor is on (menu.js openKeys, keyhelp.ts's overview). */
   openHelp() {
     return this.row === "head" ? openKeys("pane header keys", HEADER_HELP)
       : this.row === "parked" ? openKeys("parked pane keys", PARKED_HELP) : openKeys("tab strip keys", STRIP_HELP);

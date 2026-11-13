@@ -51,7 +51,7 @@ import { View, div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { theme, spaces, panes, focused, terminals, hc, run, props, nextCommand, shared, setShared } from "herdr";
 import { dither, pip } from "./kit.js";
-import { keysView, keysKey, hintBar } from "./keyhelp.js";
+import { keysView, keysKey, hintBar } from "./keyhelp.ts";
 
 /** The name a person gave a pane's terminal (Nocturne's "Rename": the nocturne.name label), or null. */
 const givenName = (terminal) => terminals().find((x) => x.address === terminal)?.labels?.["nocturne.name"] || null;
@@ -660,14 +660,14 @@ export default class Agents extends View {
         .child(`${Math.round(this.zoom * 100)}%`)));
   }
 
-  /** lazygit's options bar: the main keys, ? keys last (keyhelp.js). */
+  /** lazygit's options bar: the main keys, ? keys last (keyhelp.ts). */
   hints(t) {
     const list = this.help ? [["esc", "close"]]
       : [["hjkl", "move"], ["enter", "fold"], ["G", "follow"], ["w", "working"], ["s", "stats"], ["f", "terminal"], ["[ ]", "session"]];
     return hintBar(t, "ag-hints", list, { keys: { on: Boolean(this.help), toggle: () => { this.help = !this.help; } } });
   }
 
-  /** ?: every key, in the graph's place (keyhelp.js). */
+  /** ?: every key, in the graph's place (keyhelp.ts). */
   helpPanel(t) {
     return keysView(t, { id: "ag-help", title: "agents and workflows", list: KEYS, close: () => { this.help = false; } });
   }
@@ -691,7 +691,7 @@ export default class Agents extends View {
       .on_mouse_up("left", (_e, cx) => endResize(cx))
       .on_hover((h, cx) => { if (!h) endResize(cx); })
       .child(this.toolbar(t, list, pane));
-    // ?: the keys in the graph's place, the toolbar and the bar stay (keyhelp.js).
+    // ?: the keys in the graph's place, the toolbar and the bar stay (keyhelp.ts).
     if (this.help) return shell.child(div().relative().flex_1().min_h(0).child(this.helpPanel(t))).child(this.hints(t));
     const note = (text, sub) => shell.child(v_flex().flex_1().items_center().justify_center().gap(6).px(16).text_size(11)
       .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.ansi8).child(sub ?? "")))

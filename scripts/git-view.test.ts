@@ -250,7 +250,7 @@ test("review: the Files panel's Review tab marks and hides like diff", async () 
   sh("rm review.txt review2.txt");
 });
 
-test("keys: ? opens the keys overview (keyhelp.js), its rows run; the bar follows the context; right-click has the row's actions", async () => {
+test("keys: ? opens the keys overview (keyhelp.ts), its rows run; the bar follows the context; right-click has the row's actions", async () => {
   const v = await open();
   v.setPanel("commits"); await settle(v);
   await press(v, "?");

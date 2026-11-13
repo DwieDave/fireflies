@@ -350,7 +350,7 @@ export function lensStep(stops, at, dir) {
   return next < 0 || next >= stops.length ? null : stops[next];
 }
 
-/** "? keys" on the filter line (keyhelp.js), px: 4 + "?" + 4 + "keys" + 4 at 7 px a character. */
+/** "? keys" on the filter line (keyhelp.ts), px: 4 + "?" + 4 + "keys" + 4 at 7 px a character. */
 const KEYS_CHIP = 47;
 
 /** The new-item chips by `fit.add`: "+ file" and "+ folder", "+ file" alone, or "+". */

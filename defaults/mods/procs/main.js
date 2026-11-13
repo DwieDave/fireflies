@@ -70,7 +70,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, focused, home, nextCommand, notify, panes, props, run, settings, shared, setShared, spaces, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, index, buildTree, flatten, place, targets, guardOf, endGently, signal, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.js";
 import { SYS_PROBE, KEEP, STEP, STEP_SHOWN, parseSys, measure, push, rate, size, scale } from "./sys.js";
-import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
+import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const ART = "mods/nocturne/art";
 // The strip's note that the deck is open (../nocturne/procs.js DECK, COUNT).

@@ -425,7 +425,7 @@ for (const [kind, item] of [["permission", PERMISSION], ["question", QUESTION], 
     // Under both columns: the overview's last child, after the row of list and request.
     expect(ids["notify-overview"].kids.at(-1)).toBe(ids["ov-bar"]);
     expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
-    // The ? list open (keyhelp.js's overview, over the requests): ? keys still the bar's last word.
+    // The ? list open (keyhelp.ts's overview, over the requests): ? keys still the bar's last word.
     const { o, draw } = center(item);
     o.keysShown = true;
     draw();

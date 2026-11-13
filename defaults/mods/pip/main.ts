@@ -28,7 +28,7 @@
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
 //   p  into a pane   P  park   o  out of Fireflies   x q  close
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
-//   ?    these keys (KEYS), keyhelp.js's overview in a popup: the video is a
+//   ?    these keys (KEYS), keyhelp.ts's overview in a popup: the video is a
 //        native view, drawn over the panes and the overlays opened before it
 //        (a popup, a dialog or a window raised after it cuts a hole in it and
 //        its backdrop dims it); the bar's ? (before ✕) opens it too
@@ -51,9 +51,8 @@ import { props, theme, settings, closeOverlay, openOverlay, run, panes, focused,
 import type { OverlaySpec, PaneInfo, Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
-// keyhelp.js is one file shared by every nocturne mod; keyhelp.d.ts types it until all its
-// copies turn .ts together.
-import { keysView, keysKey, keysHeight } from "./keyhelp.js";
+// keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
+import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
 
 const ID = "pip";
 const BAR = 22;
@@ -628,7 +627,7 @@ export default class Pip extends View {
     run(`pip.${c.id}`);
   }
 
-  /** The keys, keyhelp.js's overview in a popup: ? esc q close it. */
+  /** The keys, keyhelp.ts's overview in a popup: ? esc q close it. */
   renderKeys(t: Theme) {
     const handle = this.handle;
     const view = div().id("pip-keys").relative().size_full().bg(t.background).border(1).border_color(t.ansi0);

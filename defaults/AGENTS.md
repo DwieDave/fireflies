@@ -1406,7 +1406,7 @@ picture opens them as a popup over its video. Git's rows run their action
 (j k, enter or the row's own key), as lazygit's menu does. Every overview
 also opens by command: `<mod>.keys` (agent-graph, browser, editor,
 file-tree, git, github, markdown, notifications, pip, preview, scripts,
-usage). The drawing is `mods/nocturne/keyhelp.js`, copied byte for byte into
+usage). The drawing is `mods/nocturne/keyhelp.ts`, copied byte for byte into
 each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
 The sidebar walks the fold key, spaces (n new: the folder list, t new tab, f folder: the same list, w worktree,
