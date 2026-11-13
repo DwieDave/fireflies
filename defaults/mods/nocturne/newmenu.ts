@@ -190,6 +190,9 @@ function agentRows(agents: readonly KnownAgent[], show = showMissing()): NewItem
  *  here, beside the focused pane or in a tab, like Terminal (no corner mark,
  *  no close on a second pick); the docked panel is the strip's button's. */
 export const menuPanels = (): Panel[] => panels().flatMap((p): Panel[] => {
+  // Databases: not a tile yet (a tenth starts a fourth row): the palette, the git ▾ and nocturne.databases open it.
+  if (p.id === "databases") return [];
+
   // Git, GitHub, Scripts: a normal pane or tab of their own here (inpane.ts), a new one each pick.
   if (p.fixed === "float") return p.beside ? [{ id: p.id, name: p.name, icon: p.icon, key: p.key, words: p.words, pane: p.beside, tab: p.tab }] : [];
 

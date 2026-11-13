@@ -22,7 +22,7 @@ import { updateShown, dismissUpdate } from "./screens.ts";
 import type { Entry, EntryArgs } from "./palette-entries.ts";
 
 // The scratchpad is a panel too (panels.ts): its pick runs nocturne.scratchpad(-tab), opened by the sidebar's copy.
-const BIND: ReadonlyMap<string, string> = new Map([["files", "nocturne.files"], ["git", "nocturne.git"], ["diff", "nocturne.diff"], ["worktrees", "nocturne.worktrees"], ["github", "nocturne.github"], ["scratchpad", "nocturne.scratchpad"]]);
+const BIND: ReadonlyMap<string, string> = new Map([["files", "nocturne.files"], ["git", "nocturne.git"], ["diff", "nocturne.diff"], ["worktrees", "nocturne.worktrees"], ["github", "nocturne.github"], ["scratchpad", "nocturne.scratchpad"], ["databases", "nocturne.databases"]]);
 const BIND_TAB: ReadonlyMap<string, string> = new Map([["scratchpad", "nocturne.scratchpad-tab"]]);
 
 /** An entry with its key bound to `bind` when there is one. */

@@ -373,7 +373,7 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
   if (p?.tab === "dock") return dockItems(t);
 
   if (p?.tab === "git") {
-    // The tab strip's git ▾: the git window, its review, its worktrees, the GitHub window.
+    // The tab strip's git ▾: the git window, its review, its worktrees, the GitHub and Databases windows.
     const bound = (cmd: string) => keys().find((b) => b.action === cmd)?.keys ?? "";
 
     return [
@@ -381,6 +381,7 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
       gitRow(t, "diff", icon(t, "eye"), "Diff", bound("nocturne.diff"), "nocturne.diff"),
       gitRow(t, "worktrees", icon(t, "git-branch"), "Worktrees", bound("nocturne.worktrees"), "nocturne.worktrees"),
       gitRow(t, "github", svg(`${ART}/github.svg`).size(14).flex_none().text_color(t.accent), "GitHub", bound("nocturne.github"), "nocturne.github"),
+      gitRow(t, "databases", svg(`${ART}/database.svg`).size(14).flex_none().text_color(t.accent), "Databases", bound("nocturne.databases"), "nocturne.databases"),
     ];
   }
 

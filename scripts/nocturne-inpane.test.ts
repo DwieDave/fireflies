@@ -86,15 +86,18 @@ test("as the window: opened, never toggled shut", () => {
   expect(opened.length).toBe(before);
 });
 
-test("the sky's commands: git / lazygit / github / scripts with a value open; others fall through", () => {
+test("the sky's commands: git / lazygit / github / scripts / databases with a value open; others fall through", () => {
   expect(openAsCommand("git:pane")).toBe(true);
   expect(openAsCommand("lazygit:tab")).toBe(true);
   expect(openAsCommand('github:{"as":"pane"}')).toBe(true);
   expect(openAsCommand("scripts:pane")).toBe(true);
   expect(ran.map(([n, a]) => [n, a.mod])).toEqual([["pane.split", "git"], ["tab.new", "git"], ["pane.split", "github"], ["pane.split", "scripts"]]);
   expect(openAsCommand("git")).toBe(false);
-  expect(openAsCommand("databases:pane")).toBe(false);
+  expect(openAsCommand("procs:pane")).toBe(false);
   expect(openAsCommand("git:sideways")).toBe(false);
+  ran = [];
+  expect(openAsCommand("databases:pane")).toBe(true);
+  expect(ran.map(([n, a]) => [n, a.mod])).toEqual([["pane.split", "databases"]]);
 });
 
 test("+ new: Git, GitHub and Scripts are tiles that open a pane (or a tab), never the window", () => {
@@ -114,7 +117,7 @@ test("+ new: Git, GitHub and Scripts are tiles that open a pane (or a tab), neve
 });
 
 test("the palette's panels: a \"… in a pane\" entry beside the window and tab ones", async () => {
-  expect(panels().filter((p: any) => p.beside).map((p: any) => p.id)).toEqual(["git", "github", "scripts"]);
+  expect(panels().filter((p: any) => p.beside).map((p: any) => p.id)).toEqual(["git", "github", "scripts", "databases"]);
   const { openEntries } = await import("../defaults/mods/nocturne/palette-open.ts");
   const list = openEntries();
   const titles = list.map((e: any) => e.title);
@@ -125,4 +128,29 @@ test("the palette's panels: a \"… in a pane\" entry beside the window and tab 
   ran = [];
   list.find((e: any) => e.title === "GitHub in a pane")!.go();
   expect(ran[0]).toMatchObject(["pane.split", { mod: "github" }]);
+});
+
+test("databases: nocturne.databases toggles the window; a connection another mod sends opens it there, or where its as says", async () => {
+  const { databasesCommand } = await import("../defaults/mods/nocturne/inpane.ts");
+  expect(databasesCommand("databases")).toBe(true);
+  expect(opened.at(-1)).toMatchObject({ mod: "databases", kind: "window", key: "databases", scrim: true, props: { folder: "/code/app/src" } });
+  // A connection (procs3's port, the Kubernetes mod's port-forward): the window opens on it.
+  sharedState = {};
+  const args = { kind: "postgres", host: "127.0.0.1", port: 15432, name: "postgres :15432", from: "port :15432 (postgres in t3)" };
+  expect(databasesCommand(`databases:${JSON.stringify(args)}`)).toBe(true);
+  expect(opened.at(-1).props.connect).toEqual(args);
+  // The window open: it takes the connection by its own command, nothing else opens.
+  sharedState["databases.window"] = { id: "o7", beat: Date.now() };
+  const before = opened.length;
+  ran = [];
+  databasesCommand(`databases:${JSON.stringify(args)}`);
+  expect(opened.length).toBe(before);
+  expect(ran).toEqual([["databases.connect:" + JSON.stringify(args), undefined]]);
+  // "as": a pane beside the focused one, the connection in its props.
+  ran = [];
+  databasesCommand(`databases:${JSON.stringify({ ...args, as: "pane" })}`);
+  expect(ran[0]).toMatchObject(["pane.split", { mod: "databases", props: { connect: args } }]);
+  // Not a connection (a kind it doesn't speak, a secret-shaped field is just ignored): no.
+  expect(databasesCommand('databases:{"kind":"oracle"}')).toBe(false);
+  expect(databasesCommand("databases:pane")).toBe(false); // openAsCommand's
 });

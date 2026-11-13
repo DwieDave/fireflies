@@ -207,9 +207,9 @@ test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys 
   for (const id of ["git", "diff", "worktrees", "github"]) expect(all).toContain(id);
   // The strip's git ▾ (menu.js, tab "git"): each runs its command.
   const git = menuItems(theme, { tab: "git" });
-  expect(git.map((x: any) => x.id)).toEqual(["git", "diff", "worktrees", "github"]);
+  expect(git.map((x: any) => x.id)).toEqual(["git", "diff", "worktrees", "github", "databases"]);
   for (const x of git) x.go();
-  expect(ran.map(([n]) => n)).toEqual(["nocturne.git", "nocturne.diff", "nocturne.worktrees", "nocturne.github"]);
+  expect(ran.map(([n]) => n)).toEqual(["nocturne.git", "nocturne.diff", "nocturne.worktrees", "nocturne.github", "nocturne.databases"]);
   // Keys: cmd-g Git, cmd-shift-g GitHub (keys.macos.json); the git button itself toggles Git.
   const keysFile = readFileSync(new URL("../defaults/keys.macos.json", import.meta.url), "utf8");
   expect(keysFile).toContain('"cmd-g": "nocturne.git"');

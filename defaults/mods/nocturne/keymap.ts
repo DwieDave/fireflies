@@ -128,6 +128,7 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["nocturne.github", "GitHub window"],
   ["nocturne.github-pr", "GitHub window, on a new pull request"],
   ["nocturne.github-run", "GitHub window, running a workflow"],
+  ["nocturne.databases", "Databases window"],
   ["nocturne.scripts", "Script runner"],
   ["nocturne.scripts-again", "Run the folder's last script again"],
   ["nocturne.scripts-failed", "The last failed script's output"],
