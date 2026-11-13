@@ -50,7 +50,7 @@ import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.ts";
 import { field } from "./inline.ts";
-import Spaces from "./spaces.js";
+import Spaces from "./spaces.ts";
 
 export { GLOW_SQUARE };
 import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.ts";

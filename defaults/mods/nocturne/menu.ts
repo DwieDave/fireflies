@@ -62,7 +62,7 @@ export type SpaceEdit = "rename" | "folder" | "delete";
 
 /** shared() key: { id, kind: "rename" | "folder" | "delete", at } asks the sidebar to edit that space inline. */
 export const EDIT_SPACE = "nocturne.edit-space";
-const EDIT_SPACE_KEY = sharedKey(EDIT_SPACE, object({ id: isString, kind: literal("rename", "folder", "delete"), at: isNumber }));
+export const EDIT_SPACE_KEY = sharedKey(EDIT_SPACE, object({ id: isString, kind: literal("rename", "folder", "delete"), at: isNumber }));
 
 /** Up to this many places to move to in all, the "Move to" rows stay flat in
  *  the menu; past it they gather under one "Move to…" row (moveItems). */

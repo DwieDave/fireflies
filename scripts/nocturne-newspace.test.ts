@@ -495,7 +495,7 @@ test("attach by a typed path", async () => {
 // ---- where it's opened from
 
 test("the sidebar's + new hangs the picker under itself; the press on a lit + new only closes it", async () => {
-  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
+  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
   const s: any = new Spaces();
   s.init(cx());
   const press = { position: { x: 220, y: 40 }, local_position: { x: 12, y: 9 }, bounds: { width: 40, height: 18 } };
@@ -513,7 +513,7 @@ test("the sidebar's + new hangs the picker under itself; the press on a lit + ne
 });
 
 test("Change folder… hangs it under the row right-clicked; from a key or the folded rail it's centered", async () => {
-  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
+  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
   const { EDIT_SPACE } = await import("../defaults/mods/nocturne/menu.ts");
   const s: any = new Spaces();
   s.init(cx());
