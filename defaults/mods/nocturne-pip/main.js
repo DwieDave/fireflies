@@ -1,6 +1,9 @@
 // Nocturne picture in picture: the video a browser pane put in Picture in
-// Picture, in a Fireflies window (drag it by its bar, resize it by its edges and
-// corners: the video keeps its shape) that stays over every tab and space.
+// Picture, in a Fireflies window (drag it by its bar or anywhere on its video,
+// resize it by its edges and corners: the video keeps its shape) that stays
+// over every tab and space. The video is a native view that hands its left
+// presses to Fireflies (fireflies-native-view Kind::gives_left_presses): a
+// press that moves 4 px drags the window, a click gives the player the keyboard.
 // Square, like the rest of Nocturne.
 //
 //   ↩    back to the pane it came from (it plays on there)

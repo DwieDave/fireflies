@@ -1694,7 +1694,11 @@ The main ones:
   lifts the video into the page's top layer to fill it, with the rest of the page hidden, in
   any of the site's layouts (a site moving its player, as YouTube does when the width
   changes, is followed; an embedded player's iframe too); the pane is left empty meanwhile
-  (draw a placeholder; the page gets `pip.leave` when it's back). Actions: `pip.toggle`
+  (draw a placeholder; the page gets `pip.leave` when it's back). A left press on a `pip`
+  view (and its drag and release) goes to the mod's element under it, not the video: in a
+  `kind: "window"` overlay it drags the window like any press the mod doesn't stop (past
+  4 px; less is a click), so a player window moves by its video too. Right-clicks and the
+  wheel stay the page's; `native.debug` shows it per view (`pressAtCenter`). Actions: `pip.toggle`
   (play/pause), `pip.seek { by }` (seconds, back when negative), `pip.mute { muted? }`
   (sound off/on; without `muted`, the other way round), `pip.sync` (nothing): each answers
   with event `pip.state { result: "playing" | "paused", muted, width, height }` (the video's
@@ -1724,6 +1728,8 @@ The main ones:
   « ❚❚ » sound, playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own); what doesn't fit a
   narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
   takes its seam along), which lists them in the same sections, a dithered rule between. The
+  window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
+  video gives the player the keyboard), and resizes by its edges and corners. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
