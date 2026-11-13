@@ -4,7 +4,7 @@
 // other one switches the open picker to its mode in place, the query kept.
 
 import { spaces, panes, focused, openOverlay, closeOverlay, shared, setShared, run } from "herdr";
-import { folderCandidates } from "./folders.js";
+import { folderCandidates } from "./folders.ts";
 
 const KEY = "nocturne.picker-open";
 

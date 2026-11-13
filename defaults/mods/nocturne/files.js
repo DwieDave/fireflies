@@ -11,7 +11,7 @@
 // in the panel goes back there too and leaves it open).
 
 import { spaces, panes, focused, run, shared, setShared } from "herdr";
-import { folderCandidates } from "./folders.js";
+import { folderCandidates } from "./folders.ts";
 
 const MOD = "file-tree";
 const WIDTH = 280;

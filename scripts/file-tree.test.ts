@@ -453,7 +453,7 @@ test("a copy opened as the focused pane takes the keyboard, with a row picked; p
 });
 
 test("cmd-e: opens the panel, moves the keyboard into an open one, closes it from inside, back where it came from", async () => {
-  const files = await load("nocturne/files.js", await import("../defaults/mods/nocturne/folders.js"));
+  const files = await load("nocturne/files.js", await import("../defaults/mods/nocturne/folders.ts"));
   world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }], folder: "/repo" }];
   world.panes = [{ pane: "p1", tab: "t1", terminal: "x", cwd: "/repo" }];
   world.focused = { pane: "p1", cwd: "/repo" };

@@ -43,7 +43,7 @@ const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) =
 
 const { default: Picker } = await import("../defaults/mods/finder/main.js");
 const { togglePicker, pickerFolder } = await import("../defaults/mods/nocturne/picker.js");
-const { folderCandidates, modFolder } = await import("../defaults/mods/nocturne/folders.js");
+const { folderCandidates, modFolder } = await import("../defaults/mods/nocturne/folders.ts");
 
 const TAB = { id: "tb1", active: true }, WEB = { id: "tb2", active: false };
 beforeEach(() => {

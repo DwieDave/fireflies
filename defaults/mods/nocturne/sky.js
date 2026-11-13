@@ -46,7 +46,7 @@ import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, s
 import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
-import { walkStops, walkAt, walkNext } from "./walk.js";
+import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.ts";
 import { field } from "./inline.js";
@@ -67,7 +67,7 @@ import { toggleProcs } from "./procs.js";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
 import { openSpacePicker } from "./newspace.js";
-import { gridify } from "./gridify.js";
+import { gridify } from "./gridify.ts";
 import { toastKey } from "./toast.js";
 import { dismissUpdate } from "./screens.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";

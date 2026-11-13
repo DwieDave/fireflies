@@ -32,7 +32,7 @@ import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "
 import { CURSOR } from "./nav.js";
 import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
-import { openEqualize } from "./equalize.js";
+import { openEqualize } from "./equalize.ts";
 
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
 const MODS = {

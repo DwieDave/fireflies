@@ -13,7 +13,7 @@
 // instead (the menus say "Close …").
 
 import { spaces, panes, focused, run, home } from "herdr";
-import { folderCandidates } from "./folders.js";
+import { folderCandidates } from "./folders.ts";
 import { ART } from "./kit.ts";
 import { filesPane, toggleFiles, filesSlot } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";

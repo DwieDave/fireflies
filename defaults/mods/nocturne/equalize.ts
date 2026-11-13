@@ -5,6 +5,6 @@
 import { openOverlay } from "herdr";
 
 /** Opens the popup (at the pointer) for a pane; without one, the focused pane. */
-export function openEqualize(pane) {
+export function openEqualize(pane: string | null | undefined): void {
   openOverlay({ mod: "equalize-panes", kind: "popup", frame: "none", width: 230, height: 160, props: pane ? { pane } : {} });
 }

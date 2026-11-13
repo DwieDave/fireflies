@@ -1,5 +1,5 @@
 import { test, expect } from "bun:test";
-import { gridRows, gridMoves, simulate } from "../defaults/mods/nocturne/grid.js";
+import { gridRows, gridMoves, simulate } from "../defaults/mods/nocturne/grid.ts";
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i + 1}`);
 
