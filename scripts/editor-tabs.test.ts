@@ -34,6 +34,7 @@ const theme: any = new Proxy({}, { get: () => "#808080" });
 
 // ---- herdr: files on disk, shared state, panes, a language server the tests drive
 let disk: Record<string, string> = {};
+let zoomNow = 1;
 let sharedNow: Record<string, any> = {};
 let storage: Record<string, string> = {};
 let propsNow: any = {};
@@ -50,7 +51,7 @@ let queue: any[] = [];
 let wake: ((m: any) => void) | null = null;
 const listens: number[] = [];
 const herdr: Record<string, any> = {
-  settings: () => ({ zoom: 1, editor: {} }), window: () => ({ platform: "macos" }), appHome: () => "/tmp/app", home: () => "/home/a",
+  settings: () => ({ zoom: zoomNow, editor: {} }), window: () => ({ platform: "macos" }), appHome: () => "/tmp/app", home: () => "/home/a",
   props: () => propsNow, theme: () => theme, run: (name: string, args?: any) => { ran.push(args === undefined ? [name] : [name, args]); return null; },
   keys: () => [], panes: () => paneList, spaces: () => spaceList, focused: () => (focusedPane ? { pane: focusedPane } : null),
   shared: (k: string) => sharedNow[k] ?? null, setShared: (k: string, v: any) => { sharedNow[k] = v; },
@@ -66,7 +67,7 @@ const herdr: Record<string, any> = {
   lspRelease: (id: number) => { released.push(id); }, setUnsaved: (n: any) => { unsaved.push(n); }, notify: () => {},
 };
 mock.module("herdr", () => herdr);
-mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: () => new El(), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (src: string) => Object.assign(new El(), { src }), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
 class Input { v = ""; on() { return true; } value() { return this.v; } set_value(v: string) { this.v = v; } focus() {} set_selected_range() {} }
 /** gpui-base's EditorState: its text, caret, undo stack (count), handlers. */
 class Ed {
@@ -94,6 +95,7 @@ mock.module("gpui-base", () => ({
 const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("../defaults/mods/editor/editor-route.ts");
+const icons = await import("../defaults/mods/editor/file-icons.ts");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 let later: [number, (cx: any) => void][] = [];
@@ -126,7 +128,7 @@ const key = (k: string, mods: any = {}) => ({ key: k, key_char: k.length === 1 ?
 
 beforeEach(() => {
   disk = { "/p/src/a.rs": "fn a() {}\n", "/p/src/b.rs": "fn b() {}\n", "/p/lib/b.rs": "fn lib_b() {}\n", "/p/docs/n.md": "# N\n" };
-  sharedNow = {}; storage = {}; ran.length = 0; notes.length = 0; released.length = 0; unsaved.length = 0; starts = 0; queue = []; wake = null; listens.length = 0;
+  zoomNow = 1; sharedNow = {}; storage = {}; ran.length = 0; notes.length = 0; released.length = 0; unsaved.length = 0; starts = 0; queue = []; wake = null; listens.length = 0;
   spaceList = [{ active: true, tabs: [{ id: "t1", active: true }] }]; focusedPane = null; eds.length = 0;
 });
 
@@ -1128,4 +1130,80 @@ test("keys: space b o / b i / b m, :popout / :popin; the commands pop-out, pop-o
   p.command("pop-out", cx());
   expect(splitOf()).toBeTruthy();
   expect(p.docs.length).toBe(1);
+});
+
+// ---- the file type marks on the tabs (file-icons.ts)
+
+const markOf = (root: any, id: string) => { const box = byId(root, id); return { src: box?.kids[0]?.src, color: box?.kids[0]?.calls.text_color?.[0]?.[0], opacity: box?.calls.opacity?.[0]?.[0] }; };
+const hues: any = new Proxy({}, { get: (_t, k) => String(k) }); // each theme colour by its name
+
+test("file marks: one per kind of file, its svg a crisp one-colour mark beside the editor, tinted by the theme", () => {
+  const want: Record<string, string> = {
+    "/p/a.md": "markdown", "/p/README.markdown": "markdown", "/p/src/a.rs": "code", "/p/x.tsx": "code", "/p/Makefile": "code", "/p/fix.diff": "code",
+    "/p/package.json": "config", "/p/c.yaml": "config", "/p/Cargo.toml": "config", "/p/.gitignore": "config", "/p/.env.local": "config",
+    "/p/a.PNG": "image", "/p/i.svg": "image", "/p/d.pdf": "pdf", "/p/t.csv": "table", "/p/q.sqlite": "table", "/p/v.mov": "media", "/p/s.mp3": "media",
+    "/p/notes.txt": "text", "/p/LICENSE": "text", "/p/f.woff2": "file", "/p/blob.bin": "file",
+  };
+  for (const [path, icon] of Object.entries(want)) expect([path, icons.fileIcon(path)]).toEqual([path, icon]);
+  const colors = icons.FILE_ICONS.map((i: any) => icons.iconColor(i, hues));
+  expect(colors).toEqual(["dim", "dim", "ansi4", "ansi6", "ansi3", "ansi5", "ansi1", "ansi2", "ansi5"]);
+  for (const i of icons.FILE_ICONS) {
+    expect(icons.iconSvg(i, "editor")).toBe(`mods/editor/icons/${i}.svg`);
+    const svg = readFileSync(new URL(`../defaults/${icons.iconSvg(i, "editor")}`, import.meta.url), "utf8");
+    expect(svg).toContain('viewBox="0 0 16 16"');
+    expect(svg).toContain('shape-rendering="crispEdges"');
+    expect(svg).not.toMatch(/fill="#|stroke=/); // one colour: the tint
+  }
+});
+
+test("file marks on the strip: before each name, after the unsaved mark, dimmed on a tab not shown; the widths fit them at zoom 0.9", async () => {
+  zoomNow = 0.9;
+  const p = await pane();
+  p.openFile("/p/docs/n.md", cx());
+  await flush();
+  p.size = { width: 400, height: 600 };
+  const strip = p.tabStrip(theme);
+  const tab0 = byId(strip, "editor-tab-0");
+  const ids = tab0.kids.map((k: any) => k.calls?.id?.[0]?.[0] ?? (typeof k === "string" ? k : null));
+  // The unsaved mark, the type mark, the name, the close box: in that order.
+  expect(ids.indexOf("editor-tab-mark-0")).toBeLessThan(ids.indexOf("editor-tab-icon-0"));
+  expect(ids.indexOf("editor-tab-icon-0")).toBeLessThan(ids.indexOf("editor-tab-close-0"));
+  expect(texts(tab0.kids[ids.indexOf("editor-tab-icon-0") + 1])).toEqual(["a.rs"]);
+  expect(texts(byId(strip, "editor-tab-close-1"))).toEqual(["×"]);
+  expect(markOf(strip, "editor-tab-icon-0")).toEqual({ src: "mods/editor/icons/code.svg", color: "#808080", opacity: 0.5 });
+  expect(markOf(strip, "editor-tab-icon-1")).toEqual({ src: "mods/editor/icons/markdown.svg", color: "#808080", opacity: 1 });
+  // A tab's width has the mark and its gap (12 + 6 px): "a.rs" is 98 px unzoomed.
+  expect(tabs.tabWidth({ name: "a.rs", hint: null })).toBe(Math.round(20 + 8 + 6 + 12 + 6 + 4 * tabs.CHAR_W + 6 + 14));
+  // At zoom 0.9 in 400 px: the room is 400 / 0.9 - 8; the tabs that fit, with their marks, stay within it.
+  const room = 400 / 0.9 - 8;
+  const names = ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs", "/p/lib/b.rs", "/p/src/a.rs.bak", "/p/q.csv"];
+  for (const n of names.slice(2)) { disk[n] ??= "x\n"; p.openFile(n, cx()); await flush(); }
+  const labels = tabs.tabLabels(p.docs.map((d: any) => d.path));
+  const widths = labels.map((l: any) => tabs.tabWidth(l));
+  const fit = tabs.visibleTabs(widths, p.docs.indexOf(p.cur), room);
+  const drawn = widths.slice(fit.from, fit.to).reduce((a: number, b: number) => a + b, 0) + (fit.before ? tabs.MORE : 0) + (fit.after ? tabs.MORE : 0);
+  expect(drawn).toBeLessThanOrEqual(room);
+  expect(fit.to - fit.from).toBeLessThan(names.length); // the marks' room shows: not all six fit
+  const wide = p.tabStrip(theme);
+  for (let i = fit.from; i < fit.to; i++) expect(byId(wide, `editor-tab-icon-${i}`)).toBeTruthy();
+  expect(byId(wide, `editor-tab-icon-${fit.to}`)).toBeFalsy();
+});
+
+test("file marks: one tab (no strip): the bar's name has its mark; a scratchpad's tab has the scratchpad's own", async () => {
+  const p = await pane("/p/docs/n.md");
+  const bar = p.bar(theme);
+  expect(markOf(bar, "bar-icon")).toEqual({ src: "mods/editor/icons/markdown.svg", color: "#808080", opacity: 1 });
+  const ids = bar.kids.map((k: any) => k.calls?.id?.[0]?.[0]);
+  expect(ids.indexOf("bar-icon") + 1).toBe(ids.indexOf("bar-name"));
+  disk["/tmp/app/scratchpad/p-12345678.md"] = "";
+  p.openFile("/tmp/app/scratchpad/p-12345678.md", cx());
+  await flush();
+  expect(markOf(p.tabStrip(theme), "editor-tab-icon-1").src).toBe("mods/nocturne/art/scratchpad.svg");
+});
+
+test("file marks are shared: file-tree's file-icons.ts and icons/*.svg are editor's, byte for byte", () => {
+  const read = (mod: string, file: string) => readFileSync(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
+  for (const file of ["file-icons.ts", ...icons.FILE_ICONS.map((i: string) => `icons/${i}.svg`)]) expect([file, read("file-tree", file) === read("editor", file)]).toEqual([file, true]);
+  // It imports only kinds.ts, itself a shared copy in both.
+  expect([...read("editor", "file-icons.ts").matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1])).toEqual(["kinds.ts", "kinds.ts"]);
 });
