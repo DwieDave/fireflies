@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -162,7 +162,10 @@ test("path helpers", () => {
 
 test("file-tree opens Markdown as a tab of the editor to read (its preview) on a double click; p in the viewer beside; alt-double-click and e open it as text", async () => {
   const route = await load("file-tree/editor-route.ts");
-  const { default: Files, isMarkdown } = await load("file-tree/main.ts", { ...(await load("file-tree/logic.ts")), ...(await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"))), openInEditor: route.openInEditor, editorProps: route.editorProps, herdr: { ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } });
+  const standins = { herdr: { window: () => ({ platform: "macos" }), ...{ ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const { default: Files } = await importMod("file-tree/main.ts", standins, { "./viewer.ts": { default: class {} } });
+  const { isMarkdown } = await importMod("file-tree/state.ts", standins);
   const kept: Record<string, any> = {};
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
   world.spaces = [{ active: true, tabs: [{ id: "tab1", active: true }] }];

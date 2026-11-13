@@ -6,33 +6,19 @@
 # checks it against `oxlint -c oxlint.size.json defaults/mods`.
 defaults/mods/agent-graph/claude.ts snapshot
 defaults/mods/agent-graph/main.ts
-defaults/mods/browser/main.ts
-defaults/mods/browser/main.ts init
-defaults/mods/browser/main.ts onEvent
 defaults/mods/editor/diff.ts parse
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
 defaults/mods/editor/viewer.ts
 defaults/mods/file-tree/diff.ts parse
-defaults/mods/file-tree/logic.ts
-defaults/mods/file-tree/main.ts
-defaults/mods/file-tree/main.ts key
-defaults/mods/file-tree/main.ts render
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
-defaults/mods/nocturne/sky.ts
 defaults/mods/nocturne/tabs.ts render
 defaults/mods/notifications/claude.ts
 defaults/mods/notifications/claude.ts questionStep
 defaults/mods/preview/diff.ts parse
 defaults/mods/preview/viewer.ts
-defaults/mods/procs/main.ts
-defaults/mods/procs/main.ts foot
-defaults/mods/procs/main.ts onKey
-defaults/mods/scripts/main.ts
-defaults/mods/scripts/main.ts onKey
-defaults/mods/scripts/main.ts render

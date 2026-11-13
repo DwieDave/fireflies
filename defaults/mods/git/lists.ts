@@ -134,7 +134,7 @@ export function emptyText(v: GitView, ctx: ListContext) {
     case "reflog": return "Empty reflog";
     case "stash": return "Nothing stashed";
     case "worktrees": return "No worktrees";
-    case "remoteBranches": return "No branches on v remote";
+    case "remoteBranches": return "No branches on this remote";
     case "subCommits": case "commitFiles": return "Reading…";
     default: return "Empty";
   }

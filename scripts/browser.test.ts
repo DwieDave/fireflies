@@ -69,10 +69,29 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
 
+// The mod's own files loaded for real (they import nothing of the app's), or as keyhelp.ts is.
+const REAL = /^(guard|guards|editor-route|tabs|favicons|keyhelp)\.ts$/;
+const transpile = (text: string) => new Bun.Transpiler({ loader: "ts", trimUnusedImports: false }).transformSync(text);
+
+/** The mod's own modules a file imports (and theirs), dependencies first, as transpiled
+ *  text: main.ts's parts (strip.ts, tab-ops.ts, …) run in its copy, with its stand-ins. */
+async function locals(path: string, source: string, seen = new Set<string>()): Promise<string[]> {
+  const out: string[] = [];
+  for (const [, file] of source.matchAll(/^import (?!type )[^;]* from "\.\/([\w-]+\.ts)";$/gm)) {
+    if (REAL.test(file!) || seen.has(file!)) continue;
+    seen.add(file!);
+    const src = transpile(await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`, import.meta.url), "utf8"));
+    out.push(...await locals(path, src, seen), src);
+  }
+  return out;
+}
+
 async function load(path: string, own: { props?: any; copy?: number } = {}) {
   let source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
-  // A TypeScript mod: its types go first (Bun keeps the imports and exports this loader rewrites).
-  if (path.endsWith(".ts")) source = new Bun.Transpiler({ loader: "ts", trimUnusedImports: false }).transformSync(source);
+  // A TypeScript mod: its types go first (Bun keeps the imports and exports this loader rewrites);
+  // its own modules before it, in the same copy (their exports are the mod's too).
+  if (path.endsWith(".ts")) source = transpile(source);
+  if (path.startsWith("browser/")) source = [...await locals(path, source), source].join("\n");
   const names: string[] = [];
   const body = source
     .replace(/^import [^;]*;\n/gm, "")

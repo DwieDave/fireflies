@@ -396,8 +396,8 @@ test("route: the copies in the files pane, the picker and the Markdown viewer ar
 test("the picker opens into the focused editor, else the shown tab's; the files pane into the one it sent files to", async () => {
   const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
   expect(pick).toMatch(/openInEditor\(herdr, "match" in r \? \{ path, line/);
-  const files = readFileSync(new URL("../defaults/mods/file-tree/main.ts", import.meta.url), "utf8");
-  expect(files).toMatch(/openInEditor\(herdr, \{ path: `\$\{this\.root\}\/\$\{path\}`, pane: beside\?\.pane \?\? null, prefer: this\.editorSlot/);
+  const files = readFileSync(new URL("../defaults/mods/file-tree/opening.ts", import.meta.url), "utf8");
+  expect(files).toMatch(/openInEditor\(herdr, \{ path: `\$\{v\.root\}\/\$\{path\}`, pane: beside\?\.pane \?\? null, prefer: v\.editorSlot/);
   // The picker's case: a terminal focused, the shown tab's editor takes it.
   paneList = [{ pane: "t", tab: "t1", terminal: "x" }, ed("e1", "s1", "t1", "/a.rs")];
   focusedPane = "t";

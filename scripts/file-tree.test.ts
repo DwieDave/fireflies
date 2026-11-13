@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // file-tree with stand-ins for the app's modules (as preview.test.ts):
 // they record the commands it runs and what it shares.
@@ -65,11 +65,15 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const logic = await load("file-tree/logic.ts");
+// The pure parts (logic.ts and the modules it was split into), as the pane imports them.
+const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`file-tree/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const keyhelp = await load("file-tree/keyhelp.ts");
 const route = await load("file-tree/editor-route.ts");
 const fileIcons = await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"));
-const { default: Loaded } = await load("file-tree/main.ts", { ...logic, ...keyhelp, ...fileIcons, openInEditor: route.openInEditor, editorProps: route.editorProps, herdr, Viewer: class {} });
+// The pane itself is imported for real (its modules as the app loads them),
+// with the stand-ins above for the app's modules and none for the viewer.
+(globalThis as any).window = { paint_path: () => new Element() };
+const { default: Loaded } = await importMod("file-tree/main.ts", { herdr: { ...herdr, window: herdr.appWindow }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} }, { "./viewer.ts": { default: class {} } });
 /** A key event as GPUI sends it, every modifier there (the tests write only the ones held). */
 const full = (e: any) => ({ ...e, modifiers: { shift: false, control: false, alt: false, platform: false, function: false, ...e.modifiers } });
 class Files extends Loaded { key(e: any, cx: any) { return super.key(full(e), cx); } }

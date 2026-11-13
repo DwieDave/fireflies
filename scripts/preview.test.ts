@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked (as markdown.test.ts).
 class Element {
@@ -92,7 +92,10 @@ test("pictures are told apart by extension, any case", () => {
 
 test("file-tree: Markdown and pictures as tabs of the editor (a double click), p their viewer panes, alt-double-click / e the other way", async () => {
   const route = await load("file-tree/editor-route.ts");
-  const { default: Files, viewerFor, isMarkdown } = await load("file-tree/main.ts", { ...(await load("file-tree/logic.ts")), openInEditor: route.openInEditor, editorProps: route.editorProps, herdr: { run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } });
+  const standins = { herdr: { ...herdr, ...{ run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
+  (globalThis as any).window = { paint_path: () => new Element() };
+  const { default: Files } = await importMod("file-tree/main.ts", standins, { "./viewer.ts": { default: class {} } });
+  const { viewerFor, isMarkdown } = await importMod("file-tree/state.ts", standins);
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);
   expect([viewerFor("a.json"), viewerFor("a.yaml"), viewerFor("Cargo.toml")]).toEqual([null, null, null]);

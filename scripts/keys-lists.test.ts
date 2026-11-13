@@ -121,7 +121,7 @@ function isNamed(names: Set<string>, p: string) {
 /** The probes a handler takes: `press(event, cx)` on a fresh surface each time. */
 function taken(make: () => (e: any, cx: any) => void, skip: (p: string) => boolean = () => false) {
   return PROBES.filter((p) => !skip(p)).filter((p) => {
-    const cx: any = { stopped: 0, stop_propagation() { this.stopped++; }, notify() {}, spawn() {}, write_to_clipboard() {}, timer: { after() {}, every() {} }, focus_handle: () => ({ focus() {}, is_focused: () => true }) };
+    const cx: any = { stopped: 0, stop_propagation() { this.stopped++; }, notify() {}, spawn() {}, write_to_clipboard() {}, new: () => ({ set_props() {}, release: () => true }), timer: { after() {}, every() {} }, focus_handle: () => ({ focus() {}, is_focused: () => true }) };
     try { make()(probe(p), cx); } catch (err) { throw new Error(`${p}: ${err}`); }
     return cx.stopped > 0;
   });
@@ -184,10 +184,10 @@ test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?
 });
 
 const files = await import("../defaults/mods/file-tree/main.ts");
-const filesLogic = await import("../defaults/mods/file-tree/logic.ts");
+const filesLogic = await import("../defaults/mods/file-tree/fit.ts");
 test("files: ? lists every key, in the list and while the filter types", () => {
   const rows = [{ path: "a.txt", name: "a.txt", dir: false, depth: 0 }, { path: "b", name: "b", dir: true, depth: 0 }];
-  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {} }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both" }); return (e: any, cx: any) => v.key(e, cx); };
+  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {}, set_value() {}, value: () => "" }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both", lookState: { on: false }, look: null, size: { width: 400, height: 600 }, nav: { back: [], forward: [] }, on: null, entries: new Map(), cut: { hidden: 0, ignored: 0 }, filters: { hidden: false, ignored: false } }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(false, "a.txt")), ...taken(make(false, "b"))])];
   expect(unnamed(filesLogic.KEYS, keys)).toEqual([]);
   // Typing: what steers the hits (the list's "/" line names them).
@@ -242,7 +242,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };
   const make = (state: Record<string, any>) => () => {
-    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], ...state });
+    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], items: [run, row], ...state });
     return (e: any, cx: any) => d.onKey(e, cx, [run, row]);
   };
   // ctrl-x is cmd-x off macOS (the list names the platform's own).
@@ -252,7 +252,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   // The output row spells its keys in its words: name them as the list does.
   const flat: [string, string][] = list.flatMap(([k, w]: [string, string]) => k === "output" ? [[w.split("·").map((x) => x.trim().split(" ").filter((y) => !/^[a-z]{4,}$/.test(y)).join(" ")).join(" "), ""]] : [[k, w]]);
   expect(unnamed(flat, keys)).toEqual([]);
-  const d: any = surface(deck.default, ["foot", "hint", "badge"], { help: false, output: null, typing: false, query: "", folder: "/f" });
+  const d: any = surface(deck.default, ["foot", "hint", "badge"], { help: false, output: null, typing: false, query: "", folder: "/f", asking: null });
   expect(texts(d.foot(theme, run)).slice(-2)).toEqual(["?", "keys"]);
   expect(texts(d.foot(theme, row)).slice(-2)).toEqual(["?", "keys"]);
   expect(texts(d.foot(theme, null)).slice(-2)).toEqual(["?", "keys"]);
