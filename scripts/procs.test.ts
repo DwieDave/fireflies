@@ -1,4 +1,4 @@
-// The processes and ports manager's logic (defaults/mods/procs/logic.js):
+// The processes and ports manager's logic (defaults/mods/procs/logic.ts):
 // the probe's parsers on fixtures in this Mac's formats, the tree, the
 // terminal grouping, folds and search, the cursor across refreshes, what a
 // kill reaches, the kill flow against a fake exec, and the port actions.
@@ -7,7 +7,7 @@ import {
   PROBE, SEP, parseEtime, parseComm, parsePs, parseLsof, parseProbe, guardOf, index, descendants, buildTree, flatten, place,
   targets, alive, signal, endGently, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count,
   wheelDelta, scrollBy,
-} from "../defaults/mods/procs/logic.js";
+} from "../defaults/mods/procs/logic.ts";
 import { COMM, PS, LSOF, TERMS, PANES, SPACES } from "./fixtures/procs.ts";
 
 const procs = () => parsePs(PS, parseComm(COMM));
@@ -97,10 +97,10 @@ test("flatten: folds hide what's under a node; a search keeps the matches and wh
   const rows = flatten(tree, {});
   expect(rows[0]).toMatchObject({ key: "s:s1", depth: 0, open: true });
   expect(rows.find((r: any) => r.key === "p:52391")).toMatchObject({ depth: 7, open: null });
-  const folded = flatten(tree, { folds: { "t:tA": true } });
+  const folded = flatten(tree, { folds: new Map([["t:tA", true]]) });
   expect(folded.some((r: any) => r.key === "p:41872")).toBe(false);
   expect(folded.find((r: any) => r.key === "t:tA").open).toBe(false);
-  const found = flatten(tree, { query: "vite", folds: { "t:tB": true }, byPid: byPid() });
+  const found = flatten(tree, { query: "vite", folds: new Map([["t:tB", true]]), byPid: byPid() });
   expect(found.map((r: any) => r.key)).toEqual(["s:s1", "t:tB", "x:t7", "p:50112", "p:50118"]);
   expect(flatten(tree, { query: "50112", byPid: byPid() }).map((r: any) => r.key)).toEqual(["s:s1", "t:tB", "x:t7", "p:50112"]);
 });

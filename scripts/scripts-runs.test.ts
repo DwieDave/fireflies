@@ -19,7 +19,7 @@ mock.module("herdr", () => ({
   openOverlay: (spec: any) => { overlays.push(spec); return `ov${overlays.length}`; },
   closeOverlay: (id: string) => { closed.push(id); return null; },
 }));
-const { runs, word, tone, elapsed, runArgs, LABEL, start, stop, dismiss, restart, JOBS } = await import("../defaults/mods/scripts/runs.js");
+const { runs, word, tone, elapsed, runArgs, LABEL, start, stop, dismiss, restart, JOBS } = await import("../defaults/mods/scripts/runs.ts");
 const jobs = await import("../defaults/mods/nocturne/jobs.js");
 const prompt = await import("../defaults/mods/nocturne/prompt.js");
 const reset = () => { store.clear(); calls.length = 0; ran.length = 0; notes.length = 0; terms = []; overlays.length = 0; closed.length = 0; reply = () => ({ code: 0, stdout: '{"address":"t9"}', stderr: "" }); };
@@ -67,11 +67,11 @@ test("hc run gets one shell line, the folder, the machine and the labels", () =>
 });
 
 test("ended runs the strip kept come back when the core no longer lists them", async () => {
-  const { withEnded } = await import("../defaults/mods/scripts/runs.js");
+  const { withEnded } = await import("../defaults/mods/scripts/runs.ts");
   const kept = { t1: term("t1", lab("build"), { state: "finished", exit_code: 2, reason: "exited" }), t3: term("t3", lab("old"), { state: "finished" }) };
   const all = [term("t3", lab("dev"))];
-  expect(withEnded(all, kept).map((t: any) => t.address)).toEqual(["t3", "t1"]);
-  expect(runs(withEnded(all, kept)).find((r: any) => r.address === "t1").word).toBe("exit 2");
+  expect(withEnded(all, new Map(Object.entries(kept))).map((t: any) => t.address)).toEqual(["t3", "t1"]);
+  expect(runs(withEnded(all, new Map(Object.entries(kept)))).find((r: any) => r.address === "t1").word).toBe("exit 2");
 });
 
 test("an admin run cancelled at its password prompt reads cancelled; elsewhere 130 is just an exit", () => {
@@ -144,7 +144,7 @@ test("jobs run once, even asked twice at once; stale ones are dropped", async ()
 });
 
 test("hc run's argv never holds a NUL or a newline (hc refuses a NUL)", async () => {
-  const { detect, parseProbe } = await import("../defaults/mods/scripts/detect.js");
+  const { detect, parseProbe } = await import("../defaults/mods/scripts/detect.ts");
   const found = detect(parseProbe("\u001els\njustfile\n\u001efile justfile\ntest:\n  x\n"));
   const a = runArgs({ ...found[0], id: "old\u0000id", cmd: "a\nb" }, "/repo", null);
   for (const w of a.slice(0, -1)) expect(/[\u0000\n]/.test(w)).toBe(false);

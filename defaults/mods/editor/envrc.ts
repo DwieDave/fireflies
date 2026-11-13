@@ -16,9 +16,18 @@
 // the next app start has it at once without running nix: it's refreshed
 // behind the scenes then, and replaced when it changed.
 
+import type * as Herdr from "herdr";
+import type { Guarded } from "./guard.ts";
+import { isNumber, isString, nullable, object, parseJson } from "./guard.ts";
+import { isList } from "./guards.ts";
+
+/** herdr's exec (a test's stand-in). */
+export type Exec = typeof Herdr.exec;
+
 // What decides a direnv environment besides the .envrc: a flake, a classic
 // nix shell, devenv. A change to any of them is a new environment.
 export const WATCHED = [".envrc", ".env", "flake.nix", "flake.lock", "shell.nix", "default.nix", "devenv.nix", "devenv.lock", "devenv.yaml"];
+
 // Up from the folder: the first .envrc, stopping at the repository's top
 // (.git). Then, there: whether direnv is installed, a checksum of each file
 // that decides what the environment is, and direnv's status. One process:
@@ -28,41 +37,115 @@ export const PROBE_SCRIPT = 'd=$1; while :; do if [ -f "$d/.envrc" ]; then break
   + 'printf "dir\\t%s\\n" "$d"; command -v direnv >/dev/null 2>&1 || { printf "direnv\\tnone\\n"; exit 0; }; cd "$d" || exit 0; '
   + `for f in ${WATCHED.join(" ")}; do [ -f "$f" ] && printf "sum\\t%s %s\\n" "$(cksum < "$f" | tr -s ' ' ' ')" "$f"; done; `
   + 'printf "status\\t"; direnv status --json 2>/dev/null | tr -d "\\n"; printf "\\n"';
+
 // How long a first load may take (ms): a flake shell's first build.
 export const LOAD_TIMEOUT = 600000;
 
+/** direnv's change to the environment by variable name (names are data):
+ *  a value, or null to unset it. */
+export interface EnvVars {
+  readonly [name: string]: string | null;
+}
+
+/** An environment as direnv exports it (`direnv export json`): every value a string or null. */
+export function isEnvVars(value: unknown): value is EnvVars {
+  if (typeof value !== "object" || value === null || isList(value)) return false;
+
+  return Object.keys(value).every((name) => {
+    const v: unknown = Object.getOwnPropertyDescriptor(value, name)?.value;
+
+    return v === null || isString(v);
+  });
+}
+
+/** What the disk keeps for a folder (main.ts's cache): its watched files' sums and its environment. */
+export const isKeptEnv = object({ dir: isString, key: isString, env: isEnvVars });
+
+export type KeptEnv = Guarded<typeof isKeptEnv>;
+
+/** The disk's environments by folder. */
+export interface EnvCache {
+  read(dir: string): Promise<{ readonly key: string; readonly env: EnvVars } | null>;
+  write(dir: string, value: { readonly key: string; readonly env: EnvVars }): Promise<void>;
+}
+
+/** A loaded environment of a folder: the sums it's for, and the load (editors opened meanwhile wait on it). */
+interface Load {
+  readonly key: string;
+  readonly env: Promise<EnvVars>;
+}
+
 // Loaded environments by folder: { key, env (a promise) }, so editors opened
 // meanwhile wait on the same load, and a changed key loads again.
-const loads = new Map();
+const loads = new Map<string, Load>();
 
 /** Forgets every loaded environment (tests). */
-export function forgetEnvs() { loads.clear(); }
+export function forgetEnvs(): void {
+  loads.clear();
+}
+
+/** The probe's findings. */
+export interface Probe {
+  /** The .envrc's folder (null: none). */
+  readonly dir: string | null;
+  /** direnv is installed. */
+  readonly direnv: boolean;
+  /** direnv: 0 allowed, 1 not yet, 2 denied, null: unknown. */
+  readonly allowed: number | null;
+  /** The watched files' checksums. */
+  readonly key: string;
+}
+
+/** `direnv status --json`, the part read: whether the .envrc is allowed. */
+const isStatus = object({}, { state: object({}, { foundRC: nullable(object({}, { allowed: nullable(isNumber) })) }) });
 
 /** The probe's findings: { dir } (null: no .envrc), { direnv } (false: not
  *  installed), { allowed } (direnv: 0 allowed, 1 not yet, 2 denied, null:
  *  unknown), { key } (the watched files' checksums). */
-export async function probe(exec, folder) {
+export async function probe(exec: Exec, folder: string): Promise<Probe> {
   const r = await exec("sh", ["-c", PROBE_SCRIPT, "probe", folder]).catch(() => null);
-  const out = { dir: null, direnv: true, allowed: null, key: "" };
-  const sums = [];
-  for (const line of String(r?.stdout ?? "").split("\n")) {
+  let dir: string | null = null;
+  let direnv = true;
+  let allowed: number | null = null;
+  const sums: string[] = [];
+
+  for (const line of (r?.stdout ?? "").split("\n")) {
     const tab = line.indexOf("\t");
+
     if (tab < 0) continue;
-    const [k, v] = [line.slice(0, tab), line.slice(tab + 1)];
-    if (k === "dir") out.dir = v;
-    else if (k === "direnv") out.direnv = v !== "none";
+
+    const k = line.slice(0, tab);
+    const v = line.slice(tab + 1);
+
+    if (k === "dir") dir = v;
+    else if (k === "direnv") direnv = v !== "none";
     else if (k === "sum") sums.push(v);
-    else if (k === "status") {
-      try { out.allowed = JSON.parse(v)?.state?.foundRC?.allowed ?? null; } catch { /* old direnv: unknown */ }
-    }
+    // An old direnv without --json: unknown.
+    else if (k === "status") allowed = parseJson(v, isStatus)?.state?.foundRC?.allowed ?? null;
   }
-  out.key = sums.join("\n");
-  return out;
+
+  return { dir, direnv, allowed, key: sums.join("\n") };
 }
 
 /** The folder holding the nearest .envrc above `folder` (up to the repository), or null. */
-export async function envrcDir(exec, folder) {
+export async function envrcDir(exec: Exec, folder: string): Promise<string | null> {
   return (await probe(exec, folder)).dir;
+}
+
+/** What a folder's environment is for its language servers (kinds below). */
+export type ProjectEnv =
+  | { readonly kind: "none" }
+  | { readonly kind: "no-direnv"; readonly dir: string }
+  | { readonly kind: "blocked"; readonly dir: string; readonly denied: boolean }
+  | { readonly kind: "ready"; readonly dir: string; readonly env: EnvVars; readonly cached: boolean }
+  | { readonly kind: "failed"; readonly dir: string; readonly note: string };
+
+/** What else projectEnv takes (below). */
+export interface ProjectEnvOptions {
+  readonly loading?: (dir: string) => void;
+  readonly cache?: EnvCache | null;
+  readonly fresh?: boolean;
+  readonly refreshed?: (env: EnvVars) => void;
 }
 
 /**
@@ -79,81 +162,122 @@ export async function envrcDir(exec, folder) {
  *   fresh            skip what's kept (a cached shell whose server is gone: garbage-collected)
  *   refreshed(env)   the refresh behind a cached environment found it changed
  */
-export async function projectEnv(exec, folder, { loading, cache = null, fresh = false, refreshed } = {}) {
+export async function projectEnv(exec: Exec, folder: string, { loading, cache = null, fresh = false, refreshed }: ProjectEnvOptions = {}): Promise<ProjectEnv> {
   const p = await probe(exec, folder);
+
   if (!p.dir) return { kind: "none" };
+
   const dir = p.dir;
+
   if (!p.direnv) return { kind: "no-direnv", dir };
+
   // Asked every time (it's in the probe): an allow or a revoke takes effect at the next start.
   if (p.allowed !== 0) return { kind: "blocked", dir, denied: p.allowed === 2 };
+
   const key = p.key;
   let cached = false;
-  const known = loads.get(dir);
-  if (fresh || !known || known.key !== key) {
+  let load = loads.get(dir);
+
+  if (fresh || !load || load.key !== key) {
     const kept = !fresh && cache ? await Promise.resolve(cache.read(dir)).catch(() => null) : null;
-    if (kept && kept.key === key && kept.env) {
+
+    if (kept && kept.key === key) {
       cached = true;
-      loads.set(dir, { key, env: Promise.resolve(kept.env) });
+      load = { key, env: Promise.resolve(kept.env) };
+      loads.set(dir, load);
       // Behind the scenes: what direnv says now (nix-direnv answers from its own cache in ~0.1 s).
-      exportEnv(exec, dir).then((env) => {
-        if (same(env, kept.env)) return;
-        loads.set(dir, { key, env: Promise.resolve(env) });
-        cache?.write(dir, { key, env });
-        refreshed?.(env);
-      }, () => { /* the kept one stays; a real failure shows at the next uncached load */ });
+      exportEnv(exec, dir).then(
+        (env) => {
+          if (same(env, kept.env)) return;
+
+          loads.set(dir, { key, env: Promise.resolve(env) });
+          void cache?.write(dir, { key, env });
+          refreshed?.(env);
+        },
+        () => {
+          /* the kept one stays; a real failure shows at the next uncached load */
+        },
+      );
     } else {
       loading?.(dir);
+
       const env = exportEnv(exec, dir);
-      loads.set(dir, { key, env });
-      env.then((e) => cache?.write(dir, { key, env: e }), () => {});
+
+      load = { key, env };
+      loads.set(dir, load);
+      env.then(
+        (e) => cache?.write(dir, { key, env: e }),
+        () => {},
+      );
     }
   }
+
   try {
-    return { kind: "ready", dir, env: await loads.get(dir).env, cached };
-  } catch (e) {
+    return { kind: "ready", dir, env: await load.env, cached };
+  } catch (error) {
     if (loads.get(dir)?.key === key) loads.delete(dir); // next time, again
-    return { kind: "failed", dir, note: String(e?.message ?? e) };
+
+    return { kind: "failed", dir, note: error instanceof Error ? error.message : String(error) };
   }
 }
 
 /** direnv's environment for `dir`, without its own bookkeeping (DIRENV_*):
  *  those change with every load and would make each start look like a new server. */
-async function exportEnv(exec, dir) {
+async function exportEnv(exec: Exec, dir: string): Promise<EnvVars> {
   const r = await exec("direnv", ["export", "json"], { cwd: dir, timeout: LOAD_TIMEOUT });
+
   if (r.code !== 0) throw new Error(lastWords(r.stderr) || `direnv exited with ${r.code}`);
-  const all = r.stdout.trim() ? JSON.parse(r.stdout) : {};
+
+  const all = r.stdout.trim() ? parseJson(r.stdout, isEnvVars) : {};
+
+  if (all === undefined) throw new Error("direnv's environment isn't JSON of names and values");
+
   return Object.fromEntries(Object.entries(all).filter(([k]) => !k.startsWith("DIRENV_")));
 }
 
-function same(a, b) {
-  const ka = Object.keys(a ?? {}), kb = Object.keys(b ?? {});
-  return ka.length === kb.length && ka.every((k) => a[k] === b?.[k]);
+function same(a: EnvVars, b: EnvVars): boolean {
+  const ka = Object.keys(a);
+  const kb = Object.keys(b);
+
+  return ka.length === kb.length && ka.every((k) => a[k] === b[k]);
 }
 
 /** The last line direnv wrote that says something (its errors end its output). */
-function lastWords(stderr) {
-  return String(stderr ?? "").split("\n").map((l) => l.replace(/^direnv: /, "").trim()).filter(Boolean).at(-1) ?? "";
+function lastWords(stderr: string): string {
+  return stderr.split("\n").flatMap((l) => {
+    const said = l.replace(/^direnv: /, "").trim();
+
+    return said ? [said] : [];
+  }).at(-1) ?? "";
 }
 
 /** The program's absolute path in `env`'s PATH (else the app's), or null. */
-export async function lookup(exec, program, env = null) {
-  const path = env?.PATH;
+export async function lookup(exec: Exec, program: string, env: EnvVars | null = null): Promise<string | null> {
+  const path = env?.["PATH"];
   const script = path ? 'PATH=$1; command -v "$2"' : 'command -v "$2"';
   const r = await exec("sh", ["-c", script, "lookup", path ?? "", program]).catch(() => null);
   const found = r?.code === 0 ? r.stdout.trim() : "";
+
   return found.startsWith("/") ? found : null;
 }
 
 /** argv that runs the server at `path` with `env`'s variables (null: unset). */
-export function wrap(argv, path, env = null) {
+export function wrap(argv: readonly string[], path: string, env: EnvVars | null = null): string[] {
   const vars = Object.entries(env ?? {});
+
   if (!vars.length) return [path, ...argv.slice(1)];
-  return ["env", ...vars.flatMap(([k, v]) => (v == null ? ["-u", k] : [])), ...vars.filter(([, v]) => v != null).map(([k, v]) => `${k}=${v}`), path, ...argv.slice(1)];
+
+  return ["env", ...vars.flatMap(([k, v]) => (v === null ? ["-u", k] : [])), ...vars.flatMap(([k, v]) => (v === null ? [] : [`${k}=${v}`])), path, ...argv.slice(1)];
 }
 
 /** A file name for a folder's kept environment (FNV-1a of the path). */
-export function cacheName(dir) {
+export function cacheName(dir: string): string {
   let h = 0x811c9dc5;
-  for (let i = 0; i < dir.length; i++) { h ^= dir.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; }
+
+  for (let i = 0; i < dir.length; i++) {
+    h ^= dir.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+
   return `env-${h.toString(16).padStart(8, "0")}.json`;
 }

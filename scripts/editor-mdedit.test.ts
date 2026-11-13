@@ -1,9 +1,9 @@
-// The editor's Markdown commands (editor/mdedit.js): each from a
+// The editor's Markdown commands (editor/mdedit.ts): each from a
 // text and a selection to the new text and selection, written here with `|`
 // for a caret and «…» for a selection; running one again takes it off; the
 // lines a command isn't about stay byte for byte.
 import { test, expect, describe } from "bun:test";
-import { run, enter, active, spans, links, tickLine, COMMANDS } from "../defaults/mods/editor/mdedit.js";
+import { run, enter, active, spans, links, tickLine, COMMANDS } from "../defaults/mods/editor/mdedit.ts";
 
 type P = { line: number; col: number };
 /** "a «b» c" or "a|b" -> { text, sel }. */

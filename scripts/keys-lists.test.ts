@@ -194,7 +194,7 @@ test("files: ? lists every key, in the list and while the filter types", () => {
   expect(unnamed(filesLogic.KEYS, taken(make(true, "a.txt")))).toEqual([]);
 });
 
-const preview = await import("../defaults/mods/preview/main.js");
+const preview = await import("../defaults/mods/preview/main.ts");
 const previewKeys = await import("../defaults/mods/preview/keys.ts");
 test("preview: ? lists every key for each way it shows a file", () => {
   const cases: [string, string | null, Record<string, any>][] = [
@@ -237,7 +237,7 @@ test("picture in picture: ? lists every key; ? sits on the bar right before ✕"
   expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "popup", props: { keys: true } });
 });
 
-const deck = await import("../defaults/mods/scripts/main.js");
+const deck = await import("../defaults/mods/scripts/main.ts");
 test("script runner: ? lists every key; every bar ends with the keys entry, cmd-k ? while the filter types", () => {
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };

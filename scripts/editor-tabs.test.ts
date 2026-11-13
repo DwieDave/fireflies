@@ -1,4 +1,4 @@
-// The editor's file tabs (editor/tabs.js, main.js) and where files
+// The editor's file tabs (editor/tabs.ts, main.js) and where files
 // go (editor-route.ts, copied into the files pane, the picker and the
 // Markdown viewer): a tab per file with its own text, undo, caret and unsaved
 // changes; switching, closing with and without unsaved changes, the last tab
@@ -92,9 +92,9 @@ mock.module("gpui-base", () => ({
 (globalThis as any).localStorage = { getItem: (k: string) => storage[k] ?? null, setItem: (k: string, v: string) => { storage[k] = String(v); } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const tabs = await import("../defaults/mods/editor/tabs.js");
+const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("../defaults/mods/editor/editor-route.ts");
-const { createVim, feed } = await import("../defaults/mods/editor/vim.js");
+const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {
@@ -130,7 +130,7 @@ beforeEach(() => {
   spaceList = [{ active: true, tabs: [{ id: "t1", active: true }] }]; focusedPane = null; eds.length = 0;
 });
 
-// ---- the tab model (tabs.js)
+// ---- the tab model (tabs.ts)
 
 test("model: a new file goes right after the shown tab; an open one is found; closing shows the next, else the one before", () => {
   expect(tabs.placeTab(["a", "b", "c"], 0, "x")).toEqual({ index: 1, added: true });
@@ -392,8 +392,8 @@ test("route: the copies in the files pane, the picker and the Markdown viewer ar
 });
 
 test("the picker opens into the focused editor, else the shown tab's; the files pane into the one it sent files to", async () => {
-  const pick = readFileSync(new URL("../defaults/mods/finder/main.js", import.meta.url), "utf8");
-  expect(pick).toMatch(/openInEditor\(herdr, \{ path, \.\.\.\(r\.match/);
+  const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
+  expect(pick).toMatch(/openInEditor\(herdr, "match" in r \? \{ path, line/);
   const files = readFileSync(new URL("../defaults/mods/file-tree/main.js", import.meta.url), "utf8");
   expect(files).toMatch(/openInEditor\(herdr, \{ path: `\$\{this\.root\}\/\$\{path\}`, pane: beside\?\.pane \?\? null, prefer: this\.editorSlot/);
   // The picker's case: a terminal focused, the shown tab's editor takes it.
@@ -451,9 +451,9 @@ test("the pane runs vim's tab commands and the app's next-tab / prev-tab / close
   expect(texts(p.tabStrip(theme))).toEqual(expect.arrayContaining(["src", "lib"]));
 });
 
-// ---- links in the hover card (cardlinks.js)
+// ---- links in the hover card (cardlinks.ts)
 
-const links = await import("../defaults/mods/editor/cardlinks.js");
+const links = await import("../defaults/mods/editor/cardlinks.ts");
 
 test("card links: inline (not images), reference definitions, <autolinks> and bare addresses, each once, in order", () => {
   const parts = [
@@ -953,8 +953,8 @@ test("route: look rides along to the editor (the open record) and to editor.open
   route.openInEditor(herdr, { path: "/p/img/logo.png", pane: "f", look: true });
   expect(ran.at(-1)).toEqual(["editor.open", { path: "/p/img/logo.png", pane: "f", look: true }]);
   expect(sharedNow["editor.open"]).toMatchObject({ slot: null, path: "/p/img/logo.png", look: true });
-  const pick = readFileSync(new URL("../defaults/mods/finder/main.js", import.meta.url), "utf8");
-  expect(pick).toMatch(/r\.match \? \{ line: r\.match\.line, col: r\.match\.col \+ 1 \} : \{ look: true \}/);
+  const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
+  expect(pick).toMatch(/"match" in r \? \{ path, line: r\.match\.line, col: r\.match\.col \+ 1 \} : \{ path, look: true \}/);
 });
 
 test("a link to a picture in the Markdown preview opens as a drawn tab here; on another machine, the preview beside", async () => {
