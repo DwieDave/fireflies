@@ -1,0 +1,333 @@
+// The picker's decisions, as plain functions (scripts/finder.test.ts):
+// how a row's matched characters are marked, how grep's lines group by file,
+// which row the keys move to, and what the preview shows around a line.
+
+import type { Color } from "gpui-kit";
+import type { Theme } from "herdr";
+
+/** The picker's two modes: paths, or the text of every file. */
+export type Mode = "files" | "grep";
+
+/** A `[start, end)` range of characters (fff's matched characters). */
+export type Range = readonly [number, number];
+
+/** A piece of text and whether it's marked as matched. */
+export type Mark = [piece: string, marked: boolean];
+
+/** A file fff found (findFiles): its path in the root, its git state, its matched characters. */
+export interface FoundFile {
+  readonly path: string;
+  readonly git: string | null;
+  readonly ranges: readonly Range[];
+}
+
+/** A line grep found: its file, one-based line, zero-based column, text and matches. */
+export interface GrepMatch {
+  readonly path: string;
+  readonly line: number;
+  readonly col: number;
+  readonly text: string;
+  readonly ranges: readonly Range[];
+}
+
+/** A piece of a line in its syntax color (null: the text's own). */
+export type Run = readonly [piece: string, color: Color | null];
+
+/** A piece of a grep line: its color, and whether a match covers it. */
+export type HitRun = readonly [piece: string, color: Color | null, hit: boolean];
+
+/** grep's head row: a file and how many of its lines matched. */
+export interface HeadRow {
+  readonly head: true;
+  readonly path: string;
+  readonly count: number;
+}
+
+/** grep's line row; its colored runs are worked out the first time it shows. */
+export interface LineRow {
+  readonly head: false;
+  readonly path: string;
+  readonly match: GrepMatch;
+  runs?: readonly HitRun[];
+}
+
+/** A row of grep's list. */
+export type GrepRow = HeadRow | LineRow;
+
+/** `text` cut into `[piece, marked]` by `[start, end]` ranges (any order,
+ *  overlapping ones merged). */
+export function marks(text: string, ranges: readonly Range[]): Mark[] {
+  const r = ranges.filter(([s, e]) => e > s).sort((a, b) => a[0] - b[0]);
+  const out: Mark[] = [];
+  let at = 0;
+
+  for (const [s0, e0] of r) {
+    const s = Math.max(s0, at);
+    const e = Math.min(e0, text.length);
+
+    if (e <= s) continue;
+
+    if (s > at) out.push([text.slice(at, s), false]);
+
+    const last = out.at(-1);
+
+    if (last?.[1] && s === at) last[0] += text.slice(s, e);
+    else out.push([text.slice(s, e), true]);
+
+    at = e;
+  }
+
+  if (at < text.length) out.push([text.slice(at), false]);
+
+  return out;
+}
+
+/** A path's file name and folder, and where the name starts in it. */
+export interface Split {
+  readonly name: string;
+  readonly dir: string;
+  readonly at: number;
+}
+
+/** A path's file name and folder ("src/a/b.rs" → ["b.rs", "src/a"]), and
+ *  where the name starts in it. */
+export function split(path: string): Split {
+  const i = path.lastIndexOf("/");
+
+  return { name: path.slice(i + 1), dir: i > 0 ? path.slice(0, i) : "", at: i + 1 };
+}
+
+/** Ranges in a path moved onto its file name (dropping those in the folder). */
+export function nameRanges(path: string, ranges: readonly Range[]): Range[] {
+  const { at } = split(path);
+
+  return ranges.flatMap(([s, e]): Range[] => (e > at ? [[Math.max(0, s - at), e - at]] : []));
+}
+
+/** Ranges in a path that fall in its folder. */
+export function dirRanges(path: string, ranges: readonly Range[]): Range[] {
+  const { at } = split(path);
+
+  return ranges.flatMap(([s, e]): Range[] => (s < at - 1 ? [[s, Math.min(e, at - 1)]] : []));
+}
+
+/** Grep's matches as rows: a head per file (its count) and its lines, files
+ *  in the order their first match came. Every row knows its match's index. */
+export function grepRows(matches: readonly GrepMatch[]): GrepRow[] {
+  const files = new Map<string, GrepMatch[]>();
+
+  for (const m of matches) {
+    const list = files.get(m.path);
+
+    if (list) list.push(m);
+    else files.set(m.path, [m]);
+  }
+
+  const rows: GrepRow[] = [];
+
+  for (const [path, list] of files) {
+    rows.push({ head: true, path, count: list.length });
+
+    for (const m of list) rows.push({ head: false, path, match: m });
+  }
+
+  return rows;
+}
+
+/** A row the keys may pass over (a head) or pick. */
+interface Pickable {
+  readonly head: boolean;
+}
+
+/** The next pickable row from `at` going `d` (1 / -1), skipping heads,
+ *  stopping at the ends; -1 when there's none. */
+export function move(rows: readonly Pickable[], at: number, d: number): number {
+  const pick = (i: number): boolean => rows[i]?.head === false;
+  let i = at;
+
+  for (let n = 0; n < rows.length; n++) {
+    const next = i + d;
+
+    if (next < 0 || next >= rows.length) return pick(at) ? at : first(rows);
+
+    i = next;
+
+    if (pick(i)) return i;
+  }
+
+  return first(rows);
+}
+
+/** The first pickable row, or -1. */
+export function first(rows: readonly Pickable[]): number {
+  return rows.findIndex((r) => !r.head);
+}
+
+/** Lines of a file, the first one's one-based number. */
+export interface Around {
+  readonly from: number;
+  readonly lines: string[];
+}
+
+/** The lines of `text` to show around one-based `line`: `{ from, lines }`
+ *  (from one-based), about `around` lines on each side, more below near the top. */
+export function around(text: string, line: number, count = 24): Around {
+  const all = text.split("\n");
+  const want = Math.max(1, line || 1);
+  let from = Math.max(1, want - Math.floor(count / 3));
+  const to = Math.min(all.length, from + count - 1);
+
+  from = Math.max(1, Math.min(from, to - count + 1));
+
+  return { from, lines: all.slice(from - 1, to) };
+}
+
+// The same moonfly colors as the editor's (preview's kinds.ts): mods
+// don't share modules, so the table is copied.
+
+/** The moonfly roles (moonfly.vim's groups) a capture name colors with, from
+ *  the theme's palette: capture names are data (the grammars'), so a Map. */
+export function syntaxColors(t: Theme): ReadonlyMap<string, Color> {
+  return new Map<string, Color>([
+    ["keyword", t.ansi5], ["keyword.operator", t.ansi9], ["conditional", t.ansi5], ["repeat", t.ansi5], ["include", t.ansi5],
+    ["function", t.ansi12], ["function.builtin", t.ansi4], ["function.macro", t.ansi13], ["constructor", t.ansi10],
+    ["type", t.ansi10], ["type.builtin", t.ansi10], ["tag", t.ansi10], ["attribute", t.ansi13], ["namespace", t.ansi6], ["module", t.ansi6],
+    ["string", t.ansi11], ["string.escape", t.ansi9], ["string.special", t.ansi3], ["string.regex", t.ansi3], ["character", t.ansi11], ["escape", t.ansi9],
+    ["number", t.ansi3], ["float", t.ansi3], ["boolean", t.ansi3], ["constant", t.ansi3], ["constant.builtin", t.ansi3],
+    ["comment", t.ansi8], ["comment.documentation", t.ansi8],
+    ["property", t.ansi6], ["field", t.ansi6], ["label", t.ansi3], ["operator", t.ansi9],
+    ["variable.builtin", t.ansi4], ["variable.parameter", t.foreground], ["embedded", t.foreground],
+    ["text.title", t.ansi4], ["text.literal", t.ansi11], ["text.uri", t.ansi6], ["text.reference", t.ansi12], ["text.emphasis", t.ansi5], ["text.strong", t.ansi5],
+    ["punctuation.special", t.ansi9],
+  ]);
+}
+
+/** The color for a capture name: its own, else its root's, else none. */
+export function colorOf(colors: ReadonlyMap<string, Color>, name: string): Color | null {
+  const own = colors.get(name);
+
+  if (own) return own;
+
+  const parts = name.split(".");
+
+  for (let i = parts.length - 1; i > 0; i--) {
+    const c = colors.get(parts.slice(0, i).join("."));
+
+    if (c) return c;
+  }
+
+  return null;
+}
+
+/** A highlight span: `[start, end, capture name]` (herdr's `highlight`). */
+export type Span = readonly [number, number, string];
+
+/** `text` cut into `[piece, color|null]` by highlight spans `[start, end, name]`. */
+export function colorRuns(text: string, spans: readonly Span[], colors: ReadonlyMap<string, Color>): Run[] {
+  const out: Run[] = [];
+  let at = 0;
+
+  for (const [s, e, name] of spans) {
+    if (s > at) out.push([text.slice(at, s), null]);
+
+    if (e > s) out.push([text.slice(s, e), colorOf(colors, name)]);
+
+    at = Math.max(at, e);
+  }
+
+  if (at < text.length) out.push([text.slice(at), null]);
+
+  return out;
+}
+
+/** A grep line's colored runs split where a match starts or ends:
+ *  [piece, color, hit]. `runs` from colorRuns, `ranges` the match's. */
+export function lineRuns(runs: readonly Run[], ranges: readonly Range[]): HitRun[] {
+  const hits = new Set<number>();
+
+  for (const [s, e] of ranges) for (let k = s; k < e; k++) hits.add(k);
+
+  const out: HitRun[] = [];
+  let at = 0;
+
+  for (const [piece, color] of runs) {
+    let start = 0;
+
+    for (let k = 1; k <= piece.length; k++) {
+      if (k === piece.length || hits.has(at + k) !== hits.has(at + start)) {
+        out.push([piece.slice(start, k), color, hits.has(at + start)]);
+        start = k;
+      }
+    }
+
+    at += piece.length;
+  }
+
+  return out;
+}
+
+/** How long typing must pause before the picker searches (ms): grep reads
+ *  every file, so it waits a little longer than the file list. */
+export const PAUSE = { files: 40, grep: 120 } as const satisfies { readonly [M in Mode]: number };
+
+/** The overlay width from which the preview shows, and the least the list
+ *  keeps beside it. */
+export const PREVIEW_MIN = 860;
+
+export const LIST_MIN = 340;
+
+/** The preview's width in a picker `width` wide: the larger share (about 64%),
+ *  the list keeping at least LIST_MIN; 0 below PREVIEW_MIN (no preview). */
+export function previewWidth(width: number): number {
+  if (!(width >= PREVIEW_MIN)) return 0;
+
+  return Math.round(width - Math.max(LIST_MIN, width * 0.36));
+}
+
+/** The preview's line height and the height the picker's bars take
+ *  (input 48, hint bar 26, the preview's head 26 and its top padding 6). */
+export const PREVIEW_LINE = 20;
+
+export const PREVIEW_CHROME = 48 + 26 + 26 + 6;
+
+/** How many lines to load so the preview is full in a picker `height` tall,
+ *  with a few to spare (a note line moves it, the last row may be cut). */
+export function previewLines(height: number): number {
+  return Math.max(12, Math.ceil(Math.max(0, height - PREVIEW_CHROME) / PREVIEW_LINE) + 3);
+}
+
+/** The other mode. */
+export const otherMode = (mode: Mode): Mode => (mode === "files" ? "grep" : "files");
+
+/** A key binding as herdr's `keys()` lists it. */
+export interface Binding {
+  readonly section: string;
+  readonly keys: string;
+  readonly action: string;
+}
+
+/** The key bound to `action` in the nocturne layout or globally (keys()),
+ *  else `fallback`: what the chips and the hint bar name. */
+export function keyFor(bound: readonly Binding[], action: string, fallback: string): string {
+  const k = bound.find((b) => b.action === action && (b.section === "layout:nocturne" || b.section === "global"));
+
+  return k?.keys ?? fallback;
+}
+
+/** The first of `folders` that is there: `there(folder)` says true, false,
+ *  or null when it can't tell (no `test` to ask, as on Windows), which
+ *  counts as there. Null when none is. */
+export async function firstFolder(folders: readonly string[], there: (folder: string) => Promise<boolean | null>): Promise<string | null> {
+  for (const f of folders) if ((await there(f)) !== false) return f;
+
+  return null;
+}
+
+/** The line shown when none of `folders` is there: it names the missing
+ *  folder (the space's own when it was one of them) and how to point the
+ *  space somewhere else. `show` writes a path the way the picker does (~). */
+export function goneNote(folders: readonly string[], space: string | null, show: (path: string) => string = (p) => p): string {
+  const gone = space && folders.includes(space) ? space : folders[0] ?? "";
+
+  return `${show(gone)} isn't there any more. Point the space at its folder: f on the space in the sidebar, or "Change this space's folder…" in the palette.`;
+}

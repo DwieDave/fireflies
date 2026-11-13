@@ -10,7 +10,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { dither, pip, toneColor, stop, ART } from "./kit.js";
-import { tone, duration } from "./model.js";
+import { tone, duration } from "./model.ts";
 
 export { NW, NH, GAP_X, GAP_Y, PAD, RW } from "./wires.js";
 import { route, NW, NH, RW } from "./wires.js";

@@ -18,7 +18,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared } from "herdr";
 import { graphql } from "./gh.js";
-import { readAgo, ago, SLOW, linksIn } from "./model.js";
+import { readAgo, ago, SLOW, linksIn } from "./model.ts";
 import { repoKey, newest, LIMITS } from "./cache.js";
 import { markdown } from "./markdown.ts";
 import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";
@@ -26,8 +26,8 @@ import {
   projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices,
   filterTokens, layout, grid, find, step, pickUp, carry, carried, drop, overlay, valueFor, setFieldMutation, positionMutation,
   archiveMutation, addDraftMutation, convertMutation, draftMutation, toggleMutation, cardFields, editableFields, OPTION_ANSI,
-  initials, loginSlot, valueText, slimBoard, wrap,
-} from "./board.js";
+  initials, loginSlot, valueText, slimBoard, wrap, isStoredBoard, boardOf,
+} from "./board.ts";
 
 const PREFS = "github.boards"; // { repos: { repoKey: projectId }, projects: { id: { view, folded: { viewId: [key] }, lanes: { viewId: [key] }, limits: { fieldId: { key: n } } } } }
 const LIST_EVERY = 10 * 60000; // the picker's list is read again this rarely
@@ -35,7 +35,7 @@ const SETTLE = 2500; // after an edit GitHub took, the board is read again this 
 const FOLD_W = 28, GAP = 6, DETAIL_W = 340, CHAR = 7.7, LINE = 15, LANE_H = 22;
 const HANDLES = 16;
 
-const ansi = (t, color) => t[`ansi${OPTION_ANSI[color] ?? 8}`] ?? t.ansi8;
+const ansi = (t, color) => t[`ansi${OPTION_ANSI.get(color) ?? 8}`] ?? t.ansi8;
 
 export default class Projects {
   constructor(app, kept = {}) {
@@ -77,7 +77,7 @@ export default class Projects {
   hydrate(c) {
     this.list = c?.list?.projects ? c.list : null; this.listAt = c?.list?.at ?? 0;
     this.boards = {};
-    for (const [id, b] of Object.entries(c?.boards ?? {})) if (b?.board?.project) this.boards[id] = { board: b.board, at: b.at ?? 0 };
+    for (const [id, b] of Object.entries(c?.boards ?? {})) if (isStoredBoard(b?.board)) this.boards[id] = { board: boardOf(b.board), at: b.at ?? 0 };
     this.pending = []; this.carrying = null; this.menu = null; this.details = new Map(); this.choices = new Map();
     this.scope = null; this.error = "";
     if (!this.pick || (this.list && !this.list.projects.some((p) => p.id === this.pick))) this.pick = this.remembered() ?? null;
@@ -126,7 +126,7 @@ export default class Projects {
     const field = v ? (b.fields.find((f) => f.id === v.columnBy) ?? null) : null;
     return layout(b, v, this.filterText, {
       folded: l.folded?.[v?.id] ?? [], lanesFolded: l.lanes?.[v?.id] ?? [],
-      limits: (l.limits ?? {})[field?.id ?? layout(b, v).field?.id] ?? {},
+      limits: new Map(Object.entries((l.limits ?? {})[field?.id ?? layout(b, v).field?.id] ?? {}).filter(([, n]) => Number(n) > 0).map(([k, n]) => [k, Number(n)])),
     }, { me: b.viewer ?? this.list?.viewer });
   }
 
@@ -314,13 +314,13 @@ export default class Projects {
     if (!title || !lay || !b) return;
     const col = lay.columns[this.at(lay).col];
     const temp = `temp-${++this.seq}`;
-    const values = col?.key && lay.field ? { [lay.field.id]: valueFor(lay.field, col.key) } : {};
+    const values = new Map(col?.key && lay.field ? [[lay.field.id, valueFor(lay.field, col.key)]] : []);
     const item = { id: temp, db: null, type: "DRAFT_ISSUE", archived: false, values, content: { kind: "draft", id: null, number: null, title, state: "DRAFT", url: null, repo: null, assignees: [], labels: [], milestone: null } };
     this.sel = temp;
     this.edit({ kind: "add", item }, async (repo) => {
       const r = await graphql(repo, addDraftMutation(b.project.id, title));
       const id = r?.addProjectV2DraftIssue?.projectItem?.id;
-      if (id && col?.key && lay.field) await graphql(repo, setFieldMutation(b.project.id, id, lay.field, values[lay.field.id]));
+      if (id && col?.key && lay.field) await graphql(repo, setFieldMutation(b.project.id, id, lay.field, values.get(lay.field.id)));
       if (id) {
         // The real item takes the temporary one's place in what's shown until the next read.
         item.id = id; item.db = r.addProjectV2DraftIssue.projectItem.databaseId ?? null; item.content.id = r.addProjectV2DraftIssue.projectItem.content?.id ?? null;
@@ -514,7 +514,7 @@ export default class Projects {
 
   /** The values the field menu offers for one field: [{ id, label, color, on }]. */
   options(b, item, f) {
-    const v = item.values[f.id];
+    const v = item.values.get(f.id);
     if (f.type === "single") return [...f.options.map((o) => ({ id: o.id, label: o.name, color: ansiKey(o.color), on: v?.optionId === o.id })), { id: null, label: "clear", dim: true }];
     if (f.type === "iteration") return [...f.iterations.filter((i) => !i.done).map((i) => ({ id: i.id, label: i.title, right: i.startDate, on: v?.iterationId === i.id })), { id: null, label: "clear", dim: true }];
     if (f.type === "labels" || f.type === "assignees") {
@@ -564,7 +564,7 @@ export default class Projects {
   choose(b, item, f, o, cx) {
     if (!o || o.id === undefined) return;
     if (o.input) {
-      const v = item.values[f.id];
+      const v = item.values.get(f.id);
       this.valueInput.set_value(f.type === "title" ? item.content.title : f.type === "date" ? v?.date ?? "" : f.type === "number" ? (v?.number != null ? String(v.number) : "") : v?.text ?? "");
       const back = this.menu;
       this.menu = { kind: "value", back, title: `${f.name}${f.type === "date" ? " (YYYY-MM-DD)" : ""}`, go: (text) => {
@@ -811,7 +811,7 @@ export default class Projects {
   }
 
   metaShown(item, fields) {
-    return item.content.assignees.length > 0 || fields.some((f) => item.values[f.id]) || item.content.kind === "draft" || item.content.repo !== this.app.repo?.full || item.content.state === "CLOSED" || item.content.state === "MERGED";
+    return item.content.assignees.length > 0 || fields.some((f) => item.values.get(f.id)) || item.content.kind === "draft" || item.content.repo !== this.app.repo?.full || item.content.state === "CLOSED" || item.content.state === "MERGED";
   }
 
   card(t, b, item, a, ci, chars, fields, lay) {
@@ -824,7 +824,7 @@ export default class Projects {
     const num = c.kind === "draft" ? "draft" : c.number != null ? `#${c.number}` : "";
     const state = c.state === "MERGED" ? ["merged", t.ansi5] : c.state === "CLOSED" ? ["closed", t.blocked] : null;
     const otherRepo = c.repo && c.repo !== this.app.repo?.full ? c.repo.split("/")[1] : null;
-    const values = fields.map((f) => [f, item.values[f.id]]).filter(([, v]) => v);
+    const values = fields.map((f) => [f, item.values.get(f.id)]).filter(([, v]) => v);
     const titleColor = lifted || sel ? t.foreground : c.kind === "draft" ? t.dim : t.muted;
     return v_flex().id(`pcard-${item.id}`).relative().w_full().h(this.cardH(item, chars, fields)).pl(10).pr(8).pt(6).gap(4).flex_none()
       .hover((s) => s.bg(t.ansi0 + "55"))
@@ -861,7 +861,7 @@ export default class Projects {
       .child(body);
     if (!item) return frame(empty(t, "Nothing selected", null, { moon: 0, small: true }));
     const c = item.content, kept = c.id ? this.details.get(c.id) : null, d = kept?.d;
-    const rows = editableFields(b, item).filter((f) => f.type !== "title" && f.type !== "labels" && f.type !== "assignees").map((f) => [f.name, item.values[f.id] ? div().text_color(valueColor(t, f, item.values[f.id])).child(valueText(f, item.values[f.id])) : div().text_color(t.dim).child("—")]);
+    const rows = editableFields(b, item).filter((f) => f.type !== "title" && f.type !== "labels" && f.type !== "assignees").map((f) => [f.name, item.values.get(f.id) ? div().text_color(valueColor(t, f, item.values.get(f.id))).child(valueText(f, item.values.get(f.id))) : div().text_color(t.dim).child("—")]);
     const grid2 = v_flex().gap(3).text_size(11)
       .children([["Assignees", c.assignees.length ? h_flex().gap(6).items_center().children(c.assignees.map((u, i) => h_flex().id(`pda-${i}`).gap(4).items_center().child(avatar(t, u.login, 0)).child(div().text_color(t.foreground).child(u.login)))) : div().text_color(t.dim).child("—")],
         ...(c.kind !== "draft" ? [["Labels", c.labels.length ? h_flex().flex_wrap().gap(4).children(c.labels.map((l, i) => div().id(`pdl-${i}`).relative().px(5).h(16).flex().items_center().text_size(10).text_color(t.foreground).child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name)))) : div().text_color(t.dim).child("—")]] : []),
@@ -926,7 +926,7 @@ export default class Projects {
     const fields = m.fields.map((id) => b.fields.find((f) => f.id === id)).filter(Boolean);
     const f = fields[m.at], opts = f ? this.options(b, item, f) : [];
     const left = v_flex().w(170).flex_none().py(4).border_r(1).border_color(t.ansi0).children(fields.map((x, i) => {
-      const v = x.type === "labels" ? String(item.content.labels.length || "") : x.type === "assignees" ? String(item.content.assignees.length || "") : x.type === "title" ? "" : valueText(x, item.values[x.id]);
+      const v = x.type === "labels" ? String(item.content.labels.length || "") : x.type === "assignees" ? String(item.content.assignees.length || "") : x.type === "title" ? "" : valueText(x, item.values.get(x.id));
       return row(`pmf-${i}`, x.name, { on: i === m.at && m.side === "fields", right: v }).when(i === m.at && m.side !== "fields", (el) => el.text_color(t.foreground))
         .on_mouse_down("left", stop).on_click((_e, cx) => { m.at = i; m.side = "opts"; m.opt = 0; cx.notify(); });
     }));
@@ -943,7 +943,7 @@ export default class Projects {
 
 const label = (item) => (item.content.number != null ? `#${item.content.number}` : "the draft");
 const numW = (item) => (item.content.kind === "draft" ? 6 : item.content.number != null ? String(item.content.number).length + 2 : 0);
-const ansiKey = (color) => OPTION_ANSI[color] ?? 8;
+const ansiKey = (color) => OPTION_ANSI.get(color) ?? 8;
 
 /** Where o opens a card: its issue or PR, or the draft in the project's view. */
 function itemUrl(b, view, item) {

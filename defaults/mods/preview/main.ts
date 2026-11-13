@@ -49,7 +49,7 @@
 // takes them): zoom_in, zoom_out, fit, actual, next, prev, rotate, background,
 // reload, page_next, page_prev.
 //
-// What's drawn, and how, is viewer.js: the files pane's preview split
+// What's drawn, and how, is viewer.ts: the files pane's preview split
 // (file-tree) shows a file with the same code.
 
 import Viewer from "./viewer.ts";

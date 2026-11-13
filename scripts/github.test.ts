@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import {
   tone, pollEvery, FAST, SLOW, parseHeaders, needsFromWorkflow, jobColumns, jobParents, splitLog, logLine, duration, ago, checkRows, rollupTone,
-} from "../defaults/mods/github/model.js";
+} from "../defaults/mods/github/model.ts";
 
 test("tone maps GitHub states to the window's colors", () => {
   expect(tone("in_progress", null)).toBe("working");
