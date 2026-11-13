@@ -30,8 +30,8 @@ import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, window as appWindow, keys, shared, setShared } from "herdr";
 import { ART, LOGO, dither, eyebrow } from "./kit.ts";
-import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
-import { openWorktrees } from "./git.js";
+import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.ts";
+import { openWorktrees } from "./git.ts";
 import { openSpacePicker } from "./newspace.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.

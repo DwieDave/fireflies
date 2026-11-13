@@ -20,7 +20,7 @@ import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverl
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
 import { Popup, icon, popupHeight } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
-import { openWorktrees } from "./git.js";
+import { openWorktrees } from "./git.ts";
 import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";

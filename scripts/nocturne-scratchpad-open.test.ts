@@ -54,7 +54,7 @@ mock.module("gpui-base", () => ({
 
 const { default: Palette } = await import("../defaults/mods/nocturne/palette.js");
 const { default: NewMenu } = await import("../defaults/mods/nocturne/newmenu.js");
-const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.js");
+const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.ts");
 const cx: any = { notify() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, stop_propagation() {}, bind_keys() {} };
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 

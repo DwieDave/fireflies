@@ -13,72 +13,145 @@
 // instead (the menus say "Close …").
 
 import { spaces, panes, focused, run, home } from "herdr";
+import type { PaneInfo, SpaceInfo } from "herdr";
 import { folderCandidates } from "./folders.ts";
 import { ART } from "./kit.ts";
 import { filesPane, toggleFiles, filesSlot } from "./files.ts";
 import { usagePane, toggleUsage } from "./usage.ts";
-import { gitOpen, toggleGit, openWorktrees } from "./git.js";
-import { githubOpen, toggleGithub } from "./github.js";
-import { askScratchpad } from "./scratchpad.js";
+import { gitOpen, toggleGit, openWorktrees } from "./git.ts";
+import type { WorktreesAsk } from "./git.ts";
+import { githubOpen, toggleGithub } from "./github.ts";
+import { askScratchpad } from "./scratchpad.ts";
+
+/** Where things would open now. */
+export interface Here {
+  readonly space: SpaceInfo | null;
+  readonly tab: string | null;
+  readonly pane: string | null;
+  readonly terminal: string | null;
+  readonly folder: string | null;
+  readonly on: string | null;
+}
 
 /** Where things would open now: the shown space and tab, the focused pane and its folder. */
-export function here() {
+export function here(): Here {
   const space = spaces().find((s) => s.active) ?? null;
   const tab = space?.tabs.find((c) => c.active)?.id ?? null;
   const f = focused();
   const pane = panes().find((p) => p.focused && p.tab === tab) ?? (f?.pane ? panes().find((p) => p.pane === f.pane) : null);
-  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.js).
+  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.ts).
   const folder = folderCandidates(space, pane, f, panes(), { attached: false })[0] ?? null;
+
   return { space, tab, pane: pane?.pane ?? null, terminal: pane?.terminal ?? null, folder, on: space?.machine ?? null };
 }
 
 /** A mod pane of `mod` in the shown tab, if any. */
-export const modPane = (mod) => {
+export const modPane = (mod: string): PaneInfo | null => {
   const { tab } = here();
+
   return panes().find((p) => p.mod === mod && p.tab === tab) ?? null;
 };
 
 // Each copy of the web pane keeps its page and zoom by its slot.
 const slot = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+/** terminal.open's arguments here. */
+type TerminalOpen = { place: "auto"; pane?: string; folder?: string; argv?: readonly string[] };
+
 /** A terminal (or an agent's argv) beside the focused pane, in its folder. */
-export function terminalPane(argv) {
+export function terminalPane(argv?: readonly string[] | null): void {
   const h = here();
-  run("terminal.open", { place: "auto", ...(h.pane ? { pane: h.pane } : {}), ...(h.folder ? { folder: h.folder } : {}), ...(argv ? { argv } : {}) });
+  const args: TerminalOpen = { place: "auto" };
+
+  if (h.pane) args.pane = h.pane;
+
+  if (h.folder) args.folder = h.folder;
+
+  if (argv) args.argv = argv;
+
+  run("terminal.open", args);
 }
 
+/** tab.new's arguments for a terminal tab. */
+type TerminalTab = { space?: string; folder?: string; argv?: readonly string[]; name?: string };
+
 /** A terminal (or an agent) in a new tab of the shown space. */
-export function terminalTab(argv, name) {
+export function terminalTab(argv?: readonly string[] | null, name?: string | null): void {
   const h = here();
-  run("tab.new", { ...(h.space ? { space: h.space.id } : {}), ...(h.folder ? { folder: h.folder } : {}), ...(argv ? { argv } : {}), ...(name ? { name } : {}) });
+  const args: TerminalTab = {};
+
+  if (h.space) args.space = h.space.id;
+
+  if (h.folder) args.folder = h.folder;
+
+  if (argv) args.argv = argv;
+
+  if (name) args.name = name;
+
+  run("tab.new", args);
 }
+
+/** files.open's arguments. */
+type FilesOpen = { path: string; in?: "tab"; pane?: string; on?: string };
 
 /** A files pane of its own (`files.open`, not the panel docked down the tab's
  *  edge) at the folder a terminal would open in: beside the focused pane, or
  *  `inTab` in a tab of its own. */
-export function filesHere(inTab = false) {
+export function filesHere(inTab = false): void {
   const h = here();
-  const path = h.folder ?? h.space?.folder ?? home();
-  run("files.open", { path, ...(inTab ? { in: "tab" } : h.pane ? { pane: h.pane } : {}), ...(h.on ? { on: h.on } : {}) });
+  const args: FilesOpen = { path: h.folder ?? h.space?.folder ?? home() };
+
+  if (inTab) args.in = "tab";
+  else if (h.pane) args.pane = h.pane;
+
+  if (h.on) args.on = h.on;
+
+  run("files.open", args);
 }
 
+/** The props this file opens mods with: a web pane's or files pane's slot, a
+ *  folder and its machine, the agent graph's terminal, the git window's tab. */
+type ModProps = { slot?: string; folder?: string | null; on?: string | null; terminal?: string; review?: true; worktrees?: WorktreesAsk };
+
 /** A mod beside the focused pane. */
-function modBeside(mod, props) {
+function modBeside(mod: string, props: ModProps): void {
   const h = here();
-  run("pane.split", { direction: "auto", ...(h.pane ? { pane: h.pane } : {}), mod, props });
+
+  run("pane.split", h.pane ? { direction: "auto", pane: h.pane, mod, props } : { direction: "auto", mod, props });
 }
 
 /** A mod in a tab of its own. */
-function modTab(mod, props, name) {
+function modTab(mod: string, props: ModProps, name: string): void {
   const h = here();
-  run("tab.new", { ...(h.space ? { space: h.space.id } : {}), name, mod, props });
+
+  run("tab.new", h.space ? { space: h.space.id, name, mod, props } : { name, mod, props });
 }
 
 /** Opens `mod` beside the focused pane, or closes the one in the shown tab. */
-function toggleBeside(mod, props) {
+function toggleBeside(mod: string, props: ModProps): void {
   const open = modPane(mod);
-  if (open) return run("pane.close", { pane: open.pane });
-  modBeside(mod, props);
+
+  if (open) run("pane.close", { pane: open.pane });
+  else modBeside(mod, props);
+}
+
+/** A panel: what "+ new" and the palette open. */
+export interface Panel {
+  readonly id: string;
+  readonly name: string;
+  /** A workspace-chrome icon's name, or an svg path. */
+  readonly icon: string;
+  readonly key: string;
+  readonly words: string;
+  /** Its own command in keys.json, when it has one. */
+  readonly bind?: string;
+  /** It always lands in one place: floating over the tab, or down its edge. */
+  readonly fixed?: "float" | "edge";
+  /** It's shown in this tab now (the pane, the float). */
+  readonly open?: () => boolean;
+  /** Opens it where it lives (toggles it, once per tab), or in a tab of its own. */
+  readonly pane: () => void;
+  readonly tab: () => void;
 }
 
 /**
@@ -86,19 +159,20 @@ function toggleBeside(mod, props) {
  *   open() (shown in this tab: the pane / float), fixed? ("float" | "edge"),
  *   pane(), tab() } — `pane` toggles where a panel lives once per tab.
  */
-export function panels() {
+export function panels(): Panel[] {
   const h = here();
-  const agentsProps = () => (h.terminal ? { terminal: h.terminal } : {});
+  const agentsProps = (): ModProps => (h.terminal ? { terminal: h.terminal } : {});
+
   return [
     { id: "terminal", name: "Terminal", icon: "terminal", key: "t", words: "shell new",
       pane: () => terminalPane(), tab: () => terminalTab() },
     { id: "web", name: "Web", icon: "monitor", key: "w", words: "browser page url",
       pane: () => modBeside("browser", { slot: slot() }), tab: () => modTab("browser", { slot: slot() }, "web") },
-    { id: "files", name: "Files", icon: "files", key: "f", words: "tree explorer folder", fixed: "edge", open: filesPane,
+    { id: "files", name: "Files", icon: "files", key: "f", words: "tree explorer folder", fixed: "edge", open: () => Boolean(filesPane()),
       pane: toggleFiles, tab: () => modTab("file-tree", { folder: h.folder, on: h.on, slot: filesSlot() }, "files") },
-    { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => modPane("agent-graph"),
+    { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => Boolean(modPane("agent-graph")),
       pane: () => toggleBeside("agent-graph", agentsProps()), tab: () => modTab("agent-graph", agentsProps(), "agents") },
-    { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: usagePane,
+    { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: () => Boolean(usagePane()),
       pane: toggleUsage, tab: () => modTab("usage", {}, "usage") },
     { id: "scratchpad", name: "Scratchpad", icon: `${ART}/scratchpad.svg`, key: "s", words: "note notes scratch pad markdown repository repo jot todo memo", bind: "nocturne.scratchpad",
       pane: () => askScratchpad(), tab: () => askScratchpad(true) },

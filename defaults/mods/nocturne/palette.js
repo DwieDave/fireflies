@@ -18,11 +18,11 @@ import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, 
 import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
-import { panels, here, terminalPane, terminalTab } from "./panels.js";
+import { panels, here, terminalPane, terminalTab } from "./panels.ts";
 import { toggleDeck, lastFailed } from "./scripts.js";
 import { toggleProcs } from "./procs.ts";
-import { gitOpen, openWorktrees } from "./git.js";
-import { githubOpen } from "./github.js";
+import { gitOpen, openWorktrees } from "./git.ts";
+import { githubOpen } from "./github.ts";
 import { togglePicker } from "./picker.ts";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
