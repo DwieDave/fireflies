@@ -32,9 +32,17 @@
 // Adding a block: a "+" left of the block under the pointer, and the "add a
 // block" line under the last one, put an empty paragraph after it (lit, the
 // caret in it); an empty block offers the kinds (heading, list, task, quote,
-// code, rule) as chips a click or cmd-. and the kind's letter runs.
+// code, rule, image) as chips a click or cmd-. and the kind's letter runs.
+//
+// Image blocks: a line holding only images (live.js "image") draws each
+// picture fitting the column and keeping its shape (at most IMAGE_H tall),
+// from a copy under the app's cache made once per picture (main.js
+// loadImageSrcs, markdown.js cacheImage; gpui decodes it once), so a key
+// costs nothing for them; a picture on the web is drawn by the Markdown view,
+// one that can't be found is a block saying so. A paste the block finds no
+// text in (a screenshot) goes to the pane (main.js pasteImage, images.js).
 
-import { div, svg } from "gpui-kit";
+import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, EditorState, Editor } from "gpui-base";
 import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.js";
 import { enter } from "./mdedit.js";
@@ -50,7 +58,8 @@ const KINDS_H = 26; // an empty block's row of kinds
 const PLUS = "mods/workspace-chrome/plus.svg";
 
 /** The kinds an empty block offers: [Markdown command (mdedit.js), word, its letter after cmd-.]. */
-export const KINDS = [["heading-1", "heading", "1"], ["bullets", "list", "l"], ["task", "task", "t"], ["quote", "quote", "q"], ["fence", "code", "c"], ["rule", "rule", "r"]];
+export const KINDS = [["heading-1", "heading", "1"], ["bullets", "list", "l"], ["task", "task", "t"], ["quote", "quote", "q"], ["fence", "code", "c"], ["rule", "rule", "r"], ["image", "image", "p"]];
+const IMAGE_H = 560; // the tallest a picture is drawn (it keeps its shape, the column's width at most)
 
 /** One edit taking `a` to `b`: the span between their common start and end, as editor positions. */
 export function editBetween(a, b) {
@@ -122,6 +131,8 @@ export class Rendered {
     });
     this.block.on("change", (_e, cx) => this.push(cx));
     this.block.on("key", (e, cx) => this.key(e, cx));
+    // A paste the block found no text in (a screenshot): the pane saves it and puts an image block there.
+    this.block.on("paste_other", (_e, cx) => this.host.pasteImage?.(cx));
   }
 
   // ---- the text
@@ -148,10 +159,17 @@ export class Rendered {
   /** A unit's own text (kept on it: a unit moved down keeps it). */
   src(u) { return u.src ?? (u.src = this.sliceOf(u)); }
 
-  /** Cuts the whole text into units again. */
-  recut() {
+  /** Cuts the whole text into units again (and has the pictures it shows copied where they can be drawn). */
+  recut(cx) {
     this.all = units(this.text);
     this.stale = false;
+    this.askImages(cx);
+  }
+
+  /** The pictures of the image blocks, copied once each where they can be drawn (main.js loadImageSrcs). */
+  askImages(cx) {
+    const srcs = this.all.filter((u) => u.kind === "image").flatMap((u) => u.images.map((im) => im.src));
+    if (srcs.length && cx) this.host.loadImages?.(srcs, cx);
   }
 
   /** The units drawn (every one outside the lit lines), and the lit lines' kind as they are now. */
@@ -173,7 +191,7 @@ export class Rendered {
   /** Starts on the file's text with the caret where the file's editor has it (switching to this view, a reload). */
   open(cx) {
     this.setText(this.fileText());
-    this.recut();
+    this.recut(cx);
     this.lightAt(cx, true);
     this.reveal = true;
     cx?.notify?.();
@@ -197,7 +215,7 @@ export class Rendered {
 
   /** Lights the lines the file's caret (and selection) is on. `force`: even when they're lit already. */
   lightAt(cx, force = false) {
-    if (this.stale) this.recut();
+    if (this.stale) this.recut(cx);
     const r = this.wanted();
     if (force || r.from !== this.range.from || r.to !== this.range.to) this.light(r);
     else this.split();
@@ -280,7 +298,7 @@ export class Rendered {
     const now = this.fileText();
     if (now !== this.text) {
       this.setText(now);
-      this.recut();
+      this.recut(cx);
       // What's lit is the caret's now, its lines as they are (on the same first line, edited
       // in place: vim's x, a command, undo keep the block's caret and scroll).
       this.light(this.wanted(), true);
@@ -417,7 +435,7 @@ export class Rendered {
       this.block.focus();
       return;
     }
-    if (this.stale) this.recut();
+    if (this.stale) this.recut(cx);
     const ls = this.lines();
     this.splitAt(Math.min(u.to, ls.length - 1), (ls[Math.min(u.to, ls.length - 1)] ?? "").length, cx);
   }
@@ -438,7 +456,7 @@ export class Rendered {
 
   /** Into the unit before (-1) or after (1); false at the document's ends. */
   stepUnit(dir, col, cx) {
-    if (this.stale) { this.recut(); this.units = this.all.filter((u) => u.to < this.range.from || u.from > this.range.to); }
+    if (this.stale) { this.recut(cx); this.units = this.all.filter((u) => u.to < this.range.from || u.from > this.range.to); }
     const s = step(this.text, this.units, this.range, dir, col);
     if (!s) return false;
     this.doc.editor.set_cursor(s.line, s.col);
@@ -463,7 +481,7 @@ export class Rendered {
 
   /** A click on a drawn unit: it lights up, the caret on its first line (`end`: its last). */
   clickUnit(u, cx, end = false) {
-    if (this.stale) { this.recut(); u = unitFor(this.all, u.from); }
+    if (this.stale) { this.recut(cx); u = unitFor(this.all, u.from); }
     const ls = this.lines();
     const line = end ? u.to : u.from;
     this.doc.editor.set_cursor(line, end ? (ls[line] ?? "").length : 0);
@@ -655,6 +673,30 @@ export class Rendered {
       .child(div().text_color(t.dim).child(o.empty.hint));
   }
 
+  /** An image block: each picture fits the column and keeps its shape (drawn from its cached
+   *  copy: decoded once, not per key); one on the web is drawn by the Markdown view; one that
+   *  can't be found says so. */
+  imagesView(u, id, o, md) {
+    const { t } = o;
+    return v_flex().gap(8).children(u.images.map((im, j) => {
+      const got = this.host.image?.(im.src) ?? { abs: null, name: null };
+      if (got.name) {
+        return div().id(`${id}-img-${j}`).flex()
+          .child(image(got.name).id(`${id}-pic-${j}`).max_w_full().max_h(IMAGE_H));
+      }
+      if (!got.abs) return md(`${id}-web-${j}`, `![${im.alt}](${im.src})`);
+      const missing = got.name === null;
+      const color = missing ? t.ansi1 : t.dim;
+      return h_flex().id(`${id}-img-${j}`).relative().h(56).px(14).gap(10).items_center()
+        .child(div().absolute().inset_0().opacity(0.12).child(this.host.dither(color)))
+        .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(color))
+        .child(div().relative().size(10).flex_none().border(1).border_color(color))
+        .child(v_flex().relative().min_w(0)
+          .child(div().text_color(missing ? t.ansi1 : t.muted).child(missing ? "picture not found" : "loading the picture…"))
+          .child(div().truncate().text_size(11).text_color(t.dim).child(im.src)));
+    }));
+  }
+
   /** The reference definitions of the text, for a unit drawn alone (so [text][ref] resolves); once per text. */
   refsOf() {
     if (this.refsText == null) {
@@ -697,6 +739,8 @@ export class Rendered {
           .child(div().relative().size(8).flex_none().border(1).border_color(color).child(this.host.dither(color)))
           .child(div().text_size(size - 1).text_color(color).child(head?.[1] || name)))
         .when(!!rest.trim(), (el) => el.child(div().relative().child(md(`${id}-md`, withRefs(rest)))));
+    } else if (u.kind === "image") {
+      body = this.imagesView(u, id, o, md);
     } else if (u.kind === "rule") {
       body = div().relative().h(13).flex().items_center().child(div().relative().w_full().h(1).opacity(0.6).child(this.host.dither(t.ansi8)));
     } else if (u.kind === "ref") {

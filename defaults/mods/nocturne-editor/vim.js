@@ -47,7 +47,7 @@ export const LEADER = {
     b: ["md-bold", "bold"], i: ["md-italic", "italic"], "`": ["md-code", "inline code"], k: ["md-link", "link"],
     h: ["md-heading-up", "heading up"], H: ["md-heading-down", "heading down"],
     l: ["md-bullets", "bullet list"], n: ["md-numbers", "numbered list"], t: ["md-task", "task box"], x: ["md-tick", "tick"],
-    q: ["md-quote", "quote"], c: ["md-fence", "code block"], r: ["md-rule", "rule"],
+    q: ["md-quote", "quote"], c: ["md-fence", "code block"], r: ["md-rule", "rule"], p: ["md-image", "image from a file"], v: ["md-image-paste", "paste an image"],
     0: ["md-heading-0", "text"], 1: ["md-heading-1", "heading 1"], 2: ["md-heading-2", "heading 2"], 3: ["md-heading-3", "heading 3"],
   },
 };

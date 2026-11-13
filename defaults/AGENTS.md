@@ -710,7 +710,7 @@ the highlighted line shows where it will land.
   box ticks with a click. Adding a block with the pointer: the "+" left of
   the block under the pointer, and the "add a block" line under the last
   block, put an empty paragraph there. An empty block made so offers the
-  kinds (heading, list, task, quote, code, rule): a click on one, or cmd-.
+  kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
   height kept, edited in place), and a key costs the same in a long file.
   The file's own editor holds the whole text, so saving, undo (cmd-z,
@@ -722,11 +722,27 @@ the highlighted line shows where it will land.
   being typed into is code-font source (a heading isn't heading-size then), a
   click lands on a block's first line, not the character clicked; find and
   replace work in the text view.
+  **Pictures**: a line holding only images (`![alt](path)`, `<img src>`) is an
+  image block in the rendered view: each picture fits the column and keeps
+  its shape; one on the web is drawn as the preview draws it; a path that
+  doesn't lead to a picture is a block saying "picture not found". Pasting a
+  picture into a Markdown file (rendered or text view: cmd-v of a screenshot
+  or of a copied image file, vim's p in normal mode when the clipboard holds
+  no text, cmd-. v, palette "Markdown: paste an image") saves it beside the
+  file as `assets/<file name>-<YYYYMMDD-HHMMSS>.png` (a scratchpad note's in
+  `<note>-assets/` beside the note) and puts `![](assets/…)` in as a block of
+  its own after the caret's block; undo takes the line back and leaves the
+  file. cmd-. p (the empty block's "image" chip, palette "Markdown: image from
+  a file") picks a picture with the system's picker and writes a relative
+  path to it. Text pastes as before. The clipboard's picture is read with
+  the system's own tool: macOS osascript, Linux wl-paste or xclip, Windows
+  PowerShell.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
   space .), or the bar's "markdown" chip, opens their list at the caret, lit
   for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
-  t task box, x tick, q quote, c code block, r rule. Running one where it's
+  t task box, x tick, q quote, c code block, r rule, p image from a file, v
+  paste an image. Running one where it's
   on takes it off again; with a caret in the rendered view, list, task,
   tick, quote and code block take the caret's whole block. The palette lists
   each ("Markdown: bold" ...). The Markdown viewer's edit (its chip,
@@ -815,7 +831,7 @@ the highlighted line shows where it will land.
   `.preview-split`, `.preview-only`, `.preview-text`, `.preview-rendered`, `.md-menu` (the
   Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
   `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
-  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`), `.next-tab`, `.prev-tab`,
+  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
@@ -1675,6 +1691,13 @@ The main ones:
   or beside that tab's focused pane; no tab or target: a new tab of its own (`name`, in
   `space`). Its terminal keeps running; the tab it leaves closes when emptied. The pane
   menus (shipped and Nocturne's, and a firefly's) list "Move to …" for every tab.
+  In Nocturne's (pane and firefly), up to three places stay flat rows; past that one
+  "Move to…" row opens a level in place: this space's tabs (a tab's number moves
+  there at once), "a new tab", then a row per other space (a space with one tab
+  moves at once, one with more opens a level of its tabs). → / l / enter open a
+  level, ← / h / esc go back one (a click on its "‹" head too), esc at the top
+  closes; a click on a row opens or moves. Any popup item can carry such a level
+  (popup.js `sub`).
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and

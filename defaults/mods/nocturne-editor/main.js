@@ -85,6 +85,16 @@
 // lit lines follow its caret and visual selection). The preview's blocks
 // aren't cut while the rendered view is shown (previewStale: cut on the way
 // back). The view switch goes rendered -> split -> preview -> text (space m r: rendered).
+// Pictures (images.js): in a Markdown file (rendered or text view) a pasted
+// picture (cmd-v of a screenshot: the editor's paste_other; of a copied image
+// file: its name is the clipboard's text, so cmd-v asks the clipboard first;
+// vim's p in normal mode when the clipboard has no text) is saved beside the
+// file (assets/<name>-<time>.png; a scratchpad's in <note>-assets/) and put
+// in as an image block after the caret's block, one undoable edit (undo
+// leaves the file). The clipboard's image is read with the system's tool
+// (osascript, wl-paste / xclip, PowerShell): the app hands mods text only.
+// md-image picks a file (the system's picker; a relative path), md-image-paste
+// pastes; cmd-. p / v.
 // The Markdown commands (mdedit.js) in every view but preview only: cmd-.
 // (vim: space .) or the bar's "markdown" chip opens their list, a letter or a
 // click runs one (b i ` k h H l n t x q c r, 0-6); commands md-<name>, md-menu.
@@ -135,8 +145,12 @@ import Viewer from "./viewer.js";
 import { OPEN, LAST, PATHS, HANDOVER, filesOf, isScratchpad } from "./editor-route.js";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
+import { units as liveUnits, unitFor } from "./live.js";
 import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.js";
 import { isNote, noteName, Autosave } from "./scratch.js";
+import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.js";
+// Read off the module when used (pickFile): test stand-ins for herdr needn't know them all.
+import * as herdr from "herdr";
 
 // The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -212,6 +226,10 @@ function tabStake(t) {
 export function selectionColor(t) {
   return String(t.accent ?? "#80a0ff").slice(0, 7) + "66";
 }
+
+/** The image commands in the list (main.js, not mdedit.js: they ask the clipboard or a picker):
+ *  name -> [title, its letter after cmd-., what it writes]. */
+const MD_IMAGE = { image: ["Image from a file", "p", "![](…)"], "image-paste": ["Paste an image", "v", "assets/"] };
 
 /** The Markdown commands that, from a caret in the rendered view, take the caret's whole block. */
 const WHOLE_BLOCK = new Set(["bullets", "numbers", "task", "tick", "quote", "fence"]);
@@ -379,6 +397,8 @@ export default class EditorPane extends View {
     d.editor.on("key", (e, cx) => this.vimKey(e, cx));
     d.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
     d.editor.on("change", (_e, cx) => this.changed(cx, d));
+    // A paste the editor found no text in (a screenshot): a Markdown file takes it as an image block.
+    d.editor.on("paste_other", (_e, cx) => { if (d.markdown && d === this.cur) this.pasteImage(cx); });
     d.editor.on("hover", (e, cx) => { if (d === this.cur) this.hovered(e, cx); });
     // The editor losing the keyboard closes the card (and watchFocus, while
     // one is open: the editor's blur doesn't reach mods every time).
@@ -1678,6 +1698,7 @@ export default class EditorPane extends View {
     if (this.markdown && isMdMenuKey(e)) { this.openMdMenu(cx); return true; }
     if (this.cardKey(e, cx)) return true;
     if (this.appKey(e)) return true;
+    if (this.markdown && !this.mode && this.imagePasteKey(e, cx)) return true;
     if (!this.vimOn() || this.state === "loading" || this.mode) return false;
     const k = token(e);
     if (k == null) return false;
@@ -1880,6 +1901,9 @@ export default class EditorPane extends View {
       link: (url, cx) => this.previewLink(url, cx),
       notify: (cx) => cx?.notify?.(),
       mdRun: (name, cx) => this.mdRun(name, cx),
+      image: (src) => this.image(src),
+      loadImages: (srcs, cx) => this.loadImageSrcs(srcs, cx),
+      pasteImage: (cx) => this.pasteImage(cx),
       mdMenu: (cx) => this.openMdMenu(cx),
       vim: () => this.vimOn(),
     };
@@ -1912,7 +1936,8 @@ export default class EditorPane extends View {
     this.mdMenu = null;
     const ch = e.key_char && e.key_char.length === 1 ? e.key_char : m.shift && k.length === 1 ? k.toUpperCase() : k;
     if (!m.platform && !m.control) {
-      const name = MD_LEVELS.includes(ch) ? `heading-${ch}` : Object.keys(MD_COMMANDS).find((n) => MD_COMMANDS[n][1] === ch);
+      const name = MD_LEVELS.includes(ch) ? `heading-${ch}` : Object.keys(MD_COMMANDS).find((n) => MD_COMMANDS[n][1] === ch)
+        ?? Object.keys(MD_IMAGE).find((n) => MD_IMAGE[n][1] === ch);
       if (name) this.mdRun(name, cx);
     }
     cx?.notify?.();
@@ -1924,6 +1949,8 @@ export default class EditorPane extends View {
     this.mdMenu = null;
     const d = this.cur;
     if (!d?.markdown) return this.say("the Markdown commands are for Markdown files");
+    if (name === "image") return this.pickImage(cx);
+    if (name === "image-paste") return this.pasteImage(cx);
     if (d.state !== "ready" && d.state !== "missing") return;
     const rendered = d.view === "rendered" ? d.rendered : null;
     const text = d.editor.value();
@@ -2017,7 +2044,7 @@ export default class EditorPane extends View {
     const names = Object.keys(MD_COMMANDS);
     const inline = names.slice(0, 4), heads = names.slice(4, 6), blocks = names.slice(6);
     const row = (n) => {
-      const [title, key, mark] = MD_COMMANDS[n];
+      const [title, key, mark] = MD_COMMANDS[n] ?? MD_IMAGE[n];
       const lit = on.has(n) || (n.startsWith("heading") && [...on].some((x) => /^heading-\d/.test(x)));
       // A click runs it too (the pointer's way; the letter is the keyboard's).
       return h_flex().id(`md-menu-${n}`).gap(10).px(4).ml(-4).cursor_pointer().hover((s) => s.bg(t.ansi0))
@@ -2029,7 +2056,7 @@ export default class EditorPane extends View {
     };
     const group = (name) => div().text_size(10.5).text_color(t.dim).mt(4).child(name);
     // Under the lit block (rendered), above it when it doesn't fit there; under the bar in the text views.
-    const MENU_H = 210, paneH = this.size.height / zoom();
+    const MENU_H = 270, paneH = this.size.height / zoom();
     let top = this.textTop() + 8;
     if (d.view === "rendered") {
       const litTop = this.textTop() + (d.rendered.litTop ?? 0), litBottom = litTop + d.rendered.litHeight();
@@ -2048,7 +2075,8 @@ export default class EditorPane extends View {
               .text_color(t.accent).cursor_pointer().hover((s) => s.border_color(t.accent))
               .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
               .on_click((_e, cx) => { cx.stop_propagation(); this.mdRun(`heading-${n}`, cx); cx.notify(); }).child(n)))))
-        .child(v_flex().flex_1().gap(2).child(group("blocks")).children(blocks.map(row))));
+        .child(v_flex().flex_1().gap(2).child(group("blocks")).children(blocks.map(row))
+          .child(group("image")).children(Object.keys(MD_IMAGE).map(row))));
   }
 
   // ---- the Markdown preview
@@ -2096,6 +2124,111 @@ export default class EditorPane extends View {
         d.images.set(abs, undefined);
         cx.spawn(async (cx) => { d.images.set(abs, await cacheImage(abs, MOD)); cx.notify(); });
       }
+    }
+  }
+
+  // ---- images: pasted, picked, drawn (images.js)
+
+  /** cmd-v (and vim's p / P in normal mode) when the clipboard may hold a picture: a copied
+   *  image file (its name is the clipboard's text) or no text at all (vim's p; cmd-v without
+   *  text comes as the editor's paste_other). Taken: the clipboard is asked, and what isn't a
+   *  picture is pasted as before. */
+  imagePasteKey(e, cx) {
+    const m = e.modifiers ?? {};
+    const mac = appWindow()?.platform === "macos";
+    const cmdV = e.key === "v" && (mac ? m.platform && !m.control : m.control && !m.platform) && !m.alt && !m.shift;
+    const vimP = this.vimOn() && this.vim.mode === "normal" && !this.vim.keys?.length && !this.vim.pendingLeader && !this.vim.ex
+      && (e.key === "p" || e.key_char === "P") && !m.platform && !m.control && !m.alt && !this.imagePassP;
+    if (!cmdV && !vimP) return false;
+    let text = null;
+    try { text = cx.read_from_clipboard?.() ?? null; } catch { /* no clipboard */ }
+    if (cmdV && !maybeCopiedImage(text)) return false;
+    if (vimP && text && !maybeCopiedImage(text)) return false;
+    cx.spawn(async (cx) => {
+      const done = await this.pasteImage(cx, { quiet: true });
+      if (done) return;
+      if (cmdV && text != null) this.typeText(text, cx);
+      else if (vimP) { this.imagePassP = true; try { this.vimKey(e, cx); } finally { this.imagePassP = false; } this.cur?.rendered?.pull(cx); }
+      cx.notify();
+    });
+    return true;
+  }
+
+  /** Text at the caret, as the editor's own paste would (one edit). */
+  typeText(text, cx) {
+    const d = this.cur;
+    const rendered = d.view === "rendered" ? d.rendered : null;
+    const s = rendered ? rendered.selection() : d.editor.selection();
+    d.editor.edit([{ start: s.start, end: s.end, text }]);
+    const lines = text.split("\n");
+    const line = s.start.line + lines.length - 1, col = (lines.length > 1 ? 0 : s.start.col) + lines[lines.length - 1].length;
+    d.editor.set_cursor(line, col);
+    if (rendered) rendered.pull(cx);
+    this.changed(cx, d);
+  }
+
+  /** The clipboard's picture into the shown Markdown tab: saved beside it (images.js
+   *  assetPlace) and an image block at the caret. -> whether there was one. */
+  async pasteImage(cx, { quiet = false } = {}) {
+    const d = this.cur;
+    if (!d?.markdown || !d.path || this.on) { if (!quiet) this.say("pasting a picture works in a Markdown file on this machine", true); return false; }
+    const tmp = `${appHome()}/cache/${MOD}/clip-${stamp()}-${Math.random().toString(36).slice(2, 6)}.png`;
+    await herdr.exec("mkdir", ["-p", dirname(tmp)]).catch(() => null);
+    const got = await readClipboardImage(herdr.exec, appWindow()?.platform, tmp);
+    if (!got) { if (!quiet) this.say("the clipboard holds no picture"); cx?.notify?.(); return false; }
+    const ext = got.kind === "file" ? (got.path.split(".").pop() || "png").toLowerCase() : "png";
+    const place = assetPlace(d.path, { scratch: Boolean(d.scratch), ext });
+    // Into its place: the clipboard's PNG moved, a copied file copied (the original stays where it was).
+    const r = await herdr.exec("sh", ["-c", 'mkdir -p "$1" && if [ "$4" = file ]; then cp "$2" "$3"; else mv "$2" "$3"; fi', "paste-image", place.dir, got.path, place.path, got.kind]).catch(() => null);
+    if (r?.code !== 0) { this.say(`couldn't save the picture: ${String(r?.stderr ?? "").trim() || "no answer"}`, true); cx?.notify?.(); return true; }
+    const alt = got.kind === "file" ? basename(got.path).replace(/\.[^.]+$/, "") : "";
+    this.insertImageBlock(imageMarkdown(place.rel, alt), cx);
+    this.say(`pasted: ${place.rel}`);
+    return true;
+  }
+
+  /** The system's file picker: an image block for the chosen picture (a relative path to it). */
+  pickImage(cx) {
+    const d = this.cur;
+    if (!d?.path || this.on) return this.say("pick a picture in a file on this machine", true);
+    if (typeof herdr.pickFile !== "function") return this.say("no file picker here", true);
+    cx.spawn(async (cx) => {
+      const file = await herdr.pickFile({ prompt: "Insert" }).catch(() => null);
+      if (!file) return;
+      if (!isImagePath(file)) { this.say(`not a picture: ${basename(file)}`, true); cx.notify(); return; }
+      this.insertImageBlock(imageMarkdown(relative(dirname(d.path), file), basename(file).replace(/\.[^.]+$/, "")), cx);
+      cx.notify();
+    });
+  }
+
+  /** An image line at the caret (its own block: the caret's blank line, else after its block), one undoable edit. */
+  insertImageBlock(md, cx) {
+    const d = this.cur;
+    const rendered = d.view === "rendered" ? d.rendered : null;
+    const text = d.editor.value();
+    const caret = rendered ? rendered.selection().end.line : d.editor.cursor().line;
+    // After the caret's whole block (the lit lines; in the text view the unit holding the caret).
+    const end = rendered && caret >= rendered.range.from && caret <= rendered.range.to ? (rendered.unit.kind !== "blank" ? rendered.range.to : caret)
+      : unitFor(liveUnits(text), caret).to;
+    const r = insertImage(text, caret, md, end);
+    const e = editBetween(text, r.text);
+    if (e) d.editor.edit([e]);
+    d.editor.set_cursor(r.line, 0);
+    if (rendered) { rendered.pull(cx); rendered.focus(); }
+    this.changed(cx, d);
+  }
+
+  /** Copies the pictures of `srcs` where they can be drawn (once each: cacheImage names them by content). */
+  loadImageSrcs(srcs, cx) {
+    const d = this.cur;
+    if (!d || this.on || !cx?.spawn) return;
+    for (const src of srcs) {
+      if (!isLocalSource(src)) continue;
+      const abs = join(dirname(d.path), decodeURI(src.split(/[?#]/)[0]));
+      if (d.images.has(abs)) continue;
+      if (!IMAGE_EXT.test(abs)) { d.images.set(abs, null); continue; }
+      d.images.set(abs, undefined);
+      cx.spawn(async (cx) => { d.images.set(abs, await cacheImage(abs, MOD)); cx.notify(); });
     }
   }
 

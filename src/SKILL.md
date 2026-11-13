@@ -89,7 +89,9 @@ scratchpad pane reloads it). `herdr-app do nocturne.scratchpad` opens the
 shown space's note beside the focused pane (`nocturne.scratchpad-tab`: in a
 tab of its own). It's plain Markdown, kept byte for byte: write paragraphs
 and lists as you would in any .md (the person's rendered view adds blocks as
-paragraphs separated by a blank line).
+paragraphs separated by a blank line). Pictures the person pastes into it
+are saved beside it in `<note>-assets/`; in a repository's Markdown file in
+`assets/` beside the file (`![](assets/<file>-<time>.png)`).
 
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
