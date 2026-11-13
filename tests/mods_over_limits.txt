@@ -44,7 +44,6 @@ defaults/mods/file-tree/main.ts key
 defaults/mods/file-tree/main.ts render
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
-defaults/mods/git/popups.ts key
 defaults/mods/github/actions.ts
 defaults/mods/github/board.ts
 defaults/mods/github/dispatch.ts parseYaml
