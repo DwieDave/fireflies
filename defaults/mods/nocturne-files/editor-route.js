@@ -5,7 +5,7 @@
 // copy it to the others.
 //
 // An editor already showing the file in the shown tab shows it (its tab);
-// else the editor the caller prefers (the one it sent files to before), the
+// a tab popped into a pane of its own takes no other files; else the editor the caller prefers (the one it sent files to before), the
 // focused one, the one that last had the keyboard, the tab's first: the file
 // opens there as a new tab (never in a scratchpad's pane), through shared `nocturne-editor.open`
 // { slot, path, line?, col?, view?, look?, n } (the editor whose slot it names
@@ -21,6 +21,10 @@ export const OPEN = "nocturne-editor.open";
 export const LAST = "nocturne-editor.last";
 // Every editor's files by slot (its tabs), for the app's `editor.open` too.
 export const PATHS = "nocturne-editor.paths";
+// A tab popped out into a pane of its own, or moved into another editor:
+// { slot, path, text?, saved?, caret, top, view, wrap, look, at } for the
+// editor whose slot it names (its text with unsaved changes, where it was).
+export const HANDOVER = "nocturne-editor.handover";
 
 /** A scratchpad's editor (it opened on a note under the app's folder,
  *  `…/scratchpad/<name>-<hash>.md`, nocturne-editor/scratch.js): a pane of its
@@ -37,12 +41,16 @@ export function filesOf(pane, paths) {
 
 /** The editor pane in tab `tab` that takes `path` (on machine `on`), or null.
  *  `panes`: herdr's panes(); `focused`: the focused pane's id; `prefer`: a
- *  slot the caller sent files to; `last`: shared LAST; `paths`: shared PATHS. */
+ *  slot the caller sent files to; `last`: shared LAST; `paths`: shared PATHS.
+ *  A tab popped into a pane of its own (props.popped) keeps its file there,
+ *  but other files don't go to it. */
 export function editorFor({ panes, tab, focused = null, prefer = null, last = null, paths = null, path, on = null }) {
-  const eds = (panes ?? []).filter((p) => p.mod === EDITOR && p.tab === tab && !p.parked && p.props?.slot && (p.props?.on ?? null) === (on ?? null) && !isScratchpad(p));
+  const all = (panes ?? []).filter((p) => p.mod === EDITOR && p.tab === tab && !p.parked && p.props?.slot && (p.props?.on ?? null) === (on ?? null) && !isScratchpad(p));
+  const holder = all.find((p) => filesOf(p, paths).includes(path));
+  if (holder) return holder;
+  const eds = all.filter((p) => !p.props?.popped);
   if (!eds.length) return null;
-  return eds.find((p) => filesOf(p, paths).includes(path))
-    ?? eds.find((p) => p.props.slot === prefer)
+  return eds.find((p) => p.props.slot === prefer)
     ?? eds.find((p) => p.pane === focused)
     ?? eds.find((p) => p.props.slot === last)
     ?? eds[0];

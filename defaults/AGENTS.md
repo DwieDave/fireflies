@@ -306,7 +306,7 @@ the highlighted line shows where it will land.
   executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
   leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
-  shift-tab the next group; on a run `w` watches, `x` stops, `R` runs it again;
+  shift-tab the next group; on a run `w` watches, `x` removes an ended one and stops a running one, `R` runs it again (ending a running one, `x` or `R`, asks: the same key again within 3 s does it);
   an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
@@ -326,7 +326,7 @@ the highlighted line shows where it will land.
   `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; if it's on already,
   remove it and add it again. A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
-  restarts, stops and dismisses runs, and shows an ended run's output; a failure
+  restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns), and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
@@ -585,7 +585,23 @@ the highlighted line shows where it will land.
   n › at the ends; the wheel over it steps tabs, a middle click closes one).
   The strip shows from two files on: with one, the bar names the file with
   its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
-  marks where it lands; off the strip it stays); the order is kept. Each tab keeps its text, undo, caret, scroll, folds,
+  marks where it lands; dropped on the pane below the strip it pops out; off
+  the pane it stays); the order is kept. A right-click on a tab (or space b m,
+  `nocturne-editor.tab-menu`) opens its menu: pop out into its own pane, pop
+  out into a new tab, move into the editor beside, move left / right, close,
+  close the others (those with unsaved changes stay); j k / ↑ ↓, enter, the
+  entries' letters, esc. **Popping a tab out** (the menu, the drag, space b o,
+  `:popout`, `nocturne-editor.pop-out` beside or `.pop-out-tab` in a new tab
+  of the window) opens an editor pane of its own with what the tab had: its
+  unsaved text, caret, scroll, Markdown view, wrap, drawn or text (shared
+  `nocturne-editor.handover` `{ slot, path, text?, saved?, caret, top, view,
+  wrap, look, at }` for the editor of that slot; undo stays behind, it lives
+  in the editor it was typed in). The tab leaves the strip without asking;
+  the last one popping out closes its pane. The popped pane (props `popped`)
+  keeps its file while it lives (`editor.open`, the files pane and the picker
+  show it there) and takes no other files; space b i, `:popin`,
+  `nocturne-editor.pop-in` move its shown tab into the editor beside, as a
+  tab, the same way. Each tab keeps its text, undo, caret, scroll, folds,
   unsaved changes and Markdown view. Where a file goes: go to definition and
   references into another file, a card link to a file, `:e <file>` and a
   Markdown preview's link open it as a tab of the same editor; the files pane

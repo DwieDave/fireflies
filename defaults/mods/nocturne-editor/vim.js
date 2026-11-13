@@ -32,7 +32,7 @@ export const LEADER = {
   e: ["files-pane", "files pane"],
   w: ["save", "save"],
   q: ["quit", "close"],
-  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"], "<": ["move-tab-left", "move tab left"], ">": ["move-tab-right", "move tab right"] },
+  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"], "<": ["move-tab-left", "move tab left"], ">": ["move-tab-right", "move tab right"], o: ["pop-out", "pop out into its own pane"], i: ["pop-in", "into the editor beside"], m: ["tab-menu", "tab menu"] },
   d: ["problems", "problems"],
   h: ["hover", "hover"],
   c: { name: "code", a: ["code-action", "code action"], f: ["format", "format"] },
@@ -1085,6 +1085,9 @@ export function runEx(vim, line, doc, out) {
     case "bn": case "bnext": case "tabn": case "tabnext": out.commands.push("next-tab"); return out;
     case "bp": case "bprevious": case "bN": case "bNext": case "tabp": case "tabprevious": case "tabN": out.commands.push("prev-tab"); return out;
     case "bd": case "bdelete": case "bw": case "bwipeout": case "tabc": case "tabclose": out.commands.push(bang ? "close-tab!" : "close-tab"); return out;
+    // :popout (the shown tab into a pane of its own beside), :popin (into the editor beside).
+    case "popout": case "popo": out.commands.push("pop-out"); return out;
+    case "popin": case "popi": out.commands.push("pop-in"); return out;
     // :tabm N (that place, 0 the first), :tabm +N / -N (that many right / left), :tabm (the end).
     case "tabm": case "tabmove": {
       const a = arg.trim();

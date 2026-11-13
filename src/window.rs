@@ -6159,14 +6159,16 @@ fn editor_takes(viewer: Viewer, editor: bool) -> (Viewer, bool) {
 /// The editor pane of a tab that takes a file as a new tab: among `eds` (an
 /// editor's pane id and props, in the tab's order) on machine `on`, the one
 /// whose slot is `last` (it last had the keyboard), else the first; never a
-/// scratchpad's (its note, under `notes`, keeps its pane). -> (pane, slot).
+/// scratchpad's (its note, under `notes`, keeps its pane) nor a tab popped
+/// into a pane of its own (`popped`: it keeps its one file). -> (pane, slot).
 fn tab_editor(eds: &[(String, Value)], on: Option<&str>, last: Option<&str>, notes: &std::path::Path) -> Option<(String, String)> {
     let notes = format!("{}/", notes.to_string_lossy().trim_end_matches('/'));
     let fit: Vec<(String, String)> = eds.iter().filter_map(|(id, props)| {
         let slot = props.get("slot").and_then(Value::as_str)?;
         let here = props.get("on").and_then(Value::as_str).filter(|m| !m.is_empty()) == on;
         let note = props.get("path").and_then(Value::as_str).is_some_and(|p| p.starts_with(&notes));
-        (here && !note).then(|| (id.clone(), slot.to_owned()))
+        let popped = props.get("popped").and_then(Value::as_bool) == Some(true);
+        (here && !note && !popped).then(|| (id.clone(), slot.to_owned()))
     }).collect();
     fit.iter().find(|(_, slot)| Some(slot.as_str()) == last).or(fit.first()).cloned()
 }
@@ -8209,6 +8211,10 @@ export default class SystemToast extends View {
         assert_eq!(tab_editor(&eds, None, Some("s1"), notes), Some(("p2".into(), "s2".into())));
         assert_eq!(tab_editor(&eds, None, Some("s4"), notes), Some(("p2".into(), "s2".into())));
         assert_eq!(tab_editor(&eds, Some("box"), None, notes), Some(("p4".into(), "s4".into())));
+        // A tab popped into a pane of its own takes no other files.
+        let popped = vec![ed("p6", "s6", "/r/x.rs", None), (eds[2].0.clone(), json!({ "slot": "s3", "path": "/r/b.rs", "popped": true }))];
+        assert_eq!(tab_editor(&popped, None, Some("s3"), notes), Some(("p6".into(), "s6".into())));
+        assert_eq!(tab_editor(&popped[1..], None, None, notes), None);
         // Only a scratchpad, or no editor with a slot: none (a new editor opens beside).
         assert_eq!(tab_editor(&eds[..1], None, None, notes), None);
         assert_eq!(tab_editor(&[("p5".to_owned(), json!({ "path": "/r/a.rs" }))], None, None, notes), None);

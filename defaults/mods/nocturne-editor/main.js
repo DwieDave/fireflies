@@ -23,6 +23,16 @@
 // (with one tab: the screen's top / bottom), ]b / [b, :bn :bp :bd :b N :ls,
 // space b; next-tab / prev-tab / close-tab / move-tab-left / -right commands.
 //
+// Pop a tab out into an editor pane of its own beside (or a new tab of the
+// window): the tab's menu (a right-click on it, space b m, tab-menu), space b
+// o / :popout, pop-out, or a tab dragged off the strip and dropped on the
+// pane. Its unsaved text, caret, scroll, Markdown view, wrap and drawn state
+// go with it (shared `nocturne-editor.handover`; undo stays behind: it lives
+// in the editor it was typed in); the last tab popping out closes its pane.
+// The popped pane (props.popped) keeps its file while it lives and takes no
+// other files from the routing; space b i / :popin / pop-in moves its shown
+// tab into the editor beside, as a tab.
+//
 // Every kind of file is a tab: what the preview shows (pictures, PDFs,
 // tables, patches, databases, fonts, clips) is drawn in its tab by the
 // preview's viewer (viewer.js, embedded: its slim bar, no keys of its own; a
@@ -128,11 +138,11 @@ import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
-import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction } from "./tabs.js";
+import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.js";
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
 // of nocturne-preview/viewer.js and what it imports (scripts/nocturne-preview-shared.test.ts).
 import Viewer from "./viewer.js";
-import { OPEN, LAST, PATHS, filesOf } from "./editor-route.js";
+import { OPEN, LAST, PATHS, HANDOVER, filesOf, isScratchpad } from "./editor-route.js";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
 import { units as liveUnits, unitFor } from "./live.js";
@@ -199,6 +209,9 @@ function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 const stop = (_e, cx) => cx.stop_propagation();
+/** A new editor pane's slot (its shared records' key). */
+const newSlot = () => `ed-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 /** Where a dragged tab lands: a 2 px accent bar capped top and bottom, at the
  *  left edge of its box (as the app's tab strip, nocturne/tabdrag.js). */
 function tabStake(t) {
@@ -259,7 +272,9 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.asking = null; // closing a tab with unsaved changes: { doc, at } (the question's line)
-    this.tabPress = null; this.tabDrag = null; // a press on a tab, and the drag it became: { from, gap } (tabs.js)
+    this.tabPress = null; this.tabDrag = null; // a press on a tab, and the drag it became: { from, gap, out } (tabs.js)
+    this.tabMenu = null; // the tab's menu: { index, at, items }
+    this.menuHandle = cx.focus_handle();
     this.listening = new Set(); // the servers this pane hears (one queue per server for every tab)
     this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
@@ -303,7 +318,9 @@ export default class EditorPane extends View {
     // The props' file opened to be looked at (a terminal's link: `look`) starts drawn.
     const req = shared(OPEN);
     const asked = req && req.slot == null && req.path === pr.path && Date.now() - (req.at ?? 0) < 10000 ? req : null;
-    this.docs = start.paths.map((path) => this.newDoc(path, path === pr.path && !kept?.paths?.length ? { look: Boolean(pr.look || asked?.look), view: asked?.view ?? null } : {}));
+    // A tab popped out of another editor into this new one: what it had (tabs.js handover).
+    const handed = !kept?.paths?.length ? handoverFor(shared(HANDOVER), pr.slot, pr.path) : null;
+    this.docs = start.paths.map((path) => this.newDoc(path, path === pr.path && !kept?.paths?.length ? { look: Boolean(pr.look || asked?.look), view: asked?.view ?? null, hand: handed } : {}));
     this.cur = this.docs[start.active];
     // The props' line goes to the props' file (editor.open opened this pane on it).
     let go = null;
@@ -330,7 +347,7 @@ export default class EditorPane extends View {
   /** A file's record: its own code editor (text, undo, caret, scroll,
    *  folds), what's on disk, unsaved changes, its server document, problems
    *  and Markdown preview. Read when first shown (`state` "unloaded" till then). */
-  newDoc(path, { look = false, view = null } = {}) {
+  newDoc(path, { look = false, view = null, hand = null } = {}) {
     const lang = languageOf(path) ?? "text";
     const opts = languageSettings(settings()?.editor, lang);
     const d = {
@@ -358,6 +375,12 @@ export default class EditorPane extends View {
     };
     // Markdown takes the view asked for, else the pane's (rendered, split, preview, text: its last pick).
     if (d.markdown && VIEWS.includes(view)) d.view = view;
+    // Handed over from another editor: its view and drawn state now, its text, caret and scroll once read (load).
+    if (hand) {
+      if (d.markdown && VIEWS.includes(hand.view)) d.view = hand.view;
+      if (d.kind === "either") d.look = Boolean(hand.look);
+      d.hand = hand;
+    }
     const t = theme();
     // Word wrap in this tab: the language's soft_wrap until cmd-k z / space u w
     // / :set wrap / the bar's chip switch it (this tab only, not written to settings).
@@ -370,6 +393,7 @@ export default class EditorPane extends View {
       selection: selectionColor(t),
     });
     d.editor.set_tab_size(opts.tab_size, opts.insert_spaces === false);
+    if (d.hand && Boolean(d.hand.wrap) !== d.softWrap) { d.softWrap = Boolean(d.hand.wrap); d.editor.set_soft_wrap?.(d.softWrap); }
     d.editor.on("key", (e, cx) => this.vimKey(e, cx));
     d.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
     d.editor.on("change", (_e, cx) => this.changed(cx, d));
@@ -417,6 +441,8 @@ export default class EditorPane extends View {
         this.mode = null;
         this.asking = null;
         this.keysShown = false;
+        // A tab's menu belongs to the tab it opened on: another one shown closes it.
+        this.tabMenu = null;
       }
       this.cur = d;
       this.vimSettled(this.vimOn());
@@ -456,7 +482,7 @@ export default class EditorPane extends View {
       return;
     }
     const at = placeTab(this.docs.map((d) => d.path), this.docs.indexOf(this.cur), path);
-    if (at.added) this.docs.splice(at.index, 0, this.newDoc(path, { look, view }));
+    if (at.added) this.docs.splice(at.index, 0, this.newDoc(path, { look, view, hand: handoverFor(shared(HANDOVER), this.slot, path) }));
     const d = this.docs[at.index];
     if (!at.added) {
       if (view && d.markdown && VIEWS.includes(view)) d.view = view;
@@ -465,6 +491,131 @@ export default class EditorPane extends View {
     }
     this.select(d, cx, line && !d.look ? { line, col: col ?? 1 } : null);
     this.publish();
+  }
+
+  // ---- popping a tab out into a pane of its own, and back in
+
+  /** Tab `d` into a new editor pane of its own: beside this one (`where`
+   *  "beside"), or in a new tab of the window ("tab"); what it had goes with
+   *  it (handover) and it leaves this strip without asking (its unsaved text
+   *  went too). The last tab popping out closes this pane. */
+  popOut(cx, d = this.cur, where = "beside") {
+    if (!d) return;
+    if (d.scratch) return this.say("the scratchpad is a pane of its own");
+    const me = this.me();
+    const slot = newSlot();
+    setShared(HANDOVER, handover(d, slot));
+    const props = { path: d.path, slot, popped: true, ...(this.on ? { on: this.on } : {}) };
+    if (where === "tab" || !me) run("tab.new", { mod: MOD, props, name: basename(d.path) });
+    else run("pane.split", { direction: "auto", pane: me.pane, mod: MOD, props });
+    this.leave(cx, d);
+  }
+
+  /** The shown tab into another editor of this window's tab, as a tab there
+   *  (the one that last had the keyboard, else the first): what it had goes
+   *  with it; this pane closes when it was its last tab. */
+  popIn(cx, d = this.cur) {
+    if (!d || d.scratch) return;
+    const target = this.otherEditor();
+    if (!target) return this.say("no other editor in this tab");
+    setShared(HANDOVER, handover(d, target.props.slot));
+    setShared(OPEN, { slot: target.props.slot, path: d.path, n: (shared(OPEN)?.n ?? 0) + 1, at: Date.now() });
+    run("pane.focus", { pane: target.pane });
+    this.leave(cx, d);
+  }
+
+  /** Another editor in this pane's window tab (not a scratchpad's), for popIn. */
+  otherEditor() {
+    const me = this.me();
+    if (!me) return null;
+    const eds = panes().filter((p) => p.mod === MOD && p.tab === me.tab && p.pane !== me.pane && !p.parked && p.props?.slot && (p.props?.on ?? null) === (this.on ?? null) && !isScratchpad(p));
+    return eds.find((p) => p.props.slot === shared(LAST)) ?? eds[0] ?? null;
+  }
+
+  /** Tab `d` goes from here without asking: it lives on elsewhere. */
+  leave(cx, d) {
+    d.dirty = false;
+    this.closeTab(cx, d, true);
+  }
+
+  // ---- the tab's menu
+
+  /** Opens the menu of tab `index` (the shown one by default): a right-click
+   *  on it, space b m, the tab-menu command. */
+  openTabMenu(cx, index = this.docs.indexOf(this.cur)) {
+    const d = this.docs[index];
+    if (!d) return;
+    const items = tabMenuItems({ count: this.docs.length, index, others: Boolean(this.otherEditor()), scratch: Boolean(d.scratch) });
+    this.tabMenu = { index, at: 0, items };
+    this.closeCard(cx);
+    cx?.timer?.after?.(0, () => this.menuHandle.focus());
+    cx?.notify?.();
+  }
+
+  closeTabMenu(cx, refocus = true) {
+    if (!this.tabMenu) return;
+    this.tabMenu = null;
+    if (refocus) this.focusText();
+    cx?.notify?.();
+  }
+
+  /** Runs a tab menu entry on its tab. */
+  tabMenuAct(act, cx) {
+    const m = this.tabMenu;
+    const d = this.docs[m?.index ?? this.docs.indexOf(this.cur)];
+    this.closeTabMenu(cx, act === "move-left" || act === "move-right");
+    if (!d) return;
+    const i = this.docs.indexOf(d);
+    if (act === "pop-out") this.popOut(cx, d, "beside");
+    else if (act === "pop-out-tab") this.popOut(cx, d, "tab");
+    else if (act === "pop-in") this.popIn(cx, d);
+    else if (act === "move-left") this.moveTab(i, i - 1, cx);
+    else if (act === "move-right") this.moveTab(i, i + 1, cx);
+    else if (act === "close") this.closeTab(cx, d);
+    else if (act === "close-others") this.closeOthers(cx, d);
+    cx?.notify?.();
+  }
+
+  /** Every tab but `d` closes; those with unsaved changes stay (and say so). */
+  closeOthers(cx, d = this.cur) {
+    const kept = this.docs.filter((x) => x !== d && x.dirty);
+    for (const x of this.docs.filter((x) => x !== d && !x.dirty)) this.closeTab(cx, x, true);
+    if (this.cur !== d) this.select(d, cx);
+    if (kept.length) this.say(`${kept.length} kept: unsaved changes (${kept.map((x) => basename(x.path)).join(", ")})`);
+  }
+
+  tabMenuKeyDown(e, cx) {
+    const m = this.tabMenu;
+    if (!m) return;
+    const r = tabMenuKey(m.items, m.at, e);
+    if (!r.taken) return;
+    cx?.stop_propagation?.();
+    m.at = r.at;
+    if (r.act) return this.tabMenuAct(r.act, cx);
+    if (r.close) return this.closeTabMenu(cx);
+    cx?.notify?.();
+  }
+
+  /** The menu, under its tab on the strip (at the bar's left with one tab). */
+  tabMenuView(t) {
+    const m = this.tabMenu;
+    const z = zoom();
+    const x = Math.max(4, Math.min(this.tabX?.(m.index) ?? 8, this.size.width / z - 236));
+    const row = (it, i) => h_flex().id(`editor-tab-menu-${it.act}`).relative().h(22).px(10).gap(10).items_center()
+      .text_color(i === m.at ? t.foreground : t.muted)
+      .when(i === m.at, (el) => el.child(div().absolute().inset_0().opacity(0.6).child(dither(t.ansi0, 1))).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .hover((s) => s.text_color(t.foreground))
+      .on_mouse_move(() => { if (m.at !== i) { m.at = i; } })
+      .on_click((_e, cx) => { this.tabMenuAct(it.act, cx); cx.notify(); })
+      .child(div().relative().w(14).flex_none().text_color(t.accent).child(it.key))
+      .child(div().relative().flex_1().child(it.label));
+    return div().id("editor-tab-menu").absolute().top(this.stripH()).left(x).w(228).py(4).bg(t.background).border(1).border_color(t.accent)
+      .track_focus(this.menuHandle)
+      .on_key_down((e, cx) => this.tabMenuKeyDown(e, cx))
+      .on_mouse_down("left", stop)
+      .child(div().absolute().left(4).right(-4).top(4).bottom(-4).child(dither(t.ansi0, 1)))
+      .child(div().absolute().inset_0().bg(t.background))
+      .children(m.items.map(row));
   }
 
   // ---- drawn tabs (the preview's viewer)
@@ -594,8 +745,9 @@ export default class EditorPane extends View {
       this.tabDrag = { from: p.index, gap: null };
     }
     const g = this.tabDrag.gap;
-    if (g && g.index === gap.index && g.after === gap.after) return;
+    if (g && g.index === gap.index && g.after === gap.after && !this.tabDrag.out) return;
     this.tabDrag.gap = gap;
+    this.tabDrag.out = false;
     cx?.notify?.();
   }
 
@@ -609,7 +761,35 @@ export default class EditorPane extends View {
     cx?.notify?.();
   }
 
-  /** The pointer left the strip: the drag ends where it started. */
+  /** The pointer left the strip with a tab dragged: over the pane it's
+   *  dropped out (popped into a pane of its own); off the pane it ends. */
+  leaveStrip(cx) {
+    if (!this.tabDrag) { this.tabPress = null; return; }
+    this.tabDrag.out = true;
+    this.tabDrag.gap = null;
+    cx?.notify?.();
+  }
+
+  /** A tab dragged off the strip, let go over the pane: popped out beside. */
+  dropOut(cx) {
+    const d = this.docs[this.tabDrag?.from];
+    this.tabDrag = null;
+    this.tabPress = null;
+    if (d) this.popOut(cx, d, "beside");
+    cx?.notify?.();
+  }
+
+  /** Over the pane while a tab is dragged off the strip: where it goes. */
+  dropZone(t) {
+    const d = this.docs[this.tabDrag.from];
+    return div().id("editor-drop-out").absolute().left(8).right(8).top(this.stripH() + 6).bottom(8).border(1).border_color(t.accent)
+      .child(div().absolute().inset_0().opacity(0.18).child(dither(t.accent, 1)))
+      .child(v_flex().absolute().inset_0().items_center().justify_center().gap(4)
+        .child(div().text_color(t.foreground).child(`let go: ${basename(d?.path ?? "")} into its own pane`))
+        .child(div().text_color(t.dim).child("back on the strip: moves it there · off the pane: nothing")));
+  }
+
+  /** The pointer left the pane: the drag ends where it started. */
   cancelDrag(cx) {
     const dragging = Boolean(this.tabDrag);
     this.tabDrag = null;
@@ -815,9 +995,14 @@ export default class EditorPane extends View {
       if (error) { d.state = "error"; d.error = error; cx.notify(); return; }
       if (text == null) { d.state = "missing"; d.saved = null; d.editor.set_value(""); }
       else { d.state = "ready"; d.saved = text; d.editor.set_value(text); }
-      d.text = text ?? "";
+      // Handed over with unsaved changes: that text, unsaved here too.
+      const hand = d.hand;
+      d.hand = null;
+      if (hand?.text != null && d.state !== "error") d.editor.set_value(hand.text);
+      d.text = hand?.text ?? text ?? "";
       if (d.markdown) this.refreshPreview(cx, true, d);
-      d.dirty = false; d.conflict = false;
+      d.dirty = hand?.text != null && hand.text !== (d.saved ?? ""); d.conflict = false;
+      if (hand) { const c = hand.caret ?? { line: 0, col: 0 }; d.editor.set_cursor(c.line, c.col); if (hand.top) d.editor.scroll_to_line?.(hand.top); }
       this.noteUnsaved();
       this.title();
       go ??= d.go;
@@ -1585,6 +1770,10 @@ export default class EditorPane extends View {
       case "move-tab-left": return this.stepMove(-1, cx);
       case "move-tab-right": return this.stepMove(1, cx);
       case "move-tab": return this.stepMove(0, cx, arg);
+      case "pop-out": return this.popOut(cx);
+      case "pop-out-tab": return this.popOut(cx, this.cur, "tab");
+      case "pop-in": return this.popIn(cx);
+      case "tab-menu": return this.openTabMenu(cx);
       case "tabs": return this.say(this.docs.map((d, i) => `${i + 1}${d === this.cur ? "%" : ""} ${basename(d.path)}${d.dirty ? " +" : ""}`).join("  "));
       case "undo": return this.editor.undo();
       case "redo": return this.editor.redo();
@@ -1680,6 +1869,10 @@ export default class EditorPane extends View {
     if (c === "close-tab") return this.closeTab(cx);
     if (c === "move-tab-left") return this.stepMove(-1, cx);
     if (c === "move-tab-right") return this.stepMove(1, cx);
+    if (c === "pop-out") return this.popOut(cx);
+    if (c === "pop-out-tab") return this.popOut(cx, this.cur, "tab");
+    if (c === "pop-in") return this.popIn(cx);
+    if (c === "tab-menu") return this.openTabMenu(cx);
     // `nocturne-editor.open:{"path","line"?,"col"?,"view"?}`: a file as a tab of the focused editor.
     if (c.startsWith("open:")) {
       let a = null;
@@ -2200,8 +2393,11 @@ export default class EditorPane extends View {
         if (this.card) { this.closeCard(cx); cx.stop_propagation(); }
         else if (this.mode) { this.closeFind(cx); cx.stop_propagation(); }
       })
-      // A click outside the card closes it (the card keeps its own).
-      .on_mouse_down("left", (_e, cx) => this.closeCard(cx))
+      // A click outside the card closes it (the card keeps its own), and the tab menu.
+      .on_mouse_down("left", (_e, cx) => { this.closeCard(cx); this.closeTabMenu(cx, false); })
+      // A tab dragged off the strip and let go over the pane: popped out beside (tabs.js).
+      .on_mouse_up("left", (_e, cx) => { if (this.tabDrag?.out) this.dropOut(cx); })
+      .on_hover((over, cx) => { if (!over) this.cancelDrag(cx); })
       .when(showStrip(this.allDocs().length), (el) => el.child(this.tabStrip(t)))
       // A drawn tab: the viewer's slim bar says what it is; the editor's is for text.
       .when(!this.look, (el) => el.child(this.bar(t)))
@@ -2216,7 +2412,9 @@ export default class EditorPane extends View {
       .child(this.hints(t))
       .map((el) => { const card = this.card ? this.cardView(t, code) : null; return card ? el.child(card) : el; })
       .when(!!this.which?.length && this.vimOn(), (el) => el.child(this.whichView(t)))
-      .when(Boolean(this.mdMenu) && this.markdown, (el) => el.child(this.mdMenuView(t)));
+      .when(Boolean(this.mdMenu) && this.markdown, (el) => el.child(this.mdMenuView(t)))
+      .when(Boolean(this.tabDrag?.out), (el) => el.child(this.dropZone(t)))
+      .when(Boolean(this.tabMenu), (el) => el.child(this.tabMenuView(t)));
   }
 
   bar(t) {
@@ -2311,7 +2509,10 @@ export default class EditorPane extends View {
     const z = zoom();
     const room = this.size.width / z - 8;
     const active = docs.indexOf(this.cur);
-    const fit = visibleTabs(labels.map(tabWidth), active, room);
+    const widths = labels.map(tabWidth);
+    const fit = visibleTabs(widths, active, room);
+    // Where each drawn tab starts (px, unzoomed): the tab menu opens under it.
+    this.tabX = (i) => (i < fit.from || i >= fit.to ? 8 : (fit.before > 0 ? MORE : 0) + widths.slice(fit.from, i).reduce((a, b) => a + b, 0));
     const drag = this.tabDrag;
     const stake = drag ? stakeAt(docs.length, drag.from, dropIndex(docs.length, drag.from, drag.gap)) : null;
     // The landing place among the drawn tabs: one folded away stands at the edge.
@@ -2335,8 +2536,9 @@ export default class EditorPane extends View {
         .on_mouse_move((e, cx) => this.dragOver(gapAt(i, e?.local_position?.x ?? 0, e?.bounds?.width ?? 1), e, cx))
         // A click (no drag) shows the tab; a drag drops in the strip's mouse up.
         .on_click((_e, cx) => { if (this.tabDrag) return; this.select(d, cx); cx.notify(); })
-        // Middle click closes it, as the app's tab strip does.
+        // Middle click closes it, as the app's tab strip does; a right-click opens its menu.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.closeTab(cx, d); cx.notify(); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.openTabMenu(cx, i); cx.notify(); })
         // Unsaved: the bar's yellow dithered square; nothing when clean.
         .child(div().id(`editor-tab-mark-${i}`).relative().size(7).flex_none().border(1)
           .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
@@ -2356,7 +2558,7 @@ export default class EditorPane extends View {
       .when(stakeBefore === null, (el) => el.child(tabStake(t)));
     return h_flex().id("editor-tabs").relative().h(TABS).flex_none().items_center().overflow_hidden().bg(t.background)
       .on_mouse_up("left", (_e, cx) => this.dropTab(cx))
-      .on_hover((hovered, cx) => { if (!hovered) this.cancelDrag(cx); })
+      .on_hover((hovered, cx) => { if (!hovered) this.leaveStrip(cx); })
       .when(Boolean(drag), (el) => el.cursor_grabbing())
       .on_scroll_wheel((e, cx) => { const dy = e?.delta?.y ?? 0; if (Math.abs(dy) >= 1) { this.stepTab(dy > 0 ? -1 : 1, cx); cx.notify(); } })
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
