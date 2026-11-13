@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 
-// The picker's decisions (defaults/mods/finder/logic.js).
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, lineRuns, previewWidth, previewLines, PREVIEW_MIN, LIST_MIN, PREVIEW_LINE, PREVIEW_CHROME, keyFor, otherMode } from "../defaults/mods/finder/logic.js";
+// The picker's decisions (defaults/mods/finder/logic.ts).
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, lineRuns, previewWidth, previewLines, PREVIEW_MIN, LIST_MIN, PREVIEW_LINE, PREVIEW_CHROME, keyFor, otherMode } from "../defaults/mods/finder/logic.ts";
 
 test("matched characters are marked, ranges in any order and overlapping", () => {
   expect(marks("picker.rs", [[0, 1], [3, 4], [7, 9]])).toEqual([["p", true], ["ic", false], ["k", true], ["er.", false], ["rs", true]]);

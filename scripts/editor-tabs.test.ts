@@ -392,8 +392,8 @@ test("route: the copies in the files pane, the picker and the Markdown viewer ar
 });
 
 test("the picker opens into the focused editor, else the shown tab's; the files pane into the one it sent files to", async () => {
-  const pick = readFileSync(new URL("../defaults/mods/finder/main.js", import.meta.url), "utf8");
-  expect(pick).toMatch(/openInEditor\(herdr, \{ path, \.\.\.\(r\.match/);
+  const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
+  expect(pick).toMatch(/openInEditor\(herdr, "match" in r \? \{ path, line/);
   const files = readFileSync(new URL("../defaults/mods/file-tree/main.js", import.meta.url), "utf8");
   expect(files).toMatch(/openInEditor\(herdr, \{ path: `\$\{this\.root\}\/\$\{path\}`, pane: beside\?\.pane \?\? null, prefer: this\.editorSlot/);
   // The picker's case: a terminal focused, the shown tab's editor takes it.
@@ -953,8 +953,8 @@ test("route: look rides along to the editor (the open record) and to editor.open
   route.openInEditor(herdr, { path: "/p/img/logo.png", pane: "f", look: true });
   expect(ran.at(-1)).toEqual(["editor.open", { path: "/p/img/logo.png", pane: "f", look: true }]);
   expect(sharedNow["editor.open"]).toMatchObject({ slot: null, path: "/p/img/logo.png", look: true });
-  const pick = readFileSync(new URL("../defaults/mods/finder/main.js", import.meta.url), "utf8");
-  expect(pick).toMatch(/r\.match \? \{ line: r\.match\.line, col: r\.match\.col \+ 1 \} : \{ look: true \}/);
+  const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
+  expect(pick).toMatch(/"match" in r \? \{ path, line: r\.match\.line, col: r\.match\.col \+ 1 \} : \{ path, look: true \}/);
 });
 
 test("a link to a picture in the Markdown preview opens as a drawn tab here; on another machine, the preview beside", async () => {
