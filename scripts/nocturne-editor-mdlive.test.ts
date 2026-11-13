@@ -211,6 +211,8 @@ test("typing at speed into a paragraph, through autosaves and reloads: every cha
   clickLine(p, 2);
   const b = block(p);
   const sets = b.setValues;
+  // The block's box as drawn (its size change reports it): 60 characters to a row, as the stand-in wraps.
+  R(p).litW = 484;
   R(p).measure(cx());
   let lastH = R(p).litHeight();
   let typed = "";

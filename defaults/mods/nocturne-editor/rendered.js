@@ -568,10 +568,13 @@ export class Rendered {
   /** The lit block's height: its editor's content as measured, or (grown since) as its lines would wrap;
    *  an empty block has its kinds under it. */
   litHeight() {
+    // Measured: that height, grown by the rows the text has gained since (never shrunk to an
+    // estimate, so it doesn't jump between the two on a key). Not yet: the estimate, a little
+    // slack in it (a box a little short lets the editor scroll inside it).
     const rows = wrappedRows(this.piece, this.litW, this.cw);
-    // A row's slack: an estimate a little short would let the editor scroll inside its box.
-    const est = rows * this.rowH + 6;
-    const h = this.blockH == null ? est : this.blockHFor === this.piece ? this.blockH : Math.max(this.blockH, est);
+    const h = this.blockH == null ? rows * this.rowH + 6
+      : this.blockHFor === this.piece ? this.blockH
+      : this.blockH + Math.max(0, rows - wrappedRows(this.blockHFor ?? "", this.litW, this.cw)) * this.rowH;
     return Math.min(h, Math.max(ROW * 3, this.viewH - 60)) + 10 + (this.offersKinds() ? KINDS_H : 0);
   }
 
