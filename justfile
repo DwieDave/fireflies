@@ -71,6 +71,8 @@ test:
     bun test scripts/git-pane.test.ts
     # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.
     bun test scripts/github-scroll.test.ts
+    # The GitHub window as a normal pane: no frame or ✕, esc stays, narrow tabs, moved window -> pane -> window, two copies, a restart's props.
+    bun test scripts/github-pane.test.ts
     # A panel's long title ends in an ellipsis inside its panel (GitHub window, git window), with recording gpui stand-ins.
     bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.

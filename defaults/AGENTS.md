@@ -101,6 +101,14 @@ pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
 `L` lists the links in the shown pull request or open card (j/k, enter opens
 one); `tab` / `shift-tab` walk the panels; `?` lists every key.
+The window also lives in a normal pane, beside terminals: props `{slot,
+folder, on?}` (`slot` unique: the pane finds itself and keeps its tab and
+each tab's selection across restarts). In a pane it has no frame or ✕, esc
+never closes it (q does), and narrower than 640 px only the shown tab says its
+name. ctrl-t (or the header's ◧ / ⧉, `github.to-pane` / `github.to-window`)
+moves the window into a pane beside the focused one, or a pane out to the
+window, keeping its tab and selection; commands (`github.<name>`) go to the
+window while one is open, else to the GitHub pane with the keyboard.
 Its third tab, Projects (`3`, or `github.projects` in keys.json), is
 a GitHub Projects board: the projects linked to the repo (and its parent, for
 a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
