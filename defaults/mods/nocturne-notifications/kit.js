@@ -18,6 +18,29 @@ export function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
 
+// ---- the toolbar's ground (the same in ../nocturne/kit.js and
+// ../nocturne-notifications/kit.js: the tools, the bell and "+ new" are
+// blocks of their own, and the ground runs under all of them to the strip's
+// right edge, each block drawing its stretch)
+
+/** The toolbar's look: "ledge" (the tools on a raised, lit ledge of the
+ *  horizon) or "plate" (the tools on a dithered plate the strip's height). */
+export const TOOL_LOOK = "plate";
+
+/** The ground under a block of the toolbar (layers filling it, behind its
+ *  controls), in place of the tabs' plain horizon. */
+export function toolGround(t, look = TOOL_LOOK) {
+  const layer = () => div().absolute().left(0).right(0);
+  if (look === "plate") return [
+    layer().top(0).bottom(0).opacity(0.55).child(dither(t.ansi0, 1)), // the plate
+    layer().bottom(0).h(2).child(dither(t.ansi8, 1)), // its foot: the horizon, lit
+  ];
+  return [
+    layer().bottom(0).h(4).child(dither(t.ansi8, 1)), // the ledge, dithered
+    layer().bottom(4).h(1).bg(t.ansi8).opacity(0.8), // its lit edge
+  ];
+}
+
 /** A small dithered diamond; `blink` for what needs the person. */
 export function pip(color, size = 6, blink = false) {
   const el = svg(`${ART}/pip.svg`).size(size).flex_none().text_color(color);

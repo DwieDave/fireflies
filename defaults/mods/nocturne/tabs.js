@@ -1,8 +1,8 @@
 // The tab strip: tabs sit on a dithered horizon line; the shown one is
-// underlined in a blue checker. Where they end, a seam (seamFade, SEAM): the
-// tabs fade into the night in dithered steps (overflowing ones under it,
-// never into the tools), a post down to the horizon, and the tools stand on
-// a lit stretch of it. Right of the seam, icons only:
+// underlined in a blue checker. Where they end, a seam (seamFade, seam,
+// SEAM): the tabs dissolve into the night in dithered steps (overflowing ones
+// under it, never into the tools), and the tools stand on their own ground
+// (kit.js toolGround), on under the bell and "+ new". Right of the seam, icons only:
 //   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
 //           deck's queued jobs (jobs.js)
 //   procs   a tree mark and the ports listening in this app's terminals
@@ -34,7 +34,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
-import { dither, pip, spaceFolder, givenName, dropBelow, navRing } from "./kit.js";
+import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, TOOL_LOOK } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.js";
@@ -53,29 +53,45 @@ import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js
 
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 
-// Where the tabs end and the tools begin: the tabs fade into the night
-// under the seam in SEAM.steps bands of SEAM.band px (the moonlit path's
-// three steps, one more for the night itself), a gap, a post down to the
-// horizon, and the tools on a lit stretch of the horizon (ansi8 at SEAM.ground).
-export const SEAM = { band: 5, steps: 4, gap: 6, ground: 0.6 };
+// Where the tabs end and the tools begin (kit.js toolGround, TOOL_LOOK): the
+// tabs dissolve into the night under the seam in SEAM[look].steps dithered
+// bands of SEAM.band px, then the seam itself, and the tools (with the bell
+// and "+ new", blocks of their own) stand on their own ground to the strip's
+// right edge. "ledge": a gap of night that cuts the tabs' horizon, then a
+// raised, lit ledge. "plate": a dithered band the strip's height, then a plate.
+export const SEAM = { band: 8, ledge: { steps: 5, gap: 12 }, plate: { steps: 6, band: 6 } };
+
+/** How much of the night covers band `i` of `n` (0..1, the last all). */
+export const fadeCover = (i, n) => (i + 1) / n;
 
 /**
  * The tabs' fade under the seam, at the right of the tab area: the night
- * (the background) over them, thinning out leftwards in dithered steps:
- * a quarter, half, three quarters, all. Over the tab area's end it shows
- * nothing (the night on the night); over overflowing tabs they fade into
- * it rather than run into the tools. It takes no pointer: a press goes
- * through to the tab under it. The horizon line under it stays.
+ * (the background) over them, thickening rightwards in dithered steps, as
+ * much of it as fadeCover says: a checker of the night (half) at an opacity
+ * below a half, the checker plus the solid night above it. Over the tab
+ * area's end it shows nothing (the night on the night); over overflowing
+ * tabs they dissolve into it rather than run into the tools. It takes no
+ * pointer: a press goes through to the tab under it. The horizon stays.
  */
-export function seamFade(t) {
-  const bands = [
-    (el) => el.opacity(0.5).child(dither(t.background, 1)), // a quarter of the dots
-    (el) => el.child(dither(t.background, 1)), // half
-    (el) => el.child(dither(t.background, 1)).child(div().absolute().top(0).left(0).size_full().bg(t.background).opacity(0.5)), // three quarters
-    (el) => el.bg(t.background), // the night
-  ];
-  return div().id("tab-fade").absolute().top(0).bottom(2).right(0).w(SEAM.band * SEAM.steps)
-    .children(bands.map((b, i) => b(div().absolute().top(0).bottom(0).left(i * SEAM.band).w(SEAM.band))));
+export function seamFade(t, look = TOOL_LOOK) {
+  const n = SEAM[look].steps;
+  const band = (i) => {
+    const c = fadeCover(i, n), el = div().absolute().top(0).bottom(0).left(i * SEAM.band).w(SEAM.band);
+    if (c >= 1) return el.bg(t.background);
+    if (c <= 0.5) return el.opacity(c * 2).child(dither(t.background, 1));
+    // over half: the checker, and the solid night over the rest
+    return el.child(dither(t.background, 1)).child(div().absolute().top(0).left(0).size_full().bg(t.background).opacity((c - 0.5) * 2));
+  };
+  return div().id("tab-fade").absolute().top(0).bottom(2).right(0).w(SEAM.band * n)
+    .children(Array.from({ length: n }, (_, i) => band(i)));
+}
+
+/** The seam between the fade and the tools: "ledge", a gap of night over the
+ *  tabs' horizon (it ends there); "plate", a dithered band the strip's height. */
+export function seam(t, look = TOOL_LOOK) {
+  if (look === "plate") return div().id("tab-seam").relative().flex_none().w(SEAM.plate.band).h_full()
+    .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(dither(t.ansi8, 1)));
+  return div().id("tab-seam").relative().flex_none().w(SEAM.ledge.gap).h_full().bg(t.background);
 }
 
 export default class Tabs {
@@ -430,11 +446,11 @@ export default class Tabs {
       .child(h_flex().id("tab-area").relative().flex_1().min_w(0).h_full()
         .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)).child(end))
         .child(seamFade(t)))
-      // The seam (seamFade's other half): a post from the top down to the
-      // horizon, and the tools standing on a lit stretch of it.
-      .child(div().id("tab-seam").flex_none().w(1).h_full().ml(SEAM.gap).bg(t.ansi0))
-      .child(h_flex().id("tab-tools").relative().flex_none().h_full().pl(SEAM.gap - 2).gap(2).items_center()
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).opacity(SEAM.ground).child(dither(t.ansi8, 1)))
+      // The seam, then the tools on their own ground (kit.js toolGround),
+      // which the bell's and "+ new"'s blocks carry on to the strip's end.
+      .child(seam(t))
+      .child(h_flex().id("tab-tools").relative().flex_none().h_full().pl(4).gap(2).items_center()
+        .children(toolGround(t))
         .child(scriptsControl(t, (...a) => this.tool(...a)))
         .child(procsControl(t, (...a) => this.tool(...a)))
         .child(rule())

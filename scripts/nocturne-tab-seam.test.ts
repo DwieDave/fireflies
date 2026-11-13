@@ -1,9 +1,13 @@
-// The tab strip's seam (tabs.js seamFade, SEAM): where the tabs end and the
-// toolbar's tools begin. The tabs fade into the night under it in dithered
-// steps, a post stands down to the horizon, the tools stand on a lit stretch
-// of it. With few tabs and with tabs overflowing the strip. Stand-ins for herdr
-// and gpui (mock.module is process-wide: this file runs alone).
-import { test, expect, mock } from "bun:test";
+// The tab strip's seam (tabs.js seamFade, seam, SEAM; kit.js toolGround):
+// where the tabs end and the toolbar's tools begin. The tabs dissolve into the
+// night under it in dithered steps, then the seam, and the tools stand on
+// their own ground, which the bell's and "+ new"'s blocks (layout blocks of
+// their own) carry on to the strip's right edge: Developer saw it stop under
+// the git button's ▾. With few tabs and overflowing ones, the bell with a
+// count and without. Stand-ins for herdr and gpui (mock.module is
+// process-wide: this file runs alone).
+import { test, expect, mock, beforeEach } from "bun:test";
+import { readFileSync } from "node:fs";
 
 class El {
   kids: any[] = [];
@@ -29,6 +33,7 @@ function find(root: any, id: string): any {
 const isDither = (e: any) => e?.tag === "dither";
 
 let tabsNow: any[] = [];
+let sharedState: Record<string, unknown> = {};
 const LAYOUT = {
   id: "root", type: "row", children: [
     { id: "sidebar", type: "block", content: { mod: "nocturne", props: { role: "sky" } } },
@@ -47,8 +52,8 @@ mock.module("herdr", () => ({
   hc: async () => ({ code: 1, stdout: "" }), home: () => "/home/a", keys: () => [], knownAgents: async () => [], layout: () => LAYOUT,
   layouts: () => ["nocturne"], nextCommand: () => new Promise<string>(() => {}), notify: () => {}, openOverlay: () => "o1",
   panes: () => [{ pane: "p1", tab: "t1", terminal: "a/1", focused: true, cwd: "/home/a" }], pickFolder: async () => null,
-  presentUpdateNotes: () => {}, props: () => null, run: () => null, setAgentOrder: () => {}, setShared: () => {},
-  settings: () => ({ zoom: 0.9 }), shared: () => null,
+  presentUpdateNotes: () => {}, props: () => ({ role: "bell", end: 0 }), run: () => null, setAgentOrder: () => {}, setShared: () => {},
+  settings: () => ({ zoom: 0.9 }), shared: (k: string) => sharedState[k] ?? null,
   spaces: () => [{ id: "s1", name: "one", active: true, folder: "/home/a", tabs: tabsNow }],
   terminals: () => [], theme: () => theme, updates: () => null, window: () => ({ platform: "macos" }),
 }));
@@ -66,7 +71,15 @@ const cx: any = {
   focus_handle: () => ({ focus() {}, is_focused: () => false }), new: () => ({ set_props() {} }), timer: { every() {}, after() {} },
 };
 
-const { default: Tabs, SEAM, seamFade } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defaults/mods/nocturne/tabs.js");
+const kit = await import("../defaults/mods/nocturne/kit.js");
+const nkit = await import("../defaults/mods/nocturne-notifications/kit.js");
+const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
+const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
+const { ITEMS } = await import("../defaults/mods/nocturne-notifications/engine.js");
+
+beforeEach(() => { sharedState = {}; });
+
 const tab = (i: number) => ({ id: `t${i}`, index: i, active: i === 1, name: `tab number ${i}`, status: i % 3 ? "working" : "done" });
 function strip(n: number) {
   tabsNow = Array.from({ length: n }, (_, i) => tab(i + 1));
@@ -74,57 +87,103 @@ function strip(n: number) {
   v.init({ role: "tabs" }, cx);
   return v.render(cx);
 }
+/** A layer's shape: what it calls (its id aside) and its children's shapes. */
+const shape = (e: any): any => e instanceof Object && e.calls
+  ? { tag: e.tag ?? null, calls: Object.fromEntries(Object.entries(e.calls).filter(([k]) => k !== "id")), kids: e.kids.map(shape) }
+  : e;
+const ground = () => kit.toolGround(theme).map(shape);
+/** The ground's layers among a block's root children, in order. */
+const groundIn = (root: any) => root.kids.map(shape).filter((k: any) => ground().some((g: any) => JSON.stringify(g) === JSON.stringify(k)));
 
 for (const [what, n] of [["few tabs", 2], ["tabs overflowing the strip", 40]] as const) {
-  test(`with ${what}: tabs, then the seam's post, then the tools on their ground`, () => {
+  test(`with ${what}: the tabs and their fade, the seam, then the tools on their ground`, () => {
     const root = strip(n);
     const order = root.kids.map(idOf).filter(Boolean);
     expect(order.slice(0, 3)).toEqual(["tab-area", "tab-seam", "tab-tools"]);
     const area = find(root, "tab-area");
-    // the tabs give way (they scroll), the tools never do
+    // the tabs give way (they scroll), the seam and the tools never do
     expect(area.calls.flex_1).toBeDefined();
     expect(area.calls.min_w?.[0]).toBe(0);
+    expect(find(root, "tab-seam").calls.flex_none).toBeDefined();
     expect(find(root, "tab-tools").calls.flex_none).toBeDefined();
     expect(find(root, "tab-scroll").calls.overflow_x_scrollbar).toBeDefined();
     expect(find(root, "tab-scroll").kids.filter((k: any) => String(idOf(k)).startsWith("tab-t")).length).toBe(n);
     // the fade lies over the tabs (after them, at the area's right edge), above the horizon
     expect(area.kids.map(idOf)).toEqual(["tab-scroll", "tab-fade"]);
     const fade = find(root, "tab-fade");
-    expect(fade.calls.absolute).toBeDefined();
     expect(fade.calls.right?.[0]).toBe(0);
     expect(fade.calls.bottom?.[0]).toBe(2);
-    // the post: 1 px, the strip's height, a gap from the fade
-    const post = find(root, "tab-seam");
-    expect(post.calls.w?.[0]).toBe(1);
-    expect(post.calls.h_full).toBeDefined();
-    expect(post.calls.ml?.[0]).toBe(SEAM.gap);
-    // the tools' ground: a lit stretch of the horizon under them
-    const ground = find(root, "tab-tools").kids[0];
-    expect(ground.calls.absolute).toBeDefined();
-    expect(ground.calls.bottom?.[0]).toBe(0);
-    expect(ground.calls.h?.[0]).toBe(2);
-    expect(ground.kids.some(isDither)).toBe(true);
-    // the tools are all still there
-    for (const id of ["tab-scripts-run", "tab-procs", "tab-files", "tab-git"]) expect(find(root, id)).toBeDefined();
+    // the tools stand on the ground, edge to edge of their block
+    const tools = find(root, "tab-tools");
+    expect(tools.kids.slice(0, ground().length).map(shape)).toEqual(ground());
+    for (const id of ["tab-scripts-run", "tab-procs", "tab-files", "tab-git", "tab-git-more"]) expect(find(root, id)).toBeDefined();
   });
 }
 
-test("the fade thins out leftwards in dithered steps: a quarter, half, three quarters, the night", () => {
-  const fade = seamFade(theme);
-  expect(fade.calls.w?.[0]).toBe(SEAM.band * SEAM.steps);
-  const bands = fade.kids;
-  expect(bands.map((b: any) => b.calls.left?.[0])).toEqual([0, 5, 10, 15]);
-  // a quarter: half the checker at half strength
-  expect(bands[0].calls.opacity?.[0]).toBe(0.5);
-  expect(bands[0].kids.some(isDither)).toBe(true);
-  // half: the checker
-  expect(bands[1].calls.opacity).toBeUndefined();
-  expect(bands[1].kids.some(isDither)).toBe(true);
-  // three quarters: the checker and the night at half over it
-  expect(bands[2].kids.some(isDither)).toBe(true);
-  expect(bands[2].kids.some((k: any) => k.calls.bg?.[0] === "background" && k.calls.opacity?.[0] === 0.5)).toBe(true);
-  // then the night itself, in the background's color
-  expect(bands[3].calls.bg?.[0]).toBe("background");
+for (const look of ["ledge", "plate"]) {
+  test(`${look}: the ground spans its whole block, and is a real break from the tabs' 2 px horizon`, () => {
+    const layers = kit.toolGround(theme, look);
+    for (const l of layers) {
+      expect(l.calls.absolute).toBeDefined();
+      expect(l.calls.left?.[0]).toBe(0);
+      expect(l.calls.right?.[0]).toBe(0);
+    }
+    // dithered, and taller than the horizon (a ledge) or the strip's height (a plate)
+    expect(layers.some((l: any) => l.kids.some(isDither))).toBe(true);
+    const tall = Math.max(...layers.map((l: any) => (l.calls.top?.[0] === 0 && l.calls.bottom?.[0] === 0 ? 36 : l.calls.h?.[0] ?? 0)));
+    expect(tall).toBeGreaterThan(2);
+  });
+
+  test(`${look}: the fade is wide (40 px and more) and thickens rightwards to the night`, () => {
+    const fade = seamFade(theme, look);
+    const n = (SEAM as any)[look].steps;
+    expect(fade.calls.w?.[0]).toBe(SEAM.band * n);
+    expect(SEAM.band * n).toBeGreaterThanOrEqual(40);
+    const covers = Array.from({ length: n }, (_, i) => fadeCover(i, n));
+    expect(covers.every((c, i) => i === 0 || c > covers[i - 1])).toBe(true);
+    expect(covers.at(-1)).toBe(1);
+    expect(fade.kids.at(-1).calls.bg?.[0]).toBe("background"); // the night itself, last
+    expect(fade.kids.slice(0, -1).every((b: any) => b.kids.some(isDither))).toBe(true); // dithered steps before it
+  });
+
+  test(`${look}: the seam has weight: a gap of night 8 px+ wide, or a dithered band the strip's height`, () => {
+    const s = seam(theme, look);
+    expect(s.calls.w?.[0]).toBeGreaterThanOrEqual(look === "ledge" ? 8 : 4);
+    expect(s.calls.h_full).toBeDefined();
+    if (look === "ledge") expect(s.calls.bg?.[0]).toBe("background"); // covers the tabs' horizon: it ends there
+    else expect(s.kids.some((k: any) => k.kids.some(isDither))).toBe(true);
+  });
+}
+
+// ---- Developer: "why is the brighter line stopping midway?" The bell and
+// "+ new" are blocks of their own; each now draws the same ground.
+
+for (const [what, list] of [
+  ["no count", []],
+  ["a count (two waiting on you, one to look at)", [{ id: "a", type: "permission" }, { id: "b", type: "question" }, { id: "c", type: "other" }]],
+] as const) {
+  test(`the ground runs on under the bell (${what}) and "+ new" to the strip's right edge`, () => {
+    sharedState[ITEMS] = list;
+    const b = new Bell();
+    b.init({ role: "bell" }, cx);
+    const bellRoot = b.render(cx);
+    expect(groundIn(bellRoot)).toEqual(ground());
+    const nb = new NewButton();
+    nb.init();
+    const newRoot = nb.render();
+    expect(groundIn(newRoot)).toEqual(ground());
+    // and both roots fill their blocks, so the ground reaches each block's edges
+    for (const r of [bellRoot, newRoot]) expect(r.calls.size_full).toBeDefined();
+    // none of them still draws the old plain horizon (ansi0, 2 px) on top
+    for (const r of [bellRoot, newRoot]) expect(r.kids.some((k: any) => k.calls.h?.[0] === 2 && JSON.stringify(shape(k)).includes("ansi0") && !JSON.stringify(shape(k)).includes("ansi8"))).toBe(false);
+  });
+}
+
+test("the two copies of toolGround (nocturne, nocturne-notifications) are the same", () => {
+  const cut = (p: string) => { const s = readFileSync(p, "utf8"); const i = s.indexOf("// ---- the toolbar's ground"); return s.slice(i, s.indexOf("\n}\n", s.indexOf("export function toolGround", i)) + 2); };
+  expect(cut("defaults/mods/nocturne-notifications/kit.js")).toBe(cut("defaults/mods/nocturne/kit.js"));
+  expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
+  expect(nkit.toolGround(theme).map(shape)).toEqual(ground());
 });
 
 test("the fade takes no pointer: a press, click or drag on a tab under it reaches the tab", () => {
