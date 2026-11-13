@@ -300,8 +300,8 @@ test("GitHub: each tab's ? list names every key its handler takes, in every pane
   const lay = { columns: [{}, {}], lane: null, lanes: [], sorted: false };
   const item = { id: "i", content: { kind: "draft" } };
   const pjKeys = [["board", false], ["board", true], ["detail", true]].flatMap(([focus, detailOpen]) => taken(() => asTab(surface(ghProjects, ["key"], {
-    app, focus, detailOpen, typing: null, menu: null, carrying: null, filterText: "x", board: () => ({ project: { url: "u" } }), lay: () => lay, at: () => ({ col: 0, row: 0 }),
-    current: () => item, grid: () => [[]], foldedCols: () => [], viewH: 400, draft: { set_value() {}, focus() {} }, filter: { set_value() {}, focus() {}, value: () => "" }, view: () => ({}),
+    app, focus, detailOpen, typing: null, menu: null, carrying: null, filterText: "x", board: () => ({ project: { url: "u" }, fields: [], views: [], repos: [] }), lay: () => lay, at: () => ({ col: 0, row: 0 }),
+    current: () => item, grid: () => [[]], foldedCols: () => [], viewH: 400, draft: { set_value() {}, focus() {} }, valueInput: { set_value() {}, focus() {} }, filter: { set_value() {}, focus() {}, value: () => "" }, view: () => ({}),
   })), skip));
   expect(unnamed([...ghProjects.help(), ["space m", ""]], pjKeys)).toEqual([]);
 });

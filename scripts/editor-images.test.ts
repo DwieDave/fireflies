@@ -200,7 +200,7 @@ let store: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
-const { KINDS } = await import("../defaults/mods/editor/rendered.ts");
+const { KINDS } = await import("../defaults/mods/editor/rendered-units.ts");
 const images = await import("../defaults/mods/editor/images.ts");
 const live = await import("../defaults/mods/editor/live.ts");
 

@@ -24,9 +24,6 @@ defaults/mods/editor/main.ts tabStrip
 defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
-defaults/mods/editor/rendered.ts
-defaults/mods/editor/rendered.ts unitView
-defaults/mods/editor/rendered.ts view
 defaults/mods/editor/viewer.ts
 defaults/mods/editor/vim.ts
 defaults/mods/editor/vim.ts feed
@@ -39,18 +36,10 @@ defaults/mods/file-tree/diff.ts parse
 defaults/mods/file-tree/logic.ts
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
-defaults/mods/github/board.ts
 defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
-defaults/mods/github/projects.ts
-defaults/mods/github/projects.ts key
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
-defaults/mods/nocturne/newspace.ts
-defaults/mods/nocturne/newspace.ts render
-defaults/mods/nocturne/palette.ts
-defaults/mods/nocturne/palette.ts openEntries
-defaults/mods/nocturne/palette.ts render
 defaults/mods/nocturne/sky.ts
 defaults/mods/nocturne/tabs.ts render
 defaults/mods/notifications/claude.ts

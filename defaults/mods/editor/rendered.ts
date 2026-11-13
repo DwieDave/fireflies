@@ -6,7 +6,9 @@
 // unsaved mark and the language server work as in the text view, and what
 // isn't edited stays byte for byte. Edits made to the file's editor from
 // elsewhere (vim, the Markdown commands, undo, a reload) come back into the
-// block (pull).
+// block (pull). This file keeps that state and the syncing; the column and
+// the lit block's box are rendered-column.ts's, the drawn units
+// rendered-units.ts's, the keys and adding blocks rendered-keys.ts's.
 //
 // While it's typed into, the block is one stable thing: its editor is never
 // emptied and refilled (set_value resets its caret, scroll and undo), only
@@ -46,101 +48,21 @@
 // text in (a screenshot) goes to the pane (main.ts pasteImage, images.ts).
 
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
-import { div, svg, image } from "gpui-kit";
 import type { EditorPosition, EditorState as EditorStateT } from "gpui-base";
-import { h_flex, v_flex, EditorState, Editor } from "gpui-base";
+import { EditorState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Range, Unit } from "./live.ts";
-import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.ts";
+import { units, unitFor, splice } from "./live.ts";
 import type { SyntaxColors } from "./logic.ts";
 import type { Sel } from "./md-text.ts";
-import { enter } from "./mdedit.ts";
-import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
+import { editBetween } from "./md-text.ts";
+import { columnView, litHeight, measureBlock, CHAR, ROW } from "./rendered-column.ts";
+import { blockKey, clickUnit, enterBelow } from "./rendered-keys.ts";
+import { GAP } from "./rendered-units.ts";
 
 type Pos = EditorPosition;
 
-const GAP = 10;
 const TIGHT = 3; // between units; between two list items
-const PAD_TOP = 18;
-const PAD_BOTTOM = 60;
-const ROW = 20; // the block editor's line height at font 13 (measured when drawn)
-const CHAR = 7.8; // a code-font character's width at 13 px (measured when drawn)
-const OVERDRAW = 1.2;
-const ADD_H = 30; // the "add a block" line under the last unit
-const KINDS_H = 26; // an empty block's row of kinds
-const PLUS = "mods/workspace-chrome/plus.svg";
-
-/** A kind an empty block offers: [Markdown command (mdedit.ts), word, its letter after cmd-.]. */
-export type BlockKind = readonly [command: string, word: string, letter: string];
-
-/** The kinds an empty block offers: [Markdown command (mdedit.ts), word, its letter after cmd-.]. */
-export const KINDS: readonly BlockKind[] = [["heading-1", "heading", "1"], ["bullets", "list", "l"], ["task", "task", "t"], ["quote", "quote", "q"], ["fence", "code", "c"], ["rule", "rule", "r"], ["image", "image", "p"]];
-
-const IMAGE_H = 560; // the tallest a picture is drawn (it keeps its shape, the column's width at most)
-
-/** One edit: [start, end) replaced by `text`, as editor positions. */
-export interface TextEdit {
-  readonly start: Pos;
-  readonly end: Pos;
-  readonly text: string;
-}
-
-/** One edit taking `a` to `b`: the span between their common start and end, as editor positions. */
-export function editBetween(a: string, b: string): TextEdit | null {
-  if (a === b) return null;
-
-  let s = 0;
-
-  while (s < a.length && s < b.length && a[s] === b[s]) s++;
-
-  let e = 0;
-
-  while (e < a.length - s && e < b.length - s && a[a.length - 1 - e] === b[b.length - 1 - e]) e++;
-
-  const pos = (text: string, o: number): Pos => {
-    const before = text.slice(0, o).split("\n");
-
-    return { line: before.length - 1, col: (before.at(-1) ?? "").length };
-  };
-
-  return { start: pos(a, s), end: pos(a, a.length - e), text: b.slice(s, b.length - e) };
-}
-
-/** What a unit is called, at the lit block's corner. */
-export function kindWord(u: Unit | null | undefined): string {
-  if (!u) return "";
-
-  switch (u.kind) {
-    case "heading":
-      return `heading ${u.level}`;
-    case "item":
-      return u.task ? "task" : /^\d/.test(u.marker) ? "numbered item" : "list item";
-    case "fence":
-      return u.lang ? `code · ${u.lang}` : "code";
-    case "quote":
-      return u.callout ? `callout · ${u.callout}` : "quote";
-    case "para":
-      return "paragraph";
-    case "ref":
-      return "reference";
-    case "front":
-      return "front matter";
-    case "blank":
-      return "new block";
-    default:
-      return u.kind;
-  }
-}
-
-/** How many rows `text` takes in a box `width` px wide, `cw` px a character (an estimate: words wrap whole). */
-export function wrappedRows(text: string, width: number, cw = CHAR): number {
-  const cols = Math.max(8, Math.floor((width - 4) / cw));
-  let n = 0;
-
-  for (const l of text.split("\n")) n += Math.max(1, Math.ceil(l.replace(/\t/g, "    ").length / cols));
-
-  return n;
-}
 
 const samePos = (a: Pos | null | undefined, b: Pos | null | undefined): boolean => Boolean(a && b) && a?.line === b?.line && a?.col === b?.col;
 
@@ -194,7 +116,7 @@ interface Placed {
 }
 
 /** A drawn row: its unit, lit or not, its key and its gap above. */
-interface Row {
+export interface Row {
   readonly u: Unit;
   readonly lit: boolean;
   readonly key: string;
@@ -268,7 +190,7 @@ export class Rendered {
       selection: host.selection,
     });
     this.block.on("change", (_e, cx) => this.push(cx));
-    this.block.on("key", (e, cx) => this.key(e, cx));
+    this.block.on("key", (e, cx) => blockKey(this, e, cx));
     // A paste the block found no text in (a screenshot): the pane saves it and puts an image block there.
     this.block.on("paste_other", (_e, cx) => this.host.pasteImage?.(cx));
   }
@@ -607,111 +529,7 @@ export class Rendered {
     return { start: { line: s.start.line + off, col: s.start.col }, end: { line: s.end.line + off, col: s.end.col } };
   }
 
-  // ---- keys
-
-  /** A key in the block, before the block editor: -> true when taken. */
-  key(e: KeyEvent, cx: Context): boolean {
-    this.syncCaret();
-
-    if (this.host.onKey(e, cx)) return true;
-
-    const k = e.key;
-    const m = e.modifiers;
-    const plain = !m.platform && !m.control && !m.alt && !m.shift;
-
-    if (m.platform && !m.alt && !m.control && k === "z") {
-      if (m.shift) this.doc.editor.redo();
-      else this.doc.editor.undo();
-
-      return true;
-    }
-
-    if (plain && (k === "up" || k === "down")) return this.edge(k === "up" ? -1 : 1, cx);
-
-    if (plain && k === "enter") return this.enterKey(cx);
-
-    return false;
-  }
-
-  /** Enter: a list item, task or quote goes on (mdedit.ts); on the last line of any other block, a new paragraph below. */
-  enterKey(cx: Context): boolean {
-    const sel = this.localSel();
-    const r = enter(this.piece, sel);
-
-    if (r) {
-      const e = editBetween(this.block.value(), r.text);
-
-      if (e) this.block.edit([e]);
-
-      this.block.set_cursor(r.sel.start.line, r.sel.start.col);
-      this.push(cx); // the edit's own change event comes after: the file has it now
-
-      return true;
-    }
-
-    if (sel.start.line !== sel.end.line || sel.start.col !== sel.end.col) return false;
-
-    const ls = this.piece.split("\n");
-    const last = ls.length - 1;
-    const lastText = ls[last] ?? "";
-    const c = sel.start;
-
-    // An empty block made here is the new block already: enter keeps it (no blank lines piling up).
-    if (this.offersKinds()) return true;
-
-    // A paragraph splits at the caret on any of its lines (the lines after go with the rest).
-    if (this.unit.kind === "para" && c.line < last) {
-      this.splitAt(this.range.from + c.line, c.col, cx, false);
-
-      return true;
-    }
-
-    if (c.line !== last || this.unit.kind === "blank" || this.unit.kind === "front") return false;
-
-    // Inside a code block, enter is a new line (its closing line's end makes a block).
-    if (this.unit.kind === "fence" && !(c.col >= lastText.length && last > 0)) return false;
-
-    if ((this.unit.kind === "item" || this.unit.kind === "quote") && c.col < lastText.length) return false;
-
-    this.splitAt(this.range.to, c.col, cx);
-
-    return true;
-  }
-
-  /** Vim's enter in normal mode (nothing pending): a new block below the lit one, as enter at
-   *  its end does, vim in insert mode in it (an empty block made here: insert mode in it). The
-   *  caller has put vim in insert mode; -> false when it's no block enter makes one after. */
-  enterBelow(cx: Context): boolean {
-    const ls = this.piece.split("\n");
-    const last = ls.length - 1;
-
-    this.block.set_cursor(last, (ls[last] ?? "").length);
-    this.syncCaret(true);
-
-    return this.enterKey(cx) || this.offersKinds();
-  }
-
-  /** A new paragraph after file line `line`, from column `col` (the rest of the line goes into
-   *  it). `glue`: a blank line after it too when a block follows straight on (false: the caret's
-   *  inside a paragraph, its lines after go with the rest). */
-  splitAt(line: number, col: number, cx: Context, glue = true): void {
-    const ls = this.lines();
-    const crlf = /\r\n/.test(this.text ?? "");
-    const nl = crlf ? "\r\n" : "\n";
-    const rest = (ls[line] ?? "").slice(col);
-    const next = ls[line + 1];
-    // A blank line between, and one after it when something follows straight on.
-    const tail = glue && next?.trim() ? nl : "";
-
-    // At a paragraph line's end: its next line starts the new paragraph (no empty first line).
-    const end = !glue && !rest ? { line: line + 1, col: 0 } : { line, col: (ls[line] ?? "").length };
-
-    this.doc.editor.edit([{ start: { line, col }, end, text: nl + nl + rest + tail }]);
-    this.doc.editor.set_cursor(line + 2, 0);
-    this.made = line + 2;
-    this.pull(cx);
-    this.block.focus();
-  }
+  // ---- keys (rendered-keys.ts)
 
   /** Whether the lit block offers the kinds: an empty one made here (enter, a +), or an empty
    *  document; not a blank line vim's j passes over (the layout stays still there). */
@@ -719,96 +537,18 @@ export class Rendered {
     return this.unit.kind === "blank" && (this.made === this.range.from || !this.all.length);
   }
 
-  /** An empty paragraph after unit `u` (the "+" beside it, "add a block" under the last), lit, the caret in it. */
-  addAfter(u: Unit | null, cx: Context): void {
-    if (!u) {
-      // An empty document: its first line.
-      this.doc.editor.set_cursor(0, 0);
-      this.made = 0;
-      this.pull(cx);
-      this.block.focus();
-
-      return;
-    }
-
-    if (this.stale) this.recut(cx);
-
-    const ls = this.lines();
-    const at = Math.min(u.to, ls.length - 1);
-
-    this.splitAt(at, (ls[at] ?? "").length, cx);
-  }
-
   localSel(): Sel {
     return this.block.selection();
   }
 
-  /** Up / down: within the block unless the caret is on its first / last row, else into the next unit. */
-  edge(dir: number, cx: Context): boolean {
-    const c = this.block.cursor();
-    const lines = this.piece.split("\n");
-    const lastLine = lines.length - 1;
-    const onEdge = dir < 0 ? c.line === 0 && this.firstRow(c) : c.line === lastLine && this.lastRow(c, lines);
-
-    if (!onEdge) return false;
-
-    return this.stepUnit(dir, c.col, cx);
+  /** Vim's enter in normal mode: a new block below (rendered-keys.ts enterBelow). */
+  enterBelow(cx: Context): boolean {
+    return enterBelow(this, cx);
   }
 
-  /** Into the unit before (-1) or after (1); false at the document's ends. */
-  stepUnit(dir: number, col: number, cx: Context): boolean {
-    if (this.stale) {
-      this.recut(cx);
-      this.units = this.all.filter((u) => u.to < this.range.from || u.from > this.range.to);
-    }
-
-    const s = step(this.text, this.units, this.range, dir, col);
-
-    if (!s) return false;
-
-    this.doc.editor.set_cursor(s.line, s.col);
-    this.light(s.unit);
-    this.mirror();
-    this.measureSoon(cx);
-    this.host.notify(cx);
-
-    return true;
-  }
-
-  /** Whether the caret is on the first drawn row of the block's first line (a soft-wrapped line has more). */
-  firstRow(c: Pos): boolean {
-    const a = this.block.bounds({ line: 0, col: 0 });
-    const b = this.block.bounds(c);
-
-    return !a || !b || Math.abs(a.y - b.y) < 2;
-  }
-
-  lastRow(c: Pos, lines: readonly string[]): boolean {
-    const last = lines.length - 1;
-    const a = this.block.bounds({ line: last, col: (lines[last] ?? "").length });
-    const b = this.block.bounds(c);
-
-    return !a || !b || Math.abs(a.y - b.y) < 2;
-  }
-
-  /** A click on a drawn unit: it lights up, the caret on its first line (`end`: its last). */
+  /** A click on a drawn unit: it lights up (rendered-keys.ts clickUnit). */
   clickUnit(clicked: Unit, cx: Context, end = false): void {
-    let u = clicked;
-
-    if (this.stale) {
-      this.recut(cx);
-      u = unitFor(this.all, u.from);
-    }
-
-    const ls = this.lines();
-    const line = end ? u.to : u.from;
-
-    this.doc.editor.set_cursor(line, end ? (ls[line] ?? "").length : 0);
-    this.light(u);
-    this.mirror();
-    this.measureSoon(cx);
-    this.block.focus();
-    this.host.notify(cx);
+    clickUnit(this, clicked, cx, end);
   }
 
   focus(): void {
@@ -877,332 +617,25 @@ export class Rendered {
     return out;
   }
 
-  /** The view: `o` { t, focused, empty: { title, detail } (an empty scratchpad), onTask(line, cx), maxWidth, unzoom(px) }. */
+  /** The view: `o` { t, focused, empty: { title, detail } (an empty scratchpad), onTask(line, cx),
+   *  maxWidth, unzoom(px) } (rendered-column.ts). */
   view(o: ViewOptions): Element {
-    const { t } = o;
-    const rows = this.rows();
-    const tops: number[] = [];
-    let y = PAD_TOP;
-    // The row's height as drawn (the lit one's, or its own).
-    const rowH = (r: Row): number => (r.lit ? this.litHeight() : this.height(r.key, r.u));
-    const topOf = (i: number): number => tops[i] ?? 0;
-
-    for (const r of rows) {
-      y += r.gap;
-      tops.push(y);
-      y += rowH(r);
-    }
-
-    const total = y + ADD_H + PAD_BOTTOM;
-    const li = rows.findIndex((r) => r.lit);
-
-    if (this.reveal && li >= 0) {
-      // The lit block in view, with room around it.
-      const top = topOf(li);
-      const bottom = top + this.litHeight();
-
-      if (top - 24 < this.scrollY) this.scrollY = Math.max(0, top - 24);
-      else if (bottom + 24 > this.scrollY + this.viewH) this.scrollY = Math.max(0, bottom + 24 - this.viewH);
-
-      this.reveal = false;
-    }
-
-    this.scrollY = Math.max(0, Math.min(this.scrollY, Math.max(0, total - this.viewH)));
-    this.litTop = li >= 0 ? topOf(li) - this.scrollY : 0;
-
-    const lo = this.scrollY - this.viewH * OVERDRAW;
-    const hi = this.scrollY + this.viewH * (1 + OVERDRAW);
-    const shown = rows.flatMap((r, i) => (r.lit || (topOf(i) + this.height(r.key, r.u) >= lo && topOf(i) <= hi) ? [i] : []));
-    const firstShown = shown[0];
-    const first = firstShown === undefined ? 0 : topOf(firstShown) - (rows[firstShown]?.gap ?? 0);
-    const max = Math.max(1, total - this.viewH);
-    const frac = Math.min(1, this.viewH / Math.max(1, total));
-    let last: number | null = null;
-    const kids: Element[] = [];
-
-    for (const i of shown) {
-      const r = rows[i];
-
-      if (!r) continue;
-
-      // A gap where unshown rows sit between two shown ones.
-      const before = last === null ? undefined : rows[last];
-
-      if (last !== null && before && i !== last + 1) kids.push(div().h(topOf(i) - r.gap - (topOf(last) + rowH(before))).flex_none());
-
-      kids.push(div().flex_none().h(r.gap));
-      kids.push(r.lit ? this.litView(o) : this.unitView(r, o));
-      last = i;
-    }
-
-    const lastUnit = rows.at(-1)?.u ?? null;
-    const empty = o.empty;
-
-    return div()
-      .id("editor-rendered")
-      .relative()
-      .flex_1()
-      .min_h(0)
-      .min_w(0)
-      .overflow_hidden()
-      .bg(t.background)
-      .on_size_change((size, cx) => {
-        const h = o.unzoom(size.height);
-
-        if (Math.abs(h - this.viewH) > 1) {
-          this.viewH = h;
-          this.host.notify(cx);
-        }
-      })
-      .on_scroll_wheel((e, cx) => {
-        this.scrollY = Math.max(0, Math.min(Math.max(0, total - this.viewH), this.scrollY - o.unzoom(e.delta.y)));
-        this.host.notify(cx);
-      })
-      .child(
-        h_flex()
-          .absolute()
-          .left(0)
-          .right(0)
-          .top(first - this.scrollY)
-          .justify_center()
-          .child(
-            v_flex()
-              .w_full()
-              .max_w(o.maxWidth ?? 760)
-              .px(28)
-              .when(Boolean(empty), (el) => (empty ? el.child(this.emptyView(t, empty)) : el))
-              .children(kids)
-              // Under the last block (not under an empty one that offers its kinds already).
-              .when(!(lastUnit?.kind === "blank" && this.offersKinds()) && (!shown.length || shown.at(-1) === rows.length - 1), (el) => el.child(this.addView(o, lastUnit))),
-          ),
-      )
-      .when(frac < 1, (el) =>
-        el.child(
-          div()
-            .absolute()
-            .right(1)
-            .w(3)
-            .top(Math.round((this.scrollY / max) * this.viewH * (1 - frac)))
-            .h(Math.max(16, Math.round(this.viewH * frac)))
-            .child(this.host.dither(o.focused ? t.accent : t.ansi8)),
-        ),
-      );
+    return columnView(this, o);
   }
 
-  /** The lit block's height: its editor's content as measured, or (grown since) as its lines would wrap;
-   *  an empty block has its kinds under it. */
+  /** The lit block's height (rendered-column.ts). */
   litHeight(): number {
-    // Measured: that height, grown by the rows the text has gained since (never shrunk to an
-    // estimate, so it doesn't jump between the two on a key). Not yet: the estimate, a little
-    // slack in it (a box a little short lets the editor scroll inside it).
-    const rows = wrappedRows(this.piece, this.litW, this.cw);
+    return litHeight(this);
+  }
 
-    const h =
-      this.blockH === null
-        ? rows * this.rowH + 6
-        : this.blockHFor === this.piece
-          ? this.blockH
-          : this.blockH + Math.max(0, rows - wrappedRows(this.blockHFor ?? "", this.litW, this.cw)) * this.rowH;
-
-    return Math.min(h, Math.max(ROW * 3, this.viewH - 60)) + 10 + (this.offersKinds() ? KINDS_H : 0);
+  /** Measures the block editor's content (rendered-column.ts). */
+  measure(cx: Context): void {
+    measureBlock(this, cx);
   }
 
   /** Measures the block editor again a moment after a change (once it's drawn). */
   measureSoon(cx: Context | null | undefined): void {
     cx?.timer.after(30, (cx) => this.measure(cx));
-  }
-
-  /** Measures the block editor's content from where it drew its last line; its row and character size too. */
-  measure(cx: Context): void {
-    const lines = this.piece.split("\n");
-    const last = lines.length - 1;
-    const first = lines[0] ?? "";
-    const b = this.block.bounds({ line: last, col: (lines[last] ?? "").length });
-
-    if (!b?.view) return;
-
-    const z = this.host.zoom();
-
-    if (b.height > 4) this.rowH = b.height / z;
-
-    const a0 = this.block.bounds({ line: 0, col: 0 });
-    const a1 = first.length ? this.block.bounds({ line: 0, col: 1 }) : null;
-
-    if (a0 && a1 && a1.y === a0.y && a1.x > a0.x) this.cw = (a1.x - a0.x) / z;
-
-    const h = (b.y + b.height - b.view.y) / z + 2;
-    const changed = h > 4 && Math.abs((this.blockH ?? -1) - h) > 1;
-
-    if (h > 4) {
-      this.blockH = h;
-      this.blockHFor = this.piece;
-    }
-
-    if (changed) this.host.notify(cx);
-  }
-
-  litView(o: ViewOptions): Element {
-    const { t } = o;
-    const h = this.litHeight();
-    const empty = this.offersKinds();
-
-    return div()
-      .id("rendered-lit")
-      .relative()
-      .flex_none()
-      .h(h)
-      .ml(-12)
-      .mr(-12)
-      .pl(12)
-      .pr(92)
-      .py(5)
-      .child(div().absolute().inset_0().opacity(0.22).child(this.host.dither(t.ansi0)))
-      .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
-      .child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(this.unit)))
-      .child(
-        v_flex()
-          .relative()
-          .size_full()
-          .child(
-            div()
-              .id("rendered-lit-box")
-              .relative()
-              .flex_1()
-              .min_h(0)
-              .w_full()
-              .on_size_change((s, cx) => {
-                this.litW = o.unzoom(s.width);
-                cx.timer.after(0, (cx) => this.measure(cx));
-              })
-              .child(Editor.new(this.block).size_full().font_family(this.host.font)),
-          )
-          .when(empty, (el) => el.child(this.kindsView(o))),
-      );
-  }
-
-  /** An empty block's kinds: a click runs one; cmd-. (vim: space .) and its letter do too. */
-  kindsView(o: ViewOptions): Element {
-    const { t } = o;
-    const lead = this.host.vim?.() ? "space ." : "cmd-.";
-
-    return h_flex()
-      .id("rendered-kinds")
-      .h(KINDS_H)
-      .flex_none()
-      .gap(4)
-      .items_center()
-      .text_size(11)
-      .child(div().flex_none().pr(4).text_color(t.dim).child("make it"))
-      .children(
-        KINDS.map(([name, word, letter]) =>
-          h_flex()
-            .id(`rendered-kind-${name}`)
-            .relative()
-            .flex_none()
-            .h(18)
-            .px(6)
-            .gap(5)
-            .items_center()
-            .border(1)
-            .border_color(t.ansi0)
-            .text_color(t.muted)
-            .cursor_pointer()
-            .hover((s) => s.border_color(t.accent).text_color(t.foreground))
-            .tooltip(`${lead} ${letter}`)
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-              cx.stop_propagation();
-              this.host.mdRun?.(name, cx);
-            })
-            .child(div().relative().child(word))
-            .child(div().relative().text_size(10).text_color(t.dim).child(letter)),
-        ),
-      )
-      .child(div().flex_1())
-      .child(div().flex_none().text_color(t.dim).child(`${lead} more`));
-  }
-
-  /** The line under the last block: "add a block" (an empty paragraph after it). */
-  addView(o: ViewOptions, after: Unit | null): Element {
-    const { t } = o;
-
-    return h_flex()
-      .id("rendered-add")
-      .relative()
-      .h(ADD_H)
-      .mt(GAP)
-      .ml(-22)
-      .flex_none()
-      .gap(8)
-      .items_center()
-      .cursor_pointer()
-      .text_color(t.dim)
-      .hover((s) => s.text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        this.addAfter(after, cx);
-      })
-      .child(div().relative().size(14).flex_none().border(1).border_color(t.ansi8).flex().items_center().justify_center().child(svg(PLUS).size(10).text_color(t.accent)))
-      .child(div().flex_none().text_size(11.5).child("add a block"))
-      .child(div().relative().flex_1().h(1).opacity(0.5).child(this.host.dither(t.ansi8)))
-      .child(div().flex_none().text_size(10.5).child("or enter at a block's end"));
-  }
-
-  emptyView(t: Theme, empty: NonNullable<ViewOptions["empty"]>): Element {
-    return v_flex()
-      .id("rendered-empty")
-      .items_center()
-      .gap(8)
-      .pt(30)
-      .pb(22)
-      .text_center()
-      .child(div().relative().size(44).opacity(0.55).child(this.host.moon?.(t) ?? div()))
-      .child(div().text_color(t.foreground).text_size(12).child(empty.title))
-      .child(div().text_color(t.muted).child(empty.detail))
-      .child(div().text_color(t.dim).child(empty.hint ?? ""));
-  }
-
-  /** An image block: each picture fits the column and keeps its shape (drawn from its cached
-   *  copy: decoded once, not per key); one on the web is drawn by the Markdown view; one that
-   *  can't be found says so. */
-  imagesView(u: Extract<Unit, { kind: "image" }>, id: string, o: ViewOptions, md: (key: string, text: string) => Element): Element {
-    const { t } = o;
-
-    return v_flex()
-      .gap(8)
-      .children(
-        u.images.map((im, j) => {
-          const got = this.host.image?.(im.src) ?? { abs: null, name: null };
-
-          if (got.name) {
-            return div().id(`${id}-img-${j}`).flex().child(image(got.name).id(`${id}-pic-${j}`).max_w_full().max_h(IMAGE_H));
-          }
-
-          if (!got.abs) return md(`${id}-web-${j}`, `![${im.alt}](${im.src})`);
-
-          const missing = got.name === null;
-          const color = missing ? t.ansi1 : t.dim;
-
-          return h_flex()
-            .id(`${id}-img-${j}`)
-            .relative()
-            .h(56)
-            .px(14)
-            .gap(10)
-            .items_center()
-            .child(div().absolute().inset_0().opacity(0.12).child(this.host.dither(color)))
-            .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(color))
-            .child(div().relative().size(10).flex_none().border(1).border_color(color))
-            .child(
-              v_flex()
-                .relative()
-                .min_w(0)
-                .child(div().text_color(missing ? t.ansi1 : t.muted).child(missing ? "picture not found" : "loading the picture…"))
-                .child(div().truncate().text_size(11).text_color(t.dim).child(im.src)),
-            );
-        }),
-      );
   }
 
   /** The reference definitions of the text, for a unit drawn alone (so [text][ref] resolves); once per text. */
@@ -1218,159 +651,6 @@ export class Rendered {
     return this.refsText;
   }
 
-  unitView(r: Row, o: ViewOptions): Element {
-    const { t } = o;
-    const u = r.u;
-    const id = `rd-${r.key}`;
-    const size = 13;
-    const md = (key: string, text: string): Element => markdown(t, key, text, { onLink: (url, cx) => this.host.link(url, cx), size });
-
-    const withRefs = (text: string): string => {
-      const rf = this.refsOf();
-
-      return rf ? `${text}\n\n${rf}` : text;
-    };
-
-    const src = this.src(u);
-    const local = { from: 0, to: u.to - u.from };
-    let body: Element;
-
-    if (u.kind === "item") {
-      const p = itemParts(src, local);
-
-      const mark = u.task
-        ? div()
-            .id(`${id}-box`)
-            .relative()
-            .size(12)
-            .mt(4)
-            .flex_none()
-            .border(1)
-            .border_color(u.checked ? t.accent : t.ansi8)
-            .cursor_pointer()
-            .hover((s) => s.border_color(t.foreground))
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-              cx.stop_propagation();
-              o.onTask(u.from, cx);
-            })
-            .when(u.checked, (el) => el.child(div().absolute().top(2).left(2).right(2).bottom(2).child(this.host.dither(t.accent))))
-        : div()
-            .w(18)
-            .flex_none()
-            .text_color(t.dim)
-            .child(/^\d/.test(p.marker) ? p.marker : "•");
-
-      body = h_flex()
-        .gap(8)
-        .items_start()
-        .pl(u.indent * 7)
-        .child(mark)
-        .child(
-          div()
-            .flex_1()
-            .min_w(0)
-            .when(u.checked, (el) => el.opacity(0.6))
-            .child(md(`${id}-md`, withRefs(imagesAsLinks(p.body)) || " ")),
-        );
-    } else if (u.kind === "quote" && u.callout) {
-      const lines = quoteBody(src, local).split("\n");
-      const head = /^\[![A-Za-z-]+\][+-]?\s*(.*)$/.exec(lines[0] ?? "");
-      const [ck, name] = CALLOUTS.get(u.callout) ?? ["ansi4", u.callout];
-      const color = t[ck];
-      const rest = lines.slice(1).join("\n");
-
-      body = v_flex()
-        .relative()
-        .pl(14)
-        .pr(12)
-        .py(8)
-        .gap(4)
-        .child(div().absolute().inset_0().opacity(0.14).child(this.host.dither(color)))
-        .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(color))
-        .child(
-          h_flex()
-            .relative()
-            .gap(8)
-            .items_center()
-            .child(div().relative().size(8).flex_none().border(1).border_color(color).child(this.host.dither(color)))
-            .child(
-              div()
-                .text_size(size - 1)
-                .text_color(color)
-                .child(head?.[1] || name),
-            ),
-        )
-        .when(Boolean(rest.trim()), (el) => el.child(div().relative().child(md(`${id}-md`, withRefs(rest)))));
-    } else if (u.kind === "image") {
-      body = this.imagesView(u, id, o, md);
-    } else if (u.kind === "rule") {
-      body = div().relative().h(13).flex().items_center().child(div().relative().w_full().h(1).opacity(0.6).child(this.host.dither(t.ansi8)));
-    } else if (u.kind === "ref") {
-      body = div().text_color(t.dim).font_family(this.host.font).text_size(11.5).child(src);
-    } else if (u.kind === "front") {
-      body = md(
-        `${id}-md`,
-        fenced(src.split("\n").slice(1, -1).join("\n")).replace(/^`+/, (m) => m + "yaml"),
-      );
-    } else {
-      body = md(`${id}-md`, u.kind === "fence" ? src : withRefs(imagesAsLinks(src)));
-    }
-
-    const hovered = this.hover === r.key;
-
-    return div()
-      .id(id)
-      .relative()
-      .flex_none()
-      .on_size_change((box, cx) => {
-        const h = o.unzoom(box.height);
-        const was = this.heights.get(r.key);
-
-        if (was === undefined || Math.abs(was - h) > 1) {
-          this.heights.set(r.key, h);
-          this.host.notify(cx);
-        }
-      })
-      .on_hover((on, cx) => {
-        const next = on ? r.key : this.hover === r.key ? null : this.hover;
-
-        if (next !== this.hover) {
-          this.hover = next;
-          this.host.notify(cx);
-        }
-      })
-      .cursor_text()
-      .on_click((_e, cx) => this.clickUnit(u, cx, false))
-      .child(body)
-      // Its "+": an empty paragraph after it (shown while the pointer is over it).
-      .when(hovered, (el) =>
-        el.child(
-          div()
-            .id(`${id}-add`)
-            .absolute()
-            .left(-24)
-            .top(1)
-            .size(16)
-            .flex()
-            .items_center()
-            .justify_center()
-            .border(1)
-            .border_color(t.ansi8)
-            .bg(t.background)
-            .cursor_pointer()
-            .hover((s) => s.border_color(t.accent))
-            .tooltip("add a block after this one")
-            .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-            .on_click((_e, cx) => {
-              cx.stop_propagation();
-              this.hover = null;
-              this.addAfter(u, cx);
-            })
-            .child(svg(PLUS).size(10).text_color(t.accent)),
-        ),
-      );
-  }
 }
 
 /** A short hash of a string (FNV-1a), for unit keys. */
