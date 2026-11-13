@@ -126,7 +126,7 @@ test("agents: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("GitHub: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/github/main.js");
+  const m = await import("../defaults/mods/github/main.ts");
   const v: any = surface(m.default, ["key", "helpPanel"], { help: false, confirm: null, picker: null, shown: () => ({}), tab: "prs", repo: {} });
   opensAndCloses("github", (e) => v.key(e, cx()), () => v.help, () => v.helpPanel(theme));
 });

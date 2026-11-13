@@ -199,6 +199,11 @@ export default class Actions {
     return this.flow?.form ?? null;
   }
 
+  /** No comment box or menu of its own on this tab: the window keeps the keys. */
+  get composer(): boolean {
+    return false;
+  }
+
   /** n, the button, the menu, the palette: run a workflow by hand (the selected run's, when it can be). */
   runWorkflow(cx: Context): void {
     const repo = this.app.repo;

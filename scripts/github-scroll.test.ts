@@ -41,7 +41,7 @@ const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: 
 
 const { default: Actions, graphHeight } = await import("../defaults/mods/github/actions.ts");
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
-const { default: GitHub } = await import("../defaults/mods/github/main.js");
+const { default: GitHub } = await import("../defaults/mods/github/main.ts");
 
 const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {} });
 const last = (h: Handle) => h.calls[h.calls.length - 1]?.[0];
