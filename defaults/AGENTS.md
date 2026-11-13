@@ -2243,6 +2243,15 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   then moves from any stop, and otherwise switches the window's tabs. A
   multi-line field types cmd-enter as a new line and fires `submit` with
   `secondary`: listen for that to submit from it.
+- `"launcher"` in `mod.json` puts a mod Nocturne doesn't ship (one installed from
+  its own repository) into "+ new" and the palette, nothing in Nocturne naming it:
+  `"launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
+  "window": true, "pane": true }`. `window`: it opens as its `mod.json` overlay
+  (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
+  (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
+  switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
+  mod's folder, tinted like the other tiles. Nocturne reads every `mods/*/mod.json`
+  at its start and whenever "+ new" or the palette opens.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then
   (`this.handle.focus()`) and handle keys with `on_key_down`. The copy gets `"focus"`

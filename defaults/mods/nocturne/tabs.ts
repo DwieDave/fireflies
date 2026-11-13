@@ -62,6 +62,7 @@ import { runJobs, pendingJobs } from "./jobs.ts";
 import { watchPrompts } from "./prompt.ts";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
 import type { Gap, StakeAt } from "./tabdrag.ts";
+import { readLaunchers } from "./launchers.ts";
 
 const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
@@ -176,6 +177,8 @@ export default class Tabs {
   rows: Rows = { tabs: [], head: [], parked: [] };
 
   init(_props: Props | undefined, cx: Context): void {
+    // Optional mods' launchers for "+ new" and the palette (launchers.ts), read once at the start.
+    readLaunchers().catch(() => undefined);
     this.poll(cx);
     cx.timer.every(5000, (later) => this.poll(later));
     // Scripts that failed since the last look get a toast.

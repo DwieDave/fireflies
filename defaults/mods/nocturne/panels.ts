@@ -26,6 +26,7 @@ import { githubOpen, toggleGithub } from "./github.ts";
 import { askScratchpad } from "./scratchpad.ts";
 import { deckOpen, toggleDeck } from "./scripts.ts";
 import { openAs } from "./inpane.ts";
+import { launcherPanels } from "./launchers.ts";
 
 /** Where things would open now. */
 export interface Here {
@@ -192,5 +193,7 @@ export function panels(): Panel[] {
       pane: () => toggleGithub(), tab: () => openAs("github", { as: "tab" }), beside: () => openAs("github", { as: "pane" }) },
     { id: "scripts", name: "Scripts", icon: `${ART}/play.svg`, key: "r", words: "script runner run tasks npm bun just make cargo test build dev nix", bind: "nocturne.scripts", fixed: "float", open: () => Boolean(deckOpen()),
       pane: () => toggleDeck({ centered: true }), tab: () => openAs("scripts", { as: "tab" }), beside: () => openAs("scripts", { as: "pane" }) },
+    // Mods Nocturne doesn't ship that declare a launcher in their mod.json (launchers.ts).
+    ...launcherPanels(),
   ];
 }

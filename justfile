@@ -85,6 +85,8 @@ test:
     bun test scripts/form-keys.test.ts
     # Nocturne's palette through its real imports, herdr and gpui stand-ins; no command, key or mod command goes missing from it.
     bun test scripts/nocturne-palette.test.ts
+    # Optional mods in "+ new" and the palette: each installed mod's mod.json launcher, nothing named.
+    bun test scripts/nocturne-launchers.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
     bun test scripts/palette-commands.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.
