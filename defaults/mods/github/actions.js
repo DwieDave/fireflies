@@ -13,7 +13,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import { settings } from "herdr";
 import { api, ghRun, fileAt } from "./gh.js";
-import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.js";
+import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.ts";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.js";

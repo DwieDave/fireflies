@@ -551,7 +551,7 @@ test("a pointer's card doesn't ring links on tab (the key goes on to vim / the t
 // ---- edit from the Markdown viewer
 
 test("the Markdown viewer's edit: the viewer closes and the editor takes its place with the preview on (a tab when the tab has an editor)", async () => {
-  const { default: Markdown } = await import("../defaults/mods/markdown/main.js");
+  const { default: Markdown } = await import("../defaults/mods/markdown/main.ts");
   const viewer: any = Object.create(Markdown.prototype);
   Object.assign(viewer, { path: "/p/docs/n.md", on: null, slot: "m1" });
   // No editor in the tab: a new one beside the viewer (asked for the preview), then the viewer closes.

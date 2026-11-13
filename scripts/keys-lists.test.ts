@@ -152,7 +152,7 @@ function surface(Cls: any, keep: string[], fields: Record<string, any>) {
   return Object.assign(o, fields);
 }
 
-const agents = await import("../defaults/mods/agent-graph/main.js");
+const agents = await import("../defaults/mods/agent-graph/main.ts");
 test("agents: ? lists every key; the bar ends with ? keys, the list open too", () => {
   const keys = taken(() => { const a = surface(agents.default, ["key"], { help: false, open: new Set(), layout: [], zoom: 1, step: (_k: string, cx: any) => cx.stop_propagation(), target: () => ({ pane: "p" }), feedScroll: { scroll_to_item() {} } }); return (e, cx) => a.key(e, cx); });
   expect(keys).toContain("H");
@@ -163,7 +163,7 @@ test("agents: ? lists every key; the bar ends with ? keys, the list open too", (
   expect(texts(a.hints(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const md = await import("../defaults/mods/markdown/main.js");
+const md = await import("../defaults/mods/markdown/main.ts");
 test("markdown: ? lists every key; the toolbar's last control is ? keys", () => {
   const make = (sel: number | null) => () => { const v = surface(md.default, ["key"], { sel, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(null)), ...taken(make(0))])];

@@ -15,7 +15,7 @@ mock.module("herdr", () => ({
   run: (name: string, args?: any) => { st.runs.push([name, args]); return null; },
   closeOverlay: (id: unknown) => { st.closed.push(id); }, openOverlay: () => "o9", notify: () => null,
   keys: () => [], spaces: () => [], panes: () => [], terminals: () => st.terms, agents: () => [], focused: () => null,
-  hc: async () => ({ code: 1, stdout: "" }), home: () => "/h", appHome: () => "/tmp/none", exec: async () => ({ code: 1, stdout: "", stderr: "" }),
+  hc: async (a: string[]) => { st.hc.push(a); return { code: 1, stdout: "" }; }, home: () => "/h", appHome: () => "/tmp/none", exec: async () => ({ code: 1, stdout: "", stderr: "" }),
   nextCommand: () => new Promise(() => {}), readTextFile: async () => null, writeTextFile: async () => null, layout: () => null,
 }));
 
@@ -24,7 +24,7 @@ const term = (address: string, name: string, live: boolean, extra: any = {}) => 
   labels: { "nocturne.script": `nix:${name}`, "nocturne.script.name": name, "nocturne.script.runner": "nix", "nocturne.script.cmd": `run ${name}`, "nocturne.script.folder": "/src" }, ...extra,
 });
 beforeEach(() => {
-  Object.assign(st, { shared: {}, runs: [], closed: [], props: { overlay: "d1" },
+  Object.assign(st, { shared: {}, runs: [], closed: [], hc: [], props: { overlay: "d1" },
     terms: [term("t1", "build", true), term("t2", "switch homelab", false)] });
 });
 
@@ -202,4 +202,30 @@ test("in the 420 px deck: the chips fit their room, the status and time keep the
   // the chips sit before them, where the badge was
   const row0 = find(r, "run-0")!.nodes.filter((n: any) => n?.calls).map((n: any) => n.calls.id?.[0] ?? "");
   expect(row0.indexOf("chips-0")).toBe(row0.length - 3);
+});
+
+// ---- the two views drawn with a word that acts (action): an ended run's output, the switch's password bar
+
+test("an ended run's output draws, and its ‹ back takes the list back", () => {
+  const o = open();
+  o.d.cursor = 1;
+  press(o, "w");
+  expect(o.d.output?.r?.address).toBe("t2");
+  const r: any = o.draw();
+  expect(texts(find(r, "out-back"))).toContain("‹ back");
+  click(o, "out-back");
+  expect(o.d.output).toBe(null);
+});
+
+test("a switch's password bar draws; cancel presses ctrl-c in the run and closes the window", () => {
+  st.props = { overlay: "pw1", password: "t5", name: "switch homelab" };
+  const d: any = new Deck();
+  const c = mkcx();
+  d.init({}, c);
+  const r: any = d.render();
+  expect(texts(r)).toContain("switch homelab");
+  find(r, "pw-cancel")!.calls.on_click[0]({}, c);
+  expect(st.hc).toEqual([["keys", "t5", "ctrl+c"]]);
+  expect(st.closed).toEqual(["pw1"]);
+  expect(st.shared["scripts.prompts"]).toEqual({ t5: { closed: true } });
 });
