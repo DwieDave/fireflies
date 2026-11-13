@@ -75,8 +75,8 @@ mock.module("herdr", () => ({
   terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), keys: () => [], focusedTerminal: () => null,
 }));
 
-const L = await import("../defaults/mods/nocturne/folderlist.js");
-const { default: NewSpace, openSpacePicker, pickerOpen, RECENT, OPEN, WIDTH, LIST_SCRIPT } = await import("../defaults/mods/nocturne/newspace.js");
+const L = await import("../defaults/mods/nocturne/folderlist.ts");
+const { default: NewSpace, openSpacePicker, pickerOpen, RECENT, OPEN, WIDTH, LIST_SCRIPT } = await import("../defaults/mods/nocturne/newspace.ts");
 
 /** A context whose spawns run, awaited with settle(). */
 function cx() {
@@ -495,7 +495,7 @@ test("attach by a typed path", async () => {
 // ---- where it's opened from
 
 test("the sidebar's + new hangs the picker under itself; the press on a lit + new only closes it", async () => {
-  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
+  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
   const s: any = new Spaces();
   s.init(cx());
   const press = { position: { x: 220, y: 40 }, local_position: { x: 12, y: 9 }, bounds: { width: 40, height: 18 } };
@@ -513,8 +513,8 @@ test("the sidebar's + new hangs the picker under itself; the press on a lit + ne
 });
 
 test("Change folder… hangs it under the row right-clicked; from a key or the folded rail it's centered", async () => {
-  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
-  const { EDIT_SPACE } = await import("../defaults/mods/nocturne/menu.js");
+  const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
+  const { EDIT_SPACE } = await import("../defaults/mods/nocturne/menu.ts");
   const s: any = new Spaces();
   s.init(cx());
   const r: any = s.render(theme, null);
@@ -535,7 +535,7 @@ test("Change folder… hangs it under the row right-clicked; from a key or the f
 // ---- the dock (dock.js) keeps its rules
 
 test("the dock is never attached: no picker opens for it, and an open one attaches nothing", async () => {
-  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.ts");
   st.spaces.push({ id: "dk", name: "dock", named: true, folder: HOME, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
   st.shared[DOCK_KEY] = { id: "dk" };
   expect(openSpacePicker({ space: "dk" })).toBeNull();
@@ -549,7 +549,7 @@ test("the dock is never attached: no picker opens for it, and an open one attach
 });
 
 test("the dock isn't a folder in the list, and no folder makes an ordinary unnamed space, not the dock", async () => {
-  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.js");
+  const { DOCK_KEY } = await import("../defaults/mods/nocturne/dock.ts");
   st.spaces.push({ id: "dk", name: "dock", named: true, folder: `${HOME}/code/scratch`, attached: true, machine: null, branch: null, active: false, tabs: [{ id: "t9" }] });
   st.shared[DOCK_KEY] = { id: "dk" };
   const { v, k } = await picker();

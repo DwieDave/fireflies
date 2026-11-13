@@ -15,18 +15,18 @@
 import { div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input } from "gpui-base";
 import { commands, layouts, keys, run, theme, props, closeOverlay, openOverlay, shared, setShared, window as win, agents, panes, terminals, updates, spaces } from "herdr";
-import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.js";
-import { isDock } from "./dock.js";
-import { onShelf } from "./pins.js";
-import { panels, here, terminalPane, terminalTab } from "./panels.js";
-import { toggleDeck, lastFailed } from "./scripts.js";
-import { toggleProcs } from "./procs.js";
-import { gitOpen, openWorktrees } from "./git.js";
-import { githubOpen } from "./github.js";
-import { togglePicker } from "./picker.js";
-import { openNewMenu } from "./newmenu.js";
-import { NAME_PANE, EDIT_SPACE } from "./menu.js";
-import { TOASTS, toastKey } from "./toast.js";
+import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb } from "./kit.ts";
+import { isDock } from "./dock.ts";
+import { onShelf } from "./pins.ts";
+import { panels, here, terminalPane, terminalTab } from "./panels.ts";
+import { toggleDeck, lastFailed } from "./scripts.ts";
+import { toggleProcs } from "./procs.ts";
+import { gitOpen, openWorktrees } from "./git.ts";
+import { githubOpen } from "./github.ts";
+import { togglePicker } from "./picker.ts";
+import { openNewMenu } from "./newmenu.ts";
+import { NAME_PANE, EDIT_SPACE } from "./menu.ts";
+import { TOASTS, toastKey } from "./toast.ts";
 import { updateShown, dismissUpdate } from "./screens.js";
 
 // Fixed heights, so the list keeps one height while you move.

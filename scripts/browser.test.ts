@@ -1087,7 +1087,7 @@ test("browser.titles: the shown tab's title by the pane's slot, on a title chang
 
 // ---- one web tab pinned to the shelf (nocturne's pins.js reads the records)
 
-const pinsJs = await import("../defaults/mods/nocturne/pins.js");
+const pinsJs = await import("../defaults/mods/nocturne/pins.ts");
 const PINS = "nocturne.pinned-panes";
 const find = (root: any, id: string) => walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === id));
 const on = (el: any, name: string, button?: string) => callOf(el, name).find((a: any) => button == null || a[0] === button)?.at(-1);
@@ -1147,7 +1147,7 @@ test("a web tab pinned from its menu (a right-click, at the pointer): the record
   view.tabAct(cmd.slice("browser.tab_act:".length), cx);
   expect(app.store[PINS]).toEqual([{ pane: "p1", mod: "browser", props: { slot: "s1" }, at: expect.any(Number), tab: "web-2" }]);
   // The shelf (pins.js) sees a tile of its own for that tab.
-  const jar = pinsJs.jarItems({ agents: [], terminals: [], panes: [pane], records: pinsJs.paneRecords(app.store[PINS]) });
+  const jar = pinsJs.jarItems({ agents: [], terminals: [], panes: [pane], records: pinsJs.paneRecords(() => app.store[PINS]) });
   expect(jar.map((x: any) => [x.key, x.tab])).toEqual([["pane:p1#web-2", "web-2"]]);
   // The strip marks it.
   root = view.render();

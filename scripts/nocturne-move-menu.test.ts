@@ -34,8 +34,8 @@ beforeEach(() => {
   bigSetup();
 });
 
-const menu = await import("../defaults/mods/nocturne/menu.js");
-const popup = await import("../defaults/mods/nocturne/popup.js");
+const menu = await import("../defaults/mods/nocturne/menu.ts");
+const popup = await import("../defaults/mods/nocturne/popup.ts");
 const { default: Menu, moveTargets, moveItems, MOVE_FLAT, menuHeight } = menu;
 
 /** An open pane menu: its view, a render, and a key. */

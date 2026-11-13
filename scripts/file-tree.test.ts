@@ -425,8 +425,8 @@ test("the header shows both filters, the search hint and a close button in a pan
 });
 
 test("the panel toggle leaves files panes of their own alone", async () => {
-  const src = await readFile(new URL("../defaults/mods/nocturne/files.js", import.meta.url), "utf8");
-  expect(src).toContain("p.mod === MOD && p.tab === tab && !p.props?.path");
+  const src = await readFile(new URL("../defaults/mods/nocturne/files.ts", import.meta.url), "utf8");
+  expect(src).toContain("p.mod === MOD && p.tab === tab && !(isFilesProps(p.props) && p.props.path)");
 });
 
 // ---- the keyboard, the folders visited, narrow widths
@@ -458,7 +458,7 @@ test("a copy opened as the focused pane takes the keyboard, with a row picked; p
 });
 
 test("cmd-e: opens the panel, moves the keyboard into an open one, closes it from inside, back where it came from", async () => {
-  const files = await load("nocturne/files.js", await import("../defaults/mods/nocturne/folders.js"));
+  const files = await load("nocturne/files.ts", await import("../defaults/mods/nocturne/folders.ts"));
   world.spaces = [{ active: true, tabs: [{ id: "t1", active: true }], folder: "/repo" }];
   world.panes = [{ pane: "p1", tab: "t1", terminal: "x", cwd: "/repo" }];
   world.focused = { pane: "p1", cwd: "/repo" };

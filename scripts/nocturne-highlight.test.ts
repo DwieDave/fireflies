@@ -118,7 +118,7 @@ test("in the jar: the pinned, focused agent's ticks frame its square too", () =>
   expect(has(w[0].el, "size", GLOW_SQUARE.size)).toBe(true);
 });
 
-const { SHOWN_INSET } = await import("../defaults/mods/nocturne/spaces.js");
+const { SHOWN_INSET } = await import("../defaults/mods/nocturne/spaces.ts");
 
 test("open sidebar: the shown space's row wears the corner ticks on its plate, the others none", () => {
   const w = wearers(draw());

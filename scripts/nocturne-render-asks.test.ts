@@ -77,8 +77,8 @@ const cx: any = {
 };
 
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
-const { default: Header } = await import("../defaults/mods/nocturne/header.js");
-const { EDIT_SPACE, NAME_AGENT, NAME_PANE } = await import("../defaults/mods/nocturne/menu.js");
+const { default: Header } = await import("../defaults/mods/nocturne/header.ts");
+const { EDIT_SPACE, NAME_AGENT, NAME_PANE } = await import("../defaults/mods/nocturne/menu.ts");
 
 /** A render as GPUI runs it: the cx refuses notify and focus meanwhile. */
 function render(view: any) {

@@ -34,22 +34,22 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, ScrollHandle } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
-import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.js";
-import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
-import { newButtonNode } from "./newbutton.js";
-import { openMenu, openKeys } from "./menu.js";
+import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
+import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
+import { newButtonNode } from "./newbutton.ts";
+import { openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
-import { headerControls, paneMenu, renamePane } from "./header.js";
-import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.js";
-import { gitState } from "./lazygit.js";
-import { gitOpen, toggleGit } from "./git.js";
-import { githubOpen } from "./github.js";
-import { filesPane, toggleFiles, focusFiles } from "./files.js";
-import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
-import { procsControl, toggleProcs } from "./procs.js";
-import { runJobs, pendingJobs } from "./jobs.js";
-import { watchPrompts } from "./prompt.js";
-import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
+import { headerControls, paneMenu, renamePane } from "./header.ts";
+import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.ts";
+import { gitState } from "./lazygit.ts";
+import { gitOpen, toggleGit } from "./git.ts";
+import { githubOpen } from "./github.ts";
+import { filesPane, toggleFiles, focusFiles } from "./files.ts";
+import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.ts";
+import { procsControl, toggleProcs } from "./procs.ts";
+import { runJobs, pendingJobs } from "./jobs.ts";
+import { watchPrompts } from "./prompt.ts";
+import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
 
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 

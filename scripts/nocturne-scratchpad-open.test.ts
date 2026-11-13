@@ -53,8 +53,8 @@ mock.module("gpui-base", () => ({
 (globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
 
 const { default: Palette } = await import("../defaults/mods/nocturne/palette.js");
-const { default: NewMenu } = await import("../defaults/mods/nocturne/newmenu.js");
-const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.js");
+const { default: NewMenu } = await import("../defaults/mods/nocturne/newmenu.ts");
+const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.ts");
 const cx: any = { notify() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, stop_propagation() {}, bind_keys() {} };
 const flush = async () => { for (let i = 0; i < 10; i++) await Promise.resolve(); };
 
@@ -96,7 +96,7 @@ test("the + new menu's Scratchpad tile: a click, its letter s, enter on it; the 
   m.init({ role: "new" }, cx);
   m.render(cx);
   // Its letter (the menu's key handler finds the tile by it).
-  const items = (await import("../defaults/mods/nocturne/newmenu.js")).menuPanels();
+  const items = (await import("../defaults/mods/nocturne/newmenu.ts")).menuPanels();
   const tile = items.find((x: any) => x.id === "scratchpad");
   expect(tile).toMatchObject({ name: "Scratchpad", key: "s", icon: "mods/nocturne/art/scratchpad.svg" });
   const liveItems = items.map((p: any) => ({ kind: "tile", id: p.id, p, key: p.key }));
@@ -113,7 +113,7 @@ test("the + new menu's Scratchpad tile: a click, its letter s, enter on it; the 
   await flush();
   expect(execCalls).toEqual([]);
   // The old row under the worktrees is gone: one place.
-  expect(readFileSync("defaults/mods/nocturne/newmenu.js", "utf8")).not.toContain('id: "scratchpad"');
+  expect(readFileSync("defaults/mods/nocturne/newmenu.ts", "utf8")).not.toContain('id: "scratchpad"');
 });
 
 test("the command (cmd-shift-;, and what the palette and menu run) reaches the sidebar's loop, which opens the note", () => {

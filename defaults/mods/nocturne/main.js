@@ -23,19 +23,19 @@
 
 import { View, div } from "gpui-kit";
 import { props } from "herdr";
-import { Prompt, Confirm } from "./dialog.js";
+import { Prompt, Confirm } from "./dialog.ts";
 import Palette from "./palette.js";
-import Peek from "./peek.js";
+import Peek from "./peek.ts";
 import Sky from "./sky.js";
 import Tabs from "./tabs.js";
-import Header from "./header.js";
-import Parked from "./parked.js";
-import { WorktreesPanel } from "./worktrees.js";
-import NewMenu from "./newmenu.js";
-import NewButton from "./newbutton.js";
-import NewSpace from "./newspace.js";
-import Menu, { KeysDialog } from "./menu.js";
-import Toast from "./toast.js";
+import Header from "./header.ts";
+import Parked from "./parked.ts";
+import { WorktreesPanel } from "./worktrees.ts";
+import NewMenu from "./newmenu.ts";
+import NewButton from "./newbutton.ts";
+import NewSpace from "./newspace.ts";
+import Menu, { KeysDialog } from "./menu.ts";
+import Toast from "./toast.ts";
 import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";
 
 const ROLES = {

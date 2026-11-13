@@ -90,8 +90,8 @@ const tick = () => new Promise((r) => setTimeout(r, 0));
 /** A command, to every copy waiting for one. */
 function send(c: string) { const w = waiting; waiting = []; for (const f of w) f(c); }
 
-const scripts = await import("../defaults/mods/nocturne/scripts.js");
-const newmenu = await import("../defaults/mods/nocturne/newmenu.js");
+const scripts = await import("../defaults/mods/nocturne/scripts.ts");
+const newmenu = await import("../defaults/mods/nocturne/newmenu.ts");
 const { default: NewMenu } = newmenu;
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");

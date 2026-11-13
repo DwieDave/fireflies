@@ -60,7 +60,7 @@ const cx: any = {
   focus_handle: () => ({ focus() {}, is_focused: () => false }), timer: { every() {}, after() {} },
 };
 
-const drag = await import("../defaults/mods/nocturne/tabdrag.js");
+const drag = await import("../defaults/mods/nocturne/tabdrag.ts");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 
 // ---- helpers

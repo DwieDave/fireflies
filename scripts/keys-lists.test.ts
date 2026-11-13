@@ -308,9 +308,9 @@ test("GitHub: each tab's ? list names every key its handler takes, in every pane
 
 // ---- the chrome
 
-const nav = await import("../defaults/mods/nocturne/nav.js");
+const nav = await import("../defaults/mods/nocturne/nav.ts");
 test("sidebar, tab strip, header and parked chips: each ? list names every key of its keymap (no function keys shown)", () => {
-  const keysOf = (map: Record<string, string>, drop: string[] = []) => Object.keys(map).filter((k) => !/^(shift-)?f\d+$/.test(k) && !drop.includes(k)).map((k) => k === "shift-tab" ? "shift-tab" : k);
+  const keysOf = (map: ReadonlyMap<string, string>, drop: string[] = []) => [...map.keys()].filter((k) => !/^(shift-)?f\d+$/.test(k) && !drop.includes(k)).map((k) => k === "shift-tab" ? "shift-tab" : k);
   expect(unnamed(nav.SIDEBAR_HELP, keysOf(nav.SIDEBAR_KEYS))).toEqual([]);
   const digits = (l: any) => [...l, ["1-9", ""]];
   expect(unnamed(digits(nav.STRIP_HELP), keysOf(nav.STRIP_KEYS))).toEqual([]);
@@ -340,7 +340,7 @@ test("welcome and what's new: ? lists every key; their foot hints end with ? key
 
 // ---- the keys dialog
 
-const keymap = await import("../defaults/mods/nocturne/keymap.js");
+const keymap = await import("../defaults/mods/nocturne/keymap.ts");
 const shipped = (file: string) => Object.entries(keysNow(require("fs").readFileSync(`${import.meta.dir}/../defaults/${file}`, "utf8")))
   .flatMap(([section, v]: any) => Object.entries(v).map(([keys, action]) => ({ section, keys, action: String(action) })));
 

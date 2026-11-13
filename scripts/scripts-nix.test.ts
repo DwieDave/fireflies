@@ -316,7 +316,7 @@ test("a switch remembers its plan, so restarting it builds and activates again",
 });
 
 test("the strip's copy of SUDO_PROMPT matches", () => {
-  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/prompt.js"), "utf8");
+  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/prompt.ts"), "utf8");
   expect(src).toContain(`export const SUDO_PROMPT = ${JSON.stringify(SUDO_PROMPT)};`);
 });
 
@@ -332,7 +332,7 @@ test("a darwin switch denied App Management is recognized, nothing else is", () 
 });
 
 test("the strip's copy of APP_MANAGEMENT matches the deck's", () => {
-  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/scripts.js"), "utf8");
+  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/scripts.ts"), "utf8");
   for (const v of [APP_MANAGEMENT.match, APP_MANAGEMENT.hint, APP_MANAGEMENT.open]) expect(src).toContain(v);
 });
 

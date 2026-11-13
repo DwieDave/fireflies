@@ -152,8 +152,8 @@ test("the files mod opens pictures and PDFs in the preview; alt-click: the syste
 });
 
 test("the pane header names a viewer by the file it shows", async () => {
-  const src = await readFile(new URL("../defaults/mods/nocturne/header.js", import.meta.url), "utf8");
-  expect(src).toContain('"preview": ["Preview", "eye"]');
+  const src = await readFile(new URL("../defaults/mods/nocturne/header.ts", import.meta.url), "utf8");
+  expect(src).toContain('["preview", ["Preview", "eye"]]');
   expect(src).toContain('new Set(["markdown", "preview", "editor", "file-tree"])');
   await readFile(new URL("../defaults/mods/workspace-chrome/eye.svg", import.meta.url), "utf8");
 });

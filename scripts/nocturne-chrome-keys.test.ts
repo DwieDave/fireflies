@@ -76,11 +76,11 @@ function key(k: string, mods: Record<string, boolean> = {}, char?: string) {
   return { key: k, key_char: typed, modifiers: { control: false, platform: false, alt: false, shift: false, ...mods } };
 }
 
-const nav = await import("../defaults/mods/nocturne/nav.js");
+const nav = await import("../defaults/mods/nocturne/nav.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
-const toast = await import("../defaults/mods/nocturne/toast.js");
-const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.js");
+const toast = await import("../defaults/mods/nocturne/toast.ts");
+const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.ts");
 
 beforeEach(() => {
   sharedState = {}; commands = []; overlays = []; closed = []; queue = []; waiting = [];
@@ -443,7 +443,7 @@ test("nocturne.toast-dismiss closes the newest toast, as nocturne.toast-close do
 // ---- popup menus: q closes like esc, unless an item is bound to q
 
 test("q closes a popup menu, unless one of its items takes q", async () => {
-  const { Popup } = await import("../defaults/mods/nocturne/popup.js");
+  const { Popup } = await import("../defaults/mods/nocturne/popup.ts");
   propsNow = { overlay: "menu1" };
   const p: any = new Popup();
   p.init(cx);

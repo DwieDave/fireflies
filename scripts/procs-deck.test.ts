@@ -1,6 +1,6 @@
 // The processes and ports manager as Developer drives it: the strip's tree
 // mark and nocturne.procs / nocturne.ports open and close the deck
-// (defaults/mods/nocturne/procs.js); the deck's every key, its cursor across
+// (defaults/mods/nocturne/procs.ts); the deck's every key, its cursor across
 // refreshes, the kill flow (ask, TERM, still there, KILL) and the port
 // actions, against a fake exec that never signals a real process. herdr and
 // gpui stand-ins (mock.module is process-wide: this file runs alone).
@@ -108,7 +108,7 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 /** Runs the timers waiting this long (the kill flow's grace). */
 const elapse = async (ms: number) => { const due = timers.filter((x) => x.ms === ms); timers = timers.filter((x) => x.ms !== ms); for (const x of due) x.f(cx); await flush(); };
 
-const procs = await import("../defaults/mods/nocturne/procs.js");
+const procs = await import("../defaults/mods/nocturne/procs.ts");
 const { default: Deck, REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/procs/main.ts");
 
 beforeEach(() => {
