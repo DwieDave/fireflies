@@ -792,7 +792,10 @@ the highlighted line shows where it will land.
   forward through the folders rooted at (back with none goes up), `r` refresh; `/` filters as you type (fff's fuzzy
   `findFiles` over the root, git-ignored files left out; hits under their
   folders, ↑↓ pick, enter opens, a folder shows in the tree; esc clears; home,
-  `/` and other machines search the folders listed so far); `H` / `I` (the eye
+  `/` and other machines search the folders listed so far; in a narrow pane,
+  the docked panel, the filter has a row of its own at full width, a click
+  anywhere on it starts it, and the switches and chips sit on the row under
+  it); `H` / `I` (the eye
   switches under the toolbar; tab / shift-tab ring them, `+ file`, `+ folder`
   and `? keys` in turn, enter or space presses, esc leaves) hide or show dotfiles and git-ignored files
   (`git ls-files --ignored`; both hidden by default), each pane keeping its

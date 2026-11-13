@@ -10,7 +10,11 @@
 //
 // Each pane keeps its filters (dotfiles, git-ignored files: both left out
 // unless settings.json `files` or H / I say otherwise; written once toggled)
-// in shared `nocturne-files.filters` by slot. `/`
+// in shared `nocturne-files.filters` by slot. The filter line holds the
+// filter, the two switches, + file / + folder and ? keys; narrower than the
+// filter's whole placeholder allows (the docked panel), the filter takes a
+// row of its own at full width and the rest the row under it (logic.js
+// lensLayout). `/`
 // filters the tree as you type: fff's fuzzy index of the root (findFiles),
 // hits under their folders; elsewhere (home, /, another machine) the folders
 // already listed.
@@ -109,7 +113,7 @@ import * as herdr from "herdr";
 import { openInEditor } from "./editor-route.js";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
-import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensFit, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, TREE_TOP, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
+import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensLayout, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.js";
 // The preview split: the preview pane's own viewer (a copy of nocturne-preview/viewer.js).
 import Viewer from "./viewer.js";
@@ -1081,7 +1085,7 @@ export default class Files extends View {
   treeBox() {
     const g = this.geo ?? {};
     return {
-      top: TREE_TOP - 4,
+      top: treeTop(this.lensRows ?? 1) - 4,
       bottom: this.size.height - (g.side === "bottom" && g.px != null ? g.px + DIVIDER : 0),
       right: this.size.width - (g.side === "right" && g.px != null ? g.px + DIVIDER : 0),
     };
@@ -1095,7 +1099,7 @@ export default class Files extends View {
     if (!at || this.keysShown || at.y < box.top || at.y > box.bottom || at.x > box.right) return null;
     const list = this.listed ?? [];
     const scrolled = -(this.scroll.offset?.()?.y ?? 0) / zoom();
-    const i = rowIndexAt(at.y, scrolled);
+    const i = rowIndexAt(at.y, scrolled, treeTop(this.lensRows ?? 1));
     if (i >= 0 && i < list.length) return { row: list[i] };
     return i >= list.length ? { root: true } : null;
   }
@@ -1541,33 +1545,52 @@ export default class Files extends View {
       .when(Boolean(word), (el) => el.child(div().relative().child(word)));
   }
 
-  /** The line under the toolbar: the filter as you type, and the two switches. */
+  /** The line under the toolbar: the filter as you type, the two switches,
+   *  the new-item chips and ? keys. Narrow (the docked panel), two rows
+   *  (logic.js lensLayout): the filter at full width, a click anywhere on its
+   *  row starts it; the switches and chips on the row under it. */
   lens(t, w, found) {
     const live = this.typing || this.finding || Boolean(this.query);
     const cut = this.cut ?? { hidden: 0, ignored: 0 };
     const searching = Boolean(this.query.trim());
-    // What fits this width: the placeholder shortens, then the switches' labels.
-    const fit = lensFit(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
+    // What fits this width: the placeholder shortens, then the switches' labels; then two rows.
+    const fit = lensLayout(w, { cut: { hidden: this.filters.hidden ? 0 : cut.hidden, ignored: this.filters.ignored ? 0 : cut.ignored }, count: searching ? found : null });
     const [hLabel, iLabel] = fit.labels;
     this.lensAdd = fit.add;
+    this.lensRows = fit.rows;
     const at = this.stop;
-    return h_flex().id("nf-lens").relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden()
-      .child(svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim))
-      .child(h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
+    const row = (id) => h_flex().id(id).relative().h(26).flex_none().pl(10).pr(6).gap(6).items_center().text_size(11).overflow_hidden();
+    const find = h_flex().id("nf-find").relative().flex_1().min_w(0).h_full().items_center().overflow_hidden()
+      .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
+      .child(live
+        ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
+        : h_flex().min_w(0).gap(5).text_color(t.dim)
+          .child(div().flex_none().text_color(t.accent).child("/"))
+          .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find))));
+    const icon = svg(`${ICONS}/search.svg`).relative().size(11).flex_none().text_color(this.typing ? t.accent : t.dim);
+    const count = searching && fit.count ? div().flex_none().text_color(t.dim).child(`${found}`) : null;
+    const chips = [
+      this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"),
+      this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"),
+      ...ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)),
+    ];
+    // ? keys: the line's last item (keyhelp.js).
+    const keys = keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
+      .when(at === "keys", (el) => el.child(ring(t)));
+    const rule = () => div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1));
+    if (fit.rows === 1) {
+      return row("nf-lens").child(icon).child(find).when(Boolean(count), (el) => el.child(count)).children(chips).child(keys).child(rule());
+    }
+    // Two rows: the filter's own row takes a click anywhere (the icon, the gap, the count too).
+    return v_flex().id("nf-lens").relative().flex_none()
+      .child(row("nf-lens-find").cursor_text()
         .on_mouse_down("left", (_e, cx) => { cx.stop_propagation(); this.startFind(cx); })
-        .child(live
-          ? Input.new(this.input).flex_1().min_w(0).h_full().text_size(11).text_color(t.foreground)
-          : h_flex().min_w(0).gap(5).text_color(t.dim)
-            .child(div().flex_none().text_color(t.accent).child("/"))
-            .when(Boolean(fit.find), (el) => el.child(div().min_w(0).truncate().child(fit.find)))))
-      .when(searching && fit.count, (el) => el.child(div().flex_none().text_color(t.dim).child(`${found}`)))
-      .child(this.filterChip(t, "nf-hidden", hLabel, this.filters.hidden, fit.cuts ? cut.hidden : 0, (cx) => this.setFilter("hidden", cx), at === "hidden"))
-      .child(this.filterChip(t, "nf-ignored", iLabel, this.filters.ignored, fit.cuts ? cut.ignored : 0, (cx) => this.setFilter("ignored", cx), at === "ignored"))
-      .children(ADDS[fit.add].map(([kind, label]) => this.addChip(t, kind, label, at === `add-${kind}`)))
-      // ? keys: the line's last item (keyhelp.js).
-      .child(keysHint(t, "nf-keys", Boolean(this.keysShown), () => { this.keysShown = !this.keysShown; }).relative().h(20).px(4)
-        .when(at === "keys", (el) => el.child(ring(t))))
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+        // Typing: the field's own frame, so it reads as a place to type.
+        .when(live, (el) => el.child(div().absolute().left(4).right(4).top(3).bottom(3).border(1).border_color(this.typing ? t.accent : t.ansi0)))
+        .child(icon).child(find).when(Boolean(count), (el) => el.child(count))
+        .when(Boolean(this.query), (el) => el.child(div().flex_none().text_color(t.dim).child("esc clears")))
+        .child(div().absolute().left(10).right(10).bottom(0).h(1).opacity(0.5).child(dither(t.ansi0, 1))))
+      .child(row("nf-lens-chips").children(chips).child(div().flex_1()).child(keys).child(rule()));
   }
 
   /** `?`: every key, in the list's place (keyhelp.js); one column at the panel's width. */

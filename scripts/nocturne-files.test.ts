@@ -1570,3 +1570,70 @@ test("a scrolled list maps the pointer to the row under it", () => {
   expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[0] });
   expect(view.hitAt({ x: 40, y: 20 })).toBeNull();
 });
+
+// ---- the narrow panel's filter line: two rows
+
+test("the filter line: one line while the filter keeps its placeholder; narrower, the filter gets a row of its own, the switches and chips the row under it", () => {
+  const { lensLayout, chipsFit, treeTop, TREE_TOP, LENS_ROW } = logic;
+  const cut = { hidden: 12, ignored: 3 };
+  expect(lensLayout(500, { cut })).toMatchObject({ rows: 1, find: "filter files", chips: "full", add: "both" });
+  expect(lensLayout(400, { cut })).toMatchObject({ rows: 1, find: "filter files" });
+  // The docked panel (about 280 px): two rows; the chips keep their counts and "+ file".
+  expect(lensLayout(280, { cut })).toMatchObject({ rows: 2, find: "filter files", chips: "short", cuts: true, add: "file" });
+  expect(lensLayout(320, { cut })).toMatchObject({ rows: 2, chips: "full" });
+  expect(lensLayout(150, { cut })).toMatchObject({ rows: 2, chips: "icon", add: "plus" });
+  // Every width: the chips' row fits (CH px a character, as the one-line check).
+  for (let w = 140; w <= 360; w += 2) {
+    const fit = chipsFit(w, cut);
+    const chip = (label: string, n: number) => 8 + 11 + (label ? 4 + label.length * logic.CH : 0) + (fit.cuts && n ? 4 + String(n).length * logic.CH : 0);
+    const adds = ({ both: ["+ file", "+ folder"], file: ["+ file"], plus: ["+"] } as any)[fit.add].map((l: string) => 8 + l.length * logic.CH);
+    const parts = [chip(fit.labels[0], cut.hidden), chip(fit.labels[1], cut.ignored), ...adds, 47];
+    if (w >= 170) expect(16 + parts.reduce((a: number, b: number) => a + b, 0) + 6 * (parts.length - 1)).toBeLessThanOrEqual(w);
+  }
+  // The rows start one row lower.
+  expect([TREE_TOP, treeTop(2)]).toEqual([treeTop(1), treeTop(1) + LENS_ROW]);
+});
+
+test("the narrow panel draws the filter on its own row at full width; a click anywhere on it starts the filter; typing, esc, tab into the list and the chips' ring work", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "nocturne-files", props: { slot: "s1" } }];
+  world.shared = {};
+  const view = pane({ slot: "s1" }, TREE);
+  view.size = { width: 280, height: 600 };
+  const ids = (el: any) => walk(el).map((e: any) => e.calls.find(([k]: [string]) => k === "id")?.[1]?.[0]).filter(Boolean);
+  let el = view.render();
+  expect(ids(el)).toEqual(expect.arrayContaining(["nf-lens", "nf-lens-find", "nf-lens-chips", "nf-find", "nf-hidden", "nf-ignored", "nf-add-file", "nf-keys"]));
+  const findRow = walk(el).find((e: any) => e.calls.some(([k, a]: [string, any]) => k === "id" && a?.[0] === "nf-lens-find"));
+  // The filter's row holds the field (no switches beside it): its placeholder whole.
+  const rowIds = ids(findRow);
+  expect(rowIds).toContain("nf-find");
+  expect(rowIds).not.toContain("nf-hidden");
+  expect(JSON.stringify(walk(findRow).map((e: any) => e.nodes.filter((n: any) => typeof n === "string")).flat())).toContain("filter files");
+  // A click on the row (not only the field): the input is drawn and focused.
+  later.length = 0;
+  findRow.calls.find(([k]: [string]) => k === "on_mouse_down")[1][1]({}, cx);
+  view.render();
+  for (const f of later.splice(0)) f(cx);
+  expect([view.input.focused, view.typing]).toEqual([true, true]);
+  // Typing filters; the row then says esc clears; esc clears.
+  view.input.set_value("main"); view.input.fire("change");
+  expect(view.query).toBe("main");
+  el = view.render();
+  expect(JSON.stringify(walk(el).map((e: any) => e.nodes.filter((n: any) => typeof n === "string")).flat())).toContain("esc clears");
+  view.key({ key: "escape", modifiers: {} }, cx);
+  expect([view.query, view.finding]).toEqual(["", false]);
+  // tab from the list rings the second row's chips, then back to the list.
+  view.input.focused = false; view.typing = false;
+  view.render();
+  const seen: any[] = [];
+  for (let i = 0; i < 5; i++) { view.key({ key: "tab", key_char: "\t", modifiers: { shift: false } }, cx); seen.push(view.stop); }
+  expect(seen).toEqual(["hidden", "ignored", "add-file", "keys", null]);
+  // The pointer: rows start under both lines.
+  view.listed = view.shown();
+  expect(view.hitAt({ x: 40, y: logic.treeTop(2) + 5 })).toEqual({ row: view.listed[0] });
+  expect(view.hitAt({ x: 40, y: logic.treeTop(2) - 10 })).toBeNull();
+  // Wide again: one line, no rows of their own.
+  view.size = { width: 560, height: 600 };
+  el = view.render();
+  expect(ids(el)).not.toContain("nf-lens-find");
+  expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[0] });
+});
