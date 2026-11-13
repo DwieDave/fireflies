@@ -1378,6 +1378,47 @@ pub fn install_policy() -> async_channel::Receiver<Request> {
     rx
 }
 
+/// The same props with every object's keys sorted, at every depth. serde_json
+/// keeps insertion order here (a dependency turns on `preserve_order`), and a
+/// pane's props come back from a restart in another order than they were
+/// opened with (`app.open_url` gives `{url, slot}`, the layout `{slot, url}`).
+fn sorted_props(v: &serde_json::Value) -> serde_json::Value {
+    match v {
+        serde_json::Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            serde_json::Value::Object(keys.into_iter().map(|k| (k.clone(), sorted_props(&map[k]))).collect())
+        }
+        serde_json::Value::Array(list) => serde_json::Value::Array(list.iter().map(sorted_props).collect()),
+        other => other.clone(),
+    }
+}
+
+/// A store's file name for these props as written (`to_string`).
+fn store_name(props: &serde_json::Value) -> String {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    props.to_string().hash(&mut h);
+    format!("store-{:016x}.json", h.finish())
+}
+
+/// A mod copy's localStorage file in `dir`: one per props, whatever order their
+/// keys come in (named by the props with their keys sorted, the order a pane's
+/// props have after a restart). A store written under the props' unsorted order
+/// (a pane opened by a link, before this naming) is renamed to the sorted name
+/// on its next load, so its tabs and zoom carry over.
+fn store_path(dir: &Path, props: &serde_json::Value) -> PathBuf {
+    if props.is_null() {
+        return dir.join("store.json");
+    }
+    let path = dir.join(store_name(&sorted_props(props)));
+    let before = dir.join(store_name(props));
+    if before != path && !path.exists() && before.exists() {
+        let _ = std::fs::rename(&before, &path);
+    }
+    path
+}
+
 /// Gives the next mod copy to load a policy of its own: its `herdr` module
 /// (its props, its identity) and its localStorage file. The shell hands every
 /// view a copy of the default that *shares* modules and storage, so each copy
@@ -1390,18 +1431,10 @@ pub fn prepare_load(inst: &Instance) -> u64 {
     });
     let dir = app_dir().join("data").join(&inst.name);
     let _ = std::fs::create_dir_all(&dir);
-    let file = if inst.props.is_null() {
-        "store.json".to_owned()
-    } else {
-        use std::hash::{Hash, Hasher};
-        let mut h = std::collections::hash_map::DefaultHasher::new();
-        inst.props.to_string().hash(&mut h);
-        format!("store-{:016x}.json", h.finish())
-    };
     let policy = gpui_shell::policy::Policy::new()
         .with_application(inst.key())
         .with_capabilities(capabilities())
-        .with_storage_path(dir.join(file))
+        .with_storage_path(store_path(&dir, &inst.props))
         .with_host_module(module(inst.clone(), copy))
         .expect("herdr module is valid");
     gpui_shell::policy::set_default(policy);
@@ -1411,6 +1444,32 @@ pub fn prepare_load(inst: &Instance) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_copys_store_is_one_file_whatever_order_its_props_keys_come_in() {
+        let opened = serde_json::json!({ "url": "https://a.example/", "slot": "s1", "deep": { "b": 1, "a": [{ "y": 2, "x": 1 }] } });
+        let restarted = serde_json::json!({ "deep": { "a": [{ "x": 1, "y": 2 }], "b": 1 }, "slot": "s1", "url": "https://a.example/" });
+        // As written they differ (serde_json keeps their order here); sorted they're one.
+        assert_ne!(opened.to_string(), restarted.to_string());
+        let root = if cfg!(target_os = "linux") { PathBuf::from("/var/tmp") } else { std::env::temp_dir() };
+        let dir = root.join(format!("herdr-store-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert_eq!(store_path(&dir, &opened), store_path(&dir, &restarted));
+        assert_eq!(store_path(&dir, &restarted), dir.join(store_name(&restarted)), "a restarted pane's store keeps its file");
+        assert_eq!(store_path(&dir, &serde_json::Value::Null), dir.join("store.json"));
+        // A store written under the unsorted name (before a first restart) moves to the sorted one, once.
+        let old = dir.join(store_name(&opened));
+        std::fs::write(&old, "{\"tabs\":\"two\"}").unwrap();
+        let now = store_path(&dir, &opened);
+        assert!(!old.exists());
+        assert_eq!(std::fs::read_to_string(&now).unwrap(), "{\"tabs\":\"two\"}");
+        // The sorted one wins when both are there: nothing is overwritten.
+        std::fs::write(&old, "{}").unwrap();
+        assert_eq!(store_path(&dir, &opened), now);
+        assert_eq!(std::fs::read_to_string(&now).unwrap(), "{\"tabs\":\"two\"}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn exec_timeout_defaults_caps_and_rejects_invalid_values() {
