@@ -109,7 +109,7 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 const elapse = async (ms: number) => { const due = timers.filter((x) => x.ms === ms); timers = timers.filter((x) => x.ms !== ms); for (const x of due) x.f(cx); await flush(); };
 
 const procs = await import("../defaults/mods/nocturne/procs.js");
-const { default: Deck, REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/procs/main.js");
+const { default: Deck, REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/procs/main.ts");
 
 beforeEach(() => {
   shared = {}; overlays = []; closed = []; ran = []; calls = []; ids = {}; clip = []; timers = [];
@@ -223,17 +223,17 @@ test("keys: j k move, g G first / last, h l fold and step, space toggles, tab 1 
   await press("home");
   // l on an open group steps in; h on a leaf steps to its parent; h on an open group folds it.
   await press("l"); expect(cur()).toBe("t:tA");
-  await press("h"); expect(d.folds["t:tA"]).toBe(true);
+  await press("h"); expect(d.folds.get("t:tA")).toBe(true);
   expect(d.rows().some((r: any) => r.key === "x:t4")).toBe(false);
-  await press("l"); expect(d.folds["t:tA"]).toBe(false);
-  await press("space"); expect(d.folds["t:tA"]).toBe(true);
-  await press("space"); expect(d.folds["t:tA"]).toBe(false);
+  await press("l"); expect(d.folds.get("t:tA")).toBe(false);
+  await press("space"); expect(d.folds.get("t:tA")).toBe(true);
+  await press("space"); expect(d.folds.get("t:tA")).toBe(false);
   await press("l"); expect(cur()).toBe("x:t4");
-  await press("h"); expect(d.folds["x:t4"]).toBe(true);
+  await press("h"); expect(d.folds.get("x:t4")).toBe(true);
   expect(cur()).toBe("x:t4");
   await press("h"); expect(cur()).toBe("t:tA");
   // enter on a group folds it too.
-  await press("enter"); expect(d.folds["t:tA"]).toBe(true);
+  await press("enter"); expect(d.folds.get("t:tA")).toBe(true);
   await press("tab"); expect(d.tab).toBe("ports");
   await press("1"); expect(d.tab).toBe("procs");
   await press("2"); expect(d.tab).toBe("ports");
@@ -359,6 +359,16 @@ test("ports: o on a port with no web pane in the focused tab opens one beside th
     await press("o");
     expect(ran).toEqual([["app.open_url", { url: "http://localhost:8080", in: "app" }]]);
   } finally { focusedNow = { tab: "tB", pane: "p2", terminal: "t7" }; }
+});
+
+test("ports: x on a port whose process ps didn't list (it started between ps and lsof) says so and asks nothing", async () => {
+  probeText = probe(PS, `p77777\ncdeno\nf3\nn*:3000\n`);
+  const { d, press, cur } = await deck("ports");
+  expect(cur()).toBe("3000:77777");
+  await press("x");
+  expect(d.ask).toBe(null);
+  expect(d.note.text).toBe("deno (77777): not in the last reading, r reads again");
+  expect(calls.some((c) => c[0] === "kill")).toBe(false);
 });
 
 test("ports: none listening shows the empty note; the deck says so and the count is 0", async () => {
@@ -547,15 +557,15 @@ test("clicks: a row selects, a double click shows its terminal, the fold arrow f
   ids["fold-1"].on.click({ click_count: 1 }, c);
   expect(c.stopped).toBe(1);
   expect(cur()).toBe("t:tA");
-  expect(d.folds["t:tA"]).toBe(true);
+  expect(d.folds.get("t:tA")).toBe(true);
   expect(d.rows().some((r: any) => r.key === "x:t4")).toBe(false);
   draw();
   ids["fold-1"].on.click({ click_count: 1 }, c);
-  expect(d.folds["t:tA"]).toBe(false);
+  expect(d.folds.get("t:tA")).toBe(false);
   // A double click on a group folds it, as enter does.
   draw();
   ids["row-1"].on.click({ click_count: 2 }, cx);
-  expect(d.folds["t:tA"]).toBe(true);
+  expect(d.folds.get("t:tA")).toBe(true);
   // The tabs and "fireflies" / "all of dev".
   draw();
   ids["tab-ports"].on.click({}, cx); expect(d.tab).toBe("ports");
@@ -666,7 +676,7 @@ test("the scrollbar: a thumb while the rows overflow; dragging it scrolls, a pre
 // ---- the system tab's pace: Developer: "when system tab is active refresh every second"
 
 test("system readings: a second apart while the system tab shows, 2 s behind the others, never two at once", async () => {
-  const sys = await import("../defaults/mods/procs/sys.js");
+  const sys = await import("../defaults/mods/procs/sys.ts");
   expect(sys.STEP_SHOWN).toBe(1000);
   expect(sys.STEP).toBe(2000);
   expect(sys.KEEP).toBe(90); // still about 90 s at a second

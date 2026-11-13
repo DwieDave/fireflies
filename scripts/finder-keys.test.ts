@@ -1,5 +1,5 @@
 // The picker's mode switch as the keys drive it, with herdr and gpui stand-ins
-// (finder/main.js and its opener nocturne/picker.js): tab reaches the
+// (finder/main.ts and its opener nocturne/picker.js): tab reaches the
 // picker as an action bound in its own key context (the base's Root binds tab
 // to focus cycling, and actions run before any on_key_down), and cmd-shift-f /
 // cmd-p while it's open switch it in place. Every switch keeps the query.
@@ -70,7 +70,7 @@ const cx: any = {
 };
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
 
-const { default: Picker } = await import("../defaults/mods/finder/main.js");
+const { default: Picker } = await import("../defaults/mods/finder/main.ts");
 const { togglePicker } = await import("../defaults/mods/nocturne/picker.js");
 
 beforeEach(() => {

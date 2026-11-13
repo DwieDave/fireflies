@@ -52,7 +52,7 @@ import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, Mous
 import type { Props } from "gpui-shell";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import { theme, spaces, panes, focused, terminals, hc, run, props, nextCommand, shared, setShared } from "herdr";
-import type { PaneInfo, TabInfo, Theme } from "herdr";
+import type { PaneInfo, TabInfo, TerminalPaneInfo, Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, parseJson, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 import { dither, pip } from "./kit.ts";
@@ -127,9 +127,8 @@ function remember(v: Remembered) {
   }
 }
 
-/** A Claude Code pane in the shown space, with the name it shows under and its space's machine. */
-interface ClaudePane extends PaneInfo {
-  readonly terminal: string;
+/** A Claude Code pane in the shown space (a terminal's), with the name it shows under and its space's machine. */
+interface ClaudePane extends TerminalPaneInfo {
   readonly name: string;
   readonly machine: string | null;
 }
@@ -150,7 +149,7 @@ function claudePanes(): ClaudePane[] {
   };
 
   return panes().flatMap((p) => (p.terminal && p.app === "claude-code" && tabs.has(p.tab)
-    ? [{ ...p, terminal: p.terminal, name: givenName(p.terminal) ?? p.program.name, machine: space.machine }]
+    ? [{ ...p, name: givenName(p.terminal) ?? p.program.name, machine: space.machine }]
     : []))
     .sort((a, b) => rank(a) - rank(b));
 }
