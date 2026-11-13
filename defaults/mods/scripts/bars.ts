@@ -18,6 +18,7 @@ import { asked } from "./actions.ts";
 import { actionChip, badge, keyHint } from "./rows-view.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { deckKeys } from "./main.ts";
+import { inPane, move } from "./place.ts";
 
 /** Opens the App Management setting and shows Herdr Core in Finder, on the run's machine. */
 export function openGrant(r: Run) {
@@ -153,11 +154,28 @@ export function grantHint(t: Theme, r: Run, h: number) {
 }
 
 /** The deck's head: its mark, "Scripts", the folder (and machine). */
+/** ◧ into a pane, or from a pane ⧉ out over the tab (place.ts). */
+function moveChip(v: ScriptsDeck, t: Theme): Element {
+  const pane = inPane(v);
+
+  return h_flex().id("scripts-move").flex_none().h(20).px(6).items_center().text_size(11).text_color(t.dim)
+    .hover((s) => s.text_color(t.foreground))
+    .tooltip(pane ? "Out over the tab · ctrl-t" : "Into a pane · ctrl-t")
+    .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+    .on_click((_e, cx) => {
+      cx.stop_propagation();
+      move(v, cx);
+      cx.notify();
+    })
+    .child(pane ? "⧉" : "◧");
+}
+
 export function deckHead(v: ScriptsDeck, t: Theme): Element {
   return h_flex().relative().h(HEAD).flex_none().px(12).gap(10).items_center()
         .child(svg(`${ART}/play.svg`).size(9).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(12).text_color(t.foreground).child("Scripts"))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).flex().justify_end().child(short(v.folder) + (v.on ? ` on ${v.on}` : "")))
+        .child(moveChip(v, t))
         .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
 }
 

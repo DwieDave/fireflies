@@ -177,6 +177,8 @@ test:
     bun test scripts/nocturne-move-menu.test.ts
     # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
     bun test scripts/scripts-chips.test.ts
+    # The script runner's deck as a normal pane: no frame, esc stays, the pane's height, moved over the tab -> pane -> back with its filter.
+    bun test scripts/scripts-pane.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
     # An agent's status as the winged firefly in its tab and pane header (kit.ts statusFly): colour, motion, size.

@@ -327,7 +327,12 @@ the highlighted line shows where it will land.
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
   leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
   shift-tab the next group; on a run `w` watches, `x` removes an ended one and stops a running one, `R` runs it again (ending a running one, `x` or `R`, asks: the same key again within 3 s does it);
-  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
+  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys.
+  The deck also lives in a normal pane (props `{slot, folder, on?}`): there it
+  stays open when a script runs, esc never closes it (q does), and its list
+  takes the pane's height; ctrl-t (or the head's ◧ / ⧉, `scripts.to-pane` /
+  `scripts.to-window`) moves it into a pane beside the focused one or back
+  over the tab, with its filter and cursor. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
