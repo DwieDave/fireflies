@@ -107,7 +107,8 @@
     "cmd-alt-shift-n": "nocturne.toast-close",
     "cmd-shift-n": "nocturne.space-new",
     "cmd-shift-o": "nocturne.procs",
-    "cmd-shift-;": "nocturne.scratchpad"
+    "cmd-shift-;": "nocturne.scratchpad",
+    "cmd-shift-b": "nocturne.databases"
   },
   "mod:editor": {
     "cmd-s": "editor.save",

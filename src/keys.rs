@@ -80,6 +80,8 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // (`mod:nocturne-editor`, `nocturne-editor.save`), before cmd-k shift-l / shift-h moved the editor's shown tab,
     // cmd-k o / shift-o popped it out and in, and cmd-k t opened its menu.
     include_str!("keys/shipped/fireflies-tabkeys-keys.macos.json"),
+    // With the mods under their new names and the editor's tab keys, before cmd-shift-b opened the Databases window.
+    include_str!("keys/shipped/fireflies-panes-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

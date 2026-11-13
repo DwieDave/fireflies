@@ -1051,6 +1051,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.space-new",
         "nocturne.procs",
         "nocturne.scratchpad",
+        "nocturne.databases",
         "nocturne.picker",
         "nocturne.grep",
         "editor.save",

@@ -165,7 +165,7 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
-**The Databases window** (`databases`: `nocturne.databases`, the palette's
+**The Databases window** (`databases`: `nocturne.databases` (cmd-shift-b), the palette's
 "Databases", the strip's git ▾; `mod.open {"name": "databases"}` in any
 layout) speaks Postgres (psql), MySQL / MariaDB (mysql or mariadb), SQLite
 (sqlite3) and libSQL (a local file through sqlite3, a remote one such as Turso
