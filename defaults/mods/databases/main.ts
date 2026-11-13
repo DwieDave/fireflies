@@ -31,7 +31,8 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rows, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Review, Rows, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
 import { keyName } from "./keys.ts";
@@ -51,6 +52,7 @@ import { here, start, command, handoverOut } from "./opening.ts";
 import { IO, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import { unzoomSize } from "./kit.ts";
+import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
 import type { Room } from "./layout.ts";
 import { keepSizes, keptSizes } from "./layout.ts";
@@ -93,6 +95,10 @@ export default class Databases extends View {
   structAt = 0;
   rows: Rows = { browse: null, set: null, total: null, error: null, busy: false, at: gridStart(), filtering: false };
   filterInput: InputState | null = null;
+  /** The changes staged on the shown table's rows (saved by w, after the review). */
+  edits: Edits | null = null;
+  /** The cell being edited. */
+  cellEdit: CellEdit | null = null;
   queries: QueryTab[] = [];
   /** The main view's tab: 0 the Rows, n the n-th query. */
   mainTab = 0;
@@ -103,6 +109,7 @@ export default class Databases extends View {
 
   // ---- over the body
   ask: Ask | null = null;
+  review: Review | null = null;
   menu: Menu | null = null;
   password: PasswordAsk | null = null;
   form: ConnForm | null = null;
@@ -191,7 +198,9 @@ export default class Databases extends View {
 
   /** A window closes itself; a pane never does by esc (its own × and cmd-w close it). */
   closeWindow(): void {
-    if (this.overlay) closeOverlay(this.overlay);
+    const id = this.overlay;
+
+    if (id) beforeLeaving(this, "close", () => closeOverlay(id));
   }
 
   /** The keyboard back to the view (or the shown query's editor). */
@@ -324,7 +333,7 @@ export default class Databases extends View {
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
   move(cx: Context): void {
-    handoverOut(this, cx);
+    beforeLeaving(this, this.overlay ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
   }
 
   key(e: KeyEvent, cx: Context): void {

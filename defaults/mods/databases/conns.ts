@@ -18,6 +18,8 @@ import { clearHistory, readHistory, writeConnections } from "./store.ts";
 import { IO, dataHome, loadTables, needsPassword, runOn } from "./session.ts";
 import type { ConnectArgs } from "./state.ts";
 import { gridStart, noteOf } from "./state.ts";
+import { counted } from "./edits.ts";
+import { beforeLeaving } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The list the Connections panel shows, in order. */
@@ -110,6 +112,12 @@ function pick(a: ConnectArgs): Place {
 /** Connects: the password first where it must be asked, then the tables. A local server that
  *  trusts its socket needs none, so a sent one tries without and asks when refused. */
 export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
+  if (counted(v.edits).cells) {
+    beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
+
+    return Promise.resolve();
+  }
+
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
     v.askPassword(c, false, cx, () => void connect(v, c, cx));
 
@@ -120,6 +128,8 @@ export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
   v.catalog = { tables: [], error: null, busy: true };
   v.struct = { table: null, data: null, busy: false, error: null };
   v.rows = { browse: null, set: null, total: null, error: null, busy: false, at: gridStart(), filtering: false };
+  v.edits = null;
+  v.cellEdit = null;
   v.tableAt = 0;
   v.history = [];
 

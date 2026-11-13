@@ -13,6 +13,7 @@ import { loadRows } from "./session.ts";
 import { cellMenu } from "./menus.ts";
 import { openExport } from "./export-form.ts";
 import { saveQueries } from "./queries.ts";
+import { stageNull, startEdit, undoCell } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 const measured = new WeakMap<ResultSet, readonly Column[]>();
@@ -78,6 +79,7 @@ export function gridAct(v: DbView, place: "rows" | "results", action: string, cx
     case "copy-row": if (g) cx.write_to_clipboard(rowText(g.set, g.at.row)); break;
     case "menu": if (g) cellMenu(v, g.at.row, g.at.col, cx); break;
     case "export": exportShown(v, cx); break;
+    case "cell-edit": startEdit(v); break;
     case "tab-next":
     case "tab-prev": v.mainTab = (v.mainTab + (action === "tab-next" ? 1 : v.queries.length)) % (v.queries.length + 1); v.focusShown(); break;
     default: return place === "rows" ? rowsAct(v, action, cx) : resultsAct(v, action, cx);
@@ -102,6 +104,8 @@ function rowsAct(v: DbView, action: string, cx: Context): boolean {
   if (!b) return false;
 
   switch (action) {
+    case "cell-null": stageNull(v); break;
+    case "cell-undo": undoCell(v); break;
     case "sort": sortBy(v, v.rows.set?.columns[v.rows.at.col] ?? null, cx); break;
     case "filter": openFilter(v); break;
     case "page-next":

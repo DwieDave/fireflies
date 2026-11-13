@@ -3,17 +3,20 @@
 // right, NULL apart from an empty text, a cursor cell, only the rows and
 // columns in view drawn. The cursor moves by keys (moveGrid), a click picks a
 // cell, a double click opens its whole value, a right click its menu, a click
-// on a header sorts by that column, the wheel scrolls.
+// on a header sorts by that column, the wheel scrolls. Editing (cell-edit.ts)
+// lays its overlay on top: a staged cell in yellow over a dithered tint, its old
+// value on hover, a pip in its row's gutter, the edited cell an input.
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
-import { h_flex, v_flex } from "gpui-base";
+import { h_flex, v_flex, Input } from "gpui-base";
+import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Column } from "./table.ts";
 import { table, oneLine } from "./table.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
-import { dither, stop } from "./kit.ts";
+import { dither, pip, stop } from "./kit.ts";
 
 /** A character's width and a row's height, in px at the grid's text size. */
 export const CH = 7.8;
@@ -33,7 +36,7 @@ export function columnsOf(set: ResultSet): readonly Column[] {
 export const colWidth = (c: Column): number => Math.ceil(Math.max(c.ch, 4) * CH) + PAD;
 
 /** The row-number gutter's width for `n` rows. */
-export const gutterWidth = (n: number): number => Math.max(GUTTER_MIN, String(n).length * CH + 14);
+export const gutterWidth = (n: number): number => Math.max(GUTTER_MIN, String(n).length * CH + 14) + 10;
 
 /** How many whole rows fit `height`. */
 export const rowsIn = (height: number): number => Math.max(1, Math.floor((height - HEAD) / ROW));
@@ -83,13 +86,25 @@ export interface GridLook {
   readonly active: boolean;
   readonly sort: { readonly column: string; readonly desc: boolean } | null;
   readonly types?: readonly string[] | undefined;
+  readonly overlay?: GridOverlay | undefined;
 }
+
+/** What editing lays over the grid: a cell's staged change, a row with changes, the edited cell. */
+export interface GridOverlay {
+  readonly change: (r: number, c: number) => { readonly was: Cell; readonly now: Cell } | null;
+  readonly marked: (r: number) => boolean;
+  readonly editing: { readonly row: number; readonly col: number; readonly input: InputState; readonly isNull: boolean } | null;
+}
+
+/** The edited cell is at least this wide (an input needs room). */
+const EDIT_MIN = 150;
 
 /** A cell's text and colour. */
 function cellLook(t: Theme, v: Cell, num: boolean): readonly [string, Color] {
   if (v === null) return ["null", t.dim];
 
-  if (v === "") return ["", t.foreground];
+  // An empty text, apart from NULL.
+  if (v === "") return ["''", t.ansi8];
 
   return [oneLine(v), num ? t.ansi3 : t.foreground];
 }
@@ -120,18 +135,35 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly Column[
     .children(cells);
 }
 
+/** The edited cell: an input in an accent box, as wide as it needs. */
+function editCell(t: Theme, look: GridLook, r: number, i: number, c: Column, ed: NonNullable<GridOverlay["editing"]>): Element {
+  return div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(Math.max(EDIT_MIN, colWidth(c))).h(ROW).px(4).flex().items_center().overflow_hidden()
+    .bg(t.background).border_1().border_color(t.accent)
+    .on_mouse_down("left", stop)
+    .child(Input.new(ed.input).flex_1().text_size(11.2).text_color(t.foreground))
+    .when(ed.isNull, (el) => el.child(div().flex_none().pl(4).text_color(t.ansi3).child("NULL")));
+}
+
 function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly Column[], shown: readonly number[], gutter: number, r: number, at: GridAt, h: GridHandlers): Element {
   const cur = r === at.row;
   const data = set.rows[r] ?? [];
+  const o = look.overlay;
+  const ed = o?.editing?.row === r ? o.editing : null;
 
   const cells = shown.map((i) => {
     const c = cols[i] ?? { name: "", num: false, ch: 4 };
-    const [text, color] = cellLook(t, data[i] ?? null, c.num);
+
+    if (ed?.col === i) return editCell(t, look, r, i, c, ed);
+
+    const change = o?.change(r, i) ?? null;
+    const [text, plain] = cellLook(t, change ? change.now : data[i] ?? null, c.num);
+    const color = change ? t.ansi3 : plain;
     const picked = cur && i === at.col;
 
     return div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(colWidth(c)).h(ROW).px(8).flex().items_center().overflow_hidden()
       .border_r(1).border_color("#1c1d1f")
       .when(c.num, (el) => el.justify_end())
+      .when(change !== null, (el) => el.child(dither(`${t.ansi3}2e`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
       .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.ansi8).bg(`${t.accent}1a`))
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
@@ -146,13 +178,17 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly Column[], 
         h.menu(r, i, cx);
         cx.notify();
       })
-      .child(div().truncate().text_color(color).child(text));
+      .child(div().relative().truncate().text_color(color).child(text));
   });
+
+  const marked = o?.marked(r) ?? false;
 
   return h_flex().id(`${look.id}-r-${r}`).relative().h(ROW).flex_none()
     .when(r % 2 === 1, (el) => el.bg("#0d0d0e"))
     .when(cur, (el) => el.child(div().absolute().inset_0().child(dither(`${t.ansi0}66`, 1))))
-    .child(div().relative().flex_none().w(gutter).pr(8).text_color(cur ? t.foreground : t.dim).flex().justify_end().items_center().child(String(r + 1)))
+    .child(h_flex().relative().flex_none().w(gutter).pl(4).pr(8).gap(4).items_center().text_color(cur ? t.foreground : t.dim)
+      .child(marked ? pip(t.ansi3, 6) : div().w(6))
+      .child(div().flex_1().flex().justify_end().child(String(r + 1))))
     .children(cells);
 }
 

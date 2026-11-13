@@ -22,6 +22,8 @@ import { keepCopy, ownPane } from "./opening.ts";
 import { quoteName, qualified } from "./catalog.ts";
 import { schemasOf, shownTables, structRows } from "./panels.ts";
 import { edgesOf } from "./layout.ts";
+import { counted } from "./edits.ts";
+import { beforeLeaving, discardAll, openReview } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -83,6 +85,8 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   else if (action === "help") v.help = !v.help;
   else if (action === "close") closeCopy(v);
   else if (action === "grow" || action === "shrink") resize(v, action === "grow" ? 1 : -1);
+  else if (action === "save") openReview(v);
+  else if (action === "discard") discardAll(v);
   else return false;
 
   return true;
@@ -107,11 +111,17 @@ function closeCopy(v: DbView): void {
 
   const own = ownPane(v);
 
-  if (own) run("pane.close", { pane: own });
+  if (own) beforeLeaving(v, "close", () => run("pane.close", { pane: own }));
 }
 
 /** Reads everything shown again: the folder's connections, the tables, the structure, the page. */
 export function refresh(v: DbView, cx: Context): void {
+  if (counted(v.edits).cells) {
+    beforeLeaving(v, "read it again", () => refresh(v, cx));
+
+    return;
+  }
+
   void discover(v, cx);
 
   if (!v.active) return;
@@ -191,6 +201,14 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
 
 /** Shows a table: its rows in the main view, its structure in [3]. */
 export function openTable(v: DbView, t: Parameters<typeof browse>[1], cx: Context): void {
+  const e = v.edits;
+
+  if (e && counted(e).cells && (e.table.name !== t.name || e.table.schema !== t.schema)) {
+    beforeLeaving(v, `open ${t.name}`, () => openTable(v, t, cx));
+
+    return;
+  }
+
   browse(v, t, cx);
   void loadStructure(v, t, cx);
   v.mainTab = 0;

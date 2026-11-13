@@ -19,6 +19,7 @@ const WINDOW: readonly Binding[] = [
   [["ctrl-n"], "new query tab", "query-new"], [["ctrl-h"], "history", "history"],
   [["r"], "read again", "refresh"], [["ctrl-t"], "into a pane / out to a window", "move"],
   [["+", "="], "grow the panel (drag a gap; double click: back)", "grow"], [["-"], "shrink the panel", "shrink"],
+  [["w", "cmd-s", "ctrl-s"], "save the changes (the statements shown first)", "save"], [["U"], "discard every change", "discard"],
   [["q"], "close", "close"], [["?"], "keys", "help"],
 ];
 
@@ -49,12 +50,13 @@ const GRID: readonly Binding[] = [
 ];
 
 const ROWS: readonly Binding[] = [
-  ...GRID, [["s"], "sort by this column", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
+  ...GRID, [["c"], "change the cell (a double click too)", "cell-edit"], [["N"], "the cell to NULL", "cell-null"], [["u"], "undo the cell's change", "cell-undo"],
+  [["s"], "sort by this column", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
   [[">"], "next page", "page-next"], [["<"], "previous page", "page-prev"], [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"],
 ];
 
 const RESULTS: readonly Binding[] = [
-  ...GRID, [["i", "escape"], "back to the editor", "edit"], [[">"], "next result", "result-next"], [["<"], "previous result", "result-prev"],
+  ...GRID, [["c"], "change the cell (a table's rows only)", "cell-edit"], [["i", "escape"], "back to the editor", "edit"], [[">"], "next result", "result-next"], [["<"], "previous result", "result-prev"],
   [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"], [["x"], "close the tab", "query-close"],
 ];
 
@@ -109,7 +111,7 @@ export function helpSections(place: Place): KeySection[] {
 /** The actions the key bar names, per place. */
 const BAR = {
   window: [], conns: ["connect", "conn-new", "conn-edit", "conn-test"], tables: ["open", "table-query", "insert", "export"],
-  structure: ["subtab-next", "open", "insert"], rows: ["value", "sort", "filter", "page-next", "export"],
+  structure: ["subtab-next", "open", "insert"], rows: ["cell-edit", "value", "sort", "filter", "page-next", "export"],
   results: ["value", "edit", "copy", "export"], editor: ["run", "run-all", "results", "history"], log: ["open", "copy"],
 } as const satisfies { readonly [P in Place]: readonly string[] };
 
