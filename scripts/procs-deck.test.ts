@@ -71,6 +71,7 @@ const herdr: Record<string, any> = {
   },
   focused: () => focusedNow,
   home: () => "/home/dev",
+  appHome: () => "/home/dev/.config/herdr-app",
   hc: async () => ({ code: 1, stdout: "" }),
   agents: () => [],
   nextCommand: () => new Promise(() => {}),
@@ -386,7 +387,7 @@ test("ports: none listening shows the empty note; the deck says so and the count
 test("the foot names the cursor's row and its keys", async () => {
   const { press, draw, cur } = await deck();
   while (cur() !== "p:50118") await press("j");
-  expect(words(draw())).toEqual(expect.arrayContaining(["↳", "node", "x", "end", "/", "find", "?", "keys"]));
+  expect(words(draw())).toEqual(expect.arrayContaining(["↳", "node", "x", "end", "/", "find", "m", "menu", "?", "keys"]));
   await press("x");
   expect(words(draw())).toEqual(expect.arrayContaining(["end node", "enter", "esc", "keep"]));
 });

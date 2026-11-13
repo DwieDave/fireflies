@@ -161,6 +161,8 @@ test:
     bun test scripts/procs-sys.test.ts
     # Its readings strip: the histories, a line's points (empty, one, a full window, a gap), the layout wide and narrow at zoom 0.9 and 1.0, a cell's numbers.
     bun test scripts/procs-vitals.test.ts
+    # Its row menu: the entries per row kind, each act against a fake exec and fake herdr calls, the ends asking first, open / close / its place, every entry's key, a database's port to the Databases mod.
+    bun test scripts/procs-menu.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.

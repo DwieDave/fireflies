@@ -9,7 +9,7 @@ import type { Theme } from "herdr";
 import type { Row } from "./logic.ts";
 import { guardOf, terminalOf, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.ts";
 import type { Ask, ProcRow, Rect } from "./state.ts";
-import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS } from "./state.ts";
+import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS, HEAD } from "./state.ts";
 import { zoom, unzoom, dither, toneOf, dotCell } from "./paint.ts";
 import { byPid, moveTo, procOf, termPids } from "./listing.ts";
 import { begin, confirm, copyRow, killHard, showTerminal } from "./actions.ts";
@@ -77,6 +77,10 @@ export function treeRow(v: ProcsDeck, t: Theme, r: Row, i: number, on: boolean, 
     .text_color(on ? t.foreground : t.muted)
     .cursor_pointer()
     .on_click((e, cx) => clickRow(v, e, i, cx))
+    // The deck's own right press comes after this and opens the row's menu at the pointer.
+    .on_mouse_down("right", () => {
+      v.pressed = r.key;
+    })
     .on_hover((h, cx) => {
       const k = h ? r.key : v.hover === r.key ? null : v.hover;
 
@@ -240,11 +244,14 @@ export function confirmBand(v: ProcsDeck, t: Theme, a: Ask): Element {
 
   const title = a.phase === "held" ? `${a.left.length > 1 ? `${a.left.length} processes are` : `${a.name} (${a.left[0]}) is`} still running.`
     : a.phase === "ending" ? `ending ${a.name}…`
+    : a.what ? `End ${a.what}?`
+    : a.force ? `Force end ${a.name} (${a.pid})?`
     : others ? `End ${a.name} (${a.pid}) and the ${others} under it?` : `End ${a.name} (${a.pid})?`;
 
   const why = a.phase === "held" ? "It didn't end on TERM. Kill -9 ends it at once, without cleanup."
     : a.phase === "ending" ? "TERM sent; a moment for it to clean up."
-    : [...(a.ports.length ? [`It serves ${a.ports.map((p) => `:${p}`).join(" ")}.`] : []), "TERM first: it can clean up."].join(" ");
+    : [...(a.ports.length ? [`It serves ${a.ports.map((p) => `:${p}`).join(" ")}.`] : []),
+      a.force ? "Kill -9 ends it at once, without cleanup." : "TERM first: it can clean up."].join(" ");
 
   return v_flex().id("confirm").relative().h(CONFIRM).flex_none().px(12).py(8).gap(5)
     .child(div().absolute().left(0).top(0).right(0).bottom(0).opacity(0.22).child(dither(t.blocked, 1)))
@@ -252,7 +259,7 @@ export function confirmBand(v: ProcsDeck, t: Theme, a: Ask): Element {
     .child(div().relative().text_size(12).text_color(t.blocked).truncate().child(title))
     .child(div().relative().text_size(11).text_color(t.muted).truncate().child(why))
     .child(h_flex().relative().gap(8)
-      .when(a.phase === "ask", (el) => el.child(btn("c-yes", "enter · end it", true, (cx) => confirm(v, cx))).child(btn("c-no", "esc · keep", false, () => {
+      .when(a.phase === "ask", (el) => el.child(btn("c-yes", a.force ? "enter · kill -9" : "enter · end it", true, (cx) => confirm(v, cx))).child(btn("c-no", "esc · keep", false, () => {
         v.ask = null;
       })))
       .when(a.phase === "held", (el) => el.child(btn("c-kill", "K · kill -9", true, (cx) => killHard(v, cx))).child(btn("c-leave", "esc · leave it", false, () => {
@@ -300,6 +307,9 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
   v.scroll.procs = Math.max(0, Math.min(v.scroll.procs, max));
 
   const s = v.scroll.procs;
+
+  // Where m opens the menu: under the selected row.
+  v.selY = HEAD + v.stripH() + COLS + (top ?? 0) - s + ROW;
   const kids: Element[] = [];
   // The depth guides of every row in sight as one 1 px dithered path over the rows (one
   // element for the list, not two a level a row).

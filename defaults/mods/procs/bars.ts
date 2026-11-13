@@ -8,12 +8,13 @@ import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
-import { ART, FOOT, HEAD } from "./state.ts";
+import { ART, FOOT, HEAD, PROW, ROW } from "./state.ts";
 import { vitalLine } from "./vitals.ts";
 import { dither } from "./paint.ts";
 import { procOf } from "./listing.ts";
 import { begin, confirm, copyRow, escapeKey, foldRow, killHard, openPortAt, showTerminal, switchTab, toggleAll } from "./actions.ts";
 import { badge } from "./procs-view.ts";
+import { openMenu } from "./menu-view.ts";
 import type { default as ProcsDeck } from "./main.ts";
 
 export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
@@ -69,6 +70,9 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
   const all = k("k-all", "a", v.all ? "this app" : "all", () => toggleAll(v));
 
+  // m: the row's menu, under the selected row.
+  const menu = k("k-menu", "m", "menu", () => openMenu(v, items, ci, { x: 40, y: v.selY }, v.selY - (v.tab === "ports" ? PROW : ROW)));
+
   const keep = (what: string): Element => k("k-no", "esc", what, () => {
     v.ask = null;
   });
@@ -79,7 +83,10 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
     }), help));
   }
 
-  if (v.ask?.phase === "ask") return bar.child(left(arrow, word(`end ${v.ask.name}`, t.blocked))).child(keys(k("k-yes", "enter", "end", (cx) => confirm(v, cx)), keep("keep")));
+  if (v.ask?.phase === "ask") {
+    return bar.child(left(arrow, word(`${v.ask.force ? "force end" : "end"} ${v.ask.name}`, t.blocked)))
+      .child(keys(k("k-yes", "enter", v.ask.force ? "kill -9" : "end", (cx) => confirm(v, cx)), keep("keep")));
+  }
 
   if (v.ask?.phase === "held") return bar.child(left(arrow, word("still running", t.blocked))).child(keys(k("k-kill", "K", "kill -9", (cx) => killHard(v, cx)), keep("leave")));
 
@@ -104,7 +111,7 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
     return bar.child(left(arrow, note ?? word(address(item.port)), q))
       .child(keys(k("k-open", "enter", "open", () => openPortAt(v, item)), k("k-copy", "c", "copy", (cx) => copyRow(v, item, cx)),
-        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), find, help));
+        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), menu, help));
   }
 
   if (!item || "port" in item) return bar.child(left(note ?? word(""), q)).child(keys(all, find, help));
@@ -115,15 +122,15 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
     const p = procOf(v, n.pid);
     const guard = guardOf(p, v.snap?.me);
 
-    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), all, help));
+    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), menu, help));
 
     return bar.child(left(arrow, note ?? word(p?.name ?? ""), q))
-      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, help));
+      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, menu, help));
   }
 
   return bar.child(left(arrow, note ?? word(n.name), q))
     .child(keys(n.kind === "term" ? k("k-show", "enter", "show", () => showTerminal(v, item)) : null,
-      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), all, help));
+      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), menu, help));
 }
 
 export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number): Element {

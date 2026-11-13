@@ -48,7 +48,11 @@
 //   space fold or unfold · enter: a group folds, a process or terminal shows
 //   its terminal's pane, a port opens
 //   tab 1 2 processes / ports · a this app's terminals / all of yours
-//   x end · X end it and everything under it · K kill -9 what held on
+//   x end (a terminal, tab or space: what runs in it) · X end it and
+//   everything under it · K force end (kill -9, asks first; on the band:
+//   kill what held on) · t go to its terminal, tab or space · f its folder
+//   in a files pane · p copy the pid (a port: its number) · d a database's
+//   port in Databases · m the row's menu (menu.ts; keys.ts has them all)
 //   o open the port in a web pane · c copy the address (a process: its
 //   command line) · r read again now · / find (esc clears, again: back)
 //   ? keys · q esc close
@@ -66,6 +70,7 @@
 // / find, the find field itself, enter / esc on the ending band), and a port
 // row shows open ↗ / copy / end while selected or under the pointer. The
 // tree mark in the strip opens and closes the deck; a click outside closes it.
+// A right-click on a row opens its menu at the pointer (menu.ts).
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
@@ -73,7 +78,7 @@ import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import { closeOverlay, exec, nextCommand, shared, setShared, theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { keysView, keysKey } from "./keyhelp.ts";
+import { keysView } from "./keyhelp.ts";
 import type { Index, Probe, Row, TreeNode } from "./logic.ts";
 import { PROBE, parseProbe, index } from "./logic.ts";
 import type { Measured, Reading } from "./sys.ts";
@@ -81,9 +86,13 @@ import { SYS_PROBE, STEP, parseSys, measure, push } from "./sys.ts";
 import type { Fit, History, Point, Vital } from "./vitals.ts";
 import { emptyHistory, linePoints, record, stripLayout } from "./vitals.ts";
 import type { Tab, Own, Cursors, Scrolls, Drag, Command, Ask, Note, Item } from "./state.ts";
-import { deckProps, ESCAPE, CONTEXT, REFRESH, DECK, isTab, COUNT, TABS, PORTS_H, PROW, LIST_H, ROW, FOOT, HEAD, H, W, deckKeys, listH } from "./state.ts";
-import { listRows, moveTo, portList, procCount, procTree, rowAt, tabList } from "./listing.ts";
-import { activate, begin, copyRow, escapeKey, foldRow, openPortAt, switchTab, toggleAll, askKey, findKey } from "./actions.ts";
+import { deckProps, ESCAPE, CONTEXT, REFRESH, DECK, isTab, COUNT, PORTS_H, LIST_H, FOOT, HEAD, H, W, deckKeys, listH } from "./state.ts";
+import { listRows, portList, procCount, procTree, rowAt, tabList } from "./listing.ts";
+import { escapeKey } from "./actions.ts";
+import type { Menu } from "./menu.ts";
+import { dbModPath } from "./menu.ts";
+import { menuBox, rightPress } from "./menu-view.ts";
+import { deckKey } from "./keys.ts";
 import { dragTo } from "./pointer.ts";
 import { procsView } from "./procs-view.ts";
 import { vitalsStrip } from "./vitals-view.ts";
@@ -120,6 +129,13 @@ export default class ProcsDeck extends View {
   // The detail block's command: its scroll and its drawn height.
   cmd: Command = { pid: null, y: 0, h: 0 };
   ask: Ask | null = null;
+  // The row menu (menu.ts), and the row a right press went down on (its handler runs before the deck's).
+  menu: Menu | null = null;
+  pressed: string | null = null;
+  // Where m opens the menu: under the selected row, as last drawn (deck px).
+  selY = 120;
+  // The Databases mod is installed: a database's port offers "open in Databases".
+  dbMod = false;
   note: Note | null = null;
   help = false;
   hover: string | null = null;
@@ -166,6 +182,12 @@ export default class ProcsDeck extends View {
     this.beat();
     this.refresh(cx);
     this.sample(cx);
+    cx.spawn(async (cx) => {
+      const r = await exec("test", ["-f", dbModPath()], { timeout: 5000 }).catch(() => null);
+
+      this.dbMod = r?.code === 0;
+      cx.notify();
+    });
     cx.timer.every(REFRESH, (cx) => {
       this.beat();
       this.refresh(cx);
@@ -316,102 +338,7 @@ export default class ProcsDeck extends View {
   // ---- actions
 
   onKey(e: KeyEvent, cx: Context): void {
-    const m = e.modifiers;
-    const k = e.key.toLowerCase();
-    const ch = e.key_char ?? "";
-
-    const done = (): void => {
-      this.follow = true;
-      cx.stop_propagation();
-      cx.notify();
-    };
-
-    if (m.platform || m.control || m.alt) return;
-
-    if (this.help) {
-      if (keysKey(e, true) || k === "enter") {
-        this.help = false;
-        done();
-      }
-
-      return;
-    }
-
-    if (k === "escape") {
-      cx.stop_propagation();
-      escapeKey(this, cx);
-
-      return;
-    }
-
-    if (this.ask) {
-      askKey(this, this.ask, k, m, cx);
-      done();
-
-      return;
-    }
-
-    const items = this.list();
-    const i = this.at(items);
-    const item = items[i];
-    const page = Math.max(1, Math.floor(this.listH() / (this.tab === "ports" ? PROW : ROW)) - 1);
-
-    if (k === "down" || k === "up") {
-      moveTo(this, items, i + (k === "down" ? 1 : -1));
-      done();
-
-      return;
-    }
-
-    if (k === "pagedown" || k === "pageup") {
-      moveTo(this, items, i + (k === "pagedown" ? page : -page));
-      done();
-
-      return;
-    }
-
-    if (k === "tab") {
-      switchTab(this, m.shift ? TABS[(TABS.indexOf(this.tab) + TABS.length - 1) % TABS.length] : undefined, cx);
-      done();
-
-      return;
-    }
-
-    if (this.typing) {
-      if (findKey(this, k, ch)) done();
-
-      return;
-    }
-
-    if (k === "j") moveTo(this, items, i + 1);
-    else if (k === "k" && !m.shift) moveTo(this, items, i - 1);
-    else if (k === "end" || (k === "g" && m.shift)) moveTo(this, items, items.length - 1);
-    else if (k === "home" || k === "g") moveTo(this, items, 0);
-    else if (k === "h" || k === "left") foldRow(this, items, i, false);
-    else if (k === "l" || k === "right") foldRow(this, items, i, true);
-    else if (k === "space" || ch === " ") foldRow(this, items, i, null);
-    else if (k === "enter") activate(this, items, i);
-    else if (k === "1") switchTab(this, "procs", cx);
-    else if (k === "2") switchTab(this, "ports", cx);
-    else if (k === "a") toggleAll(this);
-    else if (k === "x") begin(this, item, m.shift);
-    else if (k === "o" && this.tab === "ports") {
-      cx.stop_propagation();
-      openPortAt(this, item);
-
-      return;
-    } else if (k === "c") copyRow(this, item, cx);
-    else if (k === "r") this.refresh(cx);
-    else if (k === "q") {
-      cx.stop_propagation();
-      this.dismissDeck();
-
-      return;
-    } else if (ch === "?") this.help = true;
-    else if (ch === "/" || k === "/") this.typing = true;
-    else return;
-
-    done();
+    deckKey(this, e, cx);
   }
 
   // ---- parts
@@ -429,6 +356,7 @@ export default class ProcsDeck extends View {
       .key_context(CONTEXT)
       .on_action(ESCAPE, (_e, cx) => escapeKey(this, cx))
       .on_mouse_down("left", () => this.focus())
+      .on_mouse_down("right", (e, cx) => rightPress(this, e, cx))
       .on_mouse_move((e, cx) => dragTo(this, e, cx))
       .on_mouse_up("left", (_e, cx) => {
         if (this.drag) {
@@ -445,7 +373,8 @@ export default class ProcsDeck extends View {
         } }))))
       .when(!this.help && this.tab === "procs", (el) => el.child(procsView(this, t, rows, ci)))
       .when(!this.help && this.tab === "ports", (el) => el.child(portsView(this, t, ports, ci)))
-      .child(footBar(this, t, items, ci));
+      .child(footBar(this, t, items, ci))
+      .children(this.menu ? [menuBox(this, t, this.menu)] : []);
 
     return this.handle ? el.track_focus(this.handle) : el;
   }

@@ -5,7 +5,7 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { PortItem } from "./state.ts";
-import { PROW, ART, CONFIRM } from "./state.ts";
+import { PROW, ART, CONFIRM, HEAD } from "./state.ts";
 import { moveTo } from "./listing.ts";
 import { begin, copyRow, openPortAt } from "./actions.ts";
 import { clickRow, scrollbar, wheelList } from "./pointer.ts";
@@ -20,6 +20,10 @@ export function portRow(v: ProcsDeck, t: Theme, x: PortItem, i: number, on: bool
     .text_color(on ? t.foreground : x.term ? t.muted : t.dim)
     .cursor_pointer()
     .on_click((e, cx) => clickRow(v, e, i, cx))
+    // The deck's own right press comes after this and opens the row's menu at the pointer.
+    .on_mouse_down("right", () => {
+      v.pressed = x.key;
+    })
     .on_hover((h, cx) => {
       const k = h ? x.key : v.hover === x.key ? null : v.hover;
 
@@ -32,7 +36,7 @@ export function portRow(v: ProcsDeck, t: Theme, x: PortItem, i: number, on: bool
     .child(div().relative().flex_none().max_w(110).truncate().child(x.name))
     .when(Boolean(x.guard), (el) => el.child(svg(`${ART}/shield.svg`).size(8).flex_none().text_color(t.dim)))
     .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
-      .child(`${x.where ?? "not from v app"} · ${x.hosts.join(" ")}`))
+      .child(`${x.where ?? "not from this app"} · ${x.hosts.join(" ")}`))
     .child(h_flex().relative().flex_none().gap(2).justify_end()
       .when(show, (el) => el
         .child(actionChip(v, t, `o-${i}`, "open ↗", null, () => openPortAt(v, x)))
@@ -67,6 +71,9 @@ export function portsView(v: ProcsDeck, t: Theme, items: readonly PortItem[], ci
   }
 
   const max = Math.max(0, y - listHt);
+
+  // Where m opens the menu: under the selected row.
+  v.selY = HEAD + v.stripH() + (top ?? 0) - v.scroll.ports + PROW;
 
   v.scroll.ports = Math.max(0, Math.min(v.scroll.ports, max));
 
