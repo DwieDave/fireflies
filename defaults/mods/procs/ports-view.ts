@@ -5,7 +5,8 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { PortItem } from "./state.ts";
-import { PROW, ART, CONFIRM, HEAD } from "./state.ts";
+import { PROW, ART, CONFIRM, HEAD, COLS } from "./state.ts";
+import { portHeads } from "./heads.ts";
 import { moveTo } from "./listing.ts";
 import { begin, copyRow, openPortAt } from "./actions.ts";
 import { clickRow, scrollbar, wheelList } from "./pointer.ts";
@@ -33,7 +34,7 @@ export function portRow(v: ProcsDeck, t: Theme, x: PortItem, i: number, on: bool
       }
     }), t, on)
     .child(div().relative().w(52).flex_none().text_color(x.term ? t.ansi6 : t.dim).child(`:${x.port}`))
-    .child(div().relative().flex_none().max_w(110).truncate().child(x.name))
+    .child(div().relative().w(110).flex_none().truncate().child(x.name))
     .when(Boolean(x.guard), (el) => el.child(svg(`${ART}/shield.svg`).size(8).flex_none().text_color(t.dim)))
     .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim)
       .child(`${x.where ?? "not from this app"} · ${x.hosts.join(" ")}`))
@@ -73,16 +74,16 @@ export function portsView(v: ProcsDeck, t: Theme, items: readonly PortItem[], ci
   const max = Math.max(0, y - listHt);
 
   // Where m opens the menu: under the selected row.
-  v.selY = HEAD + v.stripH() + (top ?? 0) - v.scroll.ports + PROW;
+  v.selY = HEAD + v.stripH() + COLS + (top ?? 0) - v.scroll.ports + PROW;
 
   v.scroll.ports = Math.max(0, Math.min(v.scroll.ports, max));
 
-  if (!items.length) return emptyView(v, t, listHt);
+  if (!items.length) return v_flex().child(portHeads(v, t)).child(emptyView(v, t, listHt));
 
-  return div().id("ports-list").relative().h(listHt).flex_none().overflow_hidden()
+  return v_flex().id("ports").h(COLS + listHt).flex_none().child(portHeads(v, t)).child(div().id("ports-list").relative().h(listHt).flex_none().overflow_hidden()
     .on_scroll_wheel((e, cx) => wheelList(v, "ports", e, PROW, max, cx))
     .children(items.map((x, i) => v_flex().id(`pslot-${x.key}`).absolute().left(0).right(0).top((tops[i] ?? 0) - v.scroll.ports)
       .child(portRow(v, t, x, i, i === ci))
       .children(ask && asked(x) ? [confirmBand(v, t, ask)] : [])))
-    .children(scrollbar(v, t, "ports", y, listHt));
+    .children(scrollbar(v, t, "ports", y, listHt)));
 }

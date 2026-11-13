@@ -853,3 +853,108 @@ test("the depth guides: one dithered path for the rows in sight, a 1 px line a l
   // No row draws its own.
   expect(ids["row-3"].kids.filter((k: any) => k?.tag === "dither").length).toBe(0);
 });
+
+// ---- sorting: Developer: "make the processes sortable by the columns too (cpu,mem,etc)"
+
+/** The process rows' pids, in order. */
+const procOrder = (d: any) => d.rows().filter((r: any) => r.kind === "proc").map((r: any) => r.node.pid);
+
+test("a click on a column's head sorts by it, a second turns it; the head carries the arrow, the foot what sorts", async () => {
+  const { d, draw } = await deck();
+  const before = procOrder(d);
+  draw();
+  expect(words(ids["h-cpu"])).toEqual(["CPU"]);
+  ids["h-cpu"].on.click({}, cx);
+  expect(d.sorts.procs).toEqual({ col: "cpu", dir: "desc" });
+  draw();
+  expect(words(ids["h-cpu"])).toEqual(["CPU ↓"]);
+  expect(ids["h-cpu"].css.text_color[0]).toBe("accent");
+  expect(ids["h-mem"].css.text_color[0]).toBe("ansi8");
+  expect(words(ids["k-sort"])).toContain("cpu ↓");
+  // In the tree: tA (rustc's 98 %) before tB; inside t4's chain nothing to reorder.
+  expect(d.rows().filter((r: any) => r.kind === "tab").map((r: any) => r.key)).toEqual(["t:tA", "t:tB"]);
+  ids["h-cpu"].on.click({}, cx);
+  expect(d.sorts.procs).toEqual({ col: "cpu", dir: "asc" });
+  draw();
+  expect(words(ids["h-cpu"])).toEqual(["CPU ↑"]);
+  expect(d.rows().filter((r: any) => r.kind === "tab").map((r: any) => r.key)).toEqual(["t:tB", "t:tA"]);
+  ids["h-name"].on.click({}, cx);
+  expect(d.sorts.procs).toEqual({ col: "name", dir: "asc" });
+  expect(procOrder(d)).not.toEqual(before);
+});
+
+test("s steps through the columns and back to the tree's order, S turns it; v shows every process flat while a number sorts", async () => {
+  const { d, press, draw } = await deck();
+  const tree = procOrder(d);
+  const seen: any[] = [];
+  for (let i = 0; i < 6; i++) { await press("s"); seen.push(d.sorts.procs?.col ?? null); }
+  expect(seen).toEqual(["name", "cpu", "mem", "up", "pid", null]);
+  expect(procOrder(d)).toEqual(tree);
+  await press("s"); await press("s"); // cpu
+  await press("s", { char: "S", mods: { shift: true } });
+  expect(d.sorts.procs).toEqual({ col: "cpu", dir: "asc" });
+  await press("s", { char: "S", mods: { shift: true } });
+  draw();
+  expect(ids["h-flat"]).toBeDefined();
+  await press("v");
+  expect(d.sorts.flat).toBe(true);
+  // Every process at one level, the busiest first; the head says so.
+  expect(d.rows().every((r: any) => r.kind === "proc" && r.depth === 0)).toBe(true);
+  expect(procOrder(d)).toEqual([52391, 41872, 50118, 52214, 50112, 1467, 52210, 50121]);
+  draw();
+  expect(words(ids["h-name"])).toEqual(["EVERY PROCESS"]);
+  // Each carries the terminal it runs in, which the tree said before.
+  expect(words(ids["row-0"])).toEqual(expect.arrayContaining(["rustc", "t4"]));
+  expect(words(ids["row-2"])).toEqual(expect.arrayContaining(["node", "t7"]));
+  // By name the tree comes back (flat is offered for the numbers only), and the switch goes.
+  ids["h-name"].on.click({}, cx);
+  draw();
+  expect(ids["h-flat"]).toBeUndefined();
+  expect(d.rows()[0].kind).toBe("space");
+  // A click on the switch turns it back to the tree.
+  ids["h-cpu"].on.click({}, cx);
+  draw();
+  ids["h-flat"].on.click({}, cx);
+  expect(d.sorts.flat).toBe(false);
+  expect(d.rows()[0].kind).toBe("space");
+});
+
+test("the ports' heads sort them: port, process, where, each both ways", async () => {
+  probeText = probe(PS, LSOF + "p60000\ncupsd\nf3\nn127.0.0.1:631\n");
+  const { d, press, draw } = await deck("ports");
+  const ports = () => d.list().map((x: any) => x.port);
+  expect(ports()).toEqual([5173, 8080, 631]); // this app's first
+  draw();
+  ids["h-port"].on.click({}, cx);
+  expect(ports()).toEqual([631, 5173, 8080]);
+  ids["h-port"].on.click({}, cx);
+  expect(ports()).toEqual([8080, 5173, 631]);
+  draw();
+  expect(words(ids["h-port"])).toEqual(["PORT ↓"]);
+  ids["h-name"].on.click({}, cx);
+  expect(d.list().map((x: any) => x.name)).toEqual(["claude", "cupsd", "node"]);
+  await press("s"); // the next column: where
+  expect(d.sorts.ports).toEqual({ col: "where", dir: "asc" });
+  expect(ports().at(-1)).toBe(631); // not from this app: last
+  // The processes keep their own.
+  expect(d.sorts.procs).toBe(null);
+});
+
+test("the sort is kept while the deck lives and across its opens", async () => {
+  const { press } = await deck();
+  await press("s"); await press("s");
+  expect(shared["procs.sort"]).toEqual({ procs: { col: "cpu", dir: "desc" }, ports: null, flat: false });
+  const again = await deck();
+  expect(again.d.sorts.procs).toEqual({ col: "cpu", dir: "desc" });
+  expect(again.d.rows().filter((r: any) => r.kind === "tab").map((r: any) => r.key)).toEqual(["t:tA", "t:tB"]);
+  // A record in another shape is ignored.
+  shared["procs.sort"] = { procs: { col: "gpu" } };
+  expect((await deck()).d.sorts).toEqual({ procs: null, ports: null, flat: false });
+});
+
+test("the cursor stays on its row as the order changes", async () => {
+  const { d, press, cur } = await deck();
+  while (cur() !== "p:50118") await press("j");
+  await press("s"); await press("s"); await press("v");
+  expect(cur()).toBe("p:50118");
+});

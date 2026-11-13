@@ -389,6 +389,14 @@ the highlighted line shows where it will land.
   the address (`c`), go to its terminal (`t`), end its process (`x`). Every
   end asks under the row first, as `x` does; j/k, enter, an entry's key, esc
   / `m`, a click outside or a second right-click drive and close it.
+  The column heads sort (a click; again: the other way; the sorting one lit
+  with its arrow; `s` steps through the columns and back to the tree's own
+  order, `S` turns it, the foot's `s` button shows what sorts): processes by
+  name, cpu, mem, up and pid, the siblings at each level (a terminal, tab or
+  space by what's under it: cpu and memory summed, the longest uptime, the
+  lowest pid), with FLAT (`v`) beside the name while a number sorts: every
+  process in one list, each with its terminal's badge; ports by port, process and where. The sort is kept
+  across the deck's opens (shared `procs.sort`).
 - **Notifications** (Nocturne's, the `notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,

@@ -11,12 +11,13 @@ import { guardOf, terminalOf, uptime, memory, oneLine, count, wheelDelta, scroll
 import type { Ask, ProcRow, Rect } from "./state.ts";
 import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS, HEAD } from "./state.ts";
 import { zoom, unzoom, dither, toneOf, dotCell } from "./paint.ts";
-import { byPid, moveTo, procOf, termPids } from "./listing.ts";
+import { byPid, isFlat, moveTo, procOf, termPids } from "./listing.ts";
 import { begin, confirm, copyRow, killHard, showTerminal } from "./actions.ts";
 import { clickRow, scrollbar, wheelList } from "./pointer.ts";
 import type { default as ProcsDeck } from "./main.ts";
 import { spark, layer } from "./vitals-view.ts";
 import { emptyView } from "./bars.ts";
+import { procHeads } from "./heads.ts";
 
 export function pip(v: ProcsDeck, color: Color, live = false): Element {
   const el = svg(`${ART}/pip.svg`).size(6).flex_none().text_color(color);
@@ -124,7 +125,8 @@ export function treeRow(v: ProcsDeck, t: Theme, r: Row, i: number, on: boolean, 
 
   const guard = guardOf(p, v.snap?.me);
   const mine = ports.get(p.pid);
-  const addr = v.all ? tp.get(p.pid) : undefined;
+  // Which terminal it runs in: in a flat list the tree doesn't say, so every process carries it.
+  const addr = isFlat(v) ? terminalOf(p.pid, byPid(v), tp) ?? undefined : v.all ? tp.get(p.pid) : undefined;
 
   return el
     .child(div().relative().flex_none().max_w(130).truncate().text_color(guard ? t.dim : on ? t.foreground : t.muted).child(p.name))
@@ -331,12 +333,8 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
       .children(under ? [under] : []));
   });
 
-  const head = (w: number, text: string): Element => div().w(w).flex_none().flex().justify_end().child(text);
-
   return v_flex().id("procs").h(COLS + listHt).flex_none()
-    .child(h_flex().h(COLS).flex_none().px(12).gap(7).items_center().text_size(9).text_color(t.ansi8).opacity(0.8)
-      .child(div().flex_1().child(v.all ? `ALL OF ${(v.snap?.me ?? "").toUpperCase()}'S` : "THIS APP'S TERMINALS"))
-      .child(head(34, "CPU")).child(head(44, "MEM")).child(head(54, "UP")).child(head(44, "PID")))
+    .child(procHeads(v, t))
     .child(items.length
       ? div().id("procs-list").relative().h(listHt).flex_none().overflow_hidden()
         .on_scroll_wheel((e, cx) => wheelList(v, "procs", e, ROW, max, cx))
