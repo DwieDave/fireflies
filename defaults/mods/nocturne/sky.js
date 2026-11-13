@@ -57,7 +57,7 @@ import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.js";
 import { keysHint } from "./keyhelp.ts";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.js";
-import { UsageSection } from "./usage.js";
+import { UsageSection } from "./usage.ts";
 import { focusFiles } from "./files.ts";
 import { togglePicker } from "./picker.ts";
 import { openScratchpad } from "./scratchpad.js";

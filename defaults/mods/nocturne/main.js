@@ -23,7 +23,7 @@
 
 import { View, div } from "gpui-kit";
 import { props } from "herdr";
-import { Prompt, Confirm } from "./dialog.js";
+import { Prompt, Confirm } from "./dialog.ts";
 import Palette from "./palette.js";
 import Peek from "./peek.js";
 import Sky from "./sky.js";

@@ -7,7 +7,7 @@
 // Pure: no herdr at run time. A key becomes a verb (keyVerb); the view moves its cursor
 // (move, moveSection, moveRow) and acts on the verb itself.
 
-import type { KeyEvent } from "gpui-kit";
+import type { Context, KeyEvent } from "gpui-kit";
 import { arrayOf, isBoolean, isString, object } from "./guard.ts";
 
 /** shared() key: where the tab strip's cursor is when it's outside the strip,
@@ -83,6 +83,25 @@ export const SIDEBAR_KEYS: Keymap = new Map([
 
 /** The tab strip's own verbs on top of COMMON. */
 export const STRIP_KEYS: Keymap = new Map([...COMMON, ["x", "close"], ["n", "new"], ["H", "move-left"], ["L", "move-right"]]);
+
+/** What a control does for each verb the keyboard gives it (the sidebar's nav). */
+export interface NavActs {
+  readonly go?: (cx: Context) => void;
+  readonly menu?: (cx: Context) => void;
+  readonly rename?: (cx: Context) => void;
+  readonly folder?: (cx: Context) => void;
+  readonly delete?: (cx: Context) => void;
+  readonly tab?: (cx: Context) => void;
+  readonly worktree?: (cx: Context) => void;
+  readonly new?: (cx: Context) => void;
+  readonly pin?: (cx: Context) => void;
+  readonly "pin-up"?: (cx: Context) => void;
+  readonly "pin-down"?: (cx: Context) => void;
+}
+
+/** Registers a control (`id`, in section `sec`) with the keyboard's cursor as it's drawn,
+ *  and what it does; true while the cursor is on it (sky.js nav). */
+export type Nav = (id: string, sec: string, acts?: NavActs) => boolean;
 
 /** A ? list's line: [keys, what]. */
 export type HelpLine = readonly [string, string];

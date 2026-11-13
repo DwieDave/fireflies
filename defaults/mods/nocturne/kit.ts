@@ -2,7 +2,7 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg } from "gpui-kit";
-import type { Element, MouseButtonEvent } from "gpui-kit";
+import type { Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
@@ -305,6 +305,9 @@ export function hash(s: string): number {
 
   return h >>> 0;
 }
+
+/** `el` tracking `handle` once there is one (a view makes it in init). */
+export const tracked = <E extends Element>(el: E, handle: FocusHandle | null): E => (handle ? el.track_focus(handle) : el);
 
 // ---- the keyboard cursor (nav.js): one look across the chrome
 
