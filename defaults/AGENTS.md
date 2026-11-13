@@ -632,7 +632,8 @@ the highlighted line shows where it will land.
   (a count: that many places), `:tabm N` / `+N` / `-N` (`:tabm` alone: the
   end), space b > / b <; the commands `editor.next-tab`, `.prev-tab`,
   `.close-tab`, `.move-tab-right`, `.move-tab-left` (cmd-k ] / cmd-k [ /
-  cmd-k w). `:q` closes the pane
+  cmd-k w / cmd-k shift-l / cmd-k shift-h; cmd-k o pops the shown tab out,
+  cmd-k shift-o in, cmd-k t opens its menu). `:q` closes the pane
   with all its tabs and refuses while any has unsaved changes. A language
   server serves every tab of its project (one per project as before; each
   tab's document opened and closed with it). The text is the code editor of

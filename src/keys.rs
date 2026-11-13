@@ -76,6 +76,10 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // With the resize, jar and rename keys, before cmd-shift-n / o / ; opened the folder list, the processes deck and
     // the scratchpad, and cmd-k ] / [ / w / z stepped and closed the editor's tabs and switched its word wrap.
     include_str!("keys/shipped/fireflies-resize-keys.macos.json"),
+    // With cmd-shift-n / o / ; and the editor's cmd-k ] / [ / w / z, under the mods' names before they lost their prefix
+    // (`mod:nocturne-editor`, `nocturne-editor.save`), before cmd-k shift-l / shift-h moved the editor's shown tab,
+    // cmd-k o / shift-o popped it out and in, and cmd-k t opened its menu.
+    include_str!("keys/shipped/fireflies-tabkeys-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
