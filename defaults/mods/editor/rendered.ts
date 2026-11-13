@@ -53,7 +53,7 @@ import type { Theme } from "herdr";
 import type { Range, Unit } from "./live.ts";
 import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.ts";
 import type { SyntaxColors } from "./logic.ts";
-import type { Sel } from "./mdedit.ts";
+import type { Sel } from "./md-text.ts";
 import { enter } from "./mdedit.ts";
 import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 
