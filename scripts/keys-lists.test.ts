@@ -236,7 +236,7 @@ test("picture in picture: ? lists every key; ? sits on the bar right before ✕"
   expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "popup", props: { keys: true } });
 });
 
-const deck = await import("../defaults/mods/scripts/main.js");
+const deck = await import("../defaults/mods/scripts/main.ts");
 test("script runner: ? lists every key; every bar ends with the keys entry, cmd-k ? while the filter types", () => {
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };

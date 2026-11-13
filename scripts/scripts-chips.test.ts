@@ -28,7 +28,7 @@ beforeEach(() => {
     terms: [term("t1", "build", true), term("t2", "switch homelab", false)] });
 });
 
-const deck = await import("../defaults/mods/scripts/main.js");
+const deck = await import("../defaults/mods/scripts/main.ts");
 const { default: Deck, CHIP, CHIPS_W, ASK_MS } = deck;
 const { JOBS } = await import("../defaults/mods/scripts/runs.ts");
 

@@ -121,7 +121,7 @@ test("GitHub: esc and q close the window from its top level", () => {
 
 // ---- the scripts deck
 
-const { default: Deck } = await import("../defaults/mods/scripts/main.js");
+const { default: Deck } = await import("../defaults/mods/scripts/main.ts");
 
 function deck(scripts: [string, string][]) {
   propsNow = { overlay: "d1" };
