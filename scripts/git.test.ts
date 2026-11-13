@@ -9,7 +9,7 @@ import {
 } from "../defaults/mods/git/parse.ts";
 import { layoutGraph, segments, usedWidth, widthOf } from "../defaults/mods/git/graph.ts";
 import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/git/patch.ts";
-import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/git/keys.js";
+import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/git/keys.ts";
 import { rewrite, nextUndo, nextRedo, reflogAction, UNDO, REDO } from "../defaults/mods/git/history.ts";
 
 const US = "\x1f";

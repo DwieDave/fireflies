@@ -12,7 +12,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { dither, stop, edgeRow, popupScrim } from "./draw.js";
-import { keyLabel } from "./keys.js";
+import { keyLabel } from "./keys.ts";
 import { window as appWindow } from "herdr";
 import { formKey, formHints, ring } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";

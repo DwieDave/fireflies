@@ -49,7 +49,7 @@ import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.ts";
 import { layoutGraph, usedWidth, widthOf } from "./graph.ts";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.ts";
 import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.ts";
-import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
+import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.ts";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
 import { keysHint } from "./keyhelp.ts";
