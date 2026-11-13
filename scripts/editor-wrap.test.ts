@@ -1,4 +1,4 @@
-// The editor's word wrap toggle (editor/main.js setWrap): a new
+// The editor's word wrap toggle (editor/main.ts setWrap): a new
 // editor wraps as its language's soft_wrap says; cmd-k z (the command
 // editor.wrap), vim's space u w, :set wrap / nowrap / wrap! and the
 // bar's "wrap" chip switch this editor only, nothing written to settings. A
@@ -64,7 +64,7 @@ mock.module("gpui-base", () => ({
 const storage: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => storage[k] ?? null, setItem: (k: string, v: string) => { storage[k] = String(v); } };
 
-const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
+const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const { editorKeys } = await import("../defaults/mods/editor/logic.ts");
 const { LEADER, createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 

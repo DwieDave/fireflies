@@ -163,7 +163,7 @@ mock.module("gpui-base", () => ({
 let store: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } };
 
-const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
+const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const { KINDS, wrappedRows } = await import("../defaults/mods/editor/rendered.ts");
 
 let later: [number, (cx: any) => void][] = [];

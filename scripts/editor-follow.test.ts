@@ -57,7 +57,7 @@ mock.module("gpui-base", () => ({
 
 
 const { CHANGES, follow, changeFor, newestId } = await import("../defaults/mods/editor/follow.ts");
-const { default: Editor } = await import("../defaults/mods/editor/main.js");
+const { default: Editor } = await import("../defaults/mods/editor/main.ts");
 
 beforeEach(() => { sharedNow = {}; lsp.length = 0; unsaved.length = 0; for (const k of Object.keys(storage)) delete storage[k]; });
 
@@ -73,7 +73,7 @@ function editor(path: string, { text = "fn main() {}\n", edited = false, on = nu
   const e: any = Object.create(Editor.prototype);
   const buffer = { value: edited ? text + "// more\n" : text, language: null as string | null, cursor: { line: 3, col: 4 } };
   Object.assign(e, {
-    path, firstPath: path, on, slot: `s-${path}`, lang: path.endsWith(".rs") ? "rust" : "markdown", opts: {}, state: "ready", saved: text, dirty: edited, deleted: false,
+    cur: {}, docs: [], listening: new Set(), path, firstPath: path, on, slot: `s-${path}`, lang: path.endsWith(".rs") ? "rust" : "markdown", opts: {}, state: "ready", saved: text, dirty: edited, deleted: false,
     seenChange: newestId(sharedNow[CHANGES] ?? []), version: 1, problems: [], conflict: false,
     server: { id: 7, status: "ready", name: "rust-analyzer" },
     editor: { value: () => buffer.value, set_language: (l: string) => { buffer.language = l; }, set_diagnostics() {}, set_line_notes() {}, cursor: () => buffer.cursor, set_value() { throw new Error("the buffer must stay"); } },

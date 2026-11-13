@@ -313,17 +313,17 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   const logic = await load("editor/logic.ts", guards);
   const route = await load("editor/editor-route.ts");
   const extra = {
-    ...logic, ...(await load("editor/vim.ts")), ...md, ...(await load("editor/paths.ts")),
+    ...guards, ...logic, ...(await load("editor/vim.ts")), ...md, ...(await load("editor/paths.ts")),
     ...(await load("editor/tabs.ts", { ...guards, ...logic, ...route })), ...route,
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
   };
-  const { default: EditorPane } = await load("editor/main.js", extra);
+  const { default: EditorPane } = await load("editor/main.ts", extra);
   const view: any = Object.create(EditorPane.prototype);
   const edits: any[] = [];
   const text = "# Plan\n\n- [ ] one\n- [x] two\n\n## Next";
   Object.assign(view, {
-    path: "/repo/docs/plan.md", on: null, slot: "s1", markdown: true, view: "split", text, saved: text, messages: [],
+    cur: {}, path: "/repo/docs/plan.md", on: null, slot: "s1", markdown: true, view: "split", text, saved: text, messages: [],
     preview: new MarkdownDoc("pv"), images: new Map(), previewHandle: { focus() {}, is_focused: () => false },
     editor: { edit: (e: any) => edits.push(e), value: () => text, focus() {}, set_cursor() {}, scroll_to_line() {} },
   });

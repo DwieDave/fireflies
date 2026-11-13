@@ -102,8 +102,9 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   };
   const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
   Object.assign(scope, await keyhelpOf(path, source, scope));
-  // A TypeScript mod's own pure modules (guard.ts imports nothing at run time): the real ones.
-  for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
+  // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
+  // guards.ts and editor-route.ts only guard.ts): the real ones.
+  for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts|guards\.ts|editor-route\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
   // `import * as Tabs from "./tabs.ts"`: the real module (it imports guard.ts alone).
   if (/import \* as Tabs from "\.\/tabs\.ts"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.ts")}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
@@ -491,7 +492,7 @@ test("focus that comes by key (a tab switch, agent.next, a pane closing): the we
   await blank.send("focus");
   expect([blank.view.handle.focused, blank.view.input.focused]).toEqual([0, 1]);
   // The editor: its text takes it, so mod:editor (cmd-s) applies.
-  const { mod } = await load("editor/main.js");
+  const { mod } = await load("editor/main.ts");
   let editorFocused = 0;
   mod.default.prototype.command.call({ editor: { focus: () => { editorFocused++; } } }, "focus", {});
   expect(editorFocused).toBe(1);

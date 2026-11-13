@@ -2,7 +2,7 @@
 // new text and selection: bold, italic, inline code, link, heading level up
 // and down (and 0-6 straight), bullet list, numbered list, task box, tick,
 // quote, code block, rule; and the enter that continues a list. Running one
-// where it's already on takes it off again. The editor runs them (main.js:
+// where it's already on takes it off again. The editor runs them (main.ts:
 // cmd-. and a letter, vim's space .; the palette), in every Markdown view.
 //
 // A selection is { start, end } of { line, col } (zero-based, columns in
