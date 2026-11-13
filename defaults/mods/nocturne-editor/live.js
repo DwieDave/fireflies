@@ -14,6 +14,8 @@
 //   rule                             --- *** ___
 //   ref                              [x]: url and [^note]: text definitions
 //   front                            front matter (--- yaml --- at the top)
+//   image    { images: [{ alt, src }] }  a line holding only images (![alt](src),
+//                                    <img src>), drawn as the pictures
 // Blank lines between units belong to none; a caret on one gets a one-line
 // "blank" unit of its own (unitFor), so there's always somewhere to type.
 
@@ -27,6 +29,9 @@ const TASK = /^(\s*)([-*+]|\d{1,9}[.)])\s+\[([ xX])\](?:\s|$)/;
 const QUOTE = /^ {0,3}>/;
 const CALLOUT = /^ {0,3}>\s?\[!([A-Za-z-]+)\]/;
 const REF = /^ {0,3}\[[^\]]+\]:/;
+// The same image line as markdown.js's imageLine (a module this one can't import: it draws).
+const MD_IMAGE = /\[?!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*["')])?\s*\)(?:\]\([^)]*\))?/g;
+const HTML_IMAGE = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
 const TABLE_RULE = /^\s*\|?\s*:?-{1,}:?\s*(\|\s*:?-{1,}:?\s*)*\|?\s*$/;
 
 const blank = (l) => l == null || !l.trim();
@@ -38,9 +43,23 @@ export function lines(text) {
   return { lines: t.split("\n").map((l) => l.replace(/\r$/, "")), eol: /\r\n/.test(t) ? "\r\n" : "\n" };
 }
 
+/** The images a line holds when it holds nothing else, or null. */
+export function imageLine(line) {
+  if (!line || !/!\[|<img\b/i.test(line)) return null;
+  const images = [];
+  let rest = line.replace(MD_IMAGE, (_m, alt, src) => { images.push({ alt, src }); return ""; });
+  rest = rest.replace(HTML_IMAGE, (m, src) => {
+    const alt = /\balt\s*=\s*["']([^"']*)["']/i.exec(m)?.[1] ?? "";
+    images.push({ alt, src });
+    return "";
+  });
+  rest = rest.replace(/<\/?(p|div|a|picture|source|br|center)\b[^>]*>/gi, "");
+  return images.length && !rest.trim() ? images : null;
+}
+
 /** Whether a line starts something of its own (ends a paragraph or an item's lazy text). */
 function starts(line) {
-  return HEADING.test(line) || FENCE.test(line) || MATH.test(line) || QUOTE.test(line) || ITEM.test(line) || RULE.test(line) || REF.test(line);
+  return HEADING.test(line) || FENCE.test(line) || MATH.test(line) || QUOTE.test(line) || ITEM.test(line) || RULE.test(line) || REF.test(line) || Boolean(imageLine(line));
 }
 
 /** The text's units, in order, not overlapping. */
@@ -127,6 +146,9 @@ export function units(text) {
       i = j + 1;
       continue;
     }
+    // A line of images only: a block of its own, drawn as the pictures.
+    const img = imageLine(line);
+    if (img) { out.push({ kind: "image", from: i, to: i, images: img }); i++; continue; }
     // A table: a | line with its |---| rule under it, and the | lines after.
     if (line.includes("|") && TABLE_RULE.test(ls[i + 1] ?? "") && (ls[i + 1] ?? "").includes("-")) {
       let j = i + 1;

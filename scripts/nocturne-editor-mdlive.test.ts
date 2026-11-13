@@ -379,7 +379,8 @@ test("enter after a heading, after a code block's closing line, at a list's end;
 
 test("an empty block offers the kinds; each makes that block (a click, or cmd-. and its letter)", async () => {
   const want: Record<string, string> = { "heading-1": "# ", bullets: "- ", task: "- [ ] ", quote: "> ", fence: "```\n\n```", rule: "---\n" };
-  for (const [name, , letter] of KINDS) {
+  // (image asks for a file: its own test, scripts/nocturne-editor-images.test.ts)
+  for (const [name, , letter] of KINDS.filter(([n]: string[]) => n !== "image")) {
     const p = await pane();
     clickLine(p, 2);
     block(p).press("enter");
