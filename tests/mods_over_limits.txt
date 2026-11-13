@@ -51,8 +51,6 @@ defaults/mods/github/projects.ts
 defaults/mods/github/projects.ts key
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
-defaults/mods/nocturne/newspace.ts
-defaults/mods/nocturne/newspace.ts render
 defaults/mods/nocturne/palette.ts
 defaults/mods/nocturne/palette.ts openEntries
 defaults/mods/nocturne/palette.ts render
