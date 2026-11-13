@@ -278,7 +278,7 @@ test("notifications overview: ? lists every key", () => {
 
 const ghPrs = (await import("../defaults/mods/github/prs.ts")).default;
 const ghActions = (await import("../defaults/mods/github/actions.ts")).default;
-const ghProjects = (await import("../defaults/mods/github/projects.js")).default;
+const ghProjects = (await import("../defaults/mods/github/projects.ts")).default;
 test("GitHub: each tab's ? list names every key its handler takes, in every panel", () => {
   // The window hands a tab the key as it reads it: what was typed, else GPUI's name.
   const asTab = (tab: any) => (e: any, cx: any) => {

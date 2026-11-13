@@ -52,7 +52,7 @@ const work: Promise<unknown>[] = [];
 const cx: any = { spawn: (f: Function) => { work.push(Promise.resolve(f(cx))); }, notify() {}, stop_propagation() {} };
 const settle = async () => { while (work.length) await work.shift(); };
 
-const { default: Projects } = await import("../defaults/mods/github/projects.js");
+const { default: Projects } = await import("../defaults/mods/github/projects.ts");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {

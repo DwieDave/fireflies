@@ -201,3 +201,25 @@ export interface Note {
 
 /** A note now. */
 export const noteOf = (text: string, tone: NoteTone): Note => ({ text, tone, at: Date.now() });
+
+/** The theme's ansi colour `n` (0..15), else ansi8. */
+export function ansiColor(t: Theme, n: number | null | undefined): Color {
+  switch (n) {
+    case 0: return t.ansi0;
+    case 1: return t.ansi1;
+    case 2: return t.ansi2;
+    case 3: return t.ansi3;
+    case 4: return t.ansi4;
+    case 5: return t.ansi5;
+    case 6: return t.ansi6;
+    case 7: return t.ansi7;
+    case 9: return t.ansi9;
+    case 10: return t.ansi10;
+    case 11: return t.ansi11;
+    case 12: return t.ansi12;
+    case 13: return t.ansi13;
+    case 14: return t.ansi14;
+    case 15: return t.ansi15;
+    default: return t.ansi8;
+  }
+}

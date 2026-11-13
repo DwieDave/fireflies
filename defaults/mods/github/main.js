@@ -48,7 +48,7 @@ import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";
-import Projects from "./projects.js";
+import Projects from "./projects.ts";
 
 export const WINDOW = "github.window"; // { id, beat }: the open window, for the toggle
 // { folder, on, head, at }: the git window's branch for a new pull request (its branches panel),
