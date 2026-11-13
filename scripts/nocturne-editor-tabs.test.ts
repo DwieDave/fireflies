@@ -79,7 +79,7 @@ class Ed {
   type(s: string) { this.v += s; this.undos++; this.handlers.change?.({}, cx()); }
   cursor() { return { ...this.caret }; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
   bounds() { return null; } set_language(l: string) { this.lang = l; }
-  focus() {} set_tab_size() {} set_cursor_shape() {} set_diagnostics(list: any) { (this as any).diags = list; } set_line_notes() {} find_close() {} top_line() { return 0; }
+  focus() {} set_soft_wrap() {} set_tab_size() {} set_cursor_shape() {} set_diagnostics(list: any) { (this as any).diags = list; } set_line_notes() {} find_close() {} top_line() { return 0; }
   selection() { return { start: this.caret, end: this.caret, text: "" }; } edit() {} set_selections() {} scroll_to_line() {}
 }
 const eds: Ed[] = [];
@@ -657,7 +657,7 @@ test("a drag along the strip: a press, a move past 4 px lifts the tab, a stake m
   fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 202, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
   expect(p.tabDrag).toBe(null); // 2 px: still a click
   fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 300, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
-  expect(p.tabDrag).toEqual({ from: 1, gap: { index: 2, after: true } });
+  expect(p.tabDrag).toEqual({ from: 1, gap: { index: 2, after: true }, out: false });
   // Drawn: b lifted (its plate), the stake at the end, the pointer grabbing.
   strip = p.tabStrip(theme);
   expect(byId(strip, "editor-tab-1").kids.length).toBeGreaterThan(byId(p.tabStrip(theme), "editor-tab-0").kids.length);
@@ -680,7 +680,9 @@ test("a drag that leaves the strip or drops on its own gap changes nothing; a pr
   fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
   fire(byId(strip, "editor-tab-0"), "on_mouse_move", { position: { x: 100, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
   expect(p.tabDrag?.gap).toEqual({ index: 0, after: false });
+  // Off the strip and then off the pane: the drag ends.
   fire(strip, "on_hover", false, cx());
+  fire(p.render(cx()), "on_hover", false, cx());
   expect(p.tabDrag).toBe(null);
   fire(strip, "on_mouse_up", {}, cx());
   expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
@@ -952,4 +954,163 @@ test("a link to a picture in the Markdown preview opens as a drawn tab here; on 
   ran.length = 0;
   p.openLooked("/p/img/b.png", cx());
   expect(ran).toEqual([["preview.open", { path: "/p/img/b.png", pane: "p1", on: "box" }]]);
+});
+
+// ---- item 5: a tab popped out into a pane of its own (and back in), the tab's menu
+
+const handOf = () => sharedNow["nocturne-editor.handover"];
+const splitOf = () => ran.find((r) => r[0] === "pane.split")?.[1];
+
+test("pop out: a new editor pane beside (popped), the tab leaves the strip; the new pane gets its unsaved text, caret, view, wrap", async () => {
+  const p = await pane();
+  p.openFile("/p/docs/n.md", cx());
+  await flush();
+  p.editor.type("more");
+  p.editor.set_cursor(1, 2);
+  p.setView("text", cx());
+  p.setWrap(false, cx());
+  ran.length = 0;
+  p.popOut(cx());
+  const split = splitOf();
+  expect(split).toMatchObject({ direction: "auto", pane: "p1", mod: "nocturne-editor", props: { path: "/p/docs/n.md", popped: true } });
+  expect(handOf()).toMatchObject({ slot: split.props.slot, path: "/p/docs/n.md", text: "# N\nmore", saved: "# N\n", caret: { line: 1, col: 2 }, view: "text", wrap: false });
+  // Gone from this strip without a question; the pane stays (it has a.rs).
+  expect([p.docs.map((d: any) => d.path), p.asking, ran.some((r) => r[0] === "pane.close")]).toEqual([["/p/src/a.rs"], null, false]);
+  // The new pane: the same text, unsaved, the caret and view as they were.
+  storage = {};
+  const q = await pane("/p/docs/n.md", { slot: split.props.slot, popped: true });
+  expect([q.editor.value(), q.dirty, q.editor.cursor(), q.view, q.softWrap]).toEqual(["# N\nmore", true, { line: 1, col: 2 }, "text", false]);
+  expect(unsaved.at(-1)).toBe("n.md: unsaved changes");
+  // Undo stays behind (it lives in the editor it was typed in): the new text editor starts with none.
+  expect(q.editor.undos).toBe(0);
+});
+
+test("pop out: the last tab leaves nothing behind (the pane closes, the new one takes its place); into a new tab of the window; a drawn tab too", async () => {
+  const p = await pane();
+  ran.length = 0;
+  p.popOut(cx());
+  expect(ran.map((r) => r[0])).toEqual(["pane.split", "pane.close"]);
+  expect(ran[1][1]).toMatchObject({ pane: "p1", confirmed: true });
+  storage = {};
+  const q = await pane();
+  q.openFile("/p/img/logo.png", cx());
+  ran.length = 0;
+  q.popOut(cx(), q.cur, "tab");
+  expect(ran[0]).toEqual(["tab.new", { mod: "nocturne-editor", props: expect.objectContaining({ path: "/p/img/logo.png", popped: true }), name: "logo.png" }]);
+  expect(handOf()).toMatchObject({ path: "/p/img/logo.png", look: true, text: null });
+});
+
+test("routing after a pop: the popped pane keeps its file (editor.open, the files pane find it there) and takes no other files", () => {
+  const panes = [ed("e1", "s1", "t1", "/a.rs"), ed("e2", "s2", "t1", "/x.md", { popped: true })];
+  const pick = (o: any) => route.editorFor({ panes, tab: "t1", ...o })?.pane ?? null;
+  expect(pick({ path: "/x.md", paths: { s2: ["/x.md"] } })).toBe("e2");
+  expect(pick({ path: "/y.rs", last: "s2", focused: "e2", prefer: "s2" })).toBe("e1");
+  // Only a popped pane in the tab: a new editor (null), not the popped one.
+  expect(route.editorFor({ panes: [panes[1]], tab: "t1", path: "/y.rs" })).toBe(null);
+});
+
+test("pop in: the shown tab moves into the editor beside as a tab (the open record and a handover for it); that editor gets its text", async () => {
+  const p = await pane();
+  p.openFile("/p/src/b.rs", cx());
+  await flush();
+  p.editor.type("// b");
+  paneList.push({ pane: "p2", tab: "t1", mod: "nocturne-editor", props: { slot: "s2", path: "/p/lib/b.rs" } });
+  ran.length = 0;
+  p.popIn(cx());
+  expect(sharedNow["nocturne-editor.open"]).toMatchObject({ slot: "s2", path: "/p/src/b.rs" });
+  expect(handOf()).toMatchObject({ slot: "s2", path: "/p/src/b.rs", text: "fn b() {}\n// b" });
+  expect(ran[0]).toEqual(["pane.focus", { pane: "p2" }]);
+  expect(p.docs.map((d: any) => d.path)).toEqual(["/p/src/a.rs"]);
+  // The editor beside takes it with its text.
+  storage = {};
+  const q = await pane("/p/lib/b.rs", { slot: "s2" });
+  sharedNow["nocturne-editor.open"] = { ...sharedNow["nocturne-editor.open"], n: 99 };
+  q.render(cx());
+  tick();
+  await flush();
+  expect([q.path, q.editor.value(), q.dirty]).toEqual(["/p/src/b.rs", "fn b() {}\n// b", true]);
+  // No editor beside: it says so.
+  paneList = [paneList[0]];
+  q.popIn(cx());
+  expect(q.message.text).toBe("no other editor in this tab");
+});
+
+test("the tab's menu: a right-click on a tab, its entries, j / k / enter and letters, a click; close the others keeps unsaved ones", async () => {
+  const p = await three();
+  expect(tabs.tabMenuItems({ count: 3, index: 0, others: false }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "move-right", "close", "close-others"]);
+  expect(tabs.tabMenuItems({ count: 1, index: 0, others: true }).map((x: any) => x.act)).toEqual(["pop-out", "pop-out-tab", "pop-in", "close"]);
+  expect(tabs.tabMenuItems({ count: 1, index: 0, scratch: true }).map((x: any) => x.act)).toEqual(["close"]);
+  const strip = p.tabStrip(theme);
+  byId(strip, "editor-tab-2").calls.on_mouse_down.find((c: any[]) => c[0] === "right")[1]({}, cx());
+  expect(p.tabMenu).toMatchObject({ index: 2, at: 0 });
+  const view = p.render(cx());
+  expect(texts(byId(view, "editor-tab-menu"))).toEqual(expect.arrayContaining(["Pop out into its own pane", "Move left", "Close the others"]));
+  // k wraps to the last entry, enter runs it: close the others (n.md shown; a.rs edited stays).
+  p.docs[0].dirty = true;
+  p.tabMenuKeyDown(keyc("k"), cx());
+  expect(p.tabMenu.items[p.tabMenu.at].act).toBe("close-others");
+  p.tabMenuKeyDown(keyc("enter"), cx());
+  expect([order(p), p.path, p.tabMenu]).toEqual([["a.rs", "n.md"], "/p/docs/n.md", null]);
+  expect(p.message.text).toMatch(/1 kept: unsaved changes \(a\.rs\)/);
+  // A letter runs its entry: h moves the tab left.
+  p.openTabMenu(cx(), 1);
+  p.tabMenuKeyDown(keyc("h"), cx());
+  expect(order(p)).toEqual(["n.md", "a.rs"]);
+  // esc closes it; a click on an entry runs it.
+  p.openTabMenu(cx(), 0);
+  p.tabMenuKeyDown(keyc("escape"), cx());
+  expect(p.tabMenu).toBe(null);
+  p.openTabMenu(cx(), 0);
+  ran.length = 0;
+  click(byId(p.tabMenuView(theme), "editor-tab-menu-pop-out"));
+  expect(splitOf()).toMatchObject({ props: { path: "/p/docs/n.md", popped: true } });
+  expect(order(p)).toEqual(["a.rs"]);
+});
+
+test("a tab dragged off the strip and let go over the pane pops out; back on the strip it moves; off the pane nothing happens", async () => {
+  const p = await three();
+  let strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 300, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  fire(strip, "on_hover", false, cx());
+  expect(p.tabDrag).toMatchObject({ from: 1, out: true });
+  let view = p.render(cx());
+  expect(texts(byId(view, "editor-drop-out")).join(" ")).toMatch(/let go: b\.rs into its own pane/);
+  // Back on the strip: a move again (no drop zone).
+  fire(byId(strip, "editor-tab-0"), "on_mouse_move", { position: { x: 20, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag.out).toBe(false);
+  // Off again, then out of the pane: nothing.
+  fire(strip, "on_hover", false, cx());
+  view = p.render(cx());
+  fire(view, "on_hover", false, cx());
+  expect([p.tabDrag, order(p)]).toEqual([null, ["a.rs", "b.rs", "n.md"]]);
+  // Off the strip and let go over the pane: popped out beside.
+  strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 300, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  fire(strip, "on_hover", false, cx());
+  ran.length = 0;
+  view = p.render(cx());
+  view.calls.on_mouse_up.find((c: any[]) => c[0] === "left")[1]({}, cx());
+  expect(splitOf()).toMatchObject({ props: { path: "/p/src/b.rs", popped: true } });
+  expect(order(p)).toEqual(["a.rs", "n.md"]);
+});
+
+test("keys: space b o / b i / b m, :popout / :popin; the commands pop-out, pop-out-tab, pop-in, tab-menu", async () => {
+  const run = (keys: string[]) => { const v = createVim(); const out: string[] = []; for (const k of keys) out.push(...(feed(v, k, { text: "a\n", cursor: { line: 0, col: 0 }, clipboard: null, page: 10 }).commands ?? [])); return out; };
+  expect(run([" ", "b", "o"])).toEqual(["pop-out"]);
+  expect(run([" ", "b", "i"])).toEqual(["pop-in"]);
+  expect(run([" ", "b", "m"])).toEqual(["tab-menu"]);
+  expect(run([":", ..."popout".split(""), "<cr>"])).toEqual(["pop-out"]);
+  expect(run([":", ..."popin".split(""), "<cr>"])).toEqual(["pop-in"]);
+  const p = await three();
+  p.vimCommand("tab-menu", cx());
+  expect(p.tabMenu).toMatchObject({ index: 1 });
+  p.closeTabMenu(cx());
+  ran.length = 0;
+  p.command("pop-out-tab", cx());
+  expect(ran[0][0]).toBe("tab.new");
+  p.command("pop-out", cx());
+  expect(splitOf()).toBeTruthy();
+  expect(p.docs.length).toBe(1);
 });

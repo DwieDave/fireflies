@@ -211,3 +211,53 @@ export function lookAction(pending, e) {
   const act = LOOK_ACTS[(pending ?? "") + ch] ?? null;
   return { act, taken: Boolean(act) || Boolean(pending), pending: "" };
 }
+
+// ---- the tab's menu (a right-click on a tab, space b m, the tab-menu command)
+
+/** The tab menu's entries for tab `index` of `count`: pop out (beside, or
+ *  to a tab of its own), into the editor beside (`others`: another editor in
+ *  the window's tab), move left / right, close, close the others. */
+export function tabMenuItems({ count, index, others = false, scratch = false }) {
+  return [
+    ...(scratch ? [] : [{ key: "o", act: "pop-out", label: "Pop out into its own pane" }, { key: "t", act: "pop-out-tab", label: "Pop out into a new tab" }]),
+    ...(others && !scratch ? [{ key: "i", act: "pop-in", label: "Move into the editor beside" }] : []),
+    ...(index > 0 ? [{ key: "h", act: "move-left", label: "Move left" }] : []),
+    ...(index < count - 1 ? [{ key: "l", act: "move-right", label: "Move right" }] : []),
+    { key: "d", act: "close", label: "Close" },
+    ...(count > 1 ? [{ key: "D", act: "close-others", label: "Close the others" }] : []),
+  ];
+}
+
+/** A key in the tab menu: j k ↑ ↓ move (wrapping), enter / space run the
+ *  marked entry, an entry's letter runs it, esc closes. -> { at, act, close } */
+export function tabMenuKey(items, at, e) {
+  const key = String(e?.key ?? ""), m = e?.modifiers ?? {};
+  if (m.platform || m.control || m.alt) return { at, act: null, close: false, taken: false };
+  const ch = typeof e?.key_char === "string" && e.key_char.length === 1 ? e.key_char : key.length === 1 ? (m.shift ? key.toUpperCase() : key) : key;
+  const n = items.length;
+  if (key === "escape") return { at, act: null, close: true, taken: true };
+  if (key === "down" || ch === "j") return { at: (at + 1) % n, act: null, close: false, taken: true };
+  if (key === "up" || ch === "k") return { at: (at + n - 1) % n, act: null, close: false, taken: true };
+  if (key === "enter" || key === "space") return { at, act: items[at]?.act ?? null, close: true, taken: true };
+  const hit = items.find((x) => x.key === ch);
+  return hit ? { at, act: hit.act, close: true, taken: true } : { at, act: null, close: false, taken: true };
+}
+
+/** What a tab hands to the editor it goes to (popped out, or moved into
+ *  another): its text when it has unsaved changes, what's on disk, the caret,
+ *  the first line shown, its Markdown view, wrap, drawn. Undo stays behind:
+ *  it lives in the editor it was typed in. */
+export function handover(d, slot, now = Date.now()) {
+  let caret = { line: 0, col: 0 }, top = 0;
+  try { caret = d.editor?.cursor?.() ?? caret; } catch { /* the start */ }
+  try { top = Number(d.editor?.top_line?.()) || 0; } catch { /* the top */ }
+  return {
+    slot, path: d.path, text: d.dirty ? d.editor.value() : null, saved: d.saved ?? null,
+    caret, top, view: d.view ?? null, wrap: Boolean(d.softWrap), look: Boolean(d.look), at: now,
+  };
+}
+
+/** A handover meant for this editor (`slot`) and file, fresh (10 s). */
+export function handoverFor(h, slot, path, now = Date.now()) {
+  return h && h.slot === slot && h.path === path && now - (h.at ?? 0) < 10000 ? h : null;
+}

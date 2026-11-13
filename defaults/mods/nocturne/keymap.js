@@ -152,6 +152,10 @@ const WORDS = {
   "nocturne-editor.close-tab": "Close the file tab",
   "nocturne-editor.move-tab-left": "Move the file tab left",
   "nocturne-editor.move-tab-right": "Move the file tab right",
+  "nocturne-editor.pop-out": "Pop the file tab out into its own pane",
+  "nocturne-editor.pop-out-tab": "Pop the file tab out into a new tab",
+  "nocturne-editor.pop-in": "Move the file into the editor beside",
+  "nocturne-editor.tab-menu": "The file tab's menu",
   // The web pane (mod:nocturne-browser).
   "nocturne-browser.url": "The address bar",
   "nocturne-browser.reload": "Reload the page",
