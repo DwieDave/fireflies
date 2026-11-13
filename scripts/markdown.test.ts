@@ -313,7 +313,7 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   const logic = await load("editor/logic.ts", guards);
   const route = await load("editor/editor-route.ts");
   const extra = {
-    ...logic, ...(await load("editor/vim.js")), ...md, ...(await load("editor/paths.ts")),
+    ...logic, ...(await load("editor/vim.ts")), ...md, ...(await load("editor/paths.ts")),
     ...(await load("editor/tabs.ts", { ...guards, ...logic, ...route })), ...route,
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),

@@ -66,7 +66,7 @@ const storage: Record<string, string> = {};
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const { editorKeys } = await import("../defaults/mods/editor/logic.ts");
-const { LEADER, createVim, feed } = await import("../defaults/mods/editor/vim.js");
+const { LEADER, createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 function cx(): any {
   return {

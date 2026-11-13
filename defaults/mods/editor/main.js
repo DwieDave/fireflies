@@ -131,7 +131,7 @@ import {
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
   cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown, appBindings, chordOf,
 } from "./logic.ts";
-import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
+import { createVim, feed, play, token, CARET, MODE_NAME, applyEdits } from "./vim.ts";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import { formKey, bindTab, tabActions } from "./form-keys.ts";
@@ -399,7 +399,7 @@ export default class EditorPane extends View {
     d.editor.set_tab_size(opts.tab_size, opts.insert_spaces === false);
     if (d.hand && Boolean(d.hand.wrap) !== d.softWrap) { d.softWrap = Boolean(d.hand.wrap); d.editor.set_soft_wrap?.(d.softWrap); }
     d.editor.on("key", (e, cx) => this.vimKey(e, cx));
-    d.editor.set_cursor_shape(this.vimOn() ? SHAPE.normal : "bar");
+    d.editor.set_cursor_shape(this.vimOn() ? CARET.normal : "bar");
     d.editor.on("change", (_e, cx) => this.changed(cx, d));
     // A paste the editor found no text in (a screenshot): a Markdown file takes it as an image block.
     d.editor.on("paste_other", (_e, cx) => { if (d.markdown && d === this.cur) this.pasteImage(cx); });
@@ -1692,7 +1692,7 @@ export default class EditorPane extends View {
   vimSettled(on) {
     this.vim.mode = "normal"; this.vim.keys = []; this.vim.ex = null; this.vim.pendingLeader = null;
     this.which = null; this.pending = "";
-    this.editor.set_cursor_shape(on ? SHAPE.normal : "bar");
+    this.editor.set_cursor_shape(on ? CARET.normal : "bar");
     this.vimWas = on;
   }
 
@@ -1743,7 +1743,7 @@ export default class EditorPane extends View {
     if (r.multi) this.editor.set_selections(r.multi.map((p) => ({ start: p, end: p })));
     else if (r.selections) this.editor.set_selections(r.selections.map((s) => (s.head === "start" ? { start: s.end, end: s.start } : s)));
     else if (r.cursor) this.editor.set_cursor(r.cursor.line, r.cursor.col);
-    if (r.mode) this.editor.set_cursor_shape(SHAPE[r.mode] ?? "block");
+    if (r.mode) this.editor.set_cursor_shape(CARET[r.mode] ?? "block");
     if (r.clipboard) cx.write_to_clipboard(r.clipboard.text);
     if (r.which !== undefined) this.which = r.which;
     if (r.pending !== undefined) this.pending = r.pending;
@@ -1923,7 +1923,7 @@ export default class EditorPane extends View {
     const taken = this.vimKey(e, cx);
     if (d?.rendered) {
       if (taken) d.rendered.pull(cx);
-      d.rendered.block.set_cursor_shape(this.vimOn() ? (SHAPE[this.vim.mode] ?? "block") : "bar");
+      d.rendered.block.set_cursor_shape(this.vimOn() ? (CARET[this.vim.mode] ?? "block") : "bar");
     }
     return taken;
   }

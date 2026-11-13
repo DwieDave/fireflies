@@ -94,7 +94,7 @@ mock.module("gpui-base", () => ({
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("../defaults/mods/editor/editor-route.ts");
-const { createVim, feed } = await import("../defaults/mods/editor/vim.js");
+const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {
