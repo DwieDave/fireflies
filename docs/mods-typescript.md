@@ -7,9 +7,8 @@ Nothing is compiled and nothing is checked at run time: the checking is
 TypeScript meets, the steps to convert a JavaScript mod, and the patterns
 the conversion settled on.
 
-Every mod of the Nocturne layout is TypeScript: `nocturne` and the sixteen
-listed in `scripts/nocturne-mods.ts` (once `nocturne-<name>`), with the files
-they share (below). The stock mods (agents, files, picker, pane, tabs,
+`nocturne` and all sixteen of its mods (listed in `scripts/nocturne-mods.ts`,
+once `nocturne-<name>`) are TypeScript, with the files they share (below). The stock mods (agents, files, picker, pane, tabs,
 spaces, win98, …) and the frame's older pages are JavaScript and stay as
 they are. Read `pip` and `usage` as small patterns, preview's `viewer.ts`
 for a whole view, github's `gh.ts` and `cache.ts` for outside data read and
@@ -138,8 +137,11 @@ const pipProps = (): PipProps => {
 optional)`, `parseJson(text, g)` (JSON proven by `g`, else `undefined`).
 `typeof` belongs inside a guard and nowhere else (anti-slop
 `no-runtime-typeof`, allowed in type guards); `unknown` may only be a guard's
-parameter (`no-unknown-parameters`). A value of known type tested outside a
-guard needs no `typeof`: `const v = x ?? null; v === null ? … : …`.
+parameter (`no-unknown-parameters`): guard first, then pass the proven value
+(`isX(p) ? toX(p) : fallback`). The same rule refuses a local annotated
+`: unknown` (`let err: unknown = null`): keep what you need of it, the
+message string. A value of known type tested outside a guard needs no
+`typeof`: `const v = x ?? null; v === null ? … : …`.
 
 A mod's own guards beyond guard.ts go in a file of its own (github's
 `guards.ts`), never into guard.ts, which is a shared copy:
@@ -201,7 +203,9 @@ what the owner drops.
 
 ### props(), native views, exec, files
 
-- `props()`: a guard for the props the mod is opened with (above).
+- `props()`: a guard for the props the mod is opened with (above). A
+  `Guarded<…>` type is a mapped type, so it is assignable to `Props`: a proven
+  props value goes straight to `set_props` or a nested view's `init`.
 - `nativeViewCall()` answers and `nextNativeViewEvent()` text: a guard,
   `parseJson(text, isEvent)`; `undefined` means skip it. viewer.ts's
   `ask(action, guard)` is the pattern: the answer proven or null, and
@@ -268,6 +272,15 @@ what the owner drops.
   into the view imports its type only
   (`import type { default as GitView } from "./main.ts"`: a type-only cycle
   is erased).
+- Callbacks passed to element methods (`on_click`, `on_mouse_down`, `.when`)
+  are typed by their context: don't annotate `(e, cx)`.
+- A member of a union that declares a field `?: undefined` (`ModPaneInfo`'s
+  `program?: undefined`) reaches a parameter under
+  `exactOptionalPropertyTypes` only if the parameter says so:
+  `{ program?: X | undefined }`.
+- Two members where one extends the other (`Glow | Flying`, `Flying extends
+  Glow`) collapse to the wider one (subtype reduction): give the plain member
+  `x?: undefined` and test `f.x === undefined`.
 - A colour with an alpha suffix: `` `${t.ansi0}88` `` types as `Color`;
   `t.ansi0 + "88"` is a `string`.
 - `noImplicitReturns` with a key handler that sometimes returns `false`:
@@ -286,7 +299,7 @@ what the owner drops.
 | `declare field: T` set in `init` | a field with an initializer, `T \| null` when there is no value yet |
 | `{ then: … }` in props | another name (`then` makes an object a thenable) |
 | `x.list.filter(Boolean)` mixing data and absence | `flatMap` with a guard, or an explicit `string \| null` and a test |
-| a lookup table `{ a: [...], b: [...] }` read by a key from data | a `Map` (`CALLOUTS.get(type)`), or a `switch` when the keys are a union (kinds.ts `tag`) |
+| a lookup table `{ a: [...], b: [...] }` read by a key from data | a `Map` (`CALLOUTS.get(type)`, `LOGO.get(key)`), or a `switch` when the keys are a union (kinds.ts `tag`); a literal table tests read as an object stays `as const`, with a `Set` of its keys for lookups |
 | a parameter `e: unknown` in a `.catch` | name it `cause` (anti-slop allows it): `(cause: unknown) => …` |
 | `a?.b?.c` on a value of known type | the type says what's there; keep `?.` for what really may be missing |
 | `Object.entries(x)` on an interface (gives `any`) | a `Map`, or the keys named one by one |
@@ -342,6 +355,12 @@ type-checked or linted.
   `e.modifiers ?? {}` in the mod. The engine never sends `key_char: null`;
   shared fixtures that do are met by a mod that reads `key_char` with
   `isString` or a truthy test.
+- Stand-ins give herdr's real shapes (`updates()`, agents with their
+  `program`): a typed reader no longer writes `?.` on fields that are always
+  there, so fix a `null` stand-in rather than the reader.
+- A file a herdr-only test loads (no gpui stand-ins) mustn't import a
+  `kit.ts` that imports gpui-kit: parse with the guards directly (nocturne's
+  `prompt.ts`, `procs.ts`, `scripts.ts`).
 - Code that skipped work when `cx.new` was missing now mounts its nested
   view: the test's `cx` has `new: () => ({ set_props() {}, release: () => true })`
   and the loader's scope the class.
@@ -369,6 +388,7 @@ type-checked or linted.
 | `anti-slop(no-unknown-parameters)` | a helper takes `unknown` | parse first; only a guard takes `unknown` |
 | `anti-slop(require-readable-spacing)` | blank lines | `just lint --fix`, then read the diff: it splits a one-line block oddly, write those out |
 | `unicorn(no-thenable)` | a `then` key | rename it; in outside data read it through `getOwnPropertyDescriptor` (Patterns) |
+| TS2339 `findLastIndex does not exist` | ES2022's lib (the tsconfig's) doesn't have it | a loop from the end |
 | TS2345 with `Fields<{ toString: …` | a guard built with `oneOf` around `object({}, …)`: its constraint leaks into the inference | a helper of its own (`maybe`, Patterns), not `oneOf` |
 | `anti-slop(no-known-value-widening)` | a field, binding or return typed with an inline object or mapped type, `let x: unknown`, a known value passed to a same-file function taking `unknown` | name the type (an interface), `satisfies` for a literal table, parse into the type |
 | `anti-slop(no-shape-in-symbol-names)` | a name like `SHAPE` | rename it and its importers |
