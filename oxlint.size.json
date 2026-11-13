@@ -1,0 +1,12 @@
+// The mods' size limits (docs/mods-splitting.md): a file under 750 lines, a
+// function at 80 code lines or fewer. tests/mods_typescript.rs runs it against
+// the list of what is still over, tests/mods_over_limits.txt.
+{
+  "plugins": [],
+  "categories": {},
+  "ignorePatterns": ["defaults/**/*.js", "defaults/mods/win98/art/**", "**/*.d.ts"],
+  "rules": {
+    "eslint/max-lines": ["error", { "max": 749, "skipBlankLines": false, "skipComments": false }],
+    "eslint/max-lines-per-function": ["error", { "max": 80, "skipBlankLines": true, "skipComments": true, "IIFEs": true }]
+  }
+}

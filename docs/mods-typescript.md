@@ -72,6 +72,10 @@ just typecheck   # tsc -p defaults/tsconfig.json: strict, noUncheckedIndexedAcce
 just lint        # oxlint + anti-slop (oxlint.config.ts); `just lint --fix` adds blank lines
 ```
 
+A third check holds the mods' sizes: a file under 750 lines, a function at
+80 code lines or fewer, with a list of what's still over that only shrinks
+(docs/mods-splitting.md, `oxlint.size.json`, `tests/mods_over_limits.txt`).
+
 Both cover every `.ts` file under `defaults/` (mods and frame). The
 JavaScript that remains (the stock mods, parts of the frame) is outside both
 (`checkJs` is off; the lint ignores `**/*.js`).
