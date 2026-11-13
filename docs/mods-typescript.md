@@ -156,6 +156,13 @@ A mod's own guards beyond guard.ts go in a file of its own (github's
   `list.filter((x) => guard(x))` where it's read.
 - A user-state record whose fields are each optional (`{ hidden: true }`
   alone): guard every field as optional, then normalise after the read.
+- Props with optional groups an older caller may send in another shape:
+  guard the plain fields and each group on its own, so one odd group doesn't
+  drop them all (git's `isGitProps`, `isGroups`).
+- A JSON object keyed by data inside a value (a manifest's scripts, `nix
+  flake show`): prove the object, then read each field into a guard,
+  `Object.getOwnPropertyDescriptor(o, k)?.value`, and set it in a Map
+  (scripts' `guards.ts` `fields`).
 
 ### shared(): typed keys
 
@@ -226,8 +233,9 @@ what the owner drops.
 
 - Fields made in `init` (focus handles, inputs, nested views) are
   `X | null = null`, read with `?.`. A field set from `cx.focus_handle()` in a
-  form's root keeps `this.handle = cx.focus_handle(); bindTab(cx);` as it is:
-  `form-keys.test.ts` matches that text.
+  form's root keeps `this.handle = cx.focus_handle(); bindTab(cx);` as it is
+  (`form-keys.test.ts` matches that text), and takes a narrowed
+  `const handle = this.handle` after it.
 - A view that exposes a record's fields as `this.x` (the editor's shown
   tab): typed get / set pairs over the record.
 - A view method tests call keeps its signature (it reads `this.x` and checks
@@ -245,7 +253,25 @@ what the owner drops.
   `r.error !== undefined` (or `"error" in r`).
 - Rows of several kinds read through one variable: a union whose members
   mark the others' fields `?: undefined` (`head?: undefined` on a tree row),
-  so `r.head` reads on the union and narrows.
+  so `r.head` reads on the union and narrows; or type predicates over the
+  union by a field only one member has (`"gone" in x` for a branch,
+  `"parents" in x` for a commit, git's `isBranch`). No cast, no new tags on
+  the rows.
+- An action table read by the actions of a key table: `ACTIONS = { … }
+  satisfies { readonly [A in Action]?: Handler }`, with `Action` taken from
+  the key table (`(typeof BINDINGS)[number][2]`, the table `as const
+  satisfies readonly Row[]`), and a widened `readonly Row[]` alias of it for
+  `.includes(key)`.
+- A class another file drives (a popup stack, a review): an interface of
+  what it needs of its host (github's `host.ts`, git's `PopupHost`,
+  `ReviewHost`); the view meets it structurally. A module that calls back
+  into the view imports its type only
+  (`import type { default as GitView } from "./main.ts"`: a type-only cycle
+  is erased).
+- A colour with an alpha suffix: `` `${t.ansi0}88` `` types as `Color`;
+  `t.ansi0 + "88"` is a `string`.
+- `noImplicitReturns` with a key handler that sometimes returns `false`:
+  the other paths `return true`.
 
 ### Instead of the usual escape hatches
 
@@ -322,6 +348,9 @@ type-checked or linted.
 - Tests that read a source's text (`form-keys.test.ts`,
   `nocturne-floatfocus.test.ts`) match lines as written: keep those lines
   when typing the file, and give the test the new file name.
+- A fixture with an optional field set to `undefined` (`exit_code:
+  undefined`) fails an `object()` guard; JSON never has it: write `null`, or
+  leave the key out.
 - Fixtures of a program's answers (github's GraphQL) are worth a test that
   runs them through the guards the mod reads them with, so a guard can't be
   stricter than the real answers.
