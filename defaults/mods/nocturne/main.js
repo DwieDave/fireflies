@@ -28,7 +28,7 @@ import Palette from "./palette.js";
 import Peek from "./peek.js";
 import Sky from "./sky.js";
 import Tabs from "./tabs.js";
-import Header from "./header.js";
+import Header from "./header.ts";
 import Parked from "./parked.js";
 import { WorktreesPanel } from "./worktrees.js";
 import NewMenu from "./newmenu.js";

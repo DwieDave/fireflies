@@ -9,7 +9,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { terminals, panes, spaces, props, run, theme, closeOverlay } from "herdr";
-import Header from "./header.js";
+import Header from "./header.ts";
 import { dither } from "./kit.ts";
 
 export default class Peek extends Header {

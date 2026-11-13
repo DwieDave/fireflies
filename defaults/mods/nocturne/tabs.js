@@ -39,7 +39,7 @@ import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { newButtonNode } from "./newbutton.js";
 import { openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
-import { headerControls, paneMenu, renamePane } from "./header.js";
+import { headerControls, paneMenu, renamePane } from "./header.ts";
 import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.ts";
 import { gitState } from "./lazygit.ts";
 import { gitOpen, toggleGit } from "./git.ts";

@@ -47,7 +47,7 @@ import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
-import { markPath, modKind, paneName, paneMenu } from "./header.js";
+import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.ts";
 import { field } from "./inline.ts";
 import Spaces from "./spaces.js";

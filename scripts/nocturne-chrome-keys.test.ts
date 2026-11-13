@@ -80,7 +80,7 @@ const nav = await import("../defaults/mods/nocturne/nav.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const toast = await import("../defaults/mods/nocturne/toast.ts");
-const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.js");
+const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.ts");
 
 beforeEach(() => {
   sharedState = {}; commands = []; overlays = []; closed = []; queue = []; waiting = [];
