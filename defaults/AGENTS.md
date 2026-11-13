@@ -340,7 +340,15 @@ the highlighted line shows where it will land.
   second closes it); cmd-shift-o, `nocturne.procs`, opens it centered or
   closes it, `nocturne.ports` on its ports tab (no key by default). This
   machine only.
-  Three tabs (tab / shift-tab, 1 2 3):
+  Its top, always in view over the lists: CPU, memory (its line in the
+  pressure's colour, WARN / CRIT beside its name), network (in as a line
+  with a dithered fill, out dotted) and disk (MB/s) as small line graphs of
+  the last 90 s with their numbers now, four across (two by two in a deck
+  too narrow for four), read every second while the deck is open, never two
+  at once and never while it's closed; the pointer on a graph puts its whole
+  reading in the foot (the GPU's percent among the CPU's, how full the disk
+  is among the disk's); a source the machine lacks says none.
+  Two tabs (tab / shift-tab, 1 2):
   processes, a tree of space › tab › terminal › the terminal's process and all
   it started (terminals without a pane under "no pane"; `a` switches to every
   process of yours, rooted where the parent isn't yours), each row name,
@@ -351,12 +359,7 @@ the highlighted line shows where it will land.
   TCP ports your processes listen on (this app's first, with their tab and
   terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
   the focused tab's web pane (`browser.open`) or a web pane beside the
-  focused one (`app.open_url`), `c` copies that address; system, dithered
-  graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
-  (and its pressure), disk (MB/s, how full) and network (in above the line,
-  out below), read every second while the system tab shows, every 2 s behind
-  the other tabs, never two at once and never while the deck is closed; a
-  source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  focused one (`app.open_url`), `c` copies that address. Keys: j/k ↑↓, g/G, pgup/pgdn,
   h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
   pane (a group folds), `x` ends the process (`X` with everything under it):
   it asks in the deck, sends TERM, and two seconds on names what still runs,
@@ -369,7 +372,23 @@ the highlighted line shows where it will land.
   first; a click selects a row, a double click does what enter does, a fold
   arrow folds on a click, a long list's scrollbar drags, the tabs and the
   scope switch on a click, the foot's keys are buttons, and a port row shows
-  open ↗ / copy / end while selected or hovered.
+  open ↗ / copy / end while selected or hovered. A right-click on a row (or
+  `m` on the selected one) opens its menu at the pointer (under the row by
+  key, upward near the deck's foot), each entry with its key, which works
+  without the menu too: a process: go to its terminal (enter), open its
+  folder in a files pane (`f`, lsof's cwd, `files.open`), copy pid (`p`),
+  copy command line (`c`), fold its children (space), end (`x`), force end
+  (`K`, KILL) and end the tree under it (`X`); a terminal, tab or space: go
+  to it (enter / `t`: `pane.focus`, `tab.select`, `space.select`), its
+  folder, fold, end what runs in it (`x`: what the shell started, or the
+  program a terminal runs directly, with what's under it); a port: open in
+  a web pane (enter), open in Databases (`d`: a postgres / mysql / libsql
+  port, only when the Databases mod is installed in `mods/databases`;
+  `nocturne.databases:{kind, name, host, port, from}` in the nocturne layout,
+  else the Databases window with `props.connect`), copy the port (`p`) and
+  the address (`c`), go to its terminal (`t`), end its process (`x`). Every
+  end asks under the row first, as `x` does; j/k, enter, an entry's key, esc
+  / `m`, a click outside or a second right-click drive and close it.
 - **Notifications** (Nocturne's, the `notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,

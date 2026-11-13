@@ -100,7 +100,7 @@ export function portList(v: ProcsDeck): PortItem[] {
 }
 
 export function tabList(v: ProcsDeck): readonly Item[] {
-  return v.tab === "ports" ? portList(v) : v.tab === "system" ? [] : v.rows();
+  return v.tab === "ports" ? portList(v) : v.rows();
 }
 
 /** The cursor's index in `items`, kept on its key. */
