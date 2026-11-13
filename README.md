@@ -61,6 +61,16 @@ These are screenshots of Fireflies with a made-up project, at zoom 1.7 (the whol
 
 ![The Databases window on a made-up SQLite database: connections, tables and a column's value on the left, a query with its ten result rows and the log on the right](docs/readme/databases.png)
 
+## Optional mods
+
+Some mods are not part of Fireflies: they live in their own repositories, and you install the ones you need. Once installed, a mod shows up in the "+ new" menu and the command palette, and works with the rest of the app. More will follow.
+
+**[fireflies-k8s](https://github.com/DwieDave/fireflies-k8s): Kubernetes and Argo CD.** Optional, and not installed with Fireflies. Contexts, namespaces and resources in a window or a pane, with a workload drawn as a graph from its ingress down to its pods, and Argo CD applications as a tree with what is out of sync. Logs and shells open as terminals in panes; a port-forward leads on to a web pane or to Databases. Every change to a cluster asks first. The pictures show a made-up cluster.
+
+![The k8s mod: contexts, namespaces and kinds on the left, the deployments of a namespace, and one deployment's graph from ingress to pods](docs/readme/k8s.png)
+
+![The k8s mod's Argo CD tab: the applications, one application's resources as a tree with an out-of-sync and a missing resource marked, and its history](docs/readme/k8s-argo.png)
+
 ## Install
 
 Fireflies has no release downloads yet. Build it from source on a Mac. Herdr's install scripts and its Homebrew cask install Herdr, not Fireflies.
