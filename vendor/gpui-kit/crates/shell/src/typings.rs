@@ -1148,8 +1148,11 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
      *
      * Legal from `init`, an event handler or a task; creating one during
      * `render` or layout throws.
+     *
+     * Quoted: a bare `new(...)` in an interface declares a construct signature,
+     * not a method, and `cx.new(...)` would not type.
      */
-    new(Class: ViewClass, props?: import("gpui-shell").Props): Entity;
+    "new"(Class: ViewClass, props?: import("gpui-shell").Props): Entity;
 
     /**
      * Calls `body(cx)` and adopts the promise it returns, so a rejection is
