@@ -232,7 +232,9 @@ export default class Sky {
     // nocturne.new (cmd-n) the "+ new" menu, nocturne.gridify (cmd-alt-g)
     // the shown tab's panes into an even grid (gridify.js), nocturne.picker
     // (cmd-p) and nocturne.grep (cmd-shift-f) the file picker (picker.js);
-    // nocturne.scratchpad the repository's note in the editor (scratchpad.js);
+    // nocturne.scratchpad the repository's note in the editor (scratchpad.js;
+    // nocturne.scratchpad-tab in a tab of its own; the palette and the "+ new"
+    // menu run these: this copy outlives their overlays while git answers);
     // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
     // opens a web pane there (dock.js);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
@@ -254,7 +256,7 @@ export default class Sky {
         else if (c === "files") focusFiles();
         else if (c === "picker") togglePicker("files");
         else if (c === "grep") togglePicker("grep");
-        else if (c === "scratchpad") openScratchpad();
+        else if (c === "scratchpad" || c === "scratchpad-tab") openScratchpad(c === "scratchpad-tab");
         else if (c === "github") toggleGithub();
         else if (c === "github-pr") githubForm("pr");
         else if (c === "github-run") githubForm("workflow");

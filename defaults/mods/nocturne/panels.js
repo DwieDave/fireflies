@@ -6,6 +6,8 @@
 //   fixed        a panel that always lands in one place: Git (nocturne-git:
 //                lazygit's views and the review that was the diff) and GitHub
 //                float over the tab, files runs down the tab's right edge
+//   scratchpad   the repository's note in the editor (scratchpad.js), through
+//                its command: the menus that pick it close before git answers
 //
 // A panel that is open in the shown tab and has no other place to go closes
 // instead (the menus say "Close …").
@@ -17,6 +19,7 @@ import { filesPane, toggleFiles, filesSlot } from "./files.js";
 import { usagePane, toggleUsage } from "./usage.js";
 import { gitOpen, toggleGit, openWorktrees } from "./git.js";
 import { githubOpen, toggleGithub } from "./github.js";
+import { askScratchpad } from "./scratchpad.js";
 
 /** Where things would open now: the shown space and tab, the focused pane and its folder. */
 export function here() {
@@ -97,6 +100,8 @@ export function panels() {
       pane: () => toggleBeside("nocturne-agents", agentsProps()), tab: () => modTab("nocturne-agents", agentsProps(), "agents") },
     { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: usagePane,
       pane: toggleUsage, tab: () => modTab("nocturne-usage", {}, "usage") },
+    { id: "scratchpad", name: "Scratchpad", icon: `${ART}/scratchpad.svg`, key: "s", words: "note notes scratch pad markdown repository repo jot todo memo", bind: "nocturne.scratchpad",
+      pane: () => askScratchpad(), tab: () => askScratchpad(true) },
     { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches checkouts", fixed: "float", open: () => Boolean(gitOpen()),
       pane: () => (gitOpen() ? toggleGit() : openWorktrees()), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on, worktrees: { action: "open" } }, "worktrees") },
     { id: "git", name: "Git", icon: "git-compare", key: "l", words: "git lazygit stage commit branches log graph rebase stash", fixed: "float", open: () => Boolean(gitOpen()),

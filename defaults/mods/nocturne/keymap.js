@@ -120,6 +120,7 @@ const WORDS = {
   "nocturne.picker": "Find a file",
   "nocturne.grep": "Search in the files",
   "nocturne.scratchpad": "Scratchpad: this repository's note, kept out of it",
+  "nocturne.scratchpad-tab": "Scratchpad in a new tab",
   "nocturne.gridify": "Arrange the tab's panes in an even grid",
   "nocturne.pin": "Pin the focused pane (an agent, a web page, an editor...) to the top, or unpin it",
   "nocturne.pin-up": "Move the pinned agent up in the jar, a pinned pane left on its shelf",
