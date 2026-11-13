@@ -17,7 +17,7 @@ import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkfl
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.ts";
 import { canvas, layout, NW, NH, PAD } from "./graph.ts";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
-import { DispatchForm } from "./dispatchForm.js";
+import { DispatchForm } from "./dispatchForm.ts";
 
 const ROW = 38, STEP = 24, LINE = 18;
 const PANELS = ["runs", "graph", "steps", "log"];
@@ -70,7 +70,7 @@ export default class Actions {
   runWorkflow(cx) {
     if (!this.app.repo) return;
     this.flow?.form.release();
-    this.flow = new DispatchForm(this.app, this, { path: this.run()?.path?.replace(/@.*$/, "") ?? null });
+    this.flow = new DispatchForm(this.app, this, this.app.repo, { path: this.run()?.path?.replace(/@.*$/, "") ?? null });
     this.flow.load(cx);
     this.flow.form.go(0, cx);
   }

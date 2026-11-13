@@ -9,7 +9,7 @@ import { ghJson, ghRun, api, graphql, slimmed } from "./gh.ts";
 import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments } from "./model.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
-import { PrForm } from "./prForm.js";
+import { PrForm } from "./prForm.ts";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize, chip } from "./kit.ts";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
@@ -55,7 +55,7 @@ export default class Prs {
   newPr(cx, { head = null } = {}) {
     if (!this.app.repo) return;
     this.flow?.form.release();
-    this.flow = new PrForm(this.app, this, { head });
+    this.flow = new PrForm(this.app, this, this.app.repo, { head });
     this.flow.load(cx);
     this.flow.form.go(head ? 2 : 0, cx); // from a branch: base and head are set, the title is next
   }

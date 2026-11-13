@@ -258,10 +258,10 @@ test("required fields stop the review; a failed create stays in the review with 
   form.go(form.fields.findIndex((f: any) => f.id === "push")); key(form, "space"); // no push
   key(form, "enter");
   expect(form.stage).toBe("edit");
-  expect(form.errors.title).toBe("A pull request needs a title.");
+  expect(form.errors.get("title")).toBe("A pull request needs a title.");
   expect(at(form)).toBe("title");
   type("T");
-  expect(form.errors.title).toBeUndefined();
+  expect(form.errors.get("title")).toBeUndefined();
   key(form, "enter");
   expect(form.spec.commands().length).toBe(1); // push off: gh only
   world.prCreateFails = true;
@@ -287,7 +287,7 @@ test("a branch from the git window starts on the title; one on GitHub needs no p
   await prs.flow.reread(cx);
   prs.form.go(2); type("x");
   key(prs.form, "enter");
-  expect(prs.form.errors.head).toBe("Head and base are the same branch.");
+  expect(prs.form.errors.get("head")).toBe("Head and base are the same branch.");
 });
 
 test("run workflow: only dispatchable workflows, inputs typed from the file, defaults, required, gh workflow run, then the run is selected", async () => {
@@ -313,7 +313,7 @@ test("run workflow: only dispatchable workflows, inputs typed from the file, def
   // Required: the environment is empty.
   key(form, "enter");
   expect(form.stage).toBe("edit");
-  expect(form.errors["in:1:environment"]).toBe("Required.");
+  expect(form.errors.get("in:1:environment")).toBe("Required.");
   expect(at(form)).toBe("in:1:environment");
   key(form, "space");
   focusedInput!.v = "prod";
@@ -325,7 +325,7 @@ test("run workflow: only dispatchable workflows, inputs typed from the file, def
   key(form, "tab"); key(form, "space"); // dry: off
   key(form, "tab"); type("x");
   key(form, "enter");
-  expect(form.errors["in:1:count"]).toBe("A number.");
+  expect(form.errors.get("in:1:count")).toBe("A number.");
   type("5");
   key(form, "enter");
   expect(form.stage).toBe("confirm");

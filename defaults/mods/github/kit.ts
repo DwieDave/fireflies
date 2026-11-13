@@ -188,3 +188,16 @@ export function sweep(_t: Theme, color: Color, width = 400): Element {
   return div().absolute().top(0).bottom(0).w(48).opacity(0.5).child(dither(color, 1))
     .loop("left", { from: -48, to: width, period: 1800, easing: "linear" });
 }
+
+/** How the window's note reads: working on it, done, or failed. */
+export type NoteTone = "working" | "done" | "failed";
+
+/** The note at the right of the key bar: what happened, how it went, when (it goes after a few seconds). */
+export interface Note {
+  readonly text: string;
+  readonly tone: NoteTone;
+  readonly at: number;
+}
+
+/** A note now. */
+export const noteOf = (text: string, tone: NoteTone): Note => ({ text, tone, at: Date.now() });
