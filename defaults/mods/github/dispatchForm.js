@@ -12,7 +12,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { ghJson, ghRun, api, fileAt, plain } from "./gh.ts";
 import { isEnvironments, isNamedList, isRunList, isWorkflows } from "./model.ts";
 import { slug } from "./remotes.ts";
-import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.js";
+import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.ts";
 import { Form } from "./form.js";
 import { panel, empty, band } from "./kit.ts";
 
@@ -158,8 +158,8 @@ export class DispatchForm {
   }
 
   args() {
-    const w = this.workflow(), values = {};
-    for (const f of this.form.fields) if (f.spec) values[f.name] = f.value;
+    const w = this.workflow(), values = new Map();
+    for (const f of this.form.fields) if (f.spec) values.set(f.name, f.value);
     return dispatchArgs(w, String(this.form.value("ref")).trim(), this.inputs ?? [], values);
   }
 

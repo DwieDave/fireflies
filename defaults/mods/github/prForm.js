@@ -13,8 +13,8 @@ import { exec } from "herdr";
 import { ghRun, api, graphql, plain } from "./gh.ts";
 import { isNamed, isNamedList, isPrChoices } from "./model.ts";
 import { candidates } from "./remotes.ts";
-import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.js";
-import { shellLine } from "./dispatch.js";
+import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.ts";
+import { shellLine } from "./dispatch.ts";
 import { Form } from "./form.js";
 import { panel, empty, dither } from "./kit.ts";
 

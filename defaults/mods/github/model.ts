@@ -35,7 +35,7 @@ export type Check = Guarded<typeof isCheck>;
 /** A workflow run (REST `actions/runs`), the fields the window shows. */
 export const isRun = object({ id: isNumber }, {
   name: text, display_title: text, status: text, conclusion: text, run_number: maybe(isNumber), head_branch: text, head_sha: text,
-  event: text, path: text, run_started_at: text, updated_at: text, html_url: text,
+  event: text, path: text, run_started_at: text, updated_at: text, html_url: text, created_at: text,
 });
 
 export type Run = Guarded<typeof isRun>;
