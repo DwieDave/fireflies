@@ -17,6 +17,46 @@ Under the name it is still Herdr: the same app home (`~/.config/herdr-app`), the
 
 The command is `fireflies`. Herdr's name for it, `herdr-app`, is the same program and keeps working: scripts, agent skills and setups that call it don't change. [FIREFLIES.md](FIREFLIES.md) lists what the fork changes and how it follows Herdr.
 
+## What it looks like
+
+These are screenshots of Fireflies with a made-up project, at zoom 1.7 (the whole window at 1.4).
+
+**The window.** The sky sidebar lists your spaces and turns every agent into a firefly that shows its status: working, needs you, done or idle. Keep agents in the jar and dock any pane to the shelf under them. A toast says when an agent needs you. Here a shell and the editor share a tab.
+
+![The Nocturne window: the sky sidebar with spaces, agents in the jar and in the sky, the editor docked on the shelf, a shell and the editor side by side, and a toast](docs/readme/window.png)
+
+**The editor.** Tabs with file type icons, vim keys, and the language server your project uses, found on your PATH or through its `.envrc`. Here TypeScript explains a type error under the caret.
+
+![The editor with three tabs and a hover card explaining a TypeScript error](docs/readme/editor.png)
+
+**Markdown, rendered.** The editor shows a Markdown file as text, rendered, or both side by side. Code blocks, callouts, task lists, tables and links are drawn; ticking a task writes it into the file.
+
+![A README rendered in the editor, with a code block, a note callout, a task list and a table](docs/readme/markdown.png)
+
+**Files and previews.** The files pane opens a preview beside it: tables for CSV files, pictures, PDFs, fonts, audio, video and patches.
+
+![The files pane with a CSV file shown as a table and a picture below it](docs/readme/files.png)
+
+**Git.** The git window works like lazygit: stage files or single lines, switch branches, read the commit graph and review the changes.
+
+![The git window with changed files, a diff, branches and the commit graph](docs/readme/git.png)
+
+**GitHub pull requests.** The GitHub window reads the repository through `gh`: pull requests with their checks and description.
+
+![The GitHub window listing pull requests of herdrdev/herdr-app, one opened with its checks](docs/readme/github-prs.png)
+
+**GitHub Actions.** Its Actions tab draws a run's jobs as a graph, with the steps of a job and its log.
+
+![The Actions tab: a list of runs, the jobs of one run as a graph, a job's steps and its log](docs/readme/github-actions.png)
+
+**Processes.** The processes deck shows what each terminal runs, with CPU, memory, uptime and the ports it listens on, under graphs of the machine's CPU, memory, network and disk. Sort it by any column; a row's menu acts on its process.
+
+<p align="center"><img src="docs/readme/processes.png" width="450" alt="The processes deck: graphs of CPU, memory, network and disk over every space's terminals with their programs, CPU, memory and ports"></p>
+
+**Notifications.** What your agents need from you, in one place: permission prompts and questions first.
+
+![The notification center with one agent waiting for input](docs/readme/notifications.png)
+
 ## Install
 
 Fireflies has no release downloads yet. Build it from source on a Mac. Herdr's install scripts and its Homebrew cask install Herdr, not Fireflies.
