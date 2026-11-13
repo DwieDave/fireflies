@@ -577,6 +577,41 @@ mod tests {
         });
     }
 
+    /// A form's ctrl-tab (form-keys.ts binds it in "Form > Input" and
+    /// "FormOpen") goes before the app's tab switching (keys.json's global
+    /// ctrl-tab): out of a text area, whose tab is an indent, and from any
+    /// stop of a form a pane says is open. A pane without a form keeps the
+    /// app's.
+    #[gpui::test]
+    fn a_forms_ctrl_tab_goes_before_the_apps(cx: &mut gpui::TestAppContext) {
+        cx.update(|cx| {
+            super::install(super::parse(include_str!("../defaults/keys.macos.json")).unwrap(), cx);
+            for (keystroke, action, context) in [
+                ("ctrl-tab", "form::tab", "Form > Input"),
+                ("ctrl-shift-tab", "form::tab_back", "Form > Input"),
+                ("ctrl-tab", "form::tab", "FormOpen"),
+                ("ctrl-shift-tab", "form::tab_back", "FormOpen"),
+            ] {
+                cx.bind_keys([gpui::KeyBinding::new(keystroke, super::ShellAction::new(action), Some(context))]);
+            }
+            let keymap = cx.key_bindings();
+            let keymap = keymap.borrow();
+            let first = |chord: &str, stack: &[&str]| {
+                let stack: Vec<_> = stack.iter().map(|c| gpui::KeyContext::parse(c).unwrap()).collect();
+                let (bindings, _) = keymap.bindings_for_input(&[gpui::Keystroke::parse(chord).unwrap()], &stack);
+                bindings.first().map(|b| b.action().as_any().downcast_ref::<super::ShellAction>().unwrap().id().to_owned())
+            };
+            let area = ["Herdr", "Mod mod = github", "Form", "Input"];
+            assert_eq!(first("ctrl-tab", &area).as_deref(), Some("form::tab"));
+            assert_eq!(first("ctrl-shift-tab", &area).as_deref(), Some("form::tab_back"));
+            let open = ["Herdr", "Mod mod = github", "Form FormOpen"];
+            assert_eq!(first("ctrl-tab", &open).as_deref(), Some("form::tab"));
+            // A pane that shows no form, and a text field outside any form: the app's tabs.
+            assert_eq!(first("ctrl-tab", &["Herdr", "Mod mod = github", "Form"]).as_deref(), Some("tab.next"));
+            assert_eq!(first("ctrl-shift-tab", &["Herdr", "Input"]).as_deref(), Some("tab.prev"));
+        });
+    }
+
     #[test]
     fn shipped_keys_load() {
         for keys in [include_str!("../defaults/keys.json"), include_str!("../defaults/keys.macos.json")] {

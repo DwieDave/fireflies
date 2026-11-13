@@ -191,24 +191,51 @@ export function parseYaml(text: string | null | undefined): Yaml {
     lines.push({ raw, pad: raw.length - raw.trimStart().length, text: uncomment(raw).trim() });
   }
 
-  let at = 0;
+  const reader = new YamlLines(lines);
 
-  const skip = () => {
-    while (at < lines.length && !lines[at]?.text) at++;
-  };
+  try {
+    reader.skip();
 
-  // A block scalar's lines (| keeps newlines, > folds them), from the next line deeper than `pad`.
-  const block = (style: string, pad: number): string => {
+    const first = lines[reader.at];
+
+    return first ? reader.node(first.pad) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A key line: `key:` (quoted or not), then what follows on the line. */
+const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s"'#][^:]*?)\s*:(?:\s+(.*)|$)/;
+
+/** A flow value (`[…]`, `{…}`) or a scalar, as written on one line. */
+const inline = (text: string): Yaml => (text.startsWith("[") || text.startsWith("{") ? flow(text) : scalar(text));
+
+/** parseYaml's walk over the file's lines, block by block: `at` is the line it reads next. */
+class YamlLines {
+  readonly lines: Line[];
+  at = 0;
+
+  constructor(lines: Line[]) {
+    this.lines = lines;
+  }
+
+  /** Past blank and comment-only lines. */
+  skip(): void {
+    while (this.at < this.lines.length && !this.lines[this.at]?.text) this.at++;
+  }
+
+  /** A block scalar's lines (| keeps newlines, > folds them), from the next line deeper than `pad`. */
+  block(style: string, pad: number): string {
     const out: string[] = [];
     let indent: number | null = null;
 
-    for (let l = lines[at]; l; l = lines[at]) {
+    for (let l = this.lines[this.at]; l; l = this.lines[this.at]) {
       if (l.raw.trim() && l.pad <= pad) break;
 
       if (l.raw.trim()) indent ??= l.pad;
 
       out.push(l.raw.trim() ? l.raw.slice(indent ?? 0) : "");
-      at++;
+      this.at++;
     }
 
     while (out.length && !out[out.length - 1]) out.pop();
@@ -217,105 +244,98 @@ export function parseYaml(text: string | null | undefined): Yaml {
     const body = style.startsWith(">") ? out.join("\n").replace(/([^\n])\n(?=[^\n])/g, "$1 ") : out.join("\n");
 
     return strip ? body : body + (keep ? "\n" : body ? "\n" : "");
-  };
+  }
 
-  // The value after `key:` or `- ` on the same line, or the block under it.
-  const after = (rest: string, pad: number): Yaml => {
+  /** The value after `key:` or `- ` on the same line, or the block under it. */
+  after(rest: string, pad: number): Yaml {
     const r = rest.trim();
 
     if (/^[|>][-+0-9]*$/.test(r)) {
-      at++;
+      this.at++;
 
-      return block(r, pad);
+      return this.block(r, pad);
     }
 
-    at++;
+    this.at++;
 
-    if (r) return r.startsWith("[") || r.startsWith("{") ? flow(r) : scalar(r);
+    if (r) return inline(r);
 
-    skip();
+    this.skip();
 
-    const next = lines[at];
+    const next = this.lines[this.at];
 
-    if (next && (next.pad > pad || (next.pad === pad && next.text.startsWith("- ")))) return node(next.pad);
+    if (next && (next.pad > pad || (next.pad === pad && next.text.startsWith("- ")))) return this.node(next.pad);
 
     return null;
-  };
+  }
 
-  const KEY = /^("(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^\s"'#][^:]*?)\s*:(?:\s+(.*)|$)/;
+  /** The block at `pad`: a list, a map or a lone value. */
+  node(pad: number): Yaml {
+    this.skip();
 
-  const node = (pad: number): Yaml => {
-    skip();
-
-    const first = lines[at];
+    const first = this.lines[this.at];
 
     if (!first) return null;
 
-    if (first.text === "-" || first.text.startsWith("- ")) {
-      const out: Yaml[] = [];
+    if (first.text === "-" || first.text.startsWith("- ")) return this.list(pad);
 
-      while (at < lines.length) {
-        skip();
+    if (KEY.test(first.text)) return this.map(pad);
 
-        const l = lines[at];
+    this.at++;
 
-        if (!l || l.pad !== pad || !(l.text === "-" || l.text.startsWith("- "))) break;
+    return inline(first.text);
+  }
 
-        const rest = l.text.slice(1).trimStart();
+  /** `- ` items at `pad`. */
+  list(pad: number): Yaml[] {
+    const out: Yaml[] = [];
 
-        if (KEY.test(rest) && !rest.startsWith("[") && !rest.startsWith("{")) {
-          // `- key: v` starts a map whose keys sit where `key` does.
-          const inner = pad + (l.text.length - rest.length);
+    while (this.at < this.lines.length) {
+      this.skip();
 
-          lines[at] = { ...l, pad: inner, text: rest };
-          out.push(map(inner));
-        } else {
-          out.push(after(rest, pad));
-        }
+      const l = this.lines[this.at];
+
+      if (!l || l.pad !== pad || !(l.text === "-" || l.text.startsWith("- "))) break;
+
+      const rest = l.text.slice(1).trimStart();
+
+      if (KEY.test(rest) && !rest.startsWith("[") && !rest.startsWith("{")) {
+        // `- key: v` starts a map whose keys sit where `key` does.
+        const inner = pad + (l.text.length - rest.length);
+
+        this.lines[this.at] = { ...l, pad: inner, text: rest };
+        out.push(this.map(inner));
+      } else {
+        out.push(this.after(rest, pad));
       }
-
-      return out;
     }
 
-    if (KEY.test(first.text)) return map(pad);
+    return out;
+  }
 
-    at++;
-
-    return first.text.startsWith("[") || first.text.startsWith("{") ? flow(first.text) : scalar(first.text);
-  };
-
-  const map = (pad: number): YamlMap => {
+  /** `key: value` lines at `pad`. */
+  map(pad: number): YamlMap {
     const out = new Map<string, Yaml>();
 
-    while (at < lines.length) {
-      skip();
+    while (this.at < this.lines.length) {
+      this.skip();
 
-      const l = lines[at];
+      const l = this.lines[this.at];
 
       if (!l || l.pad !== pad) break;
 
       const [, key, rest] = KEY.exec(l.text) ?? [];
 
       if (key === undefined) {
-        at++;
+        this.at++;
 
         continue;
       }
 
-      out.set(String(scalar(key) ?? key), after(rest ?? "", pad));
+      out.set(String(scalar(key) ?? key), this.after(rest ?? "", pad));
     }
 
     return out;
-  };
-
-  try {
-    skip();
-
-    const first = lines[at];
-
-    return first ? node(first.pad) : null;
-  } catch {
-    return null;
   }
 }
 

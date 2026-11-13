@@ -1,0 +1,70 @@
+# What in the mods is still over the size limits (docs/mods-splitting.md):
+# a path alone is a file of 750 lines or more, a path and a name a function of
+# more than 80 code lines ("(anonymous)" without a name; twice is two of them).
+# This list only shrinks: take a line off when its file or function is split,
+# never add one. tests/mods_typescript.rs (mods_stay_under_the_size_limits)
+# checks it against `oxlint -c oxlint.size.json defaults/mods`.
+defaults/mods/agent-graph/claude.ts snapshot
+defaults/mods/agent-graph/main.ts
+defaults/mods/browser/main.ts
+defaults/mods/browser/main.ts init
+defaults/mods/browser/main.ts onEvent
+defaults/mods/editor/diff.ts parse
+defaults/mods/editor/live.ts units
+defaults/mods/editor/logic.ts
+defaults/mods/editor/main.ts
+defaults/mods/editor/main.ts bar
+defaults/mods/editor/main.ts cardView
+defaults/mods/editor/main.ts findLine
+defaults/mods/editor/main.ts init
+defaults/mods/editor/main.ts load
+defaults/mods/editor/main.ts mdMenuView
+defaults/mods/editor/main.ts newDoc
+defaults/mods/editor/main.ts startServer
+defaults/mods/editor/main.ts tabStrip
+defaults/mods/editor/main.ts vimCommand
+defaults/mods/editor/markdown.ts
+defaults/mods/editor/markdown.ts blocks
+defaults/mods/editor/rendered.ts
+defaults/mods/editor/rendered.ts unitView
+defaults/mods/editor/rendered.ts view
+defaults/mods/editor/viewer.ts
+defaults/mods/editor/vim.ts
+defaults/mods/editor/vim.ts feed
+defaults/mods/editor/vim.ts motion
+defaults/mods/editor/vim.ts normalCommand
+defaults/mods/editor/vim.ts runEx
+defaults/mods/editor/vim.ts textObject
+defaults/mods/editor/vim.ts visualCommand
+defaults/mods/file-tree/diff.ts parse
+defaults/mods/file-tree/logic.ts
+defaults/mods/file-tree/main.ts
+defaults/mods/file-tree/main.ts key
+defaults/mods/file-tree/main.ts render
+defaults/mods/file-tree/viewer.ts
+defaults/mods/finder/main.ts render
+defaults/mods/github/board.ts
+defaults/mods/github/form.ts
+defaults/mods/github/markdown.ts
+defaults/mods/github/markdown.ts blocks
+defaults/mods/github/projects.ts
+defaults/mods/github/projects.ts key
+defaults/mods/markdown/markdown.ts
+defaults/mods/markdown/markdown.ts blocks
+defaults/mods/nocturne/newspace.ts
+defaults/mods/nocturne/newspace.ts render
+defaults/mods/nocturne/palette.ts
+defaults/mods/nocturne/palette.ts openEntries
+defaults/mods/nocturne/palette.ts render
+defaults/mods/nocturne/sky.ts
+defaults/mods/nocturne/tabs.ts render
+defaults/mods/notifications/claude.ts
+defaults/mods/notifications/claude.ts questionStep
+defaults/mods/preview/diff.ts parse
+defaults/mods/preview/viewer.ts
+defaults/mods/procs/main.ts
+defaults/mods/procs/main.ts foot
+defaults/mods/procs/main.ts onKey
+defaults/mods/scripts/main.ts
+defaults/mods/scripts/main.ts onKey
+defaults/mods/scripts/main.ts render

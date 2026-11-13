@@ -142,7 +142,7 @@ import {
   isHover, isLocations, isLspDiagnostic, isProgressParams, isPublishedDiagnostics, isServerCaps,
 } from "./logic.ts";
 import type { Doc as VimDoc, FeedResult, Mode, Played } from "./vim.ts";
-import { createVim, feed, play, token, CARET, MODE_NAME, applyEdits } from "./vim.ts";
+import { createVim, feed, play, token, beginInsert, CARET, MODE_NAME, applyEdits } from "./vim.ts";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import type { Stop } from "./form-keys.ts";
@@ -156,6 +156,7 @@ import {
   placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor,
   HANDOVER_KEY, isKeptTabsNote, isMovedNote,
 } from "./tabs.ts";
+import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import Viewer from "./viewer.ts";
 import type { EditorView, OpenRequest } from "./editor-route.ts";
 import { OPEN_KEY, LAST_KEY, PATHS_KEY, filesOf, editorPaths, isEditorView, isScratchpad } from "./editor-route.ts";
@@ -164,7 +165,7 @@ import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import type { Picture, RenderedHost } from "./rendered.ts";
 import { Rendered, editBetween } from "./rendered.ts";
 import { units as liveUnits, unitFor } from "./live.ts";
-import type { Sel } from "./mdedit.ts";
+import type { Sel } from "./md-text.ts";
 import { run as mdCommand, tickLine, commandInfo, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.ts";
 import type { AutosaveState } from "./scratch.ts";
 import { isNote, noteName, Autosave } from "./scratch.ts";
@@ -234,6 +235,9 @@ const CARD_W = 520;
 
 // A tab's name is cut past this (px); its full path is in the bar.
 const MAX_TAB_NAME = 180;
+
+/** A scratchpad's mark (nocturne's art: the "+ new" menu's tile has it too). */
+const SCRATCH_MARK = "mods/nocturne/art/scratchpad.svg";
 
 // A server that reported work within this long (ms) is still loading the
 // workspace: rust-analyzer goes quiet for a moment between its phases, and
@@ -3309,6 +3313,8 @@ export default class EditorPane extends View {
 
     if (k === null) return false;
 
+    if (k === "<cr>" && this.renderedEnter(cx)) return true;
+
     const doc = this.doc(cx);
     const r = feed(this.vim, k, doc);
 
@@ -3320,6 +3326,34 @@ export default class EditorPane extends View {
       const now = this.doc(cx);
 
       this.vimApply(play(this.vim, r.replay.keys, now, r.replay.times), now, cx);
+    }
+
+    cx.notify();
+
+    return true;
+  }
+
+  /** Vim's enter in the rendered view, normal mode with nothing pending: not the `<cr>` motion
+   *  (the caret dropping onto the blank line between blocks looked like nothing) but a new block
+   *  below the lit one, typed into (rendered.ts enterBelow); `.` appends it again (as `A`). */
+  renderedEnter(cx: Context): boolean {
+    const d = this.cur;
+    const v = this.vim;
+    const rendered = d?.view === "rendered" ? d.rendered : null;
+
+    if (!d || !rendered || v.mode !== "normal" || v.keys.length || v.ex !== null || v.pendingLeader || v.replaying) return false;
+
+    const text = d.editor.value();
+    const line = rendered.range.to;
+    const end = { line, col: (text.split("\n")[line] ?? "").replace(/\r$/, "").length };
+
+    beginInsert(v, text, end, ["A"]);
+
+    if (!rendered.enterBelow(cx)) {
+      v.mode = "normal";
+      v.insertStart = null;
+
+      return false;
     }
 
     cx.notify();
@@ -4741,6 +4775,7 @@ export default class EditorPane extends View {
                 .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))),
             ),
           )
+          .child(this.typeMark(t, this.shown(), "bar-icon", true))
           .child(
             div()
               .id("bar-name")
@@ -4918,6 +4953,21 @@ export default class EditorPane extends View {
    *  that don't fit fold into ‹ n / n › at the ends, the shown one always in
    *  view. A press dragged along the strip moves its tab: it lifts where it
    *  is and a stake stands in the gap it drops into; the wheel steps tabs. */
+  /** A file's type mark (file-icons.ts) before its name: tinted by its kind, dimmed on a tab
+   *  not shown; a scratchpad's is the scratchpad's own mark. */
+  typeMark(t: Theme, d: Doc, id: string, on: boolean): Element {
+    const icon = fileIcon(d.path);
+    const src = d.scratch ? SCRATCH_MARK : iconSvg(icon, MOD);
+
+    return div()
+      .id(id)
+      .relative()
+      .flex_none()
+      .size(ICON_SIZE)
+      .opacity(on ? 1 : 0.5)
+      .child(svg(src).size(ICON_SIZE).text_color(d.scratch ? t.accent : iconColor(icon, t)));
+  }
+
   tabStrip(t: Theme): Element {
     const docs = this.allDocs();
 
@@ -5016,6 +5066,7 @@ export default class EditorPane extends View {
               .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
               .when(d.dirty, (el) => el.child(dither(t.ansi3, 1))),
           )
+          .child(this.typeMark(t, d, `editor-tab-icon-${i}`, on || lifted))
           .child(div().relative().flex_none().max_w(MAX_TAB_NAME).truncate().child(l.name))
           .when(Boolean(hint), (el) => (hint ? el.child(div().relative().flex_none().max_w(120).truncate().text_color(t.dim).child(hint)) : el))
           .child(

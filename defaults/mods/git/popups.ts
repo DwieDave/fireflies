@@ -361,123 +361,138 @@ export class Popups {
 
     if (!p) return false;
 
-    if (p.kind === "keys") {
-      if (keysKey(e ?? { key: k }, true) || k === "escape" || k === "q") this.close();
-      else if (k === "j" || k === "down") p.sel = Math.min(p.rows.length - 1, p.sel + 1);
-      else if (k === "k" || k === "up") p.sel = Math.max(0, p.sel - 1);
-      else if (k === "enter" || k === "space") this.runRow(p.rows[p.sel], cx);
-      else {
-        const hit = p.rows.find((r) => r.key && r.key === k);
+    switch (p.kind) {
+      case "keys": return this.keysPopupKey(p, k, e, cx);
+      case "menu": return this.menuKey(p, k, cx);
+      case "confirm": return this.confirmKey(p, k, cx);
+      case "prompt": return this.promptKey(p, k, cx);
+      case "commit": return this.commitKey(p, k, cx);
+    }
+  }
 
-        if (hit) this.runRow(hit, cx);
-      }
+  /** A key on the ? overview. */
+  keysPopupKey(p: Extract<Popup, { kind: "keys" }>, k: string, e: KeyEvent | null, cx: Context) {
+    if (keysKey(e ?? { key: k }, true) || k === "escape" || k === "q") this.close();
+    else if (k === "j" || k === "down") p.sel = Math.min(p.rows.length - 1, p.sel + 1);
+    else if (k === "k" || k === "up") p.sel = Math.max(0, p.sel - 1);
+    else if (k === "enter" || k === "space") this.runRow(p.rows[p.sel], cx);
+    else {
+      const hit = p.rows.find((r) => r.key && r.key === k);
+
+      if (hit) this.runRow(hit, cx);
+    }
+
+    return true;
+  }
+
+  /** A key on a menu: j k, enter, an item's own key. */
+  menuKey(p: Extract<Popup, { kind: "menu" }>, k: string, cx: Context) {
+    const live = p.items.filter((x) => !x.off);
+
+    if (k === "escape" || k === "q") this.close();
+    else if (k === "j" || k === "down") p.sel = Math.min(p.items.length - 1, p.sel + 1);
+    else if (k === "k" || k === "up") p.sel = Math.max(0, p.sel - 1);
+    else if (k === "enter" || k === "space") this.runItem(p.items[p.sel], cx);
+    else {
+      // An item's own key runs it, as in lazygit's menus.
+      const hit = live.find((x) => x.key && x.key === k);
+
+      if (hit) this.runItem(hit, cx);
+    }
+
+    return true;
+  }
+
+  /** A key on a confirm: its checks' keys, y / n, the form's keys. */
+  confirmKey(p: ConfirmPopup, k: string, cx: Context) {
+    const check = p.checks.find((c) => c.key === k);
+
+    if (check) {
+      check.on = !check.on;
 
       return true;
     }
 
-    if (p.kind === "menu") {
-      const live = p.items.filter((x) => !x.off);
-
-      if (k === "escape" || k === "q") this.close();
-      else if (k === "j" || k === "down") p.sel = Math.min(p.items.length - 1, p.sel + 1);
-      else if (k === "k" || k === "up") p.sel = Math.max(0, p.sel - 1);
-      else if (k === "enter" || k === "space") this.runItem(p.items[p.sel], cx);
-      else {
-        // An item's own key runs it, as in lazygit's menus.
-        const hit = live.find((x) => x.key && x.key === k);
-
-        if (hit) this.runItem(hit, cx);
-      }
+    if (k === "y") {
+      this.yes(p, cx);
 
       return true;
     }
 
-    if (p.kind === "confirm") {
-      const check = p.checks.find((c) => c.key === k);
-
-      if (check) {
-        check.on = !check.on;
-
-        return true;
-      }
-
-      if (k === "y") {
-        this.yes(p, cx);
-
-        return true;
-      }
-
-      if (k === "n" || k === "q") {
-        this.close();
-
-        return true;
-      }
-
-      const [key, m] = split(k);
-      const stops = this.stops(p);
-      const a = formKey(stops, p.at, key, m, k.length === 1 ? k : null);
-
-      if (a?.act === "move") p.at = a.to;
-      else if (a?.act === "submit" || (a?.act === "press" && stops[p.at]?.id === "cf-yes")) this.yes(p, cx);
-      else if (a?.act === "cancel" || a?.act === "press") this.close();
-      else if (a?.act === "flip") {
-        const c = p.checks[p.at];
-
-        if (c) c.on = !c.on;
-      }
+    if (k === "n" || k === "q") {
+      this.close();
 
       return true;
-    }
-
-    if (p.kind === "prompt") {
-      if (k === "escape") {
-        this.close();
-
-        return true;
-      }
-
-      if (k === "enter") {
-        this.submit(cx);
-
-        return true;
-      }
-
-      const sug = this.suggestions(p);
-
-      if (sug.length && (k === "up" || k === "down")) {
-        p.pick = k === "down" ? Math.min(sug.length - 1, p.pick + 1) : Math.max(-1, p.pick - 1);
-
-        return true;
-      }
-
-      if (sug.length && k === "tab") {
-        p.input.set_value(sug[Math.max(0, p.pick)]?.value ?? "");
-        p.pick = -1;
-
-        return true;
-      }
-
-      if (p.history?.length && (k === "up" || k === "down")) {
-        p.hi = Math.max(-1, Math.min(p.history.length - 1, p.hi + (k === "up" ? 1 : -1)));
-        p.input.set_value(p.hi < 0 ? "" : p.history[p.hi] ?? "");
-
-        return true;
-      }
-
-      return false; // typing goes to the input
     }
 
     const [key, m] = split(k);
     const stops = this.stops(p);
     const a = formKey(stops, p.at, key, m, k.length === 1 ? k : null);
 
-    if (!a || a.act === "type") return false; // typing goes to the input
+    if (a?.act === "move") p.at = a.to;
+    else if (a?.act === "submit" || (a?.act === "press" && stops[p.at]?.id === "cf-yes")) this.yes(p, cx);
+    else if (a?.act === "cancel" || a?.act === "press") this.close();
+    else if (a?.act === "flip") {
+      const c = p.checks[p.at];
 
-    if (a.act === "move") this.commitGo(p, a.to);
-    else if (a.act === "submit" || (a.act === "press" && stops[p.at]?.id === "cm-ok")) this.submit(cx);
-    else if (a.act === "cancel" || a.act === "press") this.cancelCommit(p);
+      if (c) c.on = !c.on;
+    }
 
     return true;
+  }
+
+  /** A key on a prompt: suggestions and history on up / down, tab takes one. */
+  promptKey(p: PromptPopup, k: string, cx: Context) {
+    if (k === "escape") {
+      this.close();
+
+      return true;
+    }
+
+    if (k === "enter") {
+      this.submit(cx);
+
+      return true;
+    }
+
+    const sug = this.suggestions(p);
+
+    if (sug.length && (k === "up" || k === "down")) {
+      p.pick = k === "down" ? Math.min(sug.length - 1, p.pick + 1) : Math.max(-1, p.pick - 1);
+
+      return true;
+    }
+
+    if (sug.length && k === "tab") {
+      p.input.set_value(sug[Math.max(0, p.pick)]?.value ?? "");
+      p.pick = -1;
+
+      return true;
+    }
+
+    if (p.history?.length && (k === "up" || k === "down")) {
+      p.hi = Math.max(-1, Math.min(p.history.length - 1, p.hi + (k === "up" ? 1 : -1)));
+      p.input.set_value(p.hi < 0 ? "" : p.history[p.hi] ?? "");
+
+      return true;
+    }
+
+    return false; // typing goes to the input
+  }
+
+  /** A key on the commit message: the form's keys; typing goes to the input. */
+  commitKey(p: CommitPopup, k: string, cx: Context) {
+  const [key, m] = split(k);
+  const stops = this.stops(p);
+  const a = formKey(stops, p.at, key, m, k.length === 1 ? k : null);
+
+  if (!a || a.act === "type") return false; // typing goes to the input
+
+  if (a.act === "move") this.commitGo(p, a.to);
+  else if (a.act === "submit" || (a.act === "press" && stops[p.at]?.id === "cm-ok")) this.submit(cx);
+  else if (a.act === "cancel" || a.act === "press") this.cancelCommit(p);
+
+  return true;
   }
 
   /** A confirm's yes (an error's only button closes it). */

@@ -9,29 +9,27 @@
 // only as far as it takes to show the row); j / k in the log scroll it by
 // lines from where the wheel left it.
 
-import { div } from "gpui-kit";
-import type { Color, Context, Element, KeyEvent, Size } from "gpui-kit";
-import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
-import { settings } from "herdr";
+import type { Context, Element, KeyEvent, Size } from "gpui-kit";
+import { h_flex, v_flex, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guard, Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, nullable, object } from "./guard.ts";
 import { isList, maybe } from "./guards.ts";
 import { api, ghRun, fileAt, slimmed } from "./gh.ts";
 import type { Job, LogLine, Needs, NeedsOf, Run, Step } from "./model.ts";
-import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
+import { pollEvery, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine, isRunList, isRuns, isRun, isJobList, isJobs, isJob } from "./model.ts";
 import type { Hint } from "./kit.ts";
-import { dither, pip, panel, empty, band, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.ts";
+import { splitter, unzoom } from "./kit.ts";
 import type { Parents } from "./graph.ts";
-import { canvas, layout, NW, NH } from "./graph.ts";
 import type { Pieces } from "./cache.ts";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
 import type { Waiting } from "./dispatchForm.ts";
 import { DispatchForm } from "./dispatchForm.ts";
-import type { Host, PickRow, ReadOptions, RunFilter } from "./host.ts";
+import type { Host, ReadOptions, RunFilter } from "./host.ts";
 import type { KeyRow } from "./keyhelp.ts";
+import { runsPanel, graphPanel, stepsPanel, logPanel } from "./actions-panels.ts";
 
-const ROW = 38, STEP = 24, LINE = 18;
+export const ROW = 38, STEP = 24, LINE = 18;
 
 /** The tab's panels, in tab order. */
 type Panel = "runs" | "graph" | "steps" | "log";
@@ -686,264 +684,11 @@ export default class Actions {
     ];
   }
 
-  // ---- drawing
+  // ---- drawing (actions-panels.ts)
 
-  runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element {
-    const k = tone(r.status, r.conclusion);
-    const live = k === "working" || k === "queued";
-
-    return v_flex().id(`run-${r.id}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none().overflow_hidden()
-      .hover((s) => s.bg(`${t.ansi0}55`))
-      .when(sel, (el) => el.children(band(t, active)))
-      .when(k === "working", (el) => el.child(sweep(t, t.working, 420)))
-      .child(h_flex().relative().gap(7).items_center().text_size(12)
-        .child(pip(t, k, 7))
-        .child(div().flex_none().text_color(sel ? t.foreground : t.muted).child(r.name ?? ""))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(r.display_title ?? "")))
-      .child(h_flex().relative().gap(6).pl(14).items_center().text_size(10).text_color(t.dim)
-        .child(div().flex_none().text_color(sel ? t.accent : t.ansi8).child(`#${r.run_number ?? ""}`))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.ansi5).child(r.head_branch ?? ""))
-        .child(div().flex_none().child(r.event ?? ""))
-        .child(div().flex_none().text_color(live ? t.working : t.dim).child(live ? duration(r.run_started_at, null) : TONE_WORD[k] === "passed" ? ago(r.updated_at) : TONE_WORD[k])));
-  }
-
-  runsPanel(t: Theme): Element {
-    const list = this.list(), cur = this.run(), active = this.focus === "runs";
-
-    const body = !this.runs ? empty(t, "Reading runs…", null, { small: true })
-      : !list.length ? empty(t, "No runs", this.filter ? `Nothing ran on ${this.filter.label}. b shows every run.` : "This repo hasn't run a workflow yet.", { moon: 1 })
-      : div().size_full().pt(2)
-        .on_mouse_down("left", (_e, cx) => {
-          this.focus = "runs";
-          this.app.focusSelf();
-          cx.stop_propagation();
-        })
-        .child(v_virtual_list("runs", list.length, ROW, (i) => String(list[i]?.id ?? i),
-          (range) => list.slice(range.start, range.end).map((r) => this.runRow(t, r, r === cur, active)))
-          .on_item_click((key, cx) => {
-            this.focus = "runs";
-            this.selectRun(list.findIndex((r) => String(r.id) === key), cx);
-            cx.notify();
-          })
-          .size_full().track_scroll(this.runsScroll));
-
-    const running = list.filter((r) => r.status === "in_progress").length;
-
-    const right = h_flex().gap(6).items_center()
-      .child(div().text_color(this.waiting ? t.working : t.dim).child(this.waiting ? "waiting for the run…" : running ? `${running} running` : this.runs ? `${list.length}` : ""))
-      .child(chip(t, "run-workflow", "▶ run workflow", false, (cx) => this.runWorkflow(cx), t.accent));
-
-    return panel(t, "runs", this.filter ? `Runs · ${this.filter.label}` : "Runs", active, body, { right })
-      .on_mouse_down("right", (_e, cx) => {
-        cx.stop_propagation();
-        this.menu();
-        cx.notify();
-      });
-  }
-
-  /** Right-click on the runs: what can be done from here. */
-  menu(): void {
-    const r = this.run();
-    const rows: PickRow[] = [{ label: "Run a workflow…", sub: "n", go: (cx) => this.runWorkflow(cx) }];
-
-    if (r) {
-      const n = r.run_number ?? "";
-
-      rows.push({ label: `Re-run the failed jobs of #${n}`, sub: "R", go: (cx) => this.act("failed", cx) },
-        { label: `Re-run #${n}`, sub: "A", go: (cx) => this.act("all", cx) },
-        { label: `Cancel #${n}`, sub: "X", go: (cx) => this.act("cancel", cx) },
-        {
-          label: `#${n} in the browser`, sub: "o", go: (cx) => {
-            if (r.html_url) this.app.openUrl(r.html_url, cx);
-          },
-        });
-    }
-
-    this.app.picker = { title: "ACTIONS", at: 0, rows };
-  }
-
-  graphPanel(t: Theme): Element {
-    const r = this.run(), cols = this.columns(), active = this.focus === "graph";
-    const title = r ? `${r.name ?? ""} #${r.run_number ?? ""}` : "Run";
-
-    if (!r) return panel(t, "graph", title, active, empty(t, "No run selected", null, { small: true }));
-
-    if (!this.jobsOf(r)) return panel(t, "graph", title, active, empty(t, "Reading jobs…", null, { small: true }));
-
-    if (!cols.length) return panel(t, "graph", title, active, empty(t, "No jobs yet", "The run hasn't started its jobs.", { small: true }));
-
-    // Keep the selected job in view: pan only as far as needed.
-    const g = layout(cols, this.parents(), r);
-    const n = g.nodes.find((x) => x.job.id === this.jobSel);
-    const { width: W, height: H } = this.graphSize;
-    let px = g.width <= W ? Math.round((W - g.width) / 2) : 0, py = g.height <= H ? Math.round((H - g.height) / 2) : 0;
-
-    if (n && g.width > W) px = Math.min(0, Math.max(W - g.width, Math.round(W / 2 - (n.x + NW / 2))));
-
-    if (n && g.height > H) py = Math.min(0, Math.max(H - g.height, Math.round(H / 2 - (n.y + NH / 2))));
-
-    if (this.pan) {
-      px = this.pan.x;
-      py = this.pan.y;
-    }
-
-    const c = canvas(t, r, cols, this.parents(), this.jobSel, active, (node, cx) => {
-      this.focus = "graph";
-      this.jobSel = node.job.id;
-      this.stepSel = null;
-      this.loadLog(cx);
-      this.app.focusSelf();
-      cx.notify();
-    }, px, py);
-
-    const k = tone(r.status, r.conclusion);
-
-    // Drag the sky (or scroll) to move the graph; double-click it to bring the selected job back.
-    const end = (cx: Context) => {
-      if (this.drag) {
-        this.drag = null;
-        cx.notify();
-      }
-    };
-
-    const body = div().id("graph-view").relative().size_full().overflow_hidden()
-      .when(Boolean(this.drag), (el) => el.cursor_grabbing()).when(!this.drag, (el) => el.cursor_grab())
-      .on_size_change((drawn, cx) => {
-        const size = unzoomSize(drawn);
-
-        if (Math.abs(size.width - W) > 1 || Math.abs(size.height - H) > 1) {
-          this.graphSize = size;
-          cx.notify();
-        }
-      })
-      .on_scroll_wheel((e, cx) => {
-        this.pan = { x: Math.round(px + unzoom(e.delta.x)), y: Math.round(py + unzoom(e.delta.y)) };
-        cx.notify();
-      })
-      .on_mouse_down("left", (e, cx) => {
-        this.focus = "graph";
-        this.app.focusSelf();
-        cx.stop_propagation();
-
-        if (e.click_count === 2) {
-          this.pan = null;
-          this.drag = null;
-          cx.notify();
-
-          return;
-        }
-
-        this.drag = { x: e.position.x, y: e.position.y, from: { x: px, y: py } };
-        cx.notify();
-      })
-      .on_mouse_move((e, cx) => {
-        const d = this.drag;
-
-        if (!d) return;
-
-        this.pan = { x: Math.round(d.from.x + unzoom(e.position.x - d.x)), y: Math.round(d.from.y + unzoom(e.position.y - d.y)) };
-        cx.notify();
-      })
-      .on_mouse_up("left", (_e, cx) => end(cx))
-      .on_hover((h, cx) => {
-        if (!h) end(cx);
-      })
-      .child(c.el);
-
-    const right = `${TONE_WORD[k]} · ${duration(r.run_started_at, k === "working" || k === "queued" ? null : r.updated_at)}`;
-
-    return panel(t, "graph", title, active, body, { right });
-  }
-
+  /** The steps panel (tests draw it alone). */
   stepsPanel(t: Theme): Element {
-    const j = this.job(), steps = this.steps(), cur = this.step(), active = this.focus === "steps";
-
-    if (!j) return panel(t, "steps", "Steps", active, empty(t, "No job selected", null, { small: true }));
-
-    const rows = steps.map((s) => {
-      const k = tone(s.status, s.conclusion), sel = s === cur;
-
-      return h_flex().id(`step-${s.number}`).relative().h(STEP).px(10).gap(8).items_center().flex_none().text_size(11).overflow_hidden()
-        .hover((st) => st.bg(`${t.ansi0}55`))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => {
-          this.focus = "steps";
-          this.stepSel = s.number;
-          this.logAt = 0;
-          this.app.focusSelf();
-          cx.notify();
-        })
-        .when(sel, (el) => el.children(band(t, active)))
-        .when(k === "working", (el) => el.child(sweep(t, t.working, 360)))
-        // The timeline's thread: a dithered line through every pip.
-        .child(div().absolute().left(13).top(0).bottom(0).w(1).child(dither(t.ansi0, 1)))
-        .child(div().relative().w(8).flex_none().flex().justify_center().child(pip(t, k, 7)))
-        .child(div().relative().flex_1().min_w(0).truncate().text_color(k === "skipped" ? t.dim : sel ? t.foreground : t.muted).child(s.name))
-        .child(div().relative().flex_none().text_color(k === "working" ? t.working : k === "failed" ? t.blocked : t.dim).child(k === "skipped" ? "skipped" : duration(s.started_at, s.completed_at)));
-    });
-
-    const k = tone(j.status, j.conclusion);
-
-    // The chosen step stays in view: j / k past the edge, a new job whose
-    // running or failed step is further down.
-    const at = cur ? steps.indexOf(cur) : -1, key = `${j.id}:${at}`;
-
-    if (at >= 0 && key !== this.stepsAt) {
-      this.stepsAt = key;
-      this.stepsScroll.scroll_to_item(at);
-    }
-
-    const body = !steps.length ? empty(t, k === "queued" ? "Waiting for a runner…" : "No steps", null, { small: true })
-      : div().id("steps-body").size_full().overflow_y_scroll().track_scroll(this.stepsScroll).py(2).children(rows);
-
-    return panel(t, "steps", j.name ?? "", active, body, { right: `${steps.filter((s) => s.status === "completed").length}/${steps.length}` });
-  }
-
-  logPanel(t: Theme): Element {
-    const j = this.job(), s = this.step(), active = this.focus === "log";
-    const title = s ? `Log · ${s.name}` : "Log";
-
-    if (!j || !s) return panel(t, "log", title, active, empty(t, "Pick a step", null, { small: true }));
-
-    const k = tone(j.status, j.conclusion), sk = tone(s.status, s.conclusion);
-    const got = this.logs.get(j.id);
-    let body: Element;
-
-    if (j.status !== "completed") {
-      body = empty(t, sk === "working" ? `${s.name} is running · ${duration(s.started_at, null)}` : sk === "queued" ? "Not started yet" : `${s.name}: ${TONE_WORD[sk]}`,
-        "GitHub hands out a job's log once the job finishes; the steps move live meanwhile, and the log lands here when it's done.", { moon: k === "working" ? 4 : 0 });
-    } else if (!got) body = empty(t, "Reading the log…", null, { small: true });
-    else if ("error" in got) body = empty(t, "The log didn't come", got.error, { small: true });
-    else {
-      const lines = this.logLines();
-      const code = settings().font_family || "JetBrains Mono";
-
-      const color = { group: t.accent, error: t.blocked, warning: t.ansi3, notice: t.ansi4, debug: t.dim, plain: t.muted } satisfies { readonly [K in LogLine["kind"]]: Color };
-
-      body = !lines.length ? empty(t, sk === "skipped" ? "Skipped" : "Nothing logged for this step", null, { small: true })
-        : div().size_full().px(8).py(2)
-          .on_size_change((size, cx) => {
-            const v = Math.max(1, Math.floor((unzoom(size.height) - 4) / LINE));
-
-            if (v !== this.logVis) {
-              this.logVis = v;
-              cx.notify();
-            }
-          })
-          .on_mouse_down("left", (_e, cx) => {
-            this.focus = "log";
-            this.app.focusSelf();
-            cx.stop_propagation();
-          })
-          .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(i),
-            (range) => lines.slice(range.start, range.end).map((l, n) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)
-              .when(l.kind === "error", (el) => el.bg(`${t.blocked}1c`))
-              .child(div().w(38).flex_none().text_right().text_color(t.ansi0).child(String(range.start + n + 1)))
-              .child(div().flex_1().min_w(0).truncate().text_color(color[l.kind]).child(l.kind === "group" ? `▸ ${l.text}` : l.text || " "))))
-            .size_full().track_scroll(this.logScroll));
-    }
-
-    return panel(t, "log", title, active, body, { right: got && !("error" in got) ? `${this.logLines().length} lines` : "" });
+    return stepsPanel(this, t);
   }
 
   render(t: Theme, size: Size): Element {
@@ -957,19 +702,19 @@ export default class Actions {
     const rightH = wide ? size.height : size.height - rh - 6;
     const gh = graphHeight(this.sizes.graph, rightH);
     const sw = clamp(this.sizes.steps ?? Math.max(240, Math.min(360, size.width * 0.3)), 160, rightW - 200);
-    const runs = this.runsPanel(t);
+    const runs = runsPanel(this, t);
 
     const right = v_flex().flex_1().min_w(0).min_h(0).h_full()
-      .child(this.graphPanel(t).h(gh).flex_none())
+      .child(graphPanel(this, t).h(gh).flex_none())
       .child(splitter(t, "act-split-graph", "y", app.dragged("graph"), (e) => app.resize(e, "graph", "y", gh, (v) => {
         this.sizes.graph = v;
       }, { min: 100, max: rightH - 120 })))
       .child(h_flex().flex_1().min_h(0)
-        .child(this.stepsPanel(t).w(sw).flex_none().h_full())
+        .child(stepsPanel(this, t).w(sw).flex_none().h_full())
         .child(splitter(t, "act-split-steps", "x", app.dragged("steps"), (e) => app.resize(e, "steps", "x", sw, (v) => {
           this.sizes.steps = v;
         }, { min: 160, max: rightW - 200 })))
-        .child(this.logPanel(t).flex_1().h_full()));
+        .child(logPanel(this, t).flex_1().h_full()));
 
     if (!wide) {
       return v_flex().size_full()

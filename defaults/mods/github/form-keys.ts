@@ -9,6 +9,8 @@
 //
 // The keys, the same in every form:
 //   tab / shift-tab   the next / previous stop, wrapping at both ends
+//   ctrl-tab / ctrl-shift-tab  the same, also out of a multi-line field
+//                     (whose tab is an indent)
 //   ↑ ↓               the same, outside a multi-line field
 //   ← →               a choice steps through its values, a toggle flips,
 //                     a button goes to the button beside it
@@ -30,6 +32,13 @@
 // (tabActions(el, key)) that hand its key handler the tab it never heard. A
 // multi-line field eats cmd-enter as a new line and says so through its
 // "submit" event with `secondary`: a form listens for that too.
+//
+// ctrl-tab / ctrl-shift-tab are the app's tab switching (keys.json, the
+// window's "Herdr" context), and a text area takes tab for itself. So a form
+// binds them too, deeper than the app's: inside a text field of a form root
+// ("Form > Input": every form's fields and text areas), and anywhere under a
+// root that says a form has the keyboard (tabActions' `open`: the "FormOpen"
+// context). Elsewhere (a pane that shows no form) they switch the app's tabs.
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
@@ -81,9 +90,12 @@ export const FORM_CONTEXT = "Form";
 export const TAB = "form::tab";
 export const TAB_BACK = "form::tab_back";
 
+/** The context a root adds while a form has its keyboard (tabActions' `open`). */
+export const FORM_OPEN = "FormOpen";
+
 let bound = false;
 
-/** Binds tab / shift-tab inside forms (the keymap is the app's: once is enough). Not from render. */
+/** Binds tab / shift-tab inside forms, ctrl-tab / ctrl-shift-tab in their fields and open forms (the keymap is the app's: once is enough). Not from render. */
 export function bindTab(cx: Context): void {
   if (bound) return;
 
@@ -91,6 +103,10 @@ export function bindTab(cx: Context): void {
     cx.bind_keys([
       { keystroke: "tab", action: TAB, context: FORM_CONTEXT },
       { keystroke: "shift-tab", action: TAB_BACK, context: FORM_CONTEXT },
+      ...[`${FORM_CONTEXT} > Input`, FORM_OPEN].flatMap((context) => [
+        { keystroke: "ctrl-tab", action: TAB, context },
+        { keystroke: "ctrl-shift-tab", action: TAB_BACK, context },
+      ]),
     ]);
     bound = true;
   } catch {
@@ -105,9 +121,13 @@ export const tabEvent = (shift: boolean): KeyEvent => ({
   modifiers: { shift, control: false, alt: false, platform: false, function: false },
 });
 
-/** A form's root: the context tab is bound in, its actions handed to `key(event, cx)` as the tab key. */
-export function tabActions(el: Element, key: (event: KeyEvent, cx: Context) => void): Element {
-  return el.key_context(FORM_CONTEXT)
+/**
+ * A form's root: the context tab is bound in, its actions handed to `key(event, cx)` as the tab key.
+ * `open`: a form has the keyboard here, so ctrl-tab moves from any stop (a pane that shows a form
+ * only at times says when; without it ctrl-tab moves from a text field only).
+ */
+export function tabActions(el: Element, key: (event: KeyEvent, cx: Context) => void, open = false): Element {
+  return el.key_context(open ? `${FORM_CONTEXT} ${FORM_OPEN}` : FORM_CONTEXT)
     .on_action(TAB, (_e, cx) => key(tabEvent(false), cx))
     .on_action(TAB_BACK, (_e, cx) => key(tabEvent(true), cx));
 }
@@ -221,7 +241,10 @@ function ownHints(s: Stop | undefined): readonly FormHint[] {
 export function formHints(stops: readonly Stop[], at: number, options: FormHintOptions = {}): FormHint[] {
   const { mac = false, submit = "submit", cancel = "cancel" } = options;
 
-  return [["tab ⇧tab", "move"], ...ownHints(stops[at]), [submitKey(stops, at, mac), submit], ["esc", cancel]];
+  // A text area's tab is an indent: it says the chord that leaves it.
+  const move: FormHint = stops[at]?.kind === "area" ? [mac ? "⌃tab ⌃⇧tab" : "ctrl-tab ctrl-shift-tab", "move"] : ["tab ⇧tab", "move"];
+
+  return [move, ...ownHints(stops[at]), [submitKey(stops, at, mac), submit], ["esc", cancel]];
 }
 
 /** The focus ring: a 1 px accent edge over the stop (rounded by `radius`). */

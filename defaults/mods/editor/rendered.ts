@@ -21,8 +21,11 @@
 // Keys in the block (key): up / down past its first or last row step into the
 // unit before or after (blank lines between are passed over); enter on a list
 // item, task or quote starts the next one (mdedit.ts enter); enter on the
-// last line of any other block starts a new paragraph below it (the text
-// after the caret goes with it; shift-enter: a line break inside the block);
+// last line of any other block (on any line of a paragraph) starts a new
+// paragraph below it (the text after the caret goes with it; shift-enter: a
+// line break inside the block; on an empty new block it stays as it is);
+// with vim in normal mode, enter makes the new block below the lit one and
+// types into it (main.ts vimKey);
 // undo and redo are the file's. With vim, the keys go to vim over the whole
 // text first (its caret mapped there), and the lit lines follow vim: the
 // unit at its caret, or every unit its visual selection touches (the
@@ -50,7 +53,7 @@ import type { Theme } from "herdr";
 import type { Range, Unit } from "./live.ts";
 import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.ts";
 import type { SyntaxColors } from "./logic.ts";
-import type { Sel } from "./mdedit.ts";
+import type { Sel } from "./md-text.ts";
 import { enter } from "./mdedit.ts";
 import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 
@@ -653,6 +656,16 @@ export class Rendered {
     const lastText = ls[last] ?? "";
     const c = sel.start;
 
+    // An empty block made here is the new block already: enter keeps it (no blank lines piling up).
+    if (this.offersKinds()) return true;
+
+    // A paragraph splits at the caret on any of its lines (the lines after go with the rest).
+    if (this.unit.kind === "para" && c.line < last) {
+      this.splitAt(this.range.from + c.line, c.col, cx, false);
+
+      return true;
+    }
+
     if (c.line !== last || this.unit.kind === "blank" || this.unit.kind === "front") return false;
 
     // Inside a code block, enter is a new line (its closing line's end makes a block).
@@ -665,17 +678,35 @@ export class Rendered {
     return true;
   }
 
-  /** A new paragraph after file line `line`, from column `col` (the rest of the line goes into it). */
-  splitAt(line: number, col: number, cx: Context): void {
+  /** Vim's enter in normal mode (nothing pending): a new block below the lit one, as enter at
+   *  its end does, vim in insert mode in it (an empty block made here: insert mode in it). The
+   *  caller has put vim in insert mode; -> false when it's no block enter makes one after. */
+  enterBelow(cx: Context): boolean {
+    const ls = this.piece.split("\n");
+    const last = ls.length - 1;
+
+    this.block.set_cursor(last, (ls[last] ?? "").length);
+    this.syncCaret(true);
+
+    return this.enterKey(cx) || this.offersKinds();
+  }
+
+  /** A new paragraph after file line `line`, from column `col` (the rest of the line goes into
+   *  it). `glue`: a blank line after it too when a block follows straight on (false: the caret's
+   *  inside a paragraph, its lines after go with the rest). */
+  splitAt(line: number, col: number, cx: Context, glue = true): void {
     const ls = this.lines();
     const crlf = /\r\n/.test(this.text ?? "");
     const nl = crlf ? "\r\n" : "\n";
     const rest = (ls[line] ?? "").slice(col);
     const next = ls[line + 1];
     // A blank line between, and one after it when something follows straight on.
-    const tail = next?.trim() ? nl : "";
+    const tail = glue && next?.trim() ? nl : "";
 
-    this.doc.editor.edit([{ start: { line, col }, end: { line, col: (ls[line] ?? "").length }, text: nl + nl + rest + tail }]);
+    // At a paragraph line's end: its next line starts the new paragraph (no empty first line).
+    const end = !glue && !rest ? { line: line + 1, col: 0 } : { line, col: (ls[line] ?? "").length };
+
+    this.doc.editor.edit([{ start: { line, col }, end, text: nl + nl + rest + tail }]);
     this.doc.editor.set_cursor(line + 2, 0);
     this.made = line + 2;
     this.pull(cx);

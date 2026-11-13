@@ -377,6 +377,92 @@ test("enter after a heading, after a code block's closing line, at a list's end;
   expect(main(q).value()).toContain("```\ncode\n\n```\n\n\n\nLast words.");
 });
 
+test("enter at a block's end makes a new block below, the caret in it: vim off, vim insert, vim normal; the last block too", async () => {
+  const want = DOC.replace("runs on.\n", "runs on.\n\nNew one\n");
+  // vim off
+  const p = await pane();
+  clickLine(p, 2);
+  block(p).press("enter");
+  type(p, "New one");
+  expect(main(p).value()).toBe(want);
+  // vim, insert mode at the paragraph's end
+  const q = await vimPane();
+  keys(q, "jjA");
+  block(q).press("enter");
+  expect(R(q).range).toEqual({ from: 4, to: 4 });
+  type(q, "New one");
+  expect(main(q).value()).toBe(want);
+  // vim, normal mode: enter is no motion onto the blank line but the new block, typed into
+  const r = await vimPane();
+  keys(r, "jj");
+  block(r).press("enter");
+  expect(r.vim.mode).toBe("insert");
+  expect(R(r).unit.kind).toBe("blank");
+  expect(R(r).range).toEqual({ from: 4, to: 4 });
+  expect(R(r).offersKinds()).toBe(true);
+  type(r, "New one");
+  expect(main(r).value()).toBe(want);
+  block(r).press("escape");
+  expect(r.vim.mode).toBe("normal");
+  // normal mode anywhere in the block (its first column): after the block, nothing of it moved
+  const r2 = await vimPane();
+  keys(r2, "jj0");
+  block(r2).press("enter");
+  type(r2, "New one");
+  expect(main(r2).value()).toBe(want);
+  // a count or an operator pending: vim's own <cr> (a motion)
+  const r3 = await vimPane();
+  keys(r3, "2");
+  block(r3).press("enter");
+  expect(r3.vim.mode).toBe("normal");
+  expect(main(r3).value()).toBe(DOC);
+  expect(main(r3).cursor().line).toBe(2);
+  // the last block of the note, vim off and vim normal
+  for (const vim of [false, true]) {
+    const s = await pane("/p/notes.md", DOC, vim);
+    if (vim) keys(s, "G"); else clickLine(s, 11);
+    block(s).press("enter");
+    expect(R(s).range).toEqual({ from: 13, to: 13 });
+    type(s, "After");
+    expect(main(s).value()).toBe(DOC + "\n\nAfter");
+  }
+});
+
+test("enter in a paragraph's middle splits it there; on an empty new block it stays one block", async () => {
+  const two = DOC.replace("A paragraph that runs on.", "A paragraph\nthat runs on.");
+  // On its first line: the rest of the line and the lines after go into the new paragraph.
+  const p = await pane("/p/notes.md", two);
+  clickLine(p, 2);
+  block(p).set_cursor(0, 2);
+  block(p).press("enter");
+  expect(main(p).value()).toBe(DOC.replace("A paragraph that runs on.", "A \n\nparagraph\nthat runs on."));
+  expect(block(p).value()).toBe("paragraph\nthat runs on.");
+  expect(block(p).cursor()).toEqual({ line: 0, col: 0 });
+  // At a first line's end: the next line starts the new paragraph.
+  const q = await pane("/p/notes.md", two);
+  clickLine(q, 2);
+  block(q).set_cursor(0, 11);
+  block(q).press("enter");
+  expect(main(q).value()).toBe(DOC.replace("A paragraph that runs on.", "A paragraph\n\nthat runs on."));
+  expect(block(q).value()).toBe("that runs on.");
+  // An empty block made by enter: enter again keeps it (no blank lines piling up), the kinds still offered.
+  const r = await pane();
+  clickLine(r, 2);
+  block(r).press("enter");
+  expect(block(r).press("enter")).toBe(true);
+  expect(main(r).value()).toBe(DOC.replace("runs on.\n", "runs on.\n\n\n"));
+  expect(R(r).offersKinds()).toBe(true);
+  // vim normal on it: insert mode there, nothing added
+  const v = await vimPane();
+  keys(v, "jj");
+  block(v).press("escape");
+  block(v).press("enter");
+  block(v).press("escape");
+  block(v).press("enter");
+  expect(v.vim.mode).toBe("insert");
+  expect(main(v).value()).toBe(DOC.replace("runs on.\n", "runs on.\n\n\n"));
+});
+
 test("an empty block offers the kinds; each makes that block (a click, or cmd-. and its letter)", async () => {
   const want: Record<string, string> = { "heading-1": "# ", bullets: "- ", task: "- [ ] ", quote: "> ", fence: "```\n\n```", rule: "---\n" };
   // (image asks for a file: its own test, scripts/editor-images.test.ts)

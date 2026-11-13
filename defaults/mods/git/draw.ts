@@ -389,3 +389,29 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
       .child(div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.ansi8}aa`))
     : numbered;
 }
+
+/** The rows a windowed list draws: `vis` whole rows fit `px` (its height in
+ *  layout units: the measured window px over the zoom, draw.ts unzoom), and
+ *  `top` is clamped so the last row ends inside the list, never under its
+ *  edge. Shared by the side lists and the main view. */
+export function rowWindow(n: number, top: number, px: number, rowH: number) {
+  const vis = Math.max(1, Math.floor(px / rowH));
+
+  return { vis, top: Math.max(0, Math.min(top, Math.max(0, n - vis))) };
+}
+
+/** A busy row's mark, over the row (it keeps its width): a dithered sweep
+ *  running through it and the command log's spinner at its right end. */
+export function busyMark(t: Theme, id: string) {
+  return [
+    div().absolute().top(0).bottom(0).w(40).opacity(0.45).child(dither(t.working, 1)).loop("left", { from: -40, to: 360, period: 1600, easing: "linear" }),
+    h_flex().id(id).absolute().top(0).bottom(0).right(0).w(22).items_center().justify_center().bg(t.background).text_size(11)
+      .child(div().text_color(t.working).frames(["░", "▒", "▓", "█", "▓", "▒"], 120)),
+  ];
+}
+
+/** A commit hash as shown: its first seven. */
+export const short = (r: string) => (/^[0-9a-f]{40}$/.test(r) ? r.slice(0, 7) : r);
+
+/** A main-view row of one text in one ink. */
+export const text = (s: string, color: Ink = "foreground"): MainRow => ({ kind: "text", parts: [[s, color]] });
