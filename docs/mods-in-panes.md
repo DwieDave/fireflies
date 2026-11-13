@@ -92,4 +92,4 @@ Drawn as a pane (no frame, no ✕, the ⧉), esc at the top level leaves the
 pane (q closes its own), narrow widths draw, moved window → pane → window
 with its state, two copies (commands go to the focused one), a restart's
 props restoring its state. `scripts/git-pane.test.ts`,
-`github-pane.test.ts`, `scripts-pane.test.ts`, `nocturne-inpane.test.ts`.
+`github-pane.test.ts`, `scripts-pane.test.ts`, `databases-view.test.ts`, `nocturne-inpane.test.ts`.

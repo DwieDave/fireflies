@@ -7,7 +7,7 @@ Nothing is compiled and nothing is checked at run time: the checking is
 TypeScript meets, the steps to convert a JavaScript mod, and the patterns
 the conversion settled on.
 
-`nocturne` and all sixteen of its mods (listed in `scripts/nocturne-mods.ts`,
+`nocturne` and all seventeen of its mods (listed in `scripts/nocturne-mods.ts`,
 once `nocturne-<name>`) are TypeScript, with the files they share (below). The stock mods (agents, files, picker, pane, tabs,
 spaces, win98, …) and the frame's older pages are JavaScript and stay as
 they are. Read `pip` and `usage` as small patterns, preview's `viewer.ts`
@@ -319,11 +319,12 @@ the mods build on (read the file's top and its `export type`s):
 
 | file | copies | test | what it types |
 |---|---|---|---|
-| `guard.ts` | nocturne and all 16 mods | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
-| `keyhelp.ts` | 14 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
-| `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
+| `guard.ts` | nocturne and all 17 mods | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
+| `keyhelp.ts` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
+| `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
 | `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
-| `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
+| `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts; `table.ts` also databases) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`; databases' `table.ts`: `databases-data.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
+| `envrc.ts` | editor, databases (its `guards.ts` gives `isList`) | `databases-data.test.ts` | `Exec`, `EnvVars`, `Probe`, `ProjectEnv`, `EnvCache`, `KeptEnv` |
 | `file-icons.ts` (and `icons/*.svg`) | editor, file-tree, preview (viewer.ts imports it), nocturne (the jar shelf's tiles) | `editor-tabs.test.ts`, `preview-shared.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
 | `markdown.ts`, `markdown-parse.ts` (its blocks) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
 | `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |

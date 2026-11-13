@@ -63,6 +63,16 @@ Without Nocturne: `herdr-app do pane.split
 (`slot` any unique word). In the pane, ctrl-t moves it out to the window
 and back.
 
+To show them a database (`nocturne.databases`, or `mod.open
+'{"name":"databases"}'` in any layout): open it on a connection with
+`herdr-app do 'nocturne.databases:{"kind":"sqlite","path":"/abs/app.db"}'`
+(`"kind":"postgres","host":…,"port":…,"database":…,"user":…`; never a
+password: the window asks for it), then `herdr-app do
+databases.table:lanterns` shows a table's rows and structure,
+`herdr-app do 'databases.sql:select count(*) from lanterns;'` puts a query in
+a tab (`databases.run` runs it; a write asks the person first, so don't
+expect it to run unattended).
+
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
 pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It

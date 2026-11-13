@@ -276,3 +276,11 @@ describe("the keychain (a throwaway one)", () => {
     expect(typeof readSecret).toBe("function");
   });
 });
+
+describe("shared copies", () => {
+  test("databases' table.ts is the preview's and its envrc.ts the editor's, byte for byte", () => {
+    const mods = new URL("../defaults/mods/", import.meta.url).pathname;
+    expect(readFileSync(`${mods}databases/table.ts`, "utf8")).toBe(readFileSync(`${mods}preview/table.ts`, "utf8"));
+    expect(readFileSync(`${mods}databases/envrc.ts`, "utf8")).toBe(readFileSync(`${mods}editor/envrc.ts`, "utf8"));
+  });
+});

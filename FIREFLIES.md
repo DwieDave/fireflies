@@ -33,6 +33,7 @@ desktop app). Under the name it is still Herdr: same config folder
   | `github` | pull requests, Actions and Projects boards |
   | `scripts` | the script runner |
   | `procs` | processes and ports |
+  | `databases` | Postgres, MySQL / MariaDB, SQLite and libSQL: connections, tables, structure, rows, SQL with tree-sitter colours, export |
   | `notifications` | what agents need from you, in one place |
   | `agent-graph` | Claude Code's agents as a graph |
   | `usage` | Claude's or Codex's usage limits |

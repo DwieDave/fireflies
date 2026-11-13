@@ -165,11 +165,52 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
-**Window mods in panes.** Git, GitHub and the script runner open as
+**The Databases window** (`databases`: `nocturne.databases`, the palette's
+"Databases", the strip's git ▾; `mod.open {"name": "databases"}` in any
+layout) speaks Postgres (psql), MySQL / MariaDB (mysql or mariadb), SQLite
+(sqlite3) and libSQL (a local file through sqlite3, a remote one such as Turso
+over its HTTP API), lazygit's way: [1] Connections (saved; sent by another
+mod; found in the shown space's folder: a `DATABASE_URL`-like variable in its
+`.env` files or its direnv environment, `*.db` / `*.sqlite*` files), [2]
+Tables · Views · Schemas with row counts, [3] Structure · Indexes · Keys ·
+Value (a key leads to its table; Value is the picked cell whole, JSON
+pretty-printed), [0] the main view: Rows (a table's page of 200: `s` sorts
+by the column, `/` a WHERE line, `<` `>` pages) and a tab per query (an SQL
+editor with tree-sitter colours over its result; ctrl-enter runs the
+statement under the caret or the selection, ctrl-shift-enter all of them in
+one session, esc cancels a run; the error is underlined where the client
+places it), [4] Log. `e` exports a table (whole, its page, its filtered rows)
+or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
+the connection's history; `?` lists every key; right-click (or `m`) opens a
+row's menu. Nothing runs on open. A statement that writes asks first (`y`);
+DROP, TRUNCATE, ALTER … DROP and a DELETE or UPDATE without WHERE ask twice,
+the second time by typing the object's name; a read-only connection (the
+default for one found in a folder) refuses writes, and the client is told so
+too. A missing client is named with what installs it, never installed.
+Passwords and tokens live in the system keychain (service
+`fireflies.databases`, account the connection's id) or only in the window's
+memory ("ask each time", found ones); they reach the client through its
+environment or a 0600 file in the window's private temp folder, never a
+command line, shared state, settings, the log or the history. It keeps
+`data/databases/connections.json` (no secrets), `history/<id>.json` (a
+password literal blanked) and `queries/<id>.json` (each tab's text). Commands
+to the window: `databases.sql:<text>` (a query tab with that text),
+`databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
+rows and structure), `databases.cancel`, and any key's action by name
+(`databases.export`, `databases.refresh`…). Another mod hands it a connection,
+never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
+| "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
+"readonly"?, "from"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+came from; the window asks for a password it needs), `databases.connect:{…}`
+to an open window, or elsewhere `openOverlay({mod: "databases", kind:
+"window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
+0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
+
+**Window mods in panes.** Git, GitHub, the script runner and Databases open as
 their floating window or as a normal pane that stays beside terminals and
 editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
 own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
-"vps"}`; the same for `nocturne.github` and `nocturne.scripts` (bare, each
+"vps"}`; the same for `nocturne.github`, `nocturne.scripts` and `nocturne.databases` (bare, each
 toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
 (beside or a tab, as its landing switch says), the palette "Git in a pane" and
 the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
@@ -724,7 +765,7 @@ the highlighted line shows where it will land.
   gpui-kit (undo / redo cmd-z / cmd-shift-z, selection, multiple carets, copy /
   paste, folding) colored by tree-sitter in moonfly's roles (a curated set of
   grammars: Rust, TypeScript / TSX / JavaScript, Python, Go, Nix, Lua, Bash,
-  JSON, YAML, TOML, Markdown, CSS, HTML, C, Zig; other text plain). Its bar
+  JSON, YAML, TOML, Markdown, CSS, HTML, C, Zig, SQL; other text plain). Its bar
   (under the tabs): the file's folder, the problems'
   counts (the shown tab's name and unsaved `●` in the pane header) (click: the problems drawer), the language server, language and
   indent, line:col. Saving writes only over what was read: a file changed
@@ -2129,7 +2170,7 @@ list or a machine's rename first.
   Top-level values apply to every language; `languages` overrides them per
   language id (`languageOf(path)`: `rust`, `typescript`, `tsx`, `javascript`,
   `python`, `go`, `nix`, `lua`, `bash`, `json`, `yaml`, `toml`, `markdown`,
-  `css`, `html`, `c`, `zig`, `csv`, `text`). Each takes `tab_size` (1–16),
+  `css`, `html`, `c`, `zig`, `sql`, `csv`, `text`). Each takes `tab_size` (1–16),
   `insert_spaces`, `soft_wrap` (where an editor's wrap starts: off, on for
   `markdown` and `text`; cmd-k z switches it in one editor tab), `format` (an argv that reads the file on stdin
   and prints it formatted), `format_on_save` (off unless set), `server` (the
