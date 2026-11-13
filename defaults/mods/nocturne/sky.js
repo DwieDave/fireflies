@@ -118,6 +118,21 @@ export function shelfHeight(n, w) {
   return BOARD + BOARD_GAP + rows * TILE + (rows - 1) * TILE_GAP + CAPTION.gap + CAPTION.h;
 }
 
+/**
+ * The open jar's rows when the sky has room (layout px from the meadow's top):
+ * each firefly lane's top (`lanes`: their heights, in jar order), the shelf's
+ * top (`shelfH`: its height, 0 for none) and the jar's height. A jar held at
+ * its least height (JAR.min) centers what it holds in the glass, so one firefly
+ * sits in the middle with as much glass above as under it.
+ */
+export function jarPlan(lanes, shelfH = 0) {
+  const held = lanes.reduce((n, l) => n + l, 0) + (shelfH ? (lanes.length ? SHELF_ABOVE : 0) + shelfH : 0);
+  const jarH = Math.max(JAR.min, JAR.top + held + JAR.bottom);
+  let y = JAR.top + Math.floor((jarH - JAR.top - held - JAR.bottom) / 2);
+  const ys = lanes.map((l) => { const at = y; y += l; return at; });
+  return { ys, shelfY: shelfH ? (lanes.length ? y + SHELF_ABOVE : y) : 0, jarH };
+}
+
 function moonPhase(list) {
   if (!list.length) return 8;
   const rest = list.filter((a) => a.status === "idle" || a.status === "done").length;
@@ -861,7 +876,7 @@ export default class Sky {
     const shelfW = w - 2 * JAR_INSET, shelfH = kept.length ? shelfHeight(kept.length + 1, shelfW) : 0; // + the "+" tile
     let lane = 40, restLane = 28;
     const laneOf = (a) => (a.status === "idle" ? restLane : lane);
-    const jarNeed = jarOn ? Math.max(JAR.min, JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + (kept.length ? SHELF_ABOVE + shelfH : 0) + JAR.bottom) : 0;
+    const jarNeed = jarOn ? jarPlan(jarred.map(laneOf), shelfH).jarH : 0;
     const need = jarNeed + awake.length * lane + resting.length * restLane + 16;
     let placed = [];
     let more = 0;
@@ -869,10 +884,12 @@ export default class Sky {
     if (need <= ground) {
       // Room to spare: the jar on top (the shelf at its foot), awake ones
       // spread out under it, the rest settle on the ground.
-      let y = JAR.top;
-      for (const a of jarred) { placed.push([a, y, laneOf(a)]); y += laneOf(a); }
-      if (kept.length) { shelfY = jarred.length ? y + SHELF_ABOVE : y; y = shelfY + shelfH; }
-      jarH = jarOn ? Math.max(JAR.min, y + JAR.bottom) : 0;
+      if (jarOn) {
+        const plan = jarPlan(jarred.map(laneOf), shelfH);
+        jarred.forEach((a, i) => placed.push([a, plan.ys[i], laneOf(a)]));
+        shelfY = plan.shelfY;
+        jarH = plan.jarH;
+      }
       const top = jarH ? jarH + JAR.gap : 8;
       const restTop = ground - resting.length * restLane;
       const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;

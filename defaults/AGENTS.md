@@ -1217,7 +1217,8 @@ neighbours; on the rail the cell and its padding): click focuses the agent,
 right-click its menu, double-click renames it. Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
-a sheen down its glass, never shorter than a jar with room under one firefly;
+a sheen down its glass, never shorter than a jar with room under one firefly,
+what it holds centered in the glass when it's that short;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it

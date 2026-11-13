@@ -136,6 +136,8 @@ test:
     bun test scripts/nocturne-procs-sys.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
+    # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.
+    bun test scripts/nocturne-chrome.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
