@@ -68,7 +68,7 @@ function ownKeys(how: ShownAs | null, kind: LookKind | null, options: KeyListOpt
   return [];
 }
 
-/** [[keys, what]] for the strip, every key main.js's key() takes for it: `how` is
+/** [[keys, what]] for the strip, every key main.ts's key() takes for it: `how` is
  *  the preview's way of showing it (image, raster, native, table, diff), `kind`
  *  the file's kind. */
 export function keyList(how: ShownAs | null, kind: LookKind | null, options: KeyListOptions = {}): KeyRow[] {
