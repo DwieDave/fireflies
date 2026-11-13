@@ -32,14 +32,14 @@ import { repoKey, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import type { Hint } from "./kit.ts";
 import { dither, pip, empty, band, stop, unzoom, ART, ansiColor, noteOf } from "./kit.ts";
-import type { At, Board, Carry, Choices, Content, Detail, Dir, Field, FieldValue, Item, Layout, Lane, ListedProject, Op, ProjectList, ScopeProblem, StoredBoard, View } from "./board.ts";
-import {
-  projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices,
-  filterTokens, layout, grid, find, step, pickUp, carry, carried, drop, overlay, valueFor, setFieldMutation, positionMutation,
-  archiveMutation, addDraftMutation, convertMutation, draftMutation, toggleMutation, cardFields, editableFields, OPTION_ANSI,
-  initials, loginSlot, valueText, slimBoard, wrap, isStoredBoard, boardOf, isProjectListAnswer, isBoardAnswer, isDetailAnswer, isChoicesAnswer, isAddedDraft,
-  isListedProject, selectOf,
-} from "./board.ts";
+import type { Board, Choices, Content, Detail, Field, FieldValue, Item, ListedProject, ProjectList, ScopeProblem, StoredBoard, View } from "./board.ts";
+import type { At, Carry, Dir, Layout, Lane } from "./board-layout.ts";
+import type { Op } from "./board-edits.ts";
+import { projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices, slimBoard, isStoredBoard, boardOf, isProjectListAnswer, isBoardAnswer, isDetailAnswer, isChoicesAnswer, isListedProject } from "./board.ts";
+import { filterTokens, selectOf } from "./board-filter.ts";
+import { layout, grid, find, step, pickUp, carry, carried, drop } from "./board-layout.ts";
+import { overlay, valueFor, setFieldMutation, positionMutation, archiveMutation, addDraftMutation, convertMutation, draftMutation, toggleMutation, isAddedDraft } from "./board-edits.ts";
+import { cardFields, editableFields, OPTION_ANSI, initials, loginSlot, valueText, wrap } from "./board-cards.ts";
 import type { Host, ReadOptions } from "./host.ts";
 import type { KeyRow } from "./keyhelp.ts";
 
