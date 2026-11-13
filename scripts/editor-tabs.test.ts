@@ -344,6 +344,16 @@ test("an editor opened for a Markdown viewer's edit starts with the preview on",
   expect(p.view).toBe("split");
 });
 
+test("a restart: an editor whose editor.paths entry is from before (a scratchpad note it no longer holds) says the tabs it has, so the app's editor.open doesn't send the note to it", async () => {
+  const note = "/app/scratchpad/p-1a2b3c4d.md";
+  sharedNow["editor.paths"] = { s1: ["/p/src/a.rs", note], gone: [note] };
+  storage.tabs = JSON.stringify({ paths: ["/p/src/a.rs", "/p/src/b.rs"], active: 0 });
+  await pane("/p/src/a.rs");
+  // Its own entry is its tabs; a slot no pane has any more goes.
+  expect(sharedNow["editor.paths"]).toEqual({ s1: ["/p/src/a.rs", "/p/src/b.rs"] });
+  expect(route.filesOf(paneList[0], route.editorPaths((k: string) => sharedNow[k] ?? null))).not.toContain(note);
+});
+
 // ---- where files go (editor-route.ts)
 
 // Props as the app hands them (JSON: a key is there with a value, or not there).

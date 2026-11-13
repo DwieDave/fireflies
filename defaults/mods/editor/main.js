@@ -332,6 +332,10 @@ export default class EditorPane extends View {
     // An "edit" from the Markdown viewer asked for the preview (editor-route.ts: slot null).
     if (asked?.view && asked.path === this.cur.path && this.cur.markdown && VIEWS.includes(asked.view)) this.cur.view = asked.view;
     this.select(this.cur, cx, go, true);
+    // The tabs it restored, told to the routing now: shared PATHS outlives a
+    // restart, and an entry from before (a scratchpad note this pane no longer
+    // holds) would send the app's editor.open to a pane that ignores it.
+    this.publish();
     if (this.on) cx.timer.every(POLL, (cx) => { for (const d of this.docs) if (d.state !== "unloaded" && d.state !== "loading") this.load(cx, null, true, d); });
     // A newly opened editor takes the keyboard.
     for (const ms of [0, 120, 400]) cx.timer.after(ms, () => this.focusText());
