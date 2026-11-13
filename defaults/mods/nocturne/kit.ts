@@ -20,9 +20,18 @@ export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
 
-/** The tab strip's icon button (tabs.ts tool): its id, lit or not, a tooltip
- *  (null: none), what a press does (the press, and whether it was lit then), its contents. */
-export type ToolButton = (t: Theme, id: string, on: boolean, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
+/** A tool button whose lit look isn't its drop-down: `lit` draws it lit, `open`
+ *  (its drop-down is up) is what a press reports as `wasOpen` (the git mark's ▾:
+ *  lit for the GitHub panel, open for its menu). */
+export interface ToolState {
+  readonly lit: boolean;
+  readonly open: boolean;
+}
+
+/** The tab strip's icon button (tabs.ts tool): its id, lit or not (a boolean is
+ *  both lit and open; ToolState tells them apart), a tooltip (null: none), what a
+ *  press does (the press, and whether its drop-down was open then), its contents. */
+export type ToolButton = (t: Theme, id: string, on: boolean | ToolState, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
 
 /** Where a drop-down goes (window px). */
 export interface DropAt {

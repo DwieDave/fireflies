@@ -173,6 +173,8 @@ test:
     bun test scripts/nocturne-usage.test.ts
     # An agent's status as the winged firefly in its tab and pane header (kit.ts statusFly): colour, motion, size.
     bun test scripts/nocturne-status-fly.test.ts
+    # The strip's drop-downs: a second press on the git mark's ▾ closes its menu (Developer's report).
+    bun test scripts/nocturne-tool-dropdowns.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
