@@ -1,4 +1,4 @@
-// The git window (git/main.js) on a real scratch repo: herdr and
+// The git window (git/main.ts) on a real scratch repo: herdr and
 // gpui are stand-ins, but exec runs the real git, so reading, the panels,
 // keys and actions run through the window's code down to git.
 import { test, expect, mock, beforeAll, afterAll } from "bun:test";
@@ -56,7 +56,7 @@ const cx: any = {
   timer: { every() {}, after() {} }, write_to_clipboard(t: string) { cx.clip = t; },
 };
 
-const { default: GitView } = await import("../defaults/mods/git/main.js");
+const { default: GitView } = await import("../defaults/mods/git/main.ts");
 
 /** Waits until both of the window's queues are drained. */
 async function settle(v: any) {
@@ -402,7 +402,7 @@ for (const zoom of [0.9, 1]) {
   test(`zoom ${zoom}: at the end of every list the last row ends inside the list`, async () => {
     zoomNow = zoom;
     try {
-      const { rowWindow } = await import("../defaults/mods/git/main.js");
+      const { rowWindow } = await import("../defaults/mods/git/main.ts");
       const { unzoom } = await import("../defaults/mods/git/draw.ts");
       // Each row height the window draws: side lists, wide commits, diffs, the branch log.
       for (const rowH of [18, 32, 16]) {
@@ -478,7 +478,7 @@ test("a history cut at its limit reads further when its end comes into view: the
 });
 
 test("an operation's row spins from the key to its end: push marks the pushed branch, a failure and a throw release it too", async () => {
-  const { rowKey } = await import("../defaults/mods/git/main.js");
+  const { rowKey } = await import("../defaults/mods/git/main.ts");
   // A clone: main tracks origin/main on a bare remote.
   const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
   sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);

@@ -46,7 +46,7 @@ test("one helper: every mod with a form ships the same form-keys.ts", () => {
 // context. Each form's root carries that context and hands the action to its
 // key handler; each binds the keys once from init.
 const ROOTS: [string, string][] = [
-  ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.js", "this.key(e, cx)"],
+  ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.ts", "this.key(e, cx)"],
   ["mods/nocturne/sky.js", "this.key(e, cx)"], ["mods/nocturne/dialog.ts", "this.key(e, cx)"],
   ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/main.ts", "this.findKey(e, cx)"],
   ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
