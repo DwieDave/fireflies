@@ -191,7 +191,12 @@ export class ConnForm {
     const has = (f: Field) => fieldsOf(this.kind, this.remote).includes(f) && this.value(f) !== "";
     const port = Number(this.value("port"));
     const typed = this.value("password");
-    const secret = this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? "none" : this.ask ? "ask" : typed || this.editing?.secret === "keychain" ? "keychain" : "none";
+    // Off macOS there's no keychain here: a typed password is asked each time (kept in memory).
+    const keychain = appWindow().platform === "macos";
+
+    const secret = this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? "none"
+      : this.ask || (typed && !keychain) ? "ask" : typed || this.editing?.secret === "keychain" ? "keychain" : "none";
+
     const c: ConnDraft = { id, name: this.value("name") || this.value("database") || this.value("path").split("/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
 
     if (has("host")) c.host = this.value("host");

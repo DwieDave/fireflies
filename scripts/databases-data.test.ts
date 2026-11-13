@@ -23,6 +23,10 @@ import { where, connJson } from "../defaults/mods/databases/kinds.ts";
 
 const FIX = new URL("./fixtures/databases/", import.meta.url).pathname;
 
+/** sqlite3 and macOS's security are here (CI's Linux image may lack them: those tests skip). */
+const SQLITE = Bun.which("sqlite3") !== null;
+const KEYCHAIN = process.platform === "darwin" && Bun.which("security") !== null;
+
 function realIo(seen: string[][] = []) {
   return {
     seen,
@@ -91,10 +95,10 @@ describe("a remote libSQL database (Hrana over HTTP, a fake server)", () => {
   });
 });
 
-describe("the catalog, for real against SQLite", () => {
+describe.skipIf(!SQLITE)("the catalog, for real against SQLite", () => {
   const dir = mkdtempSync(join(tmpdir(), "ffcat-"));
   const db = join(dir, "lanterns.db");
-  Bun.spawnSync(["sqlite3", db, `
+  if (SQLITE) Bun.spawnSync(["sqlite3", db, `
     create table users (id integer primary key, handle text not null unique);
     create table lanterns (id integer primary key, name text not null, owner_id integer references users(id) on delete cascade, lumens integer default 800, meta blob);
     create index lanterns_owner_idx on lanterns(owner_id);
@@ -184,7 +188,7 @@ describe("connections found in a folder", () => {
     expect(mergeFound([a, b]).map((f) => f.conn.from)).toEqual(["direnv · DATABASE_URL"]);
   });
 
-  test("SQLite files by their header, past dependencies", async () => {
+  test.skipIf(!SQLITE)("SQLite files by their header, past dependencies", async () => {
     const dir = mkdtempSync(join(tmpdir(), "fffind-"));
     mkdirSync(join(dir, "data"));
     mkdirSync(join(dir, "node_modules"));
@@ -251,7 +255,7 @@ describe("history and saved connections", () => {
   });
 });
 
-describe("the keychain (a throwaway one)", () => {
+describe.skipIf(!KEYCHAIN)("the keychain (a throwaway one)", () => {
   test("saved through security -i from a file: nothing on an argv, the file gone", async () => {
     const dir = mkdtempSync(join(tmpdir(), "ffkc-"));
     const kc = join(dir, "t.keychain-db");

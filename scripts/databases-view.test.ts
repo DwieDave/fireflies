@@ -21,6 +21,7 @@ const written: [string, string][] = [];
 const found = (cmd: string, args: string[]) => (cmd === "sh" && args[2] === "lookup" ? { code: 0, stdout: `/usr/bin/${args[4]}\n`, stderr: "" } : { code: 1, stdout: "", stderr: "" });
 let execReply: (cmd: string, args: string[]) => any = found;
 let overlayN = 0;
+let platformNow = "linux";
 mock.module("herdr", () => ({
   agents: () => [], appHome: () => "/tmp/herdr-test", home: () => "/home/me",
   closeOverlay: (id: string) => { closed.push(id); return null; },
@@ -32,7 +33,7 @@ mock.module("herdr", () => ({
   pickFile: async () => null, pickFolder: async () => null,
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   settings: () => ({ zoom: 1, font_family: "Mono" }), shared: (k: string) => sharedState[k] ?? null, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
-  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "linux" }),
+  spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: platformNow }),
 }));
 
 let drawn: [string, any[]][] = [];
@@ -213,6 +214,7 @@ test("keys: panels by number and tab, ? the overview, n the form, m a row's menu
 
 test("the form: a URL pasted into the host fills the fields; a typed password goes to the keychain by security -i, never an argument", async () => {
   fresh();
+  platformNow = "macos";
   const v = open({ folder: "/w", overlay: "w1" });
   await flush();
   v.dir = "/tmp/fireflies-db.abc";
@@ -231,6 +233,17 @@ test("the form: a URL pasted into the host fills the fields; a typed password go
   const file = written.find(([p]) => p.endsWith("/data/databases/connections.json"));
   expect(file?.[1]).not.toContain("pa$s");
   expect(JSON.stringify(sharedState)).not.toContain("pa$s");
+  // Off macOS there's no keychain: the typed password is kept in memory and asked again next time.
+  platformNow = "linux";
+  v.key(key("n"), cx);
+  v.form.inputs.get("host").set_value("db.local");
+  v.form.inputs.get("password").set_value("pw2");
+  written.length = 0;
+  await v.form.save(cx);
+  const second = v.saved.at(-1);
+  expect(second).toMatchObject({ host: "db.local", secret: "ask" });
+  expect(v.secrets.get(second.id)).toBe("pw2");
+  expect(written.some(([p]) => p.includes("/k-"))).toBe(false);
 });
 
 /** A connected view with a query tab holding `sql`, the caret at its start (init's reads done). */
