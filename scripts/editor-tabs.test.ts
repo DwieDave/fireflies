@@ -1,4 +1,4 @@
-// The editor's file tabs (editor/tabs.js, main.js) and where files
+// The editor's file tabs (editor/tabs.ts, main.js) and where files
 // go (editor-route.ts, copied into the files pane, the picker and the
 // Markdown viewer): a tab per file with its own text, undo, caret and unsaved
 // changes; switching, closing with and without unsaved changes, the last tab
@@ -92,7 +92,7 @@ mock.module("gpui-base", () => ({
 (globalThis as any).localStorage = { getItem: (k: string) => storage[k] ?? null, setItem: (k: string, v: string) => { storage[k] = String(v); } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const tabs = await import("../defaults/mods/editor/tabs.js");
+const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("../defaults/mods/editor/editor-route.ts");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.js");
 
@@ -130,7 +130,7 @@ beforeEach(() => {
   spaceList = [{ active: true, tabs: [{ id: "t1", active: true }] }]; focusedPane = null; eds.length = 0;
 });
 
-// ---- the tab model (tabs.js)
+// ---- the tab model (tabs.ts)
 
 test("model: a new file goes right after the shown tab; an open one is found; closing shows the next, else the one before", () => {
   expect(tabs.placeTab(["a", "b", "c"], 0, "x")).toEqual({ index: 1, added: true });
