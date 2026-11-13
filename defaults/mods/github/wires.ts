@@ -141,7 +141,28 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
 
   cols.forEach((c, ci) => c.forEach((j) => colOf.set(j.id, ci)));
 
-  // What each job is drawn from: ids of jobs left of it, or "run".
+  const gaps = groupGaps(cols, sources(cols, parents, colOf), colOf);
+  const at = place(cols, gapWidths(gaps), runTone, colOf);
+  const lines = pen();
+  const vias = drawDetours(at, cols, gaps, lines);
+
+  gaps.forEach((gs, g) => drawGap(at, gs, g, vias, lines));
+
+  // Detours over the top push everything down; those under make it taller.
+  const top = Math.min(PAD, ...lines.segs.map((r) => r.y));
+  const shift = PAD - top;
+
+  for (const b of [at.run, ...at.nodes, ...lines.segs]) b.y += shift;
+
+  for (const q of lines.pulses) q.y += shift;
+
+  const bottom = Math.max(PAD + at.tall + shift, ...lines.segs.map((r) => r.y + r.h));
+
+  return { run: at.run, nodes: at.nodes, segs: lines.segs, pulses: lines.pulses, width: at.width, height: bottom + PAD };
+}
+
+/** What each job is drawn from: ids of jobs left of it, or "run" (the needs a job's other needs imply left out). */
+function sources<J extends GraphJob>(cols: readonly (readonly J[])[], parents: ReadonlyMap<number, readonly number[]> | null, colOf: ReadonlyMap<number, number>): Map<number | "run", (number | "run")[]> {
   const raw = new Map<number | "run", (number | "run")[]>();
 
   cols.forEach((c, ci) => c.forEach((j) => {
@@ -156,16 +177,22 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
     raw.set(j.id, ps.length ? ps : ci === 0 ? ["run"] : []);
   }));
 
-  const from = parents ? reduceNeeds(raw) : raw;
-  const colOfSrc = (s: number | "run") => (s === "run" ? -1 : colOf.get(s));
+  return parents ? reduceNeeds(raw) : raw;
+}
 
-  // Groups per gap (gap g sits before column g): targets sharing one set of
-  // sources. A source from further left comes in as its detour, { via: id }.
-  const gaps = cols.map((c, g) => {
+/** The column a source sits in (-1 for the run). */
+const colOfSrc = (colOf: ReadonlyMap<number, number>, s: number | "run") => (s === "run" ? -1 : colOf.get(s));
+
+/**
+ * Groups per gap (gap g sits before column g): targets sharing one set of
+ * sources. A source from further left comes in as its detour, { via: id }.
+ */
+function groupGaps<J extends GraphJob>(cols: readonly (readonly J[])[], from: ReadonlyMap<number | "run", readonly (number | "run")[]>, colOf: ReadonlyMap<number, number>): Group[][] {
+  return cols.map((c, g) => {
     const byKey = new Map<string, Group>();
 
     for (const j of c) {
-      const src = (from.get(j.id) ?? []).map((s): Source => (s !== "run" && (colOfSrc(s) ?? Infinity) < g - 1 ? { via: s } : s));
+      const src = (from.get(j.id) ?? []).map((s): Source => (s !== "run" && (colOfSrc(colOf, s) ?? Infinity) < g - 1 ? { via: s } : s));
 
       if (!src.length) continue;
 
@@ -178,17 +205,34 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
 
     return [...byKey.values()];
   });
+}
 
-  // Buses per gap: merge buses first, then the split/single ones.
-  const gapW = gaps.map((gs) => {
+/** Each gap's width: room for its buses, merge buses first, then the split/single ones. */
+function gapWidths(gaps: readonly (readonly Group[])[]): number[] {
+  return gaps.map((gs) => {
     let lanes = 0;
 
     for (const gr of gs) lanes += gr.src.length > 1 && gr.targets.length > 1 ? 2 : 1;
 
     return Math.max(GAP_X, 2 * EDGE + Math.max(0, lanes - 1) * LANE);
   });
+}
 
-  // Boxes: columns side by side, each centered on the tallest.
+/** The boxes placed, before the lines: what drawDetours and drawGap draw between. */
+interface Placed<J> {
+  readonly run: RunBox;
+  readonly nodes: JobBox<J>[];
+  readonly byId: ReadonlyMap<number, JobBox<J>>;
+  readonly colX: readonly number[];
+  readonly colOf: ReadonlyMap<number, number>;
+
+  /** The tallest column. */
+  readonly tall: number;
+  readonly width: number;
+}
+
+/** Boxes: columns side by side, each centered on the tallest. */
+function place<J extends GraphJob>(cols: readonly (readonly J[])[], gapW: readonly number[], runTone: Tone, colOf: ReadonlyMap<number, number>): Placed<J> {
   const heights = cols.map((c) => c.length * NH + Math.max(0, c.length - 1) * GAP_Y);
   const tall = Math.max(NH, ...heights);
   const colX: number[] = [];
@@ -215,22 +259,44 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
     });
   });
 
-  const box = (s: number | "run"): RunBox | undefined => (s === "run" ? run : byId.get(s));
-  const mid = (b: { readonly y: number }) => b.y + Math.round(NH / 2);
-  const gapLeft = (g: number) => (g === 0 ? PAD + RW : (colX[g - 1] ?? 0) + NW);
+  return { run, nodes, byId, colX, colOf, tall, width: x + PAD };
+}
 
+/** A box's middle, where its lines meet it. */
+const mid = (b: { readonly y: number }) => b.y + Math.round(NH / 2);
+
+/** Gap g's left edge: the right side of the column (or the run) before it. */
+const gapLeft = (at: Placed<unknown>, g: number) => (g === 0 ? PAD + RW : (at.colX[g - 1] ?? 0) + NW);
+
+/** The lines drawn so far, and the strokes that draw them: h(orizontal) and v(ertical), 2 px. */
+interface Pen {
+  readonly segs: Seg[];
+  readonly pulses: Pulse[];
+  h(x1: number, x2: number, y: number, k: LineTone): void;
+  v(vx: number, y1: number, y2: number, k: LineTone): void;
+}
+
+function pen(): Pen {
   const segs: Seg[] = [], pulses: Pulse[] = [];
 
-  const h = (x1: number, x2: number, y: number, k: LineTone) => {
-    if (x2 !== x1) segs.push({ x: Math.min(x1, x2), y: y - 1, w: Math.abs(x2 - x1), h: 2, tone: k });
+  return {
+    segs,
+    pulses,
+    h(x1, x2, y, k) {
+      if (x2 !== x1) segs.push({ x: Math.min(x1, x2), y: y - 1, w: Math.abs(x2 - x1), h: 2, tone: k });
+    },
+    v(vx, y1, y2, k) {
+      if (y2 !== y1) segs.push({ x: vx - 1, y: Math.min(y1, y2) - 1, w: 2, h: Math.abs(y2 - y1) + 2, tone: k });
+    },
   };
+}
 
-  const v = (vx: number, y1: number, y2: number, k: LineTone) => {
-    if (y2 !== y1) segs.push({ x: vx - 1, y: Math.min(y1, y2) - 1, w: 2, h: Math.abs(y2 - y1) + 2, tone: k });
-  };
-
-  // Detours: from the needed job's right side, down past the columns in
-  // between, to the gap before the job that needs it. One per (job, gap).
+/**
+ * Detours: from the needed job's right side, down past the columns in
+ * between, to the gap before the job that needs it. One per (job, gap).
+ * Returns where each ends, by `${id}@${gap}`.
+ */
+function drawDetours<J extends GraphJob>(at: Placed<J>, cols: readonly (readonly J[])[], gaps: readonly (readonly Group[])[], lines: Pen): Map<string, End | null> {
   const vias = new Map<string, End | null>();
   const detours: { readonly id: number; readonly g: number }[] = [];
 
@@ -246,112 +312,116 @@ export function route<J extends GraphJob>(cols: readonly (readonly J[])[], paren
   let over = 0, under = 0;
 
   for (const d of detours) {
-    const p = byId.get(d.id), c = colOfSrc(d.id);
+    const p = at.byId.get(d.id), c = colOfSrc(at.colOf, d.id);
 
     if (!p || c === undefined) continue;
 
     const up = p.row < ((cols[c]?.length ?? 1) - 1) / 2;
     const i = up ? over++ : under++;
-    let edge = up ? Infinity : 0;
-
-    for (let k = c + 1; k < d.g; k++) {
-      for (const j of cols[k] ?? []) {
-        const b = byId.get(j.id);
-
-        if (b) edge = up ? Math.min(edge, b.y) : Math.max(edge, b.y + NH);
-      }
-    }
-
-    const y = up ? edge - UNDER - i * DETOUR : edge + UNDER + i * DETOUR;
-    const turn = gapLeft(c + 1) + Math.round(EDGE / 2) - (i % 2) * 4;
+    const y = up ? edgeBetween(at, cols, c, d.g, true) - UNDER - i * DETOUR : edgeBetween(at, cols, c, d.g, false) + UNDER + i * DETOUR;
+    const turn = gapLeft(at, c + 1) + Math.round(EDGE / 2) - (i % 2) * 4;
     const k = lineTone(p.tone);
 
-    h(p.x + p.w, turn, mid(p), k);
-    v(turn, mid(p), y, k);
-    h(turn, gapLeft(d.g), y, k);
-    vias.set(`${d.id}@${d.g}`, { x: gapLeft(d.g), y, tone: p.tone });
+    lines.h(p.x + p.w, turn, mid(p), k);
+    lines.v(turn, mid(p), y, k);
+    lines.h(turn, gapLeft(at, d.g), y, k);
+    vias.set(`${d.id}@${d.g}`, { x: gapLeft(at, d.g), y, tone: p.tone });
   }
 
+  return vias;
+}
+
+/** The top (`up`) or bottom edge of the boxes in the columns between column c and gap g. */
+function edgeBetween<J extends GraphJob>(at: Placed<J>, cols: readonly (readonly J[])[], c: number, g: number, up: boolean): number {
+  let edge = up ? Infinity : 0;
+
+  for (let k = c + 1; k < g; k++) {
+    for (const j of cols[k] ?? []) {
+      const b = at.byId.get(j.id);
+
+      if (b) edge = up ? Math.min(edge, b.y) : Math.max(edge, b.y + NH);
+    }
+  }
+
+  return edge;
+}
+
+/** Gap g's wires: each group's sources into its targets, a lane each (merges first). */
+function drawGap<J extends GraphJob>(at: Placed<J>, gs: readonly Group[], g: number, vias: ReadonlyMap<string, End | null>, lines: Pen): void {
   const midOf = (id: number | undefined) => {
-    const n = id === undefined ? undefined : byId.get(id);
+    const n = id === undefined ? undefined : at.byId.get(id);
 
     return n ? mid(n) : 0;
   };
 
-  gaps.forEach((gs, g) => {
-    const left = gapLeft(g), right = colX[g] ?? left;
-    const order = [...gs].sort((a, b) => midOf(a.targets[0]) - midOf(b.targets[0]));
-    const merges = order.filter((gr) => gr.src.length > 1 && gr.targets.length > 1);
-    const lanes = merges.length + order.length;
+  const left = gapLeft(at, g), right = at.colX[g] ?? left;
+  const order = [...gs].sort((a, b) => midOf(a.targets[0]) - midOf(b.targets[0]));
+  const merges = order.filter((gr) => gr.src.length > 1 && gr.targets.length > 1);
+  const lanes = merges.length + order.length;
 
-    const laneX = (i: number) => (lanes === 1 ? Math.round((left + right) / 2)
-      : left + EDGE + Math.round(i * (right - left - 2 * EDGE) / (lanes - 1)));
+  const laneX = (i: number) => (lanes === 1 ? Math.round((left + right) / 2)
+    : left + EDGE + Math.round(i * (right - left - 2 * EDGE) / (lanes - 1)));
 
-    for (const gr of order) {
-      const srcs = gr.src.flatMap((s): End[] => {
-        if (isVia(s)) {
-          const d = vias.get(`${s.via}@${g}`);
+  for (const gr of order) {
+    const srcs = gr.src.flatMap((s): End[] => {
+      if (isVia(s)) {
+        const d = vias.get(`${s.via}@${g}`);
 
-          return d ? [d] : [];
-        }
-
-        const b = box(s);
-
-        return b ? [{ x: b.x + b.w, y: mid(b), tone: b.tone }] : [];
-      });
-
-      const tgts = gr.targets.flatMap((id) => {
-        const n = byId.get(id);
-
-        return n ? [n] : [];
-      });
-
-      const into = groupTone(tgts.map((n) => n.tone));
-      const out = laneX(merges.length + order.indexOf(gr));
-      const merged = merges.includes(gr);
-
-      for (const s of srcs) h(s.x, merged ? laneX(merges.indexOf(gr)) : out, s.y, lineTone(s.tone));
-
-      const ty = tgts.map(mid);
-
-      if (merged) {
-        // Many into many: merge, one trunk, split.
-        const inX = laneX(merges.indexOf(gr));
-        const sy = srcs.map((s) => s.y);
-        const lo = Math.max(Math.min(...sy), Math.min(...ty)), hi = Math.min(Math.max(...sy), Math.max(...ty));
-        const centre = Math.round((Math.min(...ty) + Math.max(...ty)) / 2);
-
-        const trunk = lo <= hi ? Math.min(hi, Math.max(lo, nearest(centre, [...ty, ...sy].filter((y) => y >= lo && y <= hi)) ?? centre))
-          : Math.round((lo + hi) / 2);
-
-        v(inX, Math.min(...sy, trunk), Math.max(...sy, trunk), into);
-        h(inX, out, trunk, into);
-        v(out, Math.min(...ty, trunk), Math.max(...ty, trunk), into);
-      } else {
-        const ys = [...srcs.map((s) => s.y), ...ty];
-
-        v(out, Math.min(...ys), Math.max(...ys), into);
+        return d ? [d] : [];
       }
 
-      for (const n of tgts) {
-        h(out, n.x, mid(n), groupTone([n.tone]));
+      const b = s === "run" ? at.run : at.byId.get(s);
 
-        if (n.tone === "working") pulses.push({ y: mid(n), from: out, to: n.x });
-      }
-    }
-  });
+      return b ? [{ x: b.x + b.w, y: mid(b), tone: b.tone }] : [];
+    });
 
-  // Detours over the top push everything down; those under make it taller.
-  const top = Math.min(PAD, ...segs.map((r) => r.y));
-  const shift = PAD - top;
+    const tgts = gr.targets.flatMap((id) => {
+      const n = at.byId.get(id);
 
-  for (const b of [run, ...nodes, ...segs]) b.y += shift;
+      return n ? [n] : [];
+    });
 
-  for (const q of pulses) q.y += shift;
+    const merged = merges.includes(gr);
 
-  const bottom = Math.max(PAD + tall + shift, ...segs.map((r) => r.y + r.h));
+    drawGroup(srcs, tgts, merged ? laneX(merges.indexOf(gr)) : null, laneX(merges.length + order.indexOf(gr)), lines);
+  }
+}
 
-  return { run, nodes, segs, pulses, width: x + PAD, height: bottom + PAD };
+/**
+ * One group's wires: its sources to `out`, the lane its targets hang from
+ * (through `inX` first, a merge's trunk, when many go into many), then out
+ * to each target, a pulse into a working one.
+ */
+function drawGroup(srcs: readonly End[], tgts: readonly JobBox<unknown>[], inX: number | null, out: number, lines: Pen): void {
+  const into = groupTone(tgts.map((n) => n.tone));
+
+  for (const s of srcs) lines.h(s.x, inX ?? out, s.y, lineTone(s.tone));
+
+  const ty = tgts.map(mid);
+
+  if (inX !== null) {
+    // Many into many: merge, one trunk, split.
+    const sy = srcs.map((s) => s.y);
+    const lo = Math.max(Math.min(...sy), Math.min(...ty)), hi = Math.min(Math.max(...sy), Math.max(...ty));
+    const centre = Math.round((Math.min(...ty) + Math.max(...ty)) / 2);
+
+    const trunk = lo <= hi ? Math.min(hi, Math.max(lo, nearest(centre, [...ty, ...sy].filter((y) => y >= lo && y <= hi)) ?? centre))
+      : Math.round((lo + hi) / 2);
+
+    lines.v(inX, Math.min(...sy, trunk), Math.max(...sy, trunk), into);
+    lines.h(inX, out, trunk, into);
+    lines.v(out, Math.min(...ty, trunk), Math.max(...ty, trunk), into);
+  } else {
+    const ys = [...srcs.map((s) => s.y), ...ty];
+
+    lines.v(out, Math.min(...ys), Math.max(...ys), into);
+  }
+
+  for (const n of tgts) {
+    lines.h(out, n.x, mid(n), groupTone([n.tone]));
+
+    if (n.tone === "working") lines.pulses.push({ y: mid(n), from: out, to: n.x });
+  }
 }
 
 /** The value in `list` closest to `y` (null for none). */
