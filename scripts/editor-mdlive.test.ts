@@ -164,7 +164,8 @@ let store: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
-const { KINDS, wrappedRows } = await import("../defaults/mods/editor/rendered.ts");
+const { KINDS } = await import("../defaults/mods/editor/rendered-units.ts");
+const { wrappedRows } = await import("../defaults/mods/editor/rendered-column.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {

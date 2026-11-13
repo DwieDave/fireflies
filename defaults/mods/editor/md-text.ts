@@ -1,7 +1,9 @@
 // A Markdown text as the commands (mdedit.ts, md-inline.ts) see it: a
 // selection of { line, col } places (zero-based, columns in JavaScript string
 // units, as the editor's), what a command makes, and the text's lines with
-// its own line end (CRLF files keep theirs).
+// its own line end (CRLF files keep theirs); the one edit taking a text to
+// another (editBetween: the rendered view and the commands edit only where
+// the text differs).
 
 import type { EditorPosition } from "gpui-base";
 
@@ -42,4 +44,32 @@ export function split(text: string): Split {
   const eol = /\r\n/.test(t) ? "\r\n" : "\n";
 
   return { lines: t.split(/\r?\n/), eol };
+}
+
+/** One edit: [start, end) replaced by `text`, as editor positions. */
+export interface TextEdit {
+  readonly start: Pos;
+  readonly end: Pos;
+  readonly text: string;
+}
+
+/** One edit taking `a` to `b`: the span between their common start and end, as editor positions. */
+export function editBetween(a: string, b: string): TextEdit | null {
+  if (a === b) return null;
+
+  let s = 0;
+
+  while (s < a.length && s < b.length && a[s] === b[s]) s++;
+
+  let e = 0;
+
+  while (e < a.length - s && e < b.length - s && a[a.length - 1 - e] === b[b.length - 1 - e]) e++;
+
+  const pos = (text: string, o: number): Pos => {
+    const before = text.slice(0, o).split("\n");
+
+    return { line: before.length - 1, col: (before.at(-1) ?? "").length };
+  };
+
+  return { start: pos(a, s), end: pos(a, a.length - e), text: b.slice(s, b.length - e) };
 }

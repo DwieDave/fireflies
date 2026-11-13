@@ -160,7 +160,8 @@ import { OPEN_KEY, LAST_KEY, PATHS_KEY, filesOf, editorPaths, isEditorView, isSc
 import type { CardLink } from "./cardlinks.ts";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import type { Picture, RenderedHost } from "./rendered.ts";
-import { Rendered, editBetween } from "./rendered.ts";
+import { Rendered } from "./rendered.ts";
+import { editBetween } from "./md-text.ts";
 import { units as liveUnits, unitFor } from "./live.ts";
 import type { Sel } from "./md-text.ts";
 import { run as mdCommand, tickLine, commandInfo, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.ts";
