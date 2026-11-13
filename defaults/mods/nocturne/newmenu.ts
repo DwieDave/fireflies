@@ -39,7 +39,7 @@ import type { DropAt } from "./kit.ts";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.ts";
 import type { Panel } from "./panels.ts";
 import { openWorktrees } from "./git.ts";
-import { openSpacePicker } from "./newspace.js";
+import { openSpacePicker } from "./newspace.ts";
 
 /** An agent as knownAgents() reports it (and the shipped new-menu keeps it). */
 const isKnownAgent = object(

@@ -33,7 +33,7 @@ import { spaces, panes, agents, run, exec, shared } from "herdr";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.ts";
 import { chip, field, confirm } from "./inline.ts";
 import { formKey } from "./form-keys.ts";
-import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.js";
+import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.ts";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;

@@ -260,11 +260,7 @@ export function remember(list: readonly string[] | null, path: string): string[]
 }
 
 /** space.new's arguments: a name only when it isn't the folder's own. */
-export interface NewSpaceArgs {
-  readonly name?: string;
-  readonly folder: string;
-  readonly machine: "";
-}
+export type NewSpaceArgs = { readonly name?: string; readonly folder: string; readonly machine: "" };
 
 /** The space.new arguments for `folder` (null: no folder, a space in home)
  *  and a typed `name` (its folder's name, or empty: unnamed, so Fireflies calls

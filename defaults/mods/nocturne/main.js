@@ -33,7 +33,7 @@ import Parked from "./parked.ts";
 import { WorktreesPanel } from "./worktrees.ts";
 import NewMenu from "./newmenu.ts";
 import NewButton from "./newbutton.ts";
-import NewSpace from "./newspace.js";
+import NewSpace from "./newspace.ts";
 import Menu, { KeysDialog } from "./menu.ts";
 import Toast from "./toast.ts";
 import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";

@@ -66,7 +66,7 @@ import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.ts";
 import { newWorktree } from "./menu.ts";
-import { openSpacePicker } from "./newspace.js";
+import { openSpacePicker } from "./newspace.ts";
 import { gridify } from "./gridify.ts";
 import { toastKey } from "./toast.ts";
 import { dismissUpdate } from "./screens.js";
