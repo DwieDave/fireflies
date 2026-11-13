@@ -3,9 +3,9 @@
 // Fireflies opens this mod with the shipped screen's props plus `dialog`:
 //   welcome    the first-run welcome (a movable window): Fireflies, on herdr-core;
 //              records frame.welcomed ("finished" / "skipped") like the shipped one.
-//              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc skips
+//              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc or q skips
 //   whats_new  this release's notes ({ notes }, a movable window); ↑↓ / j k /
-//              space step through them, enter / esc close
+//              space step through them, enter / esc / q close
 //   help       the keys, as a map (keymap.ts): every binding in plain words,
 //              grouped, the core's own keys and what works in each block that
 //              takes the keyboard (enter or a click unfolds a block's keys);
@@ -108,11 +108,11 @@ function bullet(t: Theme, status: Status | null, title: string, body: string): E
 
 /** What the welcome's ? lists: every key its handler takes. */
 export const WELCOME_KEYS: readonly HelpLine[] = [["→ l  ⏎", "next"], ["← h", "back"], ["a", "add a machine (page 2)"], ["c", "copy the line (page 3)"],
-  ["⏎", "done (page 3)"], ["esc", "skip · keys away"], ["?", "keys"]];
+  ["⏎", "done (page 3)"], ["esc q", "skip · keys away"], ["?", "keys"]];
 
 /** What's new's ? list. */
 export const WHATS_NEW_KEYS: readonly HelpLine[] = [["j k  ↑ ↓", "step through the notes"], ["space  pgdn pgup", "step"], ["g home  end", "top / end"],
-  ["⏎ esc", "close (esc: keys away first)"], ["?", "keys"]];
+  ["⏎ esc q", "close (esc q: keys away first)"], ["?", "keys"]];
 
 const para = (t: Theme, text: string) => div().text_size(12).line_height("19px").text_color(t.muted).child(text);
 const eyebrow = (t: Theme, text: string) => div().text_size(10).text_color(t.ansi8).child(text.toUpperCase());
@@ -296,13 +296,14 @@ export class Welcome {
           return;
         }
 
-        if (k === "escape") {
+        if (m.control || m.alt || m.platform) return;
+
+        // q skips, as esc does.
+        if (k === "escape" || (k === "q" && !m.shift)) {
           this.done("skipped");
 
           return;
         }
-
-        if (m.control || m.alt || m.platform) return;
 
         if (k === "enter" || k === "right" || k === "l") {
           if (last) {
@@ -415,7 +416,7 @@ export class WhatsNew {
       return;
     }
 
-    if (k === "escape" || k === "enter") this.done();
+    if (k === "escape" || k === "enter" || (k === "q" && !m.shift)) this.done();
     else if (k === "down" || k === "j" || k === "space" || k === "pagedown") this.at = Math.min(n - 1, this.at + 1);
     else if (k === "up" || k === "k" || k === "pageup") this.at = Math.max(0, this.at - 1);
     else if (k === "home" || k === "g") this.at = 0;

@@ -5,11 +5,11 @@
 //            Enter saves (runs command with { name }), Esc cancels; Tab /
 //            Shift-Tab go name → cancel → save, wrapping, ← → between the
 //            buttons, Enter (or Space) presses the focused one, cmd-enter
-//            saves from anywhere
+//            saves from anywhere; on a button (not in the field) q cancels
 //   confirm  { title, detail, command }       before something destructive;
 //            Enter confirms (runs command), Esc keeps; Tab / ← → / h l move
 //            between keep and confirm (confirm first), Enter / Space press,
-//            y confirms, n keeps
+//            y confirms, n or q keeps
 // Both take their keys the way every form does (form-keys.ts) and name them
 // in the button row.
 // Colors from theme() only.
@@ -89,6 +89,9 @@ function hintLine(t: Theme, hs: readonly FormHint[]): Element {
     .children(hs.map(([k, w], i) => h_flex().id(`dh-${i}`).flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(w))));
 }
 
+/** The hints with q beside esc, where q cancels too (not while the field types). */
+const withQ = (hs: readonly FormHint[]): FormHint[] => hs.map(([k, w]) => [k === "esc" ? "esc q" : k, w]);
+
 function frame(t: Theme, id: string): Element {
   return v_flex().id(id).w_full().min_h(0).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground);
 }
@@ -153,6 +156,7 @@ export class Prompt {
     else if (a.act === "move") go(a.to);
     else if (a.act === "submit" || (a.act === "press" && this.at === "save")) this.save();
     else if (a.act === "press") this.close();
+    else if (this.at !== "input" && e.key === "q" && !e.modifiers.shift) this.close();
     else if (this.at !== "input" && (e.key === "h" || e.key === "l")) go(PROMPT.findIndex((s) => s.id === (this.at === "save" ? "cancel" : "save")));
 
     cx.stop_propagation();
@@ -172,6 +176,7 @@ export class Prompt {
     const t = theme();
     const p = dialogProps();
     const input = this.input;
+    const hints = formHints(PROMPT, PROMPT.findIndex((s) => s.id === this.at), { mac: mac(), submit: "save" });
 
     return tracked(frame(t, "nocturne-prompt"), this.handle)
       .on_key_down((e, cx) => this.key(e, cx))
@@ -183,7 +188,7 @@ export class Prompt {
           .when(Boolean(input), (el) => (input ? el.child(Input.new(input).flex_1().h_full().text_size(12).text_color(t.foreground)) : el)))
         .when(Boolean(p.hint), (el) => el.child(div().text_size(11).text_color(t.dim).child(p.hint ?? "")))
         .child(h_flex().pt(6).gap(6).items_center()
-          .child(hintLine(t, formHints(PROMPT, PROMPT.findIndex((s) => s.id === this.at), { mac: mac(), submit: "save" })))
+          .child(hintLine(t, this.at === "input" ? hints : withQ(hints)))
           .child(button(t, "pm-cancel", "cancel", t.muted, false, () => this.close(), this.at === "cancel"))
           .child(button(t, "pm-save", "save", t.accent, true, () => this.save(), this.at === "save"))));
   }
@@ -214,7 +219,7 @@ export class Confirm {
     const plain = !m.control && !m.shift;
 
     if (plain && k === "y") this.yes();
-    else if (plain && k === "n") this.close();
+    else if (plain && (k === "n" || k === "q")) this.close();
     else if (plain && (k === "h" || k === "l")) this.at = this.at === "go" ? "keep" : "go";
     else if (a.act === "move") this.at = CONFIRM[a.to]?.id ?? "go";
     else if (a.act === "submit" || (a.act === "press" && this.at === "go")) this.yes();
@@ -251,7 +256,7 @@ export class Confirm {
       .child(div().id("confirm-detail").max_h(240).px(14).pt(10).overflow_y_scrollbar()
         .text_size(11).line_height("17px").text_color(t.muted).child(p.detail ?? ""))
       .child(h_flex().px(14).pb(12).pt(6).gap(6).items_center()
-        .child(hintLine(t, formHints(CONFIRM, CONFIRM.findIndex((s) => s.id === this.at), { mac: mac(), submit: "confirm", cancel: "keep" })))
+        .child(hintLine(t, withQ(formHints(CONFIRM, CONFIRM.findIndex((s) => s.id === this.at), { mac: mac(), submit: "confirm", cancel: "keep" }))))
         .child(button(t, "cf-keep", "keep", t.muted, false, () => this.close(), this.at === "keep"))
         .child(button(t, "cf-go", "confirm", t.blocked, true, () => this.yes(), this.at === "go")));
   }

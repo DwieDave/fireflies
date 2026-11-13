@@ -207,6 +207,8 @@ test:
     bun test scripts/databases-view.test.ts
     # A database file leads to the Databases window: the files pane's "Open in Databases" (b), the preview's table strip, only with the mod installed.
     bun test scripts/databases-open.test.ts
+    # q closes every dialog and menu where it isn't text, as esc does: the confirm and rename dialogs, What's New, the welcome, the "+ new" launcher, the even-out popup.
+    bun test scripts/qclose.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
