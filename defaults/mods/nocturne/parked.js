@@ -11,7 +11,7 @@ import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, theme, shared } from "herdr";
 import { dither, pip, navRing } from "./kit.ts";
-import { CURSOR } from "./nav.js";
+import { CURSOR } from "./nav.ts";
 import { mark, paneName } from "./header.js";
 
 export default class Parked {

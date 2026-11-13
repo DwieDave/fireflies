@@ -314,7 +314,7 @@ test("a switch remembers its plan, so restarting it builds and activates again",
 });
 
 test("the strip's copy of SUDO_PROMPT matches", () => {
-  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/prompt.js"), "utf8");
+  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/prompt.ts"), "utf8");
   expect(src).toContain(`export const SUDO_PROMPT = ${JSON.stringify(SUDO_PROMPT)};`);
 });
 

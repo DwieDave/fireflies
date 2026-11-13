@@ -21,7 +21,7 @@ mock.module("herdr", () => ({
 }));
 const { runs, word, tone, elapsed, runArgs, LABEL, start, stop, dismiss, restart, JOBS } = await import("../defaults/mods/scripts/runs.js");
 const jobs = await import("../defaults/mods/nocturne/jobs.ts");
-const prompt = await import("../defaults/mods/nocturne/prompt.js");
+const prompt = await import("../defaults/mods/nocturne/prompt.ts");
 const reset = () => { store.clear(); calls.length = 0; ran.length = 0; notes.length = 0; terms = []; overlays.length = 0; closed.length = 0; reply = () => ({ code: 0, stdout: '{"address":"t9"}', stderr: "" }); };
 
 const term = (address: string, labels: Record<string, string>, more: Record<string, unknown> = {}) => ({ address, labels, state: "live", created_ms: 1000, ...more });

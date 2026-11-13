@@ -29,7 +29,7 @@ import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
 import { NAME_PANE, openMenu } from "./menu.js";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
-import { CURSOR } from "./nav.js";
+import { CURSOR } from "./nav.ts";
 import { field } from "./inline.js";
 import { isLazygit, gitState } from "./lazygit.js";
 import { openEqualize } from "./equalize.ts";

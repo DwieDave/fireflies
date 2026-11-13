@@ -17,7 +17,7 @@ import { h_flex } from "gpui-base";
 import { theme, shared, layout, run, settings } from "herdr";
 import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
-import { CURSOR } from "./nav.js";
+import { CURSOR } from "./nav.ts";
 
 export const ROLE = "newbutton";
 // Room after the button, layout px: the main block's side padding, so its

@@ -75,7 +75,7 @@ mock.module("herdr", () => ({
   terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), keys: () => [], focusedTerminal: () => null,
 }));
 
-const L = await import("../defaults/mods/nocturne/folderlist.js");
+const L = await import("../defaults/mods/nocturne/folderlist.ts");
 const { default: NewSpace, openSpacePicker, pickerOpen, RECENT, OPEN, WIDTH, LIST_SCRIPT } = await import("../defaults/mods/nocturne/newspace.js");
 
 /** A context whose spawns run, awaited with settle(). */

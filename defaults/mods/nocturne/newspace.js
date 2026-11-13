@@ -29,7 +29,7 @@ import { h_flex, v_flex, InputState, Input, ScrollHandle } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import { dither, eyebrow, spaceFolder } from "./kit.ts";
 import { isDock } from "./dock.ts";
-import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.js";
+import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail, parentOf } from "./folderlist.ts";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";

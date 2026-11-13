@@ -55,7 +55,7 @@ import Spaces from "./spaces.js";
 export { GLOW_SQUARE };
 import { NAME_AGENT, EDIT_SPACE, openMenu, openKeys } from "./menu.js";
 import { keysHint } from "./keyhelp.ts";
-import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.js";
+import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep, blockOf } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.js";
 import { UsageSection } from "./usage.js";
 import { focusFiles } from "./files.ts";

@@ -7,7 +7,7 @@
 // Pure: no herdr. rows() takes keys() and commands() and gives the dialog's
 // list: { head } eyebrows and { k, label, group, lines? } rows.
 
-import { SIDEBAR_HELP, STRIP_HELP, HEADER_HELP, PARKED_HELP, MENU_HELP } from "./nav.js";
+import { SIDEBAR_HELP, STRIP_HELP, HEADER_HELP, PARKED_HELP, MENU_HELP } from "./nav.ts";
 
 /** The dialog's groups, in order. */
 export const GROUPS = [
