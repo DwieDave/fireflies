@@ -84,6 +84,23 @@ import { noteLandings, glint, stamp, meadowView } from "./meadow.ts";
 import { pinLit, pinName, pinWhere } from "./shelf.ts";
 import { railView } from "./rail.ts";
 
+/** After a draw, the dock's (dock.ts) open asks: a dock being made that has
+ *  appeared gets its id, then what was asked of it; a shell asked for there is
+ *  pinned to the shelf once its terminal runs. Its pane shows first, and
+ *  nothing draws again when the terminal starts, so the sky looks again
+ *  shortly while one is awaited (dock.ts gives up after MAKING). */
+function dockTasks(cx: Context): void {
+  if (dockMaking()) cx.timer.after(0, () => adoptDock());
+
+  if (!shellWaiting()) return;
+
+  cx.timer.after(250, (later) => {
+    pinDockShell();
+
+    if (shellWaiting()) later.notify();
+  });
+}
+
 export default class Sky {
   spaces = new Spaces();
   handle: FocusHandle | null = null;
@@ -590,19 +607,7 @@ export default class Sky {
     stamp(this);
     this.tidyPins(cx);
 
-    // A dock being made (dock.ts) that has appeared: its id, then what was asked of it.
-    if (dockMaking()) cx.timer.after(0, () => adoptDock());
-
-    // A shell asked for in the dock: pinned to the shelf once its terminal runs.
-    // Its pane shows first, and nothing draws again when the terminal starts,
-    // so the sky looks again shortly while one is awaited (dock.ts gives up after MAKING).
-    if (shellWaiting()) {
-      cx.timer.after(250, (later) => {
-        pinDockShell();
-
-        if (shellWaiting()) later.notify();
-      });
-    }
+    dockTasks(cx);
 
     glint(this, [...jarred, ...kept], cx);
 

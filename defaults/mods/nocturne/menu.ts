@@ -395,7 +395,12 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
     ];
   }
 
-  // pane
+  return paneItems(t, tg);
+}
+
+/** A pane's menu ("pane": { pane, terminal }): rename, pin, dock, split, zoom,
+ *  even out, park, right-clicks, send back, move, close. */
+function paneItems(t: Theme, tg: Guarded<typeof isMenuTarget>): PopupItem[] {
   const all = terminals().filter((x) => isTerminal(x));
   const term = all.find((x) => x.address === tg.terminal);
   const parent = term?.parent ? all.find((x) => x.address === term.parent) : undefined;
