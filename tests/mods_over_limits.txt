@@ -43,7 +43,6 @@ defaults/mods/file-tree/main.ts render
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/board.ts
-defaults/mods/github/form.ts
 defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
 defaults/mods/github/projects.ts
