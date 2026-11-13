@@ -1480,8 +1480,10 @@ lights a step above the plate, `toolHover`): ▶ and its runs (the script runner
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
-layout without it gets "+ new" in the strip before the bell). The strip's
-keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
+layout without it gets "+ new" in the strip before the bell). A drop-down
+(▶'s runs, the tree mark's, the ▾'s menu, the bell's, "+ new"'s) closes on a
+second press of what opened it (the ▾'s also on a second right-click on the git
+button). The strip's keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
 the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not

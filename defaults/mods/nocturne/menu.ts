@@ -18,9 +18,9 @@
 import { svg, div } from "gpui-kit";
 import type { Color, Context, Element, FocusHandle } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
+import { theme, props, run, terminals, keys, shared, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
 import type { PaneInfo, SpaceInfo, TabInfo, Theme } from "herdr";
-import { arrayOf, isNumber, isString, literal, nullable, object, sharedKey, writeShared } from "./guard.ts";
+import { arrayOf, isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
@@ -237,6 +237,32 @@ export function openMenu(menu: MenuProps, { width = 220, centered = false, at = 
   return openOverlay(at && !centered ? { mod: "nocturne", kind, frame: "none", width, height, at, props: p } : { mod: "nocturne", kind, frame: "none", width, height, props: p });
 }
 
+// The git mark's menu (its ▾, a right-click on it, the strip's keys): the open
+// one's overlay id, so a second press closes it rather than opening it again.
+const GIT_MENU_KEY = sharedKey("nocturne.git-menu", nullable(isString));
+
+/** The git mark's menu is open. */
+export const gitMenuOpen = (): boolean => Boolean(readShared(shared, GIT_MENU_KEY, null));
+
+/** Opens the git mark's menu, or closes it when it's open. `wasOpen`: it was
+ *  open when the ▾ was pressed (tabs.ts tool): that press closed it already (a
+ *  popup closes on any press beside it), or closes it now; either way it stays
+ *  closed, as "+ new" does (newmenu.ts openNewMenu). */
+export function toggleGitMenu({ centered = false, at = null, wasOpen = false }: { readonly centered?: boolean; readonly at?: DropAt | null; readonly wasOpen?: boolean } = {}): void {
+  const open = readShared(shared, GIT_MENU_KEY, null);
+
+  if (open) {
+    writeShared(setShared, GIT_MENU_KEY, null);
+    closeOverlay(open);
+
+    return;
+  }
+
+  if (wasOpen) return;
+
+  writeShared(setShared, GIT_MENU_KEY, openMenu({ tab: "git" }, { centered, at }));
+}
+
 // The chrome's keys overview (role "keyshelp"): a dialog, since the sidebar,
 // the folded rail and the tab strip have no body to draw it over.
 const KEYS_W = 460;
@@ -410,7 +436,18 @@ export default class Menu {
 
     return this.popup.render(t, menuItems(t, menuProps()));
   }
+
+  /** Closed (a pick, esc, a press beside it): the git menu's key goes with it. */
+  closing(): void {
+    const p = props();
+    const id = isOverlayId(p) ? p.overlay : null;
+
+    if (id !== null && readShared(shared, GIT_MENU_KEY, null) === id) writeShared(setShared, GIT_MENU_KEY, null);
+  }
 }
+
+/** A popup's props carry its overlay id. */
+const isOverlayId = object({ overlay: isString });
 
 /** The tab menu's height. */
 export function menuHeight(p: MenuProps): number {

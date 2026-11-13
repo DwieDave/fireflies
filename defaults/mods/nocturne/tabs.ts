@@ -38,13 +38,13 @@ import { h_flex, ScrollHandle } from "gpui-base";
 import type { ScrollHandle as Scroll } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
-import { readShared, writeShared } from "./guard.ts";
+import { isBoolean, readShared, writeShared } from "./guard.ts";
 import { dither, statusFly, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
-import { openMenu, openKeys } from "./menu.ts";
+import { openMenu, openKeys, toggleGitMenu, gitMenuOpen } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
 import { headerControls, paneMenu, renamePane } from "./header.ts";
 import { CURSOR_KEY, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod, isLayoutNode } from "./nav.ts";
@@ -147,7 +147,7 @@ interface Rows {
   readonly parked: StripItem[];
 }
 
-/** A press on a tool button: where, and whether it was lit then. */
+/** A press on a tool button: where, and whether its drop-down was open then. */
 interface Press {
   readonly e: MouseButtonEvent;
   readonly on: boolean;
@@ -305,7 +305,7 @@ export default class Tabs {
       },
     });
 
-    const gitMenu = () => openMenu({ tab: "git" }, { centered: true });
+    const gitMenu = () => toggleGitMenu({ centered: true });
     // Left to right as drawn: "+ new" after the bell when it's a block of its own (newbutton.ts).
     const neu: StripItem = { id: "tab-new", go: () => openNewMenu({ centered: true }) };
     const bell: StripItem[] = hasMod(tree(), "notifications") ? [{ id: "bell", go: () => run("notifications.open") }] : [];
@@ -545,18 +545,28 @@ export default class Tabs {
    *  is open; a toggle goes by `wasOpen` and stays closed (scripts.ts
    *  toggleDeck, newmenu.ts openNewMenu). No `tip`: no tooltip (one over an
    *  open drop-down would sit on it). */
-  tool: ToolButton = (t, id, on, tip, action, ...kids) => h_flex().id(id).relative().flex_none().h(24).px(7).gap(5).items_center().text_size(11)
-    .text_color(on ? t.foreground : t.muted)
+  tool: ToolButton = (t, id, state, tip, action, ...kids) => {
+    const on = isBoolean(state) ? state : state.lit;
+    const open = isBoolean(state) ? state : state.open;
+
+    return this.toolFrame(t, id, on, tip, kids)
+      .on_mouse_down("left", (e, cx) => {
+        cx.stop_propagation();
+        this.press = { e, on: open };
+      })
+      .on_click(() => action(this.press?.e, Boolean(this.press?.on)));
+  };
+
+  /** A tool button's look: lit (a dithered band, a blue foot), its tooltip, its contents, the keyboard's ring. */
+  toolFrame(t: Theme, id: string, on: boolean, tip: string | null, kids: readonly Element[]): Element {
+    return h_flex().id(id).relative().flex_none().h(24).px(7).gap(5).items_center().text_size(11)
+      .text_color(on ? t.foreground : t.muted)
     .hover((s) => s.text_color(t.foreground).bg(toolHover(t)))
-    .when(Boolean(tip), (el) => el.tooltip(tip ?? ""))
-    .on_mouse_down("left", (e, cx) => {
-      cx.stop_propagation();
-      this.press = { e, on };
-    })
-    .on_click(() => action(this.press?.e, Boolean(this.press?.on)))
-    .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
-    .children(kids.map((k) => k.relative()))
-    .map((el) => navRing(t, el, this.at(id)));
+      .when(Boolean(tip), (el) => el.tooltip(tip ?? ""))
+      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
+      .children(kids.map((k) => k.relative()))
+      .map((el) => navRing(t, el, this.at(id)));
+  }
 
   filesButton(t: Theme): Element {
     const on = Boolean(filesPane());
@@ -576,7 +586,8 @@ export default class Tabs {
         .flatMap((x) => (x ? [x] : [])).join(" · ") + (g.branch ? ` on ${g.branch}` : "") + " · Git (⌘G)";
 
     const num = (s: string, c: Color) => div().flex_none().text_color(c).child(s);
-    const menu = (e: MouseButtonEvent | undefined) => openMenu({ tab: "git" }, { at: dropBelow(e, 220) });
+    // Its menu, hanging under the ▾; pressed again (or right-clicked again), closed.
+    const menu = (e: MouseButtonEvent | undefined, wasOpen = false) => toggleGitMenu({ at: dropBelow(e, 220), wasOpen });
     const github = Boolean(githubOpen());
 
     const counts = [
@@ -593,7 +604,7 @@ export default class Tabs {
       .child(this.tool(t, "tab-git", open, tip, () => toggleGit(),
         svg(chrome(busy ? "git-compare" : "git-branch")).size(14).text_color(open ? t.accent : g?.changed ? t.ansi3 : t.muted),
         ...counts))
-      .child(this.tool(t, "tab-git-more", github, null, (e) => menu(e), div().text_size(9).text_color(github ? t.accent : t.dim).child("▾")).px(3));
+      .child(this.tool(t, "tab-git-more", { lit: github, open: gitMenuOpen() }, null, (e, wasOpen) => menu(e, wasOpen), div().text_size(9).text_color(github ? t.accent : t.dim).child("▾")).px(3));
   }
 
   /** "+ new": its menu hangs under it; lit (the open look) while it's open. */
