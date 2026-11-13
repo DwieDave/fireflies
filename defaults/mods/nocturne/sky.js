@@ -45,7 +45,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused, window as appWindow } from "herdr";
 import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
-import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
+import { stamps, tidy, onShelf, storedRecords, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.ts";
@@ -1062,7 +1062,7 @@ export default class Sky {
     if (!recs.length) return;
     this.missing ??= new Map();
     const out = tidy(recs, panes(), this.missing, Date.now());
-    if (out) cx.timer.after(0, () => setShared(PANES_KEY, out));
+    if (out) cx.timer.after(0, () => setShared(PANES_KEY, storedRecords(out)));
     if (this.missing.size && !this.tidyLater) {
       this.tidyLater = true;
       cx.timer.after(PIN_GONE + 200, (cx) => { this.tidyLater = false; cx.notify?.(); });

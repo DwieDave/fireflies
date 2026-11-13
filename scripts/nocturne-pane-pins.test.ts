@@ -291,6 +291,15 @@ test("a closed pane's pin goes after a while; a pane missing at first (loading) 
   } finally { Date.now = real; }
 });
 
+test("a pin found under its pane's new id is stored with that id and its props as they were (plain JSON)", () => {
+  sharedState[pins.PANES_KEY] = [{ pane: "old", mod: WEB.mod, props: WEB.props, at: 1 }];
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  s.render(cx);
+  for (const f of timers.splice(0)) f(cx);
+  expect(sharedState[pins.PANES_KEY]).toEqual([{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 1 }]);
+});
+
 // ---- the dock: a space tied to no folder for panes that belong to no project (dock.js)
 
 const dockMod = await import("../defaults/mods/nocturne/dock.ts");
