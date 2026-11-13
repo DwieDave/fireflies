@@ -150,6 +150,8 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["nocturne.dock-shell", "New shell in the dock (it starts in ~), pinned to the shelf"],
   ["nocturne.dock-files", "New files pane at ~ in the dock, pinned to the shelf"],
   ["notifications.open", "Notifications: what your agents ask, answered from one place"],
+  // The Databases window (mod:databases).
+  ["databases.save", "Save the changed cells: a review of the statements first"],
   // The editor (mod:editor).
   ["editor.save", "Save"],
   ["editor.find", "Find"],

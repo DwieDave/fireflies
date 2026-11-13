@@ -338,6 +338,7 @@ export const OUT = {
   "editor.focus": "internal: hands the editor the keyboard",
   "editor.hover-more": "acts on the open hover card (ctrl-= while it's up)",
   "editor.hover-less": "acts on the open hover card (ctrl-- while it's up)",
+  "databases.save": "saves the Databases window's staged cell changes after a review: w or cmd-s inside the window",
   "browser.focus": "internal: hands the web pane's bar the keyboard",
   "browser.web": "hands the keyboard to the page: click it",
   "browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
