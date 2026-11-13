@@ -17,7 +17,8 @@
 //              terminals first: port, process, where it runs; on the cursor's
 //              row open ↗ (a web pane), copy (http://localhost:<port>), end
 //   system     live graphs, dithered, the last minute and a half (a reading
-//              every 2 s while the deck is open, none while it's closed):
+//              a second while this tab shows, every 2 s behind the others,
+//              none while the deck is closed; never two at once):
 //              CPU, GPU, memory, disk and network, each with its value now
 //              (sys.js has the sources); a source this machine lacks says so
 //   foot       what the cursor is on and its keys
@@ -63,7 +64,7 @@ import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, focused, home, nextCommand, notify, panes, props, run, settings, shared, setShared, spaces, terminals, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, index, buildTree, flatten, place, targets, guardOf, endGently, signal, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.js";
-import { SYS_PROBE, KEEP, STEP, parseSys, measure, push, rate, size, scale } from "./sys.js";
+import { SYS_PROBE, KEEP, STEP, STEP_SHOWN, parseSys, measure, push, rate, size, scale } from "./sys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
 const ART = "mods/nocturne/art";
@@ -74,7 +75,7 @@ const CONTEXT = "NocturneProcsDeck";
 const ESCAPE = "nocturne_procs_escape";
 export const REFRESH = 2000;
 export const GRACE = 2000;
-const SYSTEM_PACE = "a reading every 2 s while this is open";
+const SYSTEM_PACE = "a reading every second while this tab shows";
 
 const W = 480, H = 560;
 export const ROW = 24, PROW = 30;
@@ -161,9 +162,9 @@ export default class ProcsDeck extends View {
     this.refresh(cx);
     this.sample(cx);
     cx.timer.every(REFRESH, (cx) => { this.beat(); this.refresh(cx); });
-    // Checked every half second: a reading starts once STEP has passed since the last began
-    // (the probe itself takes a second or more, so a plain 2 s timer would skip every other beat).
-    cx.timer.every(500, (cx) => { if (Date.now() - (this.sampled ?? 0) >= STEP) this.sample(cx); });
+    // Checked every quarter second, and as each reading ends: the next starts once its pace has
+    // passed since the last began (the probe itself takes a second, so a plain timer would skip beats).
+    cx.timer.every(250, (cx) => this.tick(cx));
   }
 
   /** The strip learns the deck is open (and which tab); a tab the strip asked for (nocturne.ports) is taken. */
@@ -205,6 +206,15 @@ export default class ProcsDeck extends View {
     this.hist = next;
   }
 
+  /** The system readings' pace: a second while the system tab shows, else 2 s. */
+  pace() { return this.tab === "system" ? STEP_SHOWN : STEP; }
+
+  /** A system reading, when its pace has passed since the last began and none is running:
+   *  a slow source holds the next one back instead of piling them up. */
+  tick(cx, now = Date.now()) {
+    if (!this.sampling && now - (this.sampled ?? 0) >= this.pace()) this.sample(cx);
+  }
+
   /** One system reading (sys.js SYS_PROBE, about a second: iostat measures one). */
   sample(cx) {
     if (this.sampling) return;
@@ -212,7 +222,7 @@ export default class ProcsDeck extends View {
     this.sampled = Date.now();
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 10000 });
+        const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 5000 });
         const reading = parseSys(r?.stdout ?? "");
         const m = measure(reading, this.sysReading);
         this.sysReading = reading;
@@ -226,6 +236,7 @@ export default class ProcsDeck extends View {
       } catch { /* the graphs keep what they had */ }
       this.sampling = false;
       cx.notify();
+      this.tick(cx);
     });
   }
 
@@ -371,11 +382,13 @@ export default class ProcsDeck extends View {
     for (let j = i - 1; j >= 0; j--) if (items[j].depth < r.depth) return this.moveTo(items, j);
   }
 
-  switchTab(to) {
+  switchTab(to, cx = null) {
     const order = ["procs", "ports", "system"];
     this.tab = to ?? order[(order.indexOf(this.tab) + 1) % order.length];
     this.ask = null;
+    this.follow = true;
     this.beat();
+    if (cx) this.tick(cx);
   }
 
   /** a, or a click on "fireflies" / "all of …": this app's terminals or every process of yours. */
@@ -475,8 +488,8 @@ export default class ProcsDeck extends View {
     const page = Math.max(1, Math.floor((this.tab === "ports" ? PORTS_H / PROW : LIST_H / ROW)) - 1);
     if (k === "down" || k === "up") return this.moveTo(items, i + (k === "down" ? 1 : -1)), done();
     if (k === "pagedown" || k === "pageup") return this.moveTo(items, i + (k === "pagedown" ? page : -page)), done();
-    if (k === "tab" && m.shift) return this.switchTab(["procs", "ports", "system"][(["procs", "ports", "system"].indexOf(this.tab) + 2) % 3]), done();
-    if (k === "tab") return this.switchTab(), done();
+    if (k === "tab" && m.shift) return this.switchTab(["procs", "ports", "system"][(["procs", "ports", "system"].indexOf(this.tab) + 2) % 3], cx), done();
+    if (k === "tab") return this.switchTab(undefined, cx), done();
     if (this.typing) {
       if (k === "backspace") { this.query = [...this.query].slice(0, -1).join(""); return done(); }
       if (k === "enter") { this.typing = false; return done(); }
@@ -491,9 +504,9 @@ export default class ProcsDeck extends View {
     else if (k === "l" || k === "right") this.fold(items, i, true);
     else if (k === "space" || ch === " ") this.fold(items, i, null);
     else if (k === "enter") this.activate(items, i);
-    else if (k === "1") this.switchTab("procs");
-    else if (k === "2") this.switchTab("ports");
-    else if (k === "3") this.switchTab("system");
+    else if (k === "1") this.switchTab("procs", cx);
+    else if (k === "2") this.switchTab("ports", cx);
+    else if (k === "3") this.switchTab("system", cx);
     else if (k === "a") this.toggleAll();
     else if (k === "x") this.begin(item, Boolean(m.shift));
     else if (k === "o" && this.tab === "ports") return cx.stop_propagation(), this.open(item);
@@ -858,14 +871,14 @@ export default class ProcsDeck extends View {
         .child(keys(k("k-enter", "enter", "keep", () => { this.typing = false; }), k("k-esc", "esc", this.query ? "clear" : "back", (cx) => this.escape(cx)), help));
     }
     const note = this.note && Date.now() < this.note.until ? word(this.note.text, t[this.note.tone] ?? t.done) : null;
-    if (this.tab === "system") return bar.child(left(arrow, word(SYSTEM_PACE, t.dim))).child(keys(k("k-tabs", "tab", "processes", () => this.switchTab("procs")), help));
+    if (this.tab === "system") return bar.child(left(arrow, word(SYSTEM_PACE, t.dim))).child(keys(k("k-tabs", "tab", "processes", (cx) => this.switchTab("procs", cx)), help));
     // The query, kept after enter: a click on it opens the field again.
     const q = this.query ? div().id("find-query").flex_none().text_color(t.accent).cursor_text()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.typing = true; this.handle.focus(); cx.notify(); })
       .child(`/${this.query}`) : null;
     if (this.tab === "ports") {
-      if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes", () => this.switchTab("procs")), find, help));
+      if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes", (cx) => this.switchTab("procs", cx)), find, help));
       return bar.child(left(arrow, note ?? word(address(item.port)), q))
         .child(keys(k("k-open", "enter", "open", () => this.open(item)), k("k-copy", "c", "copy", (cx) => this.copy(item, cx)),
           item.guard ? null : k("k-end", "x", "end", () => this.begin(item, false)), find, help));
@@ -889,7 +902,7 @@ export default class ProcsDeck extends View {
       return h_flex().id(id).relative().h_full().px(8).gap(6).items_center().text_size(11).cursor_pointer()
         .text_color(on ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click((_e, cx) => { this.switchTab(to); this.handle.focus(); cx.notify(); })
+        .on_click((_e, cx) => { this.switchTab(to, cx); this.handle.focus(); cx.notify(); })
         .child(div().child(label)).child(div().text_color(t.dim).child(String(n)))
         .when(on, (el) => el.child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)));
     };

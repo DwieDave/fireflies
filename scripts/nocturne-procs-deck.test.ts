@@ -42,6 +42,8 @@ let calls: string[][] = [];
 let propsNow: any = {};
 let probeText = "";
 let sysText = SYS;
+// A system reading waits on this (a slow source) when set.
+let sysGate: Promise<void> | null = null;
 let focusedNow: any = { tab: "tB", pane: "p2", terminal: "t7" };
 let alive = new Set<number>();
 let stubborn = new Set<number>();
@@ -54,6 +56,7 @@ const herdr: Record<string, any> = {
   closeOverlay: (id: string) => { closed.push(id); },
   exec: async (cmd: string, args: string[]) => {
     calls.push([cmd, ...args]);
+    if (cmd === "sh" && args[1].includes("nocturne-sys")) await sysGate;
     if (cmd === "sh") return { code: 0, stdout: args[1].includes("nocturne-sys") ? sysText : probeText, stderr: "" };
     if (cmd === "kill") {
       const sig = args[0];
@@ -651,4 +654,55 @@ test("the scrollbar: a thumb while the rows overflow; dragging it scrolls, a pre
   d.refresh(cx); await flush();
   draw();
   expect(ids["bar-procs"]).toBeUndefined();
+});
+
+// ---- the system tab's pace: Developer: "when system tab is active refresh every second"
+
+test("system readings: a second apart while the system tab shows, 2 s behind the others, never two at once", async () => {
+  const sys = await import("../defaults/mods/nocturne-procs/sys.js");
+  expect(sys.STEP_SHOWN).toBe(1000);
+  expect(sys.STEP).toBe(2000);
+  expect(sys.KEEP).toBe(90); // still about 90 s at a second
+  const { d, press } = await deck();
+  const reads = () => calls.filter((c) => c[0] === "sh" && c[2].includes("nocturne-sys")).length;
+  const n0 = reads();
+  // On the processes tab: not after a second, after two.
+  d.tick(cx, d.sampled + 1000); await flush();
+  expect(reads()).toBe(n0);
+  d.tick(cx, d.sampled + 2000); await flush();
+  expect(reads()).toBe(n0 + 1);
+  // On the system tab: a second.
+  await press("3");
+  d.tick(cx, d.sampled + 999); await flush();
+  expect(reads()).toBe(n0 + 1);
+  d.tick(cx, d.sampled + 1000); await flush();
+  expect(reads()).toBe(n0 + 2);
+  // A slow source: while a reading runs, no other starts, however late it is.
+  let release: Function = () => {};
+  sysGate = new Promise((r) => { release = r; });
+  try {
+    d.tick(cx, d.sampled + 1000); await flush();
+    expect(reads()).toBe(n0 + 3);
+    for (const late of [1000, 5000, 60000]) { d.tick(cx, d.sampled + late); await flush(); }
+    expect(reads()).toBe(n0 + 3);
+    release(); await flush();
+    expect(d.sampling).toBe(false);
+  } finally { sysGate = null; }
+  // Back on another tab, 2 s again; switching to system reads at once when a second has passed.
+  await press("1");
+  d.tick(cx, d.sampled + 1500); await flush();
+  expect(reads()).toBe(n0 + 3);
+  d.sampled -= 1500;
+  await press("3");
+  expect(reads()).toBe(n0 + 4);
+});
+
+test("system: the graphs hold 90 readings, the newest at the right, in bars half as wide", async () => {
+  const { d, press, draw } = await deck();
+  await press("3");
+  for (let i = 0; i < 95; i++) { d.sampling = false; d.sample(cx); await flush(); }
+  expect(d.sys.cpu.length).toBe(90);
+  draw();
+  expect(ids["g-cpu"].kids.length).toBe(1 + 90);
+  expect(words(draw())).toContain("a reading every second while this tab shows");
 });

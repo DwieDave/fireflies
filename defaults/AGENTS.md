@@ -347,8 +347,9 @@ the highlighted line shows where it will land.
   focused one (`app.open_url`), `c` copies that address; system, dithered
   graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
   (and its pressure), disk (MB/s, how full) and network (in above the line,
-  out below), read every 2 s while the deck is open and never while it's
-  closed; a source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  out below), read every second while the system tab shows, every 2 s behind
+  the other tabs, never two at once and never while the deck is closed; a
+  source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
   h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
   pane (a group folds), `x` ends the process (`X` with everything under it):
   it asks in the deck, sends TERM, and two seconds on names what still runs,

@@ -130,7 +130,7 @@ test:
     bun test scripts/nocturne-usage-poll.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/nocturne-procs.test.ts
-    # Its deck and the strip's tree mark: every key, the cursor across refreshes, ask / TERM / KILL against a fake exec.
+    # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the system tab's second.
     bun test scripts/nocturne-procs-deck.test.ts
     # Its system graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
     bun test scripts/nocturne-procs-sys.test.ts
