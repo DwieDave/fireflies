@@ -193,9 +193,6 @@ function agentRows(agents: readonly KnownAgent[], show = showMissing()): NewItem
  *  here, beside the focused pane or in a tab, like Terminal (no corner mark,
  *  no close on a second pick); the docked panel is the strip's button's. */
 export const menuPanels = (): Panel[] => panels().flatMap((p): Panel[] => {
-  // Databases: not a tile yet (a tenth starts a fourth row): the palette, the git ▾ and nocturne.databases open it.
-  if (p.id === "databases") return [];
-
   // Git, GitHub, Scripts: a normal pane or tab of their own here (inpane.ts), a new one each pick.
   if (p.fixed === "float") return p.beside ? [{ id: p.id, name: p.name, icon: p.icon, key: p.key, words: p.words, pane: p.beside, tab: p.tab }] : [];
 
@@ -263,8 +260,10 @@ export function openNewMenu({ centered = false, at = null, wasOpen = false }: Ne
 /** The menu is open (the strip lights "+ new" and drops its tooltip). */
 export const newMenuOpen = (): boolean => Boolean(readShared(shared, OPEN_KEY, null));
 
-// The menu at its tallest (layout px); past it the body scrolls.
-const MOST = 640;
+// The menu at its tallest (layout px); past it the body scrolls. Four rows of tiles (Processes,
+// Databases and a launcher fill the fourth) with the agents a machine has: 640 and a tile row, which
+// still hangs inside a small screen's window at zoom 0.9 (about 970 layout px under the strip).
+const MOST = 640 + TILE_H + GAP;
 
 /** How tall the menu is with these agents' rows (at least one: the "looking" line). */
 export function menuHeight(agents: readonly KnownAgent[], show = showMissing()): number {
