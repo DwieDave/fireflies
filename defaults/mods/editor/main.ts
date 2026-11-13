@@ -134,13 +134,10 @@ import {
 import type { Guard, Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, nullable, object, oneOf, parseJson, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
 import { isJsonObject, isList } from "./guards.ts";
-import type { Bound, ColorRun, HoverPart, LanguageOptions, Problem, ProgressParams, ServerCaps, ServerNote, ServerState, SeverityColors, SyntaxColors, Work } from "./logic.ts";
-import {
-  languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
-  diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
-  cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown, appBindings, chordOf,
-  isHover, isLocations, isLspDiagnostic, isProgressParams, isPublishedDiagnostics, isServerCaps,
-} from "./logic.ts";
+import type { Bound, ColorRun, LanguageOptions, ServerCaps, ServerNote, ServerState, SyntaxColors } from "./logic.ts";
+import type { HoverPart, Problem, ProgressParams, SeverityColors, Work } from "./lsp-replies.ts";
+import { languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote, cardPlace, changeBetween, incremental, cardMarkdown, appBindings, chordOf, isServerCaps } from "./logic.ts";
+import { diagnostics, lineNotes, counts, diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, busy, progressWord, isHover, isLocations, isLspDiagnostic, isProgressParams, isPublishedDiagnostics } from "./lsp-replies.ts";
 import type { Doc as VimDoc, FeedResult, Mode, Played } from "./vim.ts";
 import { createVim, feed, play, token, beginInsert, CARET, MODE_NAME, applyEdits } from "./vim.ts";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
