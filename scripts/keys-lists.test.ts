@@ -193,7 +193,7 @@ test("files: ? lists every key, in the list and while the filter types", () => {
   expect(unnamed(filesLogic.KEYS, taken(make(true, "a.txt")))).toEqual([]);
 });
 
-const preview = await import("../defaults/mods/preview/main.js");
+const preview = await import("../defaults/mods/preview/main.ts");
 const previewKeys = await import("../defaults/mods/preview/keys.ts");
 test("preview: ? lists every key for each way it shows a file", () => {
   const cases: [string, string | null, Record<string, any>][] = [
