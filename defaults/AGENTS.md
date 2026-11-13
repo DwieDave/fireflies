@@ -340,22 +340,31 @@ the highlighted line shows where it will land.
   it started (terminals without a pane under "no pane"; `a` switches to every
   process of yours, rooted where the parent isn't yours), each row name,
   arguments, its listening ports, cpu, memory, uptime and pid, the selected
-  one with its whole command line and its own cpu / memory graphs; ports, the
+  one opening a block set apart by air, a ground and a dithered rule: its
+  whole command line, pid / parent with show, copy, end and end tree
+  buttons, and its own cpu / memory graphs; ports, the
   TCP ports your processes listen on (this app's first, with their tab and
   terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
   the focused tab's web pane (`nocturne-browser.open`) or a web pane beside the
   focused one (`app.open_url`), `c` copies that address; system, dithered
   graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
   (and its pressure), disk (MB/s, how full) and network (in above the line,
-  out below), read every 2 s while the deck is open and never while it's
-  closed; a source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  out below), read every second while the system tab shows, every 2 s behind
+  the other tabs, never two at once and never while the deck is closed; a
+  source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
   h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
   pane (a group folds), `x` ends the process (`X` with everything under it):
   it asks in the deck, sends TERM, and two seconds on names what still runs,
   where `K` sends KILL; `c` copies a process's command line, `/` finds, `r`
   reads again, `?` lists the keys, `q`/esc close. The app itself, herdr-core,
   its holders, launchd and other users' processes carry a shield and can't be
-  ended there. It reads `ps` and `lsof` every 2 s while open.
+  ended there. It reads `ps` and `lsof` every 2 s while open. Every key has
+  its pointer twin: the wheel scrolls the processes and the ports (the cursor
+  stays put; a key brings it back), and a long command in the detail block
+  first; a click selects a row, a double click does what enter does, a fold
+  arrow folds on a click, a long list's scrollbar drags, the tabs and the
+  scope switch on a click, the foot's keys are buttons, and a port row shows
+  open ↗ / copy / end while selected or hovered.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,

@@ -11,6 +11,7 @@ class El {
   kids: any[] = [];
   on: Record<string, Function> = {};
   text: string[] = [];
+  css: Record<string, any[]> = {};
   constructor(public tag?: string) {
     return new Proxy(this, {
       get: (t, k: string, proxy) => k in t ? (t as any)[k] : k === "then" ? undefined : (...a: any[]) => {
@@ -20,7 +21,10 @@ class El {
         else if (k === "when") { if (a[0]) a[1](proxy); }
         else if (k === "map") return a[0](proxy);
         else if (k === "on_mouse_down") t.on[`down:${a[0]}`] = a[1];
+        else if (k === "on_mouse_up") t.on[`up:${a[0]}`] = a[1];
         else if (k === "on_click") t.on.click = a[0];
+        else if (k.startsWith("on_")) t.on[k.slice(3)] = a.at(-1);
+        else t.css[k] = a;
         return proxy;
       },
     });
@@ -38,6 +42,8 @@ let calls: string[][] = [];
 let propsNow: any = {};
 let probeText = "";
 let sysText = SYS;
+// A system reading waits on this (a slow source) when set.
+let sysGate: Promise<void> | null = null;
 let focusedNow: any = { tab: "tB", pane: "p2", terminal: "t7" };
 let alive = new Set<number>();
 let stubborn = new Set<number>();
@@ -50,6 +56,7 @@ const herdr: Record<string, any> = {
   closeOverlay: (id: string) => { closed.push(id); },
   exec: async (cmd: string, args: string[]) => {
     calls.push([cmd, ...args]);
+    if (cmd === "sh" && args[1].includes("nocturne-sys")) await sysGate;
     if (cmd === "sh") return { code: 0, stdout: args[1].includes("nocturne-sys") ? sysText : probeText, stderr: "" };
     if (cmd === "kill") {
       const sig = args[0];
@@ -81,9 +88,14 @@ const herdr: Record<string, any> = {
   window: () => ({ platform: "macos" }),
 };
 mock.module("herdr", () => herdr);
-mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => path() }, Background: { checkerboard: (c: string) => bg({ dither: c }), solid: (c: string) => bg({ solid: c }) } }));
+function bg(b: any) { b.opacity = (o: number) => ({ ...b, opacity: o }); return b; }
 mock.module("gpui-base", () => ({ h_flex: () => new El(), v_flex: () => new El() }));
-(globalThis as any).window = { paint_path: () => new El("dither") };
+/** A path that counts its polygons (a graph's bars are one path a layer). */
+const path = () => { const p: any = { polys: [] as any[] }; p.add_polygon = (pts: any) => { p.polys.push(pts); return p; }; for (const k of ["move_to", "line_to", "close"]) p[k] = () => p; p.build = () => p; return p; };
+(globalThis as any).window = { paint_path: (p: any, fill: any) => { const e: any = new El("dither"); e.path = p; e.fill = fill; return e; } };
+/** A graph's bars: the polygons of its dithered layer (the first under its baseline). */
+const barsOf = (id: string) => ids[id].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither).flatMap((k: any) => k.path.polys);
 const theme: any = new Proxy({}, { get: (_t, k) => String(k) });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch((e) => { throw e; }); },
@@ -97,7 +109,7 @@ const flush = async () => { for (let i = 0; i < 6; i++) await new Promise((r) =>
 const elapse = async (ms: number) => { const due = timers.filter((x) => x.ms === ms); timers = timers.filter((x) => x.ms !== ms); for (const x of due) x.f(cx); await flush(); };
 
 const procs = await import("../defaults/mods/nocturne/procs.js");
-const { default: Deck, REFRESH, GRACE } = await import("../defaults/mods/nocturne-procs/main.js");
+const { default: Deck, REFRESH, GRACE, ROW, PROW, LIST_H, PORTS_H } = await import("../defaults/mods/nocturne-procs/main.js");
 
 beforeEach(() => {
   shared = {}; overlays = []; closed = []; ran = []; calls = []; ids = {}; clip = []; timers = [];
@@ -387,7 +399,9 @@ test("system (3): CPU, GPU, memory, disk and network graphs with their values; a
   expect(d.sys.rx.length).toBe(2); // the first reading has no rate yet
   expect(d.sys.rx[0]).toBe(null);
   // Bars: one per reading in the CPU graph.
-  expect(ids["g-cpu"].kids.length).toBe(1 + 2);
+  expect(barsOf("g-cpu").length).toBe(2);
+  // Each bar has its solid head, one layer for all of them.
+  expect(ids["g-cpu"].kids.filter((k: any) => k?.fill?.solid).flatMap((k: any) => k.path.polys).length).toBe(2);
   expect(words(ids["tab-system"])).toEqual(["system", "80%"]);
 });
 
@@ -406,6 +420,387 @@ test("the selected process's detail carries its own CPU and memory over the refr
   d.refresh(cx); await flush();
   expect(d.hist.get(52391)).toEqual({ cpu: [98.2, 98.2, 98.2], rss: [1992294, 1992294, 1992294] });
   draw();
-  expect(ids["sp-cpu"].kids.length).toBe(1 + 3);
-  expect(ids["sp-mem"].kids.length).toBe(1 + 3);
+  expect(barsOf("sp-cpu").length).toBe(3);
+  expect(barsOf("sp-mem").length).toBe(3);
+});
+
+// ---- by pointer: Developer: "all stuff needs to be mouse and keyboard first"
+
+// Forty sleeps under vite (t7) and as many ports, so both lists overflow.
+const MANY = Array.from({ length: 40 }, (_, i) => 70000 + i);
+const longPs = () => PS + MANY.map((p, i) => `${p} 50118 50112 dev                     00:10   0.0   1000 /bin/sleep ${i}\n`).join("");
+const longLsof = () => LSOF + MANY.map((p, i) => `p${p}\ncsleep\nf9\nn127.0.0.1:${6000 + i}\n`).join("");
+/** A cx that counts stop_propagation. */
+const spy = () => { const c: any = { ...cx, stopped: 0 }; c.stop_propagation = () => { c.stopped++; }; return c; };
+const mouseWheel = (lines: number) => ({ delta: { x: 0, y: lines * 18 }, delta_lines: { x: 0, y: lines }, touch_phase: "moved", position: { x: 0, y: 0 }, modifiers: {} });
+const trackpad = (px: number) => ({ delta: { x: 0, y: px }, touch_phase: "moved", position: { x: 0, y: 0 }, modifiers: {} });
+const slotOf = (key: string) => ids[`slot-${key}`];
+
+test("the wheel scrolls the processes, a mouse's lines by rows, a trackpad's pixels unzoomed (0.9), and it stays scrolled", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { d, draw, cur, press } = await deck();
+  draw();
+  expect(cur()).toBe("s:s1");
+  const c = spy();
+  // Down three notches: three rows. This used to snap back: each frame pulled the scroll to the cursor.
+  ids["procs-list"].on.scroll_wheel(mouseWheel(-3), c);
+  expect(c.stopped).toBe(1);
+  draw();
+  expect(d.scroll.procs).toBe(3 * ROW);
+  expect(cur()).toBe("s:s1"); // the cursor stays on its row
+  // A trackpad: 45 window px at zoom 0.9 are 50 layout px.
+  ids["procs-list"].on.scroll_wheel(trackpad(-45), c);
+  draw();
+  expect(d.scroll.procs).toBe(3 * ROW + 50);
+  // A refresh keeps the scroll.
+  d.refresh(cx); await flush(); draw();
+  expect(d.scroll.procs).toBe(3 * ROW + 50);
+  // Up past the top stops at 0.
+  ids["procs-list"].on.scroll_wheel(mouseWheel(40), c);
+  draw();
+  expect(d.scroll.procs).toBe(0);
+  // Far down stops where the last row ends at the list's foot.
+  ids["procs-list"].on.scroll_wheel(trackpad(-100000), c);
+  draw();
+  const last = d.rows().at(-1).key;
+  expect(slotOf(last).css.top[0] + slotOf(last).css.h[0]).toBe(LIST_H);
+  // A key brings the cursor back into sight: j moves it to the second row, now the top one.
+  await press("j");
+  draw();
+  expect(d.scroll.procs).toBe(ROW);
+});
+
+test("the last process stays reachable with its detail block open: G scrolls to its block's foot, the wheel can't pass it", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { d, draw, press, cur } = await deck();
+  await press("a"); // every process of dev's: the last row is one
+  await press("g", { char: "G", mods: { shift: true } });
+  draw();
+  const last = d.rows().at(-1).key;
+  expect(last).toMatch(/^p:/);
+  expect(cur()).toBe(last);
+  const slot = slotOf(last);
+  expect(slot.css.h[0]).toBeGreaterThan(ROW); // the row and its block
+  expect(slot.css.top[0] + slot.css.h[0]).toBe(LIST_H);
+  const at = d.scroll.procs;
+  ids["procs-list"].on.scroll_wheel(mouseWheel(-5), spy());
+  draw();
+  expect(d.scroll.procs).toBe(at);
+});
+
+test("the wheel scrolls the ports too", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { d, draw } = await deck("ports");
+  draw();
+  ids["ports-list"].on.scroll_wheel(mouseWheel(-2), spy());
+  draw();
+  expect(d.scroll.ports).toBe(2 * PROW);
+  ids["ports-list"].on.scroll_wheel(trackpad(-9), spy());
+  draw();
+  expect(d.scroll.ports).toBe(2 * PROW + 10);
+  ids["ports-list"].on.scroll_wheel(trackpad(1e6), spy());
+  draw();
+  expect(d.scroll.ports).toBe(0);
+});
+
+test("the wheel over a long command scrolls the command; at its end the list takes the wheel", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:52391") await press("j");
+  draw();
+  // As drawn: 108 window px at 0.9, eight lines of 15.
+  ids["cmd-text"].on.size_change({ width: 396, height: 108 }, cx);
+  expect(d.cmd).toMatchObject({ pid: 52391, h: 120 });
+  draw();
+  const c = spy();
+  ids["cmd"].on.scroll_wheel(mouseWheel(-1), c);
+  expect(d.cmd.y).toBe(15);
+  expect(c.stopped).toBe(1);
+  ids["cmd"].on.scroll_wheel(trackpad(-1000), c);
+  draw();
+  const room = d.cmd.h - ids["cmd"].css.h[0];
+  expect(d.cmd.y).toBe(room);
+  expect(ids["cmd-text"].css.top[0]).toBe(-room);
+  // At the end: not stopped, so the list under it scrolls.
+  ids["cmd"].on.scroll_wheel(mouseWheel(-1), c);
+  expect(c.stopped).toBe(2);
+  // Another process starts at its top.
+  await press("k");
+  draw();
+  expect(d.cmd.y).toBe(0);
+});
+
+test("clicks: a row selects, a double click shows its terminal, the fold arrow folds, the tabs and the scope switch", async () => {
+  const { d, draw, cur } = await deck();
+  draw();
+  const keys = d.rows().map((r: any) => r.key);
+  const i = keys.indexOf("p:41872");
+  ids[`row-${i}`].on.click({ click_count: 1 }, cx);
+  expect(cur()).toBe("p:41872");
+  expect(ran).toEqual([]);
+  draw();
+  ids[`row-${i}`].on.click({ click_count: 2 }, cx);
+  expect(ran).toEqual([["pane.focus", { terminal: "t4" }]]);
+  expect(closed).toEqual(["o1"]);
+  // The fold arrow of tab A folds it (and selects it); a second click unfolds.
+  draw();
+  const c = spy();
+  ids["fold-1"].on.click({ click_count: 1 }, c);
+  expect(c.stopped).toBe(1);
+  expect(cur()).toBe("t:tA");
+  expect(d.folds["t:tA"]).toBe(true);
+  expect(d.rows().some((r: any) => r.key === "x:t4")).toBe(false);
+  draw();
+  ids["fold-1"].on.click({ click_count: 1 }, c);
+  expect(d.folds["t:tA"]).toBe(false);
+  // A double click on a group folds it, as enter does.
+  draw();
+  ids["row-1"].on.click({ click_count: 2 }, cx);
+  expect(d.folds["t:tA"]).toBe(true);
+  // The tabs and "fireflies" / "all of dev".
+  draw();
+  ids["tab-ports"].on.click({}, cx); expect(d.tab).toBe("ports");
+  draw();
+  ids["tab-system"].on.click({}, cx); expect(d.tab).toBe("system");
+  draw();
+  ids["tab-procs"].on.click({}, cx); expect(d.tab).toBe("procs");
+  draw();
+  ids["scope"].on.click({}, cx); expect(d.all).toBe(true);
+  draw();
+  expect(words(ids["scope"])).toEqual(["all of dev"]);
+});
+
+test("clicks: the foot's keys are buttons: end asks, enter ends, find opens the field and a click on the field keeps it", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:50112") await press("j");
+  draw();
+  ids["k-tree"].on.click({}, cx);
+  expect(d.ask.pids).toEqual([50112, 50118, 50121]);
+  draw();
+  ids["k-no"].on.click({}, cx);
+  expect(d.ask).toBe(null);
+  draw();
+  ids["k-end"].on.click({}, cx);
+  expect(d.ask).toMatchObject({ phase: "ask", pids: [50112] });
+  draw();
+  ids["k-yes"].on.click({}, cx);
+  await flush();
+  expect(calls.find((x) => x[0] === "kill")).toEqual(["kill", "-TERM", "50112"]);
+  d.ask = null;
+  draw();
+  ids["k-find"].on.click({}, cx);
+  expect(d.typing).toBe(true);
+  await press("b");
+  draw();
+  ids["k-enter"].on.click({}, cx);
+  expect(d.typing).toBe(false);
+  expect(d.query).toBe("b");
+  draw();
+  ids["find-query"].on.click({}, cx);
+  expect(d.typing).toBe(true);
+  draw();
+  ids["find-field"].on.click({}, cx);
+  expect(d.typing).toBe(true);
+  ids["k-esc"].on.click({}, cx);
+  expect(d.query).toBe("");
+  draw();
+  ids["k-help"].on.click({}, cx);
+  expect(d.help).toBe(true);
+});
+
+test("clicks on ports: a row selects, a double click opens it; open / copy / end show on the selected and the hovered row", async () => {
+  const { d, draw, cur } = await deck("ports");
+  draw();
+  expect(ids["o-0"]).toBeTruthy(); // the cursor's row
+  expect(ids["o-1"]).toBeUndefined();
+  ids["port-1"].on.hover(true, cx);
+  draw();
+  expect(ids["o-1"]).toBeTruthy(); // hovered
+  ids["c-1"].on.click({}, cx);
+  expect(clip).toEqual(["http://localhost:8080"]);
+  ids["x-1"].on.click({}, cx);
+  expect(cur()).toBe("8080:41872");
+  expect(d.ask).toMatchObject({ pids: [41872], tab: "ports" });
+  d.ask = null;
+  draw();
+  ids["port-0"].on.click({ click_count: 1 }, cx);
+  expect(cur()).toBe("5173:50118");
+  ids["port-0"].on.click({ click_count: 2 }, cx);
+  expect(ran).toEqual([[`nocturne-browser.open:${JSON.stringify({ url: "http://localhost:5173", slot: "s9" })}`]]);
+});
+
+test("the scrollbar: a thumb while the rows overflow; dragging it scrolls, a press beside it jumps there", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { d, draw } = await deck();
+  draw();
+  const bar = ids["bar-procs"];
+  expect(bar).toBeTruthy();
+  const root = ids["nocturne-procs"];
+  // Pressed on the thumb (at the top) and dragged 90 window px (100 layout px) down.
+  const c = spy();
+  bar.on["down:left"]({ position: { x: 470, y: 200 }, local_position: { x: 4, y: 4 }, click_count: 1 }, c);
+  expect(c.stopped).toBe(1);
+  expect(d.scroll.procs).toBe(0);
+  root.on.mouse_move({ position: { x: 470, y: 290 } }, cx);
+  const moved = d.scroll.procs;
+  expect(moved).toBeGreaterThan(100); // the thumb moves less than the rows: they're longer than the list
+  draw();
+  expect(d.scroll.procs).toBe(moved); // not pulled back to the cursor
+  root.on["up:left"]({}, cx);
+  expect(d.drag).toBe(null);
+  root.on.mouse_move({ position: { x: 470, y: 400 } }, cx);
+  expect(d.scroll.procs).toBe(moved);
+  // A press at the strip's foot: the end.
+  draw();
+  ids["bar-procs"].on["down:left"]({ position: { x: 470, y: 600 }, local_position: { x: 4, y: LIST_H * 0.9 }, click_count: 1 }, cx);
+  root.on["up:left"]({}, cx);
+  draw();
+  const last = d.rows().at(-1).key;
+  expect(slotOf(last).css.top[0] + slotOf(last).css.h[0]).toBe(LIST_H);
+  // A short list has none.
+  probeText = probe();
+  d.refresh(cx); await flush();
+  draw();
+  expect(ids["bar-procs"]).toBeUndefined();
+});
+
+// ---- the system tab's pace: Developer: "when system tab is active refresh every second"
+
+test("system readings: a second apart while the system tab shows, 2 s behind the others, never two at once", async () => {
+  const sys = await import("../defaults/mods/nocturne-procs/sys.js");
+  expect(sys.STEP_SHOWN).toBe(1000);
+  expect(sys.STEP).toBe(2000);
+  expect(sys.KEEP).toBe(90); // still about 90 s at a second
+  const { d, press } = await deck();
+  const reads = () => calls.filter((c) => c[0] === "sh" && c[2].includes("nocturne-sys")).length;
+  const n0 = reads();
+  // On the processes tab: not after a second, after two.
+  d.tick(cx, d.sampled + 1000); await flush();
+  expect(reads()).toBe(n0);
+  d.tick(cx, d.sampled + 2000); await flush();
+  expect(reads()).toBe(n0 + 1);
+  // On the system tab: a second.
+  await press("3");
+  d.tick(cx, d.sampled + 999); await flush();
+  expect(reads()).toBe(n0 + 1);
+  d.tick(cx, d.sampled + 1000); await flush();
+  expect(reads()).toBe(n0 + 2);
+  // A slow source: while a reading runs, no other starts, however late it is.
+  let release: Function = () => {};
+  sysGate = new Promise((r) => { release = r; });
+  try {
+    d.tick(cx, d.sampled + 1000); await flush();
+    expect(reads()).toBe(n0 + 3);
+    for (const late of [1000, 5000, 60000]) { d.tick(cx, d.sampled + late); await flush(); }
+    expect(reads()).toBe(n0 + 3);
+    release(); await flush();
+    expect(d.sampling).toBe(false);
+  } finally { sysGate = null; }
+  // Back on another tab, 2 s again; switching to system reads at once when a second has passed.
+  await press("1");
+  d.tick(cx, d.sampled + 1500); await flush();
+  expect(reads()).toBe(n0 + 3);
+  d.sampled -= 1500;
+  await press("3");
+  expect(reads()).toBe(n0 + 4);
+});
+
+test("system: the graphs hold 90 readings, the newest at the right, in bars half as wide", async () => {
+  const { d, press, draw } = await deck();
+  await press("3");
+  for (let i = 0; i < 95; i++) { d.sampling = false; d.sample(cx); await flush(); }
+  expect(d.sys.cpu.length).toBe(90);
+  draw();
+  expect(barsOf("g-cpu").length).toBe(90);
+  // One element a layer, not three a bar: the baseline, the bars, their heads.
+  expect(ids["g-cpu"].kids.length).toBe(3);
+  expect(words(draw())).toContain("a reading every second");
+});
+
+// ---- room around the selected row: Developer: "give the selected item some whitespace"
+
+test("the selected row's block: air above and below, a ground and a rule of its own, facts apart from the command", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:52391") await press("j"); // rustc
+  draw();
+  const block = ids["block"];
+  expect(block.css.pt[0]).toBeGreaterThanOrEqual(8); // air between the row and the command
+  expect(ids["facts"].css.mt[0]).toBeGreaterThanOrEqual(8); // the facts apart from the command
+  const slot = slotOf("p:52391");
+  // The ground stops short of the next row: air under the rule.
+  expect(block.css.bottom[0]).toBeGreaterThan(0);
+  expect(slot.css.h[0]).toBe(ROW + ids["detail-52391"].css.h[0]);
+  // Before it's drawn, its lines are guessed from its length (82 characters: two).
+  expect(ids["cmd"].css.h[0]).toBe(30);
+  // As drawn: one line makes a short block; a long command grows it to three lines, and no more.
+  ids["cmd-text"].on.size_change({ width: 396, height: 13.5 }, cx);
+  draw();
+  const short = ids["detail-52391"].css.h[0];
+  expect(ids["cmd"].css.h[0]).toBe(15);
+  ids["cmd-text"].on.size_change({ width: 396, height: 27 }, cx); // two lines, at 0.9
+  draw();
+  expect(ids["detail-52391"].css.h[0]).toBe(short + 15);
+  ids["cmd-text"].on.size_change({ width: 396, height: 108 }, cx);
+  draw();
+  expect(ids["detail-52391"].css.h[0]).toBe(short + 30);
+  expect(ids["cmd"].css.h[0]).toBe(45);
+  // Its facts and its buttons.
+  expect(words(ids["facts"])).toEqual(expect.arrayContaining(["pid", "52391", "parent", "cargo 52214", "show", "copy", "end"]));
+  expect(words(ids["live"])).toEqual(expect.arrayContaining(["cpu", "98.2%", "mem", "1.9G"]));
+});
+
+test("the block's buttons: show focuses its terminal, copy its command line, end and end tree ask", async () => {
+  const { d, draw, press, cur } = await deck();
+  while (cur() !== "p:50112") await press("j"); // bun, with vite and esbuild under it
+  draw();
+  ids["d-copy"].on.click({}, cx);
+  expect(clip).toEqual(["bun run dev"]);
+  ids["d-tree"].on.click({}, cx);
+  expect(d.ask.pids).toEqual([50112, 50118, 50121]);
+  d.ask = null;
+  draw();
+  ids["d-end"].on.click({}, cx);
+  expect(d.ask.pids).toEqual([50112]);
+  d.ask = null;
+  draw();
+  ids["d-show"].on.click({}, cx);
+  expect(ran).toEqual([["pane.focus", { terminal: "t7" }]]);
+  // A shielded process has no end in its block.
+  await press("a");
+  await press("g"); // the app itself, first of all of dev's
+  draw();
+  expect(cur()).toBe("p:21416");
+  expect(ids["d-end"]).toBeUndefined();
+  expect(words(ids["live"])).toContain("the app itself");
+});
+
+test("moving the selection keeps every row above it where it was", async () => {
+  probeText = probe(longPs(), longLsof());
+  const { draw, press, cur, d } = await deck();
+  while (cur() !== "p:70000") await press("j");
+  expect(d.scroll.procs).toBe(0);
+  draw();
+  const keys = d.rows().map((r: any) => r.key);
+  const at = keys.indexOf("p:70000");
+  const before = Object.fromEntries(keys.slice(0, at + 1).map((k: string) => [k, slotOf(k)?.css.top[0]]));
+  const scroll = d.scroll.procs;
+  await press("j");
+  draw();
+  expect(d.scroll.procs).toBe(scroll);
+  const shown = keys.slice(0, at + 1).filter((k: string) => before[k] != null);
+  expect(shown.length).toBeGreaterThan(5);
+  for (const k of shown) expect([k, slotOf(k)?.css.top[0]]).toEqual([k, before[k]]);
+  // The row it left is a plain row again, and the next starts right under it.
+  expect(slotOf("p:70000").css.h[0]).toBe(ROW);
+  expect(slotOf("p:70001").css.top[0]).toBe(slotOf("p:70000").css.top[0] + ROW);
+});
+
+test("the depth guides: one dithered path for the rows in sight, a 1 px line a level a row", async () => {
+  const { d, draw } = await deck();
+  draw();
+  const guides = ids["procs-list"].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither);
+  expect(guides.length).toBe(1);
+  const want = d.rows().reduce((n: number, r: any) => n + r.depth, 0); // every row fits
+  expect(guides[0].path.polys.length).toBe(want);
+  // No row draws its own.
+  expect(ids["row-3"].kids.filter((k: any) => k?.tag === "dither").length).toBe(0);
 });
