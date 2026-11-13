@@ -2,7 +2,7 @@
 // Every color comes from theme() (the moonfly theme), never a literal.
 
 import { div, svg } from "gpui-kit";
-import type { Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
+import type { Color, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
@@ -319,6 +319,10 @@ export const atRest = (a: { readonly status: Status | null }): boolean => a.stat
 /** An agent's place in every list: needs you, working, running a command it
  *  started (working, but waiting on a shell), done, resting. */
 export const agentRank = (a: Pick<AgentInfo, "status" | "command">): number => (a.status === "working" ? (a.command ? 1.5 : 1) : RANK[a.status]);
+
+/** An agent's colour by its status, as the sidebar's fireflies wear it: the
+ *  status's own theme colour, resting ones muted. */
+export const statusColor = (t: Theme, status: Status): Color => (status === "idle" ? t.muted : t[status]);
 
 /** A small dithered diamond in the status color; working breathes, blocked blinks. */
 export function pip(t: Theme, status: Status | null | undefined, size = 6): Element {

@@ -1341,10 +1341,13 @@ what it holds centered in the glass when it's that short;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
-sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (clear of the last firefly's halo, the tiles in from the
-glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
-apart from the fireflies'. A tile is moonlit while its pane is on screen, the
+sits as a 28 px tile on a dithered shelf at the jar's foot (clear of the
+last firefly's halo, the tiles in from the glass as far as the fireflies'
+squares; on the rail 18 px tiles two abreast), in the order pinned, its own
+order apart from the fireflies'. A tile wears the pane's icon: a web page its
+favicon, an editor, Markdown or preview pane its shown file's type mark in its
+tint (as the editor's tabs wear it), a files pane the folder, a terminal its
+program's logo (an agent's in its status colour), another mod its mark. A tile is moonlit while its pane is on screen, the
 focused one wears the corner ticks; the shelf has no caption line: a tile's
 tooltip names it (its name, then its kind, its space when it's another one,
 "parked"). A click

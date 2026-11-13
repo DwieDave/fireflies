@@ -7,10 +7,11 @@ import { div, svg, image } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, focused } from "herdr";
-import type { Theme } from "herdr";
+import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, cornerTicks } from "./kit.ts";
+import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
 import { openMenu } from "./menu.ts";
 import type { JarItem } from "./pins.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
@@ -62,6 +63,67 @@ export function webIcon(p: { readonly props?: unknown } | null | undefined, tab:
   return isString(icon) && icon.startsWith("cache/browser-icons/") ? icon : null;
 }
 
+/** The viewers whose tile wears their file's type mark (file-icons.ts): each
+ *  notes its shown file's name by slot in shared `<mod>.titles` (editor adds
+ *  " ●" while unsaved, its scratchpad "Scratchpad · "), else props.path. */
+const FILE_VIEWERS: ReadonlySet<string> = new Set(["editor", "markdown", "preview"]);
+
+/** A viewer's props, as far as its file goes. */
+const isFileProps = object({}, { slot: isString, path: isString });
+
+/** The file a viewer pane shows (its name will do: the mark goes by its
+ *  extension), or null: not a viewer. */
+export function shownFile(p: PaneInfo | null | undefined): string | null {
+  if (!p?.mod || !FILE_VIEWERS.has(p.mod)) return null;
+
+  const pr = isFileProps(p.props) ? p.props : {};
+  const title = pr.slot ? readSharedMap(shared, sharedMapKey(`${p.mod}.titles`, isString)).get(pr.slot) : undefined;
+
+  if (title?.startsWith("Scratchpad · ")) return "scratchpad.md";
+
+  return title?.replace(/ ●$/, "") || pr.path || (p.mod === "markdown" ? "note.md" : null);
+}
+
+/** What a tile wears, `size` px, `bright` (lit, focused, under the pointer or
+ *  the cursor) or dimmed:
+ *    web page      its favicon (webIcon), else the web mark
+ *    editor, Markdown, preview   its file's type mark in its tint (file-icons.ts)
+ *    files pane    the folder mark
+ *    terminal      its program's logo (an agent's art logo in its status colour,
+ *                  else the program's own icon, else header.ts markPath)
+ *    other mods    their mark (header.ts markPath) */
+export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): Element {
+  const p = paneOf(it);
+  const id = `pin-icon-${it.key}`;
+  const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
+
+  if (icon) return image(icon).id(id).size(size).flex_none().opacity(bright ? 1 : 0.75);
+
+  const file = shownFile(p);
+
+  if (file) {
+    const kind = fileIcon(file);
+
+    return svg(iconSvg(kind, "nocturne")).id(id).size(size).flex_none().text_color(iconColor(kind, t)).opacity(bright ? 1 : 0.75);
+  }
+
+  const color = bright ? t.foreground : t.muted;
+
+  if (p?.mod === "file-tree") return svg("mods/workspace-chrome/folder.svg").id(id).size(size).flex_none().text_color(color);
+
+  const prog = p?.program;
+  const tint = p?.status ? statusColor(t, p.status) : color;
+
+  if (prog && !LOGO.has(prog.key) && prog.icon) {
+    return (prog.tint ? svg(prog.icon).text_color(tint) : image(prog.icon).opacity(bright ? 1 : 0.75)).id(id).size(size).flex_none();
+  }
+
+  // A terminal shown in no pane (a layout block's) goes by the listing's program.
+  const marked = p ?? (it.kind === "terminal" ? { program: it.terminal.program } : null);
+
+  return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
+}
+
 /** On screen now: its tab is the shown one of the shown space, not parked. */
 export function pinLit(sky: Sky, it: JarItem): boolean {
   const p = paneOf(it);
@@ -100,8 +162,8 @@ export function pinWhere(sky: Sky, it: JarItem): string {
 }
 
 /**
- * A pinned pane's tile, `size` px: its mark (header.ts markPath; a web page's
- * favicon, webIcon) on the dark
+ * A pinned pane's tile, `size` px: its mark (tileMark: a web page's favicon, a
+ * file's type mark, the folder, a program's logo) on the dark
  * plate in a square frame. Lit (on screen now) the frame brightens and the
  * tile is moonlit; under the pointer a grey plate; the focused one wears the
  * corner ticks, the keyboard's cursor a blue ring. A click goes to it, a
@@ -121,7 +183,6 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
   const at = (size - plate) / 2;
   const where = pinWhere(sky, it);
   const p = paneOf(it);
-  const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
   const bright = lit || on || focus || hot;
 
   return div().id(`pin-${it.key}`).relative().size(size).flex_none().flex().items_center().justify_center()
@@ -143,9 +204,8 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
     .child(div().absolute().top(0).left(0).size_full().border(1).border_color(lit ? t.ansi8 : t.ansi0))
     .child(div().absolute().top(at).left(at).size(plate).bg(t.background))
-    // A web page's favicon (its own colours, a little dimmer while not lit), else the pane's mark.
-    .child(icon ? image(icon).id(`pin-icon-${it.key}`).size(glyph).flex_none().opacity(bright ? 1 : 0.75)
-      : svg(markPath(p)).size(glyph).flex_none().text_color(bright ? t.foreground : t.muted))
+    // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
+    .child(tileMark(t, it, glyph, bright))
     .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
 }

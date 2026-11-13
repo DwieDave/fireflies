@@ -97,3 +97,65 @@ test("the shelf has no caption line: no \"n panes kept\", no name under the tile
   const tile = find(drawn([WEB, EDIT]), "pin-pane:p3");
   expect(tile.calls.tooltip[0]).toContain("main.rs");
 });
+
+// ---- item 3: a tile wears its pane's icon
+
+const tileOf = (p: any, size?: number) => {
+  panesNow = [p];
+  sharedState[pins.PANES_KEY] = p.terminal ? [] : [{ pane: p.pane, mod: p.mod, props: p.props, at: 1 }];
+  terminalsNow = p.terminal ? [{ address: p.terminal, state: "live", labels: { [pins.PIN_LABEL]: "1", [pins.AT_LABEL]: "1" }, program: p.program }] : [];
+  const it = kit.jar().find(pins.onShelf);
+  return shelf.pinTile(sky, theme, it, size);
+};
+/** The mark a tile wears: its tag (svg:path / image:path) and colour. */
+const markOf = (tile: any) => {
+  const m = all(tile).find((e: any) => /^pin-icon-/.test(idOf(e)));
+  return { tag: m.tag, color: m.calls.text_color?.[0] ?? null };
+};
+const md = (mod: string, props: any) => ({ pane: "p9", tab: "c1", terminal: null, mod, props, title: mod, focused: false, parked: false });
+const term = (program: any, status: string | null = null) => ({ pane: "p8", tab: "c1", terminal: "t8", program, status, title: "x", focused: false, parked: false });
+const PROG = { name: "", icon: null, tint: true, tile: null, color: null, shell: false, agent: false };
+
+test("a web tile wears its page's favicon, else the web mark", () => {
+  expect(markOf(tileOf(WEB)).tag).toBe("svg:mods/workspace-chrome/monitor.svg");
+  sharedState["browser.icons"] = { w1: "cache/browser-icons/docs.rs" };
+  panesNow = [WEB];
+  expect(markOf(shelf.pinTile(sky, theme, kit.jar().find(pins.onShelf)!)).tag).toBe("image:cache/browser-icons/docs.rs");
+});
+
+test("an editor, Markdown or preview tile wears its shown file's type mark in its tint (file-icons.ts, nocturne's copy)", () => {
+  expect(markOf(tileOf(EDIT))).toEqual({ tag: "svg:mods/nocturne/icons/code.svg", color: "ansi6" });
+  // The shown tab's file (editor.titles, " ●" while unsaved) over the one it opened on.
+  sharedState["editor.titles"] = { e1: "flake.nix ●" };
+  sharedState[pins.PANES_KEY] = [{ pane: "p3", mod: "editor", props: EDIT.props, at: 1 }];
+  panesNow = [EDIT];
+  expect(markOf(shelf.pinTile(sky, theme, kit.jar().find(pins.onShelf)!)).tag).toBe("svg:mods/nocturne/icons/code.svg");
+  sharedState["editor.titles"] = { e1: "notes.toml" };
+  expect(markOf(shelf.pinTile(sky, theme, kit.jar().find(pins.onShelf)!))).toEqual({ tag: "svg:mods/nocturne/icons/config.svg", color: "ansi3" });
+  sharedState["editor.titles"] = { e1: "Scratchpad · fireflies" };
+  expect(markOf(shelf.pinTile(sky, theme, kit.jar().find(pins.onShelf)!)).tag).toBe("svg:mods/nocturne/icons/markdown.svg");
+  sharedState = {};
+  expect(markOf(tileOf(md("markdown", { path: "/a/README.md", slot: "m1" })))).toEqual({ tag: "svg:mods/nocturne/icons/markdown.svg", color: "ansi4" });
+  expect(markOf(tileOf(md("preview", { path: "/a/spec.pdf", slot: "v1" })))).toEqual({ tag: "svg:mods/nocturne/icons/pdf.svg", color: "ansi1" });
+  sharedState = { "preview.titles": { v1: "shot.png" } };
+  expect(markOf(tileOf(md("preview", { path: "/a/spec.pdf", slot: "v1" }))).tag).toBe("svg:mods/nocturne/icons/image.svg");
+});
+
+test("a files tile wears the folder mark; another mod its mark", () => {
+  expect(markOf(tileOf(md("file-tree", { path: "/a", slot: "f1" }))).tag).toBe("svg:mods/workspace-chrome/folder.svg");
+  expect(markOf(tileOf(md("usage", {}))).tag).toBe("svg:mods/workspace-chrome/clock.svg");
+});
+
+test("a terminal tile wears its program's logo: its own icon, an agent's art logo in its status colour, else the terminal mark", () => {
+  expect(markOf(tileOf(term({ ...PROG, key: "nvim", name: "Neovim", icon: "icons/nvim.svg" }))).tag).toBe("svg:icons/nvim.svg");
+  expect(markOf(tileOf(term({ ...PROG, key: "btop", name: "btop", icon: "icons/btop.png", tint: false }))).tag).toBe("image:icons/btop.png");
+  expect(markOf(tileOf(term({ ...PROG, key: "shell", name: "zsh", shell: true })))).toEqual({ tag: "svg:mods/workspace-chrome/terminal.svg", color: "foreground" }); // lit: its tab is shown
+  // An agent's terminal on the shelf (pinned while not listed as an agent): its logo in its status colour.
+  expect(markOf(tileOf(term({ ...PROG, key: "claude", name: "Claude Code", icon: "icons/claude.svg", agent: true }, "blocked")))).toEqual({ tag: "svg:mods/nocturne/art/logo-claude.svg", color: "blocked" });
+});
+
+test("the rail's smaller tiles wear the same marks, 12 px", () => {
+  const tile = tileOf(md("markdown", { path: "/a/README.md", slot: "m1" }), 18);
+  const m = all(tile).find((e: any) => /^pin-icon-/.test(idOf(e)));
+  expect([m.tag, m.calls.size[0]]).toEqual(["svg:mods/nocturne/icons/markdown.svg", 12]);
+});
