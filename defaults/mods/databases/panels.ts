@@ -19,6 +19,8 @@ import { band, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "
 import { connList } from "./conns.ts";
 import { cellAt, prettyValue } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
+import { changeAt } from "./edits.ts";
+import { liveEdits } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A row's handlers: picked (a click), opened (a double click), its menu (a right click). */
@@ -278,15 +280,19 @@ function jsonLine(t: Theme, line: string, i: number): Element {
 /** The Value tab: the picked cell of the shown grid, whole (JSON pretty-printed). */
 function valueBody(t: Theme, v: DbView): Element {
   const g = shownGrid(v);
-  const cell = g ? cellAt(g.set, g.at) : undefined;
+  const read = g ? cellAt(g.set, g.at) : undefined;
 
-  if (!g || cell === undefined) return empty(t, "Pick a cell", "in the rows or a result; enter shows it here", null);
+  if (!g || read === undefined) return empty(t, "Pick a cell", "in the rows or a result; enter shows it here", null);
 
   const column = g.set.columns[g.at.col] ?? "";
+  // A staged change shows its new value, and what was read under the title.
+  const change = v.shownQuery() ? null : changeAt(liveEdits(v), g.set, g.at.row, column);
+  const cell = change ? change.now : read;
   const lines = prettyValue(cell).split("\n").slice(0, 400);
 
   return v_flex().size_full().px(10).pt(2).gap(4)
     .child(h_flex().gap(8).text_size(10).text_color(t.ansi8).child(div().child(`${column} · row ${g.at.row + 1}`)).child(div().flex_1()).child(div().text_color(t.accent).child("y")).child(div().child("copy")))
+    .when(change !== null, (el) => el.child(h_flex().gap(6).text_size(10).child(div().flex_none().text_color(t.ansi3).child("changed · was")).child(div().min_w(0).truncate().text_color(t.muted).child(change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : change?.was ?? ""))))
     .child(v_flex().id("value-text").relative().flex_1().min_h(0).p(8).overflow_y_scroll().bg(`${t.ansi0}55`)
       .when(cell === null, (el) => el.text_color(t.dim))
       .children(lines.map((l, i) => jsonLine(t, l, i))));

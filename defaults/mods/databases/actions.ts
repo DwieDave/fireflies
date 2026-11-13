@@ -21,6 +21,9 @@ import { openExport } from "./export-form.ts";
 import { keepCopy, ownPane } from "./opening.ts";
 import { quoteName, qualified } from "./catalog.ts";
 import { schemasOf, shownTables, structRows } from "./panels.ts";
+import { edgesOf } from "./layout.ts";
+import { counted } from "./edits.ts";
+import { beforeLeaving, discardAll, openReview, runSave } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -81,9 +84,25 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   else if (action === "move") v.move(cx);
   else if (action === "help") v.help = !v.help;
   else if (action === "close") closeCopy(v);
+  else if (action === "grow" || action === "shrink") resize(v, action === "grow" ? 1 : -1);
+  // databases.save with the review open runs it (a command doesn't reach the review's y).
+  else if (action === "save") {
+    if (v.review) runSave(v, cx);
+    else openReview(v);
+  }
+  else if (action === "discard") discardAll(v);
   else return false;
 
   return true;
+}
+
+/** + / -: the focused panel's edges move out or in (layout.ts edgesOf). */
+function resize(v: DbView, dir: 1 | -1): void {
+  const ds = v.dividers;
+  const edges = edgesOf(v.place(), v.room(), (d) => ds.size(d));
+
+  if (!edges.length) v.say("nothing to resize here: one panel shows", "failed");
+  else if (!ds.stepAll(edges, dir)) v.say(dir > 0 ? "it's as big as it gets" : "it's as small as it gets", "done");
 }
 
 /** q: a window closes; a pane closes too (q already means close here). */
@@ -96,11 +115,17 @@ function closeCopy(v: DbView): void {
 
   const own = ownPane(v);
 
-  if (own) run("pane.close", { pane: own });
+  if (own) beforeLeaving(v, "close", () => run("pane.close", { pane: own }));
 }
 
 /** Reads everything shown again: the folder's connections, the tables, the structure, the page. */
 export function refresh(v: DbView, cx: Context): void {
+  if (counted(v.edits).cells) {
+    beforeLeaving(v, "read it again", () => refresh(v, cx));
+
+    return;
+  }
+
   void discover(v, cx);
 
   if (!v.active) return;
@@ -180,6 +205,14 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
 
 /** Shows a table: its rows in the main view, its structure in [3]. */
 export function openTable(v: DbView, t: Parameters<typeof browse>[1], cx: Context): void {
+  const e = v.edits;
+
+  if (e && counted(e).cells && (e.table.name !== t.name || e.table.schema !== t.schema)) {
+    beforeLeaving(v, `open ${t.name}`, () => openTable(v, t, cx));
+
+    return;
+  }
+
   browse(v, t, cx);
   void loadStructure(v, t, cx);
   v.mainTab = 0;

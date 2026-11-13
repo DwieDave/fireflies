@@ -31,7 +31,8 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rows, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Review, Rows, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
 import { keyName } from "./keys.ts";
@@ -51,6 +52,10 @@ import { here, start, command, handoverOut } from "./opening.ts";
 import { IO, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import { unzoomSize } from "./kit.ts";
+import { beforeLeaving } from "./cell-edit.ts";
+import { Dividers, tracking } from "./dividers.ts";
+import type { Room } from "./layout.ts";
+import { keepSizes, keptSizes } from "./layout.ts";
 
 const NO_PROPS: DbProps = {};
 const BEAT = 4000;
@@ -90,6 +95,10 @@ export default class Databases extends View {
   structAt = 0;
   rows: Rows = { browse: null, set: null, total: null, error: null, busy: false, at: gridStart(), filtering: false };
   filterInput: InputState | null = null;
+  /** The changes staged on the shown table's rows (saved by w, after the review). */
+  edits: Edits | null = null;
+  /** The cell being edited. */
+  cellEdit: CellEdit | null = null;
   queries: QueryTab[] = [];
   /** The main view's tab: 0 the Rows, n the n-th query. */
   mainTab = 0;
@@ -100,6 +109,7 @@ export default class Databases extends View {
 
   // ---- over the body
   ask: Ask | null = null;
+  review: Review | null = null;
   menu: Menu | null = null;
   password: PasswordAsk | null = null;
   form: ConnForm | null = null;
@@ -110,6 +120,11 @@ export default class Databases extends View {
   // ---- drawing
   /** The shown grid's box, as last measured (the keys move by its rows). */
   gridSize: Size = { width: 600, height: 300 };
+  /** The body's height and a query tab's box, as last measured (the dividers' room). */
+  bodyH = 664;
+  queryBox = 400;
+  /** The panels' dividers, their sizes kept per window or pane (layout.ts). */
+  dividers = new Dividers({}, () => {});
   scrolls = { conns: ScrollHandle.new(), tables: ScrollHandle.new(), structure: ScrollHandle.new(), log: ScrollHandle.new() };
   /** Each list's cursor as last scrolled to. */
   seen = { conns: { at: -1 }, tables: { at: -1 }, structure: { at: -1 }, log: { at: -1 } };
@@ -121,6 +136,7 @@ export default class Databases extends View {
 
     this.overlay = pr.overlay ?? null;
     this.slot = pr.slot ?? null;
+    this.dividers = new Dividers(keptSizes(this.overlay !== null), (sizes) => keepSizes(this.overlay !== null, sizes));
     this.folder = h.folder;
     this.on = h.on;
     this.handle = cx.focus_handle();
@@ -182,7 +198,9 @@ export default class Databases extends View {
 
   /** A window closes itself; a pane never does by esc (its own × and cmd-w close it). */
   closeWindow(): void {
-    if (this.overlay) closeOverlay(this.overlay);
+    const id = this.overlay;
+
+    if (id) beforeLeaving(this, "close", () => closeOverlay(id));
   }
 
   /** The keyboard back to the view (or the shown query's editor). */
@@ -206,6 +224,11 @@ export default class Databases extends View {
   /** The shown query tab, or null on the Rows tab. */
   shownQuery(): QueryTab | null {
     return this.mainTab > 0 ? this.queries[this.mainTab - 1] ?? null : null;
+  }
+
+  /** The room the dividers share: the view, its body inside its padding, the shown query's box. */
+  room(): Room {
+    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() ? this.queryBox : null };
   }
 
   /** Where keys go now. */
@@ -310,7 +333,7 @@ export default class Databases extends View {
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
   move(cx: Context): void {
-    handoverOut(this, cx);
+    beforeLeaving(this, this.overlay ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
   }
 
   key(e: KeyEvent, cx: Context): void {
@@ -344,6 +367,7 @@ export default class Databases extends View {
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
+      .map((el) => tracking(el, this.dividers))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
 

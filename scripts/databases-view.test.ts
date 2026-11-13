@@ -377,3 +377,50 @@ test("grids: the cursor stays in view, the wheel scrolls, numbers go right, a JS
   expect(g.prettyValue(null)).toBe("NULL");
   expect(g.rowText(set, 1)).toBe('1\tn1\t{"a":[1,2]}');
 });
+
+test("panels resize: + / - move the focused panel's edges, the sizes are kept per window and for panes", () => {
+  fresh();
+  const w = open({ folder: "/w", overlay: "w1" });
+  w.size = { width: 1100, height: 720 };
+  w.bodyH = 664;
+  const ids = (d: [string, any[]][]) => d.filter(([m]) => m === "id").map(([, a]) => a[0]);
+  expect(ids(render(w))).toEqual(expect.arrayContaining(["db-split-left", "db-split-conns", "db-split-struct", "db-split-log"]));
+  w.panel = "conns";
+  const left = w.dividers.size({ key: "left", axis: "x", side: 1, min: 200, max: 762, start: 330 });
+  w.key(key("+"), cx);
+  expect(sharedState["databases.sizes"]).toEqual({ window: { left: left + 24, conns: expect.any(Number) } });
+  w.panel = "main";
+  w.key(key("-"), cx);
+  w.key(key("-"), cx);
+  expect((sharedState["databases.sizes"] as any).window.left).toBe(left + 72);
+  // A new window starts where this one was left; a pane keeps its own.
+  const again = open({ folder: "/w", overlay: "w2" });
+  expect(again.dividers.sizes.left).toBe(left + 72);
+  const pane = open({ folder: "/w", slot: "s1" });
+  pane.size = { width: 900, height: 600 };
+  pane.bodyH = 544;
+  pane.panel = "tables";
+  pane.key(key("="), cx);
+  expect(Object.keys(sharedState["databases.sizes"] as any)).toEqual(["window", "pane"]);
+  expect((sharedState["databases.sizes"] as any).window.left).toBe(left + 72);
+  // Narrow: one panel shows, nothing to resize.
+  pane.size = { width: 520, height: 600 };
+  pane.key(key("+"), cx);
+  expect(pane.note.text).toContain("nothing to resize");
+});
+
+test("a query's editor and result split: a divider between them, + in the result grows the result", () => {
+  fresh();
+  const v = open({ folder: "/w", overlay: "w1" });
+  v.size = { width: 1100, height: 720 };
+  v.bodyH = 664;
+  v.queryBox = 500;
+  const q = v.addQuery("select 1", cx);
+  q.inResults = true;
+  const ids = (d: [string, any[]][]) => d.filter(([m]) => m === "id").map(([, a]) => a[0]);
+  expect(ids(render(v))).toContain(`q${q.id}-split`);
+  v.key(key("+"), cx);
+  const kept = (sharedState["databases.sizes"] as any).window;
+  // The editor (start: 38 % of the box under the result line) gave 24 px to the result.
+  expect(kept.editor).toBe(Math.round((500 - 22) * 0.38) - 24);
+});

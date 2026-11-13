@@ -78,7 +78,7 @@ describe("a remote libSQL database (Hrana over HTTP, a fake server)", () => {
         step_results: [{ cols: [{ name: "id", decltype: "INTEGER" }, { name: "b", decltype: "BLOB" }], rows: [[{ type: "integer", value: "1" }, { type: "blob", base64: "AP8=" }], [{ type: "float", value: 1.5 }, { type: "null" }]], affected_row_count: 0 }, null],
         step_errors: [null, { message: "SQLite error: no such table: x", code: "SQLITE_ERROR" }] } } }, { type: "ok", response: { type: "close" } }]) };
     };
-    const o = await runHrana(fetcher, "libsql://edge-cache-dw.turso.io/", "tok-123", ["select 1", "select * from x"]);
+    const o = await runHrana(fetcher, "libsql://edge-cache-dw.turso.io/", "tok-123", [{ sql: "select 1" }, { sql: "select * from x" }]);
     expect(seen.url).toBe("https://edge-cache-dw.turso.io/v2/pipeline");
     expect(seen.headers.authorization).toBe("Bearer tok-123");
     expect(seen.body).not.toContain("tok-123");
@@ -91,7 +91,7 @@ describe("a remote libSQL database (Hrana over HTTP, a fake server)", () => {
     expect(parseHrana(401, "", 1).error!.message).toBe("the token was refused");
     expect(parseHrana(200, "{}", 1).error!.message).toBe("the server answered 200");
     expect(httpBase("https://x.turso.io/")).toBe("https://x.turso.io");
-    expect(pipelineBody(["a"])).toBe('{"requests":[{"type":"batch","batch":{"steps":[{"stmt":{"sql":"a"}}]}},{"type":"close"}]}');
+    expect(pipelineBody([{ sql: "a" }])).toBe('{"requests":[{"type":"batch","batch":{"steps":[{"stmt":{"sql":"a"}}]}},{"type":"close"}]}');
   });
 });
 

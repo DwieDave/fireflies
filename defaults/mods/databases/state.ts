@@ -13,6 +13,7 @@ import type { Browse, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
 import type { HistoryEntry } from "./store.ts";
+import type { SaveStatement } from "./save-sql.ts";
 
 export const MOD = "databases";
 
@@ -102,6 +103,27 @@ export interface Ask {
   step: 1 | 2;
   readonly input: InputState | null;
   readonly go: () => void;
+}
+
+/** A cell being edited in the Rows grid: where, its input, and whether it stands for NULL (an
+ *  empty input is '' unless it does). */
+export interface CellEdit {
+  readonly row: number;
+  readonly col: number;
+  readonly column: string;
+  readonly input: InputState;
+  isNull: boolean;
+}
+
+/** The save's review: the statements it will run, how it's going, where it stopped. */
+export interface Review {
+  readonly statements: readonly SaveStatement[];
+  readonly table: string;
+  readonly cells: number;
+  busy: boolean;
+  error: { readonly index: number | null; readonly message: string } | null;
+  /** What waits for the save (leaving the table, closing), or null. */
+  readonly after: (() => void) | null;
 }
 
 /** A row of a menu (a right-click, the connection switcher, history): what it says, its key, what it does. */

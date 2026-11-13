@@ -15,6 +15,8 @@ import { cellAt, rowText } from "./grid.ts";
 import { exportShown, shownGrid, showValue, sortBy } from "./act-grid.ts";
 import { insertName, openTable } from "./actions.ts";
 import type { StructRow } from "./panels.ts";
+import { changeAt } from "./edits.ts";
+import { editableNow, liveEdits, stageNull, startEdit, undoCell } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Opens a menu over the body. */
@@ -90,6 +92,16 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
   if (!v.shownQuery()) {
     rows.splice(3, 0, { label: `Sort by ${column}`, key: "s", go: () => sortBy(v, column, cx) });
     rows.splice(4, 0, { label: "Filter…", key: "/", go: () => { v.rows.filtering = true; } });
+
+    // Editing: only where the rows can be (else the first row says why).
+    const e = editableNow(v);
+    const changed = changeAt(liveEdits(v), g.set, row, column);
+
+    rows.unshift(...("why" in e ? [] : [
+      { label: `Change ${column}…`, key: "c", go: () => { startEdit(v); } },
+      { label: "Set it NULL", key: "N", go: () => stageNull(v) },
+      ...(changed ? [{ label: "Undo this change", sub: `back to ${changed.was ?? "NULL"}`, key: "u", go: () => undoCell(v) }] : []),
+    ]));
   }
 
   openMenu(v, `${column} · row ${row + 1}`, rows);

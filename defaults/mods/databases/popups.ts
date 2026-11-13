@@ -13,6 +13,8 @@ import { band, chip, dither, popupScrim, stop } from "./kit.ts";
 import { keysKey, keysView } from "./keyhelp.ts";
 import { helpSections } from "./keys.ts";
 import { applyFilter } from "./act-grid.ts";
+import { editKey } from "./cell-edit.ts";
+import { reviewKey, reviewPanel } from "./review.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The ask's answer to a key. */
@@ -132,6 +134,12 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): boolean {
     return true;
   }
 
+  if (v.review) {
+    reviewKey(v, e, cx);
+
+    return true;
+  }
+
   const ask = v.ask;
 
   if (ask) {
@@ -147,6 +155,8 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): boolean {
 
     return true;
   }
+
+  if (editKey(v, e)) return true;
 
   const help = keysKey(e, v.help);
 
@@ -246,6 +256,8 @@ export function overBody(t: Theme, v: DbView): Element[] {
   }
 
   if (menu) out.push(menuPanel(t, v, menu));
+
+  if (v.review) out.push(reviewPanel(t, v));
 
   if (v.password) out.push(passwordPanel(t, v));
 

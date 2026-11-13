@@ -179,7 +179,24 @@ by the column, `/` a WHERE line, `<` `>` pages) and a tab per query (an SQL
 editor with tree-sitter colours over its result; ctrl-enter runs the
 statement under the caret or the selection, ctrl-shift-enter all of them in
 one session, esc cancels a run; the error is underlined where the client
-places it), [4] Log. `e` exports a table (whole, its page, its filtered rows)
+places it), [4] Log. A table's cells are edited in the Rows grid and saved
+only when the person says so: `c` (or a double click) turns the cursor's
+cell into an input (enter keeps, esc drops, tab / shift-tab keep and edit the
+next / previous cell, ctrl-n makes it NULL), `N` sets NULL, `u` undoes the
+cell, `U` discards every change; a changed cell is yellow with its old value
+on hover and in Value, its row has a pip in the gutter, the head counts the
+changes, and they stay with their rows through pages, sorting and filtering.
+`w` (cmd-s, ctrl-s) shows the statements a save runs (one transaction, one
+UPDATE per row by its primary key, or SQLite's rowid, with the old values in
+its WHERE and a check after each, so a row changed elsewhere stops the save
+and nothing is written; Turso gets the values bound) and `y` runs them.
+A view, a table without a key, a query's result and a read-only connection
+aren't edited (the key says why). Leaving the table, reading it again or
+closing with changes staged asks first (save, discard, stay). The gaps
+between panels (and between a query's editor and its result) are dividers:
+drag one, double-click it to put it back; `+` / `-` grow and shrink the
+focused panel; the sizes are kept (one set for the window, one for panes).
+`e` exports a table (whole, its page, its filtered rows)
 or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
 the connection's history; `?` lists every key; right-click (or `m`) opens a
 row's menu. Nothing runs on open. A statement that writes asks first (`y`);
@@ -197,7 +214,9 @@ password literal blanked) and `queries/<id>.json` (each tab's text). Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
 rows and structure), `databases.cancel`, and any key's action by name
-(`databases.export`, `databases.refresh`…). Another mod hands it a connection,
+(`databases.export`, `databases.refresh`, `databases.save`…);
+`databases.set:<text>` puts text in the edited cell's input, or with none
+edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
 "readonly"?, "from"?, "as"?: "pane" | "tab"}` (`from` is shown as where it

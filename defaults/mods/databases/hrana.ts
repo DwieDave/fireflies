@@ -7,6 +7,7 @@
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, literal, nullable, object, oneOf, parseJson } from "./guard.ts";
 import type { Cell, Outcome, StatementResult } from "./parse-out.ts";
+import type { BoundValue } from "./script.ts";
 
 /** fetch as the window uses it (a test's stand-in). */
 export type Fetch = (url: string, init: { method: string; headers: { readonly [name: string]: string }; body: string }) => Promise<{ readonly status: number; text(): Promise<string> }>;
@@ -16,9 +17,21 @@ export function httpBase(url: string): string {
   return url.trim().replace(/^libsql:\/\//, "https://").replace(/^wss:\/\//, "https://").replace(/^ws:\/\//, "http://").replace(/\/+$/, "");
 }
 
+/** A statement for the pipeline: its text and the values bound to its `?`s, if any. */
+export interface HranaStatement {
+  readonly sql: string;
+  readonly args?: readonly BoundValue[];
+}
+
+/** A bound value as Hrana writes it (a float as a number, an integer as text). */
+const hranaValue = (b: BoundValue) => (b.type === "null" ? { type: "null" } : { type: b.type, value: b.value });
+
+/** A statement as Hrana writes it. */
+const stmt = (s: HranaStatement) => (s.args ? { sql: s.sql, args: s.args.map(hranaValue) } : { sql: s.sql });
+
 /** The pipeline's body: one batch of the statements, each after the one before went well, then close. */
-export function pipelineBody(statements: readonly string[]): string {
-  const steps = statements.map((sql, i) => (i === 0 ? { stmt: { sql } } : { stmt: { sql }, condition: { type: "ok", step: i - 1 } }));
+export function pipelineBody(statements: readonly HranaStatement[]): string {
+  const steps = statements.map((s, i) => (i === 0 ? { stmt: stmt(s) } : { stmt: stmt(s), condition: { type: "ok", step: i - 1 } }));
 
   return JSON.stringify({ requests: [{ type: "batch", batch: { steps } }, { type: "close" }] });
 }
@@ -89,7 +102,7 @@ export function parseHrana(status: number, text: string, count: number): Outcome
 }
 
 /** Runs the statements on a remote libSQL database. */
-export async function runHrana(fetcher: Fetch, url: string, token: string | null, statements: readonly string[]): Promise<Outcome> {
+export async function runHrana(fetcher: Fetch, url: string, token: string | null, statements: readonly HranaStatement[]): Promise<Outcome> {
   const json = { "content-type": "application/json" };
   const headers = token ? { ...json, authorization: `Bearer ${token}` } : json;
 

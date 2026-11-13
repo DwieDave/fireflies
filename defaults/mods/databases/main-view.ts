@@ -9,9 +9,15 @@ import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
-import { chip, dither, empty, panel, pip, titleTabs, unzoomSize } from "./kit.ts";
+import { chip, dither, empty, panel, pip, titleTabs, unzoom, unzoomSize } from "./kit.ts";
+import { divider } from "./dividers.ts";
+import { editorDivider } from "./layout.ts";
 import { grid } from "./grid.ts";
-import type { GridHandlers } from "./grid.ts";
+import type { GridHandlers, GridOverlay } from "./grid.ts";
+import type { ResultSet } from "./parse-out.ts";
+import { changeAt, changesWord, counted, rowChanged } from "./edits.ts";
+import { editableNow, liveEdits, settleEdit, startEdit } from "./cell-edit.ts";
+import { changesBar } from "./review.ts";
 import { colsOf, openFilter, showValue, sortBy } from "./act-grid.ts";
 import { cellMenu } from "./menus.ts";
 import { loadRows } from "./session.ts";
@@ -29,6 +35,8 @@ function handlers(v: DbView, q: QueryTab | null): GridHandlers {
 
   return {
     pick: (row, col) => {
+      if (!q) settleEdit(v);
+
       put(row, col);
       v.panel = "main";
 
@@ -36,9 +44,13 @@ function handlers(v: DbView, q: QueryTab | null): GridHandlers {
 
       v.focusSelf();
     },
+    // A double click edits a table's cell; anything else shows its whole value.
     open: (row, col) => {
+      if (!q) settleEdit(v);
+
       put(row, col);
-      showValue(v);
+
+      if (q || "why" in editableNow(v) || !startEdit(v)) showValue(v);
     },
     menu: (row, col, cx) => {
       put(row, col);
@@ -46,6 +58,17 @@ function handlers(v: DbView, q: QueryTab | null): GridHandlers {
     },
     sort: q ? null : (col, cx) => sortBy(v, v.rows.set?.columns[col] ?? null, cx),
     scroll: (by, across, cx) => v.scrollGrid(by, across, cx),
+  };
+}
+
+/** What editing lays over the Rows grid: the staged changes, the rows with some, the edited cell. */
+function overlayOf(v: DbView, set: ResultSet): GridOverlay {
+  const e = liveEdits(v);
+
+  return {
+    change: (r, c) => changeAt(e, set, r, set.columns[c] ?? ""),
+    marked: (r) => rowChanged(e, set, r),
+    editing: v.cellEdit,
   };
 }
 
@@ -133,9 +156,11 @@ function rowsBody(t: Theme, v: DbView, active: boolean): Element {
   const body = v.rows.error ? empty(t, "It didn't answer", v.rows.error, 1)
     : !set ? empty(t, "reading…", null, null)
     : !set.rows.length ? empty(t, b.filter ? "No row matches" : "No rows", b.filter ? `where ${b.filter}` : null, null)
-    : grid(t, { id: "rows-grid", width: v.gridSize.width, height: v.gridSize.height, active, sort: b.sort, types: v.columnTypes() }, set, colsOf(set), v.rows.at, handlers(v, null));
+    : grid(t, { id: "rows-grid", width: v.gridSize.width, height: v.gridSize.height, active, sort: b.sort, types: v.columnTypes(), overlay: overlayOf(v, set) }, set, colsOf(set), v.rows.at, handlers(v, null));
 
-  return v_flex().size_full().child(filterLine(t, v)).child(gridBox(t, v, "rows-box", body)).child(pager(t, v));
+  const changes = changesBar(t, v);
+
+  return v_flex().size_full().child(filterLine(t, v)).child(gridBox(t, v, "rows-box", body)).when(changes !== null, (el) => (changes ? el.child(changes) : el)).child(pager(t, v));
 }
 
 /** The line between a query's editor and its result: how it went. */
@@ -169,14 +194,22 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
   const o = q.outcome;
   const set = o?.results[q.shown]?.set ?? null;
-  const tall = v.gridSize.height + 200;
-  const edH = Math.max(90, Math.min(280, Math.round(tall * 0.38)));
+  const split = editorDivider(v.queryBox);
+  const edH = v.dividers.size(split);
 
   const result = !o || q.running ? div().flex_1()
     : set && set.columns.length ? grid(t, { id: `q${q.id}-grid`, width: v.gridSize.width, height: v.gridSize.height, active: active && q.inResults, sort: null, types: set.types }, set, colsOf(set), q.at, handlers(v, q))
     : empty(t, o.error ? "Nothing to show: it stopped at the error" : "No rows", o.error ? "the error is underlined in the statement above; fix it and run it again" : null, null);
 
   return v_flex().size_full()
+    .on_size_change((drawn, cx) => {
+      const h = unzoom(drawn.height);
+
+      if (Math.abs(h - v.queryBox) > 1) {
+        v.queryBox = h;
+        cx.notify();
+      }
+    })
     .child(div().id(`q${q.id}-editor`).relative().h(edH).flex_none().pl(2).text_size(12)
       .on_mouse_down("left", (_e, cx) => {
         q.inResults = false;
@@ -185,6 +218,7 @@ function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
         cx.notify();
       })
       .child(Editor.new(q.editor).size_full()))
+    .child(divider(t, `q${q.id}-split`, split, v.dividers, 0))
     .child(resultHead(t, v, q))
     .child(gridBox(t, v, `q${q.id}-box`, result));
 }
@@ -194,8 +228,10 @@ function mainRight(t: Theme, v: DbView, q: QueryTab | null): Element {
   if (q) return div().text_color(t.dim).child(q.running ? "running · esc cancels" : `${v.active?.name ?? "not connected"} · ctrl-enter run`);
 
   const b = v.rows.browse;
+  const n = counted(liveEdits(v)).cells;
+  const name = div().text_color(t.dim).child(b ? `${b.table.schema ? `${b.table.schema}.` : ""}${b.table.name}` : "");
 
-  return div().text_color(t.dim).child(b ? `${b.table.schema ? `${b.table.schema}.` : ""}${b.table.name}` : "");
+  return n ? h_flex().gap(6).items_center().child(name).child(div().text_color(t.ansi3).child(`· ${changesWord(n)}`)) : name;
 }
 
 /** [0] the main view. */

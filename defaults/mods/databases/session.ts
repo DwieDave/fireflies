@@ -24,6 +24,8 @@ import type { Browse, TableRef } from "./catalog.ts";
 import { browseSql, countsSql, structureOf, structureSql, tablesOf, tablesSql } from "./catalog.ts";
 import type { ClientFound } from "./state.ts";
 import { gridStart } from "./state.ts";
+import { readsRowid } from "./edits.ts";
+import { settleEdit } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** herdr's exec and files, as the runner and the store take them. */
@@ -80,7 +82,7 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 
   if (c.kind === "libsql" && c.url) {
     const token = c.secret === "ask" ? v.secrets.get(c.id) ?? null : c.secret === "keychain" ? await readSecret(IO, c.id) : null;
-    const o = await runHrana(FETCH, c.url, token, statements.map((s) => s.text));
+    const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })));
 
     return { ...o, ms: Date.now() - at };
   }
@@ -184,6 +186,14 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
 
   if (count !== null) v.catalog.tables = v.catalog.tables.map((x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: count } : x));
 
+  // A SQLite table without a primary key: its rows read again with their rowid, so they can be edited.
+  const b = v.rows.browse;
+
+  if (b && !b.rowid && b.table.name === t.name && v.struct.data && readsRowid(c.kind, v.struct.data.columns, t.type)) {
+    v.rows.browse = { ...b, rowid: true };
+    void loadRows(v, cx, true);
+  }
+
   cx.notify();
 }
 
@@ -196,6 +206,8 @@ export async function loadRows(v: DbView, cx: Context, keepCursor = false): Prom
   const b = v.rows.browse;
 
   if (!c || !b) return;
+
+  settleEdit(v);
 
   const sql = browseSql(c.kind, b);
 

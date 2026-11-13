@@ -209,6 +209,12 @@ test:
     bun test scripts/databases-open.test.ts
     # q closes every dialog and menu where it isn't text, as esc does: the confirm and rename dialogs, What's New, the welcome, the "+ new" launcher, the even-out popup.
     bun test scripts/qclose.test.ts
+    # The dividers between panels (dividers.ts, the pattern the Kubernetes mod copies): a drag by its handlers, the clamp, + / - steps, the double click's reset, the sizes kept.
+    bun test scripts/databases-dividers.test.ts
+    # Editing cells: each engine's quoting, the changes staged by row key, what's editable, the save's statements (one UPDATE per row, the old values checked, one transaction), a real round trip on a throwaway SQLite file.
+    bun test scripts/databases-edit.test.ts
+    # Editing cells through the window's keys and handlers on a throwaway SQLite file: c / a double click, enter, esc, tab, ctrl-n, N, u, U, w and y; changes kept through pages and sorting; the asks before leaving; q types while editing.
+    bun test scripts/databases-editview.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

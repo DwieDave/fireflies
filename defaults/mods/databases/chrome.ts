@@ -3,6 +3,8 @@
 // body (wide: the three side panels left, the main view and the log right;
 // narrow, under NARROW: one panel, the others folded into a row of numbered
 // tabs), the ask bar and the key bar. What only a window has is here alone.
+// The gaps between the wide view's panels are dividers (layout.ts): dragged,
+// they resize the panels.
 
 import { div, svg } from "gpui-kit";
 import type { Element } from "gpui-kit";
@@ -12,16 +14,15 @@ import type { Theme } from "herdr";
 import { where } from "./kinds.ts";
 import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
-import { ART, chip, dither, kindBadge, lock, pip, toneColor } from "./kit.ts";
+import { ART, chip, dither, kindBadge, lock, pip, toneColor, unzoom } from "./kit.ts";
 import { hint, keysHint } from "./keyhelp.ts";
 import { barHints } from "./keys.ts";
 import { connsPanel, logPanel, structPanel, tablesPanel, NARROW_ORDER } from "./panels.ts";
 import { mainPanel } from "./main-view.ts";
 import { askBar, overBody } from "./popups.ts";
+import { divider } from "./dividers.ts";
+import { GAP_X, GAP_Y, NARROW, wideDividers } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
-
-/** Under this width the view is one column (the pattern's one break per mod). */
-export const NARROW = 640;
 
 /** The top bar: where the window drags from (presses on it aren't stopped). */
 function header(t: Theme, v: DbView): Element {
@@ -90,27 +91,29 @@ function panelOf(t: Theme, v: DbView, p: PanelId): Element {
   }
 }
 
-/** The body: wide, the git window's layout; narrow, one panel. */
+/** The body: wide, the git window's layout with a divider in each gap; narrow, one panel. */
 function body(t: Theme, v: DbView): Element {
-  const { width, height } = v.size;
+  const { width } = v.size;
 
   if (width < NARROW) {
     return v_flex().size_full().child(panelTabs(t, v)).child(div().flex_1().min_h(0).pt(8).px(4).pb(4).flex().flex_col().child(panelOf(t, v, v.panel).flex_1()));
   }
 
-  const left = Math.round(Math.max(250, Math.min(400, width * 0.3)));
-  const tall = height > 520;
-  const connsH = Math.round(Math.max(110, Math.min(230, (height - 90) * 0.28)));
-  const structH = Math.round(Math.max(120, Math.min(300, (height - 90) * 0.36)));
+  const ds = v.dividers;
+  const w = wideDividers(v.room(), (d) => ds.size(d));
+  const log = w.log;
 
-  return h_flex().size_full().gap(6).p(6).pt(12)
-    .child(v_flex().w(left).flex_none().h_full().gap(14)
-      .child(connsPanel(t, v).h(connsH).flex_none())
+  return h_flex().size_full().p(6).pt(12)
+    .child(v_flex().w(ds.size(w.left)).flex_none().h_full()
+      .child(connsPanel(t, v).h(ds.size(w.conns)).flex_none())
+      .child(divider(t, "db-split-conns", w.conns, ds, GAP_Y))
       .child(tablesPanel(t, v).flex_1())
-      .child(structPanel(t, v).h(structH).flex_none()))
-    .child(v_flex().flex_1().min_w(0).h_full().gap(14)
+      .child(divider(t, "db-split-struct", w.struct, ds, GAP_Y))
+      .child(structPanel(t, v).h(ds.size(w.struct)).flex_none()))
+    .child(divider(t, "db-split-left", w.left, ds, GAP_X))
+    .child(v_flex().flex_1().min_w(0).h_full()
       .child(mainPanel(t, v).flex_1())
-      .when(tall, (el) => el.child(logPanel(t, v).h(92).flex_none())));
+      .when(log !== null, (el) => (log ? el.child(divider(t, "db-split-log", log, ds, GAP_Y)).child(logPanel(t, v).h(ds.size(log)).flex_none()) : el)));
 }
 
 /** The view's children: the top bar, the body (with what's over it), the ask, the key bar. */
@@ -120,6 +123,14 @@ export function frame(v: DbView, t: Theme): Element[] {
   return [
     header(t, v),
     div().id("db-body").relative().flex_1().min_h(0)
+      .on_size_change((drawn, cx) => {
+        const h = unzoom(drawn.height);
+
+        if (Math.abs(h - v.bodyH) > 1) {
+          v.bodyH = h;
+          cx.notify();
+        }
+      })
       .on_mouse_down("left", (_e, cx) => {
         v.focusShown();
         cx.stop_propagation();

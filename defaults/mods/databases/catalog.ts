@@ -210,6 +210,8 @@ export interface Browse {
   readonly filter: string;
   readonly offset: number;
   readonly limit: number;
+  /** A SQLite table without a primary key: its rowid read first, so its rows can be edited. */
+  readonly rowid?: boolean;
 }
 
 /** The page's statements (the rows, and the count when filtered), or why the filter can't run. */
@@ -217,7 +219,7 @@ export function browseSql(kind: Kind, b: Browse): { readonly statements: ScriptS
   const filter = b.filter.trim().replace(/^where\s+/i, "").replace(/;\s*$/, "");
   const from = qualified(kind, b.table);
   const where = filter ? ` where ${filter}` : "";
-  const rows = `select * from ${from}${where}${b.sort ? ` order by ${quoteName(kind, b.sort.column)} ${b.sort.desc ? "desc" : "asc"}` : ""} limit ${b.limit} offset ${b.offset}`;
+  const rows = `select ${b.rowid ? "rowid, " : ""}* from ${from}${where}${b.sort ? ` order by ${quoteName(kind, b.sort.column)} ${b.sort.desc ? "desc" : "asc"}` : ""} limit ${b.limit} offset ${b.offset}`;
 
   if (filter) {
     // The filter is the person's SQL inside ours: one statement, and only a read.
