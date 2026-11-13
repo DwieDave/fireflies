@@ -15,9 +15,9 @@
 
 import { hc, terminals, shared, setShared, openOverlay, closeOverlay } from "herdr";
 import type { OverlaySpec } from "herdr";
-import { isString, literal, nullable, object, oneOf, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
+import { isBoolean, isString, literal, nullable, object, oneOf, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { isTerminal } from "./guards.ts";
+import { isLabels } from "./guards.ts";
 
 /** A copy of ../scripts/nix.ts SUDO_PROMPT (a mod can't import another's files). */
 export const SUDO_PROMPT = "password to activate (sudo): ";
@@ -65,11 +65,17 @@ export function promptOverlay(address: string, name: string | undefined): Overla
   };
 }
 
+/** A terminal as far as the watch reads it: its address, labels and whether
+ *  it floats. Only these: a stricter field here (guards.ts isTerminal once
+ *  took `status` as a string, and a script run has null) would refuse every
+ *  run, and no window would open, without a word. */
+const isRun = object({ address: isString }, { labels: isLabels, floating: isBoolean });
+
 let busy = false;
 
 /** Opens and closes the small windows for the live switch runs' prompts. */
 export async function watchPrompts(): Promise<void> {
-  const live = terminals().filter((t) => isTerminal(t)).filter((t) => t.labels?.["nocturne.script.plan"]);
+  const live = terminals().filter((t) => isRun(t)).filter((t) => t.labels?.["nocturne.script.plan"]);
 
   if (busy || (!live.length && !promptsNow().size)) return;
 

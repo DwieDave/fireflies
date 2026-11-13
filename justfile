@@ -191,6 +191,8 @@ test:
     bun test scripts/scripts-chips.test.ts
     # The script runner's deck as a normal pane: no frame, esc stays, the pane's height, moved over the tab -> pane -> back with its filter.
     bun test scripts/scripts-pane.test.ts
+    # A switch's password window the whole way (deck -> job -> watch -> window -> enter / cancel), with the app's real terminal record; a wrong password, two at once, again.
+    bun test scripts/scripts-sudo.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
     # An agent's one mark in its tab and pane header, the sidebar's winged one (winged.ts): colour, motion only while working, size, no second mark.
