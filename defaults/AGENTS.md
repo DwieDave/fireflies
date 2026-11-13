@@ -355,7 +355,13 @@ the highlighted line shows where it will land.
   where `K` sends KILL; `c` copies a process's command line, `/` finds, `r`
   reads again, `?` lists the keys, `q`/esc close. The app itself, herdr-core,
   its holders, launchd and other users' processes carry a shield and can't be
-  ended there. It reads `ps` and `lsof` every 2 s while open.
+  ended there. It reads `ps` and `lsof` every 2 s while open. Every key has
+  its pointer twin: the wheel scrolls the processes and the ports (the cursor
+  stays put; a key brings it back), and a long command in the detail block
+  first; a click selects a row, a double click does what enter does, a fold
+  arrow folds on a click, a long list's scrollbar drags, the tabs and the
+  scope switch on a click, the foot's keys are buttons, and a port row shows
+  open ↗ / copy / end while selected or hovered.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,

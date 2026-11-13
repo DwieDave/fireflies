@@ -330,3 +330,18 @@ export function memory(kib) {
 
 /** A command line for one row: newlines (an agent's brief) as ⏎, runs of space as one. */
 export const oneLine = (s) => String(s ?? "").replace(/\\012|\n/g, " ⏎ ").replace(/\s+/g, " ").trim();
+
+/**
+ * How far a wheel event moves a list, in layout px (more: toward the end).
+ * A mouse wheel reports lines: each moves one `row`. A trackpad reports
+ * pixels (momentum included): they move as far as the fingers, taken back
+ * out of the window's `zoom` (at 0.9 a window pixel is 1/0.9 of a layout one).
+ */
+export function wheelDelta(e, row, zoom = 1) {
+  const lines = Number(e?.delta_lines?.y);
+  if (Number.isFinite(lines) && lines !== 0) return -lines * row;
+  return -(Number(e?.delta?.y) || 0) / (Number(zoom) || 1);
+}
+
+/** A scroll offset moved by `by`, kept within 0 and `max`. */
+export const scrollBy = (offset, by, max) => Math.max(0, Math.min(Math.max(0, max), offset + by));

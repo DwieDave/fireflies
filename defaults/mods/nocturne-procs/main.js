@@ -46,11 +46,23 @@
 //   ? keys · q esc close
 // nocturne-procs.focus gives the deck the keyboard back; nocturne-procs.keys
 // shows its keys.
+//
+// By pointer, everything the keys do: the wheel scrolls the processes and the
+// ports (a mouse's lines a row each, a trackpad's pixels as far as the
+// fingers), and the cursor stays on its row (a key brings it back into sight);
+// over a long command in the detail block it scrolls the command first. A
+// click selects a row, a double click does what enter does, a click on a fold
+// arrow folds. The scrollbar along a long list's right edge drags, and a
+// press beside its thumb jumps there. The tabs and "fireflies" / "all of …"
+// switch on a click, every key in the foot is a button (x end, X tree,
+// / find, the find field itself, enter / esc on the ending band), and a port
+// row shows open ↗ / copy / end while selected or under the pointer. The
+// tree mark in the strip opens and closes the deck; a click outside closes it.
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { closeOverlay, exec, focused, home, nextCommand, notify, panes, props, run, settings, shared, setShared, spaces, terminals, theme, window as appWindow } from "herdr";
-import { PROBE, parseProbe, index, buildTree, flatten, place, targets, guardOf, endGently, signal, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count } from "./logic.js";
+import { PROBE, parseProbe, index, buildTree, flatten, place, targets, guardOf, endGently, signal, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.js";
 import { SYS_PROBE, KEEP, STEP, parseSys, measure, push, rate, size, scale } from "./sys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 
@@ -62,14 +74,16 @@ const CONTEXT = "NocturneProcsDeck";
 const ESCAPE = "nocturne_procs_escape";
 export const REFRESH = 2000;
 export const GRACE = 2000;
+const SYSTEM_PACE = "a reading every 2 s while this is open";
 
 const W = 480, H = 560;
-const HEAD = 36, COLS = 18, ROW = 24, PROW = 30, FOOT = 26, IND = 14, DETAIL = 66, CONFIRM = 76;
-const LIST_H = H - 2 - HEAD - COLS - FOOT;
+export const ROW = 24, PROW = 30;
+const HEAD = 36, COLS = 18, FOOT = 26, IND = 14, DETAIL = 66, CONFIRM = 76;
+export const LIST_H = H - 2 - HEAD - COLS - FOOT;
 // The system tab: five graphs, KEEP bars each, the newest at the right.
 const GRAPH_W = W - 2 - 24, GRAPH_H = 48, SLOT = Math.floor(GRAPH_W / KEEP), BAR = SLOT - 2;
 const SPARK = 30;
-const PORTS_H = H - 2 - HEAD - FOOT;
+export const PORTS_H = H - 2 - HEAD - FOOT;
 
 // The dither fill, copied from ../nocturne/kit.js (a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
@@ -78,6 +92,13 @@ function dither(color, cell = 1) {
   const dpr = appWindow()?.platform === "macos" ? 2 : 1;
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
+
+const zoom = () => Number(settings()?.zoom) || 1;
+const unzoom = (v) => v / zoom();
+// The scrollbar's hit strip along a list's right edge, and its thumb's least height.
+const BAR_HIT = 8, THUMB_MIN = 16;
+// The detail block's command: lines of CMD_LINE px, at most CMD_SHOWN shown (the wheel scrolls the rest).
+const CMD_LINE = 15, CMD_SHOWN = 3;
 
 function short(folder) {
   if (!folder) return "";
@@ -112,6 +133,10 @@ export default class ProcsDeck extends View {
     this.typing = false;
     this.cur = { procs: { key: null, at: 0 }, ports: { key: null, at: 0 }, system: { key: null, at: 0 } };
     this.scroll = { procs: 0, ports: 0 };
+    // The list keeps the cursor in sight until the wheel or the scrollbar moves it away; a key or a click brings it back.
+    this.follow = true;
+    this.drag = null; // the scrollbar's drag: { tab, at, from, ratio }
+    this.cmd = { pid: null, y: 0, h: 0 }; // the detail block's command: its scroll and its drawn height
     this.ask = null; // { pids, key, tree, phase: ask | ending | held, left, name, tab }
     this.note = null; // { text, tone, until }
     this.help = false;
@@ -260,6 +285,7 @@ export default class ProcsDeck extends View {
     const c = this.cur[this.tab];
     c.at = Math.max(0, Math.min(items.length - 1, i));
     c.key = items[c.at].key;
+    this.follow = true;
   }
 
   proc(pid) { return this.ix?.byPid.get(pid) ?? null; }
@@ -352,6 +378,69 @@ export default class ProcsDeck extends View {
     this.beat();
   }
 
+  /** a, or a click on "fireflies" / "all of …": this app's terminals or every process of yours. */
+  toggleAll() {
+    this.all = !this.all;
+    this.cur.procs = { key: this.cur.procs.key, at: 0 };
+    this.follow = true;
+  }
+
+  /** enter, or a double click: a port opens, a process or terminal shows its pane, a group folds. */
+  activate(items, i) {
+    const item = items[i];
+    if (!item) return;
+    if (this.tab === "ports") return this.open(item);
+    if (item.kind === "proc" || item.kind === "term") return this.show(item);
+    this.fold(items, i, null);
+  }
+
+  /** A click on a row: the cursor goes there; a double click does what enter does. */
+  clickRow(e, i, cx) {
+    const items = this.list();
+    this.moveTo(items, i);
+    this.handle.focus();
+    if ((e?.click_count ?? 1) >= 2) this.activate(items, i);
+    cx.notify();
+  }
+
+  /** The wheel over a list (a mouse's lines or a trackpad's pixels): the rows move, the
+   *  cursor stays on its row (a key brings it back into sight). */
+  wheel(tab, e, row, max, cx) {
+    cx.stop_propagation();
+    const to = scrollBy(this.scroll[tab], wheelDelta(e, row, zoom()), max);
+    this.follow = false;
+    if (to !== this.scroll[tab]) { this.scroll[tab] = to; cx.notify(); }
+  }
+
+  /** A list's scrollbar while its rows overflow: a 2 px dithered thumb along the right edge.
+   *  Drag it; a press on the strip beside it brings the thumb there first. */
+  scrollbar(t, tab, total, view) {
+    if (total <= view) return null;
+    const room = total - view;
+    const th = Math.max(THUMB_MIN, Math.round((view * view) / total));
+    const ty = Math.round((this.scroll[tab] / room) * (view - th));
+    const ratio = room / Math.max(1, view - th);
+    return div().id(`bar-${tab}`).absolute().top(0).right(0).w(BAR_HIT).h(view).cursor_pointer()
+      .on_mouse_down("left", (e, cx) => {
+        cx.stop_propagation();
+        const y = unzoom(e?.local_position?.y ?? 0);
+        if (y < ty || y > ty + th) this.scroll[tab] = scrollBy(0, (y - th / 2) * ratio, room);
+        this.drag = { tab, at: e.position.y, from: this.scroll[tab], ratio, room };
+        this.follow = false;
+        this.handle.focus();
+        cx.notify();
+      })
+      .child(div().absolute().right(2).top(ty).w(2).h(th).child(dither(this.drag?.tab === tab ? t.accent : t.ansi8, 1)));
+  }
+
+  /** The scrollbar's thumb follows the pointer while it's held. */
+  dragTo(e, cx) {
+    const d = this.drag;
+    if (!d) return;
+    const to = scrollBy(d.from, unzoom(e.position.y - d.at) * d.ratio, d.room);
+    if (to !== this.scroll[d.tab]) { this.scroll[d.tab] = to; cx.notify(); }
+  }
+
   escape(cx) {
     if (this.help) this.help = false;
     else if (this.ask) this.ask = null;
@@ -366,7 +455,7 @@ export default class ProcsDeck extends View {
     const m = e.modifiers ?? {};
     const k = String(e.key ?? "").toLowerCase();
     const ch = typeof e.key_char === "string" ? e.key_char : "";
-    const done = () => { cx.stop_propagation(); cx.notify(); };
+    const done = () => { this.follow = true; cx.stop_propagation(); cx.notify(); };
     if (m.platform || m.control || m.alt) return;
     if (this.help) {
       if (keysKey(e, true) || k === "enter") { this.help = false; return done(); }
@@ -401,16 +490,11 @@ export default class ProcsDeck extends View {
     else if (k === "h" || k === "left") this.fold(items, i, false);
     else if (k === "l" || k === "right") this.fold(items, i, true);
     else if (k === "space" || ch === " ") this.fold(items, i, null);
-    else if (k === "enter") {
-      if (this.tab === "ports") return cx.stop_propagation(), this.open(item);
-      if (!item) return done();
-      if (item.kind === "proc" || item.kind === "term") return cx.stop_propagation(), this.show(item);
-      this.fold(items, i, null);
-    }
+    else if (k === "enter") this.activate(items, i);
     else if (k === "1") this.switchTab("procs");
     else if (k === "2") this.switchTab("ports");
     else if (k === "3") this.switchTab("system");
-    else if (k === "a") { this.all = !this.all; this.cur.procs = { key: this.cur.procs.key, at: 0 }; }
+    else if (k === "a") this.toggleAll();
     else if (k === "x") this.begin(item, Boolean(m.shift));
     else if (k === "o" && this.tab === "ports") return cx.stop_propagation(), this.open(item);
     else if (k === "c") this.copy(item, cx);
@@ -450,9 +534,19 @@ export default class ProcsDeck extends View {
     return div().relative().w(w).flex_none().flex().justify_end().text_size(11).text_color(color ?? t.dim).child(text);
   }
 
-  fold_(t, r) {
+  /** The fold arrow; a click on it (a few px around it count) folds or unfolds its row. */
+  fold_(t, r, i) {
     const icon = r.open === null ? null : svg(`${ART}/${r.open ? "fold-open" : "fold-shut"}.svg`).size(6).text_color(t.dim);
-    return div().relative().w(6).flex_none().flex().items_center().when(Boolean(icon), (el) => el.child(icon));
+    return div().relative().w(6).flex_none().flex().items_center().when(Boolean(icon), (el) => el.child(icon)
+      .child(div().id(`fold-${i}`).absolute().left(-5).right(-5).top(-4).bottom(-4).cursor_pointer()
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => {
+          cx.stop_propagation();
+          this.moveTo(this.list(), i);
+          this.folds[r.key] = r.open;
+          this.handle.focus();
+          cx.notify();
+        })));
   }
 
   /** One tree row; its depth drawn as 1 px dithered guides. */
@@ -461,9 +555,10 @@ export default class ProcsDeck extends View {
     const guides = Array.from({ length: r.depth }, (_, g) => div().absolute().top(0).bottom(0).left(12 + g * IND + 3).w(1).opacity(0.9).child(dither(t.ansi0, 1)));
     const row = h_flex().id(`row-${i}`).relative().h(ROW).flex_none().pl(12 + r.depth * IND).pr(12).gap(7).items_center().text_size(12)
       .text_color(on ? t.foreground : t.muted)
-      .on_click((_e, cx) => { this.moveTo(this.list(), i); this.handle.focus(); cx.notify(); })
+      .cursor_pointer()
+      .on_click((e, cx) => this.clickRow(e, i, cx))
       .on_hover((h, cx) => { const k = h ? r.key : this.hover === r.key ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } });
-    const el = this.band(row, t, on).children(guides).child(this.fold_(t, r));
+    const el = this.band(row, t, on).children(guides).child(this.fold_(t, r, i));
     if (r.kind === "space") {
       if (n.machine) return el.child(this.pip(t.dim)).child(div().relative().flex_none().text_color(t.muted).child(n.name))
         .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(`on ${n.machine} · this machine only for now`));
@@ -508,7 +603,7 @@ export default class ProcsDeck extends View {
     const full = oneLine(p.cmd);
     const meta = (k, v, c) => h_flex().flex_none().gap(4).child(div().text_color(t.dim).child(k)).child(div().text_color(c ?? t.muted).child(v));
     return v_flex().id(`detail-${pid}`).relative().h(DETAIL).flex_none().pl(26).pr(12).pt(4).gap(4).text_size(11)
-      .child(div().h(45).flex_none().overflow_hidden().line_height("15px").text_color(t.muted).child(full.length > 300 ? full.slice(0, 299) + "…" : full))
+      .child(this.command(t, pid, full, CMD_SHOWN * CMD_LINE))
       .child(h_flex().h(14).flex_none().gap(12).items_center().overflow_hidden()
         .child(meta("pid", String(p.pid)))
         .when(Boolean(up), (el) => el.child(meta("parent", `${up.name} ${up.pid}`)))
@@ -517,6 +612,28 @@ export default class ProcsDeck extends View {
         .child(meta("mem", memory(p.rss)))
         .child(this.spark(t, "sp-mem", this.hist.get(pid)?.rss, t.accent, null))
         .when(Boolean(guard), (el) => el.child(h_flex().gap(4).items_center().child(svg(`${ART}/shield.svg`).size(8).text_color(t.dim)).child(div().text_color(t.dim).child(guard)))));
+  }
+
+  /** The detail block's whole command line in `box` px; one that runs longer scrolls under the
+   *  wheel (a thin thumb says so), and once it's at its end the wheel scrolls the list again. */
+  command(t, pid, full, box) {
+    if (this.cmd.pid !== pid) this.cmd = { pid, y: 0, h: 0 };
+    const c = this.cmd;
+    const room = Math.max(0, c.h - box);
+    c.y = Math.min(c.y, room);
+    return div().id("cmd").relative().h(box).flex_none().overflow_hidden()
+      .on_scroll_wheel((e, cx) => {
+        const to = scrollBy(c.y, wheelDelta(e, CMD_LINE, zoom()), Math.max(0, c.h - box));
+        if (to === c.y) return;
+        cx.stop_propagation();
+        c.y = to;
+        cx.notify();
+      })
+      .child(div().id("cmd-text").absolute().left(0).right(0).top(-c.y).line_height(`${CMD_LINE}px`).text_color(t.muted)
+        .on_size_change((size, cx) => { const h = Math.round(unzoom(size?.height ?? 0)); if (h !== c.h) { c.h = h; cx.notify(); } })
+        .child(full))
+      .when(room > 0, (el) => el.child(div().absolute().right(0).w(1).h(Math.max(6, Math.round((box * box) / c.h))).top(Math.round((c.y / room) * (box - Math.max(6, Math.round((box * box) / c.h)))))
+        .child(dither(t.ansi8, 1))));
   }
 
   /** The band that asks before ending, then tells what held on. */
@@ -553,7 +670,7 @@ export default class ProcsDeck extends View {
     const tops = [];
     let y = 0;
     for (const r of items) { tops.push(y); y += ROW + extra(r); }
-    if (sel) {
+    if (sel && this.follow) {
       const a = tops[ci], b = tops[ci] + ROW + extra(sel);
       if (a < this.scroll.procs) this.scroll.procs = a;
       if (b > this.scroll.procs + LIST_H) this.scroll.procs = b - LIST_H;
@@ -577,8 +694,9 @@ export default class ProcsDeck extends View {
         .child(head(34, "CPU")).child(head(44, "MEM")).child(head(54, "UP")).child(head(44, "PID")))
       .child(items.length
         ? div().id("procs-list").relative().h(LIST_H).flex_none().overflow_hidden()
-          .on_scroll_wheel((e, cx) => { this.scroll.procs = Math.max(0, Math.min(this.scroll.procs - e.delta.y, max)); cx.notify(); })
+          .on_scroll_wheel((e, cx) => this.wheel("procs", e, ROW, max, cx))
           .children(kids)
+          .children([this.scrollbar(t, "procs", y, LIST_H)].filter(Boolean))
         : this.empty(t, LIST_H));
   }
 
@@ -657,7 +775,8 @@ export default class ProcsDeck extends View {
     const show = on || this.hover === x.key;
     return this.band(h_flex().id(`port-${i}`).relative().h(PROW).flex_none().px(12).gap(10).items_center().text_size(12)
       .text_color(on ? t.foreground : x.term ? t.muted : t.dim)
-      .on_click((_e, cx) => { this.moveTo(this.list(), i); this.handle.focus(); cx.notify(); })
+      .cursor_pointer()
+      .on_click((e, cx) => this.clickRow(e, i, cx))
       .on_hover((h, cx) => { const k = h ? x.key : this.hover === x.key ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } }), t, on)
       .child(div().relative().w(52).flex_none().text_color(x.term ? t.ansi6 : t.dim).child(`:${x.port}`))
       .child(div().relative().flex_none().max_w(110).truncate().child(x.name))
@@ -676,17 +795,20 @@ export default class ProcsDeck extends View {
     let y = 0;
     for (const x of items) { tops.push(y); y += PROW + (this.ask?.tab === "ports" && this.ask.key === x.key ? CONFIRM : 0); }
     const sel = items[ci];
-    if (sel) {
+    if (sel && this.follow) {
       const b = tops[ci] + PROW + (this.ask?.key === sel.key ? CONFIRM : 0);
       if (tops[ci] < this.scroll.ports) this.scroll.ports = tops[ci];
       if (b > this.scroll.ports + PORTS_H) this.scroll.ports = b - PORTS_H;
     }
-    this.scroll.ports = Math.max(0, Math.min(this.scroll.ports, Math.max(0, y - PORTS_H)));
+    const max = Math.max(0, y - PORTS_H);
+    this.scroll.ports = Math.max(0, Math.min(this.scroll.ports, max));
     if (!items.length) return this.empty(t, PORTS_H);
     return div().id("ports-list").relative().h(PORTS_H).flex_none().overflow_hidden()
+      .on_scroll_wheel((e, cx) => this.wheel("ports", e, PROW, max, cx))
       .children(items.map((x, i) => v_flex().id(`pslot-${x.key}`).absolute().left(0).right(0).top(tops[i] - this.scroll.ports)
         .child(this.portRow(t, x, i, i === ci))
-        .when(this.ask?.tab === "ports" && this.ask.key === x.key, (el) => el.child(this.confirmBand(t)))));
+        .when(this.ask?.tab === "ports" && this.ask.key === x.key, (el) => el.child(this.confirmBand(t)))))
+      .children([this.scrollbar(t, "ports", y, PORTS_H)].filter(Boolean));
   }
 
   empty(t, h) {
@@ -703,43 +825,62 @@ export default class ProcsDeck extends View {
       .child(div().child("a lists every process of yours"));
   }
 
-  /** The bar along the bottom: what the cursor is on and its keys. */
-  foot(t, item) {
+  /** The bar along the bottom: what the cursor is on and its keys, each a button too. */
+  foot(t, items, ci) {
+    const item = items[ci];
     const bar = h_flex().relative().h(FOOT).flex_none().px(12).gap(10).items_center().text_size(11)
       .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
     const left = (...kids) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids.filter(Boolean));
-    const keys = (...caps) => h_flex().flex_none().gap(10).items_center().children(caps.filter(Boolean));
-    const k = (id, key, what) => hint(t, id, key, what);
+    const keys = (...caps) => h_flex().flex_none().gap(8).items_center().children(caps.filter(Boolean));
+    // A key's hint, and a click does what the key does.
+    const k = (id, key, what, go) => hint(t, id, key, what).px(2).cursor_pointer().hover((s) => s.bg(t.ansi0))
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); go(cx); this.follow = true; this.handle.focus(); cx.notify(); });
     const help = keysHint(t, "k-help", this.help, () => { this.help = !this.help; });
     const arrow = div().flex_none().text_color(t.accent).child("↳");
     const word = (s, c) => div().min_w(0).truncate().text_color(c ?? t.muted).child(s);
-    if (this.help) return bar.child(left(word("every key", t.dim))).child(keys(k("k-esc", "esc", "back"), help));
-    if (this.ask?.phase === "ask") return bar.child(left(arrow, word(`end ${this.ask.name}`, t.blocked))).child(keys(k("k-yes", "enter", "end"), k("k-no", "esc", "keep")));
-    if (this.ask?.phase === "held") return bar.child(left(arrow, word("still running", t.blocked))).child(keys(k("k-kill", "K", "kill -9"), k("k-no", "esc", "leave")));
-    if (this.ask) return bar.child(left(arrow, word("ending…", t.dim))).child(keys(k("k-no", "esc", "hide")));
+    const find = k("k-find", "/", "find", () => { this.typing = true; });
+    const all = k("k-all", "a", this.all ? "this app" : "all", () => this.toggleAll());
+    const keep = (what) => k("k-no", "esc", what, () => { this.ask = null; });
+    if (this.help) return bar.child(left(word("every key", t.dim))).child(keys(k("k-esc", "esc", "back", () => { this.help = false; }), help));
+    if (this.ask?.phase === "ask") return bar.child(left(arrow, word(`end ${this.ask.name}`, t.blocked))).child(keys(k("k-yes", "enter", "end", (cx) => this.confirm(cx)), keep("keep")));
+    if (this.ask?.phase === "held") return bar.child(left(arrow, word("still running", t.blocked))).child(keys(k("k-kill", "K", "kill -9", (cx) => this.killHard(cx)), keep("leave")));
+    if (this.ask) return bar.child(left(arrow, word("ending…", t.dim))).child(keys(keep("hide")));
     if (this.typing) {
-      return bar.child(left(div().flex_none().text_color(t.accent).child("/"), word(this.query ? this.query.replace(/ /g, " ") : "type to find", this.query ? t.foreground : t.dim),
-        div().flex_none().w(1).h(14).bg(t.accent).loop("opacity", { from: 0, to: 1, period: 1000 })))
-        .child(keys(k("k-enter", "enter", "keep"), k("k-esc", "esc", this.query ? "clear" : "back"), help));
+      // The find field: a click on it keeps it taking letters.
+      const field = h_flex().id("find-field").flex_1().min_w(0).gap(6).items_center().cursor_text()
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click((_e, cx) => { cx.stop_propagation(); this.typing = true; this.handle.focus(); cx.notify(); })
+        .child(div().flex_none().text_color(t.accent).child("/"))
+        .child(word(this.query ? this.query.replace(/ /g, " ") : "type to find", this.query ? t.foreground : t.dim))
+        .child(div().flex_none().w(1).h(14).bg(t.accent).loop("opacity", { from: 0, to: 1, period: 1000 }));
+      return bar.child(field)
+        .child(keys(k("k-enter", "enter", "keep", () => { this.typing = false; }), k("k-esc", "esc", this.query ? "clear" : "back", (cx) => this.escape(cx)), help));
     }
     const note = this.note && Date.now() < this.note.until ? word(this.note.text, t[this.note.tone] ?? t.done) : null;
-    if (this.tab === "system") return bar.child(left(arrow, word("a reading every 2 s while this is open", t.dim))).child(keys(k("k-tabs", "tab", "processes"), help));
-    const q = this.query ? div().flex_none().text_color(t.accent).child(`/${this.query}`) : null;
+    if (this.tab === "system") return bar.child(left(arrow, word(SYSTEM_PACE, t.dim))).child(keys(k("k-tabs", "tab", "processes", () => this.switchTab("procs")), help));
+    // The query, kept after enter: a click on it opens the field again.
+    const q = this.query ? div().id("find-query").flex_none().text_color(t.accent).cursor_text()
+      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_click((_e, cx) => { cx.stop_propagation(); this.typing = true; this.handle.focus(); cx.notify(); })
+      .child(`/${this.query}`) : null;
     if (this.tab === "ports") {
-      if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes"), help));
+      if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes", () => this.switchTab("procs")), find, help));
       return bar.child(left(arrow, note ?? word(address(item.port)), q))
-        .child(keys(k("k-open", "enter", "open"), k("k-copy", "c", "copy"), item.guard ? null : k("k-end", "x", "end"), help));
+        .child(keys(k("k-open", "enter", "open", () => this.open(item)), k("k-copy", "c", "copy", (cx) => this.copy(item, cx)),
+          item.guard ? null : k("k-end", "x", "end", () => this.begin(item, false)), find, help));
     }
-    if (!item) return bar.child(left(note ?? word(""), q)).child(keys(k("k-all", "a", this.all ? "this app" : "all"), help));
+    if (!item) return bar.child(left(note ?? word(""), q)).child(keys(all, find, help));
     if (item.kind === "proc") {
       const p = this.proc(item.node.pid);
       const guard = guardOf(p, this.snap?.me);
-      if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show"), k("k-all", "a", this.all ? "this app" : "all"), help));
+      if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => this.show(item)), all, help));
       return bar.child(left(arrow, note ?? word(p?.name ?? ""), q))
-        .child(keys(k("k-end", "x", "end"), item.node.kids.length ? k("k-tree", "X", "tree") : null, k("k-find", "/", "find"), help));
+        .child(keys(k("k-end", "x", "end", () => this.begin(item, false)), item.node.kids.length ? k("k-tree", "X", "tree", () => this.begin(item, true)) : null, find, help));
     }
     return bar.child(left(arrow, note ?? word(item.node.name ?? ""), q))
-      .child(keys(item.kind === "term" ? k("k-show", "enter", "show") : null, item.open !== null ? k("k-fold", "←→", "fold") : null, k("k-all", "a", this.all ? "this app" : "all"), help));
+      .child(keys(item.kind === "term" ? k("k-show", "enter", "show", () => this.show(item)) : null,
+        item.open !== null ? k("k-fold", "←→", "fold", () => this.fold(items, ci, null)) : null, all, help));
   }
 
   head(t, nProcs, nPorts) {
@@ -759,7 +900,7 @@ export default class ProcsDeck extends View {
       .child(div().flex_1())
       .child(div().id("scope").flex_none().text_size(11).text_color(t.dim).cursor_pointer()
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-        .on_click((_e, cx) => { this.all = !this.all; cx.notify(); })
+        .on_click((_e, cx) => { this.toggleAll(); this.handle.focus(); cx.notify(); })
         .child(this.all ? `all of ${this.snap?.me ?? "yours"}` : "fireflies"))
       .child(this.badge(t, "a", false))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
@@ -777,6 +918,8 @@ export default class ProcsDeck extends View {
       .key_context(CONTEXT)
       .on_action(ESCAPE, (_e, cx) => this.escape(cx))
       .on_mouse_down("left", () => this.handle.focus())
+      .on_mouse_move((e, cx) => this.dragTo(e, cx))
+      .on_mouse_up("left", (_e, cx) => { if (this.drag) { this.drag = null; cx.notify(); } })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .child(this.head(t, nProcs, ports.length))
       .when(this.help, (el) => el.child(div().id("procs-help").relative().h(H - 2 - HEAD - FOOT).flex_none()
@@ -784,6 +927,6 @@ export default class ProcsDeck extends View {
       .when(!this.help && this.tab === "procs", (el) => el.child(this.procsView(t, items, ci)))
       .when(!this.help && this.tab === "ports", (el) => el.child(this.portsView(t, items, ci)))
       .when(!this.help && this.tab === "system", (el) => el.child(this.systemView(t)))
-      .child(this.foot(t, items[ci]));
+      .child(this.foot(t, items, ci));
   }
 }
