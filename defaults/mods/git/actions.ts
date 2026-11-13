@@ -13,8 +13,18 @@ import { shq } from "./git.ts";
 import type { Action } from "./keys.ts";
 import type { MenuItem } from "./popups.ts";
 import type { StatusFile } from "./parse.ts";
-import type { default as GitView, ExecOptions, Item, SpawnOptions } from "./main.ts";
-import { isBranch, isCheckout, isCommit, isReflog, isRemote, isRemoteBranch, isStash, isTag, isTreeRow, hashOf, nameOf, statusFileOf } from "./main.ts";
+import type { default as GitView } from "./main.ts";
+import type { ExecOptions, SpawnOptions } from "./state.ts";
+import type { Item } from "./items.ts";
+import { isBranch, isCheckout, isCommit, isReflog, isRemote, isRemoteBranch, isStash, isTag, isTreeRow, hashOf, nameOf, statusFileOf } from "./items.ts";
+import { openKeys } from "./bars.ts";
+import { openPane, quit } from "./panes.ts";
+import { pickedKeys, startStaging, stepFile, stepHunk, stepLine, switchSide } from "./staging.ts";
+import { loadMain } from "./content.ts";
+import { goToWorktree, newWorktree, pickMergedWorktrees, removeWorktrees } from "./checkouts.ts";
+import { collapseAll, cycleScreen, enterSub, giveWay, moveBy, openFilter, pageRows, setContext, stepPanel, stepTab, toggleDir, toggleRange } from "./navigate.ts";
+import { reload } from "./reads.ts";
+import { editFile, editIn, openFile, recentRepos, switchRepo, terminal } from "./elsewhere.ts";
 
 const MSG_COMMIT = (flags: string) => `printf '%s' "$NOCTURNE_GIT_MSG" | git commit --cleanup=strip ${flags} -F -`;
 
@@ -105,14 +115,14 @@ const checkoutOf = (v: GitView) => {
 
 const ACTIONS = {
   // ---- window
-  keys: (v) => v.openKeys(),
-  quit: (v) => v.quit(),
-  back: (v) => v.back(),
+  keys: (v) => openKeys(v),
+  quit: (v) => quit(v),
+  back: (v) => giveWay(v),
   "focus-main": (v) => v.focusMain(),
-  "open-pane": (v) => v.openPane(false),
-  "open-pane-tab": (v) => v.openPane(true),
-  "panel-prev": (v) => v.stepPanel(-1),
-  "panel-next": (v) => v.stepPanel(1),
+  "open-pane": (v) => openPane(v, false),
+  "open-pane-tab": (v) => openPane(v, true),
+  "panel-prev": (v) => stepPanel(v, -1),
+  "panel-next": (v) => stepPanel(v, 1),
   "panel:status": (v) => v.setPanel("status"),
   "panel:files": (v) => v.setPanel("files"),
   "panel:branches": (v) => v.setPanel("branches"),
@@ -120,15 +130,15 @@ const ACTIONS = {
   "panel:stash": (v) => v.setPanel("stash"),
   "main-up": (v) => v.scrollMain(-1),
   "main-down": (v) => v.scrollMain(1),
-  refresh: (v) => v.reload(true),
-  "screen-next": (v) => v.screen(1),
-  "screen-prev": (v) => v.screen(-1),
-  "context-more": (v) => v.setContext(1),
-  "context-less": (v) => v.setContext(-1),
+  refresh: (v) => reload(v, true),
+  "screen-next": (v) => cycleScreen(v, 1),
+  "screen-prev": (v) => cycleScreen(v, -1),
+  "context-more": (v) => setContext(v, 1),
+  "context-less": (v) => setContext(v, -1),
   whitespace: (v) => {
     v.ws = !v.ws;
     v.note(v.ws ? "Whitespace hidden in diffs" : "Whitespace shown in diffs");
-    v.loadMain();
+    loadMain(v);
   },
   "log-menu": (v) => v.menu({
     title: "Command log",
@@ -156,16 +166,16 @@ const ACTIONS = {
   }),
   "recent-repos": (v) => v.menu({
     title: "Recent repos",
-    items: v.recentRepos().map((r, i) => ({ key: i < 9 ? String(i + 1) : "", label: r.name, sub: r.folder, go: () => v.switchRepo(r.folder) })),
+    items: recentRepos(v).map((r, i) => ({ key: i < 9 ? String(i + 1) : "", label: r.name, sub: r.folder, go: () => switchRepo(v, r.folder) })),
     empty: "No other repos in your spaces yet.",
   }),
   "all-branches-log": (v) => {
     v.allBranches = !v.allBranches;
     v.setPanel("commits");
-    v.reload();
+    reload(v);
     v.note(v.allBranches ? "Commits: every branch" : "Commits: this branch");
   },
-  "edit-config": (v) => v.editFile(".git/config"),
+  "edit-config": (v) => editFile(v, ".git/config"),
   undo: (v) => undoRedo(v, "undo"),
   redo: (v) => undoRedo(v, "redo"),
   "merge-rebase-menu": (v) => mergeRebaseMenu(v),
@@ -175,25 +185,25 @@ const ACTIONS = {
   fetch: (v) => git(v, "Fetch", ["fetch", "--all", "--prune"], { timeout: 120000, row: null }),
 
   // ---- lists
-  down: (v) => v.move(1),
-  up: (v) => v.move(-1),
-  "page-down": (v) => v.move(v.page()),
-  "page-up": (v) => v.move(-v.page()),
+  down: (v) => moveBy(v, 1),
+  up: (v) => moveBy(v, -1),
+  "page-down": (v) => moveBy(v, pageRows(v)),
+  "page-up": (v) => moveBy(v, -pageRows(v)),
   top: (v) => v.moveTo(0),
   bottom: (v) => v.moveTo(Infinity),
-  filter: (v) => v.openFilter(),
-  "tab-next": (v) => v.stepTab(1),
-  "tab-prev": (v) => v.stepTab(-1),
-  range: (v) => v.toggleRange(),
+  filter: (v) => openFilter(v),
+  "tab-next": (v) => stepTab(v, 1),
+  "tab-prev": (v) => stepTab(v, -1),
+  range: (v) => toggleRange(v),
   "range-down": (v) => {
-    if (!v.range) v.toggleRange();
+    if (!v.range) toggleRange(v);
 
-    v.move(1);
+    moveBy(v, 1);
   },
   "range-up": (v) => {
-    if (!v.range) v.toggleRange();
+    if (!v.range) toggleRange(v);
 
-    v.move(-1);
+    moveBy(v, -1);
   },
 
   // ---- files
@@ -221,7 +231,7 @@ const ACTIONS = {
 
     if (!isTreeRow(r)) return;
 
-    if (r.kind === "dir") return v.toggleDir(r.path);
+    if (r.kind === "dir") return toggleDir(v, r.path);
 
     const f = statusFileOf(r);
 
@@ -229,7 +239,7 @@ const ACTIONS = {
 
     if (f.conflict) return conflictMenu(v);
 
-    v.startStaging(f);
+    startStaging(v, f);
   },
   commit: (v) => commit(v, ""),
   "commit-no-verify": (v) => commit(v, "--no-verify"),
@@ -237,7 +247,7 @@ const ACTIONS = {
     title: "Amend last commit", text: "Amend the last commit with what's staged? Its message stays.", danger: true,
     go: () => git(v, "Amend commit", [], { env: {}, shell: "git commit --amend --no-edit --allow-empty", shown: "git commit --amend --no-edit" }),
   }),
-  "commit-editor": (v) => v.terminal(["git", "commit"], "git commit"),
+  "commit-editor": (v) => terminal(v, ["git", "commit"], "git commit"),
   "discard-menu": (v) => discardMenu(v),
   "reset-menu": (v) => v.menu({
     title: "Reset the working tree",
@@ -264,7 +274,7 @@ const ACTIONS = {
 
     if (!p) return false;
 
-    v.editFile(p);
+    editFile(v, p);
 
     return true;
   },
@@ -273,7 +283,7 @@ const ACTIONS = {
 
     if (!p) return false;
 
-    v.openFile(p);
+    openFile(v, p);
 
     return true;
   },
@@ -298,8 +308,8 @@ const ACTIONS = {
     v.tree = !v.tree;
     v.moveTo(0);
   },
-  "collapse-all": (v) => v.collapseAll(true),
-  "expand-all": (v) => v.collapseAll(false),
+  "collapse-all": (v) => collapseAll(v, true),
+  "expand-all": (v) => collapseAll(v, false),
   "copy-path": (v, cx) => {
     const p = v.itemPath();
 
@@ -331,7 +341,7 @@ const ACTIONS = {
   "worktree-switch": (v) => {
     const w = checkoutOf(v);
 
-    if (w) v.goToWorktree(w);
+    if (w) goToWorktree(v, w);
   },
   "worktree-here": (v) => {
     const w = checkoutOf(v);
@@ -342,9 +352,9 @@ const ACTIONS = {
 
     if (w.path === v.git?.root) return v.note("This window is on it already");
 
-    v.switchRepo(w.path);
+    switchRepo(v, w.path);
   },
-  "worktree-new": (v) => v.newWorktree(),
+  "worktree-new": (v) => newWorktree(v),
   "worktree-of": (v) => {
     const x = it(v);
 
@@ -355,14 +365,14 @@ const ACTIONS = {
     if (hash || isTag(x) || v.ctx() === "tags") {
       const base = hash ?? nameOf(x);
 
-      return base ? v.newWorktree({ base, label: hash ? hash.slice(0, 7) : base }) : undefined;
+      return base ? newWorktree(v, { base, label: hash ? hash.slice(0, 7) : base }) : undefined;
     }
 
     if (isRemoteBranch(x)) {
       // A remote branch: a local branch of the same name that tracks it.
       const local = v.data.branches.find((b) => b.name === x.branch);
 
-      return local ? v.newWorktree({ value: x.branch }) : v.newWorktree({ value: x.branch, base: x.name, label: x.name, track: true });
+      return local ? newWorktree(v, { value: x.branch }) : newWorktree(v, { value: x.branch, base: x.name, label: x.name, track: true });
     }
 
     const name = nameOf(x);
@@ -373,9 +383,9 @@ const ACTIONS = {
 
     if (taken) return v.error(`${name} is checked out in ${v.tilde(taken.path)} already: space there goes to it.`);
 
-    v.newWorktree({ value: name, now: true });
+    newWorktree(v, { value: name, now: true });
   },
-  "worktree-remove": (v) => v.removeWorktrees(),
+  "worktree-remove": (v) => removeWorktrees(v),
   "worktree-open-menu": (v) => {
     const w = checkoutOf(v);
 
@@ -387,7 +397,7 @@ const ACTIONS = {
       title: `Open ${v.tilde(w.path)}`,
       items: [
         { key: "f", label: "In a files pane", go: () => herdrRun("files.open", on ? { path: w.path, on } : { path: w.path }) },
-        { key: "e", label: "In the editor ($EDITOR, a floating terminal)", go: () => v.editIn(w.path) },
+        { key: "e", label: "In the editor ($EDITOR, a floating terminal)", go: () => editIn(v, w.path) },
         { key: "t", label: "A terminal tab there, in this space", go: () => herdrRun("tab.new", { folder: w.path }) },
         { key: "o", label: "In the system's file manager", go: () => herdrRun("files.open", on ? { path: w.path, in: "system", on } : { path: w.path, in: "system" }) },
       ],
@@ -420,7 +430,7 @@ const ACTIONS = {
     v.wtPicked = new Set(v.data.worktrees.flatMap((w) => (!w.main && !occ.get(w.path)?.spaces.length && !occ.get(w.path)?.agents.length ? [w.path] : [])));
     v.note(v.wtPicked.size ? `${v.wtPicked.size} unused picked: d removes them, esc lets go` : "Every worktree has a space or an agent");
   },
-  "worktree-pick-merged": (v) => v.pickMergedWorktrees(),
+  "worktree-pick-merged": (v) => pickMergedWorktrees(v),
   "worktree-prune": (v) => {
     const stale = v.data.worktrees.filter((w) => w.prunable);
 
@@ -608,14 +618,14 @@ const ACTIONS = {
   "view-commits": (v) => {
     const r = refOf(v);
 
-    if (r) v.enterSub({ kind: "subCommits", ref: r, title: short(r) });
+    if (r) enterSub(v, { kind: "subCommits", ref: r, title: short(r) });
   },
 
   // ---- remotes
   "view-remote-branches": (v) => {
     const r = remoteOf(v);
 
-    if (r) v.enterSub({ kind: "remoteBranches", remote: r.name, title: r.name });
+    if (r) enterSub(v, { kind: "remoteBranches", remote: r.name, title: r.name });
   },
   "fetch-remote": (v) => {
     const r = remoteOf(v);
@@ -720,12 +730,12 @@ const ACTIONS = {
   "view-files": (v) => {
     const c = it(v);
 
-    if (isCommit(c)) v.enterSub({ kind: "commitFiles", hash: c.hash, title: c.short, stash: false });
-    else if (isStash(c)) v.enterSub({ kind: "commitFiles", hash: c.hash, title: c.ref, stash: true });
+    if (isCommit(c)) enterSub(v, { kind: "commitFiles", hash: c.hash, title: c.short, stash: false });
+    else if (isStash(c)) enterSub(v, { kind: "commitFiles", hash: c.hash, title: c.ref, stash: true });
     else {
       const hash = hashOf(c);
 
-      if (hash) v.enterSub({ kind: "commitFiles", hash, title: isReflog(c) ? c.short : short(hash), stash: false });
+      if (hash) enterSub(v, { kind: "commitFiles", hash, title: isReflog(c) ? c.short : short(hash), stash: false });
     }
   },
   "checkout-commit": (v) => {
@@ -759,7 +769,7 @@ const ACTIONS = {
 
     if (!c) return;
 
-    if (v.isHead(c)) return v.terminal(["git", "commit", "--amend", "--only"], "git commit --amend --only");
+    if (v.isHead(c)) return terminal(v, ["git", "commit", "--amend", "--only"], "git commit --amend --only");
 
     const plan = rewrite(v.commitList(), v.commitIndex(), "edit");
 
@@ -767,14 +777,14 @@ const ACTIONS = {
 
     const todo = plan.todo.replace(/^edit /m, "reword ");
 
-    v.terminal(["env", `NOCTURNE_GIT_TODO=${todo}`, `GIT_SEQUENCE_EDITOR=sh -c 'printf "%s" "$NOCTURNE_GIT_TODO" > "$1"' -`, "git", "rebase", "-i", "--autostash", ...(plan.base ? [plan.base] : ["--root"])], `git rebase -i (reword ${short(c.hash)})`);
+    terminal(v, ["env", `NOCTURNE_GIT_TODO=${todo}`, `GIT_SEQUENCE_EDITOR=sh -c 'printf "%s" "$NOCTURNE_GIT_TODO" > "$1"' -`, "git", "rebase", "-i", "--autostash", ...(plan.base ? [plan.base] : ["--root"])], `git rebase -i (reword ${short(c.hash)})`);
   },
   squash: (v) => confirmRewrite(v, "squash", "Squash", "Squash this commit into the one below it? Their messages are combined."),
   fixup: (v) => confirmRewrite(v, "fixup", "Fixup", "Meld this commit into the one below it? Its message is dropped."),
   drop: (v) => confirmRewrite(v, "drop", "Drop commit", "Drop this commit from the branch?"),
   "edit-commit": (v) => rebaseRewrite(v, "edit"),
-  "move-down": (v) => rebaseRewrite(v, "move-down", {}, () => v.move(1)),
-  "move-up": (v) => rebaseRewrite(v, "move-up", {}, () => v.move(-1)),
+  "move-down": (v) => rebaseRewrite(v, "move-down", {}, () => moveBy(v, 1)),
+  "move-up": (v) => rebaseRewrite(v, "move-up", {}, () => moveBy(v, -1)),
   pick: (v) => (v.rebasing() ? v.error("Picking todo entries mid-rebase isn't here yet: press m to continue, or i for git's own todo.") : v.error("Pick only applies mid-rebase.")),
   "rebase-interactive": (v) => {
     const c = commitOf(v);
@@ -783,7 +793,7 @@ const ACTIONS = {
 
     const base = c.parents[0];
 
-    v.terminal(["git", "rebase", "-i", "--autostash", ...(base ? [base] : ["--root"])], `git rebase -i ${base ? short(base) : "--root"}`);
+    terminal(v, ["git", "rebase", "-i", "--autostash", ...(base ? [base] : ["--root"])], `git rebase -i ${base ? short(base) : "--root"}`);
   },
   "fixup-commit": (v) => {
     const c = commitOf(v);
@@ -898,8 +908,8 @@ const ACTIONS = {
     title: "Log options",
     items: [
       { key: "g", label: v.noGraph ? "Show the graph" : "Hide the graph", go: () => { v.noGraph = !v.noGraph; } },
-      { key: "a", label: v.allBranches ? "Only this branch" : "Every branch", go: () => { v.allBranches = !v.allBranches; v.reload(); } },
-      { key: "+", label: "Wide commits (screen mode)", sub: "+ / _", go: () => { v.panel = "commits"; v.screen(1); } },
+      { key: "a", label: v.allBranches ? "Only this branch" : "Every branch", go: () => { v.allBranches = !v.allBranches; reload(v); } },
+      { key: "+", label: "Wide commits (screen mode)", sub: "+ / _", go: () => { v.panel = "commits"; cycleScreen(v, 1); } },
     ],
   }),
 
@@ -945,17 +955,17 @@ const ACTIONS = {
   },
 
   // ---- staging lines
-  "line-down": (v) => (v.staging ? v.stepLine(1) : v.scrollMain(1, 1)),
-  "line-up": (v) => (v.staging ? v.stepLine(-1) : v.scrollMain(-1, 1)),
-  "hunk-next": (v) => v.stepHunk(1),
-  "hunk-prev": (v) => v.stepHunk(-1),
+  "line-down": (v) => (v.staging ? stepLine(v, 1) : v.scrollMain(1, 1)),
+  "line-up": (v) => (v.staging ? stepLine(v, -1) : v.scrollMain(-1, 1)),
+  "hunk-next": (v) => stepHunk(v, 1),
+  "hunk-prev": (v) => stepHunk(v, -1),
   "hunk-mode": (v) => {
     if (v.staging) {
       v.staging.hunkMode = !v.staging.hunkMode;
       v.staging.anchor = null;
     }
   },
-  "switch-side": (v) => v.switchSide(),
+  "switch-side": (v) => switchSide(v),
   "stage-pick": (v) => stagePick(v),
   "discard-pick": (v) => discardPick(v),
   "copy-lines": (v, cx) => {
@@ -963,13 +973,13 @@ const ACTIONS = {
 
     if (!s) return;
 
-    const keys = v.pickedKeys();
+    const keys = pickedKeys(v);
     const text = s.rows.flatMap((r) => (keys.has(`${r.hunk}:${r.line}`) ? [r.text] : [])).join("\n");
 
     v.copy(text, cx);
   },
-  "file-next": (v) => v.stepFile(1),
-  "file-prev": (v) => v.stepFile(-1),
+  "file-next": (v) => stepFile(v, 1),
+  "file-prev": (v) => stepFile(v, -1),
 } satisfies { readonly [A in Action]?: Handler };
 
 const short = (r: string) => (/^[0-9a-f]{40}$/.test(r) ? r.slice(0, 7) : r);
@@ -1088,7 +1098,7 @@ function conflictMenu(v: GitView) {
     items: [
       { key: "o", label: "Use ours", sub: "checkout --ours", go: () => git(v, "Use ours", [], { shell: `git checkout --ours -- ${shq(f.path)} && git add -- ${shq(f.path)}`, shown: `git checkout --ours ${f.path} && git add ${f.path}` }) },
       { key: "t", label: "Use theirs", sub: "checkout --theirs", go: () => git(v, "Use theirs", [], { shell: `git checkout --theirs -- ${shq(f.path)} && git add -- ${shq(f.path)}`, shown: `git checkout --theirs ${f.path} && git add ${f.path}` }) },
-      { key: "e", label: "Edit the file", go: () => v.editFile(f.path) },
+      { key: "e", label: "Edit the file", go: () => editFile(v, f.path) },
       { key: "a", label: "Mark as resolved", sub: "git add", go: () => git(v, "Mark resolved", ["add", "--", f.path]) },
     ],
   });
@@ -1199,7 +1209,7 @@ function diffMenu(v: GitView) {
       go: () => {
         v.diffBase = r;
         v.note(`Diff mode: ${short(r)} against the selection (W to leave)`);
-        v.loadMain();
+        loadMain(v);
       },
     });
   }
@@ -1211,7 +1221,7 @@ function diffMenu(v: GitView) {
       ok: (x) => {
         if (x.trim()) {
           v.diffBase = x.trim();
-          v.loadMain();
+          loadMain(v);
         }
       },
     }),
@@ -1222,7 +1232,7 @@ function diffMenu(v: GitView) {
       key: "r", label: "Reverse the direction",
       go: () => {
         v.diffReverse = !v.diffReverse;
-        v.loadMain();
+        loadMain(v);
       },
     });
     items.push({
@@ -1230,7 +1240,7 @@ function diffMenu(v: GitView) {
       go: () => {
         v.diffBase = null;
         v.diffReverse = false;
-        v.loadMain();
+        loadMain(v);
       },
     });
   }
@@ -1372,7 +1382,7 @@ function stagePick(v: GitView) {
 
   if (!s || !diff || !g) return;
 
-  const keys = v.pickedKeys();
+  const keys = pickedKeys(v);
 
   if (!keys.size) return;
 
@@ -1408,7 +1418,7 @@ function discardPick(v: GitView) {
 
   if (s.side === "staged") return stagePick(v); // lazygit: d on the staged side unstages
 
-  const keys = v.pickedKeys();
+  const keys = pickedKeys(v);
 
   if (!keys.size) return;
 

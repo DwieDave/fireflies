@@ -402,7 +402,7 @@ for (const zoom of [0.9, 1]) {
   test(`zoom ${zoom}: at the end of every list the last row ends inside the list`, async () => {
     zoomNow = zoom;
     try {
-      const { rowWindow } = await import("../defaults/mods/git/main.ts");
+      const { rowWindow } = await import("../defaults/mods/git/draw.ts");
       const { unzoom } = await import("../defaults/mods/git/draw.ts");
       // Each row height the window draws: side lists, wide commits, diffs, the branch log.
       for (const rowH of [18, 32, 16]) {
@@ -478,7 +478,7 @@ test("a history cut at its limit reads further when its end comes into view: the
 });
 
 test("an operation's row spins from the key to its end: push marks the pushed branch, a failure and a throw release it too", async () => {
-  const { rowKey } = await import("../defaults/mods/git/main.ts");
+  const { rowKey } = await import("../defaults/mods/git/items.ts");
   // A clone: main tracks origin/main on a bare remote.
   const remote = join(dir, "busy-remote.git"), work = join(dir, "busy-work");
   sh(`git clone -q --bare ${repo} ${remote} && git clone -q ${remote} ${work}`, dir);

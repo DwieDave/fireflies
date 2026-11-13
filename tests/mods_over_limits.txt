@@ -45,9 +45,6 @@ defaults/mods/file-tree/main.ts render
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/git/actions.ts
-defaults/mods/git/main.ts
-defaults/mods/git/main.ts drawRow
-defaults/mods/git/main.ts init
 defaults/mods/git/popups.ts key
 defaults/mods/github/actions.ts
 defaults/mods/github/board.ts
