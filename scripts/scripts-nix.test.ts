@@ -330,7 +330,7 @@ test("a darwin switch denied App Management is recognized, nothing else is", () 
 });
 
 test("the strip's copy of APP_MANAGEMENT matches the deck's", () => {
-  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/scripts.js"), "utf8");
+  const src = readFileSync(join(import.meta.dir, "../defaults/mods/nocturne/scripts.ts"), "utf8");
   for (const v of [APP_MANAGEMENT.match, APP_MANAGEMENT.hint, APP_MANAGEMENT.open]) expect(src).toContain(v);
 });
 

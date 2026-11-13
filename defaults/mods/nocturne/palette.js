@@ -19,7 +19,7 @@ import { dither, eyebrow, focusedPane, panePinnedNow, pinPane, pinKey, movePin, 
 import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
 import { panels, here, terminalPane, terminalTab } from "./panels.ts";
-import { toggleDeck, lastFailed } from "./scripts.js";
+import { toggleDeck, lastFailed } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
 import { gitOpen, openWorktrees } from "./git.ts";
 import { githubOpen } from "./github.ts";

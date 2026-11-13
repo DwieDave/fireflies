@@ -45,7 +45,7 @@ import { gitState } from "./lazygit.ts";
 import { gitOpen, toggleGit } from "./git.ts";
 import { githubOpen } from "./github.ts";
 import { filesPane, toggleFiles, focusFiles } from "./files.ts";
-import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
+import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.ts";
 import { procsControl, toggleProcs } from "./procs.ts";
 import { runJobs, pendingJobs } from "./jobs.ts";
 import { watchPrompts } from "./prompt.ts";

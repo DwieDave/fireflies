@@ -20,7 +20,7 @@ import type { Terminal } from "./guards.ts";
 export const lazygitArgv = (on: string | null): string[] => (on ? ["sh", "-c", 'exec "$(command -v nocturne-lazygit || echo lazygit)"'] : [`${appHome()}/mods/nocturne/bin/nocturne-lazygit`]);
 
 /** The pane runs lazygit (Fireflies' program table knows it; the wrapper execs it). */
-export const isLazygit = (p: { readonly program?: { readonly key: string } } | null | undefined): boolean => p?.program?.key === "lazygit";
+export const isLazygit = (p: { readonly program?: { readonly key: string } | undefined } | null | undefined): boolean => p?.program?.key === "lazygit";
 
 /** The lazygit pane in the shown tab, if any. */
 export function lazygitPane(): PaneInfo | null {

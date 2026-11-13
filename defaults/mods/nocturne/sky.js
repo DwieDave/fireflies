@@ -62,7 +62,7 @@ import { focusFiles } from "./files.ts";
 import { togglePicker } from "./picker.ts";
 import { openScratchpad } from "./scratchpad.ts";
 import { toggleGithub, githubForm } from "./github.ts";
-import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
+import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";

@@ -4,7 +4,7 @@
 // test can load it.
 
 import type { Guarded } from "./guard.ts";
-import { isBoolean, isNull, isNumber, isString, nullable, object, oneOf } from "./guard.ts";
+import { arrayOf, isBoolean, isNull, isNumber, isString, nullable, object, oneOf } from "./guard.ts";
 
 /** A JSON value: what a mod pane's props are (they come from its mod, keys and all). */
 export type Json = string | number | boolean | null | readonly Json[] | JsonObject;
@@ -57,6 +57,9 @@ export const isTerminal = object(
     reason: oneOf(isString, isNull),
     program: object({ key: isString }),
     pid: oneOf(isNumber, isNull),
+    created_ms: oneOf(isNumber, isNull),
+    finished_ms: oneOf(isNumber, isNull),
+    argv: nullable(arrayOf(isString)),
   },
 );
 
