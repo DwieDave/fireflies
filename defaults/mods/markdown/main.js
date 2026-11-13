@@ -35,7 +35,7 @@ import { openInEditor } from "./editor-route.ts";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.ts";
 import { follow, dirname, basename, join, tilde } from "./paths.ts";
-import { documentLinks, nextLink, nextHeading } from "./links.js";
+import { documentLinks, nextLink, nextHeading } from "./links.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 

@@ -370,7 +370,7 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
 
 const walk = (el: any): any[] => (el && typeof el === "object" && Array.isArray(el.nodes) ? [el, ...el.nodes.flatMap(walk)] : []);
 
-const linkLogic = await load("markdown/links.js");
+const linkLogic = await load("markdown/links.ts");
 const { linksOf, documentLinks, nextLink, nextHeading } = linkLogic;
 
 test("links in reading order: inline, reference, autolinks, bare addresses; none in code", () => {
