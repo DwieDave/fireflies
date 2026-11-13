@@ -7,7 +7,6 @@
 defaults/mods/agent-graph/claude.ts snapshot
 defaults/mods/agent-graph/main.ts
 defaults/mods/editor/diff.ts parse
-defaults/mods/editor/live.ts units
 defaults/mods/editor/main.ts
 defaults/mods/editor/main.ts bar
 defaults/mods/editor/main.ts cardView
