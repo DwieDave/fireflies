@@ -178,7 +178,7 @@ export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause 
 // Not on stock Herdr: the module has no nativeView there.
 const available = () => typeof herdr.nativeView !== "undefined";
 
-// The dither fill, as ../nocturne/kit.js has it (a mod can't import another mod's files).
+// The dither fill, as ../nocturne/toolground.ts has it (nocturne's kit.ts passes it on; a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 function dither(color: Color, cell = 1) {
