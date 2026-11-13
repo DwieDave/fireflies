@@ -209,6 +209,8 @@ test:
     bun test scripts/databases-open.test.ts
     # The dividers between panels (dividers.ts, the pattern the Kubernetes mod copies): a drag by its handlers, the clamp, + / - steps, the double click's reset, the sizes kept.
     bun test scripts/databases-dividers.test.ts
+    # Editing cells: each engine's quoting, the changes staged by row key, what's editable, the save's statements (one UPDATE per row, the old values checked, one transaction), a real round trip on a throwaway SQLite file.
+    bun test scripts/databases-edit.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

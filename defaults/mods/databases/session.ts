@@ -80,7 +80,7 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 
   if (c.kind === "libsql" && c.url) {
     const token = c.secret === "ask" ? v.secrets.get(c.id) ?? null : c.secret === "keychain" ? await readSecret(IO, c.id) : null;
-    const o = await runHrana(FETCH, c.url, token, statements.map((s) => s.text));
+    const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })));
 
     return { ...o, ms: Date.now() - at };
   }
