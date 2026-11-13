@@ -91,7 +91,7 @@ mock.module("gpui-base", () => ({
 (globalThis as any).window = { paint_path: () => new El() };
 (globalThis as any).localStorage = { getItem: (k: string) => storage[k] ?? null, setItem: (k: string, v: string) => { storage[k] = String(v); } };
 
-const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
+const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("../defaults/mods/editor/editor-route.ts");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
@@ -534,7 +534,7 @@ test("a web link: the shown tab's browser pane gets it (browser.open by slot); w
   const c2 = await cardWithLinks();
   const md = all(c2.cardView(theme, "mono") ?? new El()).find((x: any) => x.calls?.on_link_click);
   void md; // (the card isn't drawn without a word on screen; the handler is wired in cardView, checked below)
-  const src = readFileSync(new URL("../defaults/mods/editor/main.js", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../defaults/mods/editor/main.ts", import.meta.url), "utf8");
   expect(src).toMatch(/\.on_link_click\(\(url, cx\) => this\.followLink\(url, cx\)\)/);
 });
 
@@ -719,7 +719,7 @@ test("the wheel over the strip steps the tabs; a middle click closes one", async
   expect(p.path).toBe("/p/docs/n.md");
   fire(strip, "on_scroll_wheel", { delta: { y: 3 } }, cx());
   expect(p.path).toBe("/p/src/b.rs");
-  fire(byId(p.tabStrip(theme), "editor-tab-0"), "on_mouse_down", {}, cx()); // the left press (no-op), then
+  fire(byId(p.tabStrip(theme), "editor-tab-0"), "on_mouse_down", { position: { x: 0, y: 0 } }, cx()); // the left press (no-op), then
   byId(p.tabStrip(theme), "editor-tab-0").calls.on_mouse_down.find((c: any[]) => c[0] === "middle")[1]({}, cx());
   expect(order(p)).toEqual(["b.rs", "n.md"]);
 });

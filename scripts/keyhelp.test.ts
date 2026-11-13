@@ -176,9 +176,9 @@ test("files: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("editor: its chord (the keys command) opens the overview, which holds the keyboard; ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/editor/main.js");
+  const m = await import("../defaults/mods/editor/main.ts");
   const focus = { keys: 0, editor: 0 };
-  const v: any = surface(m.default, ["command", "toggleKeys", "keysStrip"], { keysShown: false, view: "text", vimOn: () => true,
+  const v: any = surface(m.default, ["command", "toggleKeys", "keysStrip", "shown"], { cur: {}, keysShown: false, view: "text", vimOn: () => true,
     keysHandle: { focus() { focus.keys++; } }, editor: { focus() { focus.editor++; } }, previewHandle: { focus() {} } });
   const press = (e: any) => {
     if (!v.keysShown) { if (e === QUESTION) v.command("keys", cx()); return; }
@@ -259,16 +259,16 @@ test("welcome and what's new: ? opens the overview over the page, ? or esc close
 // ---- not key help, the same stand-ins: the editor's line numbers keep their room
 
 test("editor: the gutter's numbers sit in from the pane's edge as the top bar's text (a 4-digit file touched the border)", async () => {
-  const m = await import("../defaults/mods/editor/main.js");
-  const v: any = surface(m.default, ["body"], { state: "ready", markdown: false, view: "text", editor: {} });
+  const m = await import("../defaults/mods/editor/main.ts");
+  const v: any = surface(m.default, ["body", "shown"], { cur: {}, state: "ready", markdown: false, view: "text", editor: {} });
   const body = v.body(theme, "mono");
   expect(body.calls.pl).toEqual([m.GUTTER_INSET]);
   expect(m.GUTTER_INSET).toBe(12);
 });
 
 test("editor: the asked-for hover (cmd-i) says why there's no answer; the pointer's hover stays quiet", async () => {
-  const m = await import("../defaults/mods/editor/main.js");
-  const v: any = surface(m.default, ["showCard", "serverNote", "cardState", "answered", "ask", "settling"], { problems: [], lang: "rust", path: "/p/a.rs", hovers: new Map(), progress: new Map(),
+  const m = await import("../defaults/mods/editor/main.ts");
+  const v: any = surface(m.default, ["showCard", "serverNote", "cardState", "answered", "ask", "settling", "shown"], { cur: {}, problems: [], lang: "rust", path: "/p/a.rs", hovers: new Map(), progress: new Map(),
     server: { status: "none", why: "missing", names: ["rust-analyzer"], envrc: "/p", envKind: "blocked" } });
   v.showCard(1, 2, true, cx());
   expect(v.card.note.text).toMatch(/\/p\/\.envrc isn't allowed/);
