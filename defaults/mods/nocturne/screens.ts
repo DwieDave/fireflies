@@ -330,7 +330,7 @@ export class Welcome {
       .child(h_flex().relative().h(48).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
         .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
         .child(dots)
-        .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc skip ·"))
+        .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc q skip ·"))
         .child(keysHint(t, "w-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
         .child(div().flex_1())
         .when(this.page > 1, (el) => el.child(button(t, "w-back", "back", t.muted, false, (cx) => go(this.page - 1, cx))))
