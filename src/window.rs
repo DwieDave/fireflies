@@ -8422,7 +8422,8 @@ export default class SystemToast extends View {
         }
         let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods");
         for m in mods {
-            assert!(shipped.join(&m).join("main.js").is_file(), "nocturne names {m:?}, which doesn't ship");
+            let folder = shipped.join(&m);
+            assert!(folder.join("main.js").is_file() || folder.join("main.ts").is_file(), "nocturne names {m:?}, which doesn't ship");
         }
     }
 

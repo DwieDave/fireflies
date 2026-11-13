@@ -632,7 +632,8 @@ the highlighted line shows where it will land.
   (a count: that many places), `:tabm N` / `+N` / `-N` (`:tabm` alone: the
   end), space b > / b <; the commands `editor.next-tab`, `.prev-tab`,
   `.close-tab`, `.move-tab-right`, `.move-tab-left` (cmd-k ] / cmd-k [ /
-  cmd-k w). `:q` closes the pane
+  cmd-k w / cmd-k shift-l / cmd-k shift-h; cmd-k o pops the shown tab out,
+  cmd-k shift-o in, cmd-k t opens its menu). `:q` closes the pane
   with all its tabs and refuses while any has unsaved changes. A language
   server serves every tab of its project (one per project as before; each
   tab's document opened and closed with it). The text is the code editor of
@@ -1462,7 +1463,7 @@ Nocturne's toolbar, right of the tabs past a seam (the tabs dissolve into the
 night over 48 px in dithered steps, so overflowing ones slip under it; a
 dithered band the strip's height), on a dithered plate of its own with a lit
 foot that runs under every tool, the bell and "+ new" to the strip's right edge
-(each block draws its stretch, kit.js `toolGround`; a tool under the pointer
+(each block draws its stretch, `toolGround` in toolground.ts, one file in nocturne and notifications; a tool under the pointer
 lights a step above the plate, `toolHover`): ▶ and its runs (the script runner),
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
