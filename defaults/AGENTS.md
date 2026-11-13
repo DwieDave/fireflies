@@ -2050,6 +2050,14 @@ list or a machine's rename first.
   pane's right edge (default `true`). It shows only when the pane has
   scrollback — never on the alternate screen (editors, pagers) — and
   drags to move through it.
+- `system_notifications`: `false` keeps toasts inside the window (default
+  `true`). While Fireflies isn't the app in front, every toast (its own
+  "needs you" / "finished" notes and every `notify()`) also goes to the
+  system's notification center once, with the toast's title and body and no
+  sound (the app's own sound plays). A click brings Fireflies forward and
+  does the toast's `action` (an agent's note goes to its pane). macOS asks
+  for permission with the first one; a build run outside the app bundle
+  posts none. Settings > Alerts switches it.
 
 ## Programs: `programs.json`
 

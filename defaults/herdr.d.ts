@@ -575,7 +575,9 @@ export function openOverlay(spec: OverlaySpec): string;
 export function closeOverlay(id: string): null;
 
 /** Posts a notification. Shown by the `toast` mod (replaceable), which runs `action` when clicked.
- *  Fireflies posts one itself when an agent needs you or finished while you weren't looking. Returns its id. */
+ *  Fireflies posts one itself when an agent needs you or finished while you weren't looking.
+ *  While the window isn't in front it also goes to the system's notification center (title and body;
+ *  a click there runs `action` too), unless settings.json says `system_notifications: false`. Returns its id. */
 export function notify(n: {
   title: string;
   body?: string;
