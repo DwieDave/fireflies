@@ -54,7 +54,7 @@ import { act } from "./actions.js";
 import { Popups } from "./popups.js";
 import { keysHint } from "./keyhelp.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
-import * as WT from "./worktrees.js";
+import * as WT from "./worktrees.ts";
 import { Review } from "./review.js";
 import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
 
