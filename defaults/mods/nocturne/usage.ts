@@ -43,13 +43,13 @@ const eighths = (w: UsageWindow) => Math.round((left(w) / 100) * 8);
 
 const HOUR = 3600_000;
 
-/** The picked provider's last answer, its windows' lengths filled in (answers saved before they had them were Claude's 5 h and 7 d). */
+/** The picked provider's last answer, its windows' lengths filled in where it gave none (5 h and 7 d, as the usage pane takes them). */
 function reading(): Usage | null {
   const d = lastUsage();
 
   if (!d) return null;
 
-  const sized = (w: UsageWindow | null, length: number): UsageWindow | null => w && { ...w, length: w.length === undefined ? length : w.length };
+  const sized = (w: UsageWindow | null, length: number): UsageWindow | null => w && { ...w, length: w.length ?? length };
 
   return { ...d, session: sized(d.session, 5 * HOUR), week: sized(d.week, 168 * HOUR) };
 }

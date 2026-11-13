@@ -169,6 +169,8 @@ test:
     bun test scripts/nocturne-move-menu.test.ts
     # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
     bun test scripts/scripts-chips.test.ts
+    # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
+    bun test scripts/nocturne-usage.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
