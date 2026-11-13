@@ -1,8 +1,10 @@
 import { test, expect } from "bun:test";
-import { PROBE, parseProbe, detect, justRecipes, makeTargets, taskfileTasks, miseTasks, looseJson, rank } from "../defaults/mods/scripts/detect.js";
+import { PROBE, parseProbe, detect, justRecipes, makeTargets, taskfileTasks, miseTasks, looseJson, rank } from "../defaults/mods/scripts/detect.ts";
+import { NO_SYS } from "../defaults/mods/scripts/nix.ts";
+import { isRecord } from "../defaults/mods/scripts/guards.ts";
 
 const probe = (files: Record<string, string>, extra: Partial<{ ls: string[]; exec: string[]; examples: string[]; cmd: string[] }> = {}) => ({
-  ls: new Set([...Object.keys(files), ...(extra.ls ?? [])]), exec: extra.exec ?? [], examples: extra.examples ?? [], cmd: extra.cmd ?? [], files,
+  ls: new Set([...Object.keys(files), ...(extra.ls ?? [])]), exec: extra.exec ?? [], examples: extra.examples ?? [], cmd: extra.cmd ?? [], files: new Map(Object.entries(files)), sys: NO_SYS,
 });
 const cmds = (p: ReturnType<typeof probe>) => detect(p).map((s: any) => s.cmd);
 
@@ -43,7 +45,7 @@ test("cargo: the usual four, each [[bin]] and examples", () => {
 
 test("deno tasks, jsonc comments and all", () => {
   const d = '{\n  // tasks\n  "tasks": { "dev": "deno run -A main.ts", "fmt": "deno fmt", },\n}';
-  expect(looseJson(d)?.tasks.dev).toBe("deno run -A main.ts");
+  expect((looseJson(d, isRecord) as any)?.tasks.dev).toBe("deno run -A main.ts");
   expect(cmds(probe({ "deno.jsonc": d }))).toEqual(["deno task dev", "deno task fmt"]);
 });
 
