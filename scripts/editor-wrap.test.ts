@@ -131,7 +131,7 @@ test("vim: space u w and :set wrap / nowrap / wrap! / invwrap", async () => {
 });
 
 test("space u w in vim's leader map asks for wrap; the which-key popup names it", () => {
-  expect(LEADER.u).toEqual({ name: "toggle", w: ["wrap", "word wrap"] });
+  expect(LEADER.keys.get("u")).toEqual({ name: "toggle", keys: new Map([["w", ["wrap", "word wrap"]]]) });
   const vim = createVim();
   const doc = { text: "a", cursor: { line: 0, col: 0 } };
   expect((feed(vim, " ", doc) as any).which.map((w: any) => w.label)).toContain("+toggle");

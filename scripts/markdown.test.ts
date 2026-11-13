@@ -87,7 +87,7 @@ test("markdown() draws selectable Markdown in the theme's text and routes links"
 });
 
 test("the GitHub window renders PR bodies and comments through the shared module", async () => {
-  const prs = await readFile(new URL("../defaults/mods/github/prs.js", import.meta.url), "utf8");
+  const prs = await readFile(new URL("../defaults/mods/github/prs.ts", import.meta.url), "utf8");
   expect(prs).toContain('import { markdown } from "./markdown.ts"');
   expect(prs).not.toContain("TextView");
 });

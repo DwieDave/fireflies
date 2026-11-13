@@ -3,7 +3,7 @@
 // into free room, and where a field's list opens (under it, or upward
 // without room, never over the footer).
 import { test, expect } from "bun:test";
-import { columns, layout, cellOf, pickerHeight, pickerPlace, COLUMN, WIDE, AREA_MIN, AREA_MAX, CONTROL, LABEL, LABEL_GAP } from "../defaults/mods/github/form-layout.js";
+import { columns, layout, cellOf, pickerHeight, pickerPlace, COLUMN, WIDE, AREA_MIN, AREA_MAX, CONTROL, LABEL, LABEL_GAP } from "../defaults/mods/github/form-layout.ts";
 
 const PR = [
   { id: "base", kind: "choice", group: "branches", pair: true, join: "←" },
@@ -73,7 +73,7 @@ test("the body grows into the room the column leaves, up to a limit", () => {
 
 test("an error adds its line under the field", () => {
   const ok = cellOf(layout(PR, { width: 638 }), 2)!;
-  const bad = cellOf(layout(PR, { width: 638, errors: { title: "A pull request needs a title." } }), 2)!;
+  const bad = cellOf(layout(PR, { width: 638, errors: new Map([["title", "A pull request needs a title."]]) }), 2)!;
   expect(bad.h).toBe(ok.h + 16);
   expect(ok.controlY).toBe(ok.y + LABEL + LABEL_GAP);
   expect(ok.controlH).toBe(CONTROL);

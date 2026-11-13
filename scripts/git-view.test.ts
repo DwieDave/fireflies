@@ -378,7 +378,7 @@ test("a log cut at its limit: the rows that fit follow the row height, the open 
   // view draws it on below the last row.
   const last = v.main.rows[v.main.rows.length - 1];
   expect(last.g.after.some((c: any) => c != null)).toBe(true);
-  const { logTail } = await import("../defaults/mods/git/draw.js");
+  const { logTail } = await import("../defaults/mods/git/draw.ts");
   expect(logTail(theme, last, 100)).not.toBe(null);
   expect(logTail(theme, { kind: "log", g: { after: [] }, w: 1 }, 100)).toBe(null);
 
@@ -403,7 +403,7 @@ for (const zoom of [0.9, 1]) {
     zoomNow = zoom;
     try {
       const { rowWindow } = await import("../defaults/mods/git/main.js");
-      const { unzoom } = await import("../defaults/mods/git/draw.js");
+      const { unzoom } = await import("../defaults/mods/git/draw.ts");
       // Each row height the window draws: side lists, wide commits, diffs, the branch log.
       for (const rowH of [18, 32, 16]) {
         for (const raw of [137, 300, 745, 735.5, 1203.3]) { // measured window px

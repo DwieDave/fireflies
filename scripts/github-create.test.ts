@@ -2,8 +2,8 @@
 // workflow_dispatch inputs, checking answers, building the gh argv, and the
 // new pull request's fill, template, push plan and argv.
 import { test, expect } from "bun:test";
-import { parseYaml, dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "../defaults/mods/github/dispatch.js";
-import { humanize, fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "../defaults/mods/github/pr-create.js";
+import { parseYaml, dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "../defaults/mods/github/dispatch.ts";
+import { humanize, fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "../defaults/mods/github/pr-create.ts";
 
 const DEPLOY = `name: Deploy
 on:
@@ -72,8 +72,8 @@ test("knows workflows without a dispatch trigger, and every way to write one", (
 });
 
 test("the YAML reader handles lists of maps, block scalars and quotes", () => {
-  expect(parseYaml("a:\n  - b: 1\n    c: two\n  - d\nx: 'it''s'\ny: \"q\\\"\"\nz: >\n  one\n  two\n")).toEqual({ a: [{ b: 1, c: "two" }, "d"], x: "it's", y: 'q"', z: "one two\n" });
-  expect(parseYaml("k: v # c\n# whole\nn: ~\nf: 1.5\n")).toEqual({ k: "v", n: null, f: 1.5 });
+  expect(parseYaml("a:\n  - b: 1\n    c: two\n  - d\nx: 'it''s'\ny: \"q\\\"\"\nz: >\n  one\n  two\n")).toEqual(new Map<string, unknown>([["a", [new Map<string, unknown>([["b", 1], ["c", "two"]]), "d"]], ["x", "it's"], ["y", 'q"'], ["z", "one two\n"]]));
+  expect(parseYaml("k: v # c\n# whole\nn: ~\nf: 1.5\n")).toEqual(new Map<string, unknown>([["k", "v"], ["n", null], ["f", 1.5]]));
 });
 
 test("starting values follow GitHub's form", () => {
@@ -102,11 +102,11 @@ test("required, numbers, choices and environments are checked", () => {
 
 test("builds gh workflow run with every input", () => {
   const inputs = dispatchOf(DEPLOY)!.inputs;
-  const args = dispatchArgs({ id: 7, path: ".github/workflows/deploy.yml" }, "main", inputs, { environment: "prod", level: "debug", dry: false, count: " 4 ", note: "it's\nok", "tag-name": "" });
+  const args = dispatchArgs({ id: 7, path: ".github/workflows/deploy.yml" }, "main", inputs, new Map<string, string | boolean>([["environment", "prod"], ["level", "debug"], ["dry", false], ["count", " 4 "], ["note", "it's\nok"], ["tag-name", ""]]));
   expect(args).toEqual(["workflow", "run", "deploy.yml", "--ref", "main", "-f", "environment=prod", "-f", "level=debug", "-f", "dry=false", "-f", "count=4", "-f", "note=it's\nok", "-f", "tag-name="]);
   expect(shellLine("gh", [...args.slice(0, 5), "-f", "note=it's ok"])).toBe("gh workflow run deploy.yml --ref main -f 'note=it'\\''s ok'");
   expect(workflowFile(".github/workflows/a.yaml")).toBe("a.yaml");
-  expect(dispatchArgs({ id: 9, path: "" }, "v1", [], {})).toEqual(["workflow", "run", "9", "--ref", "v1"]);
+  expect(dispatchArgs({ id: 9, path: "" }, "v1", [], new Map())).toEqual(["workflow", "run", "9", "--ref", "v1"]);
 });
 
 test("finds the run a dispatch started", () => {

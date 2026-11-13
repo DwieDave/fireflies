@@ -193,8 +193,8 @@ function modCommands(): [string, string, string?][] {
     }
   }
   // The git window's key table and the overview's keys: families of their own.
-  const git = read("defaults/mods/git/keys.js");
-  for (const [, a] of git.matchAll(/\[\s*"[A-Za-z]+",\s*\[[^\]]*\],\s*"([a-z0-9:-]+)"/g)) out.push([`git.${a.replace(":", "-")}`, "git/keys.js", "git"]);
+  const git = read("defaults/mods/git/keys.ts");
+  for (const [, a] of git.matchAll(/\[\s*"[A-Za-z]+",\s*\[[^\]]*\],\s*"([a-z0-9:-]+)"/g)) out.push([`git.${a.replace(":", "-")}`, "git/keys.ts", "git"]);
   const open = read("defaults/mods/notifications/open.js");
   const keysBlock = open.slice(open.indexOf("export const COMMAND_KEYS"), open.indexOf("};", open.indexOf("export const COMMAND_KEYS")));
   for (const [, k] of keysBlock.matchAll(/"?([a-z-]+)"?: \{ key/g)) out.push([`notifications.${k}`, "notifications/open.js", "notifications"]);
@@ -255,5 +255,5 @@ test("every command a person can trigger is in the palette or stays out with a r
     expect(typeof why === "string" && why.length > 10).toBe(true);
     expect(bare.has(name) ? name : "").toBe("");
   }
-  expect(existsSync(root + "defaults/mods/git/keys.js")).toBe(true);
+  expect(existsSync(root + "defaults/mods/git/keys.ts")).toBe(true);
 });

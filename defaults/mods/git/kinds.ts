@@ -10,6 +10,7 @@ const DOC_FILE = /\.(md|mdx|markdown|rst|adoc|asciidoc|txt|org)$|(^|\/)(README|C
 // Config: tool and build settings, CI, containers and lockfiles. Generic
 // .json and source languages (.nix included) stay code: they often are.
 const CONFIG_DIR = /(^|\/)(\.github|\.gitlab|\.circleci|\.husky|\.vscode|\.idea|\.devcontainer)\//i;
+
 const CONFIG_FILE = new RegExp([
   /(^|\/)\.[^/]*rc(\.(js|cjs|mjs|ts|json|ya?ml))?$/,           // .eslintrc, .prettierrc.json, .npmrc
   /(^|\/)\.(editorconfig|gitignore|gitattributes|gitmodules|dockerignore|npmignore|prettierignore|eslintignore|env[^/]*|nvmrc|tool-versions|envrc)$/,
@@ -24,7 +25,11 @@ const CONFIG_FILE = new RegExp([
 // Assets go by extension only: a folder named assets/ can hold code.
 const ASSET = /\.(png|jpe?g|gif|webp|avif|bmp|tiff?|ico|icns|svg|heic|psd|ai|sketch|fig|woff2?|ttf|otf|eot|mp3|wav|ogg|flac|aac|m4a|mp4|mov|webm|mkv|avi|pdf|zip|gz|tar|lottie)$/i;
 
-export const KINDS = [
+/** What a file counts as when it isn't code. */
+export type Kind = "tests" | "config" | "assets" | "docs";
+
+/** Each kind and its name in the review's menu. */
+export const KINDS: readonly (readonly [Kind, string])[] = [
   ["tests", "tests"],
   ["config", "config"],
   ["assets", "assets"],
@@ -33,11 +38,16 @@ export const KINDS = [
 
 /** The kind a file counts as, or null for code. First match wins: a test
  *  fixture is a test, a requirements.txt is config, not docs. */
-export function kind(f) {
+export function kind(f: { readonly path: string; readonly binary?: boolean }): Kind | null {
   const p = f.path;
+
   if (TEST_DIR.test(p) || TEST_FILE.test(p)) return "tests";
+
   if (CONFIG_DIR.test(p) || CONFIG_FILE.test(p)) return "config";
+
   if (DOC_DIR.test(p) || DOC_FILE.test(p)) return "docs";
+
   if (ASSET.test(p) || f.binary) return "assets";
+
   return null;
 }
