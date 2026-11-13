@@ -21,6 +21,7 @@ import { openExport } from "./export-form.ts";
 import { keepCopy, ownPane } from "./opening.ts";
 import { quoteName, qualified } from "./catalog.ts";
 import { schemasOf, shownTables, structRows } from "./panels.ts";
+import { edgesOf } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -81,9 +82,19 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   else if (action === "move") v.move(cx);
   else if (action === "help") v.help = !v.help;
   else if (action === "close") closeCopy(v);
+  else if (action === "grow" || action === "shrink") resize(v, action === "grow" ? 1 : -1);
   else return false;
 
   return true;
+}
+
+/** + / -: the focused panel's edges move out or in (layout.ts edgesOf). */
+function resize(v: DbView, dir: 1 | -1): void {
+  const ds = v.dividers;
+  const edges = edgesOf(v.place(), v.room(), (d) => ds.size(d));
+
+  if (!edges.length) v.say("nothing to resize here: one panel shows", "failed");
+  else if (!ds.stepAll(edges, dir)) v.say(dir > 0 ? "it's as big as it gets" : "it's as small as it gets", "done");
 }
 
 /** q: a window closes; a pane closes too (q already means close here). */

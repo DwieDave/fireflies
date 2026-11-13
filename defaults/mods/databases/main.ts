@@ -51,6 +51,9 @@ import { here, start, command, handoverOut } from "./opening.ts";
 import { IO, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import { unzoomSize } from "./kit.ts";
+import { Dividers, tracking } from "./dividers.ts";
+import type { Room } from "./layout.ts";
+import { keepSizes, keptSizes } from "./layout.ts";
 
 const NO_PROPS: DbProps = {};
 const BEAT = 4000;
@@ -110,6 +113,11 @@ export default class Databases extends View {
   // ---- drawing
   /** The shown grid's box, as last measured (the keys move by its rows). */
   gridSize: Size = { width: 600, height: 300 };
+  /** The body's height and a query tab's box, as last measured (the dividers' room). */
+  bodyH = 664;
+  queryBox = 400;
+  /** The panels' dividers, their sizes kept per window or pane (layout.ts). */
+  dividers = new Dividers({}, () => {});
   scrolls = { conns: ScrollHandle.new(), tables: ScrollHandle.new(), structure: ScrollHandle.new(), log: ScrollHandle.new() };
   /** Each list's cursor as last scrolled to. */
   seen = { conns: { at: -1 }, tables: { at: -1 }, structure: { at: -1 }, log: { at: -1 } };
@@ -121,6 +129,7 @@ export default class Databases extends View {
 
     this.overlay = pr.overlay ?? null;
     this.slot = pr.slot ?? null;
+    this.dividers = new Dividers(keptSizes(this.overlay !== null), (sizes) => keepSizes(this.overlay !== null, sizes));
     this.folder = h.folder;
     this.on = h.on;
     this.handle = cx.focus_handle();
@@ -206,6 +215,11 @@ export default class Databases extends View {
   /** The shown query tab, or null on the Rows tab. */
   shownQuery(): QueryTab | null {
     return this.mainTab > 0 ? this.queries[this.mainTab - 1] ?? null : null;
+  }
+
+  /** The room the dividers share: the view, its body inside its padding, the shown query's box. */
+  room(): Room {
+    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() ? this.queryBox : null };
   }
 
   /** Where keys go now. */
@@ -344,6 +358,7 @@ export default class Databases extends View {
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
+      .map((el) => tracking(el, this.dividers))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
 

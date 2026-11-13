@@ -18,6 +18,7 @@ const WINDOW: readonly Binding[] = [
   [["tab"], "next panel", "panel-next"], [["shift-tab"], "previous panel", "panel-prev"],
   [["ctrl-n"], "new query tab", "query-new"], [["ctrl-h"], "history", "history"],
   [["r"], "read again", "refresh"], [["ctrl-t"], "into a pane / out to a window", "move"],
+  [["+", "="], "grow the panel (drag a gap; double click: back)", "grow"], [["-"], "shrink the panel", "shrink"],
   [["q"], "close", "close"], [["?"], "keys", "help"],
 ];
 

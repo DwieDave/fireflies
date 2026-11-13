@@ -9,7 +9,9 @@ import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
 import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
-import { chip, dither, empty, panel, pip, titleTabs, unzoomSize } from "./kit.ts";
+import { chip, dither, empty, panel, pip, titleTabs, unzoom, unzoomSize } from "./kit.ts";
+import { divider } from "./dividers.ts";
+import { editorDivider } from "./layout.ts";
 import { grid } from "./grid.ts";
 import type { GridHandlers } from "./grid.ts";
 import { colsOf, openFilter, showValue, sortBy } from "./act-grid.ts";
@@ -169,14 +171,22 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
   const o = q.outcome;
   const set = o?.results[q.shown]?.set ?? null;
-  const tall = v.gridSize.height + 200;
-  const edH = Math.max(90, Math.min(280, Math.round(tall * 0.38)));
+  const split = editorDivider(v.queryBox);
+  const edH = v.dividers.size(split);
 
   const result = !o || q.running ? div().flex_1()
     : set && set.columns.length ? grid(t, { id: `q${q.id}-grid`, width: v.gridSize.width, height: v.gridSize.height, active: active && q.inResults, sort: null, types: set.types }, set, colsOf(set), q.at, handlers(v, q))
     : empty(t, o.error ? "Nothing to show: it stopped at the error" : "No rows", o.error ? "the error is underlined in the statement above; fix it and run it again" : null, null);
 
   return v_flex().size_full()
+    .on_size_change((drawn, cx) => {
+      const h = unzoom(drawn.height);
+
+      if (Math.abs(h - v.queryBox) > 1) {
+        v.queryBox = h;
+        cx.notify();
+      }
+    })
     .child(div().id(`q${q.id}-editor`).relative().h(edH).flex_none().pl(2).text_size(12)
       .on_mouse_down("left", (_e, cx) => {
         q.inResults = false;
@@ -185,6 +195,7 @@ function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
         cx.notify();
       })
       .child(Editor.new(q.editor).size_full()))
+    .child(divider(t, `q${q.id}-split`, split, v.dividers, 0))
     .child(resultHead(t, v, q))
     .child(gridBox(t, v, `q${q.id}-box`, result));
 }
