@@ -1,5 +1,5 @@
 // The rendered Markdown view as Developer types into it (editor's
-// rendered.js through the whole pane): a block that stays one stable thing
+// rendered.ts through the whole pane): a block that stays one stable thing
 // while typed into (its editor never emptied and refilled, its height never
 // dropped to a guess), no character lost through autosaves and reloads, work
 // per key that doesn't grow with the document; adding blocks by keys and by
@@ -164,7 +164,7 @@ let store: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const { KINDS, wrappedRows } = await import("../defaults/mods/editor/rendered.js");
+const { KINDS, wrappedRows } = await import("../defaults/mods/editor/rendered.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {

@@ -1,4 +1,4 @@
-// The editor's rendered view, its model (editor/live.js): a text cut
+// The editor's rendered view, its model (editor/live.ts): a text cut
 // into units by their source lines, the unit at a line, the caret's walk from
 // unit to unit, a unit's edit spliced back with every other byte kept (a
 // corpus of Markdown, CRLF included), and a unit's range followed through
@@ -6,7 +6,7 @@
 import { test, expect, describe } from "bun:test";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { units, unitAt, unitFor, neighbor, slice, splice, follow, itemParts, quoteBody, refs, step } from "../defaults/mods/editor/live.js";
+import { units, unitAt, unitFor, neighbor, slice, splice, follow, itemParts, quoteBody, refs, step } from "../defaults/mods/editor/live.ts";
 
 const DOC = [
   "# Title",                 // 0
