@@ -26,7 +26,7 @@ function overlaySpecs(text: string): string[] {
 }
 
 test("every Git and GitHub window opens with a scrim, so the app keeps the keyboard in it", () => {
-  const files = ["nocturne/git.ts", "nocturne/github.ts", "github/main.ts", "git/main.js"];
+  const files = ["nocturne/git.ts", "nocturne/github.ts", "github/main.ts", "git/main.ts"];
   const windows = files.flatMap((f) => overlaySpecs(src(f)).filter((s) => /kind:\s*"window"/.test(s)).map((s) => [f, s] as const));
   expect(windows.length).toBeGreaterThanOrEqual(4); // the two toggles, the diff in GitHub's place, back from it
   for (const [f, s] of windows) expect(`${f}: ${s}`).toContain("scrim: true");
