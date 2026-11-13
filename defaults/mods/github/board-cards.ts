@@ -107,3 +107,23 @@ export function wrap(text: string | null | undefined, width: number, lines = 2):
 
   return out.length ? out : [""];
 }
+
+// ---- a card's words (projects.ts and its parts)
+
+/** A card's option color as an ansi slot (OPTION_ANSI; gray when it has none). */
+export const ansiKey = (color: string | null | undefined) => OPTION_ANSI.get(color ?? "") ?? 8;
+
+/** How a card is named in a note: its number, or "the draft". */
+export const label = (item: Item | undefined): string => (item?.content.number !== null && item?.content.number !== undefined ? `#${item.content.number}` : "the draft");
+
+/** How wide a card's number is, in characters (its # and a space). */
+export const numW = (item: Item): number => (item.content.kind === "draft" ? 6 : item.content.number !== null ? String(item.content.number).length + 2 : 0);
+
+/** Where o opens a card: its issue or PR, or the draft in the project's view. */
+export function itemUrl(b: Board, view: View | null, item: Item): string | null {
+  if (item.content.url) return item.content.url;
+
+  const base = `${b.project.url ?? ""}${view?.number ? `/views/${view.number}` : ""}`;
+
+  return item.db ? `${base}?pane=issue&itemId=${item.db}` : base;
+}
