@@ -12,6 +12,8 @@ test("the probe: one shell line, sections apart, iostat last (it takes its secon
   expect(SYS_PROBE).not.toContain("powermetrics");
   expect(SYS_PROBE.trim().endsWith("true")).toBe(true);
   expect(SYS_PROBE).toContain("iostat -n 8 -C -c 2 -w 1");
+  // Numbers, not names: netstat -ib looks up a hostname for every address (5 s on a busy Mac).
+  expect(SYS_PROBE).toContain("netstat -ibn");
   expect([KEEP, STEP, STEP_SHOWN]).toEqual([90, 2000, 1000]);
 });
 

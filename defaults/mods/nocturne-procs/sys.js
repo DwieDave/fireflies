@@ -11,7 +11,7 @@
 //            app memory (anonymous less purgeable) + wired + compressed, as
 //            Activity Monitor counts it; kern.memorystatus_vm_pressure_level
 //            for the pressure (1 normal, 2 warning, 4 critical)
-//   network  netstat -ib byte counters of every interface but loopback,
+//   network  netstat -ibn byte counters of every interface but loopback,
 //            per second between two readings
 //   gpu      ioreg's IOAccelerator PerformanceStatistics "Device Utilization %"
 //
@@ -23,7 +23,8 @@ const part = (cmd) => `${cmd} 2>/dev/null; echo '${SEP}'`;
 export const SYS_PROBE = [
   part("sysctl -n hw.ncpu hw.memsize hw.pagesize kern.memorystatus_vm_pressure_level"),
   part("vm_stat"),
-  part("netstat -ib"),
+  // -n: without it netstat looks up a hostname for every address, 5 s on a busy Mac.
+  part("netstat -ibn"),
   part("df -k /"),
   part("ioreg -r -c IOAccelerator -d 1 | grep -o '\"Device Utilization %\"=[0-9]*'"),
   "LC_ALL=C iostat -n 8 -C -c 2 -w 1 2>/dev/null; true",
@@ -52,7 +53,7 @@ export function parseVmStat(text) {
     wired: v("Pages wired down"), anonymous: v("Anonymous pages"), purgeable: v("Pages purgeable"), compressed: v("Pages occupied by compressor") };
 }
 
-/** netstat -ib: bytes in and out, summed over every link row but loopback. */
+/** netstat -ibn: bytes in and out, summed over every link row but loopback. */
 export function parseNetstat(text) {
   let rx = 0, tx = 0, seen = false;
   for (const line of String(text ?? "").split("\n")) {
