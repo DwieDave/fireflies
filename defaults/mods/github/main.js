@@ -44,7 +44,7 @@ import { slug } from "./remotes.js";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
-import { bindTab, tabActions } from "./form-keys.js";
+import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
 import Prs from "./prs.js";
 import Actions from "./actions.js";
@@ -104,7 +104,7 @@ export default class GitHub extends View {
     this.checked = false; // the cache was looked at
     this.dirty = false; this.savedAt = 0; this.saving = null;
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.handle.focus();
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.shown().composer && !this.shown().form) this.handle.focus(); });

@@ -4,7 +4,7 @@
 // (tools/oxlint/anti-slop, vendored) for the patterns it rejects.
 //
 // Scope: the converted mods' .ts files (`just lint` names them:
-// defaults/mods/**/*.ts). The .js mods come in with their migration;
+// defaults/mods/**/*.ts and defaults/frame/**/*.ts). The .js mods come in with their migration;
 // scripts/ (bun tests, which stand in for "herdr" with mock.module, which
 // anti-slop's no-module-mocking rejects) stays out.
 import { defineConfig } from "oxlint";

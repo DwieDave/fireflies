@@ -21,7 +21,7 @@
 //   delete        ends its terminals and agents (asks first, inline, saying
 //                 how many); it stays in Fireflies' recent spaces
 // The inline forms (rename, delete) take keys as every form does
-// (form-keys.js): tab / shift-tab walk name → esc (delete: delete ↔ keep),
+// (form-keys.ts): tab / shift-tab walk name → esc (delete: delete ↔ keep),
 // wrapping; the focused chip wears the blue ring; enter in a field saves
 // (cmd-enter from anywhere), enter / space press a chip, esc cancels.
 // The menu asks through shared(EDIT_SPACE); on the folded rail Fireflies' own
@@ -32,7 +32,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, shared } from "herdr";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.js";
 import { chip, field, confirm } from "./inline.js";
-import { formKey } from "./form-keys.js";
+import { formKey } from "./form-keys.ts";
 import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.js";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
@@ -206,7 +206,7 @@ export default class Spaces {
     this.start(null, cx);
   }
 
-  /** The inline form's stops in tab order (form-keys.js). */
+  /** The inline form's stops in tab order (form-keys.ts). */
   stops() {
     const k = this.mode?.kind;
     if (k === "rename") return [{ id: "name", kind: "text" }, { id: "cancel", kind: "button" }];

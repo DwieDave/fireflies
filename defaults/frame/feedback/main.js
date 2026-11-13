@@ -1,12 +1,12 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { theme, props, closeOverlay, feedbackIssue, run, window as appWindow } from "herdr";
-import { formKey, formHints, submitKey, ring, bindTab, tabActions } from "./form-keys.js";
+import { formKey, formHints, submitKey, ring, bindTab, tabActions } from "./form-keys.ts";
 
 // Feedback is a GitHub issue: this drafts it, GitHub's page (opened like any
 // link) is where the person adds screenshots and submits. Nothing is sent from here.
 //
-// Keys, as every form takes them (form-keys.js): tab / shift-tab go title →
+// Keys, as every form takes them (form-keys.ts): tab / shift-tab go title →
 // message → Cancel → Open on GitHub, wrapping; the focused one has the ring.
 // Enter in the title opens it (cmd-enter from the message or Cancel), enter /
 // space press a button, esc closes.
@@ -32,7 +32,7 @@ export default class Feedback extends View {
     this.title.on("focus", (_e, cx) => { this.at = 0; cx?.notify?.(); });
     this.message.on("focus", (_e, cx) => { this.at = 1; cx?.notify?.(); });
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.at = 0; // the stop with the keyboard (STOPS)
     this.title.focus();
     // The overlay takes focus once it's shown; take it back.

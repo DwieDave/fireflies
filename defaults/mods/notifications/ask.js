@@ -7,7 +7,7 @@
 //   enter on "other"      types an answer: the dialog's input takes the keys;
 //                         enter keeps it (and goes on), esc drops the edit
 //   tab / shift-tab       the next / previous stop, wrapping, as in every
-//                         form (form-keys.js): the questions, then the
+//                         form (form-keys.ts): the questions, then the
 //                         review's "submit" and "back" rows; tab in the
 //                         typed answer keeps it and goes on
 //   review                every answer; enter on "submit" sends them all,

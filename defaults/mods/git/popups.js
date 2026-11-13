@@ -3,7 +3,7 @@
 // ones), prompts and the commit message (summary + description). One popup
 // at a time over the window, on a dithered scrim; esc closes it.
 //
-// The confirm and the commit message are forms (form-keys.js): tab /
+// The confirm and the commit message are forms (form-keys.ts): tab /
 // shift-tab walk their stops (a confirm's checks, then its buttons; the
 // summary, the description, commit, cancel), wrapping; the focused one wears
 // the accent ring; enter submits from a one-line field and presses a
@@ -14,12 +14,12 @@ import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui
 import { dither, stop, edgeRow, popupScrim } from "./draw.js";
 import { keyLabel } from "./keys.js";
 import { window as appWindow } from "herdr";
-import { formKey, formHints, ring } from "./form-keys.js";
+import { formKey, formHints, ring } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
 
 const mac = () => appWindow?.()?.platform === "macos";
 
-/** A key as keyName() writes it ("shift-tab", "ctrl-enter", "a") as form-keys.js takes it: the key and its modifiers. */
+/** A key as keyName() writes it ("shift-tab", "ctrl-enter", "a") as form-keys.ts takes it: the key and its modifiers. */
 function split(k) {
   const m = {};
   let key = k;
@@ -62,7 +62,7 @@ export class Popups {
     this.top = { kind: "confirm", title, text, danger, go, error, lines, checks, at: 0 };
   }
 
-  /** A form popup's stops in tab order (form-keys.js); `at` is the focused one. */
+  /** A form popup's stops in tab order (form-keys.ts); `at` is the focused one. */
   stops(p = this.top) {
     if (p?.kind === "confirm") return [
       ...(p.checks ?? []).map((_, i) => ({ id: `cf-c-${i}`, kind: "toggle" })),

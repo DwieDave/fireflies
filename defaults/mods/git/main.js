@@ -53,7 +53,7 @@ import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from ".
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";
 import { keysHint } from "./keyhelp.ts";
-import { bindTab, tabActions } from "./form-keys.js";
+import { bindTab, tabActions } from "./form-keys.ts";
 import * as WT from "./worktrees.js";
 import { Review } from "./review.js";
 import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.js";
@@ -183,7 +183,7 @@ export default class GitView extends View {
     if (this.wtIntent) { this.panel = "files"; this.tabOf.files = "worktrees"; this.mode = "normal"; }
     if (this.show) { this.mode = "normal"; this.showLog = false; if (this.show.kind !== "review") this.focus = "main"; }
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.handle.focus();
     if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => { if (!this.closed && !this.popups.open && !this.filtering) this.handle.focus(); });
     this.beat();

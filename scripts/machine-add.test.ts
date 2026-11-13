@@ -17,7 +17,7 @@ function setup(result: any) {
     InputState: { new: () => ({ on() {}, focus() {}, set_value() {} }) }, Input: {}, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
     home: () => "/home/test", readTextFile: async () => null,
     theme() {}, props: () => ({}), closeOverlay() {},
-    // form-keys.js and herdr's window (imports are stripped here).
+    // form-keys.ts and herdr's window (imports are stripped here).
     bindTab() {}, tabActions: (el: unknown) => el, formKey: () => null, formHints: () => [], ring: (el: unknown) => el, appWindow: () => null,
     openOverlay: (...args: unknown[]) => overlays.push(args),
     exec: async (_cmd: string, _args: string[], options: any) => {

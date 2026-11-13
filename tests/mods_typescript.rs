@@ -43,5 +43,5 @@ fn shipped_typescript_mods_type_check() {
 fn shipped_typescript_mods_lint() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let Some(oxlint) = tool(root, "oxlint") else { return eprintln!("CI: the mods' lint is skipped") };
-    passes(Command::new(oxlint).current_dir(root).args(["--deny-warnings", "defaults/mods"]), "oxlint defaults/mods");
+    passes(Command::new(oxlint).current_dir(root).args(["--deny-warnings", "defaults/mods", "defaults/frame"]), "oxlint defaults/mods defaults/frame");
 }

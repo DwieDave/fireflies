@@ -51,11 +51,11 @@ typecheck:
     cargo run --locked -q -- types target/mod-types
     node_modules/.bin/tsc -p defaults/tsconfig.json
 
-# oxlint with anti-slop (oxlint.config.ts) on the same files; `just lint --fix`
+# oxlint with anti-slop (oxlint.config.ts) on the same files (mods and frame); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for.
 lint *args:
     bun install --frozen-lockfile
-    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods
+    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods defaults/frame
 
 test:
     bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/github.test.ts scripts/github-graph.test.ts scripts/github-cache.test.ts scripts/github-remotes.test.ts scripts/github-create.test.ts scripts/equalize-panes.test.ts scripts/scripts.test.ts scripts/scripts-runs.test.ts scripts/scripts-nix.test.ts scripts/markdown.test.ts scripts/notifications.test.ts scripts/preview.test.ts scripts/preview-table.test.ts scripts/preview-diff.test.ts scripts/preview-native.test.ts scripts/github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/git.test.ts scripts/editor.test.ts scripts/finder.test.ts scripts/nocturne-vim.test.ts scripts/file-tree.test.ts scripts/browser.test.ts

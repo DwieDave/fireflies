@@ -10,7 +10,7 @@
 //            Enter confirms (runs command), Esc keeps; Tab / ← → / h l move
 //            between keep and confirm (confirm first), Enter / Space press,
 //            y confirms, n keeps
-// Both take their keys the way every form does (form-keys.js) and name them
+// Both take their keys the way every form does (form-keys.ts) and name them
 // in the button row.
 // Colors from theme() only.
 
@@ -18,7 +18,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { run, props, closeOverlay, theme, window as appWindow } from "herdr";
 import { dither } from "./kit.js";
-import { formKey, formHints, bindTab, tabActions } from "./form-keys.js";
+import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();
 const cap = (s) => (s ?? "").replace(/^./, (c) => c.toUpperCase());
@@ -55,7 +55,7 @@ function frame(t, id) {
   return v_flex().id(id).w_full().min_h(0).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground);
 }
 
-// The prompt's stops in tab order (form-keys.js).
+// The prompt's stops in tab order (form-keys.ts).
 const PROMPT = [{ id: "input", kind: "text" }, { id: "cancel", kind: "button" }, { id: "save", kind: "button", submit: true }];
 // The confirm's: confirm first (it has the keyboard when the dialog opens).
 const CONFIRM = [{ id: "go", kind: "button", submit: true }, { id: "keep", kind: "button" }];
@@ -70,13 +70,13 @@ export class Prompt {
     // The overlay takes focus once it's shown; take it back.
     cx.timer.after(600, () => { if (this.at === "input") this.input.focus(); });
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.at = "input"; // the keyboard's: "input" | "cancel" | "save"
   }
 
   close() { closeOverlay(props().overlay); }
 
-  /** The keys the dialog takes before the name field (form-keys.js):
+  /** The keys the dialog takes before the name field (form-keys.ts):
    *  moving between the field and the buttons, and pressing a button. */
   key(e, cx) {
     const at = PROMPT.findIndex((s) => s.id === this.at);
@@ -124,7 +124,7 @@ export class Prompt {
 export class Confirm {
   init(_props, cx) {
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.handle.focus();
     // The overlay takes focus once it's shown; take it back.
     cx.timer.after(600, () => this.handle.focus());

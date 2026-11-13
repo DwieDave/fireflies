@@ -134,7 +134,7 @@ import {
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
 import { follow, join } from "./paths.js";
-import { formKey, bindTab, tabActions } from "./form-keys.js";
+import { formKey, bindTab, tabActions } from "./form-keys.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
@@ -152,7 +152,7 @@ import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopied
 // Read off the module when used (pickFile): test stand-ins for herdr needn't know them all.
 import * as herdr from "herdr";
 
-// The find line's stops in tab order (form-keys.js): the find field, Aa, ‹, ›
+// The find line's stops in tab order (form-keys.ts): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
 const FIND_STOPS = [{ id: "find", kind: "text" }, { id: "case", kind: "toggle" }, { id: "prev", kind: "button" }, { id: "next", kind: "button", submit: true }];
 const REPLACE_STOPS = [...FIND_STOPS, { id: "with", kind: "text" }, { id: "replace-one", kind: "button" }, { id: "replace-all", kind: "button" }];
@@ -277,7 +277,7 @@ export default class EditorPane extends View {
     this.menuHandle = cx.focus_handle();
     this.listening = new Set(); // the servers this pane hears (one queue per server for every tab)
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     // Vim: the pane's own switch, else settings.json editor.vim (default on).
     const leader = String(settings()?.editor?.leader ?? "space");
     this.vim = createVim({ leader: leader === "space" ? " " : leader === "comma" ? "," : leader.slice(0, 1) || " " });
@@ -1631,7 +1631,7 @@ export default class EditorPane extends View {
     else this.handle.focus();
   }
 
-  /** A key on the find line, as every form takes them (form-keys.js): tab /
+  /** A key on the find line, as every form takes them (form-keys.ts): tab /
    *  shift-tab walk its fields and chips, wrapping; space / enter press a
    *  chip (Aa flips); a field keeps its own enter (next, or replace). */
   findKey(e, cx) {

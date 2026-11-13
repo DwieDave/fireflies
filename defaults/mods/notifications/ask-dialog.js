@@ -13,7 +13,7 @@ import { reviewText } from "./claude.js";
 import { answer } from "./drive.js";
 import { forget, followCommands } from "./open.js";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.js";
-import { bindTab, tabActions } from "./form-keys.js";
+import { bindTab, tabActions } from "./form-keys.ts";
 
 export default class AskDialog {
   init(p, cx) {
@@ -31,7 +31,7 @@ export default class AskDialog {
       cx.notify();
     });
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.handle.focus();
     followCommands(cx, nextCommand, (e, cx) => this.key(e, cx), () => (this.s?.editing ? this.input.focus() : this.handle.focus()));
     cx.timer.after(400, () => (this.s?.editing ? this.input.focus() : this.handle.focus()));

@@ -10,7 +10,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup, ScrollHandle } from "gpui-base";
 import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window } from "herdr";
-import { bindTab, tabActions } from "./form-keys.js";
+import { bindTab, tabActions } from "./form-keys.ts";
 
 const I = (name) => `frame/settings/${name}.svg`;
 
@@ -73,7 +73,7 @@ export default class Settings extends View {
     this.machineEdit = null;
     this.machineNotice = null;
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.handle.focus();
     // The overlay takes the keyboard once it's shown; take it back.
     cx.timer.after(600, () => { if (!this.picking && !this.machineEdit) this.handle.focus(); });

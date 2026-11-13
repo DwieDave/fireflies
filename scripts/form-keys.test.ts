@@ -1,4 +1,4 @@
-// Every form is keyboard first, the same way (form-keys.js): tab / shift-tab
+// Every form is keyboard first, the same way (form-keys.ts): tab / shift-tab
 // through its fields and buttons, wrapping; ← → change a choice; enter
 // submits from a one-line field and presses a focused button; cmd-enter
 // submits from anywhere; esc cancels. Each form's own key handler is driven
@@ -10,7 +10,7 @@ import { readFileSync, readdirSync, existsSync } from "fs";
 import { state, find, cx, press, key, texts, act } from "./dialog-stubs.ts";
 
 const root = new URL("../defaults/", import.meta.url).pathname;
-const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.js");
+const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.ts");
 const { Popups } = await import("../defaults/mods/git/popups.js");
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.js");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
@@ -27,16 +27,16 @@ beforeEach(() => {
 
 // ---- the helper
 
-test("one helper: every mod with a form ships the same form-keys.js", () => {
+test("one helper: every mod with a form ships the same form-keys.ts", () => {
   const copies = [
     "mods/nocturne", "mods/github", "mods/git", "mods/editor", "mods/notifications",
     "mods/machine-add", "frame/feedback", "frame/settings",
-  ].map((d) => `${root}${d}/form-keys.js`);
+  ].map((d) => `${root}${d}/form-keys.ts`);
   const canon = readFileSync(copies[0], "utf8");
   for (const c of copies) expect([c, readFileSync(c, "utf8") === canon]).toEqual([c, true]);
   // No mod carries a stale copy this list forgets.
   for (const kind of ["mods", "frame"]) for (const d of readdirSync(`${root}${kind}`)) {
-    const f = `${root}${kind}/${d}/form-keys.js`;
+    const f = `${root}${kind}/${d}/form-keys.ts`;
     if (existsSync(f)) expect(copies).toContain(f);
   }
 });
@@ -53,7 +53,7 @@ const ROOTS: [string, string][] = [
 ];
 
 test("tab is bound: shift-tab and tab become the forms' actions in the Form context", async () => {
-  const keys = await import("../defaults/mods/machine-add/form-keys.js");
+  const keys = await import("../defaults/mods/machine-add/form-keys.ts");
   (globalThis as any).boundKeys = [];
   keys.bindTab(cx());
   keys.bindTab(cx()); // once is enough: the keymap is the app's

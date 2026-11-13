@@ -116,7 +116,7 @@ export function key(name: string) {
     modifiers: { shift: has("shift"), control: has("ctrl"), alt: has("alt"), platform: has("cmd") } };
 }
 
-/** A bound action on the root of a render (form-keys.js binds tab / shift-tab to some). */
+/** A bound action on the root of a render (form-keys.ts binds tab / shift-tab to some). */
 export function act(root: any, name: string, c = cx()) {
   const f = root.actions?.[name];
   if (!f) throw new Error(`no ${name} action on the root (has ${Object.keys(root.actions ?? {}).join(", ")})`);

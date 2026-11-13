@@ -9,7 +9,7 @@
 // into the free room, the buttons in a footer on the panel's bottom edge,
 // a list opening under its field (upward without room below).
 //
-// Keyboard first, the way every form is (form-keys.js): tab / shift-tab
+// Keyboard first, the way every form is (form-keys.ts): tab / shift-tab
 // (or ↓ ↑ outside the body) walk the fields, then Review and Cancel,
 // wrapping; typing goes into text; ← → step a choice's value, space flips a
 // toggle and opens a list (typing on a list field opens it filtered); enter
@@ -28,7 +28,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { window as appWindow } from "herdr";
 import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.js";
-import { formKey, formHints, submitKey, wrap } from "./form-keys.js";
+import { formKey, formHints, submitKey, wrap } from "./form-keys.ts";
 import { layout, cellOf, columns, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, TOP, FOOTER, PICK_MAX, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.js";
 
 const PICK_ROWS = PICK_MAX;
@@ -69,7 +69,7 @@ export class Form {
     this.at = Math.max(0, Math.min(this.stops().length - 1, i < 0 ? this.at : i));
   }
 
-  /** The keyboard's stops, in tab order (form-keys.js): the fields and the
+  /** The keyboard's stops, in tab order (form-keys.ts): the fields and the
    *  buttons under them, or in the review its two buttons. */
   stops() {
     if (this.stage !== "edit") return [{ id: "form-send", kind: "button", submit: true }, { id: "form-back", kind: "button" }];

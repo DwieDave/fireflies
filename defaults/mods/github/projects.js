@@ -541,7 +541,7 @@ export default class Projects {
     if (!item) { this.menu = null; return true; }
     const fields = m.fields.map((id) => b.fields.find((f) => f.id === id)).filter(Boolean);
     const f = fields[m.at], opts = f ? this.options(b, item, f) : [];
-    // tab / shift-tab: the next / previous field, wrapping, as in every form (form-keys.js).
+    // tab / shift-tab: the next / previous field, wrapping, as in every form (form-keys.ts).
     if (k === "tab" || k === "shift-tab") {
       const by = k === "tab" && !e?.modifiers?.shift ? 1 : -1;
       m.at = (((m.at + by) % fields.length) + fields.length) % fields.length;

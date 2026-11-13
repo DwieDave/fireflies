@@ -2088,7 +2088,7 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   (`mod:nocturne-editor`) or binding (`nocturne-editor.save`) and a command
   (`nocturne-browser.open:…`); its shared keys, localStorage and cache moved
   to the new name on the first start. Write the new names.
-- A form (fields and buttons): copy `mods/nocturne/form-keys.js` into your
+- A form (fields and buttons): copy `mods/nocturne/form-keys.ts` into your
   mod (a mod can't import another's files). `formKey(stops, at, key,
   modifiers, char)` says what a key does on the focused stop (`{ act: "move",
   to }`, `"submit"`, `"cancel"`, `"press"`, `"step"`, `"flip"`, `"open"`,

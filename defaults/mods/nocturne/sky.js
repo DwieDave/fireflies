@@ -72,7 +72,7 @@ import { toastKey } from "./toast.js";
 import { dismissUpdate } from "./screens.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.js";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.js";
-import { bindTab, tabActions } from "./form-keys.js";
+import { bindTab, tabActions } from "./form-keys.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();
 
@@ -233,7 +233,7 @@ export default class Sky {
     // The keyboard (nav.js): the cursor's control, where it was in the list,
     // the controls as last drawn ({ id, sec, go?, menu?, ... }).
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.cursor = null;
     this.navAt = 0;
     this.navList = [];

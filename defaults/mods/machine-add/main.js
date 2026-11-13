@@ -8,14 +8,14 @@
 //
 // Keys: ↓ / ↑ (ctrl-n / ctrl-p) walk the ssh config's hosts from the typed
 // field; enter adds the highlighted host (in the field: what's typed); esc closes.
-// As in every form (form-keys.js), tab / shift-tab walk the field, Add, each
+// As in every form (form-keys.ts), tab / shift-tab walk the field, Add, each
 // Copy and "Open the setting" shown, and Esc, wrapping; the focused one has
 // the ring; enter / space press it, cmd-enter adds what's typed.
 
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView, ScrollHandle } from "gpui-base";
 import { hc, exec, home, readTextFile, theme, props, closeOverlay, window as appWindow } from "herdr";
-import { formKey, formHints, ring, bindTab, tabActions } from "./form-keys.js";
+import { formKey, formHints, ring, bindTab, tabActions } from "./form-keys.ts";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
 const shellArg = (target) => /^[a-z0-9_@%+=:,./-]+$/i.test(target) ? target : "'" + target.replace(/'/g, "'\\''") + "'";
@@ -82,7 +82,7 @@ export default class MachineAdd extends View {
     this.macs = {}; // target -> { name, core } for an added Mac
     this.opened = {};
     this.handle = cx.focus_handle();
-    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
+    bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)
     this.at = -1; // the host row under the keyboard; -1: the typed field
     this.stop = "input"; // the form's stop with the keyboard (stops())
     this.scroll = ScrollHandle.new();
@@ -222,7 +222,7 @@ export default class MachineAdd extends View {
     closeOverlay(props().overlay);
   }
 
-  /** The form's stops in tab order (form-keys.js): the field, Add, the Copy
+  /** The form's stops in tab order (form-keys.ts): the field, Add, the Copy
    *  and "Open the setting" buttons shown, Esc. */
   stops() {
     const out = [{ id: "input", kind: "text" }, { id: "add", kind: "button", submit: true }];
