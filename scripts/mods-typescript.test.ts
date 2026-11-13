@@ -4,6 +4,7 @@
 // data is, or refuses it.
 import { test, expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { NOCTURNE_MODS } from "./nocturne-mods.ts";
 import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared, sharedKey, writeShared } from "../defaults/mods/pip/guard.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
@@ -11,12 +12,13 @@ const mods = readdirSync(MODS).filter((m) => !m.startsWith("."));
 const sources = (m: string) => readdirSync(`${MODS}/${m}`).filter((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts"));
 const imports = (m: string, file: string) => sources(m).some((f) => readFileSync(`${MODS}/${m}/${f}`, "utf8").includes(`from "./${file}"`));
 
-test("every copy of guard.ts is the same file, and every mod that imports it has one", () => {
+test("every copy of guard.ts is the same file: nocturne and each of its mods has one, ready for its migration", () => {
   const source = readFileSync(`${MODS}/pip/guard.ts`, "utf8");
   const copies = mods.filter((m) => existsSync(`${MODS}/${m}/guard.ts`));
   for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/guard.ts`, "utf8") === source]).toEqual([m, true]);
-  expect(mods.filter((m) => imports(m, "guard.ts")).sort()).toEqual(copies.sort());
-  expect(copies.sort()).toEqual(["nocturne", "pip", "usage"]);
+  expect(copies.sort()).toEqual(["nocturne", ...NOCTURNE_MODS].sort());
+  // A mod that imports it has its copy (no stock mod does).
+  for (const m of mods.filter((x) => imports(x, "guard.ts"))) expect(copies).toContain(m);
 });
 
 test("no mod keeps a hand-written .d.ts for a shared file: the shared files are TypeScript", () => {

@@ -3,9 +3,10 @@
 // and a guard proves what it is before anything uses it. No casts: a value is
 // either proven or refused (and the caller says what then).
 //
-// A mod can't import another mod's files, so this file is in every TypeScript
-// mod, byte for byte (scripts/mods-typescript.test.ts checks). Edit one, copy
-// it over the others.
+// A mod can't import another mod's files, so this file is in nocturne and in
+// each of its mods (scripts/nocturne-mods.ts), byte for byte
+// (scripts/mods-typescript.test.ts checks). Edit one, copy it over the others:
+// for m in defaults/mods/*/guard.ts; do cp defaults/mods/pip/guard.ts "$m"; done
 
 // Types only: this file runs nothing at import, so any test can load it as it is.
 import type { setShared, shared } from "herdr";
