@@ -150,6 +150,8 @@ test:
     bun test scripts/nocturne-tab-seam.test.ts
     # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.
     bun test scripts/nocturne-move-menu.test.ts
+    # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
+    bun test scripts/nocturne-scripts-chips.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
