@@ -147,6 +147,8 @@ const WORDS = {
   "nocturne-editor.next-tab": "Next file tab",
   "nocturne-editor.prev-tab": "Previous file tab",
   "nocturne-editor.close-tab": "Close the file tab",
+  "nocturne-editor.move-tab-left": "Move the file tab left",
+  "nocturne-editor.move-tab-right": "Move the file tab right",
   // The web pane (mod:nocturne-browser).
   "nocturne-browser.url": "The address bar",
   "nocturne-browser.reload": "Reload the page",

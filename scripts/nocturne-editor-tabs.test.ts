@@ -575,3 +575,153 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
   p.vimCommand("set:wrap", cx());
   expect([p.softWrap, rs.wrap, p.docs[1].softWrap]).toEqual([true, true, false]);
 });
+
+// ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands)
+
+test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
+  const p = await pane();
+  const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
+  expect(tabs.showStrip(1)).toBe(false);
+  expect(tabs.showStrip(2)).toBe(true);
+  let view = p.render(cx());
+  expect(ids(view)).not.toContain("editor-tabs");
+  expect(texts(byId(view, "bar-name"))).toEqual(["a.rs"]);
+  expect(byId(view, "bar-mark").kids.length).toBe(0);
+  p.editor.type("x");
+  expect(byId(p.render(cx()), "bar-mark").kids.length).toBe(1); // dithered: unsaved
+  // The card sits under the bar only: no strip's height above it.
+  expect(p.stripH()).toBe(0);
+  p.openFile("/p/src/b.rs", cx());
+  await flush();
+  view = p.render(cx());
+  expect(ids(view)).toContain("editor-tabs");
+  expect(ids(view)).not.toContain("bar-name");
+  expect(p.stripH()).toBe(26);
+  // Closing back to one: the strip goes again.
+  p.closeTab(cx());
+  expect(ids(p.render(cx()))).not.toContain("editor-tabs");
+});
+
+test("model: where a dragged tab lands and where its stake stands", () => {
+  // Four tabs, the second (1) dragged.
+  expect(tabs.gapAt(2, 10, 100)).toEqual({ index: 2, after: false });
+  expect(tabs.gapAt(2, 60, 100)).toEqual({ index: 2, after: true });
+  expect(tabs.dropIndex(4, 1, { index: 3, after: true })).toBe(3); // the end
+  expect(tabs.dropIndex(4, 1, { index: null })).toBe(3); // past the last tab
+  expect(tabs.dropIndex(4, 1, { index: 3, after: false })).toBe(2);
+  expect(tabs.dropIndex(4, 1, { index: 0, after: false })).toBe(0);
+  expect(tabs.dropIndex(4, 1, { index: 0, after: true })).toBe(null); // its own gap
+  expect(tabs.dropIndex(4, 1, { index: 2, after: false })).toBe(null); // its own gap
+  expect(tabs.dropIndex(4, 1, { index: 1, after: true })).toBe(null); // over itself
+  expect(tabs.stakeAt(4, 1, 3)).toEqual({ before: null });
+  expect(tabs.stakeAt(4, 1, 2)).toEqual({ before: 3 });
+  expect(tabs.stakeAt(4, 1, 0)).toEqual({ before: 0 });
+  expect(tabs.stakeAt(4, 1, null)).toBe(null);
+  expect(tabs.moved(["a", "b", "c", "d"], 1, 3)).toEqual(["a", "c", "d", "b"]);
+  expect(tabs.moved(["a", "b", "c", "d"], 3, 0)).toEqual(["d", "a", "b", "c"]);
+});
+
+/** Three tabs a, b, n (b shown), with the strip wide enough for all. */
+async function three(): Promise<any> {
+  const p = await pane();
+  p.openFile("/p/src/b.rs", cx());
+  p.openFile("/p/docs/n.md", cx());
+  p.select(p.docs[1], cx());
+  await flush();
+  p.size = { width: 1200, height: 600 };
+  return p;
+}
+const order = (p: any) => p.docs.map((d: any) => d.path.split("/").pop());
+const fire = (el: any, name: string, ...args: any[]) => el.calls[name].find((c: any[]) => typeof c[c.length - 1] === "function").at(-1)(...args);
+
+test("a drag along the strip: a press, a move past 4 px lifts the tab, a stake marks the gap, the drop moves it; kept for a restart", async () => {
+  const p = await three();
+  let strip = p.tabStrip(theme);
+  // Press on b (index 1), then move over n's right half.
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 202, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag).toBe(null); // 2 px: still a click
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 300, y: 5 }, local_position: { x: 70, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag).toEqual({ from: 1, gap: { index: 2, after: true } });
+  // Drawn: b lifted (its plate), the stake at the end, the pointer grabbing.
+  strip = p.tabStrip(theme);
+  expect(byId(strip, "editor-tab-1").kids.length).toBeGreaterThan(byId(p.tabStrip(theme), "editor-tab-0").kids.length);
+  expect(byId(strip, "editor-tabs-end").kids.length).toBe(1);
+  expect(strip.calls.cursor_grabbing).toBeTruthy();
+  // The drop: b goes last, still shown; the order is kept and told.
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  expect(p.path).toBe("/p/src/b.rs");
+  expect(JSON.parse(storage.tabs)).toEqual({ paths: ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"], active: 2 });
+  expect(sharedNow["nocturne-editor.paths"].s1).toEqual(["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"]);
+  // A restart: the same order, the same tab shown.
+  const q = await pane();
+  expect([order(q), q.path]).toEqual([["a.rs", "n.md", "b.rs"], "/p/src/b.rs"]);
+});
+
+test("a drag that leaves the strip or drops on its own gap changes nothing; a press without a move is a click", async () => {
+  const p = await three();
+  let strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-0"), "on_mouse_move", { position: { x: 100, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(p.tabDrag?.gap).toEqual({ index: 0, after: false });
+  fire(strip, "on_hover", false, cx());
+  expect(p.tabDrag).toBe(null);
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  // Over its own right gap (the left half of the next tab): no stake, no move.
+  strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-1"), "on_mouse_down", { position: { x: 200, y: 5 } }, cx());
+  fire(byId(strip, "editor-tab-2"), "on_mouse_move", { position: { x: 260, y: 5 }, local_position: { x: 10, y: 5 }, bounds: { width: 100 } }, cx());
+  expect(texts(p.tabStrip(theme)).length).toBeGreaterThan(0);
+  fire(strip, "on_mouse_up", {}, cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  // A press and a click on a: shown.
+  strip = p.tabStrip(theme);
+  fire(byId(strip, "editor-tab-0"), "on_mouse_down", { position: { x: 20, y: 5 } }, cx());
+  click(byId(strip, "editor-tab-0"));
+  fire(strip, "on_mouse_up", {}, cx());
+  expect([p.path, order(p)]).toEqual(["/p/src/a.rs", ["a.rs", "b.rs", "n.md"]]);
+});
+
+test("the wheel over the strip steps the tabs; a middle click closes one", async () => {
+  const p = await three();
+  const strip = p.tabStrip(theme);
+  fire(strip, "on_scroll_wheel", { delta: { y: -3 } }, cx());
+  expect(p.path).toBe("/p/docs/n.md");
+  fire(strip, "on_scroll_wheel", { delta: { y: 3 } }, cx());
+  expect(p.path).toBe("/p/src/b.rs");
+  fire(byId(p.tabStrip(theme), "editor-tab-0"), "on_mouse_down", {}, cx()); // the left press (no-op), then
+  byId(p.tabStrip(theme), "editor-tab-0").calls.on_mouse_down.find((c: any[]) => c[0] === "middle")[1]({}, cx());
+  expect(order(p)).toEqual(["b.rs", "n.md"]);
+});
+
+test("moving by key: ]B / [B, :tabm N / +N / -N / (none), space b < / >, the commands; ends say so; kept for a restart", async () => {
+  const doc = { text: "abc\n", cursor: { line: 0, col: 0 }, clipboard: null, page: 10 };
+  const run = (keys: string[]) => { const v = createVim(); const out: string[] = []; for (const k of keys) out.push(...(feed(v, k, doc).commands ?? [])); return out; };
+  expect(run(["]", "B"])).toEqual(["move-tab-right"]);
+  expect(run(["2", "[", "B"])).toEqual(["move-tab-left", "move-tab-left"]);
+  const ex = (line: string) => run([":", ...line.split(""), "<cr>"]);
+  expect(ex("tabm 0")).toEqual(["move-tab:0"]);
+  expect(ex("tabm +1")).toEqual(["move-tab:+1"]);
+  expect(ex("tabmove -2")).toEqual(["move-tab:-2"]);
+  expect(ex("tabm")).toEqual(["move-tab:$"]);
+  expect(run([" ", "b", "<"])).toEqual(["move-tab-left"]);
+  expect(run([" ", "b", ">"])).toEqual(["move-tab-right"]);
+  const p = await three();
+  p.command("move-tab-right", cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  p.vimCommand("move-tab-right", cx());
+  expect([order(p), p.message.text]).toEqual([["a.rs", "n.md", "b.rs"], "the last tab"]);
+  p.vimCommand("move-tab:0", cx());
+  expect(order(p)).toEqual(["b.rs", "a.rs", "n.md"]);
+  p.command("move-tab-left", cx());
+  expect(p.message.text).toBe("the first tab");
+  p.vimCommand("move-tab:+2", cx());
+  expect(order(p)).toEqual(["a.rs", "n.md", "b.rs"]);
+  p.vimCommand("move-tab:-1", cx());
+  expect(order(p)).toEqual(["a.rs", "b.rs", "n.md"]);
+  p.vimCommand("move-tab:$", cx());
+  expect([order(p), p.path]).toEqual([["a.rs", "n.md", "b.rs"], "/p/src/b.rs"]);
+  expect(JSON.parse(storage.tabs)).toEqual({ paths: ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"], active: 2 });
+});

@@ -32,7 +32,7 @@ export const LEADER = {
   e: ["files-pane", "files pane"],
   w: ["save", "save"],
   q: ["quit", "close"],
-  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"] },
+  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"], "<": ["move-tab-left", "move tab left"], ">": ["move-tab-right", "move tab right"] },
   d: ["problems", "problems"],
   h: ["hover", "hover"],
   c: { name: "code", a: ["code-action", "code action"], f: ["format", "format"] },
@@ -795,6 +795,9 @@ function normalCommand(vim, cmd, b, doc, out) {
     case "gt": out.commands.push(cmd.has ? `tab:${n}` : "next-tab"); return false;
     case "gT": case "[b": out.commands.push(...Array(n).fill("prev-tab")); return false;
     case "]b": out.commands.push(...Array(n).fill("next-tab")); return false;
+    // ]B / [B: the shown tab one place right / left (a count: that many).
+    case "]B": out.commands.push(...Array(n).fill("move-tab-right")); return false;
+    case "[B": out.commands.push(...Array(n).fill("move-tab-left")); return false;
     case "gr": out.commands.push("references"); return false;
     case "K": out.commands.push("hover"); return false;
     case "]d": out.commands.push("next-problem"); return false;
@@ -1070,6 +1073,13 @@ export function runEx(vim, line, doc, out) {
     case "bn": case "bnext": case "tabn": case "tabnext": out.commands.push("next-tab"); return out;
     case "bp": case "bprevious": case "bN": case "bNext": case "tabp": case "tabprevious": case "tabN": out.commands.push("prev-tab"); return out;
     case "bd": case "bdelete": case "bw": case "bwipeout": case "tabc": case "tabclose": out.commands.push(bang ? "close-tab!" : "close-tab"); return out;
+    // :tabm N (that place, 0 the first), :tabm +N / -N (that many right / left), :tabm (the end).
+    case "tabm": case "tabmove": {
+      const a = arg.trim();
+      if (a && !/^[+-]?\d+$/.test(a)) { out.message = "E474: :tabm takes N, +N or -N"; return out; }
+      out.commands.push(`move-tab:${a || "$"}`);
+      return out;
+    }
     case "b": case "buffer": if (!/^\d+$/.test(arg.trim())) { out.message = "E94: :b takes a tab number (:ls lists them)"; return out; } out.commands.push(`tab:${arg.trim()}`); return out;
     case "ls": case "buffers": case "files": out.commands.push("tabs"); return out;
     case "u": case "undo": out.commands.push("undo"); return out;

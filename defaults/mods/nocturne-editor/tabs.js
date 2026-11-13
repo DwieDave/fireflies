@@ -3,7 +3,8 @@
 // its text, undo, caret, scroll, unsaved changes, server document); these
 // decide where a new tab goes, which one shows after a close, what comes back
 // after a restart, what closing the pane asks, the names on the strip and
-// which of them fit.
+// which of them fit, whether the strip shows (from two tabs on), and where a
+// dragged tab lands.
 
 import { basename, dirname } from "./logic.js";
 
@@ -100,4 +101,51 @@ export function visibleTabs(widths, active, room) {
     break;
   }
   return { from, to, before: from, after: n - to };
+}
+
+/** The strip shows from two tabs on: one file's name and unsaved mark are the bar's. */
+export const showStrip = (count) => count > 1;
+
+// ---- moving a tab (a drag along the strip, ]B / [B, cmd-k < / >)
+
+/** How far (px) a press moves before it's a drag rather than a click. */
+export const DRAG_START = 4;
+
+/** The gap the pointer is over in tab `index`: before it, or after it (its
+ *  right half). `x`, `width`: the pointer's place in the tab, its width. */
+export function gapAt(index, x, width) {
+  return { index, after: x >= width / 2 };
+}
+
+/** Where tab `from` of `count` ends up dropped into `gap` ({ index, after },
+ *  or { index: null } the strip past the last tab): its new index, or null
+ *  when the drop leaves it where it is (over itself or its own gaps). */
+export function dropIndex(count, from, gap) {
+  if (!gap || from < 0 || from >= count) return null;
+  let at;
+  if (gap.index == null) at = count - 1;
+  else {
+    if (gap.index === from) return null;
+    // The place among the others, then counted with the dragged one out.
+    at = gap.index + (gap.after ? 1 : 0);
+    if (at > from) at -= 1;
+  }
+  return at === from ? null : at;
+}
+
+/** Where the stake stands for a drop of `from` at `to` (dropIndex's): at the
+ *  left edge of tab `before` (an index in the strip as it is), or at the end
+ *  (`before` null). A gap after a tab is drawn as the one before the next. */
+export function stakeAt(count, from, to) {
+  if (to == null) return null;
+  const before = to < from ? to : to + 1;
+  return { before: before >= count ? null : before };
+}
+
+/** The list with item `from` moved to index `to`. */
+export function moved(list, from, to) {
+  const out = [...list];
+  const [item] = out.splice(from, 1);
+  out.splice(to, 0, item);
+  return out;
 }

@@ -5,7 +5,10 @@
 // Props: { path, line?, col?, on?, slot } (the file it opened on).
 //
 // File tabs: the pane holds several files, a tab each on the strip along its
-// top (tabs.js decides placement, closing, labels, what fits). Each tab is a
+// top (tabs.js decides placement, closing, labels, what fits); with one file
+// the strip isn't drawn and the bar names it with its unsaved mark. Drag a
+// tab along the strip to move it (it lifts, a stake marks where it lands),
+// or ]B / [B, :tabm, space b < / >, move-tab-left / -right. Each tab is a
 // record (newDoc) with its own code editor (text, undo, caret, scroll), what's
 // on disk, unsaved changes, server document, problems and Markdown preview;
 // `this.path`, `this.editor`, ... are the shown tab's (TAB_FIELDS at the end),
@@ -16,8 +19,8 @@
 // `editor.open` finds a file in any tab through shared `nocturne-editor.paths`
 // and shows it with `nocturne-editor.goto`. Closing an edited tab asks on a
 // line under the bar; the last tab closes the pane; the tabs come back after
-// a restart (localStorage `tabs`). Keys: vim gt / gT, ]b / [b, :bn :bp :bd
-// :b N :ls, space b; next-tab / prev-tab / close-tab commands.
+// a restart (localStorage `tabs`, in their order). Keys: vim gt / gT, ]b / [b,
+// :bn :bp :bd :b N :ls, space b; next-tab / prev-tab / close-tab / move-tab-left / -right commands.
 //
 // Links in the hover card (cardlinks.js) open on a click, and a keyboard
 // card rings them with tab (enter follows): web pages in the shown tab's
@@ -100,7 +103,7 @@ import { formKey, bindTab, tabActions } from "./form-keys.js";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.js";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
 import { CHANGES, newestId, follow as followFiles } from "./follow.js";
-import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE } from "./tabs.js";
+import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved } from "./tabs.js";
 import { OPEN, LAST, PATHS, filesOf } from "./editor-route.js";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
@@ -164,6 +167,14 @@ function dither(color, cell = 1) {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
 }
 const stop = (_e, cx) => cx.stop_propagation();
+/** Where a dragged tab lands: a 2 px accent bar capped top and bottom, at the
+ *  left edge of its box (as the app's tab strip, nocturne/tabdrag.js). */
+function tabStake(t) {
+  return div().absolute().left(-3).top(3).bottom(2).w(8)
+    .child(div().absolute().left(3).top(0).bottom(0).w(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent));
+}
 
 /** The editor's selection (and, drawn from it, search matches): the accent
  *  at 40%, see-through so the syntax colors read on it. */
@@ -212,6 +223,7 @@ export default class EditorPane extends View {
     this.size = { width: 800, height: 600 };
     this.message = null; // a short note in the bar (saved, reloaded, an error)
     this.asking = null; // closing a tab with unsaved changes: { doc, at } (the question's line)
+    this.tabPress = null; this.tabDrag = null; // a press on a tab, and the drag it became: { from, gap } (tabs.js)
     this.listening = new Set(); // the servers this pane hears (one queue per server for every tab)
     this.handle = cx.focus_handle();
     bindTab(cx); // tab / shift-tab reach the key handler (form-keys.js)
@@ -399,6 +411,68 @@ export default class EditorPane extends View {
   stepTab(dir, cx) {
     if (this.docs.length < 2) return this.say("one tab");
     this.select(this.docs[stepTab(this.docs.length, this.docs.indexOf(this.cur), dir)], cx);
+  }
+
+  /** Moves tab `from` to index `to` (a drag's drop, ]B / [B, :tabm): the
+   *  order is kept for a restart and told to the routing (shared PATHS). */
+  moveTab(from, to, cx) {
+    const n = this.docs.length;
+    if (from < 0 || from >= n || to == null) return;
+    to = Math.max(0, Math.min(n - 1, to));
+    if (to === from) return;
+    this.docs = moved(this.docs, from, to);
+    this.keepTabs();
+    this.publish();
+    cx?.notify?.();
+  }
+
+  /** The shown tab one place right (1) or left (-1); `:tabm`'s "N", "+N",
+   *  "-N" or "$" (the end) as `spec`. */
+  stepMove(dir, cx, spec = null) {
+    const n = this.docs.length, i = this.docs.indexOf(this.cur);
+    if (n < 2) return this.say("one tab");
+    let to;
+    if (spec == null) to = i + dir;
+    else if (spec === "$") to = n - 1;
+    else if (/^[+-]/.test(spec)) to = i + Number(spec);
+    else to = Number(spec);
+    if (!(to >= 0 && to < n)) return this.say(dir < 0 || /^-/.test(spec ?? "") ? "the first tab" : "the last tab");
+    this.moveTab(i, to, cx);
+  }
+
+  // ---- dragging a tab along the strip (tabs.js)
+
+  /** The pointer moved over a gap with a press down: past DRAG_START it's a
+   *  drag, and the gap it's over is where the stake stands. */
+  dragOver(gap, e, cx) {
+    const p = this.tabPress;
+    if (!p) return;
+    if (!this.tabDrag) {
+      if (Math.abs((e?.position?.x ?? p.x) - p.x) < DRAG_START) return;
+      this.tabDrag = { from: p.index, gap: null };
+    }
+    const g = this.tabDrag.gap;
+    if (g && g.index === gap.index && g.after === gap.after) return;
+    this.tabDrag.gap = gap;
+    cx?.notify?.();
+  }
+
+  /** The press let go on the strip: a drag drops where its stake stands. */
+  dropTab(cx) {
+    const d = this.tabDrag;
+    this.tabDrag = null;
+    this.tabPress = null;
+    if (!d) return;
+    this.moveTab(d.from, dropIndex(this.docs.length, d.from, d.gap), cx);
+    cx?.notify?.();
+  }
+
+  /** The pointer left the strip: the drag ends where it started. */
+  cancelDrag(cx) {
+    const dragging = Boolean(this.tabDrag);
+    this.tabDrag = null;
+    this.tabPress = null;
+    if (dragging) cx?.notify?.();
   }
 
   /** Closes tab `d` (the shown one by default): with unsaved changes it
@@ -1349,6 +1423,9 @@ export default class EditorPane extends View {
       case "tab": { const n = Number(arg); if (!(n >= 1 && n <= this.docs.length)) return this.say(`E86: no tab ${arg}`, true); return this.select(this.docs[n - 1], cx); }
       case "close-tab": return this.closeTab(cx);
       case "close-tab!": return this.closeTab(cx, this.cur, true);
+      case "move-tab-left": return this.stepMove(-1, cx);
+      case "move-tab-right": return this.stepMove(1, cx);
+      case "move-tab": return this.stepMove(0, cx, arg);
       case "tabs": return this.say(this.docs.map((d, i) => `${i + 1}${d === this.cur ? "%" : ""} ${basename(d.path)}${d.dirty ? " +" : ""}`).join("  "));
       case "undo": return this.editor.undo();
       case "redo": return this.editor.redo();
@@ -1441,6 +1518,8 @@ export default class EditorPane extends View {
     if (c === "next-tab") return this.stepTab(1, cx);
     if (c === "prev-tab") return this.stepTab(-1, cx);
     if (c === "close-tab") return this.closeTab(cx);
+    if (c === "move-tab-left") return this.stepMove(-1, cx);
+    if (c === "move-tab-right") return this.stepMove(1, cx);
     // `nocturne-editor.open:{"path","line"?,"col"?,"view"?}`: a file as a tab of the focused editor.
     if (c.startsWith("open:")) {
       let a = null;
@@ -1835,7 +1914,7 @@ export default class EditorPane extends View {
       })
       // A click outside the card closes it (the card keeps its own).
       .on_mouse_down("left", (_e, cx) => this.closeCard(cx))
-      .child(this.tabStrip(t))
+      .when(showStrip(this.allDocs().length), (el) => el.child(this.tabStrip(t)))
       .child(this.bar(t))
       .when(Boolean(this.asking), (el) => el.child(this.askLine(t)))
       .when(this.conflict, (el) => el.child(this.conflictLine(t)))
@@ -1880,6 +1959,11 @@ export default class EditorPane extends View {
         .child(div().absolute().inset_0().opacity(0.3).child(dither(modeColor, 1)))
         .child(div().relative().text_color(modeColor).child(MODE_NAME[this.vim.mode] ?? "NORMAL"))))
       .when(vim && !!this.vim.recording, (el) => el.child(div().flex_none().text_color(t.ansi1).child(`rec @${this.vim.recording.reg}`)))
+      // One file (no strip): its unsaved mark and name are here, as before tabs.
+      .when(!showStrip(this.allDocs().length), (el) => el
+        .child(div().id("bar-mark").relative().size(8).flex_none().border(1).border_color(this.dirty ? t.ansi3 : t.ansi0)
+          .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))))
+        .child(div().id("bar-name").flex_none().max_w(MAX_TAB_NAME * 1.5).truncate().text_color(t.foreground).child(this.scratch ? "scratchpad" : basename(this.path) || "untitled")))
       .when(this.deleted, (el) => el.child(div().id("bar-deleted").flex_none().text_color(t.ansi1).child("deleted · cmd-s writes it again")))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(narrow ? "" : this.scratch ? `${noteName(this.path)} · every worktree of it` : dir))
       // A scratchpad: saving… while it waits to write, saved after (green), what went wrong (red).
@@ -1910,10 +1994,17 @@ export default class EditorPane extends View {
         .on_click((_e, cx) => this.toggleVim(cx)).child("vim"));
   }
 
-  /** The file tabs along the pane's top: each file's unsaved mark, name
-   *  (with the folder that tells two of the same name apart) and ×; the
-   *  shown one lit (a dithered band, an accent edge). Those that don't fit
-   *  fold into ‹ n / n › at the ends, the shown one always in view. */
+  /** The strip's height: none with one tab. */
+  stripH() {
+    return showStrip(this.allDocs().length) ? TABS : 0;
+  }
+
+  /** The file tabs along the pane's top (from two files on): each file's
+   *  unsaved mark, name (with the folder that tells two of the same name
+   *  apart) and ×; the shown one lit (a dithered band, an accent edge). Those
+   *  that don't fit fold into ‹ n / n › at the ends, the shown one always in
+   *  view. A press dragged along the strip moves its tab: it lifts where it
+   *  is and a stake stands in the gap it drops into; the wheel steps tabs. */
   tabStrip(t) {
     const docs = this.allDocs();
     // A scratchpad's tab says so, with its repository (its file is named for the app).
@@ -1922,17 +2013,31 @@ export default class EditorPane extends View {
     const room = this.size.width / z - 8;
     const active = docs.indexOf(this.cur);
     const fit = visibleTabs(labels.map(tabWidth), active, room);
+    const drag = this.tabDrag;
+    const stake = drag ? stakeAt(docs.length, drag.from, dropIndex(docs.length, drag.from, drag.gap)) : null;
+    // The landing place among the drawn tabs: one folded away stands at the edge.
+    const stakeBefore = stake == null ? undefined : stake.before == null || stake.before >= fit.to ? null : Math.max(stake.before, fit.from);
     const more = (id, text, dir) => h_flex().id(id).relative().h_full().w(MORE).flex_none().justify_center().items_center().text_color(t.dim)
       .hover((s) => s.text_color(t.foreground)).on_click((_e, cx) => { this.stepTab(dir, cx); cx.notify(); }).child(text);
     const tab = (d, i) => {
       const on = d === this.cur, l = labels[i];
       const bad = d.state === "error" || d.deleted;
+      const lifted = drag?.from === i;
       return h_flex().id(`editor-tab-${i}`).relative().h_full().flex_none().pl(10).pr(6).gap(6).items_center().border_r(1).border_color(t.ansi0)
-        .text_color(on ? t.foreground : t.muted)
-        .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.45).child(dither(t.ansi0, 1)))
+        .text_color(on || lifted ? t.foreground : t.muted)
+        .when(on && !lifted, (el) => el.child(div().absolute().inset_0().opacity(0.45).child(dither(t.ansi0, 1)))
           .child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent)))
-        .when(!on, (el) => el.hover((s) => s.text_color(t.foreground)))
-        .on_click((_e, cx) => { this.select(d, cx); cx.notify(); })
+        // Dragged: lifted where it is (a plate edged in the accent, a dither shadow), behind its words.
+        .when(lifted, (el) => el
+          .child(div().absolute().left(5).right(-1).top(5).bottom(1).child(dither(t.ansi0, 1)))
+          .child(div().absolute().left(2).right(2).top(2).bottom(4).bg(t.background).border(1).border_color(t.accent)))
+        .when(!on && !drag, (el) => el.hover((s) => s.text_color(t.foreground)))
+        .on_mouse_down("left", (e, _cx) => { this.tabPress = { index: i, x: e?.position?.x ?? 0 }; })
+        .on_mouse_move((e, cx) => this.dragOver(gapAt(i, e?.local_position?.x ?? 0, e?.bounds?.width ?? 1), e, cx))
+        // A click (no drag) shows the tab; a drag drops in the strip's mouse up.
+        .on_click((_e, cx) => { if (this.tabDrag) return; this.select(d, cx); cx.notify(); })
+        // Middle click closes it, as the app's tab strip does.
+        .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.closeTab(cx, d); cx.notify(); })
         // Unsaved: the bar's yellow dithered square; nothing when clean.
         .child(div().id(`editor-tab-mark-${i}`).relative().size(7).flex_none().border(1)
           .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
@@ -1943,12 +2048,22 @@ export default class EditorPane extends View {
           .text_color(on ? t.muted : t.ansi8).hover((s) => s.text_color(t.ansi1))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => { cx.stop_propagation(); this.closeTab(cx, d); cx.notify(); })
-          .child("×"));
+          .child("×"))
+        .when(stakeBefore === i, (el) => el.child(tabStake(t)));
     };
+    // Past the last tab: the gap at the end, wide enough to aim at.
+    const end = div().id("editor-tabs-end").relative().flex_1().min_w(24).h_full()
+      .on_mouse_move((e, cx) => this.dragOver({ index: null, after: false }, e, cx))
+      .when(stakeBefore === null, (el) => el.child(tabStake(t)));
     return h_flex().id("editor-tabs").relative().h(TABS).flex_none().items_center().overflow_hidden().bg(t.background)
+      .on_mouse_up("left", (_e, cx) => this.dropTab(cx))
+      .on_hover((hovered, cx) => { if (!hovered) this.cancelDrag(cx); })
+      .when(Boolean(drag), (el) => el.cursor_grabbing())
+      .on_scroll_wheel((e, cx) => { const dy = e?.delta?.y ?? 0; if (Math.abs(dy) >= 1) { this.stepTab(dy > 0 ? -1 : 1, cx); cx.notify(); } })
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
       .when(fit.before > 0, (el) => el.child(more("editor-tabs-before", `‹ ${fit.before}`, -1)))
       .children(docs.slice(fit.from, fit.to).map((d, j) => tab(d, fit.from + j)))
+      .child(end)
       .when(fit.after > 0, (el) => el.child(more("editor-tabs-after", `${fit.after} ›`, 1)));
   }
 
@@ -2203,7 +2318,7 @@ export default class EditorPane extends View {
   /** How far down the pane the text starts: the bar, and whatever lines sit
    *  between it and the text (a conflict, find / replace, vim's ex line). */
   textTop() {
-    return TABS + BAR + (this.asking ? FIND : 0) + (this.conflict ? FIND : 0) + (this.mode === "replace" ? 2 * FIND : this.mode ? FIND : 0) + (this.vim.ex != null ? FIND : 0);
+    return this.stripH() + BAR + (this.asking ? FIND : 0) + (this.conflict ? FIND : 0) + (this.mode === "replace" ? 2 * FIND : this.mode ? FIND : 0) + (this.vim.ex != null ? FIND : 0);
   }
 
   /** The card's word in pane coordinates (unzoomed), from where the editor
@@ -2231,7 +2346,7 @@ export default class EditorPane extends View {
     const footH = 24;
     // The pane's size comes in window pixels (zoomed); the card is placed in layout units.
     const z = zoom();
-    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W }, { top: TABS + BAR, bottom: HINTS });
+    const place = cardPlace(anchor, { width: this.size.width / z, height: this.size.height / z }, { width: CARD_W }, { top: this.stripH() + BAR, bottom: HINTS });
     const sevColor = { error: t.ansi1, warning: t.ansi3, info: t.ansi4, hint: t.dim };
     const lang = this.lang === "tsx" ? "typescript" : this.lang;
     const parts = c.parts.map((p, i) => p.code != null

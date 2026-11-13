@@ -545,7 +545,10 @@ the highlighted line shows where it will land.
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the name, the folder that tells two of the
   same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
-  n › at the ends). Each tab keeps its text, undo, caret, scroll, folds,
+  n › at the ends; the wheel over it steps tabs, a middle click closes one).
+  The strip shows from two files on: with one, the bar names the file with
+  its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
+  marks where it lands; off the strip it stays); the order is kept. Each tab keeps its text, undo, caret, scroll, folds,
   unsaved changes and Markdown view. Where a file goes: go to definition and
   references into another file, a card link to a file, `:e <file>` and a
   Markdown preview's link open it as a tab of the same editor; the files pane
@@ -564,10 +567,13 @@ the highlighted line shows where it will land.
   unsaved changes asks on a line under the bar (s save and close, d discard,
   esc keep; tab / ← → and enter too); closing the last tab closes the pane;
   closing the pane asks once, naming every edited tab. Tabs come back after a
-  restart (each read when first shown). Tab keys: vim's gt / gT (a count: that
-  tab), ]b / [b, `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls`
-  (also `:tabn` `:tabp` `:tabc`), space b n / b p / b d / b l; the commands
-  `nocturne-editor.next-tab`, `.prev-tab`, `.close-tab` (cmd-k ] / cmd-k [ /
+  restart (in their order, each read when first shown). Tab keys: vim's
+  gt / gT (a count: that tab), ]b / [b,
+  `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls` (also `:tabn`
+  `:tabp` `:tabc`), space b n / b p / b d / b l; moving the shown tab: ]B / [B
+  (a count: that many places), `:tabm N` / `+N` / `-N` (`:tabm` alone: the
+  end), space b > / b <; the commands `nocturne-editor.next-tab`, `.prev-tab`,
+  `.close-tab`, `.move-tab-right`, `.move-tab-left` (cmd-k ] / cmd-k [ /
   cmd-k w). `:q` closes the pane
   with all its tabs and refuses while any has unsaved changes. A language
   server serves every tab of its project (one per project as before; each
