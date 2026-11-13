@@ -25,6 +25,10 @@
 //              one), then pid and parent with show / copy / end / end
 //              tree, then its cpu and memory. Rows above it never move as the
 //              selection does; the ones below make room.
+//   sorting    a click on a column's head sorts by it, again the other way;
+//              s steps through the columns, S turns it, v the flat list of
+//              every process while a number sorts (sort.ts, heads.ts); kept
+//              across opens
 //   ports      the TCP ports his processes listen on, those in this app's
 //              terminals first: port, process, where it runs; on the cursor's
 //              row open ↗ (a web pane), copy (http://localhost:<port>), end
@@ -78,6 +82,8 @@ import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import { closeOverlay, exec, nextCommand, shared, setShared, theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
+import type { Sorts } from "./sort.ts";
+import { NO_SORT, SORT } from "./sort.ts";
 import { keysView } from "./keyhelp.ts";
 import type { Index, Probe, Row, TreeNode } from "./logic.ts";
 import { PROBE, parseProbe, index } from "./logic.ts";
@@ -114,6 +120,8 @@ export default class ProcsDeck extends View {
   pointsCache = new WeakMap<readonly (number | null)[], { sig: string; runs: Point[][] }>();
   hist = new Map<number, Own>();
   all = false;
+  // Each tab's sort and the flat view (sort.ts), kept across opens.
+  sorts: Sorts = readShared(shared, SORT, null) ?? NO_SORT;
   snap: Probe | null = null;
   ix: Index | null = null;
   failed: string | null = null;

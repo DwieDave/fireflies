@@ -51,7 +51,7 @@ export const STRIP_H = stripLayout(W - 2).h;
 // The lists' heights under a strip four across; a narrower deck's strip takes two rows (listH).
 export const LIST_H = H - 2 - HEAD - STRIP_H - COLS - FOOT;
 
-export const PORTS_H = H - 2 - HEAD - STRIP_H - FOOT;
+export const PORTS_H = H - 2 - HEAD - STRIP_H - COLS - FOOT;
 
 /** A list's height under a strip `strip` px tall: what a two-row strip takes comes off it. */
 export const listH = (base: number, strip: number): number => base - (strip - STRIP_H);
@@ -114,6 +114,7 @@ export const deckKeys = (): KeyRow[] => [
   ["K", "force end (kill -9, asks first) · on the band: kill what held on"],
   ["o", "open the port in a web pane"], ["c", "copy the address · a process: its command line"],
   ["p", "copy the pid · a port: its number"], ["f", "open its folder in a files pane"],
+  ["s S", "sort by the next column · the other way (a click on a column's head too)"], ["v", "tree / flat while a number column sorts"],
   ["r", "read again now"], ["/", "find (esc clears, again: back)"], ["q esc", "close"], ["?", "keys"],
 ];
 

@@ -10,9 +10,10 @@ import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
 import { ART, FOOT, HEAD, PROW, ROW } from "./state.ts";
 import { vitalLine } from "./vitals.ts";
+import { arrow as sortArrow } from "./sort.ts";
 import { dither } from "./paint.ts";
 import { procOf } from "./listing.ts";
-import { begin, confirm, copyRow, escapeKey, foldRow, killHard, openPortAt, showTerminal, switchTab, toggleAll } from "./actions.ts";
+import { begin, confirm, escapeKey, foldRow, killHard, openPortAt, showTerminal, sortKey, switchTab, toggleAll } from "./actions.ts";
 import { badge } from "./procs-view.ts";
 import { openMenu } from "./menu-view.ts";
 import type { default as ProcsDeck } from "./main.ts";
@@ -70,6 +71,10 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
   const all = k("k-all", "a", v.all ? "this app" : "all", () => toggleAll(v));
 
+  // s: the next column to sort by (what sorts now, with its arrow); S turns it.
+  const sorted = v.tab === "ports" ? v.sorts.ports : v.sorts.procs;
+  const sort = k("k-sort", "s", sorted ? `${sorted.col} ${sortArrow(sorted.dir)}` : "sort", () => sortKey(v, false));
+
   // m: the row's menu, under the selected row.
   const menu = k("k-menu", "m", "menu", () => openMenu(v, items, ci, { x: 40, y: v.selY }, v.selY - (v.tab === "ports" ? PROW : ROW)));
 
@@ -107,14 +112,14 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
   const q = v.query ? queryChip(v, t) : null;
 
   if (v.tab === "ports") {
-    if (!item || !("port" in item)) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes", (cx) => switchTab(v, "procs", cx)), find, help));
+    if (!item || !("port" in item)) return bar.child(left(note ?? word(""), q)).child(keys(k("k-a", "tab", "processes", (cx) => switchTab(v, "procs", cx)), find, sort, help));
 
     return bar.child(left(arrow, note ?? word(address(item.port)), q))
-      .child(keys(k("k-open", "enter", "open", () => openPortAt(v, item)), k("k-copy", "c", "copy", (cx) => copyRow(v, item, cx)),
-        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), menu, help));
+      .child(keys(k("k-open", "enter", "open", () => openPortAt(v, item)),
+        item.guard ? null : k("k-end", "x", "end", () => begin(v, item, false)), menu, sort, help));
   }
 
-  if (!item || "port" in item) return bar.child(left(note ?? word(""), q)).child(keys(all, find, help));
+  if (!item || "port" in item) return bar.child(left(note ?? word(""), q)).child(keys(all, find, sort, help));
 
   const n = item.node;
 
@@ -122,15 +127,15 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
     const p = procOf(v, n.pid);
     const guard = guardOf(p, v.snap?.me);
 
-    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), menu, help));
+    if (guard) return bar.child(left(arrow, note ?? word(`${p?.name ?? ""} · ${guard}`, t.dim), q)).child(keys(k("k-show", "enter", "show", () => showTerminal(v, item)), menu, sort, help));
 
     return bar.child(left(arrow, note ?? word(p?.name ?? ""), q))
-      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, menu, help));
+      .child(keys(k("k-end", "x", "end", () => begin(v, item, false)), n.kids.length ? k("k-tree", "X", "tree", () => begin(v, item, true)) : null, find, menu, sort, help));
   }
 
   return bar.child(left(arrow, note ?? word(n.name), q))
     .child(keys(n.kind === "term" ? k("k-show", "enter", "show", () => showTerminal(v, item)) : null,
-      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), menu, help));
+      item.open === null ? null : k("k-fold", "←→", "fold", () => foldRow(v, items, ci, null)), menu, sort, help));
 }
 
 export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number): Element {

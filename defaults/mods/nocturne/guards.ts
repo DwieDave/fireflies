@@ -133,7 +133,7 @@ export const isTerminal = object(
     exit_code: oneOf(isNumber, isNull),
     reason: oneOf(isString, isNull),
     program: object({ key: isString }, { name: isString, agent: isBoolean, shell: isBoolean }),
-    status: isString,
+    status: nullable(isString), // null: no agent reports one (a plain shell)
     title: isString,
     pid: oneOf(isNumber, isNull),
     created_ms: oneOf(isNumber, isNull),

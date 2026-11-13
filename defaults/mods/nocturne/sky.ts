@@ -13,8 +13,8 @@
 //            the top, in the order pinned, status and all; the glass
 //            glints when one flies in and breathes red while one needs you;
 //            other pinned panes (web, editor, files, a shell) sit as tiles
-//            on a shelf at the jar's foot, a caption naming the one under
-//            the pointer or the cursor (shelf());
+//            on a shelf at the jar's foot, each named in its tooltip
+//            (shelf.ts);
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
 //            nocturne.agent-next / agent-prev walk the agents, then the shelf's
@@ -47,11 +47,11 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, onShelf, storedRecords, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
-import { adoptDock, dockMaking } from "./dock.ts";
+import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
 import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
@@ -83,6 +83,23 @@ import { placeCursor, toggleKeys, sidebarKey, railActs } from "./sky-keys.ts";
 import { noteLandings, glint, stamp, meadowView } from "./meadow.ts";
 import { pinLit, pinName, pinWhere } from "./shelf.ts";
 import { railView } from "./rail.ts";
+
+/** After a draw, the dock's (dock.ts) open asks: a dock being made that has
+ *  appeared gets its id, then what was asked of it; a shell asked for there is
+ *  pinned to the shelf once its terminal runs. Its pane shows first, and
+ *  nothing draws again when the terminal starts, so the sky looks again
+ *  shortly while one is awaited (dock.ts gives up after MAKING). */
+function dockTasks(cx: Context): void {
+  if (dockMaking()) cx.timer.after(0, () => adoptDock());
+
+  if (!shellWaiting()) return;
+
+  cx.timer.after(250, (later) => {
+    pinDockShell();
+
+    if (shellWaiting()) later.notify();
+  });
+}
 
 export default class Sky {
   spaces = new Spaces();
@@ -159,8 +176,9 @@ export default class Sky {
     // nocturne.scratchpad the repository's note in the editor (scratchpad.ts;
     // nocturne.scratchpad-tab in a tab of its own; the palette and the "+ new"
     // menu run these: this copy outlives their overlays while git answers);
-    // nocturne.dock moves the focused pane into the dock and pins it, nocturne.dock-web
-    // opens a web pane there (dock.ts);
+    // nocturne.dock moves the focused pane (any kind) into the dock and pins it,
+    // nocturne.dock-web / dock-shell / dock-files open a web pane, a shell or a
+    // files pane there (dock.ts);
     // nocturne.toast runs the newest toast's action, nocturne.toast-close
     // (alias nocturne.toast-dismiss) dismisses it (toast.ts), or with none the
     // update note; nocturne.update-close closes the update note (screens.ts).
@@ -197,6 +215,8 @@ export default class Sky {
         else if (c === "pin") pinFocused();
         else if (c === "dock") dockFocused();
         else if (c === "dock-web") dockWeb();
+        else if (c === "dock-shell") dockShell();
+        else if (c === "dock-files") dockFiles();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
         else if (c === "agent-next") this.walk(1);
@@ -587,8 +607,7 @@ export default class Sky {
     stamp(this);
     this.tidyPins(cx);
 
-    // A dock being made (dock.ts) that has appeared: its id, then what was asked of it.
-    if (dockMaking()) cx.timer.after(0, () => adoptDock());
+    dockTasks(cx);
 
     glint(this, [...jarred, ...kept], cx);
 

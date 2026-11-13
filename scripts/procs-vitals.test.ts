@@ -94,7 +94,7 @@ test("the layout: four across in the deck's width, at zoom 0.9 and 1.0 alike", (
   }
   expect(STRIP_H).toBe(stripLayout(W - 2).h);
   expect(LIST_H).toBe(H - 2 - HEAD - STRIP_H - COLS - FOOT);
-  expect(PORTS_H).toBe(H - 2 - HEAD - STRIP_H - FOOT);
+  expect(PORTS_H).toBe(H - 2 - HEAD - STRIP_H - COLS - FOOT); // the ports have column heads too
 });
 
 test("the layout: a narrow deck wraps two by two, never clips; the strip grows a row", () => {
