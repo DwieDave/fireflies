@@ -314,6 +314,13 @@ function motion(b, vim, key, count, arg, hasCount) {
     case "n": case "N": { const s = vim.search; if (!s) return null; const q = searchFrom(b, p, s.pattern, key === "N" ? !s.back : s.back, count); return q && { to: q, exclusive: true, jump: true }; }
     case "*": case "#": { const w = wordUnder(b, p); if (!w) return null; vim.search = { pattern: `\\<${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\>`, back: key === "#" }; const q = searchFrom(b, p, vim.search.pattern, key === "#", count); return q && { to: q, exclusive: true, jump: true }; }
     case "`": case "'": { const m = vim.marks[arg]; if (!m) return null; return key === "'" ? { to: b.firstNonBlank(Math.min(b.last, m.line)), linewise: true, jump: true } : { to: b.clamp(m), exclusive: true, jump: true }; }
+    // The screen's top / middle / bottom line (H M L; a count: that many from the top / bottom).
+    case "H": case "M": case "L": {
+      const top = Math.max(0, Math.min(b.last, vim.top ?? 0));
+      const bottom = Math.max(top, Math.min(b.last, top + (vim.rows ?? 2 * (vim.page ?? 15)) - 1));
+      const line = key === "H" ? Math.min(bottom, top + count - 1) : key === "L" ? Math.max(top, bottom - count + 1) : Math.floor((top + bottom) / 2);
+      return { to: b.firstNonBlank(line), linewise: true, jump: true };
+    }
     case "<C-d>": return { to: { line: Math.min(b.last, p.line + (hasCount ? count : vim.page ?? 15)), col: p.col }, linewise: true };
     case "<C-u>": return { to: { line: Math.max(0, p.line - (hasCount ? count : vim.page ?? 15)), col: p.col }, linewise: true };
     case "<C-f>": case "<pgdn>": return { to: { line: Math.min(b.last, p.line + 2 * (vim.page ?? 15) * count), col: p.col }, linewise: true };
@@ -323,7 +330,7 @@ function motion(b, vim, key, count, arg, hasCount) {
 }
 
 const MOTION_ARG = new Set(["f", "F", "t", "T", "`", "'"]);
-const MOTIONS = new Set(["h", "j", "k", "l", "<left>", "<right>", "<up>", "<down>", "<bs>", " ", "+", "-", "_", "<cr>", "0", "^", "$", "<home>", "<end>", "w", "W", "b", "B", "e", "E", "ge", "gE", "gg", "G", "}", "{", "%", "f", "F", "t", "T", ";", ",", "n", "N", "*", "#", "`", "'", "<C-d>", "<C-u>", "<C-f>", "<C-b>", "<pgup>", "<pgdn>", "<C-n>", "<C-p>", "<C-j>"]);
+const MOTIONS = new Set(["h", "j", "k", "l", "<left>", "<right>", "<up>", "<down>", "<bs>", " ", "+", "-", "_", "<cr>", "0", "^", "$", "<home>", "<end>", "w", "W", "b", "B", "e", "E", "ge", "gE", "gg", "G", "}", "{", "%", "f", "F", "t", "T", ";", ",", "n", "N", "*", "#", "`", "'", "<C-d>", "<C-u>", "<C-f>", "<C-b>", "<pgup>", "<pgdn>", "<C-n>", "<C-p>", "<C-j>", "H", "M", "L"]);
 
 // ---- text objects: (buf, cursor, around, kind, count) -> { start, end, linewise? } (end exclusive)
 
@@ -602,6 +609,8 @@ export function feed(vim, key, doc) {
   const visual = vim.mode === "visual" || vim.mode === "vline" || vim.mode === "vblock";
   const b = new Buffer(doc.text, visual && vim.head ? vim.head : doc.cursor);
   vim.page = doc.page ?? vim.page;
+  vim.top = doc.top ?? vim.top;
+  vim.rows = doc.rows ?? vim.rows;
   if (vim.pendingLeader) return leaderKey(vim, key, b, out);
   if (vim.keys.length === 0 && key === vim.leader && (vim.mode === "normal")) {
     vim.pendingLeader = vim.leaderMap;
@@ -715,6 +724,9 @@ function normalCommand(vim, cmd, b, doc, out) {
     return cmd.op !== "y";
   }
   const key = cmd.key;
+  // H / L: the pane's previous / next file tab while it has several (a count:
+  // that many); with one, the screen's top / bottom line as in Vim.
+  if ((key === "H" || key === "L") && (doc.tabs ?? 1) > 1) { out.commands.push(...Array(n).fill(key === "H" ? "prev-tab" : "next-tab")); return false; }
   if (MOTIONS.has(key)) {
     const m = motion(b, vim, key, n, cmd.arg, cmd.has);
     if (!m) return false;

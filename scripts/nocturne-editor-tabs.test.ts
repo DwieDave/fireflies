@@ -576,7 +576,7 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
   expect([p.softWrap, rs.wrap, p.docs[1].softWrap]).toEqual([true, true, false]);
 });
 
-// ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands)
+// ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands); H / L
 
 test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
   const p = await pane();
@@ -724,4 +724,32 @@ test("moving by key: ]B / [B, :tabm N / +N / -N / (none), space b < / >, the com
   p.vimCommand("move-tab:$", cx());
   expect([order(p), p.path]).toEqual([["a.rs", "n.md", "b.rs"], "/p/src/b.rs"]);
   expect(JSON.parse(storage.tabs)).toEqual({ paths: ["/p/src/a.rs", "/p/docs/n.md", "/p/src/b.rs"], active: 2 });
+});
+
+test("H / L: the previous / next tab while there are several (a count: that many); with one, the screen's top / bottom line", async () => {
+  const text = Array.from({ length: 100 }, (_, i) => `  line ${i}`).join("\n");
+  const feedOne = (k: string[], d: any) => { const v = createVim(); let r: any; const cmds: string[] = []; for (const x of k) { r = feed(v, x, d); cmds.push(...(r.commands ?? [])); } return { cmds, cursor: r.cursor }; };
+  // Several tabs: commands, no move.
+  const many = { text, cursor: { line: 50, col: 2 }, clipboard: null, page: 10, top: 40, rows: 20, tabs: 3 };
+  expect(feedOne(["L"], many).cmds).toEqual(["next-tab"]);
+  expect(feedOne(["H"], many).cmds).toEqual(["prev-tab"]);
+  expect(feedOne(["2", "L"], many).cmds).toEqual(["next-tab", "next-tab"]);
+  // One tab: H the top line on screen, L the bottom, M the middle (first non-blank), 3H the third.
+  const one = { ...many, tabs: 1 };
+  expect(feedOne(["H"], one)).toEqual({ cmds: [], cursor: { line: 40, col: 2 } });
+  expect(feedOne(["L"], one)).toEqual({ cmds: [], cursor: { line: 59, col: 2 } });
+  expect(feedOne(["M"], one).cursor).toEqual({ line: 49, col: 2 });
+  expect(feedOne(["3", "H"], one).cursor).toEqual({ line: 42, col: 2 });
+  // With an operator H / L stay motions even with several tabs: dL deletes to the screen's bottom.
+  const v = createVim();
+  feed(v, "d", many);
+  const r = feed(v, "L", many);
+  expect(r.commands ?? []).toEqual([]);
+  expect(r.edits?.length).toBe(1);
+  // The pane hands vim its screen and tab count: H in a pane with three tabs steps back.
+  const p = await three();
+  p.vimKey(key("H", { shift: true }), cx());
+  expect(p.path).toBe("/p/src/a.rs");
+  p.vimKey(key("L", { shift: true }), cx());
+  expect(p.path).toBe("/p/src/b.rs");
 });

@@ -19,8 +19,9 @@
 // `editor.open` finds a file in any tab through shared `nocturne-editor.paths`
 // and shows it with `nocturne-editor.goto`. Closing an edited tab asks on a
 // line under the bar; the last tab closes the pane; the tabs come back after
-// a restart (localStorage `tabs`, in their order). Keys: vim gt / gT, ]b / [b,
-// :bn :bp :bd :b N :ls, space b; next-tab / prev-tab / close-tab / move-tab-left / -right commands.
+// a restart (localStorage `tabs`, in their order). Keys: vim gt / gT, H / L
+// (with one tab: the screen's top / bottom), ]b / [b, :bn :bp :bd :b N :ls,
+// space b; next-tab / prev-tab / close-tab / move-tab-left / -right commands.
 //
 // Links in the hover card (cardlinks.js) open on a click, and a keyboard
 // card rings them with tab (enter follows): web pages in the shown tab's
@@ -1380,7 +1381,10 @@ export default class EditorPane extends View {
     const lines = Math.max(4, Math.floor((this.size.height - BAR - HINTS) / 20 / 2));
     let clipboard = null;
     try { clipboard = cx.read_from_clipboard() ?? null; } catch { /* no clipboard */ }
-    return { text: this.text, cursor: this.editor.cursor(), clipboard, page: lines };
+    // The screen's lines (H M L) and the tabs (H / L step them when there are several).
+    let top = 0;
+    try { top = Number(this.editor.top_line?.()) || 0; } catch { /* the first line */ }
+    return { text: this.text, cursor: this.editor.cursor(), clipboard, page: lines, top, rows: 2 * lines, tabs: this.allDocs().length };
   }
 
   /** What vim decided: one undoable edit for all its edits, the caret,

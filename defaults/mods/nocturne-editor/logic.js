@@ -332,7 +332,7 @@ export function editorKeys(vim) {
     ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (!vim) return [...app, ["cmd-k ?", "keys"]];
   return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],
-    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["gt gT :bn :bp", "next / prev tab"], ["]B [B :tabm", "move tab right / left"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
+    ["/ ? n N", "search"], [":w :q :wq", "save / close"], ["L H gt gT :bn :bp", "next / prev tab"], ["]B [B :tabm", "move tab right / left"], [":bd :ls", "close / list tabs"], ["gd gr K", "definition, references, hover"], ["]d [d", "next / prev problem"],
     ["space f f", "files"], ["space f g", "grep"], ["space e", "files pane"], ["space b", "tabs"], ["space d", "problems"], ["space m p", "Markdown view"], ["space m r", "Markdown rendered"], ["space .", "Markdown commands"], ["space u w", "word wrap"],
     ...app.filter(([k]) => k.startsWith("cmd-s") || k.startsWith("cmd-k v") || k.startsWith("cmd-p")), ["space ?", "keys"]];
 }

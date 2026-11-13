@@ -568,7 +568,8 @@ the highlighted line shows where it will land.
   esc keep; tab / ← → and enter too); closing the last tab closes the pane;
   closing the pane asks once, naming every edited tab. Tabs come back after a
   restart (in their order, each read when first shown). Tab keys: vim's
-  gt / gT (a count: that tab), ]b / [b,
+  gt / gT (a count: that tab), H / L in normal mode while there are several
+  (with one, the screen's top / bottom line as in Vim; M the middle), ]b / [b,
   `:bn` `:bp` `:bd` (`:bd!` drops its changes) `:b <n>` `:ls` (also `:tabn`
   `:tabp` `:tabc`), space b n / b p / b d / b l; moving the shown tab: ]B / [B
   (a count: that many places), `:tabm N` / `+N` / `-N` (`:tabm` alone: the
