@@ -152,7 +152,7 @@ function surface(Cls: any, keep: string[], fields: Record<string, any>) {
   return Object.assign(o, fields);
 }
 
-const agents = await import("../defaults/mods/agent-graph/main.js");
+const agents = await import("../defaults/mods/agent-graph/main.ts");
 test("agents: ? lists every key; the bar ends with ? keys, the list open too", () => {
   const keys = taken(() => { const a = surface(agents.default, ["key"], { help: false, open: new Set(), layout: [], zoom: 1, step: (_k: string, cx: any) => cx.stop_propagation(), target: () => ({ pane: "p" }), feedScroll: { scroll_to_item() {} } }); return (e, cx) => a.key(e, cx); });
   expect(keys).toContain("H");

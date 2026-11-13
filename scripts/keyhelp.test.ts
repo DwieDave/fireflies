@@ -120,7 +120,7 @@ function opensAndCloses(name: string, press: (e: any) => void, open: () => boole
 }
 
 test("agents: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/agent-graph/main.js");
+  const m = await import("../defaults/mods/agent-graph/main.ts");
   const v: any = surface(m.default, ["key", "helpPanel"], { help: false });
   opensAndCloses("agents", (e) => v.key(e, cx()), () => v.help, () => v.helpPanel(theme));
 });
