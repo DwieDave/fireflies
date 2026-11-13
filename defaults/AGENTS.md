@@ -580,11 +580,14 @@ the highlighted line shows where it will land.
   hit, definitions) opens its text. Another machine's pictures open in the
   preview pane, as before.
   **File tabs**: an editor pane holds several files, each a tab on the strip
-  along its top (an unsaved mark, the name, the folder that tells two of the
+  along its top (an unsaved mark, the file's type mark (a pixel mark tinted
+  by kind: Markdown, code, settings, a picture, a PDF, a table, video or
+  audio, text, other; a scratchpad's own; dimmed on a tab not shown), the
+  name, the folder that tells two of the
   same name apart, ×; the shown one lit; those that don't fit fold into ‹ n /
   n › at the ends; the wheel over it steps tabs, a middle click closes one).
   The strip shows from two files on: with one, the bar names the file with
-  its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
+  its unsaved mark and type mark. Drag a tab along the strip to move it (it lifts, a stake
   marks where it lands; dropped on the pane below the strip it pops out; off
   the pane it stays); the order is kept. A right-click on a tab (or space b m,
   `editor.tab-menu`) opens its menu: pop out into its own pane, pop

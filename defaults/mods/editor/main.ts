@@ -156,6 +156,7 @@ import {
   placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor,
   HANDOVER_KEY, isKeptTabsNote, isMovedNote,
 } from "./tabs.ts";
+import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import Viewer from "./viewer.ts";
 import type { EditorView, OpenRequest } from "./editor-route.ts";
 import { OPEN_KEY, LAST_KEY, PATHS_KEY, filesOf, editorPaths, isEditorView, isScratchpad } from "./editor-route.ts";
@@ -234,6 +235,9 @@ const CARD_W = 520;
 
 // A tab's name is cut past this (px); its full path is in the bar.
 const MAX_TAB_NAME = 180;
+
+/** A scratchpad's mark (nocturne's art: the "+ new" menu's tile has it too). */
+const SCRATCH_MARK = "mods/nocturne/art/scratchpad.svg";
 
 // A server that reported work within this long (ms) is still loading the
 // workspace: rust-analyzer goes quiet for a moment between its phases, and
@@ -4771,6 +4775,7 @@ export default class EditorPane extends View {
                 .when(this.dirty, (el) => el.child(dither(t.ansi3, 1))),
             ),
           )
+          .child(this.typeMark(t, this.shown(), "bar-icon", true))
           .child(
             div()
               .id("bar-name")
@@ -4948,6 +4953,21 @@ export default class EditorPane extends View {
    *  that don't fit fold into ‹ n / n › at the ends, the shown one always in
    *  view. A press dragged along the strip moves its tab: it lifts where it
    *  is and a stake stands in the gap it drops into; the wheel steps tabs. */
+  /** A file's type mark (file-icons.ts) before its name: tinted by its kind, dimmed on a tab
+   *  not shown; a scratchpad's is the scratchpad's own mark. */
+  typeMark(t: Theme, d: Doc, id: string, on: boolean): Element {
+    const icon = fileIcon(d.path);
+    const src = d.scratch ? SCRATCH_MARK : iconSvg(icon, MOD);
+
+    return div()
+      .id(id)
+      .relative()
+      .flex_none()
+      .size(ICON_SIZE)
+      .opacity(on ? 1 : 0.5)
+      .child(svg(src).size(ICON_SIZE).text_color(d.scratch ? t.accent : iconColor(icon, t)));
+  }
+
   tabStrip(t: Theme): Element {
     const docs = this.allDocs();
 
@@ -5046,6 +5066,7 @@ export default class EditorPane extends View {
               .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
               .when(d.dirty, (el) => el.child(dither(t.ansi3, 1))),
           )
+          .child(this.typeMark(t, d, `editor-tab-icon-${i}`, on || lifted))
           .child(div().relative().flex_none().max_w(MAX_TAB_NAME).truncate().child(l.name))
           .when(Boolean(hint), (el) => (hint ? el.child(div().relative().flex_none().max_w(120).truncate().text_color(t.dim).child(hint)) : el))
           .child(
