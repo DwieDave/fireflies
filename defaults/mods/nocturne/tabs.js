@@ -44,10 +44,10 @@ import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move
 import { gitState } from "./lazygit.js";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
-import { filesPane, toggleFiles, focusFiles } from "./files.js";
+import { filesPane, toggleFiles, focusFiles } from "./files.ts";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
 import { procsControl, toggleProcs } from "./procs.js";
-import { runJobs, pendingJobs } from "./jobs.js";
+import { runJobs, pendingJobs } from "./jobs.ts";
 import { watchPrompts } from "./prompt.js";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
 

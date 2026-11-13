@@ -15,7 +15,7 @@
 import { spaces, panes, focused, run, home } from "herdr";
 import { folderCandidates } from "./folders.ts";
 import { ART } from "./kit.ts";
-import { filesPane, toggleFiles, filesSlot } from "./files.js";
+import { filesPane, toggleFiles, filesSlot } from "./files.ts";
 import { usagePane, toggleUsage } from "./usage.js";
 import { gitOpen, toggleGit, openWorktrees } from "./git.js";
 import { githubOpen, toggleGithub } from "./github.js";

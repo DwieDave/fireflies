@@ -42,7 +42,7 @@ const cx: any = { spawn: (f: Function) => { Promise.resolve(f(cx)); }, notify() 
 const settle = async () => { for (let i = 0; i < 8; i++) await new Promise((r) => setTimeout(r, 0)); };
 
 const { default: Picker } = await import("../defaults/mods/finder/main.js");
-const { togglePicker, pickerFolder } = await import("../defaults/mods/nocturne/picker.js");
+const { togglePicker, pickerFolder } = await import("../defaults/mods/nocturne/picker.ts");
 const { folderCandidates, modFolder } = await import("../defaults/mods/nocturne/folders.ts");
 
 const TAB = { id: "tb1", active: true }, WEB = { id: "tb2", active: false };

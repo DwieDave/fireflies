@@ -71,7 +71,7 @@ const cx: any = {
 const settle = async () => { for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0)); };
 
 const { default: Picker } = await import("../defaults/mods/finder/main.js");
-const { togglePicker } = await import("../defaults/mods/nocturne/picker.js");
+const { togglePicker } = await import("../defaults/mods/nocturne/picker.ts");
 
 beforeEach(() => {
   for (const k of Object.keys(store)) delete store[k];

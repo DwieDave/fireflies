@@ -11,27 +11,43 @@
 // in the panel goes back there too and leaves it open).
 
 import { spaces, panes, focused, run, shared, setShared } from "herdr";
+import type { PaneInfo } from "herdr";
+import { isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import { folderCandidates } from "./folders.ts";
 
 const MOD = "file-tree";
 const WIDTH = 280;
+
 /** The pane the keyboard came from into the panel (file-tree reads it on esc). */
 export const FROM = "file-tree.from";
+const FROM_KEY = sharedKey(FROM, nullable(isString));
+
+/** A files pane's props, as far as telling the panel from a pane of its own goes. */
+const isFilesProps = object({}, { path: isString });
 
 /** The files panel in the shown tab, if any (not a files pane of its own). */
-export function filesPane() {
+export function filesPane(): PaneInfo | null {
   const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
-  return panes().find((p) => p.mod === MOD && p.tab === tab && !p.props?.path) ?? null;
+
+  return panes().find((p) => p.mod === MOD && p.tab === tab && !(isFilesProps(p.props) && p.props.path)) ?? null;
 }
 
 /** A slot names a files pane, so it keeps its own filters. */
-export const filesSlot = () => `files-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+export const filesSlot = (): string => `files-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 /** Opens the files pane at the focused pane's folder; closes it when it's there. */
-export function toggleFiles() {
+export function toggleFiles(): void {
   const open = filesPane();
-  if (open) return closeFiles(open);
-  const space = spaces().find((s) => s.active), f = focused();
+
+  if (open) {
+    closeFiles(open);
+
+    return;
+  }
+
+  const space = spaces().find((s) => s.active);
+  const f = focused();
+
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
   // Its live folder, else the mod pane's, the space's terminals', the space's (folders.js).
   const folder = folderCandidates(space, pane, f, panes(), { attached: false })[0] ?? null;
@@ -39,19 +55,35 @@ export function toggleFiles() {
 }
 
 /** Closes the panel; the keyboard goes back to where it came from. */
-function closeFiles(open) {
-  const from = shared(FROM), had = focused()?.pane === open.pane;
+function closeFiles(open: PaneInfo): void {
+  const from = readShared(shared, FROM_KEY, null);
+  const had = focused()?.pane === open.pane;
+
   run("pane.close", { pane: open.pane });
+
   if (had && from && from !== open.pane && panes().some((p) => p.pane === from)) run("pane.focus", { pane: from });
 }
 
 /** cmd-e (nocturne.files): the panel with the keyboard in it (opening it if
  *  need be); pressed in the panel, closes it. */
-export function focusFiles() {
-  const open = filesPane(), here = focused()?.pane ?? null;
-  if (open && here === open.pane) return closeFiles(open);
-  setShared(FROM, here);
-  if (!open) return toggleFiles(); // the new pane is focused and takes the keyboard itself
+export function focusFiles(): void {
+  const open = filesPane();
+  const here = focused()?.pane ?? null;
+
+  if (open && here === open.pane) {
+    closeFiles(open);
+
+    return;
+  }
+
+  writeShared(setShared, FROM_KEY, here);
+
+  if (!open) {
+    toggleFiles(); // the new pane is focused and takes the keyboard itself
+
+    return;
+  }
+
   run("pane.focus", { pane: open.pane });
   // pane.focus leaves the keys with the window; the panel takes them.
   run("file-tree.take-panel");

@@ -20,7 +20,7 @@ mock.module("herdr", () => ({
   closeOverlay: (id: string) => { closed.push(id); return null; },
 }));
 const { runs, word, tone, elapsed, runArgs, LABEL, start, stop, dismiss, restart, JOBS } = await import("../defaults/mods/scripts/runs.js");
-const jobs = await import("../defaults/mods/nocturne/jobs.js");
+const jobs = await import("../defaults/mods/nocturne/jobs.ts");
 const prompt = await import("../defaults/mods/nocturne/prompt.js");
 const reset = () => { store.clear(); calls.length = 0; ran.length = 0; notes.length = 0; terms = []; overlays.length = 0; closed.length = 0; reply = () => ({ code: 0, stdout: '{"address":"t9"}', stderr: "" }); };
 

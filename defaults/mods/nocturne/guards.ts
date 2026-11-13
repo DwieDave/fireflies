@@ -14,7 +14,8 @@ export interface JsonObject {
   readonly [key: string]: Json;
 }
 
-const isList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
+/** A list of anything (its items still to be proven). */
+export const isList = (value: unknown): value is readonly unknown[] => Array.isArray(value);
 
 /** A plain object (not an array, not null) whose every value is JSON. */
 export const isJsonObject = (value: unknown): value is JsonObject =>

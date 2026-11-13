@@ -23,7 +23,7 @@ import { toggleDeck, lastFailed } from "./scripts.js";
 import { toggleProcs } from "./procs.js";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
-import { togglePicker } from "./picker.js";
+import { togglePicker } from "./picker.ts";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
 import { TOASTS, toastKey } from "./toast.js";
