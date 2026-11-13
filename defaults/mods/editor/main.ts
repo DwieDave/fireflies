@@ -142,7 +142,7 @@ import {
   isHover, isLocations, isLspDiagnostic, isProgressParams, isPublishedDiagnostics, isServerCaps,
 } from "./logic.ts";
 import type { Doc as VimDoc, FeedResult, Mode, Played } from "./vim.ts";
-import { createVim, feed, play, token, CARET, MODE_NAME, applyEdits } from "./vim.ts";
+import { createVim, feed, play, token, beginInsert, CARET, MODE_NAME, applyEdits } from "./vim.ts";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import type { Stop } from "./form-keys.ts";
@@ -3309,6 +3309,8 @@ export default class EditorPane extends View {
 
     if (k === null) return false;
 
+    if (k === "<cr>" && this.renderedEnter(cx)) return true;
+
     const doc = this.doc(cx);
     const r = feed(this.vim, k, doc);
 
@@ -3320,6 +3322,34 @@ export default class EditorPane extends View {
       const now = this.doc(cx);
 
       this.vimApply(play(this.vim, r.replay.keys, now, r.replay.times), now, cx);
+    }
+
+    cx.notify();
+
+    return true;
+  }
+
+  /** Vim's enter in the rendered view, normal mode with nothing pending: not the `<cr>` motion
+   *  (the caret dropping onto the blank line between blocks looked like nothing) but a new block
+   *  below the lit one, typed into (rendered.ts enterBelow); `.` appends it again (as `A`). */
+  renderedEnter(cx: Context): boolean {
+    const d = this.cur;
+    const v = this.vim;
+    const rendered = d?.view === "rendered" ? d.rendered : null;
+
+    if (!d || !rendered || v.mode !== "normal" || v.keys.length || v.ex !== null || v.pendingLeader || v.replaying) return false;
+
+    const text = d.editor.value();
+    const line = rendered.range.to;
+    const end = { line, col: (text.split("\n")[line] ?? "").replace(/\r$/, "").length };
+
+    beginInsert(v, text, end, ["A"]);
+
+    if (!rendered.enterBelow(cx)) {
+      v.mode = "normal";
+      v.insertStart = null;
+
+      return false;
     }
 
     cx.notify();

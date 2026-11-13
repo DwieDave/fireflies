@@ -707,9 +707,12 @@ the highlighted line shows where it will land.
   into the next block (blank lines between are passed over); a click on a
   drawn block puts the caret in it; enter on a list item, task or quote starts
   the next one (on an empty one it ends the list); enter on the last line of
-  any other block starts a new paragraph under it (the text after the caret
-  goes with it; shift-enter is a line break inside the block; inside a code
-  block enter is a new line, at its closing line's end a new block); a task
+  any other block, or anywhere in a paragraph, starts a new paragraph under it
+  (the text after the caret goes with it; shift-enter is a line break inside
+  the block; inside a code block enter is a new line, at its closing line's
+  end a new block; on an empty new block it stays as it is); with vim in
+  normal mode, enter makes the new block under the lit one and types into it
+  (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
   the block under the pointer, and the "add a block" line under the last
   block, put an empty paragraph there. An empty block made so offers the
