@@ -39,7 +39,7 @@ import { View, div, svg } from "gpui-kit";
 import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import { repoOf, viewRepo } from "./gh.js";
-import { readAgo } from "./model.js";
+import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";

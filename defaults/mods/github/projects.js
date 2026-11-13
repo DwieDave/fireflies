@@ -18,7 +18,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared } from "herdr";
 import { graphql } from "./gh.js";
-import { readAgo, ago, SLOW, linksIn } from "./model.js";
+import { readAgo, ago, SLOW, linksIn } from "./model.ts";
 import { repoKey, newest, LIMITS } from "./cache.js";
 import { markdown } from "./markdown.ts";
 import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";

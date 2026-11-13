@@ -4,7 +4,7 @@
 // hands back the copy kept here. A space on another machine runs gh there.
 
 import { exec } from "herdr";
-import { parseHeaders } from "./model.js";
+import { parseHeaders } from "./model.ts";
 import { candidates, slug } from "./remotes.ts";
 
 const cache = new Map(); // `${on}|${path}` -> { etag, data }
@@ -99,7 +99,7 @@ export async function api(repo, path, { fresh = false, prior = null, slim = null
  *  came back beside errors (one owner GitHub won't show, say) is used, unless a scope is missing. */
 export async function graphql(repo, query, vars = {}, { partial = false } = {}) {
   const args = ["api", "graphql", ...hostArgs(repo), "-f", `query=${query}`];
-  for (const [k, v] of Object.entries(vars)) args.push(typeof v === "number" ? "-F" : "-f", `${k}=${v}`);
+  for (const [k, v] of Array.isArray(vars) ? vars : Object.entries(vars)) args.push(typeof v === "number" ? "-F" : "-f", `${k}=${v}`);
   const r = await gh(args, { cwd: repo.root, on: repo.on });
   let j = null;
   try { j = JSON.parse(r.stdout || "null"); } catch { /* not JSON */ }
