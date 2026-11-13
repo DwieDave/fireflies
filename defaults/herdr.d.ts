@@ -373,11 +373,11 @@ export function placement(): {
  *  muted, dim, accent, accent_foreground, solid and solid_foreground (a primary button: ink on
  *  paper, paper on ink), selection, working, blocked, done, idle, unknown, ansi0..ansi15.
  *  Light and dark themes name the same colors, so a mod that uses them follows both. */
-export function theme(): Record<string, string>;
+export function theme(): Record<string, import("gpui-kit").Color>;
 
 /** Every theme `app.theme` can use (presets, then `themes/*.json`), each with its colors and
  *  whether it's light. */
-export function themes(): { name: string; light: boolean; colors: Record<string, string> }[];
+export function themes(): { name: string; light: boolean; colors: Record<string, import("gpui-kit").Color> }[];
 
 /** The font families on this machine, by name. */
 export function fonts(): string[];
@@ -479,8 +479,9 @@ export function notify(n: {
  * The exported View may implement async close(cx) for bounded final cleanup. */
 export function props(): any;
 
-/** Reads a value every mod can see (persisted). */
-export function shared(key: string): unknown;
+/** Reads a value every mod can see (persisted). Its shape is whatever the mod that set it
+ *  wrote, so name it at the call: `shared<Pip | null>("pip")`; untyped it is `any`. */
+export function shared<T = any>(key: string): T;
 
 /** Sets a shared value; every mod re-renders so it can react. */
 export function setShared(key: string, value: unknown): null;
@@ -511,7 +512,7 @@ export function watchFolder(path: string): Promise<string[]>;
  *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
  *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
 export interface NativeViewProps {
-  kind: "web" | "pdf" | "media" | "quicklook" | "inspector"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  kind: "web" | "pdf" | "media" | "quicklook" | "inspector" | "pip"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
   /** Inspector only: the web view to inspect, the `of` its `web.inspect` action returned. */
   of?: string;
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
@@ -528,7 +529,7 @@ export const nativeView: { new: (id: string, props: NativeViewProps) => import("
 export function nativeViewCapabilities(): { interface: string; platform: string; available: boolean; kinds: { kind: string; actions: string[] }[] };
 /** HUP: one whitelisted action on this mod's view `id` (see capabilities), e.g. ("v", "pdf.goToPage", { page: 2 }),
  *  ("v", "media.pause"), ("v", "browser.navigate", { url }), ("v", "state"). Throws on unknown actions. */
-export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;
+export function nativeViewCall<T = any>(id: string, action: string, args?: Record<string, unknown>): T;
 /** HUP: the next event from this mod's native views, as JSON text:
  *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed, …).
  *  Web: `web.location` (the page state, as in load.*) whenever the address or back/forward state changes,

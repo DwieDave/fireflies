@@ -135,6 +135,50 @@ const EDITOR_CONFIG: &str = r#"{
     "a preference. A view assigns its state in `init`, which TypeScript cannot",
     "see as definite assignment the way it sees a constructor, so every field",
     "would read as possibly-undefined and every use would want a `?.` that",
+    "means nothing at run time. Turning it on would buy noise, not safety.",
+    "",
+    "HERDR: `.ts` files run with their types removed, nothing compiled.",
+    "`erasableSyntaxOnly` reports what removing cannot do (enum, namespace,",
+    "parameter properties) here rather than at load; imports name the file",
+    "as it is, `./kit.ts`, which `allowImportingTsExtensions` accepts."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "checkJs": true,
+    "strict": true,
+    "strictNullChecks": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true
+  }
+}
+"#;
+
+/// HERDR: earlier generated configurations, byte for byte. One of these is
+/// replaced by the current [`EDITOR_CONFIG`]: nobody edited it, and without
+/// the TypeScript options an editor rejects a `.ts` application's imports.
+const EARLIER_EDITOR_CONFIGS: [&str; 1] = [r#"{
+  "// why": [
+    "Written once by gpui-shell, then yours: an existing jsconfig.json or",
+    "tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "`moduleResolution` is how a bare specifier is answered. Left to be",
+    "inferred it can still land on the resolution that never looks in",
+    "node_modules, and a Git dependency the runtime resolves fine is",
+    "underlined as a module the editor cannot find.",
+    "",
+    "`lib` decides which globals exist. The default hands a script the",
+    "browser's — a `console`, a `localStorage`, a `Window` this runtime does",
+    "not have — and their declarations collide with the ones gpui-kit.d.ts makes,",
+    "so the file describing the API is itself reported as the error.",
+    "",
+    "`strictNullChecks` is off, and this one is the runtime's shape rather than",
+    "a preference. A view assigns its state in `init`, which TypeScript cannot",
+    "see as definite assignment the way it sees a constructor, so every field",
+    "would read as possibly-undefined and every use would want a `?.` that",
     "means nothing at run time. Turning it on would buy noise, not safety."
   ],
   "compilerOptions": {
@@ -148,7 +192,7 @@ const EDITOR_CONFIG: &str = r#"{
     "noEmit": true
   }
 }
-"#;
+"#];
 
 /// Writes the editor configuration beside an application, once.
 ///
@@ -157,8 +201,12 @@ const EDITOR_CONFIG: &str = r#"{
 /// alone. Returns the path only when it actually wrote.
 fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
     let path = directory.join(CONFIG_FILE_NAME);
-    if std::fs::symlink_metadata(&path).is_ok()
-        || std::fs::symlink_metadata(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).is_ok()
+    let earlier = std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
+        && std::fs::read_to_string(&path)
+            .is_ok_and(|text| EARLIER_EDITOR_CONFIGS.contains(&text.as_str()));
+    if !earlier
+        && (std::fs::symlink_metadata(&path).is_ok()
+            || std::fs::symlink_metadata(directory.join(TYPESCRIPT_CONFIG_FILE_NAME)).is_ok())
     {
         return Ok(None);
     }
@@ -599,10 +647,10 @@ fn directories_importing_builtins(root: &Path) -> Vec<PathBuf> {
             }
 
             if !imports
-                && matches!(
-                    path.extension().and_then(|extension| extension.to_str()),
-                    Some("js" | "mjs")
-                )
+                && path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(crate::typescript::is_source)
                 && std::fs::read_to_string(&path).is_ok_and(|source| imports_builtin(&source))
             {
                 imports = true;
@@ -2014,10 +2062,10 @@ const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentag
   export type Props = Record<string, any>;
 
   /** Element-local event bounds assembled by the shell. */
-  export interface ElementBounds extends import("gpui-kit").Point {
+  export type ElementBounds = import("gpui-kit").Point & {
     width: number;
     height: number;
-  }
+  };
 
   export interface DialogOptions {
     escape_dismissable?: boolean;
@@ -3736,6 +3784,7 @@ const BASE_IMPORTS: &str = r#"  import {
     Element,
     NativeElement,
     FocusHandle,
+    KeyEvent,
   } from "gpui-kit";
 
 "#;
@@ -3827,11 +3876,16 @@ const CAPABILITIES: &str = r#"
 
 const STANDARD_RUNTIME: &str = r#"
 declare module "buffer" {
-  export class Buffer extends Uint8Array {
-    static from(value: string | ArrayBuffer | ArrayLike<number>, encoding?: string): Buffer;
-    static alloc(size: number): Buffer;
+  // HERDR: an interface and a value rather than `class extends Uint8Array`,
+  // whose static `from` cannot match Uint8Array's overloads under strict.
+  export interface Buffer extends Uint8Array {
     toString(encoding?: string): string;
   }
+  export const Buffer: {
+    prototype: Buffer;
+    from(value: string | ArrayBuffer | ArrayLike<number>, encoding?: string): Buffer;
+    alloc(size: number): Buffer;
+  };
 }
 declare module "path" {
   export function join(...parts: string[]): string;
@@ -3958,6 +4012,58 @@ interface ShellFetchOptions {
 }
 declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellFetchResponse>;
 declare const process: typeof import("process").default;
+// HERDR: the web globals the engine installs (LLRT's Buffer, URL and crypto),
+// which `lib: ["ES2022"]` leaves out. Not declared, because the engine has
+// none of them: setTimeout and setInterval (stubs that throw: use cx.timer),
+// TextDecoder, TextEncoder, structuredClone.
+declare function atob(data: string): string;
+declare function btoa(data: string): string;
+declare function queueMicrotask(callback: () => void): void;
+type Buffer = import("buffer").Buffer;
+declare const Buffer: typeof import("buffer").Buffer;
+interface URLSearchParams {
+  readonly size: number;
+  append(name: string, value: string): void;
+  delete(name: string, value?: string): void;
+  get(name: string): string | null;
+  getAll(name: string): string[];
+  has(name: string, value?: string): boolean;
+  set(name: string, value: string): void;
+  sort(): void;
+  toString(): string;
+  forEach(callback: (value: string, key: string, parent: URLSearchParams) => void): void;
+  keys(): IterableIterator<string>;
+  values(): IterableIterator<string>;
+  entries(): IterableIterator<[string, string]>;
+  [Symbol.iterator](): IterableIterator<[string, string]>;
+}
+declare var URLSearchParams: {
+  prototype: URLSearchParams;
+  new (init?: string | Record<string, string> | [string, string][] | URLSearchParams): URLSearchParams;
+};
+interface URL {
+  hash: string;
+  host: string;
+  hostname: string;
+  href: string;
+  readonly origin: string;
+  password: string;
+  pathname: string;
+  port: string;
+  protocol: string;
+  search: string;
+  readonly searchParams: URLSearchParams;
+  username: string;
+  toString(): string;
+  toJSON(): string;
+}
+declare var URL: { prototype: URL; new (url: string | URL, base?: string | URL): URL };
+interface Crypto {
+  getRandomValues<T extends Uint8Array | Uint16Array | Uint32Array | Int8Array | Int16Array | Int32Array>(array: T): T;
+  randomUUID(): string;
+  readonly subtle: unknown;
+}
+declare const crypto: Crypto;
 "#;
 
 /// `window` is a real global — see the runtime's `overlay` module.
