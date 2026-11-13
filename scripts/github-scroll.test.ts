@@ -17,7 +17,14 @@ mock.module("herdr", () => ({
   settings: () => ({ zoom: zoomNow }), shared: () => null, setShared: () => null,
   spaces: () => [], terminals: () => [], theme: () => theme, window: () => ({ platform: "linux" }),
 }));
-const el: any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : () => el), apply: () => el });
+/** Every string an element was given (a child's text), for what a panel says; `when` runs its part when it holds. */
+const drawn: string[] = [];
+const el: any = new Proxy(function () {}, {
+  get: (_t, k) => (k === "then" ? undefined
+    : k === "when" ? (on: unknown, add: (e: unknown) => unknown) => (on ? add(el) : el)
+    : (...args: unknown[]) => { for (const a of args) if (typeof a === "string") drawn.push(a); return el; }),
+  apply: () => el,
+});
 class View {}
 mock.module("gpui-kit", () => ({ View, div: () => el, svg: () => el, image: () => el, PathBuilder: { fill: () => el }, Background: { checkerboard: () => el } }));
 
@@ -41,7 +48,7 @@ const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: 
 
 const { default: Actions, graphHeight } = await import("../defaults/mods/github/actions.ts");
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
-const { default: GitHub } = await import("../defaults/mods/github/main.js");
+const { default: GitHub } = await import("../defaults/mods/github/main.ts");
 
 const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {} });
 const last = (h: Handle) => h.calls[h.calls.length - 1]?.[0];
@@ -172,4 +179,17 @@ test("the job graph: 55 % of the column by default (220..520), a dragged height 
   const a: any = new Actions(app(), {});
   expect(a.save().sizes).toEqual({});
   expect(new (Actions as any)(app(), { sizes: { graph: 210 } }).sizes.graph).toBe(210);
+});
+
+test("a pull request's header says when it was opened only once its view is read (a list row has no createdAt)", () => {
+  const p: any = new Prs(app(), {});
+  p.list = [{ number: 5, title: "a", isDraft: false, headRefName: "h", additions: 1, deletions: 2, reviewDecision: null, updatedAt: "2026-11-13T07:00:00Z", author: { login: "x" }, labels: [], rollup: null }];
+  p.sel = 5;
+  drawn.length = 0;
+  p.mainPanel(theme);
+  expect(drawn.filter((s) => s.startsWith("opened"))).toEqual([]);
+  p.details.set(5, { pr: { number: 5, title: "a", createdAt: new Date(Date.now() - 3 * 3600_000).toISOString() }, review: [], reviewTag: null, at: Date.now() });
+  drawn.length = 0;
+  p.mainPanel(theme);
+  expect(drawn.filter((s) => s.startsWith("opened"))).toEqual(["opened 3h ago"]);
 });

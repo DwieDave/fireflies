@@ -689,6 +689,7 @@ export default class Prs {
     const pr: PrView = d?.pr ?? p;
     const [rev, revTone] = REVIEW.get(pr.reviewDecision ?? "") ?? [null, null];
     const labels = pr.labels ?? [];
+    const opened = ago(pr.createdAt);
 
     const head = v_flex().gap(6).pb(10)
       .child(h_flex().gap(8).items_center()
@@ -701,7 +702,8 @@ export default class Prs {
         .when(Boolean(pr.isDraft), (el) => el.child(div().text_color(t.dim).child("draft")))
         .child(div().text_color(t.ansi2).child(`+${pr.additions ?? 0}`)).child(div().text_color(t.ansi1).child(`-${pr.deletions ?? 0}`))
         .when(isNumber(pr.changedFiles), (el) => el.child(div().text_color(t.dim).child(`${pr.changedFiles ?? 0} files`)))
-        .child(div().text_color(t.dim).child(`opened ${ago(pr.createdAt)} ago`)))
+        // A list row has no createdAt (the list's query doesn't ask): the words wait for the PR's view.
+        .when(opened !== "", (el) => el.child(div().text_color(t.dim).child(`opened ${opened} ago`))))
       .when(labels.length > 0, (el) => el.child(h_flex().flex_wrap().gap(5).children(labels.map((l, i) =>
         div().id(`label-${i}`).relative().px(6).h(18).flex().items_center().text_size(10).text_color(t.foreground)
           .child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name))))))

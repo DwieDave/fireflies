@@ -1,4 +1,4 @@
-// The rendered view of a Markdown tab (main.js view "rendered"): the document
+// The rendered view of a Markdown tab (main.ts view "rendered"): the document
 // drawn as its units (live.ts), the one the caret is in lit up as its own
 // Markdown in a second code editor (the "block editor") that holds just those
 // lines. The file's own editor keeps the whole text: every keystroke in the
@@ -36,11 +36,11 @@
 //
 // Image blocks: a line holding only images (live.ts "image") draws each
 // picture fitting the column and keeping its shape (at most IMAGE_H tall),
-// from a copy under the app's cache made once per picture (main.js
+// from a copy under the app's cache made once per picture (main.ts
 // loadImageSrcs, markdown.ts cacheImage; gpui decodes it once), so a key
 // costs nothing for them; a picture on the web is drawn by the Markdown view,
 // one that can't be found is a block saying so. A paste the block finds no
-// text in (a screenshot) goes to the pane (main.js pasteImage, images.ts).
+// text in (a screenshot) goes to the pane (main.ts pasteImage, images.ts).
 
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { div, svg, image } from "gpui-kit";

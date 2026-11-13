@@ -41,9 +41,9 @@ mock.module("gpui-base", () => ({ h_flex: el, v_flex: el, InputState: { new: () 
 (globalThis as any).window = { paint_path: el };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.js");
-const notif = await import("../defaults/mods/notifications/open.js");
-const { ITEMS } = await import("../defaults/mods/notifications/engine.js");
+const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.ts");
+const notif = await import("../defaults/mods/notifications/open.ts");
+const { ITEMS } = await import("../defaults/mods/notifications/engine.ts");
 
 const cx: any = { focus_handle: () => ({ focus() {}, is_focused: () => true }), spawn() {}, notify() {}, stop_propagation() {}, timer: { after() {}, every() {} } };
 
@@ -80,9 +80,14 @@ function frame(v: any) {
   return drawn;
 }
 
+/** An item as the engine writes it (model.ts isItem): the fields a fixture leaves out. */
+const ITEM = { machine: null, adapter: "claude", kind: null, msg: "", program: "Claude Code", app: "claude-code", space: null, spaceName: "", tab: null, tabName: "",
+  tabIndex: null, tail: null, title: "", line: "", answerable: false, request: null, status: "blocked" };
+/** A permission request as the claude adapter makes it: the fields a fixture leaves out. */
+const PERM_REQUEST = { title: "", question: "", description: "", input: null, from: "hook" };
 const permission = {
-  id: "t2:perm", type: "permission", answerable: true, address: "t2", name: "claude", logo: "claude", since: Date.now(), program: "Claude Code",
-  request: { type: "permission", tool: "Bash", line: "ls -la", options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "No", kind: "no" }], canAmend: true },
+  ...ITEM, id: "t2:perm", type: "permission", answerable: true, address: "t2", name: "claude", logo: "claude", since: Date.now(), program: "Claude Code",
+  request: { ...PERM_REQUEST, type: "permission", tool: "Bash", line: "ls -la", options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "No", kind: "no" }], canAmend: true },
 };
 
 beforeEach(() => { sharedState = {}; specs = []; propsNow = { overlay: "o1", most: 580 }; });
@@ -207,8 +212,8 @@ test("the empty overview is EMPTY_H tall (a center's height, not its note's), ne
 // ---- answering: the driver waits for the dialog, not for any change on a busy screen
 
 test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
-  const { settled } = await import("../defaults/mods/notifications/drive.js");
-  const { dialog } = await import("../defaults/mods/notifications/claude.js");
+  const { settled } = await import("../defaults/mods/notifications/drive.ts");
+  const { dialog } = await import("../defaults/mods/notifications/claude.ts");
   const rule = "─".repeat(80);
   const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
   const before = dlg("Yes", "Esc to cancel · Tab to amend");

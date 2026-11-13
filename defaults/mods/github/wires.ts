@@ -1,5 +1,5 @@
 // Where the actions graph's boxes and lines go, as plain numbers (no herdr
-// imports, so scripts/ tests it; graph.js draws them). Lines run left to
+// imports, so scripts/ tests it; graph.ts draws them). Lines run left to
 // right through the gap before each column, one group per set of jobs that
 // wait for the same jobs: one waited-for job fans out on one bus, many into
 // one merge on one bus, and many into many merge on a bus, run on as one

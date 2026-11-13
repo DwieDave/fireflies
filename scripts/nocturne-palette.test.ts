@@ -195,10 +195,10 @@ function modCommands(): [string, string, string?][] {
   // The git window's key table and the overview's keys: families of their own.
   const git = read("defaults/mods/git/keys.ts");
   for (const [, a] of git.matchAll(/\[\s*"[A-Za-z]+",\s*\[[^\]]*\],\s*"([a-z0-9:-]+)"/g)) out.push([`git.${a.replace(":", "-")}`, "git/keys.ts", "git"]);
-  const open = read("defaults/mods/notifications/open.js");
+  const open = read("defaults/mods/notifications/open.ts");
   const keysBlock = open.slice(open.indexOf("export const COMMAND_KEYS"), open.indexOf("};", open.indexOf("export const COMMAND_KEYS")));
-  for (const [, k] of keysBlock.matchAll(/"?([a-z-]+)"?: \{ key/g)) out.push([`notifications.${k}`, "notifications/open.js", "notifications"]);
-  for (let n = 1; n <= 9; n++) out.push([`notifications.${n}`, "notifications/open.js", "notifications"]);
+  for (const [, k] of keysBlock.matchAll(/"?([a-z-]+)"?: \{ key/g)) out.push([`notifications.${k}`, "notifications/open.ts", "notifications"]);
+  for (let n = 1; n <= 9; n++) out.push([`notifications.${n}`, "notifications/open.ts", "notifications"]);
   return out;
 }
 

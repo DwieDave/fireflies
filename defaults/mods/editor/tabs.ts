@@ -1,5 +1,5 @@
 // The editor's file tabs, as data: no app calls, so scripts/editor-tabs.test.ts
-// drives them. A pane holds several files (main.js keeps one record per file:
+// drives them. A pane holds several files (main.ts keeps one record per file:
 // its text, undo, caret, scroll, unsaved changes, server document); these
 // decide where a new tab goes, which one shows after a close, what comes back
 // after a restart, what closing the pane asks, the names on the strip and

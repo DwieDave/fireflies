@@ -96,9 +96,9 @@ const { default: NewMenu } = newmenu;
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const { default: Deck } = await import("../defaults/mods/scripts/main.ts");
-const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
-const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.js");
-const notif = await import("../defaults/mods/notifications/open.js");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.ts");
+const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.ts");
+const notif = await import("../defaults/mods/notifications/open.ts");
 
 // Each view's own close hook, as the app runs it once its overlay is gone.
 const HOOKS: Record<string, (id: string) => void> = {
@@ -362,7 +362,7 @@ test("a note of an open center left by a restart doesn't swallow a press", () =>
 
 test("the center with a request is the popup's most; with nothing waiting, EMPTY_H or its note, up to the most", () => {
   const o: any = Object.create(Overview.prototype);
-  o.sizes = {};
+  o.sizes = new Map();
   propsNow = { overlay: "o1", most: 500 };
   const it = { id: "x" };
   // A request: the most, measured or not, short or long.
@@ -376,7 +376,7 @@ test("the center with a request is the popup's most; with nothing waiting, EMPTY
   expect(o.height(it)).toBe(500);
   // Nothing waits: the most until the note measures, then EMPTY_H (a short
   // note), the note and the key bar (a tall one), never more than the most.
-  o.sizes = { list: 70 };
+  o.sizes = new Map([["list", 70]]);
   expect(o.height(null)).toBe(500);
   o.measure("empty")({ height: 200 * 0.9 }, cx1);
   expect(o.height(null)).toBe(Math.min(500, EMPTY_H));
@@ -389,12 +389,17 @@ test("the center with a request is the popup's most; with nothing waiting, EMPTY
 // ---- the center's key bar: under both columns, ? keys last, whatever fits
 
 const ITEMS = "notifications.items";
-const PERMISSION = { id: "p1", address: "t2", type: "permission", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
-  request: { type: "permission", tool: "Bash", line: "mkdir -p x", title: "Bash command", canAmend: true, input: {},
+/** An item as the engine writes it (model.ts isItem): the fields a fixture leaves out. */
+const ITEM = { machine: null, adapter: "claude", kind: null, msg: "", program: "Claude Code", app: "claude-code", space: null, spaceName: "", tab: null, tabName: "",
+  tabIndex: null, tail: null, title: "", line: "", answerable: false, request: null, status: "blocked" };
+/** A permission request as the claude adapter makes it: the fields a fixture leaves out. */
+const PERM_REQUEST = { title: "", question: "", description: "", input: null, from: "hook" };
+const PERMISSION = { ...ITEM, id: "p1", address: "t2", type: "permission", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
+  request: { ...PERM_REQUEST, type: "permission", tool: "Bash", line: "mkdir -p x", title: "Bash command", canAmend: true, input: {},
     options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "Yes, always", kind: "always" }, { n: 3, label: "No", kind: "no" }] } };
-const QUESTION = { id: "q1", address: "t3", type: "question", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
-  request: { type: "question", questions: [{ question: "What for lunch?", header: "Lunch", options: [{ label: "Pizza" }, { label: "Salad" }] }] } };
-const OTHER = { id: "e1", address: "t4", type: "other", status: "error", name: "Codex", logo: "codex", since: Date.now(), msg: "it failed" };
+const QUESTION = { ...ITEM, id: "q1", address: "t3", type: "question", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
+  request: { type: "question", from: "hook", questions: [{ question: "What for lunch?", header: "Lunch", multiSelect: false, options: [{ label: "Pizza", description: "" }, { label: "Salad", description: "" }] }] } };
+const OTHER = { ...ITEM, id: "e1", address: "t4", type: "other", status: "error", name: "Codex", logo: "codex", since: Date.now(), msg: "it failed" };
 
 /** A center showing `item`, drawn; `width`: its key bar's (layout px), as measured, then drawn again. */
 function center(item: any, width?: number) {
@@ -452,7 +457,7 @@ test("the center's key bar fits a narrow drop-down: the least needed hints go fi
   // What's left fits: the hints, their gaps, the padding and ? keys.
   for (const [w, item] of [[520, PERMISSION], [260, PERMISSION], [300, QUESTION], [300, OTHER]] as const) {
     const { o } = center(item, w);
-    const used = hintsShown().reduce((a, h) => a + o.sizes[`hint:${h}`] + 14, 0);
+    const used = hintsShown().reduce((a, h) => a + o.sizes.get(`hint:${h}`) + 14, 0);
     expect(40 + used + 14 + 50).toBeLessThanOrEqual(w);
     expect(flowKids("ov-bar").at(-1)).toBe(ids["ov-keys"]);
   }

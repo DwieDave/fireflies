@@ -224,7 +224,7 @@ test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys 
 // ---- 2. "+ new" last, right of the bell
 
 const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.ts");
-const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.ts");
 const { default: Nocturne } = await import("../defaults/mods/nocturne/main.js");
 const shipped = JSON.parse(readFileSync(new URL("../defaults/layouts/nocturne.json", import.meta.url), "utf8"));
 

@@ -1,4 +1,4 @@
-// The rendered view's model (main.js "rendered"): a Markdown text cut into
+// The rendered view's model (main.ts "rendered"): a Markdown text cut into
 // units, each a run of source lines drawn as one thing; the unit the caret is
 // in is edited as its own Markdown (a second code editor holding just those
 // lines), the rest stay drawn. The file's own editor keeps the whole text, so

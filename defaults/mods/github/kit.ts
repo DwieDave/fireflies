@@ -1,5 +1,5 @@
 // Nocturne's look for the GitHub window: the dither fill and pips (copied
-// from ../nocturne/kit.js and ../agent-graph/kit.js: a mod can't import
+// from ../nocturne/kit.ts and ../agent-graph/kit.ts: a mod can't import
 // another mod's files), the tone colors, lazygit-style panels, chips, the
 // key bar and empty states.
 
@@ -59,7 +59,7 @@ export function dither(color: Color, cell = 1): Element {
 
 /** The dim under a popup inside the window (a picker, a confirm): black,
  *  dithered, light enough that the window stays readable under it. The same
- *  as git's (draw.js POPUP_SCRIM): every in-window popup matches. */
+ *  as git's (draw.ts POPUP_SCRIM): every in-window popup matches. */
 export const POPUP_SCRIM: Color = "#0000008c";
 
 /** The layer that dims the window under an in-window popup (POPUP_SCRIM). */

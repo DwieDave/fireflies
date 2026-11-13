@@ -16,8 +16,8 @@ const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.ts");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
 const Feedback = (await import("../defaults/frame/feedback/main.js")).default;
 const MachineAdd = (await import("../defaults/mods/machine-add/main.js")).default;
-const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/notifications/ask.js");
-const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
+const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/notifications/ask.ts");
+const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const t = (await import("./dialog-stubs.ts")).theme;
 
 beforeEach(() => {
@@ -46,9 +46,9 @@ test("one helper: every mod with a form ships the same form-keys.ts", () => {
 // context. Each form's root carries that context and hands the action to its
 // key handler; each binds the keys once from init.
 const ROOTS: [string, string][] = [
-  ["mods/github/main.js", "this.key(e, cx)"], ["mods/git/main.js", "this.key(e, cx)"],
+  ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.js", "this.key(e, cx)"],
   ["mods/nocturne/sky.ts", "this.key(e, cx)"], ["mods/nocturne/dialog.ts", "this.key(e, cx)"],
-  ["mods/notifications/ask-dialog.js", "this.key(e, cx)"], ["mods/editor/main.js", "this.findKey(e, cx)"],
+  ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/main.ts", "this.findKey(e, cx)"],
   ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
 ];
 
@@ -412,7 +412,7 @@ function findLine(mode: "find" | "replace") {
   const calls: string[] = [];
   const ed: any = Object.create(EditorPane.prototype);
   Object.assign(ed, {
-    mode, findAt: "find", caseSensitive: false,
+    cur: {}, mode, findAt: "find", caseSensitive: false,
     handle: { focus() { calls.push("handle"); } },
     findInput: { focus() { calls.push("find-input"); }, value: () => "x" },
     replaceInput: { focus() { calls.push("with-input"); }, value: () => "y" },

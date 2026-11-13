@@ -73,10 +73,10 @@ const cx: any = {
 
 const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defaults/mods/nocturne/tabs.ts");
 const kit = await import("../defaults/mods/nocturne/kit.ts");
-const nkit = await import("../defaults/mods/notifications/kit.js");
-const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
+const nkit = await import("../defaults/mods/notifications/kit.ts");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.ts");
 const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.ts");
-const { ITEMS } = await import("../defaults/mods/notifications/engine.js");
+const { ITEMS } = await import("../defaults/mods/notifications/engine.ts");
 
 beforeEach(() => { sharedState = {}; });
 
