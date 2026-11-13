@@ -17,6 +17,8 @@
 //            the pointer or the cursor (shelf());
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
+//            nocturne.agent-next / agent-prev walk the agents, then the shelf's
+//            tiles, wrapping (walk.js; the layout's cmd-] / cmd-[);
 //            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -44,6 +46,7 @@ import { spaces, terminals, panes, run, hc, theme, setAgentOrder, nextCommand, s
 import * as herdrAll from "herdr";
 import { ART, LOGO, WORD, atRest, dither, pip, eyebrow, hash, givenName, nameTerminal, pin, movePin, sortedAgents, pinFocused, moveFocused, goToPin, unpin, dockWeb, dockFocused, jar as jarNow, paneRecordsNow, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.js";
 import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.js";
+import { walkStops, walkAt, walkNext } from "./walk.js";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.js";
 import { field } from "./inline.js";
@@ -101,10 +104,11 @@ export function laneReach(lanes) {
 
 /** A web pane's name on the shelf: its page's title, if nocturne-browser
  *  notes it by slot in shared `nocturne-browser.titles` (as the viewers do
- *  theirs), else the host it opened on (props.url), else "Web". */
-export function webName(p) {
+ *  theirs), else the host it opened on (props.url), else "Web". One of its
+ *  tabs (`tab`, a tab pin): that tab's title (`nocturne-browser.tab-titles`). */
+export function webName(p, tab = null) {
   const slot = p?.props?.slot;
-  const title = slot != null ? shared("nocturne-browser.titles")?.[slot] : null;
+  const title = slot == null ? null : tab ? shared("nocturne-browser.tab-titles")?.[slot]?.[tab] : shared("nocturne-browser.titles")?.[slot];
   if (title) return String(title);
   try { return new URL(String(p?.props?.url)).host || "Web"; } catch { return "Web"; }
 }
@@ -117,6 +121,26 @@ export function shelfHeight(n, w) {
   const rows = Math.ceil(n / perRow);
   return BOARD + BOARD_GAP + rows * TILE + (rows - 1) * TILE_GAP + CAPTION.gap + CAPTION.h;
 }
+
+/**
+ * The open jar's rows when the sky has room (layout px from the meadow's top):
+ * each firefly lane's top (`lanes`: their heights, in jar order), the shelf's
+ * top (`shelfH`: its height, 0 for none) and the jar's height. A jar held at
+ * its least height (JAR.min) centers what it holds in the glass, so one firefly
+ * sits in the middle with as much glass above as under it.
+ */
+export function jarPlan(lanes, shelfH = 0) {
+  const held = lanes.reduce((n, l) => n + l, 0) + (shelfH ? (lanes.length ? SHELF_ABOVE : 0) + shelfH : 0);
+  const jarH = Math.max(JAR.min, JAR.top + held + JAR.bottom);
+  let y = JAR.top + Math.floor((jarH - JAR.top - held - JAR.bottom) / 2);
+  const ys = lanes.map((l) => { const at = y; y += l; return at; });
+  return { ys, shelfY: shelfH ? (lanes.length ? y + SHELF_ABOVE : y) : 0, jarH };
+}
+
+/** The shelf's inset from the jar's walls (layout px): its tiles and caption
+ *  start where a firefly's square does (its lane's mark at x 6, the glow's
+ *  square GLOW_SQUARE.at in), so they line up under the fireflies. */
+export const SHELF_PAD = 6 + GLOW_SQUARE.at;
 
 function moonPhase(list) {
   if (!list.length) return 8;
@@ -193,10 +217,11 @@ const RAIL_REACH = { x: 8, y: 1 }, PAIR_REACH = { x: 1, y: 1 };
 const GLINT = 1800;
 // The shelf at the jar's foot, where pinned panes that aren't agents sit as
 // tiles (pins.js onShelf): a tile's size and the gap between tiles, the
-// shelf's inset from the jar's walls, the room above it under the last
-// firefly, its dithered board, the board's gap to the tiles, the caption
-// line under them (its gap above, its height). On the rail: smaller tiles, two abreast.
-const TILE = 28, TILE_GAP = 6, SHELF_PAD = 8, SHELF_ABOVE = 4, BOARD = 2, BOARD_GAP = 6, CAPTION = { gap: 6, h: 14 };
+// room above it under the last firefly (clear of its halo: air before the
+// board), its dithered board, the board's gap to the tiles, the caption line
+// under them (its gap above, its height); SHELF_PAD (above) is its inset from
+// the jar's walls. On the rail: smaller tiles, two abreast.
+const TILE = 28, TILE_GAP = 6, SHELF_ABOVE = 10, BOARD = 2, BOARD_GAP = 6, CAPTION = { gap: 6, h: 14 };
 const RAIL_TILE = 18, RAIL_TILE_GAP = 4;
 
 export default class Sky {
@@ -274,6 +299,8 @@ export default class Sky {
         else if (c === "dock-web") dockWeb();
         else if (c === "pin-up") moveFocused(-1);
         else if (c === "pin-down") moveFocused(1);
+        else if (c === "agent-next") this.walk(1);
+        else if (c === "agent-prev") this.walk(-1);
         // With no toast on show, closing one closes the update note.
         else if (c === "toast" || c === "toast-close" || c === "toast-dismiss") { if (!toastKey(c) && c !== "toast") dismissUpdate(); }
         else if (c === "update-close") dismissUpdate();
@@ -305,6 +332,18 @@ export default class Sky {
       const c = clock();
       if (c.time !== this.clock.time) { this.clock = c; cx.notify(); }
     });
+  }
+
+  /** nocturne.agent-next / agent-prev (walk.js): the next / previous agent in
+   *  the sidebar's order, then on through the shelf's tiles, wrapping. A tile
+   *  is gone to the way a click on it goes (kit.js goToPin). */
+  walk(dir) {
+    const stops = walkStops(sortedAgents().all.map((a) => a.address), jarNow().filter(onShelf));
+    const to = walkNext(stops, walkAt(stops, focused(), this.walkedTo), dir);
+    if (!to) return;
+    this.walkedTo = to.key;
+    if (to.item) goToPin(to.item);
+    else run("agent.focus", { terminal: to.agent });
   }
 
   /** A menu's ask ({ at }) this view hasn't answered yet. */
@@ -863,7 +902,7 @@ export default class Sky {
     const shelfW = w - 2 * JAR_INSET, shelfH = kept.length ? shelfHeight(kept.length + 1, shelfW) : 0; // + the "+" tile
     let lane = 40, restLane = 28;
     const laneOf = (a) => (a.status === "idle" ? restLane : lane);
-    const jarNeed = jarOn ? Math.max(JAR.min, JAR.top + jarred.reduce((n, a) => n + laneOf(a), 0) + (kept.length ? SHELF_ABOVE + shelfH : 0) + JAR.bottom) : 0;
+    const jarNeed = jarOn ? jarPlan(jarred.map(laneOf), shelfH).jarH : 0;
     const need = jarNeed + awake.length * lane + resting.length * restLane + 16;
     let placed = [];
     let more = 0;
@@ -871,10 +910,12 @@ export default class Sky {
     if (need <= ground) {
       // Room to spare: the jar on top (the shelf at its foot), awake ones
       // spread out under it, the rest settle on the ground.
-      let y = JAR.top;
-      for (const a of jarred) { placed.push([a, y, laneOf(a)]); y += laneOf(a); }
-      if (kept.length) { shelfY = jarred.length ? y + SHELF_ABOVE : y; y = shelfY + shelfH; }
-      jarH = jarOn ? Math.max(JAR.min, y + JAR.bottom) : 0;
+      if (jarOn) {
+        const plan = jarPlan(jarred.map(laneOf), shelfH);
+        jarred.forEach((a, i) => placed.push([a, plan.ys[i], laneOf(a)]));
+        shelfY = plan.shelfY;
+        jarH = plan.jarH;
+      }
       const top = jarH ? jarH + JAR.gap : 8;
       const restTop = ground - resting.length * restLane;
       const step = awake.length ? Math.min(46, (restTop - top) / awake.length) : 0;
@@ -929,7 +970,7 @@ export default class Sky {
 
   /** What a tile is called: the pane's name (header.js paneName), a terminal's given name. */
   pinName(it) {
-    if (it.pane?.mod === "nocturne-browser") return webName(it.pane);
+    if (it.pane?.mod === "nocturne-browser") return webName(it.pane, it.tab);
     if (it.pane) return paneName(it.pane);
     return givenName(it.key) ?? it.terminal?.name ?? "shell";
   }

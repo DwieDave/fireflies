@@ -125,6 +125,8 @@ const WORDS = {
   "nocturne.pin": "Pin the focused pane (an agent, a web page, an editor...) to the top, or unpin it",
   "nocturne.pin-up": "Move the pinned agent up in the jar, a pinned pane left on its shelf",
   "nocturne.pin-down": "Move the pinned agent down in the jar, a pinned pane right on its shelf",
+  "nocturne.agent-next": "Next agent, then on through the shelf's pinned panes (web pages, editors...)",
+  "nocturne.agent-prev": "Previous agent, or back through the shelf's pinned panes",
   "nocturne.dock": "Move the focused pane to the dock (a space tied to no folder) and pin it to the shelf",
   "nocturne.dock-web": "New web pane in the dock, pinned to the shelf",
   "nocturne-notifications.open": "Notifications: what your agents ask, answered from one place",
@@ -158,6 +160,10 @@ const WORDS = {
   "nocturne-browser.tab_close": "Close the web tab",
   "nocturne-browser.tab_next": "Next web tab",
   "nocturne-browser.tab_prev": "Previous web tab",
+  "nocturne-browser.tab_move_left": "Move the web tab left",
+  "nocturne-browser.tab_move_right": "Move the web tab right",
+  "nocturne-browser.pin_tab": "Pin the web tab to the shelf",
+  "nocturne-browser.tab_menu": "The web tab's menu",
 };
 
 // A group's rows in this order (keys() comes sorted by key): the blocks first in

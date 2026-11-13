@@ -3,7 +3,7 @@
 // per second between two), the history, the scales, and a machine without
 // the sources reading as null (the graph says so, not zero).
 import { test, expect } from "bun:test";
-import { SYS_PROBE, SEP, KEEP, STEP, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/nocturne-procs/sys.js";
+import { SYS_PROBE, SEP, KEEP, STEP, STEP_SHOWN, parseSys, parseSysctl, parseVmStat, parseNetstat, parseDf, parseGpu, parseIostat, measure, push, rate, size, scale } from "../defaults/mods/nocturne-procs/sys.js";
 import { SYS, SYS_NONE } from "./fixtures/procs.ts";
 
 test("the probe: one shell line, sections apart, iostat last (it takes its second), no sudo", () => {
@@ -12,7 +12,9 @@ test("the probe: one shell line, sections apart, iostat last (it takes its secon
   expect(SYS_PROBE).not.toContain("powermetrics");
   expect(SYS_PROBE.trim().endsWith("true")).toBe(true);
   expect(SYS_PROBE).toContain("iostat -n 8 -C -c 2 -w 1");
-  expect([KEEP, STEP]).toEqual([45, 2000]);
+  // Numbers, not names: netstat -ib looks up a hostname for every address (5 s on a busy Mac).
+  expect(SYS_PROBE).toContain("netstat -ibn");
+  expect([KEEP, STEP, STEP_SHOWN]).toEqual([90, 2000, 1000]);
 });
 
 test("each source's parser", () => {
@@ -52,7 +54,7 @@ test("a machine without the sources: every graph null, none zero", () => {
 
 test("history, scales and words", () => {
   let h: number[] = [];
-  for (let i = 0; i < 50; i++) h = push(h, i);
+  for (let i = 0; i < 95; i++) h = push(h, i);
   expect(h.length).toBe(KEEP);
   expect(h[0]).toBe(5);
   expect(scale([0, 50, 100, null], { max: 100 })).toEqual([0, 0.5, 1, null]);

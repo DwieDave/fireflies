@@ -4,7 +4,7 @@
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import { settings, window as appWindow, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import { isDock, toDock, newSlot } from "./dock.js";
-import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
+import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -18,6 +18,43 @@ export function dither(color, cell = 1) {
   const zoom = Number(settings()?.zoom) || 1;
   const dpr = appWindow()?.platform === "macos" ? 2 : 1;
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
+}
+
+// ---- the toolbar's ground (the same in ../nocturne/kit.js and
+// ../nocturne-notifications/kit.js: the tools, the bell and "+ new" are
+// blocks of their own, and the ground runs under all of them to the strip's
+// right edge, each block drawing its stretch)
+
+/** The toolbar's look: "ledge" (the tools on a raised, lit ledge of the
+ *  horizon) or "plate" (the tools on a dithered plate the strip's height). */
+export const TOOL_LOOK = "plate";
+
+/** The ground under a block of the toolbar (layers filling it, behind its
+ *  controls), in place of the tabs' plain horizon. */
+export function toolGround(t, look = TOOL_LOOK) {
+  const layer = () => div().absolute().left(0).right(0);
+  if (look === "plate") return [
+    layer().top(0).bottom(0).opacity(0.55).child(dither(t.ansi0, 1)), // the plate
+    layer().bottom(0).h(2).child(dither(t.ansi8, 1)), // its foot: the horizon, lit
+  ];
+  return [
+    layer().bottom(0).h(4).child(dither(t.ansi8, 1)), // the ledge, dithered
+    layer().bottom(4).h(1).bg(t.ansi8).opacity(0.8), // its lit edge
+  ];
+}
+
+/** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either isn't one. */
+export function mix(a, b, k) {
+  const hex = (c) => (/^#[0-9a-f]{6}$/i.test(String(c)) ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null);
+  const x = hex(a), y = hex(b);
+  if (!x || !y) return a;
+  return `#${x.map((v, i) => Math.round(v + (y[i] - v) * k).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** A tool's plate under the pointer: on the plate a step brighter than it
+ *  (ansi0 lifted toward ansi8, the text still reads on it); on the ledge ansi0. */
+export function toolHover(t, look = TOOL_LOOK) {
+  return look === "plate" ? mix(t.ansi0, t.ansi8, 0.3) : t.ansi0;
 }
 
 /** Where a drop-down opened by a press on a tab-strip button goes: its top
@@ -126,15 +163,28 @@ export function moveFocused(dir) {
   movePin(pinKey(focusedPane()), dir);
 }
 
+// A web tab to show once its pane is on screen: { slot, tab, at } (goToPin).
+// Commands reach only the copies on screen, and a pane in another tab or space
+// comes there only after pane.focus: the web pane takes this up when it shows.
+export const WEB_SHOW = "nocturne-browser.show";
+
 /** Goes to a pin of any kind (a jar item, pins.js jarItems): in whatever tab
- *  and space it is; a parked pane comes back (pane.focus). */
+ *  and space it is; a parked pane comes back (pane.focus). A web tab's pin
+ *  (`it.tab`): its pane, then that tab (nocturne-browser.show). */
 export function goToPin(it) {
+  if (it.kind === "pane" && it.tab) {
+    const want = { slot: it.pane.props?.slot ?? null, tab: it.tab };
+    setShared(WEB_SHOW, { ...want, at: Date.now() });
+    run("pane.focus", { pane: it.pane.pane });
+    return run(`nocturne-browser.show:${JSON.stringify(want)}`);
+  }
   if (it.kind === "pane" || (it.kind === "terminal" && it.pane)) return run("pane.focus", { pane: it.pane.pane });
   run("agent.focus", { terminal: it.key });
 }
 
-/** Takes a jar item out of the jar. */
+/** Takes a jar item out of the jar (a web tab's pin: that tab's alone). */
 export function unpin(it) {
+  if (it.kind === "pane" && it.tab) return setShared(PANES_KEY, pinTabRecord(paneRecordsNow(), it.pane, it.tab, false, Date.now()));
   if (it.kind === "pane") return pinPane({ pane: it.pane.pane, terminal: null }, false);
   pin(it.key, false);
 }

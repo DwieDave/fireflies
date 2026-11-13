@@ -6,6 +6,7 @@ import { test, expect } from "bun:test";
 import {
   PROBE, SEP, parseEtime, parseComm, parsePs, parseLsof, parseProbe, guardOf, index, descendants, buildTree, flatten, place,
   targets, alive, signal, endGently, address, terminalOf, whereIs, openPort, uptime, memory, oneLine, count,
+  wheelDelta, scrollBy,
 } from "../defaults/mods/nocturne-procs/logic.js";
 import { COMM, PS, LSOF, TERMS, PANES, SPACES } from "./fixtures/procs.ts";
 
@@ -194,4 +195,16 @@ test("the row words: uptime, memory, one line", () => {
   expect(memory(1992294)).toBe("1.9G");
   expect(memory(88)).toBe("88K");
   expect(oneLine("claude # brief\\012\\012## Item 1")).toBe("claude # brief ⏎ ⏎ ## Item 1");
+});
+
+test("the wheel: a mouse's lines move whole rows, a trackpad's pixels move as far as the fingers, unzoomed", () => {
+  expect(wheelDelta({ delta: { x: 0, y: -54 }, delta_lines: { x: 0, y: -3 } }, 24, 0.9)).toBe(72);
+  expect(wheelDelta({ delta: { x: 0, y: 2 }, delta_lines: { x: 0, y: 1 } }, 24, 0.9)).toBe(-24);
+  expect(wheelDelta({ delta: { x: 0, y: -45 } }, 24, 0.9)).toBe(50);
+  expect(wheelDelta({ delta: { x: 0, y: 12 } }, 24, 1)).toBe(-12);
+  // A sideways swipe moves nothing.
+  expect(wheelDelta({ delta: { x: 30, y: 0 }, delta_lines: { x: 1, y: 0 } }, 24, 1) + 0).toBe(0);
+  expect(scrollBy(10, -50, 100)).toBe(0);
+  expect(scrollBy(90, 50, 100)).toBe(100);
+  expect(scrollBy(0, 20, -5)).toBe(0);
 });

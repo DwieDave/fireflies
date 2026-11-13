@@ -1,6 +1,7 @@
 // The system graphs' readings (the deck's system tab), free of the view
-// (tested in scripts/nocturne-procs-sys.test.ts). One probe every 2 s while
-// the deck is open, none while it's closed; macOS sources that need no sudo:
+// (tested in scripts/nocturne-procs-sys.test.ts). One probe a second while
+// the system tab shows, every 2 s while the deck shows another tab, none
+// while it's closed; never two at once. macOS sources that need no sudo:
 //
 //   cpu      iostat -C -c 2 -w 1: its second line is the last second's
 //            user / system / idle (the probe takes that second)
@@ -10,7 +11,7 @@
 //            app memory (anonymous less purgeable) + wired + compressed, as
 //            Activity Monitor counts it; kern.memorystatus_vm_pressure_level
 //            for the pressure (1 normal, 2 warning, 4 critical)
-//   network  netstat -ib byte counters of every interface but loopback,
+//   network  netstat -ibn byte counters of every interface but loopback,
 //            per second between two readings
 //   gpu      ioreg's IOAccelerator PerformanceStatistics "Device Utilization %"
 //
@@ -22,14 +23,18 @@ const part = (cmd) => `${cmd} 2>/dev/null; echo '${SEP}'`;
 export const SYS_PROBE = [
   part("sysctl -n hw.ncpu hw.memsize hw.pagesize kern.memorystatus_vm_pressure_level"),
   part("vm_stat"),
-  part("netstat -ib"),
+  // -n: without it netstat looks up a hostname for every address, 5 s on a busy Mac.
+  part("netstat -ibn"),
   part("df -k /"),
   part("ioreg -r -c IOAccelerator -d 1 | grep -o '\"Device Utilization %\"=[0-9]*'"),
   "LC_ALL=C iostat -n 8 -C -c 2 -w 1 2>/dev/null; true",
 ].join("; ");
 
-/** How many readings a graph keeps: 45 at 2 s, the last minute and a half. */
-export const KEEP = 45;
+/** How many readings a graph keeps: 90 at a second, the last minute and a half. */
+export const KEEP = 90;
+/** Between readings: a second while the system tab shows, 2 s behind another tab. A reading
+ *  takes about a second itself (iostat measures one), so at a second they run back to back. */
+export const STEP_SHOWN = 1000;
 export const STEP = 2000;
 
 /** sysctl's four numbers. */
@@ -48,7 +53,7 @@ export function parseVmStat(text) {
     wired: v("Pages wired down"), anonymous: v("Anonymous pages"), purgeable: v("Pages purgeable"), compressed: v("Pages occupied by compressor") };
 }
 
-/** netstat -ib: bytes in and out, summed over every link row but loopback. */
+/** netstat -ibn: bytes in and out, summed over every link row but loopback. */
 export function parseNetstat(text) {
   let rx = 0, tx = 0, seen = false;
   for (const line of String(text ?? "").split("\n")) {

@@ -84,6 +84,51 @@ export function nth(m, n) {
   return (n === 9 ? m.list.at(-1) : m.list[n - 1])?.id ?? null;
 }
 
+/** Tab `id` moved to place `index` (0-based: where it ends up, clamped). It
+ *  was put there by hand, so it leaves its row of links (opener). */
+export function move(m, id, index) {
+  const i = indexOf(m, id);
+  if (i < 0) return m;
+  const to = Math.max(0, Math.min(m.list.length - 1, Number(index) || 0));
+  if (to === i) return m;
+  const rest = m.list.filter((t) => t.id !== id);
+  return { ...m, list: [...rest.slice(0, to), { ...m.list[i], opener: null }, ...rest.slice(to)] };
+}
+
+// ---- dragging a tab along the strip (as the app's own strip, nocturne/tabdrag.js)
+
+/** How far (window px) a press moves before it's a drag rather than a click. */
+export const DRAG_START = 4;
+
+/** The gap the pointer is over: before tab `id`, or after it (its right
+ *  half); `id` null: the strip's end. `x`, `width`: the pointer's place in the tab. */
+export const gapAt = (id, x, width) => ({ id, after: id != null && x >= width / 2 });
+
+/** Where `dragged` ends up (move's index) dropped into `gap`, or null when the
+ *  drop leaves it where it is (over itself, or its own gaps). A gap after a
+ *  tab and the gap before the next one are the same place. */
+export function dropIndex(m, dragged, gap) {
+  const i = indexOf(m, dragged);
+  if (!gap || i < 0) return null;
+  const rest = m.list.map((t) => t.id).filter((x) => x !== dragged);
+  let at;
+  if (gap.id == null) at = rest.length;
+  else {
+    const j = rest.indexOf(gap.id);
+    if (j < 0) return null;
+    at = j + (gap.after ? 1 : 0);
+  }
+  return at === i ? null : at;
+}
+
+/** The tab the drop marker stands before for a drop at `index` (dropIndex's):
+ *  its left edge; null: the strip's end. Undefined: no marker. */
+export function stakeBefore(m, dragged, index) {
+  if (index == null) return undefined;
+  const rest = m.list.map((t) => t.id).filter((x) => x !== dragged);
+  return rest[index] ?? null;
+}
+
 /** What survives a restart: each tab's address, title and zoom. */
 export function save(m) {
   return JSON.stringify({ active: m.active, next: m.next,
@@ -143,4 +188,68 @@ export function openArgs(value) {
     } catch { return null; }
   }
   return { url: v, slot: null };
+}
+
+// ---- one tab pinned to the shelf (nocturne's pins.js reads these records)
+//
+// Nocturne keeps the shelf's pins in shared PINS: [{ pane, mod, props, at, tab? }].
+// A record with `tab` pins that one tab of a web pane: the shelf names it by the
+// tab's title (TAB_TITLES), and going to it focuses the pane and shows the tab
+// (command show:{ slot, tab }, or SHOW when the pane comes on screen later).
+// A web pane finds its records by its props' slot (its pane id may change
+// across a restart; nocturne's tidy() keeps `pane` current).
+
+export const PINS = "nocturne.pinned-panes";
+
+const ofSlot = (r, slot) => r?.mod === "nocturne-browser" && r.props?.slot != null && String(r.props.slot) === String(slot);
+
+/** Tab `tab` of the pane with this slot is pinned to the shelf. */
+export const tabPinned = (records, slot, tab) => (Array.isArray(records) ? records : []).some((r) => ofSlot(r, slot) && r.tab === tab);
+
+/** The records with tab `tab` of `pane` (its PaneInfo: pane, props with a slot) pinned (at `now`) or not. */
+export function pinTab(records, pane, tab, on, now) {
+  const slot = pane?.props?.slot;
+  const rest = (Array.isArray(records) ? records : []).filter((r) => !(ofSlot(r, slot) && r.tab === tab));
+  return on ? [...rest, { pane: pane.pane, mod: "nocturne-browser", props: pane.props, at: now, tab }] : rest;
+}
+
+/** The records without the pins of tab `tab` of the pane with this slot (it
+ *  closed), or null when it had none. */
+export function dropTabPins(records, slot, tab) {
+  const list = Array.isArray(records) ? records : [];
+  const rest = list.filter((r) => !(ofSlot(r, slot) && r.tab === tab));
+  return rest.length === list.length ? null : rest;
+}
+
+/** A `show:` value (JSON `{ slot, tab }`), or null. */
+export function showArgs(value) {
+  try {
+    const o = JSON.parse(String(value ?? ""));
+    return typeof o?.tab === "string" && o.tab ? { slot: o.slot == null ? null : String(o.slot), tab: o.tab } : null;
+  } catch { return null; }
+}
+
+/** Each tab's name for the shelf, `{ [tab id]: label }`; blank tabs have none. */
+export const tabTitles = (m) => Object.fromEntries(m.list.filter((t) => t.page.href || t.page.title || t.start).map((t) => [t.id, label(t)]));
+
+// ---- the tab's menu (a right-click on it, m in the bar): its rows in sections
+
+/** The menu's sections for a tab: `{ pinned, canPin, index, count }` →
+ *  [[{ act, name, enabled }], …]. */
+export function menuRows({ pinned = false, canPin = true, index = 0, count = 1 } = {}) {
+  return [
+    [{ act: "pin", name: pinned ? "Unpin this tab from the shelf" : "Pin this tab to the shelf", enabled: Boolean(canPin) }],
+    [{ act: "left", name: "Move the tab left", enabled: index > 0 }, { act: "right", name: "Move the tab right", enabled: index < count - 1 }],
+    [{ act: "close", name: "Close the tab", enabled: true }],
+  ];
+}
+
+/** The next enabled row from `at` going `by` (wrapping), or `at`. */
+export function menuStep(rows, at, by) {
+  const n = rows.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (((at + by * k) % n) + n) % n;
+    if (rows[i].enabled) return i;
+  }
+  return at;
 }

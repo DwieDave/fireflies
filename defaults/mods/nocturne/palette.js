@@ -103,6 +103,10 @@ const PANE = {
     ["tab_close", "Close the tab", "web browser tab shut"],
     ["tab_next", "Next tab", "web browser tab right switch"],
     ["tab_prev", "Previous tab", "web browser tab left switch"],
+    ["tab_move_left", "Move the tab left", "web browser tab reorder order drag"],
+    ["tab_move_right", "Move the tab right", "web browser tab reorder order drag"],
+    ["pin_tab", "Pin the tab to the shelf (or unpin it)", "web browser tab pin shelf jar keep unpin"],
+    ["tab_menu", "The tab's menu", "web browser tab menu pin move close"],
     ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-markdown": ["Markdown", [
@@ -375,8 +379,8 @@ const NAMED = [
   ["terminal.search", {}, "Terminal", "Find in the terminal…", "search scrollback history text"],
   ["terminal.scroll", { to: "top" }, "Terminal", "Scroll to the top of the history", "scrollback oldest start beginning"],
   ["terminal.scroll", { to: "bottom" }, "Terminal", "Scroll back to the live screen", "scrollback bottom end newest"],
-  ["agent.next", {}, "Agent", "Next agent", ""],
-  ["agent.prev", {}, "Agent", "Previous agent", ""],
+  ["agent.next", {}, "Agent", "Next agent", "pinned shelf web page dock"],
+  ["agent.prev", {}, "Agent", "Previous agent", "pinned shelf web page dock"],
   ["window.minimize", {}, "Window", "Minimize window", ""],
   ["window.maximize", {}, "Window", "Maximize window", "restore"],
   ["window.close", {}, "Window", "Close window", "quit"],
@@ -459,6 +463,8 @@ export const OUT = {
   "nocturne-browser.focus": "internal: hands the web pane's bar the keyboard",
   "nocturne-browser.web": "hands the keyboard to the page: click it",
   "nocturne-browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
+  "nocturne-browser.show": "a tab for a pane by its slot (show:{slot, tab}): a web tab's tile on the shelf",
+  "nocturne-browser.tab_act": "internal: a pick in a web tab's menu (tab_act:{slot, tab, act})",
   "nocturne-agents.focus": "internal: hands the agents graph the keyboard",
   "nocturne-usage.focus": "internal: hands the usage pane the keyboard",
   "nocturne-pip.focus": "internal: hands the player the keyboard",
@@ -526,8 +532,10 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
 // Nocturne runs these in place of Fireflies': the same key, the sidebar's order;
-// "New space" is the folder picker (newspace.js).
-const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
+// "New space" is the folder picker (newspace.js); next / previous agent walk on
+// through the shelf's pinned panes (walk.js).
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new",
+  "agent.next": "nocturne.agent-next", "agent.prev": "nocturne.agent-prev" };
 
 /** Every entry for the state we're in now. */
 function entries() {
