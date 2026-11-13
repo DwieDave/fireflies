@@ -261,7 +261,7 @@ describe("the runner, for real with sqlite3", () => {
     const io = realIo();
     const dir = (await privateDir(io))!;
     const fake = join(dbDir, "fake-mysql");
-    writeFileSync(fake, '#!/bin/sh\nf=${1#--defaults-extra-file=}; stat -f "%Lp" "$f"; cat "$f"\n', { mode: 0o755 });
+    writeFileSync(fake, '#!/bin/sh\nf=${1#--defaults-extra-file=}; perl -e \'printf "%o\\n", (stat shift)[2] & 0777\' "$f"; cat "$f"\n', { mode: 0o755 });
     const r = await run(io, { kind: "mysql", dir, program: fake, args: ["--xml"], script: "select 1;\n", secret: 'p"a\\ss' });
     expect(r.stdout).toBe('600\n[client]\npassword="p\\"a\\\\ss"\n');
     expect(readdirSync(dir)).toEqual([]);
