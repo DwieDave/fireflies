@@ -207,6 +207,8 @@ test:
     bun test scripts/databases-view.test.ts
     # A database file leads to the Databases window: the files pane's "Open in Databases" (b), the preview's table strip, only with the mod installed.
     bun test scripts/databases-open.test.ts
+    # The dividers between panels (dividers.ts, the pattern the Kubernetes mod copies): a drag by its handlers, the clamp, + / - steps, the double click's reset, the sizes kept.
+    bun test scripts/databases-dividers.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
