@@ -61,12 +61,17 @@ export interface Selection {
 /** What the leader's next keys can be: an entry to run [command, label], or a node of more keys. */
 export type LeaderEntry = readonly [command: string, label: string];
 
-/** A node of the leader map: its name (the which-key popup's +name) and its keys
- *  (typed characters: data). */
+/** A node of the leader map: its name (the which-key popup's +name) and what each key
+ *  (a typed character: data) does there, in the popup's order. */
 export interface LeaderNode {
-  readonly name?: string;
-  readonly [key: string]: LeaderEntry | LeaderNode | string | undefined;
+  readonly name: string;
+  readonly keys: ReadonlyMap<string, LeaderStep>;
 }
+
+/** What a key after the leader is: an entry to run, or a node of more keys. */
+export type LeaderStep = LeaderEntry | LeaderNode;
+
+const node = (name: string, keys: readonly (readonly [string, LeaderStep])[]): LeaderNode => ({ name, keys: new Map(keys) });
 
 /** A key of the which-key popup and what it does. */
 export interface Which {
@@ -90,30 +95,29 @@ const maxPos = (a: Pos, b: Pos): Pos => (cmp(a, b) <= 0 ? b : a);
 const times = (n: number, command: string): string[] => Array.from({ length: n }, () => command);
 
 /** The default leader map: key sequences after the leader and what they do. */
-export const LEADER = {
-  f: { name: "find", f: ["picker", "files"], g: ["grep", "grep"], b: ["picker", "files"] },
-  e: ["files-pane", "files pane"],
-  w: ["save", "save"],
-  q: ["quit", "close"],
-  b: { name: "tabs", n: ["next-tab", "next tab"], p: ["prev-tab", "previous tab"], d: ["close-tab", "close tab"], l: ["tabs", "list tabs"], "<": ["move-tab-left", "move tab left"], ">": ["move-tab-right", "move tab right"], o: ["pop-out", "pop out into its own pane"], i: ["pop-in", "into the editor beside"], m: ["tab-menu", "tab menu"] },
-  d: ["problems", "problems"],
-  h: ["hover", "hover"],
-  c: { name: "code", a: ["code-action", "code action"], f: ["format", "format"] },
-  r: { name: "refactor", n: ["rename", "rename"] },
-  g: { name: "go", d: ["definition", "definition"], r: ["references", "references"] },
-  "?": ["keys", "keys"],
-  u: { name: "toggle", w: ["wrap", "word wrap"] },
-  m: { name: "markdown", p: ["preview", "view: rendered / split / preview / text"], r: ["preview-rendered", "rendered"], s: ["preview-split", "preview beside"], v: ["preview-only", "preview only"], t: ["preview-text", "text only"] },
-  // The Markdown commands (mdedit.ts), by the letters cmd-. takes.
-  ".": {
-    name: "markdown commands",
-    b: ["md-bold", "bold"], i: ["md-italic", "italic"], "`": ["md-code", "inline code"], k: ["md-link", "link"],
-    h: ["md-heading-up", "heading up"], H: ["md-heading-down", "heading down"],
-    l: ["md-bullets", "bullet list"], n: ["md-numbers", "numbered list"], t: ["md-task", "task box"], x: ["md-tick", "tick"],
-    q: ["md-quote", "quote"], c: ["md-fence", "code block"], r: ["md-rule", "rule"], p: ["md-image", "image from a file"], v: ["md-image-paste", "paste an image"],
-    0: ["md-heading-0", "text"], 1: ["md-heading-1", "heading 1"], 2: ["md-heading-2", "heading 2"], 3: ["md-heading-3", "heading 3"],
-  },
-} as const satisfies LeaderNode;
+export const LEADER: LeaderNode = node("leader", [
+  ["f", node("find", [["f", ["picker", "files"]], ["g", ["grep", "grep"]], ["b", ["picker", "files"]]])],
+  ["e", ["files-pane", "files pane"]],
+  ["w", ["save", "save"]],
+  ["q", ["quit", "close"]],
+  ["b", node("tabs", [["n", ["next-tab", "next tab"]], ["p", ["prev-tab", "previous tab"]], ["d", ["close-tab", "close tab"]], ["l", ["tabs", "list tabs"]], ["<", ["move-tab-left", "move tab left"]], [">", ["move-tab-right", "move tab right"]], ["o", ["pop-out", "pop out into its own pane"]], ["i", ["pop-in", "into the editor beside"]], ["m", ["tab-menu", "tab menu"]]])],
+  ["d", ["problems", "problems"]],
+  ["h", ["hover", "hover"]],
+  ["c", node("code", [["a", ["code-action", "code action"]], ["f", ["format", "format"]]])],
+  ["r", node("refactor", [["n", ["rename", "rename"]]])],
+  ["g", node("go", [["d", ["definition", "definition"]], ["r", ["references", "references"]]])],
+  ["?", ["keys", "keys"]],
+  ["u", node("toggle", [["w", ["wrap", "word wrap"]]])],
+  ["m", node("markdown", [["p", ["preview", "view: rendered / split / preview / text"]], ["r", ["preview-rendered", "rendered"]], ["s", ["preview-split", "preview beside"]], ["v", ["preview-only", "preview only"]], ["t", ["preview-text", "text only"]]])],
+  // The Markdown commands (mdedit.ts), by the letters cmd-. takes (the levels first, as the popup lists them).
+  [".", node("markdown commands", [
+    ["0", ["md-heading-0", "text"]], ["1", ["md-heading-1", "heading 1"]], ["2", ["md-heading-2", "heading 2"]], ["3", ["md-heading-3", "heading 3"]],
+    ["b", ["md-bold", "bold"]], ["i", ["md-italic", "italic"]], ["`", ["md-code", "inline code"]], ["k", ["md-link", "link"]],
+    ["h", ["md-heading-up", "heading up"]], ["H", ["md-heading-down", "heading down"]],
+    ["l", ["md-bullets", "bullet list"]], ["n", ["md-numbers", "numbered list"]], ["t", ["md-task", "task box"]], ["x", ["md-tick", "tick"]],
+    ["q", ["md-quote", "quote"]], ["c", ["md-fence", "code block"]], ["r", ["md-rule", "rule"]], ["p", ["md-image", "image from a file"]], ["v", ["md-image-paste", "paste an image"]],
+  ])],
+]);
 
 /** Where insert mode began: the text and caret then, the keys that entered it. */
 export interface InsertStart {
@@ -1624,18 +1628,14 @@ export function feed(vim: Vim, key: Key | null | undefined, doc: Doc): FeedResul
   return out;
 }
 
-function whichOf(node: LeaderNode): Which[] {
-  return Object.entries(node).flatMap(([k, v]): Which[] => {
-    if (k === "name" || v === undefined || isString(v)) return [];
-
-    return [{ key: k === " " ? "space" : k, label: isEntry(v) ? v[1] : `+${v.name ?? k}` }];
-  });
+function whichOf(at: LeaderNode): Which[] {
+  return [...at.keys].map(([k, v]) => ({ key: k === " " ? "space" : k, label: isEntry(v) ? v[1] : `+${v.name}` }));
 }
 
 /** A leader entry to run, not a node of more keys. */
-const isEntry = (step: LeaderEntry | LeaderNode): step is LeaderEntry => Array.isArray(step);
+const isEntry = (step: LeaderStep): step is LeaderEntry => Array.isArray(step);
 
-function leaderKey(vim: Vim, node: LeaderNode, key: string, out: FeedResult): FeedResult {
+function leaderKey(vim: Vim, at: LeaderNode, key: string, out: FeedResult): FeedResult {
   if (key === "<esc>") {
     vim.pendingLeader = null;
     out.which = null;
@@ -1643,9 +1643,9 @@ function leaderKey(vim: Vim, node: LeaderNode, key: string, out: FeedResult): Fe
     return out;
   }
 
-  const next = key === "name" ? undefined : node[key];
+  const next = at.keys.get(key);
 
-  if (next === undefined || isString(next)) {
+  if (next === undefined) {
     vim.pendingLeader = null;
     out.which = null;
     out.message = `leader: nothing on ${key}`;
