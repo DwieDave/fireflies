@@ -13,6 +13,7 @@ import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCop
 import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
 import { runQuery } from "./query.ts";
+import { setCell } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A folder and the machine it's on. */
@@ -173,6 +174,7 @@ export function command(v: DbView, c: string, cx: Context): void {
   } else if (name.startsWith("sql:")) v.addQuery(name.slice("sql:".length), cx);
   else if (name === "run" || name === "run-all") runShown(v, name === "run-all", cx);
   else if (name.startsWith("table:")) openNamed(v, name.slice("table:".length), cx);
+  else if (name.startsWith("set:")) setCell(v, name.slice("set:".length));
   else if (name === "to-pane" && v.overlay) handoverOut(v, cx);
   else if (name === "to-window" && !v.overlay) handoverOut(v, cx);
   // A command is no keystroke: in a query tab it reaches the results' actions, not the editor.

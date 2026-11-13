@@ -192,6 +192,24 @@ export function toggleNull(v: DbView): void {
   edit.input.focus();
 }
 
+/** databases.set:<text>: the edited cell's input holds `text`; with none edited, the cursor's
+ *  cell is staged as `text` (as typed: its column's checks apply). */
+export function setCell(v: DbView, text: string): void {
+  const edit = v.cellEdit;
+
+  if (edit) {
+    edit.input.set_value(text);
+    edit.isNull = false;
+
+    return;
+  }
+
+  const cell = cursorCell(v);
+  const why = "why" in cell ? cell.why : stageCell(v, v.rows.at.row, cell.column, text);
+
+  if (why) v.say(why, "failed");
+}
+
 /** N: the cursor's cell staged as NULL. */
 export function stageNull(v: DbView): void {
   const cell = cursorCell(v);

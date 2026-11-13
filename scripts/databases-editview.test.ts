@@ -304,3 +304,20 @@ test("the keys are in ? and the bar: c, N, u in the rows; w and U for the window
   expect(barHints("rows")[0]).toEqual(["c", "change the cell"]);
   void privateDir;
 });
+
+test.skipIf(!SQLITE)("databases.set:<text>: fills the edited cell's input, or stages the cursor's cell as typed", async () => {
+  seed();
+  const v = await opened();
+  const { command } = await import("../defaults/mods/databases/opening.ts");
+  v.key(key("l"), cx);
+  command(v, "databases.set:Harbour", cx);
+  expect(v.edits.rows.size).toBe(1);
+  v.key(key("l"), cx);
+  command(v, "databases.cell-edit", cx);
+  command(v, "databases.set:12", cx);
+  expect(v.cellEdit.input.value()).toBe("12");
+  v.key(key("enter"), cx);
+  command(v, "databases.set:lots", cx);
+  expect(v.note.text).toBe("lumens: it takes a whole number");
+  expect(render(v)).toEqual(expect.arrayContaining(["Harbour", "12", "2 changes · not saved"]));
+});
