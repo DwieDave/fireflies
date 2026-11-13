@@ -76,7 +76,7 @@ mock.module("gpui-base", () => ({
 (globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const { cardPlace, progressWord, busy, changeBetween, cardMarkdown } = await import("../defaults/mods/editor/logic.js");
+const { cardPlace, progressWord, busy, changeBetween, cardMarkdown } = await import("../defaults/mods/editor/logic.ts");
 
 // ---- a pane, its context and its timers
 let later: [number, (cx: any) => void][] = [];

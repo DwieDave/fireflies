@@ -453,7 +453,7 @@ test("the pane runs vim's tab commands and the app's next-tab / prev-tab / close
 
 // ---- links in the hover card (cardlinks.js)
 
-const links = await import("../defaults/mods/editor/cardlinks.js");
+const links = await import("../defaults/mods/editor/cardlinks.ts");
 
 test("card links: inline (not images), reference definitions, <autolinks> and bare addresses, each once, in order", () => {
   const parts = [

@@ -130,25 +130,25 @@ import {
   languageSettings, serverCandidates, ROOTS, rootScript, pickRoot, languageId, uri, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hoverParts, parseGoto, firstLocation, tilde, dirname, basename, syntaxColors, colorRuns, hintList, editorKeys, serverNote,
   cardPlace, busy, progressWord, changeBetween, incremental, cardMarkdown, appBindings, chordOf,
-} from "./logic.js";
+} from "./logic.ts";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.ts";
 import { follow, join } from "./paths.ts";
 import { formKey, bindTab, tabActions } from "./form-keys.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
-import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
+import { projectEnv, lookup, wrap, cacheName } from "./envrc.ts";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.js";
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
 // of preview/viewer.js and what it imports (scripts/preview-shared.test.ts).
 import Viewer from "./viewer.ts";
 import { OPEN, LAST, PATHS, HANDOVER, filesOf, editorPaths, isScratchpad } from "./editor-route.ts";
-import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
+import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import { Rendered, editBetween } from "./rendered.js";
 import { units as liveUnits, unitFor } from "./live.js";
 import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.js";
 import { isNote, noteName, Autosave } from "./scratch.ts";
-import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.js";
+import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.ts";
 // Read off the module when used (pickFile): test stand-ins for herdr needn't know them all.
 import * as herdr from "herdr";
 
@@ -1145,7 +1145,7 @@ export default class EditorPane extends View {
     this.mark(`environment: ${env.kind}${env.cached ? " (kept on disk; refreshing behind)" : ""}`, d);
     const inEnv = env.kind === "ready" ? env.env : null;
     // Every candidate's path and the workspace root at once: each is a process.
-    const markers = ROOTS[d.lang]?.markers ?? [];
+    const markers = ROOTS.get(d.lang)?.markers ?? [];
     const [paths, r] = await Promise.all([
       Promise.all(candidates.map((c) => (c.argv[0].startsWith("/") ? c.argv[0] : lookup(exec, c.argv[0], inEnv)))),
       exec("sh", ["-c", rootScript(markers), "root", dir]).catch(() => null),

@@ -201,7 +201,7 @@ let store: Record<string, string> = {};
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const { KINDS } = await import("../defaults/mods/editor/rendered.js");
-const images = await import("../defaults/mods/editor/images.js");
+const images = await import("../defaults/mods/editor/images.ts");
 const live = await import("../defaults/mods/editor/live.js");
 
 let later: [number, (cx: any) => void][] = [];

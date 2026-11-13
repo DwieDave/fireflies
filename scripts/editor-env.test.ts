@@ -1,11 +1,11 @@
 // The editor's language servers in the workspace's own environment
-// (editor/envrc.js): the nearest .envrc up to the repository,
+// (editor/envrc.ts): the nearest .envrc up to the repository,
 // loaded by direnv only when direnv allows it, once per folder; and what the
 // asked-for hover (cmd-i) says when no server answers (logic.js serverNote).
 // `exec` is a fake that answers as sh and direnv would.
 import { test, expect, beforeEach } from "bun:test";
-import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName } from "../defaults/mods/editor/envrc.js";
-import { serverNote } from "../defaults/mods/editor/logic.js";
+import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName } from "../defaults/mods/editor/envrc.ts";
+import { serverNote } from "../defaults/mods/editor/logic.ts";
 
 type Call = { cmd: string; args: string[]; opts?: any };
 /** A fake exec: `world` says where .envrc files are, whether direnv is there, what it allows and exports. */

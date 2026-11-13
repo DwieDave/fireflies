@@ -1,12 +1,12 @@
 import { test, expect } from "bun:test";
 
-// The editor's decisions (defaults/mods/editor/logic.js): settings,
+// The editor's decisions (defaults/mods/editor/logic.ts): settings,
 // servers and roots, diagnostics, hovers, go to line, colors.
 import {
   languageSettings, serverCandidates, languageId, rootScript, pickRoot, uri, pathOf, diagnostics, lineNotes, counts,
   diagnosticsAt, nextProblem, hintList, editorKeys, hoverParts, splitMarkdown, parseGoto, firstLocation, firstLine, tilde, syntaxColors, colorOf, colorRuns,
   RUST_ANALYZER, chordOf, appBindings,
-} from "../defaults/mods/editor/logic.js";
+} from "../defaults/mods/editor/logic.ts";
 
 test("a language's settings: its own over the top level over its convention over the defaults", () => {
   expect(languageSettings(undefined, "rust")).toEqual({ tab_size: 4, insert_spaces: true, soft_wrap: false, format_on_save: false });

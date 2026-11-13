@@ -4,38 +4,63 @@
 // docs.rs; TypeScript's {@link} points at `file:///…/x.ts#L12%2C5`; others
 // write relative paths or `path:12:5`.
 
+import type { HoverPart } from "./logic.ts";
 import { follow } from "./paths.ts";
 
 /** A link's words without Markdown's marks (`code`, *emphasis*). */
-function plain(label) {
+function plain(label: string): string {
   // Emphasis marks only at a word's edge: `with_capacity` keeps its underscore.
-  return String(label ?? "").replace(/`/g, "").replace(/(^|\s)[*_]+|[*_]+(?=\s|$)/g, "$1").replace(/\s+/g, " ").trim();
+  return label.replace(/`/g, "").replace(/(^|\s)[*_]+|[*_]+(?=\s|$)/g, "$1").replace(/\s+/g, " ").trim();
 }
 
 /** The links in a card's parts (hoverParts: `{ text }` paragraphs and
  *  `{ code }` blocks; only the text has links): inline `[label](url)` (not
  *  images), reference definitions `[label]: url`, `<url>` and bare http(s)
  *  addresses; each address once, in order. -> [{ label, url }] */
-export function cardLinks(parts) {
-  const out = [], seen = new Set();
-  const add = (label, url) => {
-    const u = String(url ?? "").trim().replace(/^<|>$/g, "");
+export function cardLinks(parts: readonly HoverPart[] | null | undefined): CardLink[] {
+  const out: CardLink[] = [];
+  const seen = new Set<string>();
+
+  const add = (label: string, url: string): void => {
+    const u = url.trim().replace(/^<|>$/g, "");
+
     if (!u || u.startsWith("#") || seen.has(u)) return;
+
     seen.add(u);
     out.push({ label: label === url ? u : plain(label) || u, url: u });
   };
+
   for (const p of parts ?? []) {
-    if (p?.text == null) continue;
-    const t = String(p.text);
-    const found = [];
-    for (const m of t.matchAll(/(!?)\[((?:[^[\]]|\[[^\]]*\])*)\]\(\s*(<[^>]*>|[^\s)]+)(?:\s+"[^"]*")?\s*\)/g)) if (!m[1]) found.push([m.index, m[2], m[3]]);
-    for (const m of t.matchAll(/^[ \t]*\[([^\]]+)\]:[ \t]*(\S+)/gm)) found.push([m.index, m[1], m[2]]);
-    for (const m of t.matchAll(/<((?:https?|file):\/\/[^>\s]+)>/g)) found.push([m.index, m[1], m[1]]);
-    for (const m of t.matchAll(/(^|[^(<[\w/])(https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,;:!?'"`])/g)) found.push([m.index + m[1].length, m[2], m[2]]);
+    if (!("text" in p)) continue;
+
+    const t = p.text;
+    // Where each link starts, its words and its address.
+    const found: [number, string, string][] = [];
+
+    for (const m of t.matchAll(/(!?)\[((?:[^[\]]|\[[^\]]*\])*)\]\(\s*(<[^>]*>|[^\s)]+)(?:\s+"[^"]*")?\s*\)/g)) if (!m[1]) found.push([m.index, m[2] ?? "", m[3] ?? ""]);
+
+    for (const m of t.matchAll(/^[ \t]*\[([^\]]+)\]:[ \t]*(\S+)/gm)) found.push([m.index, m[1] ?? "", m[2] ?? ""]);
+
+    for (const m of t.matchAll(/<((?:https?|file):\/\/[^>\s]+)>/g)) found.push([m.index, m[1] ?? "", m[1] ?? ""]);
+
+    for (const m of t.matchAll(/(^|[^(<[\w/])(https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,;:!?'"`])/g)) found.push([m.index + (m[1] ?? "").length, m[2] ?? "", m[2] ?? ""]);
+
     for (const [, label, url] of found.sort((a, b) => a[0] - b[0])) add(label, url);
   }
+
   return out;
 }
+
+/** A link in a hover card: its words and its address. */
+export interface CardLink {
+  readonly label: string;
+  readonly url: string;
+}
+
+/** Where a card's link goes (linkTarget). */
+export type LinkTarget =
+  | { readonly kind: "web" | "other"; readonly url: string }
+  | { readonly kind: "file"; readonly path: string; readonly line: number | null; readonly col: number | null };
 
 /** Where a card's link goes, from the file the card is in:
  *  { kind: "web", url }                     http(s): a browser pane
@@ -44,28 +69,56 @@ export function cardLinks(parts) {
  *                                           give its place, one-based): a tab
  *  { kind: "other", url }                   mailto: and the like: the system
  *  null                                     nothing to follow (an anchor) */
-export function linkTarget(url, from) {
-  const raw = String(url ?? "").trim();
+export function linkTarget(url: string | null | undefined, from: string | null | undefined): LinkTarget | null {
+  const raw = (url ?? "").trim();
+
   if (!raw) return null;
+
   // A place written after the path (`src/a.rs:12:5`), before follow() reads it as a scheme or a name.
-  let place = null, href = raw;
+  let place: { line: number; col: number | null } | null = null;
+  let href = raw;
   const tail = raw.match(/^(.*[^:\d]):(\d+)(?::(\d+))?$/);
-  if (tail && !/^[a-z][a-z0-9+.-]*:\/\/[^/]*$/i.test(tail[1])) { href = tail[1]; place = { line: Number(tail[2]), col: tail[3] ? Number(tail[3]) : null }; }
+
+  if (tail?.[1] !== undefined && !/^[a-z][a-z0-9+.-]*:\/\/[^/]*$/i.test(tail[1])) {
+    href = tail[1];
+    place = { line: Number(tail[2]), col: tail[3] ? Number(tail[3]) : null };
+  }
+
   const to = follow(href, from ?? "/");
+
   if (!to || to.kind === "anchor") return null;
+
   if (to.kind === "web" || to.kind === "other") return { kind: to.kind, url: to.url };
+
   // `#L12`, `#L12,5`, `#L12%2C5`, `#L12C5`.
   let hash = href.includes("#") ? href.slice(href.indexOf("#") + 1) : "";
-  try { hash = decodeURIComponent(hash); } catch { /* as written */ }
+
+  try {
+    hash = decodeURIComponent(hash);
+  } catch {
+    /* as written */
+  }
+
   const m = hash.match(/^L(\d+)(?:[,:C](\d+))?/i);
+
   if (m) place = { line: Number(m[1]), col: m[2] ? Number(m[2]) : null };
+
   return { kind: "file", path: to.path, line: place?.line ?? null, col: place?.col ?? null };
 }
 
 /** The short "where" beside a link's words: a web page's host, a file's name and line. */
-export function linkWhere(to) {
+export function linkWhere(to: LinkTarget | null | undefined): string {
   if (!to) return "";
-  if (to.kind === "web") { try { return new URL(to.url).host; } catch { return to.url; } }
-  if (to.kind === "file") return `${to.path.split("/").pop()}${to.line ? `:${to.line}` : ""}`;
-  return to.url.split(":")[0];
+
+  if (to.kind === "file") return `${to.path.split("/").pop() ?? ""}${to.line ? `:${to.line}` : ""}`;
+
+  if (to.kind === "web") {
+    try {
+      return new URL(to.url).host;
+    } catch {
+      return to.url;
+    }
+  }
+
+  return to.url.split(":")[0] ?? "";
 }

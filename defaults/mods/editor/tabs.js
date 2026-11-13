@@ -7,7 +7,7 @@
 // dragged tab lands, and whether a tab is text or drawn (the preview's
 // viewer: a picture, a PDF, a table).
 
-import { basename, dirname } from "./logic.js";
+import { basename, dirname } from "./logic.ts";
 import { kindOf } from "./kinds.ts";
 
 /** Where a file opened in the pane goes: the index of its tab when it is
