@@ -15,7 +15,7 @@ import { settings } from "herdr";
 import { api, ghRun, fileAt, slimmed } from "./gh.ts";
 import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine, isRunList, isRuns, isRun, isJobList, isJobs } from "./model.ts";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.ts";
-import { canvas, layout, NW, NH, PAD } from "./graph.js";
+import { canvas, layout, NW, NH, PAD } from "./graph.ts";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
 import { DispatchForm } from "./dispatchForm.js";
 
