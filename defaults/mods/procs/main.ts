@@ -90,7 +90,7 @@ import { deckProps, ESCAPE, CONTEXT, REFRESH, DECK, isTab, COUNT, PORTS_H, LIST_
 import { listRows, portList, procCount, procTree, rowAt, tabList } from "./listing.ts";
 import { escapeKey } from "./actions.ts";
 import type { Menu } from "./menu.ts";
-import { dbModPath } from "./menu.ts";
+import { dbSeen, withDbCheck } from "./menu.ts";
 import { menuBox, rightPress } from "./menu-view.ts";
 import { deckKey } from "./keys.ts";
 import { dragTo } from "./pointer.ts";
@@ -182,12 +182,6 @@ export default class ProcsDeck extends View {
     this.beat();
     this.refresh(cx);
     this.sample(cx);
-    cx.spawn(async (cx) => {
-      const r = await exec("test", ["-f", dbModPath()], { timeout: 5000 }).catch(() => null);
-
-      this.dbMod = r?.code === 0;
-      cx.notify();
-    });
     cx.timer.every(REFRESH, (cx) => {
       this.beat();
       this.refresh(cx);
@@ -224,8 +218,10 @@ export default class ProcsDeck extends View {
     this.reading = true;
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", PROBE], { timeout: 10000 });
+        const r = await exec("sh", ["-c", withDbCheck(PROBE)], { timeout: 10000 });
         const snap = parseProbe(r.stdout);
+
+        this.dbMod = dbSeen(r.stdout);
 
         this.snap = snap;
         this.ix = index(snap.procs);

@@ -62,13 +62,13 @@ const herdr: Record<string, any> = {
   exec: async (cmd: string, args: string[]) => {
     calls.push([cmd, ...args]);
     if (cmd === "sh" && args[1].includes("nocturne-sys")) await sysGate;
-    if (cmd === "sh") return { code: 0, stdout: args[1].includes("nocturne-sys") ? sysText : probeText, stderr: "" };
+    // The refresh's probe asks, last, whether the Databases mod is installed.
+    if (cmd === "sh") return { code: 0, stdout: args[1].includes("nocturne-sys") ? sysText : probeText + (dbInstalled && args[1].includes("'/home/dev/.config/herdr-app/mods/databases/mod.json'") ? `${SEP}\ndatabases\n` : ""), stderr: "" };
     if (cmd === "kill") {
       const sig = args[0];
       for (const p of args.slice(1).map(Number)) if (sig === "-KILL" || !stubborn.has(p)) alive.delete(p);
       return { code: 0, stdout: "", stderr: "" };
     }
-    if (cmd === "test") return { code: dbInstalled && args[1]?.endsWith("/mods/databases/mod.json") ? 0 : 1, stdout: "", stderr: "" };
     if (cmd === "lsof") return { code: 0, stdout: `p${args[2]}\nfcwd\nn/w/from-lsof/${args[2]}\n`, stderr: "" };
     if (cmd === "ps") {
       const out = args.at(-1)!.split(",").map(Number).filter((p) => alive.has(p)).map((p) => `${p} S`).join("\n");
@@ -208,7 +208,7 @@ test("a database's port offers open in Databases, only while the Databases mod i
   expect((await opened("5432:70500", "ports")).entries()).not.toContain("d open in Databases");
   dbInstalled = true;
   const t = await opened("5432:70500", "ports");
-  expect(calls).toContainEqual(["test", "-f", "/home/dev/.config/herdr-app/mods/databases/mod.json"]);
+  expect(calls.some((c) => c[0] === "sh" && c[2].includes("@@procs@@") && c[2].includes("test -f '/home/dev/.config/herdr-app/mods/databases/mod.json' && echo databases"))).toBe(true);
   expect(t.entries()?.[1]).toBe("d open in Databases");
   // Not on a port that isn't a database's.
   t.d.menu = null;

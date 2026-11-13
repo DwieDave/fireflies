@@ -21,7 +21,7 @@
 import type { Context } from "gpui-kit";
 import { appHome, exec, focused, openOverlay, panes, run, shared } from "herdr";
 import type { Index, ProcNode, Row, TreeNode } from "./logic.ts";
-import { guardOf, targets, terminalOf } from "./logic.ts";
+import { SEP, guardOf, targets, terminalOf } from "./logic.ts";
 import type { Item, PortItem } from "./state.ts";
 import { byPid, procOf, termPids } from "./listing.ts";
 import { begin, copyRow, foldRow, openPortAt, say, showTerminal } from "./actions.ts";
@@ -278,6 +278,13 @@ export function dbKind(x: Pick<PortItem, "port" | "name">): DbKind | null {
 
 /** Where the Databases mod lives when it's installed: the deck offers its entry only then. */
 export const dbModPath = (): string => `${appHome()}/mods/databases/mod.json`;
+
+/** The refresh's probe with one more section: "databases" while the Databases mod is installed
+ *  (read each refresh, so one installed while the deck is open shows up). */
+export const withDbCheck = (probe: string): string => `${probe}; echo '${SEP}'; test -f '${dbModPath().replace(/'/g, "'\\''")}' && echo databases; true`;
+
+/** Whether the probe's output says the Databases mod is installed. */
+export const dbSeen = (stdout: string): boolean => stdout.split(`${SEP}\n`)[4]?.trim() === "databases";
 
 /** What the Databases window opens on (the Databases mod's contract; no secret: it asks for the password). */
 export interface DbConnect {
