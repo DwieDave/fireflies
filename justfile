@@ -163,6 +163,8 @@ test:
     bun test scripts/procs-vitals.test.ts
     # Its row menu: the entries per row kind, each act against a fake exec and fake herdr calls, the ends asking first, open / close / its place, every entry's key, a database's port to the Databases mod.
     bun test scripts/procs-menu.test.ts
+    # Its sorting: the order per column and direction in the tree (a group by what's under it) and flat, the ports' columns, a click and the keys' steps, the kept record.
+    bun test scripts/procs-sort.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.

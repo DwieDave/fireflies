@@ -3,7 +3,10 @@
 // switch tabs, all of yours or this app's, esc.
 
 import type { Context, Modifiers } from "gpui-kit";
-import { exec, focused, panes, run } from "herdr";
+import { exec, focused, panes, run, setShared } from "herdr";
+import { writeShared } from "./guard.ts";
+import type { PortCol, ProcCol, Sorts } from "./sort.ts";
+import { PORT_COLS, PROC_COLS, SORT, clickSort, stepSort, turnSort } from "./sort.ts";
 import type { Row } from "./logic.ts";
 import { targets, guardOf, endGently, signal, address, terminalOf, openPort } from "./logic.ts";
 import type { Tab, Note, Item, Ask } from "./state.ts";
@@ -255,4 +258,34 @@ export function findKey(v: ProcsDeck, k: string, ch: string): boolean {
   else return false;
 
   return true;
+}
+
+// ---- sorting (sort.ts)
+
+/** The sorts changed: the cursor follows its row into sight, and they're kept for the next open. */
+function setSorts(v: ProcsDeck, next: Sorts): void {
+  v.sorts = next;
+  v.follow = true;
+  writeShared(setShared, SORT, next);
+}
+
+/** A click on a process column's head: by it, or the other way. */
+export function sortProcsBy(v: ProcsDeck, col: ProcCol): void {
+  setSorts(v, { ...v.sorts, procs: clickSort(v.sorts.procs, col) });
+}
+
+/** A click on a port column's head. */
+export function sortPortsBy(v: ProcsDeck, col: PortCol): void {
+  setSorts(v, { ...v.sorts, ports: clickSort(v.sorts.ports, col) });
+}
+
+/** s: the shown tab's next column (after the last, no sort); S: the other way. */
+export function sortKey(v: ProcsDeck, turn: boolean): void {
+  if (v.tab === "ports") setSorts(v, { ...v.sorts, ports: turn ? turnSort(v.sorts.ports) : stepSort(v.sorts.ports, PORT_COLS) });
+  else setSorts(v, { ...v.sorts, procs: turn ? turnSort(v.sorts.procs) : stepSort(v.sorts.procs, PROC_COLS) });
+}
+
+/** v: the processes as a tree or one flat list (while a number column sorts). */
+export function toggleFlat(v: ProcsDeck): void {
+  setSorts(v, { ...v.sorts, flat: !v.sorts.flat });
 }

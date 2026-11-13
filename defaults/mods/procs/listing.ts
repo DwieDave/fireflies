@@ -6,6 +6,7 @@ import { panes, spaces, terminals } from "herdr";
 import type { Index, Row, Terminal, TreeNode } from "./logic.ts";
 import { buildTree, flatten, place, guardOf, terminalOf, whereIs, count, isTerminal, isLocal } from "./logic.ts";
 import type { PortItem, Item } from "./state.ts";
+import { flatTree, numeric, sortPorts, sortTree } from "./sort.ts";
 import { NO_PIDS } from "./state.ts";
 import type { default as ProcsDeck } from "./main.ts";
 
@@ -61,24 +62,30 @@ export function procCount(v: ProcsDeck): number {
   return v.treeCache?.n ?? 0;
 }
 
+/** The processes show as one flat list: flat chosen while a number column sorts. */
+export const isFlat = (v: ProcsDeck): boolean => v.sorts.flat && numeric(v.sorts.procs);
+
 /** The rows on screen, made again only when the tree, a fold or the query changes. */
 export function listRows(v: ProcsDeck, tree: readonly TreeNode[] = procTree(v)): Row[] {
   if (!v.snap) return [];
 
-  const sig = JSON.stringify([[...v.folds], v.query]);
+  const sig = JSON.stringify([[...v.folds], v.query, v.sorts.procs, v.sorts.flat]);
   const c = v.rowsCache;
 
   if (c?.tree === tree && c.sig === sig) return c.rows;
 
-  const rows = flatten(tree, { folds: v.folds, query: v.query, byPid: byPid(v) });
+  // Sorted: the siblings at each level, or (flat, while a number column sorts) every process at one level.
+  const s = v.sorts.procs;
+  const shown = isFlat(v) ? flatTree(tree, s, byPid(v)) : sortTree(tree, s, byPid(v));
+  const rows = flatten(shown, { folds: v.folds, query: v.query, byPid: byPid(v) });
 
   v.rowsCache = { tree, sig, rows };
 
   return rows;
 }
 
-/** The ports, those in this app's terminals first: { key, port, pid, name, hosts, term, where, guard }. */
-export function portList(v: ProcsDeck): PortItem[] {
+/** The ports, those in this app's terminals first (or in the sort's order): { key, port, pid, name, hosts, term, where, guard }. */
+export function portList(v: ProcsDeck): readonly PortItem[] {
   const snap = v.snap;
 
   if (!snap) return [];
@@ -87,7 +94,7 @@ export function portList(v: ProcsDeck): PortItem[] {
   const ctx = { panes: panes(), spaces: spaces() };
   const q = v.query.trim().toLowerCase();
 
-  return snap.ports.flatMap((x): PortItem[] => {
+  return sortPorts(snap.ports.flatMap((x): PortItem[] => {
     const term = terminalOf(x.pid, byPid(v), tp);
     const p = byPid(v).get(x.pid);
     const name = p?.name ?? x.name;
@@ -96,7 +103,7 @@ export function portList(v: ProcsDeck): PortItem[] {
 
     return [{ key: `${x.port}:${x.pid}`, ...x, name, term, where: term ? whereIs(term, ctx) : null, guard: guardOf(p, snap.me) }];
   })
-    .sort((a, b) => Number(Boolean(b.term)) - Number(Boolean(a.term)) || a.port - b.port);
+    .sort((a, b) => Number(Boolean(b.term)) - Number(Boolean(a.term)) || a.port - b.port), v.sorts.ports);
 }
 
 export function tabList(v: ProcsDeck): readonly Item[] {

@@ -7,7 +7,7 @@ import { keysKey } from "./keyhelp.ts";
 import type { Item } from "./state.ts";
 import { PROW, ROW, TABS } from "./state.ts";
 import { moveTo } from "./listing.ts";
-import { activate, askKey, begin, copyRow, escapeKey, findKey, foldRow, openPortAt, switchTab, toggleAll } from "./actions.ts";
+import { activate, askKey, begin, copyRow, escapeKey, findKey, foldRow, openPortAt, sortKey, switchTab, toggleAll, toggleFlat } from "./actions.ts";
 import { beginIn, copyNumber, goTo, openDatabase, openFolder } from "./menu.ts";
 import { menuKey, openMenu } from "./menu-view.ts";
 import type { default as ProcsDeck } from "./main.ts";
@@ -64,6 +64,8 @@ function plainKey(v: ProcsDeck, k: string, ch: string, m: Modifiers, cx: Context
   else if (k === "1") switchTab(v, "procs", cx);
   else if (k === "2") switchTab(v, "ports", cx);
   else if (k === "a") toggleAll(v);
+  else if (k === "s") sortKey(v, m.shift);
+  else if (k === "v" && v.tab === "procs") toggleFlat(v);
   else if (k === "r") v.refresh(cx);
   else if (k === "q") {
     v.dismissDeck();
