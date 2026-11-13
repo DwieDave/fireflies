@@ -34,10 +34,10 @@ import * as herdr from "herdr";
 import { openInEditor } from "./editor-route.ts";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
-import { follow, dirname, basename, join, tilde } from "./paths.js";
+import { follow, dirname, basename, join, tilde } from "./paths.ts";
 import { documentLinks, nextLink, nextHeading } from "./links.js";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
-import { CHANGES, newestId, follow as followFiles } from "./follow.js";
+import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 
 const MOD = "markdown";
 // Each viewer's shown file by slot, for its pane header (nocturne/header.js).
@@ -83,9 +83,9 @@ export default class Markdown extends View {
     this.doc = new MarkdownDoc("md");
     this.rawDoc = new MarkdownDoc("md-raw");
     this.width = 600;
-    // Renamed or moved from the files pane (follow.js): the viewer follows,
+    // Renamed or moved from the files pane (follow.ts): the viewer follows,
     // only what comes after this start.
-    this.seenChange = newestId(shared(CHANGES));
+    this.seenChange = newestId(fileChanges(shared));
     this.open(pr.path ?? "", cx, pr.anchor);
     if (this.on) cx.timer.every(POLL, (cx) => this.load(cx));
     cx.spawn(async (cx) => {
@@ -178,7 +178,7 @@ export default class Markdown extends View {
    *  from there, the scroll kept; the back history follows too. A delete
    *  shows as the missing file it is. From a task, never a render. */
   followChanges(cx) {
-    const list = shared(CHANGES);
+    const list = fileChanges(shared);
     const r = followFiles(list, this.seenChange, this.path, this.on);
     this.history = this.history.map((h) => (typeof h === "string" ? followFiles(list, this.seenChange, h, this.on).path : h?.path ? { ...h, path: followFiles(list, this.seenChange, h.path, this.on).path } : h));
     this.seenChange = r.seen;
@@ -441,7 +441,7 @@ export default class Markdown extends View {
     const t = theme();
     const focused = this.handle.is_focused();
     // A newer rename or move from the files pane: answered after this render.
-    if (newestId(shared(CHANGES)) > this.seenChange) cx?.timer?.after(0, (cx) => this.followChanges(cx));
+    if (newestId(fileChanges(shared)) > this.seenChange) cx?.timer?.after(0, (cx) => this.followChanges(cx));
     let body;
     if (this.error) body = this.empty(t, "Can't show this file", this.error);
     else if (this.text == null) body = this.empty(t, "Reading…", tilde(this.path, home()));

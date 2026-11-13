@@ -63,13 +63,13 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 const md = await load("markdown/markdown.js");
 const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
-const { follow, join, dirname, basename, tilde } = await load("markdown/paths.js");
+const { follow, join, dirname, basename, tilde } = await load("markdown/paths.ts");
 
-test("the GitHub window, the viewer and the editor ship the same markdown.js (and the editor the viewer's paths.js)", async () => {
+test("the GitHub window, the viewer and the editor ship the same markdown.js (and the editor the viewer's paths.ts)", async () => {
   const read = (mod: string, file = "markdown.js") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
   expect(await read("github")).toBe(await read("markdown"));
   expect(await read("editor")).toBe(await read("markdown"));
-  expect(await read("editor", "paths.js")).toBe(await read("markdown", "paths.js"));
+  expect(await read("editor", "paths.ts")).toBe(await read("markdown", "paths.ts"));
 });
 
 test("markdown() draws selectable Markdown in the theme's text and routes links", () => {
@@ -310,7 +310,7 @@ test("the document view: source lines to heights and back, anchors, and measurin
 
 test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
   const extra = {
-    ...(await load("editor/logic.js")), ...(await load("editor/vim.js")), ...md, ...(await load("editor/paths.js")),
+    ...(await load("editor/logic.js")), ...(await load("editor/vim.js")), ...md, ...(await load("editor/paths.ts")),
     ...(await load("editor/tabs.js", await load("editor/logic.js"))), ...(await load("editor/editor-route.ts")),
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
@@ -403,9 +403,9 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 });
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
-  const filesLog = await load("markdown/follow.js");
+  const filesLog = await load("markdown/follow.ts");
   const { default: Markdown } = await load("markdown/main.js", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
-    CHANGES: filesLog.CHANGES, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+    fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
   const view: any = Object.create(Markdown.prototype);
   const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
   const doc = new MarkdownDoc("md");

@@ -119,6 +119,24 @@ export function writeShared<T>(write: typeof setShared, key: SharedKey<T>, value
   write(key.name, value);
 }
 
+// ---- records of entries: a list another mod appends to, read entry by entry
+
+/** A shared() key whose value is a list, each entry a T. */
+export interface SharedListKey<T> {
+  readonly name: string;
+  readonly item: Guard<T>;
+}
+
+export const sharedListKey = <T>(name: string, item: Guard<T>): SharedListKey<T> => ({ name, item });
+
+/** The entries under `key` that are T, in order (one in another shape is left out,
+ *  not the whole list); empty when there is none or it isn't a list. */
+export function readSharedList<T>(read: typeof shared, key: SharedListKey<T>): readonly T[] {
+  const value = read(key.name);
+
+  return isList(value) ? value.filter((item) => key.item(item)) : [];
+}
+
 // ---- dictionaries: an object whose keys are data (slots, paths), read as a Map
 
 /** A shared() key whose value is an object keyed by data, each value a T. */

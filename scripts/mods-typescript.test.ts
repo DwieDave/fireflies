@@ -5,7 +5,7 @@
 import { test, expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { NOCTURNE_MODS } from "./nocturne-mods.ts";
-import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, parseJsonMap, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "../defaults/mods/pip/guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, parseJsonMap, readShared, readSharedList, readSharedMap, sharedKey, sharedListKey, sharedMapKey, writeShared, writeSharedMap } from "../defaults/mods/pip/guard.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
 const mods = readdirSync(MODS).filter((m) => !m.startsWith("."));
@@ -81,4 +81,14 @@ test("dictionaries (keys are data): read as a Map of the entries the guard prove
   expect(store.get("t.paths")).toEqual({ s9: ["/c"] });
   expect(parseJsonMap('{"a.md":{"name":"a"},"b":1}', object({ name: isString }))).toEqual(new Map([["a.md", { name: "a" }]]));
   expect([parseJsonMap("[1]", isNumber), parseJsonMap("nope", isNumber)]).toEqual([undefined, undefined]);
+});
+
+test("records of entries: the entries the guard proves, in order; one in another shape is left out, not the list", () => {
+  const store = new Map<string, unknown>([["t.log", [{ id: 1 }, { id: "2" }, null, { id: 3 }]]]);
+  const read = (k: string) => store.get(k) ?? null;
+  const LOG = sharedListKey("t.log", object({ id: isNumber }));
+  expect(readSharedList(read, LOG)).toEqual([{ id: 1 }, { id: 3 }]);
+  store.set("t.log", { id: 1 });
+  expect(readSharedList(read, LOG)).toEqual([]);
+  expect(readSharedList(read, sharedListKey("t.none", isNumber))).toEqual([]);
 });

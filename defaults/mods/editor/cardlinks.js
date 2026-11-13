@@ -4,7 +4,7 @@
 // docs.rs; TypeScript's {@link} points at `file:///…/x.ts#L12%2C5`; others
 // write relative paths or `path:12:5`.
 
-import { follow } from "./paths.js";
+import { follow } from "./paths.ts";
 
 /** A link's words without Markdown's marks (`code`, *emphasis*). */
 function plain(label) {

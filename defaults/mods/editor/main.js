@@ -133,11 +133,11 @@ import {
 } from "./logic.js";
 import { createVim, feed, play, token, SHAPE, MODE_NAME, applyEdits } from "./vim.js";
 import { MarkdownDoc, cacheImage, taskToggle, isLocalSource } from "./markdown.js";
-import { follow, join } from "./paths.js";
+import { follow, join } from "./paths.ts";
 import { formKey, bindTab, tabActions } from "./form-keys.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 import { projectEnv, lookup, wrap, cacheName } from "./envrc.js";
-import { CHANGES, newestId, follow as followFiles } from "./follow.js";
+import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.js";
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
 // of preview/viewer.js and what it imports (scripts/preview-shared.test.ts).
@@ -257,9 +257,9 @@ export default class EditorPane extends View {
     const pr = props() ?? p ?? {};
     this.on = pr.on ?? null;
     this.slot = pr.slot ?? null;
-    // Renamed, moved or deleted from the files pane (follow.js): only what
+    // Renamed, moved or deleted from the files pane (follow.ts): only what
     // comes after this start counts.
-    this.seenChange = newestId(shared(CHANGES));
+    this.seenChange = newestId(fileChanges(shared));
     // Files sent here as tabs (editor-route.ts): only requests after this start.
     this.seenOpen = shared(OPEN)?.n ?? 0;
     this.drawer = false;
@@ -895,12 +895,12 @@ export default class EditorPane extends View {
     if (all[this.slot] !== name) setShared(TITLES, { ...all, [this.slot]: name });
   }
 
-  // ---- the files pane's renames, moves and deletes (follow.js)
+  // ---- the files pane's renames, moves and deletes (follow.ts)
 
   /** Acts on the change record's entries newer than the last seen, for every
    *  tab (from a task, never a render). */
   followChanges(cx) {
-    const list = shared(CHANGES), from = this.seenChange;
+    const list = fileChanges(shared), from = this.seenChange;
     let seen = from;
     for (const d of this.allDocs()) {
       const r = followFiles(list, from, d.path, this.on);
@@ -2371,7 +2371,7 @@ export default class EditorPane extends View {
     if (this.vimWas !== undefined && this.vimWas !== this.vimOn()) this.vimSettled(this.vimOn());
     const goto = shared(GOTO);
     // A newer rename, move or delete from the files pane: answered after this render.
-    if (newestId(shared(CHANGES)) > this.seenChange) cx.timer.after(0, (cx) => this.followChanges(cx));
+    if (newestId(fileChanges(shared)) > this.seenChange) cx.timer.after(0, (cx) => this.followChanges(cx));
     // The app's editor.open on a file one of the tabs holds: that tab, at the line asked for.
     if (goto && goto.n !== this.seenGoto && this.allDocs().some((d) => d.path === goto.path)) {
       this.seenGoto = goto.n;

@@ -1,5 +1,5 @@
 // The editor follows a file renamed, moved or deleted from the files pane
-// (editor/follow.js): through shared("nocturne.files.changes"),
+// (editor/follow.ts): through shared("nocturne.files.changes"),
 // only entries newer than its start, only its own machine's. herdr and gpui
 // stand-ins (mock.module is process-wide: this file runs alone).
 import { test, expect, mock, beforeEach } from "bun:test";
@@ -56,7 +56,7 @@ mock.module("gpui-base", () => ({
 
 
 
-const { CHANGES, follow, changeFor, newestId } = await import("../defaults/mods/editor/follow.js");
+const { CHANGES, follow, changeFor, newestId } = await import("../defaults/mods/editor/follow.ts");
 const { default: Editor } = await import("../defaults/mods/editor/main.js");
 
 beforeEach(() => { sharedNow = {}; lsp.length = 0; unsaved.length = 0; for (const k of Object.keys(storage)) delete storage[k]; });
@@ -74,7 +74,7 @@ function editor(path: string, { text = "fn main() {}\n", edited = false, on = nu
   const buffer = { value: edited ? text + "// more\n" : text, language: null as string | null, cursor: { line: 3, col: 4 } };
   Object.assign(e, {
     path, firstPath: path, on, slot: `s-${path}`, lang: path.endsWith(".rs") ? "rust" : "markdown", opts: {}, state: "ready", saved: text, dirty: edited, deleted: false,
-    seenChange: newestId(sharedNow[CHANGES]), version: 1, problems: [], conflict: false,
+    seenChange: newestId(sharedNow[CHANGES] ?? []), version: 1, problems: [], conflict: false,
     server: { id: 7, status: "ready", name: "rust-analyzer" },
     editor: { value: () => buffer.value, set_language: (l: string) => { buffer.language = l; }, set_diagnostics() {}, set_line_notes() {}, cursor: () => buffer.cursor, set_value() { throw new Error("the buffer must stay"); } },
     say(text: string) { this.said = text; }, watch() { this.watched = this.path; }, startServer() { this.started = true; }, setProblems() {},
@@ -148,14 +148,14 @@ test("a persisted old entry is ignored at start; another machine's entry is igno
   record("/w/a.rs", "/w/b.rs", "box"); // on another machine
   e.followChanges(cx());
   expect([e.path, e.deleted]).toEqual(["/w/a.rs", false]);
-  expect(e.seenChange).toBe(newestId(sharedNow[CHANGES]));
+  expect(e.seenChange).toBe(newestId(sharedNow[CHANGES] ?? []));
 });
 
 test("the Markdown viewer follows a move too, its scroll and its back history with it", async () => {
   const { default: Markdown } = await import("../defaults/mods/markdown/main.js");
   const m: any = Object.create(Markdown.prototype);
   const opened: any[] = [];
-  Object.assign(m, { path: "/w/docs/a.md", on: null, history: [{ path: "/w/docs/index.md", scrollY: 40 }], seenChange: newestId(sharedNow[CHANGES]),
+  Object.assign(m, { path: "/w/docs/a.md", on: null, history: [{ path: "/w/docs/index.md", scrollY: 40 }], seenChange: newestId(sharedNow[CHANGES] ?? []),
     open(path: string, _cx: any, anchor: any, keep: boolean) { opened.push([path, keep]); this.path = path; } });
   record("/w/docs", "/w/guide");
   m.followChanges(cx());
@@ -167,9 +167,9 @@ test("the Markdown viewer follows a move too, its scroll and its back history wi
   expect(m.path).toBe("/w/guide/a.md");
 });
 
-test("the editor's and the Markdown viewer's follow.js are the same file", async () => {
+test("the editor's and the Markdown viewer's follow.ts are the same file", async () => {
   const { readFileSync } = await import("fs");
-  const read = (m: string) => readFileSync(`${import.meta.dir}/../defaults/mods/${m}/follow.js`, "utf8");
+  const read = (m: string) => readFileSync(`${import.meta.dir}/../defaults/mods/${m}/follow.ts`, "utf8");
   expect(read("markdown")).toBe(read("editor"));
 });
 
