@@ -67,7 +67,9 @@ It shows the file again when you overwrite it, so open it once and keep saving
 to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
 terminal output opens it as a tab of their editor instead, drawn the same way
 (Markdown in the editor's view for it); `herdr-app do editor.open --path … --look true`
-does that too.
+does that too. Their files pane opens a picture or PDF in a preview pane of its
+own until they open a text file from it, which turns that preview pane into an
+editor (the picture its first tab); later pictures from it go to that editor.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens

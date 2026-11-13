@@ -123,6 +123,8 @@ test:
     bun test scripts/editor-wrap.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
     bun test scripts/file-tree-preview.test.ts
+    # Where the files pane opens a file: a picture in its own preview pane, else its editor's tab; a text file turning that preview pane into the editor (file-tree routing.ts, preview main.ts), with stand-ins.
+    bun test scripts/file-tree-open.test.ts
     # file-tree ships the preview's viewer and what it imports: each copy is preview's byte for byte.
     bun test scripts/preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.

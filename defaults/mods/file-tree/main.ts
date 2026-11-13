@@ -26,14 +26,17 @@
 // so later picks open in that same nvim instead of a new pane.
 //
 // Click a file: select it (the keyboard comes here, the preview split follows).
-// Double-click a file (enter, the menu's Open): a tab of the app's editor,
-// whatever its kind (editor-route.ts `look`): a Markdown file in the editor's view for it
-// (alt-double-click: as text), a picture, PDF, table, patch, font or clip
-// drawn in its tab by the preview's viewer (alt-double-click: the system's
-// app, or a table or patch as text). `p` (the menu's "Open in its viewer
-// pane") opens Markdown in the Markdown viewer (markdown) and the
-// rest in the preview (preview), panes of their own; so does
-// another machine's file. Click a
+// Double-click a file (enter, the menu's Open): a preview file (a picture,
+// PDF, font, clip, database) in this pane's own preview pane, one file at a
+// time, unless this pane's editor is in the tab: then a drawn tab of it; any
+// other file a tab of the app's editor (editor-route.ts `look`): Markdown in
+// the editor's view for it (alt-double-click: as text), a table or patch
+// drawn. With this pane's preview pane there and no editor of its own, the
+// editor takes the preview pane's place, its file the first tab
+// (routing.ts). alt-double-click on a preview file: the system's app.
+// `p` (the menu's "Open in its viewer pane") opens Markdown in the Markdown
+// viewer (markdown) and the rest in the preview (this pane's preview pane);
+// so does another machine's file. Click a
 // folder: fold it; double-click it: edit the folder in $EDITOR (the fold its
 // first click made is undone). cmd-click marks or unmarks a row; shift-click
 // marks every row from the last clicked one. Drag a row (or, pressed on a
@@ -205,7 +208,6 @@ export default class Files extends View {
   // What the filters leave out, counted by rows().
   cut: Cut = { hidden: 0, ignored: 0 };
   keysShown = false;
-  editorSlot: string | null = null;
   copied = 0;
   copiedText: string | null = null;
   // The machine's trash tool, once asked ("": none).
@@ -491,8 +493,9 @@ export default class Files extends View {
     return editPath(this, path, cx);
   }
 
-  /** Opens a file as a tab of the editor, whatever its kind: Markdown in its
-   *  preview, a picture, PDF or table drawn (look), other text to edit; on
+  /** Opens a file: a preview file in this pane's preview pane unless its
+   *  editor is there, else a tab of the editor (routing.ts): Markdown in its
+   *  view, a table drawn (look), other text to edit; on
    *  another machine the viewers' panes, as before (the editor's drawn tabs
    *  read this computer's files). `other` (alt-double-click, `e`): Markdown,
    *  tables and patches as text, a picture in the system's app. */

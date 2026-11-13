@@ -524,10 +524,16 @@ the highlighted line shows where it will land.
   video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
   above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
   opens it as a tab of the editor, drawn by the preview's viewer (Editing
-  files: a drawn tab), or shows that tab; so does a double click or enter in
-  Nocturne's files pane (alt-double-click or `e`: the system's app; for a
-  table or patch its text), the file picker, and such links and drawn images
-  in the editor's Markdown preview. The preview pane (`preview`,
+  files: a drawn tab), or shows that tab; so do the file picker, and such
+  links and drawn images in the editor's Markdown preview. Nocturne's files
+  pane (a double click, enter, the menu's Open) opens a picture, PDF, font,
+  clip or database in a preview pane of its own (one: the next one shows
+  there), unless an editor it opened files in is in the tab: then as a drawn
+  tab of that editor (a table or patch is a drawn tab either way;
+  alt-double-click or `e`: the system's app, a table's or patch's text). A
+  text or Markdown file opened from it while its preview pane shows a picture
+  and it has no editor: the editor takes the preview pane's place, the
+  picture its first tab, the file the second. The preview pane (`preview`,
   called `nocturne-image` and `nocturne-preview` before: panes and keys
   saved with those names keep working) is for whoever opens it on purpose: the files pane's `p`, a drawn
   tab's `p`, links and drawn images in the Markdown viewer, another machine's
@@ -588,7 +594,8 @@ the highlighted line shows where it will land.
   terminal's link, the files pane's double click or enter, the picker's pick:
   `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
   hit, definitions) opens its text. Another machine's pictures open in the
-  preview pane, as before.
+  preview pane, as before; the files pane's pictures too while it has no
+  editor in the tab (Files panes).
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the file's type mark (a pixel mark tinted
   by kind: Markdown, code, settings, a picture, a PDF, a table, video or
@@ -891,9 +898,25 @@ the highlighted line shows where it will land.
   and the preview split's bar show its type mark, as the editor's tabs do;
   folders keep the folder mark. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
-  click (or enter) opens it as a tab of the editor whatever its kind, the same
-  editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
-  alt-double-click: the other way, as `e`; `p`: its viewer pane). A click on a folder
+  click (or enter, the menu's Open) opens it, the same panes each time. Each
+  files pane has its own editor and preview pane in the shown tab (shared
+  `file-tree.opened` by its slot: `{ editor, preview }`, each `{ slot }`, or
+  `{ path }` till the app's new pane is seen):
+  - a picture, PDF, font, clip or database: a tab of an editor already
+    holding it; else a drawn tab of the files pane's editor; else its preview
+    pane, which shows it (one file at a time; shared `preview.show`
+    `{ slot, path, n, at }` asks the preview pane with that slot to show
+    another file); else a new preview pane beside;
+  - any other file: a tab of the editor (the files pane's, else the shown
+    tab's: Markdown in the editor's view for it, a table drawn). With no
+    editor of its own but its preview pane there, the editor takes the
+    preview pane's place: the preview's file its first tab (drawn), this one
+    the second, shown; the preview pane closes.
+  An editor or preview pane closed (or in another tab) is no longer the files
+  pane's: the rules start over. A tab popped out of the editor keeps its file
+  (opening that file again shows it) and takes no others.
+  alt-double-click: the other way, as `e`; `p`: its viewer pane (a preview
+  file in the files pane's own). A click on a folder
   folds it; a double click opens the folder in $EDITOR (its first click's fold
   undone). Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
   `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`
