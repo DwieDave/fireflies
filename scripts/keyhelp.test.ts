@@ -168,7 +168,7 @@ test("web pane: ? opens the overview in the page's place, ? or esc closes it", a
 });
 
 test("files: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/file-tree/main.js");
+  const m = await import("../defaults/mods/file-tree/main.ts");
   const v: any = surface(m.default, ["key", "keysStrip"], { menu: null, typing: false, query: "", alone: false, keysShown: false, shown: () => [], sel: null, folders: new Set(), root: "/r",
     input: { focus() {} }, handle: { focus() {} }, size: { width: 280, height: 600 } });
   opensAndCloses("files", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));

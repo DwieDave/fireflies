@@ -182,11 +182,11 @@ test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?
   expect(browser.KEYS.at(-1)).toEqual(["?", "keys"]);
 });
 
-const files = await import("../defaults/mods/file-tree/main.js");
-const filesLogic = await import("../defaults/mods/file-tree/logic.js");
+const files = await import("../defaults/mods/file-tree/main.ts");
+const filesLogic = await import("../defaults/mods/file-tree/logic.ts");
 test("files: ? lists every key, in the list and while the filter types", () => {
   const rows = [{ path: "a.txt", name: "a.txt", dir: false, depth: 0 }, { path: "b", name: "b", dir: true, depth: 0 }];
-  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {} }, handle: { focus() {} } }); return (e: any, cx: any) => v.key(e, cx); };
+  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {} }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both" }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(false, "a.txt")), ...taken(make(false, "b"))])];
   expect(unnamed(filesLogic.KEYS, keys)).toEqual([]);
   // Typing: what steers the hits (the list's "/" line names them).
