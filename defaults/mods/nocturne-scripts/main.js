@@ -5,8 +5,9 @@
 //            folder, else the focused pane's (props { folder, on })
 //   runs     every run (runs.js), running first, a pip and a count per
 //            state in the header; each row a pip in its state's color, name, runner, running / ok / exit N / stopped, how long; the row
-//            under the cursor or pointer shows watch, ↻ (again) and ■ (stop)
-//            or ✕ (dismiss a finished one)
+//            under the cursor or pointer shows three chips (runChips): watch
+//            (w), again (R) and, set apart, remove (x) or stop (x) while it
+//            runs; ending a running one (stop, again) asks first (ask)
 //   filter   type to fuzzy-match; ↑↓ move through runs and scripts alike
 //   scripts  what the folder can run (detect.js), grouped by manifest with
 //            the runner as a badge; the last ones run here come first
@@ -57,6 +58,12 @@ const FLAKE_FRESH = 30000;
 
 const W = 420, H = 470;
 const HEAD = 36, SECTION = 24, ROW = 26, INPUT = 32, FOOT = 26, RUNS_SHOWN = 5;
+// A run's chips (runChips): their height, the most room they take (asking
+// "again?" the widest), and how long a "stop?" / "again?" waits for the
+// second press (ms).
+export const CHIP = 20, CHIPS_W = 140, ASK_MS = 3000;
+const ICON = (n) => `mods/workspace-chrome/${n}.svg`;
+const OWN = (n) => `mods/nocturne-scripts/${n}.svg`;
 /** The keys entry where ? types (the filter): cmd-k then ?, as in the editor. */
 const CHORD = "cmd-k ?";
 const TONE = { running: "working", ok: "done", failed: "blocked", stopped: "dim" };
@@ -89,7 +96,7 @@ function aside(s) {
 export const deckKeys = (cmd) => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
   ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
-  ["w", "watch the run"], [`x ${cmd}⌫`, "stop the run · dismiss an ended one"], [`R ${cmd}R`, "run it again"],
+  ["w", "watch the run · an ended one's output"], [`x ${cmd}⌫`, "remove an ended run · stop a running one (twice)"], [`R ${cmd}R`, "run it again (a running one: twice)"],
   ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
   ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
 ];
@@ -252,10 +259,27 @@ export default class ScriptsDeck extends View {
     // A run that ended has no terminal to float: its output shows here instead.
     if (what === "watch" && !r.live) return this.showOutput(r, cx);
     if (what === "watch") { this.dismissDeck(); return watch(r); }
+    // Ending a running one (stop, or again: it's stopped first) asks: the
+    // same press again within ASK_MS does it.
+    if (r.live && (what === "stop" || what === "again") && !this.asked(what, r)) return this.ask(what, r, cx);
+    this.asking = null;
     // Queued for the strip (runs.js), like a start: closing the deck can't cut them short.
     if (what === "stop") stop(r);
     else if (what === "dismiss") dismiss(r);
     else if (what === "again") restart(r);
+    cx.notify();
+  }
+
+  /** The press `what` on `r` was asked for and is still fresh. */
+  asked(what, r) {
+    const a = this.asking;
+    return Boolean(a) && a.what === what && a.address === r.address && Date.now() < a.until;
+  }
+
+  /** Asks before ending a running one: its chip says "stop?" / "again?" for ASK_MS. */
+  ask(what, r, cx) {
+    this.asking = { what, address: r.address, until: Date.now() + ASK_MS };
+    cx.timer?.after?.(ASK_MS + 50, (cx) => { if (this.asking && Date.now() >= this.asking.until) { this.asking = null; cx.notify?.(); } });
     cx.notify();
   }
 
@@ -339,18 +363,42 @@ export default class ScriptsDeck extends View {
     return el.when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)));
   }
 
-  action(t, id, label, color, go) {
-    return div().id(id).relative().flex_none().px(3).text_size(11).text_color(t.dim)
-      .hover((s) => s.text_color(color ?? t.foreground))
+  /**
+   * A run's control: a square chip CHIP px tall, its mark and its key, a frame
+   * that lights under the pointer (in `color` for remove and stop). Asking
+   * ("stop?"), it's filled in that color and says so. A tooltip names it.
+   */
+  chip(t, id, { mark, key, tip, color, asking, ask }, go) {
+    const tone = color ?? t.foreground;
+    return h_flex().id(id).relative().flex_none().h(CHIP).px(5).gap(4).items_center().text_size(10)
+      .border(1).border_color(asking ? tone : t.ansi0).text_color(asking ? t.background : t.muted)
+      .when(asking, (el) => el.bg(tone))
+      .hover((s) => (asking ? s : s.border_color(color ?? t.ansi8).text_color(tone).bg(t.ansi0)))
+      .tooltip(tip)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); go(cx); })
-      .child(label);
+      // Asking, the word takes the chip ("stop?"); else its mark and its key.
+      .when(!asking, (el) => el.child(svg(mark).size(11).flex_none().text_color(color ?? t.muted)))
+      .child(div().flex_none().child(asking ? ask : key));
+  }
+
+  /** The chips on a run's row: watch and again, then set apart remove (stop while it runs). */
+  runChips(t, r, i) {
+    const asked = (what) => this.asking?.address === r.address && this.asking.what === what && Date.now() < this.asking.until;
+    return h_flex().id(`chips-${i}`).relative().max_w(CHIPS_W).flex_none().gap(4).items_center()
+      .child(this.chip(t, `w-${i}`, { mark: ICON("eye"), key: "w", tip: r.live ? "Watch it (w, enter)" : "Its output (w, enter)" }, (cx) => this.act("watch", r, cx)))
+      .child(this.chip(t, `a-${i}`, { mark: OWN("rotate-cw"), key: "R", tip: r.live ? "Run it again: stops this one first (R)" : "Run it again (R)", asking: asked("again"), ask: "again?", color: asked("again") ? t.working : null }, (cx) => this.act("again", r, cx)))
+      // Set apart: a gap and a rule, so it isn't hit for its neighbours.
+      .child(div().w(1).h(14).mx(4).flex_none().bg(t.ansi0))
+      .child(r.live
+        ? this.chip(t, `s-${i}`, { mark: ICON("square"), key: "x", tip: "Stop it (x, twice)", color: t.blocked, asking: asked("stop"), ask: "stop?" }, (cx) => this.act("stop", r, cx))
+        : this.chip(t, `d-${i}`, { mark: ICON("x"), key: "x", tip: "Remove it from the list (x)", color: t.blocked }, (cx) => this.act("dismiss", r, cx)));
   }
 
   runRow(t, r, i, on) {
     const color = t[TONE[tone(r)]];
     const show = on || this.hover === `r${i}`;
-    return this.band(h_flex().id(`run-${i}`).relative().h(ROW).flex_none().px(12).gap(8).items_center().text_size(12)
+    return this.band(h_flex().id(`run-${i}`).relative().h(ROW).flex_none().px(12).gap(6).items_center().text_size(12)
       .text_color(on ? t.foreground : r.live ? t.muted : t.dim)
       .on_hover((h, cx) => { const k = h ? `r${i}` : this.hover === `r${i}` ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } })
       .on_click((_e, cx) => { this.cursor = i; this.act("watch", r, cx); }), t, on)
@@ -358,16 +406,13 @@ export default class ScriptsDeck extends View {
       .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
         .child(div().min_w(0).truncate().child(r.name))
         .when(Boolean(r.admin), (el) => el.child(this.lock(t, on))))
-      .when(Boolean(r.runner), (el) => el.child(div().relative().child(this.badge(t, r.runner, on))))
+      // With its chips showing, they take the runner's badge's place, before
+      // the status and the time: those stay in their columns on every row,
+      // and only this row's name gives up room.
+      .when(Boolean(r.runner) && !show, (el) => el.child(div().relative().child(this.badge(t, r.runner, on))))
+      .when(show, (el) => el.child(this.runChips(t, r, i)))
       .child(div().relative().w(58).flex_none().text_size(11).truncate().text_color(r.reason === "killed" ? t.dim : color).child(r.word))
-      .child(div().relative().w(46).flex_none().text_size(11).text_color(t.dim).flex().justify_end().child(elapsed(r)))
-      .child(h_flex().relative().w(64).flex_none().justify_end().gap(1)
-        .when(show, (el) => el
-          .child(this.action(t, `w-${i}`, "watch", null, (cx) => this.act("watch", r, cx)))
-          .child(this.action(t, `a-${i}`, "↻", null, (cx) => this.act("again", r, cx)))
-          .child(r.live
-            ? this.action(t, `s-${i}`, "■", t.blocked, (cx) => this.act("stop", r, cx))
-            : this.action(t, `d-${i}`, "✕", null, (cx) => this.act("dismiss", r, cx)))));
+      .child(div().relative().w(46).flex_none().text_size(11).text_color(t.dim).flex().justify_end().child(elapsed(r)));
   }
 
   /** A script's name, the matched letters in blue. */
@@ -445,7 +490,7 @@ export default class ScriptsDeck extends View {
       return bar
         .child(left(div().flex_none().text_color(t.accent).child("↳"), div().min_w(0).truncate().text_color(t.muted).child(r.name)))
         .child(keys(this.hint(t, "k-enter", "enter", r.live ? "watch" : "output"),
-          this.hint(t, "k-stop", "x", r.live ? "stop" : "dismiss"),
+          this.hint(t, "k-stop", "x", this.asked("stop", r) ? "x: stop it" : r.live ? "stop" : "remove"),
           this.hint(t, "k-again", "R", "again"), help));
     }
     return bar

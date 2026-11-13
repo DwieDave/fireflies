@@ -304,7 +304,7 @@ the highlighted line shows where it will land.
   executables in `scripts/` and `bin/`. The list has the keyboard: up/down or
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
   leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
-  shift-tab the next group; on a run `w` watches, `x` stops, `R` runs it again;
+  shift-tab the next group; on a run `w` watches, `x` removes an ended one and stops a running one, `R` runs it again (ending a running one, `x` or `R`, asks: the same key again within 3 s does it);
   an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
@@ -324,7 +324,7 @@ the highlighted line shows where it will land.
   `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; if it's on already,
   remove it and add it again. A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
-  restarts, stops and dismisses runs, and shows an ended run's output; a failure
+  restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns), and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
