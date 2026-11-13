@@ -57,7 +57,7 @@ export const isPrComment = object({}, { body: text, createdAt: text, url: text, 
 /** A review (gh pr view's `reviews`). */
 export const isReview = object({}, { state: text, body: text, submittedAt: text, author: maybe(isActor) });
 
-/** A pull request as the right panel draws it: `gh pr view --json` (prs.js VIEW), or its slim copy. */
+/** A pull request as the right panel draws it: `gh pr view --json` (prs.ts VIEW), or its slim copy. */
 export const isPrView = object({ number: isNumber, title: isString }, {
   body: text, isDraft: maybe(isBoolean), baseRefName: text, headRefName: text, reviewDecision: text, url: text, createdAt: text, updatedAt: text,
   additions: maybe(isNumber), deletions: maybe(isNumber), changedFiles: maybe(isNumber), author: maybe(isActor),

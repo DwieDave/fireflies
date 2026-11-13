@@ -92,7 +92,7 @@ const STATE = sharedKey("github.state", object({}, {
   folder: nullable(isString), tab: isTabId, prs: isPrsKept, actions: isActionsKept, projects: isProjectsKept,
 }));
 
-/** What the window is opened with (nocturne/github.js, git's way back, + new): the folder and
+/** What the window is opened with (nocturne/github.ts, git's way back, + new): the folder and
  *  machine, its overlay, the tab, a form to open (and when it was asked). */
 const isGithubProps = object({}, {
   folder: nullable(isString), on: nullable(isString), overlay: isString, tab: isTabId, create: literal("pr", "workflow"), at: isNumber,

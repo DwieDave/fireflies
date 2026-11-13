@@ -48,7 +48,7 @@ import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 
 const MOD = "markdown";
 
-// Each viewer's shown file by slot, for its pane header (nocturne/header.js).
+// Each viewer's shown file by slot, for its pane header (nocturne/header.ts).
 const TITLES = sharedMapKey("markdown.titles", isString);
 
 // ... and its path, for the app to find the viewer showing a file (`markdown.open`).
@@ -110,7 +110,7 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 const zoom = (): number => settings().zoom || 1;
 const unzoom = (v: number): number => v / zoom();
 
-/** A 50% checker dither filling the parent (same as ../nocturne/kit.js). */
+/** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
 function dither(color: Color, cell = 1): Element {
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
