@@ -8,7 +8,7 @@ import { div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import * as herdr from "herdr";
-import { segments } from "./graph.js";
+import { segments } from "./graph.ts";
 import { keysHint } from "./keyhelp.ts";
 
 export const ART = "mods/nocturne/art";

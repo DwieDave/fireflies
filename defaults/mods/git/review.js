@@ -7,7 +7,7 @@
 // there is still marked here.
 
 import { shared, setShared } from "herdr";
-import { kind, KINDS } from "./kinds.js";
+import { kind, KINDS } from "./kinds.ts";
 import { diffKey } from "./git.ts";
 
 export const MARKS = "diff.reviewed";
