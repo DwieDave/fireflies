@@ -16,12 +16,13 @@ import type { Item } from "./model.ts";
 import { start, press, setOther, keepOther, answers, answered, isReview, otherRow, REVIEW } from "./ask.ts";
 import type { AskAction, AskState } from "./ask.ts";
 import { reviewText } from "./claude.ts";
-import type { Question, QuestionGoal, QuestionRequest } from "./claude.ts";
+import type { QuestionGoal } from "./claude.ts";
 import { answer } from "./drive.ts";
 import { forget, followCommands } from "./open.ts";
 import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
+import type { Question, QuestionRequest } from "./request.ts";
 
 /** The dialog's props: the terminal whose questions it answers, its overlay. */
 const isAskProps = object({}, { terminal: isString, overlay: isString });

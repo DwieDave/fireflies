@@ -1,6 +1,8 @@
 import { test, expect } from "bun:test";
 import { readFileSync } from "fs";
-import { parseScreen, describe as describeClaude, step, reviewText, optionKind, dialog } from "../defaults/mods/notifications/claude.ts";
+import { step, reviewText } from "../defaults/mods/notifications/claude.ts";
+import { parseScreen } from "../defaults/mods/notifications/screen.ts";
+import { describe as describeClaude, optionKind, dialog } from "../defaults/mods/notifications/request.ts";
 
 const FIX = `${import.meta.dir}/fixtures/notifications`;
 const screen = (name: string) => readFileSync(`${FIX}/${name}.txt`, "utf8");

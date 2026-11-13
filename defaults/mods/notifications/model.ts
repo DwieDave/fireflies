@@ -20,7 +20,9 @@
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, nullable, object } from "./guard.ts";
 import * as claude from "./claude.ts";
-import type { HookRecord, Request, Step, Goal } from "./claude.ts";
+import * as request from "./request.ts";
+import type { Step, Goal } from "./claude.ts";
+import type { HookRecord, Request } from "./request.ts";
 
 /** A status that waits on the person: an agent blocked on them, or one that failed. */
 const isWaiting = literal("blocked", "error");
@@ -75,9 +77,9 @@ export const ADAPTERS: readonly Adapter[] = [
   {
     id: "claude",
     handles: (t) => /claude/.test(t.report?.app ?? t.program?.key ?? ""),
-    describe: claude.describe,
+    describe: request.describe,
     step: claude.step,
-    dialog: claude.dialog,
+    dialog: request.dialog,
     hook: true,
   },
   generic,
@@ -160,7 +162,7 @@ export const isItem = object({
   tabName: isString,
   tabIndex: nullable(isNumber),
   since: isNumber,
-  request: nullable(claude.isRequest),
+  request: nullable(request.isRequest),
   tail: nullable(isString),
   answerable: isBoolean,
   // For readers outside this mod (Nocturne's toasts): the words as the overview says them.

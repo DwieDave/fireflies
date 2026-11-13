@@ -27,7 +27,5 @@ defaults/mods/github/markdown.ts blocks
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
 defaults/mods/nocturne/tabs.ts render
-defaults/mods/notifications/claude.ts
-defaults/mods/notifications/claude.ts questionStep
 defaults/mods/preview/diff.ts parse
 defaults/mods/preview/viewer.ts

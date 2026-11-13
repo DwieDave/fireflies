@@ -18,7 +18,8 @@
 // Pure: press() returns a new state and maybe an action for the dialog.
 
 
-import type { Answer, Question } from "./claude.ts";
+import type { Answer } from "./claude.ts";
+import type { Question } from "./request.ts";
 
 /** Where the dialog is: the question shown (questions.length: the review), each question's
  *  cursor, picked options and typed answer (and whether it counts), typing it, the review's row. */

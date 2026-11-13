@@ -213,7 +213,7 @@ test("the empty overview is EMPTY_H tall (a center's height, not its note's), ne
 
 test("drive settled(): a ticking status line isn't the key's effect; the dialog changing is", async () => {
   const { settled } = await import("../defaults/mods/notifications/drive.ts");
-  const { dialog } = await import("../defaults/mods/notifications/claude.ts");
+  const { dialog } = await import("../defaults/mods/notifications/request.ts");
   const rule = "─".repeat(80);
   const dlg = (label: string, foot: string) => [rule, " Bash command", " ls", " Do you want to proceed?", ` ❯ 1. ${label}`, "   2. No", "", ` ${foot}`].join("\n");
   const before = dlg("Yes", "Esc to cancel · Tab to amend");

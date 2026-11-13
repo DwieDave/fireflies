@@ -32,13 +32,14 @@ import { isNumber, isString, nullable, object } from "./guard.ts";
 import { items, dismiss } from "./engine.ts";
 import { group, age, headline, summary, where, TYPES } from "./model.ts";
 import type { Item, ItemType } from "./model.ts";
-import type { OptionKind, PermissionGoal, PermissionRequest, QuestionRequest } from "./claude.ts";
+import type { PermissionGoal } from "./claude.ts";
 import { answer } from "./drive.ts";
 import { openAsk, forget, followCommands, overviewBeat, BEAT, OVERVIEW_H } from "./open.ts";
 import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.ts";
+import type { OptionKind, PermissionRequest, QuestionRequest } from "./request.ts";
 
 // How tall it is at the least with nothing waiting (layout px, up to the
 // popup's most): a center, not a sliver around its note.

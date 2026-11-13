@@ -9,7 +9,7 @@ import { openOverlay, closeOverlay, shared, setShared, settings } from "herdr";
 import type { nextCommand as NextCommand } from "herdr";
 import { isNumber, isString, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Item } from "./model.ts";
-import type { Question } from "./claude.ts";
+import type { Question } from "./request.ts";
 
 /** What of ours is open: the overview (and when it last said so), the question dialog. */
 const SHOWN = sharedKey("notifications.shown", object({}, { overview: isString, beat: isNumber, ask: isString }));
