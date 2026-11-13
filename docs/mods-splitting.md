@@ -63,12 +63,22 @@ to the list; a split that leaves a new file or function over is split further.
   or new feature rides along; those go in their own commit.
 - **Keep the tests' doors.** A method tests call keeps its name and
   signature on the view (it may forward to the new module). Tests that read a
-  source's text (`form-keys.test.ts`, `nocturne-floatfocus.test.ts`) and
-  tests that `load()` a file by path follow the code to its new file in the
-  same commit.
-- **Imports stay one-way.** A new module imports the view's type only
-  (`import type { default as GitView } from "./main.ts"`), or better an
-  interface of what it needs (below); never a runtime cycle.
+  source's text (`form-keys.test.ts`, `nocturne-floatfocus.test.ts`) follow
+  the code to its new file in the same commit. A test that evaluates a mod
+  file with a `load()` that drops its imports and puts names in scope doesn't
+  see the modules a split makes: import the mod for real instead,
+  `importMod("<mod>/main.ts", { herdr, "gpui-kit": kit, … }, { "./viewer.ts":
+  { default: class {} } })` (scripts/mod-source.ts: the mod's own modules as
+  the app loads them, stand-ins for the app's, a module left out where the
+  test doesn't want it), as file-tree.test.ts does.
+- **Imports: types back, functions across.** A new module imports the view's
+  type only (`import type { default as GitView } from "./main.ts"`), or an
+  interface of what it needs (below). Modules of the split may call each
+  other's functions, cycles included: function declarations are there before
+  anything runs, as in git's `navigate.ts` and `staging.ts`. What a cycle
+  can't hold is a value used while a module loads (a table built from
+  another's export, a class extending one): that goes in a module the cycle
+  doesn't reach (git's `state.ts`, `items.ts`).
 
 What not to do:
 
