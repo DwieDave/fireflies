@@ -2,9 +2,9 @@
 // opening it beside or in a new tab, and closing or leaving (q, esc, back to
 // the GitHub window).
 
-import { panes, run, closeOverlay, openOverlay } from "herdr";
+import { run, closeOverlay, openOverlay } from "herdr";
 import type { Show } from "./state.ts";
-import { isGitProps } from "./state.ts";
+import { ownPane } from "./place.ts";
 import { pathOf, hashOf, isBranch, isRemoteBranch, isTag, statusFileOf, isTreeRow, isStash, nameOf } from "./items.ts";
 import type { default as GitView } from "./main.ts";
 
@@ -102,10 +102,9 @@ export function openPane(v: GitView, tab = false) {
   }
 }
 
-/** Closes this copy's own pane (a ctrl-p pane finds itself by its paneId prop). */
+/** Closes this copy's own pane (found by its slot or a ctrl-p pane's paneId; else the focused one). */
 export function closePane(v: GitView) {
-  const id = v.paneId;
-  const mine = id ? panes().find((p) => p.mod === "git" && isGitProps(p.props) && p.props.paneId === id) : undefined;
+  const mine = ownPane(v);
 
   run("pane.close", mine ? { pane: mine.pane } : {});
 }
@@ -133,5 +132,6 @@ export function quit(v: GitView, fromEsc = false) {
     return;
   }
 
-  if (!fromEsc) run("pane.close");
+  // esc never closes a pane (docs/mods-in-panes.md); q does.
+  if (!fromEsc) closePane(v);
 }

@@ -131,6 +131,7 @@ export type Intent = Guarded<typeof isIntent>;
  *  one of them in another shape leaves the rest). */
 export const isGitProps = object({}, {
   overlay: isString,
+  slot: isString,
   folder: nullable(isString),
   on: nullable(isString),
   paneId: isString,

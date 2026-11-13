@@ -173,6 +173,15 @@ uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 pane or tab yourself with `pane.split` / `tab.new {mod: "git", props:
 {folder, on?, review?, scope?: "work" | "branch", pr?, repo?}}`. A
 `diff` pane or window (old saved tabs) hands over to it.
+The whole window also lives in a normal pane, beside terminals: props
+`{slot, folder, on?}` (`slot` unique, so the pane finds itself and keeps what
+it shows across restarts; `folder` fixed when it opens). In a pane it has no
+frame or ✕ (the pane's header closes it), esc never closes it (q does), and
+narrower than 640 px its panels stack in one column. ctrl-t (or the header's
+◧ / ⧉, `git.to-pane` / `git.to-window`) moves the window into a pane beside
+the focused one, or a pane out to the window, keeping its panel, tabs, mode
+and selection. Commands (`git.<action>`) go to the window while one is open,
+else to the git pane with the keyboard.
 In the window, ctrl-p (or the ⧉ in the main view's title, a right-click menu,
 the palette's "Git: open the diff as a pane") opens what the main view shows
 as a pane beside the focused pane, ctrl-shift-p in a new tab, and closes the

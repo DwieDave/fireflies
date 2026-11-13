@@ -9,6 +9,7 @@ import type { MenuItem } from "./popups.ts";
 import type { default as GitView } from "./main.ts";
 import { openKeys } from "./bars.ts";
 import { openPane, quit } from "./panes.ts";
+import { move } from "./place.ts";
 import { loadMain } from "./content.ts";
 import { cycleScreen, giveWay, moveBy, openFilter, pageRows, setContext, stepPanel, stepTab, toggleRange } from "./navigate.ts";
 import { reload } from "./reads.ts";
@@ -25,6 +26,7 @@ export const WINDOW_ACTIONS = {
   "focus-main": (v) => v.focusMain(),
   "open-pane": (v) => openPane(v, false),
   "open-pane-tab": (v) => openPane(v, true),
+  move: (v) => move(v),
   "panel-prev": (v) => stepPanel(v, -1),
   "panel-next": (v) => stepPanel(v, 1),
   "panel:status": (v) => v.setPanel("status"),
