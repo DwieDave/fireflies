@@ -183,6 +183,10 @@ test:
     bun test scripts/nocturne-winged.test.ts
     # The strip's drop-downs: a second press on the git mark's ▾ closes its menu (Developer's report).
     bun test scripts/nocturne-tool-dropdowns.test.ts
+    # The Databases window's statements and runs: splitting, the asks before a write, scripts, the runner for real with sqlite3 (no secret on any argv), psql's recorded output.
+    bun test scripts/databases-run.test.ts
+    # The Databases window's data: mysql's XML, libSQL over HTTP, the catalog against SQLite, connections found in a folder, exports, history, a throwaway keychain.
+    bun test scripts/databases-data.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

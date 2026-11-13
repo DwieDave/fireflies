@@ -3,7 +3,7 @@
 // old names). Tests that check every one of them (copied files, commands)
 // list them from here, since no prefix tells them apart from the stock mods.
 export const NOCTURNE_MODS = [
-  "agent-graph", "browser", "diff", "editor", "equalize-panes", "file-tree", "finder", "git", "github",
+  "agent-graph", "browser", "databases", "diff", "editor", "equalize-panes", "file-tree", "finder", "git", "github",
   "markdown", "notifications", "pip", "preview", "procs", "scripts", "usage",
 ] as const;
 
@@ -15,6 +15,7 @@ export const RENAMED_MODS: Record<string, string> = {
 delete RENAMED_MODS["nocturne-agent-graph"];
 delete RENAMED_MODS["nocturne-file-tree"];
 delete RENAMED_MODS["nocturne-finder"];
+delete RENAMED_MODS["nocturne-databases"]; // born after the rename: it never had the old name
 
 /** An action as the app reads it (src/keys.rs current()): a renamed mod's
  *  `nocturne-editor.save` is `editor.save`. */

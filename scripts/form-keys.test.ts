@@ -30,7 +30,7 @@ beforeEach(() => {
 test("one helper: every mod with a form ships the same form-keys.ts", () => {
   const copies = [
     "mods/nocturne", "mods/github", "mods/git", "mods/editor", "mods/notifications",
-    "mods/machine-add", "frame/feedback", "frame/settings",
+    "mods/machine-add", "mods/databases", "frame/feedback", "frame/settings",
   ].map((d) => `${root}${d}/form-keys.ts`);
   const canon = readFileSync(copies[0], "utf8");
   for (const c of copies) expect([c, readFileSync(c, "utf8") === canon]).toEqual([c, true]);
@@ -50,7 +50,7 @@ const ROOTS: [string, string, string?][] = [
   ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.ts", "this.key(e, cx)"],
   ["mods/nocturne/sky.ts", "this.key(e, cx)"], ["mods/nocturne/dialog.ts", "this.key(e, cx)"],
   ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/find.ts", "findKey(ed, e, cx)", "mods/editor/pane-start.ts"],
-  ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
+  ["mods/machine-add/main.js", "this.key(e, cx)"], ["mods/databases/main.ts", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
 ];
 
 test("tab is bound: shift-tab and tab become the forms' actions in the Form context", async () => {

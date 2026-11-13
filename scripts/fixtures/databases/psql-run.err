@@ -1,0 +1,3 @@
+psql:q.sql:8: ERROR:  relation "lantern" does not exist
+LINE 1: select * from lantern;
+                      ^

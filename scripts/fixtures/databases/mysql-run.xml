@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+
+<resultset statement="SELECT '__ff_stmt__ 0' AS __ff
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="__ff">__ff_stmt__ 0</field>
+  </row>
+</resultset>
+
+<resultset statement="select id, name, note from lanterns order by id
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="id">1</field>
+	<field name="name">Harbour &lt;Watch&gt; &amp; Co</field>
+	<field name="note">NULL</field>
+  </row>
+  <row>
+	<field name="id">2</field>
+	<field name="name">two&#10;lines</field>
+	<field name="note" xsi:nil="true" />
+  </row>
+</resultset>
+
+<resultset statement="SELECT '__ff_stmt__ 1' AS __ff
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="__ff">__ff_stmt__ 1</field>
+  </row>
+</resultset>
+
+<resultset statement="SELECT ROW_COUNT() AS __ff_affected
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="__ff_affected">3</field>
+  </row>
+</resultset>
+
+<resultset statement="SELECT '__ff_stmt__ 2' AS __ff
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="__ff">__ff_stmt__ 2</field>
+  </row>
+</resultset>
+
+<resultset statement="select * from lanterns where false
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+</resultset>
+
+<resultset statement="SELECT '__ff_stmt__ 3' AS __ff
+" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <row>
+	<field name="__ff">__ff_stmt__ 3</field>
+  </row>
+</resultset>

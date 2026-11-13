@@ -1,0 +1,5 @@
+{
+  "place": "none",
+  "focusable": true,
+  "overlay": { "kind": "window", "key": "databases", "frame": "none", "scrim": true, "width": 0.88, "height": 0.88, "resizable": { "min": [520, 360] } }
+}

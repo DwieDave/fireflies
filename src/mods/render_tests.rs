@@ -174,6 +174,12 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
             let reply = match name {
                 // github's cache (data/github/cache.json): none yet.
                 "readTextFile" if first == "/fixture/app/settings.json" || first == "/fixture/.ssh/config" || first == "/fixture/app/data/github/cache.json" => Some(Value::Null),
+                // databases: its saved connections and query tabs, a folder's .env files: none here.
+                "readTextFile"
+                    if first.as_str().is_some_and(|p| p.starts_with("/fixture/app/data/databases/") || p.rsplit('/').next().is_some_and(|f| f.starts_with(".env"))) =>
+                {
+                    Some(Value::Null)
+                }
                 "readTextFile" => first
                     .as_str()
                     .and_then(|p| p.strip_prefix("/fixture/app/layouts/"))
@@ -204,6 +210,13 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                         && a.get(1).map(from_host).and_then(|v| v.get(1).and_then(Value::as_str).map(|s| s.contains("Claude Code-credentials"))) == Some(true) =>
                 {
                     Some(json!({"code":3,"stdout":"","stderr":""}))
+                }
+                // databases makes its private folder and looks for SQLite files and direnv: none here.
+                "exec"
+                    if first == "sh"
+                        && a.get(1).map(from_host).and_then(|v| v.get(2).and_then(Value::as_str).map(|s| ["ff-dir", "ff-find", "probe"].contains(&s))) == Some(true) =>
+                {
+                    Some(json!({"code":0,"stdout":"","stderr":""}))
                 }
                 // procs reads processes, ports and the system graphs' sources: nothing here.
                 "exec"

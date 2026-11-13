@@ -62,7 +62,7 @@ test("every nocturne mod's keyhelp.ts is the source, byte for byte", () => {
   const users = ["nocturne", ...NOCTURNE_MODS].filter((m) => readdirSync(`${MODS}/${m}`).some((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts") && f !== "keyhelp.ts"
     && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.ts"')));
   expect(users.filter((m) => m !== "nocturne").sort()).toEqual(copies.sort());
-  expect(users.sort()).toEqual(["agent-graph", "browser", "editor", "file-tree", "git", "github",
+  expect(users.sort()).toEqual(["agent-graph", "browser", "databases", "editor", "file-tree", "git", "github",
     "markdown", "nocturne", "notifications", "pip", "preview", "procs", "scripts", "usage"]);
 });
 

@@ -1,0 +1,1 @@
+psql: error: connection to server on socket "/tmp/pg/.s.PGSQL.5432" failed: FATAL:  database "nosuch" does not exist

@@ -1,0 +1,25 @@
+__FF__ 1
+schema,name,type,estimate
+billing,invoices,table,-1
+public,lanterns,table,-1
+public,users,table,-1
+public,bright,view,-1
+__FF__ 2
+name,type,nullable,default,key
+id,bigint,no,nextval('lanterns_id_seq'::regclass),pk
+name,text,no,␀,
+owner_id,bigint,yes,␀,
+lumens,integer,yes,800,
+lit,boolean,yes,␀,
+meta,jsonb,yes,␀,
+created_at,timestamp with time zone,yes,now(),
+__FF__ 3
+name,kind,method,def
+lanterns_pkey,primary,btree,CREATE UNIQUE INDEX lanterns_pkey ON public.lanterns USING btree (id)
+lanterns_owner_idx,,btree,CREATE INDEX lanterns_owner_idx ON public.lanterns USING btree (owner_id)
+__FF__ 4
+name,from_table,to_table,def
+lanterns_owner_id_fkey,lanterns,users,FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+__FF__ 5
+n
+4

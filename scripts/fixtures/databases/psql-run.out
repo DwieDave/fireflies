@@ -1,0 +1,13 @@
+__FF__ 1
+id,name,lumens,lit,meta
+1,Harbour Watch,1600,t,"{""glow"": ""amber""}"
+2,"Moth ""Lure"", No. 4",1420,␀,␀
+3,,700,t,{}
+4,"two
+lines",␀,t,␀
+__FF__ 2
+UPDATE 1
+__FF__ 3
+n
+0
+__FF__ 4
