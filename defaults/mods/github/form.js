@@ -29,7 +29,7 @@ import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui
 import { window as appWindow } from "herdr";
 import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.ts";
 import { formKey, formHints, submitKey, wrap } from "./form-keys.ts";
-import { layout, cellOf, columns, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, TOP, FOOTER, PICK_MAX, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.js";
+import { layout, cellOf, columns, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, TOP, FOOTER, PICK_MAX, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.ts";
 
 const PICK_ROWS = PICK_MAX;
 const TEXT = new Set(["text", "area", "number"]);
@@ -137,7 +137,7 @@ export class Form {
 
   /** The fields laid out for the panel's last known size (form-layout.js). */
   lay() {
-    return layout(this.fields, { width: this.width, viewH: this.viewH, errors: this.errors });
+    return layout(this.fields, { width: this.width, viewH: this.viewH, errors: new Map(Object.entries(this.errors)) });
   }
 
   /** Stop i's top and height in the scrolled form; null for the buttons (the footer doesn't scroll). */
