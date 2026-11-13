@@ -67,8 +67,12 @@ test:
     bun test scripts/github-form-layout.test.ts
     # The git window on a real scratch repo, with herdr and gpui stand-ins.
     bun test scripts/git-view.test.ts
+    # The git window as a normal pane: no frame or ✕, esc stays, narrow widths, moved window -> pane -> window, two copies, a restart's props.
+    bun test scripts/git-pane.test.ts
     # The GitHub window's lists keep their cursor in view (runs, steps, log, PRs, checks, the picker) at zoom 0.9 and 1, and the job graph's default height, with herdr and gpui stand-ins.
     bun test scripts/github-scroll.test.ts
+    # The GitHub window as a normal pane: no frame or ✕, esc stays, narrow tabs, moved window -> pane -> window, two copies, a restart's props.
+    bun test scripts/github-pane.test.ts
     # A panel's long title ends in an ellipsis inside its panel (GitHub window, git window), with recording gpui stand-ins.
     bun test scripts/nocturne-panel-titles.test.ts
     # Nocturne's chrome by keyboard (sidebar, tab strip, headers, toasts), with herdr and gpui stand-ins.
@@ -123,10 +127,14 @@ test:
     bun test scripts/editor-wrap.test.ts
     # The files pane's preview split through its key handler, toolbar and menu, and the preview's viewer embedded in it, with recording stand-ins.
     bun test scripts/file-tree-preview.test.ts
+    # Where the files pane opens a file: a picture in its own preview pane, else its editor's tab; a text file turning that preview pane into the editor (file-tree routing.ts, preview main.ts), with stand-ins.
+    bun test scripts/file-tree-open.test.ts
     # file-tree ships the preview's viewer and what it imports: each copy is preview's byte for byte.
     bun test scripts/preview-shared.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
+    # Git, GitHub and Scripts opened as normal panes: nocturne.<mod>:pane | :tab | :window | {as, folder?, on?}, the "+ new" tiles, the palette's "… in a pane".
+    bun test scripts/nocturne-inpane.test.ts
     # The editor's Markdown commands (bold … rule, enter in a list), each text and selection in and out, and off again.
     bun test scripts/editor-mdedit.test.ts
     # The editor's rendered view model: units by source line, the caret's walk, a round trip on a Markdown corpus.
@@ -177,6 +185,8 @@ test:
     bun test scripts/nocturne-move-menu.test.ts
     # The script runner's run rows: watch, again and remove / stop as chips with their keys, asking before ending a running one, the row's widths in the deck.
     bun test scripts/scripts-chips.test.ts
+    # The script runner's deck as a normal pane: no frame, esc stays, the pane's height, moved over the tab -> pane -> back with its filter.
+    bun test scripts/scripts-pane.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
     # An agent's one mark in its tab and pane header, the sidebar's winged one (winged.ts): colour, motion only while working, size, no second mark.

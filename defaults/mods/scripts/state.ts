@@ -18,6 +18,7 @@ export const ART = "mods/nocturne/art";
  *  switch's password window ({ password: address, name }, ../nocturne/prompt.ts). */
 export const isDeckProps = object({}, {
   overlay: isString,
+  slot: isString,
   folder: nullable(isString),
   on: nullable(isString),
   focus: isString,

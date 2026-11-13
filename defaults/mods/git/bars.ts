@@ -19,6 +19,7 @@ import { pathOf, nameOf, subjectOf } from "./items.ts";
 import type { default as GitView } from "./main.ts";
 import { openPane, quit } from "./panes.ts";
 import { reload } from "./reads.ts";
+import { inPane, movable, move } from "./place.ts";
 
 /** A bar label: the first words before "/" or "…". */
 export const shortLabel = (s: string) => (s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0]?.split(",")[0]?.split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0] ?? "").toLowerCase();
@@ -31,7 +32,7 @@ export function windowHeader(v: GitView, t: Theme) {
   const where = v.git ? v.git.root.replace(/^\/(Users|home)\/[^/]+/, "~") : v.folder ?? "";
   const state = v.data.state;
 
-  const head = h_flex().id("git-head").relative().h(34).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
+  const head = h_flex().id("git-head").relative().h(34).flex_none().overflow_hidden().pl(12).pr(6).gap(10).items_center().text_size(11)
     .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
     .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi8, 1)));
 
@@ -43,7 +44,7 @@ export function windowHeader(v: GitView, t: Theme) {
     .child(h_flex().relative().flex_none().gap(8).items_center()
       .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
       .child(div().text_color(t.foreground).child("GIT")))
-    .child(div().relative().flex_none().max_w(360).truncate().text_color(t.muted).child(v.on ? `${v.on}:${where}` : where));
+    .child(div().relative().flex_shrink(1).min_w(0).max_w(360).truncate().text_color(t.muted).child(v.on ? `${v.on}:${where}` : where));
 
   const branch = s
     ? named
@@ -61,7 +62,10 @@ export function windowHeader(v: GitView, t: Theme) {
     .child(keysHint(t, "git-keys", v.popups.top?.kind === "keys", () => (v.popups.top?.kind === "keys" ? v.popups.close() : openKeys(v))).mx(4))
     .child(chip(t, "git-refresh", "↻", false, () => reload(v, true)));
 
-  return v.overlay ? keyed.child(chip(t, "git-close", "✕", false, () => quit(v))) : keyed;
+  // Where the window's ✕ is, the move: ◧ into a pane, or from a pane ⧉ out to a window (place.ts).
+  const moved = movable(v) ? keyed.child(chip(t, "git-move", inPane(v) ? "⧉" : "◧", false, () => move(v)).tooltip(inPane(v) ? "Out to a window · ctrl-t" : "Into a pane · ctrl-t")) : keyed;
+
+  return v.overlay ? moved.child(chip(t, "git-close", "✕", false, () => quit(v))) : moved;
 }
 
 export function optionsBar(v: GitView, t: Theme) {

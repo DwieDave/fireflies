@@ -101,6 +101,14 @@ pushes to or tracks, else `origin`, else the others. In a fork, the header's
 "fork of owner/name" (or `p`, `F` on every tab) switches to the parent and back.
 `L` lists the links in the shown pull request or open card (j/k, enter opens
 one); `tab` / `shift-tab` walk the panels; `?` lists every key.
+The window also lives in a normal pane, beside terminals: props `{slot,
+folder, on?}` (`slot` unique: the pane finds itself and keeps its tab and
+each tab's selection across restarts). In a pane it has no frame or ✕, esc
+never closes it (q does), and narrower than 640 px only the shown tab says its
+name. ctrl-t (or the header's ◧ / ⧉, `github.to-pane` / `github.to-window`)
+moves the window into a pane beside the focused one, or a pane out to the
+window, keeping its tab and selection; commands (`github.<name>`) go to the
+window while one is open, else to the GitHub pane with the keyboard.
 Its third tab, Projects (`3`, or `github.projects` in keys.json), is
 a GitHub Projects board: the projects linked to the repo (and its parent, for
 a fork) and its owner's, `p` to pick one, `v` its board views (their filter,
@@ -157,6 +165,21 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
+**Window mods in panes.** Git, GitHub and the script runner open as
+their floating window or as a normal pane that stays beside terminals and
+editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
+own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
+"vps"}`; the same for `nocturne.github` and `nocturne.scripts` (bare, each
+toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
+(beside or a tab, as its landing switch says), the palette "Git in a pane" and
+the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
+"git", props: {slot, folder, on?}}` (`slot` a unique word). ctrl-t in one (or
+its header's ◧ / ⧉) moves it between the window and a pane with its state.
+A mod of your own that opens as a window can do the same: a window has
+`props().overlay`, a pane doesn't; in a pane no frame, no close ✕, esc never closes it, the size
+is the pane's; a pane's props carry a unique `slot` to find itself in
+`panes()` and key its `localStorage`.
+
 Nocturne's git window (`mods/git`, cmd-g, `nocturne.git`; the old
 `nocturne.lazygit` does the same) is lazygit in Nocturne's look and runs
 the real git CLI, on the space's machine too: 1 Status, 2 Files / Review /
@@ -173,6 +196,15 @@ uncommitted / the branch since its base / a PR's `gh pr diff`, reviewed marks
 pane or tab yourself with `pane.split` / `tab.new {mod: "git", props:
 {folder, on?, review?, scope?: "work" | "branch", pr?, repo?}}`. A
 `diff` pane or window (old saved tabs) hands over to it.
+The whole window also lives in a normal pane, beside terminals: props
+`{slot, folder, on?}` (`slot` unique, so the pane finds itself and keeps what
+it shows across restarts; `folder` fixed when it opens). In a pane it has no
+frame or ✕ (the pane's header closes it), esc never closes it (q does), and
+narrower than 640 px its panels stack in one column. ctrl-t (or the header's
+◧ / ⧉, `git.to-pane` / `git.to-window`) moves the window into a pane beside
+the focused one, or a pane out to the window, keeping its panel, tabs, mode
+and selection. Commands (`git.<action>`) go to the window while one is open,
+else to the git pane with the keyboard.
 In the window, ctrl-p (or the ⧉ in the main view's title, a right-click menu,
 the palette's "Git: open the diff as a pane") opens what the main view shows
 as a pane beside the focused pane, ctrl-shift-p in a new tab, and closes the
@@ -310,7 +342,12 @@ the highlighted line shows where it will land.
   j/k, enter runs, shift-enter runs and floats it, `/` filters (esc clears, esc
   leaves the filter, esc closes), g / G the ends, pgup / pgdn a page, tab /
   shift-tab the next group; on a run `w` watches, `x` removes an ended one and stops a running one, `R` runs it again (ending a running one, `x` or `R`, asks: the same key again within 3 s does it);
-  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys. A flake gets `nix flake check` / `update`
+  an ended run's output scrolls with j/k and g/G; `q` closes, `?` lists the keys.
+  The deck also lives in a normal pane (props `{slot, folder, on?}`): there it
+  stays open when a script runs, esc never closes it (q does), and its list
+  takes the pane's height; ctrl-t (or the head's ◧ / ⧉, `scripts.to-pane` /
+  `scripts.to-window`) moves it into a pane beside the focused one or back
+  over the tab, with its filter and cursor. A flake gets `nix flake check` / `update`
   at once and its outputs from `nix flake show --json` (in the background,
   cached): packages (`nix build .#x`), apps (`nix run`), devShells (`nix develop`),
   checks, and build / switch for darwin (Mac), nixos (Linux) and home-manager
@@ -551,10 +588,16 @@ the highlighted line shows where it will land.
   video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
   above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
   opens it as a tab of the editor, drawn by the preview's viewer (Editing
-  files: a drawn tab), or shows that tab; so does a double click or enter in
-  Nocturne's files pane (alt-double-click or `e`: the system's app; for a
-  table or patch its text), the file picker, and such links and drawn images
-  in the editor's Markdown preview. The preview pane (`preview`,
+  files: a drawn tab), or shows that tab; so do the file picker, and such
+  links and drawn images in the editor's Markdown preview. Nocturne's files
+  pane (a double click, enter, the menu's Open) opens a picture, PDF, font,
+  clip or database in a preview pane of its own (one: the next one shows
+  there), unless an editor it opened files in is in the tab: then as a drawn
+  tab of that editor (a table or patch is a drawn tab either way;
+  alt-double-click or `e`: the system's app, a table's or patch's text). A
+  text or Markdown file opened from it while its preview pane shows a picture
+  and it has no editor: the editor takes the preview pane's place, the
+  picture its first tab, the file the second. The preview pane (`preview`,
   called `nocturne-image` and `nocturne-preview` before: panes and keys
   saved with those names keep working) is for whoever opens it on purpose: the files pane's `p`, a drawn
   tab's `p`, links and drawn images in the Markdown viewer, another machine's
@@ -615,7 +658,8 @@ the highlighted line shows where it will land.
   terminal's link, the files pane's double click or enter, the picker's pick:
   `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
   hit, definitions) opens its text. Another machine's pictures open in the
-  preview pane, as before.
+  preview pane, as before; the files pane's pictures too while it has no
+  editor in the tab (Files panes).
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the file's type mark (a pixel mark tinted
   by kind: Markdown, code, settings, a picture, a PDF, a table, video or
@@ -918,9 +962,25 @@ the highlighted line shows where it will land.
   and the preview split's bar show its type mark, as the editor's tabs do;
   folders keep the folder mark. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
-  click (or enter) opens it as a tab of the editor whatever its kind, the same
-  editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
-  alt-double-click: the other way, as `e`; `p`: its viewer pane). A click on a folder
+  click (or enter, the menu's Open) opens it, the same panes each time. Each
+  files pane has its own editor and preview pane in the shown tab (shared
+  `file-tree.opened` by its slot: `{ editor, preview }`, each `{ slot }`, or
+  `{ path }` till the app's new pane is seen):
+  - a picture, PDF, font, clip or database: a tab of an editor already
+    holding it; else a drawn tab of the files pane's editor; else its preview
+    pane, which shows it (one file at a time; shared `preview.show`
+    `{ slot, path, n, at }` asks the preview pane with that slot to show
+    another file); else a new preview pane beside;
+  - any other file: a tab of the editor (the files pane's, else the shown
+    tab's: Markdown in the editor's view for it, a table drawn). With no
+    editor of its own but its preview pane there, the editor takes the
+    preview pane's place: the preview's file its first tab (drawn), this one
+    the second, shown; the preview pane closes.
+  An editor or preview pane closed (or in another tab) is no longer the files
+  pane's: the rules start over. A tab popped out of the editor keeps its file
+  (opening that file again shows it) and takes no others.
+  alt-double-click: the other way, as `e`; `p`: its viewer pane (a preview
+  file in the files pane's own). A click on a folder
   folds it; a double click opens the folder in $EDITOR (its first click's fold
   undone). Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
   `e` / `E` edit, `p` its viewer (preview, Markdown), `-` / `.` reroot, `[` / `]`

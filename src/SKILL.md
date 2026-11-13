@@ -53,6 +53,16 @@ network and disk sit over its lists; a right-click on a row offers what one
 does to it). It only shows and asks: ending a process is
 theirs to confirm in it.
 
+To put a repo's git, its GitHub (pull requests, runs, projects) or its
+scripts beside their terminals as a normal pane that stays, in Nocturne:
+`herdr-app do 'nocturne.git:pane'` (`nocturne.github:pane`,
+`nocturne.scripts:pane`; `:tab` a tab of its own, `:window` the floating
+window; `'nocturne.git:{"as":"pane","folder":"/abs/repo"}'` another folder).
+Without Nocturne: `herdr-app do pane.split
+'{"direction":"auto","mod":"git","props":{"slot":"s1","folder":"/abs/repo"}}'`
+(`slot` any unique word). In the pane, ctrl-t moves it out to the window
+and back.
+
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused
 pane (`--anchor some-heading` scrolls there; `--pane p12` picks the pane). It
@@ -68,7 +78,9 @@ It shows the file again when you overwrite it, so open it once and keep saving
 to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
 terminal output opens it as a tab of their editor instead, drawn the same way
 (Markdown in the editor's view for it); `herdr-app do editor.open --path … --look true`
-does that too.
+does that too. Their files pane opens a picture or PDF in a preview pane of its
+own until they open a text file from it, which turns that preview pane into an
+editor (the picture its first tab); later pictures from it go to that editor.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens

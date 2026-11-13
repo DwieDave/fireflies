@@ -97,7 +97,7 @@ test("pictures are told apart by extension, any case", () => {
   expect(extension("/a.b/c")).toBe("");
 });
 
-test("file-tree: Markdown and pictures as tabs of the editor (a double click), p their viewer panes, alt-double-click / e the other way", async () => {
+test("file-tree: a picture in the preview pane (a double click, enter; no editor of the files pane's), p the same, alt-double-click / e the other way", async () => {
   const route = await load("file-tree/editor-route.ts");
   const standins = { herdr: { ...herdr, ...{ run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
   (globalThis as any).window = { paint_path: () => new Element() };
@@ -126,12 +126,13 @@ test("file-tree: Markdown and pictures as tabs of the editor (a double click), p
   view.key({ key: "e", modifiers: {} }, cx);
   view.key({ key: "enter", modifiers: {} }, cx);
   view.key({ key: "p", modifiers: {} }, cx);
-  // A double click and enter: a tab of the editor to look at (none in the tab: a new one beside); p: the preview pane.
+  // A double click, enter and p: the preview pane (no editor of this files pane's;
+  // file-tree-open.test.ts follows the panes it makes).
   expect(commands).toEqual([
-    ["editor.open", { path: "/repo/shots/Screen Shot.png", pane: "p1", look: true }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", in: "system" }],
-    ["editor.open", { path: "/repo/shots/Screen Shot.png", pane: "p1", look: true }],
+    ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
     ["preview.open", { path: "/repo/shots/Screen Shot.png", pane: "p1" }],
   ]);
   expect(edits).toEqual([]);

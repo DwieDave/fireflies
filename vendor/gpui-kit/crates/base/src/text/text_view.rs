@@ -2749,6 +2749,74 @@ mod tests {
     /// ratio and wrapping the end of its text onto a line of its own, in the
     /// header and the body alike, and with the cell and frame refinements
     /// the text renders with.
+    /// An app's zoom sets the window's rem size and the view's text size
+    /// together. The cells' `px_3` padding is in rems, so the columns must
+    /// make room for it at every zoom: short words keep to one line, and no
+    /// row of a table that fits grows a second line ("uni|t").
+    #[test]
+    fn table_columns_fit_their_words_at_any_zoom() {
+        use crate::text::inline::test_fonts::WideMonoTextSystem;
+        use gpui::TestApp;
+        use std::sync::Arc;
+
+        const CELL_BACKGROUND: u32 = 0x11aa77;
+
+        struct TableRoot {
+            text_view: Entity<TextViewState>,
+            rem: Pixels,
+            text: Pixels,
+            style: TextViewStyle,
+        }
+
+        impl Render for TableRoot {
+            fn render(&mut self, window: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                window.set_rem_size(self.rem);
+                div()
+                    .w(px(1200.))
+                    .text_size(self.text)
+                    .child(TextView::new(&self.text_view).style(self.style.clone()))
+            }
+        }
+
+        let source = "| reading | unit | range |\n| --- | --- | --- |\n\
+            | temperature | °C | -20 to 50 |\n| humidity | % | 0 to 100 |\n\
+            | light | lux | 0 to 100000 |\n";
+        // An interface font of 13px and a Markdown body of 12.5px, zoomed.
+        for scale_factor in [1., 2.] {
+            for zoom in [0.9_f32, 1.0, 1.7] {
+                let mut app = TestApp::with_text_system(Arc::new(WideMonoTextSystem));
+                app.update(crate::init);
+                let style = TextViewStyle::default();
+                let cell = style.table_cell().clone().bg(gpui::rgb(CELL_BACKGROUND));
+                let mut window = app.open_window(|_, cx| TableRoot {
+                    text_view: cx.new(|cx| TextViewState::markdown(source, cx)),
+                    rem: px(13. * zoom),
+                    text: px(12.5 * zoom),
+                    style: style.with_table_cell(cell),
+                });
+                window.simulate_scale_factor_change(scale_factor);
+                window.draw();
+                app.run_until_parked();
+                window.draw();
+                let heights = window.update(|_, window, _| {
+                    let background: gpui::Background = gpui::rgb(CELL_BACKGROUND).into();
+                    window
+                        .painted_quads()
+                        .into_iter()
+                        .filter(|quad| quad.background == background)
+                        .map(|quad| quad.bounds.size.height)
+                        .collect::<Vec<_>>()
+                });
+                // The cells, and the slack beside them that wears their fill.
+                assert!(heights.len() >= 12, "scale {scale_factor}, zoom {zoom}: {heights:?}");
+                assert!(
+                    heights.iter().all(|h| *h == heights[0]),
+                    "scale {scale_factor}, zoom {zoom}: a cell wrapped: {heights:?}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn table_keeps_narrow_columns_on_one_line_while_wide_ones_wrap() {
         use crate::text::inline::test_fonts::WideMonoTextSystem;

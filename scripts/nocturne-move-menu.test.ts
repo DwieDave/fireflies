@@ -10,7 +10,7 @@ import { find, texts, theme, cx, key } from "./dialog-stubs.ts";
 
 const st: any = {};
 mock.module("herdr", () => ({
-  props: () => st.props, theme: () => theme, settings: () => ({ zoom: 0.9 }), window: () => ({ platform: "macos" }),
+  notify: () => null, props: () => st.props, theme: () => theme, settings: () => ({ zoom: 0.9 }), window: () => ({ platform: "macos" }),
   shared: (k: string) => st.shared[k] ?? null, setShared: (k: string, v: unknown) => { st.shared[k] = v; },
   run: (name: string, args?: any) => { st.runs.push([name, args]); return null; },
   closeOverlay: (id: unknown) => { st.closed.push(id); }, openOverlay: (spec: any) => { st.opened.push(spec); return `ov${st.opened.length}`; },

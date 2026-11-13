@@ -39,7 +39,12 @@ export function startFields(ed: EditorPane, pr: PaneProps, cx: AsyncContext): vo
   ed.on = pr.on ?? null;
   ed.slot = pr.slot ?? null;
   ed.seenChange = newestId(fileChanges(shared));
-  ed.seenOpen = readShared(shared, OPEN_KEY, null)?.n ?? 0;
+  // A file sent to this pane's own slot just before it started (the files
+  // pane put this editor in its preview pane's place): opened on the first frame.
+  const req = readShared(shared, OPEN_KEY, null);
+  const early = req !== null && req.slot !== null && req.slot === ed.slot && Date.now() - (req.at ?? 0) < 10000;
+
+  ed.seenOpen = early ? req.n - 1 : req?.n ?? 0;
   ed.menuHandle = cx.focus_handle();
   ed.handle = cx.focus_handle();
   bindTab(cx); // tab / shift-tab reach the key handler (form-keys.ts)

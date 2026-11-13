@@ -142,7 +142,7 @@ const PANE: ReadonlyMap<string, readonly [string, readonly PaneCommand[]]> = new
 export type EntryArgs = {
   panel?: string; tab?: true; direction?: string; name?: string; agent?: string; to?: string; terminal?: string; scope?: string; dir?: string;
   section?: string; fold?: true; scripts?: true | "again"; procs?: true | "ports"; worktree?: "new"; space?: "folder"; gridify?: true; pin?: true;
-  rename?: "pane"; path?: string; pane?: string; on?: string; in?: "tab";
+  rename?: "pane"; path?: string; pane?: string; on?: string; in?: "tab" | "pane";
 };
 
 /** A row of the palette: a command, its arguments, its group, its words; `go` runs it
@@ -358,6 +358,12 @@ export const OUT = {
   "git.menu-run": "the git window's enter in its menu",
   "git.prompt-ok": "the git window's enter in its prompt",
   "github.focus": "internal: hands the GitHub window the keyboard",
+  "github.to-pane": "the GitHub window's own ctrl-t or ◧ (into a pane); the palette's \"GitHub in a pane\" opens a new one",
+  "github.to-window": "a GitHub pane's own ctrl-t or ⧉ (out to a window)",
+  "git.to-pane": "the git window's own ctrl-t or ◧ (into a pane); the palette's \"Git in a pane\" opens a new one",
+  "git.to-window": "a git pane's own ctrl-t or ⧉ (out to a window)",
+  "scripts.to-pane": "the script deck's own ctrl-t or ◧ (into a pane); the palette's \"Scripts in a pane\" opens a new one",
+  "scripts.to-window": "a script deck pane's own ctrl-t or ⧉ (back over the tab)",
   "github.new-pr": "the same form as GitHub: new pull request… (nocturne.github-pr)",
   "github.run-workflow": "the same form as GitHub: run a workflow… (nocturne.github-run)",
   "notifications.focus": "internal: hands the overview the keyboard",
