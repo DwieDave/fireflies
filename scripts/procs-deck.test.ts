@@ -88,11 +88,11 @@ const herdr: Record<string, any> = {
   window: () => ({ platform: "macos" }),
 };
 mock.module("herdr", () => herdr);
-mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => path() }, Background: { checkerboard: (c: string) => bg({ dither: c }), solid: (c: string) => bg({ solid: c }) } }));
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => path(), stroke: () => path() }, Background: { checkerboard: (c: string) => bg({ dither: c }), solid: (c: string) => bg({ solid: c }) } }));
 function bg(b: any) { b.opacity = (o: number) => ({ ...b, opacity: o }); return b; }
 mock.module("gpui-base", () => ({ h_flex: () => new El(), v_flex: () => new El() }));
 /** A path that counts its polygons (a graph's bars are one path a layer). */
-const path = () => { const p: any = { polys: [] as any[] }; p.add_polygon = (pts: any) => { p.polys.push(pts); return p; }; for (const k of ["move_to", "line_to", "close"]) p[k] = () => p; p.build = () => p; return p; };
+const path = () => { const p: any = { polys: [] as any[], ops: [] as any[] }; p.add_polygon = (pts: any) => { p.polys.push(pts); return p; }; for (const k of ["move_to", "line_to", "close", "dash_array"]) p[k] = (...a: any[]) => { p.ops.push([k, ...a]); return p; }; p.build = () => p; return p; };
 (globalThis as any).window = { paint_path: (p: any, fill: any) => { const e: any = new El("dither"); e.path = p; e.fill = fill; return e; } };
 /** A graph's bars: the polygons of its dithered layer (the first under its baseline). */
 const barsOf = (id: string) => ids[id].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither).flatMap((k: any) => k.path.polys);
@@ -238,9 +238,11 @@ test("keys: j k move, g G first / last, h l fold and step, space toggles, tab 1 
   await press("tab"); expect(d.tab).toBe("ports");
   await press("1"); expect(d.tab).toBe("procs");
   await press("2"); expect(d.tab).toBe("ports");
-  await press("3"); expect(d.tab).toBe("system");
+  // No system tab (its graphs sit over the lists): 3 does nothing, tab goes round the two.
+  await press("3"); expect(d.tab).toBe("ports");
   await press("tab"); expect(d.tab).toBe("procs");
-  await press("tab", { mods: { shift: true } }); expect(d.tab).toBe("system");
+  await press("tab", { mods: { shift: true } }); expect(d.tab).toBe("ports");
+  await press("tab", { mods: { shift: true } }); expect(d.tab).toBe("procs");
   await press("2");
   expect(shared["procs.deck"].tab).toBe("ports");
   await press("1");
@@ -389,39 +391,85 @@ test("the foot names the cursor's row and its keys", async () => {
   expect(words(draw())).toEqual(expect.arrayContaining(["end node", "enter", "esc", "keep"]));
 });
 
-// ---- the system graphs
+// ---- the readings strip: Developer: "instead of the system tab show the most important graphs
+// as dithered line graphs not balken in the top of the tooltip pane"
 
-test("system (3): CPU, GPU, memory, disk and network graphs with their values; a reading every 2 s while open", async () => {
+/** A graph's paths: its fills (dithered) and its lines (solid), each one path. */
+const fillsOf = (id: string) => ids[id].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither && k.path?.polys?.length);
+const linesOf = (id: string) => ids[id].kids.filter((k: any) => k?.tag === "dither" && k.fill?.solid);
+
+test("the graphs sit at the top over either list: CPU, memory, network, disk with their numbers; no system tab", async () => {
   const { d, press, draw } = await deck();
-  await press("3");
-  expect(d.tab).toBe("system");
   // A second reading, so the network has a rate.
-  const a = SYS.replace("12944968792", "12946968792");
-  sysText = a;
+  sysText = SYS.replace("12944968792", "12946968792");
   d.sample(cx);
   await flush();
-  const el = draw();
-  const w = words(el);
-  expect(w).toEqual(expect.arrayContaining(["CPU", "80%", "GPU", "53%", "MEMORY", "26.4G of 32.0G", "DISK", "28.7 MB/s", "NETWORK"]));
-  expect(w).toContain("82% used · pressure normal");
-  expect(w).toContain("the startup disk is 21% full");
-  expect(w.some((x) => /^↓ .*B\/s  ↑ /.test(x))).toBe(true);
+  for (const tab of ["1", "2"]) {
+    await press(tab);
+    const w = words(draw());
+    expect(w).toEqual(expect.arrayContaining(["CPU", "80%", "MEM", "82%", "NET", "DISK", "28.7M/s"]));
+    // In per second between the two readings (ms apart here), out unchanged.
+    expect(w.some((x) => /^↓[\d.]+[KMG]? ↑0$/.test(x))).toBe(true);
+    for (const k of ["cpu", "mem", "net", "disk"]) expect(ids[`vital-${k}`]).toBeDefined();
+  }
+  expect(ids["tab-system"]).toBeUndefined();
   expect(d.sys.cpu).toEqual([80, 80]);
-  expect(d.sys.rx.length).toBe(2); // the first reading has no rate yet
-  expect(d.sys.rx[0]).toBe(null);
-  // Bars: one per reading in the CPU graph.
-  expect(barsOf("g-cpu").length).toBe(2);
-  // Each bar has its solid head, one layer for all of them.
-  expect(ids["g-cpu"].kids.filter((k: any) => k?.fill?.solid).flatMap((k: any) => k.path.polys).length).toBe(2);
-  expect(words(ids["tab-system"])).toEqual(["system", "80%"]);
+  expect(d.sys.rx.length).toBe(2);
+  expect(d.sys.rx[0]).toBe(null); // the first reading has no rate yet
+  // A line and its dithered fill, one path each; the network's out a dotted line over it.
+  expect(fillsOf("g-cpu").length).toBe(1);
+  expect(linesOf("g-cpu").length).toBe(1);
+  expect(linesOf("g-net").length).toBe(2);
+  expect(fillsOf("g-net").length).toBe(1);
+  // The props' "system" (an old strip's ask) opens the processes.
+  propsNow = { overlay: "o1", tab: "system" };
+  const old: any = new Deck();
+  old.init({}, cx);
+  expect(old.tab).toBe("procs");
 });
 
-test("system: a source this machine lacks says so instead of drawing zero", async () => {
-  sysText = SYS.replace('"Device Utilization %"=53', "");
-  const { press, draw } = await deck();
-  await press("3");
-  expect(words(draw())).toContain("no GPU reading on this machine");
-  expect(words(ids["g-cpu"])).toEqual([]);
+test("the graphs: the memory line takes the pressure's colour and its word; a source this machine lacks says none", async () => {
+  sysText = SYS.replace("16384\n1\n", "16384\n2\n");
+  const { draw } = await deck();
+  expect(words(draw())).toEqual(expect.arrayContaining(["MEM", "WARN"]));
+  expect(linesOf("g-mem")[0].fill.solid).toBe("working");
+  sysText = SYS.replace('"Device Utilization %"=53', "").replace(/Mach Virtual Memory Statistics/, "nothing");
+  const { draw: draw2 } = await deck();
+  draw2();
+  expect(words(ids["vital-mem"])).toEqual(["MEM", "none"]);
+  expect(linesOf("g-mem")).toEqual([]);
+});
+
+test("the graphs: the pointer on one puts its whole reading in the foot (the GPU's among the CPU's); off it, the row's again", async () => {
+  const { d, draw } = await deck();
+  draw();
+  ids["vital-cpu"].on.hover(true, cx);
+  expect(d.hoverVital).toBe("cpu");
+  expect(words(draw())).toContain("cpu 80%: user 62% · system 18% · 10 cores · gpu 53%");
+  ids["vital-cpu"].on.hover(false, cx);
+  expect(d.hoverVital).toBe(null);
+  expect(words(draw())).not.toContain("cpu 80%: user 62% · system 18% · 10 cores · gpu 53%");
+});
+
+test("the graphs cost no work when nothing changed: a frame without a new reading reuses each line", async () => {
+  const { d } = await deck();
+  const a = d.points(d.sys.cpu, { max: 100, h: 22 });
+  expect(d.points(d.sys.cpu, { max: 100, h: 22 })).toBe(a);
+  d.sampling = false; d.sample(cx); await flush();
+  expect(d.points(d.sys.cpu, { max: 100, h: 22 })).not.toBe(a);
+});
+
+test("a narrow deck: the graphs go two by two and the lists give up the row they take", async () => {
+  const { d, draw } = await deck();
+  draw();
+  const wide = d.listH();
+  expect(wide).toBe(LIST_H);
+  // The strip measures 300 layout px (270 device px at zoom 0.9).
+  ids["vitals"].on.size_change({ width: 270, height: 60 }, cx);
+  expect(d.width).toBe(300);
+  draw();
+  expect(ids["vitals"].kids.filter((k: any) => k?.css).length).toBeGreaterThanOrEqual(2);
+  expect(d.listH()).toBe(wide - 48);
 });
 
 test("the selected process's detail carries its own CPU and memory over the refreshes", async () => {
@@ -571,8 +619,6 @@ test("clicks: a row selects, a double click shows its terminal, the fold arrow f
   draw();
   ids["tab-ports"].on.click({}, cx); expect(d.tab).toBe("ports");
   draw();
-  ids["tab-system"].on.click({}, cx); expect(d.tab).toBe("system");
-  draw();
   ids["tab-procs"].on.click({}, cx); expect(d.tab).toBe("procs");
   draw();
   ids["scope"].on.click({}, cx); expect(d.all).toBe(true);
@@ -674,25 +720,20 @@ test("the scrollbar: a thumb while the rows overflow; dragging it scrolls, a pre
   expect(ids["bar-procs"]).toBeUndefined();
 });
 
-// ---- the system tab's pace: Developer: "when system tab is active refresh every second"
+// ---- the readings' pace: Developer: "when system tab is active refresh every second" (the graphs always show now)
 
-test("system readings: a second apart while the system tab shows, 2 s behind the others, never two at once", async () => {
+test("readings: a second apart while the deck is open, never two at once", async () => {
   const sys = await import("../defaults/mods/procs/sys.ts");
-  expect(sys.STEP_SHOWN).toBe(1000);
-  expect(sys.STEP).toBe(2000);
-  expect(sys.KEEP).toBe(90); // still about 90 s at a second
+  expect(sys.STEP).toBe(1000);
   const { d, press } = await deck();
   const reads = () => calls.filter((c) => c[0] === "sh" && c[2].includes("nocturne-sys")).length;
   const n0 = reads();
-  // On the processes tab: not after a second, after two.
-  d.tick(cx, d.sampled + 1000); await flush();
-  expect(reads()).toBe(n0);
-  d.tick(cx, d.sampled + 2000); await flush();
-  expect(reads()).toBe(n0 + 1);
-  // On the system tab: a second.
-  await press("3");
   d.tick(cx, d.sampled + 999); await flush();
+  expect(reads()).toBe(n0);
+  d.tick(cx, d.sampled + 1000); await flush();
   expect(reads()).toBe(n0 + 1);
+  // On the ports tab alike.
+  await press("2");
   d.tick(cx, d.sampled + 1000); await flush();
   expect(reads()).toBe(n0 + 2);
   // A slow source: while a reading runs, no other starts, however late it is.
@@ -706,25 +747,19 @@ test("system readings: a second apart while the system tab shows, 2 s behind the
     release(); await flush();
     expect(d.sampling).toBe(false);
   } finally { sysGate = null; }
-  // Back on another tab, 2 s again; switching to system reads at once when a second has passed.
-  await press("1");
-  d.tick(cx, d.sampled + 1500); await flush();
-  expect(reads()).toBe(n0 + 3);
-  d.sampled -= 1500;
-  await press("3");
-  expect(reads()).toBe(n0 + 4);
 });
 
-test("system: the graphs hold 90 readings, the newest at the right, in bars half as wide", async () => {
-  const { d, press, draw } = await deck();
-  await press("3");
+test("the graphs hold 90 readings: the line runs the box's width, the newest at the right edge", async () => {
+  const { d, draw } = await deck();
   for (let i = 0; i < 95; i++) { d.sampling = false; d.sample(cx); await flush(); }
   expect(d.sys.cpu.length).toBe(90);
   draw();
-  expect(barsOf("g-cpu").length).toBe(90);
-  // One element a layer, not three a bar: the baseline, the bars, their heads.
+  // The baseline, the fill, the line: one element each.
   expect(ids["g-cpu"].kids.length).toBe(3);
-  expect(words(draw())).toContain("a reading every second");
+  const line = linesOf("g-cpu")[0].path;
+  expect(line.ops.length).toBe(90);
+  expect(line.ops[0]).toEqual(["move_to", "0%", expect.any(String)]);
+  expect(line.ops.at(-1)).toEqual(["line_to", "100%", expect.any(String)]);
 });
 
 // ---- room around the selected row: Developer: "give the selected item some whitespace"
@@ -787,11 +822,13 @@ test("the block's buttons: show focuses its terminal, copy its command line, end
 test("moving the selection keeps every row above it where it was", async () => {
   probeText = probe(longPs(), longLsof());
   const { draw, press, cur, d } = await deck();
-  while (cur() !== "p:70000") await press("j");
+  // A row whose block and the next row's still fit under the strip without a scroll.
+  const pick = d.rows().map((r: any) => r.key)[d.rows().findIndex((r: any) => r.key === "p:70000") - 3];
+  while (cur() !== pick) await press("j");
   expect(d.scroll.procs).toBe(0);
   draw();
   const keys = d.rows().map((r: any) => r.key);
-  const at = keys.indexOf("p:70000");
+  const at = keys.indexOf(pick);
   const before = Object.fromEntries(keys.slice(0, at + 1).map((k: string) => [k, slotOf(k)?.css.top[0]]));
   const scroll = d.scroll.procs;
   await press("j");
@@ -801,8 +838,8 @@ test("moving the selection keeps every row above it where it was", async () => {
   expect(shown.length).toBeGreaterThan(5);
   for (const k of shown) expect([k, slotOf(k)?.css.top[0]]).toEqual([k, before[k]]);
   // The row it left is a plain row again, and the next starts right under it.
-  expect(slotOf("p:70000").css.h[0]).toBe(ROW);
-  expect(slotOf("p:70001").css.top[0]).toBe(slotOf("p:70000").css.top[0] + ROW);
+  expect(slotOf(pick).css.h[0]).toBe(ROW);
+  expect(slotOf(keys[at + 1]).css.top[0]).toBe(slotOf(pick).css.top[0] + ROW);
 });
 
 test("the depth guides: one dithered path for the rows in sight, a 1 px line a level a row", async () => {

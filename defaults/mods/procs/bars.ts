@@ -8,7 +8,8 @@ import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
-import { ART, FOOT, SYSTEM_PACE, HEAD } from "./state.ts";
+import { ART, FOOT, HEAD } from "./state.ts";
+import { vitalLine } from "./vitals.ts";
 import { dither } from "./paint.ts";
 import { procOf } from "./listing.ts";
 import { begin, confirm, copyRow, escapeKey, foldRow, killHard, openPortAt, showTerminal, switchTab, toggleAll } from "./actions.ts";
@@ -93,7 +94,8 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
 
   const note = v.note && Date.now() < v.note.until ? word(v.note.text, t[v.note.tone]) : null;
 
-  if (v.tab === "system") return bar.child(left(arrow, word(SYSTEM_PACE, t.dim))).child(keys(k("k-tabs", "tab", "processes", (cx) => switchTab(v, "procs", cx)), help));
+  // The pointer on a graph: its whole reading, in place of the row's name.
+  if (v.hoverVital) return bar.child(left(word(vitalLine(v.hoverVital, v.now, v.sysReading?.sysctl.ncpu ?? null), t.muted))).child(keys(help));
 
   const q = v.query ? queryChip(v, t) : null;
 
@@ -142,8 +144,7 @@ export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number):
 
   return h_flex().relative().h(HEAD).flex_none().pl(12).pr(12).gap(10).items_center()
     .child(svg(`${ART}/tree.svg`).size(9).flex_none().text_color(t.accent))
-    .child(h_flex().h_full().flex_none().child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts))
-      .child(tabBtn("tab-system", "system", "system", v.now?.cpu ? `${Math.round(v.now.cpu.pct)}%` : "")))
+    .child(h_flex().h_full().flex_none().child(tabBtn("tab-procs", "procs", "processes", nProcs)).child(tabBtn("tab-ports", "ports", "ports", nPorts)))
     .child(div().flex_1())
     .child(div().id("scope").flex_none().text_size(11).text_color(t.dim).cursor_pointer()
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())

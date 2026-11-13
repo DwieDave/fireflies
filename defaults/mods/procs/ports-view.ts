@@ -5,7 +5,7 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { PortItem } from "./state.ts";
-import { PORTS_H, PROW, ART, CONFIRM } from "./state.ts";
+import { PROW, ART, CONFIRM } from "./state.ts";
 import { moveTo } from "./listing.ts";
 import { begin, copyRow, openPortAt } from "./actions.ts";
 import { clickRow, scrollbar, wheelList } from "./pointer.ts";
@@ -44,6 +44,7 @@ export function portRow(v: ProcsDeck, t: Theme, x: PortItem, i: number, on: bool
 }
 
 export function portsView(v: ProcsDeck, t: Theme, items: readonly PortItem[], ci: number): Element {
+  const listHt = v.listH();
   const ask = v.ask;
   const asked = (x: PortItem): boolean => ask?.tab === "ports" && ask.key === x.key;
   const tops: number[] = [];
@@ -62,19 +63,19 @@ export function portsView(v: ProcsDeck, t: Theme, items: readonly PortItem[], ci
 
     if (top < v.scroll.ports) v.scroll.ports = top;
 
-    if (b > v.scroll.ports + PORTS_H) v.scroll.ports = b - PORTS_H;
+    if (b > v.scroll.ports + listHt) v.scroll.ports = b - listHt;
   }
 
-  const max = Math.max(0, y - PORTS_H);
+  const max = Math.max(0, y - listHt);
 
   v.scroll.ports = Math.max(0, Math.min(v.scroll.ports, max));
 
-  if (!items.length) return emptyView(v, t, PORTS_H);
+  if (!items.length) return emptyView(v, t, listHt);
 
-  return div().id("ports-list").relative().h(PORTS_H).flex_none().overflow_hidden()
+  return div().id("ports-list").relative().h(listHt).flex_none().overflow_hidden()
     .on_scroll_wheel((e, cx) => wheelList(v, "ports", e, PROW, max, cx))
     .children(items.map((x, i) => v_flex().id(`pslot-${x.key}`).absolute().left(0).right(0).top((tops[i] ?? 0) - v.scroll.ports)
       .child(portRow(v, t, x, i, i === ci))
       .children(ask && asked(x) ? [confirmBand(v, t, ask)] : [])))
-    .children(scrollbar(v, t, "ports", y, PORTS_H));
+    .children(scrollbar(v, t, "ports", y, listHt));
 }

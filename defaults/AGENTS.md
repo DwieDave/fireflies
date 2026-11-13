@@ -340,7 +340,15 @@ the highlighted line shows where it will land.
   second closes it); cmd-shift-o, `nocturne.procs`, opens it centered or
   closes it, `nocturne.ports` on its ports tab (no key by default). This
   machine only.
-  Three tabs (tab / shift-tab, 1 2 3):
+  Its top, always in view over the lists: CPU, memory (its line in the
+  pressure's colour, WARN / CRIT beside its name), network (in as a line
+  with a dithered fill, out dotted) and disk (MB/s) as small line graphs of
+  the last 90 s with their numbers now, four across (two by two in a deck
+  too narrow for four), read every second while the deck is open, never two
+  at once and never while it's closed; the pointer on a graph puts its whole
+  reading in the foot (the GPU's percent among the CPU's, how full the disk
+  is among the disk's); a source the machine lacks says none.
+  Two tabs (tab / shift-tab, 1 2):
   processes, a tree of space › tab › terminal › the terminal's process and all
   it started (terminals without a pane under "no pane"; `a` switches to every
   process of yours, rooted where the parent isn't yours), each row name,
@@ -351,12 +359,7 @@ the highlighted line shows where it will land.
   TCP ports your processes listen on (this app's first, with their tab and
   terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
   the focused tab's web pane (`browser.open`) or a web pane beside the
-  focused one (`app.open_url`), `c` copies that address; system, dithered
-  graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
-  (and its pressure), disk (MB/s, how full) and network (in above the line,
-  out below), read every second while the system tab shows, every 2 s behind
-  the other tabs, never two at once and never while the deck is closed; a
-  source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  focused one (`app.open_url`), `c` copies that address. Keys: j/k ↑↓, g/G, pgup/pgdn,
   h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
   pane (a group folds), `x` ends the process (`X` with everything under it):
   it asks in the deck, sends TERM, and two seconds on names what still runs,

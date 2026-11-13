@@ -9,13 +9,13 @@ import type { Theme } from "herdr";
 import type { Row } from "./logic.ts";
 import { guardOf, terminalOf, uptime, memory, oneLine, count, wheelDelta, scrollBy } from "./logic.ts";
 import type { Ask, ProcRow, Rect } from "./state.ts";
-import { LIST_H, ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS } from "./state.ts";
+import { ROW, ART, IND, short, CMD_LINE, CHAR_W, W, D_LEFT, D_RIGHT, CMD_SHOWN, D_TOP, D_GAP, D_LINE, D_LINES_GAP, D_FOOT, D_AFTER, CONFIRM, isProcRow, COLS } from "./state.ts";
 import { zoom, unzoom, dither, toneOf, dotCell } from "./paint.ts";
 import { byPid, moveTo, procOf, termPids } from "./listing.ts";
 import { begin, confirm, copyRow, killHard, showTerminal } from "./actions.ts";
 import { clickRow, scrollbar, wheelList } from "./pointer.ts";
 import type { default as ProcsDeck } from "./main.ts";
-import { spark, layer } from "./system-view.ts";
+import { spark, layer } from "./vitals-view.ts";
 import { emptyView } from "./bars.ts";
 
 export function pip(v: ProcsDeck, color: Color, live = false): Element {
@@ -273,6 +273,7 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
   }
 
   const tp = termPids();
+  const listHt = v.listH();
   const sel = items[ci];
   const ask = v.ask;
   const extra = (r: Row): number => (ask && ask.tab === "procs" && ask.key === r.key ? CONFIRM : r === sel && isProcRow(r) ? blockH(v, r.node.pid) : 0);
@@ -291,10 +292,10 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
 
     if (top < v.scroll.procs) v.scroll.procs = top;
 
-    if (b > v.scroll.procs + LIST_H) v.scroll.procs = b - LIST_H;
+    if (b > v.scroll.procs + listHt) v.scroll.procs = b - listHt;
   }
 
-  const max = Math.max(0, y - LIST_H);
+  const max = Math.max(0, y - listHt);
 
   v.scroll.procs = Math.max(0, Math.min(v.scroll.procs, max));
 
@@ -308,7 +309,7 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
     const top = tops[i] ?? 0;
     const h = ROW + extra(r);
 
-    if (top + h <= s || top >= s + LIST_H) return;
+    if (top + h <= s || top >= s + listHt) return;
 
     for (let g = 0; g < r.depth; g++) guides.push({ x: 12 + g * IND + 3, y: top - s, w: 1, h: ROW });
 
@@ -322,14 +323,14 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
 
   const head = (w: number, text: string): Element => div().w(w).flex_none().flex().justify_end().child(text);
 
-  return v_flex().id("procs").h(COLS + LIST_H).flex_none()
+  return v_flex().id("procs").h(COLS + listHt).flex_none()
     .child(h_flex().h(COLS).flex_none().px(12).gap(7).items_center().text_size(9).text_color(t.ansi8).opacity(0.8)
       .child(div().flex_1().child(v.all ? `ALL OF ${(v.snap?.me ?? "").toUpperCase()}'S` : "THIS APP'S TERMINALS"))
       .child(head(34, "CPU")).child(head(44, "MEM")).child(head(54, "UP")).child(head(44, "PID")))
     .child(items.length
-      ? div().id("procs-list").relative().h(LIST_H).flex_none().overflow_hidden()
+      ? div().id("procs-list").relative().h(listHt).flex_none().overflow_hidden()
         .on_scroll_wheel((e, cx) => wheelList(v, "procs", e, ROW, max, cx))
         .children(kids)
-        .children([...layer(v, guides, Background.checkerboard(t.ansi0, dotCell()).opacity(0.9), W - 2, LIST_H), ...scrollbar(v, t, "procs", y, LIST_H)])
-      : emptyView(v, t, LIST_H));
+        .children([...layer(v, guides, Background.checkerboard(t.ansi0, dotCell()).opacity(0.9), W - 2, listHt), ...scrollbar(v, t, "procs", y, listHt)])
+      : emptyView(v, t, listHt));
 }

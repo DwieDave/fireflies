@@ -2,9 +2,16 @@
 // under the tab strip's tree mark (../nocturne/procs.ts), or centered from
 // nocturne.procs / nocturne.ports and the palette. This machine only.
 //
-//   head       the tree mark, its three tabs (processes and ports with their
-//              counts, system with the CPU now), and what's listed:
-//              "fireflies" (this app's terminals) or "all of <user>'s" (a switches)
+//   head       the tree mark, its two tabs (processes and ports with their
+//              counts), and what's listed: "fireflies" (this app's terminals)
+//              or "all of <user>'s" (a switches)
+//   readings   under the head, always in view (vitals-view.ts): CPU, memory,
+//              network and disk as small line graphs over the last two
+//              a minute and a half, a reading a second while the deck is open (none while
+//              it's closed; never two at once; sys.ts has the sources). The
+//              pointer on a graph puts its whole reading in the foot (the GPU
+//              and how full the disk is among them). Four across, or two by two
+//              in a deck too narrow for four.
 //   processes  a tree: space › tab › terminal › the terminal's process and
 //              everything it started (shells, agents, dev servers, builds);
 //              terminals without a pane under "no pane"; spaces on another
@@ -21,11 +28,6 @@
 //   ports      the TCP ports his processes listen on, those in this app's
 //              terminals first: port, process, where it runs; on the cursor's
 //              row open ↗ (a web pane), copy (http://localhost:<port>), end
-//   system     live graphs, dithered, the last minute and a half (a reading
-//              a second while this tab shows, every 2 s behind the others,
-//              none while the deck is closed; never two at once):
-//              CPU, GPU, memory, disk and network, each with its value now
-//              (sys.ts has the sources); a source this machine lacks says so
 //   foot       what the cursor is on and its keys
 //
 // The selected process's detail block carries its own CPU and memory over
@@ -45,7 +47,7 @@
 //   h ← fold, or up to the parent · l → unfold, or into the first child
 //   space fold or unfold · enter: a group folds, a process or terminal shows
 //   its terminal's pane, a port opens
-//   tab 1 2 3 processes / ports / system · a this app's terminals / all of yours
+//   tab 1 2 processes / ports · a this app's terminals / all of yours
 //   x end · X end it and everything under it · K kill -9 what held on
 //   o open the port in a web pane · c copy the address (a process: its
 //   command line) · r read again now · / find (esc clears, again: back)
@@ -75,24 +77,32 @@ import { keysView, keysKey } from "./keyhelp.ts";
 import type { Index, Probe, Row, TreeNode } from "./logic.ts";
 import { PROBE, parseProbe, index } from "./logic.ts";
 import type { Measured, Reading } from "./sys.ts";
-import { SYS_PROBE, STEP, STEP_SHOWN, parseSys, measure, push } from "./sys.ts";
-import type { Tab, History, Own, Cursors, Scrolls, Drag, Command, Ask, Note, Item } from "./state.ts";
-import { deckProps, ESCAPE, CONTEXT, REFRESH, DECK, isTab, COUNT, TABS, PORTS_H, PROW, LIST_H, ROW, FOOT, HEAD, H, deckKeys } from "./state.ts";
+import { SYS_PROBE, STEP, parseSys, measure, push } from "./sys.ts";
+import type { Fit, History, Point, Vital } from "./vitals.ts";
+import { emptyHistory, linePoints, record, stripLayout } from "./vitals.ts";
+import type { Tab, Own, Cursors, Scrolls, Drag, Command, Ask, Note, Item } from "./state.ts";
+import { deckProps, ESCAPE, CONTEXT, REFRESH, DECK, isTab, COUNT, TABS, PORTS_H, PROW, LIST_H, ROW, FOOT, HEAD, H, W, deckKeys, listH } from "./state.ts";
 import { listRows, moveTo, portList, procCount, procTree, rowAt, tabList } from "./listing.ts";
 import { activate, begin, copyRow, escapeKey, foldRow, openPortAt, switchTab, toggleAll, askKey, findKey } from "./actions.ts";
 import { dragTo } from "./pointer.ts";
 import { procsView } from "./procs-view.ts";
-import { systemView } from "./system-view.ts";
+import { vitalsStrip } from "./vitals-view.ts";
 import { portsView } from "./ports-view.ts";
 import { footBar, headBar } from "./bars.ts";
 
 export default class ProcsDeck extends View {
   static bound = false;
   tab: Tab = "procs";
-  // The system graphs' histories (sys.ts), the last reading's values, and each process's own.
-  sys: History = { cpu: [], gpu: [], mem: [], disk: [], rx: [], tx: [] };
+  // The readings' histories (vitals.ts), the last reading's values, and each process's own.
+  sys: History = emptyHistory();
   now: Measured | null = null;
   sysReading: Reading | null = null;
+  // The deck's inner width as drawn (layout px): the strip goes two by two when it's narrow.
+  width = W - 2;
+  // The graph under the pointer: its whole reading shows in the foot.
+  hoverVital: Vital | null = null;
+  // A graph's line over a history, made again only when that history (a new array a reading) or its scale changes.
+  pointsCache = new WeakMap<readonly (number | null)[], { sig: string; runs: Point[][] }>();
   hist = new Map<number, Own>();
   all = false;
   snap: Probe | null = null;
@@ -102,7 +112,7 @@ export default class ProcsDeck extends View {
   folds = new Map<string, boolean>();
   query = "";
   typing = false;
-  cur: Cursors = { procs: { key: null, at: 0 }, ports: { key: null, at: 0 }, system: { key: null, at: 0 } };
+  cur: Cursors = { procs: { key: null, at: 0 }, ports: { key: null, at: 0 } };
   scroll: Scrolls = { procs: 0, ports: 0 };
   // The list keeps the cursor in sight until the wheel or the scrollbar moves it away; a key or a click brings it back.
   follow = true;
@@ -123,7 +133,7 @@ export default class ProcsDeck extends View {
   override init(_p: Props | undefined, cx: AsyncContext): void {
     const tab = deckProps().tab;
 
-    this.tab = tab === "ports" || tab === "system" ? tab : "procs";
+    this.tab = tab === "ports" ? tab : "procs";
 
     const handle = cx.focus_handle();
 
@@ -222,18 +232,36 @@ export default class ProcsDeck extends View {
     this.hist = next;
   }
 
-  /** The system readings' pace: a second while the system tab shows, else 2 s. */
-  pace(): number {
-    return this.tab === "system" ? STEP_SHOWN : STEP;
-  }
-
-  /** A system reading, when its pace has passed since the last began and none is running:
+  /** A reading for the graphs, when a second has passed since the last began and none is running:
    *  a slow source holds the next one back instead of piling them up. */
   tick(cx: Context, now = Date.now()): void {
-    if (!this.sampling && now - (this.sampled ?? 0) >= this.pace()) this.sample(cx);
+    if (!this.sampling && now - (this.sampled ?? 0) >= STEP) this.sample(cx);
   }
 
-  /** One system reading (sys.ts SYS_PROBE, about a second: iostat measures one). */
+  /** A graph's line over `values` (vitals.ts linePoints), kept while they and the scale stay. */
+  points(values: readonly (number | null)[], fit: Fit): Point[][] {
+    const sig = `${fit.max ?? ""}:${fit.floor ?? ""}:${fit.h ?? ""}`;
+    const c = this.pointsCache.get(values);
+
+    if (c?.sig === sig) return c.runs;
+
+    const runs = linePoints(values, fit);
+
+    this.pointsCache.set(values, { sig, runs });
+
+    return runs;
+  }
+
+  /** The strip's height, and the lists' under it. */
+  stripH(): number {
+    return stripLayout(this.width).h;
+  }
+
+  listH(): number {
+    return listH(this.tab === "ports" ? PORTS_H : LIST_H, this.stripH());
+  }
+
+  /** One reading for the graphs (sys.ts SYS_PROBE, about a second: iostat measures one). */
   sample(cx: Context): void {
     if (this.sampling) return;
 
@@ -247,18 +275,7 @@ export default class ProcsDeck extends View {
 
         this.sysReading = reading;
         this.now = m;
-
-        const s = this.sys;
-
-        s.cpu = push(s.cpu, m.cpu?.pct ?? null);
-        s.gpu = push(s.gpu, m.gpu?.pct ?? null);
-        s.mem = push(s.mem, m.mem?.pct ?? null);
-        s.disk = push(s.disk, m.disk?.mbps ?? null);
-
-        if (m.netSeen) {
-          s.rx = push(s.rx, m.net?.rx ?? null);
-          s.tx = push(s.tx, m.net?.tx ?? null);
-        }
+        this.sys = record(this.sys, m);
       } catch {
         // The graphs keep what they had.
       }
@@ -337,7 +354,7 @@ export default class ProcsDeck extends View {
     const items = this.list();
     const i = this.at(items);
     const item = items[i];
-    const page = Math.max(1, Math.floor((this.tab === "ports" ? PORTS_H / PROW : LIST_H / ROW)) - 1);
+    const page = Math.max(1, Math.floor(this.listH() / (this.tab === "ports" ? PROW : ROW)) - 1);
 
     if (k === "down" || k === "up") {
       moveTo(this, items, i + (k === "down" ? 1 : -1));
@@ -354,7 +371,7 @@ export default class ProcsDeck extends View {
     }
 
     if (k === "tab") {
-      switchTab(this, m.shift ? TABS[(TABS.indexOf(this.tab) + 2) % 3] : undefined, cx);
+      switchTab(this, m.shift ? TABS[(TABS.indexOf(this.tab) + TABS.length - 1) % TABS.length] : undefined, cx);
       done();
 
       return;
@@ -376,7 +393,6 @@ export default class ProcsDeck extends View {
     else if (k === "enter") activate(this, items, i);
     else if (k === "1") switchTab(this, "procs", cx);
     else if (k === "2") switchTab(this, "ports", cx);
-    else if (k === "3") switchTab(this, "system", cx);
     else if (k === "a") toggleAll(this);
     else if (k === "x") begin(this, item, m.shift);
     else if (k === "o" && this.tab === "ports") {
@@ -422,13 +438,13 @@ export default class ProcsDeck extends View {
       })
       .on_key_down((e, cx) => this.onKey(e, cx))
       .child(headBar(this, t, nProcs, ports.length))
-      .when(this.help, (el) => el.child(div().id("procs-help").relative().h(H - 2 - HEAD - FOOT).flex_none()
+      .child(vitalsStrip(this, t))
+      .when(this.help, (el) => el.child(div().id("procs-help").relative().h(H - 2 - HEAD - this.stripH() - FOOT).flex_none()
         .child(keysView(t, { id: "procs-keys", title: "processes and ports", list: deckKeys(), close: () => {
           this.help = false;
         } }))))
       .when(!this.help && this.tab === "procs", (el) => el.child(procsView(this, t, rows, ci)))
       .when(!this.help && this.tab === "ports", (el) => el.child(portsView(this, t, ports, ci)))
-      .when(!this.help && this.tab === "system", (el) => el.child(systemView(this, t)))
       .child(footBar(this, t, items, ci));
 
     return this.handle ? el.track_focus(this.handle) : el;
