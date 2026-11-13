@@ -583,7 +583,23 @@ the highlighted line shows where it will land.
   n › at the ends; the wheel over it steps tabs, a middle click closes one).
   The strip shows from two files on: with one, the bar names the file with
   its unsaved mark. Drag a tab along the strip to move it (it lifts, a stake
-  marks where it lands; off the strip it stays); the order is kept. Each tab keeps its text, undo, caret, scroll, folds,
+  marks where it lands; dropped on the pane below the strip it pops out; off
+  the pane it stays); the order is kept. A right-click on a tab (or space b m,
+  `nocturne-editor.tab-menu`) opens its menu: pop out into its own pane, pop
+  out into a new tab, move into the editor beside, move left / right, close,
+  close the others (those with unsaved changes stay); j k / ↑ ↓, enter, the
+  entries' letters, esc. **Popping a tab out** (the menu, the drag, space b o,
+  `:popout`, `nocturne-editor.pop-out` beside or `.pop-out-tab` in a new tab
+  of the window) opens an editor pane of its own with what the tab had: its
+  unsaved text, caret, scroll, Markdown view, wrap, drawn or text (shared
+  `nocturne-editor.handover` `{ slot, path, text?, saved?, caret, top, view,
+  wrap, look, at }` for the editor of that slot; undo stays behind, it lives
+  in the editor it was typed in). The tab leaves the strip without asking;
+  the last one popping out closes its pane. The popped pane (props `popped`)
+  keeps its file while it lives (`editor.open`, the files pane and the picker
+  show it there) and takes no other files; space b i, `:popin`,
+  `nocturne-editor.pop-in` move its shown tab into the editor beside, as a
+  tab, the same way. Each tab keeps its text, undo, caret, scroll, folds,
   unsaved changes and Markdown view. Where a file goes: go to definition and
   references into another file, a card link to a file, `:e <file>` and a
   Markdown preview's link open it as a tab of the same editor; the files pane
