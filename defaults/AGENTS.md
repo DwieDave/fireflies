@@ -414,7 +414,7 @@ the highlighted line shows where it will land.
   Without it, and for other agents (Codex, pi, opencode, ...), a request shows
   herdr-core's words for it and the end of the agent's screen, with peek and
   go to; an agent family gets exact answers by an adapter in the mod's
-  `model.js` (`describe` the request from its screen, `step` the keys).
+  `model.ts` (`describe` the request from its screen, `step` the keys).
   Ctrl-click (Cmd-click on macOS) a live terminal address in terminal text to
   peek at it. Bare addresses refer to the machine of the terminal showing them;
   use `machine/address` for another machine. Names and non-live addresses aren't links.

@@ -270,7 +270,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   expect(typing.help).toBe(true);
 });
 
-const overview = await import("../defaults/mods/notifications/overview.js");
+const overview = await import("../defaults/mods/notifications/overview.ts");
 test("notifications overview: ? lists every key", () => {
   const it = { id: "a", type: "permission", answerable: true, request: { options: [{ n: 1 }, { n: 2 }] } };
   const keys = taken(() => { const o = surface(overview.default, ["key"], { but: null, keysShown: false, cursor: 0, list: () => [it], current: () => it }); return (e, cx) => o.key(e, cx); });

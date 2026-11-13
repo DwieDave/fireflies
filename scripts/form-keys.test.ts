@@ -16,7 +16,7 @@ const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.ts");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
 const Feedback = (await import("../defaults/frame/feedback/main.js")).default;
 const MachineAdd = (await import("../defaults/mods/machine-add/main.js")).default;
-const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/notifications/ask.js");
+const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/notifications/ask.ts");
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const t = (await import("./dialog-stubs.ts")).theme;
 
@@ -48,7 +48,7 @@ test("one helper: every mod with a form ships the same form-keys.ts", () => {
 const ROOTS: [string, string][] = [
   ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.js", "this.key(e, cx)"],
   ["mods/nocturne/sky.js", "this.key(e, cx)"], ["mods/nocturne/dialog.ts", "this.key(e, cx)"],
-  ["mods/notifications/ask-dialog.js", "this.key(e, cx)"], ["mods/editor/main.js", "this.findKey(e, cx)"],
+  ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/main.js", "this.findKey(e, cx)"],
   ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
 ];
 

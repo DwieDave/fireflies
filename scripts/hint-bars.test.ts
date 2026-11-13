@@ -86,10 +86,10 @@ test("sidebar: its hint line ends with ? keys", () => {
   expect(words.slice(-2)).toEqual(["?", "keys"]);
 });
 
-const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/notifications/overview.js");
+const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/notifications/overview.ts");
 
 test("notifications overview: ? keys ends its key bar, after the sent / not sent note; its key list ends with ? too", () => {
-  const o: any = Object.create(Overview.prototype);
+  const o: any = new Overview();
   const it = { id: "a", type: "other", status: "error" };
   o.note = { id: "a", text: "sent" };
   expect(texts(o.footer(theme, it)).slice(-3)).toEqual(["sent", "?", "keys"]);

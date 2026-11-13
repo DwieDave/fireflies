@@ -185,7 +185,7 @@ test("deck: an ended run's output scrolls by keys, esc goes back to the list", (
 
 // ---- the notifications overview
 
-const { default: Overview } = await import("../defaults/mods/notifications/overview.js");
+const { default: Overview } = await import("../defaults/mods/notifications/overview.ts");
 
 test("overview: q closes, up / down move between requests that have no options", () => {
   propsNow = { overlay: "n1" };
