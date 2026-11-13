@@ -61,14 +61,19 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const md = await load("markdown/markdown.ts");
+// markdown.ts and its parser imported for real, with the stand-ins above.
+const mdStandins = { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
+const mdMain = await importMod("markdown/markdown.ts", mdStandins);
+const md = { ...mdMain, ...(await importMod("markdown/markdown-parse.ts", mdStandins)) };
 const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
 const { follow, join, dirname, basename, tilde } = await load("markdown/paths.ts");
 
-test("the GitHub window, the viewer and the editor ship the same markdown.ts (and the editor the viewer's paths.ts)", async () => {
+test("the GitHub window, the viewer and the editor ship the same markdown.ts and markdown-parse.ts (and the editor the viewer's paths.ts)", async () => {
   const read = (mod: string, file = "markdown.ts") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
-  expect(await read("github")).toBe(await read("markdown"));
-  expect(await read("editor")).toBe(await read("markdown"));
+  for (const file of ["markdown.ts", "markdown-parse.ts"]) {
+    expect(await read("github", file)).toBe(await read("markdown", file));
+    expect(await read("editor", file)).toBe(await read("markdown", file));
+  }
   expect(await read("editor", "paths.ts")).toBe(await read("markdown", "paths.ts"));
 });
 
@@ -316,7 +321,7 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   const logic = await load("editor/logic.ts", guards);
   const route = await load("editor/editor-route.ts");
   const extra = {
-    ...guards, ...logic, ...(await load("editor/vim.ts")), ...md, ...(await load("editor/paths.ts")),
+    ...guards, ...logic, ...(await load("editor/vim.ts")), ...mdMain, ...(await load("editor/paths.ts")),
     ...(await load("editor/tabs.ts", { ...guards, ...logic, ...route })), ...route,
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),

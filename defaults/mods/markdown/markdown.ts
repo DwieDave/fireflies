@@ -1,9 +1,9 @@
 // Markdown in Nocturne's look: the GitHub window's PR bodies and comments,
 // the Markdown viewer, and the editor's live preview. Shared by
 // github, markdown and editor. A mod can import
-// only its own files, so each of them ships this same file;
-// scripts/markdown.test.ts fails when the copies differ: edit
-// markdown/markdown.ts and copy it over.
+// only its own files, so each of them ships this same file and its parser,
+// markdown-parse.ts; scripts/markdown.test.ts fails when the copies differ:
+// edit markdown's and copy them over.
 //
 // What the app draws natively inside every Markdown text (src/markdown.rs):
 // math ($…$, $$…$$, a ```math fence), mermaid diagrams (a ```mermaid fence),
@@ -17,6 +17,7 @@ import type { Color, Context, Element } from "gpui-kit";
 import { TextView, h_flex, v_flex } from "gpui-base";
 import { exec, appHome } from "herdr";
 import type { Theme } from "herdr";
+import { blocks, TASK } from "./markdown-parse.ts";
 
 /** The theme colours a callout is drawn in. */
 export type CalloutColor = "ansi1" | "ansi2" | "ansi3" | "ansi4" | "ansi5" | "ansi6" | "ansi8" | "ansi13";
@@ -49,7 +50,7 @@ export interface Footnote {
 
 /** What every block has: its source lines (0-based, inclusive) and the
  *  footnotes referenced in it (`fnref-…`, for the way back). */
-interface Lines {
+export interface Lines {
   readonly from: number;
   readonly to: number;
   readonly anchors?: readonly string[];
@@ -125,63 +126,6 @@ export function slug(heading: string): string {
     .replace(/ /g, "-");
 }
 
-const FENCE = /^ {0,3}(`{3,}|~{3,})/;
-const HEADING = /^ {0,3}(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$/;
-const SETEXT = /^ {0,3}(=+|-+)[ \t]*$/;
-const REF = /^ {0,3}\[(?!\^)[^\]]+\]:[ \t]*\S/;
-const FOOTNOTE = /^ {0,3}\[\^([^\]\s]+)\]:[ \t]?(.*)$/;
-const LIST = /^(\s*)([-*+]|\d{1,9}[.)])(\s+|$)/;
-const TASK = /^(\s*)([-*+]|\d{1,9}[.)])\s+\[([ xX])\](?=\s|$)\s?(.*)$/;
-const CALLOUT = /^ {0,3}>\s?\[!([A-Za-z-]+)\]([+-]?)[ \t]*(.*)$/;
-const ADMONITION = /^(!!!|\?\?\?\+?)[ \t]+([A-Za-z-]+)(?:[ \t]+"([^"]*)")?[ \t]*$/;
-const MATH_FENCE = /^ {0,3}\$\$/;
-const INDENTED = /^(\s{2,}|\t)\S/;
-
-// A line holding only images: ![alt](src "title"), optionally wrapped in a link, or <img src>.
-const MD_IMAGE = /\[?!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+["'(][^)]*["')])?\s*\)(?:\]\([^)]*\))?/g;
-const HTML_IMAGE = /<img\b[^>]*?\bsrc\s*=\s*["']([^"']+)["'][^>]*>/gi;
-
-/** Whether an image source is a file next to the document (not http, data: or another scheme). */
-export function isLocalSource(src: string): boolean {
-  return !/^[a-z][a-z0-9+.-]*:/i.test(src) && !src.startsWith("//");
-}
-
-/** The images a line holds, when it holds nothing else (HTML wrappers aside). */
-export function imageLine(line: string): ImageRef[] | null {
-  const images: ImageRef[] = [];
-
-  const rest = line
-    .replace(MD_IMAGE, (_m, alt: string, src: string) => {
-      images.push({ alt, src });
-
-      return "";
-    })
-    .replace(HTML_IMAGE, (m, src: string) => {
-      images.push({ alt: /\balt\s*=\s*["']([^"']*)["']/i.exec(m)?.[1] ?? "", src });
-
-      return "";
-    })
-    .replace(/<\/?(p|div|a|picture|source|br|center)\b[^>]*>/gi, "");
-
-  return images.length && !rest.trim() ? images : null;
-}
-
-/** Local images inside running text (TextView can't draw them) as links to the file. */
-export function imagesAsLinks(line: string): string {
-  return line.replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+["'(][^)]*["')])?\s*\)/g,
-    (m, alt: string, src: string) => (isLocalSource(src) ? `[▧ ${alt || src.split("/").pop() || src}](${src})` : m));
-}
-
-const SUP = "⁰¹²³⁴⁵⁶⁷⁸⁹";
-const sup = (n: number): string => String(n).split("").map((d) => SUP[Number(d)] ?? d).join("");
-
-/** Footnote references `[^id]` as superscript links to their note, outside
- *  code spans; `number(id)` numbers them in the order they're first seen. */
-export function footnoteRefs(line: string, number: (id: string) => number): string {
-  return line.split(/(`+[^`]*`+)/).map((piece, i) => (i % 2 ? piece
-    : piece.replace(/\[\^([^\]\s]+)\](?!:)/g, (_m, id: string) => `[${sup(number(id))}](#fn-${slug(id)})`))).join("");
-}
-
 /** Callout colors and names by type (a document names the type): GitHub's five
  *  and Obsidian's / MkDocs' others. */
 export const CALLOUTS: ReadonlyMap<string, readonly [color: CalloutColor, name: string]> = new Map<string, readonly [CalloutColor, string]>([
@@ -195,371 +139,15 @@ export const CALLOUTS: ReadonlyMap<string, readonly [color: CalloutColor, name: 
   ["quote", ["ansi8", "Quote"]], ["cite", ["ansi8", "Cite"]],
 ]);
 
-/** A callout type's colour and name: its own, else the note's colour and the type, capitalised. */
-const calloutOf = (written: string): readonly [CalloutColor, string] =>
-  CALLOUTS.get(written.toLowerCase()) ?? ["ansi4", written.slice(0, 1).toUpperCase() + written.slice(1).toLowerCase()];
-
-/** A short, stable hash of a string (FNV-1a), for block keys. */
-function hash(s: string): string {
-  let h = 0x811c9dc5;
-
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = Math.imul(h, 0x01000193);
-  }
-
-  return (h >>> 0).toString(36);
+/** Local images inside running text (TextView can't draw them) as links to the file. */
+export function imagesAsLinks(line: string): string {
+  return line.replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+["'(][^)]*["')])?\s*\)/g,
+    (m, alt: string, src: string) => (isLocalSource(src) ? `[▧ ${alt || src.split("/").pop() || src}](${src})` : m));
 }
 
-const indentOf = (s: string): number => s.replace(/\t/g, "    ").length;
-
-/** The items of a list holding tasks: each item's first line, indent,
- *  marker, checked (null: not a task), and its text (continuations joined). */
-function taskItems(lines: readonly string[], from: number): TaskItem[] {
-  const items: TaskItem[] = [];
-
-  lines.forEach((line, i) => {
-    const task = TASK.exec(line);
-    const list = LIST.exec(line);
-    const last = items.at(-1);
-
-    if (task) items.push({ line: from + i, indent: indentOf(task[1] ?? ""), marker: task[2] ?? "", checked: task[3] !== " ", text: task[4] ?? "" });
-    else if (list) items.push({ line: from + i, indent: indentOf(list[1] ?? ""), marker: list[2] ?? "", checked: null, text: line.slice(list[0].length) });
-    else if (last) items[items.length - 1] = { ...last, text: last.text + "\n" + line.trim() };
-  });
-
-  return items;
-}
-
-/** A run of lines collected into one block, from line `from`. */
-interface LineRun {
-  readonly from: number;
-  readonly lines: string[];
-  anchor?: string;
-}
-
-/** Whether a fence line `f` closes the fence opened with `open`. */
-const closes = (f: RegExpExecArray | null, open: string, line: string): boolean => {
-  const mark = f?.[1];
-
-  return Boolean(f && mark && mark[0] === open[0] && mark.length >= open.length && !line.slice(f[0].length).trim());
-};
-
-/** A footnote definition, gathered in the first pass. */
-interface NoteDraft {
-  readonly id: string;
-  readonly text: string;
-  readonly from: number;
-  readonly to: number;
-}
-
-/** What the first pass finds: reference definitions, footnotes, and the lines footnotes take. */
-interface Definitions {
-  readonly refs: string[];
-  readonly notes: Map<string, NoteDraft>;
-  readonly noteLines: Set<number>;
-}
-
-/** The first pass: reference definitions and footnotes (outside fences). */
-function definitions(lines: readonly string[]): Definitions {
-  const refs: string[] = [];
-  const notes = new Map<string, NoteDraft>();
-  const noteLines = new Set<number>();
-  let fence: string | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-    const f = FENCE.exec(line);
-
-    if (fence) {
-      if (closes(f, fence, line)) fence = null;
-
-      continue;
-    }
-
-    if (f) {
-      fence = f[1] ?? null;
-
-      continue;
-    }
-
-    if (REF.test(line)) refs.push(line);
-
-    const fn = FOOTNOTE.exec(line);
-    const id = fn?.[1];
-
-    if (fn && id) {
-      const body = [fn[2] ?? ""];
-      let j = i + 1;
-
-      noteLines.add(i);
-
-      // Its continuation: indented lines, blank lines between them.
-      for (let next = lines[j]; next !== undefined && (INDENTED.test(next) || (!next.trim() && INDENTED.test(lines[j + 1] ?? ""))); next = lines[j]) {
-        body.push(next.trim());
-        noteLines.add(j);
-        j++;
-      }
-
-      if (!notes.has(id)) notes.set(id, { id, text: body.join("\n"), from: i, to: j - 1 });
-
-      i = j - 1;
-    }
-  }
-
-  return { refs, notes, noteLines };
-}
-
-/** A heading's anchor: its slug, numbered from the second time it's seen. */
-const anchorOf = (seen: Map<string, number>, text: string): string => {
-  const base = slug(text);
-  const n = seen.get(base) ?? 0;
-
-  seen.set(base, n + 1);
-
-  return n ? `${base}-${n}` : base;
-};
-
-/** What a block's key is made from. */
-const keyText = (p: Unkeyed): string => {
-  switch (p.kind) {
-    case "images": return JSON.stringify(p.images);
-    case "tasks": return JSON.stringify(p.items);
-    case "footnotes": return JSON.stringify(p.notes);
-    case "callout": return JSON.stringify([p.text, p.title]);
-    case "md": return JSON.stringify([p.text, ""]);
-  }
-};
-
-/** A document cut into blocks drawn one by one, each knowing its source lines
- *  (`from`..`to`, 0-based) and a stable `key` (its kind and text); see Block.
- *  Reference definitions are copied into every Markdown block so `[text][ref]`
- *  still resolves; footnote references become superscript links. A block also
- *  lists the footnotes referenced in it (`anchors`: fnref-…) for the way back. */
-export function blocks(text: string): Block[] {
-  const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const { refs, notes, noteLines } = definitions(lines);
-  const numbers = new Map<string, number>();
-
-  const number = (id: string): number => {
-    const known = numbers.get(id);
-
-    if (known !== undefined) return known;
-
-    const n = numbers.size + 1;
-
-    numbers.set(id, n);
-
-    return n;
-  };
-
-  const out: Unkeyed[] = [];
-  const seen = new Map<string, number>();
-  let run: LineRun | null = null;
-
-  const flush = (): void => {
-    if (run && run.lines.some((l) => l.trim())) {
-      // Trailing blank lines aren't the block's.
-      while (!(run.lines.at(-1) ?? "x").trim()) run.lines.pop();
-
-      out.push(classify(run, refs, number));
-    }
-
-    run = null;
-  };
-
-  const push = (i: number, line: string): void => {
-    run ??= { from: i, lines: [] };
-    run.lines.push(line);
-  };
-
-  let fence: string | null = null;
-  let math = false;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
-
-    // Front matter: a YAML block at the very top, shown as such.
-    if (i === 0 && /^---\s*$/.test(line)) {
-      const end = lines.findIndex((l, j) => j > 0 && /^(---|\.\.\.)\s*$/.test(l));
-
-      if (end > 0) {
-        out.push({ kind: "md", text: fenced(lines.slice(1, end).join("\n")).replace(/^`+/, (m) => m + "yaml"), from: 0, to: end });
-        i = end;
-
-        continue;
-      }
-    }
-
-    if (noteLines.has(i)) {
-      flush();
-
-      continue;
-    }
-
-    const f = FENCE.exec(line);
-
-    if (fence) {
-      if (closes(f, fence, line)) fence = null;
-
-      push(i, line);
-
-      continue;
-    }
-
-    if (math) {
-      if (/\$\$\s*$/.test(line)) math = false;
-
-      push(i, line);
-
-      continue;
-    }
-
-    if (f) {
-      if (!run || !run.lines.some((l) => l.trim())) flush();
-
-      fence = f[1] ?? null;
-      push(i, line);
-
-      continue;
-    }
-
-    if (MATH_FENCE.test(line) && !/^\s*\$\$.+\$\$\s*$/.test(line)) {
-      math = true;
-      push(i, line);
-
-      continue;
-    }
-
-    const h = HEADING.exec(line);
-
-    if (h) {
-      flush();
-      run = { from: i, lines: [line], anchor: anchorOf(seen, h[2] ?? "") };
-      flush();
-
-      continue;
-    }
-
-    // A setext heading: one line of text, then === or ---.
-    const only = run?.lines.length === 1 ? run.lines[0] : undefined;
-
-    if (run && SETEXT.test(line) && only?.trim() && !LIST.test(only) && !/^\s*>/.test(only)) {
-      run.lines.push(line);
-      run.anchor = anchorOf(seen, only.trim());
-      flush();
-
-      continue;
-    }
-
-    const images = imageLine(line);
-
-    if (images?.some((im) => isLocalSource(im.src))) {
-      flush();
-      out.push({ kind: "images", images, from: i, to: i });
-
-      continue;
-    }
-
-    if (REF.test(line)) {
-      flush();
-
-      continue;
-    }
-
-    if (!line.trim()) {
-      // A blank line ends the block unless what follows belongs to it: an
-      // indented continuation, or the next item of the same list.
-      const next = lines.slice(i + 1).find((l) => l.trim());
-      const inList = LIST.test(run?.lines[0] ?? "");
-
-      if (run && next !== undefined && (INDENTED.test(next) || (inList && LIST.test(next)))) {
-        push(i, line);
-
-        continue;
-      }
-
-      flush();
-
-      continue;
-    }
-
-    // A list or quote right after a paragraph line starts its own block.
-    if (run?.lines.length && TASK.test(line) && !LIST.test(run.lines[0] ?? "")) flush();
-
-    push(i, imagesAsLinks(line));
-  }
-
-  flush();
-
-  if (notes.size) {
-    const list = [...notes.values()].sort((a, b) => (numbers.get(a.id) ?? 1e9) - (numbers.get(b.id) ?? 1e9) || a.from - b.from);
-    const drafts = list.map((n) => ({ ...n, text: footnoteRefs(imagesAsLinks(n.text), number) }));
-
-    out.push({
-      kind: "footnotes",
-      notes: drafts.map((n) => ({ id: n.id, n: number(n.id), anchor: `fn-${slug(n.id)}`, text: n.text, from: n.from, to: n.to })),
-      from: Math.min(...drafts.map((n) => n.from)),
-      to: Math.max(...drafts.map((n) => n.to)),
-    });
-  }
-
-  const count = new Map<string, number>();
-
-  return out.map((p) => {
-    const base = `${p.kind}-${hash(keyText(p))}`;
-    const n = count.get(base) ?? 0;
-
-    count.set(base, n + 1);
-
-    return { ...p, key: n ? `${base}-${n}` : base };
-  });
-}
-
-/** What a run of lines is: Markdown, a task list, a callout. */
-function classify(run: LineRun, refs: readonly string[], number: (id: string) => number): Unkeyed {
-  const from = run.from;
-  const to = run.from + run.lines.length - 1;
-  const refsIn: string[] = [];
-
-  const withRefs = (lines: readonly string[]): string[] => lines.map((l) => {
-    for (const m of l.matchAll(/\[\^([^\]\s]+)\](?!:)/g)) refsIn.push(`fnref-${slug(m[1] ?? "")}`);
-
-    return footnoteRefs(l, number);
-  });
-
-  const body = (lines: readonly string[]): string => [...withRefs(lines), ...(refs.length ? ["", ...refs] : [])].join("\n");
-  const lines = (): Lines => (refsIn.length ? { from, to, anchors: [...new Set(refsIn)] } : { from, to });
-  const first = run.lines[0] ?? "";
-  const callout = CALLOUT.exec(first);
-
-  if (callout && run.lines.every((l) => /^\s{0,3}>/.test(l) || !l.trim())) {
-    const written = callout[1] ?? "";
-    const [color, name] = calloutOf(written);
-    const text = body(run.lines.slice(1).map((l) => l.replace(/^\s{0,3}>\s?/, "")));
-
-    return { kind: "callout", type: written.toLowerCase(), title: callout[3] || name, color, folded: callout[2] === "-", text, ...lines() };
-  }
-
-  const adm = ADMONITION.exec(first);
-
-  if (adm) {
-    const written = adm[2] ?? "";
-    const [color, name] = calloutOf(written);
-    const text = body(run.lines.slice(1).map((l) => l.replace(/^( {4}|\t)/, "")));
-
-    return { kind: "callout", type: written.toLowerCase(), title: adm[3] ?? name, color, folded: adm[1] === "???", text, ...lines() };
-  }
-
-  if (LIST.test(first) && run.lines.some((l) => TASK.test(l))) {
-    const items = taskItems(run.lines, from).map((it) => ({ ...it, text: body([it.text]) }));
-
-    return { kind: "tasks", items, ...lines() };
-  }
-
-  const text = body(run.lines);
-
-  return run.anchor ? { kind: "md", text, anchor: run.anchor, ...lines() } : { kind: "md", text, ...lines() };
+/** Whether an image source is a file next to the document (not http, data: or another scheme). */
+export function isLocalSource(src: string): boolean {
+  return !/^[a-z][a-z0-9+.-]*:/i.test(src) && !src.startsWith("//");
 }
 
 /** The edit that ticks or unticks the task on `line` of `text`: the one

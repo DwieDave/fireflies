@@ -325,7 +325,7 @@ the mods build on (read the file's top and its `export type`s):
 | `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
 | `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree | `preview-shared.test.ts` | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
 | `file-icons.ts` (and `icons/*.svg`) | editor, file-tree, preview (viewer.ts imports it) | `editor-tabs.test.ts`, `preview-shared.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
-| `markdown.ts` | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
+| `markdown.ts`, `markdown-parse.ts` (its blocks) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
 | `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |
 | `scratch.ts` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry`, `ScratchIo`, `Autosave`, `AutosaveState` |
 | `limits.ts` | nocturne, usage | `usage-limits.test.ts` | the usage windows |
