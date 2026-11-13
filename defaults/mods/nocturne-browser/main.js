@@ -462,7 +462,7 @@ export default class Browser extends View {
     const row = (r) => {
       const i = n++, on = i === this.cursor && r.enabled;
       return h_flex().id(`tm-${r.act}`).relative().h(MENU_ROW).flex_none().px(12).items_center().text_size(12)
-        .text_color(!r.enabled ? t.ansi8 : on ? t.foreground : t.muted)
+        .text_color(!r.enabled ? t.ansi0 : on ? t.foreground : t.muted)
         .on_hover((h, cx) => { if (h && r.enabled && this.cursor !== i) { this.cursor = i; cx.notify(); } })
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click(() => this.pickRow(r))
@@ -1137,8 +1137,8 @@ export default class Browser extends View {
         // Middle click closes it, as in a browser; a right-click opens its menu.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.claim(); this.closeTab(tab.id, cx); cx.notify(); })
         .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.claim(); this.openTabMenu(tab.id, false); })
-        // Pinned to the shelf: a small dithered mark in its corner.
-        .when(pinned(tab.id), (el) => el.child(div().absolute().left(2).top(4).size(4).child(dither(t.foreground, 1))))
+        // Pinned to the shelf: a small square in its corner, as the shelf's tiles.
+        .when(pinned(tab.id), (el) => el.child(div().absolute().left(2).top(4).size(4).bg(on ? t.foreground : t.muted)))
         .child(div().flex_none().text_color(on || tab.page.loading ? t.accent : t.dim).child(i < 9 ? String(i + 1) : "·"))
         .child(div().flex_1().min_w(0).truncate().child(Tabs.label(tab)))
         .child(div().id(`webtab-x-${tab.id}`).size(16).flex_none().flex().items_center().justify_center().text_color(t.dim)
