@@ -32,6 +32,16 @@ fn js() -> String {
     tree_sitter_javascript::HIGHLIGHT_QUERY.to_owned()
 }
 
+/// tree-sitter-sql's query is written for "a later pattern wins" (nvim);
+/// here the earlier one does: its catch-alls (every literal a string, every
+/// name a type) go last, so numbers and called functions keep their names.
+const SQL_CATCH_ALLS: [&str; 2] = ["(object_reference\n  name: (identifier) @type)\n", "(literal) @string\n"];
+
+fn sql() -> String {
+    let q = SQL_CATCH_ALLS.iter().fold(tree_sitter_sequel::HIGHLIGHTS_QUERY.to_owned(), |q, p| q.replacen(p, "", 1));
+    format!("{q}\n{}", SQL_CATCH_ALLS.concat())
+}
+
 /// Every language the editor knows, in the order a lookup tries them.
 pub static LANGS: &[Lang] = &[
     Lang { id: "rust", aliases: &["rs"], extensions: &["rs"], files: &[], grammar: Some(|| (tree_sitter_rust::LANGUAGE.into(), tree_sitter_rust::HIGHLIGHTS_QUERY.into())) },
@@ -51,6 +61,7 @@ pub static LANGS: &[Lang] = &[
     Lang { id: "html", aliases: &["htm", "xml", "svg"], extensions: &["html", "htm", "xhtml", "xml", "svg", "plist"], files: &[], grammar: Some(|| (tree_sitter_html::LANGUAGE.into(), tree_sitter_html::HIGHLIGHTS_QUERY.into())) },
     Lang { id: "c", aliases: &["h", "cpp", "c++", "objc"], extensions: &["c", "h", "cc", "cpp", "cxx", "hpp", "hh", "m", "mm"], files: &[], grammar: Some(|| (tree_sitter_c::LANGUAGE.into(), tree_sitter_c::HIGHLIGHT_QUERY.into())) },
     Lang { id: "zig", aliases: &[], extensions: &["zig", "zon"], files: &[], grammar: Some(|| (tree_sitter_zig::LANGUAGE.into(), tree_sitter_zig::HIGHLIGHTS_QUERY.into())) },
+    Lang { id: "sql", aliases: &["postgres", "postgresql", "mysql", "sqlite", "libsql"], extensions: &["sql"], files: &[], grammar: Some(|| (tree_sitter_sequel::LANGUAGE.into(), sql())) },
     Lang { id: "csv", aliases: &["tsv"], extensions: &["csv", "tsv"], files: &[], grammar: None },
     Lang { id: "text", aliases: &["txt", "plain", "plaintext"], extensions: &["txt", "log"], files: &["LICENSE", "COPYING"], grammar: None },
 ];
@@ -393,12 +404,30 @@ mod tests {
     }
 
     #[test]
+    fn sql_spans_name_keywords_strings_numbers_and_comments() {
+        let text = "-- the bright ones\nselect name, count(*) from lanterns where lumens > 600 and glow = 'moon';";
+        let names: Vec<_> = highlight(text, "sql").into_iter().map(|(s, e, n)| (&text[s..e], n.split('.').next().unwrap())).collect();
+        assert!(names.contains(&("select", "keyword")), "{names:?}");
+        assert!(names.contains(&("600", "number")), "{names:?}");
+        assert!(names.contains(&("count", "function")), "{names:?}");
+        assert!(names.contains(&("lanterns", "type")), "{names:?}");
+        assert!(names.contains(&("'moon'", "string")), "{names:?}");
+        assert!(names.iter().any(|(t, n)| t.starts_with("--") && *n == "comment"), "{names:?}");
+        assert_eq!(lang("db/schema.sql").unwrap().id, "sql");
+        assert_eq!(lang("postgres").unwrap().id, "sql");
+        for p in SQL_CATCH_ALLS {
+            assert!(tree_sitter_sequel::HIGHLIGHTS_QUERY.contains(p), "tree-sitter-sql's query changed: move {p:?} last another way");
+        }
+    }
+
+    #[test]
     fn spans_are_ordered_and_never_overlap() {
         for (text, lang) in [
             ("const a = { b: [1, 'x', `t${y}`] }; // c\nfunction f() { return a?.b }", "tsx"),
             ("[package]\nname = \"x\"\n[dependencies]\nserde = { version = \"1\" }", "toml"),
             ("# T\n\nsome *text*\n\n```rs\nfn x(){}\n```\n", "markdown"),
             ("{ pkgs, ... }: { x = pkgs.hello; y = \"${pkgs.z}/bin\"; }", "nix"),
+            ("with t as (select 1 as a) select a, 'x' from t; -- c\ninsert into u values ($1, 2.5);", "sql"),
         ] {
             let spans = highlight(text, lang);
             assert!(!spans.is_empty(), "{lang} had no spans");
