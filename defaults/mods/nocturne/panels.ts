@@ -25,6 +25,7 @@ import type { WorktreesAsk } from "./git.ts";
 import { githubOpen, toggleGithub } from "./github.ts";
 import { askScratchpad } from "./scratchpad.ts";
 import { deckOpen, toggleDeck } from "./scripts.ts";
+import { procsOpen, toggleProcs } from "./procs.ts";
 import { openAs } from "./inpane.ts";
 
 /** Where things would open now. */
@@ -192,5 +193,7 @@ export function panels(): Panel[] {
       pane: () => toggleGithub(), tab: () => openAs("github", { as: "tab" }), beside: () => openAs("github", { as: "pane" }) },
     { id: "scripts", name: "Scripts", icon: `${ART}/play.svg`, key: "r", words: "script runner run tasks npm bun just make cargo test build dev nix", bind: "nocturne.scripts", fixed: "float", open: () => Boolean(deckOpen()),
       pane: () => toggleDeck({ centered: true }), tab: () => openAs("scripts", { as: "tab" }), beside: () => openAs("scripts", { as: "pane" }) },
+    { id: "procs", name: "Processes", icon: `${ART}/tree.svg`, key: "p", words: "processes ports tree kill end pid ps top activity monitor cpu memory graphs", fixed: "float", open: () => Boolean(procsOpen()),
+      pane: () => toggleProcs({ centered: true }), tab: () => openAs("procs", { as: "tab" }), beside: () => openAs("procs", { as: "pane" }) },
   ];
 }

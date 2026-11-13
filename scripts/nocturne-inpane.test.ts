@@ -86,20 +86,23 @@ test("as the window: opened, never toggled shut", () => {
   expect(opened.length).toBe(before);
 });
 
-test("the sky's commands: git / lazygit / github / scripts with a value open; others fall through", () => {
+test("the sky's commands: git / lazygit / github / scripts / procs with a value open; others fall through", () => {
   expect(openAsCommand("git:pane")).toBe(true);
   expect(openAsCommand("lazygit:tab")).toBe(true);
   expect(openAsCommand('github:{"as":"pane"}')).toBe(true);
   expect(openAsCommand("scripts:pane")).toBe(true);
-  expect(ran.map(([n, a]) => [n, a.mod])).toEqual([["pane.split", "git"], ["tab.new", "git"], ["pane.split", "github"], ["pane.split", "scripts"]]);
+  expect(openAsCommand("procs:tab")).toBe(true);
+  expect(ran.map(([n, a]) => [n, a.mod])).toEqual([["pane.split", "git"], ["tab.new", "git"], ["pane.split", "github"], ["pane.split", "scripts"], ["tab.new", "procs"]]);
+  // The processes' tab is named for them, its props as every pane mod's (the deck reads the whole machine).
+  expect(ran.at(-1)[1]).toMatchObject({ name: "processes", props: { slot: expect.any(String) } });
   expect(openAsCommand("git")).toBe(false);
   expect(openAsCommand("databases:pane")).toBe(false);
   expect(openAsCommand("git:sideways")).toBe(false);
 });
 
-test("+ new: Git, GitHub and Scripts are tiles that open a pane (or a tab), never the window", () => {
-  const tiles = menuPanels().filter((p: any) => ["git", "github", "scripts"].includes(p.id));
-  expect(tiles.map((p: any) => p.id)).toEqual(["git", "github", "scripts"]);
+test("+ new: Git, GitHub, Scripts and Processes are tiles that open a pane (or a tab), never the window", () => {
+  const tiles = menuPanels().filter((p: any) => ["git", "github", "scripts", "procs"].includes(p.id));
+  expect(tiles.map((p: any) => p.id)).toEqual(["git", "github", "scripts", "procs"]);
   for (const p of tiles) {
     expect(p.fixed).toBeUndefined();
     expect(p.open).toBeUndefined();
@@ -114,11 +117,14 @@ test("+ new: Git, GitHub and Scripts are tiles that open a pane (or a tab), neve
 });
 
 test("the palette's panels: a \"… in a pane\" entry beside the window and tab ones", async () => {
-  expect(panels().filter((p: any) => p.beside).map((p: any) => p.id)).toEqual(["git", "github", "scripts"]);
+  expect(panels().filter((p: any) => p.beside).map((p: any) => p.id)).toEqual(["git", "github", "scripts", "procs"]);
   const { openEntries } = await import("../defaults/mods/nocturne/palette-open.ts");
   const list = openEntries();
   const titles = list.map((e: any) => e.title);
-  for (const t of ["Git in a pane", "GitHub in a pane", "Scripts in a pane", "Git in a new tab", "Scripts in a new tab"]) expect(titles).toContain(t);
+  for (const t of ["Git in a pane", "GitHub in a pane", "Scripts in a pane", "Processes in a pane", "Git in a new tab", "Scripts in a new tab", "Processes in a new tab"]) expect(titles).toContain(t);
+  // The processes' window entry stays "Processes and ports…", not a second "Processes".
+  expect(titles).toContain("Processes and ports…");
+  expect(titles).not.toContain("Processes");
   // The script runner's window entry stays "Run a script…", not a second "Scripts".
   expect(titles).toContain("Run a script…");
   expect(titles).not.toContain("Scripts");

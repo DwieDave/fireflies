@@ -165,12 +165,12 @@ and presses a focused button, cmd-enter (ctrl-enter off macOS) submits from
 anywhere (enter is a new line in a multi-line field), esc cancels. Each
 form's hint line names its keys.
 
-**Window mods in panes.** Git, GitHub and the script runner open as
+**Window mods in panes.** Git, GitHub, the script runner and the processes deck open as
 their floating window or as a normal pane that stays beside terminals and
 editors: `nocturne.git:pane` (beside the focused pane), `:tab` (a tab of its
 own), `:window`, or `nocturne.git:{"as": "pane", "folder"?: "/abs", "on"?:
-"vps"}`; the same for `nocturne.github` and `nocturne.scripts` (bare, each
-toggles its window as before). "+ new" has Git, GitHub and Scripts tiles
+"vps"}`; the same for `nocturne.github`, `nocturne.scripts` and `nocturne.procs` (bare, each
+toggles its window as before). "+ new" has Git, GitHub, Scripts and Processes tiles
 (beside or a tab, as its landing switch says), the palette "Git in a pane" and
 the like. Anywhere, without Nocturne: `pane.split {direction: "auto", mod:
 "git", props: {slot, folder, on?}}` (`slot` a unique word). ctrl-t in one (or
@@ -433,7 +433,12 @@ the highlighted line shows where it will land.
   space by what's under it: cpu and memory summed, the longest uptime, the
   lowest pid), with FLAT (`v`) beside the name while a number sorts: every
   process in one list, each with its terminal's badge; ports by port, process and where. The sort is kept
-  across the deck's opens (shared `procs.sort`).
+  across the deck's opens (shared `procs.sort`). In a pane (`nocturne.procs:pane`,
+  "+ new"'s Processes, the palette "Processes in a pane", ctrl-t or the head's
+  ◧ / ⧉ to move) it has no frame, its lists take the pane's height, a narrow
+  pane drops the UP and then the PID column, esc never closes it and `q`
+  closes its pane; going to a terminal or opening a port leaves it open. A
+  pane keeps its tab, cursors, find and scope by its slot.
 - **Notifications** (Nocturne's, the `notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,

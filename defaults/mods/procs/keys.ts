@@ -10,6 +10,7 @@ import { moveTo } from "./listing.ts";
 import { activate, askKey, begin, copyRow, escapeKey, findKey, foldRow, openPortAt, sortKey, switchTab, toggleAll, toggleFlat } from "./actions.ts";
 import { beginIn, copyNumber, goTo, openDatabase, openFolder } from "./menu.ts";
 import { menuKey, openMenu } from "./menu-view.ts";
+import { move, quit } from "./place.ts";
 import type { default as ProcsDeck } from "./main.ts";
 
 /** What a plain key did: "done" (draw again), "gone" (the deck closed or handed off), or null (not ours). */
@@ -68,7 +69,7 @@ function plainKey(v: ProcsDeck, k: string, ch: string, m: Modifiers, cx: Context
   else if (k === "v" && v.tab === "procs") toggleFlat(v);
   else if (k === "r") v.refresh(cx);
   else if (k === "q") {
-    v.dismissDeck();
+    quit(v);
 
     return "gone";
   } else if (ch === "?") v.help = true;
@@ -103,6 +104,14 @@ export function deckKey(v: ProcsDeck, e: KeyEvent, cx: Context): void {
     cx.stop_propagation();
     cx.notify();
   };
+
+  // ctrl-t: over the tab into a pane, or out of a pane over the tab (place.ts).
+  if (m.control && !m.platform && !m.alt && k === "t") {
+    cx.stop_propagation();
+    move(v, cx);
+
+    return;
+  }
 
   if (m.platform || m.control || m.alt) return;
 
