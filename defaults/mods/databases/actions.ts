@@ -23,7 +23,7 @@ import { quoteName, qualified } from "./catalog.ts";
 import { schemasOf, shownTables, structRows } from "./panels.ts";
 import { edgesOf } from "./layout.ts";
 import { counted } from "./edits.ts";
-import { beforeLeaving, discardAll, openReview } from "./cell-edit.ts";
+import { beforeLeaving, discardAll, openReview, runSave } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -85,7 +85,11 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   else if (action === "help") v.help = !v.help;
   else if (action === "close") closeCopy(v);
   else if (action === "grow" || action === "shrink") resize(v, action === "grow" ? 1 : -1);
-  else if (action === "save") openReview(v);
+  // databases.save with the review open runs it (a command doesn't reach the review's y).
+  else if (action === "save") {
+    if (v.review) runSave(v, cx);
+    else openReview(v);
+  }
   else if (action === "discard") discardAll(v);
   else return false;
 

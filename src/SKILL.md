@@ -71,7 +71,9 @@ password: the window asks for it), then `herdr-app do
 databases.table:lanterns` shows a table's rows and structure,
 `herdr-app do 'databases.sql:select count(*) from lanterns;'` puts a query in
 a tab (`databases.run` runs it; a write asks the person first, so don't
-expect it to run unattended).
+expect it to run unattended). A change to a table's cell
+(`databases.set:<text>` on the cursor's cell) is only staged: the person
+reviews and saves it themselves (`w`, then `y`).
 
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused

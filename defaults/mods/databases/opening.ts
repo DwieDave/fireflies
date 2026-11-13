@@ -189,6 +189,10 @@ function dismiss(v: DbView): void {
   v.form = null;
   v.exporting = null;
   v.help = false;
+  v.cellEdit = null;
+
+  if (!v.review?.busy) v.review = null;
+
   v.focusShown();
 }
 
