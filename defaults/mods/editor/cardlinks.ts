@@ -4,7 +4,7 @@
 // docs.rs; TypeScript's {@link} points at `file:///…/x.ts#L12%2C5`; others
 // write relative paths or `path:12:5`.
 
-import type { HoverPart } from "./logic.ts";
+import type { HoverPart } from "./lsp-replies.ts";
 import { follow } from "./paths.ts";
 
 /** A link's words without Markdown's marks (`code`, *emphasis*). */
