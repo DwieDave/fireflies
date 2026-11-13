@@ -32,7 +32,10 @@ pub enum Content {
 }
 
 /// Shipped mods that were renamed, old name first: panes and layouts saved
-/// with the old name open the new mod, and its `<old>.<command>` reaches it.
+/// with the old name open the new mod, its `<old>.<command>` reaches it,
+/// keys.json's `mod:<old>` section and `<old>.<command>` bindings apply to it,
+/// and its shared keys, localStorage (`data/<old>/`) and cache move to the new
+/// name on start (mods.rs). A mod renamed twice: its latest old name first.
 pub const RENAMED_MODS: &[(&str, &str)] = &[("nocturne-image", "nocturne-preview")];
 
 /// The name a mod goes by now (`RENAMED_MODS`); any other name as it is.
@@ -227,7 +230,8 @@ pub enum HeaderContent {
     /// `"tabs"`: Fireflies' plain built-in tab strip (fallback).
     Builtin(String),
     Mod {
-        #[serde(rename = "mod")]
+        /// A renamed shipped mod's old name reads as its new one (`RENAMED_MODS`).
+        #[serde(rename = "mod", deserialize_with = "renamed_mod")]
         name: String,
         #[serde(default, skip_serializing_if = "Value::is_null")]
         props: Value,
@@ -902,6 +906,9 @@ mod tests {
         assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"mod":"nocturne-preview","props":{"path":"/a.png"}}"#);
         assert_eq!(current_mod_name("nocturne-image"), "nocturne-preview");
         assert_eq!(current_mod_name("nocturne-markdown"), "nocturne-markdown");
+        // A layout's header mod too.
+        let header: HeaderContent = serde_json::from_str(r#"{"mod":"nocturne-image"}"#).unwrap();
+        assert_eq!(header, HeaderContent::Mod { name: "nocturne-preview".into(), props: Value::Null });
     }
 
     #[test]

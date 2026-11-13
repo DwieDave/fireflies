@@ -80,6 +80,7 @@ pub fn write_workspace() -> std::io::Result<()> {
         std::fs::create_dir_all(file.parent().unwrap())?;
         std::fs::write(&file, bytes)?;
     }
+    move_renamed_dirs(&dir);
     let shipped: Vec<(&str, &[u8])> = shipped_mods().iter().map(|(p, b)| (p.as_str(), b.as_slice())).collect();
     sync_defaults(&mods_dir(), &dir.join("installed.json"), &shipped)
 }
@@ -499,6 +500,38 @@ pub fn finish_shared() {
     });
 }
 
+/// A renamed shipped mod's shared keys (`<old>.<key>`, `RENAMED_MODS`) under
+/// its name now, once. A key the mod already keeps under its new name wins
+/// (the table lists a mod's latest old name first); the old one goes.
+fn renamed_shared(values: &mut serde_json::Map<String, Value>) -> bool {
+    let mut changed = false;
+    for (old, new) in crate::layout::RENAMED_MODS {
+        let prefix = format!("{old}.");
+        let keys: Vec<String> = values.keys().filter(|k| k.starts_with(&prefix)).cloned().collect();
+        for key in keys {
+            let value = values.remove(&key).expect("listed above");
+            values.entry(format!("{new}.{}", &key[prefix.len()..])).or_insert(value);
+            changed = true;
+        }
+    }
+    changed
+}
+
+/// A renamed shipped mod's localStorage (`data/<old>/`) and cache
+/// (`cache/<old>/`) under its name now, once, unless it already has its own.
+fn move_renamed_dirs(home: &Path) {
+    for kind in ["data", "cache"] {
+        for (old, new) in crate::layout::RENAMED_MODS {
+            let (from, to) = (home.join(kind).join(old), home.join(kind).join(new));
+            if from.is_dir() && !to.exists()
+                && let Err(error) = std::fs::rename(&from, &to)
+            {
+                tracing::warn!("cannot move {} to {}: {error}", from.display(), to.display());
+            }
+        }
+    }
+}
+
 struct SharedStore {
     values: serde_json::Map<String, Value>,
     path: PathBuf,
@@ -532,6 +565,12 @@ impl SharedStore {
                 serde_json::Map::new()
             }
         };
+        let mut values = values;
+        if renamed_shared(&mut values) && writable {
+            if let Err(error) = crate::persist::write_atomic(&path, serde_json::to_string(&values).expect("shared values encode as JSON")) {
+                tracing::warn!("cannot write {}: {error}", path.display());
+            }
+        }
         Self { values, path, writable, writer: None }
     }
 
@@ -1523,6 +1562,38 @@ mod tests {
         assert_eq!(next[0]["installed"], true);
         assert_eq!(next[1]["key"], "claude-alt");
         assert_eq!(next[1]["installed"], true);
+    }
+
+    #[test]
+    fn a_renamed_mods_shared_keys_and_folders_move_to_its_name_now_once() {
+        let root = if cfg!(target_os = "linux") { PathBuf::from("/var/tmp") } else { std::env::temp_dir() };
+        let dir = root.join(format!("herdr-renamed-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        // Saved while the preview was nocturne-image: its keys, one the new name already has.
+        let path = dir.join("shared.json");
+        std::fs::write(&path, r#"{"nocturne-image.paths":{"s1":"/a.png"},"nocturne-image.titles":{"s1":"old"},"nocturne-preview.titles":{"s1":"new"},"nocturne.sidebar":1}"#).unwrap();
+        let store = SharedStore::load(path.clone());
+        let want = json!({ "nocturne-preview.paths": { "s1": "/a.png" }, "nocturne-preview.titles": { "s1": "new" }, "nocturne.sidebar": 1 });
+        assert_eq!(Value::Object(store.values.clone()), want);
+        // Written back at once: the next start finds nothing to move.
+        let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(written, want);
+        let mut again = store.values.clone();
+        assert!(!renamed_shared(&mut again));
+
+        // localStorage and cache follow; a folder the new name already has stays its own.
+        for (kind, file) in [("data", "store.json"), ("cache", "env.json")] {
+            std::fs::create_dir_all(dir.join(kind).join("nocturne-image")).unwrap();
+            std::fs::write(dir.join(kind).join("nocturne-image").join(file), "old").unwrap();
+        }
+        std::fs::create_dir_all(dir.join("cache").join("nocturne-preview")).unwrap();
+        move_renamed_dirs(&dir);
+        assert_eq!(std::fs::read_to_string(dir.join("data/nocturne-preview/store.json")).unwrap(), "old");
+        assert!(!dir.join("data/nocturne-image").exists());
+        assert!(dir.join("cache/nocturne-image/env.json").exists());
+        assert!(!dir.join("cache/nocturne-preview/env.json").exists());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

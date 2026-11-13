@@ -128,15 +128,23 @@ pub fn listing() -> Vec<(String, String, String)> {
                 Binding::String(a) => {
                     let a = current(&a);
                     if !gone_mod(&a) {
-                        out.push((s.clone(), k, a));
+                        out.push((current_section(&s), k, a));
                     }
                 }
-                Binding::Object(a) => out.push((s.clone(), k, serde_json::Value::Object(a).to_string())),
+                Binding::Object(a) => out.push((current_section(&s), k, serde_json::Value::Object(a).to_string())),
             }
         }
     }
     out.push(("global".into(), ESCAPE_HATCH.into(), "app.reset".into()));
     out
+}
+
+/// A section as the mods read it: `mod:<old name>` of a renamed mod is its section now.
+fn current_section(section: &str) -> String {
+    match section.strip_prefix("mod:") {
+        Some(m) => format!("mod:{}", crate::layout::current_mod_name(m)),
+        None => section.to_owned(),
+    }
 }
 
 pub fn path() -> std::path::PathBuf {
@@ -152,7 +160,8 @@ fn tab(section: &str) -> Result<String, String> {
         "global" => Ok("Herdr".into()),
         "terminal" => Ok("Terminal".into()),
         s => match (s.strip_prefix("mod:"), s.strip_prefix("layout:")) {
-            (Some(p), _) if !p.is_empty() => Ok(format!("mod == {p}")),
+            // A renamed mod's old name: its section applies to the mod as it is called now.
+            (Some(p), _) if !p.is_empty() => Ok(format!("mod == {}", crate::layout::current_mod_name(p))),
             // While layouts/<name>.json is shown (the window's tab says which).
             (_, Some(l)) if !l.is_empty() => Ok(format!("layout == {l}")),
             _ => Err(format!("unknown section {s:?}: use \"global\", \"terminal\", \"layout:<name>\" or \"mod:<name>\"")),
@@ -167,6 +176,12 @@ pub(crate) fn current(action: &str) -> String {
         return "tab.new".into();
     }
     let command = |a: &str| crate::commands::find(a.split_once(':').map_or(a, |(n, _)| n)).is_some();
+    // A renamed shipped mod's command (`nocturne-editor.save`): its name now.
+    if let Some((m, rest)) = action.split_once('.')
+        && crate::layout::current_mod_name(m) != m
+    {
+        return format!("{}.{rest}", crate::layout::current_mod_name(m));
+    }
     for (old, new) in [("project.", "space."), ("context.", "tab.")] {
         if let Some(rest) = action.strip_prefix(old) {
             let renamed = format!("{new}{rest}");
@@ -345,6 +360,19 @@ mod tests {
             assert_eq!(std::fs::read_to_string(&path).unwrap(), defaults);
         }
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_renamed_mods_old_section_and_commands_mean_the_mod_now() {
+        // An edited keys.json from before a shipped mod's rename keeps working.
+        assert_eq!(super::current("nocturne-image.fit"), "nocturne-preview.fit");
+        assert_eq!(super::current("nocturne-image.open:a.png"), "nocturne-preview.open:a.png");
+        assert_eq!(super::tab("mod:nocturne-image").unwrap(), "mod == nocturne-preview");
+        assert_eq!(super::current_section("mod:nocturne-image"), "mod:nocturne-preview");
+        // Any other name stays as it is.
+        assert_eq!(super::current("nocturne.picker"), "nocturne.picker");
+        assert_eq!(super::tab("mod:nocturne").unwrap(), "mod == nocturne");
+        assert_eq!(super::current_section("layout:nocturne"), "layout:nocturne");
     }
 
     #[test]
