@@ -43,7 +43,7 @@ import { readAgo } from "./model.ts";
 import { slug } from "./remotes.ts";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.ts";
 import * as store from "./store.ts";
-import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";
+import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
 import Prs from "./prs.js";

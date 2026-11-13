@@ -27,7 +27,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { window as appWindow } from "herdr";
-import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.js";
+import { dither, panel, stop, band, sweep, empty, unzoom } from "./kit.ts";
 import { formKey, formHints, submitKey, wrap } from "./form-keys.ts";
 import { layout, cellOf, columns, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, TOP, FOOTER, PICK_MAX, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.js";
 

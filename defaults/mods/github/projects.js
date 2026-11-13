@@ -21,7 +21,7 @@ import { graphql, mutate } from "./gh.ts";
 import { readAgo, ago, SLOW, linksIn } from "./model.ts";
 import { repoKey, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
-import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.js";
+import { dither, pip, empty, band, stop, unzoom, ART } from "./kit.ts";
 import {
   projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices,
   filterTokens, layout, grid, find, step, pickUp, carry, carried, drop, overlay, valueFor, setFieldMutation, positionMutation,

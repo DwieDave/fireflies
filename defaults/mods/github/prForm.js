@@ -16,7 +16,7 @@ import { candidates } from "./remotes.ts";
 import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.js";
 import { shellLine } from "./dispatch.js";
 import { Form } from "./form.js";
-import { panel, empty, dither } from "./kit.js";
+import { panel, empty, dither } from "./kit.ts";
 
 const CHOICES = `query($owner: String!, $name: String!) { viewer { login }
   repository(owner: $owner, name: $name) {

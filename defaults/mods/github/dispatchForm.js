@@ -14,7 +14,7 @@ import { isEnvironments, isNamedList, isRunList, isWorkflows } from "./model.ts"
 import { slug } from "./remotes.ts";
 import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.js";
 import { Form } from "./form.js";
-import { panel, empty, band } from "./kit.js";
+import { panel, empty, band } from "./kit.ts";
 
 const KIND = { string: "text", number: "number", boolean: "toggle", choice: "choice", environment: "choice" };
 const WAIT = 2000, WAIT_FOR = 120000; // how often, and how long, to look for the new run

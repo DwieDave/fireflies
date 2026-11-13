@@ -10,7 +10,7 @@ import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, rea
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.js";
-import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize, chip } from "./kit.js";
+import { dither, pip, panel, empty, band, toneColor, TONE_WORD, stop, eyebrow, splitter, unzoom, unzoomSize, chip } from "./kit.ts";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
 const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
