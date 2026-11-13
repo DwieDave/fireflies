@@ -8,7 +8,7 @@
 // and can take the branch along.
 
 import { exec, home, spaces, panes, agents } from "herdr";
-import { parseWorktrees } from "./parse.js";
+import { parseWorktrees } from "./parse.ts";
 
 /** Where new checkouts go: <ROOT>/<repo>/<branch, slashes as dashes>. */
 export const ROOT = (userHome) => `${userHome}/.herdr/worktrees`;

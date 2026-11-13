@@ -48,7 +48,7 @@ import { props, theme, settings, shared, setShared, spaces, panes, focused, run,
 import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.js";
 import { layoutGraph, usedWidth, widthOf } from "./graph.js";
 import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
-import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.js";
+import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.ts";
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";
 import { Popups } from "./popups.js";

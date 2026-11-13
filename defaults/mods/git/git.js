@@ -8,7 +8,7 @@ import { exec } from "herdr";
 import {
   parseStatus, parseLogFull, LOG_FULL_FORMAT, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseReflog, parseStash, parseWorktrees, repoState,
   BRANCH_FORMAT, REMOTE_BRANCH_FORMAT, TAG_FORMAT, LOG_FORMAT, REFLOG_FORMAT, STASH_FORMAT,
-} from "./parse.js";
+} from "./parse.ts";
 import { parseDiff } from "./patch.js";
 
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", "-c", "color.ui=false"];
@@ -126,7 +126,7 @@ export class Git {
   /** What the repo is in the middle of (rebasing, merging…), or null. */
   async state() {
     const r = await exec("sh", ["-c", 'cd "$(git rev-parse --git-dir)" 2>/dev/null && ls -d rebase-merge rebase-apply MERGE_HEAD CHERRY_PICK_HEAD REVERT_HEAD BISECT_LOG 2>/dev/null'], { cwd: this.root, on: this.on ?? undefined });
-    const exists = Object.fromEntries(r.stdout.split("\n").filter(Boolean).map((n) => [n.trim(), true]));
+    const exists = new Set(r.stdout.split("\n").filter(Boolean).map((n) => n.trim()));
     return repoState(exists);
   }
 
