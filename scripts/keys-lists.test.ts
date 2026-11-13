@@ -339,7 +339,7 @@ test("welcome and what's new: ? lists every key; their foot hints end with ? key
 
 // ---- the keys dialog
 
-const keymap = await import("../defaults/mods/nocturne/keymap.js");
+const keymap = await import("../defaults/mods/nocturne/keymap.ts");
 const shipped = (file: string) => Object.entries(keysNow(require("fs").readFileSync(`${import.meta.dir}/../defaults/${file}`, "utf8")))
   .flatMap(([section, v]: any) => Object.entries(v).map(([keys, action]) => ({ section, keys, action: String(action) })));
 
