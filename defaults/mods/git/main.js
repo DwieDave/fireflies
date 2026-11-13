@@ -55,7 +55,7 @@ import { Popups } from "./popups.ts";
 import { keysHint } from "./keyhelp.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import * as WT from "./worktrees.ts";
-import { Review } from "./review.js";
+import { Review } from "./review.ts";
 import { ART, dither, panel, band, chip, hints, empty, graphCell, graphPass, logTail, diffLine, laneColors, letterColor, unzoom, unzoomSize, stop } from "./draw.ts";
 
 export const WINDOW = "git.window"; // { id, beat }: the open window, for the toggle
@@ -639,6 +639,12 @@ export default class GitView extends View {
   }
 
   /** The selected row of a context (the focused panel's by default). */
+  /** The review file under the cursor, when the cursor is on one (review.ts). */
+  reviewItem() {
+    const x = this.item();
+    return this.review.files.find((f) => f === x) ?? null;
+  }
+
   item(ctx = this.focus === "main" ? this.ctxOf(this.panel) : this.ctx()) {
     if (!LISTS.has(ctx)) ctx = this.ctxOf(this.panel);
     const list = this.items(ctx);
