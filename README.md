@@ -55,7 +55,7 @@ These are screenshots of Fireflies with a made-up project, at zoom 1.7 (the whol
 
 **Notifications.** What your agents need from you, in one place: permission prompts and questions first.
 
-![The notification center with one agent waiting for input](docs/readme/notifications.png)
+![The notification center: a permission request with its answers, a question and an agent waiting for input](docs/readme/notifications.png)
 
 ## Install
 
