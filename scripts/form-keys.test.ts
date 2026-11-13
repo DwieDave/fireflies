@@ -11,7 +11,7 @@ import { state, find, cx, press, key, texts, act } from "./dialog-stubs.ts";
 
 const root = new URL("../defaults/", import.meta.url).pathname;
 const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.ts");
-const { Popups } = await import("../defaults/mods/git/popups.js");
+const { Popups } = await import("../defaults/mods/git/popups.ts");
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.js");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
 const Feedback = (await import("../defaults/frame/feedback/main.js")).default;

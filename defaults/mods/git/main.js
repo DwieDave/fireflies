@@ -51,7 +51,7 @@ import { rows as diffRows, isChange, hunkKeys } from "./patch.ts";
 import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.ts";
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.ts";
 import { act } from "./actions.js";
-import { Popups } from "./popups.js";
+import { Popups } from "./popups.ts";
 import { keysHint } from "./keyhelp.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import * as WT from "./worktrees.ts";
