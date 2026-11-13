@@ -163,7 +163,7 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly Column[], 
     return div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(colWidth(c)).h(ROW).px(8).flex().items_center().overflow_hidden()
       .border_r(1).border_color("#1c1d1f")
       .when(c.num, (el) => el.justify_end())
-      .when(change !== null, (el) => el.child(dither(`${t.ansi3}2e`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
+      .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
       .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.ansi8).bg(`${t.accent}1a`))
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
