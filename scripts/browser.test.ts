@@ -498,11 +498,7 @@ test("focus that comes by key (a tab switch, agent.next, a pane closing): the we
   const blank = await webPane({ slot: "b2" });
   await blank.send("focus");
   expect([blank.view.handle.focused, blank.view.input.focused]).toEqual([0, 1]);
-  // The editor: its text takes it, so mod:editor (cmd-s) applies.
-  const { mod } = await load("editor/main.ts");
-  let editorFocused = 0;
-  mod.default.prototype.command.call({ editor: { focus: () => { editorFocused++; } } }, "focus", {});
-  expect(editorFocused).toBe(1);
+  // The editor's side (its text takes the keyboard): scripts/editor-tabs.test.ts.
 });
 
 test("entering the address (cmd-l, cmd-p, a click) selects all of it, so typing replaces it", async () => {

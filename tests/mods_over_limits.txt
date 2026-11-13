@@ -10,17 +10,6 @@ defaults/mods/browser/main.ts
 defaults/mods/browser/main.ts init
 defaults/mods/browser/main.ts onEvent
 defaults/mods/editor/diff.ts parse
-defaults/mods/editor/main.ts
-defaults/mods/editor/main.ts bar
-defaults/mods/editor/main.ts cardView
-defaults/mods/editor/main.ts findLine
-defaults/mods/editor/main.ts init
-defaults/mods/editor/main.ts load
-defaults/mods/editor/main.ts mdMenuView
-defaults/mods/editor/main.ts newDoc
-defaults/mods/editor/main.ts startServer
-defaults/mods/editor/main.ts tabStrip
-defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
 defaults/mods/editor/viewer.ts

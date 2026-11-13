@@ -312,61 +312,7 @@ test("the editor's Markdown preview: ticks edit the text, links go where they po
   const guards = await load("editor/guards.ts");
   const logic = await load("editor/logic.ts", guards);
   const route = await load("editor/editor-route.ts");
-  const extra = {
-    ...guards, ...logic, ...(await load("editor/vim.ts")), ...md, ...(await load("editor/paths.ts")),
-    ...(await load("editor/tabs.ts", { ...guards, ...logic, ...route })), ...route,
-    languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
-    setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
-  };
-  const { default: EditorPane } = await load("editor/main.ts", extra);
-  const view: any = Object.create(EditorPane.prototype);
-  const edits: any[] = [];
-  const text = "# Plan\n\n- [ ] one\n- [x] two\n\n## Next";
-  Object.assign(view, {
-    cur: {}, path: "/repo/docs/plan.md", on: null, slot: "s1", markdown: true, view: "split", text, saved: text, messages: [],
-    preview: new MarkdownDoc("pv"), images: new Map(), previewHandle: { focus() {}, is_focused: () => false },
-    editor: { edit: (e: any) => edits.push(e), value: () => text, focus() {}, set_cursor() {}, scroll_to_line() {} },
-  });
-  view.preview.setText(text);
-  view.changed = () => {};
-  // Other files open as tabs of this editor (its tabs: editor-tabs.test.ts).
-  const tabs: string[] = [];
-  view.openFile = (path: string) => tabs.push(path);
-  const cx = { notify() {}, timer: { after: (_ms: number, f: any) => f(cx) } };
-
-  view.tick(2, cx);
-  view.tick(3, cx);
-  view.tick(0, cx);
-  expect(edits).toEqual([
-    [{ start: { line: 2, col: 3 }, end: { line: 2, col: 4 }, text: "x" }],
-    [{ start: { line: 3, col: 3 }, end: { line: 3, col: 4 }, text: " " }],
-  ]);
-
-  world.panes = [{ pane: "pe", mod: "editor", props: { slot: "s1" } }];
-  commands.length = 0;
-  view.previewLink("other.md#x", cx);
-  view.previewLink("../src/main.rs", cx);
-  view.previewLink("shot.png", cx);
-  view.previewLink("https://example.org", cx);
-  // A picture: a drawn tab of this editor too.
-  expect(tabs).toEqual(["/repo/docs/other.md", "/repo/src/main.rs", "/repo/docs/shot.png"]);
-  expect(commands).toEqual([
-    ["app.open_url", { url: "https://example.org" }],
-  ]);
-  // An anchor scrolls the preview (and the text to the heading).
-  const lines: number[] = [];
-  view.editor.scroll_to_line = (l: number) => lines.push(l);
-  view.previewLink("#next", cx);
-  expect(lines).toEqual([5]);
-
-  const seen: string[] = [];
-  view.say = (m: string) => seen.push(m);
-  for (let i = 0; i < 4; i++) { view.command("preview", cx); seen.push(view.view); }
-  expect(seen.filter((s) => !s.includes(" ") && !s.includes(":"))).toEqual(["preview", "text", "rendered", "split"]);
-  view.markdown = false;
-  view.command("preview-only", cx);
-  expect(view.view).toBe("split");
-  expect(seen.at(-1)).toBe("the preview is for Markdown files");
+  // The editor's preview (ticks, links, the view switch): scripts/editor-tabs.test.ts.
 });
 
 // ---- the viewer by keys

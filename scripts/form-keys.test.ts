@@ -45,10 +45,11 @@ test("one helper: every mod with a form ships the same form-keys.ts", () => {
 // the focus, so a form's tab arrives only as an action bound in its own
 // context. Each form's root carries that context and hands the action to its
 // key handler; each binds the keys once from init.
-const ROOTS: [string, string][] = [
+// [the file drawing the form's root, its key call, the file whose init binds tab (else the same)]
+const ROOTS: [string, string, string?][] = [
   ["mods/github/main.ts", "this.key(e, cx)"], ["mods/git/main.ts", "this.key(e, cx)"],
   ["mods/nocturne/sky.ts", "this.key(e, cx)"], ["mods/nocturne/dialog.ts", "this.key(e, cx)"],
-  ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/main.ts", "this.findKey(e, cx)"],
+  ["mods/notifications/ask-dialog.ts", "this.key(e, cx)"], ["mods/editor/find.ts", "findKey(ed, e, cx)", "mods/editor/pane-start.ts"],
   ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
 ];
 
@@ -90,12 +91,12 @@ test("every form's root takes the bound tab and hands it to its key handler; ini
   const gh = readFileSync(`${root}mods/github/main.ts`, "utf8");
   expect(gh).toContain("const formOpen = !!this.shown().form;");
   expect(gh).toContain("tabActions(el, (e, cx) => this.key(e, cx), formOpen)");
-  for (const [file, call] of ROOTS) {
+  for (const [file, call, init = file] of ROOTS) {
     const src = readFileSync(`${root}${file}`, "utf8");
     const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     const wired = new RegExp(`${esc(`.on_key_down((e, cx) => ${call})`)}\\n\\s+${esc(`.map((el) => tabActions(el, (e, cx) => ${call}`)}(, \\w+)?\\)\\)`);
     expect([file, wired.test(src)]).toEqual([file, true]); // a pane passes whether its form is open
-    expect([file, /this\.handle = cx\.focus_handle\(\);\n\s+bindTab\(cx\);/.test(src)]).toEqual([file, true]);
+    expect([init, /(this|ed)\.handle = cx\.focus_handle\(\);\n\s+bindTab\(cx\);/.test(readFileSync(`${root}${init}`, "utf8"))]).toEqual([init, true]);
   }
 });
 

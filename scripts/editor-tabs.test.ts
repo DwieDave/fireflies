@@ -536,8 +536,8 @@ test("a web link: the shown tab's browser pane gets it (browser.open by slot); w
   const c2 = await cardWithLinks();
   const md = all(c2.cardView(theme, "mono") ?? new El()).find((x: any) => x.calls?.on_link_click);
   void md; // (the card isn't drawn without a word on screen; the handler is wired in cardView, checked below)
-  const src = readFileSync(new URL("../defaults/mods/editor/main.ts", import.meta.url), "utf8");
-  expect(src).toMatch(/\.on_link_click\(\(url, cx\) => this\.followLink\(url, cx\)\)/);
+  const src = readFileSync(new URL("../defaults/mods/editor/card-view.ts", import.meta.url), "utf8");
+  expect(src).toMatch(/\.on_link_click\(\(url, cx\) => followLink\(ed, url, cx\)\)/);
 });
 
 test("a pointer's card doesn't ring links on tab (the key goes on to vim / the text); a picture link opens as a drawn tab here", async () => {
@@ -1208,4 +1208,53 @@ test("file marks are shared: file-tree's and preview's file-icons.ts and icons/*
   }
   // It imports only kinds.ts, itself a shared copy in both.
   expect([...read("editor", "file-icons.ts").matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1])).toEqual(["kinds.ts", "kinds.ts"]);
+});
+
+test("focus that comes by key (a tab switch, agent.next, a pane closing): the editor's text takes it, so mod:editor (cmd-s) applies", async () => {
+  const p = await pane();
+  let focused = 0;
+  p.editor.focus = () => { focused++; };
+  p.command("focus", cx());
+  expect(focused).toBe(1);
+});
+
+test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
+  const text = "# Plan\n\n- [ ] one\n- [x] two\n\n## Next";
+  disk["/repo/docs/plan.md"] = text;
+  const p = await pane("/repo/docs/plan.md");
+  const edits: any[] = [];
+  p.editor.edit = (e: any) => edits.push(e);
+  p.changed = () => {};
+  const c: any = { ...cx(), timer: { after: (_ms: number, f: any) => f(c), every() {} } };
+  p.tick(2, c);
+  p.tick(3, c);
+  p.tick(0, c);
+  expect(edits).toEqual([
+    [{ start: { line: 2, col: 3 }, end: { line: 2, col: 4 }, text: "x" }],
+    [{ start: { line: 3, col: 3 }, end: { line: 3, col: 4 }, text: " " }],
+  ]);
+  // Other files open as tabs of this editor; a picture as a drawn tab; the web in the app.
+  const tabs: string[] = [];
+  p.openFile = (path: string) => tabs.push(path);
+  ran.length = 0;
+  p.previewLink("other.md#x", c);
+  p.previewLink("../src/main.rs", c);
+  p.previewLink("shot.png", c);
+  p.previewLink("https://example.org", c);
+  expect(tabs).toEqual(["/repo/docs/other.md", "/repo/src/main.rs", "/repo/docs/shot.png"]);
+  expect(ran.filter(([n]: any) => n === "app.open_url")).toEqual([["app.open_url", { url: "https://example.org" }]]);
+  // An anchor scrolls the preview (and the text to the heading).
+  const lines: number[] = [];
+  p.editor.scroll_to_line = (l: number) => lines.push(l);
+  p.previewLink("#next", c);
+  expect(lines).toEqual([5]);
+  const seen: string[] = [];
+  p.say = (m: string) => seen.push(m);
+  for (let i = 0; i < 4; i++) { p.command("preview", c); seen.push(p.view); }
+  expect(p.view === "split" ? seen.filter((s) => !s.includes(" ") && !s.includes(":")) : p.view).toEqual(["preview", "text", "rendered", "split"]);
+  // Not Markdown: the views don't switch; it says why.
+  p.cur.markdown = false;
+  p.command("preview-only", c);
+  expect(p.view).toBe("split");
+  expect(seen.at(-1)).toBe("the preview is for Markdown files");
 });
