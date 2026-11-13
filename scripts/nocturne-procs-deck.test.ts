@@ -88,9 +88,14 @@ const herdr: Record<string, any> = {
   window: () => ({ platform: "macos" }),
 };
 mock.module("herdr", () => herdr);
-mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
+mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: (p: string) => new El(`svg:${p}`), image: () => new El(), PathBuilder: { fill: () => path() }, Background: { checkerboard: (c: string) => bg({ dither: c }), solid: (c: string) => bg({ solid: c }) } }));
+function bg(b: any) { b.opacity = (o: number) => ({ ...b, opacity: o }); return b; }
 mock.module("gpui-base", () => ({ h_flex: () => new El(), v_flex: () => new El() }));
-(globalThis as any).window = { paint_path: () => new El("dither") };
+/** A path that counts its polygons (a graph's bars are one path a layer). */
+const path = () => { const p: any = { polys: [] as any[] }; p.add_polygon = (pts: any) => { p.polys.push(pts); return p; }; for (const k of ["move_to", "line_to", "close"]) p[k] = () => p; p.build = () => p; return p; };
+(globalThis as any).window = { paint_path: (p: any, fill: any) => { const e: any = new El("dither"); e.path = p; e.fill = fill; return e; } };
+/** A graph's bars: the polygons of its dithered layer (the first under its baseline). */
+const barsOf = (id: string) => ids[id].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither).flatMap((k: any) => k.path.polys);
 const theme: any = new Proxy({}, { get: (_t, k) => String(k) });
 const cx: any = {
   spawn: (f: Function) => { Promise.resolve().then(() => f(cx)).catch((e) => { throw e; }); },
@@ -394,7 +399,9 @@ test("system (3): CPU, GPU, memory, disk and network graphs with their values; a
   expect(d.sys.rx.length).toBe(2); // the first reading has no rate yet
   expect(d.sys.rx[0]).toBe(null);
   // Bars: one per reading in the CPU graph.
-  expect(ids["g-cpu"].kids.length).toBe(1 + 2);
+  expect(barsOf("g-cpu").length).toBe(2);
+  // Each bar has its solid head, one layer for all of them.
+  expect(ids["g-cpu"].kids.filter((k: any) => k?.fill?.solid).flatMap((k: any) => k.path.polys).length).toBe(2);
   expect(words(ids["tab-system"])).toEqual(["system", "80%"]);
 });
 
@@ -413,8 +420,8 @@ test("the selected process's detail carries its own CPU and memory over the refr
   d.refresh(cx); await flush();
   expect(d.hist.get(52391)).toEqual({ cpu: [98.2, 98.2, 98.2], rss: [1992294, 1992294, 1992294] });
   draw();
-  expect(ids["sp-cpu"].kids.length).toBe(1 + 3);
-  expect(ids["sp-mem"].kids.length).toBe(1 + 3);
+  expect(barsOf("sp-cpu").length).toBe(3);
+  expect(barsOf("sp-mem").length).toBe(3);
 });
 
 // ---- by pointer: Developer: "all stuff needs to be mouse and keyboard first"
@@ -703,6 +710,19 @@ test("system: the graphs hold 90 readings, the newest at the right, in bars half
   for (let i = 0; i < 95; i++) { d.sampling = false; d.sample(cx); await flush(); }
   expect(d.sys.cpu.length).toBe(90);
   draw();
-  expect(ids["g-cpu"].kids.length).toBe(1 + 90);
-  expect(words(draw())).toContain("a reading every second while this tab shows");
+  expect(barsOf("g-cpu").length).toBe(90);
+  // One element a layer, not three a bar: the baseline, the bars, their heads.
+  expect(ids["g-cpu"].kids.length).toBe(3);
+  expect(words(draw())).toContain("a reading every second");
+});
+
+test("the depth guides: one dithered path for the rows in sight, a 1 px line a level a row", async () => {
+  const { d, draw } = await deck();
+  draw();
+  const guides = ids["procs-list"].kids.filter((k: any) => k?.tag === "dither" && k.fill?.dither);
+  expect(guides.length).toBe(1);
+  const want = d.rows().reduce((n: number, r: any) => n + r.depth, 0); // every row fits
+  expect(guides[0].path.polys.length).toBe(want);
+  // No row draws its own.
+  expect(ids["row-3"].kids.filter((k: any) => k?.tag === "dither").length).toBe(0);
 });

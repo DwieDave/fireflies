@@ -75,7 +75,7 @@ const CONTEXT = "NocturneProcsDeck";
 const ESCAPE = "nocturne_procs_escape";
 export const REFRESH = 2000;
 export const GRACE = 2000;
-const SYSTEM_PACE = "a reading every second while this tab shows";
+const SYSTEM_PACE = "a reading every second";
 
 const W = 480, H = 560;
 export const ROW = 24, PROW = 30;
@@ -95,6 +95,8 @@ function dither(color, cell = 1) {
 }
 
 const zoom = () => Number(settings()?.zoom) || 1;
+// The dither's cell in device px: one layout px at the zoom (as dither() has it).
+const dotCell = () => Math.max(1, Math.round(zoom() * (appWindow()?.platform === "macos" ? 2 : 1)));
 const unzoom = (v) => v / zoom();
 // The scrollbar's hit strip along a list's right edge, and its thumb's least height.
 const BAR_HIT = 8, THUMB_MIN = 16;
@@ -222,7 +224,7 @@ export default class ProcsDeck extends View {
     this.sampled = Date.now();
     cx.spawn(async (cx) => {
       try {
-        const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 5000 });
+        const r = await exec("sh", ["-c", SYS_PROBE], { timeout: 10000 });
         const reading = parseSys(r?.stdout ?? "");
         const m = measure(reading, this.sysReading);
         this.sysReading = reading;
@@ -257,12 +259,35 @@ export default class ProcsDeck extends View {
     return new Map(terminals().filter((t) => t?.pid && !String(t.address).includes("/") && t.state !== "finished").map((t) => [Number(t.pid), t.address]));
   }
 
+  /** The tree, built again only when a refresh, a or the app's spaces, tabs and terminals
+   *  change it: a frame has 50 ms, and building it over every process of a Mac's takes more. */
   tree() {
-    return this.snap ? buildTree({ procs: this.snap.procs, me: this.snap.me, terminals: terminals(), panes: panes(), spaces: spaces(), all: this.all }) : [];
+    if (!this.snap) return [];
+    const ctx = { terminals: terminals(), panes: panes(), spaces: spaces() };
+    // What buildTree reads, no more: an agent's terminal carries its whole brief in argv.
+    const sig = JSON.stringify([this.all,
+      ctx.terminals.map((t) => [t?.address, t?.pid, t?.state, t?.labels?.["nocturne.name"], t?.name, t?.argv?.[0], t?.cwd, t?.status]),
+      ctx.panes.map((p) => [p?.tab, p?.terminal, p?.status, p?.cwd, p?.program?.name, p?.title]),
+      ctx.spaces.map((x) => [x?.id, x?.name, x?.folder, x?.machine, (x?.tabs ?? []).map((tab) => [tab.id, tab.index, tab.name])])]);
+    const c = this.treeCache;
+    if (c?.snap === this.snap && c.sig === sig) return c.tree;
+    const tree = buildTree({ procs: this.snap.procs, me: this.snap.me, ix: this.ix, all: this.all, ...ctx });
+    this.treeCache = { snap: this.snap, sig, tree, n: tree.reduce((n, node) => n + count(node), 0) };
+    return tree;
   }
 
+  /** How many processes the tree holds (the processes tab's count). */
+  procCount() { return this.snap ? (this.tree(), this.treeCache.n) : 0; }
+
+  /** The rows on screen, made again only when the tree, a fold or the query changes. */
   rows(tree = this.tree()) {
-    return this.snap ? flatten(tree, { folds: this.folds, query: this.query, byPid: this.ix.byPid }) : [];
+    if (!this.snap) return [];
+    const sig = JSON.stringify([this.folds, this.query]);
+    const c = this.rowsCache;
+    if (c?.tree === tree && c.sig === sig) return c.rows;
+    const rows = flatten(tree, { folds: this.folds, query: this.query, byPid: this.ix.byPid });
+    this.rowsCache = { tree, sig, rows };
+    return rows;
   }
 
   /** The ports, those in this app's terminals first: { key, port, pid, name, hosts, term, where, guard }. */
@@ -562,16 +587,15 @@ export default class ProcsDeck extends View {
         })));
   }
 
-  /** One tree row; its depth drawn as 1 px dithered guides. */
+  /** One tree row (its depth's guides are the list's, procsView). */
   treeRow(t, r, i, on, ports, tp) {
     const n = r.node;
-    const guides = Array.from({ length: r.depth }, (_, g) => div().absolute().top(0).bottom(0).left(12 + g * IND + 3).w(1).opacity(0.9).child(dither(t.ansi0, 1)));
     const row = h_flex().id(`row-${i}`).relative().h(ROW).flex_none().pl(12 + r.depth * IND).pr(12).gap(7).items_center().text_size(12)
       .text_color(on ? t.foreground : t.muted)
       .cursor_pointer()
       .on_click((e, cx) => this.clickRow(e, i, cx))
       .on_hover((h, cx) => { const k = h ? r.key : this.hover === r.key ? null : this.hover; if (k !== this.hover) { this.hover = k; cx.notify(); } });
-    const el = this.band(row, t, on).children(guides).child(this.fold_(t, r, i));
+    const el = this.band(row, t, on).child(this.fold_(t, r, i));
     if (r.kind === "space") {
       if (n.machine) return el.child(this.pip(t.dim)).child(div().relative().flex_none().text_color(t.muted).child(n.name))
         .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(`on ${n.machine} · this machine only for now`));
@@ -692,9 +716,13 @@ export default class ProcsDeck extends View {
     this.scroll.procs = Math.max(0, Math.min(this.scroll.procs, max));
     const s = this.scroll.procs;
     const kids = [];
+    // The depth guides of every row in sight as one 1 px dithered path over the rows (one
+    // element for the list, not two a level a row).
+    const guides = [];
     items.forEach((r, i) => {
       const top = tops[i], h = ROW + extra(r);
       if (top + h <= s || top >= s + LIST_H) return;
+      for (let g = 0; g < r.depth; g++) guides.push({ x: 12 + g * IND + 3, y: top - s, w: 1, h: ROW });
       const on = i === ci;
       kids.push(v_flex().id(`slot-${r.key}`).absolute().left(0).right(0).top(top - s).h(h)
         .child(this.treeRow(t, r, i, on, ports, tp))
@@ -709,7 +737,7 @@ export default class ProcsDeck extends View {
         ? div().id("procs-list").relative().h(LIST_H).flex_none().overflow_hidden()
           .on_scroll_wheel((e, cx) => this.wheel("procs", e, ROW, max, cx))
           .children(kids)
-          .children([this.scrollbar(t, "procs", y, LIST_H)].filter(Boolean))
+          .children([this.layer(guides, Background.checkerboard(t.ansi0, dotCell()).opacity(0.9), W - 2, LIST_H), this.scrollbar(t, "procs", y, LIST_H)].filter(Boolean))
         : this.empty(t, LIST_H));
   }
 
@@ -720,29 +748,42 @@ export default class ProcsDeck extends View {
     const hs = scale(v, { max: max == null ? Math.max(1, ...v) * 1.25 : Math.max(max, ...v), floor: 1 });
     return div().id(id).relative().w(SPARK * 2).h(12).flex_none()
       .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
-      .children(hs.map((h, i) => div().absolute().bottom(0).left((SPARK - hs.length + i) * 2).w(2).h(Math.max(1, Math.round((h ?? 0) * 12)))
-        .child(dither(color, 1))));
+      .children([this.layer(hs.map((h, i) => {
+        const tall = Math.max(1, Math.round((h ?? 0) * 12));
+        return { x: (SPARK - hs.length + i) * 2, y: 12 - tall, w: 2, h: tall };
+      }), Background.checkerboard(color, dotCell()), SPARK * 2, 12)].filter(Boolean));
   }
 
-  /** One bar: a dithered column in `color` with a solid 1 px head; `down` hangs it from its top. */
-  bar(t, x, h, color, down = false) {
-    const px = Math.max(1, Math.round(h));
-    const el = div().absolute().left(x).w(BAR).h(px).child(dither(color, 1))
-      .child(div().absolute().left(0).right(0).h(1).bg(color).map((c) => (down ? c.bottom(0) : c.top(0))));
-    return el;
+  /** Bars as one layer: `rects` ({ x, y, w, h } in the graph's px) as one path, filled with
+   *  `fill`. Percentages of the graph's box, so the zoom never shifts them; one element a
+   *  layer instead of three a bar keeps the system tab's frame inside its render budget. */
+  layer(rects, fill, w = GRAPH_W, h = GRAPH_H) {
+    if (!rects.length) return null;
+    const px = (v) => `${(v / w) * 100}%`, py = (v) => `${(v / h) * 100}%`;
+    const path = rects.reduce((b, r) => b.add_polygon([[px(r.x), py(r.y)], [px(r.x + r.w), py(r.y)], [px(r.x + r.w), py(r.y + r.h)], [px(r.x), py(r.y + r.h)]], true), PathBuilder.fill()).build();
+    return window.paint_path(path, fill).absolute().top(0).left(0).size_full();
   }
 
-  /** A graph: the history `values` (0..1, null: no reading) as bars, the newest at the right.
-   *  `down`: a second series hung under a midline (network out). `none`: what to say instead. */
+  /** A graph: the history `values` (0..1, null: no reading) as bars, the newest at the right:
+   *  dithered columns with a solid 1 px head. `down`: a second series hung under a midline
+   *  (network out). `none`: what to say instead. */
   graph(t, id, values, color, { down = null, color2 = null, none = null } = {}) {
     const box = div().id(id).relative().w(GRAPH_W).h(GRAPH_H).flex_none()
       .child(div().absolute().left(0).right(0).bottom(down ? GRAPH_H / 2 : 0).h(1).child(dither(t.ansi0, 1)));
     if (none) return box.child(div().absolute().left(0).right(0).top(0).bottom(0).flex().items_center().justify_center().text_size(11).text_color(t.dim).child(none));
     const x = (i, n) => GRAPH_W - (n - i) * SLOT + 1;
     const half = down ? GRAPH_H / 2 : GRAPH_H;
-    const up = values.map((v, i) => (v == null ? null : this.bar(t, x(i, values.length), v * (half - 1), color).bottom(down ? half : 0))).filter(Boolean);
-    const under = (down ?? []).map((v, i) => (v == null ? null : this.bar(t, x(i, down.length), v * (half - 1), color2, true).top(half + 1))).filter(Boolean);
-    return box.children(up).children(under);
+    const tall = (v) => Math.max(1, Math.round(v * (half - 1)));
+    const up = values.map((v, i) => (v == null ? null : { x: x(i, values.length), y: half - tall(v), w: BAR, h: tall(v) })).filter(Boolean);
+    const under = (down ?? []).map((v, i) => (v == null ? null : { x: x(i, down.length), y: half + 1, w: BAR, h: tall(v) })).filter(Boolean);
+    const cell = dotCell();
+    const layers = [
+      this.layer(up, Background.checkerboard(color, cell)),
+      this.layer(up.map((r) => ({ ...r, h: 1 })), Background.solid(color)),
+      this.layer(under, Background.checkerboard(color2 ?? color, cell)),
+      this.layer(under.map((r) => ({ ...r, y: r.y + r.h - 1, h: 1 })), Background.solid(color2 ?? color)),
+    ];
+    return box.children(layers.filter(Boolean));
   }
 
   /** One graph's block: its name and value now, the graph, a line of detail. */
@@ -925,7 +966,7 @@ export default class ProcsDeck extends View {
     const ports = this.portList();
     const items = this.tab === "ports" ? ports : this.rows(tree);
     const ci = this.at(items);
-    const nProcs = tree.reduce((n, node) => n + count(node), 0);
+    const nProcs = this.procCount();
     return v_flex().id("nocturne-procs").size_full().bg(t.background).border(1).border_color(t.ansi0)
       .track_focus(this.handle)
       .key_context(CONTEXT)

@@ -158,13 +158,15 @@ const termName = (t, pane) => t?.labels?.["nocturne.name"] || pane?.program?.nam
  */
 export function buildTree(ctx) {
   const { procs = [], me = "", terminals = [], panes = [], spaces = [], all = false } = ctx;
-  const ix = index(procs);
+  const ix = ctx.ix ?? index(procs);
   const local = terminals.filter((t) => t?.address && !String(t.address).includes("/") && t.state !== "finished");
   if (all) {
     const mine = procs.filter((p) => !me || p.user === me);
     const roots = mine.filter((p) => { const up = ix.byPid.get(p.ppid); return !up || up.pid === p.pid || (me && up.user !== me); });
-    roots.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.pid - b.pid);
-    return roots.map((p) => procNode(p.pid, ix));
+    // By name, any case, then pid: keys made once (localeCompare in the sort cost a frame's whole budget).
+    const keyed = roots.map((p) => [p.name.toLowerCase(), p.pid]);
+    keyed.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+    return keyed.map(([, pid]) => procNode(pid, ix));
   }
   const byAddr = new Map(local.map((t) => [t.address, t]));
   const used = new Set();
