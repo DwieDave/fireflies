@@ -5,3 +5,6 @@
 /.env
 .direnv/
 /node_modules
+# Written by the app (or `herdr-app types`) into a mod folder: generated, never shipped.
+/defaults/**/gpui-kit.d.ts
+/defaults/mods/*/jsconfig.json
