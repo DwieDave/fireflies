@@ -37,7 +37,7 @@ export interface ReviewFile extends DiffFile {
 
 /** What review needs of the window. */
 export interface ReviewHost {
-  readonly data: { readonly main: string | null; readonly status: { readonly oid: string | null } | null };
+  readonly data: { readonly main: string | null | undefined; readonly status: { readonly oid: string | null } | null };
   readonly git: Git | null;
   /** The review file under the cursor, if that's where it is. */
   reviewItem(): ReviewFile | null;
@@ -77,7 +77,7 @@ export class Review {
 
   scopes(): Scope[] { return this.pr ? ["pr", "work", "branch"] : ["work", "branch"]; }
 
-  scopeName(s: Scope = this.scope, base: string | null = this.v.data.main) {
+  scopeName(s: Scope = this.scope, base: string | null | undefined = this.v.data.main) {
     return s === "pr" ? `#${this.pr ?? ""}` : s === "work" ? "uncommitted" : `since ${base ?? "base"}`;
   }
 
@@ -90,7 +90,7 @@ export class Review {
 
     try {
       const head = Boolean(this.v.data.status?.oid);
-      const { files, since } = this.scope === "pr" && this.pr !== null ? await g.prReview(this.pr, this.prRepo) : await g.review(this.scope, this.v.data.main, head);
+      const { files, since } = this.scope === "pr" && this.pr !== null ? await g.prReview(this.pr, this.prRepo) : await g.review(this.scope, this.v.data.main ?? null, head);
 
       this.files = files.map((f) => ({ ...f, kind: kind(f), key: diffKey(f) }));
       this.since = since;

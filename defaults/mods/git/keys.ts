@@ -310,6 +310,12 @@ export const REVIEW_CLASHES: readonly (readonly [key: string, review: string, fi
   ["enter", "the file's diff (read only)", "stage lines"],
 ];
 
+/** The contexts that are lists (j/k, paging, filter apply): each panel's tabs and drill-ins. */
+export type ListContext = "status" | "files" | "review" | "worktrees" | "branches" | "remotes" | "remoteBranches" | "tags" | "commits" | "reflog" | "subCommits" | "commitFiles" | "stash";
+
+/** Whether a context is a list. */
+export const isListContext = literal("status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash");
+
 /** Contexts that are lists (j/k, paging, filter apply). */
 export const LISTS: ReadonlySet<KeyContext> = new Set<KeyContext>(["status", "files", "review", "worktrees", "branches", "remotes", "remoteBranches", "tags", "commits", "reflog", "subCommits", "commitFiles", "stash"]);
 
