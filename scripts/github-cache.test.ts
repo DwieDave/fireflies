@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import {
-  blank, parse, lookup, merge, prune, fit, scrub, scrubUrl, newest, entryFor, repoKey, folderKey,
+  blank, parse, lookup, merge, prune, fit, scrub, scrubUrl, newest, entryFor, repoKey, folderKey, textOf,
   slimRun, slimJob, slimPr, slimPrRow, slimReviewComment, MAX_BYTES, LIMITS, VERSION,
 } from "../defaults/mods/github/cache.ts";
 import { prListQuery, prRows, rowTone, readAgo } from "../defaults/mods/github/model.ts";
@@ -14,7 +14,11 @@ test("a missing, broken or older cache reads as blank", () => {
   expect(parse(JSON.stringify({ v: VERSION - 1, folders: {}, repos: {} }))).toEqual(blank());
   expect(parse(null)).toEqual(blank());
   const ok = { v: VERSION, folders: { a: "b" }, repos: { b: { at: 1 } } };
-  expect(parse(JSON.stringify(ok))).toEqual(ok);
+  expect(parse(JSON.stringify(ok))).toEqual({ v: VERSION, folders: new Map([["a", "b"]]), repos: new Map([["b", { at: 1 }]]) });
+  // Its text is the file as it was.
+  expect(JSON.parse(textOf(parse(JSON.stringify(ok))))).toEqual(ok);
+  // A repo entry of another shape: the file reads as blank (it's a cache).
+  expect(parse(JSON.stringify({ ...ok, repos: { b: { at: "x" } } }))).toEqual(blank());
 });
 
 test("a folder finds the repo it last showed, per machine", () => {
@@ -31,64 +35,65 @@ test("merging keeps other windows' repos and stamps this one", () => {
   const a = merge("", "/a", entry("o/a"), 100);
   const b = merge(a, "/b", entry("o/b"), 200);
   const doc = parse(b);
-  expect(Object.keys(doc.repos).sort()).toEqual(["|o/a", "|o/b"]);
-  expect(doc.repos["|o/b"].at).toBe(200);
-  expect(doc.repos["|o/a"].at).toBe(100);
+  expect([...doc.repos.keys()].sort()).toEqual(["|o/a", "|o/b"]);
+  expect(doc.repos.get("|o/b")?.at).toBe(200);
+  expect(doc.repos.get("|o/a")?.at).toBe(100);
   // The same repo again replaces its entry.
-  const c = parse(merge(b, "/a", entry("o/a", { prs: { lists: { all: { list: [{ number: 1 }], at: 300 } }, details: {} } }), 300));
-  expect(c.repos["|o/a"].prs.lists.all.list).toEqual([{ number: 1 }]);
+  const c = parse(merge(b, "/a", entry("o/a", { prs: { lists: new Map([["all", { list: [{ number: 1 }], at: 300 }]]), details: new Map() } }), 300));
+  expect(c.repos.get("|o/a")?.prs?.lists?.get("all")).toEqual({ list: [{ number: 1 }], at: 300 });
 });
 
 test("only the last repos opened are kept, and their folders with them", () => {
   let text = "";
   for (let i = 0; i < LIMITS.repos + 3; i++) text = merge(text, `/f${i}`, entry(`o/r${i}`), 1000 + i);
   const doc = parse(text);
-  expect(Object.keys(doc.repos).length).toBe(LIMITS.repos);
-  expect(doc.repos["|o/r0"]).toBeUndefined();
-  expect(doc.repos[`|o/r${LIMITS.repos + 2}`]).toBeDefined();
-  expect(doc.folders["|/f0"]).toBeUndefined();
-  expect(doc.folders[`|/f${LIMITS.repos + 2}`]).toBe(`|o/r${LIMITS.repos + 2}`);
+  expect(doc.repos.size).toBe(LIMITS.repos);
+  expect(doc.repos.get("|o/r0")).toBeUndefined();
+  expect(doc.repos.get(`|o/r${LIMITS.repos + 2}`)).toBeDefined();
+  expect(doc.folders.get("|/f0")).toBeUndefined();
+  expect(doc.folders.get(`|/f${LIMITS.repos + 2}`)).toBe(`|o/r${LIMITS.repos + 2}`);
 });
 
 test("details, jobs and needs keep their newest few", () => {
-  const details: Record<string, unknown> = {}, jobs: Record<string, unknown> = {};
-  for (let i = 0; i < 40; i++) { details[i] = { pr: { number: i }, at: i }; jobs[i] = { jobs: [], at: i }; }
-  const doc = prune({ v: VERSION, folders: {}, repos: { k: { ...entry("o/r"), at: 1, prs: { lists: {}, details }, actions: { runs: {}, jobs, needs: {} } } } });
-  const e = doc.repos.k;
-  expect(Object.keys(e.prs.details).length).toBe(LIMITS.details);
-  expect(Object.keys(e.prs.details)).toContain("39");
-  expect(Object.keys(e.prs.details)).not.toContain("0");
-  expect(Object.keys(e.actions.jobs).length).toBe(LIMITS.jobs);
-  expect(Object.keys(newest({ a: { at: 1 }, b: { at: 3 }, c: { at: 2 } }, 2))).toEqual(["b", "c"]);
+  const details = new Map<string, { at: number }>(), jobs = new Map<string, { at: number }>();
+  for (let i = 0; i < 40; i++) { details.set(String(i), { pr: { number: i }, at: i } as any); jobs.set(String(i), { jobs: [], at: i } as any); }
+  const doc = prune({ v: VERSION, folders: new Map(), repos: new Map([["k", { ...entry("o/r"), at: 1, prs: { lists: new Map(), details }, actions: { runs: new Map(), jobs, needs: new Map() } }]]) });
+  const e: any = doc.repos.get("k");
+  expect(e.prs.details.size).toBe(LIMITS.details);
+  expect([...e.prs.details.keys()]).toContain("39");
+  expect([...e.prs.details.keys()]).not.toContain("0");
+  expect(e.actions.jobs.size).toBe(LIMITS.jobs);
+  expect([...newest(new Map([["a", { at: 1 }], ["b", { at: 3 }], ["c", { at: 2 }]]), 2).keys()]).toEqual(["b", "c"]);
 });
 
 test("the file stays under its byte budget, dropping the oldest first and this repo last", () => {
   const big = "x".repeat(20_000);
   let text = "";
   for (let i = 0; i < LIMITS.repos; i++) {
-    const details: Record<string, unknown> = {};
-    for (let n = 0; n < LIMITS.details; n++) details[n] = { pr: { number: n, body: big }, at: 1000 * i + n };
-    text = merge(text, `/f${i}`, entry(`o/r${i}`, { prs: { lists: {}, details } }), 1000 * i + 999);
+    const details = new Map<string, { at: number }>();
+    for (let n = 0; n < LIMITS.details; n++) details.set(String(n), { pr: { number: n, body: big }, at: 1000 * i + n } as any);
+    text = merge(text, `/f${i}`, entry(`o/r${i}`, { prs: { lists: new Map(), details } }), 1000 * i + 999);
   }
   expect(text.length).toBeLessThanOrEqual(MAX_BYTES);
   const doc = parse(text);
   const last = `|o/r${LIMITS.repos - 1}`;
-  expect(doc.repos[last]).toBeDefined();
-  expect(Object.keys(doc.repos[last].prs.details).length).toBe(LIMITS.details);
-  expect(doc.repos["|o/r0"]).toBeUndefined();
+  expect(doc.repos.get(last)).toBeDefined();
+  expect(doc.repos.get(last)?.prs?.details?.size).toBe(LIMITS.details);
+  expect(doc.repos.get("|o/r0")).toBeUndefined();
   // Even one huge entry fits: its oldest pieces go.
-  const huge: Record<string, unknown> = {};
-  for (let n = 0; n < LIMITS.details; n++) huge[n] = { pr: { body: "y".repeat(200_000) }, at: n };
-  const one = fit({ v: VERSION, folders: {}, repos: { k: { ...entry("o/k"), at: 5, prs: { lists: {}, details: huge } } } }, 500_000, "k");
+  const huge = new Map<string, { at: number }>();
+  for (let n = 0; n < LIMITS.details; n++) huge.set(String(n), { pr: { body: "y".repeat(200_000) }, at: n } as any);
+  const one = fit({ v: VERSION, folders: new Map(), repos: new Map([["k", { ...entry("o/k"), at: 5, prs: { lists: new Map(), details: huge } }]]) }, 500_000, "k");
   expect(one.length).toBeLessThanOrEqual(500_000);
-  expect(Object.keys(parse(one).repos.k.prs.details)).toContain(String(LIMITS.details - 1));
+  expect([...(parse(one).repos.get("k")?.prs?.details?.keys() ?? [])]).toContain(String(LIMITS.details - 1));
 });
 
 test("multi-byte text counts in bytes", () => {
   const body = "🌙".repeat(50_000); // 4 bytes each: 200 KB, 100k UTF-16 units
-  const t = fit({ v: VERSION, folders: {}, repos: { k: { ...entry("o/k"), at: 1, prs: { lists: {}, details: { 1: { pr: { body }, at: 1 }, 2: { pr: { body }, at: 2 } } } } } }, 300_000, "k");
+  const details = new Map<string, any>([["1", { pr: { body }, at: 1 }], ["2", { pr: { body }, at: 2 }]]);
+  const t = fit({ v: VERSION, folders: new Map(), repos: new Map([["k", { ...entry("o/k"), at: 1, prs: { lists: new Map(), details } }]]) }, 300_000, "k");
   expect(new TextEncoder().encode(t).length).toBeLessThanOrEqual(300_000);
-  expect(Object.keys(parse(t).repos.k.prs.details)).toEqual(["2"]);
+  expect([...(parse(t).repos.get("k")?.prs?.details?.keys() ?? [])]).toEqual(["2"]);
 });
 
 test("nothing that looks like a credential is written", () => {

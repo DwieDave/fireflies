@@ -203,7 +203,7 @@ export default class GitHub extends View {
         if (to.child) next.parent = null; // from the parent, p goes back to the fork, not up again
         this.note = null;
         // From the cache when this folder showed it before.
-        this.show(next, cx, store.peek()?.repos?.[repoKey(next)] ?? null);
+        this.show(next, cx, store.peek()?.repos.get(repoKey(next)) ?? null);
         this.dirty = true;
       } catch (e) {
         this.note = { text: String(e?.message ?? e), tone: "failed", at: Date.now() };

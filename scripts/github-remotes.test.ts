@@ -76,5 +76,5 @@ test("the cache keeps a repo's fork links, and drops v1 (which could hold a fork
   const r = slimRepo({ owner: "herdrdev", name: "herdr-app", full: "herdrdev/herdr-app", root: "/x", url: "https://github.com/herdrdev/herdr-app", child: "DwieDave/fireflies" });
   expect(r).toMatchObject({ host: "github.com", parent: null, child: "DwieDave/fireflies" });
   expect(VERSION).toBe(2);
-  expect(parse(JSON.stringify({ v: 1, folders: { "|/f": "|herdrdev/herdr-app" }, repos: { "|herdrdev/herdr-app": { at: 1 } } })).folders).toEqual({});
+  expect(parse(JSON.stringify({ v: 1, folders: { "|/f": "|herdrdev/herdr-app" }, repos: { "|herdrdev/herdr-app": { at: 1 } } })).folders).toEqual(new Map());
 });

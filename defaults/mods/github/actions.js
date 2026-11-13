@@ -84,12 +84,12 @@ export default class Actions {
   /** Shows what an earlier opening read (cache.js entry.actions), until GitHub answers. */
   hydrate(c) {
     this.runsCache = {};
-    for (const [b, l] of Object.entries(c?.runs ?? {})) if (Array.isArray(l?.list)) this.runsCache[b] = { list: l.list, etag: l.etag ?? null, at: l.at ?? 0 };
+    for (const [b, l] of (c?.runs ?? [])) if (Array.isArray(l?.list)) this.runsCache[b] = { list: l.list, etag: l.etag ?? null, at: l.at ?? 0 };
     this.useRuns();
     this.jobs = new Map(); this.jobTags = new Map();
-    for (const [id, j] of Object.entries(c?.jobs ?? {})) if (Array.isArray(j?.jobs)) { this.jobs.set(Number(id), j.jobs); this.jobTags.set(Number(id), { etag: j.etag ?? null, at: j.at ?? 0 }); }
-    this.needs = new Map(Object.entries(c?.needs ?? {}).filter(([, n]) => Array.isArray(n?.jobs)).map(([k, n]) => [k, new Map(n.jobs)]));
-    this.needsAt = new Map(Object.entries(c?.needs ?? {}).map(([k, n]) => [k, n?.at ?? 0]));
+    for (const [id, j] of (c?.jobs ?? [])) if (Array.isArray(j?.jobs)) { this.jobs.set(Number(id), j.jobs); this.jobTags.set(Number(id), { etag: j.etag ?? null, at: j.at ?? 0 }); }
+    this.needs = new Map([...(c?.needs ?? [])].filter(([, n]) => Array.isArray(n?.jobs)).map(([k, n]) => [k, new Map(n.jobs)]));
+    this.needsAt = new Map([...(c?.needs ?? [])].map(([k, n]) => [k, n?.at ?? 0]));
     if (this.runs && (this.sel == null || !this.list().some((r) => r.id === this.sel))) this.sel = this.list()[0]?.id ?? null;
   }
 
@@ -107,7 +107,8 @@ export default class Actions {
     for (const [id, list] of this.jobs) jobs[id] = { jobs: list, etag: this.jobTags.get(id)?.etag ?? null, at: this.jobTags.get(id)?.at ?? 0 };
     const needs = {};
     for (const [k, m] of this.needs) needs[k] = { jobs: [...m], at: this.needsAt?.get(k) ?? 0 };
-    return { runs: newest(runs, LIMITS.runs), jobs: newest(jobs, LIMITS.jobs), needs: newest(needs, LIMITS.needs) };
+    const map = (o) => new Map(Object.entries(o));
+    return { runs: newest(map(runs), LIMITS.runs), jobs: newest(map(jobs), LIMITS.jobs), needs: newest(map(needs), LIMITS.needs) };
   }
 
   /** When the shown list was read (0: never). */

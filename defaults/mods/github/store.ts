@@ -4,7 +4,7 @@
 // (writeTextFile), merged with what other windows wrote (cache.ts merge).
 
 import { appHome, readTextFile, writeTextFile } from "herdr";
-import type { Doc, Written } from "./cache.ts";
+import type { Doc, Entry } from "./cache.ts";
 import { parse, merge } from "./cache.ts";
 
 const path = () => `${appHome()}/data/github/cache.json`;
@@ -33,7 +33,7 @@ export async function load(): Promise<Doc> {
 export const peek = (): Doc | null => last?.doc ?? null;
 
 /** Writes `entry` (the window's repo and its data) into the file. */
-export async function save(folder: string | null, entry: Written): Promise<boolean> {
+export async function save(folder: string | null, entry: Entry): Promise<boolean> {
   for (let tries = 0; tries < 3; tries++) {
     let text: string | null;
 

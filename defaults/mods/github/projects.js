@@ -77,7 +77,7 @@ export default class Projects {
   hydrate(c) {
     this.list = c?.list?.projects ? c.list : null; this.listAt = c?.list?.at ?? 0;
     this.boards = {};
-    for (const [id, b] of Object.entries(c?.boards ?? {})) if (isStoredBoard(b?.board)) this.boards[id] = { board: boardOf(b.board), at: b.at ?? 0 };
+    for (const [id, b] of (c?.boards ?? [])) if (isStoredBoard(b?.board)) this.boards[id] = { board: boardOf(b.board), at: b.at ?? 0 };
     this.pending = []; this.carrying = null; this.menu = null; this.details = new Map(); this.choices = new Map();
     this.scope = null; this.error = "";
     if (!this.pick || (this.list && !this.list.projects.some((p) => p.id === this.pick))) this.pick = this.remembered() ?? null;
@@ -86,7 +86,7 @@ export default class Projects {
   snapshot() {
     const boards = {};
     for (const [id, b] of Object.entries(this.boards)) boards[id] = { board: slimBoard(b.board), at: b.at };
-    return { list: this.list ? { ...this.list, at: this.listAt } : null, boards: newest(boards, LIMITS.boards) };
+    return { list: this.list ? { ...this.list, at: this.listAt } : null, boards: newest(new Map(Object.entries(boards)), LIMITS.boards) };
   }
 
   readAt() { return this.pick ? this.boards[this.pick]?.at ?? 0 : this.listAt; }
@@ -204,7 +204,7 @@ export default class Projects {
     this.pending = this.pending.filter((p) => !(p.state === "done" && p.doneAt <= started));
     this.keepSel();
     const n = Object.keys(this.boards);
-    if (n.length > LIMITS.boards * 2) this.boards = Object.fromEntries(Object.entries(newest(this.boards, LIMITS.boards)));
+    if (n.length > LIMITS.boards * 2) this.boards = Object.fromEntries(newest(new Map(Object.entries(this.boards)), LIMITS.boards));
   }
 
   /** The selected card's body and comments, read once it's opened. */

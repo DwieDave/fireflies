@@ -356,15 +356,15 @@ test("boards are cached slim, the last few per repo, and fit the budget", async 
   expect(isStoredBoard(JSON.parse(JSON.stringify(slim)))).toBe(true);
   expect(boardOf(JSON.parse(JSON.stringify(slim))).items).toEqual(b.items);
   const repo = { owner: "o", name: "r", full: "o/r", root: "/src", on: null };
-  const boards: Record<string, unknown> = {};
-  for (let i = 0; i < LIMITS.boards + 2; i++) boards[`P${i}`] = { board: slim, at: i };
+  const boards = new Map<string, { at: number }>();
+  for (let i = 0; i < LIMITS.boards + 2; i++) boards.set(`P${i}`, { board: slim, at: i } as any);
   const doc = parse(merge("", "/src", { ...entryFor(repo), projects: { list: { projects: [], at: 1 }, boards } }, 100));
-  const e = doc.repos["|o/r"];
-  expect(Object.keys(e.projects.boards).sort()).toEqual(["P2", "P3", "P4"]);
+  const e: any = doc.repos.get("|o/r");
+  expect([...e.projects.boards.keys()].sort()).toEqual(["P2", "P3", "P4"]);
   expect(e.projects.list.at).toBe(1);
   // Old entries without projects stay as they were.
-  expect(prune({ v: VERSION, folders: {}, repos: { k: { at: 1, prs: {}, actions: {} } } }).repos.k.projects).toBeUndefined();
+  expect(prune({ v: VERSION, folders: new Map(), repos: new Map([["k", { at: 1, prs: {}, actions: {} }]]) }).repos.get("k")?.projects).toBeUndefined();
   // Over the budget, boards go before the repo does.
   const text = fit(doc, 30000, "|o/r");
-  expect(parse(text).repos["|o/r"]).toBeDefined();
+  expect(parse(text).repos.get("|o/r")).toBeDefined();
 });

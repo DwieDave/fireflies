@@ -13,7 +13,6 @@
 
 import type { Guard, Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf } from "./guard.ts";
-import type { JsonMap } from "./guards.ts";
 import { isList, mapOf, maybe, toJson, toMap } from "./guards.ts";
 
 const text = maybe(isString);
@@ -1452,4 +1451,3 @@ export function slimBoard(b: Board | null | undefined): StoredBoard | null {
   };
 }
 
-export type { JsonMap };

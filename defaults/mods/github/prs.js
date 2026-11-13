@@ -82,8 +82,8 @@ export default class Prs {
   /** Shows what an earlier opening read (cache.js entry.prs), until GitHub answers. */
   hydrate(c) {
     this.lists = {};
-    for (const [f, l] of Object.entries(c?.lists ?? {})) if (FILTERS.includes(f) && Array.isArray(l?.list)) this.lists[f] = { list: l.list, at: l.at ?? 0 };
-    this.details = new Map(Object.entries(c?.details ?? {}).map(([n, d]) => [Number(n), { pr: d.pr, review: d.review ?? [], reviewTag: d.reviewTag ?? null, at: d.at ?? 0 }]));
+    for (const [f, l] of (c?.lists ?? [])) if (FILTERS.includes(f) && Array.isArray(l?.list)) this.lists[f] = { list: l.list, at: l.at ?? 0 };
+    this.details = new Map([...(c?.details ?? [])].map(([n, d]) => [Number(n), { pr: d.pr, review: d.review ?? [], reviewTag: d.reviewTag ?? null, at: d.at ?? 0 }]));
     const l = this.lists[this.filter];
     this.list = l?.list ?? null; this.listAt = l?.at ?? 0;
     if (this.list && (this.sel == null || !this.list.some((p) => p.number === this.sel))) this.sel = this.list[0]?.number ?? null;
@@ -95,7 +95,7 @@ export default class Prs {
     for (const [f, l] of Object.entries(this.lists)) lists[f] = { list: l.list.map(slimPrRow), at: l.at };
     const details = {};
     for (const [n, d] of this.details) if (d.pr) details[n] = { pr: slimPr(d.pr), review: (d.review ?? []).map(slimReviewComment), reviewTag: d.reviewTag ?? null, at: d.at };
-    return { lists, details: newest(details, LIMITS.details) };
+    return { lists: new Map(Object.entries(lists)), details: newest(new Map(Object.entries(details)), LIMITS.details) };
   }
 
   /** When the shown list was read (0: never). */
@@ -163,7 +163,7 @@ export default class Prs {
     if (this.app.repo !== repo) return;
     this.details.set(p.number, { pr, review: review.data ?? [], reviewTag: review.etag ?? null, at: Date.now() });
     if (this.details.size > LIMITS.details * 2) {
-      const keep = new Set(Object.keys(newest(Object.fromEntries(this.details), LIMITS.details)).map(Number));
+      const keep = new Set(newest(this.details, LIMITS.details).keys());
       for (const n of this.details.keys()) if (!keep.has(n)) this.details.delete(n);
     }
   }
