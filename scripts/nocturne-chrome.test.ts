@@ -108,3 +108,22 @@ test("a shelf alone in a short jar is centered; under fireflies it sits at the j
   const under = jarPlan([28], shelf);
   expect(under.shelfY + shelf + 12).toBe(under.jarH);
 });
+
+// ---- item 2: air above the shelf line, the tiles in from the wall
+
+test("the shelf's board sits clear of the last firefly's halo", () => {
+  const plan = jarPlan([28], shelfHeight(2, 232));
+  const laneEnd = plan.ys[0] + 28;
+  // the halo (40 px) hangs 6 px under a resting lane: the board starts a clear 4 px+ below that
+  expect(plan.shelfY - laneEnd).toBeGreaterThanOrEqual(6 + 4);
+});
+
+test("the shelf's tiles and caption start where a firefly's square does, clear of the glass", () => {
+  // A jar lane's firefly: its mark's box 6 px into the lane, the glow's square GLOW_SQUARE.at into that.
+  expect(SHELF_PAD).toBe(6 + GLOW_SQUARE.at);
+  // the focused tile's corner ticks (3 px out) stay off the jar's inner wall
+  expect(SHELF_PAD - 3).toBeGreaterThanOrEqual(8);
+  // a 232 px shelf still holds six 28 px tiles to a row
+  expect(shelfHeight(6, 232)).toBe(shelfHeight(1, 232));
+  expect(shelfHeight(7, 232)).toBeGreaterThan(shelfHeight(6, 232));
+});

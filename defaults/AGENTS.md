@@ -1223,7 +1223,8 @@ on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, m
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
 sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (on the rail 18 px tiles two abreast), in the order pinned, its own order
+foot (clear of the last firefly's halo, the tiles and caption in from the
+glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
 apart from the fireflies'. A tile is moonlit while its pane is on screen, the
 focused one wears the corner ticks; the caption line under the shelf names
 the tile under the pointer or the keyboard's cursor (else the focused one):

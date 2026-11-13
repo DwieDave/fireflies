@@ -133,6 +133,11 @@ export function jarPlan(lanes, shelfH = 0) {
   return { ys, shelfY: shelfH ? (lanes.length ? y + SHELF_ABOVE : y) : 0, jarH };
 }
 
+/** The shelf's inset from the jar's walls (layout px): its tiles and caption
+ *  start where a firefly's square does (its lane's mark at x 6, the glow's
+ *  square GLOW_SQUARE.at in), so they line up under the fireflies. */
+export const SHELF_PAD = 6 + GLOW_SQUARE.at;
+
 function moonPhase(list) {
   if (!list.length) return 8;
   const rest = list.filter((a) => a.status === "idle" || a.status === "done").length;
@@ -208,10 +213,11 @@ const RAIL_REACH = { x: 8, y: 1 }, PAIR_REACH = { x: 1, y: 1 };
 const GLINT = 1800;
 // The shelf at the jar's foot, where pinned panes that aren't agents sit as
 // tiles (pins.js onShelf): a tile's size and the gap between tiles, the
-// shelf's inset from the jar's walls, the room above it under the last
-// firefly, its dithered board, the board's gap to the tiles, the caption
-// line under them (its gap above, its height). On the rail: smaller tiles, two abreast.
-const TILE = 28, TILE_GAP = 6, SHELF_PAD = 8, SHELF_ABOVE = 4, BOARD = 2, BOARD_GAP = 6, CAPTION = { gap: 6, h: 14 };
+// room above it under the last firefly (clear of its halo: air before the
+// board), its dithered board, the board's gap to the tiles, the caption line
+// under them (its gap above, its height); SHELF_PAD (above) is its inset from
+// the jar's walls. On the rail: smaller tiles, two abreast.
+const TILE = 28, TILE_GAP = 6, SHELF_ABOVE = 10, BOARD = 2, BOARD_GAP = 6, CAPTION = { gap: 6, h: 14 };
 const RAIL_TILE = 18, RAIL_TILE_GAP = 4;
 
 export default class Sky {
