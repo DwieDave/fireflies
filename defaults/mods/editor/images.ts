@@ -1,4 +1,4 @@
-// Images in a Markdown file (main.js, rendered.js): where a pasted picture
+// Images in a Markdown file (main.js, rendered.ts): where a pasted picture
 // goes, the line that shows it, and reading the clipboard's image.
 //
 // Where it goes: beside the document, in a folder of its own:

@@ -451,7 +451,7 @@ test("the pane runs vim's tab commands and the app's next-tab / prev-tab / close
   expect(texts(p.tabStrip(theme))).toEqual(expect.arrayContaining(["src", "lib"]));
 });
 
-// ---- links in the hover card (cardlinks.js)
+// ---- links in the hover card (cardlinks.ts)
 
 const links = await import("../defaults/mods/editor/cardlinks.ts");
 

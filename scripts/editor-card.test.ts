@@ -1,4 +1,4 @@
-// The editor's hover card (editor/main.js, logic.js cardPlace): where
+// The editor's hover card (editor/main.js, logic.ts cardPlace): where
 // it opens (under its word, above it near the pane's foot, inside the pane),
 // every way it closes in each vim mode and without vim, a card that opens
 // waiting on the server and fills in by itself, the bar's progress words,
