@@ -49,9 +49,42 @@
 // takes them): zoom_in, zoom_out, fit, actual, next, prev, rotate, background,
 // reload, page_next, page_prev.
 //
+// Another file in this pane: shared `preview.show` { slot, path, n, at } for
+// the pane whose slot it names (a files pane's own preview pane: a second
+// picture opened there shows here, file-tree/routing.ts).
+//
 // What's drawn, and how, is viewer.ts: the files pane's preview split
 // (file-tree) shows a file with the same code.
 
+import type { AsyncContext, Context, Element } from "gpui-kit";
+import type { Props } from "gpui-shell";
+import { shared } from "herdr";
+import { isNumber, isString, nullable, object, readShared, sharedKey } from "./guard.ts";
 import Viewer from "./viewer.ts";
 
-export default class PreviewView extends Viewer {}
+/** A file for the preview pane whose slot it names. */
+export const SHOW_KEY = sharedKey("preview.show", nullable(object({ slot: isString, path: isString, n: isNumber }, { at: isNumber })));
+
+export default class PreviewView extends Viewer {
+  // The last `preview.show` seen: one from before this pane started is old.
+  seenShow = 0;
+
+  override init(p: Props | undefined, cx: AsyncContext): void {
+    super.init(p, cx);
+    this.seenShow = readShared(shared, SHOW_KEY, null)?.n ?? 0;
+  }
+
+  override render(cx: Context): Element {
+    const ask = readShared(shared, SHOW_KEY, null);
+
+    if (ask && !this.embedded && this.slot && ask.slot === this.slot && ask.n !== this.seenShow) {
+      this.seenShow = ask.n;
+      cx.timer.after(0, (cx) => {
+        this.open(ask.path, cx);
+        cx.notify();
+      });
+    }
+
+    return super.render(cx);
+  }
+}
