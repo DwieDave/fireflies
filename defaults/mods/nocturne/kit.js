@@ -4,7 +4,7 @@
 import { div, svg, PathBuilder, Background } from "gpui-kit";
 import { settings, window as appWindow, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import { isDock, toDock, newSlot } from "./dock.js";
-import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
+import { AT_LABEL, isPinned, sortAgents, PANES_KEY, paneRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime } from "./pins.js";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -126,15 +126,28 @@ export function moveFocused(dir) {
   movePin(pinKey(focusedPane()), dir);
 }
 
+// A web tab to show once its pane is on screen: { slot, tab, at } (goToPin).
+// Commands reach only the copies on screen, and a pane in another tab or space
+// comes there only after pane.focus: the web pane takes this up when it shows.
+export const WEB_SHOW = "nocturne-browser.show";
+
 /** Goes to a pin of any kind (a jar item, pins.js jarItems): in whatever tab
- *  and space it is; a parked pane comes back (pane.focus). */
+ *  and space it is; a parked pane comes back (pane.focus). A web tab's pin
+ *  (`it.tab`): its pane, then that tab (nocturne-browser.show). */
 export function goToPin(it) {
+  if (it.kind === "pane" && it.tab) {
+    const want = { slot: it.pane.props?.slot ?? null, tab: it.tab };
+    setShared(WEB_SHOW, { ...want, at: Date.now() });
+    run("pane.focus", { pane: it.pane.pane });
+    return run(`nocturne-browser.show:${JSON.stringify(want)}`);
+  }
   if (it.kind === "pane" || (it.kind === "terminal" && it.pane)) return run("pane.focus", { pane: it.pane.pane });
   run("agent.focus", { terminal: it.key });
 }
 
-/** Takes a jar item out of the jar. */
+/** Takes a jar item out of the jar (a web tab's pin: that tab's alone). */
 export function unpin(it) {
+  if (it.kind === "pane" && it.tab) return setShared(PANES_KEY, pinTabRecord(paneRecordsNow(), it.pane, it.tab, false, Date.now()));
   if (it.kind === "pane") return pinPane({ pane: it.pane.pane, terminal: null }, false);
   pin(it.key, false);
 }

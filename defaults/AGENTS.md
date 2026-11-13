@@ -438,11 +438,16 @@ the highlighted line shows where it will land.
   the page's earlier links. A click shows a tab, × or a middle click closes it;
   closing the last leaves a blank tab (the pane stays). Drag a tab along the
   strip to move it (a marker shows where it lands; the numbers follow), or `<` /
-  `>` in the bar (the ringed tab, else the shown one); the order is kept. The bar, the address,
+  `>` in the bar (the ringed tab, else the shown one); the order is kept. A
+  right-click on a tab (or `m` in the bar) opens its menu: pin it to the
+  sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
+  close it; ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
   `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
-  `.tab_move_left`, `.tab_move_right` (the palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
+  `.tab_move_left`, `.tab_move_right`, `.pin_tab`, `.tab_menu` (the palette's
+  Web entries), `nocturne-browser.show:{"slot": …, "tab": …}` (that pane shows
+  that tab, as a pinned tab's tile does), and `nocturne-browser.open:<value>` for a mod: value
   `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
   `slot` matches (none: the one other commands reach) opens the page in a new
   tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
@@ -450,7 +455,8 @@ the highlighted line shows where it will land.
   typed in the address it does the same. A mod finds a web pane and its
   slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`). Each web pane with a slot
   publishes its shown tab's title (else its host) in shared `nocturne-browser.titles`
-  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name.
+  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
+  and every tab's in `nocturne-browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
@@ -1232,11 +1238,20 @@ its name, then its kind, its space when it's another one, "parked". A click
 or enter goes to it in whatever tab and space (a parked pane comes back);
 right-click opens its pane's menu. A shell's pin is its terminal's
 (`terminal.pin`, ends with it); a mod pane's is kept in shared
-`nocturne.pinned-panes` (`[{pane, mod, props, at}]`), found again by its mod
+`nocturne.pinned-panes` (`[{pane, mod, props, at, tab?}]`), found again by its mod
 and props if a restart gives the pane a new id, and gone once the pane has
 been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
 its page's title when nocturne-browser notes it in shared
-`nocturne-browser.titles` (by slot), else the host it opened on. Pin or unpin
+`nocturne-browser.titles` (by slot), else the host it opened on. One tab of a
+web pane can be pinned on its own (the tab's right-click menu or `m` in the
+bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
+a record with `tab` (the web tab's id, kept across restarts), its own tile named
+by that tab's title (`nocturne-browser.tab-titles`, `{ [slot]: { [tab]: title } }`),
+keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
+whole, can each have a tile. Going to it focuses the pane, then
+`nocturne-browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
+screen yet takes the same wish from shared `nocturne-browser.show` when it
+shows). Closing the tab drops its pin. Pin or unpin
 from a firefly's or any pane's right-click menu (open sky and rail), the
 palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a

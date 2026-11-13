@@ -11,8 +11,14 @@
 //                       stamped when the sky first sees it (stamps())
 // A mod pane (web, editor, files, ...) has no terminal: its pin is a record in
 // the mods' shared storage (persisted), PANES_KEY:
-//   [{ pane, mod, props, at }]   pane: its id; mod and props: what it shows,
+//   [{ pane, mod, props, at, tab? }]   pane: its id; mod and props: what it shows,
 //                                to find it again if its id changed; at: as above
+//                                tab: one web tab of a nocturne-browser pane (its
+//                                tab id, "web", "web-2", …, kept across restarts)
+// A record without `tab` pins the whole pane; with one, that tab alone: a tile
+// of its own, named by the tab's title (nocturne-browser.tab-titles), going to
+// the pane and showing that tab (kit.js goToPin). One pane may have its own pin
+// and several tab pins at once; the browser drops a tab's pin when the tab closes.
 // It ends when the pane closes (tidy(): missing from panes() for GONE_AFTER ms);
 // a parked pane stays pinned. Going to it brings a parked pane back.
 // Pure functions: no herdr imports, so the tests can load this file.
@@ -113,24 +119,41 @@ export function findPane(rec, panes) {
   return like.length === 1 ? like[0] : null;
 }
 
-/** A mod pane is pinned (its id, among the records). */
-export const panePinned = (records, pane) => records.some((r) => r.pane === pane);
+/** A record's web tab (a tab pin), or null (the whole pane). */
+export const recordTab = (r) => (typeof r?.tab === "string" && r.tab ? r.tab : null);
 
-/** The records with `p` (a PaneInfo of a mod pane) pinned (at `now`) or unpinned. */
+/** A mod pane is pinned as a whole (its id, among the records; its tab pins aside). */
+export const panePinned = (records, pane) => records.some((r) => r.pane === pane && !recordTab(r));
+
+/** Tab `tab` of mod pane `pane` is pinned on its own. */
+export const tabPinned = (records, pane, tab) => records.some((r) => r.pane === pane && recordTab(r) === tab);
+
+/** The records with `p` (a PaneInfo of a mod pane) pinned (at `now`) or unpinned
+ *  as a whole; its tab pins stay. */
 export function pinPaneRecord(records, p, on, now) {
-  const rest = records.filter((r) => r.pane !== p.pane);
+  const rest = records.filter((r) => r.pane !== p.pane || recordTab(r));
   return on ? [...rest, { pane: p.pane, mod: p.mod ?? null, props: p.props ?? null, at: now }] : rest;
 }
 
-/** The jar's key for a mod pane's pin ("pane:<id>"); a terminal's is its address. */
-export const paneKey = (pane) => `pane:${pane}`;
+/** The records with tab `tab` of `p` (a web pane's PaneInfo) pinned (at `now`) or unpinned. */
+export function pinTabRecord(records, p, tab, on, now) {
+  const rest = records.filter((r) => r.pane !== p.pane || recordTab(r) !== tab);
+  return on ? [...rest, { pane: p.pane, mod: p.mod ?? null, props: p.props ?? null, at: now, tab }] : rest;
+}
+
+/** The jar's key for a mod pane's pin ("pane:<id>"), or one of its tabs'
+ *  ("pane:<id>#<tab>"); a terminal's is its address. */
+export const paneKey = (pane, tab = null) => (tab ? `pane:${pane}#${tab}` : `pane:${pane}`);
 export const isPaneKey = (key) => String(key).startsWith("pane:");
+/** A record's jar key. */
+export const recordKey = (r) => paneKey(r.pane, recordTab(r));
 
 /**
  * Everything in the jar, in the order pinned (unstamped ones last, then by key):
  *   { kind: "agent", key: address, agent }                a pinned agent (agents())
  *   { kind: "terminal", key: address, terminal, pane }    a pinned terminal that isn't an agent
  *   { kind: "pane", key: "pane:<id>", record, pane }      a pinned mod pane that's there now
+ *   { kind: "pane", key: "pane:<id>#<tab>", record, pane, tab }   one web tab of it, pinned
  * `agents`: agents(); `terminals`: terminals(); `panes`: panes(); `records`: paneRecords().
  */
 export function jarItems({ agents, terminals, panes, records }) {
@@ -146,7 +169,8 @@ export function jarItems({ agents, terminals, panes, records }) {
   }
   for (const r of records) {
     const p = findPane(r, panes);
-    if (p) out.push({ kind: "pane", key: paneKey(p.pane), record: r, pane: p, at: Number.isFinite(Number(r.at)) && r.at != null ? Number(r.at) : null });
+    const tab = recordTab(r);
+    if (p) out.push({ kind: "pane", key: paneKey(p.pane, tab), record: r, pane: p, ...(tab ? { tab } : {}), at: Number.isFinite(Number(r.at)) && r.at != null ? Number(r.at) : null });
   }
   return out.sort((a, b) => {
     if (a.at != null && b.at != null && a.at !== b.at) return a.at - b.at;
@@ -175,10 +199,10 @@ export function reorder(jar, key, dir, now) {
   return order.map((k, n) => [k, now + n]);
 }
 
-/** The records with new times (`times`, [key, at] from reorder) for their panes. */
+/** The records with new times (`times`, [key, at] from reorder) for their panes (and tabs). */
 export function retime(records, times) {
-  const at = new Map(times.filter(([k]) => isPaneKey(k)).map(([k, v]) => [k.slice(5), v]));
-  return records.map((r) => (at.has(r.pane) ? { ...r, at: at.get(r.pane) } : r));
+  const at = new Map(times.filter(([k]) => isPaneKey(k)));
+  return records.map((r) => (at.has(recordKey(r)) ? { ...r, at: at.get(recordKey(r)) } : r));
 }
 
 /**
@@ -193,6 +217,8 @@ export function tidy(records, panes, missing, now) {
   let changed = false;
   const machines = new Set(panes.map((p) => (p.pane.includes("/") ? p.pane.split("/")[0] : "")));
   const out = [];
+  // A pane's records (its own pin, its tabs') go together: once one is over time, all are.
+  const gone = new Set();
   for (const r of records) {
     const p = findPane(r, panes);
     if (p) {
@@ -204,8 +230,9 @@ export function tidy(records, panes, missing, now) {
     if (!panes.length || !machines.has(machine)) { out.push(r); continue; }
     const since = missing.get(r.pane) ?? now;
     missing.set(r.pane, since);
-    if (now - since >= GONE_AFTER) { changed = true; missing.delete(r.pane); continue; }
+    if (gone.has(r.pane) || now - since >= GONE_AFTER) { changed = true; gone.add(r.pane); continue; }
     out.push(r);
   }
+  for (const pane of gone) missing.delete(pane);
   return changed ? out : null;
 }

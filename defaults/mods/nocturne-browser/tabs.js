@@ -189,3 +189,67 @@ export function openArgs(value) {
   }
   return { url: v, slot: null };
 }
+
+// ---- one tab pinned to the shelf (nocturne's pins.js reads these records)
+//
+// Nocturne keeps the shelf's pins in shared PINS: [{ pane, mod, props, at, tab? }].
+// A record with `tab` pins that one tab of a web pane: the shelf names it by the
+// tab's title (TAB_TITLES), and going to it focuses the pane and shows the tab
+// (command show:{ slot, tab }, or SHOW when the pane comes on screen later).
+// A web pane finds its records by its props' slot (its pane id may change
+// across a restart; nocturne's tidy() keeps `pane` current).
+
+export const PINS = "nocturne.pinned-panes";
+
+const ofSlot = (r, slot) => r?.mod === "nocturne-browser" && r.props?.slot != null && String(r.props.slot) === String(slot);
+
+/** Tab `tab` of the pane with this slot is pinned to the shelf. */
+export const tabPinned = (records, slot, tab) => (Array.isArray(records) ? records : []).some((r) => ofSlot(r, slot) && r.tab === tab);
+
+/** The records with tab `tab` of `pane` (its PaneInfo: pane, props with a slot) pinned (at `now`) or not. */
+export function pinTab(records, pane, tab, on, now) {
+  const slot = pane?.props?.slot;
+  const rest = (Array.isArray(records) ? records : []).filter((r) => !(ofSlot(r, slot) && r.tab === tab));
+  return on ? [...rest, { pane: pane.pane, mod: "nocturne-browser", props: pane.props, at: now, tab }] : rest;
+}
+
+/** The records without the pins of tab `tab` of the pane with this slot (it
+ *  closed), or null when it had none. */
+export function dropTabPins(records, slot, tab) {
+  const list = Array.isArray(records) ? records : [];
+  const rest = list.filter((r) => !(ofSlot(r, slot) && r.tab === tab));
+  return rest.length === list.length ? null : rest;
+}
+
+/** A `show:` value (JSON `{ slot, tab }`), or null. */
+export function showArgs(value) {
+  try {
+    const o = JSON.parse(String(value ?? ""));
+    return typeof o?.tab === "string" && o.tab ? { slot: o.slot == null ? null : String(o.slot), tab: o.tab } : null;
+  } catch { return null; }
+}
+
+/** Each tab's name for the shelf, `{ [tab id]: label }`; blank tabs have none. */
+export const tabTitles = (m) => Object.fromEntries(m.list.filter((t) => t.page.href || t.page.title || t.start).map((t) => [t.id, label(t)]));
+
+// ---- the tab's menu (a right-click on it, m in the bar): its rows in sections
+
+/** The menu's sections for a tab: `{ pinned, canPin, index, count }` →
+ *  [[{ act, name, enabled }], …]. */
+export function menuRows({ pinned = false, canPin = true, index = 0, count = 1 } = {}) {
+  return [
+    [{ act: "pin", name: pinned ? "Unpin this tab from the shelf" : "Pin this tab to the shelf", enabled: Boolean(canPin) }],
+    [{ act: "left", name: "Move the tab left", enabled: index > 0 }, { act: "right", name: "Move the tab right", enabled: index < count - 1 }],
+    [{ act: "close", name: "Close the tab", enabled: true }],
+  ];
+}
+
+/** The next enabled row from `at` going `by` (wrapping), or `at`. */
+export function menuStep(rows, at, by) {
+  const n = rows.length;
+  for (let k = 1; k <= n; k++) {
+    const i = (((at + by * k) % n) + n) % n;
+    if (rows[i].enabled) return i;
+  }
+  return at;
+}

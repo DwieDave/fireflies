@@ -44,8 +44,10 @@ const app = {
   panes: [] as any[],
   focusedPane: null as string | null,
   ran: [] as [string, any][],
+  overlays: [] as any[],
+  closed: [] as any[],
 };
-const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; };
+const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; };
 const kit = { View: class {}, div: () => new Element(), svg: () => new Element(), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
 
 /** A loaded copy of a mod: `props` its own, its commands from `send`, its native calls in `native`. */
@@ -76,7 +78,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
     shared: (k: string) => app.store[k] ?? null, setShared: (k: string, v: any) => { app.store[k] = v; return null; },
     run: (n: string, a: any) => { app.ran.push([n, a]); return null; },
     panes: () => app.panes, spaces: () => [], focused: () => ({ pane: app.focusedPane }),
-    openOverlay() {}, closeOverlay() {}, window: () => ({ platform: "macos" }),
+    openOverlay: (spec: any) => { app.overlays.push(spec); return null; }, closeOverlay: (id: any) => { app.closed.push(id); }, window: () => ({ platform: "macos" }),
     nativeView: { new: (id: string, p: any) => { const el: any = new Element(); el.view = [id, p]; return el; } },
     nativeViewCall: (id: string, action: string, args: any) => {
       native.push([id, action, args]);
@@ -1075,4 +1077,173 @@ test("nocturne-browser.titles: the shown tab's title by the pane's slot, on a ti
   const bare = await webPane({ url: "https://c.example/" });
   bare.view.onEvent({ id: "web", event: "web.location", data: { href: "https://c.example/", title: "C" } }, bare.cx);
   expect(app.store["nocturne-browser.titles"]).toBe(undefined);
+});
+
+// ---- one web tab pinned to the shelf (nocturne's pins.js reads the records)
+
+const pinsJs = await import("../defaults/mods/nocturne/pins.js");
+const PINS = "nocturne.pinned-panes";
+const find = (root: any, id: string) => walk(root).find((e: any) => callOf(e, "id").some(([i]: any) => i === id));
+const on = (el: any, name: string, button?: string) => callOf(el, name).find((a: any) => button == null || a[0] === button)?.at(-1);
+
+/** The tab menu's copy, opened with the props an overlay spec gave it. */
+async function menuCopy(spec: any) {
+  const props = { ...spec.props, overlay: "o-menu" };
+  const loaded = await load("nocturne-browser/main.js", { props });
+  const cx = context();
+  const view: any = new loaded.mod.default();
+  view.init(props, cx);
+  return { view, cx };
+}
+
+test("nocturne-browser.tab-titles: every tab's name by the pane's slot (blank tabs none); the pane's going takes it away", async () => {
+  reset();
+  const tt = () => app.store["nocturne-browser.tab-titles"];
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" }];
+  app.store["nocturne-browser.tab-titles"] = { gone: { web: "Old" } };
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/x" });
+  expect(tt()).toEqual({ s1: { web: "a.example" } });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://www.youtube.com/watch", background: true } }, cx);
+  view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://www.youtube.com/watch", title: "YouTube" } }, cx);
+  view.onEvent({ id: "web", event: "web.location", data: { href: "https://a.example/x", title: "A" } }, cx);
+  expect(tt()).toEqual({ s1: { web: "A", "web-2": "YouTube" } });
+  // The first key is as it was: the shown tab's title.
+  expect(app.store["nocturne-browser.titles"]).toEqual({ s1: "A" });
+  view.openTab(null, {}, cx);
+  expect(Object.keys(tt().s1)).toEqual(["web", "web-2"]);
+  await view.close();
+  expect(tt()).toEqual({});
+});
+
+test("a web tab pinned from its menu (a right-click, at the pointer): the record nocturne's shelf reads; unpinned the same way", async () => {
+  reset();
+  const pane = { pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" };
+  app.panes = [pane];
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://www.youtube.com/", background: true } }, cx);
+  view.onEvent({ id: "web-2", event: "web.location", data: { href: "https://www.youtube.com/", title: "YouTube" } }, cx);
+  let root = view.render();
+  // A right-click on tab 2: its menu, a popup (it opens at the pointer).
+  on(find(root, "webtab-web-2"), "on_mouse_down", "right")({}, cx);
+  const spec = app.overlays.at(-1);
+  expect(spec).toMatchObject({ mod: "nocturne-browser", kind: "popup", props: { tabMenu: { slot: "s1", tab: "web-2", title: "YouTube", pinned: false, canPin: true, index: 1, count: 2 } } });
+  const menu = await menuCopy(spec);
+  let mroot = menu.view.render();
+  expect(strings(mroot)).toEqual(expect.arrayContaining(["YouTube", "Pin this tab to the shelf", "Move the tab left", "Move the tab right", "Close the tab"]));
+  // Tab 2 is the last: "right" can't be picked, the cursor starts on the pin.
+  expect(menu.view.rows.map((r: any) => [r.act, r.enabled])).toEqual([["pin", true], ["left", true], ["right", false], ["close", true]]);
+  expect(menu.view.cursor).toBe(0);
+  // A click on the pin row: the menu closes, its pick goes to the pane.
+  on(find(mroot, "tm-pin"), "on_click")({}, menu.cx);
+  expect(app.closed).toEqual(["o-menu"]);
+  const [cmd] = app.ran.at(-1)!;
+  expect(cmd).toBe('nocturne-browser.tab_act:{"slot":"s1","tab":"web-2","act":"pin"}');
+  view.tabAct(cmd.slice("nocturne-browser.tab_act:".length), cx);
+  expect(app.store[PINS]).toEqual([{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, at: expect.any(Number), tab: "web-2" }]);
+  // The shelf (pins.js) sees a tile of its own for that tab.
+  const jar = pinsJs.jarItems({ agents: [], terminals: [], panes: [pane], records: pinsJs.paneRecords(app.store[PINS]) });
+  expect(jar.map((x: any) => [x.key, x.tab])).toEqual([["pane:p1#web-2", "web-2"]]);
+  // The strip marks it.
+  root = view.render();
+  const marked = (id: string) => walk(find(root, id)).some((e: any) => callOf(e, "size").some(([n]: any) => n === 4));
+  expect([marked("webtab-web"), marked("webtab-web-2")]).toEqual([false, true]);
+  // Its menu now says Unpin; picked by keys (enter on the first row).
+  on(find(root, "webtab-web-2"), "on_mouse_down", "right")({}, cx);
+  const again = await menuCopy(app.overlays.at(-1));
+  expect(strings(again.view.render())).toContain("Unpin this tab from the shelf");
+  on(again.view.render(), "on_key_down")({ key: "enter", keystroke: "enter", modifiers: {} }, again.cx);
+  view.tabAct(app.ran.at(-1)![0].slice("nocturne-browser.tab_act:".length), cx);
+  expect(app.store[PINS]).toEqual([]);
+});
+
+test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j k skip what can't be picked, esc closes; the wheel moves too", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" }];
+  app.focusedPane = "p1";
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  expect(press(view, cx, "m", char("m"))).toBe(true);
+  const spec = app.overlays.at(-1);
+  expect(spec).toMatchObject({ kind: "dialog", props: { tabMenu: { tab: "web", index: 0 } } });
+  const menu = await menuCopy(spec);
+  // The first tab: "left" can't be picked; j from the pin goes to "right", k back to the pin, k wraps to close.
+  const key = (k: string) => on(menu.view.render(), "on_key_down")({ key: k, keystroke: k, key_char: k.length === 1 ? k : null, modifiers: {} }, menu.cx);
+  key("j");
+  expect(menu.view.rows[menu.view.cursor].act).toBe("right");
+  key("k"); key("k");
+  expect(menu.view.rows[menu.view.cursor].act).toBe("close");
+  key("down");
+  expect(menu.view.rows[menu.view.cursor].act).toBe("pin");
+  on(menu.view.render(), "on_scroll_wheel")({ delta: { y: -3 } }, menu.cx);
+  expect(menu.view.rows[menu.view.cursor].act).toBe("right");
+  // enter on "right": the tab moves.
+  key("enter");
+  view.tabAct(app.ran.at(-1)![0].slice("nocturne-browser.tab_act:".length), cx);
+  expect(ids(view)).toEqual(["web-2", "web"]);
+  // esc: closed, nothing sent.
+  const before = app.ran.length;
+  const m2 = await menuCopy(spec);
+  on(m2.view.render(), "on_key_down")({ key: "escape", keystroke: "escape", modifiers: {} }, m2.cx);
+  expect([app.closed.at(-1), app.ran.length]).toEqual(["o-menu", before]);
+  // The palette's pin_tab pins the shown tab; again unpins it.
+  view.command("pin_tab", cx);
+  expect(app.store[PINS].map((r: any) => r.tab)).toEqual(["web"]);
+  view.command("pin_tab", cx);
+  expect(app.store[PINS]).toEqual([]);
+  // A pane without a slot can't keep a pin (the shelf couldn't find it again): the row is off.
+  reset();
+  const bare = await webPane({ url: "https://c.example/" });
+  bare.view.openTabMenu("web", false);
+  expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ slot: null, canPin: false });
+  const bm = await menuCopy(app.overlays.at(-1));
+  expect(bm.view.rows[0]).toMatchObject({ act: "pin", enabled: false });
+});
+
+test("show:{slot, tab} (a tab's tile on the shelf): the pane with that slot shows the tab; one off screen takes the wish when it shows", async () => {
+  reset();
+  app.panes = [{ pane: "pa", mod: "nocturne-browser", props: { slot: "a" }, tab: "t1" }, { pane: "pb", mod: "nocturne-browser", props: { slot: "b" }, tab: "t2" }];
+  const a = await webPane({ slot: "a", url: "https://a.example/", copy: 1 });
+  const b = await webPane({ slot: "b", url: "https://b.example/", copy: 2 });
+  for (const v of [a, b]) v.view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://x.example/", background: true } }, v.cx);
+  await a.send('show:{"slot":"b","tab":"web-2"}');
+  await b.send('show:{"slot":"b","tab":"web-2"}');
+  expect([a.view.tabs.active, b.view.tabs.active]).toEqual(["web", "web-2"]);
+  expect(viewsOf(b.view.render()).filter(([, , h]) => !h).map(([id]) => id)).toEqual(["web-2"]);
+  // A tab that's gone: nothing.
+  await b.send('show:{"slot":"b","tab":"web-9"}');
+  expect(b.view.tabs.active).toBe("web-2");
+  // Off screen (the command didn't reach it): the wish, taken when its focus comes.
+  app.store["nocturne-browser.show"] = { slot: "a", tab: "web-2", at: Date.now() };
+  await b.send("focus");
+  expect(app.store["nocturne-browser.show"]).not.toBe(null);
+  await a.send("focus");
+  expect([a.view.tabs.active, app.store["nocturne-browser.show"]]).toEqual(["web-2", null]);
+  // A stale wish (over 5 s) is dropped, not acted on.
+  app.store["nocturne-browser.show"] = { slot: "a", tab: "web", at: Date.now() - 6000 };
+  a.view.takeShow(a.cx);
+  expect([a.view.tabs.active, app.store["nocturne-browser.show"]]).toEqual(["web-2", null]);
+});
+
+test("a pinned tab: closing it drops its pin (the pane's other pins stay); a restart keeps it pinned under its id", async () => {
+  reset();
+  const store = storage();
+  try {
+    app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" }];
+    const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+    for (const u of ["https://b.example/", "https://c.example/"]) view.onEvent({ id: "web", event: "web.newTab", data: { url: u, background: true } }, cx);
+    view.togglePin("web-2");
+    view.togglePin("web-3");
+    app.store[PINS] = [...app.store[PINS], { pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, at: 9 }, { pane: "p9", mod: "nocturne-browser", props: { slot: "zz" }, at: 9, tab: "web-2" }];
+    view.closeTab("web-2", cx);
+    expect(app.store[PINS].map((r: any) => pinsJs.recordKey(r))).toEqual(["pane:p1#web-3", "pane:p1", "pane:p9#web-2"]);
+    // Restarted: the tab comes back as web-3, still pinned (its menu says Unpin).
+    reset();
+    app.panes = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, tab: "t1" }];
+    app.store[PINS] = [{ pane: "p1", mod: "nocturne-browser", props: { slot: "s1" }, at: 1, tab: "web-3" }];
+    const again = await webPane({ slot: "s1", url: "https://a.example/" });
+    expect(ids(again.view)).toEqual(["web", "web-3"]);
+    expect(again.view.tabPinned("web-3")).toBe(true);
+    again.view.openTabMenu("web-3", false);
+    expect(app.overlays.at(-1).props.tabMenu.pinned).toBe(true);
+  } finally { store.done(); }
 });

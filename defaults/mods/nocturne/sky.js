@@ -101,10 +101,11 @@ export function laneReach(lanes) {
 
 /** A web pane's name on the shelf: its page's title, if nocturne-browser
  *  notes it by slot in shared `nocturne-browser.titles` (as the viewers do
- *  theirs), else the host it opened on (props.url), else "Web". */
-export function webName(p) {
+ *  theirs), else the host it opened on (props.url), else "Web". One of its
+ *  tabs (`tab`, a tab pin): that tab's title (`nocturne-browser.tab-titles`). */
+export function webName(p, tab = null) {
   const slot = p?.props?.slot;
-  const title = slot != null ? shared("nocturne-browser.titles")?.[slot] : null;
+  const title = slot == null ? null : tab ? shared("nocturne-browser.tab-titles")?.[slot]?.[tab] : shared("nocturne-browser.titles")?.[slot];
   if (title) return String(title);
   try { return new URL(String(p?.props?.url)).host || "Web"; } catch { return "Web"; }
 }
@@ -927,7 +928,7 @@ export default class Sky {
 
   /** What a tile is called: the pane's name (header.js paneName), a terminal's given name. */
   pinName(it) {
-    if (it.pane?.mod === "nocturne-browser") return webName(it.pane);
+    if (it.pane?.mod === "nocturne-browser") return webName(it.pane, it.tab);
     if (it.pane) return paneName(it.pane);
     return givenName(it.key) ?? it.terminal?.name ?? "shell";
   }
