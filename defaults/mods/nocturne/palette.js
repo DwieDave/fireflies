@@ -24,7 +24,7 @@ import { toggleProcs } from "./procs.ts";
 import { gitOpen, openWorktrees } from "./git.ts";
 import { githubOpen } from "./github.ts";
 import { togglePicker } from "./picker.ts";
-import { openNewMenu } from "./newmenu.js";
+import { openNewMenu } from "./newmenu.ts";
 import { NAME_PANE, EDIT_SPACE } from "./menu.ts";
 import { TOASTS, toastKey } from "./toast.ts";
 import { updateShown, dismissUpdate } from "./screens.js";

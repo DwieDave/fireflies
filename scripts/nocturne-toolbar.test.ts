@@ -85,7 +85,7 @@ const cx: any = {
   focus_handle: () => ({ focus() {}, is_focused: () => true }), timer: { every() {}, after() {} }, bind_keys() {}, new: () => ({ set_props() {} }),
 };
 
-const newmenu = await import("../defaults/mods/nocturne/newmenu.js");
+const newmenu = await import("../defaults/mods/nocturne/newmenu.ts");
 const { default: NewMenu, menuPanels, WIDTH: NEW_W } = newmenu;
 const { panels } = await import("../defaults/mods/nocturne/panels.ts");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
@@ -170,7 +170,7 @@ test("+ new menu: nothing clipped at the new width: the head, every agent row an
 
 /** What the footer says for the menu's space row `id` (its item's `say`). */
 function rowSay(id: string) {
-  const src = readFileSync(new URL("../defaults/mods/nocturne/newmenu.js", import.meta.url), "utf8");
+  const src = readFileSync(new URL("../defaults/mods/nocturne/newmenu.ts", import.meta.url), "utf8");
   const said = [...src.matchAll(/id: "([\w-]+)", icon:[^\n]*say: "([^"]+)"/g)].find(([, rid]) => rid === id);
   expect(said).toBeTruthy();
   return said![2];
@@ -223,7 +223,7 @@ test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys 
 
 // ---- 2. "+ new" last, right of the bell
 
-const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
+const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.ts");
 const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
 const { default: Nocturne } = await import("../defaults/mods/nocturne/main.js");
 const shipped = JSON.parse(readFileSync(new URL("../defaults/layouts/nocturne.json", import.meta.url), "utf8"));

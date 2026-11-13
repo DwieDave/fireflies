@@ -75,7 +75,7 @@ const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defa
 const kit = await import("../defaults/mods/nocturne/kit.ts");
 const nkit = await import("../defaults/mods/notifications/kit.js");
 const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
-const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
+const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.ts");
 const { ITEMS } = await import("../defaults/mods/notifications/engine.js");
 
 beforeEach(() => { sharedState = {}; });

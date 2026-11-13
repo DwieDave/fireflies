@@ -8,7 +8,7 @@
 // (move, moveSection, moveRow) and acts on the verb itself.
 
 import type { Context, KeyEvent } from "gpui-kit";
-import { arrayOf, isBoolean, isString, object } from "./guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, object } from "./guard.ts";
 
 /** shared() key: where the tab strip's cursor is when it's outside the strip,
  *  so that copy draws the ring: { region: "head" | "parked" | "bell" | "new", pane?, item }. */
@@ -19,12 +19,13 @@ export interface LayoutNode {
   readonly id?: string;
   readonly hidden?: boolean;
   readonly content?: { readonly mod?: string; readonly props?: { readonly role?: string } };
+  readonly size?: { readonly px?: number };
   readonly children?: readonly LayoutNode[];
 }
 
 /** layout()'s tree: every node with the fields above right where they're there. */
 export function isLayoutNode(value: unknown): value is LayoutNode {
-  return object({}, { id: isString, hidden: isBoolean, content: object({}, { mod: isString, props: object({}, { role: isString }) }), children: arrayOf(isLayoutNode) })(value);
+  return object({}, { id: isString, hidden: isBoolean, content: object({}, { mod: isString, props: object({}, { role: isString }) }), size: object({}, { px: isNumber }), children: arrayOf(isLayoutNode) })(value);
 }
 
 /** The layout block showing nocturne with `role` (sky, tabs), from layout(). */

@@ -8,28 +8,46 @@
 // CURSOR)) is lit and ringed: enter puts it back, x closes it, m its menu.
 
 import { div } from "gpui-kit";
+import type { Element } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, theme, shared } from "herdr";
+import { isString, literal, nullable, object, readShared, sharedKey } from "./guard.ts";
 import { dither, pip, navRing } from "./kit.ts";
 import { CURSOR } from "./nav.ts";
 import { mark, paneName } from "./header.ts";
 
+/** The strip's cursor outside it (nav.ts CURSOR): on a chip when its region is "parked". */
+const CURSOR_KEY = sharedKey(CURSOR, nullable(object({ region: literal("head", "parked", "bell", "new") }, { pane: nullable(isString), item: nullable(isString) })));
+
+/** A chip's props from the app: its pane. */
+const isChipProps = object({}, { pane: isString });
+
 export default class Parked {
-  init() {
+  hovered = false;
+
+  init(): void {
     this.hovered = false;
   }
 
-  render() {
+  render(): Element {
     const t = theme();
-    const p = panes().find((x) => x.pane === props()?.pane);
+    const pr = props();
+    const pane = isChipProps(pr) ? pr.pane : undefined;
+    const p = panes().find((x) => x.pane === pane);
+
     if (!p) return div();
-    const c = shared(CURSOR);
+
+    const c = readShared(shared, CURSOR_KEY, null);
     const on = c?.region === "parked" && c.pane === p.pane;
     const lit = this.hovered || on;
     const st = p.status;
+
     return h_flex().id(`park-${p.pane}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
       .text_size(11)
-      .on_hover((h, cx) => { this.hovered = h; cx.notify(); })
+      .on_hover((h, cx) => {
+        this.hovered = h;
+        cx.notify();
+      })
       .child(mark(t, { ...p, focused: lit }))
       .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))
       .child(div().min_w(0).truncate().text_color(lit ? t.foreground : t.muted).child(paneName(p)))

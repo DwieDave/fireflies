@@ -7,32 +7,53 @@
 // where the worktrees went, with an enter / click that opens them.
 
 import { div, svg } from "gpui-kit";
+import type { Context, Element } from "gpui-kit";
+import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import { panes, spaces, run, theme } from "herdr";
+import { isString, object } from "./guard.ts";
 import { spaceFolder } from "./kit.ts";
 import { openWorktrees } from "./git.ts";
+import type { WorktreesAsk } from "./git.ts";
+
+/** A saved worktrees pane's props. */
+const isRoleProps = object({}, { role: isString });
 
 export class WorktreesPanel {
-  init(_props, cx) {
+  done = false;
+
+  init(_props: Props | undefined, cx: Context): void {
     cx.timer.after(0, () => this.handOver());
   }
 
-  handOver() {
+  handOver(): void {
     if (this.done) return;
-    const mine = panes().filter((p) => p.mod === "nocturne" && p.props?.role === "worktrees");
-    if (mine.length !== 1) return;
+
+    const mine = panes().filter((p) => p.mod === "nocturne" && isRoleProps(p.props) && p.props.role === "worktrees");
+    const pane = mine.length === 1 ? mine[0] : undefined;
+
+    if (!pane) return;
+
     this.done = true;
-    const pane = mine[0];
-    const s = spaces().find((x) => (x.tabs ?? []).some((t) => t.id === pane.tab));
+
+    const s = spaces().find((x) => x.tabs.some((t) => t.id === pane.tab));
     const folder = s ? spaceFolder(s, panes()) : null;
-    run("pane.split", { direction: "right", pane: pane.pane, mod: "git", props: { folder, on: s?.machine ?? null, worktrees: { action: "open", ...(s ? { space: s.id } : {}) } } });
+    const worktrees: WorktreesAsk = s ? { action: "open", space: s.id } : { action: "open" };
+
+    run("pane.split", { direction: "right", pane: pane.pane, mod: "git", props: { folder, on: s?.machine ?? null, worktrees } });
     run("pane.close", { pane: pane.pane });
   }
 
-  render() {
+  render(): Element {
     const t = theme();
+
     return v_flex().id("worktrees-moved").size_full().bg(t.background).items_center().justify_center().gap(10).text_size(11)
-      .on_key_down((e, cx) => { if (e.key === "enter") { openWorktrees(); cx.stop_propagation(); } })
+      .on_key_down((e, cx) => {
+        if (e.key === "enter") {
+          openWorktrees();
+          cx.stop_propagation();
+        }
+      })
       .child(svg("mods/nocturne/art/moon-8.svg").w(40).h(40).text_color(t.ansi8).opacity(0.6))
       .child(div().text_color(t.foreground).child("Worktrees live in Git now"))
       .child(div().text_color(t.ansi8).child("Git's Files panel, Worktrees tab: cmd-g, then 2 and ["))
