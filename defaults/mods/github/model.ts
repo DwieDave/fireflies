@@ -641,3 +641,50 @@ export function linksIn(texts: readonly (string | null | undefined)[]): WebLink[
 
   return out;
 }
+
+// ---- the other answers the window reads (the forms', the run lists')
+
+/** A branch or a tag (REST `branches`, `tags`): its name. */
+export const isNamed = object({ name: isString });
+
+export const isNamedList = arrayOf(isNamed);
+
+/** A repo's deployment environments (REST `environments`). */
+export const isEnvironments = object({}, { environments: maybe(arrayOf(isNamed)) });
+
+/** A workflow (`gh workflow list --json id,name,path,state`). */
+export const isWorkflow = object({ id: isNumber, name: isString, path: isString, state: isString });
+
+export type Workflow = Guarded<typeof isWorkflow>;
+
+/** `gh workflow list` prints nothing (null) when there are none. */
+export const isWorkflows = maybe(arrayOf(isWorkflow));
+
+/** A page of runs (REST `actions/runs`, a workflow's `runs`). */
+export const isRunList = object({}, { workflow_runs: maybe(arrayOf(isRun)) });
+
+export const isRuns = arrayOf(isRun);
+
+/** A run's jobs (REST `actions/runs/<id>/jobs`). */
+export const isJobList = object({}, { jobs: maybe(arrayOf(isJob)) });
+
+export const isJobs = arrayOf(isJob);
+
+export const isReviewComments = arrayOf(isReviewComment);
+
+/** A file of the repo (REST `contents`): base64. */
+export const isFileContent = object({}, { content: text });
+
+const connection = <T>(item: (value: unknown) => value is T) => maybe(object({}, { nodes: maybe(arrayOf(item)) }));
+
+/** The new pull request form's lists: who can be assigned, the labels, the open milestones. */
+export const isPrChoices = object({}, {
+  viewer: maybe(isActor),
+  repository: maybe(object({}, {
+    assignableUsers: connection(object({ login: isString }, { name: text })),
+    labels: connection(object({ name: isString }, { description: text })),
+    milestones: connection(object({ title: isString }, { dueOn: text })),
+  })),
+});
+
+export type PrChoices = Guarded<typeof isPrChoices>;

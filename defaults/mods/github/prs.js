@@ -5,8 +5,8 @@
 
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
-import { ghJson, ghRun, api, graphql } from "./gh.js";
-import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn } from "./model.ts";
+import { ghJson, ghRun, api, graphql, slimmed } from "./gh.ts";
+import { checkRows, rollupTone, rowTone, prListQuery, prRows, ago, duration, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments } from "./model.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.js";
@@ -150,14 +150,14 @@ export default class Prs {
 
   async readList(repo, filter) {
     const { query, vars } = prListQuery(filter, repo.full);
-    return prRows(await graphql(repo, query, vars));
+    return prRows(await graphql(repo, query, isPrList, vars));
   }
 
   async readDetail(repo, p, fresh) {
     const d = this.details.get(p.number);
     const [pr, review] = await Promise.all([
-      ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW]),
-      api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`, { fresh, prior: d?.reviewTag ? { etag: d.reviewTag, data: d.review } : null, slim: (a) => (a ?? []).map(slimReviewComment) })
+      ghJson(repo, ["pr", "view", String(p.number), "--json", VIEW], isPrView),
+      api(repo, `repos/${repo.full}/pulls/${p.number}/comments?per_page=100`, slimmed(isReviewComments, (a) => a.map(slimReviewComment), isReviewComments), { fresh, prior: d?.reviewTag ? { etag: d.reviewTag, data: d.review } : null })
         .catch(() => ({ data: d?.review ?? [], etag: d?.reviewTag ?? null })),
     ]);
     if (this.app.repo !== repo) return;

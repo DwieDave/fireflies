@@ -9,7 +9,8 @@
 
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { ghJson, ghRun, api, fileAt } from "./gh.js";
+import { ghJson, ghRun, api, fileAt, plain } from "./gh.ts";
+import { isEnvironments, isNamedList, isRunList, isWorkflows } from "./model.ts";
 import { slug } from "./remotes.ts";
 import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.js";
 import { Form } from "./form.js";
@@ -82,7 +83,7 @@ export class DispatchForm {
     const repo = this.repo;
     this.app.spawn(cx, async () => {
       try {
-        const list = (await ghJson(repo, ["workflow", "list", "--json", "id,name,path,state", "--limit", "100"])) ?? [];
+        const list = (await ghJson(repo, ["workflow", "list", "--json", "id,name,path,state", "--limit", "100"], isWorkflows)) ?? [];
         const read = await Promise.all(list.filter((w) => w.state === "active" && w.path).map(async (w) => {
           const yaml = await fileAt(repo, w.path, repo.base ?? "HEAD");
           const d = yaml ? dispatchOf(yaml) : null;
@@ -98,8 +99,8 @@ export class DispatchForm {
     });
     this.app.spawn(cx, async () => {
       const [b, t] = await Promise.all([
-        api(repo, `repos/${repo.full}/branches?per_page=100`).catch(() => ({ data: [] })),
-        api(repo, `repos/${repo.full}/tags?per_page=100`).catch(() => ({ data: [] })),
+        api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
+        api(repo, `repos/${repo.full}/tags?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] })),
       ]);
       const names = (b.data ?? []).map((x) => x.name);
       const order = [repo.base, repo.branch].filter((n, i, a) => n && names.includes(n) && a.indexOf(n) === i);
@@ -131,7 +132,7 @@ export class DispatchForm {
     else this.inputs = d.inputs;
     this.form.setFields(this.fields());
     if (this.inputs.some((i) => i.type === "environment") && !this.envs) {
-      const { data } = await api(this.repo, `repos/${this.repo.full}/environments`).catch(() => ({ data: null }));
+      const { data } = await api(this.repo, `repos/${this.repo.full}/environments`, plain(isEnvironments)).catch(() => ({ data: null }));
       this.envs = (data?.environments ?? []).map((e) => e.name);
     }
     cx?.notify?.();
@@ -171,7 +172,7 @@ export class DispatchForm {
   // ---- sending, then finding the run
 
   runsOf(w) {
-    return api(this.repo, `repos/${this.repo.full}/actions/workflows/${w.id}/runs?event=workflow_dispatch&per_page=20`, { fresh: true })
+    return api(this.repo, `repos/${this.repo.full}/actions/workflows/${w.id}/runs?event=workflow_dispatch&per_page=20`, plain(isRunList), { fresh: true })
       .then((r) => r.data?.workflow_runs ?? []).catch(() => []);
   }
 

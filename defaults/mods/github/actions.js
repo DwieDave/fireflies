@@ -12,8 +12,8 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle } from "gpui-base";
 import { settings } from "herdr";
-import { api, ghRun, fileAt } from "./gh.js";
-import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine } from "./model.ts";
+import { api, ghRun, fileAt, slimmed } from "./gh.ts";
+import { tone, pollEvery, duration, ago, jobColumns, jobParents, needsFromWorkflow, splitLog, logLine, isRunList, isRuns, isRun, isJobList, isJobs } from "./model.ts";
 import { dither, pip, panel, empty, band, toneColor, TONE_WORD, sweep, stop, splitter, unzoom, unzoomSize, chip } from "./kit.js";
 import { canvas, layout, NW, NH, PAD } from "./graph.js";
 import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
@@ -158,8 +158,8 @@ export default class Actions {
     const jobs = early ? this.pollRun(fresh, cx, early) : null;
     jobs?.catch(() => {});
     const [{ data, etag }] = await Promise.all([
-      api(repo, `repos/${repo.full}/actions/runs?per_page=40${q}`, { fresh, prior: kept?.etag ? { etag: kept.etag, data: kept.list } : null, slim: (d) => (d?.workflow_runs ?? []).map(slimRun) }),
-      ...[...this.extra.keys()].map((id) => api(repo, `repos/${repo.full}/actions/runs/${id}`, { slim: slimRun }).then((r) => { if (r.data) this.extra.set(id, r.data); }).catch(() => null)),
+      api(repo, `repos/${repo.full}/actions/runs?per_page=40${q}`, slimmed(isRunList, (d) => (d.workflow_runs ?? []).map(slimRun), isRuns), { fresh, prior: kept?.etag ? { etag: kept.etag, data: kept.list } : null }),
+      ...[...this.extra.keys()].map((id) => api(repo, `repos/${repo.full}/actions/runs/${id}`, slimmed(isRun, slimRun, isRun)).then((r) => { if (r.data) this.extra.set(id, r.data); }).catch(() => null)),
     ]);
     if (this.app.repo !== repo || this.branchKey() !== branch) return;
     this.runsCache[branch] = { list: data ?? [], etag, at: Date.now() };
@@ -178,7 +178,7 @@ export default class Actions {
     const tag = this.jobTags.get(r.id), had = this.jobs.get(r.id);
     const workflow = r.path && !this.needs.has(key) ? fileAt(repo, r.path.replace(/@.*$/, ""), r.head_sha) : null;
     const [{ data, etag }, yaml] = await Promise.all([
-      api(repo, `repos/${repo.full}/actions/runs/${r.id}/jobs?per_page=100&filter=latest`, { fresh, prior: tag?.etag && had ? { etag: tag.etag, data: had } : null, slim: (d) => (d?.jobs ?? []).map(slimJob) }),
+      api(repo, `repos/${repo.full}/actions/runs/${r.id}/jobs?per_page=100&filter=latest`, slimmed(isJobList, (d) => (d.jobs ?? []).map(slimJob), isJobs), { fresh, prior: tag?.etag && had ? { etag: tag.etag, data: had } : null }),
       workflow,
     ]);
     if (this.app.repo !== repo) return;

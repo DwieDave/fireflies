@@ -10,7 +10,8 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec } from "herdr";
-import { ghRun, api, graphql } from "./gh.js";
+import { ghRun, api, graphql, plain } from "./gh.ts";
+import { isNamed, isNamedList, isPrChoices } from "./model.ts";
 import { candidates } from "./remotes.ts";
 import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.js";
 import { shellLine } from "./dispatch.js";
@@ -114,14 +115,14 @@ export class PrForm {
       done();
     });
     this.app.spawn(cx, async () => {
-      const { data } = await api(repo, `repos/${repo.full}/branches?per_page=100`).catch(() => ({ data: [] }));
+      const { data } = await api(repo, `repos/${repo.full}/branches?per_page=100`, plain(isNamedList)).catch(() => ({ data: [] }));
       const names = (data ?? []).map((b) => b.name);
       // The default branch first, the rest as GitHub sorts them.
       this.remoteBranches = repo.base && names.includes(repo.base) ? [repo.base, ...names.filter((n) => n !== repo.base)] : names;
       done();
     });
     this.app.spawn(cx, async () => {
-      const d = await graphql(repo, CHOICES, { owner, name }, { partial: true }).catch(() => null);
+      const d = await graphql(repo, CHOICES, isPrChoices, [["owner", owner], ["name", name]], { partial: true }).catch(() => null);
       const r = d?.repository;
       this.choices = {
         me: d?.viewer?.login ?? null,
@@ -151,7 +152,7 @@ export class PrForm {
     const [log, stat, onRemote] = await Promise.all([
       baseRef ? this.git(["log", "--format=%H%x1f%s%x1f%b%x1e", "-n", "200", `${baseRef}..${head}`]).catch((e) => ({ error: e.message })) : { error: `${base} isn't fetched here: fetch to see the commits.` },
       baseRef ? this.git(["diff", "--numstat", `${baseRef}...${head}`]).catch(() => "") : "",
-      api(this.repo, `repos/${this.headRepo}/branches/${encodeURIComponent(head)}`, { fresh: true }).then(() => true).catch((e) => (/not found|404/i.test(e.message) ? false : null)),
+      api(this.repo, `repos/${this.headRepo}/branches/${encodeURIComponent(head)}`, plain(isNamed), { fresh: true }).then(() => true).catch((e) => (/not found|404/i.test(e.message) ? false : null)),
     ]);
     if (gen !== this.gen || this.closed) return;
     const commits = typeof log === "string" ? parseLog(log) : null;

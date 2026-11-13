@@ -1305,7 +1305,9 @@ export const addDraftMutation = (projectId: string, title: string): string =>
   `mutation { addProjectV2DraftIssue(input: { projectId: ${lit(projectId)}, title: ${lit(title)} }) { projectItem { id databaseId content { ... on DraftIssue { id } } } } }`;
 
 /** addDraftMutation's answer: the new item's id. */
-export const isAddedDraft = object({}, { addProjectV2DraftIssue: maybe(object({}, { projectItem: maybe(object({}, { id: text })) })) });
+export const isAddedDraft = object({}, {
+  addProjectV2DraftIssue: maybe(object({}, { projectItem: maybe(object({}, { id: text, databaseId: maybe(isNumber), content: maybe(object({}, { id: text })) })) })),
+});
 
 export const convertMutation = (itemId: string, repoId: string): string =>
   `mutation { convertProjectV2DraftIssueItemToIssue(input: { itemId: ${lit(itemId)}, repositoryId: ${lit(repoId)} }) { item { id content { ... on Issue { id number url } } } } }`;

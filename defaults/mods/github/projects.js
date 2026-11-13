@@ -17,7 +17,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { shared, setShared } from "herdr";
-import { graphql } from "./gh.js";
+import { graphql, mutate } from "./gh.ts";
 import { readAgo, ago, SLOW, linksIn } from "./model.ts";
 import { repoKey, newest, LIMITS } from "./cache.ts";
 import { markdown } from "./markdown.ts";
@@ -26,7 +26,7 @@ import {
   projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, scopeProblem, detailQuery, parseDetail, choicesQuery, parseChoices,
   filterTokens, layout, grid, find, step, pickUp, carry, carried, drop, overlay, valueFor, setFieldMutation, positionMutation,
   archiveMutation, addDraftMutation, convertMutation, draftMutation, toggleMutation, cardFields, editableFields, OPTION_ANSI,
-  initials, loginSlot, valueText, slimBoard, wrap, isStoredBoard, boardOf,
+  initials, loginSlot, valueText, slimBoard, wrap, isStoredBoard, boardOf, isProjectListAnswer, isBoardAnswer, isDetailAnswer, isChoicesAnswer, isAddedDraft,
 } from "./board.ts";
 
 const PREFS = "github.boards"; // { repos: { repoKey: projectId }, projects: { id: { view, folded: { viewId: [key] }, lanes: { viewId: [key] }, limits: { fieldId: { key: n } } } } }
@@ -168,7 +168,7 @@ export default class Projects {
     const now = Date.now();
     try {
       if (all || !this.list || now - this.listAt >= LIST_EVERY) {
-        const l = parseProjectList(await graphql(repo, projectListQuery(repo), {}, { partial: true }));
+        const l = parseProjectList(await graphql(repo, projectListQuery(repo), isProjectListAnswer, [], { partial: true }));
         if (this.app.repo !== repo) return;
         this.list = l; this.listAt = Date.now(); this.scope = null;
         if (!this.pick || !l.projects.some((p) => p.id === this.pick)) {
@@ -194,9 +194,9 @@ export default class Projects {
 
   async readBoard(repo, pid) {
     const started = Date.now();
-    let b = parseBoard(await graphql(repo, boardQuery(true), { id: pid }));
+    let b = parseBoard(await graphql(repo, boardQuery(true), isBoardAnswer, [["id", pid]]));
     if (!b) throw new Error("GitHub didn't find that project (it may be gone, or private to others).");
-    while (b.more) b = addPage(b, await graphql(repo, boardQuery(false), { id: pid, after: b.more }));
+    while (b.more) b = addPage(b, await graphql(repo, boardQuery(false), isBoardAnswer, [["id", pid], ["after", b.more]]));
     if (this.app.repo !== repo) return;
     this.boards[pid] = { board: b, at: Date.now() };
     this.settleAt = 0; this.error = "";
@@ -216,7 +216,7 @@ export default class Projects {
     this.details.set(id, { ...(kept ?? {}), busy: true, at: kept?.at ?? 0 });
     const repo = this.app.repo;
     const read = (async () => {
-      try { this.details.set(id, { d: parseDetail(await graphql(repo, detailQuery, { id })), at: Date.now() }); }
+      try { this.details.set(id, { d: parseDetail(await graphql(repo, detailQuery, isDetailAnswer, [["id", id]])), at: Date.now() }); }
       catch (e) { this.details.set(id, { error: String(e?.message ?? e), at: Date.now() }); }
     })();
     if (cx) this.app.spawn(cx, () => read);
@@ -225,7 +225,7 @@ export default class Projects {
 
   async choicesFor(full) {
     if (!full) return { labels: [], users: [] };
-    if (!this.choices.has(full)) this.choices.set(full, parseChoices(await graphql(this.app.repo, choicesQuery(full))));
+    if (!this.choices.has(full)) this.choices.set(full, parseChoices(await graphql(this.app.repo, choicesQuery(full), isChoicesAnswer)));
     return this.choices.get(full);
   }
 
@@ -254,7 +254,7 @@ export default class Projects {
     });
   }
 
-  gql(query) { return (repo) => graphql(repo, query); }
+  gql(query) { return (repo) => mutate(repo, query); }
 
   setField(item, field, choice, cx) {
     const b = this.board();
@@ -282,7 +282,7 @@ export default class Projects {
     if (plan.column !== undefined) sends.push(setFieldMutation(pid, plan.id, lay.field, ops[0].value));
     if (plan.afterId !== undefined) sends.push(positionMutation(pid, plan.id, plan.afterId));
     this.sel = plan.id; this.selCol = c.col;
-    this.editBatch(ops, async (repo) => { for (const q of sends) await graphql(repo, q); },
+    this.editBatch(ops, async (repo) => { for (const q of sends) await mutate(repo, q); },
       plan.column !== undefined ? `Moved ${label(item)} to ${col.name}` : `Moved ${label(item)}`, cx);
   }
 
@@ -318,9 +318,9 @@ export default class Projects {
     const item = { id: temp, db: null, type: "DRAFT_ISSUE", archived: false, values, content: { kind: "draft", id: null, number: null, title, state: "DRAFT", url: null, repo: null, assignees: [], labels: [], milestone: null } };
     this.sel = temp;
     this.edit({ kind: "add", item }, async (repo) => {
-      const r = await graphql(repo, addDraftMutation(b.project.id, title));
+      const r = await graphql(repo, addDraftMutation(b.project.id, title), isAddedDraft);
       const id = r?.addProjectV2DraftIssue?.projectItem?.id;
-      if (id && col?.key && lay.field) await graphql(repo, setFieldMutation(b.project.id, id, lay.field, values.get(lay.field.id)));
+      if (id && col?.key && lay.field) await mutate(repo, setFieldMutation(b.project.id, id, lay.field, values.get(lay.field.id)));
       if (id) {
         // The real item takes the temporary one's place in what's shown until the next read.
         item.id = id; item.db = r.addProjectV2DraftIssue.projectItem.databaseId ?? null; item.content.id = r.addProjectV2DraftIssue.projectItem.content?.id ?? null;
