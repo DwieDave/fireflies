@@ -35,7 +35,7 @@ import NewMenu from "./newmenu.js";
 import NewButton from "./newbutton.js";
 import NewSpace from "./newspace.js";
 import Menu, { KeysDialog } from "./menu.js";
-import Toast from "./toast.js";
+import Toast from "./toast.ts";
 import { Welcome, WhatsNew, Keys, UpdateNote } from "./screens.js";
 
 const ROLES = {

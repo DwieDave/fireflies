@@ -31,7 +31,7 @@ import { div, svg } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, shared } from "herdr";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.ts";
-import { chip, field, confirm } from "./inline.js";
+import { chip, field, confirm } from "./inline.ts";
 import { formKey } from "./form-keys.ts";
 import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.js";
 

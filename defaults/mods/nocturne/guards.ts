@@ -55,6 +55,7 @@ export const isTerminal = object(
     floating_view: oneOf(isNumber, isNull),
     exit_code: oneOf(isNumber, isNull),
     reason: oneOf(isString, isNull),
+    program: object({ key: isString }),
   },
 );
 

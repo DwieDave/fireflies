@@ -26,7 +26,7 @@ import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.ts";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
-import { TOASTS, toastKey } from "./toast.js";
+import { TOASTS, toastKey } from "./toast.ts";
 import { updateShown, dismissUpdate } from "./screens.js";
 
 // Fixed heights, so the list keeps one height while you move.

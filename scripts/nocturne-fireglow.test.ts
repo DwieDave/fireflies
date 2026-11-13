@@ -65,7 +65,7 @@ const cx: any = {
   timer: { every() {}, after(_ms: number, f: Function) { timers.push(f); } },
 };
 
-const { placeGlow, nextGlow, drawGlow, GONE_AFTER, PULSE, PULSE_FRAMES, pulseFrame, Fireglow } = await import("../defaults/mods/nocturne/glow.js");
+const { placeGlow, nextGlow, drawGlow, GONE_AFTER, PULSE, PULSE_FRAMES, pulseFrame, Fireglow } = await import("../defaults/mods/nocturne/glow.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 
 beforeEach(() => { windowNow = { platform: "linux", active: true }; zoom = 1; byId = {}; glows = []; timers = []; cx.notified = 0; });

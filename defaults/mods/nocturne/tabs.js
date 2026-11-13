@@ -41,7 +41,7 @@ import { openMenu, openKeys } from "./menu.js";
 import { keysHint } from "./keyhelp.ts";
 import { headerControls, paneMenu, renamePane } from "./header.js";
 import { CURSOR, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod } from "./nav.ts";
-import { gitState } from "./lazygit.js";
+import { gitState } from "./lazygit.ts";
 import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
 import { filesPane, toggleFiles, focusFiles } from "./files.ts";

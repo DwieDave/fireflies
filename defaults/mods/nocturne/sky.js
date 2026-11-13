@@ -49,7 +49,7 @@ import { stamps, tidy, onShelf, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins
 import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.js";
 import { isDock, adoptDock, DOCK_KEY } from "./dock.ts";
-import { field } from "./inline.js";
+import { field } from "./inline.ts";
 import Spaces from "./spaces.js";
 
 export { GLOW_SQUARE };
@@ -68,10 +68,10 @@ import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
 import { openSpacePicker } from "./newspace.js";
 import { gridify } from "./gridify.ts";
-import { toastKey } from "./toast.js";
+import { toastKey } from "./toast.ts";
 import { dismissUpdate } from "./screens.js";
 import { calm, flash, dust, fly as flyPath } from "./flight.ts";
-import { Fireglow, nextGlow, GONE_AFTER } from "./glow.js";
+import { Fireglow, nextGlow, GONE_AFTER } from "./glow.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 
 const stop = (_e, cx) => cx.stop_propagation();

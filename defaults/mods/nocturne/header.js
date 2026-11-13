@@ -30,8 +30,8 @@ import { panes, spaces, props, run, theme, home, shared, setShared, keys } from 
 import { NAME_PANE, openMenu } from "./menu.js";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR } from "./nav.ts";
-import { field } from "./inline.js";
-import { isLazygit, gitState } from "./lazygit.js";
+import { field } from "./inline.ts";
+import { isLazygit, gitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
 
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
