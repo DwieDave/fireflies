@@ -160,6 +160,8 @@ test("the kill flow: TERM, a moment, the ones still there; KILL ends those", asy
 test("the kill flow: all gone on TERM leaves nothing; a zombie counts as ended; nothing to end sends nothing", async () => {
   const { exec, calls } = fakeExec([], [7]);
   expect(await endGently([7, 8], { exec, wait: async () => {} })).toEqual([]);
+  // No setTimeout in the engine: without the caller's timer it refuses before signalling anything.
+  await expect(endGently([7, 8], { exec } as any)).rejects.toThrow("endGently needs wait(ms)");
   const n = calls.length;
   await signal([], "TERM", exec);
   expect(await alive([], exec)).toEqual([]);

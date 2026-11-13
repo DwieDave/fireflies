@@ -270,8 +270,11 @@ export function signal(pids, sig, exec) {
   return exec("kill", [`-${sig}`, ...pids.map(String)], { timeout: 5000 }).catch(() => null);
 }
 
-/** TERM, a moment, and the ones that held on: the deck then offers KILL for those. */
-export async function endGently(pids, { exec, wait = (ms) => new Promise((r) => setTimeout(r, ms)), grace = 2000 }) {
+/** TERM, a moment, and the ones that held on: the deck then offers KILL for those.
+ *  `wait(ms)` is the caller's timer (cx.timer.after): the engine has no setTimeout
+ *  (a stub that throws), so there is no default for it. */
+export async function endGently(pids, { exec, wait, grace = 2000 }) {
+  if (typeof wait !== "function") throw new TypeError("endGently needs wait(ms): the engine has no setTimeout, use cx.timer.after");
   await signal(pids, "TERM", exec);
   await wait(grace);
   return alive(pids, exec);
