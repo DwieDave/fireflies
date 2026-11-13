@@ -572,6 +572,22 @@ test("worktrees: n checks a branch out under ~/.herdr/worktrees and opens it as 
   spacesNow = [];
 });
 
+// The Agents line named every agent "agent": it read a.name, which herdr's agent listing doesn't have.
+test("worktrees: the main view names the agents in a checkout by their program", async () => {
+  homeNow = join(dir, "home");
+  sh(`git worktree add -q -b named ${join(homeNow, "wt-n")} HEAD`);
+  agentsNow = [{ pane: "p1", status: "working", title: "fix the parser", program: { key: "claude", name: "Claude Code" } }];
+  panesNow = [{ pane: "p1", tab: "t1", cwd: join(homeNow, "wt-n") }];
+  const v = await open();
+  v.setPanel("files"); v.setTab("worktrees"); await settle(v);
+  const i = v.items("worktrees").findIndex((w: any) => w.path === join(homeNow, "wt-n"));
+  v.moveTo(i); await settle(v);
+  const agents = v.main.rows.find((r: any) => r.kind === "text" && r.parts[0][0].startsWith("Agents"));
+  expect(agents.parts[1][0]).toBe("Claude Code (working)");
+  sh(`git worktree remove --force ${join(homeNow, "wt-n")} && git branch -D named`);
+  agentsNow = []; panesNow = [];
+});
+
 test("worktrees: the main checkout can't go; M picks merged ones, U unused ones, d removes the picked", async () => {
   homeNow = join(dir, "home");
   sh("git branch done-a && git branch done-b");

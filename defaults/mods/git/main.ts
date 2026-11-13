@@ -2095,7 +2095,7 @@ export default class GitView extends View {
 
     rows.push(kv("Spaces", occ.spaces.length ? [[occ.spaces.map((s) => s.name || "unnamed").join(", "), "accent"]] : [["none: space opens one", "muted"]]));
 
-    if (occ.agents.length) rows.push(kv("Agents", [[occ.agents.map((a) => `agent (${a.status})`).join(", "), "ansi3"]]));
+    if (occ.agents.length) rows.push(kv("Agents", [[occ.agents.map((a) => `${a.program.name} (${a.status})`).join(", "), "ansi3"]]));
 
     rows.push(text(""));
 
