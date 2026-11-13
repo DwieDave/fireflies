@@ -1225,12 +1225,14 @@ neighbours; on the rail the cell and its padding): click focuses the agent,
 right-click its menu, double-click renames it. Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
-a sheen down its glass, never shorter than a jar with room under one firefly;
+a sheen down its glass, never shorter than a jar with room under one firefly,
+what it holds centered in the glass when it's that short;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
 sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (on the rail 18 px tiles two abreast), in the order pinned, its own order
+foot (clear of the last firefly's halo, the tiles and caption in from the
+glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
 apart from the fireflies'. A tile is moonlit while its pane is on screen, the
 focused one wears the corner ticks; the caption line under the shelf names
 the tile under the pointer or the keyboard's cursor (else the focused one):
@@ -1255,7 +1257,13 @@ shows). Closing the tab drops its pin. Pin or unpin
 from a firefly's or any pane's right-click menu (open sky and rail), the
 palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
-firefly up or down in the jar, a tile left or right on the shelf. The dock
+firefly up or down in the jar, a tile left or right on the shelf.
+`nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
+place of the core's `agent.next` / `agent.prev`) walk the agents in the
+sidebar's order, then on through every tile on the shelf in its order (web
+pages, editors, files, shells; each pinned web tab its own stop), then back to
+the first agent, and the other way round; a tile is gone to as a click on it
+goes. The dock
 (dock.js) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
@@ -1358,7 +1366,11 @@ drops nothing. Two blue corner ticks mark what's shown: the shown space (its pla
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
 
-Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
+Nocturne's toolbar, right of the tabs past a seam (the tabs dissolve into the
+night over 48 px in dithered steps, so overflowing ones slip under it; a
+dithered band the strip's height), on a dithered plate of its own with a lit
+foot that runs under every tool, the bell and "+ new" to the strip's right edge
+(each block draws its stretch, kit.js `toolGround`): ▶ and its runs (the script runner),
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a

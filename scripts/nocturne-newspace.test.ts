@@ -71,7 +71,7 @@ mock.module("herdr", () => ({
   exec: (c: string, a: string[], o: any) => fakeExec(c, a, o), home: () => HOME, spaces: () => st.spaces, panes: () => st.panes,
   focused: () => st.focused, shared: (k: string) => st.shared[k] ?? null, setShared: (k: string, v: unknown) => { st.shared[k] = v; },
   openOverlay: (spec: any) => { st.opened.push(spec); return `ov${st.opened.length}`; }, closeOverlay: (id: unknown) => { st.closed.push(id); },
-  pickFolder: async () => st.picked, settings: () => ({ zoom: 0.9 }), window: () => ({ platform: "macos" }),
+  pickFolder: async () => st.picked, settings: () => ({ zoom: st.zoom ?? 0.9 }), window: () => ({ platform: "macos" }),
   terminals: () => [], agents: () => [], hc: async () => ({ code: 1, stdout: "" }), keys: () => [], focusedTerminal: () => null,
 }));
 
@@ -558,4 +558,79 @@ test("the dock isn't a folder in the list, and no folder makes an ordinary unnam
   await k("enter");
   expect(st.runs).toEqual([["space.new", { folder: HOME, machine: "" }]]);
   expect(st.shared[DOCK_KEY]).toEqual({ id: "dk" }); // the dock's record untouched
+});
+
+// ---- the list's end (Developer: "scrolling to the bottom leads to this"): its
+// children are rows, section heads and a rule, and scroll_to_item counts
+// children, so the cursor's row is asked for by its child index.
+
+/** A dozen worktrees beside the focused one, as in Developer's list. */
+function manyWorktrees() {
+  const wt = `${HOME}/code/fireflies-wt`;
+  const more = ["api", "bench", "chrome", "docs", "edtabs2", "mdlive", "overlay", "procs", "procs2", "rename", "webpip", "zeta"];
+  st.dirs[wt] = [...st.dirs[wt], ...more];
+  for (const n of more) st.worktrees.add(`${wt}/${n}`);
+}
+const listNodes = (r: any) => find(r, "ns-list")!.nodes;
+const rowAt = (r: any, i: number) => listNodes(r).findIndex((n: any) => n?.calls?.id?.[0] === `ns-row-${i}`);
+
+for (const zoom of [0.9, 1.0]) {
+  test(`at zoom ${zoom} the cursor's row is the child the list scrolls to, by keys down and up through the end`, async () => {
+    st.zoom = zoom;
+    manyWorktrees();
+    const { v, c, k } = await picker();
+    const n = v.rows(null).all.length;
+    expect(n).toBeGreaterThan(14);
+    // up from the first row wraps to the last ("no folder"), past every section head
+    await k("up");
+    let r: any = v.render(c);
+    expect(v.cursor).toBe(n - 1);
+    expect(v.scroll.items.at(-1)).toBe(rowAt(r, n - 1));
+    expect(rowAt(r, n - 1)).toBeGreaterThan(n - 1); // heads and the rule before it: the old index fell short
+    // the last folder row (Developer's "rename"), then browse…
+    await k("up"); await k("up");
+    r = v.render(c);
+    expect(v.scroll.items.at(-1)).toBe(rowAt(r, n - 3));
+    await k("down");
+    r = v.render(c);
+    expect(names(v)[v.cursor]).toBe("browse…");
+    expect(v.scroll.items.at(-1)).toBe(rowAt(r, n - 2));
+    // walking down to the end one row at a time asks for every row by its child
+    v.cursor = 0;
+    for (let i = 1; i < n; i++) {
+      await k("down");
+      r = v.render(c);
+      expect(v.scroll.items.at(-1)).toBe(rowAt(r, i));
+    }
+    // and wrapping to the top shows the list's top, its first head
+    await k("down");
+    v.render(c);
+    expect(v.cursor).toBe(0);
+    expect(v.scroll.items.at(-1)).toBe(0);
+    st.zoom = undefined;
+  });
+}
+
+test("a render asks for the cursor's row once per move; the pointer moving the cursor doesn't scroll", async () => {
+  manyWorktrees();
+  const { v, c, k } = await picker();
+  v.render(c);
+  const before = v.scroll.items.length;
+  v.render(c);
+  expect(v.scroll.items.length).toBe(before);
+  const r: any = v.render(c);
+  find(r, "ns-row-5")!.calls.on_mouse_move[0]({}, c);
+  v.render(c);
+  expect(v.scroll.items.length).toBe(before);
+  await k("down");
+  v.render(c);
+  expect(v.scroll.items.length).toBe(before + 1);
+});
+
+test("the list fits its popup: the popup's height holds the head, the longest list and the footer", () => {
+  openSpacePicker({ at: { x: 10, y: 10 } });
+  const spec = st.opened.at(-1);
+  const HEAD = 34, ROW = 26, SEC = 24, FOOT = 28;
+  // the list's max height, its 2 px padding above and below, the 1 px border twice
+  expect(spec.height).toBeGreaterThanOrEqual(HEAD + 12 * ROW + 4 * SEC + 4 + FOOT + 2);
 });

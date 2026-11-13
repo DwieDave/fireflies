@@ -104,7 +104,10 @@ nocturne-browser.pin_tab` for the web pane's shown tab); the tile shows that tab
 that belongs to no project (a docs page, a dashboard), `herdr-app do
 nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
 repo for git or GitHub, terminals start in ~), pinned to the shelf;
-`herdr-app do nocturne.dock` moves the focused pane there.
+`herdr-app do nocturne.dock` moves the focused pane there. There,
+`nocturne.agent-next` / `nocturne.agent-prev` (cmd-] / cmd-[) walk the
+agents in the sidebar's order and then on through the shelf's tiles, wrapping;
+the core's `agent.next` / `agent.prev` visit agents only.
 
 For a remote space:
 

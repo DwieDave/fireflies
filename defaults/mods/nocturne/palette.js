@@ -380,8 +380,8 @@ const NAMED = [
   ["terminal.search", {}, "Terminal", "Find in the terminal…", "search scrollback history text"],
   ["terminal.scroll", { to: "top" }, "Terminal", "Scroll to the top of the history", "scrollback oldest start beginning"],
   ["terminal.scroll", { to: "bottom" }, "Terminal", "Scroll back to the live screen", "scrollback bottom end newest"],
-  ["agent.next", {}, "Agent", "Next agent", ""],
-  ["agent.prev", {}, "Agent", "Previous agent", ""],
+  ["agent.next", {}, "Agent", "Next agent", "pinned shelf web page dock"],
+  ["agent.prev", {}, "Agent", "Previous agent", "pinned shelf web page dock"],
   ["window.minimize", {}, "Window", "Minimize window", ""],
   ["window.maximize", {}, "Window", "Maximize window", "restore"],
   ["window.close", {}, "Window", "Close window", "quit"],
@@ -533,8 +533,10 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
 // Nocturne runs these in place of Fireflies': the same key, the sidebar's order;
-// "New space" is the folder picker (newspace.js).
-const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
+// "New space" is the folder picker (newspace.js); next / previous agent walk on
+// through the shelf's pinned panes (walk.js).
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new",
+  "agent.next": "nocturne.agent-next", "agent.prev": "nocturne.agent-prev" };
 
 /** Every entry for the state we're in now. */
 function entries() {

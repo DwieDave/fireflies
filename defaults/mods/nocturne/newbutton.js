@@ -15,7 +15,7 @@
 import { div } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, shared, layout, run, settings } from "herdr";
-import { dither, dropBelow, navRing } from "./kit.js";
+import { dither, dropBelow, navRing, toolGround } from "./kit.js";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.js";
 import { CURSOR } from "./nav.js";
 
@@ -58,8 +58,8 @@ export default class NewButton {
       .child(div().relative().text_color(open ? t.foreground : t.muted).child("+ new"))
       .map((el) => navRing(t, el, ring));
     return h_flex().id("new-block").relative().size_full().pr(END).items_center().justify_start().bg(t.background)
-      // The tab strip's horizon continues under it.
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+      // The toolbar's ground runs on under it to the strip's right edge (kit.js toolGround).
+      .children(toolGround(t))
       .child(h_flex().id("new-tools").relative().flex_none().items_center().on_size_change((size) => fit(size.width))
         .child(div().w(1).h(14).mx(4).flex_none().bg(t.ansi0))
         .child(button));
