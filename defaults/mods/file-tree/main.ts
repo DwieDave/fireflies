@@ -114,7 +114,6 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, Entity, FocusHandle, KeyEvent, Modifiers, MouseButtonEvent } from "gpui-kit";
-import type { InputState as Input_, VirtualListScrollHandle as ScrollHandle_ } from "gpui-base";
 import type { Props } from "gpui-shell";
 import * as herdr from "herdr";
 import type { Theme } from "herdr";
@@ -402,14 +401,14 @@ export default class Files extends View {
   menu: Menu | null = null;
   mouse: At = { x: 40, y: 40 };
   size: Size = { width: 400, height: 600 };
-  input: Input_ | null = null;
+  input: InputState | null = null;
   // The name a new file or folder gets, or a rename's: an input row in the tree.
   draft: Draft | null = null;
   ask: Ask | null = null;
   msg: Msg | null = null;
-  nameInput: Input_ | null = null;
+  nameInput: InputState | null = null;
   naming = false;
-  scroll: ScrollHandle_ | null = null;
+  scroll: VirtualListScrollHandle | null = null;
   // Several rows: the marked ones (paths), the row a shift-click or a range
   // starts from, the range being marked (V, shift-↑↓), a row being dragged.
   marked = new Set<string>();
