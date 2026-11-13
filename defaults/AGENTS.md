@@ -1610,6 +1610,13 @@ The main ones:
   or beside that tab's focused pane; no tab or target: a new tab of its own (`name`, in
   `space`). Its terminal keeps running; the tab it leaves closes when emptied. The pane
   menus (shipped and Nocturne's, and a firefly's) list "Move to …" for every tab.
+  In Nocturne's (pane and firefly), up to three places stay flat rows; past that one
+  "Move to…" row opens a level in place: this space's tabs (a tab's number moves
+  there at once), "a new tab", then a row per other space (a space with one tab
+  moves at once, one with more opens a level of its tabs). → / l / enter open a
+  level, ← / h / esc go back one (a click on its "‹" head too), esc at the top
+  closes; a click on a row opens or moves. Any popup item can carry such a level
+  (popup.js `sub`).
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and

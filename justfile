@@ -142,6 +142,8 @@ test:
     bun test scripts/nocturne-chrome.test.ts
     # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
     bun test scripts/nocturne-tab-seam.test.ts
+    # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.
+    bun test scripts/nocturne-move-menu.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
