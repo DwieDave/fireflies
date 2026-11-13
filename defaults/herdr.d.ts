@@ -632,6 +632,16 @@ export interface NativeViewProps {
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
    *  Changing only `zoom` zooms the page in place; it doesn't reload. */
   zoom?: number;
+  /** Web only: keep cookies and logins in this app's own persistent WebKit store (separate
+   *  from Safari's and Chrome's). Default: a throwaway store. */
+  persist?: boolean;
+  /** Web only: the page may put a video in Picture in Picture (a `pip` view takes it over).
+   *  Default off. */
+  pip?: boolean;
+  /** Web only: the mod keeps tabs: a new window, a middle or Cmd click on a link and the link
+   *  menu's "Open Link in New Tab" come as `web.newTab { url, background, from }`. Default off:
+   *  a new window loads in place. */
+  tabs?: boolean;
   /** Any kind: a revision of the content the mod keeps (the preview: the file's stamp). The view
    *  compares its props as a whole, so a new `rev` loads the same `path` again (a file changed in place). */
   rev?: string;
