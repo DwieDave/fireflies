@@ -39,7 +39,7 @@ import type { ScrollHandle as Scroll } from "gpui-base";
 import { spaces, panes, run, theme, shared, setShared, layout, focused, nextCommand } from "herdr";
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { dither, pip, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
+import { dither, statusFly, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
@@ -665,7 +665,7 @@ export default class Tabs {
         .child(div().text_color(c.active || lifted ? t.accent : t.dim).child(String(c.index)))
         .when(Boolean(icon), (el) => (icon ? el.child(prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : el))
         .child(div().max_w(180).truncate().child(c.zoomed ? `${name} [z]` : name))
-        .child(pip(t, c.status))
+        .when(Boolean(c.status), (el) => (c.status ? el.child(statusFly(t, c.status, `tab-fly-${c.id}`)) : el))
         .when(c.active, (el) => el.child(div().absolute().left(8).right(8).bottom(0).h(4).child(dither(t.accent, 2))))
         .map((el) => navRing(t, el, this.at(`tab:${c.id}`)))
         .when(at?.before === c.id, (el) => el.child(stake(t)));

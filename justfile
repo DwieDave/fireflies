@@ -171,6 +171,8 @@ test:
     bun test scripts/scripts-chips.test.ts
     # The sky's usage section: a window without a length (Codex) is taken as the usual one, so its path still shows the clock.
     bun test scripts/nocturne-usage.test.ts
+    # An agent's status as the winged firefly in its tab and pane header (kit.ts statusFly): colour, motion, size.
+    bun test scripts/nocturne-status-fly.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
