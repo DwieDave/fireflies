@@ -1,6 +1,6 @@
 import { keysNow } from "./nocturne-mods.ts";
 import { test, expect } from "bun:test";
-import { asJs } from "./mod-source.ts";
+import { asJs, guard } from "./mod-source.ts";
 import { readFile } from "node:fs/promises";
 
 // The web pane (browser) and the picture in picture player by keys,
@@ -100,7 +100,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
       return state;
     } },
   };
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
+  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));

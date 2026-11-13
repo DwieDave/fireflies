@@ -620,7 +620,7 @@ the highlighted line shows where it will land.
   its pane; each editor notes its files by slot in shared
   `editor.paths` (`editor.open` reads it to find the editor holding a
   file in any tab) and the last one with the keyboard in `editor.last`
-  (see `defaults/mods/editor/editor-route.js`). Closing a tab with
+  (see `defaults/mods/editor/editor-route.ts`). Closing a tab with
   unsaved changes asks on a line under the bar (s save and close, d discard,
   esc keep; tab / ← → and enter too); closing the last tab closes the pane;
   closing the pane asks once, naming every edited tab. Tabs come back after a

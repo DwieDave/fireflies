@@ -27,7 +27,7 @@
 //
 // Click a file: select it (the keyboard comes here, the preview split follows).
 // Double-click a file (enter, the menu's Open): a tab of the app's editor,
-// whatever its kind (editor-route.js `look`): a Markdown file in the editor's view for it
+// whatever its kind (editor-route.ts `look`): a Markdown file in the editor's view for it
 // (alt-double-click: as text), a picture, PDF, table, patch, font or clip
 // drawn in its tab by the preview's viewer (alt-double-click: the system's
 // app, or a table or patch as text). `p` (the menu's "Open in its viewer
@@ -114,7 +114,7 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import * as herdr from "herdr";
-import { openInEditor } from "./editor-route.js";
+import { openInEditor } from "./editor-route.ts";
 import { h_flex, v_flex, v_virtual_list, Scrollbar, VirtualListScrollHandle, InputState, Input } from "gpui-base";
 import { props, theme, settings, exec, run, panes, spaces, terminals, focused, watchFolder, nextCommand, home, appHome, shared, setShared, findFiles, window as appWindow } from "herdr";
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensLayout, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
@@ -657,7 +657,7 @@ export default class Files extends View {
     if (this.on || !path || row?.dir) return this.terminalEdit(path, cx);
     const beside = this.beside();
     // As a tab of the editor this pane sent files to, else the shown tab's
-    // editor; with none, a new one beside (editor-route.js). Markdown edited
+    // editor; with none, a new one beside (editor-route.ts). Markdown edited
     // as text opens with its preview beside it.
     const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, view: isMarkdown(path) ? "split" : viewerFor(path) ? "text" : null });
     if (to) this.editorSlot = to.props.slot;
@@ -666,7 +666,7 @@ export default class Files extends View {
   /** Opens a file to look at it in the editor as a tab, whatever its kind (a
    *  picture, a PDF, a table drawn in its tab, Markdown in the editor's view for it): the
    *  editor this pane sent files to, else the shown tab's; with none, a new
-   *  one beside (editor-route.js). */
+   *  one beside (editor-route.ts). */
   openLooked(path, cx) {
     const beside = this.beside();
     const to = openInEditor(herdr, { path: `${this.root}/${path}`, pane: beside?.pane ?? null, prefer: this.editorSlot ?? null, look: true });

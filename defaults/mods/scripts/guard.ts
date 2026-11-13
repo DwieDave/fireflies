@@ -118,3 +118,54 @@ export function readShared<T>(read: typeof shared, key: SharedKey<T>, fallback: 
 export function writeShared<T>(write: typeof setShared, key: SharedKey<T>, value: T): void {
   write(key.name, value);
 }
+
+// ---- dictionaries: an object whose keys are data (slots, paths), read as a Map
+
+/** A shared() key whose value is an object keyed by data, each value a T. */
+export interface SharedMapKey<T> {
+  readonly name: string;
+  readonly entry: Guard<T>;
+}
+
+export const sharedMapKey = <T>(name: string, entry: Guard<T>): SharedMapKey<T> => ({ name, entry });
+
+/** The entries under `key` whose values are T (the others are left out); empty when
+ *  there is none or it isn't an object. */
+export function readSharedMap<T>(read: typeof shared, key: SharedMapKey<T>): ReadonlyMap<string, T> {
+  const value = read(key.name);
+  const out = new Map<string, T>();
+
+  if (!isObject(value)) return out;
+
+  // As in object(): each value read from its descriptor straight into the guard.
+  for (const name of Object.keys(value)) {
+    const entry = Object.getOwnPropertyDescriptor(value, name)?.value;
+
+    if (key.entry(entry)) out.set(name, entry);
+  }
+
+  return out;
+}
+
+/** Sets `map` under `key`, as an object (with herdr's `setShared`). */
+export function writeSharedMap<T>(write: typeof setShared, key: SharedMapKey<T>, map: ReadonlyMap<string, T>): void {
+  write(key.name, Object.fromEntries(map));
+}
+
+/** `text` as a JSON object keyed by data, each value a T (the others are left out):
+ *  undefined when it isn't JSON or not an object. */
+export function parseJsonMap<T>(text: string, entry: Guard<T>): ReadonlyMap<string, T> | undefined {
+  const value = parseJson(text, isObject);
+
+  if (value === undefined) return undefined;
+
+  const out = new Map<string, T>();
+
+  for (const name of Object.keys(value)) {
+    const item = Object.getOwnPropertyDescriptor(value, name)?.value;
+
+    if (entry(item)) out.set(name, item);
+  }
+
+  return out;
+}

@@ -15,7 +15,7 @@
 // and what runs in the background for a tab (reading, watching, saving, its
 // server) takes the tab. Definition, references, a card link and `:e` open
 // files as tabs here; the files pane, the picker and the Markdown viewer send
-// them through shared `editor.open` (editor-route.js); the app's
+// them through shared `editor.open` (editor-route.ts); the app's
 // `editor.open` finds a file in any tab through shared `editor.paths`
 // and shows it with `editor.goto`. Closing an edited tab asks on a
 // line under the bar; the last tab closes the pane; the tabs come back after
@@ -102,7 +102,7 @@
 // The scratchpad (scratch.js): a tab on a note under `<app home>/scratchpad/`
 // opens rendered, saves itself 600 ms after the typing and at once on close
 // (never unsaved, never asks), titles itself "Scratchpad · <repo>"; its pane
-// sends other files to an editor beside it (editor-route.js skips it).
+// sends other files to an editor beside it (editor-route.ts skips it).
 // nocturne.scratchpad opens it.
 //
 // Vim (vim.js): new editors start as settings.json `editor.vim` says (default
@@ -142,7 +142,7 @@ import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabL
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
 // of preview/viewer.js and what it imports (scripts/preview-shared.test.ts).
 import Viewer from "./viewer.js";
-import { OPEN, LAST, PATHS, HANDOVER, filesOf, isScratchpad } from "./editor-route.js";
+import { OPEN, LAST, PATHS, HANDOVER, filesOf, editorPaths, isScratchpad } from "./editor-route.ts";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";
 import { units as liveUnits, unitFor } from "./live.js";
@@ -260,7 +260,7 @@ export default class EditorPane extends View {
     // Renamed, moved or deleted from the files pane (follow.js): only what
     // comes after this start counts.
     this.seenChange = newestId(shared(CHANGES));
-    // Files sent here as tabs (editor-route.js): only requests after this start.
+    // Files sent here as tabs (editor-route.ts): only requests after this start.
     this.seenOpen = shared(OPEN)?.n ?? 0;
     this.drawer = false;
     this.mode = null; // null | "find" | "replace" | "line"
@@ -329,7 +329,7 @@ export default class EditorPane extends View {
       this.cur = d;
       go = { line: pr.line, col: pr.col ?? 1 };
     }
-    // An "edit" from the Markdown viewer asked for the preview (editor-route.js: slot null).
+    // An "edit" from the Markdown viewer asked for the preview (editor-route.ts: slot null).
     if (asked?.view && asked.path === this.cur.path && this.cur.markdown && VIEWS.includes(asked.view)) this.cur.view = asked.view;
     this.select(this.cur, cx, go, true);
     if (this.on) cx.timer.every(POLL, (cx) => { for (const d of this.docs) if (d.state !== "unloaded" && d.state !== "loading") this.load(cx, null, true, d); });
@@ -1258,7 +1258,7 @@ export default class EditorPane extends View {
     const text = d.editor.value();
     if (text === d.sent) return;
     // Another editor pane holding the file (any of its tabs): their buffers differ.
-    const paths = shared(PATHS);
+    const paths = editorPaths(shared);
     const alone = !panes().some((p) => p.mod === MOD && p.props?.slot !== this.slot && filesOf(p, paths).includes(d.path));
     const change = d.sent != null && alone && incremental(s.caps) ? changeBetween(d.sent, text) : { text };
     d.sent = text;
@@ -2373,7 +2373,7 @@ export default class EditorPane extends View {
       this.seenGoto = goto.n;
       cx.timer.after(0, (cx) => { this.openFile(goto.path, cx, { line: goto.line ?? null, col: goto.col ?? null }); cx.notify(); });
     }
-    // A file sent to this editor as a tab (editor-route.js: the files pane, the picker, the Markdown viewer).
+    // A file sent to this editor as a tab (editor-route.ts: the files pane, the picker, the Markdown viewer).
     const req = shared(OPEN);
     if (req && req.slot === this.slot && this.slot && req.n !== this.seenOpen) {
       this.seenOpen = req.n;

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs } from "./mod-source.ts";
+import { asJs, guard } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -56,7 +56,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import [\s\S]*? from "[^"]+";\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
+  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
@@ -161,7 +161,7 @@ test("path helpers", () => {
 });
 
 test("file-tree opens Markdown as a tab of the editor to read (its preview) on a double click; p in the viewer beside; alt-double-click and e open it as text", async () => {
-  const route = await load("file-tree/editor-route.js");
+  const route = await load("file-tree/editor-route.ts");
   const { default: Files, isMarkdown } = await load("file-tree/main.js", { ...(await load("file-tree/logic.js")), openInEditor: route.openInEditor, herdr: { ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } });
   const kept: Record<string, any> = {};
   expect([isMarkdown("a.md"), isMarkdown("B.MARKDOWN"), isMarkdown("a.mdx"), isMarkdown("md")]).toEqual([true, true, false, false]);
@@ -311,7 +311,7 @@ test("the document view: source lines to heights and back, anchors, and measurin
 test("the editor's Markdown preview: ticks edit the text, links go where they point, the view switch cycles", async () => {
   const extra = {
     ...(await load("editor/logic.js")), ...(await load("editor/vim.js")), ...md, ...(await load("editor/paths.js")),
-    ...(await load("editor/tabs.js", await load("editor/logic.js"))), ...(await load("editor/editor-route.js")),
+    ...(await load("editor/tabs.js", await load("editor/logic.js"))), ...(await load("editor/editor-route.ts")),
     languageOf: (p: string) => (/\.(rs|ts|md)$/.test(p) ? "x" : null), lspStart() {}, lspRequest() {}, lspNotify() {}, lspNextMessage() {}, lspRelease() {},
     setUnsaved() {}, notify() {}, writeTextFile: async () => {}, highlight: () => [], InputState: {}, Input: {}, appWindow: () => ({ platform: "macos" }),
   };

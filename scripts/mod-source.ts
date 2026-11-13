@@ -7,3 +7,7 @@ const ts = new Bun.Transpiler({ loader: "ts", trimUnusedImports: false });
 
 /** `source` (the text of the mod file at `path`) as JavaScript. */
 export const asJs = (path: string, source: string): string => (path.endsWith(".ts") ? ts.transformSync(source) : source);
+
+/** guard.ts's exports (it imports nothing at run time), for the scope of a
+ *  loader that drops a mod file's imports: what `from "./guard.ts"` brings. */
+export const guard = await import("../defaults/mods/pip/guard.ts");

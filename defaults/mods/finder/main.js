@@ -29,7 +29,7 @@ import { div } from "gpui-kit";
 import { View } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import * as herdr from "herdr";
-import { openInEditor } from "./editor-route.js";
+import { openInEditor } from "./editor-route.ts";
 import { props, theme, settings, closeOverlay, shared, setShared, run, exec, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
 import { PathBuilder, Background } from "gpui-kit";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote } from "./logic.js";
@@ -256,7 +256,7 @@ export default class Picker extends View {
     if (!r || r.head) return;
     const path = `${this.root}/${r.path}`;
     this.dismiss();
-    // The focused editor, else the shown tab's, takes it as a tab; with none, a new one (editor-route.js).
+    // The focused editor, else the shown tab's, takes it as a tab; with none, a new one (editor-route.ts).
     // A file picked (no line): opened to be looked at, as a files pane's open: a picture or a
     // table drawn, Markdown in the editor's view for it. A grep hit: the text at its line.
     openInEditor(herdr, { path, ...(r.match ? { line: r.match.line, col: r.match.col + 1 } : { look: true }) });

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs } from "./mod-source.ts";
+import { asJs, guard } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.js, logic.js) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.js),
@@ -77,7 +77,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import [^;]*;\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, herdr, ...extra, window: { paint_path: () => new Element() } };
+  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, herdr, ...extra, window: { paint_path: () => new Element() } };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
@@ -90,7 +90,7 @@ const keyhelp = await load(`${F}/keyhelp.ts`);
 const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.js`)), ...keyhelp };
 const { default: Viewer } = await load(`${F}/viewer.js`, shared);
 const logic = await load(`${F}/logic.js`);
-const route = await load(`${F}/editor-route.js`);
+const route = await load(`${F}/editor-route.ts`);
 const { default: Files } = await load(`${F}/main.js`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 

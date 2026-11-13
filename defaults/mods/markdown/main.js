@@ -31,7 +31,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import * as herdr from "herdr";
-import { openInEditor } from "./editor-route.js";
+import { openInEditor } from "./editor-route.ts";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.js";
 import { follow, dirname, basename, join, tilde } from "./paths.js";
@@ -257,7 +257,7 @@ export default class Markdown extends View {
 
   /** The app's editor (editor) in this viewer's place, its Markdown
    *  preview on (split): a tab of the tab's editor when it has one
-   *  (editor-route.js), else a new editor opened beside this viewer, which
+   *  (editor-route.ts), else a new editor opened beside this viewer, which
    *  then closes so the editor takes its room. A file on another machine:
    *  $EDITOR in a terminal beside. */
   edit() {

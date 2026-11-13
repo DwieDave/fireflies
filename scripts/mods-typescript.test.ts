@@ -5,7 +5,7 @@
 import { test, expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { NOCTURNE_MODS } from "./nocturne-mods.ts";
-import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared, sharedKey, writeShared } from "../defaults/mods/pip/guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, parseJsonMap, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "../defaults/mods/pip/guard.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
 const mods = readdirSync(MODS).filter((m) => !m.startsWith("."));
@@ -65,4 +65,20 @@ test("shared keys: a value another mod wrote in another shape reads as the fallb
   expect(readShared(read, PANE, null)).toEqual({ pane: "p1" });
   store.set("t.pane", { pane: 7 });
   expect(readShared(read, PANE, null)).toBe(null);
+});
+
+test("dictionaries (keys are data): read as a Map of the entries the guard proves, the others left out", () => {
+  const store = new Map<string, unknown>();
+  const read = (k: string) => store.get(k) ?? null;
+  const write = (k: string, v: unknown) => { store.set(k, v); return null; };
+  const PATHS = sharedMapKey("t.paths", arrayOf(isString));
+  expect(readSharedMap(read, PATHS).size).toBe(0);
+  store.set("t.paths", { s1: ["/a"], s2: "not a list", s3: ["/b", 7] });
+  expect([...readSharedMap(read, PATHS)]).toEqual([["s1", ["/a"]]]);
+  store.set("t.paths", ["/a"]);
+  expect(readSharedMap(read, PATHS).size).toBe(0);
+  writeSharedMap(write, PATHS, new Map([["s9", ["/c"]]]));
+  expect(store.get("t.paths")).toEqual({ s9: ["/c"] });
+  expect(parseJsonMap('{"a.md":{"name":"a"},"b":1}', object({ name: isString }))).toEqual(new Map([["a.md", { name: "a" }]]));
+  expect([parseJsonMap("[1]", isNumber), parseJsonMap("nope", isNumber)]).toEqual([undefined, undefined]);
 });

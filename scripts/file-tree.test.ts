@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs } from "./mod-source.ts";
+import { asJs, guard } from "./mod-source.ts";
 
 // file-tree with stand-ins for the app's modules (as preview.test.ts):
 // they record the commands it runs and what it shares.
@@ -61,13 +61,13 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import .*;\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, ...extra, window: { paint_path: () => new Element() } };
+  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, ...extra, window: { paint_path: () => new Element() } };
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
 const logic = await load("file-tree/logic.js");
 const keyhelp = await load("file-tree/keyhelp.ts");
-const route = await load("file-tree/editor-route.js");
+const route = await load("file-tree/editor-route.ts");
 const { default: Files } = await load("file-tree/main.js", { ...logic, ...keyhelp, openInEditor: route.openInEditor, herdr });
 const { keyColumn, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks } = logic;
 

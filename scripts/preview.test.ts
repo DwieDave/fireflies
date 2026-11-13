@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs } from "./mod-source.ts";
+import { asJs, guard } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked (as markdown.test.ts).
 class Element {
@@ -63,7 +63,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; })
     .replace(/^export const (\w+) = /gm, (_m, n) => { names.push(n); return `const ${n} = `; });
   const win = { paint_path: () => new Element() };
-  const scope: Record<string, unknown> = { ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
+  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
@@ -90,7 +90,7 @@ test("pictures are told apart by extension, any case", () => {
 });
 
 test("file-tree: Markdown and pictures as tabs of the editor (a double click), p their viewer panes, alt-double-click / e the other way", async () => {
-  const route = await load("file-tree/editor-route.js");
+  const route = await load("file-tree/editor-route.ts");
   const { default: Files, viewerFor, isMarkdown } = await load("file-tree/main.js", { ...(await load("file-tree/logic.js")), openInEditor: route.openInEditor, herdr: { run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } });
   expect([viewerFor("a.md")?.open, viewerFor("Shot 1.PNG")?.open, viewerFor("logo.svg")?.open, viewerFor("main.rs")]).toEqual(["markdown.open", "preview.open", "preview.open", null]);
   expect([viewerFor("r.pdf")?.other, viewerFor("d.csv")?.other, viewerFor("x.patch")?.other, viewerFor("app.sqlite")?.other]).toEqual(["system", "edit", "edit", "system"]);

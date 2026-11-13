@@ -1,5 +1,5 @@
 // The editor's file tabs (editor/tabs.js, main.js) and where files
-// go (editor-route.js, copied into the files pane, the picker and the
+// go (editor-route.ts, copied into the files pane, the picker and the
 // Markdown viewer): a tab per file with its own text, undo, caret and unsaved
 // changes; switching, closing with and without unsaved changes, the last tab
 // closing the pane, a file already open showing its tab, what a restart
@@ -93,7 +93,7 @@ mock.module("gpui-base", () => ({
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const tabs = await import("../defaults/mods/editor/tabs.js");
-const route = await import("../defaults/mods/editor/editor-route.js");
+const route = await import("../defaults/mods/editor/editor-route.ts");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.js");
 
 let later: [number, (cx: any) => void][] = [];
@@ -344,9 +344,10 @@ test("an editor opened for a Markdown viewer's edit starts with the preview on",
   expect(p.view).toBe("split");
 });
 
-// ---- where files go (editor-route.js)
+// ---- where files go (editor-route.ts)
 
-const ed = (pane: string, slot: string, tab = "t1", path?: string, extra: any = {}) => ({ pane, tab, mod: "editor", props: { slot, path, ...extra } });
+// Props as the app hands them (JSON: a key is there with a value, or not there).
+const ed = (pane: string, slot: string, tab = "t1", path?: string, extra: any = {}) => ({ pane, tab, mod: "editor", props: { slot, ...(path ? { path } : {}), ...extra } });
 
 test("route: the editor holding the file, else the caller's, the focused one, the last with the keyboard, the tab's first; other tabs and machines don't count", () => {
   const panes = [{ pane: "f", tab: "t1", mod: "file-tree", props: {} }, ed("e1", "s1", "t1", "/a.rs"), ed("e2", "s2", "t1", "/b.rs"), ed("e3", "s3", "t2", "/c.rs"), ed("e4", "s4", "t1", "/d.rs", { on: "box" })];
@@ -356,7 +357,7 @@ test("route: the editor holding the file, else the caller's, the focused one, th
   expect(pick({ last: "s2", focused: "e1" })).toBe("e1");
   expect(pick({ last: "s1", focused: "e1", prefer: "s2" })).toBe("e2");
   // Already open (its tabs, as noted): that editor, whatever else.
-  expect(pick({ path: "/z.rs", paths: { s2: ["/b.rs", "/z.rs"] }, focused: "e1" })).toBe("e2");
+  expect(pick({ path: "/z.rs", paths: new Map([["s2", ["/b.rs", "/z.rs"]]]), focused: "e1" })).toBe("e2");
   expect(pick({ path: "/c.rs" })).toBe("e1"); // e3 is in another tab
   expect(pick({ tab: "t3" })).toBe(null);
   expect(route.editorFor({ panes, tab: "t1", path: "/x", on: "box" })?.pane).toBe("e4");
@@ -376,7 +377,7 @@ test("route: with an editor the file goes to it as a tab and it gets the focus; 
 });
 
 test("route: the copies in the files pane, the picker and the Markdown viewer are the editor's, byte for byte", () => {
-  const read = (m: string) => readFileSync(new URL(`../defaults/mods/${m}/editor-route.js`, import.meta.url), "utf8");
+  const read = (m: string) => readFileSync(new URL(`../defaults/mods/${m}/editor-route.ts`, import.meta.url), "utf8");
   for (const m of ["file-tree", "finder", "markdown"]) expect(read(m)).toBe(read("editor"));
 });
 
@@ -1003,7 +1004,7 @@ test("pop out: the last tab leaves nothing behind (the pane closes, the new one 
 test("routing after a pop: the popped pane keeps its file (editor.open, the files pane find it there) and takes no other files", () => {
   const panes = [ed("e1", "s1", "t1", "/a.rs"), ed("e2", "s2", "t1", "/x.md", { popped: true })];
   const pick = (o: any) => route.editorFor({ panes, tab: "t1", ...o })?.pane ?? null;
-  expect(pick({ path: "/x.md", paths: { s2: ["/x.md"] } })).toBe("e2");
+  expect(pick({ path: "/x.md", paths: new Map([["s2", ["/x.md"]]]) })).toBe("e2");
   expect(pick({ path: "/y.rs", last: "s2", focused: "e2", prefer: "s2" })).toBe("e1");
   // Only a popped pane in the tab: a new editor (null), not the popped one.
   expect(route.editorFor({ panes: [panes[1]], tab: "t1", path: "/y.rs" })).toBe(null);
