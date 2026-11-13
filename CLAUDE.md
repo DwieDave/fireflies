@@ -142,7 +142,7 @@ arguments):
   pane or a database connection, a pod to a shell in a pane, a file to the
   editor, a failing run to its log), offered only when the other mod is there.
 
-Optional mods live in their own repositories (`fireflies-k9s` is the first)
+Optional mods live in their own repositories (`fireflies-k8s` is the first)
 and may not be assumed by the shipped ones: a shipped mod finds an optional
 one by its command, never by importing it.
 
