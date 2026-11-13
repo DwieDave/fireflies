@@ -222,7 +222,7 @@ test("usage: ? lists every key; the toolbar's last control is ? keys", () => {
   expect(texts(u.toolbar(theme, null, null)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const pip = await import("../defaults/mods/nocturne-pip/main.js");
+const pip = await import("../defaults/mods/nocturne-pip/main.ts");
 test("picture in picture: ? lists every key; ? sits on the bar right before ✕", () => {
   const keys = PROBES.filter((p) => pip.keyControl(probe(p)) != null);
   expect(keys).toContain("?");

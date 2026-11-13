@@ -35,7 +35,7 @@ impl Staged {
         for folder in ["mods", "frame"] {
             for entry in std::fs::read_dir(self.0.join(folder)).unwrap() {
                 let entry = entry.unwrap();
-                assert!(entry.path().join("main.js").is_file(), "missing main.js: {:?}", entry.path());
+                assert!(entry.path().join("main.js").is_file() || entry.path().join("main.ts").is_file(), "missing main.js or main.ts: {:?}", entry.path());
                 entries.push(format!("{folder}/{}", entry.file_name().to_str().unwrap()));
             }
         }
@@ -44,8 +44,9 @@ impl Staged {
     }
     fn wrapper(&self, entry: &str, setup: &str) -> PathBuf {
         let dir = self.0.clone();
+        let main = gpui_shell::typescript::default_entry(&dir.join(entry));
         std::fs::write(dir.join("main.js"), format!(
-            "import Real from './{entry}/main.js'; export default class Scenario extends Real {{ init(props, cx) {{ super.init(props, cx); {setup} }} }}"
+            "import Real from './{entry}/{main}'; export default class Scenario extends Real {{ init(props, cx) {{ super.init(props, cx); {setup} }} }}"
         )).unwrap();
         dir
     }

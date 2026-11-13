@@ -63,7 +63,9 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
 }
 
 async function load(path: string, own: { props?: any; copy?: number } = {}) {
-  const source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  let source = await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8");
+  // A TypeScript mod: its types go first (Bun keeps the imports and exports this loader rewrites).
+  if (path.endsWith(".ts")) source = new Bun.Transpiler({ loader: "ts", trimUnusedImports: false }).transformSync(source);
   const names: string[] = [];
   const body = source
     .replace(/^import [^;]*;\n/gm, "")
@@ -461,7 +463,7 @@ test("picture in picture: the pane is parked meanwhile, p brings the video back,
 });
 
 test("the player by keys, and j / k in its ⋯ menu", async () => {
-  const { mod } = await load("nocturne-pip/main.js");
+  const { mod } = await load("nocturne-pip/main.ts");
   const { keyControl, menuMove } = mod;
   const k = (key: string, extra: any = {}) => keyControl({ key, modifiers: {}, ...extra });
   expect([k("space"), k("k", { key_char: "k" }), k("left"), k("l", { key_char: "l" }), k("m", { key_char: "m" }), k("b", { key_char: "b" }),

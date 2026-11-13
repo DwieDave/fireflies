@@ -33,7 +33,7 @@ mock.module("gpui-kit", () => ({ View: class {}, div: () => new Element(), svg: 
 mock.module("gpui-base", () => ({ h_flex: () => new Element(), v_flex: () => new Element() }));
 (globalThis as any).window = { paint_path: () => new Element() };
 
-const pip = await import("../defaults/mods/nocturne-pip/main.js");
+const pip = await import("../defaults/mods/nocturne-pip/main.ts");
 const { default: Pip, fit, sections } = pip;
 
 /** A player as the window draws it, `width` px wide. */

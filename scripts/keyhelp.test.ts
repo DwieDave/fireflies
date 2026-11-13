@@ -58,7 +58,7 @@ test("every nocturne mod's keyhelp.js is the source, byte for byte", () => {
   const copies = readdirSync(MODS).filter((m) => m.startsWith("nocturne-") && existsSync(`${MODS}/${m}/keyhelp.js`));
   for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/keyhelp.js`, "utf8") === SOURCE]).toEqual([m, true]);
   // Each mod that imports it has its copy, and every mod with a ? overview imports it.
-  const users = readdirSync(MODS).filter((m) => m.startsWith("nocturne") && readdirSync(`${MODS}/${m}`).some((f) => f.endsWith(".js") && f !== "keyhelp.js"
+  const users = readdirSync(MODS).filter((m) => m.startsWith("nocturne") && readdirSync(`${MODS}/${m}`).some((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts") && f !== "keyhelp.js"
     && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
   expect(users.filter((m) => m !== "nocturne").sort()).toEqual(copies.sort());
   expect(users.sort()).toEqual(["nocturne", "nocturne-agents", "nocturne-browser", "nocturne-editor", "nocturne-files", "nocturne-git", "nocturne-github",
@@ -200,7 +200,7 @@ test("git: ? opens the keys overview, ? or esc closes it (its rows run as a menu
 });
 
 test("picture in picture: ? opens the overview in a popup (the video is native), ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/nocturne-pip/main.js");
+  const m = await import("../defaults/mods/nocturne-pip/main.ts");
   opened.length = 0;
   const v: any = surface(m.default, ["command", "openKeys"], { menu: null });
   v.command("keys");

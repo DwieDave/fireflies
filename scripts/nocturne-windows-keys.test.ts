@@ -222,7 +222,7 @@ test("overview: ? shows its keys, ? or esc hides them (esc then closes)", () => 
 
 // ---- picture in picture (the rest of its keys: nocturne-browser.test.ts)
 
-const { keyControl } = await import("../defaults/mods/nocturne-pip/main.js");
+const { keyControl } = await import("../defaults/mods/nocturne-pip/main.ts");
 
 test("pip: esc gives the keyboard back; command keys stay the app's", () => {
   expect(keyControl(key("escape"))).toBe("unfocus");
