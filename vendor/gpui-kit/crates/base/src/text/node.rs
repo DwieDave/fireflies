@@ -2987,12 +2987,17 @@ struct TableColumn {
 /// Horizontal padding of a table cell: `px_3` unless `style.table_cell`
 /// sets it. `px_3` is in rems, so it grows with the window's rem size (an
 /// app's zoom) while the measured widths carry `CELL_PAD_PX`, its size at
-/// the default 16px rem.
-fn table_cell_padding_x(style: &TextViewStyle, rem_size: Pixels) -> f32 {
+/// the default 16px rem. Each side is rounded up to device pixels, as the
+/// layout may round the cell's edges: a side of 9.75px can take 10, and the
+/// text would lose the fraction of a pixel that keeps it on one line.
+fn table_cell_padding_x(style: &TextViewStyle, rem_size: Pixels, scale_factor: f32) -> f32 {
     let padding = &style.table_cell().padding;
-    let side = |length: Option<DefiniteLength>| match length {
-        Some(DefiniteLength::Absolute(length)) => f32::from(length.to_pixels(rem_size)),
-        _ => f32::from(rems(CELL_PAD_REMS).to_pixels(rem_size)),
+    let device_ceil = |width: f32| (width * scale_factor).ceil() / scale_factor;
+    let side = |length: Option<DefiniteLength>| {
+        device_ceil(match length {
+            Some(DefiniteLength::Absolute(length)) => f32::from(length.to_pixels(rem_size)),
+            _ => f32::from(rems(CELL_PAD_REMS).to_pixels(rem_size)),
+        })
     };
     side(padding.left) + side(padding.right)
 }
@@ -3613,12 +3618,12 @@ impl BlockNode {
         let nowrap = style.table_cell().text.white_space == Some(WhiteSpace::Nowrap);
         let rem_size = window.rem_size();
         let wrap_min_px = f32::from(rems(4.).to_pixels(rem_size));
-        // Widths were measured with the default cell padding.
-        let padding_delta = table_cell_padding_x(style, rem_size) - CELL_PAD_PX;
         // Lengths are rounded to device pixels for layout. Round the content
         // widths up, or a column can lose the fraction of a pixel that keeps
         // its text on one line.
         let scale_factor = window.scale_factor();
+        // Widths were measured with the default cell padding.
+        let padding_delta = table_cell_padding_x(style, rem_size, scale_factor) - CELL_PAD_PX;
         let device_ceil = |width: f32| (width * scale_factor).ceil() / scale_factor;
         let columns: Vec<TableColumn> = col_w
             .iter()
@@ -4546,19 +4551,18 @@ mod tests {
     #[test]
     fn table_cell_padding_follows_the_rem_size() {
         let style = TextViewStyle::default();
-        assert_eq!(table_cell_padding_x(&style, px(16.)), CELL_PAD_PX);
-        // An app's rem at zoom 0.9, 1.0 and 1.7 of a 13px interface font.
-        for (rem, padding) in [(11.7, 17.55), (13., 19.5), (22.1, 33.15)] {
-            let got = table_cell_padding_x(&style, px(rem));
-            assert!(
-                (got - padding).abs() < 0.001,
-                "rem {rem}: padding {got}, the cell draws {padding}"
-            );
+        assert_eq!(table_cell_padding_x(&style, px(16.), 1.), CELL_PAD_PX);
+        assert_eq!(table_cell_padding_x(&style, px(16.), 2.), CELL_PAD_PX);
+        // An app's rem at zoom 0.9, 1.0 and 1.7 of a 13px interface font: a
+        // side of 8.775, 9.75 and 16.575px (and 9.3px), rounded up to device pixels.
+        for (rem, at_1x, at_2x) in [(11.7, 18., 18.), (12.4, 20., 19.), (13., 20., 20.), (22.1, 34., 34.)] {
+            assert_eq!(table_cell_padding_x(&style, px(rem), 1.), at_1x, "rem {rem} at 1x");
+            assert_eq!(table_cell_padding_x(&style, px(rem), 2.), at_2x, "rem {rem} at 2x");
         }
         // A caller's own absolute padding is taken as it is.
         let style = TextViewStyle::default()
             .with_table_cell(StyleRefinement::default().px(px(5.)));
-        assert_eq!(table_cell_padding_x(&style, px(22.1)), 10.);
+        assert_eq!(table_cell_padding_x(&style, px(22.1), 2.), 10.);
     }
 
     /// A code block keeps its size next to the body text: at the theme's
