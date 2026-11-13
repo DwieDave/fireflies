@@ -63,7 +63,7 @@ import { togglePicker } from "./picker.ts";
 import { openScratchpad } from "./scratchpad.js";
 import { toggleGithub, githubForm } from "./github.js";
 import { toggleDeck, lastFailed, grantAppManagement } from "./scripts.js";
-import { toggleProcs } from "./procs.js";
+import { toggleProcs } from "./procs.ts";
 import { openNewMenu, OPEN as NEW_OPEN } from "./newmenu.js";
 import { newWorktree } from "./menu.js";
 import { openSpacePicker } from "./newspace.js";

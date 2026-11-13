@@ -56,6 +56,7 @@ export const isTerminal = object(
     exit_code: oneOf(isNumber, isNull),
     reason: oneOf(isString, isNull),
     program: object({ key: isString }),
+    pid: oneOf(isNumber, isNull),
   },
 );
 

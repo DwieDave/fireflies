@@ -20,6 +20,10 @@ export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
 
+/** The tab strip's icon button (tabs.js tool): its id, lit or not, a tooltip
+ *  (null: none), what a press does (the press, and whether it was lit then), its contents. */
+export type ToolButton = (t: Theme, id: string, on: boolean, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
+
 /** Where a drop-down goes (window px). */
 export interface DropAt {
   readonly x: number;

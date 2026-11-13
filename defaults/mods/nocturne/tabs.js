@@ -46,10 +46,10 @@ import { gitOpen, toggleGit } from "./git.js";
 import { githubOpen } from "./github.js";
 import { filesPane, toggleFiles, focusFiles } from "./files.ts";
 import { scriptsControl, scriptRuns, tellFailures, trackRuns, toggleDeck } from "./scripts.js";
-import { procsControl, toggleProcs } from "./procs.js";
+import { procsControl, toggleProcs } from "./procs.ts";
 import { runJobs, pendingJobs } from "./jobs.ts";
 import { watchPrompts } from "./prompt.ts";
-import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
+import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
 
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
 

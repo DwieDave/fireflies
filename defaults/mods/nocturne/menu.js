@@ -18,7 +18,7 @@
 import { svg, div } from "gpui-kit";
 import { theme, props, run, terminals, keys, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
-import { Popup, icon, popupHeight } from "./popup.js";
+import { Popup, icon, popupHeight } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.js";
 import { ART, spaceFolder, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane } from "./kit.ts";

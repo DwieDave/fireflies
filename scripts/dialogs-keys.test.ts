@@ -183,7 +183,7 @@ test("settings: updates keeps what's new before the check button", () => {
 // ---- nocturne: prompt, confirm, menus, screens, toasts
 
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.js");
-const { Popup } = await import("../defaults/mods/nocturne/popup.js");
+const { Popup } = await import("../defaults/mods/nocturne/popup.ts");
 const { Keys, WhatsNew, Welcome, UpdateNote, dismissUpdate, UPDATE_DISMISSED } = await import("../defaults/mods/nocturne/screens.js");
 const { default: Toast, toastKey, TOASTS } = await import("../defaults/mods/nocturne/toast.ts");
 const MachineAdd = (await import("../defaults/mods/machine-add/main.js")).default;

@@ -20,7 +20,7 @@ import { isDock } from "./dock.ts";
 import { onShelf } from "./pins.ts";
 import { panels, here, terminalPane, terminalTab } from "./panels.js";
 import { toggleDeck, lastFailed } from "./scripts.js";
-import { toggleProcs } from "./procs.js";
+import { toggleProcs } from "./procs.ts";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.ts";
