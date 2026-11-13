@@ -137,7 +137,7 @@ export interface PressOptions {
 
 /**
  * One key. Keys are GPUI names ("up", "down", "j", "k", "enter", "space",
- * "tab", "escape") with `shift` for shift-tab, and "submit". Returns { state, action }:
+ * "tab", "escape", "q") with `shift` for shift-tab, and "submit". Returns { state, action }:
  * action "close", "submit" (answers(questions, state) are ready), "edit"
  * (focus the typed-answer input), or null.
  */
@@ -155,6 +155,9 @@ export function press(questions: Questions, state: AskState, key: string, { shif
   }
 
   if (s.editing) return { state: s, action: null }; // the input has the keys
+
+  // q closes, as esc does (once the typed answer's input has let go).
+  if (key === "q" && !shift) return { state: s, action: "close" };
 
   if (key === "tab") {
     tab(questions, s, shift ? -1 : 1);

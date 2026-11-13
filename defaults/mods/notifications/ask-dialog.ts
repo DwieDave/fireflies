@@ -141,7 +141,7 @@ export default class AskDialog {
     const s = this.s;
 
     if (!s) {
-      if (e.key === "escape") this.close();
+      if (e.key === "escape" || e.key === "q") this.close();
 
       return;
     }
@@ -324,7 +324,7 @@ export default class AskDialog {
         .child(hint("j k", isReview(qs, s) ? "row" : "answer"))
         .child(hint(q?.multiSelect ? "space" : "↵", q?.multiSelect ? "toggle" : isReview(qs, s) ? "choose" : "pick")))
       .when(!isReview(qs, s), (el) => el.child(hint(appWindow().platform === "macos" ? "⌘↵" : "ctrl-↵", "submit")))
-      .child(hint("esc", "close"))
+      .child(hint(s.editing ? "esc" : "esc q", "close"))
       .child(div().flex_1())
       .when(this.changed && !isReview(qs, s), (el) => el.child(div().text_color(t.blocked).child("changed in the terminal")));
   }
