@@ -5,7 +5,6 @@
 # never add one. tests/mods_typescript.rs (mods_stay_under_the_size_limits)
 # checks it against `oxlint -c oxlint.size.json defaults/mods`.
 defaults/mods/agent-graph/claude.ts snapshot
-defaults/mods/agent-graph/main.ts
 defaults/mods/editor/diff.ts parse
 defaults/mods/editor/main.ts
 defaults/mods/editor/main.ts bar

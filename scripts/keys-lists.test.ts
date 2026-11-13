@@ -154,7 +154,7 @@ function surface(Cls: any, keep: string[], fields: Record<string, any>) {
 
 const agents = await import("../defaults/mods/agent-graph/main.ts");
 test("agents: ? lists every key; the bar ends with ? keys, the list open too", () => {
-  const keys = taken(() => { const a = surface(agents.default, ["key"], { help: false, open: new Set(), layout: [], zoom: 1, step: (_k: string, cx: any) => cx.stop_propagation(), target: () => ({ pane: "p" }), feedScroll: { scroll_to_item() {} } }); return (e, cx) => a.key(e, cx); });
+  const keys = taken(() => { const a = surface(agents.default, ["key"], { help: false, open: new Set(), layout: [], zoom: 1, step: (_k: string, cx: any) => cx.stop_propagation(), target: () => ({ pane: "p" }), feedScroll: { scroll_to_item() {}, scroll_to_bottom() {} }, view: { width: 600, height: 400 }, pan: null, drag: null, selected: null, detail: null, follow: true, detailH: null, paneH: 600, graphH: null, rootY: 0, gAt: 0 }); return (e, cx) => a.key(e, cx); });
   expect(keys).toContain("H");
   expect(unnamed(agents.KEYS, keys)).toEqual([]);
   const a: any = Object.create(agents.default.prototype);

@@ -48,136 +48,25 @@
 // pane coming back (another tab, a restart) draws at once, then refreshes.
 
 import { View, div } from "gpui-kit";
-import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Point, Size } from "gpui-kit";
+import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Point, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
-import { theme, spaces, panes, focused, terminals, hc, run, props, nextCommand, shared, setShared } from "herdr";
-import type { PaneInfo, TabInfo, TerminalPaneInfo, Theme } from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isNumber, isString, literal, nullable, object, parseJson, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
-import { dither, pip } from "./kit.ts";
+import { v_flex, VirtualListScrollHandle } from "gpui-base";
+import { theme, run, nextCommand, shared } from "herdr";
+import type { Theme } from "herdr";
+import { readSharedMap } from "./guard.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { keysView, keysKey, hintBar } from "./keyhelp.ts";
-import type { Agent, Feed, FeedItem, Snapshot, Usage } from "./claude.ts";
-import { isPackedSnapshot, pack, unpack, sessionOf, snapshot, feed, usageOf, ranFor, span, count, emptyUsage, addUsage } from "./claude.ts";
-import type { AgentNode as AgentNodeOf, GraphNode, PhaseNode, RunNode } from "./graph.ts";
-import { tree, place, canvas, sky, dims, ZOOM, TONE, WORDS } from "./graph.ts";
-
-/** A terminal of terminals(), for the name a person gave it. */
-const isLabelled = object({ address: isString }, { labels: nullable(object({}, { "nocturne.name": isString })) });
-
-/** A terminal of terminals(), for the program it runs now. */
-const isRunning = object({ address: isString }, { foreground: nullable(object({}, { pid: isNumber })) });
-
-/** The name a person gave a pane's terminal (Nocturne's "Rename": the nocturne.name label), or null. */
-const givenName = (terminal: string | null): string | null => terminals().filter(isLabelled).find((x) => x.address === terminal)?.labels?.["nocturne.name"] || null;
-
-/** What it is opened with (see the top); other props are no props. */
-const isAgentsProps = object({}, { terminal: isString, select: isString });
-
-type AgentsProps = Guarded<typeof isAgentsProps>;
-
-const agentsProps = (): AgentsProps => {
-  const p = props();
-
-  return isAgentsProps(p) ? p : {};
-};
-
-const POLL = 2500;
-const STALE = 15000;
-const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
-const PAN_STEP = 80;
-
-// Fireflies shows a hidden tab's panes at a placeholder size for a moment before
-// their real one; sizes under this are ignored, so the graph doesn't jump.
-const PLACEHOLDER = 120;
-const DETAIL_MIN = 90;
-
-// The selection key of the stats breakdown (no node has it).
-const STATS = "@stats";
-
-/** The Claude Code session a terminal runs: its process, the session id, its name and folder. */
-const isSession = object({ pid: isNumber, id: isString }, { name: nullable(isString), cwd: nullable(isString) });
-
-type Session = Guarded<typeof isSession>;
-
-/** The last read of each terminal's session (keyed by terminal), so a pane coming back
- *  draws at once: the session, and the snapshot as JSON-safe values. */
-const CACHE = sharedMapKey("agent-graph.cache", object({ session: nullable(isSession), data: nullable(isPackedSnapshot) }));
-
-/** This copy's remembered zoom and detail height. */
-const isRemembered = object({}, { zoom: nullable(isNumber), detailH: nullable(isNumber) });
-
-type Remembered = Guarded<typeof isRemembered>;
-
-/** This copy's remembered zoom and detail height (localStorage may be missing). */
-function remembered(): Remembered {
-  try {
-    return parseJson(localStorage.getItem("view") ?? "{}", isRemembered) ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function remember(v: Remembered) {
-  try {
-    localStorage.setItem("view", JSON.stringify(v));
-  } catch {
-    /* not kept */
-  }
-}
-
-/** A Claude Code pane in the shown space (a terminal's), with the name it shows under and its space's machine. */
-interface ClaudePane extends TerminalPaneInfo {
-  readonly name: string;
-  readonly machine: string | null;
-}
-
-/** Claude Code panes in the shown space, the shown tab's first. */
-function claudePanes(): ClaudePane[] {
-  const space = spaces().find((s) => s.active);
-
-  if (!space) return [];
-
-  const tabs = new Map<string, TabInfo>(space.tabs.map((c) => [c.id, c]));
-
-  // The shown tab first, then by position.
-  const rank = (p: PaneInfo) => {
-    const tab = tabs.get(p.tab);
-
-    return (tab?.active ? 0 : 1000) + (tab?.index ?? 0);
-  };
-
-  return panes().flatMap((p) => (p.terminal && p.app === "claude-code" && tabs.has(p.tab)
-    ? [{ ...p, name: givenName(p.terminal) ?? p.program.name, machine: space.machine }]
-    : []))
-    .sort((a, b) => rank(a) - rank(b));
-}
-
-function ago(ms: number): string {
-  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
-
-  return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.round(s / 3600)}h ago`;
-}
-
-/** "$4.10", "$0.82", "<$0.01"; "≈" when a model had no price. */
-function money(u: Usage): string {
-  const c = u.cost;
-  const v = c > 0 && c < 0.01 ? "<$0.01" : c >= 100 ? `$${c.toFixed(0)}` : `$${c.toFixed(2)}`;
-
-  return u.unpriced ? `≈${v}` : v;
-}
-
-function chip(t: Theme, id: string, label: string, action: (cx: Context) => void, color?: Color): Element {
-  return div().id(id).flex_none().px(6).h(20).flex().items_center().text_size(11).text_color(color ?? t.muted)
-    .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-    .on_mouse_down("left", stop)
-    .on_click((_e, cx) => {
-      cx.stop_propagation();
-      action(cx);
-    })
-    .child(label);
-}
+import type { Feed, Snapshot, Usage } from "./claude.ts";
+import { unpack } from "./claude.ts";
+import type { GraphNode } from "./graph.ts";
+import { tree, ZOOM, WORDS } from "./graph.ts";
+import type { Session, ClaudePane, Step, StatsPick } from "./state.ts";
+import { agentsProps, remembered, CACHE, POLL, claudePanes, isStep, STATS, PAN, PLACEHOLDER, DETAIL_MIN } from "./state.ts";
+import { poll, runCommand, startFollowing, targetPane, toWorking } from "./reading.ts";
+import { cycleAgents, flipRun, movePan, saveState, stepGraph, zoomTo } from "./navigate.ts";
+import { details, drawToolbar } from "./feed-view.ts";
+import { statsStrip } from "./stats-view.ts";
+import { viewport } from "./viewport.ts";
 
 /** What ? lists: every key key() takes, ? keys last. */
 export const KEYS: readonly KeyRow[] = [
@@ -186,36 +75,6 @@ export const KEYS: readonly KeyRow[] = [
   ["gg", "oldest step"], ["w", "next working agent"], ["s", "every agent's time, tokens, cost"], ["f", "focus its terminal"],
   ["[ ]", "previous / next session"], ["esc", "close the details"], ["?", "keys"],
 ];
-
-/** A move of the selection: h parent, l first child, j / k down / up the column. */
-const isStep = literal("h", "j", "k", "l");
-
-type Step = Guarded<typeof isStep>;
-
-/** H J K L: which way each moves the graph. */
-const PAN = new Map<string, readonly [number, number]>([["h", [PAN_STEP, 0]], ["l", [-PAN_STEP, 0]], ["k", [0, PAN_STEP]], ["j", [0, -PAN_STEP]]]);
-
-/** The stats breakdown, selected like a node. */
-interface StatsPick {
-  readonly key: typeof STATS;
-  readonly kind: "stats";
-}
-
-/** An agent picked from a list (the stats, a run's agents): its key is its id. */
-interface AgentPick {
-  readonly key: string;
-  readonly kind: "agent";
-}
-
-/** A row of the feed: the task first, then the steps. */
-type FeedRow = FeedItem | { readonly kind: "task"; readonly text: string };
-
-/** A group of the stats breakdown: the session's own subagents, or a run's. */
-interface StatsGroup {
-  readonly id: string;
-  readonly name: string;
-  readonly list: readonly Agent[];
-}
 
 export default class Agents extends View {
   terminal: string | null = null; // the Claude Code shown
@@ -278,315 +137,25 @@ export default class Agents extends View {
         const c = String(await nextCommand()).replace(/^agent-graph\./, "");
 
         if (c === "focus") handle.focus();
-        else this.command(c, cx);
+        else runCommand(this, c, cx);
 
         cx.notify();
       }
     });
-    this.poll(cx);
-    cx.timer.every(POLL, (cx) => this.poll(cx));
+    poll(this, cx);
+    cx.timer.every(POLL, (cx) => poll(this, cx));
   }
 
   /** Which Claude Code to show now. */
   target(): ClaudePane | null {
-    const list = claudePanes();
-    const f = focused();
-    const here = f?.terminal ? list.find((p) => p.terminal === f.terminal) : undefined;
-
-    if (here && !this.pinned) this.terminal = here.terminal;
-
-    if (!list.some((p) => p.terminal === this.terminal)) {
-      this.terminal = list[0]?.terminal ?? null;
-      this.pinned = false;
-    }
-
-    return list.find((p) => p.terminal === this.terminal) ?? null;
-  }
-
-  poll(cx: Context) {
-    if (this.busy && Date.now() - this.busy < STALE) return;
-
-    const pane = this.target();
-
-    if (!pane) {
-      if (this.data || this.session) {
-        this.data = null;
-        this.session = null;
-        cx.notify();
-      }
-
-      return;
-    }
-
-    if (pane.machine) {
-      this.error = "This space is on another machine: only this computer's Claude Code sessions can be read.";
-      this.data = null;
-      cx.notify();
-
-      return;
-    }
-
-    const pid = terminals().filter(isRunning).find((x) => x.address === pane.terminal)?.foreground?.pid ?? null;
-    const gen = (this.gen += 1);
-
-    this.busy = Date.now();
-    cx.spawn(async (cx) => {
-      try {
-        if (this.session?.pid !== pid) {
-          const hit = readSharedMap(shared, CACHE).get(pane.terminal);
-
-          if (hit && hit.session?.pid === pid) {
-            this.session = hit.session;
-            this.data = hit.data && unpack(hit.data);
-            cx.notify();
-          }
-        }
-
-        if (this.session?.pid !== pid) {
-          const s = await sessionOf(pid);
-
-          if (gen !== this.gen) return;
-
-          if (this.session?.id !== s?.sessionId) {
-            this.selected = null;
-            this.detail = null;
-            this.open = new Set();
-          }
-
-          this.session = s && pid !== null ? { pid, id: s.sessionId, name: s.name ?? null, cwd: s.cwd ?? null } : null;
-        }
-
-        if (!this.session) {
-          this.data = null;
-          this.error = pid ? "Waiting for Claude Code to write its session…" : "";
-
-          return;
-        }
-
-        const data = await snapshot(this.session.id);
-
-        if (gen !== this.gen) return;
-
-        this.data = data;
-        this.error = data ? "" : "No transcript for this session yet.";
-
-        if (data) {
-          this.keep(pane.terminal, this.session, data);
-          // Tokens per transcript (each read again only once it changed).
-          this.usage = await usageOf([{ file: data.main, changed: data.mainChanged }, ...[...data.agents.values()].map((a) => ({ file: a.file, changed: a.changed }))]);
-
-          // Opened with props { select: "working" }: start on a working agent, once the graph is laid out.
-          if (agentsProps().select === "working" && !this.startedOn) {
-            this.startedOn = true;
-            cx.timer.after(50, (cx) => {
-              this.toWorking(cx);
-              cx.notify();
-            });
-          }
-        }
-
-        const file = this.selectedFile();
-        const before = this.detail?.items.length ?? 0;
-
-        this.detail = file ? await feed(file) : null;
-
-        if (this.follow && this.detail && this.detail.items.length !== before) this.feedScroll?.scroll_to_bottom();
-      } catch (cause: unknown) {
-        this.error = cause instanceof Error ? cause.message : String(cause);
-      } finally {
-        if (gen === this.gen) this.busy = 0;
-
-        cx.notify();
-      }
-    });
-  }
-
-  /** Keeps this read for the next copy that shows this terminal (only when it changed). */
-  keep(terminal: string, session: Session, data: Snapshot) {
-    const entry = { session, data: pack(data) };
-    const json = JSON.stringify(entry);
-
-    if (json === this.kept) return;
-
-    this.kept = json;
-
-    // Only terminals that still exist.
-    const live = new Set(terminals().filter(isLabelled).map((x) => x.address));
-    const all = new Map([...readSharedMap(shared, CACHE)].filter(([k]) => live.has(k)));
-
-    all.set(terminal, entry);
-    writeSharedMap(setShared, CACHE, all);
-  }
-
-  /** Follows the selected agent from now on: to its newest step. */
-  startFollowing() {
-    this.follow = true;
-    this.feedScroll?.scroll_to_bottom();
-    this.pendingBottom = true; // again once the list has drawn with the newest rows
-  }
-
-  /** agent-graph.<command>: the keyboard's moves, for keys.json. */
-  command(c: string, cx: Context) {
-    if (c === "keys") {
-      this.help = !this.help;
-
-      return;
-    }
-
-    if (isStep(c)) {
-      this.step(c, cx);
-
-      return;
-    }
-
-    if (c === "in") this.zoomTo(this.zoom * ZOOM.step);
-    else if (c === "out") this.zoomTo(this.zoom / ZOOM.step);
-    else if (c === "reset") {
-      this.zoom = 1;
-      this.pan = null;
-      this.save();
-    } else if (c === "follow") this.startFollowing();
-    else if (c === "working") this.toWorking(cx);
-  }
-
-  /** Selects the next working agent (after the selected one, wrapping) and follows it. */
-  toWorking(cx: Context) {
-    const list = (this.layout ?? []).filter((n) => n.kind === "agent" && n.status === "working").sort((a, b) => a.x - b.x || a.y - b.y);
-    const i = list.findIndex((n) => n.key === this.selected);
-    const n = list[(i + 1) % list.length];
-
-    if (!n) return;
-
-    this.pick(n, cx, false);
-    this.reveal(n);
-    this.startFollowing();
-  }
-
-  /** The transcript behind the selected node, if it has one. */
-  selectedFile(): string | null {
-    if (!this.data || !this.selected || this.selected === STATS) return null;
-
-    if (this.selected === "main") return this.data.main;
-
-    return this.data.agents.get(this.selected)?.file ?? null;
-  }
-
-  /** Folds or opens a run. */
-  flip(n: RunNode) {
-    if (this.open.has(n.foldKey)) this.open.delete(n.foldKey);
-    else this.open.add(n.foldKey);
-  }
-
-  pick(n: GraphNode | AgentPick, cx: Context, again = true) {
-    this.handle?.focus();
-
-    // A second click folds or opens it.
-    if (again && n.kind === "run" && this.selected === n.key) this.flip(n);
-
-    if (this.selected !== n.key) this.follow = true;
-
-    this.selected = n.key;
-    this.detail = null;
-    this.busy = 0;
-    this.poll(cx);
-    cx.notify();
-  }
-
-  ask(n: AgentNodeOf | RunNode | PhaseNode, pane: ClaudePane) {
-    const what = n.kind === "run" ? `the workflow run ${n.run.name} (${n.run.id})`
-      : n.kind === "phase" ? `the ${n.label} phase of the workflow ${n.run.name} (${n.run.id})`
-      : `the subagent "${n.label}" (${n.key})`;
-
-    hc(["send", pane.terminal, `How is ${what} doing? Brief status, anything blocked or worth my attention.`]).catch(() => null);
+    return targetPane(this);
   }
 
   // ---- keyboard, zoom
 
-  save() {
-    remember({ zoom: this.zoom, detailH: this.detailH });
-  }
-
-  /** Zooms to z keeping the graph point under `at` (view px; default its centre) where it is. */
-  zoomTo(to: number, at?: Point) {
-    const z = Math.min(ZOOM.max, Math.max(ZOOM.min, Math.round(to * 100) / 100));
-
-    if (z === this.zoom) return;
-
-    const a = at ?? { x: this.view.width / 2, y: this.view.height / 2 };
-    const p = this.panFor(this.graphH ?? 0);
-    const k = z / this.zoom;
-
-    this.pan = { x: Math.round(a.x - (a.x - p.x) * k), y: Math.round(a.y - (a.y - p.y) * k) };
-    this.zoom = z;
-    this.save();
-  }
-
-  movePan(dx: number, dy: number) {
-    const p = this.panFor(this.graphH ?? 0);
-
-    this.pan = { x: p.x + dx, y: p.y + dy };
-  }
-
   /** Moves the selection: h parent, l first child, j / k next / previous in the column. */
   step(dir: Step, cx: Context) {
-    const nodes = this.layout ?? [];
-
-    if (!nodes.length) return;
-
-    const cur = nodes.find((n) => n.key === this.selected);
-    let next: GraphNode | undefined;
-
-    if (!cur) next = nodes.find((n) => n.kind === "main");
-    else if (dir === "h") next = nodes.find((n) => n.children.includes(cur));
-    else if (dir === "l") {
-      if (cur.kind === "run" && cur.folded) {
-        this.flip(cur);
-        cx.notify();
-
-        return;
-      }
-
-      next = cur.children[0];
-    } else {
-      const col = nodes.filter((n) => n.x === cur.x).sort((a, b) => a.y - b.y);
-
-      next = col[col.indexOf(cur) + (dir === "j" ? 1 : -1)];
-    }
-
-    if (!next) return;
-
-    this.pick(next, cx, false);
-    this.reveal(next);
-  }
-
-  /** Moves the graph so `n` is in view, if it isn't. */
-  reveal(n: GraphNode) {
-    const p = this.panFor(this.graphH ?? 0), d = dims(this.zoom), m = 24;
-    const x = n.x + p.x, y = n.y + p.y;
-    let dx = 0, dy = 0;
-
-    if (x < m) dx = m - x;
-    else if (x + d.NW > this.view.width - m) dx = this.view.width - m - x - d.NW;
-
-    if (y < m) dy = m - y;
-    else if (y + n.h > this.view.height - m) dy = this.view.height - m - y - n.h;
-
-    if (dx || dy) this.movePan(dx, dy);
-  }
-
-  /** [ / ]: the previous / next session in the toolbar's chips, kept. */
-  cycle(d: number, cx: Context) {
-    const list = claudePanes(), cur = this.target();
-    const i = list.findIndex((p) => p.terminal === cur?.terminal);
-    const p = list[(i + d + list.length) % list.length];
-
-    if (!p) return;
-
-    this.terminal = p.terminal;
-    this.pinned = true;
-    this.session = null;
-    this.busy = 0;
-    this.poll(cx);
+    return stepGraph(this, dir, cx);
   }
 
   key(e: KeyEvent, cx: Context) {
@@ -608,7 +177,7 @@ export default class Agents extends View {
     if (this.help) return;
 
     if (typed === "[" || typed === "]") {
-      this.cycle(typed === "]" ? 1 : -1, cx);
+      cycleAgents(this, typed === "]" ? 1 : -1, cx);
       cx.stop_propagation();
       cx.notify();
 
@@ -618,28 +187,28 @@ export default class Agents extends View {
     const k = e.key, upper = m.shift || /^[A-Z]$/.test(k), low = k.toLowerCase();
     const pan = upper ? PAN.get(low) : undefined;
 
-    if (pan) this.movePan(pan[0], pan[1]);
+    if (pan) movePan(this, pan[0], pan[1]);
     else if (isStep(k)) {
       this.step(k, cx);
 
       return;
-    } else if (k === "+" || k === "=") this.zoomTo(this.zoom * ZOOM.step);
-    else if (k === "-" || k === "_") this.zoomTo(this.zoom / ZOOM.step);
+    } else if (k === "+" || k === "=") zoomTo(this, this.zoom * ZOOM.step);
+    else if (k === "-" || k === "_") zoomTo(this, this.zoom / ZOOM.step);
     else if (k === "0") {
       this.zoom = 1;
       this.pan = null;
-      this.save();
+      saveState(this);
     } else if (k === "enter" || k === "space") {
       const n = (this.layout ?? []).find((x) => x.key === this.selected);
 
-      if (n?.kind === "run") this.flip(n);
+      if (n?.kind === "run") flipRun(this, n);
     } else if (k === "f" && !upper) {
       const pane = this.target();
 
       if (pane) run("pane.focus", { pane: pane.pane });
 
       return;
-    } else if (low === "g" && upper) this.startFollowing();
+    } else if (low === "g" && upper) startFollowing(this);
     else if (k === "g") {
       // gg (two within half a second): the oldest step, and stop following.
       if (Date.now() - this.gAt < 500) {
@@ -651,7 +220,7 @@ export default class Agents extends View {
 
         return;
       }
-    } else if (k === "w") this.toWorking(cx);
+    } else if (k === "w") toWorking(this, cx);
     else if (k === "s") {
       this.selected = this.selected === STATS ? null : STATS;
       this.detail = null;
@@ -665,395 +234,6 @@ export default class Agents extends View {
   }
 
   // ---- parts
-
-  toolbar(t: Theme, list: readonly ClaudePane[], pane: ClaudePane | null): Element {
-    const counts = this.data ? [...this.data.agents.values()].filter((a) => a.status === "working").length : 0;
-
-    return h_flex().id("ag-toolbar").relative().h(34).flex_none().px(12).gap(6).items_center().text_size(11)
-      .child(div().flex_none().pr(4).text_color(t.ansi8).child("AGENTS"))
-      .child(h_flex().id("ag-sessions").flex_1().min_w(0).gap(2).items_center().overflow_x_scroll()
-        .children(list.map((p) => {
-          const on = p.terminal === pane?.terminal;
-
-          return h_flex().id(`ag-s-${p.terminal}`).relative().flex_none().h(20).px(6).gap(6).items_center()
-            .text_color(on ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
-            .on_mouse_down("left", stop)
-            .on_click((_e, cx) => {
-              this.terminal = p.terminal;
-              this.pinned = true;
-              this.session = null;
-              this.busy = 0;
-              this.poll(cx);
-              cx.notify();
-            })
-            .when(on, (el) => el.child(dither(t.ansi0, 1)))
-            .child(div().relative().child(pip(t, p.status, 5)))
-            .child(div().relative().max_w(140).truncate().child(p.name));
-        })))
-      .when(counts > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`${counts} working`)))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
-  }
-
-  /**
-   * The selected agent's steps, oldest first, newest at the bottom (where
-   * follow keeps it). A virtual list, so the scroll handle can move it: rows
-   * get fixed heights, text wrapping to at most a few lines (cut off past them).
-   */
-  feedList(t: Theme, f: Feed | null): Element {
-    if (!f) return div().id("ag-feed").flex_1().px(12).py(6).text_size(11).text_color(t.dim).child("reading…");
-
-    const rows: FeedRow[] = [...(f.task ? [{ kind: "task", text: f.task } as const] : []), ...f.items.slice(-150)];
-    // Roughly how many characters fit on a line (Departure Mono: ~0.6em wide).
-    const perLine = Math.max(20, Math.floor((this.view.width - 24) / 6.6));
-    const lines = (text: string, max: number) => Math.min(max, Math.max(1, Math.ceil(text.length / perLine)));
-    const LINE = 15;
-
-    const height = (x: FeedRow) => x.kind === "task" ? 20 + lines(x.text, 5) * LINE
-      : x.kind === "tool" ? 19 : x.kind === "result" ? 17 : 6 + lines(x.text, 4) * LINE;
-
-    const row = (x: FeedRow, i: number): Element => {
-      const box = div().id(`f-${i}`).h(height(x)).overflow_hidden();
-
-      if (x.kind === "task") {
-        return box.px(12).pt(4).child(div().text_size(10).text_color(t.ansi8).child("TASK"))
-          .child(div().text_size(11).text_color(t.muted).child(x.text));
-      }
-
-      if (x.kind === "tool") {
-        return box.child(h_flex().h_full().px(12).gap(6).items_center().text_size(11)
-          .child(div().flex_none().text_color(t.accent).child(`▸ ${x.name}`))
-          .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(x.text)));
-      }
-
-      if (x.kind === "result") {
-        return box.pl(24).pr(12).truncate().text_size(10).text_color(x.error ? t.blocked : t.dim).child(`↳ ${x.text || "(no output)"}`);
-      }
-
-      return box.px(12).pt(3).text_size(11).text_color(x.kind === "prompt" ? t.muted : t.foreground).child(x.text);
-    };
-
-    const last = rows.length - 1;
-
-    const list = v_virtual_list("ag-feed", rows.length, rows.map(height), (i) => `${i}`, (range) => {
-      if (range.end - 1 >= last) this.lastDrawn = Date.now();
-
-      const out: Element[] = [];
-
-      for (let i = range.start; i < range.end; i++) {
-        const x = rows[i];
-
-        if (x) out.push(row(x, i));
-      }
-
-      return out;
-    }).size_full();
-
-    return div().id("ag-feed-box").relative().flex_1().min_h(0)
-      .on_scroll_wheel((e, cx) => {
-        const dy = e.delta.y;
-
-        if (dy > 0 && this.follow) {
-          this.follow = false;
-          cx.notify();
-        } else if (dy < 0 && !this.follow) {
-          // Scrolled down to the newest step: follow again.
-          cx.timer.after(60, (cx) => {
-            if (Date.now() - this.lastDrawn < 250) {
-              this.follow = true;
-              cx.notify();
-            }
-          });
-        }
-      })
-      .child(this.feedScroll ? list.track_scroll(this.feedScroll) : list);
-  }
-
-  /** "41.2k tok · $0.82" for a transcript, once its tokens are known. */
-  tokens(file: string | null): string | null {
-    const u = file ? this.usage?.get(file) : null;
-
-    if (!u || !u.tokens) return null;
-
-    return `${count(u.tokens)} tok · ${money(u)}`;
-  }
-
-  /** Every agent of the session together, and the session itself. */
-  totals() {
-    const list = [...(this.data?.agents.values() ?? [])];
-    const by = (st: Agent["status"]) => list.filter((a) => a.status === st).length;
-    const sub = emptyUsage(), all = emptyUsage();
-
-    for (const a of list) addUsage(sub, this.usage?.get(a.file));
-
-    addUsage(all, sub);
-
-    if (this.data) addUsage(all, this.usage?.get(this.data.main));
-
-    return {
-      n: list.length, working: by("working"), done: by("done"), stopped: by("stopped") + by("idle"),
-      time: list.reduce((k, a) => k + ranFor(a), 0),
-      wall: this.data?.mainStarted ? Date.now() - this.data.mainStarted : 0,
-      sub, all,
-    };
-  }
-
-  /** The strip under the toolbar: counts, time, tokens, cost. Click: each agent's share. */
-  statsStrip(t: Theme): Element {
-    const s = this.totals();
-    const on = this.selected === STATS;
-    const part = (color: Color, text: string) => div().flex_none().text_color(color).child(text);
-    const sep = () => div().flex_none().text_color(t.ansi0).child("│");
-
-    return h_flex().id("ag-stats").relative().h(26).flex_none().px(12).gap(8).items_center().text_size(11).overflow_hidden()
-      .hover((st) => st.bg(`${t.ansi0}55`))
-      .on_mouse_down("left", stop)
-      .on_click((_e, cx) => {
-        this.selected = on ? null : STATS;
-        this.detail = null;
-        cx.notify();
-      })
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-      .child(div().relative().flex_none().text_color(t.ansi8).child("ALL"))
-      .child(part(t.foreground, `${s.n} agent${s.n === 1 ? "" : "s"}`).relative())
-      .when(s.working > 0, (el) => el.child(part(t.working, `${s.working} working`).relative()))
-      .when(s.done > 0, (el) => el.child(part(t.done, `${s.done} done`).relative()))
-      .when(s.stopped > 0, (el) => el.child(part(t.muted, `${s.stopped} stopped`).relative()))
-      .child(sep().relative())
-      .child(part(t.muted, `Σ ${span(s.time)}`).relative().tooltip("the agents' run times added up"))
-      .when(s.wall > 0, (el) => el.child(part(t.dim, `wall ${span(s.wall)}`).relative().tooltip("since the session started")))
-      .when(s.all.tokens > 0, (el) => el.child(sep().relative())
-        .child(part(t.muted, `${count(s.all.tokens)} tok`).relative()
-          .tooltip(`in ${count(s.all.input)} · out ${count(s.all.output)} · cache write ${count(s.all.cache5m + s.all.cache1h)} · cache read ${count(s.all.cacheRead)}`))
-        .child(part(t.foreground, money(s.all)).relative().tooltip("at Anthropic's API list prices; the session and every agent")))
-      .child(div().flex_1())
-      .child(div().relative().flex_none().text_color(on ? t.accent : t.dim).child(on ? "× close" : "s · breakdown"))
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).bg(t.ansi0));
-  }
-
-  /** Each agent's share, grouped by run (the session's own first), with totals. */
-  statsBody(t: Theme, d: Snapshot): Element {
-    const s = this.totals();
-
-    const cols = (id: string, color: Color, cells: readonly (Element | string)[]) => h_flex().id(id).h(20).flex_none().gap(8).items_center().text_color(color)
-      .child(div().flex_1().min_w(0).truncate().child(cells[0] ?? ""))
-      .child(div().w(70).flex_none().child(cells[1] ?? ""))
-      .child(div().w(64).flex_none().child(cells[2] ?? ""))
-      .child(div().w(64).flex_none().child(cells[3] ?? ""))
-      .child(div().w(56).flex_none().child(cells[4] ?? ""));
-
-    const row = (a: Agent) => {
-      const u = this.usage?.get(a.file);
-
-      return h_flex().id(`ag-st-${a.id}`).gap(6).items_center().hover((st) => st.bg(`${t.ansi0}55`))
-        .on_click((_e, cx) => this.pick({ key: a.id, kind: "agent" }, cx))
-        .child(div().w(6).h(6).flex_none().relative().child(dither(t[TONE[a.status]], 1)))
-        .child(div().flex_1().min_w(0).child(cols(`ag-stc-${a.id}`, t.muted, [
-          div().truncate().text_color(t.foreground).child(a.label),
-          div().text_color(t[TONE[a.status]]).child(WORDS[a.status]),
-          div().text_color(a.status === "working" ? t.working : t.muted).child(span(ranFor(a))),
-          u?.tokens ? count(u.tokens) : "–", u?.tokens ? money(u) : "–"])));
-    };
-
-    const agents = [...d.agents.values()].sort((a, b) => a.started - b.started);
-    const own = agents.filter((a) => !a.run);
-
-    const groups: StatsGroup[] = [
-      ...(own.length ? [{ id: "own", name: "the session's subagents", list: own }] : []),
-      ...d.runs.map((r) => ({ id: r.id, name: `${r.name} · ${span((r.ended ?? Date.now()) - r.started)}`, list: r.agents.flatMap((id) => d.agents.get(id) ?? []) })),
-    ];
-
-    const head = (g: StatsGroup) => h_flex().id(`ag-stg-${g.id}`).pt(6).pb(2).gap(8).items_center()
-      .child(div().flex_none().text_size(10).text_color(t.ansi8).child(g.name.toUpperCase()))
-      .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)));
-
-    const main = this.usage?.get(d.main);
-
-    return v_flex().id("ag-stats-body").flex_1().min_h(0).px(12).py(6).gap(2).overflow_y_scroll().text_size(11)
-      .child(h_flex().gap(6).pl(12).child(div().flex_1().child(cols("ag-st-head", t.ansi8, ["agent", "status", "time", "tokens", "cost"]))))
-      .child(h_flex().id("ag-st-main").gap(6).items_center()
-        .child(div().w(6).h(6).flex_none())
-        .child(div().flex_1().min_w(0).child(cols("ag-stc-main", t.muted, [
-          div().truncate().text_color(t.foreground).child("the session itself"), "", s.wall ? span(s.wall) : "–",
-          main?.tokens ? count(main.tokens) : "–", main?.tokens ? money(main) : "–"]))))
-      .children(groups.flatMap((g) => [head(g), ...g.list.map(row)]))
-      .child(div().h(2).mt(6).relative().child(dither(t.ansi0, 1)))
-      .child(h_flex().gap(6).pl(12).child(div().flex_1().child(cols("ag-st-sum", t.foreground, [
-        `${s.n} agents · ${s.working} working · ${s.done} done · ${s.stopped} stopped`, "", span(s.time), count(s.all.tokens), money(s.all)]))))
-      .child(div().pt(4).text_size(10).text_color(t.dim).child(`agents alone: ${count(s.sub.tokens)} tok · ${money(s.sub)} · costs at API list prices${s.all.unpriced ? "; a model without a price is left out" : ""}`));
-  }
-
-  /** What the selected node is: a run's or phase's agents, else its transcript. */
-  details(t: Theme, n: GraphNode | StatsPick, pane: ClaudePane, data: Snapshot): Element {
-    if (n.kind === "stats") {
-      return this.panel(t, h_flex().id("ag-detail-head").relative().h(30).flex_none().px(12).gap(8).items_center().text_size(11)
-        .child(div().flex_none().text_color(t.foreground).child("Every agent"))
-        .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child("time, tokens and cost, by run"))
-        .child(chip(t, "ag-close", "×", (cx) => {
-          this.selected = null;
-          cx.notify();
-        }))
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1))), this.statsBody(t, data));
-    }
-
-    const color = t[TONE[n.status]];
-
-    const head = h_flex().id("ag-detail-head").relative().h(30).flex_none().px(12).gap(8).items_center().text_size(11)
-      .child(div().flex_none().w(8).h(8).relative().child(dither(color, 1)))
-      .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(n.label))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.dim)
-        .child([n.kind === "main" ? "session" : n.kind, WORDS[n.status], this.detail?.model?.replace(/^claude-/, ""),
-          n.kind === "agent" ? `${n.status === "working" ? "for" : "ran"} ${span(ranFor(n.agent))}` : n.kind === "main" && data.mainStarted ? `started ${ago(data.mainStarted)}` : null,
-          n.kind === "agent" && n.agent.changed && n.status !== "working" ? ago(n.agent.changed) : null,
-          this.tokens(n.kind === "main" ? data.main : n.kind === "agent" ? n.agent.file : null)].filter(Boolean).join(" · ")))
-      .when(n.kind === "agent" || n.kind === "main", (el) => el.child(chip(t, "ag-follow", this.follow ? "● follow" : "○ follow",
-        (cx) => {
-          if (this.follow) this.follow = false;
-          else this.startFollowing();
-
-          cx.notify();
-        }, this.follow ? t.accent : t.dim)))
-      .child(chip(t, "ag-focus", "focus", () => run("pane.focus", { pane: pane.pane })))
-      .when(n.kind !== "main", (el) => (n.kind === "main" ? el : el.child(chip(t, "ag-ask", "ask", () => this.ask(n, pane), t.accent))))
-      .child(chip(t, "ag-close", "×", (cx) => {
-        this.selected = null;
-        this.detail = null;
-        cx.notify();
-      }))
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
-
-    if (n.kind === "run" || n.kind === "phase") {
-      const r = n.run;
-      const ids = n.kind === "run" ? r.agents : r.agents.filter((id) => data.agents.get(id)?.phase === n.label);
-
-      const body = v_flex().id("ag-run").flex_1().min_h(0).px(12).py(6).gap(3).overflow_y_scroll().text_size(11)
-        .when(n.kind === "run" && Boolean(r.summary), (el) => el.child(div().pb(4).text_color(t.muted).child(r.summary)))
-        .when(n.kind === "run", (el) => el.child(div().pb(4).text_color(t.dim).child(`phases: ${r.phases.join(" → ") || "-"}`)))
-        .children(ids.flatMap((id) => data.agents.get(id) ?? []).map((a) =>
-          h_flex().id(`ag-r-${a.id}`).gap(8).items_center().hover((s) => s.bg(`${t.ansi0}55`))
-            .on_click((_e, cx) => this.pick({ key: a.id, kind: "agent" }, cx))
-            .child(div().w(6).h(6).flex_none().relative().child(dither(t[TONE[a.status]], 1)))
-            .child(div().w(54).flex_none().truncate().text_color(t.dim).child(a.phase ?? ""))
-            .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(a.label))
-            .child(div().flex_none().text_color(t.dim).child(this.tokens(a.file) ?? ""))
-            .child(div().w(64).flex_none().text_color(a.status === "working" ? t.working : t.muted).child(span(ranFor(a))))
-            .child(div().w(54).flex_none().text_color(t[TONE[a.status]]).child(WORDS[a.status]))));
-
-      return this.panel(t, head, body);
-    }
-
-    return this.panel(t, head, this.feedList(t, this.detail));
-  }
-
-  /** The details panel: a head, a body, and the edge above them that resizes it. */
-  panel(t: Theme, head: Element, body: Element): Element {
-    // The edge above the details: drag it to resize them.
-    const edge = div().id("ag-detail-edge").absolute().left(0).right(0).top(-3).h(7).cursor_row_resize()
-      .on_mouse_down("left", (e, cx) => {
-        cx.stop_propagation();
-        this.resizing = { y: e.position.y, from: this.detailH ?? Math.round(this.paneH / 2) };
-        cx.notify();
-      })
-      .child(div().absolute().left(0).right(0).top(3).h(1).when(Boolean(this.resizing), (el) => el.bg(t.accent)));
-
-    const panel = v_flex().id("ag-detail").relative().flex_none().bg(t.background).child(head).child(body).child(edge);
-
-    return this.detailH ? panel.h(this.detailH) : panel.h_1_2();
-  }
-
-  /** Where the graph sits: dragged there, else at the left, the whole graph centred when it fits, else the session node. */
-  panFor(height: number): Point {
-    if (this.pan) return this.pan;
-
-    const vh = this.view.height;
-    const y = height <= vh ? (vh - height) / 2 : Math.min(0, Math.max(vh - height, vh / 2 - this.rootY));
-
-    return { x: 0, y: Math.round(y) };
-  }
-
-  /** The graph's window: drag (or scroll) to move it, double-click empty sky to centre it again. */
-  viewport(t: Theme, root: GraphNode): Element {
-    const d = dims(this.zoom);
-    const probe = place(root, d); // sizes and positions, before drawing
-
-    this.rootY = root.y + root.h / 2;
-    this.graphH = probe.height;
-    this.layout = probe.nodes;
-
-    const at = this.panFor(probe.height);
-    const { el } = canvas(t, root, this.selected, (n, cx) => this.pick(n, cx), at.x, at.y, d);
-
-    const end = (cx: Context) => {
-      if (this.drag) {
-        this.drag = null;
-        cx.notify();
-      }
-    };
-
-    return div().id("ag-graph").relative().flex_1().min_h(0).overflow_hidden()
-      .when(Boolean(this.drag), (el) => el.cursor_grabbing()).when(!this.drag, (el) => el.cursor_grab())
-      .on_size_change((size, cx) => {
-        if (size.width >= PLACEHOLDER && size.height >= PLACEHOLDER) {
-          this.view = size;
-          cx.notify();
-        }
-      })
-      .on_mouse_down("left", (e, cx) => {
-        if (e.click_count === 2) {
-          this.pan = null;
-          this.drag = null;
-          cx.notify();
-
-          return;
-        }
-
-        this.handle?.focus();
-        this.drag = { x: e.position.x, y: e.position.y, from: this.panFor(probe.height) };
-        cx.notify();
-      })
-      .on_mouse_move((e, cx) => {
-        const d = this.drag;
-
-        if (!d) return;
-
-        this.pan = { x: Math.round(d.from.x + e.position.x - d.x), y: Math.round(d.from.y + e.position.y - d.y) };
-        cx.notify();
-      })
-      .on_mouse_up("left", (_e, cx) => end(cx))
-      .on_hover((h, cx) => {
-        if (!h) end(cx);
-      })
-      .on_scroll_wheel((e, cx) => {
-        if (e.modifiers.platform || e.modifiers.control) {
-          // cmd-scroll (or a pinch's ctrl-scroll) zooms around the pointer.
-          this.zoomTo(this.zoom * Math.pow(ZOOM.step, e.delta.y / 40), e.local_position);
-        } else {
-          const p = this.panFor(probe.height);
-
-          this.pan = { x: Math.round(p.x + e.delta.x), y: Math.round(p.y + e.delta.y) };
-        }
-
-        cx.notify();
-      })
-      .child(sky(t, at.x, at.y))
-      .child(el)
-      .when(Boolean(this.pan), (el) => el.child(div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
-        .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => {
-          this.pan = null;
-          cx.notify();
-        })
-        .child("centre")))
-      .when(this.zoom !== 1, (el) => el.child(div().id("ag-zoom").absolute().left(10).bottom(8).px(6).h(20).flex().items_center()
-        .text_size(11).text_color(t.dim).bg(t.background).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
-        .on_mouse_down("left", stop)
-        .on_click((_e, cx) => {
-          this.zoom = 1;
-          this.save();
-          cx.notify();
-        })
-        .child(`${Math.round(this.zoom * 100)}%`)));
-  }
 
   /** lazygit's options bar: the main keys, ? keys last (keyhelp.ts). */
   hints(t: Theme): Element {
@@ -1087,7 +267,7 @@ export default class Agents extends View {
     const endResize = (cx: Context) => {
       if (this.resizing) {
         this.resizing = null;
-        this.save();
+        saveState(this);
         cx.notify();
       }
     };
@@ -1115,7 +295,7 @@ export default class Agents extends View {
       .on_hover((h, cx) => {
         if (!h) endResize(cx);
       })
-      .child(this.toolbar(t, list, pane));
+      .child(drawToolbar(this, t, list, pane));
 
     // ?: the keys in the graph's place, the toolbar and the bar stay (keyhelp.ts).
     if (this.help) return shell.child(div().relative().flex_1().min_h(0).child(this.helpPanel(t))).child(this.hints(t));
@@ -1138,15 +318,15 @@ export default class Agents extends View {
     const sel = this.selected === STATS ? stats : this.selected ? find(root) : undefined;
 
     return shell
-      .when(data.agents.size > 0, (el) => el.child(this.statsStrip(t)))
-      .child(this.viewport(t, root))
+      .when(data.agents.size > 0, (el) => el.child(statsStrip(this, t)))
+      .child(viewport(this, t, root))
       .when(this.pendingBottom, (el) => {
         this.pendingBottom = false;
         this.feedScroll?.scroll_to_bottom();
 
         return el;
       })
-      .when(sel !== undefined, (el) => (sel ? el.child(this.details(t, sel, pane, data)) : el))
+      .when(sel !== undefined, (el) => (sel ? el.child(details(this, t, sel, pane, data)) : el))
       .when(!root.children.length, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.ansi8)
         .child("No subagents or workflows in this session yet.")))
       .child(this.hints(t));
