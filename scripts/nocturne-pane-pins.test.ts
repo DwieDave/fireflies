@@ -455,7 +455,7 @@ test("going to a web tab's pin: its pane, then that tab (show:{slot, tab}, and a
 });
 
 test("a web tab's tile is named by that tab's title (browser.tab-titles), the pane's by its shown tab", async () => {
-  const { webName } = await import("../defaults/mods/nocturne/sky.ts");
+  const { webName } = await import("../defaults/mods/nocturne/shelf.ts");
   sharedState["browser.titles"] = { w1: "Shown page" };
   sharedState["browser.tab-titles"] = { w1: { web: "Shown page", "web-2": "YouTube" } };
   expect(webName(WEB, "web-2")).toBe("YouTube");
@@ -466,7 +466,7 @@ test("a web tab's tile is named by that tab's title (browser.tab-titles), the pa
 });
 
 test("a web tile wears its page's favicon (browser.icons, browser.tab-icons by tab), else the web mark", async () => {
-  const { webIcon } = await import("../defaults/mods/nocturne/sky.ts");
+  const { webIcon } = await import("../defaults/mods/nocturne/shelf.ts");
   delete sharedState["browser.icons"];
   delete sharedState["browser.tab-icons"];
   expect(webIcon(WEB)).toBe(null);

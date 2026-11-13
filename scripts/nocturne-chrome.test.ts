@@ -68,7 +68,7 @@ const cx: any = {
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const walk = await import("../defaults/mods/nocturne/walk.ts");
-const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky.ts");
+const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky-plan.ts");
 const { GLOW_SQUARE } = await import("../defaults/mods/nocturne/kit.ts");
 
 beforeEach(() => {
