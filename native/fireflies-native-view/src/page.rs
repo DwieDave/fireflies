@@ -1,10 +1,14 @@
 //! What a `pip: true` web view's page says about itself: whether it has a
 //! `<video>` (event `web.video { present }`), so the mod shows its picture in
-//! picture button only then.
+//! picture button only then; and the icon it names (event `web.icon { href }`),
+//! so the mod can show its favicon on the page's tab.
 //!
 //! A script in every frame (WebKit's isolated client world: pages can't reach
 //! the handler) watches its document with a MutationObserver and reports its
 //! own yes/no when that changes. The view has a video while any frame says yes.
+//! A second script, in the main frame only, reports the document's
+//! `link[rel~=icon]` once it is parsed (null: none, the mod asks the origin's
+//! `/favicon.ico`). Nothing is fetched here: the mod fetches the icon itself.
 
 use crate::macos::emit_event;
 use objc2::{MainThreadMarker, MainThreadOnly};
@@ -33,6 +37,18 @@ const VIDEO_SCRIPT: &str = r#"(() => {
   addEventListener("pageshow", (e) => { if (e.persisted) check(); });
 })();"#;
 
+/// The main frame's icon link, once the document is parsed: an `http(s)` one,
+/// 32 px or 16 px if the page says, else an SVG, else the first.
+const ICON_SCRIPT: &str = r#"(() => {
+  const post = () => {
+    const links = [...document.querySelectorAll('link[rel~="icon" i]')].filter((l) => /^https?:/i.test(l.href));
+    const sized = (n) => links.find((l) => (l.getAttribute("sizes") || "").toLowerCase().split(/\s+/).includes(n));
+    const best = sized("32x32") || sized("16x16") || links.find((l) => /svg/i.test(l.type || l.href)) || links[0];
+    try { webkit.messageHandlers.herdrPage.postMessage(JSON.stringify({ type: "icon", href: best ? best.href : null })); } catch {}
+  };
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", post, { once: true }); else post();
+})();"#;
+
 thread_local! {
     /// Per web view: the frame documents that have a video now.
     static VIDEOS: RefCell<HashMap<String, HashSet<String>>> = RefCell::new(HashMap::new());
@@ -56,6 +72,14 @@ pub(crate) fn configure(
             &client,
         );
         content.addUserScript(&script);
+        let icon = WKUserScript::initWithSource_injectionTime_forMainFrameOnly_inContentWorld(
+            WKUserScript::alloc(mtm),
+            &NSString::from_str(ICON_SCRIPT),
+            WKUserScriptInjectionTime::AtDocumentStart,
+            true,
+            &client,
+        );
+        content.addUserScript(&icon);
         content.addScriptMessageHandler_contentWorld_name(
             handler,
             &client,
@@ -84,9 +108,25 @@ fn update(web_key: &str, change: impl FnOnce(&mut HashSet<String>)) -> Option<bo
     })
 }
 
-/// A message from the page script.
+/// The `web.icon` event an icon message makes: its `href` (an `http(s)` URL),
+/// else null. None: not an icon message.
+fn icon_event(m: &Value) -> Option<Value> {
+    if m["type"] != "icon" {
+        return None;
+    }
+    let href = m["href"]
+        .as_str()
+        .filter(|h| h.len() <= 4096 && (h.starts_with("https://") || h.starts_with("http://")));
+    Some(json!({ "href": href }))
+}
+
+/// A message from the page scripts.
 pub(crate) fn on_message(web_key: &str, generation: u64, body: &str) {
     let Ok(m) = serde_json::from_str::<Value>(body) else { return };
+    if let Some(icon) = icon_event(&m) {
+        emit_event(web_key, generation, "web.icon", icon);
+        return;
+    }
     if m["type"] != "video" {
         return;
     }
@@ -114,4 +154,21 @@ pub(crate) fn navigated(web_key: &str, generation: u64) {
 /// The view is disposed.
 pub(crate) fn web_gone(web_key: &str) {
     VIDEOS.with(|v| v.borrow_mut().remove(web_key));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::icon_event;
+    use serde_json::json;
+
+    #[test]
+    fn icon_messages_carry_an_http_href_or_null() {
+        let ev = |m| icon_event(&m);
+        assert_eq!(ev(json!({ "type": "icon", "href": "https://a.example/i.png" })), Some(json!({ "href": "https://a.example/i.png" })));
+        assert_eq!(ev(json!({ "type": "icon", "href": null })), Some(json!({ "href": null })));
+        // Not a web address (data:, javascript:, file:): none, the mod asks the origin.
+        assert_eq!(ev(json!({ "type": "icon", "href": "data:image/png;base64,AA" })), Some(json!({ "href": null })));
+        assert_eq!(ev(json!({ "type": "icon", "href": "file:///etc/passwd" })), Some(json!({ "href": null })));
+        assert_eq!(ev(json!({ "type": "video", "id": "x", "has": true })), None);
+    }
 }

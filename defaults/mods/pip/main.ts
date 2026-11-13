@@ -190,8 +190,27 @@ function dither(color: Color, cell = 1) {
 // The bar keeps this much for its title before controls go into ⋯.
 const TITLE = 70;
 
-// A seam between two sections: 2 px of dither with 3 px either side.
+// A seam between two sections: 1 px of dither, 8 px tall (the icons are
+// 12, the bar 21), in the dim of the icons: half its dots lit, so quieter
+// than they are. Its place on the bar is 8 px, the seam in the middle.
 const SEAM = 8;
+const SEAM_H = 8;
+
+/**
+ * How far each glyph's ink sits below the middle of its box, in em. An svg
+ * centres its drawing on its box; a glyph sits by its font's line box, and
+ * each one's ink lands differently. Measured on the bar at zoom 0.9 (2×
+ * pixels, 11 px text: 19.8 px to the em), where ❚❚ and ◧ sat 1.6 px low, ⇱
+ * 1.5, ✕ 1, ↩ « » ⤓ about 0.5, and ? 0.5 high (▶ and ⋯ weren't on the
+ * shot: none). In em, so the lift scales
+ * with the text size and the zoom: the same at zoom 1, and in the ⋯ menu.
+ */
+export const GLYPH_DROP: ReadonlyMap<string, number> = new Map([
+  ["↩", 0.035], ["«", 0.025], ["❚❚", 0.08], ["»", 0.025], ["◧", 0.085], ["⤓", 0.025], ["⇱", 0.075], ["?", -0.025], ["✕", 0.05],
+]);
+
+/** How far up a glyph is moved at text size `size` (px) to centre its ink. */
+export const lift = (glyph: string, size: number): number => Math.round((GLYPH_DROP.get(glyph) ?? 0) * size * 100) / 100;
 
 /** `list` cut into its sections, in order: [[control, …], …]; none empty. */
 export function sections<C extends { readonly section: string }>(list: readonly C[]): C[][] {
@@ -232,9 +251,9 @@ export function fit(controls: readonly Control[], width: number): Fitted {
   }
 }
 
-/** The seam between two sections of the bar: a short dithered upright. */
+/** The seam between two sections of the bar: a short, quiet dithered upright. */
 function seam(t: Theme) {
-  return div().relative().flex_none().w(2).h(12).mx((SEAM - 2) / 2).child(dither(t.ansi8, 1));
+  return div().relative().flex_none().w(1).h(SEAM_H).mx((SEAM - 1) / 2).child(dither(t.dim, 1));
 }
 
 const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
@@ -533,8 +552,13 @@ export default class Pip extends View {
     return CONTROLS.filter((c) => !(c.window && this.inPane));
   }
 
-  mark(c: Control, color: Color, s: PlayerState): Element {
-    return "icon" in c.mark ? svg(`${ICONS}/${c.mark.icon(s)}.svg`).size(12).text_color(color) : div().text_color(color).child(label(c.mark.glyph, s));
+  /** A control's mark at text size `size`: its svg, or its glyph lifted onto the middle line (GLYPH_DROP). */
+  mark(c: Control, color: Color, s: PlayerState, size = 11): Element {
+    if ("icon" in c.mark) return svg(`${ICONS}/${c.mark.icon(s)}.svg`).size(12).text_color(color);
+
+    const glyph = label(c.mark.glyph, s);
+
+    return div().relative().top(-lift(glyph, size)).text_color(color).child(glyph);
   }
 
   /** Under the pointer: bright on the hover color, its `name` in the title. */
@@ -653,7 +677,7 @@ export default class Pip extends View {
         .on_hover((h, cx) => { if (h) { this.cursor = i; cx.notify(); } })
         .on_click(() => this.pick(c))
         .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-        .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on ? t.accent : t.dim, s)))
+        .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on ? t.accent : t.dim, s, 12)))
         .child(div().relative().flex_1().min_w(0).truncate().child(label(c.name, s)));
     };
 
@@ -678,7 +702,8 @@ export default class Pip extends View {
         if (k === "escape" || k === "q") closeOwn();
       })
       .children(sections(items).flatMap((part, n) => [
-        ...(n ? [div().relative().h(RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.ansi8, 1)))] : []),
+        // The bar's seam lying down: as quiet, and short of the edges.
+        ...(n ? [div().relative().h(RULE).flex_none().mx(24).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.dim, 1)))] : []),
         ...part.map((c) => row(c, items.indexOf(c))),
       ]));
   }

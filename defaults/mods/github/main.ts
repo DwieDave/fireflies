@@ -1008,10 +1008,12 @@ export default class GitHub extends View implements Host {
 
     const handle = this.handle, resizing = this.resizing, picker = this.picker, confirm = this.confirm;
     const view = v_flex().id("github").size_full().bg(t.background).border(1).border_color(t.ansi8);
+    // A form open: ctrl-tab moves through it from any stop, not the app's tabs.
+    const formOpen = !!this.shown().form;
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
-      .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
+      .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
 

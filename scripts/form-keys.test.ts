@@ -60,13 +60,41 @@ test("tab is bound: shift-tab and tab become the forms' actions in the Form cont
   expect((globalThis as any).boundKeys).toEqual([
     { keystroke: "tab", action: "form::tab", context: "Form" },
     { keystroke: "shift-tab", action: "form::tab_back", context: "Form" },
+    { keystroke: "ctrl-tab", action: "form::tab", context: "Form > Input" },
+    { keystroke: "ctrl-shift-tab", action: "form::tab_back", context: "Form > Input" },
+    { keystroke: "ctrl-tab", action: "form::tab", context: "FormOpen" },
+    { keystroke: "ctrl-shift-tab", action: "form::tab_back", context: "FormOpen" },
   ]);
 });
 
+test("ctrl-tab: a root says when a form has its keyboard; the bound tab reaches the key handler as tab", async () => {
+  const keys = await import("../defaults/mods/github/form-keys.ts");
+  const root = () => {
+    const el: any = { acts: {}, key_context(c: string) { el.ctx = c; return el; }, on_action(n: string, f: any) { el.acts[n] = f; return el; } };
+    return el;
+  };
+  const heard: string[] = [];
+  const handler = (e: any) => heard.push(e.keystroke);
+  expect(keys.tabActions(root(), handler).ctx).toBe("Form"); // a pane without a form: ctrl-tab only from a text field
+  const open = keys.tabActions(root(), handler, true);
+  expect(open.ctx).toBe("Form FormOpen"); // a form open: from any stop
+  open.acts["form::tab"]({}, cx()); open.acts["form::tab_back"]({}, cx());
+  expect(heard).toEqual(["tab", "shift-tab"]);
+  // A ctrl-tab that reaches a key handler unbound moves all the same, even from a text area.
+  expect(K(1, "tab", { control: true })).toEqual({ act: "move", to: 2 });
+  expect(K(1, "tab", { control: true, shift: true })).toEqual({ act: "move", to: 0 });
+});
+
 test("every form's root takes the bound tab and hands it to its key handler; init binds it", () => {
+  // The GitHub window says when its form has the keyboard (ctrl-tab from any stop).
+  const gh = readFileSync(`${root}mods/github/main.ts`, "utf8");
+  expect(gh).toContain("const formOpen = !!this.shown().form;");
+  expect(gh).toContain("tabActions(el, (e, cx) => this.key(e, cx), formOpen)");
   for (const [file, call] of ROOTS) {
     const src = readFileSync(`${root}${file}`, "utf8");
-    expect([file, src.includes(`.on_key_down((e, cx) => ${call})\n      .map((el) => tabActions(el, (e, cx) => ${call}))`)]).toEqual([file, true]);
+    const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const wired = new RegExp(`${esc(`.on_key_down((e, cx) => ${call})`)}\\n\\s+${esc(`.map((el) => tabActions(el, (e, cx) => ${call}`)}(, \\w+)?\\)\\)`);
+    expect([file, wired.test(src)]).toEqual([file, true]); // a pane passes whether its form is open
     expect([file, /this\.handle = cx\.focus_handle\(\);\n\s+bindTab\(cx\);/.test(src)]).toEqual([file, true]);
   }
 });
@@ -117,7 +145,9 @@ test("formKey: choices change by arrows or typing, toggles flip, buttons move al
 
 test("formHints: the hint line names tab, the focused stop's keys, the submit key there, esc", () => {
   expect(formHints(FORM, 0, { submit: "save" })).toEqual([["tab ⇧tab", "move"], ["enter", "save"], ["esc", "cancel"]]);
-  expect(formHints(FORM, 1, { mac: true, submit: "save" })).toEqual([["tab ⇧tab", "move"], ["enter", "new line"], ["⌘enter", "save"], ["esc", "cancel"]]);
+  // A text area's tab indents: the line names the chord that leaves it.
+  expect(formHints(FORM, 1, { mac: true, submit: "save" })).toEqual([["⌃tab ⌃⇧tab", "move"], ["enter", "new line"], ["⌘enter", "save"], ["esc", "cancel"]]);
+  expect(formHints(FORM, 1)[0]).toEqual(["ctrl-tab ctrl-shift-tab", "move"]);
   expect(formHints(FORM, 2)[1]).toEqual(["← →", "change"]);
   expect(formHints(FORM, 6, { mac: true })).toEqual([["tab ⇧tab", "move"], ["enter", "press"], ["⌘enter", "submit"], ["esc", "cancel"]]);
   expect(submitKey(FORM, 5, true)).toBe("enter");

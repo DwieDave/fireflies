@@ -190,6 +190,14 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 "exec" if first == "sh" && a.get(1).map(from_host).and_then(|v| v.get(2).cloned()) == Some(json!("files")) => {
                     Some(json!({"code":0,"stdout":"d\u{0}src\u{0}f\u{0}README.md\u{0}","stderr":""}))
                 }
+                // The browser lists its favicon cache at start: none here (no folder).
+                "exec"
+                    if first == "ls"
+                        && a.get(1).map(from_host).and_then(|v| v.get(1).and_then(Value::as_str).map(|s| s.ends_with("/cache/browser-icons")))
+                            == Some(true) =>
+                {
+                    Some(json!({"code":1,"stdout":"","stderr":"ls: no such folder"}))
+                }
                 // usage reads Claude Code's login: none here (exit 3).
                 "exec"
                     if first == "sh"
