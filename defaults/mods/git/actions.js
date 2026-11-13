@@ -4,7 +4,7 @@
 // the data, the selection, the popups and the command log.
 
 import { run as herdrRun, notify, setShared } from "herdr";
-import { rewrite, nextUndo, nextRedo, UNDO, REDO } from "./history.js";
+import { rewrite, nextUndo, nextRedo, UNDO, REDO } from "./history.ts";
 import { partialPatch, hunkKeys } from "./patch.ts";
 import { shq } from "./git.ts";
 
