@@ -350,7 +350,7 @@ fn as_shipped(dir: &Path, files: &Files) -> bool {
     let mut found = Vec::new();
     walk(dir, dir, &mut found);
     // gpui-shell writes these editor helpers when it loads a mod.
-    found.retain(|f| !matches!(f.as_str(), "gpui-kit.d.ts" | "jsconfig.json") || files.contains_key(f));
+    found.retain(|f| !matches!(f.as_str(), "gpui-kit.d.ts" | "jsconfig.json" | "tsconfig.json") || files.contains_key(f));
     found.len() == files.len() && found.iter().all(|f| files.contains_key(f)) && untouched(dir, files)
 }
 

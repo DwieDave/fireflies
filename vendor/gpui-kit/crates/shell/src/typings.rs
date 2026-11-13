@@ -194,12 +194,61 @@ const EARLIER_EDITOR_CONFIGS: [&str; 1] = [r#"{
 }
 "#];
 
+/// HERDR: the configuration a TypeScript application (a `main.ts`) gets instead:
+/// checked at the standard its own repository holds it to, no escape hatches.
+/// Fireflies' defaults/tsconfig.json says the same for the shipped mods.
+const TYPESCRIPT_EDITOR_CONFIG: &str = r#"{
+  "// why": [
+    "Written once by gpui-shell for a TypeScript application, then yours: an",
+    "existing tsconfig.json is never replaced, and this file is not rewritten.",
+    "",
+    "Full strictness: .ts files run with their types removed, so the checker is",
+    "the only place a wrong type is caught. `erasableSyntaxOnly` reports what",
+    "removing cannot do (enum, namespace, parameter properties) here rather than",
+    "at load; imports name the file as it is (`./kit.ts`). `lib` leaves out the",
+    "browser's globals, which gpui-kit.d.ts declares for this runtime instead."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noImplicitReturns": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noFallthroughCasesInSwitch": true,
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true
+  }
+}
+"#;
+
 /// Writes the editor configuration beside an application, once.
 ///
 /// Only when the directory has neither configuration file: the first launch
 /// scaffolds one, and everything after that leaves the author's own settings
-/// alone. Returns the path only when it actually wrote.
+/// alone. Returns the path only when it actually wrote. HERDR: a TypeScript
+/// application (`main.ts`) gets a strict `tsconfig.json` beside a generated
+/// `jsconfig.json` (the editor reads tsconfig.json first), never beside one of
+/// the author's.
 fn write_editor_config(directory: &Path) -> std::io::Result<Option<PathBuf>> {
+    let typescript = directory.join(TYPESCRIPT_CONFIG_FILE_NAME);
+    if directory.join("main.ts").is_file() && std::fs::symlink_metadata(&typescript).is_err() {
+        let generated = std::fs::read_to_string(directory.join(CONFIG_FILE_NAME))
+            .map_or(true, |text| text == EDITOR_CONFIG || EARLIER_EDITOR_CONFIGS.contains(&text.as_str()));
+        if generated {
+            std::fs::write(&typescript, TYPESCRIPT_EDITOR_CONFIG)?;
+            return Ok(Some(typescript));
+        }
+    }
     let path = directory.join(CONFIG_FILE_NAME);
     let earlier = std::fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.is_file())
         && std::fs::read_to_string(&path)

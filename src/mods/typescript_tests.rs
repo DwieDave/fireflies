@@ -272,3 +272,39 @@ mod strip {
         }
     }
 }
+
+/// The editor configuration the runtime writes into a mod folder on load:
+/// a strict tsconfig.json for a TypeScript mod, the jsconfig.json of before
+/// upgraded to allow .ts imports, the author's own left alone.
+#[test]
+fn editor_configs_for_typescript_mods() {
+    let write = |dir: &Path| gpui_shell::write_type_declarations_with_components(dir, &gpui_shell::FrozenComponentRegistry::default()).unwrap();
+    let read = |path: PathBuf| std::fs::read_to_string(path).unwrap_or_default();
+
+    let typed = Tree::new();
+    typed.write("main.ts", "");
+    write(&typed.0);
+    assert!(read(typed.0.join("tsconfig.json")).contains("\"exactOptionalPropertyTypes\": true"));
+    assert!(!typed.0.join("jsconfig.json").exists(), "a TypeScript mod gets tsconfig.json alone");
+
+    // An installed mod's jsconfig.json from before TypeScript: generated, so upgraded.
+    let plain = Tree::new();
+    plain.write("main.js", "");
+    plain.write("jsconfig.json", include_str!("../../tests/fixtures/jsconfig-0.7.1.json"));
+    write(&plain.0);
+    assert!(read(plain.0.join("jsconfig.json")).contains("\"allowImportingTsExtensions\": true"));
+    assert!(!plain.0.join("tsconfig.json").exists());
+
+    // The same, converted to TypeScript: the strict tsconfig.json beside it.
+    std::fs::rename(plain.0.join("main.js"), plain.0.join("main.ts")).unwrap();
+    write(&plain.0);
+    assert!(read(plain.0.join("tsconfig.json")).contains("\"noUncheckedIndexedAccess\": true"));
+
+    // An author's own jsconfig.json is theirs: nothing is added over it.
+    let own = Tree::new();
+    own.write("main.ts", "");
+    own.write("jsconfig.json", "{ \"compilerOptions\": { \"checkJs\": false } }\n");
+    write(&own.0);
+    assert_eq!(read(own.0.join("jsconfig.json")), "{ \"compilerOptions\": { \"checkJs\": false } }\n");
+    assert!(!own.0.join("tsconfig.json").exists());
+}

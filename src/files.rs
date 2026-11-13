@@ -540,6 +540,8 @@ mod tests {
         assert!(watched(Path::new("mods/probe/target/output.js")));
         assert!(watched(Path::new("mods/probe/lib/jsconfig.json")));
         assert!(!watched(Path::new("mods/probe/jsconfig.json")));
+        assert!(!watched(Path::new("mods/probe/tsconfig.json")));
+        assert!(watched(Path::new("mods/probe/main.ts")));
         assert!(!watched(Path::new("mods/probe/gpui-kit.d.ts")));
         assert!(!watched(Path::new("mods/probe/.main.js.swp")));
         assert!(!watched(Path::new("mods/probe/.vscode/settings.json")));

@@ -61,7 +61,7 @@ use crate::{
 pub fn application_file_counts(path: &Path) -> bool {
     let parts: Vec<_> = path.components().map(|part| part.as_os_str().to_string_lossy()).collect();
     !parts.iter().any(|part| part.starts_with('.') || part.ends_with('~') || part == "node_modules")
-        && !(parts.len() == 1 && parts[0] == "jsconfig.json")
+        && !(parts.len() == 1 && (parts[0] == "jsconfig.json" || parts[0] == "tsconfig.json"))
         && !parts.last().is_some_and(|part| part == "gpui-kit.d.ts")
 }
 
