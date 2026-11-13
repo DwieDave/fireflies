@@ -100,10 +100,11 @@ export function passwordBar(t: Theme, bar: PasswordBar) {
 
   return h_flex().id("pw-bar").size_full().px(12).gap(8).items_center().text_size(12)
     .child(svg(`${ART}/lock.svg`).size(9).flex_none().text_color(t.working))
-    .child(div().flex_none().text_color(t.foreground).child(name))
+    .child(div().min_w(0).truncate().text_color(t.foreground).child(name))
     .child(div().flex_none().text_color(t.dim).child("· password"))
     .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
-    .child(div().flex_none().text_size(11).text_color(t.dim).child("type it, enter · ctrl-c cancels"))
+    // The hint gives way first with the name (a long one, a narrow window): cancel always shows.
+    .child(div().min_w(0).truncate().text_size(11).text_color(t.dim).child("enter · ctrl-c"))
     .child(actionChip(t, "pw-cancel", "cancel", t.blocked, cancel));
 }
 

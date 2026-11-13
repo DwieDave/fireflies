@@ -138,6 +138,11 @@ test("a switch started from the deck: its prompt opens the password window over 
   const { r } = bar(spec, "ov1");
   expect(texts(r)).toEqual(expect.arrayContaining(["switch homelab", "· password", "cancel"]));
   expect(find(r, "pw-cancel")).toBeDefined();
+  // The name and the hint give way in a narrow window; the cancel never does.
+  const holding = (text: string) => find(r, "pw-bar")!.nodes.find((n: any) => n?.nodes?.includes(text));
+  expect(find(r, "pw-cancel")!.calls.flex_none).toBeDefined();
+  expect(holding("switch homelab")!.calls.truncate).toBeDefined();
+  expect(holding("enter · ctrl-c")!.calls.truncate).toBeDefined();
 
   // Typed and enter: sudo takes it, the output moves on, the window closes.
   type(t, `${SECRET}\n`);
