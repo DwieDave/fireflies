@@ -42,166 +42,172 @@ type Writable<T> = { -readonly [K in keyof T]: T[K] };
 /** A header path without its `--- ` / `+++ `, a tab's date and quotes. */
 const headerPath = (s: string): string => s.slice(4).replace(/\t.*$/, "").replace(/^"|"$/g, "");
 
-/** Cuts a unified diff into rows (see PatchRow). */
-export function parse(text: string | null | undefined): Patch {
-  const lines = (text ?? "").replace(/\r\n/g, "\n").split("\n");
-
-  if (lines.at(-1) === "") lines.pop();
-
-  const rows: PatchRow[] = [];
-  const files: Writable<PatchFile>[] = [];
+/** A diff being read: its rows and files so far, the open file, and where
+ *  its hunk is (the old and new line numbers, the lines it has left). */
+class PatchReader {
+  readonly rows: PatchRow[] = [];
+  readonly files: Writable<PatchFile>[] = [];
   // The files whose ---/+++ header was read (git's comes after its "diff --git" line).
-  const headed = new WeakSet<PatchFile>();
-  let f: Writable<PatchFile> | null = null;
-  let oldN = 0;
-  let newN = 0;
-  let inHunk = false;
-  let left = { o: 0, n: 0 };
+  readonly headed = new WeakSet<PatchFile>();
+  f: Writable<PatchFile> | null = null;
+  oldN = 0;
+  newN = 0;
+  inHunk = false;
+  left = { o: 0, n: 0 };
 
-  const start = (path: string, old: string | null = null): Writable<PatchFile> => {
+  /** A new file's row. */
+  start(path: string, old: string | null = null): Writable<PatchFile> {
     const file: Writable<PatchFile> = { kind: "file", path, old, add: 0, del: 0, binary: false };
 
-    files.push(file);
-    rows.push(file);
-    inHunk = false;
+    this.files.push(file);
+    this.rows.push(file);
+    this.inHunk = false;
 
     return file;
-  };
+  }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i] ?? "";
+  /** A line inside a hunk, while its counts say it goes on (a "-- " line is a
+   *  deletion there, not a mail's signature). True when it was one; any other
+   *  line ends the hunk. */
+  hunkLine(line: string): boolean {
+    const f = this.f;
 
-    // Inside a hunk its counts say where it ends (a "-- " line is a deletion there, not a mail's signature).
-    if (f && inHunk && (left.o > 0 || left.n > 0)) {
-      const k = line[0] ?? " ";
-      const body = line.slice(1);
+    if (!f || !this.inHunk || !(this.left.o > 0 || this.left.n > 0)) return false;
 
-      if (k === "+") {
-        f.add++;
-        left.n--;
-        rows.push({ kind: "+", n: newN++, text: body });
+    const k = line[0] ?? " ";
+    const body = line.slice(1);
 
-        continue;
-      }
+    if (k === "+") {
+      f.add++;
+      this.left.n--;
+      this.rows.push({ kind: "+", n: this.newN++, text: body });
+    } else if (k === "-") {
+      f.del++;
+      this.left.o--;
+      this.rows.push({ kind: "-", o: this.oldN++, text: body });
+    } else if (k === " " || line === "") {
+      this.left.o--;
+      this.left.n--;
+      this.rows.push({ kind: " ", o: this.oldN++, n: this.newN++, text: body });
+    } else if (k === "\\") this.rows.push({ kind: "\\", text: line.slice(2) });
+    else {
+      this.inHunk = false;
 
-      if (k === "-") {
-        f.del++;
-        left.o--;
-        rows.push({ kind: "-", o: oldN++, text: body });
-
-        continue;
-      }
-
-      if (k === " " || line === "") {
-        left.o--;
-        left.n--;
-        rows.push({ kind: " ", o: oldN++, n: newN++, text: body });
-
-        continue;
-      }
-
-      if (k === "\\") {
-        rows.push({ kind: "\\", text: line.slice(2) });
-
-        continue;
-      }
-
-      inHunk = false;
+      return false;
     }
 
-    if (inHunk && line.startsWith("\\")) {
-      rows.push({ kind: "\\", text: line.slice(2) });
+    return true;
+  }
 
-      continue;
-    }
-
-    // git's a/ b/, or its mnemonic prefixes (diff.mnemonicPrefix: c/ w/ i/ o/).
+  /** A file's head line: git's (a/ b/, or its mnemonic prefixes, diff.mnemonicPrefix:
+   *  c/ w/ i/ o/), or another diff's `diff …`. True when it was one. */
+  diffLine(line: string): boolean {
     const git = /^diff --git "?[a-z]\/(.+?)"? "?[a-z]\/(.+?)"?$/.exec(line);
 
     if (git) {
       const a = git[1] ?? "";
       const b = git[2] ?? "";
 
-      f = start(b, a !== b ? a : null);
+      this.f = this.start(b, a !== b ? a : null);
 
-      continue;
+      return true;
     }
 
-    if (line.startsWith("diff ")) {
-      f = start(line.replace(/^diff\s+(-\S+\s+)*/, "").split(/\s+/).pop() ?? line);
+    if (!line.startsWith("diff ")) return false;
 
-      continue;
+    this.f = this.start(line.replace(/^diff\s+(-\S+\s+)*/, "").split(/\s+/).pop() ?? line);
+
+    return true;
+  }
+
+  /** A `--- a` / `+++ b` header pair: the file it names (git's headers come
+   *  after its "diff --git" line: the file is already open), added or deleted. */
+  header(line: string, next: string): void {
+    let a = headerPath(line);
+    let b = headerPath(next);
+    // git's one-letter prefixes go when both sides have one (a plain diff's x/ stays).
+    const pre = /^[a-z]\//;
+
+    if ((pre.test(a) || a === "/dev/null") && (pre.test(b) || b === "/dev/null")) {
+      a = a.replace(pre, "");
+      b = b.replace(pre, "");
     }
 
-    const next = lines[i + 1];
+    const path = b === "/dev/null" ? a : b;
+    const last = this.rows.at(-1)?.kind;
+    const f = this.f;
+    const file: Writable<PatchFile> = !f || this.headed.has(f) || this.inHunk || last === "+" || last === " " || last === "-" ? this.start(path) : f;
 
-    if (line.startsWith("--- ") && next?.startsWith("+++ ")) {
-      let a = headerPath(line);
-      let b = headerPath(next);
-      // git's one-letter prefixes go when both sides have one (a plain diff's x/ stays).
-      const pre = /^[a-z]\//;
+    this.f = file;
+    this.headed.add(file);
 
-      if ((pre.test(a) || a === "/dev/null") && (pre.test(b) || b === "/dev/null")) {
-        a = a.replace(pre, "");
-        b = b.replace(pre, "");
-      }
+    if (path) file.path = path;
 
-      const path = b === "/dev/null" ? a : b;
-      const last = rows.at(-1)?.kind;
-      // git's headers come after its "diff --git" line: the file is already open.
-      const file: Writable<PatchFile> = !f || headed.has(f) || inHunk || last === "+" || last === " " || last === "-" ? start(path) : f;
+    if (a === "/dev/null") file.status = "added";
 
-      f = file;
-      headed.add(file);
+    if (b === "/dev/null") file.status = "deleted";
+  }
 
-      if (path) file.path = path;
+  /** A hunk's `@@ -o,n +o,n @@` line: where its lines start, how many it has. */
+  hunk(h: RegExpExecArray, line: string): void {
+    this.f ??= this.start("");
+    this.oldN = Number(h[1]);
+    this.newN = Number(h[3]);
+    this.left = { o: h[2] === undefined ? 1 : Number(h[2]), n: h[4] === undefined ? 1 : Number(h[4]) };
+    this.inHunk = true;
+    this.rows.push({ kind: "@", range: line.slice(0, line.indexOf("@@", 2) + 2), text: h[5] ?? "" });
+  }
 
-      if (a === "/dev/null") file.status = "added";
+  /** Any other line, a note: a binary file's, a rename's old name. */
+  note(line: string): void {
+    const f = this.f;
 
-      if (b === "/dev/null") file.status = "deleted";
+    if (f && /^Binary files .* differ$|^GIT binary patch$/.test(line)) f.binary = true;
+    else {
+      const renamed = f ? /^rename from (.+)$/.exec(line) : null;
 
+      if (f && renamed) f.old = renamed[1] ?? null;
+    }
+
+    this.rows.push({ kind: "note", text: line });
+  }
+}
+
+/** Cuts a unified diff into rows (see PatchRow). */
+export function parse(text: string | null | undefined): Patch {
+  const lines = (text ?? "").replace(/\r\n/g, "\n").split("\n");
+
+  if (lines.at(-1) === "") lines.pop();
+
+  const r = new PatchReader();
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i] ?? "";
+
+    if (r.hunkLine(line)) continue;
+
+    if (r.inHunk && line.startsWith("\\")) r.rows.push({ kind: "\\", text: line.slice(2) });
+    else if (r.diffLine(line)) continue;
+    else if (line.startsWith("--- ") && lines[i + 1]?.startsWith("+++ ")) {
+      r.header(line, lines[i + 1] ?? "");
       i++;
+    } else {
+      const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/.exec(line);
 
-      continue;
+      if (hunk) r.hunk(hunk, line);
+      else r.note(line);
     }
-
-    const hunk = /^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@ ?(.*)$/.exec(line);
-
-    if (hunk) {
-      f ??= start("");
-
-      oldN = Number(hunk[1]);
-      newN = Number(hunk[3]);
-      left = { o: hunk[2] === undefined ? 1 : Number(hunk[2]), n: hunk[4] === undefined ? 1 : Number(hunk[4]) };
-      inHunk = true;
-      rows.push({ kind: "@", range: line.slice(0, line.indexOf("@@", 2) + 2), text: hunk[5] ?? "" });
-
-      continue;
-    }
-
-    if (f && /^Binary files .* differ$|^GIT binary patch$/.test(line)) {
-      f.binary = true;
-      rows.push({ kind: "note", text: line });
-
-      continue;
-    }
-
-    const renamed = f ? /^rename from (.+)$/.exec(line) : null;
-
-    if (f && renamed) f.old = renamed[1] ?? null;
-
-    rows.push({ kind: "note", text: line });
   }
 
   let add = 0;
   let del = 0;
 
-  for (const x of files) {
+  for (const x of r.files) {
     add += x.add;
     del += x.del;
   }
 
-  return { rows, files, add, del };
+  return { rows: r.rows, files: r.files, add, del };
 }
 
 /** Where each file starts in `rows`, for ] / [ (next / previous file). */

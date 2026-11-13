@@ -4,7 +4,6 @@
 # This list only shrinks: take a line off when its file or function is split,
 # never add one. tests/mods_typescript.rs (mods_stay_under_the_size_limits)
 # checks it against `oxlint -c oxlint.size.json defaults/mods`.
-defaults/mods/editor/diff.ts parse
 defaults/mods/editor/main.ts
 defaults/mods/editor/main.ts bar
 defaults/mods/editor/main.ts cardView
@@ -16,7 +15,5 @@ defaults/mods/editor/main.ts newDoc
 defaults/mods/editor/main.ts startServer
 defaults/mods/editor/main.ts tabStrip
 defaults/mods/editor/main.ts vimCommand
-defaults/mods/file-tree/diff.ts parse
 defaults/mods/finder/main.ts render
 defaults/mods/nocturne/tabs.ts render
-defaults/mods/preview/diff.ts parse
