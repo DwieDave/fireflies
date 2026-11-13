@@ -7790,7 +7790,7 @@ export default class Probe extends View {
         for (name, text) in [
             ("detect.ts", include_str!("../defaults/mods/scripts/detect.ts")),
             ("nix.ts", include_str!("../defaults/mods/scripts/nix.ts")),
-            ("runs.js", include_str!("../defaults/mods/scripts/runs.js")),
+            ("runs.ts", include_str!("../defaults/mods/scripts/runs.ts")),
         ] {
             std::fs::write(folder.join(name), text).unwrap();
         }

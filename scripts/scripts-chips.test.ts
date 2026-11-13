@@ -20,7 +20,7 @@ mock.module("herdr", () => ({
 }));
 
 const term = (address: string, name: string, live: boolean, extra: any = {}) => ({
-  address, state: live ? "running" : "finished", exit_code: live ? undefined : 0, created_ms: Date.now() - 15000, finished_ms: live ? null : Date.now(),
+  address, state: live ? "running" : "finished", exit_code: live ? null : 0, created_ms: Date.now() - 15000, finished_ms: live ? null : Date.now(),
   labels: { "nocturne.script": `nix:${name}`, "nocturne.script.name": name, "nocturne.script.runner": "nix", "nocturne.script.cmd": `run ${name}`, "nocturne.script.folder": "/src" }, ...extra,
 });
 beforeEach(() => {
@@ -30,7 +30,7 @@ beforeEach(() => {
 
 const deck = await import("../defaults/mods/scripts/main.js");
 const { default: Deck, CHIP, CHIPS_W, ASK_MS } = deck;
-const { JOBS } = await import("../defaults/mods/scripts/runs.js");
+const { JOBS } = await import("../defaults/mods/scripts/runs.ts");
 
 function open() {
   const d: any = new Deck();

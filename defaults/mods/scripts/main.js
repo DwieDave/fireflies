@@ -32,10 +32,10 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, shared, setShared, terminals, theme, window as appWindow } from "herdr";
+import { closeOverlay, exec, hc, home, nextCommand, notify, props, settings, shared, setShared, theme, window as appWindow } from "herdr";
 import { PROBE, parseProbe, detect, rank } from "./detect.ts";
 import { FLAKE_SHOW, nixScripts, oldId, APP_MANAGEMENT, needsAppManagement } from "./nix.ts";
-import { runs, withEnded, ENDED, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.js";
+import { allRuns, elapsed, tone, start, watch, stop, dismiss, restart } from "./runs.ts";
 import { hint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 
 const ART = "mods/nocturne/art";
@@ -117,7 +117,7 @@ export default class ScriptsDeck extends View {
     // Opened by nocturne.scripts-again: runs this folder's last script once it's found.
     this.again = Boolean(p.again);
     // Opened from a failure's toast: straight to that run's output.
-    const shown = p.show && runs(withEnded(terminals(), shared(ENDED))).find((r) => r.address === p.show);
+    const shown = p.show && allRuns().find((r) => r.address === p.show);
     if (shown && !shown.live) this.showOutput(shown, cx);
     this.hover = null;
     this.scroll = 0;
@@ -151,7 +151,7 @@ export default class ScriptsDeck extends View {
     }
     this.beat();
     // Elapsed times tick; the strip learns the deck is still open.
-    cx.timer.every(1000, (cx) => { this.beat(); if (runs(withEnded(terminals(), shared(ENDED))).some((r) => r.live)) cx.notify(); });
+    cx.timer.every(1000, (cx) => { this.beat(); if (allRuns().some((r) => r.live)) cx.notify(); });
     this.look(cx);
   }
 
@@ -667,7 +667,7 @@ export default class ScriptsDeck extends View {
   render() {
     const t = theme();
     if (this.bar) return this.passwordBar(t);
-    const all = runs(withEnded(terminals(), shared(ENDED)));
+    const all = allRuns();
     const rows = this.scripts ? rank(this.scripts, this.query, this.recent()) : [];
     const items = [...all.map((r) => ({ kind: "run", r })), ...rows.map((row) => ({ kind: "script", row }))];
     // The cursor starts on the first script that needs no password: a stray
