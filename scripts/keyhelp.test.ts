@@ -262,13 +262,15 @@ test("editor: the gutter's numbers sit in from the pane's edge as the top bar's 
   const m = await import("../defaults/mods/editor/main.ts");
   const v: any = surface(m.default, ["body", "shown"], { cur: {}, state: "ready", markdown: false, view: "text", editor: {} });
   const body = v.body(theme, "mono");
-  expect(body.calls.pl).toEqual([m.GUTTER_INSET]);
-  expect(m.GUTTER_INSET).toBe(12);
+  const { GUTTER_INSET } = await import("../defaults/mods/editor/pane-kit.ts");
+  expect(body.calls.pl).toEqual([GUTTER_INSET]);
+  expect(GUTTER_INSET).toBe(12);
 });
 
 test("editor: the asked-for hover (cmd-i) says why there's no answer; the pointer's hover stays quiet", async () => {
   const m = await import("../defaults/mods/editor/main.ts");
-  const v: any = surface(m.default, ["showCard", "serverNote", "cardState", "answered", "ask", "settling", "shown"], { cur: {}, problems: [], lang: "rust", path: "/p/a.rs", hovers: new Map(), progress: new Map(),
+  // card.ts's own steps (watchFocus, later) run as they are: an editor without the keyboard.
+  const v: any = surface(m.default, ["showCard", "serverNote", "cardState", "answered", "ask", "settling", "shown"], { cur: {}, problems: [], lang: "rust", path: "/p/a.rs", hovers: new Map(), progress: new Map(), editor: { focused: () => false },
     server: { status: "none", why: "missing", names: ["rust-analyzer"], envrc: "/p", envKind: "blocked" } });
   v.showCard(1, 2, true, cx());
   expect(v.card.note.text).toMatch(/\/p\/\.envrc isn't allowed/);
