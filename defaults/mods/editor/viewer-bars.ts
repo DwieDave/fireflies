@@ -14,6 +14,7 @@ import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import { held, lastPart, unzoom, basename, MOD, stop, checker, ART } from "./viewer-state.ts";
 import { goTo } from "./viewer-load.ts";
 import { actual, copyPath, editable, fit, openInSystem, pageGo, ready, reveal, turn, zoomBy } from "./viewer-pan.ts";
+import { openInDatabases } from "./viewer-table.ts";
 import type { default as Viewer } from "./viewer.ts";
 
 /** A control on the bar or the strip; tab / shift-tab reach it in drawing order. */
@@ -223,6 +224,8 @@ export function drawStrip(v: Viewer, t: Theme): Element | null {
       if (i !== shownAt) v.pickTable(i, cx);
     }, i === shownAt)))
     .when(Boolean(note), (el) => el.child(div().flex_1().min_w(0).when(tables.length > 0, (e2) => e2.pl(8)).truncate().text_color(t.ansi3).child(note ?? "")))
+    // The whole database in the Databases window: its structure, every row, queries.
+    .when(v.kind === "sqlite" && v.dbMod, (el) => el.child(div().flex_1()).child(chip(v, t, "db-open", "open in Databases", () => openInDatabases(v.path, "the preview"))))
     .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
 }
 

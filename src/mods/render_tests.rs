@@ -174,9 +174,12 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
             let reply = match name {
                 // github's cache (data/github/cache.json): none yet.
                 "readTextFile" if first == "/fixture/app/settings.json" || first == "/fixture/.ssh/config" || first == "/fixture/app/data/github/cache.json" => Some(Value::Null),
-                // databases: its saved connections and query tabs, a folder's .env files: none here.
+                // databases: its saved connections and query tabs, a folder's .env files: none here; the files
+                // pane and the preview look for its mod.json (the Databases mod installed).
                 "readTextFile"
-                    if first.as_str().is_some_and(|p| p.starts_with("/fixture/app/data/databases/") || p.rsplit('/').next().is_some_and(|f| f.starts_with(".env"))) =>
+                    if first.as_str().is_some_and(|p| {
+                        p.starts_with("/fixture/app/data/databases/") || p == "/fixture/app/mods/databases/mod.json" || p.rsplit('/').next().is_some_and(|f| f.starts_with(".env"))
+                    }) =>
                 {
                     Some(Value::Null)
                 }

@@ -143,12 +143,15 @@ import type { At, Entry, LookState, Side } from "./split-size.ts";
 import type { Size } from "./image.ts";
 import { newLook, DIVIDER } from "./split-size.ts";
 import type { ViewerProps } from "./viewer-state.ts";
+import { hasDatabases } from "./viewer-table.ts";
 
 export default class Files extends View {
   on: string | null = null;
   slot: string | null = null;
   // A pane of its own (a folder link, files.open): closes itself, opens files beside itself.
   alone = false;
+  // The Databases mod is installed: a database file's menu offers it (b).
+  dbMod = false;
   filters: Filters = { hidden: false, ignored: false };
   query = "";
   hits: (HeadRow | HitRow)[] | null = null;
@@ -234,6 +237,10 @@ export default class Files extends View {
     this.on = pr.on ?? null;
     this.slot = slot;
     this.alone = Boolean(pr.path);
+    cx.spawn(async (cx) => {
+      this.dbMod = await hasDatabases();
+      cx.notify();
+    });
 
     const kept = slot ? readSharedMap(shared, FILTERS).get(slot) : undefined;
 

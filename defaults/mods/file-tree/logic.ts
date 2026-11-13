@@ -195,7 +195,7 @@ export function nvimLaunch(abs: string, dir: boolean): Launch {
 }
 
 /** What a menu entry does (the pane's `act`). */
-export type Act = "toggle" | "pane" | "root" | "edit" | "nvim" | "open" | "viewer" | "web" | "other" | "terminal"
+export type Act = "toggle" | "pane" | "root" | "edit" | "nvim" | "open" | "viewer" | "web" | "databases" | "other" | "terminal"
   | "new-file" | "new-folder" | "rename" | "cut" | "paste" | "delete" | "copy" | "look" | "close"
   | "delete-set" | "cut-set" | "copy-set" | "unmark";
 
@@ -219,6 +219,8 @@ export interface MenuOptions {
   readonly look?: boolean;
   readonly web?: boolean;
   readonly viewer?: boolean;
+  /** The Databases mod is installed (a database file offers it). */
+  readonly databases?: boolean;
 }
 
 /** The right-click menu for a row: [{ key, label, act }], `act` naming the
@@ -227,7 +229,7 @@ export interface MenuOptions {
  *  (it closes); `clip`: something is cut (paste shows); `look`: the preview
  *  split is open (its entry hides it); `viewer`: the file has a viewer pane
  *  (Markdown, the preview's kinds). */
-export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false }: MenuOptions = {}): MenuItem[] {
+export function menuItems(row: MenuTarget, { pane = false, clip = false, look = false, web = true, viewer = false, databases = false }: MenuOptions = {}): MenuItem[] {
   const root = row.dir && !row.path;
 
   const items: MenuItem[] = row.dir
@@ -243,6 +245,7 @@ export function menuItems(row: MenuTarget, { pane = false, clip = false, look = 
         // A file with a viewer pane (Markdown, a picture, a PDF): there, beside, instead of a tab of the editor.
         ...(viewer ? [{ key: "p", label: "Open in its viewer pane", act: "viewer" } as const] : []),
         ...(web && isHtml(row.path) ? [{ key: "w", label: "Open in a web pane", act: "web" } as const] : []),
+        ...(databases && isDatabaseFile(row.path) ? [{ key: "b", label: "Open in Databases", act: "databases" } as const] : []),
         { key: "e", label: "Edit as text", act: "other" },
         { key: "E", label: "Open in $EDITOR", act: "terminal" },
         { key: "v", label: "Open in Neovim", act: "nvim" },
@@ -267,6 +270,9 @@ export function menuItems(row: MenuTarget, { pane = false, clip = false, look = 
 }
 
 // ---- a page in the web pane
+
+/** A SQLite database by its name: the menu's "Open in Databases" (b) offers it there. */
+export const isDatabaseFile = (path: string): boolean => /\.(db|db3|sqlite|sqlite3)$/i.test(path);
 
 /** An HTML page: w (and the menu's "Open in a web pane") shows it in browser. */
 export const isHtml = (path: string): boolean => /\.html?$/i.test(path);
