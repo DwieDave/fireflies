@@ -12,7 +12,7 @@ import { isRawObject, mapOf } from "./guards.ts";
 import { dither, givenName, goToPin, dockWeb, cornerTicks } from "./kit.ts";
 import type { JarItem } from "./pins.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
-import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, CAPTION, paneOf } from "./sky-plan.ts";
+import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
 import { pinActs } from "./sky-keys.ts";
 import type Sky from "./sky.ts";
 
@@ -174,24 +174,15 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
 }
 
-/** The shelf at the jar's foot, `w` wide: a dithered board, the tiles in
- *  rows in the order pinned, and a caption naming the tile under the pointer
- *  or the keyboard's cursor, else the focused one, else how many it keeps. */
+/** The shelf at the jar's foot, `w` wide: a dithered board and the tiles in
+ *  rows in the order pinned, the "+" tile last. Each tile names itself in its
+ *  tooltip; the shelf has no caption line. */
 export function shelfView(sky: Sky, t: Theme, kept: readonly JarItem[], w: number): Element {
   sky.tileOn = null;
 
   const tiles = [...kept.map((it) => pinTile(sky, t, it)), newTile(sky, t)];
-  const adding = sky.tileHover === "shelf-new" || sky.tileOn === "shelf-new";
-  const named = adding ? undefined : kept.find((it) => it.key === sky.tileHover) ?? kept.find((it) => it.key === sky.tileOn) ?? kept.find((it) => pinFocus(it));
-  const where = named ? pinWhere(sky, named) : "";
 
   return v_flex().id("shelf").w(w)
     .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.ansi8, 1)))
-    .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles))
-    .child(h_flex().h(CAPTION.h).mt(CAPTION.gap).px(SHELF_PAD).gap(6).items_center().min_w(0).text_size(11)
-      .when(Boolean(named), (el) => (named ? el
-        .child(div().flex_none().max_w(w - 2 * SHELF_PAD - 40).truncate().text_color(t.foreground).child(pinName(named)))
-        .when(Boolean(where), (e2) => e2.child(div().min_w(0).truncate().text_color(t.dim).child(where))) : el))
-      .when(!named, (el) => el.child(div().text_color(t.dim)
-        .child(adding ? "new web pane in the dock" : `${kept.length} ${kept.length === 1 ? "pane" : "panes"} kept`))));
+    .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles));
 }

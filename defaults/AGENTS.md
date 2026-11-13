@@ -1342,12 +1342,12 @@ on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, m
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
 sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (clear of the last firefly's halo, the tiles and caption in from the
+foot (clear of the last firefly's halo, the tiles in from the
 glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
 apart from the fireflies'. A tile is moonlit while its pane is on screen, the
-focused one wears the corner ticks; the caption line under the shelf names
-the tile under the pointer or the keyboard's cursor (else the focused one):
-its name, then its kind, its space when it's another one, "parked". A click
+focused one wears the corner ticks; the shelf has no caption line: a tile's
+tooltip names it (its name, then its kind, its space when it's another one,
+"parked"). A click
 or enter goes to it in whatever tab and space (a parked pane comes back);
 right-click opens its pane's menu. A shell's pin is its terminal's
 (`terminal.pin`, ends with it); a mod pane's is kept in shared

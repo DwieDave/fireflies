@@ -70,15 +70,15 @@ export function laneReach(lanes: readonly Lane[]): Reach[] {
   return out;
 }
 
-/** The shelf's height for `n` tiles in `w` px (layout px): the board, the
- *  rows of tiles (as many to a row as fit), the caption line. */
+/** The shelf's height for `n` tiles in `w` px (layout px): the board and the
+ *  rows of tiles (as many to a row as fit). A tile's name is its tooltip. */
 export function shelfHeight(n: number, w: number): number {
   if (!n) return 0;
 
   const perRow = Math.max(1, Math.floor((w - 2 * SHELF_PAD + TILE_GAP) / (TILE + TILE_GAP)));
   const rows = Math.ceil(n / perRow);
 
-  return BOARD + BOARD_GAP + rows * TILE + (rows - 1) * TILE_GAP + CAPTION.gap + CAPTION.h;
+  return BOARD + BOARD_GAP + rows * TILE + (rows - 1) * TILE_GAP;
 }
 
 /** The open jar's rows (jarPlan). */
@@ -111,8 +111,7 @@ export function jarPlan(lanes: readonly number[], shelfH = 0): JarPlan {
   return { ys, shelfY: shelfH ? (lanes.length ? y + SHELF_ABOVE : y) : 0, jarH };
 }
 
-/** The shelf's inset from the jar's walls (layout px): its tiles and caption
- *  start where a firefly's square does (its lane's mark at x 6, the glow's
+/** The shelf's inset from the jar's walls (layout px): its tiles start where a firefly's square does (its lane's mark at x 6, the glow's
  *  square GLOW_SQUARE.at in), so they line up under the fireflies. */
 export const SHELF_PAD = 6 + GLOW_SQUARE.at;
 
@@ -214,10 +213,9 @@ export const GLINT = 1800;
 // The shelf at the jar's foot, where pinned panes that aren't agents sit as
 // tiles (pins.ts onShelf): a tile's size and the gap between tiles, the
 // room above it under the last firefly (clear of its halo: air before the
-// board), its dithered board, the board's gap to the tiles, the caption line
-// under them (its gap above, its height); SHELF_PAD (above) is its inset from
-// the jar's walls. On the rail: smaller tiles, two abreast.
-export const TILE = 28, TILE_GAP = 6, SHELF_ABOVE = 10, BOARD = 2, BOARD_GAP = 6, CAPTION = { gap: 6, h: 14 } as const;
+// board), its dithered board, the board's gap to the tiles; SHELF_PAD (above)
+// is its inset from the jar's walls. On the rail: smaller tiles, two abreast.
+export const TILE = 28, TILE_GAP = 6, SHELF_ABOVE = 10, BOARD = 2, BOARD_GAP = 6;
 export const RAIL_TILE = 18, RAIL_TILE_GAP = 4;
 
 /** A control the sidebar's cursor walks: its id, its section, what the keyboard's verbs do on it. */

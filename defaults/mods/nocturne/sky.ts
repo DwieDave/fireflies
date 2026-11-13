@@ -13,8 +13,8 @@
 //            the top, in the order pinned, status and all; the glass
 //            glints when one flies in and breathes red while one needs you;
 //            other pinned panes (web, editor, files, a shell) sit as tiles
-//            on a shelf at the jar's foot, a caption naming the one under
-//            the pointer or the cursor (shelf());
+//            on a shelf at the jar's foot, each named in its tooltip
+//            (shelf.ts);
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
 //            nocturne.agent-next / agent-prev walk the agents, then the shelf's

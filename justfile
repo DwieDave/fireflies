@@ -163,6 +163,8 @@ test:
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.
     bun test scripts/nocturne-chrome.test.ts
+    # The jar's shelf as drawn: no caption, a tile's icon by kind, the + tile's dock menu.
+    bun test scripts/nocturne-shelf.test.ts
     # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
     bun test scripts/nocturne-tab-seam.test.ts
     # The pane menu's "Move to" rows: flat up to three places, else levels (this space's tabs, a new tab, the other spaces); every key and the click path.

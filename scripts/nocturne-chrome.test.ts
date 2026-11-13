@@ -119,7 +119,7 @@ test("the shelf's board sits clear of the last firefly's halo", () => {
   expect(plan.shelfY - laneEnd).toBeGreaterThanOrEqual(6 + 4);
 });
 
-test("the shelf's tiles and caption start where a firefly's square does, clear of the glass", () => {
+test("the shelf's tiles start where a firefly's square does, clear of the glass", () => {
   // A jar lane's firefly: its mark's box 6 px into the lane, the glow's square GLOW_SQUARE.at into that.
   expect(SHELF_PAD).toBe(6 + GLOW_SQUARE.at);
   // the focused tile's corner ticks (3 px out) stay off the jar's inner wall
@@ -127,6 +127,18 @@ test("the shelf's tiles and caption start where a firefly's square does, clear o
   // a 232 px shelf still holds six 28 px tiles to a row
   expect(shelfHeight(6, 232)).toBe(shelfHeight(1, 232));
   expect(shelfHeight(7, 232)).toBeGreaterThan(shelfHeight(6, 232));
+});
+
+// ---- jarfly item 1: no "n panes kept" line; the shelf closes up under its tiles
+
+test("the shelf is its board and its rows of tiles, no caption line under them", () => {
+  // board 2 + its gap 6, then rows of 28 px tiles 6 apart: nothing under the last row
+  expect(shelfHeight(2, 232)).toBe(2 + 6 + 28);
+  expect(shelfHeight(7, 232)).toBe(2 + 6 + 28 + 6 + 28);
+  expect(shelfHeight(0, 232)).toBe(0);
+  // a jar holding a firefly and the shelf ends 12 px (its base) under the tiles
+  const under = jarPlan([28], shelfHeight(2, 232));
+  expect(under.jarH - 12 - under.shelfY).toBe(36);
 });
 
 // ---- item 3: the walk, agents then the shelf's tiles
