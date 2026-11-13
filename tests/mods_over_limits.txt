@@ -18,9 +18,7 @@ defaults/mods/editor/main.ts tabStrip
 defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
-defaults/mods/editor/viewer.ts
 defaults/mods/file-tree/diff.ts parse
-defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
@@ -28,4 +26,3 @@ defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
 defaults/mods/nocturne/tabs.ts render
 defaults/mods/preview/diff.ts parse
-defaults/mods/preview/viewer.ts

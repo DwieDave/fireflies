@@ -6,7 +6,6 @@ import type { Context } from "gpui-kit";
 import { shared, setShared } from "herdr";
 import { readSharedMap, writeSharedMap } from "./guard.ts";
 import Viewer from "./viewer.ts";
-import type { ViewerProps } from "./viewer.ts";
 import type { LookTarget, Geo } from "./state.ts";
 import { LOOK, directory, byName, messageOf, REST } from "./state.ts";
 import { keptFor, rowAt } from "./tree.ts";
@@ -14,6 +13,7 @@ import type { default as Files } from "./main.ts";
 import type { Entry, LookState } from "./split-size.ts";
 import { lookSide, clampShare, LOOK_STEP, lookSize } from "./split-size.ts";
 import { join, cleanError } from "./ops.ts";
+import type { ViewerProps } from "./viewer-state.ts";
 
 /** The viewer (the preview pane's, viewer.ts), made once: a nested view, so
  *  its reading and drawing redraw only it, never the tree. */

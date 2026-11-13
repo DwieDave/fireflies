@@ -205,7 +205,7 @@ test("preview: ? lists every key for each way it shows a file", () => {
       const v = surface(preview.default, ["key", "barKey", "rowKey", "mediaKey"], {
         how: { how, firstOnly: !opts.paged }, kind, keysShown: false, ring: null, chips: [], cursor: 0, sy: 0, sx: 0, pages: 3,
         grid: how === "table" ? { body: [1, 2, 3], cols: [{ ch: 3 }] } : null, patch: how === "diff" ? { rows: [1, 2], starts: [0, 1] } : null,
-        db: opts.db ? { at: 0, tables: ["a", "b"] } : null, pannable: () => true, call: () => ({ content: {} }), rowCount: () => 3, visibleRows: () => 2,
+        db: opts.db ? { at: 0, tables: ["a", "b"] } : null, path: "/x/a.png", on: null, info: null, view: null, copy: null, size: { width: 400, height: 300 }, port: { width: 400, height: 300 }, zoom: 1, rot: 0, offset: { x: 0, y: 0 }, fitted: true, names: [], folder: "/x", gen: 0, pending: null, embedded: false, pannable: () => true, call: () => ({ content: {} }), rowCount: () => 3, visibleRows: () => 2, colStarts: () => [0, 4], tableWidth: () => 20, gutter: () => 3, img: () => ({ width: 100, height: 80 }),
       });
       return (e: any, cx: any) => v.key(e, cx);
     };

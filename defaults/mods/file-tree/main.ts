@@ -123,7 +123,6 @@ import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
 import type { Filters, HeadRow, HitRow, Nav, Row, TreeRow, Act } from "./logic.ts";
 import { filterDefaults, newNav, navGo, navBack, navForward, rangePaths } from "./logic.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.ts).
-import type { ViewerProps } from "./viewer.ts";
 import type { Menu, Draft, Ask, Msg, MarkRange, Drag, Press, LookDir, Geo, FilesProps, SayHow, Hit } from "./state.ts";
 import { isFilesProps, FILTERS, LOOK, MOD, isAlone, FROM, NATIVE_IDS, DRAFT, DOUBLE } from "./state.ts";
 import { keptFor, loadFolderOf, refreshTree, reroot, shownRows, toggleFolder, treeRows, watchTree } from "./tree.ts";
@@ -140,6 +139,7 @@ import type { Adds, Cut, Stop } from "./fit.ts";
 import type { At, Entry, LookState, Side } from "./split-size.ts";
 import type { Size } from "./image.ts";
 import { newLook, DIVIDER } from "./split-size.ts";
+import type { ViewerProps } from "./viewer-state.ts";
 
 export default class Files extends View {
   on: string | null = null;
