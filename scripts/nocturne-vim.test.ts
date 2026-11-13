@@ -1,11 +1,11 @@
 import { test, expect, describe } from "bun:test";
 
-// The editor's vim (defaults/mods/editor/vim.js), key by key. A
+// The editor's vim (defaults/mods/editor/vim.ts), key by key. A
 // small stand-in plays the editor: it types what vim leaves to it in insert
 // mode, applies vim's edits and moves the caret. `|` marks the caret (Zed's
 // vim tests mark it with ˇ; their cases guided many of these).
-import { createVim, feed, play, tokens, typedText, parse, pattern, token } from "../defaults/mods/editor/vim.js";
-import { applyEdits } from "../defaults/mods/editor/vim.js";
+import { createVim, feed, play, tokens, typedText, parse, pattern, token } from "../defaults/mods/editor/vim.ts";
+import { applyEdits } from "../defaults/mods/editor/vim.ts";
 
 function split(marked: string) {
   const i = marked.indexOf("|");
@@ -163,10 +163,10 @@ describe("operators", () => {
   test("registers: \"a, \"A appends, \"_ black hole, \"0 the last yank", () => {
     const e = ed("|one\ntwo");
     e.keys('"ayyj"Ayy');
-    expect(e.vim.registers.a).toEqual({ text: "one\ntwo\n", linewise: true });
-    const before = e.vim.registers['"'];
+    expect(e.vim.registers.get("a")).toEqual({ text: "one\ntwo\n", linewise: true });
+    const before = e.vim.registers.get('"');
     e.keys('"_dd');
-    expect(e.vim.registers['"']).toBe(before);
+    expect(e.vim.registers.get('"')).toBe(before);
     check("|x\ny", 'yyjdd"0p', "x\n|x");
   });
   test("> < shift lines", () => {
@@ -259,7 +259,7 @@ describe("visual", () => {
   });
   test("p over a selection replaces it and keeps what was there", () => {
     const e = check("|one two", "yiwwviwp", "one on|e");
-    expect(e.vim.registers['"'].text).toBe("two");
+    expect(e.vim.registers.get('"').text).toBe("two");
   });
 });
 
@@ -279,7 +279,7 @@ describe("repeat, counts, macros", () => {
     e.keys("@@");
     expect(e.text).toBe("1!\n1!\n1!\n1");
     e.keys("gg0qbxq");
-    expect(e.vim.registers.b.text).toBe("x");
+    expect(e.vim.registers.get("b").text).toBe("x");
   });
   test("u and <C-r> ask the editor to undo and redo, counted", () => {
     const e = ed("|a").keys("3u<C-r>");

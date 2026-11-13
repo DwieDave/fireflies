@@ -1,4 +1,4 @@
-// The editor's hover card (editor/main.js, logic.js cardPlace): where
+// The editor's hover card (editor/main.js, logic.ts cardPlace): where
 // it opens (under its word, above it near the pane's foot, inside the pane),
 // every way it closes in each vim mode and without vim, a card that opens
 // waiting on the server and fills in by itself, the bar's progress words,
@@ -76,7 +76,7 @@ mock.module("gpui-base", () => ({
 (globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const { cardPlace, progressWord, busy, changeBetween, cardMarkdown } = await import("../defaults/mods/editor/logic.js");
+const { cardPlace, progressWord, busy, changeBetween, cardMarkdown } = await import("../defaults/mods/editor/logic.ts");
 
 // ---- a pane, its context and its timers
 let later: [number, (cx: any) => void][] = [];

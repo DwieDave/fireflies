@@ -104,7 +104,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   Object.assign(scope, await keyhelpOf(path, source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
-  // `import * as Tabs from "./tabs.js"`: the real module (it imports nothing).
+  // `import * as Tabs from "./tabs.ts"`: the real module (it imports nothing).
   if (/import \* as Tabs from "\.\/tabs\.js"/.test(source)) scope.Tabs = await import(`../defaults/mods/${path.replace(/[^/]+$/, "tabs.js")}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
   const send = async (c: string) => {

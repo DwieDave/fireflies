@@ -65,8 +65,8 @@ const storage: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => storage[k] ?? null, setItem: (k: string, v: string) => { storage[k] = String(v); } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const { editorKeys } = await import("../defaults/mods/editor/logic.js");
-const { LEADER, createVim, feed } = await import("../defaults/mods/editor/vim.js");
+const { editorKeys } = await import("../defaults/mods/editor/logic.ts");
+const { LEADER, createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 function cx(): any {
   return {
