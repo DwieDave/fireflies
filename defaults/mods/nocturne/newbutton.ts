@@ -16,10 +16,10 @@ import { div } from "gpui-kit";
 import type { Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { theme, shared, layout, run, settings } from "herdr";
-import { isString, literal, nullable, object, readShared, sharedKey } from "./guard.ts";
+import { readShared } from "./guard.ts";
 import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
-import { CURSOR, isLayoutNode } from "./nav.ts";
+import { CURSOR_KEY, isLayoutNode } from "./nav.ts";
 import type { LayoutNode } from "./nav.ts";
 
 export const ROLE = "newbutton";
@@ -28,8 +28,6 @@ export const ROLE = "newbutton";
 // edge lines up with the panes' right edge.
 const END = 8;
 
-/** The strip's cursor outside it (nav.ts CURSOR): on "+ new" when its region is "new". */
-const CURSOR_KEY = sharedKey(CURSOR, nullable(object({ region: literal("head", "parked", "bell", "new") }, { pane: nullable(isString), item: nullable(isString) })));
 
 /** The shown layout's tree, or null. */
 const tree = (): LayoutNode | null => {

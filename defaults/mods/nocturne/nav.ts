@@ -8,11 +8,17 @@
 // (move, moveSection, moveRow) and acts on the verb itself.
 
 import type { Context, KeyEvent } from "gpui-kit";
-import { arrayOf, isBoolean, isNumber, isString, object } from "./guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
+import type { Guarded } from "./guard.ts";
 
 /** shared() key: where the tab strip's cursor is when it's outside the strip,
  *  so that copy draws the ring: { region: "head" | "parked" | "bell" | "new", pane?, item }. */
 export const CURSOR = "nocturne.chrome";
+
+/** The strip's cursor outside it (CURSOR): which row ("head", "parked"), the bell or "+ new", on which pane, on which control. */
+export const CURSOR_KEY = sharedKey(CURSOR, nullable(object({ region: literal("head", "parked", "bell", "new") }, { pane: nullable(isString), item: nullable(isString) })));
+
+export type ChromeCursor = NonNullable<Guarded<typeof CURSOR_KEY.guard>>;
 
 /** A block of the layout tree (layout()), as far as Nocturne reads it. */
 export interface LayoutNode {

@@ -30,10 +30,10 @@ import type { Props } from "gpui-shell";
 import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
 import type { PaneInfo, Status, Theme } from "herdr";
-import { isNumber, isString, literal, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
+import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { NAME_PANE, openMenu } from "./menu.ts";
 import { ART, LOGO, dither, pip, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
-import { CURSOR } from "./nav.ts";
+import { CURSOR_KEY } from "./nav.ts";
 import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
@@ -206,8 +206,6 @@ export function folder(cwd: string | null | undefined): string {
 /** A header's props from the app: its pane (and terminal). */
 const isHeaderProps = object({}, { pane: isString });
 
-/** The tab strip's cursor outside the strip (nav.ts CURSOR): which row, which pane, which control. */
-const CURSOR_KEY = sharedKey(CURSOR, nullable(object({ region: literal("head", "parked", "bell", "new") }, { pane: nullable(isString), item: nullable(isString) })));
 
 export default class Header {
   hovered = false;

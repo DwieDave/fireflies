@@ -27,7 +27,7 @@ import { Prompt, Confirm } from "./dialog.ts";
 import Palette from "./palette.js";
 import Peek from "./peek.ts";
 import Sky from "./sky.js";
-import Tabs from "./tabs.js";
+import Tabs from "./tabs.ts";
 import Header from "./header.ts";
 import Parked from "./parked.ts";
 import { WorktreesPanel } from "./worktrees.ts";

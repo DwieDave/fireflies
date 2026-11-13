@@ -11,13 +11,11 @@ import { div } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { panes, props, theme, shared } from "herdr";
-import { isString, literal, nullable, object, readShared, sharedKey } from "./guard.ts";
+import { isString, object, readShared } from "./guard.ts";
 import { dither, pip, navRing } from "./kit.ts";
-import { CURSOR } from "./nav.ts";
+import { CURSOR_KEY } from "./nav.ts";
 import { mark, paneName } from "./header.ts";
 
-/** The strip's cursor outside it (nav.ts CURSOR): on a chip when its region is "parked". */
-const CURSOR_KEY = sharedKey(CURSOR, nullable(object({ region: literal("head", "parked", "bell", "new") }, { pane: nullable(isString), item: nullable(isString) })));
 
 /** A chip's props from the app: its pane. */
 const isChipProps = object({}, { pane: isString });

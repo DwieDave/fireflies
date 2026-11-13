@@ -61,7 +61,7 @@ const cx: any = {
 };
 
 const drag = await import("../defaults/mods/nocturne/tabdrag.ts");
-const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 
 // ---- helpers
 
