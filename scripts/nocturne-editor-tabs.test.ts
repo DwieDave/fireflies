@@ -582,6 +582,17 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
 
 // ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands); H / L
 
+test("a scratchpad (one tab) has no strip either: the bar says scratchpad, no unsaved mark (it saves itself)", async () => {
+  const note = "/tmp/app/scratchpad/repo-0123abcd.md";
+  disk[note] = "# note\n";
+  const p = await pane(note);
+  const view = p.render(cx());
+  const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
+  expect(ids(view)).not.toContain("editor-tabs");
+  expect(texts(byId(view, "bar-name"))).toEqual(["scratchpad"]);
+  expect(byId(view, "bar-mark")).toBeUndefined();
+});
+
 test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
   const p = await pane();
   const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
@@ -882,12 +893,13 @@ test("a table opened to look at is drawn; e shows its text (read then), the bar'
   expect(p.look).toBe(false);
 });
 
-test("Markdown opened to look at starts in its preview; an open Markdown tab keeps its view; an edit asks for the split", async () => {
+test("Markdown opened to look at comes up in the editor's view for it (the pane's last pick, rendered too); an open Markdown tab keeps its view; an edit asks for the split", async () => {
   disk["/p/docs/m.md"] = "# M\n";
+  storage.preview = "rendered"; // the pane's last pick
   const p = await pane();
   p.openFile("/p/docs/n.md", cx(), { look: true });
   await flush();
-  expect([p.path, p.view, p.look]).toEqual(["/p/docs/n.md", "preview", false]);
+  expect([p.path, p.view, p.look, Boolean(p.cur.rendered)]).toEqual(["/p/docs/n.md", "rendered", false, true]);
   p.setView("split", cx());
   p.openFile("/p/docs/n.md", cx(), { look: true });
   expect(p.view).toBe("split");
@@ -907,7 +919,7 @@ test("files sent as tabs with look (the open record) and an editor opened on one
   p.render(cx());
   tick();
   await flush();
-  expect([p.path, p.view]).toEqual(["/p/docs/n.md", "preview"]);
+  expect([p.path, p.view, p.look]).toEqual(["/p/docs/n.md", "split", false]);
   // A new editor on a table opened by a terminal's link: props { look: true }.
   disk["/p/data/rows.csv"] = "a,b\n";
   storage = {}; // a new pane keeps no tabs of its own yet
@@ -917,7 +929,7 @@ test("files sent as tabs with look (the open record) and an editor opened on one
   sharedNow["nocturne-editor.open"] = { slot: null, path: "/p/docs/n.md", look: true, n: 11, at: Date.now() };
   storage = {};
   const r = await pane("/p/docs/n.md");
-  expect(r.view).toBe("preview");
+  expect([r.view, r.look]).toEqual(["split", false]);
 });
 
 test("route: look rides along to the editor (the open record) and to editor.open when there's none; the picker looks at a picked file, edits a grep hit", () => {

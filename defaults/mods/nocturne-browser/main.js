@@ -13,6 +13,7 @@
 //   H L  back / forward   r  reload   + - 0  zoom   p  picture in picture
 //   d  the inspector   O  the system's browser   ?  the keys, under the bar
 //   t  new tab   x  close the tab   J K  the tab left / right   1-9  a tab (9 the last)
+//   < >  move the tab (the ring's, else the shown one) left / right   m  its menu
 //   tab / shift-tab  the tabs and the bar's buttons (a ring shows which), enter presses it
 //   esc  the ring, then the keys strip, away
 //   ⧉        (only while the page has a <video>)
@@ -33,16 +34,28 @@
 // Tabs (tabs.js has the rules): one pane, several pages, each its own web view
 // (id "web", "web-2", …) kept alive while another shows, in no room at all
 // (which hides a native view). From two on, a strip over the bar: number,
-// title, × (a middle click closes too), + a blank tab. The view is made with
-// `tabs: true`, so what would open a window comes as web.newTab: a middle or
+// title, × (a middle click closes too), + a blank tab. Drag a tab along it to
+// move it: it lifts where it is and a marker stands in the gap it drops into
+// (the pointer's half of the tab under it; past the last tab, the end). The
+// view is made with `tabs: true`, so what would open a window comes as web.newTab: a middle or
 // Cmd click on a link and the link menu's "Open Link in New Tab" behind (Shift:
 // in front), target=_blank / window.open in front, each after its page's
 // earlier links. The bar, zoom, picture in picture and the inspector act on the
 // shown tab. Closing the last tab leaves a blank one. Kept in localStorage
 // "tabs" (addresses, titles, zoom): after a restart only the shown tab loads,
-// the others when first shown. Commands tab_new, tab_close, tab_next, tab_prev,
-// tab:<n>, and open:<{ url, slot? } as JSON, or a URL> (the editor's links):
-// the copy whose slot it names opens it in front and its pane takes the keyboard.
+// the others when first shown, in the order last left. Commands tab_new,
+// tab_close, tab_next, tab_prev, tab_move_left, tab_move_right, pin_tab,
+// tab_menu, tab:<n>, tab_act:<{ slot, tab, act }> (the tab menu's picks), and
+// open:<{ url, slot? } as JSON, or a URL> (the editor's links): the copy
+// whose slot it names opens it in front and its pane takes the keyboard.
+// A tab's menu (a right-click on it; m in the bar, for the ringed tab else the
+// shown one): pin it to the shelf or unpin it, move it left / right, close it.
+// It is this mod as a popup (props { tabMenu }); its picks come back as tab_act.
+// A pinned tab (nocturne's PANES_KEY record with `tab`, tabs.js has the rules)
+// is its own tile on the shelf, named from shared nocturne-browser.tab-titles
+// ({ [slot]: { [tab]: title } }); the tile sends show:<{ slot, tab }> (or leaves
+// nocturne-browser.show for when this pane comes on screen). Closing the tab
+// drops its pin; it keeps it across restarts (tab ids are kept).
 // A file:// address (an HTML file from the files pane) loads as the file
 // (props path, trust "interactive": its folder readable, scripts on).
 //
@@ -75,7 +88,7 @@
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, window as appWindow } from "herdr";
+import { props, theme, settings, nextCommand, shared, setShared, run, panes, spaces, focused, openOverlay, closeOverlay, window as appWindow } from "herdr";
 import { keysHint, keysView, keysKey } from "./keyhelp.js";
 import * as Tabs from "./tabs.js";
 
@@ -86,6 +99,7 @@ const SEARCH = "https://duckduckgo.com/?q=";
 export const KEYS = [["enter i", "into the page"], ["⌘esc", "back to the bar"], ["o /  ⌘l ⌘p", "address"], ["H L  ⌘[ ⌘]", "back / forward"],
   ["r  ⌘r", "reload"], ["+ - 0", "zoom"], ["p", "picture in picture"], ["d  ⌘⌥i", "inspector"], ["O", "system browser"],
   ["t", "new tab"], ["x", "close the tab"], ["J K", "tab left / right"], ["1-9", "tab 1 to 8, 9 the last"],
+  ["< >", "move the tab left / right (or drag it)"], ["m", "the tab's menu: pin it to the shelf, move, close"],
   ["tab ⇧tab", "buttons and tabs (⏎ presses)"], ["esc", "out of the address · keys away"], ["?", "keys"]];
 /** A key's name: the typed character for printable keys ("H", "?", "+"), else GPUI's key. */
 const keyOf = (e) => (typeof e?.key_char === "string" && e.key_char.length === 1 && e.key_char.trim() ? e.key_char : String(e?.key ?? ""));
@@ -99,6 +113,14 @@ const tabEvent = (shift) => ({ key: "tab", keystroke: shift ? "shift-tab" : "tab
 // What each web pane shows, for the dock's shelf: { [props.slot]: the shown
 // tab's page title (else its host) }, as the viewers keep theirs.
 const TITLES = "nocturne-browser.titles";
+// Every tab's name, for a tab pinned to the shelf: { [props.slot]: { [tab id]: title } }.
+const TAB_TITLES = "nocturne-browser.tab-titles";
+// A tab to show once this pane is on screen (nocturne's goToPin): { slot, tab, at }.
+const SHOW = "nocturne-browser.show";
+// How long such a wish holds (ms): long enough for a tab or space switch.
+const SHOW_FOR = 5000;
+// The tab's menu: a row's height, the rule between its sections.
+const MENU_ROW = 26, MENU_RULE = 9, MENU_W = 250;
 // The open inspector panes: { [web view key]: pane id }, one per page.
 const INSPECTORS = "nocturne-browser.inspectors";
 const INSPECTOR = "inspector";
@@ -113,6 +135,24 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 function dither(color, cell = 1) {
   const zoom = Number(settings()?.zoom) || 1, dpr = appWindow()?.platform === "macos" ? 2 : 1;
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
+}
+
+/** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.js):
+ *  a 2 px accent bar capped top and bottom, at the left edge of its box. */
+function stake(t) {
+  return div().absolute().left(-3).top(3).bottom(2).w(8)
+    .child(div().absolute().left(3).top(0).bottom(0).w(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent));
+}
+
+/** The dragged tab's lift, behind its words: a dither shadow, then a plate
+ *  edged in the accent, clear of the horizon. */
+function lift(t) {
+  return [
+    div().absolute().left(5).right(0).top(6).bottom(2).child(dither(t.ansi0, 1)),
+    div().absolute().left(2).right(3).top(3).bottom(4).bg(t.background).border(1).border_color(t.accent),
+  ];
 }
 
 const available = () => typeof herdr.nativeView?.new === "function";
@@ -172,6 +212,8 @@ function parts(href) {
 export default class Browser extends View {
   init(p, cx) {
     const pr = props() ?? p ?? {};
+    // A web tab's menu: this mod as a popup (openTabMenu), props { tabMenu }.
+    if (pr.tabMenu) return this.initMenu(pr.tabMenu, cx);
     // An inspector pane: Safari's Web Inspector for another pane's page.
     this.inspect = pr.inspect ? String(pr.inspect) : null;
     if (this.inspect) {
@@ -220,6 +262,9 @@ export default class Browser extends View {
     this.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(pr.url ? target(pr.url) : saved, zoom);
     this.publishTitle();
     this.barW = 600;
+    // A left press on a tab ({ id, x }), and the drag it became ({ id, gap }: Tabs.dropIndex).
+    this.pressed = null;
+    this.drag = null;
     this.handle = cx.focus_handle();
     this.input = InputState.new({ placeholder: "address or search" });
     this.input.on("submit", (_e, cx) => { this.go(this.input.value(), cx); });
@@ -232,7 +277,7 @@ export default class Browser extends View {
     // puts this tab away and shows the one before. Polled gently: a mod isn't
     // told when another tab shows.
     this.seen = [];
-    cx.timer.every(500, () => this.noteShown());
+    cx.timer.every(500, () => { this.noteShown(); this.takeShow(cx); });
     if (available()) {
       cx.spawn(async (cx) => {
         for (;;) {
@@ -250,7 +295,11 @@ export default class Browser extends View {
         // Sent too on a press into the page (it keeps AppKit's keyboard) and when
         // the window focuses this pane any other way (a tab switch, agent.next).
         // A blank pane: the address field it types into keeps the keyboard.
-        if (c === "focus") { this.claim(); if (this.editing && !this.start) this.input.focus(); else this.handle.focus(); }
+        if (c === "focus") { this.takeShow(cx); this.claim(); if (this.editing && !this.start) this.input.focus(); else this.handle.focus(); }
+        // A tab pinned to the shelf: the pane named by its slot shows it.
+        else if (c.startsWith("show:")) this.showCommand(c.slice(5), cx);
+        // A pick in a tab's menu (the menu is another copy): { slot, tab, act }.
+        else if (c.startsWith("tab_act:")) this.tabAct(c.slice(8), cx);
         // open names its pane by slot (else the one that takes the rest).
         else if (c === "open" || c.startsWith("open:")) this.openCommand(c.slice(5), cx);
         else if (this.mine()) this.command(c, cx);
@@ -294,6 +343,7 @@ export default class Browser extends View {
   publishTitle() {
     if (!this.ownSlot || this.inspect) return;
     const live = new Set(panes().filter((p) => p.mod === "nocturne-browser").map((p) => p.props?.slot).filter((x) => x != null).map(String));
+    this.publishTabTitles(live);
     const was = shared(TITLES) ?? {};
     const name = this.page.href || this.page.title ? Tabs.label(this.tab) : null;
     const stale = Object.keys(was).some((k) => !live.has(k) && k !== this.slot);
@@ -301,6 +351,133 @@ export default class Browser extends View {
     const next = Object.fromEntries(Object.entries(was).filter(([k]) => live.has(k) && k !== this.slot));
     if (name) next[this.slot] = name;
     setShared(TITLES, next);
+  }
+
+  /** Every tab's name in shared TAB_TITLES under this pane's slot (a tab
+   *  pinned to the shelf is named by it); gone panes' entries go. Written
+   *  only when something changed. */
+  publishTabTitles(live) {
+    const was = shared(TAB_TITLES) ?? {};
+    const mine = Tabs.tabTitles(this.tabs);
+    const same = JSON.stringify(was[this.slot] ?? {}) === JSON.stringify(mine);
+    const stale = Object.keys(was).some((k) => !live.has(k) && k !== this.slot);
+    if (same && !stale) return;
+    const next = Object.fromEntries(Object.entries(was).filter(([k]) => live.has(k) && k !== this.slot));
+    if (Object.keys(mine).length) next[this.slot] = mine;
+    setShared(TAB_TITLES, next);
+  }
+
+  // ---- a tab pinned to the shelf (Tabs.pinTab; nocturne's shelf draws it)
+
+  /** Tab `id` is pinned to the shelf. */
+  tabPinned(id) { return this.ownSlot && Tabs.tabPinned(shared(Tabs.PINS), this.slot, id); }
+
+  /** This pane can pin a tab: it has a slot (the shelf finds it again by it) and is found. */
+  canPin() { return Boolean(this.ownSlot && this.ownPane()); }
+
+  /** Pins tab `id` to the shelf, or unpins it. */
+  togglePin(id) {
+    const me = this.ownSlot ? this.ownPane() : null;
+    if (!me || !this.tabs.list.some((t) => t.id === id)) return;
+    setShared(Tabs.PINS, Tabs.pinTab(shared(Tabs.PINS), me, id, !this.tabPinned(id), Date.now()));
+  }
+
+  /** `show:{ slot, tab }` (a tab's tile on the shelf): the pane with that slot shows it. */
+  showCommand(value, cx) {
+    const a = Tabs.showArgs(value);
+    if (!a || !this.ownSlot || a.slot !== this.slot) return;
+    const w = shared(SHOW);
+    if (w?.slot === this.slot) setShared(SHOW, null);
+    this.showTab(a.tab, cx);
+    this.claim();
+  }
+
+  /** A tab the shelf asked for while this pane wasn't on screen (SHOW): shown now. */
+  takeShow(cx) {
+    const w = shared(SHOW);
+    if (!w || !this.ownSlot || String(w.slot) !== this.slot) return;
+    setShared(SHOW, null);
+    if (Date.now() - Number(w.at) <= SHOW_FOR) this.showTab(w.tab, cx);
+  }
+
+  // ---- the tab's menu: this mod as a popup (props { tabMenu })
+
+  /** Opens tab `id`'s menu: at the pointer (a right-click), or in the middle
+   *  from the keyboard (`keyboard`: m in the bar), as Nocturne's menus open. */
+  openTabMenu(id, keyboard) {
+    const index = Tabs.indexOf(this.tabs, id);
+    if (index < 0) return;
+    const tab = this.tabs.list[index];
+    const menu = { slot: this.ownSlot ? this.slot : null, tab: id, title: Tabs.label(tab), pinned: Boolean(this.tabPinned(id)),
+      canPin: this.canPin(), index, count: this.tabs.list.length };
+    const rows = Tabs.menuRows(menu);
+    const height = rows.flat().length * MENU_ROW + (rows.length - 1) * MENU_RULE + MENU_ROW + 10;
+    openOverlay({ mod: "nocturne-browser", kind: keyboard ? "dialog" : "popup", frame: "none", width: MENU_W, height, props: { tabMenu: menu } });
+  }
+
+  /** `tab_act:{ slot, tab, act }`: a pick in a tab's menu, for the pane it names. */
+  tabAct(value, cx) {
+    let a;
+    try { a = JSON.parse(value); } catch { return; }
+    if (!a || typeof a.tab !== "string" || !(a.slot != null ? this.ownSlot && String(a.slot) === this.slot : this.mine())) return;
+    if (!this.tabs.list.some((t) => t.id === a.tab)) return;
+    this.claim();
+    if (a.act === "pin") this.togglePin(a.tab);
+    else if (a.act === "left" || a.act === "right") this.stepTab(a.tab, a.act === "right" ? 1 : -1);
+    else if (a.act === "close") this.closeTab(a.tab, cx);
+    else if (a.act === "show") this.showTab(a.tab, cx);
+  }
+
+  initMenu(menu, cx) {
+    this.menu = menu;
+    this.rows = Tabs.menuRows(menu).flat();
+    this.cursor = Tabs.menuStep(this.rows, -1, 1);
+    this.handle = cx.focus_handle();
+    this.handle.focus();
+    cx.timer.after(120, () => this.handle.focus());
+  }
+
+  /** A row picked: to the pane (its copy acts), and the menu goes. */
+  pickRow(row) {
+    if (!row?.enabled) return;
+    closeOverlay(props()?.overlay);
+    run(`nocturne-browser.tab_act:${JSON.stringify({ slot: this.menu.slot, tab: this.menu.tab, act: row.act })}`);
+  }
+
+  /** The menu's keys: ↑ ↓ j k move (over the rows that can be picked), enter picks, esc q close. */
+  menuKey(e, cx) {
+    const k = keyOf(e);
+    if (k === "down" || k === "j" || k === "up" || k === "k") this.cursor = Tabs.menuStep(this.rows, this.cursor, k === "down" || k === "j" ? 1 : -1);
+    else if (k === "enter") this.pickRow(this.rows[this.cursor]);
+    else if (k === "escape" || k === "q") closeOverlay(props()?.overlay);
+    else return;
+    cx.stop_propagation();
+    cx.notify();
+  }
+
+  /** The menu: the tab's name, then its rows in sections, a dithered rule between. */
+  renderMenu(t) {
+    const sections = Tabs.menuRows(this.menu);
+    let n = 0;
+    const row = (r) => {
+      const i = n++, on = i === this.cursor && r.enabled;
+      return h_flex().id(`tm-${r.act}`).relative().h(MENU_ROW).flex_none().px(12).items_center().text_size(12)
+        .text_color(!r.enabled ? t.ansi0 : on ? t.foreground : t.muted)
+        .on_hover((h, cx) => { if (h && r.enabled && this.cursor !== i) { this.cursor = i; cx.notify(); } })
+        .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+        .on_click(() => this.pickRow(r))
+        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+        .child(div().relative().flex_1().min_w(0).truncate().child(r.name));
+    };
+    return v_flex().id("tab-menu").size_full().bg(t.background).border(1).border_color(t.ansi0).py(4)
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => this.menuKey(e, cx))
+      .on_scroll_wheel((e, cx) => { if (Math.abs(e?.delta?.y ?? 0) >= 1) { this.cursor = Tabs.menuStep(this.rows, this.cursor, e.delta.y > 0 ? -1 : 1); cx.notify(); } })
+      .child(div().h(MENU_ROW).flex_none().px(12).flex().items_center().text_size(11).text_color(t.dim).truncate().child(this.menu.title ?? "tab"))
+      .children(sections.flatMap((part, k) => [
+        ...(k ? [div().relative().h(MENU_RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.ansi8, 1)))] : []),
+        ...part.map(row),
+      ]));
   }
 
   /** A new tab on `url` (null: blank, its address open). In front unless
@@ -343,6 +520,9 @@ export default class Browser extends View {
     const pane = of ? this.inspectorPane(of) : null;
     if (pane) run("pane.close", { pane });
     if (tab.live) this.quiet(tab.id, "dispose");
+    // Its pin on the shelf goes with it.
+    const pins = this.ownSlot ? Tabs.dropTabPins(shared(Tabs.PINS), this.slot, tab.id) : null;
+    if (pins) setShared(Tabs.PINS, pins);
     const was = this.tabs.active;
     [this.tabs] = Tabs.close(this.tabs, tab.id);
     if (this.tabs.active !== was) this.shown(null, cx);
@@ -400,11 +580,13 @@ export default class Browser extends View {
   }
 
   async close() {
-    if (this.inspect) return;
+    if (this.inspect || this.menu) return;
     if (shared(ACTIVE) === this.slot) setShared(ACTIVE, null);
-    // The pane is gone (or the mod reloads: its first title comes back with init).
-    const titles = shared(TITLES) ?? {};
-    if (this.ownSlot && this.slot in titles) { const { [this.slot]: _gone, ...rest } = titles; setShared(TITLES, rest); }
+    // The pane is gone (or the mod reloads: its first titles come back with init).
+    for (const key of [TITLES, TAB_TITLES]) {
+      const titles = shared(key) ?? {};
+      if (this.ownSlot && this.slot in titles) { const { [this.slot]: _gone, ...rest } = titles; setShared(key, rest); }
+    }
   }
 
   /** The page's inspector pane, if one is open. */
@@ -660,6 +842,65 @@ export default class Browser extends View {
     else if (c === "tab_close") this.closeTab(null, cx);
     else if (c === "tab_next" || c === "tab_prev") this.showTab(Tabs.step(this.tabs, c === "tab_next" ? 1 : -1), cx);
     else if (/^tab:\d$/.test(c)) this.showTab(Tabs.nth(this.tabs, Number(c.slice(4))), cx);
+    else if (c === "tab_move_left" || c === "tab_move_right") this.stepTab(this.keyTab(), c === "tab_move_right" ? 1 : -1);
+    else if (c === "pin_tab") this.togglePin(this.keyTab());
+    else if (c === "tab_menu") this.openTabMenu(this.keyTab(), true);
+  }
+
+  /** The tab the bar's tab keys act on: the one the ring is on, else the shown one. */
+  keyTab() {
+    const ringed = this.ring?.startsWith("tab:") ? this.ring.slice(4) : null;
+    return ringed && this.tabs.list.some((t) => t.id === ringed) ? ringed : this.tabs.active;
+  }
+
+  /** Tab `id` to place `index` (Tabs.move), kept for the next start. */
+  moveTab(id, index) {
+    const next = Tabs.move(this.tabs, id, index);
+    if (next === this.tabs) return;
+    this.tabs = next;
+    this.saveTabs();
+  }
+
+  /** Tab `id` one place left (-1) or right (+1); at the end it stays. */
+  stepTab(id, by) {
+    const i = Tabs.indexOf(this.tabs, id);
+    if (i < 0 || i + by < 0 || i + by >= this.tabs.list.length) return;
+    this.moveTab(id, i + by);
+  }
+
+  // ---- dragging a tab along the strip (Tabs.dropIndex)
+
+  /** The pointer moved over a gap with a press down on a tab: past
+   *  DRAG_START it's a drag, and the gap it's over is where the marker stands. */
+  dragOver(gap, e, cx) {
+    const p = this.pressed;
+    if (!p) return;
+    if (!this.drag) {
+      if (Math.abs((e?.position?.x ?? p.x) - p.x) < Tabs.DRAG_START) return;
+      this.drag = { id: p.id, gap: null };
+    }
+    if (this.drag.gap?.id === gap.id && this.drag.gap?.after === gap.after) return;
+    this.drag.gap = gap;
+    cx?.notify();
+  }
+
+  /** The press let go in the strip: a drag drops where its marker stands. */
+  dropTab(cx) {
+    const d = this.drag;
+    this.drag = null;
+    this.pressed = null;
+    if (!d) return;
+    const at = Tabs.dropIndex(this.tabs, d.id, d.gap);
+    if (at != null) this.moveTab(d.id, at);
+    cx?.notify();
+  }
+
+  /** The pointer left the strip: the drag ends where it started. */
+  cancelDrag(cx) {
+    const dragging = Boolean(this.drag);
+    this.drag = null;
+    this.pressed = null;
+    if (dragging) cx?.notify();
   }
 
   key(e, cx) {
@@ -710,6 +951,9 @@ export default class Browser extends View {
     else if (k === "J") this.command("tab_prev", cx);
     else if (k === "K") this.command("tab_next", cx);
     else if (/^[1-9]$/.test(k)) this.command(`tab:${k}`, cx);
+    else if (k === "m") this.command("tab_menu", cx);
+    else if (k === "<") this.command("tab_move_left", cx);
+    else if (k === ">") this.command("tab_move_right", cx);
     else return false;
     return true;
   }
@@ -823,6 +1067,7 @@ export default class Browser extends View {
 
   render() {
     const t = theme();
+    if (this.menu) return this.renderMenu(t);
     this.controls = [];
     this.barFocused = Boolean(this.handle?.is_focused?.());
     if (this.inspect) {
@@ -872,16 +1117,28 @@ export default class Browser extends View {
    *  end; the shown one bright on a dithered accent line, as the app's tabs.
    *  A click shows a tab, a middle click or × closes it; tab rings them. */
   strip(t) {
+    const drag = this.drag;
+    const pins = this.ownSlot ? shared(Tabs.PINS) : null;
+    const pinned = (id) => Boolean(pins) && Tabs.tabPinned(pins, this.slot, id);
+    const stakeAt = drag ? Tabs.stakeBefore(this.tabs, drag.id, Tabs.dropIndex(this.tabs, drag.id, drag.gap)) : undefined;
     const item = (tab, i) => {
       const on = tab.id === this.tabs.active;
+      const lifted = drag?.id === tab.id;
       const ringed = this.control(`tab:${tab.id}`, true, (cx) => this.showTab(tab.id, cx));
       return h_flex().id(`webtab-${tab.id}`).relative().flex_1().min_w(0).max_w(200).h_full().pl(8).pr(4).gap(6).items_center()
-        .text_size(11).text_color(on ? t.foreground : t.muted)
+        .text_size(11).text_color(on || lifted ? t.foreground : t.muted)
         .hover((s) => s.text_color(t.foreground))
-        .on_mouse_down("left", (e, cx) => this.stop(e, cx))
-        .on_click((_e, cx) => { this.claim(); this.showTab(tab.id, cx); cx.notify(); })
-        // Middle click closes it, as in a browser.
+        // Dragged: lifted where it is, behind its words.
+        .when(lifted, (el) => el.children(lift(t)))
+        // A press may become a drag (dragOver); let go without one, it shows the tab.
+        .on_mouse_down("left", (e, cx) => { this.stop(e, cx); this.pressed = { id: tab.id, x: e?.position?.x ?? 0 }; })
+        .on_mouse_move((e, cx) => this.dragOver(Tabs.gapAt(tab.id, e?.local_position?.x ?? 0, e?.bounds?.width ?? 1), e, cx))
+        .on_mouse_up("left", (_e, cx) => { if (!this.drag && this.pressed?.id === tab.id) { this.claim(); this.showTab(tab.id, cx); cx.notify(); } })
+        // Middle click closes it, as in a browser; a right-click opens its menu.
         .on_mouse_down("middle", (_e, cx) => { cx.stop_propagation(); this.claim(); this.closeTab(tab.id, cx); cx.notify(); })
+        .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); this.claim(); this.openTabMenu(tab.id, false); })
+        // Pinned to the shelf: a small square in its corner, as the shelf's tiles.
+        .when(pinned(tab.id), (el) => el.child(div().absolute().left(2).top(4).size(4).bg(on ? t.foreground : t.muted)))
         .child(div().flex_none().text_color(on || tab.page.loading ? t.accent : t.dim).child(i < 9 ? String(i + 1) : "·"))
         .child(div().flex_1().min_w(0).truncate().child(Tabs.label(tab)))
         .child(div().id(`webtab-x-${tab.id}`).size(16).flex_none().flex().items_center().justify_center().text_color(t.dim)
@@ -891,20 +1148,29 @@ export default class Browser extends View {
           .child(svg(`${ICONS}/x.svg`).size(10)))
         // Loading: its line runs dim; shown: the accent line it stands on.
         .when(on || tab.page.loading, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(2).child(dither(on ? t.accent : t.ansi8, 1))))
-        .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)));
+        .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
+        .when(stakeAt === tab.id, (el) => el.child(stake(t)));
     };
     const items = this.tabs.list.map(item);
     const plusRinged = this.control("tab-new", true, (cx) => this.openTab(null, {}, cx));
-    return h_flex().id("webtabs").relative().h(26).flex_none().pl(2).pr(6).gap(1).items_center().overflow_hidden()
+    const end = (e, cx) => this.dragOver({ id: null, after: false }, e, cx);
+    return h_flex().id("webtabs").relative().h(26).flex_none().pl(4).pr(6).gap(1).items_center().overflow_hidden()
+      .on_mouse_up("left", (_e, cx) => this.dropTab(cx))
+      .on_hover((hovered, cx) => { if (!hovered) this.cancelDrag(cx); })
+      .when(Boolean(drag), (el) => el.cursor_grabbing())
       // The horizon the tabs stand on, as the app's tab strip.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       .children(items)
+      // Past the last tab (+ and the room after it): the gap at the end.
       .child(div().id("webtab-new").relative().size(22).flex_none().flex().items_center().justify_center()
+        .on_mouse_move(end)
+        .when(stakeAt === null, (el) => el.child(stake(t)))
         .text_color(plusRinged ? t.foreground : t.muted)
         .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
         .when(plusRinged, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
         .on_mouse_down("left", (e, cx) => this.stop(e, cx))
         .on_click((_e, cx) => { this.claim(); this.openTab(null, {}, cx); cx.notify(); })
-        .child(svg(`${ICONS}/plus.svg`).size(12)));
+        .child(svg(`${ICONS}/plus.svg`).size(12)))
+      .child(div().id("webtab-end").flex_1().min_w(0).h_full().on_mouse_move(end));
   }
 }

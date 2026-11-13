@@ -1664,7 +1664,7 @@ impl AppWindow {
                     let Some(viewer) = Viewer::of(path) else { return };
                     let path = path.to_string_lossy().into_owned();
                     // Markdown and what the preview shows open as a tab of the editor,
-                    // to be looked at (Markdown in its preview, a picture drawn).
+                    // to be looked at (a picture drawn, Markdown in the editor's view for it).
                     let (viewer, look) = editor_takes(viewer, this.folders.contains_key(Viewer::Editor.mod_name()));
                     // `path:42:7`: the editor goes there.
                     let extra = match place {
@@ -4356,7 +4356,7 @@ impl AppWindow {
                     Some(line) => json!({ "line": line, "col": num("col").unwrap_or(1) }),
                     None => json!({}),
                 };
-                // `look`: opened to be looked at (a new tab drawn, Markdown in its preview); `--look true` too.
+                // `look`: opened to be looked at (a new tab of a picture or table drawn); `--look true` too.
                 if a.get("look").is_some_and(|v| v.as_bool() == Some(true) || v.as_str() == Some("true")) {
                     extra["look"] = json!(true);
                 }
@@ -6148,7 +6148,7 @@ const WEB_MOD: &str = "nocturne-browser";
 /// Whether a web link opens in the app's web pane (true) or the system's
 /// Where a terminal's link to a file goes: Markdown and what the preview shows
 /// open in the editor (when its mod is there) as a tab to look at (`true`):
-/// Markdown in its preview, a picture or a PDF drawn by the preview's viewer.
+/// Markdown in the editor's view for it, a picture or a PDF drawn by the preview's viewer.
 fn editor_takes(viewer: Viewer, editor: bool) -> (Viewer, bool) {
     match viewer {
         Viewer::Markdown | Viewer::Preview if editor => (Viewer::Editor, true),
@@ -8638,6 +8638,77 @@ export default class W extends View {
         cx.simulate_click(point(px(100.0 + 400.0 - 13.0), px(100.0 + 13.0)), gpui::Modifiers::default());
         cx.run_until_parked();
         assert!(!open(cx), "the × closed the window");
+    }
+
+    #[test]
+    fn the_pip_player_drags_by_its_video() {
+        in_own_process("pip_drag_by_video");
+    }
+
+    /// The shipped picture in picture player (nocturne-pip) in its window: a
+    /// left press on the video (which the native view hands to Fireflies,
+    /// fireflies-native-view's Kind::gives_left_presses) is the window's. Moved
+    /// under 4 px it's a click: the window stays and the player takes the
+    /// keyboard; moved further it drags the window by the video, as by its bar.
+    #[gpui::test]
+    fn pip_drag_by_video(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("pip_drag_by_video") {
+            return;
+        }
+        let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods/nocturne-pip");
+        let home = crate::mods::app_dir();
+        let to = home.join("mods/nocturne-pip");
+        std::fs::create_dir_all(to.join("icons")).unwrap();
+        for e in std::fs::read_dir(&shipped).unwrap().flatten().chain(std::fs::read_dir(shipped.join("icons")).unwrap().flatten()) {
+            if e.path().is_file() {
+                let rel = e.path().strip_prefix(&shipped).unwrap().to_owned();
+                std::fs::copy(e.path(), to.join(rel)).unwrap();
+            }
+        }
+        let layout = json!({ "id": "root", "type": "row", "children": [] });
+        let (view, cx) = open_window(cx, "noop", "", layout);
+        let id = view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            let id = crate::mods::new_overlay_id();
+            this.open_overlay(id.clone(), json!({ "mod": "nocturne-pip", "kind": "window", "key": "nocturne-pip", "frame": "none", "width": 384, "height": 238,
+                "resizable": { "min": [240, 158], "aspect": 16.0 / 9.0, "chrome": [2, 24] }, "props": { "of": "1:web" } }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
+            id
+        });
+        cx.run_until_parked();
+        cx.run_until_parked();
+        let place = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().find(|o| o.id == id).and_then(|o| o.place));
+        let keys = |cx: &mut gpui::VisualTestContext| view.update_in(cx, |this, window, cx| this.window_has_keys(&id, window, cx));
+        assert!(!keys(cx));
+        let none = gpui::Modifiers::default();
+        let left = gpui::MouseButton::Left;
+        // The video's middle: under the 22 px bar (and the 1 px border).
+        let video = point(px(100.0 + 192.0), px(100.0 + 24.0 + 105.0));
+        // A click: pressed, moved 3 px, let go. The window stays; the player has the keyboard.
+        cx.simulate_mouse_down(video, left, none);
+        cx.simulate_mouse_move(video + point(px(3.0), px(0.0)), left, none);
+        cx.simulate_mouse_up(video + point(px(3.0), px(0.0)), left, none);
+        cx.run_until_parked();
+        assert_eq!(place(cx), Some(point(px(100.0), px(100.0))), "a click doesn't move it");
+        assert!(keys(cx), "a click on the video gives the player the keyboard");
+        // A drag: past 4 px the window follows; let go, it stays there.
+        cx.simulate_mouse_down(video, left, none);
+        for step in [5.0, 20.0, 40.0] {
+            cx.simulate_mouse_move(video + point(px(step), px(step * 0.75)), left, none);
+            cx.run_until_parked();
+        }
+        cx.simulate_mouse_up(video + point(px(40.0), px(30.0)), left, none);
+        cx.run_until_parked();
+        assert_eq!(place(cx), Some(point(px(140.0), px(130.0))), "dragged by the video");
+        // By the bar's title, as before.
+        let title = point(px(140.0 + 30.0), px(130.0 + 11.0));
+        cx.simulate_mouse_down(title, left, none);
+        cx.simulate_mouse_move(title + point(px(-20.0), px(10.0)), left, none);
+        cx.run_until_parked();
+        cx.simulate_mouse_up(title + point(px(-20.0), px(10.0)), left, none);
+        cx.run_until_parked();
+        assert_eq!(place(cx), Some(point(px(120.0), px(140.0))), "dragged by its bar");
     }
 
     #[test]

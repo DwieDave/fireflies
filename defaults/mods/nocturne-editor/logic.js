@@ -319,7 +319,7 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
     : [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-l", "line"], ["cmd-k n", "problem"], ...(server ? [["cmd-k d", "definition"], ["cmd-i", "hover"]] : []), ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (markdown) list.splice(Math.min(list.length, 3), 0, view === "preview" ? ["e", "text"] : [vim ? "space m p" : "cmd-shift-v", "view"]);
   // The rendered view: the Markdown commands first, the arrows walk the blocks.
-  if (markdown && view === "rendered") list.splice(0, 0, [vim ? "space ." : "cmd-.", "markdown"], ["↑↓", "blocks"]);
+  if (markdown && view === "rendered") list.splice(0, 0, [vim ? "space ." : "cmd-.", "markdown"], ["enter", "new block"], ["↑↓", "blocks"]);
   else if (markdown && view !== "preview") list.splice(0, 0, [vim ? "space ." : "cmd-.", "markdown"]);
   return [...list, vim ? ["space ?", "keys"] : ["cmd-k ?", "keys"]];
 }
@@ -328,7 +328,7 @@ export function hintList({ mode = null, vim = false, vimMode = "normal", server 
 export function editorKeys(vim) {
   const app = [["cmd-s", "save"], ["cmd-f", "find"], ["cmd-alt-f", "replace"], ["cmd-l ctrl-g", "go to line"], ["cmd-k n / p", "next / prev problem"],
     ["cmd-k m", "problems"], ["cmd-k d", "definition"], ["cmd-i", "hover"], ["ctrl-= ctrl--", "hover more / less"], ["cmd-r", "reload"],
-    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown: rendered / split / preview / text"], ["cmd-.", "Markdown commands (then b i ` k h H l n t x q c r, 0-6)"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k shift-l / shift-h", "move tab right / left"], ["cmd-k w", "close tab"],
+    ["cmd-k v", "vim on / off"], ["cmd-k z", "word wrap on / off"], ["cmd-shift-v", "Markdown: rendered / split / preview / text"], ["cmd-.", "Markdown commands (then b i ` k h H l n t x q c r, 0-6)"], ["enter", "rendered: at a block's end, a new paragraph (shift-enter: a line break)"], ["cmd-k ] / [", "next / prev tab"], ["cmd-k shift-l / shift-h", "move tab right / left"], ["cmd-k w", "close tab"],
     ["cmd-p", "files"], ["cmd-shift-f", "grep"]];
   if (!vim) return [...app, ["cmd-k ?", "keys"]];
   return [["hjkl w b e", "move"], ["i a o", "insert"], ["v V ctrl-v", "visual"], ["d c y p", "delete change yank put"], ["u ctrl-r", "undo / redo"],

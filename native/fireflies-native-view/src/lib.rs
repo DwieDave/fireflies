@@ -102,7 +102,51 @@ pub enum Kind {
     Pip,
 }
 
+/// A mouse event as a view's hit test sees it: whose button.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Press {
+    /// The left button going down, dragging or coming up (not with Control:
+    /// that's a right-click on a Mac).
+    Left,
+    /// The right button, or Control with the left: the view's context menu.
+    Right,
+    /// Any other button, the wheel, a move, or no event at all.
+    Other,
+}
+
+impl Press {
+    /// The press an AppKit event is (`NSEventType`'s raw value, Control held).
+    pub fn of_event(event_type: u64, control: bool) -> Press {
+        match event_type {
+            // LeftMouseDown, LeftMouseUp, LeftMouseDragged
+            1 | 2 | 6 if control => Press::Right,
+            1 | 2 | 6 => Press::Left,
+            // RightMouseDown, RightMouseUp, RightMouseDragged
+            3 | 4 | 7 => Press::Right,
+            _ => Press::Other,
+        }
+    }
+}
+
+/// Whether a view takes a mouse event (`press`) at a point: not in a hole cut
+/// for an overlay above it (`in_hole`), not under a backdrop (`dimmed`: a
+/// dialog's, a window's scrim), and not a left press its kind gives to
+/// Fireflies (`gives_left`, Kind::gives_left_presses). Where it doesn't, the
+/// event goes to Fireflies' drawing below.
+pub fn takes_press(dimmed: bool, in_hole: bool, gives_left: bool, press: Press) -> bool {
+    !dimmed && !in_hole && !(gives_left && press == Press::Left)
+}
+
 impl Kind {
+    /// Whether a left press on a view of this kind (with its drag and release)
+    /// goes to Fireflies instead of the view. Picture in picture's video: its
+    /// window is dragged by it as by its bar (Fireflies' window drag: a press
+    /// that moves 4 px is a drag, else a click, which focuses the player). Its
+    /// right-click menu and the wheel stay the page's.
+    pub fn gives_left_presses(self) -> bool {
+        matches!(self, Kind::Pip)
+    }
+
     /// Whether Escape hands the keyboard back from a view of this kind to the
     /// app: ⌘Esc (`cmd`) from any, plain Esc (`bare`) from views that have no
     /// use for it. Pages, the inspector and picture in picture keep plain Esc.
@@ -743,6 +787,36 @@ mod tests {
         let s = Spec::parse(&json!({ "kind": "web", "url": "https://x.y", "tabs": true })).unwrap();
         assert!(s.tabs);
         assert!(s.navigated("c.d").unwrap().tabs);
+    }
+
+    #[test]
+    fn the_pip_video_gives_its_left_presses_to_fireflies_and_keeps_the_rest() {
+        // AppKit's event types: left down / up / dragged, right ones, the wheel, a move.
+        let left = [1, 2, 6].map(|t| Press::of_event(t, false));
+        assert_eq!(left, [Press::Left; 3]);
+        // Control-click is a right-click on a Mac: the page's menu, not a drag.
+        assert_eq!([1, 2, 6].map(|t| Press::of_event(t, true)), [Press::Right; 3]);
+        assert_eq!([3, 4, 7].map(|t| Press::of_event(t, false)), [Press::Right; 3]);
+        assert_eq!([22, 5, 25, 0].map(|t| Press::of_event(t, false)), [Press::Other; 4]);
+        // Only picture in picture gives its left presses away.
+        for k in [Kind::Web, Kind::Pdf, Kind::Media, Kind::QuickLook, Kind::Inspector, Kind::Chromium] {
+            assert!(!k.gives_left_presses(), "{}", k.name());
+        }
+        assert!(Kind::Pip.gives_left_presses());
+        // The video: a left press (a click or the start of a drag) is Fireflies';
+        // the rest the view's, as any view's.
+        let pip = Kind::Pip.gives_left_presses();
+        assert!(!takes_press(false, false, pip, Press::Left));
+        assert!(takes_press(false, false, pip, Press::Right));
+        assert!(takes_press(false, false, pip, Press::Other));
+        // A page keeps its left presses.
+        assert!(takes_press(false, false, false, Press::Left));
+        // Holes and backdrops: nothing for any view, as before.
+        for press in [Press::Left, Press::Right, Press::Other] {
+            assert!(!takes_press(true, false, false, press));
+            assert!(!takes_press(false, true, false, press));
+            assert!(!takes_press(false, true, pip, press));
+        }
     }
 
     #[test]

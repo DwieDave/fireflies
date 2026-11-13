@@ -118,10 +118,16 @@ test:
     bun test scripts/nocturne-editor-live.test.ts
     # The editor's rendered view and the scratchpad as a whole pane (mocks herdr): the block written back byte for byte, arrows across blocks, cmd-. and a letter, vim, undo, autosave and close.
     bun test scripts/nocturne-editor-rendered.test.ts
+    # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
+    bun test scripts/nocturne-editor-mdlive.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
     bun test scripts/nocturne-scratchpad.test.ts
+    # Opening the scratchpad from the palette, the + new menu's tile and its command: only the sidebar's copy awaits git; failures toast.
+    bun test scripts/nocturne-scratchpad-open.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
     bun test scripts/nocturne-pane-pins.test.ts
+    # The picture in picture player's bar in sections (a dithered seam between), wide and narrow, and its ⋯ menu's sections.
+    bun test scripts/nocturne-pip.test.ts
     # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.
     bun test scripts/nocturne-floatfocus.test.ts
     # Usage limits: a scratch app asks nothing; the two limits.js copies are one file.
@@ -130,12 +136,16 @@ test:
     bun test scripts/nocturne-usage-poll.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/nocturne-procs.test.ts
-    # Its deck and the strip's tree mark: every key, the cursor across refreshes, ask / TERM / KILL against a fake exec.
+    # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the system tab's second.
     bun test scripts/nocturne-procs-deck.test.ts
     # Its system graphs' readings: iostat, vm_stat, netstat, df and ioreg on a Mac's output; a machine without them reads null.
     bun test scripts/nocturne-procs-sys.test.ts
     # The new-space picker: its folders' sources and order, the filter, typed paths and tab, the name from the folder, every key, the space made or attached (stand-ins).
     bun test scripts/nocturne-newspace.test.ts
+    # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.
+    bun test scripts/nocturne-chrome.test.ts
+    # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
+    bun test scripts/nocturne-tab-seam.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

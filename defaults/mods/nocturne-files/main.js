@@ -27,7 +27,7 @@
 //
 // Click a file: select it (the keyboard comes here, the preview split follows).
 // Double-click a file (enter, the menu's Open): a tab of the app's editor,
-// whatever its kind (editor-route.js `look`): a Markdown file in its preview
+// whatever its kind (editor-route.js `look`): a Markdown file in the editor's view for it
 // (alt-double-click: as text), a picture, PDF, table, patch, font or clip
 // drawn in its tab by the preview's viewer (alt-double-click: the system's
 // app, or a table or patch as text). `p` (the menu's "Open in its viewer
@@ -664,7 +664,7 @@ export default class Files extends View {
   }
 
   /** Opens a file to look at it in the editor as a tab, whatever its kind (a
-   *  picture, a PDF, a table drawn in its tab, Markdown in its preview): the
+   *  picture, a PDF, a table drawn in its tab, Markdown in the editor's view for it): the
    *  editor this pane sent files to, else the shown tab's; with none, a new
    *  one beside (editor-route.js). */
   openLooked(path, cx) {

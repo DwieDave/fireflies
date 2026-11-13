@@ -24,7 +24,6 @@ import { toggleProcs } from "./procs.js";
 import { gitOpen, openWorktrees } from "./git.js";
 import { githubOpen } from "./github.js";
 import { togglePicker } from "./picker.js";
-import { openScratchpad } from "./scratchpad.js";
 import { openNewMenu } from "./newmenu.js";
 import { NAME_PANE, EDIT_SPACE } from "./menu.js";
 import { TOASTS, toastKey } from "./toast.js";
@@ -106,6 +105,10 @@ const PANE = {
     ["tab_close", "Close the tab", "web browser tab shut"],
     ["tab_next", "Next tab", "web browser tab right switch"],
     ["tab_prev", "Previous tab", "web browser tab left switch"],
+    ["tab_move_left", "Move the tab left", "web browser tab reorder order drag"],
+    ["tab_move_right", "Move the tab right", "web browser tab reorder order drag"],
+    ["pin_tab", "Pin the tab to the shelf (or unpin it)", "web browser tab pin shelf jar keep unpin"],
+    ["tab_menu", "The tab's menu", "web browser tab menu pin move close"],
     ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
   "nocturne-markdown": ["Markdown", [
@@ -189,20 +192,20 @@ function findEntries() {
       words: "open file picker fuzzy go to file quick open search name path", go: () => togglePicker("files") },
     { name: "nocturne.grep", args: {}, group: "Find", icon: "search", title: "Grep the project…",
       words: "grep search text in files find content ripgrep rg project folder", go: () => togglePicker("grep") },
-    { name: "nocturne.scratchpad", args: {}, group: "Open", icon: "file-text", title: "Scratchpad",
-      words: "scratchpad note notes scratch pad markdown repository repo jot todo memo", go: () => { openScratchpad(); } },
   ];
 }
 
 /** Nocturne's panels as palette entries: `go` runs them; `bind` is their key in keys.json's layout section. */
 function openEntries() {
-  const bind = { files: "nocturne.files", git: "nocturne.git", diff: "nocturne.diff", worktrees: "nocturne.worktrees", github: "nocturne.github" };
+  // The scratchpad is a panel too (panels.js): its pick runs nocturne.scratchpad(-tab), opened by the sidebar's copy.
+  const bind = { files: "nocturne.files", git: "nocturne.git", diff: "nocturne.diff", worktrees: "nocturne.worktrees", github: "nocturne.github", scratchpad: "nocturne.scratchpad" };
+  const bindTab = { scratchpad: "nocturne.scratchpad-tab" };
   const out = [];
   for (const p of panels()) {
     const where = p.fixed === "float" ? "floating over the tab" : p.fixed === "edge" ? "down the right edge" : "beside the focused pane";
     out.push({ name: "nocturne", args: { panel: p.id }, group: "Open", icon: p.icon, bind: bind[p.id],
       title: p.open?.() ? `Close ${p.name.toLowerCase()}` : p.name, words: `open ${p.words ?? ""} ${where}`, go: () => p.pane() });
-    out.push({ name: "nocturne", args: { panel: p.id, tab: true }, group: "Open", icon: p.icon,
+    out.push({ name: "nocturne", args: { panel: p.id, tab: true }, group: "Open", icon: p.icon, bind: bindTab[p.id],
       title: `${p.name} in a new tab`, words: `open ${p.words ?? ""} tab`, go: () => p.tab() });
   }
   // The focused pane's folder as a files pane of its own (files.open), beside it or in a tab.
@@ -378,8 +381,8 @@ const NAMED = [
   ["terminal.search", {}, "Terminal", "Find in the terminal…", "search scrollback history text"],
   ["terminal.scroll", { to: "top" }, "Terminal", "Scroll to the top of the history", "scrollback oldest start beginning"],
   ["terminal.scroll", { to: "bottom" }, "Terminal", "Scroll back to the live screen", "scrollback bottom end newest"],
-  ["agent.next", {}, "Agent", "Next agent", ""],
-  ["agent.prev", {}, "Agent", "Previous agent", ""],
+  ["agent.next", {}, "Agent", "Next agent", "pinned shelf web page dock"],
+  ["agent.prev", {}, "Agent", "Previous agent", "pinned shelf web page dock"],
   ["window.minimize", {}, "Window", "Minimize window", ""],
   ["window.maximize", {}, "Window", "Maximize window", "restore"],
   ["window.close", {}, "Window", "Close window", "quit"],
@@ -462,6 +465,8 @@ export const OUT = {
   "nocturne-browser.focus": "internal: hands the web pane's bar the keyboard",
   "nocturne-browser.web": "hands the keyboard to the page: click it",
   "nocturne-browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
+  "nocturne-browser.show": "a tab for a pane by its slot (show:{slot, tab}): a web tab's tile on the shelf",
+  "nocturne-browser.tab_act": "internal: a pick in a web tab's menu (tab_act:{slot, tab, act})",
   "nocturne-agents.focus": "internal: hands the agents graph the keyboard",
   "nocturne-usage.focus": "internal: hands the usage pane the keyboard",
   "nocturne-pip.focus": "internal: hands the player the keyboard",
@@ -529,8 +534,10 @@ const NEEDS_TERMINAL = new Set(["terminal.copy", "terminal.paste", "terminal.pas
 // macOS only (app.quit too, on every platform the window's close quits).
 const MAC_ONLY = new Set(["app.hide", "app.hide_others", "app.show_all"]);
 // Nocturne runs these in place of Fireflies': the same key, the sidebar's order;
-// "New space" is the folder picker (newspace.js).
-const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new" };
+// "New space" is the folder picker (newspace.js); next / previous agent walk on
+// through the shelf's pinned panes (walk.js).
+const IN_PLACE = { "space.next": "nocturne.next", "space.prev": "nocturne.prev", "space.new": "nocturne.space-new",
+  "agent.next": "nocturne.agent-next", "agent.prev": "nocturne.agent-prev" };
 
 /** Every entry for the state we're in now. */
 function entries() {

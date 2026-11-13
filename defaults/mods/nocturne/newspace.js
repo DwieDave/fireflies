@@ -246,6 +246,7 @@ export default class NewSpace {
     if (v === this.query) return;
     this.query = v;
     this.cursor = 0;
+    this.reveal = true;
     this.error = "";
     if (isPath(v)) this.list(splitPath(v, this.home).dir, cx);
     cx.notify();
@@ -257,6 +258,7 @@ export default class NewSpace {
     try { this.input.set_selected_range({ start: v.length, end: v.length }); } catch { /* the caret stays */ }
     this.query = v;
     this.cursor = 0;
+    this.reveal = true;
     this.error = "";
     if (isPath(v)) this.list(splitPath(v, this.home).dir, cx);
     cx?.notify?.();
@@ -289,7 +291,7 @@ export default class NewSpace {
   move(by, cx) {
     const n = this.rows(cx).all.length;
     this.cursor = n ? (((this.cursor + by) % n) + n) % n : 0;
-    this.scroll.scroll_to_item?.(this.cursor);
+    this.reveal = true; // the render brings its row into view (render: its child's index)
     cx?.notify?.();
   }
 
@@ -423,7 +425,7 @@ export default class NewSpace {
     const { all, path, asking } = view;
     this.cursor = Math.min(this.cursor, Math.max(0, all.length - 1));
     const items = [];
-    let lastFrom = null;
+    let lastFrom = null, cursorChild = -1;
     if (path) items.push(div().id("ns-sec-in").px(12).pt(8).pb(3).flex_none().child(eyebrow(t, `in ${tail(tilde(view.dir, this.home), 40)}`)));
     all.forEach((r, i) => {
       if (r.kind !== "folder" && lastFrom !== "end") {
@@ -437,8 +439,16 @@ export default class NewSpace {
         items.push(div().id(`ns-sec-${r.from}`).px(12).pt(8).pb(3).flex_none().child(eyebrow(t, SECTIONS[r.from] ?? r.from)));
         lastFrom = r.from;
       }
+      if (i === this.cursor) cursorChild = items.length;
       items.push(this.row(t, r, i, i === this.cursor && !this.naming));
     });
+    // The list's children are its rows and its section heads and rule, and
+    // scroll_to_item counts children: the cursor's row goes by its child
+    // index, whole; on the first row the list's top (its head) shows too.
+    if (this.reveal && !this.naming && cursorChild >= 0) {
+      this.reveal = false;
+      this.scroll.scroll_to_item?.(this.cursor === 0 ? 0 : cursorChild);
+    }
     const title = this.space ? `attach ${this.space.name} to` : "new space";
     const hint = (k, w) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(w));
     const full = this.naming ? "" : ghost(this.query, all[this.cursor], this.home);

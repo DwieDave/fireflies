@@ -25,7 +25,7 @@ import { theme, terminals, nextCommand, shared, keys, layout, run, settings, pro
 import { Engine, items, OPEN } from "./engine.js";
 import { counts } from "./model.js";
 import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.js";
-import { ART, dither, stop } from "./kit.js";
+import { ART, dither, stop, toolGround, toolHover } from "./kit.js";
 
 const POLL = 1500;
 // Room after the bell, layout px: the main block's side padding, so its edge
@@ -108,11 +108,11 @@ export default class Bell {
     // How big the overview can be (open.js overviewPlace).
     try { noteWindow(window.viewport_size?.()); } catch { /* not drawing: the last size stays */ }
     return h_flex().id("notify-bell").relative().size_full().pr(end()).items_center().justify_start().bg(t.background)
-      // The tab strip's horizon continues under the bell.
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+      // The toolbar's ground continues under the bell (kit.js toolGround).
+      .children(toolGround(t))
       .child(h_flex().id("bell").relative().flex_none().h(24).px(7).gap(6).items_center().text_size(11).text_color(open ? t.foreground : t.muted).cursor_pointer()
         .on_size_change((size) => fit(size.width))
-        .hover((s) => s.bg(t.ansi0).text_color(t.foreground))
+        .hover((s) => s.bg(toolHover(t)).text_color(t.foreground))
         // No tooltip while open: it would sit on the drop-down.
         .when(!open, (el) => el.tooltip(tip))
         // As the strip's buttons (nocturne/tabs.js tool): the click goes by

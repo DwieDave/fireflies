@@ -165,7 +165,9 @@ export class Autosave {
       this.running = null;
       this.at = Date.now();
       if (this.again) { this.again = false; return this.run(); }
-      this.set(ok ? "saved" : "error");
+      // Typed again while it wrote: that wait is still on, and the state says so
+      // (a "saved" note would let a change on disk replace what's typed).
+      this.set(!ok ? "error" : this.cancel ? "pending" : "saved");
     })();
     return this.running;
   }

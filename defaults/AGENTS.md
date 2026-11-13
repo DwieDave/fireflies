@@ -340,22 +340,31 @@ the highlighted line shows where it will land.
   it started (terminals without a pane under "no pane"; `a` switches to every
   process of yours, rooted where the parent isn't yours), each row name,
   arguments, its listening ports, cpu, memory, uptime and pid, the selected
-  one with its whole command line and its own cpu / memory graphs; ports, the
+  one opening a block set apart by air, a ground and a dithered rule: its
+  whole command line, pid / parent with show, copy, end and end tree
+  buttons, and its own cpu / memory graphs; ports, the
   TCP ports your processes listen on (this app's first, with their tab and
   terminal), where enter / `o` opens `http://localhost:<port>` as a new tab in
   the focused tab's web pane (`nocturne-browser.open`) or a web pane beside the
   focused one (`app.open_url`), `c` copies that address; system, dithered
   graphs of the last 90 s of CPU, GPU (ioreg's device utilization), memory
   (and its pressure), disk (MB/s, how full) and network (in above the line,
-  out below), read every 2 s while the deck is open and never while it's
-  closed; a source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
+  out below), read every second while the system tab shows, every 2 s behind
+  the other tabs, never two at once and never while the deck is closed; a
+  source the machine lacks says so. Keys: j/k ↑↓, g/G, pgup/pgdn,
   h/l ←→ fold or step out / in, space folds, enter shows a process's terminal
   pane (a group folds), `x` ends the process (`X` with everything under it):
   it asks in the deck, sends TERM, and two seconds on names what still runs,
   where `K` sends KILL; `c` copies a process's command line, `/` finds, `r`
   reads again, `?` lists the keys, `q`/esc close. The app itself, herdr-core,
   its holders, launchd and other users' processes carry a shield and can't be
-  ended there. It reads `ps` and `lsof` every 2 s while open.
+  ended there. It reads `ps` and `lsof` every 2 s while open. Every key has
+  its pointer twin: the wheel scrolls the processes and the ports (the cursor
+  stays put; a key brings it back), and a long command in the detail block
+  first; a click selects a row, a double click does what enter does, a fold
+  arrow folds on a click, a long list's scrollbar drags, the tabs and the
+  scope switch on a click, the foot's keys are buttons, and a port row shows
+  open ↗ / copy / end while selected or hovered.
 - **Notifications** (Nocturne's, the `nocturne-notifications` mod): one place
   for everything agents need from the person, from every agent, space and
   machine. The bell at the right of Nocturne's tab strip, before "+ new" (a 9 px pixel bell,
@@ -436,11 +445,18 @@ the highlighted line shows where it will land.
   link, and the link menu's "Open Link in New Tab", open it in a tab behind
   (Shift: in front); `target=_blank` and `window.open` open one in front, after
   the page's earlier links. A click shows a tab, × or a middle click closes it;
-  closing the last leaves a blank tab (the pane stays). The bar, the address,
+  closing the last leaves a blank tab (the pane stays). Drag a tab along the
+  strip to move it (a marker shows where it lands; the numbers follow), or `<` /
+  `>` in the bar (the ringed tab, else the shown one); the order is kept. A
+  right-click on a tab (or `m` in the bar) opens its menu: pin it to the
+  sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
+  close it; ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
-  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev` (the
-  palette's Web entries), and `nocturne-browser.open:<value>` for a mod: value
+  `nocturne-browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
+  `.tab_move_left`, `.tab_move_right`, `.pin_tab`, `.tab_menu` (the palette's
+  Web entries), `nocturne-browser.show:{"slot": …, "tab": …}` (that pane shows
+  that tab, as a pinned tab's tile does), and `nocturne-browser.open:<value>` for a mod: value
   `{"url": …, "slot": …}` as JSON (or a bare URL): the web pane whose props'
   `slot` matches (none: the one other commands reach) opens the page in a new
   tab in front and its pane takes the keyboard. A `file://` URL (an HTML file) loads as
@@ -448,13 +464,14 @@ the highlighted line shows where it will land.
   typed in the address it does the same. A mod finds a web pane and its
   slot in `panes()` (`mod: "nocturne-browser"`, `props.slot`). Each web pane with a slot
   publishes its shown tab's title (else its host) in shared `nocturne-browser.titles`
-  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name.
+  (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
+  and every tab's in `nocturne-browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
   Cmd-Esc in any native view (page, PDF, player) gives the keyboard back to
   its pane; in a PDF, the player and Quick Look plain Esc does too.
 - **Markdown files**: a link to an existing `.md` / `.markdown` file in a
   terminal (a path, `path:42`, a `file://` URL or OSC 8 link, a path relative to
   the terminal's folder, or a bare `README.md` there) opens it as a tab of the
-  editor, in its preview (Editing files: the tab's editor, else a new one
+  editor, in the editor's view for Markdown (Editing files: the tab's editor, else a new one
   beside that pane); clicking it again shows that tab. Nocturne's files pane
   does the same on a double click or enter (alt-double-click or `e`: as text,
   the preview beside; `p` or the menu's "Open in its viewer pane": the viewer).
@@ -557,7 +574,7 @@ the highlighted line shows where it will land.
   pane, `o` the system's app, `y` the path, `d` close, `?` the keys; the hint
   line along the bottom is clickable. A file opened to be looked at (a
   terminal's link, the files pane's double click or enter, the picker's pick:
-  `look`) starts drawn, a Markdown file in its preview; an edit (`e`, a grep
+  `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
   hit, definitions) opens its text. Another machine's pictures open in the
   preview pane, as before.
   **File tabs**: an editor pane holds several files, each a tab on the strip
@@ -581,7 +598,7 @@ the highlighted line shows where it will land.
   through shared `nocturne-editor.open` `{ slot, path, line?, col?, view?, look?, n }`
   (n counting up; `view` a Markdown file's split / preview / text, or
   `preview` / `text` for a table, patch or SVG; `look` opened to be looked at:
-  a new tab starts drawn, Markdown in its preview) and focus
+  a new tab starts drawn) and focus
   its pane; each editor notes its files by slot in shared
   `nocturne-editor.paths` (`editor.open` reads it to find the editor holding a
   file in any tab) and the last one with the keyboard in `nocturne-editor.last`
@@ -670,17 +687,28 @@ the highlighted line shows where it will land.
   other block stays drawn. Up / down past a block's first or last row step
   into the next block (blank lines between are passed over); a click on a
   drawn block puts the caret in it; enter on a list item, task or quote starts
-  the next one (on an empty one it ends the list); a task box ticks with a
-  click. The file's own editor holds the whole text, so saving, undo (cmd-z,
+  the next one (on an empty one it ends the list); enter on the last line of
+  any other block starts a new paragraph under it (the text after the caret
+  goes with it; shift-enter is a line break inside the block; inside a code
+  block enter is a new line, at its closing line's end a new block); a task
+  box ticks with a click. Adding a block with the pointer: the "+" left of
+  the block under the pointer, and the "add a block" line under the last
+  block, put an empty paragraph there. An empty block made so offers the
+  kinds (heading, list, task, quote, code, rule): a click on one, or cmd-.
+  and its letter. The block being typed into stays one stable thing (its
+  height kept, edited in place), and a key costs the same in a long file.
+  The file's own editor holds the whole text, so saving, undo (cmd-z,
   vim's u), the unsaved mark and the language server are the text view's, and
-  lines that aren't edited stay byte for byte. Vim works over the whole text:
-  j / k walk out of a block and the block follows. What it can't do: a block
+  lines that aren't edited stay byte for byte. Vim works over the whole text
+  as on plain text (motions, counts, operators, . and u / ctrl-r cross
+  blocks): the lit block follows its caret, and a visual selection lights
+  every block it touches, drawn in the block. What it can't do: a block
   being typed into is code-font source (a heading isn't heading-size then), a
   click lands on a block's first line, not the character clicked; find and
   replace work in the text view.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
-  space .) opens their list at the caret, lit for what's on there, and a
-  letter runs one: b bold, i italic, \` inline code, k link, h / H heading level
+  space .), or the bar's "markdown" chip, opens their list at the caret, lit
+  for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
   t task box, x tick, q quote, c code block, r rule. Running one where it's
   on takes it off again; with a caret in the rendered view, list, task,
@@ -775,9 +803,13 @@ the highlighted line shows where it will land.
   `.close-tab`, and `nocturne-editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
-  "Scratchpad", the "+ new" menu's row): a Markdown note that belongs to the shown space's
-  repository but isn't in it, opened rendered in an editor pane of its own
-  beside the focused pane. One note per repository, found by git's common dir
+  "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
+  `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
+  a new tab" or the tile with the menu set to new tab): a Markdown note that
+  belongs to the shown space's repository but isn't in it, opened rendered in
+  an editor pane of its own beside the focused pane. When it can't be found
+  or opened a toast says why (git not answering opens the folder's own note
+  and says so). One note per repository, found by git's common dir
   (`git rev-parse --git-common-dir`), so every worktree of a repository opens
   the same note; a folder outside git gets its own. It lives at
   `~/.config/herdr-app/scratchpad/<repo>-<hash>.md` (the app's folder;
@@ -807,7 +839,7 @@ the highlighted line shows where it will land.
   with `q` / `esc`. In every files pane a click on a file selects it (the
   keyboard goes there, the preview split follows) and opens nothing; a double
   click (or enter) opens it as a tab of the editor whatever its kind, the same
-  editor each time (Markdown in its preview, a picture, PDF or table drawn;
+  editor each time (Markdown in the editor's view for it, a picture, PDF or table drawn;
   alt-double-click: the other way, as `e`; `p`: its viewer pane). A click on a folder
   folds it; a double click opens the folder in $EDITOR (its first click's fold
   undone). Every files pane: `j k h l` / arrows, `gg` / `G`, enter,
@@ -1251,12 +1283,14 @@ neighbours; on the rail the cell and its padding): click focuses the agent,
 right-click its menu, double-click renames it. Pinned agents
 (`terminal.pin`, the `herdr.pinned` label) sit above them all in a glass jar
 at the top (in the open sidebar a mason jar: a threaded lid, round shoulders,
-a sheen down its glass, never shorter than a jar with room under one firefly;
+a sheen down its glass, never shorter than a jar with room under one firefly,
+what it holds centered in the glass when it's that short;
 on the rail a small one), in the order pinned (the label `nocturne.pinned-at`, ms; a pin
 made elsewhere gets one when the sky sees it), keeping their status. Any other
 pane can be pinned too (a web page, an editor, a files pane, a plain shell): it
 sits as a 28 px tile with the pane's icon on a dithered shelf at the jar's
-foot (on the rail 18 px tiles two abreast), in the order pinned, its own order
+foot (clear of the last firefly's halo, the tiles and caption in from the
+glass as far as the fireflies' squares; on the rail 18 px tiles two abreast), in the order pinned, its own order
 apart from the fireflies'. A tile is moonlit while its pane is on screen, the
 focused one wears the corner ticks; the caption line under the shelf names
 the tile under the pointer or the keyboard's cursor (else the focused one):
@@ -1264,15 +1298,30 @@ its name, then its kind, its space when it's another one, "parked". A click
 or enter goes to it in whatever tab and space (a parked pane comes back);
 right-click opens its pane's menu. A shell's pin is its terminal's
 (`terminal.pin`, ends with it); a mod pane's is kept in shared
-`nocturne.pinned-panes` (`[{pane, mod, props, at}]`), found again by its mod
+`nocturne.pinned-panes` (`[{pane, mod, props, at, tab?}]`), found again by its mod
 and props if a restart gives the pane a new id, and gone once the pane has
 been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
 its page's title when nocturne-browser notes it in shared
-`nocturne-browser.titles` (by slot), else the host it opened on. Pin or unpin
+`nocturne-browser.titles` (by slot), else the host it opened on. One tab of a
+web pane can be pinned on its own (the tab's right-click menu or `m` in the
+bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
+a record with `tab` (the web tab's id, kept across restarts), its own tile named
+by that tab's title (`nocturne-browser.tab-titles`, `{ [slot]: { [tab]: title } }`),
+keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
+whole, can each have a tile. Going to it focuses the pane, then
+`nocturne-browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
+screen yet takes the same wish from shared `nocturne-browser.show` when it
+shows). Closing the tab drops its pin. Pin or unpin
 from a firefly's or any pane's right-click menu (open sky and rail), the
 palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
-firefly up or down in the jar, a tile left or right on the shelf. The dock
+firefly up or down in the jar, a tile left or right on the shelf.
+`nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
+place of the core's `agent.next` / `agent.prev`) walk the agents in the
+sidebar's order, then on through every tile on the shelf in its order (web
+pages, editors, files, shells; each pinned web tab its own stop), then back to
+the first agent, and the other way round; a tile is gone to as a click on it
+goes. The dock
 (dock.js) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
@@ -1375,7 +1424,12 @@ drops nothing. Two blue corner ticks mark what's shown: the shown space (its pla
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
 
-Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
+Nocturne's toolbar, right of the tabs past a seam (the tabs dissolve into the
+night over 48 px in dithered steps, so overflowing ones slip under it; a
+dithered band the strip's height), on a dithered plate of its own with a lit
+foot that runs under every tool, the bell and "+ new" to the strip's right edge
+(each block draws its stretch, kit.js `toolGround`; a tool under the pointer
+lights a step above the plate, `toolHover`): ▶ and its runs (the script runner),
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
@@ -1385,7 +1439,7 @@ the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
 the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
-u; the panels that float over the tab, Git, its diff, worktrees and GitHub,
+u, Scratchpad s: the repository's note; the panels that float over the tab, Git, its diff, worktrees and GitHub,
 open from the git button, its ▾, their keys and the palette instead), every
 installed agent (1-9; the ones that aren't installed hide behind a dim
 "2 not installed · show" row: enter or a click shows them, again hides them,
@@ -1711,7 +1765,11 @@ The main ones:
   lifts the video into the page's top layer to fill it, with the rest of the page hidden, in
   any of the site's layouts (a site moving its player, as YouTube does when the width
   changes, is followed; an embedded player's iframe too); the pane is left empty meanwhile
-  (draw a placeholder; the page gets `pip.leave` when it's back). Actions: `pip.toggle`
+  (draw a placeholder; the page gets `pip.leave` when it's back). A left press on a `pip`
+  view (and its drag and release) goes to the mod's element under it, not the video: in a
+  `kind: "window"` overlay it drags the window like any press the mod doesn't stop (past
+  4 px; less is a click), so a player window moves by its video too. Right-clicks and the
+  wheel stay the page's; `native.debug` shows it per view (`pressAtCenter`). Actions: `pip.toggle`
   (play/pause), `pip.seek { by }` (seconds, back when negative), `pip.mute { muted? }`
   (sound off/on; without `muted`, the other way round), `pip.sync` (nothing): each answers
   with event `pip.state { result: "playing" | "paused", muted, width, height }` (the video's
@@ -1737,7 +1795,12 @@ The main ones:
   only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
   shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Fireflies)
-  ✕; what doesn't fit a narrow bar goes into a ⋯ menu (play/pause and close stay). The
+  ? ✕, in four sections with a short dithered seam between them (↩ where it came from ·
+  « ❚❚ » sound, playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own); what doesn't fit a
+  narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
+  takes its seam along), which lists them in the same sections, a dithered rule between. The
+  window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
+  video gives the player the keyboard), and resizes by its edges and corners. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `nocturne-pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
@@ -1754,7 +1817,7 @@ The main ones:
   `editor.open {path, line?, col?, look?, in?, pane?, on?}` (a file in the editor beside `pane`,
   default the focused one, or the editor there already holding it in one of its tabs (that tab
   shows), else as a new tab of an editor in `pane`'s tab (`in: "pane"`: a new editor beside), going to `line` / `col`, one-based;
-  `look`: to be looked at, a picture or table drawn, Markdown in its preview;
+  `look`: to be looked at, a picture or table drawn;
   `in: "system"` the system's app; see Editing files),
   `markdown.open {path, anchor?, in?, pane?, on?}` (a Markdown file rendered in the viewer beside
   `pane`, default the focused one, or the viewer there already showing it; `anchor` scrolls to a

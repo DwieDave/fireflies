@@ -5,8 +5,9 @@
 //             the landing spot in dithered blue. Tab flips it; it's
 //             remembered (shared(DEST)).
 //   panels    a grid of tiles (menuPanels): terminal, web, files, agents,
-//             usage, three to a row (COLS): the short second row keeps the
-//             columns, its third cell empty. Each opens beside the focused pane or in a tab
+//             usage, scratchpad (the repository's note, its own dithered
+//             page-and-moon mark), three to a row (COLS); a short last row
+//             keeps the columns, its cells empty. Each opens beside the focused pane or in a tab
 //             of its own; Files too (a files pane of its own, `files.open`:
 //             the panel docked down the tab's edge is the strip's files
 //             button and cmd-e). Agents and Usage, open in the shown tab,
@@ -31,7 +32,6 @@ import { theme, spaces, knownAgents, run, openOverlay, closeOverlay, props, wind
 import { ART, LOGO, dither, eyebrow } from "./kit.js";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.js";
 import { openWorktrees } from "./git.js";
-import { openScratchpad } from "./scratchpad.js";
 import { openSpacePicker } from "./newspace.js";
 
 // Shared with the shipped new-menu: the last agents each machine reported.
@@ -116,7 +116,6 @@ function items(agents) {
     { kind: "row", id: "space", icon: "plus", name: "New space", hint: shortcut("nocturne.space-new", "layout:nocturne") || shortcut("space.new"), go: () => openSpacePicker(), say: "pick its folder first" },
     { kind: "row", id: "wt-new", icon: "git-branch", name: "New worktree…", go: worktree("new"), off: !space, say: "a new branch, as a space" },
     { kind: "row", id: "wt-open", icon: "folder", name: "Open worktree…", go: worktree("open"), off: !space, say: "a worktree, as a space" },
-    { kind: "row", id: "scratchpad", icon: "file-text", name: "Scratchpad", hint: shortcut("nocturne.scratchpad"), go: () => { openScratchpad(); }, say: "this repository's note, kept out of it" },
   ];
 }
 

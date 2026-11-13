@@ -42,7 +42,8 @@ opens it in a web pane beside the focused one (or the system's browser, per
 their `links` setting). A web pane keeps tabs: `herdr-app do
 nocturne-browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
-`.tab_close` move between them).
+`.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
+the shown one).
 
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
@@ -65,7 +66,7 @@ patches colored (on macOS fonts and audio/video too; `image.open` is the same).
 It shows the file again when you overwrite it, so open it once and keep saving
 to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
 terminal output opens it as a tab of their editor instead, drawn the same way
-(Markdown in its preview); `herdr-app do editor.open --path … --look true`
+(Markdown in the editor's view for it); `herdr-app do editor.open --path … --look true`
 does that too.
 
 To show them code or text at a place (the line you changed, a failing test),
@@ -84,7 +85,10 @@ worktrees; `scratchpad/index.json` names the repository of each file
 (`{ "<file>": { "name", "dir": "<git common dir>", "repo" } }`). Read it for
 what they noted about the work; write to it only when they ask (an open
 scratchpad pane reloads it). `herdr-app do nocturne.scratchpad` opens the
-shown space's note beside the focused pane.
+shown space's note beside the focused pane (`nocturne.scratchpad-tab`: in a
+tab of its own). It's plain Markdown, kept byte for byte: write paragraphs
+and lists as you would in any .md (the person's rendered view adds blocks as
+paragraphs separated by a blank line).
 
 To show them a folder (what you generated, where the files you changed
 live), `herdr-app do files.open --path /abs/path/out` opens a files pane rooted
@@ -100,11 +104,16 @@ terminal and ends with it. In the nocturne layout any pane can be pinned to the
 jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
-mods' shared `nocturne.pinned-panes`; it ends when the pane closes). For a pane
+mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
+a web pane can have a tile of its own (its tab's menu, or `herdr-app do
+nocturne-browser.pin_tab` for the web pane's shown tab); the tile shows that tab. For a pane
 that belongs to no project (a docs page, a dashboard), `herdr-app do
 nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
 repo for git or GitHub, terminals start in ~), pinned to the shelf;
-`herdr-app do nocturne.dock` moves the focused pane there.
+`herdr-app do nocturne.dock` moves the focused pane there. There,
+`nocturne.agent-next` / `nocturne.agent-prev` (cmd-] / cmd-[) walk the
+agents in the sidebar's order and then on through the shelf's tiles, wrapping;
+the core's `agent.next` / `agent.prev` visit agents only.
 
 For a remote space:
 

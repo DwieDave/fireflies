@@ -115,11 +115,11 @@ function menuGrid() {
   return { m, rows, letters };
 }
 
-test("+ new menu: no tile floats over the tab; the five others three to a row, the short row's third cell empty", () => {
+test("+ new menu: no tile floats over the tab; the six others three to a row, the scratchpad among them", () => {
   const { rows, letters } = menuGrid();
-  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "pad"]]);
+  expect(rows).toEqual([["terminal", "web", "files"], ["agents", "usage", "scratchpad"]]);
   // Each keeps its letter.
-  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u" });
+  expect(letters).toEqual({ terminal: "t", web: "w", files: "f", agents: "a", usage: "u", scratchpad: "s" });
   // No tile carries a spot label: not "float", and Files not "edge" (it opens a pane of its own).
   const tileWords = rows.flat().filter((id) => id !== "pad").flatMap((id) => words(ids[`nm-${id}`]));
   expect(tileWords).not.toContain("float");
@@ -142,11 +142,9 @@ test("+ new menu: a little narrower than it was (352), each of three tiles wide 
   const inside = (NEW_W - 2 - 2 * 12 - 2 * 4) / 3 - 2 * 5 - 2;
   // "Terminal": 8 letters at 11 px, 7 px a letter (measured on screen at zoom 0.9).
   expect(inside).toBeGreaterThanOrEqual(8 * 7);
-  // The pads (the empty third cell) are a tile's box: the same flex, padding and border.
+  // The grid is full (six tiles): no pads.
   menuGrid();
-  const pad = ids[Object.keys(ids).find((id) => id.startsWith("nm-pad-"))!];
-  const tile = ids["nm-usage"];
-  for (const k of ["flex_1", "min_w", "h", "px", "border"]) expect(pad.calls[k]).toEqual(tile.calls[k]);
+  expect(Object.keys(ids).filter((id) => id.startsWith("nm-pad-"))).toEqual([]);
 });
 
 test("+ new menu: nothing clipped at the new width: the head, every agent row and every footer line beside \"shift: other\"", () => {

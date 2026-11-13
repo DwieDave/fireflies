@@ -11,7 +11,7 @@
 // { slot, path, line?, col?, view?, look?, n } (the editor whose slot it names
 // opens it, n counts up). Every kind of file goes: a picture, a PDF, a table
 // is drawn in its tab; `look` (opened to be looked at, not edited) starts a
-// new tab drawn, a Markdown file in its preview. With no editor in the shown
+// new tab drawn (Markdown takes the editor's view for it). With no editor in the shown
 // tab, `editor.open` opens one beside the pane, as before; a `view` or `look`
 // then waits for it in the same record with slot null.
 

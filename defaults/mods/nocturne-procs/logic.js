@@ -158,13 +158,15 @@ const termName = (t, pane) => t?.labels?.["nocturne.name"] || pane?.program?.nam
  */
 export function buildTree(ctx) {
   const { procs = [], me = "", terminals = [], panes = [], spaces = [], all = false } = ctx;
-  const ix = index(procs);
+  const ix = ctx.ix ?? index(procs);
   const local = terminals.filter((t) => t?.address && !String(t.address).includes("/") && t.state !== "finished");
   if (all) {
     const mine = procs.filter((p) => !me || p.user === me);
     const roots = mine.filter((p) => { const up = ix.byPid.get(p.ppid); return !up || up.pid === p.pid || (me && up.user !== me); });
-    roots.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.pid - b.pid);
-    return roots.map((p) => procNode(p.pid, ix));
+    // By name, any case, then pid: keys made once (localeCompare in the sort cost a frame's whole budget).
+    const keyed = roots.map((p) => [p.name.toLowerCase(), p.pid]);
+    keyed.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
+    return keyed.map(([, pid]) => procNode(pid, ix));
   }
   const byAddr = new Map(local.map((t) => [t.address, t]));
   const used = new Set();
@@ -330,3 +332,18 @@ export function memory(kib) {
 
 /** A command line for one row: newlines (an agent's brief) as ⏎, runs of space as one. */
 export const oneLine = (s) => String(s ?? "").replace(/\\012|\n/g, " ⏎ ").replace(/\s+/g, " ").trim();
+
+/**
+ * How far a wheel event moves a list, in layout px (more: toward the end).
+ * A mouse wheel reports lines: each moves one `row`. A trackpad reports
+ * pixels (momentum included): they move as far as the fingers, taken back
+ * out of the window's `zoom` (at 0.9 a window pixel is 1/0.9 of a layout one).
+ */
+export function wheelDelta(e, row, zoom = 1) {
+  const lines = Number(e?.delta_lines?.y);
+  if (Number.isFinite(lines) && lines !== 0) return -lines * row;
+  return -(Number(e?.delta?.y) || 0) / (Number(zoom) || 1);
+}
+
+/** A scroll offset moved by `by`, kept within 0 and `max`. */
+export const scrollBy = (offset, by, max) => Math.max(0, Math.min(Math.max(0, max), offset + by));
