@@ -6,11 +6,7 @@
 # checks it against `oxlint -c oxlint.size.json defaults/mods`.
 defaults/mods/agent-graph/claude.ts snapshot
 defaults/mods/agent-graph/main.ts
-defaults/mods/browser/main.ts
-defaults/mods/browser/main.ts init
-defaults/mods/browser/main.ts onEvent
 defaults/mods/editor/diff.ts parse
-defaults/mods/editor/live.ts units
 defaults/mods/editor/main.ts
 defaults/mods/editor/main.ts bar
 defaults/mods/editor/main.ts cardView
@@ -25,13 +21,6 @@ defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
 defaults/mods/editor/viewer.ts
-defaults/mods/editor/vim.ts
-defaults/mods/editor/vim.ts feed
-defaults/mods/editor/vim.ts motion
-defaults/mods/editor/vim.ts normalCommand
-defaults/mods/editor/vim.ts runEx
-defaults/mods/editor/vim.ts textObject
-defaults/mods/editor/vim.ts visualCommand
 defaults/mods/file-tree/diff.ts parse
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
@@ -39,7 +28,6 @@ defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
-defaults/mods/nocturne/sky.ts
 defaults/mods/nocturne/tabs.ts render
 defaults/mods/notifications/claude.ts
 defaults/mods/notifications/claude.ts questionStep

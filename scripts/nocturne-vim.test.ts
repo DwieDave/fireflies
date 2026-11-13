@@ -4,7 +4,9 @@ import { test, expect, describe } from "bun:test";
 // small stand-in plays the editor: it types what vim leaves to it in insert
 // mode, applies vim's edits and moves the caret. `|` marks the caret (Zed's
 // vim tests mark it with ˇ; their cases guided many of these).
-import { createVim, feed, play, tokens, typedText, parse, pattern, token } from "../defaults/mods/editor/vim.ts";
+import { createVim, feed, play, typedText, token } from "../defaults/mods/editor/vim.ts";
+import { parse, tokens } from "../defaults/mods/editor/vim-parse.ts";
+import { pattern } from "../defaults/mods/editor/vim-motions.ts";
 import { applyEdits } from "../defaults/mods/editor/vim.ts";
 
 function split(marked: string) {

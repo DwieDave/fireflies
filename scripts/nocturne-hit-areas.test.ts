@@ -71,7 +71,8 @@ const cx: any = {
   timer: { every() {}, after(_ms: number, f: Function) { timers.push(f); } },
 };
 
-const { default: Sky, laneReach } = await import("../defaults/mods/nocturne/sky.ts");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
+const { laneReach } = await import("../defaults/mods/nocturne/sky-plan.ts");
 
 const agent = (address: string, status: string, focused = false) => ({ address, status, tab: "t1", space: "s1", focused, program: { name: address, agent: true } });
 beforeEach(() => { byId = {}; ran.length = 0; opened.length = 0; termsNow = []; zoom = 0.9; });

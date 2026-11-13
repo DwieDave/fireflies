@@ -125,182 +125,186 @@ export function units(text: string | null | undefined): Unit[] {
     }
   }
 
-  // The line at `n`, "" past the end.
-  const at = (n: number): string => ls[n] ?? "";
-
   while (i < ls.length) {
-    const line = at(i);
-
-    if (blank(line)) {
+    if (blank(lineAt(ls, i))) {
       i++;
       continue;
     }
 
-    const f = FENCE.exec(line);
+    const u = unitFrom(ls, i);
 
-    if (f) {
-      const mark = f[1] ?? "";
-      let j = i + 1;
-
-      while (j < ls.length) {
-        const g = FENCE.exec(at(j));
-        const close = g?.[1] ?? "";
-
-        if (g && close[0] === mark[0] && close.length >= mark.length && !(g[2] ?? "").trim()) break;
-
-        j++;
-      }
-
-      const to = Math.min(j, ls.length - 1);
-
-      out.push({ kind: "fence", from: i, to, lang: (f[2] ?? "").trim().split(/\s+/)[0] || "" });
-      i = to + 1;
-      continue;
-    }
-
-    if (MATH.test(line) && !/^\s*\$\$.+\$\$\s*$/.test(line)) {
-      let j = i + 1;
-
-      while (j < ls.length && !/\$\$\s*$/.test(at(j))) j++;
-      const to = Math.min(j, ls.length - 1);
-      out.push({ kind: "fence", from: i, to, lang: "math" });
-      i = to + 1;
-      continue;
-    }
-
-    const h = HEADING.exec(line);
-
-    if (h) {
-      out.push({ kind: "heading", from: i, to: i, level: (h[1] ?? "").length });
-      i++;
-      continue;
-    }
-
-    if (RULE.test(line)) {
-      out.push({ kind: "rule", from: i, to: i });
-      i++;
-      continue;
-    }
-
-    if (REF.test(line)) {
-      let j = i;
-
-      // A footnote's indented continuation goes with it.
-      while (j + 1 < ls.length && /^(\s{2,}|\t)\S/.test(at(j + 1))) j++;
-      out.push({ kind: "ref", from: i, to: j });
-      i = j + 1;
-      continue;
-    }
-
-    if (QUOTE.test(line)) {
-      let j = i;
-
-      while (j + 1 < ls.length && QUOTE.test(at(j + 1))) j++;
-
-      const callout = CALLOUT.exec(line)?.[1];
-
-      out.push(callout === undefined ? { kind: "quote", from: i, to: j } : { kind: "quote", from: i, to: j, callout: callout.toLowerCase() });
-      i = j + 1;
-      continue;
-    }
-
-    const it = ITEM.exec(line);
-
-    if (it) {
-      const indent = width(it[1] ?? "");
-      const content = width(it[0]);
-      const marker = it[2] ?? "";
-      let j = i;
-
-      // Its continuation: lines indented past its marker, lazy text lines,
-      // blank lines followed by more of it.
-      for (;;) {
-        const next = ls[j + 1];
-
-        if (next === undefined) break;
-
-        if (blank(next)) {
-          let k = j + 1;
-
-          while (k < ls.length && blank(ls[k])) k++;
-
-          if (k < ls.length && indentOf(at(k)) >= content && !ITEM.test(at(k))) {
-            j = k;
-            continue;
-          }
-
-          break;
-        }
-
-        if (ITEM.test(next)) break;
-
-        if (indentOf(next) >= content) {
-          j++;
-          continue;
-        }
-
-        if (starts(next)) break;
-
-        j++; // lazy continuation
-      }
-
-      const t = TASK.exec(line);
-      const task = Boolean(t);
-      const checked = t ? t[3] !== " " : false;
-
-      out.push(
-        /^\d/.test(marker)
-          ? { kind: "item", from: i, to: j, indent, marker, number: Number(marker.slice(0, -1)), task, checked }
-          : { kind: "item", from: i, to: j, indent, marker, task, checked },
-      );
-      i = j + 1;
-      continue;
-    }
-
-    // A line of images only: a block of its own, drawn as the pictures.
-    const img = imageLine(line);
-
-    if (img) {
-      out.push({ kind: "image", from: i, to: i, images: img });
-      i++;
-      continue;
-    }
-
-    // A table: a | line with its |---| rule under it, and the | lines after.
-    if (line.includes("|") && TABLE_RULE.test(ls[i + 1] ?? "") && (ls[i + 1] ?? "").includes("-")) {
-      let j = i + 1;
-
-      while (j + 1 < ls.length && !blank(ls[j + 1]) && at(j + 1).includes("|")) j++;
-      out.push({ kind: "table", from: i, to: j });
-      i = j + 1;
-      continue;
-    }
-
-    // A paragraph, up to a blank line or a line that starts something else;
-    // a setext underline makes it a heading.
-    let j = i;
-    let setext = 0;
-
-    while (j + 1 < ls.length && !blank(ls[j + 1])) {
-      const next = at(j + 1);
-
-      if (SETEXT.test(next) && j === i) {
-        setext = next.trim()[0] === "=" ? 1 : 2;
-        j++;
-        break;
-      }
-
-      if (starts(next) && !(SETEXT.test(next))) break;
-
-      if (SETEXT.test(next)) break;
-      j++;
-    }
-
-    out.push(setext ? { kind: "heading", from: i, to: j, level: setext } : { kind: "para", from: i, to: j });
-    i = j + 1;
+    out.push(u);
+    i = u.to + 1;
   }
 
   return out;
+}
+
+/** The line at `n`, "" past the end. */
+const lineAt = (ls: readonly string[], n: number): string => ls[n] ?? "";
+
+/** The unit starting at line `i` (not blank): which kind it is, and that kind's reading of it. */
+function unitFrom(ls: readonly string[], i: number): Unit {
+  const line = lineAt(ls, i);
+  const f = FENCE.exec(line);
+
+  if (f) return fenceFrom(ls, i, f[1] ?? "", f[2] ?? "");
+
+  if (MATH.test(line) && !/^\s*\$\$.+\$\$\s*$/.test(line)) return mathFrom(ls, i);
+
+  const h = HEADING.exec(line);
+
+  if (h) return { kind: "heading", from: i, to: i, level: (h[1] ?? "").length };
+
+  if (RULE.test(line)) return { kind: "rule", from: i, to: i };
+
+  if (REF.test(line)) return refFrom(ls, i);
+
+  if (QUOTE.test(line)) return quoteFrom(ls, i);
+
+  const it = ITEM.exec(line);
+
+  if (it) return itemFrom(ls, i, it[0], it[1] ?? "", it[2] ?? "");
+
+  // A line of images only: a block of its own, drawn as the pictures.
+  const img = imageLine(line);
+
+  if (img) return { kind: "image", from: i, to: i, images: img };
+
+  // A table: a | line with its |---| rule under it, and the | lines after.
+  if (line.includes("|") && TABLE_RULE.test(lineAt(ls, i + 1)) && lineAt(ls, i + 1).includes("-")) return tableFrom(ls, i);
+
+  return paraFrom(ls, i);
+}
+
+/** A fenced code block from its opening line (`mark` its fence, `info` after it) to the closing one (or the end). */
+function fenceFrom(ls: readonly string[], i: number, mark: string, info: string): Unit {
+  let j = i + 1;
+
+  while (j < ls.length) {
+    const g = FENCE.exec(lineAt(ls, j));
+    const close = g?.[1] ?? "";
+
+    if (g && close[0] === mark[0] && close.length >= mark.length && !(g[2] ?? "").trim()) break;
+
+    j++;
+  }
+
+  const to = Math.min(j, ls.length - 1);
+
+  return { kind: "fence", from: i, to, lang: info.trim().split(/\s+/)[0] || "" };
+}
+
+/** A $$ math block, to the line ending in $$ (or the end). */
+function mathFrom(ls: readonly string[], i: number): Unit {
+  let j = i + 1;
+
+  while (j < ls.length && !/\$\$\s*$/.test(lineAt(ls, j))) j++;
+
+  return { kind: "fence", from: i, to: Math.min(j, ls.length - 1), lang: "math" };
+}
+
+/** A reference definition; a footnote's indented continuation goes with it. */
+function refFrom(ls: readonly string[], i: number): Unit {
+  let j = i;
+
+  while (j + 1 < ls.length && /^(\s{2,}|\t)\S/.test(lineAt(ls, j + 1))) j++;
+
+  return { kind: "ref", from: i, to: j };
+}
+
+/** A quote, its > lines; a callout when its first line names one ([!note]). */
+function quoteFrom(ls: readonly string[], i: number): Unit {
+  let j = i;
+
+  while (j + 1 < ls.length && QUOTE.test(lineAt(ls, j + 1))) j++;
+
+  const callout = CALLOUT.exec(lineAt(ls, i))?.[1];
+
+  return callout === undefined ? { kind: "quote", from: i, to: j } : { kind: "quote", from: i, to: j, callout: callout.toLowerCase() };
+}
+
+/** A list item (`head`: its marker with the space after, `lead` the indent before it). */
+function itemFrom(ls: readonly string[], i: number, head: string, lead: string, marker: string): Unit {
+  const j = itemEnd(ls, i, width(head));
+  const t = TASK.exec(lineAt(ls, i));
+  const task = Boolean(t);
+  const checked = t ? t[3] !== " " : false;
+  const indent = width(lead);
+
+  return /^\d/.test(marker) ? { kind: "item", from: i, to: j, indent, marker, number: Number(marker.slice(0, -1)), task, checked } : { kind: "item", from: i, to: j, indent, marker, task, checked };
+}
+
+/** An item's last line: lines indented past its marker (`content` columns), lazy text lines,
+ *  blank lines followed by more of it. */
+function itemEnd(ls: readonly string[], i: number, content: number): number {
+  let j = i;
+
+  for (;;) {
+    const next = ls[j + 1];
+
+    if (next === undefined) break;
+
+    if (blank(next)) {
+      let k = j + 1;
+
+      while (k < ls.length && blank(ls[k])) k++;
+
+      if (k < ls.length && indentOf(lineAt(ls, k)) >= content && !ITEM.test(lineAt(ls, k))) {
+        j = k;
+        continue;
+      }
+
+      break;
+    }
+
+    if (ITEM.test(next)) break;
+
+    if (indentOf(next) >= content) {
+      j++;
+      continue;
+    }
+
+    if (starts(next)) break;
+
+    j++; // lazy continuation
+  }
+
+  return j;
+}
+
+/** A table: its | lines from the head down. */
+function tableFrom(ls: readonly string[], i: number): Unit {
+  let j = i + 1;
+
+  while (j + 1 < ls.length && !blank(ls[j + 1]) && lineAt(ls, j + 1).includes("|")) j++;
+
+  return { kind: "table", from: i, to: j };
+}
+
+/** A paragraph, up to a blank line or a line that starts something else; a setext underline
+ *  makes it a heading. */
+function paraFrom(ls: readonly string[], i: number): Unit {
+  let j = i;
+  let setext = 0;
+
+  while (j + 1 < ls.length && !blank(ls[j + 1])) {
+    const next = lineAt(ls, j + 1);
+
+    if (SETEXT.test(next) && j === i) {
+      setext = next.trim()[0] === "=" ? 1 : 2;
+      j++;
+      break;
+    }
+
+    if (starts(next) && !SETEXT.test(next)) break;
+
+    if (SETEXT.test(next)) break;
+
+    j++;
+  }
+
+  return setext ? { kind: "heading", from: i, to: j, level: setext } : { kind: "para", from: i, to: j };
 }
 
 /** The unit holding `line` (index), or -1 when it's a blank line between them. */
