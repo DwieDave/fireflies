@@ -1,5 +1,5 @@
 // The preview's viewer: reads a file and draws it, kind by kind (kinds.ts).
-// The preview pane (main.js, its keys and commands described there) is this
+// The preview pane (main.ts, its keys and commands described there) is this
 // view; the files pane's preview split (file-tree) and the editor's drawn tabs
 // mount it as a nested view with props { embedded: true, path, on }. A mod can
 // import only its own files, so file-tree and editor ship this file and the
@@ -25,7 +25,7 @@ import * as herdr from "herdr";
 import { props, theme, settings, exec, run, panes, shared, setShared, watchFolder, nextCommand, home, appHome, writeTextFile, highlight, languageOf, window as appWindow } from "herdr";
 import type { ExecResult, PaneInfo, Theme } from "herdr";
 import type { Guard, Guarded } from "./guard.ts";
-import { isBoolean, isNull, isNumber, isString, isUndefined, object, oneOf, parseJson, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
+import { isBoolean, isNull, isNumber, isString, nullable, object, oneOf, parseJson, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 import type { LookKind, Route, Run } from "./kinds.ts";
 import { kindOf, lookKind, sniffKind, route, toolsFor, rasterArgv, pageCount, duration, tag, noun, siblings, stepIn, fileSize, count, syntaxColors, lineStarts, lineRuns, wrapRows, rowLine, sliceRuns } from "./kinds.ts";
 import type { Converter, Format, Size, View as Look } from "./image.ts";
@@ -40,7 +40,7 @@ import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 const MOD = "preview";
 
 // Each preview's shown file by slot: its name for the pane header
-// (nocturne/header.js), its path so a second click on it finds this preview.
+// (nocturne/header.ts), its path so a second click on it finds this preview.
 const TITLES = sharedMapKey(`${MOD}.titles`, isString);
 const PATHS = sharedMapKey(`${MOD}.paths`, oneOf(isString, isNull));
 const ART = "mods/nocturne/art";
@@ -99,8 +99,8 @@ const TEXT_HEAD = `[ -f "$1" ] || exit 3; wc -c < "$1"; wc -l < "$1"; head -c ${
 // What changed a file without reading it all (a database being written): size and time.
 const STAMP = `[ -f "$1" ] || exit 3; wc -c < "$1"; date -r "$1" +%s 2>/dev/null || stat -c %Y "$1"; od -An -v -tx1 -N 16 "$1"`;
 
-/** A string, null, or (a JavaScript host's unset field) undefined. */
-const maybeString = oneOf(isString, isNull, isUndefined);
+/** A string or null. */
+const maybeString = nullable(isString);
 
 /** The props: the preview pane's ({ path, on, slot }), or a host's that mounts it
  *  embedded ({ embedded, path, on, scroll: { n, dir }, reload }). */
@@ -109,8 +109,8 @@ export const isViewerProps = object({}, {
   path: maybeString,
   on: maybeString,
   slot: maybeString,
-  scroll: oneOf(object({ n: isNumber, dir: isNumber }), isNull, isUndefined),
-  reload: oneOf(isNumber, isNull, isUndefined),
+  scroll: nullable(object({ n: isNumber, dir: isNumber })),
+  reload: nullable(isNumber),
 });
 
 export type ViewerProps = Guarded<typeof isViewerProps>;
@@ -253,7 +253,7 @@ const nativeViews = (): boolean => {
   }
 };
 
-/** A 50% checker filling the parent, `cell` px squares (as ../nocturne/kit.js dither). */
+/** A 50% checker filling the parent, `cell` px squares (as ../nocturne/kit.ts dither). */
 function checker(color: Color, cell = 1): Element {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr())))).absolute().top(0).left(0).size_full();
 }

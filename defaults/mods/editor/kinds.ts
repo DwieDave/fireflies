@@ -288,7 +288,7 @@ export function fileSize(bytes: number): string {
 /** "1 204 330": thin groups of three, as the bar writes counts. */
 export const count = (n: number): string => String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, " ");
 
-// ---- text in the editor's colors (as editor/logic.js and finder)
+// ---- text in the editor's colors (as editor/logic.ts and finder)
 
 /** The moonfly roles a tree-sitter capture name colors with, from the theme
  *  (capture names are data: what the highlighter answers). */
