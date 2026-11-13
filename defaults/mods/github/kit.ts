@@ -109,7 +109,7 @@ export function eyebrow(t: Theme, text: string): Element {
 
 /** A panel's extras: a short label on the right of its title. */
 export interface PanelOptions {
-  readonly right?: string | null | undefined;
+  readonly right?: string | Element | null | undefined;
 }
 
 /** A lazygit panel: a 1-bit frame with its title cut into the top edge,

@@ -276,7 +276,7 @@ test("notifications overview: ? lists every key", () => {
   expect(unnamed(overview.KEYS, keys)).toEqual([]);
 });
 
-const ghPrs = (await import("../defaults/mods/github/prs.js")).default;
+const ghPrs = (await import("../defaults/mods/github/prs.ts")).default;
 const ghActions = (await import("../defaults/mods/github/actions.js")).default;
 const ghProjects = (await import("../defaults/mods/github/projects.js")).default;
 test("GitHub: each tab's ? list names every key its handler takes, in every panel", () => {

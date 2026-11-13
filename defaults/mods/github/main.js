@@ -46,7 +46,7 @@ import * as store from "./store.ts";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
-import Prs from "./prs.js";
+import Prs from "./prs.ts";
 import Actions from "./actions.js";
 import Projects from "./projects.js";
 

@@ -40,7 +40,7 @@ const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi")
 const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }), timer: { after() {}, every() {} }, bind_keys() {} };
 
 const { default: Actions, graphHeight } = await import("../defaults/mods/github/actions.js");
-const { default: Prs } = await import("../defaults/mods/github/prs.js");
+const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: GitHub } = await import("../defaults/mods/github/main.js");
 
 const app = () => ({ repo: { full: "me/app", url: "https://github.com/me/app" }, kick() {}, focusSelf() {}, refresh() {}, spawn() {}, openUrl() {}, dragged: () => false, resize() {} });

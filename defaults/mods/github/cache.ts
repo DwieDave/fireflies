@@ -259,7 +259,7 @@ export function scrub(v: Json): Json {
 // ---- bounds
 
 /** Keeps the newest `n` entries of a map of { at } values. */
-export function newest<T extends Piece>(map: ReadonlyMap<string, T> | null | undefined, n: number): Map<string, T> {
+export function newest<K, T extends Piece>(map: ReadonlyMap<K, T> | null | undefined, n: number): Map<K, T> {
   return new Map([...(map ?? [])].sort((a, b) => (b[1].at ?? 0) - (a[1].at ?? 0)).slice(0, Math.max(0, n)));
 }
 

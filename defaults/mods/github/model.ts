@@ -75,11 +75,11 @@ export const isReviewComment = object({}, {
 export type ReviewComment = Guarded<typeof isReviewComment>;
 
 /** A row of the pull request list, as prRows makes it (and the cache keeps it); `tone` once
- *  its view was read. */
+ *  its view was read; its checks when a row carries them (a row the list was given whole). */
 export const isPrRow = object({
   number: isNumber, title: isString, isDraft: isBoolean, headRefName: nullable(isString), additions: isNumber, deletions: isNumber,
   reviewDecision: nullable(isString), updatedAt: nullable(isString), author: nullable(isActor), labels: arrayOf(isLabel), rollup: nullable(isString),
-}, { tone: maybe(isTone) });
+}, { tone: maybe(isTone), statusCheckRollup: maybe(arrayOf(isCheck)) });
 
 export type PrRow = Guarded<typeof isPrRow>;
 
