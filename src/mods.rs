@@ -21,6 +21,8 @@ include!(concat!(env!("OUT_DIR"), "/frame_mods.rs"));
 mod render_tests;
 #[cfg(test)]
 mod lifecycle_tests;
+#[cfg(test)]
+mod typescript_tests;
 
 /// The frame's own mods (welcome, ...): the app's, not the person's. Written
 /// from the binary on every start, so no edit or broken mod can break them.
@@ -396,7 +398,8 @@ pub struct Found {
     pub stamp: SystemTime,
 }
 
-/// Every mod folder that has a main.js.
+/// Every mod folder that has a main.js or a main.ts (a TypeScript mod: the
+/// runtime strips its types at load).
 pub fn scan() -> Vec<Found> {
     let mut found = scan_dir(&mods_dir(), "");
     found.extend(scan_dir(&frame_dir(), "frame-"));
@@ -408,7 +411,7 @@ fn scan_dir(root: &Path, prefix: &str) -> Vec<Found> {
     let Ok(entries) = std::fs::read_dir(root) else { return Vec::new() };
     entries
         .flatten()
-        .filter(|e| e.path().join("main.js").is_file())
+        .filter(|e| ["main.js", "main.ts"].iter().any(|entry| e.path().join(entry).is_file()))
         .filter_map(|e| {
             let id = format!("{prefix}{}", e.file_name().to_str()?);
             if id.starts_with('.') {

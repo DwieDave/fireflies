@@ -5662,10 +5662,17 @@ fn read_module_source(path: &Path) -> Result<String> {
         }
         Ok(source)
     };
-    read().map_err(|error| CodeError {
+    let source = read().map_err(|error| CodeError {
         cacheable: !error.downcast_ref::<std::io::Error>().is_some_and(transient_source_io),
         message: format!("{error:#}"),
-    }.into())
+    })?;
+    // HERDR: a .ts file runs with its types blanked out; positions stay, so
+    // QuickJS's lines and columns are the .ts file's. A .js file is untouched.
+    if crate::typescript::is_typescript(path) {
+        return crate::typescript::strip(path, &source)
+            .map_err(|message| CodeError { cacheable: true, message }.into());
+    }
+    Ok(source)
 }
 
 /// Installed once per context. It builds the element prototype from the style

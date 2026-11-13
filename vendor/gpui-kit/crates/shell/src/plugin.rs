@@ -1271,8 +1271,9 @@ impl DescriptionSession {
         window: &mut Window,
         cx: &mut App,
     ) -> Result<Self> {
-        let root = crate::runtime::resolve_app_root(root.as_ref(), "main.js")?;
-        let view = load_view_with_policy(&runtime, &root, "main.js", Rc::new(policy), window, cx)?;
+        let entry = crate::typescript::default_entry(root.as_ref());
+        let root = crate::runtime::resolve_app_root(root.as_ref(), entry)?;
+        let view = load_view_with_policy(&runtime, &root, entry, Rc::new(policy), window, cx)?;
         Ok(Self { runtime, view, snapshot: None })
     }
 
@@ -1337,7 +1338,7 @@ impl ShellRuntime {
             let manifest = PluginManifest::read(&root)?;
             manifest.entry().to_owned()
         } else {
-            "main.js".to_owned()
+            crate::typescript::default_entry(&root).to_owned()
         };
         let root = crate::runtime::resolve_app_root(&root, &entry)?;
         let policy = Rc::new(crate::policy::default().duplicate());

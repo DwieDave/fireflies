@@ -79,9 +79,9 @@ const MAX_DEPTH: usize = 8;
 /// repeats for the lifetime of the watcher and must have a bounded cost.
 const MAX_FILES: usize = 4096;
 
-/// Extensions a reload can be triggered by. Only sources the runtime actually
-/// evaluates count — a change to a README should not restart the application.
-const SOURCE_EXTENSIONS: [&str; 2] = ["js", "mjs"];
+// Extensions a reload can be triggered by: `crate::typescript::SOURCE_EXTENSIONS`.
+// Only sources the runtime actually evaluates count — a change to a README
+// should not restart the application.
 
 /// Directory names that are never application source, skipped before their
 /// contents are stated. Hidden entries are skipped separately.
@@ -250,8 +250,7 @@ fn scan_with_limit(directory: &Path, max_files: usize) -> Result<TreeStamp> {
 
 /// Whether a file name is script source the runtime would evaluate.
 fn is_source(name: &str) -> bool {
-    name.rsplit_once('.')
-        .is_some_and(|(_, extension)| SOURCE_EXTENSIONS.contains(&extension))
+    crate::typescript::is_source(name)
 }
 
 /// Reloads an application in place, keeping the window and its entity.

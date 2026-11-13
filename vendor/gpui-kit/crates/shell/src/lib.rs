@@ -97,6 +97,8 @@ pub(crate) mod style;
 #[cfg(test)]
 mod tests;
 pub(crate) mod theme_tokens;
+// HERDR: TypeScript sources load with their types removed.
+pub mod typescript;
 mod typings;
 pub(crate) mod value;
 pub mod view;

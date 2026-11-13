@@ -34,6 +34,13 @@ use tracing::{
 /// are decided before any script is loaded.
 const ENTRY: &str = "main.js";
 
+/// HERDR: the entry for a command-line path: `main.ts` when the application
+/// has that and no `main.js` (see [`crate::typescript::default_entry`]).
+fn entry_of(path: &std::path::Path) -> &'static str {
+    let directory = if path.is_file() { path.parent() } else { Some(path) };
+    directory.map_or(ENTRY, crate::typescript::default_entry)
+}
+
 /// The exit code for a command line this binary could not act on. Distinct from
 /// 1, which is a runtime that failed to start.
 const EXIT_USAGE: i32 = 2;
@@ -330,7 +337,7 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
     // here rather than inside the loop is what makes that possible; a path that
     // does not resolve falls back to the argument and fails later with the
     // message that explains why.
-    let asset_root = crate::resolve_app_root(&arguments.directory, ENTRY)
+    let asset_root = crate::resolve_app_root(&arguments.directory, entry_of(&arguments.directory))
         .unwrap_or_else(|_| arguments.directory.clone());
 
     gpui_platform::application()
@@ -372,7 +379,7 @@ fn run(arguments: Arguments, components: crate::FrozenComponentRegistry, brand: 
             // title and the watcher the real application root even when the command
             // line named `main.js`. A path that does not resolve is not reported
             // twice: the load below fails with the message that explains why.
-            let root = crate::resolve_app_root(&arguments.directory, ENTRY)
+            let root = crate::resolve_app_root(&arguments.directory, entry_of(&arguments.directory))
                 .unwrap_or_else(|_| arguments.directory.clone());
 
             // A view's `init` can create GPUI entities, so the facade loads the
@@ -458,7 +465,7 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
     // here rather than inside the loop is what makes that possible; a path that
     // does not resolve falls back to the argument and fails later with the
     // message that explains why.
-    let asset_root = crate::resolve_app_root(&arguments.directory, ENTRY)
+    let asset_root = crate::resolve_app_root(&arguments.directory, entry_of(&arguments.directory))
         .unwrap_or_else(|_| arguments.directory.clone());
 
     gpui_platform::application()
@@ -482,7 +489,7 @@ fn check(arguments: CheckArguments, components: crate::FrozenComponentRegistry) 
                 }
             };
 
-            let root = match crate::resolve_app_root(&arguments.directory, ENTRY) {
+            let root = match crate::resolve_app_root(&arguments.directory, entry_of(&arguments.directory)) {
                 Ok(root) => root,
                 Err(error) => {
                     outcome.fail(format!("{error:#}"));
