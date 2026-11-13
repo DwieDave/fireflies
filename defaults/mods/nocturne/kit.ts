@@ -307,7 +307,7 @@ export const FLY_W = 13;
 export const FLY_H = 11;
 
 /** An agent's status as Fireflies' winged firefly, in the colour the sidebar
- *  gives it (sky.ts firefly: the status's own, idle muted). Working breathes and
+ *  gives it (meadow.ts firefly: the status's own, idle muted). Working breathes and
  *  blocked blinks, as the pip did; done and idle hold still. Only for an agent:
  *  a pane or tab without a status draws none. */
 export function statusFly(t: Theme, status: Status, id: string): Element {

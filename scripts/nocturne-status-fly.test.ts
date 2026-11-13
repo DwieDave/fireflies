@@ -66,7 +66,7 @@ const kit = await import("../defaults/mods/nocturne/kit.ts");
 
 const FLY = "svg:mods/nocturne/art/firefly.svg";
 const STATUSES = ["working", "blocked", "done", "idle"] as const;
-// The sidebar's colours (sky.ts firefly): the status's own, idle muted.
+// The sidebar's colours (meadow.ts firefly): the status's own, idle muted.
 const colour = (s: string) => (s === "idle" ? "muted" : s);
 
 const agentPane = (status: string | null) => ({ pane: "p1", tab: "t1", terminal: "a/1", focused: true, title: "claude", cwd: "/home/a", status,

@@ -97,7 +97,7 @@ export function mark(t: Theme, p: HeaderPane): Element {
 /** What a mark is drawn from: a mod, a program. */
 type Marked = Pick<HeaderPane, "program" | "mod">;
 
-/** The svg of a pane's mark (mark()): also the jar's for a pinned pane (sky.ts). */
+/** The svg of a pane's mark (mark()): also a pinned pane's tile on the shelf (shelf.ts). */
 export function markPath(p: Marked | null | undefined): string {
   const logo = LOGO.get(p?.program?.key ?? "");
 

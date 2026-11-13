@@ -33,7 +33,6 @@ defaults/mods/github/markdown.ts
 defaults/mods/github/markdown.ts blocks
 defaults/mods/markdown/markdown.ts
 defaults/mods/markdown/markdown.ts blocks
-defaults/mods/nocturne/sky.ts
 defaults/mods/nocturne/tabs.ts render
 defaults/mods/notifications/claude.ts
 defaults/mods/notifications/claude.ts questionStep
