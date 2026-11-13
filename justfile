@@ -138,6 +138,8 @@ test:
     bun test scripts/nocturne-newspace.test.ts
     # The sidebar's jar and walk: one firefly centered, air above the shelf, its insets; next / previous agent on through the shelf's tiles.
     bun test scripts/nocturne-chrome.test.ts
+    # The tab strip's seam before the toolbar: the tabs' dithered fade, the post, the tools' ground, with few and overflowing tabs.
+    bun test scripts/nocturne-tab-seam.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

@@ -1,5 +1,8 @@
 // The tab strip: tabs sit on a dithered horizon line; the shown one is
-// underlined in a blue checker. Right of the tabs, icons only:
+// underlined in a blue checker. Where they end, a seam (seamFade, SEAM): the
+// tabs fade into the night in dithered steps (overflowing ones under it,
+// never into the tools), a post down to the horizon, and the tools stand on
+// a lit stretch of it. Right of the seam, icons only:
 //   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
 //           deck's queued jobs (jobs.js)
 //   procs   a tree mark and the ports listening in this app's terminals
@@ -49,6 +52,31 @@ import { watchPrompts } from "./prompt.js";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.js";
 
 const chrome = (n) => `mods/workspace-chrome/${n}.svg`;
+
+// Where the tabs end and the tools begin: the tabs fade into the night
+// under the seam in SEAM.steps bands of SEAM.band px (the moonlit path's
+// three steps, one more for the night itself), a gap, a post down to the
+// horizon, and the tools on a lit stretch of the horizon (ansi8 at SEAM.ground).
+export const SEAM = { band: 5, steps: 4, gap: 6, ground: 0.6 };
+
+/**
+ * The tabs' fade under the seam, at the right of the tab area: the night
+ * (the background) over them, thinning out leftwards in dithered steps:
+ * a quarter, half, three quarters, all. Over the tab area's end it shows
+ * nothing (the night on the night); over overflowing tabs they fade into
+ * it rather than run into the tools. It takes no pointer: a press goes
+ * through to the tab under it. The horizon line under it stays.
+ */
+export function seamFade(t) {
+  const bands = [
+    (el) => el.opacity(0.5).child(dither(t.background, 1)), // a quarter of the dots
+    (el) => el.child(dither(t.background, 1)), // half
+    (el) => el.child(dither(t.background, 1)).child(div().absolute().top(0).left(0).size_full().bg(t.background).opacity(0.5)), // three quarters
+    (el) => el.bg(t.background), // the night
+  ];
+  return div().id("tab-fade").absolute().top(0).bottom(2).right(0).w(SEAM.band * SEAM.steps)
+    .children(bands.map((b, i) => b(div().absolute().top(0).bottom(0).left(i * SEAM.band).w(SEAM.band))));
+}
 
 export default class Tabs {
   init(_props, cx) {
@@ -399,8 +427,14 @@ export default class Tabs {
       // The horizon: a 2 px dithered line the tabs stand on.
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
       // Its left padding inside the scroll, so a stake before the first tab isn't cut.
-      .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)).child(end))
-      .child(h_flex().flex_none().gap(2).items_center()
+      .child(h_flex().id("tab-area").relative().flex_1().min_w(0).h_full()
+        .child(h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar().track_scroll(this.scroll).children(shown.map(item)).child(end))
+        .child(seamFade(t)))
+      // The seam (seamFade's other half): a post from the top down to the
+      // horizon, and the tools standing on a lit stretch of it.
+      .child(div().id("tab-seam").flex_none().w(1).h_full().ml(SEAM.gap).bg(t.ansi0))
+      .child(h_flex().id("tab-tools").relative().flex_none().h_full().pl(SEAM.gap - 2).gap(2).items_center()
+        .child(div().absolute().left(0).right(0).bottom(0).h(2).opacity(SEAM.ground).child(dither(t.ansi8, 1)))
         .child(scriptsControl(t, (...a) => this.tool(...a)))
         .child(procsControl(t, (...a) => this.tool(...a)))
         .child(rule())

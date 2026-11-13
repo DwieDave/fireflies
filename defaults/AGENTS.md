@@ -1349,7 +1349,9 @@ drops nothing. Two blue corner ticks mark what's shown: the shown space (its pla
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
 
-Nocturne's toolbar, right of the tabs: ▶ and its runs (the script runner),
+Nocturne's toolbar, right of the tabs past a seam (the tabs fade into the
+night in dithered steps, so overflowing ones slip under it; a post down to the
+horizon; the tools stand on a lit stretch of it): ▶ and its runs (the script runner),
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its
 own after the bell's, `{ mod: "nocturne", props: { role: "newbutton" } }`; a
