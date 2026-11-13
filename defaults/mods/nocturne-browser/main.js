@@ -671,7 +671,7 @@ export default class Browser extends View {
     // The page's video goes to the player (⧉), or comes back into Fireflies from
     // its popped-out window: the player shows it. Meanwhile the page is away.
     // From the window out of Fireflies' ◧ / ⤓, `then`: the player goes on into a pane or a chip.
-    if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: { of: d.of, ...(d.then ? { then: d.then } : {}) } });
+    if ((e.event === "pip.enter" || e.event === "pip.popIn") && d.of) openOverlay({ ...PLAYER, props: d.then ? { of: d.of, after: d.then } : { of: d.of } });
     if (e.event === "pip.enter") { this.away = true; this.pipOf = d.of; this.hide(); }
     if (e.event === "pip.leave") { this.away = false; this.unhide(true); }
     // The video went into a pane (not a parked chip): the page shows again.

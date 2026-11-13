@@ -44,118 +44,191 @@
 
 import { View, div, svg, PathBuilder, Background } from "gpui-kit";
 import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
+import type { Props } from "gpui-shell";
 import { h_flex, v_flex } from "gpui-base";
 import * as herdr from "herdr";
-import { props, theme, settings, closeOverlay, openOverlay, run, panes, focused, shared, setShared, nextCommand, window as appWindow } from "herdr";
-import type { OverlaySpec, PaneInfo } from "herdr";
-// keyhelp.js is one file shared by every nocturne mod: it turns .ts with all its copies.
+import { props, theme, settings, closeOverlay, openOverlay, run, panes, focused, nextCommand, shared, setShared, window as appWindow } from "herdr";
+import type { OverlaySpec, PaneInfo, Theme } from "herdr";
+import type { Guarded } from "./guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
+// keyhelp.js is one file shared by every nocturne mod; keyhelp.d.ts types it until all its
+// copies turn .ts together.
 import { keysView, keysKey, keysHeight } from "./keyhelp.js";
-
-type Theme = Record<string, Color>;
-/** What a control's glyph and name depend on. */
-interface PlayerState { playing: boolean; muted: boolean }
-type Section = "from" | "play" | "to" | "window";
-/** One control of the bar (and of its ⋯ menu). */
-interface Control {
-  id: string;
-  section: Section;
-  keep: number;
-  glyph?: string | ((s: PlayerState) => string);
-  icon?: (s: PlayerState) => string;
-  name: string | ((s: PlayerState) => string);
-  /** Only on the window, not in a pane. */
-  window?: boolean;
-}
-/** The pane a ◧ or ⤓ made, noted in shared(PANE). */
-interface PaneNote { of: string; pane: string; park: boolean }
-/** What the view's `state` action says of the video it holds. */
-interface PipSession { showing?: boolean }
-/** keyhelp.js's overview, typed here until it is .ts (its defaults read as `never[]` and `null`). */
-function keysOverview(t: Theme, options: { id?: string; title?: string; list?: [string, string][]; narrow?: boolean; close?: () => void }): Element {
-  return (keysView as (...args: unknown[]) => Element)(t, options);
-}
-interface NativeEvent { event: string; data?: { result?: string; muted?: boolean; width?: number; height?: number } }
 
 const ID = "pip";
 const BAR = 22;
 const MOD = "nocturne-pip";
 const ICONS = "mods/nocturne-pip/icons";
+
 // How the window resizes: the video's shape (16:9 until the video says) under
 // a 22 px bar in a 1 px border.
-const RESIZE: Exclude<OverlaySpec["resizable"], boolean | undefined> = { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] };
+const RESIZE = { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } satisfies OverlaySpec["resizable"];
+
 // The window, as nocturne-browser opens it too.
-const WINDOW: OverlaySpec = { mod: MOD, kind: "window", key: MOD, frame: "none", width: 384, height: 238, resizable: RESIZE };
-// The pane a ◧ or ⤓ made: { of, pane, park }, so that pane can find itself (a mod isn't told
-// its pane id), and the page's browser knows whether the video went into a pane or a chip.
-const PANE = "nocturne-pip.pane";
-// The video the player window shows now (the palette offers its commands meanwhile).
-const PLAYER = "nocturne-pip.player";
+const WINDOW = { mod: MOD, kind: "window", key: MOD, frame: "none", width: 384, height: 238, resizable: RESIZE } satisfies OverlaySpec;
 const SKIP = 10;
 const ROW = 26;
+
 // The ⋯ menu's rule between two sections.
 const RULE = 9;
+
 // The keys popup's width.
 const KEYS_W = 340;
+
+/** What this mod is opened with (see the top): anything else in props() is ignored, and props
+ *  that aren't these are no props. */
+const isPipProps = object({}, {
+  of: isString,
+  pane: isBoolean,
+  park: isBoolean,
+  // Popped back in from out of Fireflies by its ◧ or ⤓: on into a pane or a chip.
+  after: literal("pane", "park"),
+  overlay: isString,
+  menu: arrayOf(isString),
+  keys: isBoolean,
+  playing: isBoolean,
+  muted: isBoolean,
+});
+
+type PipProps = Guarded<typeof isPipProps>;
+
+const NO_PROPS: PipProps = {};
+
+const pipProps = (): PipProps => {
+  const p = props();
+
+  return isPipProps(p) ? p : NO_PROPS;
+};
+
+const closeOwn = () => {
+  const overlay = pipProps().overlay;
+
+  if (overlay !== undefined) closeOverlay(overlay);
+};
+
+// The pane a ◧ or ⤓ made: { of, pane, park }, so that pane can find itself (a mod isn't told
+// its pane id), and the page's browser knows whether the video went into a pane or a chip.
+const isPaneNote = object({ of: isString, pane: isString, park: isBoolean });
+
+const PANE = sharedKey("nocturne-pip.pane", nullable(isPaneNote));
+
+// The video the player window shows now (the palette offers its commands meanwhile).
+const PLAYER = sharedKey("nocturne-pip.player", nullable(isString));
+
+/** One event of the native view (`nextNativeViewEvent`), the fields read here. */
+const isNativeEvent = object({ event: isString }, {
+  data: nullable(object({}, { result: isString, muted: isBoolean, width: isNumber, height: isNumber })),
+});
+
+/** The view's `state` answer: whether it shows the video now. */
+const isPipState = object({}, {
+  content: nullable(object({}, { session: nullable(object({}, { showing: isBoolean })) })),
+});
+
+type PipSession = { readonly showing: boolean | undefined };
+
+/** What a control's glyph and name depend on. */
+interface PlayerState { readonly playing: boolean; readonly muted: boolean }
+
+/** A glyph or name: fixed, or following the player. */
+type Label = string | ((s: PlayerState) => string);
+
+const label = (v: Label, s: PlayerState): string => (isString(v) ? v : v(s));
+
+type ControlId = "back" | "rewind" | "toggle" | "forward" | "mute" | "pane" | "park" | "out" | "keys" | "close";
+
+/** What a key or a command asks of the player: a control, or the keyboard back to the pane. */
+type Command = ControlId | "unfocus";
+
+const isCommand = literal("back", "rewind", "toggle", "forward", "mute", "pane", "park", "out", "keys", "close", "unfocus");
+
+type Section = "from" | "play" | "to" | "window";
+
+/** One control of the bar (and of its ⋯ menu): a glyph, or one of icons/ by name. */
+interface Control {
+  readonly id: ControlId;
+  readonly section: Section;
+  readonly keep: number;
+  readonly mark: { readonly glyph: Label } | { readonly icon: (s: PlayerState) => string };
+  readonly name: Label;
+  /** Only on the window, not in a pane. */
+  readonly window?: true;
+}
 
 // The bar's controls, in bar order, in four sections with a dithered seam
 // between them: where the video came from (from), playback (play), where it
 // goes (to), and the player's own (window). `keep`: the lower, the longer it
 // stays on a narrow bar (the rest go into ⋯, in the same sections).
-const CONTROLS: Control[] = [
-  { id: "back", section: "from", keep: 3, glyph: "↩", name: "Back to the page" },
-  { id: "rewind", section: "play", keep: 5, glyph: "«", name: `Back ${SKIP} seconds` },
-  { id: "toggle", section: "play", keep: 0, glyph: (s) => (s.playing ? "❚❚" : "▶"), name: (s) => (s.playing ? "Pause" : "Play") },
-  { id: "forward", section: "play", keep: 6, glyph: "»", name: `On ${SKIP} seconds` },
-  { id: "mute", section: "play", keep: 2, icon: (s) => (s.muted ? "volume-x" : "volume"), name: (s) => (s.muted ? "Sound on" : "Sound off") },
-  { id: "pane", section: "to", keep: 7, glyph: "◧", name: "Into a pane", window: true },
-  { id: "park", section: "to", keep: 4, glyph: "⤓", name: "Park as a chip" },
-  { id: "out", section: "to", keep: 8, glyph: "⇱", name: "Out of Fireflies" },
-  { id: "keys", section: "window", keep: 9, glyph: "?", name: "Keys" },
-  { id: "close", section: "window", keep: 1, glyph: "✕", name: "Close" },
+const CONTROLS: readonly Control[] = [
+  { id: "back", section: "from", keep: 3, mark: { glyph: "↩" }, name: "Back to the page" },
+  { id: "rewind", section: "play", keep: 5, mark: { glyph: "«" }, name: `Back ${SKIP} seconds` },
+  { id: "toggle", section: "play", keep: 0, mark: { glyph: (s) => (s.playing ? "❚❚" : "▶") }, name: (s) => (s.playing ? "Pause" : "Play") },
+  { id: "forward", section: "play", keep: 6, mark: { glyph: "»" }, name: `On ${SKIP} seconds` },
+  { id: "mute", section: "play", keep: 2, mark: { icon: (s) => (s.muted ? "volume-x" : "volume") }, name: (s) => (s.muted ? "Sound on" : "Sound off") },
+  { id: "pane", section: "to", keep: 7, mark: { glyph: "◧" }, name: "Into a pane", window: true },
+  { id: "park", section: "to", keep: 4, mark: { glyph: "⤓" }, name: "Park as a chip" },
+  { id: "out", section: "to", keep: 8, mark: { glyph: "⇱" }, name: "Out of Fireflies" },
+  { id: "keys", section: "window", keep: 9, mark: { glyph: "?" }, name: "Keys" },
+  { id: "close", section: "window", keep: 1, mark: { glyph: "✕" }, name: "Close" },
 ];
 
 /** What ? lists: every key keyControl() takes, ? keys last. */
-export const KEYS: [string, string][] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
+export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
   ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
-const available = () => typeof herdr.nativeView?.new === "function";
-const val = <T,>(v: T | ((s: PlayerState) => T), s: PlayerState): T => (typeof v === "function" ? (v as (s: PlayerState) => T)(s) : v);
+// Not on stock Herdr: the module has no nativeView there.
+const available = () => typeof herdr.nativeView !== "undefined";
 
 // The dither fill, as ../nocturne/kit.js has it (a mod can't import another mod's files).
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
+
 function dither(color: Color, cell = 1) {
-  const zoom = Number(settings()?.zoom) || 1, dpr = appWindow()?.platform === "macos" ? 2 : 1;
+  const zoom = settings().zoom || 1, dpr = appWindow().platform === "macos" ? 2 : 1;
+
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
 
 // The bar keeps this much for its title before controls go into ⋯.
 const TITLE = 70;
+
 // A seam between two sections: 2 px of dither with 3 px either side.
 const SEAM = 8;
 
 /** `list` cut into its sections, in order: [[control, …], …]; none empty. */
-export function sections<C extends { section: string }>(list: C[]): C[][] {
+export function sections<C extends { readonly section: string }>(list: readonly C[]): C[][] {
   const out: C[][] = [];
+
   for (const c of list) {
     const last = out.at(-1);
-    if (last && last[0]!.section === c.section) last.push(c);
+
+    if (last !== undefined && last[0]?.section === c.section) last.push(c);
     else out.push([c]);
   }
+
   return out;
 }
 
 /** How wide a bar of these controls is (and ⋯, `more`), its title's room too:
  *  a place per control, a seam between sections (⋯ sits in the last one). */
-const barWidth = (shown: Control[], more: boolean) => 8 + TITLE + (shown.length + (more ? 1 : 0)) * BAR + Math.max(0, sections(shown).length - 1) * SEAM;
+const barWidth = (shown: readonly Control[], more: boolean) => 8 + TITLE + (shown.length + (more ? 1 : 0)) * BAR + Math.max(0, sections(shown).length - 1) * SEAM;
 
 /** The controls a `width` px bar shows, and those for ⋯ (which takes a place
  *  itself, before ✕). The lowest `keep`s stay, two at the least. */
-export function fit(controls: Control[], width: number): { shown: Control[]; more: Control[] } {
+/** The bar's controls at a width: those it shows, those in ⋯. */
+interface Fitted {
+  readonly shown: readonly Control[];
+  readonly more: readonly Control[];
+}
+
+export function fit(controls: readonly Control[], width: number): Fitted {
   if (barWidth(controls, false) <= width) return { shown: controls, more: [] };
+
   const order = [...controls].sort((a, b) => a.keep - b.keep);
+
   for (let n = controls.length - 1; ; n--) {
     const keep = new Set(order.slice(0, n).map((c) => c.id));
     const shown = controls.filter((c) => keep.has(c.id));
+
     if (n <= 2 || barWidth(shown, true) <= width) return { shown, more: controls.filter((c) => !keep.has(c.id)) };
   }
 }
@@ -165,90 +238,120 @@ function seam(t: Theme) {
   return div().relative().flex_none().w(2).h(12).mx((SEAM - 2) / 2).child(dither(t.ansi8, 1));
 }
 
+const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
+  ["space", "toggle"], ["k", "toggle"], ["left", "rewind"], ["h", "rewind"], ["right", "forward"], ["l", "forward"], ["m", "mute"], ["b", "back"],
+  ["p", "pane"], ["P", "park"], ["o", "out"], ["x", "close"], ["q", "close"], ["escape", "unfocus"], ["?", "keys"],
+]);
+
+/** A key as keyControl() reads it: GPUI's key event, or the fields a test gives. */
+type Key = Pick<KeyEvent, "key"> & { readonly key_char?: string | null | undefined; readonly modifiers?: Partial<KeyEvent["modifiers"]> | undefined };
+
 /** The player's control for a key event, or null. "unfocus": esc, the keyboard back to the pane. */
-export function keyControl(e: Pick<KeyEvent, "key" | "key_char"> & { modifiers?: Partial<KeyEvent["modifiers"]> } | null | undefined): string | null {
-  const m = e?.modifiers ?? {};
-  if (m.platform || m.control || m.alt) return null;
+export function keyControl(e: Key | null | undefined): Command | null {
+  const m = e?.modifiers;
+
+  if (m?.platform || m?.control || m?.alt) return null;
+
   const c = e?.key_char;
-  const k = typeof c === "string" && c.length === 1 && c.trim() ? c : String(e?.key ?? "");
-  return ({ space: "toggle", k: "toggle", left: "rewind", h: "rewind", right: "forward", l: "forward", m: "mute", b: "back",
-    p: "pane", P: "park", o: "out", x: "close", q: "close", escape: "unfocus", "?": "keys" } as Record<string, string>)[k] ?? null;
+  const k = isString(c) && c.length === 1 && c.trim() !== "" ? c : e?.key ?? "";
+
+  return KEY_COMMANDS.get(k) ?? null;
 }
 
 /** The ⋯ menu's cursor after a key (null: not a moving key). */
 export function menuMove(k: string, at: number, n: number): number | null {
   const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
-  return d && n ? (at + d + n) % n : null;
+
+  return d !== 0 && n > 0 ? (at + d + n) % n : null;
 }
 
 export default class Pip extends View {
-  // Set in init (or initMenu): a view's state is made there, not in a constructor.
-  declare menu: string[] | null;
-  declare keysList: boolean;
-  declare handle: FocusHandle;
-  declare playing: boolean;
-  declare muted: boolean;
-  declare error: string | null;
-  declare width: number;
-  declare hover: { id: string; name: string } | null;
-  declare aspect: number | null;
-  declare inPane: boolean;
-  declare parks: boolean;
-  declare closing?: boolean;
-  declare wasParked?: boolean;
-  declare parkAsked?: boolean;
-  declare made?: { of: string; before: Set<string>; park: boolean } | null;
-  declare cursor: number;
+  menu: readonly string[] | null = null;
+  keysList = false;
+  handle: FocusHandle | null = null;
+  playing = true;
+  muted = false;
+  error: string | null = null;
+  width = 384;
+  // The control under the pointer: its name shows in the title (a tooltip
+  // isn't an overlay: it would be drawn under the video, a native view).
+  hover: { readonly id: string; readonly name: string } | null = null;
+  aspect: number | null = null;
+  inPane = false;
+  parks = false;
+  closing = false;
+  wasParked = false;
+  parkAsked = false;
+  // The pane intoPane asked for, until it takes the video (`pip.moved`).
+  made: { readonly of: string; readonly before: ReadonlySet<string>; readonly park: boolean } | null = null;
+  // The ⋯ menu's cursor.
+  cursor = 0;
 
-  init(_p: unknown, cx: AsyncContext) {
-    this.menu = props()?.menu ?? null;
-    this.keysList = Boolean(props()?.keys);
-    if (this.menu || this.keysList) return this.initMenu(cx);
-    this.handle = cx.focus_handle();
-    this.playing = true;
-    this.muted = false;
-    this.error = null;
-    this.width = 384;
-    // The control under the pointer: its name shows in the title (a tooltip
-    // isn't an overlay: it would be drawn under the video, a native view).
-    this.hover = null;
-    this.aspect = null;
-    this.inPane = Boolean(props()?.pane);
-    this.parks = Boolean(props()?.park);
+  override init(_props: Props | undefined, cx: AsyncContext) {
+    const p = pipProps();
+
+    this.menu = p.menu ?? null;
+    this.keysList = p.keys === true;
+
+    if (this.menu !== null || this.keysList) return this.initMenu(cx);
+
+    const handle = cx.focus_handle();
+
+    this.handle = handle;
+    this.inPane = p.pane === true;
+    this.parks = p.park === true;
+
     if (!available()) return;
-    if (!this.inPane) setShared(PLAYER, props()?.of ?? null);
+
+    if (!this.inPane) writeShared(setShared, PLAYER, p.of ?? null);
     cx.spawn(async (cx) => {
       for (;;) {
-        let e: NativeEvent;
-        try { e = JSON.parse(await herdr.nextNativeViewEvent()); } catch { return; }
+        let text: string;
+
+        try { text = await herdr.nextNativeViewEvent(); } catch { return; }
+
+        const e = parseJson(text, isNativeEvent);
+
+        if (e === undefined) continue;
+
         // The video went home (here, in its page or elsewhere), or into
         // another player (a pane, a chip, out of Fireflies): nothing left to show here.
         if (e.event === "pip.moved") this.noteMade();
+
         if (e.event === "pip.ended" || e.event === "pip.moved") return this.leave();
-        if (e.event === "pip.state" && e.data?.result && e.data.result !== "none") {
-          this.playing = e.data.result === "playing";
-          if (typeof e.data.muted === "boolean") this.muted = e.data.muted;
-          this.shape(e.data.width ?? 0, e.data.height ?? 0);
+
+        const data = e.data;
+
+        if (e.event === "pip.state" && data && data.result !== undefined && data.result !== "none") {
+          this.playing = data.result === "playing";
+
+          if (data.muted !== undefined) this.muted = data.muted;
+          this.fitVideo(data.width ?? 0, data.height ?? 0);
         }
+
         cx.notify();
       }
     });
     // How the video is (playing, sound), once the view holds it.
-    cx.timer.after(500, () => { try { herdr.nativeViewCall(ID, "pip.sync", {}); } catch {} });
+    cx.timer.after(500, () => { try { herdr.nativeViewCall(ID, "pip.sync", {}); } catch { /* the view isn't there yet */ } });
     // Popped back in by the window out of Fireflies' ◧ or ⤓: on into a pane or a chip.
-    const then = props()?.then;
-    if (!this.inPane && (then === "pane" || then === "park")) cx.timer.after(400, () => this.command(then));
+    const after = p.after;
+
+    if (!this.inPane && after !== undefined) cx.timer.after(400, () => this.command(after));
+
     if (this.inPane) {
       // A pane from an earlier run (it is saved with its tab): no video comes.
       cx.timer.after(1500, () => { if (!this.state()) this.leave(); });
       // A chip: parks once it holds the video; unparked, the window comes back.
       cx.timer.every(250, () => { if (this.parks) this.watchPark(); });
     }
+
     cx.spawn(async (cx) => {
       for (;;) {
         const c = String(await nextCommand()).replace(/^nocturne-pip\./, "");
-        if (c === "focus") this.handle.focus();
-        else this.command(c);
+
+        if (c === "focus") handle.focus();
+        else if (isCommand(c)) this.command(c);
         cx.notify();
       }
     });
@@ -256,15 +359,18 @@ export default class Pip extends View {
 
   key(e: KeyEvent, cx: Context) {
     const c = keyControl(e);
+
     if (!c || ((c === "pane" || c === "unfocus") && this.inPane) || (c === "park" && this.parks)) return;
+
     if (c === "unfocus") run("overlay.focus", { dir: "none" });
     else this.command(c);
     cx.stop_propagation();
     cx.notify();
   }
 
-  command(c: string) {
-    if (this.menu) return;
+  command(c: Command) {
+    if (this.menu !== null) return;
+
     if (c === "toggle") this.call("pip.toggle");
     else if (c === "rewind") this.call("pip.seek", { by: -SKIP });
     else if (c === "forward") this.call("pip.seek", { by: SKIP });
@@ -283,12 +389,14 @@ export default class Pip extends View {
   }
 
   /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
-  shape(w: number, h: number) {
+  fitVideo(w: number, h: number) {
     if (this.inPane || !(w > 0 && h > 0)) return;
+
     const aspect = w / h;
-    if (this.aspect && Math.abs(this.aspect - aspect) < 0.001) return;
+
+    if (this.aspect !== null && Math.abs(this.aspect - aspect) < 0.001) return;
     this.aspect = aspect;
-    run("overlay.resizable", { id: props()?.overlay, resizable: { ...RESIZE, aspect } });
+    run("overlay.resizable", { id: pipProps().overlay, resizable: { ...RESIZE, aspect } });
   }
 
   /** ⤓: a pane parks itself; the window goes into a pane that does. */
@@ -297,24 +405,35 @@ export default class Pip extends View {
     else this.intoPane(true);
   }
 
-  call(action: string, args?: Record<string, unknown>): unknown {
-    try { return herdr.nativeViewCall(ID, action, args ?? {}); }
-    catch (err) { this.error = String((err as Error)?.message ?? err); return null; }
+  /** One action on the player's native view; a failure shows in the bar's title. */
+  call(action: string, args: Readonly<Record<string, number>> = {}): void {
+    try { herdr.nativeViewCall(ID, action, args); }
+    catch (err) { this.error = err instanceof Error ? err.message : String(err); }
   }
 
-  /** The session this player shows, if any (`{ showing, ... }`). */
+  /** The session this player shows, if any. */
   state(): PipSession | null {
-    try { return herdr.nativeViewCall<{ content?: { session?: PipSession } } | null>(ID, "state", {})?.content?.session ?? null; } catch { return null; }
+    try {
+      const answer = herdr.nativeViewCall(ID, "state", {});
+      const session = isPipState(answer) ? answer.content?.session : null;
+
+      return session ? { showing: session.showing } : null;
+    } catch {
+      return null;
+    }
   }
 
   /** This copy's pane: the one ◧/⤓ noted, else the only player pane there is. */
   ownPane(): PaneInfo | null {
-    const mine = (p: PaneInfo | undefined) => p?.mod === MOD;
-    const noted = shared<PaneNote | null>(PANE);
-    const pane = noted && noted.of === props()?.of ? panes().find((p) => p.pane === noted.pane && mine(p)) : null;
+    const mine = (p: PaneInfo) => p.mod === MOD;
+    const noted = readShared(shared, PANE, null);
+    const pane = noted !== null && noted.of === pipProps().of ? panes().find((p) => p.pane === noted.pane && mine(p)) : undefined;
+
     if (pane) return pane;
+
     const all = panes().filter(mine);
-    return all.length === 1 ? all[0]! : null;
+
+    return all.length === 1 ? all[0] ?? null : null;
   }
 
   /** A parking pane: parks itself once the video is in it; when the chip is
@@ -322,14 +441,24 @@ export default class Pip extends View {
    *  which takes the video, and this pane closes (`pip.moved`). */
   watchPark() {
     if (this.closing) return;
+
     const me = this.ownPane();
+
     if (!me) return;
-    if (me.parked) { this.wasParked = true; return; }
-    if (this.wasParked) {
-      this.wasParked = false;
-      openOverlay({ ...WINDOW, props: { of: props()?.of } });
+
+    if (me.parked) {
+      this.wasParked = true;
+
       return;
     }
+
+    if (this.wasParked) {
+      this.wasParked = false;
+      openOverlay({ ...WINDOW, props: { of: pipProps().of } });
+
+      return;
+    }
+
     if (!this.parkAsked && this.state()?.showing) {
       this.parkAsked = true;
       run("pane.park", { pane: me.pane });
@@ -337,58 +466,76 @@ export default class Pip extends View {
   }
 
   /** The copy ends (its window or pane closed, by us or by Fireflies). */
-  async close() {
-    if (!this.menu && !this.inPane && shared(PLAYER) === props()?.of) setShared(PLAYER, null);
+  override async close() {
+    const of = pipProps().of;
+
+    if (this.menu === null && !this.inPane && readShared(shared, PLAYER, null) === of) writeShared(setShared, PLAYER, null);
   }
 
   /** This player goes: its window, or its pane. */
   leave() {
     if (!this.inPane) {
-      if (shared(PLAYER) === props()?.of) setShared(PLAYER, null);
-      return closeOverlay(props()?.overlay);
+      if (readShared(shared, PLAYER, null) === pipProps().of) writeShared(setShared, PLAYER, null);
+
+      return closeOwn();
     }
+
     if (this.closing) return;
     this.closing = true;
+
     const pane = this.ownPane();
-    if (pane && shared<PaneNote | null>(PANE)?.pane === pane.pane) setShared(PANE, null);
+
+    if (pane && readShared(shared, PANE, null)?.pane === pane.pane) writeShared(setShared, PANE, null);
+
     if (pane) run("pane.close", { pane: pane.pane });
   }
 
   /** Out of Fireflies: the popped-out window takes the video, this player goes. */
   popOut() {
     const t = theme();
-    this.call("pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0 } });
-    if (!this.error) this.leave();
+
+    try {
+      herdr.nativeViewCall(ID, "pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0 } });
+      this.leave();
+    } catch (err) {
+      this.error = err instanceof Error ? err.message : String(err);
+    }
   }
 
   /** Into a new pane beside the focused one, in the shown tab (`park`: one
    *  that parks itself, a chip). The new pane's player takes the video;
    *  this one then gets `pip.moved` and goes. */
   intoPane(park: boolean) {
-    const of = props()?.of;
-    if (!of) return;
-    const before = new Set<string>(panes().map((p) => p.pane));
+    const of = pipProps().of;
+
+    if (of === undefined) return;
+
+    const before = new Set(panes().map((p) => p.pane));
     const f = focused();
     const args = f?.pane ? { direction: "right", pane: f.pane } : { edge: "right" };
-    run("pane.split", { ...args, mod: MOD, props: { of, pane: true, ...(park ? { park: true } : {}) } });
+
+    run("pane.split", { ...args, mod: MOD, props: park ? { of, pane: true, park: true } : { of, pane: true } });
     // Noted when the new pane takes the video (`pip.moved`).
-    this.made = { of, before, park: Boolean(park) };
+    this.made = { of, before, park };
   }
 
   /** Notes the pane `intoPane` made, for it to find itself. */
   noteMade() {
     const m = this.made;
+
     this.made = null;
-    const made = m && panes().find((p) => !m.before.has(p.pane) && p.mod === MOD);
-    if (made) setShared(PANE, { of: m.of, pane: made.pane, park: m.park });
+
+    const made = m ? panes().find((p) => !m.before.has(p.pane) && p.mod === MOD) : undefined;
+
+    if (m && made) writeShared(setShared, PANE, { of: m.of, pane: made.pane, park: m.park });
   }
 
-  controls(): Control[] {
+  controls(): readonly Control[] {
     return CONTROLS.filter((c) => !(c.window && this.inPane));
   }
 
   mark(c: Control, color: Color, s: PlayerState): Element {
-    return c.icon ? svg(`${ICONS}/${val(c.icon, s)}.svg`).size(12).text_color(color) : div().text_color(color).child(val(c.glyph ?? "", s));
+    return "icon" in c.mark ? svg(`${ICONS}/${c.mark.icon(s)}.svg`).size(12).text_color(color) : div().text_color(color).child(label(c.mark.glyph, s));
   }
 
   /** Under the pointer: bright on the hover color, its `name` in the title. */
@@ -403,8 +550,9 @@ export default class Pip extends View {
   button(t: Theme, c: Control) {
     const s: PlayerState = { playing: this.playing, muted: this.muted };
     const on = this.hover?.id === c.id;
+
     return this.hovers(div().id(`pip-${c.id}`).flex_none().w(BAR).h_full().flex().items_center().justify_center()
-      .when(on, (el) => el.bg(t.ansi0)), c.id, val(c.name, s))
+      .when(on, (el) => el.bg(t.ansi0)), c.id, label(c.name, s))
       // A press on a button isn't a drag of the window.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.command(c.id); cx.notify(); })
@@ -412,8 +560,9 @@ export default class Pip extends View {
   }
 
   /** ⋯: the controls that didn't fit, as a popup under the pointer. */
-  more(t: Theme, ids: string[]) {
+  more(t: Theme, ids: readonly ControlId[]) {
     const on = this.hover?.id === "more";
+
     return this.hovers(div().id("pip-more").flex_none().w(BAR).h_full().flex().items_center().justify_center()
       .text_color(on ? t.foreground : t.dim).when(on, (el) => el.bg(t.ansi0)), "more", "More")
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
@@ -421,8 +570,9 @@ export default class Pip extends View {
       .child("⋯");
   }
 
-  openMore(ids: string[]) {
+  openMore(ids: readonly ControlId[]) {
     const parts = sections(CONTROLS.filter((c) => ids.includes(c.id))).length;
+
     openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 240, height: ids.length * ROW + Math.max(0, parts - 1) * RULE + 10,
       props: { menu: ids, playing: this.playing, muted: this.muted } });
   }
@@ -431,26 +581,34 @@ export default class Pip extends View {
     const { shown, more } = fit(this.controls(), this.width);
     // Section by section, a seam between; the ⋯ goes before ✕, the last on the bar.
     const items: Element[] = sections(shown).flatMap((part, i) => [...(i ? [seam(t)] : []), ...part.map((c) => this.button(t, c))]);
+
     if (more.length) items.splice(items.length - 1, 0, this.more(t, more.map((c) => c.id)));
+
     // The bar's edge turns blue while the player has the keyboard.
     return h_flex().id("pip-bar").h(BAR).flex_none().pl(8).items_center().text_size(11).bg(t.background)
-      .border_b(1).border_color(this.handle?.is_focused?.() ? t.accent : t.border)
-      .child(div().flex_1().min_w(0).truncate().text_color(this.error ? t.blocked : this.hover ? t.foreground : t.dim)
+      .border_b(1).border_color(this.handle?.is_focused() ? t.accent : t.border)
+      .child(div().flex_1().min_w(0).truncate().text_color(this.error !== null ? t.blocked : this.hover ? t.foreground : t.dim)
         .child(this.error ?? this.hover?.name ?? "picture in picture"))
       .children(items);
   }
 
-  render() {
+  override render() {
     const t = theme();
+
     if (this.keysList) return this.renderKeys(t);
-    if (this.menu) return this.renderMenu(t);
-    const of = props()?.of;
-    const body = available() && of
+
+    if (this.menu !== null) return this.renderMenu(t);
+
+    const of = pipProps().of;
+
+    const body = available() && of !== undefined
       ? herdr.nativeView.new(ID, { kind: "pip", of }).child(div().size_full().bg("#000000"))
       : div().size_full().flex().items_center().justify_center().text_size(11).text_color(t.dim).child("Picture in picture needs native views (macOS).");
+
+    const handle = this.handle;
+
     return v_flex().id("pip").size_full().bg(t.background).when(!this.inPane, (el) => el.border(1).border_color(t.border))
-      .when(Boolean(this.handle), (el) => el.track_focus(this.handle).on_key_down((e, cx) => this.key(e, cx))
-        .on_mouse_down("left", () => this.handle.focus()))
+      .when(handle !== null, (el) => (handle ? el.track_focus(handle).on_key_down((e, cx) => this.key(e, cx)).on_mouse_down("left", () => handle.focus()) : el))
       .on_size_change((size, cx) => { if (Math.abs(size.width - this.width) >= 1) { this.width = size.width; cx.notify(); } })
       .child(this.bar(t))
       .child(div().flex_1().min_h(0).relative().child(body));
@@ -465,46 +623,60 @@ export default class Pip extends View {
   }
 
   pick(c: Control) {
-    closeOverlay(props()?.overlay);
+    closeOwn();
     // To the player (commands reach the shown copies; this one ignores them).
     run(`nocturne-pip.${c.id}`);
   }
 
   /** The keys, keyhelp.js's overview in a popup: ? esc q close it. */
   renderKeys(t: Theme) {
-    const close = () => closeOverlay(props()?.overlay);
-    return div().id("pip-keys").relative().size_full().bg(t.background).border(1).border_color(t.ansi0)
-      .track_focus(this.handle)
-      .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); close(); } })
-      .child(keysOverview(t, { id: "pip-keys-view", title: "picture in picture", list: KEYS, narrow: true, close }));
+    const handle = this.handle;
+    const view = div().id("pip-keys").relative().size_full().bg(t.background).border(1).border_color(t.ansi0);
+
+    return (handle ? view.track_focus(handle) : view)
+      .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); closeOwn(); } })
+      .child(keysView(t, { id: "pip-keys-view", title: "picture in picture", list: KEYS, narrow: true, close: closeOwn }));
   }
 
   renderMenu(t: Theme) {
-    const p = props() ?? {};
-    const s: PlayerState = { playing: Boolean(p.playing), muted: Boolean(p.muted) };
-    const items = CONTROLS.filter((c) => this.menu!.includes(c.id));
+    const menu = this.menu ?? [];
+    const p = pipProps();
+    const s: PlayerState = { playing: p.playing === true, muted: p.muted === true };
+    const items = CONTROLS.filter((c) => menu.includes(c.id));
+
     this.cursor = Math.min(this.cursor, Math.max(0, items.length - 1));
+
     const row = (c: Control, i: number) => {
       const on = i === this.cursor;
+
       return h_flex().id(`pm-${c.id}`).relative().h(ROW).px(12).gap(10).items_center().flex_none().text_size(12)
         .text_color(on ? t.foreground : t.muted)
         .on_hover((h, cx) => { if (h) { this.cursor = i; cx.notify(); } })
         .on_click(() => this.pick(c))
         .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
         .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on ? t.accent : t.dim, s)))
-        .child(div().relative().flex_1().min_w(0).truncate().child(val(c.name, s)));
+        .child(div().relative().flex_1().min_w(0).truncate().child(label(c.name, s)));
     };
-    return v_flex().id("pip-menu").size_full().bg(t.background).border(1).border_color(t.ansi0).py(4)
-      .track_focus(this.handle)
+
+    const handle = this.handle;
+    const view = v_flex().id("pip-menu").size_full().bg(t.background).border(1).border_color(t.ansi0).py(4);
+
+    return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => {
         const k = e.key;
         const to = menuMove(k, this.cursor, items.length);
-        if (to != null) {
+
+        if (to !== null) {
           this.cursor = to;
+
           return cx.notify();
         }
-        if (k === "enter" && items[this.cursor]) return this.pick(items[this.cursor]);
-        if (k === "escape" || k === "q") closeOverlay(props()?.overlay);
+
+        const picked = items[this.cursor];
+
+        if (k === "enter" && picked) return this.pick(picked);
+
+        if (k === "escape" || k === "q") closeOwn();
       })
       .children(sections(items).flatMap((part, n) => [
         ...(n ? [div().relative().h(RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.ansi8, 1)))] : []),

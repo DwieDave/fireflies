@@ -143,7 +143,7 @@ test("notifications: ? opens the overview, ? or esc closes it", async () => {
 });
 
 test("usage: ? opens the overview, ? or esc closes it", async () => {
-  const m = await import("../defaults/mods/nocturne-usage/main.js");
+  const m = await import("../defaults/mods/nocturne-usage/main.ts");
   const v: any = surface(m.default, ["key", "keysStrip"], { keysShown: false });
   opensAndCloses("usage", (e) => v.key(e, cx()), () => v.keysShown, () => v.keysStrip(theme));
 });
@@ -205,14 +205,17 @@ test("picture in picture: ? opens the overview in a popup (the video is native),
   const v: any = surface(m.default, ["command", "openKeys"], { menu: null });
   v.command("keys");
   expect(opened.at(-1)).toMatchObject({ mod: "nocturne-pip", kind: "popup", props: { keys: true } });
+  // As the app opens it: its props carry the overlay's id, which closing it names.
+  propsNow = { keys: true, overlay: "o-keys" };
   const k: any = surface(m.default, ["renderKeys"], { handle: { focus() {} } });
   const root = k.renderKeys(theme);
   expect(texts(root)[0]).toBe("KEYS");
   for (const e of [QUESTION, ESC]) {
     closed.length = 0;
     root.calls.on_key_down[0](e, cx());
-    expect(closed.length).toBe(1);
+    expect(closed).toEqual(["o-keys"]);
   }
+  propsNow = {};
 });
 
 test("Nocturne's chrome (sidebar, tab strip, header, parked chips): ? opens the overview in a dialog, ? or esc closes it", async () => {
