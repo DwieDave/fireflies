@@ -67,7 +67,7 @@ async function fakeExec(cmd: string, args: string[], opts: any = {}) {
 
 const theme: Record<string, string> = { accent: "#80a0ff", foreground: "#fff", background: "#000", muted: "#aaa", dim: "#777", ansi0: "#1", ansi8: "#8", blocked: "#f00", done: "#0f0", working: "#ff0" };
 mock.module("herdr", () => ({
-  theme: () => theme, props: () => st.props, run: (n: string, a?: any) => { st.runs.push([n, a]); return null; },
+  notify: () => null, theme: () => theme, props: () => st.props, run: (n: string, a?: any) => { st.runs.push([n, a]); return null; },
   exec: (c: string, a: string[], o: any) => fakeExec(c, a, o), home: () => HOME, spaces: () => st.spaces, panes: () => st.panes,
   focused: () => st.focused, shared: (k: string) => st.shared[k] ?? null, setShared: (k: string, v: unknown) => { st.shared[k] = v; },
   openOverlay: (spec: any) => { st.opened.push(spec); return `ov${st.opened.length}`; }, closeOverlay: (id: unknown) => { st.closed.push(id); },
