@@ -48,20 +48,20 @@ export function languageOf(pathOrName: string): string | null;
  *  past that the least recently used stops first. A copy joining while the server works gets the
  *  `$/progress` begun and not ended (with the last report's words) first. Fireflies only carries
  *  messages: opening documents, keeping them in sync and reading diagnostics is yours. */
-export function lspStart(options: { argv: string[]; root: string; settings?: object | null; idle?: number }): Promise<{ id: number; capabilities: any }>;
+export function lspStart(options: { argv: string[]; root: string; settings?: object | null; idle?: number }): Promise<{ id: number; capabilities: unknown }>;
 /** Sends a request and resolves with its result; rejects with the server's error, after 30 s,
  *  or when the server exits. `key`: a later request of this copy with the same key replaces this
  *  one (the server hears `$/cancelRequest`, this rejects with "cancelled"). */
-export function lspRequest(id: number, method: string, params?: any, options?: { key?: string }): Promise<any>;
+export function lspRequest(id: number, method: string, params?: unknown, options?: { key?: string }): Promise<unknown>;
 /** Sends a notification (`textDocument/didOpen`, `didChange`, `didSave`, `didClose`, ...). Open
  *  documents are counted per mod copy: the server hears `didOpen` once (a later copy's becomes a
  *  `didChange` with its text, and that copy gets the file's last `publishDiagnostics` at once) and
  *  `didClose` when the last copy closes the file or goes. */
-export function lspNotify(id: number, method: string, params?: any): void;
+export function lspNotify(id: number, method: string, params?: unknown): void;
 /** The next notification the server sent this copy: `{ method, params }`
  *  (`textDocument/publishDiagnostics`, `$/progress`, `window/logMessage`, ...). `$/exit` with
  *  `params.stderr` (its last lines) when the server is gone. */
-export function lspNextMessage(id: number): Promise<{ method: string; params: any }>;
+export function lspNextMessage(id: number): Promise<{ method: string; params: unknown }>;
 /** This copy no longer needs the session. */
 export function lspRelease(id: number): void;
 /** The running servers: `{ id, argv, root, users, alive, ready, stderr }`. */
@@ -275,7 +275,7 @@ export interface PaneInfo {
   terminal: string | null;
   mod?: string;
   /** A mod pane's props, as given (read-only): a copy can find its own pane by a unique prop. */
-  props?: any;
+  props?: unknown;
   tab: string;
   /** The terminal's title (what the program set), or the mod's name. */
   title: string;
@@ -315,7 +315,7 @@ export function setAgentOrder(addresses: string[]): null;
  *  without a view); others have null for both. Parent addresses use the same machine names as `address`;
  *  parents on this computer use bare terminal IDs. Parents that cannot be mapped
  *  stay as the core reported them. Live. */
-export function terminals(): any[];
+export function terminals(): readonly unknown[];
 
 /** Actual terminal/pane focus. `space` and `tab` are the current window context.
  *  Clicking a visible layout terminal block, or pane.focus {terminal}, focuses that block:
@@ -373,11 +373,60 @@ export function placement(): {
  *  muted, dim, accent, accent_foreground, solid and solid_foreground (a primary button: ink on
  *  paper, paper on ink), selection, working, blocked, done, idle, unknown, ansi0..ansi15.
  *  Light and dark themes name the same colors, so a mod that uses them follows both. */
-export function theme(): Record<string, import("gpui-kit").Color>;
+export function theme(): Theme;
+
+type Color = import("gpui-kit").Color;
+
+/** The resolved theme (settings.rs `resolve`): every name below is in every theme, as `#rrggbb`
+ *  or `#rrggbbaa`. `terminal_foreground` is the terminal's text, `foreground` the panels'. */
+export interface Theme {
+  readonly background: Color;
+  readonly terminal_foreground: Color;
+  readonly foreground: Color;
+  readonly surface: Color;
+  readonly canvas: Color;
+  readonly chrome: Color;
+  readonly popover: Color;
+  readonly raised: Color;
+  readonly hover: Color;
+  readonly selected: Color;
+  readonly border: Color;
+  readonly input: Color;
+  readonly muted: Color;
+  readonly dim: Color;
+  readonly accent: Color;
+  readonly accent_foreground: Color;
+  readonly solid: Color;
+  readonly solid_foreground: Color;
+  readonly ring: Color;
+  readonly selection: Color;
+  readonly cursor: Color;
+  readonly working: Color;
+  readonly blocked: Color;
+  readonly done: Color;
+  readonly idle: Color;
+  readonly unknown: Color;
+  readonly ansi0: Color;
+  readonly ansi1: Color;
+  readonly ansi2: Color;
+  readonly ansi3: Color;
+  readonly ansi4: Color;
+  readonly ansi5: Color;
+  readonly ansi6: Color;
+  readonly ansi7: Color;
+  readonly ansi8: Color;
+  readonly ansi9: Color;
+  readonly ansi10: Color;
+  readonly ansi11: Color;
+  readonly ansi12: Color;
+  readonly ansi13: Color;
+  readonly ansi14: Color;
+  readonly ansi15: Color;
+}
 
 /** Every theme `app.theme` can use (presets, then `themes/*.json`), each with its colors and
  *  whether it's light. */
-export function themes(): { name: string; light: boolean; colors: Record<string, import("gpui-kit").Color> }[];
+export function themes(): readonly { readonly name: string; readonly light: boolean; readonly colors: Theme }[];
 
 /** The font families on this machine, by name. */
 export function fonts(): string[];
@@ -407,7 +456,53 @@ export function feedbackIssue(title: string, message: string): { title: string; 
 
 /** What the app runs with: the shown layout's look (theme name, fonts, sizes, terminal
  *  padding and opacity) with the person's zoom and sounds. */
-export function settings(): Record<string, unknown>;
+export function settings(): Settings;
+
+/** One language's editor settings (settings.json `editor`, `editor.languages.<id>`), as written. */
+export interface EditorLanguage {
+  readonly tab_size?: number;
+  readonly insert_spaces?: boolean;
+  readonly soft_wrap?: boolean;
+  readonly format_on_save?: boolean;
+  readonly format?: readonly string[];
+  /** An argv to run, or false to run none. */
+  readonly server?: false | readonly string[];
+  /** Handed to the language server as is: parse it there. */
+  readonly server_settings?: unknown;
+}
+
+/** settings.rs `Settings`: the look the app runs with, and the person's settings.json. */
+export interface Settings {
+  readonly font_family: string;
+  readonly font_size: number;
+  readonly font_ligatures: boolean;
+  readonly ui_font_family: string;
+  readonly ui_font_size: number;
+  /** How big the whole app is drawn (1 = as designed). */
+  readonly zoom: number;
+  /** The theme showing: a preset or a file in themes/. */
+  readonly theme: string;
+  readonly theme_light: string;
+  readonly theme_dark: string;
+  /** Whether the window is dark now. */
+  readonly dark: boolean;
+  readonly colors: Theme;
+  readonly pane_scrollbars: boolean;
+  /** Between a terminal's edge and its text, px: [x, y]. */
+  readonly terminal_padding: readonly [number, number];
+  readonly terminal_opacity: number;
+  readonly clipboard_write: boolean;
+  readonly minimum_contrast: number;
+  readonly links: "app" | "system";
+  readonly option_as_alt: "auto" | "off" | "on" | "left" | "right";
+  readonly sounds: { readonly enabled: boolean; readonly done?: string; readonly blocked?: string };
+  readonly editor: EditorLanguage & {
+    readonly vim?: boolean;
+    readonly leader?: string;
+    readonly languages?: { readonly [language: string]: EditorLanguage };
+  };
+  readonly files: { readonly hidden?: boolean; readonly ignored?: boolean };
+}
 
 /** Every key binding: { section, keys, action }. */
 export function keys(): { section: string; keys: string; action: string }[];
@@ -477,11 +572,11 @@ export function notify(n: {
  *  Close the popup with closeOverlay(props().overlay). */
 /** Size is not a prop: root div/h_flex/v_flex.on_size_change reports logical px.
  * The exported View may implement async close(cx) for bounded final cleanup. */
-export function props(): any;
+export function props(): unknown;
 
-/** Reads a value every mod can see (persisted). Its shape is whatever the mod that set it
- *  wrote, so name it at the call: `shared<Pip | null>("pip")`; untyped it is `any`. */
-export function shared<T = any>(key: string): T;
+/** Reads a value every mod can see (persisted). `unknown`: any mod, or an older version of this
+ *  one, may have written it, so parse it where it's read (a TypeScript mod: guard.ts `readShared`). */
+export function shared(key: string): unknown;
 
 /** Sets a shared value; every mod re-renders so it can react. */
 export function setShared(key: string, value: unknown): null;
@@ -529,7 +624,7 @@ export const nativeView: { new: (id: string, props: NativeViewProps) => import("
 export function nativeViewCapabilities(): { interface: string; platform: string; available: boolean; kinds: { kind: string; actions: string[] }[] };
 /** HUP: one whitelisted action on this mod's view `id` (see capabilities), e.g. ("v", "pdf.goToPage", { page: 2 }),
  *  ("v", "media.pause"), ("v", "browser.navigate", { url }), ("v", "state"). Throws on unknown actions. */
-export function nativeViewCall<T = any>(id: string, action: string, args?: Record<string, unknown>): T;
+export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;
 /** HUP: the next event from this mod's native views, as JSON text:
  *  `{ id, generation, event, data }` (load.start/commit/finish/error, pdf.page, media.paused, view.created/disposed, …).
  *  Web: `web.location` (the page state, as in load.*) whenever the address or back/forward state changes,

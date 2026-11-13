@@ -2058,8 +2058,9 @@ fn shell_types() -> String {
 const SHELL_TYPES: &str = r#"  /** A path coordinate in pixels or as a percentage of the painted bounds. */
   export type PathCoordinate = number | `${number}%`;
 
-  /** The property bag carried across the JavaScript view bridge. */
-  export type Props = Record<string, any>;
+  /** The property bag carried across the JavaScript view bridge. HERDR: its values are
+   *  `unknown` (whoever made the view chose them): parse them where they're read. */
+  export type Props = { readonly [key: string]: unknown };
 
   /** Element-local event bounds assembled by the shell. */
   export type ElementBounds = import("gpui-kit").Point & {
@@ -3606,7 +3607,7 @@ const BASE: &str = r#"  /** A row. */
      * The whole layout as plain data: the tree, the docks, and each panel's own
      * `serialize()` payload. Hand it back to `load` after a restart.
      */
-    dump(): any;
+    dump(): unknown;
     /**
      * Restores a layout `dump()` wrote, rebuilding each panel through the class
      * registered under its name.
@@ -3615,7 +3616,7 @@ const BASE: &str = r#"  /** A row. */
      * forward — name, payload and position — so uninstalling an application and
      * reinstalling it puts its panels back where they were.
      */
-    load(state: any): void;
+    load(state: unknown): void;
     has_dock(placement: DockPlacement): boolean;
     is_dock_open(placement: DockPlacement): boolean;
     toggle_dock(placement: DockPlacement): void;
