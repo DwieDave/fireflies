@@ -1052,6 +1052,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.procs",
         "nocturne.scratchpad",
         "nocturne.databases",
+        "databases.save",
         "nocturne.agent-next",
         "nocturne.agent-prev",
         "nocturne.picker",

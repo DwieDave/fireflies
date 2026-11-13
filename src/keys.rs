@@ -551,6 +551,9 @@ mod tests {
         let editor = [&window[..], &["Mod mod = editor"]].concat();
         assert_eq!(runs("cmd-s", &editor).as_deref(), Some("editor.save"));
         assert_eq!(runs("cmd-s", &window).as_deref(), Some("nocturne.fold"));
+        // The Databases window likewise: cmd-s opens its review of the staged changes.
+        let databases = [&window[..], &["Mod mod = databases"]].concat();
+        assert_eq!(runs("cmd-s", &databases).as_deref(), Some("databases.save"));
     }
 
     /// keys.json edited while the app runs: each reload replaces its bindings,

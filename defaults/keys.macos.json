@@ -139,6 +139,9 @@
     "cmd-k shift-o": "editor.pop-in",
     "cmd-k t": "editor.tab-menu"
   },
+  "mod:databases": {
+    "cmd-s": "databases.save"
+  },
   "mod:browser": {
     "cmd-p": "browser.url",
     "cmd-l": "browser.url",
