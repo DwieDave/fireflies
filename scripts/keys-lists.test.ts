@@ -121,7 +121,7 @@ function isNamed(names: Set<string>, p: string) {
 /** The probes a handler takes: `press(event, cx)` on a fresh surface each time. */
 function taken(make: () => (e: any, cx: any) => void, skip: (p: string) => boolean = () => false) {
   return PROBES.filter((p) => !skip(p)).filter((p) => {
-    const cx: any = { stopped: 0, stop_propagation() { this.stopped++; }, notify() {}, spawn() {}, write_to_clipboard() {}, timer: { after() {}, every() {} }, focus_handle: () => ({ focus() {}, is_focused: () => true }) };
+    const cx: any = { stopped: 0, stop_propagation() { this.stopped++; }, notify() {}, spawn() {}, write_to_clipboard() {}, new: () => ({ set_props() {}, release: () => true }), timer: { after() {}, every() {} }, focus_handle: () => ({ focus() {}, is_focused: () => true }) };
     try { make()(probe(p), cx); } catch (err) { throw new Error(`${p}: ${err}`); }
     return cx.stopped > 0;
   });
@@ -187,7 +187,7 @@ const files = await import("../defaults/mods/file-tree/main.ts");
 const filesLogic = await import("../defaults/mods/file-tree/logic.ts");
 test("files: ? lists every key, in the list and while the filter types", () => {
   const rows = [{ path: "a.txt", name: "a.txt", dir: false, depth: 0 }, { path: "b", name: "b", dir: true, depth: 0 }];
-  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {} }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both" }); return (e: any, cx: any) => v.key(e, cx); };
+  const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {}, set_value() {}, value: () => "" }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both", lookState: { on: false }, look: null, size: { width: 400, height: 600 }, nav: { back: [], forward: [] }, on: null, entries: new Map(), cut: { hidden: 0, ignored: 0 }, filters: { hidden: false, ignored: false } }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(false, "a.txt")), ...taken(make(false, "b"))])];
   expect(unnamed(filesLogic.KEYS, keys)).toEqual([]);
   // Typing: what steers the hits (the list's "/" line names them).

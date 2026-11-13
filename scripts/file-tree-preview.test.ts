@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, importMod } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.ts, logic.ts) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.ts),
@@ -92,7 +92,9 @@ const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable
 const { default: Viewer } = await load(`${F}/viewer.ts`, shared);
 const logic = await load(`${F}/logic.ts`);
 const route = await load(`${F}/editor-route.ts`);
-const { default: Files } = await load(`${F}/main.ts`, { ...logic, ...keyhelp, ...fileIcons, Viewer, openInEditor: route.openInEditor, editorProps: route.editorProps });
+// The pane imported for real (its split modules as the app loads them), the viewer as loaded above.
+(globalThis as any).window = { paint_path: () => new Element() };
+const { default: Files } = await importMod(`${F}/main.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} }, { "./viewer.ts": { default: Viewer } });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 
 // ---- a context: tasks run, timers wait until `tick()`, nested views record their props

@@ -22,18 +22,8 @@ defaults/mods/editor/main.ts vimCommand
 defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
 defaults/mods/editor/viewer.ts
-defaults/mods/editor/vim.ts
-defaults/mods/editor/vim.ts feed
-defaults/mods/editor/vim.ts motion
-defaults/mods/editor/vim.ts normalCommand
-defaults/mods/editor/vim.ts runEx
-defaults/mods/editor/vim.ts textObject
-defaults/mods/editor/vim.ts visualCommand
 defaults/mods/file-tree/diff.ts parse
 defaults/mods/file-tree/logic.ts
-defaults/mods/file-tree/main.ts
-defaults/mods/file-tree/main.ts key
-defaults/mods/file-tree/main.ts render
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/markdown.ts
