@@ -120,8 +120,8 @@ import type { Theme } from "herdr";
 import { v_flex, VirtualListScrollHandle, InputState } from "gpui-base";
 import { props, theme, settings, run, panes, spaces, focused, nextCommand, home, shared, setShared } from "herdr";
 import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
-import type { Adds, At, Cut, Entry, Filters, HeadRow, HitRow, LookState, Nav, Row, Side, Size, Stop, TreeRow, Act } from "./logic.ts";
-import { filterDefaults, newNav, navGo, navBack, navForward, newLook, DIVIDER, rangePaths } from "./logic.ts";
+import type { Filters, HeadRow, HitRow, Nav, Row, TreeRow, Act } from "./logic.ts";
+import { filterDefaults, newNav, navGo, navBack, navForward, rangePaths } from "./logic.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.ts).
 import type { ViewerProps } from "./viewer.ts";
 import type { Menu, Draft, Ask, Msg, MarkRange, Drag, Press, LookDir, Geo, FilesProps, SayHow, Hit } from "./state.ts";
@@ -136,6 +136,10 @@ import { ghost, hitAt, markToggle, moveSet, unmark, withPointer } from "./drag.t
 import { drawKeysStrip, drawLens, drawToolbar, footer } from "./toolbar.ts";
 import { drawFolderView, drawRow, drawSplit, selectRow, settleSelection, listOf, listBody } from "./list-view.ts";
 import { keyDown } from "./input.ts";
+import type { Adds, Cut, Stop } from "./fit.ts";
+import type { At, Entry, LookState, Side } from "./split-size.ts";
+import type { Size } from "./image.ts";
+import { newLook, DIVIDER } from "./split-size.ts";
 
 export default class Files extends View {
   on: string | null = null;

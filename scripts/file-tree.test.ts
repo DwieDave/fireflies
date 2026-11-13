@@ -65,7 +65,8 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const logic = await load("file-tree/logic.ts");
+// The pure parts (logic.ts and the modules it was split into), as the pane imports them.
+const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`file-tree/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const keyhelp = await load("file-tree/keyhelp.ts");
 const route = await load("file-tree/editor-route.ts");
 const fileIcons = await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"));

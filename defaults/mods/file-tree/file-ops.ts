@@ -5,13 +5,15 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { exec, home, shared, setShared } from "herdr";
 import { readShared, readSharedList, writeShared } from "./guard.ts";
-import type { Clip, CutItem, DraftRow, Moved, NewKind, Row } from "./logic.ts";
-import { isHidden, lists, withChanges, cutItems, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.ts";
+import type { Clip, CutItem, DraftRow, Moved, Row } from "./logic.ts";
+import { isHidden, lists, withChanges, cutItems, base, dirOf } from "./logic.ts";
 import type { Ask, Outcome } from "./state.ts";
 import { messageOf, CHANGES, CUT, tilde, DRAFT } from "./state.ts";
 import { clearSearch } from "./search.ts";
 import type { default as Files } from "./main.ts";
 import { runSet, setOf } from "./drag.ts";
+import type { NewKind } from "./fit.ts";
+import { join, relTo, resolveName, renameTarget, moveRefusal, stemRange, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./ops.ts";
 
 /** Runs one of OPS's operations on this pane's machine: true when it worked;
  *  otherwise the reason is said in the pane and the tree is listed again. */

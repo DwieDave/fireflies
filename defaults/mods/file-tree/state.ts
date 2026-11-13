@@ -8,8 +8,11 @@ import type * as herdr from "herdr";
 import { exec, home, appHome } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isString, nullable, object, sharedKey, sharedListKey, sharedMapKey } from "./guard.ts";
-import type { At, Entry, MenuItem, NewKind, Row, Side } from "./logic.ts";
-import { isFilters, isLookEntry, isFileChange, isClip } from "./logic.ts";
+import type { MenuItem, Row } from "./logic.ts";
+import { isFilters, isFileChange, isClip } from "./logic.ts";
+import type { At, Entry, Side } from "./split-size.ts";
+import type { NewKind } from "./fit.ts";
+import { isLookEntry } from "./split-size.ts";
 
 export const ROW = 22;
 export const PER_FOLDER = 500;

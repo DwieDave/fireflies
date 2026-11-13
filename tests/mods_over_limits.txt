@@ -33,7 +33,6 @@ defaults/mods/editor/vim.ts runEx
 defaults/mods/editor/vim.ts textObject
 defaults/mods/editor/vim.ts visualCommand
 defaults/mods/file-tree/diff.ts parse
-defaults/mods/file-tree/logic.ts
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/markdown.ts

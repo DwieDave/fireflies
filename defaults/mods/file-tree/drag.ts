@@ -6,8 +6,8 @@ import { div, svg } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex } from "gpui-base";
-import type { At, Row } from "./logic.ts";
-import { parent, DIVIDER, rangePaths, topLevel, dropRefusal, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, dragShare } from "./logic.ts";
+import type { Row } from "./logic.ts";
+import { parent, rangePaths, topLevel, dropRefusal, treeTop, ROW_H, rowIndexAt, base, dirOf } from "./logic.ts";
 import type { Drag, TreeBox, Hit, SetOp } from "./state.ts";
 import { tilde, DRAFT, SLOP, UNFOLD, EDGE } from "./state.ts";
 import { zoom } from "./paint.ts";
@@ -16,6 +16,9 @@ import { absOf, forget, moveEntry, recordChanges, runOp, why } from "./file-ops.
 import type { default as Files } from "./main.ts";
 import { endDivider } from "./list-view.ts";
 import { rootRow } from "./menu.ts";
+import type { At } from "./split-size.ts";
+import { DIVIDER, dragShare } from "./split-size.ts";
+import { join, relTo } from "./ops.ts";
 
 /** The marked rows in the tree's order (none: []). */
 export function markedRows(v: Files): Row[] {

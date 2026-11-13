@@ -4,13 +4,14 @@
 
 import type { Context } from "gpui-kit";
 import { run, panes, findFiles } from "herdr";
-import type { Found, NewKind, Range, Stop } from "./logic.ts";
+import type { Found, Range } from "./logic.ts";
 import { lists, fuzzy, grouped, isHtml, fileUrl, webOpen, base } from "./logic.ts";
 import { HITS } from "./state.ts";
 import { rowAt } from "./tree.ts";
 import type { default as Files } from "./main.ts";
 import { ownPane } from "./opening.ts";
 import { startDraft } from "./file-ops.ts";
+import type { NewKind, Stop } from "./fit.ts";
 
 /** Hits for the query, under their folders: fff's index of the root
  *  (findFiles); where it can't go (home, /, another machine), the folders

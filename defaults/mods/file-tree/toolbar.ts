@@ -6,8 +6,7 @@ import { div, svg } from "gpui-kit";
 import type { Context, Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex, v_flex, Input } from "gpui-base";
-import type { NewKind } from "./logic.ts";
-import { parent, lensLayout, toolbarFit, KEYS, ADDS, lookSide, deleteManyQuestion, base, deleteQuestion } from "./logic.ts";
+import { parent, deleteManyQuestion, base } from "./logic.ts";
 import { keysHint, keysView, SECTION } from "./keyhelp.ts";
 import { MOD, PER_FOLDER, TOTAL, tilde, ICONS } from "./state.ts";
 import { stop, dither, ring } from "./paint.ts";
@@ -17,6 +16,10 @@ import { closePane, copySet } from "./opening.ts";
 import { askDelete, commitDraft, cutRow, removeAsked } from "./file-ops.ts";
 import { dragLabel, markedRows } from "./drag.ts";
 import type { default as Files } from "./main.ts";
+import type { NewKind } from "./fit.ts";
+import { lensLayout, toolbarFit, KEYS, ADDS } from "./fit.ts";
+import { lookSide } from "./split-size.ts";
+import { deleteQuestion } from "./ops.ts";
 
 export function toolChip(v: Files, t: Theme, id: string, label: string, action: (cx: Context) => void, on = true): Element {
   return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
