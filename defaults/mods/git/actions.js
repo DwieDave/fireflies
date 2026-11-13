@@ -5,7 +5,7 @@
 
 import { run as herdrRun, notify, setShared } from "herdr";
 import { rewrite, nextUndo, nextRedo, UNDO, REDO } from "./history.js";
-import { partialPatch, hunkKeys } from "./patch.js";
+import { partialPatch, hunkKeys } from "./patch.ts";
 import { shq } from "./git.js";
 
 const MSG_COMMIT = (flags) => `printf '%s' "$NOCTURNE_GIT_MSG" | git commit --cleanup=strip ${flags} -F -`;

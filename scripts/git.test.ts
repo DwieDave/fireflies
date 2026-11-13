@@ -8,7 +8,7 @@ import {
   parseReflog, parseStash, parseWorktrees, repoState, age, initials, fileTree, trackOf, parseLogFull, relativeDate,
 } from "../defaults/mods/git/parse.ts";
 import { layoutGraph, segments, usedWidth, widthOf } from "../defaults/mods/git/graph.js";
-import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/git/patch.js";
+import { parseDiff, rows, partialPatch, hunkKeys } from "../defaults/mods/git/patch.ts";
 import { lookup, barKeys, menuKeys, keyName, BINDINGS, REVIEW_CLASHES } from "../defaults/mods/git/keys.js";
 import { rewrite, nextUndo, nextRedo, reflogAction, UNDO, REDO } from "../defaults/mods/git/history.js";
 

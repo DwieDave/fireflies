@@ -47,7 +47,7 @@ import { h_flex, v_flex, InputState, Input } from "gpui-base";
 import { props, theme, settings, shared, setShared, spaces, panes, focused, run, nextCommand, closeOverlay, openOverlay, watchFolder, home } from "herdr";
 import { Git, LOG_LIMIT, LOG_FULL_LIMIT } from "./git.js";
 import { layoutGraph, usedWidth, widthOf } from "./graph.js";
-import { rows as diffRows, isChange, hunkKeys } from "./patch.js";
+import { rows as diffRows, isChange, hunkKeys } from "./patch.ts";
 import { fileTree, dirLetters, letters, age, initials, relativeDate } from "./parse.ts";
 import { lookup, barKeys, menuKeys, bindings, keyName, keyLabel, LISTS } from "./keys.js";
 import { act } from "./actions.js";

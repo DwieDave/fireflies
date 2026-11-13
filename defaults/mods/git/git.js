@@ -9,7 +9,7 @@ import {
   parseStatus, parseLogFull, LOG_FULL_FORMAT, parseBranches, parseRemoteBranches, parseRemotes, parseTags, parseLog, parseReflog, parseStash, parseWorktrees, repoState,
   BRANCH_FORMAT, REMOTE_BRANCH_FORMAT, TAG_FORMAT, LOG_FORMAT, REFLOG_FORMAT, STASH_FORMAT,
 } from "./parse.ts";
-import { parseDiff } from "./patch.js";
+import { parseDiff } from "./patch.ts";
 
 const READ = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "diff.autoRefreshIndex=false", "-c", "color.ui=false"];
 const DIFF = ["--no-ext-diff", "--no-textconv", "--no-color", "-M", "--src-prefix=a/", "--dst-prefix=b/"];
