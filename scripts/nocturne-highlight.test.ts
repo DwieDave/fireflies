@@ -67,7 +67,7 @@ const cx: any = {
   timer: { every() {}, after(_ms: number, f: Function) { timers.push(f); } },
 };
 
-const { default: Sky, GLOW_SQUARE } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky, GLOW_SQUARE } = await import("../defaults/mods/nocturne/sky.ts");
 
 const AGENTS = [
   { address: "a/1", status: "working", tab: "t1", space: "s1", focused: true, program: { name: "claude", agent: true } },

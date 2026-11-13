@@ -76,7 +76,7 @@ const cx: any = {
   timer: { every() {}, after(_ms: number, f: Function) { timers.push(f); } },
 };
 
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const { default: Header } = await import("../defaults/mods/nocturne/header.ts");
 const { EDIT_SPACE, NAME_AGENT, NAME_PANE } = await import("../defaults/mods/nocturne/menu.ts");
 

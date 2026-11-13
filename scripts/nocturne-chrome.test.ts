@@ -65,10 +65,10 @@ const cx: any = {
   timer: { every() {}, after: (_ms: number, f: Function) => { timers.push(f); } },
 };
 
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const walk = await import("../defaults/mods/nocturne/walk.ts");
-const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky.js");
+const { jarPlan, SHELF_PAD, shelfHeight } = await import("../defaults/mods/nocturne/sky.ts");
 const { GLOW_SQUARE } = await import("../defaults/mods/nocturne/kit.ts");
 
 beforeEach(() => {

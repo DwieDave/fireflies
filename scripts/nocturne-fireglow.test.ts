@@ -10,7 +10,7 @@ import { test, expect, mock, beforeEach } from "bun:test";
 let windowNow: any = { platform: "linux", active: true };
 let zoom = 1;
 const herdr: Record<string, any> = {
-  agents: () => [{ address: "a/1", status: "working", tab: "t1", space: "s1", focused: true }],
+  agents: () => [{ address: "a/1", status: "working", tab: "t1", space: "s1", focused: true, program: { key: "", name: "", icon: null, tint: false, tile: null, color: null, shell: false, agent: false } }],
   appHome: () => "/tmp/app", closeOverlay: () => {}, commands: () => [],
   exec: async () => ({ code: 1, stdout: "", stderr: "" }), focused: () => ({ space: "s1", tab: "t1", pane: "p1", terminal: "a/1", block: null }),
   hc: async () => ({ code: 0, stdout: "" }), home: () => "/home/a", keys: () => [], knownAgents: () => [],
@@ -66,7 +66,7 @@ const cx: any = {
 };
 
 const { placeGlow, nextGlow, drawGlow, GONE_AFTER, PULSE, PULSE_FRAMES, pulseFrame, Fireglow } = await import("../defaults/mods/nocturne/glow.ts");
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 
 beforeEach(() => { windowNow = { platform: "linux", active: true }; zoom = 1; byId = {}; glows = []; timers = []; cx.notified = 0; });
 

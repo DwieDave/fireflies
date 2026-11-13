@@ -117,7 +117,7 @@ test("the + new menu's Scratchpad tile: a click, its letter s, enter on it; the 
 });
 
 test("the command (cmd-shift-;, and what the palette and menu run) reaches the sidebar's loop, which opens the note", () => {
-  const sky = readFileSync("defaults/mods/nocturne/sky.js", "utf8");
+  const sky = readFileSync("defaults/mods/nocturne/sky.ts", "utf8");
   expect(sky).toMatch(/c === "scratchpad" \|\| c === "scratchpad-tab"\) openScratchpad\(c === "scratchpad-tab"\)/);
   expect(JSON.parse(readFileSync("defaults/keys.macos.json", "utf8"))).toBeTruthy();
   expect(readFileSync("defaults/keys.macos.json", "utf8")).toContain('"cmd-shift-;": "nocturne.scratchpad"');

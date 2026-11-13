@@ -51,7 +51,7 @@ function item(t: Theme, id: string, glyph: string, name: string, command: string
 
 /** shared() key: { address, at } asks the sidebar to start naming that agent (its terminal: kit.ts NAME_LABEL). */
 export const NAME_AGENT = "nocturne.name-agent";
-const NAME_AGENT_KEY = sharedKey(NAME_AGENT, object({ address: isString, at: isNumber }));
+export const NAME_AGENT_KEY = sharedKey(NAME_AGENT, object({ address: isString, at: isNumber }));
 
 /** shared() key: { terminal, at } asks that pane's header to start naming it. */
 export const NAME_PANE = "nocturne.name-pane";

@@ -77,7 +77,7 @@ function key(k: string, mods: Record<string, boolean> = {}, char?: string) {
 }
 
 const nav = await import("../defaults/mods/nocturne/nav.ts");
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 const toast = await import("../defaults/mods/nocturne/toast.ts");
 const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.ts");
@@ -93,7 +93,7 @@ beforeEach(() => {
     { pane: "p2", tab: "t1", terminal: "a/2", focused: false, cwd: "/home/a" },
     { pane: "p3", tab: "t1", terminal: "a/3", focused: false, parked: true, cwd: "/home/a" },
   ];
-  agentsNow = [{ address: "a/1", status: "working", tab: "t1", space: "s1", focused: true }, { address: "a/4", status: "idle", tab: "t9", space: "s2" }];
+  agentsNow = [{ address: "a/1", status: "working", tab: "t1", space: "s1", focused: true, program: { key: "", name: "", icon: null, tint: false, tile: null, color: null, shell: false, agent: false } }, { address: "a/4", status: "idle", tab: "t9", space: "s2", program: { key: "", name: "", icon: null, tint: false, tile: null, color: null, shell: false, agent: false } }];
   focusedNow = { space: "s1", tab: "t1", pane: "p1", terminal: "a/1", block: null };
 });
 

@@ -414,7 +414,7 @@ test("the toolbar's files button and cmd-e (nocturne.files) still toggle the doc
   ids["tab-files"].on.click({}, cx);
   expect(ran.filter(DOCK)).toHaveLength(1);
   ran = [];
-  const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+  const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
   const sky: any = new Sky();
   sky.init({ role: "sky" }, cx);
   await new Promise((r) => setTimeout(r, 0));

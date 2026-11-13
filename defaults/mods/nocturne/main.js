@@ -26,7 +26,7 @@ import { props } from "herdr";
 import { Prompt, Confirm } from "./dialog.ts";
 import Palette from "./palette.ts";
 import Peek from "./peek.ts";
-import Sky from "./sky.js";
+import Sky from "./sky.ts";
 import Tabs from "./tabs.ts";
 import Header from "./header.ts";
 import Parked from "./parked.ts";

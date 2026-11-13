@@ -67,7 +67,7 @@ test("Git window: ? keys ends its options bar, after the global keys and the not
 });
 
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 
 test("tab strip: with the keyboard, ? keys is the strip's last word, after its tool buttons", () => {
   const s: any = new Tabs();

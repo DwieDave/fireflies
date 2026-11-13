@@ -68,7 +68,7 @@ const cx: any = {
 const kit = await import("../defaults/mods/nocturne/kit.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const { menuItems } = await import("../defaults/mods/nocturne/menu.ts");
-const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
+const { default: Sky } = await import("../defaults/mods/nocturne/sky.ts");
 const palette = await import("../defaults/mods/nocturne/palette.ts");
 
 const WEB = { pane: "p2", tab: "c1", terminal: null, mod: "browser", props: { slot: "w1" }, title: "browser", focused: false, parked: false };
@@ -83,7 +83,7 @@ beforeEach(() => {
     { id: "s2", name: "infra", active: false, tabs: [{ id: "c9", index: 1, active: true, name: "1" }] },
   ];
   panesNow = [{ pane: "p1", tab: "c1", terminal: "t1", program: { agent: true, name: "Claude Code" }, focused: true }, WEB, EDIT, FILES, SHELL];
-  agentsNow = [{ address: "t1", status: "working", tab: "c1", space: "s1", focused: true }];
+  agentsNow = [{ address: "t1", status: "working", tab: "c1", space: "s1", focused: true, program: { key: "", name: "", icon: null, tint: false, tile: null, color: null, shell: false, agent: false } }];
   terminalsNow = [{ address: "t1", state: "live", labels: {} }, { address: "t5", state: "live", labels: {} }];
   focusedNow = { space: "s1", tab: "c1", pane: "p2", terminal: null, block: null };
 });
@@ -455,7 +455,7 @@ test("going to a web tab's pin: its pane, then that tab (show:{slot, tab}, and a
 });
 
 test("a web tab's tile is named by that tab's title (browser.tab-titles), the pane's by its shown tab", async () => {
-  const { webName } = await import("../defaults/mods/nocturne/sky.js");
+  const { webName } = await import("../defaults/mods/nocturne/sky.ts");
   sharedState["browser.titles"] = { w1: "Shown page" };
   sharedState["browser.tab-titles"] = { w1: { web: "Shown page", "web-2": "YouTube" } };
   expect(webName(WEB, "web-2")).toBe("YouTube");

@@ -82,6 +82,9 @@ export function adopt(rec: DockRecord | null, all: readonly DockSpace[], now: nu
   return null;
 }
 
+/** A dock is being made (the sky adopts it once spaces() shows it). */
+export const dockMaking = (): boolean => Boolean(record()?.making);
+
 /** The dock space now, or null. */
 export const dock = (): SpaceInfo | null => findDock(record(), spaces());
 
