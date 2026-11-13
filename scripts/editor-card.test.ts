@@ -635,7 +635,7 @@ const PANE_KEYS: [string, string][] = [
   ["cmd-alt-shift-up", "pane.swap:up"], ["cmd-alt-shift-down", "pane.swap:down"], ["cmd-alt-shift-left", "pane.swap:left"], ["cmd-alt-shift-right", "pane.swap:right"],
   ["cmd-ctrl-up", "pane.resize:up"], ["cmd-ctrl-down", "pane.resize:down"], ["cmd-ctrl-left", "pane.resize:left"], ["cmd-ctrl-right", "pane.resize:right"],
   // The editor's own keymap also binds these (indent, outdent, replace): the app's win too.
-  ["cmd-]", "agent.next"], ["cmd-[", "agent.prev"], ["cmd-shift-f", "nocturne.grep"],
+  ["cmd-]", "nocturne.agent-next"], ["cmd-[", "nocturne.agent-prev"], ["cmd-shift-f", "nocturne.grep"],
 ];
 for (const [name, vim, mode] of modes) {
   for (const card of [false, true]) {
