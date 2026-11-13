@@ -146,7 +146,7 @@ import { OPEN, LAST, PATHS, HANDOVER, filesOf, editorPaths, isScratchpad } from 
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.ts";
 import { Rendered, editBetween } from "./rendered.js";
 import { units as liveUnits, unitFor } from "./live.ts";
-import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.js";
+import { run as mdCommand, tickLine, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, active as mdActive } from "./mdedit.ts";
 import { isNote, noteName, Autosave } from "./scratch.ts";
 import { assetPlace, imageMarkdown, insertImage, readClipboardImage, maybeCopiedImage, relative, isImagePath, stamp } from "./images.ts";
 // Read off the module when used (pickFile): test stand-ins for herdr needn't know them all.

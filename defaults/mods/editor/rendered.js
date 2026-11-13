@@ -45,7 +45,7 @@
 import { div, svg, image } from "gpui-kit";
 import { h_flex, v_flex, EditorState, Editor } from "gpui-base";
 import { units, unitFor, step, splice, itemParts, quoteBody } from "./live.ts";
-import { enter } from "./mdedit.js";
+import { enter } from "./mdedit.ts";
 import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 
 const GAP = 10, TIGHT = 3; // between units; between two list items
