@@ -39,7 +39,7 @@ mock.module("gpui-base", () => ({
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: () => ({ focus() {}, is_focused: () => false, release: () => true }), timer: { after() {}, every() {} }, bind_keys() {} };
 
-const { default: Actions, graphHeight } = await import("../defaults/mods/github/actions.js");
+const { default: Actions, graphHeight } = await import("../defaults/mods/github/actions.ts");
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
 const { default: GitHub } = await import("../defaults/mods/github/main.js");
 

@@ -47,7 +47,7 @@ import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, p
 import { bindTab, tabActions } from "./form-keys.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
 import Prs from "./prs.ts";
-import Actions from "./actions.js";
+import Actions from "./actions.ts";
 import Projects from "./projects.js";
 
 export const WINDOW = "github.window"; // { id, beat }: the open window, for the toggle

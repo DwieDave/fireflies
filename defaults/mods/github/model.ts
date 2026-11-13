@@ -143,8 +143,14 @@ export interface WorkflowJob {
   needs: string[];
 }
 
+/** A job of a workflow as read back: its name and what it needs. */
+export interface NeedsOf {
+  readonly name: string | null;
+  readonly needs: readonly string[];
+}
+
 /** A workflow's jobs by key. */
-export type Needs = ReadonlyMap<string, WorkflowJob>;
+export type Needs = ReadonlyMap<string, NeedsOf>;
 
 /** The `jobs:` of a workflow file: key -> { name, needs }. A tiny reader for
  *  the shapes GitHub accepts (`needs: a`, `needs: [a, b]`, a block list), at

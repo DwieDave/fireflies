@@ -128,7 +128,7 @@ const cx: any = {
 const settle = async () => { for (let i = 0; i < 50 && work.length; i++) { while (work.length) await work.shift(); await new Promise((r) => setTimeout(r, 2)); } };
 
 const { default: Prs } = await import("../defaults/mods/github/prs.ts");
-const { default: Actions } = await import("../defaults/mods/github/actions.js");
+const { default: Actions } = await import("../defaults/mods/github/actions.ts");
 const theme: any = new Proxy({}, { get: (_t, k) => (String(k).startsWith("ansi") ? "#808080" : "#c0c0c0") });
 
 function makeApp() {
