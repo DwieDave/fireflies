@@ -259,6 +259,24 @@ BELL = [
 ]
 write("bell.svg", svg(9 * CELL, 9 * CELL, runs([[c == "#" for c in row] for row in BELL])))
 
+# An agent's status in a pane header and on its tab (kit.ts statusFly): the
+# app icon's winged insect (fireflies.svg) as a 13 x 11 mask, one cell a layout
+# px: antennae, wings spread, the glowing tail with its rays. Tinted by status.
+FIREFLY = [
+    "..#.......#..",
+    "...#.....#...",
+    ".###..#..###.",
+    "#...#.#.#...#",
+    "#.#.#####.#.#",
+    ".####.#.####.",
+    "....#####....",
+    "...#.###.#...",
+    "....#####....",
+    ".....###.....",
+    "......#......",
+]
+write("firefly.svg", svg(13 * CELL, 11 * CELL, runs([[c == "#" for c in row] for row in FIREFLY])))
+
 # Status pips: 6 px dithered diamonds, crisp at any zoom.
 write(
     "pip.svg",
