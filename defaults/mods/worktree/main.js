@@ -1,4 +1,4 @@
-// The worktree dialog moved into the git window: nocturne-git's Worktrees
+// The worktree dialog moved into the git window: git's Worktrees
 // tab (the Files panel's third) makes, lists, goes to and removes a repo's
 // worktrees, with confirmations, as spaces. This stub keeps the old way in
 // working: openOverlay({ mod: "worktree", props: { space, folder?, machine?,
@@ -38,7 +38,7 @@ export default class WorktreeMoved extends View {
   handOver() {
     if (this.done) return;
     this.done = true;
-    openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] }, props: gitProps(this.p) });
+    openOverlay({ mod: "git", kind: "window", key: "git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] }, props: gitProps(this.p) });
     if (this.p.overlay) closeOverlay(this.p.overlay);
   }
 

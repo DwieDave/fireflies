@@ -98,6 +98,11 @@ fn shipped_mods() -> &'static [(String, Vec<u8>)] {
     })
 }
 
+/// Whether `name` is one of the default mods (`shipped_mods`).
+pub fn is_shipped(name: &str) -> bool {
+    shipped_mods().iter().any(|(p, _)| p.split('/').next() == Some(name))
+}
+
 /// `Contents/Resources/mods` of the app bundle holding this binary, if it has one.
 fn resource_mods_dir() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
@@ -1570,11 +1575,12 @@ mod tests {
         let dir = root.join(format!("herdr-renamed-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
-        // Saved while the preview was nocturne-image: its keys, one the new name already has.
+        // Saved under the old names: nocturne-files' filters, the preview's titles under both
+        // its old names (the later one wins), and a key the new name already has.
         let path = dir.join("shared.json");
-        std::fs::write(&path, r#"{"nocturne-image.paths":{"s1":"/a.png"},"nocturne-image.titles":{"s1":"old"},"nocturne-preview.titles":{"s1":"new"},"nocturne.sidebar":1}"#).unwrap();
+        std::fs::write(&path, r#"{"nocturne-files.filters":{"s1":{"hidden":true}},"nocturne-image.paths":{"s1":"/a.png"},"nocturne-image.titles":{"s1":"oldest"},"nocturne-preview.titles":{"s1":"old"},"nocturne-editor.last":"x","editor.last":"y","nocturne.sidebar":1}"#).unwrap();
         let store = SharedStore::load(path.clone());
-        let want = json!({ "nocturne-preview.paths": { "s1": "/a.png" }, "nocturne-preview.titles": { "s1": "new" }, "nocturne.sidebar": 1 });
+        let want = json!({ "file-tree.filters": { "s1": { "hidden": true } }, "preview.paths": { "s1": "/a.png" }, "preview.titles": { "s1": "old" }, "editor.last": "y", "nocturne.sidebar": 1 });
         assert_eq!(Value::Object(store.values.clone()), want);
         // Written back at once: the next start finds nothing to move.
         let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
@@ -1587,12 +1593,12 @@ mod tests {
             std::fs::create_dir_all(dir.join(kind).join("nocturne-image")).unwrap();
             std::fs::write(dir.join(kind).join("nocturne-image").join(file), "old").unwrap();
         }
-        std::fs::create_dir_all(dir.join("cache").join("nocturne-preview")).unwrap();
+        std::fs::create_dir_all(dir.join("cache").join("preview")).unwrap();
         move_renamed_dirs(&dir);
-        assert_eq!(std::fs::read_to_string(dir.join("data/nocturne-preview/store.json")).unwrap(), "old");
+        assert_eq!(std::fs::read_to_string(dir.join("data/preview/store.json")).unwrap(), "old");
         assert!(!dir.join("data/nocturne-image").exists());
         assert!(dir.join("cache/nocturne-image/env.json").exists());
-        assert!(!dir.join("cache/nocturne-preview/env.json").exists());
+        assert!(!dir.join("cache/preview/env.json").exists());
         std::fs::remove_dir_all(dir).unwrap();
     }
 

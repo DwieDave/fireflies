@@ -1,5 +1,5 @@
 // The processes and ports manager's corner of the tab strip (the deck itself
-// is the nocturne-procs mod): a tree mark beside the script runner's ▶ and,
+// is the procs mod): a tree mark beside the script runner's ▶ and,
 // when the processes in this app's terminals listen on TCP ports, how many
 // in teal (":2"). A click opens the deck hanging under the mark (kit.js
 // dropBelow), a second closes it (tabs.js tool, as ▶); the mark is lit while
@@ -15,12 +15,12 @@ import { div, svg } from "gpui-kit";
 import { terminals, openOverlay, closeOverlay, shared, setShared, exec } from "herdr";
 import { ART, dropBelow } from "./kit.js";
 
-export const DECK = "nocturne-procs.deck";
+export const DECK = "procs.deck";
 // { at, n }: listening ports in this app's terminals, from the deck or the strip.
-export const COUNT = "nocturne-procs.count";
+export const COUNT = "procs.count";
 export const DECK_W = 480;
 export const DECK_H = 560;
-const SEP = "@@nocturne-procs@@";
+const SEP = "@@procs@@";
 export const PORTS_PROBE = `LC_ALL=C ps -axo pid=,ppid=; echo '${SEP}'; lsof -nP -iTCP -sTCP:LISTEN -F pn 2>/dev/null; true`;
 
 /** Opens the deck (`tab`: "procs" or "ports"), or closes it when open
@@ -37,7 +37,7 @@ export function toggleProcs({ centered = false, at = null, wasOpen = false, tab 
     return;
   }
   if (wasOpen) return;
-  const id = openOverlay({ mod: "nocturne-procs", kind: centered ? "dialog" : "popup", frame: "none",
+  const id = openOverlay({ mod: "procs", kind: centered ? "dialog" : "popup", frame: "none",
     width: DECK_W, height: DECK_H, ...(at && !centered ? { at } : {}), props: { tab: tab ?? "procs" } });
   setShared(DECK, { id, tab: tab ?? "procs", beat: Date.now() });
 }

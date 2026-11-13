@@ -7,12 +7,12 @@ import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex } from "gpui-base";
 import { run, props, closeOverlay, openOverlay, theme, keys, terminals, spaces, panes, exec, home, pickFolder } from "herdr";
 
-// Worktrees live in the git window (nocturne-git's Worktrees tab): new asks
+// Worktrees live in the git window (git's Worktrees tab): new asks
 // for a branch and opens its checkout as a space, open lists the repo's,
 // remove removes the space's (it asks first).
 function gitWorktrees(space, folder, action) {
   const s = spaces().find((x) => x.id === space);
-  openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] },
+  openOverlay({ mod: "git", kind: "window", key: "git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] },
     props: { folder, on: s?.machine ?? null, worktrees: { action, ...(space ? { space } : {}) } } });
 }
 

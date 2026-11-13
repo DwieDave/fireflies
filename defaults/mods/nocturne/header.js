@@ -36,11 +36,11 @@ import { openEqualize } from "./equalize.js";
 
 // Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
 const MODS = {
-  "nocturne-agents": ["Agents", "layers"], "nocturne-browser": ["Web", "monitor"],
-  "nocturne-diff": ["Diff", "git-compare"], "nocturne-git": ["Git", "git-compare"], "nocturne-files": ["Files", "files"],
-  "nocturne-usage": ["Usage", "clock"], "nocturne-pip": ["Picture in picture", "monitor"],
-  "nocturne-markdown": ["Markdown", "file-text"], "nocturne-preview": ["Preview", "eye"],
-  "nocturne-editor": ["Editor", "file-text"],
+  "agent-graph": ["Agents", "layers"], "browser": ["Web", "monitor"],
+  "diff": ["Diff", "git-compare"], "git": ["Git", "git-compare"], "file-tree": ["Files", "files"],
+  "usage": ["Usage", "clock"], "pip": ["Picture in picture", "monitor"],
+  "markdown": ["Markdown", "file-text"], "preview": ["Preview", "eye"],
+  "editor": ["Editor", "file-text"],
   nocturne: ["Worktrees", "git-branch"],
 };
 // Header widths (px) at which parts give way.
@@ -86,9 +86,9 @@ export function paneName(p) {
 
 /** A file viewer (Markdown, preview) goes by the file it shows (it notes that by
  *  slot in shared `<mod>.titles`); a files pane of its own by its folder. */
-const VIEWERS = new Set(["nocturne-markdown", "nocturne-preview", "nocturne-editor", "nocturne-files"]);
+const VIEWERS = new Set(["markdown", "preview", "editor", "file-tree"]);
 function viewerName(p) {
-  if (!VIEWERS.has(p.mod) || (p.mod === "nocturne-files" && !p.props?.path)) return null;
+  if (!VIEWERS.has(p.mod) || (p.mod === "file-tree" && !p.props?.path)) return null;
   const slot = p.props?.slot;
   return (slot && shared(`${p.mod}.titles`)?.[slot]) || String(p.props?.path ?? "").split("/").pop() || null;
 }
@@ -127,8 +127,8 @@ export function headerControls(p, all = panes()) {
     ] : []),
     c("split-right", "split-right", "pane.split", { direction: "right", pane }, "Split right"),
     c("split-down", "split-down", "pane.split", { direction: "down", pane }, "Split down"),
-    ...(tab.length > 1 ? [{ id: "equalize", icon: "mods/nocturne-equalize-panes/equalize.svg", tip: "Even out panes", go: () => openEqualize(pane) }] : []),
-    ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/nocturne-equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
+    ...(tab.length > 1 ? [{ id: "equalize", icon: "mods/equalize-panes/equalize.svg", tip: "Even out panes", go: () => openEqualize(pane) }] : []),
+    ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
     ...(parkable(p, all) ? [c("park", CHROME("archive"), "pane.park", { pane }, `Park pane${keyLabel("pane.park") ? ` (${keyLabel("pane.park")})` : ""}`)] : []),
     c("zoom", p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }, p.zoomed ? "Unzoom" : "Zoom"),
     { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: () => paneMenu(p, true) },

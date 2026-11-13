@@ -20,9 +20,9 @@ import { ART, dither } from "./kit.js";
 // The level's theme color: the same words the fireflies use for status.
 const COLOR = { error: "blocked", warning: "working", success: "done", info: "accent" };
 
-// nocturne-notifications' items and the request its overview opens on.
-const ITEMS = "nocturne-notifications.items";
-const OPEN = "nocturne-notifications.open";
+// notifications' items and the request its overview opens on.
+const ITEMS = "notifications.items";
+const OPEN = "notifications.open";
 
 /** shared() key: the toasts on screen, [{ overlay, action, at }], newest last. */
 export const TOASTS = "nocturne.toasts";
@@ -36,7 +36,7 @@ export function act(p) {
   const ask = request(p);
   if (ask) {
     setShared(OPEN, { terminal: ask.address, at: Date.now() });
-    run("nocturne-notifications.open");
+    run("notifications.open");
   } else if (p.action?.name) run(p.action.name, p.action.args ?? {});
   closeOverlay(p.overlay);
 }

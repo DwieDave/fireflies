@@ -36,7 +36,28 @@ pub enum Content {
 /// keys.json's `mod:<old>` section and `<old>.<command>` bindings apply to it,
 /// and its shared keys, localStorage (`data/<old>/`) and cache move to the new
 /// name on start (mods.rs). A mod renamed twice: its latest old name first.
-pub const RENAMED_MODS: &[(&str, &str)] = &[("nocturne-image", "nocturne-preview")];
+pub const RENAMED_MODS: &[(&str, &str)] = &[
+    // The Nocturne mods lost their prefix: they stand on their own. Three
+    // took names of their own where a stock mod has the plain one.
+    ("nocturne-agents", "agent-graph"),
+    ("nocturne-browser", "browser"),
+    ("nocturne-diff", "diff"),
+    ("nocturne-editor", "editor"),
+    ("nocturne-equalize-panes", "equalize-panes"),
+    ("nocturne-files", "file-tree"),
+    ("nocturne-git", "git"),
+    ("nocturne-github", "github"),
+    ("nocturne-markdown", "markdown"),
+    ("nocturne-notifications", "notifications"),
+    ("nocturne-picker", "finder"),
+    ("nocturne-pip", "pip"),
+    ("nocturne-preview", "preview"),
+    ("nocturne-procs", "procs"),
+    ("nocturne-scripts", "scripts"),
+    ("nocturne-usage", "usage"),
+    // The preview's name while it showed pictures only.
+    ("nocturne-image", "preview"),
+];
 
 /// The name a mod goes by now (`RENAMED_MODS`); any other name as it is.
 pub fn current_mod_name(name: &str) -> &str {
@@ -900,15 +921,20 @@ mod tests {
     fn a_renamed_mods_old_name_opens_the_new_one() {
         // A pane saved while the preview was the image viewer.
         let old: Content = serde_json::from_str(r#"{"mod":"nocturne-image","props":{"path":"/a.png"}}"#).unwrap();
-        assert_eq!(old, Content::Mod { name: "nocturne-preview".into(), props: serde_json::json!({ "path": "/a.png" }) });
-        let other: Content = serde_json::from_str(r#"{"mod":"nocturne-files"}"#).unwrap();
-        assert_eq!(other, Content::Mod { name: "nocturne-files".into(), props: Value::Null });
-        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"mod":"nocturne-preview","props":{"path":"/a.png"}}"#);
-        assert_eq!(current_mod_name("nocturne-image"), "nocturne-preview");
-        assert_eq!(current_mod_name("nocturne-markdown"), "nocturne-markdown");
+        assert_eq!(old, Content::Mod { name: "preview".into(), props: serde_json::json!({ "path": "/a.png" }) });
+        let other: Content = serde_json::from_str(r#"{"mod":"files"}"#).unwrap();
+        assert_eq!(other, Content::Mod { name: "files".into(), props: Value::Null });
+        // Saved while the Nocturne mods had their prefix.
+        let tree: Content = serde_json::from_str(r#"{"mod":"nocturne-files","props":{"slot":"s1"}}"#).unwrap();
+        assert_eq!(tree, Content::Mod { name: "file-tree".into(), props: serde_json::json!({ "slot": "s1" }) });
+        assert_eq!(current_mod_name("nocturne-equalize-panes"), "equalize-panes");
+        assert_eq!(current_mod_name("nocturne"), "nocturne");
+        assert_eq!(serde_json::to_string(&old).unwrap(), r#"{"mod":"preview","props":{"path":"/a.png"}}"#);
+        assert_eq!(current_mod_name("nocturne-image"), "preview");
+        assert_eq!(current_mod_name("markdown"), "markdown");
         // A layout's header mod too.
         let header: HeaderContent = serde_json::from_str(r#"{"mod":"nocturne-image"}"#).unwrap();
-        assert_eq!(header, HeaderContent::Mod { name: "nocturne-preview".into(), props: Value::Null });
+        assert_eq!(header, HeaderContent::Mod { name: "preview".into(), props: Value::Null });
     }
 
     #[test]

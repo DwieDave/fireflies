@@ -26,7 +26,7 @@ function overlaySpecs(text: string): string[] {
 }
 
 test("every Git and GitHub window opens with a scrim, so the app keeps the keyboard in it", () => {
-  const files = ["nocturne/git.js", "nocturne/github.js", "nocturne-github/main.js", "nocturne-git/main.js"];
+  const files = ["nocturne/git.js", "nocturne/github.js", "github/main.js", "git/main.js"];
   const windows = files.flatMap((f) => overlaySpecs(src(f)).filter((s) => /kind:\s*"window"/.test(s)).map((s) => [f, s] as const));
   expect(windows.length).toBeGreaterThanOrEqual(4); // the two toggles, the diff in GitHub's place, back from it
   for (const [f, s] of windows) expect(`${f}: ${s}`).toContain("scrim: true");
@@ -71,7 +71,7 @@ test("the GitHub window takes the keyboard back when the app hands it over", asy
     spawn(fn: (cx: any) => Promise<void>) { fn(cx).catch(() => {}); }, notify() {}, stop_propagation() {},
     timer: { after() {}, every() {} }, bind_keys() {}, open_url() {},
   };
-  const { default: GitHub } = await import("../defaults/mods/nocturne-github/main.js");
+  const { default: GitHub } = await import("../defaults/mods/github/main.js");
   const g: any = new GitHub();
   g.init({}, cx);
   const atOpen = focused;

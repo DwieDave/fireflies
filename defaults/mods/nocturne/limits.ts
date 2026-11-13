@@ -20,9 +20,9 @@
 // HERDR_APP_USAGE=1 turns it on there. Checked by the scripts themselves,
 // before the login is read: no request leaves a scratch app.
 //
-// Two mods show it (Nocturne's sidebar and the nocturne-usage pane), and a
+// Two mods show it (Nocturne's sidebar and the usage pane), and a
 // mod can't import another's files: this file is in both, byte for byte.
-// Edit one, copy it over the other (scripts/nocturne-usage-limits.test.ts
+// Edit one, copy it over the other (scripts/usage-limits.test.ts
 // checks they match).
 //
 // One reading per machine, not per copy, window or app: every copy draws the
@@ -130,19 +130,19 @@ const isPace = object({}, { tried: isNumber, until: isNumber, fails: isNumber })
 export type Why = "tick" | "open" | "force";
 
 /** The picked provider's id. */
-const PICK = sharedKey("nocturne-usage.provider", nullable(isProviderId));
+const PICK = sharedKey("usage.provider", nullable(isProviderId));
 
 /** The last good answer ({ state: "ok", session, week, scoped, plan, at }). Claude's keys keep their old names. */
-export const CACHE = "nocturne-usage.last";
+export const CACHE = "usage.last";
 
 /** The latest read's problem ({ state, message?, at, until? }), null after a good one. */
-export const NOTE = "nocturne-usage.note";
+export const NOTE = "usage.note";
 
 /** When some copy in this app started asking (ms), so two copies don't ask at once. */
-const ASKING = "nocturne-usage.asking";
+const ASKING = "usage.asking";
 
 /** This app's copy of the machine's record: { tried, until, fails } (see the top). */
-const STATE = "nocturne-usage.state";
+const STATE = "usage.state";
 
 const key = (base: string, p: ProviderId) => (p === "claude" ? base : `${base}.${p}`);
 const cacheKey = (p: ProviderId) => sharedKey(key(CACHE, p), nullable(isUsage));
@@ -193,7 +193,7 @@ export function pace(): number {
     const space = host.spaces().find((s) => s.active);
     const tab = space?.tabs.find((t) => t.active)?.id;
 
-    if (active && host.panes().some((p) => p.mod === "nocturne-usage" && p.tab === tab && !p.parked)) return PACE.looking;
+    if (active && host.panes().some((p) => p.mod === "usage" && p.tab === tab && !p.parked)) return PACE.looking;
 
     if (active || host.terminals().some((t) => isTerminalStatus(t) && (t.report?.state ?? t.status) === "working")) return PACE.active;
   } catch { /* not drawing yet */ }

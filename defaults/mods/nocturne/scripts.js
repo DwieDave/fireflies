@@ -1,12 +1,12 @@
 // The script runner's corner of the tab strip (the deck itself is the
-// nocturne-scripts mod): ▶ and a little jar with one dithered cell per run in
+// scripts mod): ▶ and a little jar with one dithered cell per run in
 // its state's color (running ones breathe, ok green, failed red, stopped
 // grey). A click opens the deck hanging under ▶ (kit.js dropBelow), a
 // second closes it (and it stays closed: tabs.js tool); ▶ is lit while it's
 // open. Stopping happens there.
 // cmd-shift-r (nocturne.scripts) opens the deck centered, or closes it.
 //
-// A run is a labeled pane-less terminal (nocturne-scripts/runs.js); this file
+// A run is a labeled pane-less terminal (scripts/runs.js); this file
 // reads the same labels. The strip also tells about failures: a run that
 // ended with a nonzero exit code, not stopped by a person, posts one toast
 // (shared(TOLD) keeps which, so two windows don't both tell).
@@ -18,12 +18,12 @@ import { ART, dither, dropBelow } from "./kit.js";
 import { here } from "./panels.js";
 
 const LABEL = "nocturne.script";
-export const DECK = "nocturne-scripts.deck";
-const TOLD = "nocturne-scripts.told";
+export const DECK = "scripts.deck";
+const TOLD = "scripts.told";
 // Ended runs as their terminals' records, by address (trackRuns).
-export const ENDED = "nocturne-scripts.ended";
+export const ENDED = "scripts.ended";
 // Runs being followed until they end: { address: when first seen }.
-const TRACK = "nocturne-scripts.track";
+const TRACK = "scripts.track";
 const CELLS = 8;
 export const DECK_W = 420;
 export const DECK_H = 470;
@@ -98,7 +98,7 @@ export function toggleDeck({ focus = "pick", centered = false, show = null, agai
   if (open) { setShared(DECK, null); closeOverlay(open); if (!show && !again) return; }
   else if (wasOpen && !show && !again) return;
   const { folder, on } = scriptsFolder();
-  const id = openOverlay({ mod: "nocturne-scripts", kind: centered ? "dialog" : "popup", frame: "none",
+  const id = openOverlay({ mod: "scripts", kind: centered ? "dialog" : "popup", frame: "none",
     width: DECK_W, height: DECK_H, ...(at && !centered ? { at } : {}), props: { folder, on, focus, ...(show ? { show } : {}), ...(again ? { again } : {}) } });
   setShared(DECK, { id, beat: Date.now() });
 }
@@ -118,7 +118,7 @@ const lastFailedRun = () => scriptRuns().filter((r) => !r.live && r.reason !== "
 export const lastFailed = () => lastFailedRun()?.address ?? null;
 
 // A nix-darwin switch fails when Herdr Core lacks App Management (a copy of
-// ../nocturne-scripts/nix.js APP_MANAGEMENT: a mod can't import another's).
+// ../scripts/nix.js APP_MANAGEMENT: a mod can't import another's).
 const APP_MANAGEMENT = {
   match: "permission denied when trying to update apps",
   hint: "Herdr Core needs App Management (System Settings > Privacy & Security). If it is already on, remove it and add it again",
@@ -152,7 +152,7 @@ export function tellFailures(list) {
   for (const r of fresh) keep[r.address] = 1;
   setShared(TOLD, keep);
   for (const r of fresh) {
-    // An admin run cancelled at its password prompt (nocturne-scripts/nix.js CANCELLED).
+    // An admin run cancelled at its password prompt (scripts/nix.js CANCELLED).
     const cancelled = r.admin && r.code === 130;
     if (!cancelled && r.plan) {
       needsAppManagement(r).then((grant) => notify(grant

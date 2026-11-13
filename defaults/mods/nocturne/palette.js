@@ -52,7 +52,7 @@ const MARKDOWN = /\.(md|markdown|mdx)$/i;
  * Their keys are the mod's section in keys.json (`mod:<mod>`).
  */
 const PANE = {
-  "nocturne-editor": ["Editor", [
+  "editor": ["Editor", [
     ["save", "Save the file", "write disk"],
     ["find", "Find in the file…", "search text"],
     ["replace", "Find and replace…", "search substitute text"],
@@ -97,7 +97,7 @@ const PANE = {
     ["md-fence", "Markdown: code block", "fence code block ```", (p) => MARKDOWN.test(p?.props?.path ?? "")],
     ["md-rule", "Markdown: rule", "horizontal rule line separator ---", (p) => MARKDOWN.test(p?.props?.path ?? "")],
   ]],
-  "nocturne-browser": ["Web", [
+  "browser": ["Web", [
     ["url", "Go to an address…", "url address bar location navigate open page"],
     ["reload", "Reload the page", "refresh stop"],
     ["back", "Back", "history previous page"],
@@ -117,7 +117,7 @@ const PANE = {
     ["tab_menu", "The tab's menu", "web browser tab menu pin move close"],
     ["keys", "Web pane keys", "help shortcuts list ? keybindings"],
   ]],
-  "nocturne-markdown": ["Markdown", [
+  "markdown": ["Markdown", [
     ["raw", "Show the source or the rendered page", "raw markdown source text toggle"],
     ["back", "Back to the previous file", "history link"],
     ["top", "Scroll to the top", "start beginning home"],
@@ -125,7 +125,7 @@ const PANE = {
     ["reload", "Reload the file", "refresh disk"],
     ["keys", "Markdown viewer keys", "help shortcuts list ? keybindings"],
   ]],
-  "nocturne-preview": ["Preview", [
+  "preview": ["Preview", [
     ["fit", "Fit to the pane", "zoom fit whole width"],
     ["actual", "Actual size", "zoom 100% one to one pixels"],
     ["zoom_in", "Zoom in", "bigger magnify"],
@@ -139,7 +139,7 @@ const PANE = {
     ["reload", "Reload the file", "refresh disk"],
     ["keys", "Preview keys", "help shortcuts list ? keybindings"],
   ]],
-  "nocturne-agents": ["Agents", [
+  "agent-graph": ["Agents", [
     ["follow", "Follow the selected agent", "graph track watch live"],
     ["working", "Next working agent", "graph busy jump follow"],
     ["in", "Zoom in", "graph bigger"],
@@ -147,11 +147,11 @@ const PANE = {
     ["reset", "Reset the view", "graph zoom pan fit"],
     ["keys", "Agents graph keys", "help shortcuts list ? keybindings"],
   ]],
-  "nocturne-usage": ["Usage", [
+  "usage": ["Usage", [
     ["refresh", "Check usage again", "limits quota refresh reload claude"],
     ["keys", "Usage keys", "help shortcuts list ? keybindings"],
   ]],
-  "nocturne-files": ["Files", [
+  "file-tree": ["Files", [
     ["keys", "Files pane keys", "help shortcuts list ? keybindings"],
     ["look", "Show or hide the preview", "preview split quick look peek file viewer space"],
   ]],
@@ -175,18 +175,18 @@ function windowEntries() {
   const out = [];
   const add = (name, group, icon, title, words) => out.push({ name, args: {}, group, icon, title, words, go: () => run(name) });
   if (gitOpen()) {
-    add("nocturne-git.refresh", "Git", "git-compare", "Git: refresh", "reload status reread");
-    add("nocturne-git.review", "Git", "eye", "Git: review the changes", "diff review files reviewed");
+    add("git.refresh", "Git", "git-compare", "Git: refresh", "reload status reread");
+    add("git.review", "Git", "eye", "Git: review the changes", "diff review files reviewed");
   }
   if (githubOpen()) {
     const gh = "mods/nocturne/art/github.svg";
-    add("nocturne-github.prs", "GitHub", gh, "GitHub: pull requests", "prs tab list");
-    add("nocturne-github.actions", "GitHub", gh, "GitHub: actions", "workflows runs ci checks tab");
-    add("nocturne-github.projects", "GitHub", gh, "GitHub: projects", "board items issues tab");
-    add("nocturne-github.diff", "GitHub", gh, "GitHub: diff of the selected pull request", "pr changes review files");
-    add("nocturne-github.fork", "GitHub", gh, "GitHub: switch between fork and upstream", "fork upstream origin remote repo");
-    add("nocturne-github.refresh", "GitHub", gh, "GitHub: refresh", "reload fetch again");
-    add("nocturne-github.keys", "GitHub", gh, "GitHub: keys", "help shortcuts list ? keybindings");
+    add("github.prs", "GitHub", gh, "GitHub: pull requests", "prs tab list");
+    add("github.actions", "GitHub", gh, "GitHub: actions", "workflows runs ci checks tab");
+    add("github.projects", "GitHub", gh, "GitHub: projects", "board items issues tab");
+    add("github.diff", "GitHub", gh, "GitHub: diff of the selected pull request", "pr changes review files");
+    add("github.fork", "GitHub", gh, "GitHub: switch between fork and upstream", "fork upstream origin remote repo");
+    add("github.refresh", "GitHub", gh, "GitHub: refresh", "reload fetch again");
+    add("github.keys", "GitHub", gh, "GitHub: keys", "help shortcuts list ? keybindings");
   }
   return out;
 }
@@ -261,12 +261,12 @@ function openEntries() {
   }
   // While the git window is open: what its main view shows, as a pane (its ctrl-p) or a tab (ctrl-shift-p).
   if (gitOpen()) {
-    out.push({ name: "nocturne-git.open-pane", args: {}, group: "Open", icon: "panel-right", bind: "nocturne-git.open-pane",
-      title: "Git: open the diff as a pane", words: "git diff pane split beside review patch commit stash", go: () => run("nocturne-git.open-pane") });
-    out.push({ name: "nocturne-git.open-pane-tab", args: {}, group: "Open", icon: "square", bind: "nocturne-git.open-pane-tab",
-      title: "Git: open the diff in a new tab", words: "git diff tab review patch commit stash", go: () => run("nocturne-git.open-pane-tab") });
+    out.push({ name: "git.open-pane", args: {}, group: "Open", icon: "panel-right", bind: "git.open-pane",
+      title: "Git: open the diff as a pane", words: "git diff pane split beside review patch commit stash", go: () => run("git.open-pane") });
+    out.push({ name: "git.open-pane-tab", args: {}, group: "Open", icon: "square", bind: "git.open-pane-tab",
+      title: "Git: open the diff in a new tab", words: "git diff tab review patch commit stash", go: () => run("git.open-pane-tab") });
   }
-  out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/nocturne-equalize-panes/grid.svg", bind: "nocturne.gridify",
+  out.push({ name: "nocturne", args: { gridify: true }, group: "Pane", icon: "mods/equalize-panes/grid.svg", bind: "nocturne.gridify",
     title: "Gridify panes", words: "grid tile arrange rearrange even out equalize layout", go: () => run("nocturne.gridify") });
   // Pinning the focused pane to the top of the sky, whatever it shows: an agent,
   // a shell, a web page, an editor (kit.js pinPane; menu.js pinItems).
@@ -309,8 +309,8 @@ function openEntries() {
     out.push({ name: "nocturne.update-close", args: {}, group: "App", icon: "x", title: "Close the update note",
       words: "update updated version note close hide dismiss what changed", go: () => dismissUpdate() });
   }
-  out.push({ name: "nocturne-notifications.open", args: {}, group: "Agent", icon: "layers", title: "Notifications",
-    words: "notifications inbox agents waiting needs you permission questions bell overview", go: () => run("nocturne-notifications.open") });
+  out.push({ name: "notifications.open", args: {}, group: "Agent", icon: "layers", title: "Notifications",
+    words: "notifications inbox agents waiting needs you permission questions bell overview", go: () => run("notifications.open") });
   // The keyboard into a chrome block (nav.js): the sidebar, the tab strip, the pane header.
   for (const [cmd, title, words] of [
     ["sidebar", "Keyboard to the sidebar", "focus sky spaces agents navigate"],
@@ -323,8 +323,8 @@ function openEntries() {
     out.push({ name: "nocturne", args: { rename: "pane" }, group: "Pane", icon: "square-pen", title: "Rename this pane",
       words: "name title terminal label pane header", go: () => setShared(NAME_PANE, { terminal: term, at: Date.now() }) });
   }
-  // The picture in picture player (nocturne-pip), while its window is open (or a pane holds it).
-  const pipWindow = Boolean(shared("nocturne-pip.player")), pipPane = panes().some((p) => p.mod === "nocturne-pip");
+  // The picture in picture player (pip), while its window is open (or a pane holds it).
+  const pipWindow = Boolean(shared("pip.player")), pipPane = panes().some((p) => p.mod === "pip");
   if (pipWindow || pipPane) {
     for (const [cmd, icon, title, words] of [
       ...(pipWindow ? [
@@ -339,7 +339,7 @@ function openEntries() {
       ["back", "monitor", "Picture in picture: back into the page", "pip video player return web page end"],
       ["close", "x", "Close picture in picture", "pip video player stop end quit"],
     ]) {
-      out.push({ name: `nocturne-pip.${cmd}`, args: {}, group: "Open", icon, title, words, go: () => run(`nocturne-pip.${cmd}`) });
+      out.push({ name: `pip.${cmd}`, args: {}, group: "Open", icon, title, words, go: () => run(`pip.${cmd}`) });
     }
   }
   return out;
@@ -458,48 +458,48 @@ export const OUT = {
   "nocturne.lazygit": "the old name of nocturne.git (Git)",
   "nocturne.scripts-grant": "the failed nix-darwin toast's click (App Management): nothing to grant otherwise",
   "nocturne.toast-dismiss": "the old name of nocturne.toast-close (Dismiss the toast)",
-  "nocturne-files.focus": "internal: hands the files pane the keyboard",
-  "nocturne-files.take-panel": "internal: the files panel takes the keyboard when its pane is focused",
-  "nocturne-diff.focus": "internal: hands the diff the keyboard",
-  "nocturne-markdown.focus": "internal: hands the viewer the keyboard",
-  "nocturne-markdown.up": "scrolls half a page: a key for the viewer, not a list",
-  "nocturne-markdown.down": "scrolls half a page: a key for the viewer, not a list",
-  "nocturne-preview.focus": "internal: hands the preview the keyboard",
-  "nocturne-editor.focus": "internal: hands the editor the keyboard",
-  "nocturne-editor.hover-more": "acts on the open hover card (ctrl-= while it's up)",
-  "nocturne-editor.hover-less": "acts on the open hover card (ctrl-- while it's up)",
-  "nocturne-browser.focus": "internal: hands the web pane's bar the keyboard",
-  "nocturne-browser.web": "hands the keyboard to the page: click it",
-  "nocturne-browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
-  "nocturne-browser.show": "a tab for a pane by its slot (show:{slot, tab}): a web tab's tile on the shelf",
-  "nocturne-browser.tab_act": "internal: a pick in a web tab's menu (tab_act:{slot, tab, act})",
-  "nocturne-agents.focus": "internal: hands the agents graph the keyboard",
-  "nocturne-usage.focus": "internal: hands the usage pane the keyboard",
-  "nocturne-pip.focus": "internal: hands the player the keyboard",
-  "nocturne-pip.unfocus": "the player's key that hands the keyboard back: esc in the player",
-  "nocturne-git.focus": "internal: hands the git window the keyboard",
-  "nocturne-scripts.focus": "internal: hands the script runner the keyboard",
-  "nocturne-scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
-  "nocturne-procs.focus": "internal: hands the processes and ports manager the keyboard",
-  "nocturne-procs.keys": "the open processes and ports manager's ?: it lists its keys in place",
-  "nocturne-git.back": "the git window's esc (closes its popup)",
-  "nocturne-git.commit-ok": "the git window's enter in its commit popup",
-  "nocturne-git.confirm-yes": "the git window's enter in its confirm popup",
-  "nocturne-git.menu-run": "the git window's enter in its menu",
-  "nocturne-git.prompt-ok": "the git window's enter in its prompt",
-  "nocturne-github.focus": "internal: hands the GitHub window the keyboard",
-  "nocturne-github.new-pr": "the same form as GitHub: new pull request… (nocturne.github-pr)",
-  "nocturne-github.run-workflow": "the same form as GitHub: run a workflow… (nocturne.github-run)",
-  "nocturne-notifications.focus": "internal: hands the overview the keyboard",
-  "nocturne-notifications.refresh": "internal: the bell reads the notifications again",
-  "nocturne-picker.files": "the open picker's switch to files: Find a file… (nocturne.picker) sends it",
-  "nocturne-picker.grep": "the open picker's switch to grep: Grep the project… (nocturne.grep) sends it",
+  "file-tree.focus": "internal: hands the files pane the keyboard",
+  "file-tree.take-panel": "internal: the files panel takes the keyboard when its pane is focused",
+  "diff.focus": "internal: hands the diff the keyboard",
+  "markdown.focus": "internal: hands the viewer the keyboard",
+  "markdown.up": "scrolls half a page: a key for the viewer, not a list",
+  "markdown.down": "scrolls half a page: a key for the viewer, not a list",
+  "preview.focus": "internal: hands the preview the keyboard",
+  "editor.focus": "internal: hands the editor the keyboard",
+  "editor.hover-more": "acts on the open hover card (ctrl-= while it's up)",
+  "editor.hover-less": "acts on the open hover card (ctrl-- while it's up)",
+  "browser.focus": "internal: hands the web pane's bar the keyboard",
+  "browser.web": "hands the keyboard to the page: click it",
+  "browser.open": "a page for a pane by its slot (open:{url, slot}): the editor's links",
+  "browser.show": "a tab for a pane by its slot (show:{slot, tab}): a web tab's tile on the shelf",
+  "browser.tab_act": "internal: a pick in a web tab's menu (tab_act:{slot, tab, act})",
+  "agent-graph.focus": "internal: hands the agents graph the keyboard",
+  "usage.focus": "internal: hands the usage pane the keyboard",
+  "pip.focus": "internal: hands the player the keyboard",
+  "pip.unfocus": "the player's key that hands the keyboard back: esc in the player",
+  "git.focus": "internal: hands the git window the keyboard",
+  "scripts.focus": "internal: hands the script runner the keyboard",
+  "scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",
+  "procs.focus": "internal: hands the processes and ports manager the keyboard",
+  "procs.keys": "the open processes and ports manager's ?: it lists its keys in place",
+  "git.back": "the git window's esc (closes its popup)",
+  "git.commit-ok": "the git window's enter in its commit popup",
+  "git.confirm-yes": "the git window's enter in its confirm popup",
+  "git.menu-run": "the git window's enter in its menu",
+  "git.prompt-ok": "the git window's enter in its prompt",
+  "github.focus": "internal: hands the GitHub window the keyboard",
+  "github.new-pr": "the same form as GitHub: new pull request… (nocturne.github-pr)",
+  "github.run-workflow": "the same form as GitHub: run a workflow… (nocturne.github-run)",
+  "notifications.focus": "internal: hands the overview the keyboard",
+  "notifications.refresh": "internal: the bell reads the notifications again",
+  "finder.files": "the open picker's switch to files: Find a file… (nocturne.picker) sends it",
+  "finder.grep": "the open picker's switch to grep: Grep the project… (nocturne.grep) sends it",
 };
 
 // Whole families of mod commands that stay out (the test knows where each one's list lives).
 export const OUT_FAMILIES = {
-  "nocturne-git": "the git window's key table (nocturne-git/keys.js): each acts on the window's selection; its ? and menus list them",
-  "nocturne-notifications": "the open overview's keys (open.js COMMAND_KEYS): they act on its selection; its key bar lists them",
+  "git": "the git window's key table (git/keys.js): each acts on the window's selection; its ? and menus list them",
+  "notifications": "the open overview's keys (open.js COMMAND_KEYS): they act on its selection; its key bar lists them",
 };
 
 function titleOf(name) {

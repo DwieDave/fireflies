@@ -47,8 +47,8 @@ beforeEach(() => { sharedState = {}; ran = []; closed = []; propsNow = {}; terms
 
 // ---- GitHub
 
-const { default: GitHub } = await import("../defaults/mods/nocturne-github/main.js");
-const { linksIn } = await import("../defaults/mods/nocturne-github/model.js");
+const { default: GitHub } = await import("../defaults/mods/github/main.js");
+const { linksIn } = await import("../defaults/mods/github/model.js");
 
 function github(tab = "prs") {
   propsNow = { folder: "/src", overlay: "o1", tab };
@@ -121,7 +121,7 @@ test("GitHub: esc and q close the window from its top level", () => {
 
 // ---- the scripts deck
 
-const { default: Deck } = await import("../defaults/mods/nocturne-scripts/main.js");
+const { default: Deck } = await import("../defaults/mods/scripts/main.js");
 
 function deck(scripts: [string, string][]) {
   propsNow = { overlay: "d1" };
@@ -185,7 +185,7 @@ test("deck: an ended run's output scrolls by keys, esc goes back to the list", (
 
 // ---- the notifications overview
 
-const { default: Overview } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const { default: Overview } = await import("../defaults/mods/notifications/overview.js");
 
 test("overview: q closes, up / down move between requests that have no options", () => {
   propsNow = { overlay: "n1" };
@@ -220,9 +220,9 @@ test("overview: ? shows its keys, ? or esc hides them (esc then closes)", () => 
   expect(closed).toEqual(["n1"]);
 });
 
-// ---- picture in picture (the rest of its keys: nocturne-browser.test.ts)
+// ---- picture in picture (the rest of its keys: browser.test.ts)
 
-const { keyControl } = await import("../defaults/mods/nocturne-pip/main.ts");
+const { keyControl } = await import("../defaults/mods/pip/main.ts");
 
 test("pip: esc gives the keyboard back; command keys stay the app's", () => {
   expect(keyControl(key("escape"))).toBe("unfocus");

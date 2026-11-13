@@ -244,7 +244,7 @@ def hills(w=480, h=144):
 
 hills()
 
-# The notification bell (nocturne-notifications' mark in the tab strip): 9 px,
+# The notification bell (notifications' mark in the tab strip): 9 px,
 # drawn like the strip's other pixel marks (play), one cell a layout px.
 BELL = [
     "....#....",

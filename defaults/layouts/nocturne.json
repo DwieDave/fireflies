@@ -45,7 +45,7 @@
               "id": "notify",
               "type": "block",
               "content": {
-                "mod": "nocturne-notifications",
+                "mod": "notifications",
                 "props": {
                   "role": "bell",
                   "end": 0

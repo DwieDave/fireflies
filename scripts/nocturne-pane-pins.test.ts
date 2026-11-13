@@ -71,9 +71,9 @@ const { menuItems } = await import("../defaults/mods/nocturne/menu.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const palette = await import("../defaults/mods/nocturne/palette.js");
 
-const WEB = { pane: "p2", tab: "c1", terminal: null, mod: "nocturne-browser", props: { slot: "w1" }, title: "nocturne-browser", focused: false, parked: false };
-const EDIT = { pane: "p3", tab: "c9", terminal: null, mod: "nocturne-editor", props: { file: "/a/PLAN.md" }, title: "nocturne-editor", focused: false, parked: false };
-const FILES = { pane: "p4", tab: "c1", terminal: null, mod: "nocturne-files", props: { path: "/a" }, title: "nocturne-files", focused: false, parked: true };
+const WEB = { pane: "p2", tab: "c1", terminal: null, mod: "browser", props: { slot: "w1" }, title: "browser", focused: false, parked: false };
+const EDIT = { pane: "p3", tab: "c9", terminal: null, mod: "editor", props: { file: "/a/PLAN.md" }, title: "editor", focused: false, parked: false };
+const FILES = { pane: "p4", tab: "c1", terminal: null, mod: "file-tree", props: { path: "/a" }, title: "file-tree", focused: false, parked: true };
 const SHELL = { pane: "p5", tab: "c1", terminal: "t5", program: { name: "zsh", shell: true }, focused: false, parked: false };
 
 beforeEach(() => {
@@ -105,7 +105,7 @@ function pinTerminal(addr: string, at: number) {
 
 test("nocturne.pin pins the focused web pane to the shelf, and again unpins it", () => {
   kit.pinFocused();
-  expect(records()).toEqual([{ pane: "p2", mod: "nocturne-browser", props: { slot: "w1" }, at: expect.any(Number) }]);
+  expect(records()).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: expect.any(Number) }]);
   expect(commands).toEqual([]); // no terminal: no terminal.pin
   expect(kit.panePinnedNow({ pane: "p2", terminal: null })).toBe(true);
   expect(kit.jar().map((x: any) => x.key)).toEqual(["pane:p2"]);
@@ -237,10 +237,10 @@ test("the sidebar draws the shelf's tiles in the keyboard's walk; p, J, K and en
   expect(s.pinWhere(item("pane:p3"))).toBe("infra");
   expect(s.pinWhere({ kind: "pane", key: "pane:p4", pane: FILES })).toBe("files · parked");
   expect(s.pinLit({ kind: "pane", key: "pane:p4", pane: FILES })).toBe(false);
-  // A web pane goes by its page's title (nocturne-browser.titles by slot), else the host it opened on.
+  // A web pane goes by its page's title (browser.titles by slot), else the host it opened on.
   expect(s.pinName(item("pane:p2"))).toBe("Web");
   expect(s.pinWhere(item("pane:p2"))).toBe("");
-  sharedState["nocturne-browser.titles"] = { w1: "Grafana · ops" };
+  sharedState["browser.titles"] = { w1: "Grafana · ops" };
   expect(s.pinName(item("pane:p2"))).toBe("Grafana · ops");
   expect(s.pinWhere(item("pane:p2"))).toBe("web");
   expect(s.pinName({ kind: "pane", key: "pane:x", pane: { ...WEB, props: { url: "https://github.com/a/b" } } })).toBe("github.com");
@@ -270,7 +270,7 @@ test("nocturne.pin reaches the sky's command loop", async () => {
 });
 
 test("a closed pane's pin goes after a while; a pane missing at first (loading) keeps it", () => {
-  sharedState[pins.PANES_KEY] = [{ pane: "p2", at: 1 }, { pane: "gone", mod: "nocturne-browser", props: { slot: "zz" }, at: 2 }];
+  sharedState[pins.PANES_KEY] = [{ pane: "p2", at: 1 }, { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 2 }];
   const s = new Sky();
   s.init({ role: "sky" }, cx);
   const real = Date.now;
@@ -311,7 +311,7 @@ test("a new web pane in the dock: the dock is made first (in ~, named dock), the
   kit.dockWeb("https://docs.rs");
   expect(commands).toEqual([["space.new", { name: "dock", folder: "/home/a", machine: "" }]]);
   const slot = records()[0].props.slot;
-  expect(records()[0]).toEqual({ pane: `new:${slot}`, mod: "nocturne-browser", props: { slot, url: "https://docs.rs" }, at: expect.any(Number) });
+  expect(records()[0]).toEqual({ pane: `new:${slot}`, mod: "browser", props: { slot, url: "https://docs.rs" }, at: expect.any(Number) });
   // Asked again while it's being made: no second space, no stray pin.
   kit.dockWeb();
   expect(commands.filter(([n]) => n === "space.new").length).toBe(1);
@@ -320,9 +320,9 @@ test("a new web pane in the dock: the dock is made first (in ~, named dock), the
   spacesNow = [...spacesNow, { id: "s9", name: "dock", named: true, folder: "/home/a", attached: true, active: true, tabs: [{ id: "c99", index: 1, active: true }] }];
   expect(dockMod.adoptDock()).toBe(true);
   expect(sharedState[dockMod.DOCK_KEY]).toEqual({ id: "s9" });
-  expect(commands.at(-1)).toEqual(["tab.new", { space: "s9", mod: "nocturne-browser", props: { slot, url: "https://docs.rs" } }]);
+  expect(commands.at(-1)).toEqual(["tab.new", { space: "s9", mod: "browser", props: { slot, url: "https://docs.rs" } }]);
   // The pane shows up under its own id: the pin finds it by its props and takes the id.
-  panesNow = [...panesNow, { pane: "p99", tab: "c100", terminal: null, mod: "nocturne-browser", props: { slot, url: "https://docs.rs" } }];
+  panesNow = [...panesNow, { pane: "p99", tab: "c100", terminal: null, mod: "browser", props: { slot, url: "https://docs.rs" } }];
   expect(kit.jar().map((x: any) => x.key)).toContain("pane:p99");
   expect(pins.tidy(records(), panesNow, new Map(), 0)!.map((r: any) => r.pane)).toEqual(["p99"]);
   // With the dock there, the next one opens at once.
@@ -341,7 +341,7 @@ test("moving a pane to the dock pins it and moves it into a tab of its own there
   const rows = (pane: string, terminal: string | null = null) => menuItems(theme, { tab: "pane", target: { pane, terminal } }).filter((r: any) => !r.rule).map((r: any) => r.id);
   expect(rows("p4")).toContain("dock");
   expect(rows("p3")).not.toContain("dock"); // the editor sits in infra, the dock here
-  panesNow = [...panesNow, { pane: "m/p1", tab: "m/c1", terminal: null, mod: "nocturne-browser", props: {} }];
+  panesNow = [...panesNow, { pane: "m/p1", tab: "m/c1", terminal: null, mod: "browser", props: {} }];
   expect(rows("m/p1")).not.toContain("dock");
   // nocturne.dock: the focused pane, if it's outside the dock.
   commands = [];
@@ -399,7 +399,7 @@ test("the shelf ends in a + tile: a new web pane in the dock, in the keyboard's 
   expect(commands.at(-1)![1].space).toBe("s2");
 });
 
-// ---- one web tab pinned on its own (nocturne-browser writes these records: { …, tab })
+// ---- one web tab pinned on its own (browser writes these records: { …, tab })
 
 test("a web tab's pin: its own tile next to the pane's, keys and order of its own; pinning the pane leaves it", () => {
   sharedState[pins.PANES_KEY] = [
@@ -423,7 +423,7 @@ test("a web tab's pin: its own tile next to the pane's, keys and order of its ow
   expect(records().find((r: any) => r.tab === "web-2").at).not.toBe(records().find((r: any) => r.tab === "web").at);
   // The record helpers: pin and unpin one tab, the others stay.
   const one = pins.pinTabRecord([], WEB, "web-3", true, 5);
-  expect(one).toEqual([{ pane: "p2", mod: "nocturne-browser", props: { slot: "w1" }, at: 5, tab: "web-3" }]);
+  expect(one).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: 5, tab: "web-3" }]);
   expect(pins.pinTabRecord(records(), WEB, "web", false, 6).map((r: any) => pins.recordKey(r))).toEqual(["pane:p2#web-2", "pane:p3"]);
 });
 
@@ -431,7 +431,7 @@ test("going to a web tab's pin: its pane, then that tab (show:{slot, tab}, and a
   sharedState[pins.PANES_KEY] = [{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 1, tab: "web-2" }, { pane: "p2", mod: WEB.mod, props: WEB.props, at: 2 }];
   const items = Object.fromEntries(kit.jar().map((x: any) => [x.key, x]));
   kit.goToPin(items["pane:p2#web-2"]);
-  expect(commands).toEqual([["pane.focus", { pane: "p2" }], ['nocturne-browser.show:{"slot":"w1","tab":"web-2"}', undefined]]);
+  expect(commands).toEqual([["pane.focus", { pane: "p2" }], ['browser.show:{"slot":"w1","tab":"web-2"}', undefined]]);
   expect(sharedState[kit.WEB_SHOW]).toEqual({ slot: "w1", tab: "web-2", at: expect.any(Number) });
   // The whole pane's tile: the pane only.
   commands = [];
@@ -441,10 +441,10 @@ test("going to a web tab's pin: its pane, then that tab (show:{slot, tab}, and a
   expect(records().map((r: any) => pins.recordKey(r))).toEqual(["pane:p2"]);
 });
 
-test("a web tab's tile is named by that tab's title (nocturne-browser.tab-titles), the pane's by its shown tab", async () => {
+test("a web tab's tile is named by that tab's title (browser.tab-titles), the pane's by its shown tab", async () => {
   const { webName } = await import("../defaults/mods/nocturne/sky.js");
-  sharedState["nocturne-browser.titles"] = { w1: "Shown page" };
-  sharedState["nocturne-browser.tab-titles"] = { w1: { web: "Shown page", "web-2": "YouTube" } };
+  sharedState["browser.titles"] = { w1: "Shown page" };
+  sharedState["browser.tab-titles"] = { w1: { web: "Shown page", "web-2": "YouTube" } };
   expect(webName(WEB, "web-2")).toBe("YouTube");
   expect(webName(WEB)).toBe("Shown page");
   // A tab not named yet: the pane's host, else "Web".
@@ -454,9 +454,9 @@ test("a web tab's tile is named by that tab's title (nocturne-browser.tab-titles
 
 test("a closed pane's pins go together, its tab pins too; a pane back under a new id keeps them all", () => {
   const recs = [
-    { pane: "gone", mod: "nocturne-browser", props: { slot: "zz" }, at: 1, tab: "web" },
-    { pane: "gone", mod: "nocturne-browser", props: { slot: "zz" }, at: 2, tab: "web-2" },
-    { pane: "gone", mod: "nocturne-browser", props: { slot: "zz" }, at: 3 },
+    { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 1, tab: "web" },
+    { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 2, tab: "web-2" },
+    { pane: "gone", mod: "browser", props: { slot: "zz" }, at: 3 },
     { pane: "p2", mod: WEB.mod, props: WEB.props, at: 4, tab: "web" },
   ];
   const missing = new Map();
@@ -464,6 +464,6 @@ test("a closed pane's pins go together, its tab pins too; a pane back under a ne
   expect(pins.tidy(recs, panesNow, missing, pins.GONE_AFTER)!.map((r: any) => pins.recordKey(r))).toEqual(["pane:p2#web"]);
   expect(missing.size).toBe(0);
   // After a restart the pane is p7 (same slot): every record of it follows.
-  const back = pins.tidy(recs, [...panesNow, { pane: "p7", tab: "c1", terminal: null, mod: "nocturne-browser", props: { slot: "zz" } }], new Map(), 0)!;
+  const back = pins.tidy(recs, [...panesNow, { pane: "p7", tab: "c1", terminal: null, mod: "browser", props: { slot: "zz" } }], new Map(), 0)!;
   expect(back.map((r: any) => pins.recordKey(r))).toEqual(["pane:p7#web", "pane:p7#web-2", "pane:p7", "pane:p2#web"]);
 });

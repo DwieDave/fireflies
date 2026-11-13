@@ -1,5 +1,5 @@
-// The worktree dialog moved into the git window (nocturne-git's Worktrees
-// tab, tested in nocturne-git-view.test.ts). What's left of the worktree mod
+// The worktree dialog moved into the git window (git's Worktrees
+// tab, tested in git-view.test.ts). What's left of the worktree mod
 // is a stub: whoever still opens it (a saved layout, a key, another mod)
 // gets the git window on Worktrees with the same request.
 import { test, expect } from "bun:test";
@@ -43,7 +43,7 @@ test("opened as a dialog, it opens the git window on Worktrees and closes itself
   let later: Function | null = null;
   v.init(propsNow, { timer: { after: (_ms: number, f: Function) => { later = f; } } });
   later!();
-  expect(opened.at(-1)).toMatchObject({ mod: "nocturne-git", kind: "window", props: { folder: "/r", worktrees: { action: "new", space: "s1" } } });
+  expect(opened.at(-1)).toMatchObject({ mod: "git", kind: "window", props: { folder: "/r", worktrees: { action: "new", space: "s1" } } });
   expect(closed).toEqual(["o1"]);
   v.render();
 });

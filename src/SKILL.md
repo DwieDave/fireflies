@@ -40,8 +40,8 @@ herdr-app do agent.focus --terminal t7
 To show the person a web page, `herdr-app do app.open_url --url https://...`
 opens it in a web pane beside the focused one (or the system's browser, per
 their `links` setting). A web pane keeps tabs: `herdr-app do
-nocturne-browser.open:https://...` opens the page in a new tab of the web
-pane last used instead (`nocturne-browser.tab_next`, `.tab_prev`,
+browser.open:https://...` opens the page in a new tab of the web
+pane last used instead (`browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
 the shown one).
 
@@ -109,7 +109,7 @@ on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
 a web pane can have a tile of its own (its tab's menu, or `herdr-app do
-nocturne-browser.pin_tab` for the web pane's shown tab); the tile shows that tab. For a pane
+browser.pin_tab` for the web pane's shown tab); the tile shows that tab. For a pane
 that belongs to no project (a docs page, a dashboard), `herdr-app do
 nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
 repo for git or GitHub, terminals start in ~), pinned to the shelf;

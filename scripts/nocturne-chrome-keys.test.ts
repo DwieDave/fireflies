@@ -23,7 +23,7 @@ const LAYOUT = {
     { id: "work", type: "column", children: [
       { id: "tab-row", type: "row", children: [
         { id: "tabs", type: "block", content: { mod: "nocturne", props: { role: "tabs" } } },
-        { id: "notify", type: "block", content: { mod: "nocturne-notifications", props: { role: "bell" } } },
+        { id: "notify", type: "block", content: { mod: "notifications", props: { role: "bell" } } },
       ] },
       { id: "main", type: "block", content: { tab: "active" } },
     ] },
@@ -144,7 +144,7 @@ test("the cursor moves, holds at the ends, jumps sections, and finds a neighbor 
   expect(nav.keep([], "a")).toBe(null);
   expect(nav.blockOf(LAYOUT, "sky")).toBe("sidebar");
   expect(nav.blockOf(LAYOUT, "tabs")).toBe("tabs");
-  expect(nav.hasMod(LAYOUT, "nocturne-notifications")).toBe(true);
+  expect(nav.hasMod(LAYOUT, "notifications")).toBe(true);
 });
 
 // ---- the sidebar
@@ -216,7 +216,7 @@ test("on a space: rename, folder (the picker), new tab, worktree, menu; delete a
   press(s, "t");
   expect(commands.at(-1)).toEqual(["tab.new", { space: "s1" }]);
   press(s, "w");
-  expect(overlays.at(-1)).toMatchObject({ mod: "nocturne-git", kind: "window", props: { worktrees: { space: "s1", action: "new" } } });
+  expect(overlays.at(-1)).toMatchObject({ mod: "git", kind: "window", props: { worktrees: { space: "s1", action: "new" } } });
   press(s, "r");
   expect(s.spaces.mode).toMatchObject({ kind: "rename" });
   s.spaces.start(null, cx);
@@ -319,7 +319,7 @@ test("the strip's row: tabs, the buttons and the bell; enter selects, H/L move, 
   expect(s.cursor).toBe("bell");
   expect(sharedState["nocturne.chrome"]).toEqual({ region: "bell", item: "bell" });
   press(s, "enter");
-  expect(commands.at(-1)).toEqual(["nocturne-notifications.open", undefined]);
+  expect(commands.at(-1)).toEqual(["notifications.open", undefined]);
   press(s, "h");
   press(s, "enter");
   expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { role: "new" } });
@@ -399,7 +399,7 @@ test("the header's controls: name, text size, float, splits, even out, gridify, 
   const all = [...panesNow, { pane: "p4", tab: "t1", terminal: "a/4" }];
   expect(headerControls(all[0], all).map((c: any) => c.id))
     .toEqual(["name", "fs", "fb", "float", "split-right", "split-down", "equalize", "gridify", "park", "zoom", "more", "close"]);
-  const mod = { pane: "m1", tab: "t5", mod: "nocturne-git", terminal: null };
+  const mod = { pane: "m1", tab: "t5", mod: "git", terminal: null };
   expect(headerControls(mod, [mod]).map((c: any) => c.id)).toEqual(["split-right", "split-down", "zoom", "more", "close"]);
   const zoomed = { ...all[0], zoomed: true };
   expect(headerControls(zoomed, all).slice(-3).map((c: any) => c.id)).toEqual(["zoom", "more", "close"]);

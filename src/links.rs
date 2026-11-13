@@ -178,14 +178,14 @@ pub fn local_file(target: &Target) -> Option<PathBuf> {
 /// terminal's, a mod's) opens in the viewer instead of the system's app.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Viewer {
-    /// `nocturne-markdown`: `.md`, `.markdown`.
+    /// `markdown`: `.md`, `.markdown`.
     Markdown,
-    /// `nocturne-preview`: files you look at but don't edit (pictures, PDFs,
+    /// `preview`: files you look at but don't edit (pictures, PDFs,
     /// tables, databases, patches, fonts, audio and video). Was `nocturne-image`.
     Preview,
-    /// `nocturne-editor`: source code and other text people edit.
+    /// `editor`: source code and other text people edit.
     Editor,
-    /// `nocturne-files`: a folder, as a files pane rooted there.
+    /// `file-tree`: a folder, as a files pane rooted there.
     Files,
 }
 
@@ -211,7 +211,7 @@ fn edits(path: &Path) -> bool {
 }
 
 const MARKDOWN_EXTS: &[&str] = &["md", "markdown"];
-/// The preview's kinds (defaults/mods/nocturne-preview/kinds.js KINDS): pictures,
+/// The preview's kinds (defaults/mods/preview/kinds.js KINDS): pictures,
 /// PDF, CSV/TSV, SQLite, patches.
 const PREVIEW_EXTS: &[&str] = &[
     "png", "jpg", "jpeg", "gif", "webp", "bmp", "tif", "tiff", "ico", "svg", "avif", "heic", "heif", "pdf", "csv", "tsv", "sqlite", "sqlite3", "db",
@@ -246,10 +246,10 @@ impl Viewer {
     /// The mod that shows it.
     pub fn mod_name(self) -> &'static str {
         match self {
-            Viewer::Markdown => "nocturne-markdown",
-            Viewer::Preview => "nocturne-preview",
-            Viewer::Editor => "nocturne-editor",
-            Viewer::Files => "nocturne-files",
+            Viewer::Markdown => "markdown",
+            Viewer::Preview => "preview",
+            Viewer::Editor => "editor",
+            Viewer::Files => "file-tree",
         }
     }
 
@@ -744,13 +744,13 @@ mod tests {
         assert_eq!(bare_viewable("shots", Some(&dir)), Some(dir.join("shots")));
         assert_eq!(bare_viewable(".", Some(&dir)), None);
         assert_eq!(bare_viewable("..", Some(&dir)), None);
-        assert_eq!(Viewer::Files.mod_name(), "nocturne-files");
+        assert_eq!(Viewer::Files.mod_name(), "file-tree");
         // Web images stay web pages.
         assert_eq!(view("https://example.com/a.png", None), None);
         // A bare name in the terminal's folder.
         assert_eq!(bare_viewable("a.png", Some(&dir.join("shots"))), Some(png.clone()));
         assert_eq!(bare_viewable("main.rs", Some(&dir.join("shots"))), Some(dir.join("shots/main.rs")));
-        assert_eq!(Viewer::Preview.mod_name(), "nocturne-preview");
+        assert_eq!(Viewer::Preview.mod_name(), "preview");
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

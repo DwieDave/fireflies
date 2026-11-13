@@ -51,14 +51,14 @@ export const TERMS = [
 export const PANES = [
   { pane: "p1", tab: "tA", terminal: "t4", cwd: "/w", status: "working", program: { name: "claude" }, focused: true },
   { pane: "p2", tab: "tB", terminal: "t7", cwd: "/w/web", status: null, program: { name: "zsh" } },
-  { pane: "p3", tab: "tB", terminal: null, mod: "nocturne-browser", props: { slot: "s9" } },
+  { pane: "p3", tab: "tB", terminal: null, mod: "browser", props: { slot: "s9" } },
 ];
 export const SPACES = [
   { id: "s1", name: "fireflies", folder: "/w", machine: null, tabs: [{ id: "tA", index: 1, name: "claude" }, { id: "tB", index: 2, name: "api" }] },
   { id: "s2", name: "homelab", folder: "/srv", machine: "box", tabs: [{ id: "tC", index: 1, name: "x" }] },
 ];
 
-// The system probe (nocturne-procs/sys.js SYS_PROBE) on a Mac, trimmed, addresses scrubbed.
+// The system probe (procs/sys.js SYS_PROBE) on a Mac, trimmed, addresses scrubbed.
 const S = "@@nocturne-sys@@";
 export const SYS = `10
 34359738368

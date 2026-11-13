@@ -1,4 +1,4 @@
-// The script runner's jobs: what the deck (nocturne-scripts) asks to be done
+// The script runner's jobs: what the deck (scripts) asks to be done
 // to runs: start, stop, restart, dismiss. The deck closes the moment a
 // script is picked, and work started in a closed overlay's tasks is dropped
 // with it, so the deck only queues the `hc` calls in shared(JOBS) and the tab
@@ -12,8 +12,8 @@
 
 import { hc, run, shared, setShared, notify } from "herdr";
 
-export const JOBS = "nocturne-scripts.jobs";
-const TRACK = "nocturne-scripts.track";
+export const JOBS = "scripts.jobs";
+const TRACK = "scripts.track";
 // A job left from before a restart is stale, not something to do now.
 const STALE = 60000;
 

@@ -49,7 +49,7 @@ const LAYOUT = {
     { id: "work", type: "column", children: [
       { id: "tab-row", type: "row", children: [
         { id: "tabs", type: "block", content: { mod: "nocturne", props: { role: "tabs" } } },
-        { id: "notify", type: "block", size: { px: 28 }, content: { mod: "nocturne-notifications", props: { role: "bell" } } },
+        { id: "notify", type: "block", size: { px: 28 }, content: { mod: "notifications", props: { role: "bell" } } },
       ] },
       { id: "main", type: "block", content: { tab: "active" } },
     ] },
@@ -64,7 +64,7 @@ const herdr: Record<string, any> = {
   nextCommand: () => new Promise<string>((r) => waiting.push(r)),
   notify: () => {}, openOverlay: (spec: any) => { const id = `o${overlays.length + 1}`; overlays.push({ ...spec, id }); open.add(id); return id; },
   panes: () => [{ pane: "p1", tab: "t1", terminal: "a/1", focused: true, cwd: "/home/a" }], pickFolder: async () => null,
-  presentUpdateNotes: () => {}, props: () => propsNow, run: (name: string) => { if (name.startsWith("nocturne-notifications.")) send(name); return null; },
+  presentUpdateNotes: () => {}, props: () => propsNow, run: (name: string) => { if (name.startsWith("notifications.")) send(name); return null; },
   setAgentOrder: () => {}, setShared: (k: string, v: unknown) => { sharedState[k] = v; }, settings: () => ({ zoom: 0.9 }),
   shared: (k: string) => sharedState[k] ?? null,
   spaces: () => [{ id: "s1", name: "one", active: true, folder: "/home/a", tabs: [{ id: "t1", index: 1, active: true, name: "1" }] }],
@@ -95,16 +95,16 @@ const newmenu = await import("../defaults/mods/nocturne/newmenu.js");
 const { default: NewMenu } = newmenu;
 const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
-const { default: Deck } = await import("../defaults/mods/nocturne-scripts/main.js");
-const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
-const { default: Overview, EMPTY_H } = await import("../defaults/mods/nocturne-notifications/overview.js");
-const notif = await import("../defaults/mods/nocturne-notifications/open.js");
+const { default: Deck } = await import("../defaults/mods/scripts/main.js");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
+const { default: Overview, EMPTY_H } = await import("../defaults/mods/notifications/overview.js");
+const notif = await import("../defaults/mods/notifications/open.js");
 
 // Each view's own close hook, as the app runs it once its overlay is gone.
 const HOOKS: Record<string, (id: string) => void> = {
-  "nocturne-scripts": (id) => { propsNow = { overlay: id }; (Object.create(Deck.prototype) as any).close(); },
+  "scripts": (id) => { propsNow = { overlay: id }; (Object.create(Deck.prototype) as any).close(); },
   nocturne: (id) => { propsNow = { overlay: id }; (Object.create(NewMenu.prototype) as any).closing(); },
-  "nocturne-notifications": (id) => { propsNow = { overlay: id }; (Object.create(Overview.prototype) as any).closing(); },
+  "notifications": (id) => { propsNow = { overlay: id }; (Object.create(Overview.prototype) as any).closing(); },
 };
 const hook = (id: string) => HOOKS[overlays.find((o) => o.id === id).mod](id);
 const shown = () => overlays.filter((o) => open.has(o.id));
@@ -145,7 +145,7 @@ for (const early of [true, false]) {
     expect(lit("tab-scripts-run")).toBe(false);
     press("tab-scripts-run", { early });
     expect(shown()).toHaveLength(1);
-    expect(shown()[0]).toMatchObject({ mod: "nocturne-scripts", kind: "popup", width: scripts.DECK_W });
+    expect(shown()[0]).toMatchObject({ mod: "scripts", kind: "popup", width: scripts.DECK_W });
     expect(shown()[0].at).toBeTruthy();
     s.draw();
     expect(lit("tab-scripts-run")).toBe(true);
@@ -252,7 +252,7 @@ for (const early of [true, false]) {
     expect(lit("bell")).toBe(false);
     press("bell", { early });
     expect(shown()).toHaveLength(1);
-    expect(shown()[0]).toMatchObject({ mod: "nocturne-notifications", kind: "popup", props: { role: "overview" } });
+    expect(shown()[0]).toMatchObject({ mod: "notifications", kind: "popup", props: { role: "overview" } });
     b.draw();
     expect(lit("bell")).toBe(true);
     press("bell", { early });
@@ -291,7 +291,7 @@ test("bell: the drop-down's top is on the strip's horizon and its right edge on 
   } finally { VIEWPORT.width = 1600; VIEWPORT.height = 1000; }
 });
 
-test("bell by key (nocturne-notifications.open, cmd-shift-a; the strip's enter): opens centered, closes, opens", async () => {
+test("bell by key (notifications.open, cmd-shift-a; the strip's enter): opens centered, closes, opens", async () => {
   const b = bell();
   b.draw();
   // A press on the bell before: the key still centers it.
@@ -302,7 +302,7 @@ test("bell by key (nocturne-notifications.open, cmd-shift-a; the strip's enter):
   const before = overlays.length;
   await tick();
   for (const n of [1, 0, 1]) {
-    send("nocturne-notifications.open");
+    send("notifications.open");
     await tick();
     expect(shown()).toHaveLength(n);
   }
@@ -329,18 +329,18 @@ test("bell: a toast's request opens the center on its terminal, and retargets an
   const b = bell();
   b.draw();
   await tick();
-  sharedState["nocturne-notifications.open"] = { terminal: "m/3", at: Date.now() };
-  send("nocturne-notifications.open");
+  sharedState["notifications.open"] = { terminal: "m/3", at: Date.now() };
+  send("notifications.open");
   await tick();
   expect(shown()).toHaveLength(1);
   expect(shown()[0]).toMatchObject({ kind: "dialog", props: { role: "overview", terminal: "m/3" } });
-  sharedState["nocturne-notifications.open"] = { terminal: "m/4", at: Date.now() + 1 };
-  send("nocturne-notifications.open");
+  sharedState["notifications.open"] = { terminal: "m/4", at: Date.now() + 1 };
+  send("notifications.open");
   await tick();
   expect(shown()).toHaveLength(1);
   expect(shown()[0].props.terminal).toBe("m/4");
   // The same request isn't taken twice: the key now closes it.
-  send("nocturne-notifications.open");
+  send("notifications.open");
   await tick();
   expect(shown()).toHaveLength(0);
 });
@@ -355,7 +355,7 @@ test("the question dialog still opens centered, from the drop-down too", () => {
 });
 
 test("a note of an open center left by a restart doesn't swallow a press", () => {
-  sharedState["nocturne-notifications.shown"] = { overview: "gone", beat: Date.now() - 60000 };
+  sharedState["notifications.shown"] = { overview: "gone", beat: Date.now() - 60000 };
   notif.toggleOverview();
   expect(shown()).toHaveLength(1);
 });
@@ -388,7 +388,7 @@ test("the center with a request is the popup's most; with nothing waiting, EMPTY
 
 // ---- the center's key bar: under both columns, ? keys last, whatever fits
 
-const ITEMS = "nocturne-notifications.items";
+const ITEMS = "notifications.items";
 const PERMISSION = { id: "p1", address: "t2", type: "permission", status: "blocked", answerable: true, name: "Claude Code", logo: "claude", since: Date.now(),
   request: { type: "permission", tool: "Bash", line: "mkdir -p x", title: "Bash command", canAmend: true, input: {},
     options: [{ n: 1, label: "Yes", kind: "yes" }, { n: 2, label: "Yes, always", kind: "always" }, { n: 3, label: "No", kind: "no" }] } };

@@ -628,7 +628,7 @@ Open a web page (http or https) in a web pane beside the focused pane (in "app")
 
 ## `markdown.open`
 
-Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default: the focused one), or the viewer already showing it there; anchor: a heading to scroll to; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+Open a Markdown file in the viewer (the markdown mod) beside the pane (default: the focused one), or the viewer already showing it there; anchor: a heading to scroll to; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
 
 | Argument | Required |
 |---|---|
@@ -640,7 +640,7 @@ Open a Markdown file in the viewer (nocturne-markdown) beside the pane (default:
 
 ## `editor.open`
 
-Open a file in the editor (nocturne-editor) beside the pane (default: the focused one): the editor already open on it there shows its tab, else an editor in that tab takes it as a new tab (in "pane": a new editor); line and col (one-based) put the caret there; look: to be looked at (a picture, PDF or table drawn, Markdown in its preview); in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+Open a file in the editor (the editor mod) beside the pane (default: the focused one): the editor already open on it there shows its tab, else an editor in that tab takes it as a new tab (in "pane": a new editor); line and col (one-based) put the caret there; look: to be looked at (a picture, PDF or table drawn); in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
 
 | Argument | Required |
 |---|---|
@@ -654,7 +654,7 @@ Open a file in the editor (nocturne-editor) beside the pane (default: the focuse
 
 ## `preview.open`
 
-Open a file you look at but don't edit (a picture, PDF, CSV/TSV, SQLite database, patch; on macOS also fonts, audio, video) in the preview (nocturne-preview) beside the pane (default: the focused one), or the preview already showing it there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
+Open a file you look at but don't edit (a picture, PDF, CSV/TSV, SQLite database, patch; on macOS also fonts, audio, video) in the preview (the preview mod) beside the pane (default: the focused one), or the preview already showing it there; in "system": the system's app. A relative path is the pane's folder's; on: the machine the file is on.
 
 | Argument | Required |
 |---|---|
@@ -665,7 +665,7 @@ Open a file you look at but don't edit (a picture, PDF, CSV/TSV, SQLite database
 
 ## `files.open`
 
-Open a folder in a new files pane (nocturne-files) beside the pane (default: the focused one), or focus the files pane already rooted there; in "tab": a tab of its own; in "system": the system's file manager. A relative path is the pane's folder's; on: the machine the folder is on.
+Open a folder in a new files pane (the file-tree mod) beside the pane (default: the focused one), or focus the files pane already rooted there; in "tab": a tab of its own; in "system": the system's file manager. A relative path is the pane's folder's; on: the machine the folder is on.
 
 | Argument | Required |
 |---|---|

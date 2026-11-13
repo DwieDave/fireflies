@@ -172,8 +172,8 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
         module = module.async_function(name, move |a| {
             let first = a.get(0).map(from_host).unwrap_or(Value::Null);
             let reply = match name {
-                // nocturne-github's cache (data/nocturne-github/cache.json): none yet.
-                "readTextFile" if first == "/fixture/app/settings.json" || first == "/fixture/.ssh/config" || first == "/fixture/app/data/nocturne-github/cache.json" => Some(Value::Null),
+                // github's cache (data/github/cache.json): none yet.
+                "readTextFile" if first == "/fixture/app/settings.json" || first == "/fixture/.ssh/config" || first == "/fixture/app/data/github/cache.json" => Some(Value::Null),
                 "readTextFile" => first
                     .as_str()
                     .and_then(|p| p.strip_prefix("/fixture/app/layouts/"))
@@ -190,18 +190,18 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 "exec" if first == "sh" && a.get(1).map(from_host).and_then(|v| v.get(2).cloned()) == Some(json!("files")) => {
                     Some(json!({"code":0,"stdout":"d\u{0}src\u{0}f\u{0}README.md\u{0}","stderr":""}))
                 }
-                // nocturne-usage reads Claude Code's login: none here (exit 3).
+                // usage reads Claude Code's login: none here (exit 3).
                 "exec"
                     if first == "sh"
                         && a.get(1).map(from_host).and_then(|v| v.get(1).and_then(Value::as_str).map(|s| s.contains("Claude Code-credentials"))) == Some(true) =>
                 {
                     Some(json!({"code":3,"stdout":"","stderr":""}))
                 }
-                // nocturne-procs reads processes, ports and the system graphs' sources: nothing here.
+                // procs reads processes, ports and the system graphs' sources: nothing here.
                 "exec"
                     if first == "sh"
                         && a.get(1).map(from_host).and_then(|v| {
-                            v.get(1).and_then(Value::as_str).map(|s| s.contains("@@nocturne-procs@@") || s.contains("@@nocturne-sys@@"))
+                            v.get(1).and_then(Value::as_str).map(|s| s.contains("@@procs@@") || s.contains("@@nocturne-sys@@"))
                         }) == Some(true) =>
                 {
                     Some(json!({"code":0,"stdout":"","stderr":""}))
@@ -1018,7 +1018,7 @@ fn shipped_layouts_and_keys() {
         "nocturne.github",
         "nocturne.scripts",
         "nocturne.gridify",
-        "nocturne-notifications.open",
+        "notifications.open",
         "nocturne.pin",
         "nocturne.pin-up",
         "nocturne.pin-down",
@@ -1027,30 +1027,30 @@ fn shipped_layouts_and_keys() {
         "nocturne.scratchpad",
         "nocturne.picker",
         "nocturne.grep",
-        "nocturne-editor.save",
-        "nocturne-editor.find",
-        "nocturne-editor.replace",
-        "nocturne-editor.line",
-        "nocturne-editor.next-problem",
-        "nocturne-editor.prev-problem",
-        "nocturne-editor.problems",
-        "nocturne-editor.definition",
-        "nocturne-editor.hover",
-        "nocturne-editor.hover-more",
-        "nocturne-editor.hover-less",
-        "nocturne-editor.reload",
-        "nocturne-editor.vim",
-        "nocturne-editor.keys",
-        "nocturne-editor.preview",
-        "nocturne-editor.next-tab",
-        "nocturne-editor.prev-tab",
-        "nocturne-editor.close-tab",
-        "nocturne-editor.wrap",
-        "nocturne-browser.url",
-        "nocturne-browser.reload",
-        "nocturne-browser.back",
-        "nocturne-browser.forward",
-        "nocturne-browser.inspect",
+        "editor.save",
+        "editor.find",
+        "editor.replace",
+        "editor.line",
+        "editor.next-problem",
+        "editor.prev-problem",
+        "editor.problems",
+        "editor.definition",
+        "editor.hover",
+        "editor.hover-more",
+        "editor.hover-less",
+        "editor.reload",
+        "editor.vim",
+        "editor.keys",
+        "editor.preview",
+        "editor.next-tab",
+        "editor.prev-tab",
+        "editor.close-tab",
+        "editor.wrap",
+        "browser.url",
+        "browser.reload",
+        "browser.back",
+        "browser.forward",
+        "browser.inspect",
         "nocturne.sidebar",
         "nocturne.tabstrip",
         "nocturne.header",
@@ -1065,6 +1065,8 @@ fn shipped_layouts_and_keys() {
         let sections: BTreeMap<String, BTreeMap<String, String>> = serde_json::from_str(text).unwrap();
         for bindings in sections.values() {
             for action in bindings.values() {
+                // As the app reads it: a renamed mod's old command name is its name now.
+                let action = &crate::keys::current(action);
                 let name = action.split(':').next().unwrap();
                 if let Some(command) = crate::commands::find(name) {
                     let args = match action.split_once(':') {

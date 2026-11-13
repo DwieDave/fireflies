@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // The editor's way from opening a file to its first hover answer, timed: the
-// same steps nocturne-editor's startServer takes (envrc.js, logic.js), then
+// same steps editor's startServer takes (envrc.js, logic.js), then
 // the server spoken to as Fireflies' core speaks to it (src/lsp.rs: the same
 // initialize), with its `$/progress` and a hover asked every 100 ms until one
 // answers with something.
@@ -9,8 +9,8 @@
 //
 // line and col are one-based (as the bar shows them). Prints a timeline and,
 // last, one JSON line with the phases' times (ms from the start).
-import { projectEnv, lookup, wrap, forgetEnvs } from "../defaults/mods/nocturne-editor/envrc.js";
-import { serverCandidates, languageSettings, ROOTS, rootScript, pickRoot, uri, languageId } from "../defaults/mods/nocturne-editor/logic.js";
+import { projectEnv, lookup, wrap, forgetEnvs } from "../defaults/mods/editor/envrc.js";
+import { serverCandidates, languageSettings, ROOTS, rootScript, pickRoot, uri, languageId } from "../defaults/mods/editor/logic.js";
 
 const [file, lineArg, colArg, ...rest] = process.argv.slice(2);
 if (!file || !lineArg) { console.error("usage: lsp-timeline.ts <file> <line> <col> [--settings json]"); process.exit(2); }

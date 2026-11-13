@@ -58,11 +58,11 @@ export function act(id, then) {
   if (!id || !then) return;
   if (then.kind === "move" && then.pane) run("pane.move", { pane: then.pane, space: id });
   else if (then.kind === "web") {
-    run("tab.new", { space: id, mod: "nocturne-browser", props: { slot: then.slot ?? newSlot(), ...(then.url ? { url: then.url } : {}) } });
+    run("tab.new", { space: id, mod: "browser", props: { slot: then.slot ?? newSlot(), ...(then.url ? { url: then.url } : {}) } });
   }
 }
 
-/** A fresh slot for a web pane (nocturne-browser keeps its page by slot). */
+/** A fresh slot for a web pane (browser keeps its page by slot). */
 export const newSlot = () => `dock-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
 /** Into the dock: there now, at once; else the dock is made first and `then`

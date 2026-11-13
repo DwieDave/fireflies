@@ -6,14 +6,14 @@
 //   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
 //           deck's queued jobs (jobs.js)
 //   procs   a tree mark and the ports listening in this app's terminals
-//           (":2"): the processes and ports manager (procs.js, nocturne-procs)
+//           (":2"): the processes and ports manager (procs.js, procs)
 //   files   the files pane down the tab's right edge (files.js); lit while open
 //   git     one button for the repo: the changed files and how far the branch
 //           is ahead / behind its upstream; a plain git mark when there's
 //           nothing anywhere. Click floats the git window over the tab
-//           (git.js, nocturne-git); again closes it. Its ▾ (or a right-click)
+//           (git.js, git); again closes it. Its ▾ (or a right-click)
 //           drops a menu: Git, Diff (Git's review) and GitHub.
-// Then the bell (nocturne-notifications, a block of its own) and "+ new",
+// Then the bell (notifications, a block of its own) and "+ new",
 // the toolbar's last control (newbutton.js, the row's last block; the new
 // menu, newmenu.js). A layout without that block gets "+ new" here, before
 // the bell, as before.
@@ -195,7 +195,7 @@ export default class Tabs {
     const gitMenu = () => openMenu({ tab: "git" }, { centered: true });
     // Left to right as drawn: "+ new" after the bell when it's a block of its own (newbutton.js).
     const neu = { id: "tab-new", go: () => openNewMenu({ centered: true }) };
-    const bell = hasMod(layout(), "nocturne-notifications") ? [{ id: "bell", go: () => run("nocturne-notifications.open") }] : [];
+    const bell = hasMod(layout(), "notifications") ? [{ id: "bell", go: () => run("notifications.open") }] : [];
     const tools = [
       { id: "tab-scripts-run", go: () => toggleDeck({ centered: true }) },
       { id: "tab-procs", go: () => toggleProcs({ centered: true }) },

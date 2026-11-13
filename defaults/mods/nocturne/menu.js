@@ -256,7 +256,7 @@ export function menuItems(t, p) {
     item(t, "split-down", "layers", "Split down", "pane.split", { direction: "down", pane: tg.pane }),
     item(t, "zoom", "square", "Zoom", "pane.zoom", { pane: tg.pane }),
     ...(panes().filter((x) => x.tab === panes().find((y) => y.pane === tg.pane)?.tab).length > 1
-      ? [{ id: "equalize", mark: svg("mods/nocturne-equalize-panes/equalize.svg").size(14).flex_none().text_color(t.accent), name: "Even out panes…", hint: "", go: () => openEqualize(tg.pane) }] : []),
+      ? [{ id: "equalize", mark: svg("mods/equalize-panes/equalize.svg").size(14).flex_none().text_color(t.accent), name: "Even out panes…", hint: "", go: () => openEqualize(tg.pane) }] : []),
     ...(parkable ? [item(t, "park-pane", "archive", "Park pane", "pane.park", { pane: tg.pane })] : []),
     ...(term ? [toProgram
       ? item(t, "rc", "terminal", "Use Nocturne's right-click menu", "terminal.right_click", { terminal: term.address, to: "menu" })

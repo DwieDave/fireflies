@@ -39,7 +39,7 @@ export function lazygitOpen(view) {
 }
 
 /** The float's views: lazygit (0) and the diff of the same folder (1). */
-const views = (folder, on) => ({ mod: "nocturne-diff", props: { folder, on }, name: "diff" });
+const views = (folder, on) => ({ mod: "diff", props: { folder, on }, name: "diff" });
 
 /** Floats lazygit over the tab, in the active space's folder (kit.js spaceFolder), showing `show`
  *  (0 lazygit, 1 the diff; the float's bar switches between them). Again on

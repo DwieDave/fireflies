@@ -1,9 +1,9 @@
 // The scratchpad: a Markdown note that belongs to a repository but isn't in
 // it. Shared by nocturne (the command that opens it: nocturne.scratchpad) and
-// nocturne-editor (the pane that edits it, saving as it's typed). A mod can
+// editor (the pane that edits it, saving as it's typed). A mod can
 // import only its own files, so each ships this same file;
 // scripts/nocturne-scratchpad.test.ts fails when the copies differ: edit
-// nocturne-editor/scratch.js and copy it over.
+// editor/scratch.js and copy it over.
 //
 // Where a note lives: `<app home>/scratchpad/<name>-<hash>.md`, one per
 // repository. The repository is found by git's common dir (`git rev-parse

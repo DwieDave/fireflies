@@ -1,6 +1,6 @@
-// The files pane (the nocturne-files mod): a narrow column along the tab's
+// The files pane (the file-tree mod): a narrow column along the tab's
 // whole right edge, rooted at the focused pane's folder on its machine; files
-// open in panes to its left (nocturne-files). The tab strip's files button
+// open in panes to its left (file-tree). The tab strip's files button
 // and cmd-e (nocturne.files) toggle it. Folder links and "+ new" > Files open
 // files panes of their own (props.path, `files.open`, panels.js filesHere):
 // those aren't the panel, and stay when it toggles.
@@ -13,10 +13,10 @@
 import { spaces, panes, focused, run, shared, setShared } from "herdr";
 import { folderCandidates } from "./folders.js";
 
-const MOD = "nocturne-files";
+const MOD = "file-tree";
 const WIDTH = 280;
-/** The pane the keyboard came from into the panel (nocturne-files reads it on esc). */
-export const FROM = "nocturne-files.from";
+/** The pane the keyboard came from into the panel (file-tree reads it on esc). */
+export const FROM = "file-tree.from";
 
 /** The files panel in the shown tab, if any (not a files pane of its own). */
 export function filesPane() {
@@ -54,5 +54,5 @@ export function focusFiles() {
   if (!open) return toggleFiles(); // the new pane is focused and takes the keyboard itself
   run("pane.focus", { pane: open.pane });
   // pane.focus leaves the keys with the window; the panel takes them.
-  run("nocturne-files.take-panel");
+  run("file-tree.take-panel");
 }

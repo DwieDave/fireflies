@@ -2,7 +2,7 @@
 // window: its Worktrees tab (the Files panel's third) lists a repo's
 // checkouts with what's running in each, and makes, goes to, renames and
 // removes them (picks: M merged, U unused). This stub keeps a saved pane of
-// it working: it hands its place to a nocturne-git pane on Worktrees for the
+// it working: it hands its place to a git pane on Worktrees for the
 // same space and closes itself; where it can't find its own pane, it says
 // where the worktrees went, with an enter / click that opens them.
 
@@ -25,7 +25,7 @@ export class WorktreesPanel {
     const pane = mine[0];
     const s = spaces().find((x) => (x.tabs ?? []).some((t) => t.id === pane.tab));
     const folder = s ? spaceFolder(s, panes()) : null;
-    run("pane.split", { direction: "right", pane: pane.pane, mod: "nocturne-git", props: { folder, on: s?.machine ?? null, worktrees: { action: "open", ...(s ? { space: s.id } : {}) } } });
+    run("pane.split", { direction: "right", pane: pane.pane, mod: "git", props: { folder, on: s?.machine ?? null, worktrees: { action: "open", ...(s ? { space: s.id } : {}) } } });
     run("pane.close", { pane: pane.pane });
   }
 

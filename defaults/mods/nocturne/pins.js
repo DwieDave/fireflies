@@ -13,10 +13,10 @@
 // the mods' shared storage (persisted), PANES_KEY:
 //   [{ pane, mod, props, at, tab? }]   pane: its id; mod and props: what it shows,
 //                                to find it again if its id changed; at: as above
-//                                tab: one web tab of a nocturne-browser pane (its
+//                                tab: one web tab of a browser pane (its
 //                                tab id, "web", "web-2", …, kept across restarts)
 // A record without `tab` pins the whole pane; with one, that tab alone: a tile
-// of its own, named by the tab's title (nocturne-browser.tab-titles), going to
+// of its own, named by the tab's title (browser.tab-titles), going to
 // the pane and showing that tab (kit.js goToPin). One pane may have its own pin
 // and several tab pins at once; the browser drops a tab's pin when the tab closes.
 // It ends when the pane closes (tidy(): missing from panes() for GONE_AFTER ms);
@@ -109,13 +109,18 @@ function sameProps(a, b) {
   return JSON.stringify(norm(a ?? null)) === JSON.stringify(norm(b ?? null));
 }
 
+/** A pin made while its mod had its old name (nocturne-browser, src/layout.rs
+ *  RENAMED_MODS) names the mod as it is called now. */
+const RENAMED = { "nocturne-agents": "agent-graph", "nocturne-files": "file-tree", "nocturne-picker": "finder", "nocturne-image": "preview" };
+export const modNow = (m) => RENAMED[m] ?? (typeof m === "string" && m.startsWith("nocturne-") ? m.slice("nocturne-".length) : m);
+
 /** The pane (of `panes`, PaneInfo) a pin record names: its own id, else the one
  *  pane of the same mod showing the same (non-empty) props. Null: not there now. */
 export function findPane(rec, panes) {
   const own = panes.find((p) => p.pane === rec.pane && !p.terminal);
   if (own) return own;
   if (!rec.mod || !rec.props || typeof rec.props !== "object" || !Object.keys(rec.props).length) return null;
-  const like = panes.filter((p) => !p.terminal && p.mod === rec.mod && sameProps(p.props, rec.props));
+  const like = panes.filter((p) => !p.terminal && p.mod === modNow(rec.mod) && sameProps(p.props, rec.props));
   return like.length === 1 ? like[0] : null;
 }
 

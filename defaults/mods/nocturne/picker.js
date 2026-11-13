@@ -1,4 +1,4 @@
-// The file picker and grep (the nocturne-picker mod): cmd-p (nocturne.picker)
+// The file picker and grep (the finder mod): cmd-p (nocturne.picker)
 // and cmd-shift-f (nocturne.grep) open it over the window, searching the
 // space's folder (else the focused pane's). The same key again closes it; the
 // other one switches the open picker to its mode in place, the query kept.
@@ -27,7 +27,7 @@ export function togglePicker(mode) {
   if (open?.id) {
     if (open.mode !== mode) {
       // The picker hears it on nextCommand() and keeps the note's mode current.
-      run(`nocturne-picker.${mode}`);
+      run(`finder.${mode}`);
       setShared(KEY, { ...open, mode });
       return;
     }
@@ -36,7 +36,7 @@ export function togglePicker(mode) {
     return;
   }
   const { folder, folders, space, on } = pickerFolder();
-  const id = openOverlay({ mod: "nocturne-picker", kind: "dialog", frame: "none", width: 0.92, height: 0.88,
+  const id = openOverlay({ mod: "finder", kind: "dialog", frame: "none", width: 0.92, height: 0.88,
     props: { mode, folder, folders, space, on } });
   setShared(KEY, { id, mode });
 }

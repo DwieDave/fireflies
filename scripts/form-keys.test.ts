@@ -4,20 +4,20 @@
 // submits from anywhere; esc cancels. Each form's own key handler is driven
 // here with the dialog stand-ins (dialog-stubs.ts); writes land in fakes
 // (herdr's run, hc, the clipboard), never on a real service. The GitHub
-// window's forms have their own file (nocturne-github-forms.test.ts).
+// window's forms have their own file (github-forms.test.ts).
 import { test, expect, beforeEach } from "bun:test";
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { state, find, cx, press, key, texts, act } from "./dialog-stubs.ts";
 
 const root = new URL("../defaults/", import.meta.url).pathname;
 const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.js");
-const { Popups } = await import("../defaults/mods/nocturne-git/popups.js");
+const { Popups } = await import("../defaults/mods/git/popups.js");
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.js");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.js");
 const Feedback = (await import("../defaults/frame/feedback/main.js")).default;
 const MachineAdd = (await import("../defaults/mods/machine-add/main.js")).default;
-const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/nocturne-notifications/ask.js");
-const { default: EditorPane } = await import("../defaults/mods/nocturne-editor/main.js");
+const { start, press: ask, keepOther, isReview, answers } = await import("../defaults/mods/notifications/ask.js");
+const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
 const t = (await import("./dialog-stubs.ts")).theme;
 
 beforeEach(() => {
@@ -29,7 +29,7 @@ beforeEach(() => {
 
 test("one helper: every mod with a form ships the same form-keys.js", () => {
   const copies = [
-    "mods/nocturne", "mods/nocturne-github", "mods/nocturne-git", "mods/nocturne-editor", "mods/nocturne-notifications",
+    "mods/nocturne", "mods/github", "mods/git", "mods/editor", "mods/notifications",
     "mods/machine-add", "frame/feedback", "frame/settings",
   ].map((d) => `${root}${d}/form-keys.js`);
   const canon = readFileSync(copies[0], "utf8");
@@ -46,9 +46,9 @@ test("one helper: every mod with a form ships the same form-keys.js", () => {
 // context. Each form's root carries that context and hands the action to its
 // key handler; each binds the keys once from init.
 const ROOTS: [string, string][] = [
-  ["mods/nocturne-github/main.js", "this.key(e, cx)"], ["mods/nocturne-git/main.js", "this.key(e, cx)"],
+  ["mods/github/main.js", "this.key(e, cx)"], ["mods/git/main.js", "this.key(e, cx)"],
   ["mods/nocturne/sky.js", "this.key(e, cx)"], ["mods/nocturne/dialog.js", "this.key(e, cx)"],
-  ["mods/nocturne-notifications/ask-dialog.js", "this.key(e, cx)"], ["mods/nocturne-editor/main.js", "this.findKey(e, cx)"],
+  ["mods/notifications/ask-dialog.js", "this.key(e, cx)"], ["mods/editor/main.js", "this.findKey(e, cx)"],
   ["mods/machine-add/main.js", "this.key(e, cx)"], ["frame/feedback/main.js", "this.key(e, cx)"], ["frame/settings/main.js", "this.key(e, cx)"],
 ];
 

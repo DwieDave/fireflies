@@ -1,11 +1,11 @@
 import { test, expect, describe } from "bun:test";
 
-// The editor's vim (defaults/mods/nocturne-editor/vim.js), key by key. A
+// The editor's vim (defaults/mods/editor/vim.js), key by key. A
 // small stand-in plays the editor: it types what vim leaves to it in insert
 // mode, applies vim's edits and moves the caret. `|` marks the caret (Zed's
 // vim tests mark it with ˇ; their cases guided many of these).
-import { createVim, feed, play, tokens, typedText, parse, pattern, token } from "../defaults/mods/nocturne-editor/vim.js";
-import { applyEdits } from "../defaults/mods/nocturne-editor/vim.js";
+import { createVim, feed, play, tokens, typedText, parse, pattern, token } from "../defaults/mods/editor/vim.js";
+import { applyEdits } from "../defaults/mods/editor/vim.js";
 
 function split(marked: string) {
   const i = marked.indexOf("|");

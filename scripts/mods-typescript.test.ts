@@ -4,7 +4,7 @@
 // data is, or refuses it.
 import { test, expect } from "bun:test";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared, sharedKey, writeShared } from "../defaults/mods/nocturne-pip/guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared, sharedKey, writeShared } from "../defaults/mods/pip/guard.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
 const mods = readdirSync(MODS).filter((m) => !m.startsWith("."));
@@ -12,17 +12,17 @@ const sources = (m: string) => readdirSync(`${MODS}/${m}`).filter((f) => /\.(js|
 const imports = (m: string, file: string) => sources(m).some((f) => readFileSync(`${MODS}/${m}/${f}`, "utf8").includes(`from "./${file}"`));
 
 test("every copy of guard.ts is the same file, and every mod that imports it has one", () => {
-  const source = readFileSync(`${MODS}/nocturne-pip/guard.ts`, "utf8");
+  const source = readFileSync(`${MODS}/pip/guard.ts`, "utf8");
   const copies = mods.filter((m) => existsSync(`${MODS}/${m}/guard.ts`));
   for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/guard.ts`, "utf8") === source]).toEqual([m, true]);
   expect(mods.filter((m) => imports(m, "guard.ts")).sort()).toEqual(copies.sort());
-  expect(copies.sort()).toEqual(["nocturne", "nocturne-pip", "nocturne-usage"]);
+  expect(copies.sort()).toEqual(["nocturne", "pip", "usage"]);
 });
 
 test("every TypeScript mod that imports keyhelp.js has the same keyhelp.d.ts beside it", () => {
-  const source = readFileSync(`${MODS}/nocturne-pip/keyhelp.d.ts`, "utf8");
+  const source = readFileSync(`${MODS}/pip/keyhelp.d.ts`, "utf8");
   const typed = mods.filter((m) => sources(m).some((f) => f.endsWith(".ts") && readFileSync(`${MODS}/${m}/${f}`, "utf8").includes('from "./keyhelp.js"')));
-  expect(typed.sort()).toEqual(["nocturne-pip", "nocturne-usage"]);
+  expect(typed.sort()).toEqual(["pip", "usage"]);
   for (const m of typed) expect([m, readFileSync(`${MODS}/${m}/keyhelp.d.ts`, "utf8") === source]).toEqual([m, true]);
 });
 

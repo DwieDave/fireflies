@@ -6,7 +6,7 @@
 //   pane   a pane's header (the layout's pane header)
 //   parked a parked pane's chip under the tab (the layout's pane.parked look)
 //   worktrees  (moved to the git window) hands a saved worktrees pane to
-//          nocturne-git on its Worktrees tab
+//          git on its Worktrees tab
 //   new    the "+ new" menu, an overlay from the tab strip
 //   newspace  the new-space picker: a folder list (newspace.js)
 //   newbutton  "+ new" itself, the tab row's last block, right of the bell

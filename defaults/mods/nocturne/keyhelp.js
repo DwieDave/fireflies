@@ -2,10 +2,11 @@
 // overview ? opens, the same in every Nocturne pane, panel and window.
 //
 // This file is the source. A mod can't import another mod's files, so every
-// nocturne mod that lists its keys carries a byte-identical copy (its
+// Nocturne mod that lists its keys carries a byte-identical copy (its
 // keyhelp.js); scripts/keyhelp.test.ts fails when a copy drifts. Change it
-// here, then copy it: for m in defaults/mods/nocturne-*/keyhelp.js; do cp
-// defaults/mods/nocturne/keyhelp.js "$m"; done
+// here, then copy it: for m in defaults/mods/*/keyhelp.js; do cp
+// defaults/mods/nocturne/keyhelp.js "$m"; done (the mods listed in
+// scripts/nocturne-mods.ts carry it; no stock mod has one)
 //
 //   hint(t, id, key, what)       a bar entry: the key in the accent, what it does dimmed
 //   keysHint(t, id, on, toggle, key)  the bar's last entry, "? keys": bright while

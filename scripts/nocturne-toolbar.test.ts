@@ -39,7 +39,7 @@ let overlays: any[] = [];
 let ran: [string, any][] = [];
 let waiting: ((v: string) => void)[] = [];
 let propsNow: any = null;
-const bellBlock = { id: "notify", type: "block", size: { px: 28 }, content: { mod: "nocturne-notifications", props: { role: "bell", end: 0 } } };
+const bellBlock = { id: "notify", type: "block", size: { px: 28 }, content: { mod: "notifications", props: { role: "bell", end: 0 } } };
 const newBlock = { id: "new", type: "block", size: { px: 62 }, content: { mod: "nocturne", props: { role: "newbutton" } } };
 /** The nocturne layout; `row`: the tab row's blocks after the strip. */
 const layoutWith = (row: any[]) => ({
@@ -224,7 +224,7 @@ test("Git, its diff, worktrees and GitHub still open: the strip's git ▾, keys 
 // ---- 2. "+ new" last, right of the bell
 
 const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
-const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
 const { default: Nocturne } = await import("../defaults/mods/nocturne/main.js");
 const shipped = JSON.parse(readFileSync(new URL("../defaults/layouts/nocturne.json", import.meta.url), "utf8"));
 
@@ -271,7 +271,7 @@ test("the tools row, left to right: run, processes, files, git, git's menu, bell
 });
 
 test("a layout without the + new block (an edited older copy): the strip draws + new before the bell, as before", () => {
-  LAYOUT = layoutWith([{ ...bellBlock, content: { mod: "nocturne-notifications", props: { role: "bell" } } }]);
+  LAYOUT = layoutWith([{ ...bellBlock, content: { mod: "notifications", props: { role: "bell" } } }]);
   const s = strip();
   expect(s.rows.tabs.map((x: any) => x.id).slice(-2)).toEqual(["tab-new", "bell"]);
   expect(ids["tab-new"]).toBeTruthy();
@@ -352,7 +352,7 @@ test("+ new is lit while its menu is open and a second press closes it", () => {
 
 /** The menu's live tiles, as its key handler gets them. */
 const liveTiles = () => menuPanels().map((p: any) => ({ kind: "tile", id: p.id, p, key: p.key }));
-const DOCK = (r: [string, any]) => r[0] === "pane.split" && r[1]?.edge === "right" && r[1]?.mod === "nocturne-files";
+const DOCK = (r: [string, any]) => r[0] === "pane.split" && r[1]?.edge === "right" && r[1]?.mod === "file-tree";
 
 test("+ new > Files with \"pane\": a files pane beside the focused pane, at the folder a terminal would get; never the docked panel", () => {
   const { m } = menuGrid();
@@ -394,7 +394,7 @@ test("+ new > Files with \"new tab\": a files pane in a tab of its own; shift (f
 
 test("+ new > Files: no corner mark or \"close\" while the docked panel is open, and the footer says where it opens", () => {
   // The docked panel open in the shown tab.
-  const docked = { pane: "p9", tab: "t1", mod: "nocturne-files", props: { folder: "/home/a" } };
+  const docked = { pane: "p9", tab: "t1", mod: "file-tree", props: { folder: "/home/a" } };
   PANES = [...PANES0, docked];
   {
     const { m } = menuGrid();

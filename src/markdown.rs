@@ -85,7 +85,7 @@ pub fn set_theme(cx: &mut App) {
         .install(cx);
 }
 
-/// Moonfly's roles from the theme's 16 colors (as nocturne-editor/logic.js `syntaxColors`).
+/// Moonfly's roles from the theme's 16 colors (as editor/logic.js `syntaxColors`).
 fn syntax_colors(t: &BTreeMap<String, String>) -> Vec<(&'static str, String)> {
     let a = |i: usize| t.get(&format!("ansi{i}")).cloned().unwrap_or_default();
     let fg = t.get("foreground").cloned().unwrap_or_default();

@@ -40,7 +40,7 @@ const LAYOUT = {
     { id: "work", type: "column", children: [
       { id: "tab-row", type: "row", children: [
         { id: "tabs", type: "block", content: { mod: "nocturne", props: { role: "tabs" } } },
-        { id: "notify", type: "block", size: { px: 28 }, content: { mod: "nocturne-notifications", props: { role: "bell" } } },
+        { id: "notify", type: "block", size: { px: 28 }, content: { mod: "notifications", props: { role: "bell" } } },
       ] },
       { id: "main", type: "block", content: { tab: "active" } },
     ] },
@@ -73,10 +73,10 @@ const cx: any = {
 
 const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defaults/mods/nocturne/tabs.js");
 const kit = await import("../defaults/mods/nocturne/kit.js");
-const nkit = await import("../defaults/mods/nocturne-notifications/kit.js");
-const { default: Bell } = await import("../defaults/mods/nocturne-notifications/bell.js");
+const nkit = await import("../defaults/mods/notifications/kit.js");
+const { default: Bell } = await import("../defaults/mods/notifications/bell.js");
 const { default: NewButton } = await import("../defaults/mods/nocturne/newbutton.js");
-const { ITEMS } = await import("../defaults/mods/nocturne-notifications/engine.js");
+const { ITEMS } = await import("../defaults/mods/notifications/engine.js");
 
 beforeEach(() => { sharedState = {}; });
 
@@ -179,9 +179,9 @@ for (const [what, list] of [
   });
 }
 
-test("the two copies of toolGround (nocturne, nocturne-notifications) are the same", () => {
+test("the two copies of toolGround (nocturne, notifications) are the same", () => {
   const cut = (p: string) => { const s = readFileSync(p, "utf8"); const i = s.indexOf("// ---- the toolbar's ground"); return s.slice(i, s.indexOf("\n}\n", s.indexOf("export function toolHover", i)) + 2); };
-  expect(cut("defaults/mods/nocturne-notifications/kit.js")).toBe(cut("defaults/mods/nocturne/kit.js"));
+  expect(cut("defaults/mods/notifications/kit.js")).toBe(cut("defaults/mods/nocturne/kit.js"));
   expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
   expect(nkit.toolGround(theme).map(shape)).toEqual(ground());
   expect(nkit.toolHover(MOONFLY)).toBe(kit.toolHover(MOONFLY));

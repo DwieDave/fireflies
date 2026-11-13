@@ -1,4 +1,4 @@
-// The git window (nocturne-git): lazygit in Nocturne's look and the review
+// The git window (git): lazygit in Nocturne's look and the review
 // of a repo's changes, floating over the tab like the GitHub window. Toggled
 // by cmd-g (nocturne.git; nocturne.lazygit, its old name, does the same),
 // the tab strip's git button, "+ new" > Git and the palette; opened on its
@@ -10,7 +10,7 @@ import { openOverlay, closeOverlay, shared, setShared, spaces, panes } from "her
 import { here } from "./panels.js";
 import { spaceFolder } from "./kit.js";
 
-const WINDOW = "nocturne-git.window";
+const WINDOW = "git.window";
 const FRESH = 10000;
 
 /** The open git window's overlay id, or null. */
@@ -31,7 +31,7 @@ export function toggleGit({ review = false, worktrees = null } = {}) {
 }
 
 function openGitWindow(props) {
-  const id = openOverlay({ mod: "nocturne-git", kind: "window", key: "nocturne-git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] }, props });
+  const id = openOverlay({ mod: "git", kind: "window", key: "git", frame: "none", scrim: true, width: 0.88, height: 0.88, resizable: { min: [420, 300] }, props });
   setShared(WINDOW, { id, beat: Date.now(), folder: props.folder });
 }
 

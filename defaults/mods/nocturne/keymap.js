@@ -129,47 +129,47 @@ const WORDS = {
   "nocturne.agent-prev": "Previous agent, or back through the shelf's pinned panes",
   "nocturne.dock": "Move the focused pane to the dock (a space tied to no folder) and pin it to the shelf",
   "nocturne.dock-web": "New web pane in the dock, pinned to the shelf",
-  "nocturne-notifications.open": "Notifications: what your agents ask, answered from one place",
-  // The editor (mod:nocturne-editor).
-  "nocturne-editor.save": "Save",
-  "nocturne-editor.find": "Find",
-  "nocturne-editor.replace": "Find and replace",
-  "nocturne-editor.line": "Go to a line",
-  "nocturne-editor.next-problem": "Next problem",
-  "nocturne-editor.prev-problem": "Previous problem",
-  "nocturne-editor.problems": "The problems list, open or closed",
-  "nocturne-editor.definition": "Go to the definition",
-  "nocturne-editor.hover": "What's under the cursor: its type and docs",
-  "nocturne-editor.hover-more": "Hover: say more",
-  "nocturne-editor.hover-less": "Hover: say less",
-  "nocturne-editor.reload": "Read the file again from disk",
-  "nocturne-editor.vim": "Vim keys on or off",
-  "nocturne-editor.wrap": "Word wrap on or off",
-  "nocturne-editor.keys": "The editor's keys",
-  "nocturne-editor.preview": "Markdown preview on or off",
-  "nocturne-editor.next-tab": "Next file tab",
-  "nocturne-editor.prev-tab": "Previous file tab",
-  "nocturne-editor.close-tab": "Close the file tab",
-  "nocturne-editor.move-tab-left": "Move the file tab left",
-  "nocturne-editor.move-tab-right": "Move the file tab right",
-  "nocturne-editor.pop-out": "Pop the file tab out into its own pane",
-  "nocturne-editor.pop-out-tab": "Pop the file tab out into a new tab",
-  "nocturne-editor.pop-in": "Move the file into the editor beside",
-  "nocturne-editor.tab-menu": "The file tab's menu",
-  // The web pane (mod:nocturne-browser).
-  "nocturne-browser.url": "The address bar",
-  "nocturne-browser.reload": "Reload the page",
-  "nocturne-browser.back": "Back a page",
-  "nocturne-browser.forward": "Forward a page",
-  "nocturne-browser.inspect": "The web inspector",
-  "nocturne-browser.tab_new": "New web tab",
-  "nocturne-browser.tab_close": "Close the web tab",
-  "nocturne-browser.tab_next": "Next web tab",
-  "nocturne-browser.tab_prev": "Previous web tab",
-  "nocturne-browser.tab_move_left": "Move the web tab left",
-  "nocturne-browser.tab_move_right": "Move the web tab right",
-  "nocturne-browser.pin_tab": "Pin the web tab to the shelf",
-  "nocturne-browser.tab_menu": "The web tab's menu",
+  "notifications.open": "Notifications: what your agents ask, answered from one place",
+  // The editor (mod:editor).
+  "editor.save": "Save",
+  "editor.find": "Find",
+  "editor.replace": "Find and replace",
+  "editor.line": "Go to a line",
+  "editor.next-problem": "Next problem",
+  "editor.prev-problem": "Previous problem",
+  "editor.problems": "The problems list, open or closed",
+  "editor.definition": "Go to the definition",
+  "editor.hover": "What's under the cursor: its type and docs",
+  "editor.hover-more": "Hover: say more",
+  "editor.hover-less": "Hover: say less",
+  "editor.reload": "Read the file again from disk",
+  "editor.vim": "Vim keys on or off",
+  "editor.wrap": "Word wrap on or off",
+  "editor.keys": "The editor's keys",
+  "editor.preview": "Markdown preview on or off",
+  "editor.next-tab": "Next file tab",
+  "editor.prev-tab": "Previous file tab",
+  "editor.close-tab": "Close the file tab",
+  "editor.move-tab-left": "Move the file tab left",
+  "editor.move-tab-right": "Move the file tab right",
+  "editor.pop-out": "Pop the file tab out into its own pane",
+  "editor.pop-out-tab": "Pop the file tab out into a new tab",
+  "editor.pop-in": "Move the file into the editor beside",
+  "editor.tab-menu": "The file tab's menu",
+  // The web pane (mod:browser).
+  "browser.url": "The address bar",
+  "browser.reload": "Reload the page",
+  "browser.back": "Back a page",
+  "browser.forward": "Forward a page",
+  "browser.inspect": "The web inspector",
+  "browser.tab_new": "New web tab",
+  "browser.tab_close": "Close the web tab",
+  "browser.tab_next": "Next web tab",
+  "browser.tab_prev": "Previous web tab",
+  "browser.tab_move_left": "Move the web tab left",
+  "browser.tab_move_right": "Move the web tab right",
+  "browser.pin_tab": "Pin the web tab to the shelf",
+  "browser.tab_menu": "The web tab's menu",
 };
 
 // A group's rows in this order (keys() comes sorted by key): the blocks first in
@@ -187,8 +187,8 @@ const byRank = (a, b) => { const x = rank(a.k.action), y = rank(b.k.action); ret
 /** The group for an action (its section decides first: a terminal's, a mod's). */
 function groupOf(section, action) {
   if (section === "terminal" || action.startsWith("send:")) return "in a terminal";
-  if (section === "mod:nocturne-editor") return "in the editor";
-  if (section === "mod:nocturne-browser") return "in the web pane";
+  if (section === "mod:editor") return "in the editor";
+  if (section === "mod:browser") return "in the web pane";
   if (section.startsWith("mod:")) return `in ${section.slice(4)}`;
   const name = action.split(":")[0];
   if (/^nocturne\.(sidebar|focus|tabstrip|header|toast)/.test(name) || name === "pane.go" || name.startsWith("overlay.")) return "keyboard focus";
@@ -197,7 +197,7 @@ function groupOf(section, action) {
   if (/^pane\./.test(name) || name === "nocturne.gridify") return "panes";
   if (/^agent\./.test(name) || /^nocturne\.pin/.test(name)) return "agents";
   if (/^terminal\./.test(name)) return "in a terminal";
-  if (/^nocturne(-notifications)?\./.test(name) || /^app\.(help|palette|settings)$/.test(name) || /^layout\./.test(name) || /^mod\.open/.test(name)) return "windows and panels";
+  if (/^(nocturne|notifications)\./.test(name) || /^app\.(help|palette|settings)$/.test(name) || /^layout\./.test(name) || /^mod\.open/.test(name)) return "windows and panels";
   if (/^(app|window)\./.test(name)) return "app";
   return "more";
 }

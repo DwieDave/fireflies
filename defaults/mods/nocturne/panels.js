@@ -3,7 +3,7 @@
 //
 //   dest "pane"  beside the focused pane (across from its split, "auto")
 //   dest "tab"   a new tab of its own in the shown space
-//   fixed        a panel that always lands in one place: Git (nocturne-git:
+//   fixed        a panel that always lands in one place: Git (git:
 //                lazygit's views and the review that was the diff) and GitHub
 //                float over the tab, files runs down the tab's right edge
 //   scratchpad   the repository's note in the editor (scratchpad.js), through
@@ -93,22 +93,22 @@ export function panels() {
     { id: "terminal", name: "Terminal", icon: "terminal", key: "t", words: "shell new",
       pane: () => terminalPane(), tab: () => terminalTab() },
     { id: "web", name: "Web", icon: "monitor", key: "w", words: "browser page url",
-      pane: () => modBeside("nocturne-browser", { slot: slot() }), tab: () => modTab("nocturne-browser", { slot: slot() }, "web") },
+      pane: () => modBeside("browser", { slot: slot() }), tab: () => modTab("browser", { slot: slot() }, "web") },
     { id: "files", name: "Files", icon: "files", key: "f", words: "tree explorer folder", fixed: "edge", open: filesPane,
-      pane: toggleFiles, tab: () => modTab("nocturne-files", { folder: h.folder, on: h.on, slot: filesSlot() }, "files") },
-    { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => modPane("nocturne-agents"),
-      pane: () => toggleBeside("nocturne-agents", agentsProps()), tab: () => modTab("nocturne-agents", agentsProps(), "agents") },
+      pane: toggleFiles, tab: () => modTab("file-tree", { folder: h.folder, on: h.on, slot: filesSlot() }, "files") },
+    { id: "agents", name: "Agents", icon: "layers", key: "a", words: "graph subagents workflows claude", open: () => modPane("agent-graph"),
+      pane: () => toggleBeside("agent-graph", agentsProps()), tab: () => modTab("agent-graph", agentsProps(), "agents") },
     { id: "usage", name: "Usage", icon: "clock", key: "u", words: "limits claude quota", open: usagePane,
-      pane: toggleUsage, tab: () => modTab("nocturne-usage", {}, "usage") },
+      pane: toggleUsage, tab: () => modTab("usage", {}, "usage") },
     { id: "scratchpad", name: "Scratchpad", icon: `${ART}/scratchpad.svg`, key: "s", words: "note notes scratch pad markdown repository repo jot todo memo", bind: "nocturne.scratchpad",
       pane: () => askScratchpad(), tab: () => askScratchpad(true) },
     { id: "worktrees", name: "Worktrees", icon: "git-branch", key: "g", words: "git branches checkouts", fixed: "float", open: () => Boolean(gitOpen()),
-      pane: () => (gitOpen() ? toggleGit() : openWorktrees()), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on, worktrees: { action: "open" } }, "worktrees") },
+      pane: () => (gitOpen() ? toggleGit() : openWorktrees()), tab: () => modTab("git", { folder: h.folder, on: h.on, worktrees: { action: "open" } }, "worktrees") },
     { id: "git", name: "Git", icon: "git-compare", key: "l", words: "git lazygit stage commit branches log graph rebase stash", fixed: "float", open: () => Boolean(gitOpen()),
-      pane: () => toggleGit(), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on }, "git") },
+      pane: () => toggleGit(), tab: () => modTab("git", { folder: h.folder, on: h.on }, "git") },
     { id: "diff", name: "Diff", icon: "git-compare", key: "d", words: "git changes review reviewed", fixed: "float", open: () => Boolean(gitOpen()),
-      pane: () => toggleGit({ review: true }), tab: () => modTab("nocturne-git", { folder: h.folder, on: h.on, review: true }, "diff") },
+      pane: () => toggleGit({ review: true }), tab: () => modTab("git", { folder: h.folder, on: h.on, review: true }, "diff") },
     { id: "github", name: "GitHub", icon: `${ART}/github.svg`, key: "h", words: "pull requests prs actions ci runs checks workflows", fixed: "float", open: () => Boolean(githubOpen()),
-      pane: () => toggleGithub(), tab: () => modTab("nocturne-github", { folder: h.folder, on: h.on }, "github") },
+      pane: () => toggleGithub(), tab: () => modTab("github", { folder: h.folder, on: h.on }, "github") },
   ];
 }

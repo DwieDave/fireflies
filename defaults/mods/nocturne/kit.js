@@ -21,7 +21,7 @@ export function dither(color, cell = 1) {
 }
 
 // ---- the toolbar's ground (the same in ../nocturne/kit.js and
-// ../nocturne-notifications/kit.js: the tools, the bell and "+ new" are
+// ../notifications/kit.js: the tools, the bell and "+ new" are
 // blocks of their own, and the ground runs under all of them to the strip's
 // right edge, each block drawing its stretch)
 
@@ -166,17 +166,17 @@ export function moveFocused(dir) {
 // A web tab to show once its pane is on screen: { slot, tab, at } (goToPin).
 // Commands reach only the copies on screen, and a pane in another tab or space
 // comes there only after pane.focus: the web pane takes this up when it shows.
-export const WEB_SHOW = "nocturne-browser.show";
+export const WEB_SHOW = "browser.show";
 
 /** Goes to a pin of any kind (a jar item, pins.js jarItems): in whatever tab
  *  and space it is; a parked pane comes back (pane.focus). A web tab's pin
- *  (`it.tab`): its pane, then that tab (nocturne-browser.show). */
+ *  (`it.tab`): its pane, then that tab (browser.show). */
 export function goToPin(it) {
   if (it.kind === "pane" && it.tab) {
     const want = { slot: it.pane.props?.slot ?? null, tab: it.tab };
     setShared(WEB_SHOW, { ...want, at: Date.now() });
     run("pane.focus", { pane: it.pane.pane });
-    return run(`nocturne-browser.show:${JSON.stringify(want)}`);
+    return run(`browser.show:${JSON.stringify(want)}`);
   }
   if (it.kind === "pane" || (it.kind === "terminal" && it.pane)) return run("pane.focus", { pane: it.pane.pane });
   run("agent.focus", { terminal: it.key });
@@ -209,7 +209,7 @@ export function dockFocused() {
 export function dockWeb(url) {
   const slot = newSlot(), props = { slot, ...(url ? { url } : {}) };
   if (!toDock({ kind: "web", slot, ...(url ? { url } : {}) })) return;
-  setShared(PANES_KEY, [...paneRecordsNow(), { pane: `new:${slot}`, mod: "nocturne-browser", props, at: Date.now() }]);
+  setShared(PANES_KEY, [...paneRecordsNow(), { pane: `new:${slot}`, mod: "browser", props, at: Date.now() }]);
 }
 
 /** Program keys with a dithered logo in art/logo-*.svg. */

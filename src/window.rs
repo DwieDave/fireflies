@@ -3047,7 +3047,7 @@ impl AppWindow {
                 showing && props.get("on").and_then(Value::as_str) == on
             })).map(|n| n.id.clone())
         });
-        // An editor in the tab takes the file as a new tab (nocturne-editor's
+        // An editor in the tab takes the file as a new tab (the editor mod's
         // tabs, its editor-route.js): the one that last had the keyboard, else
         // the first; never a scratchpad's. `in: "pane"`: a new editor beside.
         let into = (viewer == Viewer::Editor && shown.is_none() && !tab && place != Some("pane"))
@@ -3058,11 +3058,11 @@ impl AppWindow {
                     Some(Content::Mod { name, props }) if name == viewer_mod => Some((n.id.clone(), props.clone())),
                     _ => None,
                 }).collect();
-                let last = crate::mods::shared("nocturne-editor.last");
+                let last = crate::mods::shared("editor.last");
                 tab_editor(&eds, on, last.as_ref().and_then(Value::as_str), &crate::mods::app_dir().join("scratchpad"))
             });
         if let Some((id, slot)) = into {
-            let n = crate::mods::shared("nocturne-editor.open").and_then(|r| r.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+            let n = crate::mods::shared("editor.open").and_then(|r| r.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
             let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
             let mut req = json!({ "slot": slot, "path": path, "n": n, "at": at });
             if extra.get("line").is_some() {
@@ -3072,7 +3072,7 @@ impl AppWindow {
             if extra.get("look").and_then(Value::as_bool) == Some(true) {
                 req["look"] = json!(true);
             }
-            crate::mods::set_shared("nocturne-editor.open".into(), req);
+            crate::mods::set_shared("editor.open".into(), req);
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
             return match r.get("error") {
                 Some(e) => Err(e.to_string()),
@@ -3081,15 +3081,15 @@ impl AppWindow {
         }
         if let Some(id) = shown {
             // The editor already on the file shows it (its tab) and moves to the
-            // place asked for: it watches shared `nocturne-editor.goto` for its paths.
+            // place asked for: it watches shared `editor.goto` for its paths.
             if viewer == Viewer::Editor {
-                let n = crate::mods::shared("nocturne-editor.goto").and_then(|g| g.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+                let n = crate::mods::shared("editor.goto").and_then(|g| g.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
                 let mut goto = json!({ "path": path, "n": n });
                 if extra.get("line").is_some() {
                     goto["line"] = extra["line"].clone();
                     goto["col"] = extra.get("col").cloned().unwrap_or(json!(1));
                 }
-                crate::mods::set_shared("nocturne-editor.goto".into(), goto);
+                crate::mods::set_shared("editor.goto".into(), goto);
             }
             let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
             return match r.get("error") {
@@ -6143,7 +6143,7 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 }
 
 /// The mod a web link opens in (`open_link`).
-const WEB_MOD: &str = "nocturne-browser";
+const WEB_MOD: &str = "browser";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
 /// Where a terminal's link to a file goes: Markdown and what the preview shows
@@ -7767,9 +7767,9 @@ export default class Probe extends View {
         }
     }
 
-    /// The script runner's deck (defaults/mods/nocturne-scripts) owns the
+    /// The script runner's deck (defaults/mods/scripts) owns the
     /// keyboard from the moment it opens: real keystrokes through the window,
-    /// what the deck queued for the tab strip (`nocturne-scripts.jobs`) says
+    /// what the deck queued for the tab strip (`scripts.jobs`) says
     /// which script they ran.
     #[test]
     fn the_scripts_deck_list_has_the_keyboard() {
@@ -7783,25 +7783,25 @@ export default class Probe extends View {
             return;
         }
         cx.update(gpui_base::init);
-        let (view, cx) = open_window(cx, "nocturne-scripts", include_str!("../defaults/mods/nocturne-scripts/main.js"), json!({
+        let (view, cx) = open_window(cx, "scripts", include_str!("../defaults/mods/scripts/main.js"), json!({
             "id": "root", "type": "block", "content": { "tab": "active" }
         }));
-        let folder = crate::mods::app_dir().join("mods/nocturne-scripts");
+        let folder = crate::mods::app_dir().join("mods/scripts");
         for (name, text) in [
-            ("detect.js", include_str!("../defaults/mods/nocturne-scripts/detect.js")),
-            ("nix.js", include_str!("../defaults/mods/nocturne-scripts/nix.js")),
-            ("runs.js", include_str!("../defaults/mods/nocturne-scripts/runs.js")),
+            ("detect.js", include_str!("../defaults/mods/scripts/detect.js")),
+            ("nix.js", include_str!("../defaults/mods/scripts/nix.js")),
+            ("runs.js", include_str!("../defaults/mods/scripts/runs.js")),
         ] {
             std::fs::write(folder.join(name), text).unwrap();
         }
         // What the deck found here before (no folder: nothing to look at again).
         let script = |name: &str| json!({ "runner": "just", "group": "justfile", "name": name, "cmd": format!("just {name}"), "id": format!("justfile#{name}") });
-        crate::mods::set_shared("nocturne-scripts.found".into(), json!({ ":": [script("build"), script("test"), script("lint"), script("deploy")] }));
+        crate::mods::set_shared("scripts.found".into(), json!({ ":": [script("build"), script("test"), script("lint"), script("deploy")] }));
         let open = |cx: &mut gpui::VisualTestContext| {
-            crate::mods::set_shared("nocturne-scripts.jobs".into(), json!([]));
-            crate::mods::set_shared("nocturne-scripts.recent".into(), json!({}));
+            crate::mods::set_shared("scripts.jobs".into(), json!([]));
+            crate::mods::set_shared("scripts.recent".into(), json!({}));
             cx.update(|window, cx| view.update(cx, |this, cx| {
-                this.open_overlay("deck".into(), json!({ "mod": "nocturne-scripts", "kind": "dialog", "width": 420, "height": 470, "props": {} }), window, cx);
+                this.open_overlay("deck".into(), json!({ "mod": "scripts", "kind": "dialog", "width": 420, "height": 470, "props": {} }), window, cx);
             }));
             cx.run_until_parked();
             // One frame drawn, as the window does (the deck's key handlers are
@@ -7811,7 +7811,7 @@ export default class Probe extends View {
         };
         let ran = |cx: &mut gpui::VisualTestContext| {
             cx.run_until_parked();
-            let jobs = crate::mods::shared("nocturne-scripts.jobs").unwrap_or(json!([]));
+            let jobs = crate::mods::shared("scripts.jobs").unwrap_or(json!([]));
             jobs.as_array().unwrap().iter().map(|j| (j["name"].as_str().unwrap_or("").to_owned(), j["watch"].as_bool().unwrap_or(false))).collect::<Vec<_>>()
         };
         let deck_open = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().any(|o| o.id == "deck"));
@@ -8651,7 +8651,7 @@ export default class W extends View {
         in_own_process("pip_drag_by_video");
     }
 
-    /// The shipped picture in picture player (nocturne-pip) in its window: a
+    /// The shipped picture in picture player (pip) in its window: a
     /// left press on the video (which the native view hands to Fireflies,
     /// fireflies-native-view's Kind::gives_left_presses) is the window's. Moved
     /// under 4 px it's a click: the window stays and the player takes the
@@ -8662,9 +8662,9 @@ export default class W extends View {
         if !running_alone("pip_drag_by_video") {
             return;
         }
-        let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods/nocturne-pip");
+        let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods/pip");
         let home = crate::mods::app_dir();
-        let to = home.join("mods/nocturne-pip");
+        let to = home.join("mods/pip");
         std::fs::create_dir_all(to.join("icons")).unwrap();
         for e in std::fs::read_dir(&shipped).unwrap().flatten().chain(std::fs::read_dir(shipped.join("icons")).unwrap().flatten()) {
             if e.path().is_file() {
@@ -8677,7 +8677,7 @@ export default class W extends View {
         let id = view.update_in(cx, |this, window, cx| {
             this.sync_folders(window, cx);
             let id = crate::mods::new_overlay_id();
-            this.open_overlay(id.clone(), json!({ "mod": "nocturne-pip", "kind": "window", "key": "nocturne-pip", "frame": "none", "width": 384, "height": 238,
+            this.open_overlay(id.clone(), json!({ "mod": "pip", "kind": "window", "key": "pip", "frame": "none", "width": 384, "height": 238,
                 "resizable": { "min": [240, 158], "aspect": 16.0 / 9.0, "chrome": [2, 24] }, "props": { "of": "1:web" } }), window, cx);
             this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
             id

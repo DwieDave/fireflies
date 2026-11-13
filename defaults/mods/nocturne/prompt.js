@@ -1,5 +1,5 @@
 // A nix switch's password, typed where it's asked. A switch activates through
-// sudo in its run's own terminal (../nocturne-scripts/nix.js switchPlan), and
+// sudo in its run's own terminal (../scripts/nix.js switchPlan), and
 // that terminal has no pane: so when its last line is sudo's prompt
 // (SUDO_PROMPT), a small window shows it, the run's name and "password" in a
 // bar over the terminal itself, cut down to its last lines. The person types
@@ -15,11 +15,11 @@
 
 import { hc, terminals, shared, setShared, openOverlay, closeOverlay } from "herdr";
 
-/** A copy of ../nocturne-scripts/nix.js SUDO_PROMPT (a mod can't import another's files). */
+/** A copy of ../scripts/nix.js SUDO_PROMPT (a mod can't import another's files). */
 export const SUDO_PROMPT = "password to activate (sudo): ";
 // The small windows open now: { address: { id } }, or { closed: true } once
 // cancelled, so it doesn't come back while the run ends.
-export const PROMPTS = "nocturne-scripts.prompts";
+export const PROMPTS = "scripts.prompts";
 const LABEL = "nocturne.script";
 export const PROMPT_W = 440, PROMPT_H = 34 + 58;
 
@@ -31,14 +31,14 @@ export function asking(screen) {
   return last.endsWith(SUDO_PROMPT.trim()) || /^Sorry, try again\.?$/.test(last);
 }
 
-/** The small window: a bar (nocturne-scripts with { password }) over the terminal. */
+/** The small window: a bar (scripts with { password }) over the terminal. */
 export function promptOverlay(address, name) {
   return {
     kind: "dialog", modal: true, width: PROMPT_W, height: PROMPT_H,
     layout: {
       type: "column",
       children: [
-        { type: "block", size: { px: 34 }, content: { mod: "nocturne-scripts", props: { password: address, name } } },
+        { type: "block", size: { px: 34 }, content: { mod: "scripts", props: { password: address, name } } },
         { type: "block", padding: [4, 10], content: { terminal: address } },
       ],
     },

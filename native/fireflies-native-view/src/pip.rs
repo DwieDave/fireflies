@@ -721,7 +721,7 @@ const CHROME_H: f64 = BAR + 2.0;
 /// The title keeps this much before the buttons (as the Fireflies player's bar).
 const TITLE_MIN: f64 = 70.0;
 const TITLE: &str = "picture in picture";
-// Copies of nocturne-pip's icons: the Nix app build leaves defaults/mods out of
+// Copies of pip's icons: the Nix app build leaves defaults/mods out of
 // the crate's sources (they ship in the bundle), so the crate carries its own.
 const VOLUME_SVG: &str = include_str!("../icons/volume.svg");
 const VOLUME_X_SVG: &str = include_str!("../icons/volume-x.svg");
@@ -1195,7 +1195,7 @@ mod tests {
 mod icon_copies {
     #[test]
     fn match_the_mods_icons() {
-        assert_eq!(super::VOLUME_SVG, include_str!("../../../defaults/mods/nocturne-pip/icons/volume.svg"));
-        assert_eq!(super::VOLUME_X_SVG, include_str!("../../../defaults/mods/nocturne-pip/icons/volume-x.svg"));
+        assert_eq!(super::VOLUME_SVG, include_str!("../../../defaults/mods/pip/icons/volume.svg"));
+        assert_eq!(super::VOLUME_X_SVG, include_str!("../../../defaults/mods/pip/icons/volume-x.svg"));
     }
 }

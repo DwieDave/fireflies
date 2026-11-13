@@ -189,14 +189,14 @@ test("nocturne.agent-next walks agents, a pinned web pane, and back; agent-prev 
   panesNow = [
     { pane: "p1", tab: "c1", terminal: "t1", program: { agent: true }, focused: true },
     { pane: "p2", tab: "c1", terminal: "t2", program: { agent: true }, focused: false },
-    { pane: "p3", tab: "c1", terminal: null, mod: "nocturne-browser", props: { slot: "w1" }, focused: false, parked: false },
+    { pane: "p3", tab: "c1", terminal: null, mod: "browser", props: { slot: "w1" }, focused: false, parked: false },
   ];
   agentsNow = [
     { address: "t1", status: "working", tab: "c1", space: "s1", focused: true },
     { address: "t2", status: "working", tab: "c1", space: "s1", focused: false },
   ];
   terminalsNow = [{ address: "t1", state: "live", labels: {} }, { address: "t2", state: "live", labels: {} }];
-  sharedState[pins.PANES_KEY] = [{ pane: "p3", mod: "nocturne-browser", props: { slot: "w1" }, at: 1 }];
+  sharedState[pins.PANES_KEY] = [{ pane: "p3", mod: "browser", props: { slot: "w1" }, at: 1 }];
 
   const s = new Sky();
   s.init({ role: "sky" }, cx);

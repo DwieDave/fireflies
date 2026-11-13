@@ -3,6 +3,7 @@
 // files is an entry in some state, or in its OUT list with a reason. (Layout
 // and mod sections belong to a layout's own palette: nocturne-palette.test.ts.)
 // Its own process: mock.module is process-wide.
+import { keysNow } from "./nocturne-mods.ts";
 import { test, expect, mock } from "bun:test";
 import { readFileSync } from "node:fs";
 
@@ -70,7 +71,7 @@ test("every app command and global or terminal key is in the shipped palette or 
   }
   const items: [string, string][] = CORE.map((c) => [c.name, "src/commands.rs"]);
   for (const f of ["defaults/keys.json", "defaults/keys.macos.json"]) {
-    for (const [section, map] of Object.entries(JSON.parse(read(f)) as Record<string, Record<string, string>>)) {
+    for (const [section, map] of Object.entries(keysNow(read(f)))) {
       if (section !== "global" && section !== "terminal") continue;
       for (const a of Object.values(map)) if (typeof a === "string" && a !== "terminal" && !a.startsWith("send:")) items.push([a, `${f} ${section}`]);
     }

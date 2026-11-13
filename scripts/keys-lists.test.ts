@@ -4,6 +4,7 @@
 // chords the mods use); a key it takes (stops propagation) must be named in
 // its list. gpui and herdr stand-ins (mock.module is process-wide: this file
 // runs alone).
+import { keysNow } from "./nocturne-mods.ts";
 import { test, expect, mock } from "bun:test";
 
 class El {
@@ -151,7 +152,7 @@ function surface(Cls: any, keep: string[], fields: Record<string, any>) {
   return Object.assign(o, fields);
 }
 
-const agents = await import("../defaults/mods/nocturne-agents/main.js");
+const agents = await import("../defaults/mods/agent-graph/main.js");
 test("agents: ? lists every key; the bar ends with ? keys, the list open too", () => {
   const keys = taken(() => { const a = surface(agents.default, ["key"], { help: false, open: new Set(), layout: [], zoom: 1, step: (_k: string, cx: any) => cx.stop_propagation(), target: () => ({ pane: "p" }), feedScroll: { scroll_to_item() {} } }); return (e, cx) => a.key(e, cx); });
   expect(keys).toContain("H");
@@ -162,7 +163,7 @@ test("agents: ? lists every key; the bar ends with ? keys, the list open too", (
   expect(texts(a.hints(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const md = await import("../defaults/mods/nocturne-markdown/main.js");
+const md = await import("../defaults/mods/markdown/main.js");
 test("markdown: ? lists every key; the toolbar's last control is ? keys", () => {
   const make = (sel: number | null) => () => { const v = surface(md.default, ["key"], { sel, keysShown: false, shown: () => ({ viewH: 400, scrollY: 0 }) }); return (e: any, cx: any) => v.key(e, cx); };
   const keys = [...new Set([...taken(make(null)), ...taken(make(0))])];
@@ -173,7 +174,7 @@ test("markdown: ? lists every key; the toolbar's last control is ? keys", () => 
   expect(texts(v.toolbar(theme)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const browser = await import("../defaults/mods/nocturne-browser/main.js");
+const browser = await import("../defaults/mods/browser/main.js");
 test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?", () => {
   const keys = taken(() => { const b = surface(browser.default, ["key", "barKey"], { editing: false, start: true, controls: [], ring: null, keysShown: false, video: true }); return (e, cx) => b.key(e, cx); });
   expect(keys).toEqual(expect.arrayContaining(["O", "cmd-l", "cmd-alt-i", "?"]));
@@ -181,8 +182,8 @@ test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?
   expect(browser.KEYS.at(-1)).toEqual(["?", "keys"]);
 });
 
-const files = await import("../defaults/mods/nocturne-files/main.js");
-const filesLogic = await import("../defaults/mods/nocturne-files/logic.js");
+const files = await import("../defaults/mods/file-tree/main.js");
+const filesLogic = await import("../defaults/mods/file-tree/logic.js");
 test("files: ? lists every key, in the list and while the filter types", () => {
   const rows = [{ path: "a.txt", name: "a.txt", dir: false, depth: 0 }, { path: "b", name: "b", dir: true, depth: 0 }];
   const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {} }, handle: { focus() {} } }); return (e: any, cx: any) => v.key(e, cx); };
@@ -192,8 +193,8 @@ test("files: ? lists every key, in the list and while the filter types", () => {
   expect(unnamed(filesLogic.KEYS, taken(make(true, "a.txt")))).toEqual([]);
 });
 
-const preview = await import("../defaults/mods/nocturne-preview/main.js");
-const previewKeys = await import("../defaults/mods/nocturne-preview/keys.js");
+const preview = await import("../defaults/mods/preview/main.js");
+const previewKeys = await import("../defaults/mods/preview/keys.js");
 test("preview: ? lists every key for each way it shows a file", () => {
   const cases: [string, string | null, Record<string, any>][] = [
     ["image", "image", {}], ["raster", "pdf", { paged: true }], ["native", "pdf", {}], ["native", "video", {}], ["table", "csv", {}], ["diff", "patch", {}], ["table", "sqlite", { db: true }],
@@ -213,7 +214,7 @@ test("preview: ? lists every key for each way it shows a file", () => {
   }
 });
 
-const usage = await import("../defaults/mods/nocturne-usage/main.ts");
+const usage = await import("../defaults/mods/usage/main.ts");
 test("usage: ? lists every key; the toolbar's last control is ? keys", () => {
   const keys = taken(() => { const u = surface(usage.default, ["key"], { keysShown: false }); return (e, cx) => u.key(e, cx); });
   expect(keys).toEqual(expect.arrayContaining(["r", "p", "?"]));
@@ -222,7 +223,7 @@ test("usage: ? lists every key; the toolbar's last control is ? keys", () => {
   expect(texts(u.toolbar(theme, null, null)).slice(-2)).toEqual(["?", "keys"]);
 });
 
-const pip = await import("../defaults/mods/nocturne-pip/main.ts");
+const pip = await import("../defaults/mods/pip/main.ts");
 test("picture in picture: ? lists every key; ? sits on the bar right before ✕", () => {
   const keys = PROBES.filter((p) => pip.keyControl(probe(p)) != null);
   expect(keys).toContain("?");
@@ -232,10 +233,10 @@ test("picture in picture: ? lists every key; ? sits on the bar right before ✕"
   opened.length = 0;
   p.command = pip.default.prototype.command; p.menu = null; p.openKeys = pip.default.prototype.openKeys;
   p.command("keys");
-  expect(opened.at(-1)).toMatchObject({ mod: "nocturne-pip", kind: "popup", props: { keys: true } });
+  expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "popup", props: { keys: true } });
 });
 
-const deck = await import("../defaults/mods/nocturne-scripts/main.js");
+const deck = await import("../defaults/mods/scripts/main.js");
 test("script runner: ? lists every key; every bar ends with the keys entry, cmd-k ? while the filter types", () => {
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };
@@ -268,16 +269,16 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   expect(typing.help).toBe(true);
 });
 
-const overview = await import("../defaults/mods/nocturne-notifications/overview.js");
+const overview = await import("../defaults/mods/notifications/overview.js");
 test("notifications overview: ? lists every key", () => {
   const it = { id: "a", type: "permission", answerable: true, request: { options: [{ n: 1 }, { n: 2 }] } };
   const keys = taken(() => { const o = surface(overview.default, ["key"], { but: null, keysShown: false, cursor: 0, list: () => [it], current: () => it }); return (e, cx) => o.key(e, cx); });
   expect(unnamed(overview.KEYS, keys)).toEqual([]);
 });
 
-const ghPrs = (await import("../defaults/mods/nocturne-github/prs.js")).default;
-const ghActions = (await import("../defaults/mods/nocturne-github/actions.js")).default;
-const ghProjects = (await import("../defaults/mods/nocturne-github/projects.js")).default;
+const ghPrs = (await import("../defaults/mods/github/prs.js")).default;
+const ghActions = (await import("../defaults/mods/github/actions.js")).default;
+const ghProjects = (await import("../defaults/mods/github/projects.js")).default;
 test("GitHub: each tab's ? list names every key its handler takes, in every panel", () => {
   // The window hands a tab the key as it reads it: what was typed, else GPUI's name.
   const asTab = (tab: any) => (e: any, cx: any) => {
@@ -339,7 +340,7 @@ test("welcome and what's new: ? lists every key; their foot hints end with ? key
 // ---- the keys dialog
 
 const keymap = await import("../defaults/mods/nocturne/keymap.js");
-const shipped = (file: string) => Object.entries(JSON.parse(require("fs").readFileSync(`${import.meta.dir}/../defaults/${file}`, "utf8")))
+const shipped = (file: string) => Object.entries(keysNow(require("fs").readFileSync(`${import.meta.dir}/../defaults/${file}`, "utf8")))
   .flatMap(([section, v]: any) => Object.entries(v).map(([keys, action]) => ({ section, keys, action: String(action) })));
 
 test("keys dialog: every binding in the shipped keys files has a plain-words label", () => {

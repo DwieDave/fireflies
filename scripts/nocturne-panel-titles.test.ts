@@ -1,6 +1,6 @@
 // A panel's long title stays inside its panel, ending in an ellipsis: the
 // GitHub window's panels (kit.js panel: a job's steps beside the log) and
-// nocturne-git's (draw.js panel: the title cut into the frame). gpui and
+// git's (draw.js panel: the title cut into the frame). gpui and
 // herdr stand-ins that record every style call (mock.module is process-wide:
 // this file runs alone).
 import { test, expect, mock } from "bun:test";
@@ -35,8 +35,8 @@ mock.module("gpui-base", () => ({ h_flex: () => new El(), v_flex: () => new El()
 (globalThis as any).window = { paint_path: () => new El() };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const gh = await import("../defaults/mods/nocturne-github/kit.js");
-const git = await import("../defaults/mods/nocturne-git/draw.js");
+const gh = await import("../defaults/mods/github/kit.js");
+const git = await import("../defaults/mods/git/draw.js");
 
 const LONG = "Deploy PR preview environment / Deploy preview namespace";
 
@@ -54,7 +54,7 @@ test("GitHub window: a long title shrinks and ends in an ellipsis; its header cl
   expect(right[right.length - 1].calls).toContain("flex_none");
 });
 
-test("nocturne-git: a long title cut into the frame ends in an ellipsis before the right label", () => {
+test("git: a long title cut into the frame ends in an ellipsis before the right label", () => {
   const t = new El().child(LONG);
   const p = git.panel(theme, "main-a", [t], true, new El(), { right: new El().child("⧉") });
   const path = pathTo(p, LONG)!;

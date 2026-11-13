@@ -195,10 +195,14 @@ pub(crate) fn current(action: &str) -> String {
 }
 
 /// A mod's command whose mod is gone (0.1.x's `ribbon.next`): bound to nothing.
+/// A shipped mod is never gone, even before its folder is installed.
 fn gone_mod(action: &str) -> bool {
     let name = action.split_once(':').map_or(action, |(n, _)| n);
     crate::commands::find(name).is_none()
-        && name.split_once('.').is_some_and(|(m, _)| !m.starts_with("frame-") && !crate::mods::mods_dir().join(crate::layout::current_mod_name(m)).is_dir())
+        && name.split_once('.').is_some_and(|(m, _)| {
+            let m = crate::layout::current_mod_name(m);
+            !m.starts_with("frame-") && !crate::mods::is_shipped(m) && !crate::mods::mods_dir().join(m).is_dir()
+        })
 }
 
 fn valid_action(action: &str) -> bool {
@@ -365,10 +369,15 @@ mod tests {
     #[test]
     fn a_renamed_mods_old_section_and_commands_mean_the_mod_now() {
         // An edited keys.json from before a shipped mod's rename keeps working.
-        assert_eq!(super::current("nocturne-image.fit"), "nocturne-preview.fit");
-        assert_eq!(super::current("nocturne-image.open:a.png"), "nocturne-preview.open:a.png");
-        assert_eq!(super::tab("mod:nocturne-image").unwrap(), "mod == nocturne-preview");
-        assert_eq!(super::current_section("mod:nocturne-image"), "mod:nocturne-preview");
+        assert_eq!(super::current("nocturne-image.fit"), "preview.fit");
+        assert_eq!(super::current("nocturne-image.open:a.png"), "preview.open:a.png");
+        assert_eq!(super::tab("mod:nocturne-image").unwrap(), "mod == preview");
+        assert_eq!(super::current_section("mod:nocturne-image"), "mod:preview");
+        // The Nocturne mods' names before they lost their prefix.
+        assert_eq!(super::current("nocturne-editor.save"), "editor.save");
+        assert_eq!(super::current("nocturne-notifications.open"), "notifications.open");
+        assert_eq!(super::tab("mod:nocturne-editor").unwrap(), "mod == editor");
+        assert_eq!(super::current_section("mod:nocturne-browser"), "mod:browser");
         // Any other name stays as it is.
         assert_eq!(super::current("nocturne.picker"), "nocturne.picker");
         assert_eq!(super::tab("mod:nocturne").unwrap(), "mod == nocturne");
@@ -497,7 +506,7 @@ mod tests {
     }
 
     /// Which shipped binding a chord runs where the keyboard is: the web pane's
-    /// section (`mod:nocturne-browser`) over Nocturne's and the global ones
+    /// section (`mod:browser`) over Nocturne's and the global ones
     /// while GPUI's keyboard is inside the pane (its bar, its address field,
     /// its page after a press: src/window.rs hands it `focus`), the layout's
     /// and the global ones when the window holds it.
@@ -506,7 +515,7 @@ mod tests {
         let keymap = gpui::Keymap::new(super::parse(include_str!("../defaults/keys.macos.json")).unwrap());
         let stack = |contexts: &[&str]| contexts.iter().map(|c| gpui::KeyContext::parse(c).unwrap()).collect::<Vec<_>>();
         let window = ["ShellRoot", "Herdr layout = nocturne"];
-        let pane = [&window[..], &["Mod mod = nocturne-browser"]].concat();
+        let pane = [&window[..], &["Mod mod = browser"]].concat();
         let bar = [&pane[..], &["NocturneBrowser"]].concat();
         let address = [&bar[..], &["Input"]].concat();
         let runs = |chord: &str, at: &[&str]| {
@@ -514,12 +523,12 @@ mod tests {
             bindings.first().and_then(|b| b.action().as_any().downcast_ref::<super::ShellAction>().map(|a| a.id().to_owned()))
         };
         for at in [&pane[..], &bar[..], &address[..]] {
-            assert_eq!(runs("cmd-p", at).as_deref(), Some("nocturne-browser.url"), "{at:?}");
-            assert_eq!(runs("cmd-l", at).as_deref(), Some("nocturne-browser.url"));
-            assert_eq!(runs("cmd-r", at).as_deref(), Some("nocturne-browser.reload"));
-            assert_eq!(runs("cmd-[", at).as_deref(), Some("nocturne-browser.back"));
-            assert_eq!(runs("cmd-]", at).as_deref(), Some("nocturne-browser.forward"));
-            assert_eq!(runs("cmd-alt-i", at).as_deref(), Some("nocturne-browser.inspect"));
+            assert_eq!(runs("cmd-p", at).as_deref(), Some("browser.url"), "{at:?}");
+            assert_eq!(runs("cmd-l", at).as_deref(), Some("browser.url"));
+            assert_eq!(runs("cmd-r", at).as_deref(), Some("browser.reload"));
+            assert_eq!(runs("cmd-[", at).as_deref(), Some("browser.back"));
+            assert_eq!(runs("cmd-]", at).as_deref(), Some("browser.forward"));
+            assert_eq!(runs("cmd-alt-i", at).as_deref(), Some("browser.inspect"));
             // The app's other keys still work inside it.
             assert_eq!(runs("cmd-t", at).as_deref(), Some("tab.new"));
             assert_eq!(runs("cmd-shift-p", at).as_deref(), Some("app.palette"));
@@ -530,8 +539,8 @@ mod tests {
         assert_eq!(runs("cmd-]", &window).as_deref(), Some("agent.next"));
         assert_eq!(runs("cmd-l", &window), None);
         // The editor pane likewise (it takes the keyboard on `focus`): cmd-s saves, not Nocturne's fold.
-        let editor = [&window[..], &["Mod mod = nocturne-editor"]].concat();
-        assert_eq!(runs("cmd-s", &editor).as_deref(), Some("nocturne-editor.save"));
+        let editor = [&window[..], &["Mod mod = editor"]].concat();
+        assert_eq!(runs("cmd-s", &editor).as_deref(), Some("editor.save"));
         assert_eq!(runs("cmd-s", &window).as_deref(), Some("nocturne.fold"));
     }
 

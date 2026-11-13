@@ -11,7 +11,7 @@
 //   the rail     (the folded sky) one small meter per window, nothing else
 //   folded       the eyebrow alone, with both numbers beside it; click it (or
 //                the chevron) to fold and open. Kept in shared(FOLDED).
-//   a row        click: the full usage pane (nocturne-usage) beside the
+//   a row        click: the full usage pane (usage) beside the
 //                focused pane; again closes it (as + new > Usage does)
 
 import { div, svg } from "gpui-kit";
@@ -60,7 +60,7 @@ const clock = (ms) => { const d = new Date(ms); return `${pad(d.getHours())}:${p
 /** The usage pane in the shown tab, if it's open. */
 export function usagePane() {
   const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
-  return panes().find((p) => p.mod === "nocturne-usage" && p.tab === tab) ?? null;
+  return panes().find((p) => p.mod === "usage" && p.tab === tab) ?? null;
 }
 
 /** Opens the usage pane beside the focused pane, or closes it. */
@@ -68,7 +68,7 @@ export function toggleUsage() {
   const open = usagePane();
   if (open) return run("pane.close", { pane: open.pane });
   const focused = panes().find((p) => p.focused)?.pane;
-  run("pane.split", { direction: "auto", ...(focused ? { pane: focused } : {}), mod: "nocturne-usage", props: {} });
+  run("pane.split", { direction: "auto", ...(focused ? { pane: focused } : {}), mod: "usage", props: {} });
 }
 
 /** Picks provider `id` and asks it for its usage if its answer is old. */

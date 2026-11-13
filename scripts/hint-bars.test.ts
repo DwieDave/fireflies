@@ -48,7 +48,7 @@ const cx: any = { spawn() {}, notify() {}, stop_propagation() {}, focus_handle: 
 (globalThis as any).window = { paint_path: () => new El() };
 const theme: any = new Proxy({}, { get: () => "#808080" });
 
-const gh = await import("../defaults/mods/nocturne-github/kit.js");
+const gh = await import("../defaults/mods/github/kit.js");
 
 test("GitHub window: ? keys sits after the right-aligned note, at the bar's end", () => {
   const right = new El().child("loaded 2 min ago");
@@ -59,7 +59,7 @@ test("GitHub window: ? keys sits after the right-aligned note, at the bar's end"
   expect(texts(gh.hints(theme, [["esc", "close"]], right))).toEqual(["esc", "close", "loaded 2 min ago"]);
 });
 
-const gitDraw = await import("../defaults/mods/nocturne-git/draw.js");
+const gitDraw = await import("../defaults/mods/git/draw.js");
 
 test("Git window: ? keys ends its options bar, after the global keys and the note", () => {
   const bar = gitDraw.hints(theme, [["j/k", "move"]], new El().child("q closes this pane"), null, { ends: [["P", "push"]], help: ["?", "keys"] });
@@ -86,7 +86,7 @@ test("sidebar: its hint line ends with ? keys", () => {
   expect(words.slice(-2)).toEqual(["?", "keys"]);
 });
 
-const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/nocturne-notifications/overview.js");
+const { default: Overview, KEYS: OVERVIEW_KEYS } = await import("../defaults/mods/notifications/overview.js");
 
 test("notifications overview: ? keys ends its key bar, after the sent / not sent note; its key list ends with ? too", () => {
   const o: any = Object.create(Overview.prototype);
