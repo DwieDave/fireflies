@@ -1463,7 +1463,7 @@ Nocturne's toolbar, right of the tabs past a seam (the tabs dissolve into the
 night over 48 px in dithered steps, so overflowing ones slip under it; a
 dithered band the strip's height), on a dithered plate of its own with a lit
 foot that runs under every tool, the bell and "+ new" to the strip's right edge
-(each block draws its stretch, kit.js `toolGround`; a tool under the pointer
+(each block draws its stretch, `toolGround` in toolground.ts, one file in nocturne and notifications; a tool under the pointer
 lights a step above the plate, `toolHover`): ▶ and its runs (the script runner),
 the tree mark and its listening ports (processes and ports), files, the git button and its ▾ (Git, Diff, Worktrees, GitHub), the bell,
 then "+ new", the last control at the window's right edge (a block of its

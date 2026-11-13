@@ -179,9 +179,9 @@ for (const [what, list] of [
   });
 }
 
-test("the two copies of toolGround (nocturne, notifications) are the same", () => {
-  const cut = (p: string) => { const s = readFileSync(p, "utf8"); const i = s.indexOf("// ---- the toolbar's ground"); return s.slice(i, s.indexOf("\n}\n", s.indexOf("export function toolHover", i)) + 2); };
-  expect(cut("defaults/mods/notifications/kit.js")).toBe(cut("defaults/mods/nocturne/kit.js"));
+test("the toolbar's ground is one file in both mods (nocturne, notifications), and both kits pass it on", () => {
+  expect(readFileSync("defaults/mods/notifications/toolground.ts", "utf8")).toBe(readFileSync("defaults/mods/nocturne/toolground.ts", "utf8"));
+  for (const k of [kit, nkit]) for (const name of ["dither", "TOOL_LOOK", "toolGround", "mix", "toolHover"]) expect(k[name]).toBeDefined();
   expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
   expect(nkit.toolGround(theme).map(shape)).toEqual(ground());
   expect(nkit.toolHover(MOONFLY)).toBe(kit.toolHover(MOONFLY));
