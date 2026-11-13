@@ -1,8 +1,8 @@
 // The script runner's corner of the tab strip (the deck itself is the
 // scripts mod): ▶ and a little jar with one dithered cell per run in
 // its state's color (running ones breathe, ok green, failed red, stopped
-// grey). A click opens the deck hanging under ▶ (kit.js dropBelow), a
-// second closes it (and it stays closed: tabs.js tool); ▶ is lit while it's
+// grey). A click opens the deck hanging under ▶ (kit.ts dropBelow), a
+// second closes it (and it stays closed: tabs.ts tool); ▶ is lit while it's
 // open. Stopping happens there.
 // cmd-shift-r (nocturne.scripts) opens the deck centered, or closes it.
 //
@@ -172,7 +172,7 @@ type DeckProps = { folder: string | null; on: string | null; focus: "pick" | "ru
 
 /** Opens the deck (focus: "pick" the filter, "runs" the running list), or
  *  closes it when open. `show` (a run) and `again` always open it, on that.
- *  `wasOpen`: ▶ was lit when pressed (tabs.js tool): the press closed the
+ *  `wasOpen`: ▶ was lit when pressed (tabs.ts tool): the press closed the
  *  deck already, or closes it now; either way it stays closed. */
 export function toggleDeck({ focus = "pick", centered = false, show = null, again = false, at = null, wasOpen = false }: DeckOpening = {}): void {
   const open = deckOpen();

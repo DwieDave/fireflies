@@ -1,9 +1,9 @@
 // Gridify (nocturne.gridify; the palette, cmd-alt-g, the pane header's grid
 // button and the even-out popup's "Grid"): every placed pane of the shown
 // tab, in its order (panes(): splits left to right, top to bottom), into an
-// even grid (grid.js), then even shares (pane.equalize all). Terminals and
+// even grid (grid.ts), then even shares (pane.equalize all). Terminals and
 // mods keep running; parked panes stay parked; focus stays where it was.
-// The sky runs it (sky.js), since a pane's own header goes and comes back
+// The sky runs it (sky.ts), since a pane's own header goes and comes back
 // as its pane moves.
 
 import { panes, spaces, run } from "herdr";

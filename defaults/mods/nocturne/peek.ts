@@ -1,5 +1,5 @@
 // The bar over a floating or peeked terminal (the layout's peek_mod, on the
-// DwieDave fork): the pane header's look (header.js) for a terminal with no
+// DwieDave fork): the pane header's look (header.ts) for a terminal with no
 // pane, so a floating lazygit gets its git mark, branch, dithered band and
 // counts, and its views (lazygit / diff) to switch between. Then keep (↗:
 // its pane, or a tab), dock (⇥: a split beside the focused pane, "auto"),

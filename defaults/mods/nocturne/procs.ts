@@ -1,8 +1,8 @@
 // The processes and ports manager's corner of the tab strip (the deck itself
 // is the procs mod): a tree mark beside the script runner's ▶ and,
 // when the processes in this app's terminals listen on TCP ports, how many
-// in teal (":2"). A click opens the deck hanging under the mark (kit.js
-// dropBelow), a second closes it (tabs.js tool, as ▶); the mark is lit while
+// in teal (":2"). A click opens the deck hanging under the mark (kit.ts
+// dropBelow), a second closes it (tabs.ts tool, as ▶); the mark is lit while
 // it's open. nocturne.procs (no key by default) opens it centered or closes
 // it; nocturne.ports the same, on its ports tab.
 //
@@ -50,7 +50,7 @@ export interface ProcsOpening {
 
 /** Opens the deck (`tab`: "procs" or "ports"), or closes it when open
  *  (`tab` given to an open deck: it switches to it instead). `wasOpen`: the
- *  mark was lit when pressed (tabs.js tool): the press closed the deck
+ *  mark was lit when pressed (tabs.ts tool): the press closed the deck
  *  already, or closes it now; either way it stays closed. */
 export function toggleProcs({ centered = false, at = null, wasOpen = false, tab = null }: ProcsOpening = {}): void {
   const open = procsOpen();

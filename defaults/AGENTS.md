@@ -1132,7 +1132,7 @@ Properties any node can have:
   what's new calls `presentUpdateNotes(versions)`. The update note gets
   `{label, restart, success, dismissal}` (restart: run `app.update`) in a 460×34 px
   slot it hides itself from. Settings and feedback stay the app's (they follow the
-  theme). Nocturne: `defaults/mods/nocturne/screens.js`. Nocturne's dialogs,
+  theme). Nocturne: `defaults/mods/nocturne/screens.ts`. Nocturne's dialogs,
   menus and screens take the keyboard when they open and give it back when they
   close: tab / ← → between a dialog's field and buttons (the focused one lit),
   ↑↓ / j k (ctrl-n / ctrl-p in a list with a search field) move, enter / space
@@ -1357,7 +1357,7 @@ sidebar's order, then on through every tile on the shelf in its order (web
 pages, editors, files, shells; each pinned web tab its own stop), then back to
 the first agent, and the other way round; a tile is gone to as a click on it
 goes. The dock
-(dock.js) is a space tied to no folder for panes that belong to no project:
+(dock.ts) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
 folder, worktree or delete in its menu or keys (`space.close` still closes it;
@@ -1377,7 +1377,7 @@ trails it and lights the stars, haze and grass near it. Every 2.8 s it
 signals as a firefly does, two quick blinks: the + turns into a bright x and
 a square ring opens out from it, then rest. It fades when the pointer leaves;
 it holds still when the window isn't in front or the system asks for less
-motion (nocturne's `glow.js`, a nested view, so it never redraws the sky).
+motion (nocturne's `glow.ts`, a nested view, so it never redraws the sky).
 
 Nocturne's chrome by keyboard: its sidebar and tab strip are focusable blocks
 (`sidebar`, `tabs`), so cmd-alt-left from the leftmost pane enters the sidebar
@@ -1417,7 +1417,7 @@ focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
 Keys, everywhere: cmd-/ (`app.help`) opens Nocturne's keys dialog
-(`nocturne/screens.js` Keys, `nocturne/keymap.js`): every binding in plain
+(`nocturne/screens.ts` Keys, `nocturne/keymap.ts`): every binding in plain
 words, grouped as a map (keyboard focus, spaces, tabs, panes, agents, windows
 and panels, in a terminal, in the editor, in the web pane, app), Nocturne's
 own keys in place of the global ones they rebind, the core's own (esc closes
@@ -1700,7 +1700,7 @@ The main ones:
   moves at once, one with more opens a level of its tabs). → / l / enter open a
   level, ← / h / esc go back one (a click on its "‹" head too), esc at the top
   closes; a click on a row opens or moves. Any popup item can carry such a level
-  (popup.js `sub`).
+  (popup.ts `sub`).
   `pane.focus {terminal}` prefers the first visible layout terminal block showing that
   address, then its model pane. Clicking a terminal block focuses it too.
   While a layout terminal block is focused, implicit split/close/zoom/go/swap and
@@ -2270,7 +2270,7 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
   `.child(this.glow)`, and feed it from `.on_mouse_move((e, cx) => …)` with
   `this.glow.set_props({ x, y })`: only that view is rebuilt, not yours. Skip
   moves that change nothing, and draw nothing once it's out of sight (a loop
-  at opacity 0 still runs). Nocturne's sidebar glow (`glow.js`) does this.
+  at opacity 0 still runs). Nocturne's sidebar glow (`glow.ts`) does this.
 - **Acting on something `render()` reads** (a request another copy left in
   `shared()`, say "rename this"): render can't change state that needs a new
   frame, `cx.notify()` there throws ("not allowed during the `render`

@@ -1,18 +1,18 @@
-// Right-click menus in Nocturne's look (popup.js), with Fireflies' items:
-//   tab    the tab strip's tabs (tabs.js opens it, props { role: "menu", tab: "tab", target })
+// Right-click menus in Nocturne's look (popup.ts), with Fireflies' items:
+//   tab    the tab strip's tabs (tabs.ts opens it, props { role: "menu", tab: "tab", target })
 //   pane   a terminal's menu: the layout's `terminal_menu` is "nocturne", and
 //          Fireflies opens it with props { tab: "pane", target: { pane, terminal } };
 //          renaming happens inline in the pane's header, asked for through shared(NAME_PANE)
-//   fly    a sidebar firefly's (sky.js opens it, props { tab: "fly", target: { id, address } }):
+//   fly    a sidebar firefly's (sky.ts opens it, props { tab: "fly", target: { id, address } }):
 //          renaming happens inline in the sidebar, asked for through shared(NAME_AGENT);
 //          moving and closing act on the agent's pane, not its whole tab
-//   space  a sidebar space's (spaces.js opens it, props { tab: "space", target: { id } }):
+//   space  a sidebar space's (spaces.ts opens it, props { tab: "space", target: { id } }):
 //          rename, folder and delete happen inline in the sidebar, asked for through
 //          shared(EDIT_SPACE); "New worktree…" opens the worktree dialog on the space's folder
 //
 // A pane's menu can also move it (pane.move): to any other tab on its machine,
 // or a tab of its own; past MOVE_FLAT places they gather under one "Move to…"
-// row whose levels (popup.js) list this space's tabs, then the other spaces
+// row whose levels (popup.ts) list this space's tabs, then the other spaces
 // (moveItems).
 
 import { svg, div } from "gpui-kit";

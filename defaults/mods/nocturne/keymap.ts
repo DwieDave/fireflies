@@ -1,8 +1,8 @@
-// The keys dialog's map (screens.js Keys): every binding keys() lists, in
+// The keys dialog's map (screens.ts Keys): every binding keys() lists, in
 // plain words, grouped so the dialog reads as a map of the window, plus the
 // keys Fireflies' core handles outside keys.json and what works once the
 // keyboard is in the sidebar, the tab strip, a pane's header, the parked
-// chips, the toasts or a menu (nav.js's ? lists).
+// chips, the toasts or a menu (nav.ts's ? lists).
 //
 // Pure: no herdr at run time. rows() takes keys() and commands() and gives the dialog's
 // list: { head } eyebrows and { k, label, group, lines? } rows.
@@ -107,7 +107,7 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["send:\u0005", "To the line's end"],
   ["send:\u0015", "Delete to the line's start"],
   ["terminal", "Goes to the program (Fireflies leaves it alone here)"],
-  // Nocturne (layout:nocturne, sky.js's command loop).
+  // Nocturne (layout:nocturne, sky.ts's command loop).
   ["nocturne.sidebar", "Focus the sidebar (again: back to the pane)"],
   ["nocturne.focus", "Focus the sidebar"],
   ["nocturne.tabstrip", "Focus the tab strip (again: back to the pane)"],

@@ -1,4 +1,4 @@
-// The new-space picker's list (newspace.js), without drawing or asking
+// The new-space picker's list (newspace.ts), without drawing or asking
 // anything: where the folders come from and in what order, the fuzzy match,
 // the typed path and its completion, a space's name from its folder. No
 // imports at run time, so its tests run it as is.

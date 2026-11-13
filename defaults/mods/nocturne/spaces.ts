@@ -1,19 +1,19 @@
 // Spaces: one row each, the shown one on a dithered band, with inline
 // create / rename / folder / delete. A space's folder is the one it's attached
-// to (kit.js spaceFolder), else where its first terminal is. Spaces stay top
+// to (kit.ts spaceFolder), else where its first terminal is. Spaces stay top
 // level in Fireflies' order; only a space on a linked worktree is indented, under
 // the space on its repo's main checkout (or under the repo's name when the
 // main checkout has no space).
 // nocturne.next / nocturne.prev (keys.json) walk the rows in this order.
 //
 //   click a row   shows it
-//   + new         the new-space picker (newspace.js) hangs under it: a list
+//   + new         the new-space picker (newspace.ts) hangs under it: a list
 //                 of folders (here, the spaces', the checkouts beside them,
 //                 recent ones) and a field to filter it or type a path; enter
 //                 makes the space there, called after its folder (cmd-enter
 //                 names it first); its last row, "no folder", makes a space
 //                 in ~ that belongs to no project
-//   right-click   a menu (menu.js): show, new tab here, rename, change
+//   right-click   a menu (menu.ts): show, new tab here, rename, change
 //                 folder, new worktree (a branch checked out as a new space), delete
 //   rename        inline; an empty name gives it Fireflies' name back
 //   folder        the same picker, hanging under the row, attaches the space
@@ -121,7 +121,7 @@ export default class Spaces {
     openMenu({ tab: "space", target: { id: s.id } }, { centered });
   }
 
-  /** The keyboard's verbs on a space row (sky.js navigation; nav.ts). */
+  /** The keyboard's verbs on a space row (sky.ts navigation; nav.ts). */
   acts(s: SpaceInfo): NavActs {
     const acts: NavActs = {
       go: () => run("space.select", { id: s.id }),
@@ -479,7 +479,7 @@ export default class Spaces {
       .child(div().min_w(0).truncate().text_color(t.ansi8).child(r.header));
   }
 
-  /** `nav` (sky.js): registers a control with the keyboard's cursor, true while it's on it. */
+  /** `nav` (sky.ts): registers a control with the keyboard's cursor, true while it's on it. */
   render(t: Theme, nav?: Nav): Element {
     const newOn = nav?.("space-new", "spaces", { go: () => this.create() }) ?? false;
     const open = pickerOpen();

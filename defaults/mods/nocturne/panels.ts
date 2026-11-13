@@ -1,12 +1,12 @@
-// Nocturne's panels: everything the "+ new" menu (newmenu.js) and the command
-// palette (palette.js) can open, and where each one lands.
+// Nocturne's panels: everything the "+ new" menu (newmenu.ts) and the command
+// palette (palette.ts) can open, and where each one lands.
 //
 //   dest "pane"  beside the focused pane (across from its split, "auto")
 //   dest "tab"   a new tab of its own in the shown space
 //   fixed        a panel that always lands in one place: Git (git:
 //                lazygit's views and the review that was the diff) and GitHub
 //                float over the tab, files runs down the tab's right edge
-//   scratchpad   the repository's note in the editor (scratchpad.js), through
+//   scratchpad   the repository's note in the editor (scratchpad.ts), through
 //                its command: the menus that pick it close before git answers
 //
 // A panel that is open in the shown tab and has no other place to go closes

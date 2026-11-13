@@ -1,5 +1,5 @@
-// Keyboard navigation of Nocturne's chrome: the sidebar (sky.js) and the tab
-// strip (tabs.js, which also walks the focused pane's header, the parked chips
+// Keyboard navigation of Nocturne's chrome: the sidebar (sky.ts) and the tab
+// strip (tabs.ts, which also walks the focused pane's header, the parked chips
 // the bell and "+ new"). Both are layout blocks the keyboard reaches with pane.go
 // (cmd-alt-arrows) or layout.focus (nocturne.sidebar / nocturne.tabstrip /
 // nocturne.header); focused().block then names the block that has it.
@@ -107,7 +107,7 @@ export interface NavActs {
 }
 
 /** Registers a control (`id`, in section `sec`) with the keyboard's cursor as it's drawn,
- *  and what it does; true while the cursor is on it (sky.js nav). */
+ *  and what it does; true while the cursor is on it (sky.ts nav). */
 export type Nav = (id: string, sec: string, acts?: NavActs) => boolean;
 
 /** A ? list's line: [keys, what]. */
@@ -117,7 +117,7 @@ export type HelpLine = readonly [string, string];
 export const isHelpLine = (value: unknown): value is HelpLine => Array.isArray(value) && value.length === 2 && isString(value[0]) && isString(value[1]);
 
 // The ? lists: [keys, what] per line, every key its keymap takes, ? keys last.
-// The keys dialog (screens.js, keymap.js) shows them too.
+// The keys dialog (screens.ts, keymap.ts) shows them too.
 export const SIDEBAR_HELP: readonly HelpLine[] = [
   ["j k  ↑ ↓", "move"], ["tab  ⇧tab", "next / previous section"], ["g G  home end", "first / last"],
   ["⏎  space", "open: show the space, focus the agent, press the button"],
@@ -153,7 +153,7 @@ export const PARKED_HELP: readonly HelpLine[] = [
   ["1 … 9", "select that tab"], ["n", "new tab"], ["esc  q", "back to the pane"], ["?", "keys"],
 ];
 
-/** Every popup menu (popup.js): right-click menus, the git menu, these key lists. */
+/** Every popup menu (popup.ts): right-click menus, the git menu, these key lists. */
 export const MENU_HELP: readonly HelpLine[] = [
   ["j k  ↑ ↓", "move"], ["ctrl-n ctrl-p", "move"], ["tab  ⇧tab", "move"], ["home end", "first / last"],
   ["⏎  space", "pick the row"], ["a row's letter", "pick that row"], ["esc  q", "close"],

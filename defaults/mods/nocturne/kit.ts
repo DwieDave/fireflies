@@ -20,7 +20,7 @@ export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
 
-/** The tab strip's icon button (tabs.js tool): its id, lit or not, a tooltip
+/** The tab strip's icon button (tabs.ts tool): its id, lit or not, a tooltip
  *  (null: none), what a press does (the press, and whether it was lit then), its contents. */
 export type ToolButton = (t: Theme, id: string, on: boolean, tip: string | null, action: (e: MouseButtonEvent | undefined, wasOpen: boolean) => void, ...kids: Element[]) => Element;
 
@@ -309,7 +309,7 @@ export function hash(s: string): number {
 /** `el` tracking `handle` once there is one (a view makes it in init). */
 export const tracked = <E extends Element>(el: E, handle: FocusHandle | null): E => (handle ? el.track_focus(handle) : el);
 
-// ---- the keyboard cursor (nav.js): one look across the chrome
+// ---- the keyboard cursor (nav.ts): one look across the chrome
 
 /** On a row (a space, a firefly, a usage window): the popup's current-row
  *  look, a dithered band with a blue edge. `el` must be relative. */

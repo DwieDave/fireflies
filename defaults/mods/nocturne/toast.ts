@@ -10,7 +10,7 @@
 // By key: every toast on screen is listed in shared(TOASTS), newest last;
 // nocturne.toast runs the newest one's action as a click would, and
 // nocturne.toast-close (or its alias nocturne.toast-dismiss) dismisses it
-// (sky.js's command loop calls toastKey).
+// (sky.ts's command loop calls toastKey).
 
 import { div, svg, image } from "gpui-kit";
 import type { Element } from "gpui-kit";

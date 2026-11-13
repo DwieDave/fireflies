@@ -3,11 +3,11 @@
 // attaches an existing space to another folder (props.space: its id).
 //
 //   opens     hanging under the sidebar's "+ new" (or the press that asked,
-//             `at`: kit.js dropBelow), or centered from a key
+//             `at`: kit.ts dropBelow), or centered from a key
 //             (nocturne.space-new), the "+ new" menu, the palette and the
 //             folded rail; a space's "Change folder…" hangs it under the row
 //             right-clicked
-//   list      folderlist.js: here, spaces, near, recent; then "browse…" (the
+//   list      folderlist.ts: here, spaces, near, recent; then "browse…" (the
 //             system's folder browser) and, always last, "no folder" (a space
 //             of its own in ~; attaching: "detach", back to ~)
 //   typing    filters by the folder's name, then its path; a field starting
@@ -15,7 +15,7 @@
 //   name      unnamed spaces are called after their folder; cmd-enter on a
 //             row asks for a name first, the folder's in the field
 //
-// The dock (dock.js) is never attached: its row has no Change folder, and
+// The dock (dock.ts) is never attached: its row has no Change folder, and
 // asking anyway (the palette's "Change this space's folder…") opens nothing.
 // "no folder" here makes an ordinary space in ~, not the dock.
 //

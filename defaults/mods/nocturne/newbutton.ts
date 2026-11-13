@@ -1,11 +1,11 @@
 // "+ new" at the far right of the tab row, after the bell: a layout block of
 // its own ({ role: "newbutton" }, right of the notifications bell's), so it is
 // the toolbar's last control. A rule like the strip's sets it off from the
-// bell. Its menu (newmenu.js) hangs under it, right edges lined up (kit.js
+// bell. Its menu (newmenu.ts) hangs under it, right edges lined up (kit.ts
 // dropBelow), so it ends 8 px inside the window; a second press closes it
-// (tabs.js tool says why the press goes by `wasOpen`). Lit while the menu is
-// open. The strip's keyboard walk ends on it (tabs.js collect): its blue ring
-// comes from shared(nav.js CURSOR), region "new".
+// (tabs.ts tool says why the press goes by `wasOpen`). Lit while the menu is
+// open. The strip's keyboard walk ends on it (tabs.ts collect): its blue ring
+// comes from shared(nav.ts CURSOR), region "new".
 //
 // The block is as wide as the button plus END: it ends where the panes below
 // end. It sizes its own block (layout.resize) when the button's width changes.

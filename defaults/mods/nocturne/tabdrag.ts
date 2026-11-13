@@ -1,4 +1,4 @@
-// Dragging a tab along the strip (tabs.js): where it lands, and the marks
+// Dragging a tab along the strip (tabs.ts): where it lands, and the marks
 // that say so. The tabs stay put while one is dragged: the dragged tab lifts
 // where it is (raised on a plate edged in the accent, a dither shadow under
 // it) and a stake, a 2 px accent bar capped top and bottom, stands in the gap

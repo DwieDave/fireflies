@@ -6,7 +6,7 @@
 //              → / enter next, ← back, a adds a machine (page 2), c copies (page 3), esc skips
 //   whats_new  this release's notes ({ notes }, a movable window); ↑↓ / j k /
 //              space step through them, enter / esc close
-//   help       the keys, as a map (keymap.js): every binding in plain words,
+//   help       the keys, as a map (keymap.ts): every binding in plain words,
 //              grouped, the core's own keys and what works in each block that
 //              takes the keyboard (enter or a click unfolds a block's keys);
 //              typing filters by key and words; ↑↓ / ctrl-n ctrl-p / page up

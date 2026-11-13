@@ -2,7 +2,7 @@
 // whole right edge, rooted at the focused pane's folder on its machine; files
 // open in panes to its left (file-tree). The tab strip's files button
 // and cmd-e (nocturne.files) toggle it. Folder links and "+ new" > Files open
-// files panes of their own (props.path, `files.open`, panels.js filesHere):
+// files panes of their own (props.path, `files.open`, panels.ts filesHere):
 // those aren't the panel, and stay when it toggles.
 //
 // cmd-e is the keyboard's way in and out (focusFiles): it opens the panel
@@ -49,7 +49,7 @@ export function toggleFiles(): void {
   const f = focused();
 
   const pane = f?.pane ? panes().find((p) => p.pane === f.pane) : null;
-  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.js).
+  // Its live folder, else the mod pane's, the space's terminals', the space's (folders.ts).
   const folder = folderCandidates(space, pane, f, panes(), { attached: false })[0] ?? null;
   run("pane.split", { edge: "right", px: WIDTH, mod: MOD, props: { folder, on: space?.machine ?? null, slot: filesSlot() } });
 }

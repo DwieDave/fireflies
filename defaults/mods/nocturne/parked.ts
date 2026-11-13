@@ -3,8 +3,8 @@
 // works or needs the person, its name, then a dithered band that lights
 // up under the pointer. The app draws the frame and handles the pointer:
 // a click puts the pane back, a drag moves the chip or drops it in the tab.
-// Props from the app: { pane, terminal }. The tab strip's keyboard (tabs.js)
-// walks the chips as its last row; the one under its cursor (shared(nav.js
+// Props from the app: { pane, terminal }. The tab strip's keyboard (tabs.ts)
+// walks the chips as its last row; the one under its cursor (shared(nav.ts
 // CURSOR)) is lit and ringed: enter puts it back, x closes it, m its menu.
 
 import { div } from "gpui-kit";

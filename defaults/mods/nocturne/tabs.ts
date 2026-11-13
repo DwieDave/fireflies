@@ -2,34 +2,34 @@
 // underlined in a blue checker. Where they end, a seam (seamFade, seam,
 // SEAM): the tabs dissolve into the night in dithered steps (overflowing ones
 // under it, never into the tools), and the tools stand on their own ground
-// (kit.js toolGround), on under the bell and "+ new". Right of the seam, icons only:
-//   scripts ▶ and a jar of runs: the script runner (scripts.js); runs the
-//           deck's queued jobs (jobs.js)
+// (kit.ts toolGround), on under the bell and "+ new". Right of the seam, icons only:
+//   scripts ▶ and a jar of runs: the script runner (scripts.ts); runs the
+//           deck's queued jobs (jobs.ts)
 //   procs   a tree mark and the ports listening in this app's terminals
-//           (":2"): the processes and ports manager (procs.js, procs)
-//   files   the files pane down the tab's right edge (files.js); lit while open
+//           (":2"): the processes and ports manager (procs.ts, procs)
+//   files   the files pane down the tab's right edge (files.ts); lit while open
 //   git     one button for the repo: the changed files and how far the branch
 //           is ahead / behind its upstream; a plain git mark when there's
 //           nothing anywhere. Click floats the git window over the tab
-//           (git.js, git); again closes it. Its ▾ (or a right-click)
+//           (git.ts, git); again closes it. Its ▾ (or a right-click)
 //           drops a menu: Git, Diff (Git's review) and GitHub.
 // Then the bell (notifications, a block of its own) and "+ new",
-// the toolbar's last control (newbutton.js, the row's last block; the new
-// menu, newmenu.js). A layout without that block gets "+ new" here, before
+// the toolbar's last control (newbutton.ts, the row's last block; the new
+// menu, newmenu.ts). A layout without that block gets "+ new" here, before
 // the bell, as before.
-// Drag a tab along the strip to move it (tabdrag.js): it lifts where it is
+// Drag a tab along the strip to move it (tabdrag.ts): it lifts where it is
 // and a stake marks the gap it drops into; leaving the strip drops nothing.
 // The drop-downs (+ new, the script deck) hang under their button, right
-// edges lined up (kit.js dropBelow); a second press closes them. A rule like
+// edges lined up (kit.ts dropBelow); a second press closes them. A rule like
 // the ones between the groups closes the strip before the bell's block.
 //
 // Keys: the strip takes the keyboard from pane.go (cmd-alt-up from a top
 // pane), nocturne.tabstrip or nocturne.header (layout.focus). Its cursor
-// walks three rows (nav.js STRIP_KEYS; ? lists them): the tabs, the buttons,
-// the bell and "+ new"; the focused pane's header (header.js headerControls); the
+// walks three rows (nav.ts STRIP_KEYS; ? lists them): the tabs, the buttons,
+// the bell and "+ new"; the focused pane's header (header.ts headerControls); the
 // shown tab's parked chips. j / ↓ past the last row, esc or q: back to the
 // pane; h / ← past the first tab: the sidebar. The header, the chips and the
-// bell and "+ new" draw the cursor from shared(nav.js CURSOR).
+// bell and "+ new" draw the cursor from shared(nav.ts CURSOR).
 
 import { div, svg, image } from "gpui-kit";
 import type { Color, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, MouseMoveEvent } from "gpui-kit";

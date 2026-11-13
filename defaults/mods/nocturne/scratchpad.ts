@@ -5,7 +5,7 @@
 // repository and shared by its worktrees (scratch.ts); the editor knows it by
 // its path and saves it as it's typed.
 //
-// Finding the note awaits git, so it runs in sky.js's command loop (the
+// Finding the note awaits git, so it runs in sky.ts's command loop (the
 // sidebar, alive as long as the layout): the palette and the "+ new" menu
 // close their own overlay on a pick, and a promise whose copy is gone never
 // settles (gpui-kit's scheduler leaves it pending). They run the command

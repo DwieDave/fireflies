@@ -221,7 +221,7 @@ export interface NewMenuOpening {
  *  strip's "+ new" (`at`, kit.ts dropBelow; else under the pointer), dead
  *  center from a key (cmd-n), where the pointer could be anywhere. A dialog
  *  also takes the keyboard, so esc and the menu's keys reach it.
- *  `wasOpen`: "+ new" was lit when pressed (tabs.js tool): the press closed
+ *  `wasOpen`: "+ new" was lit when pressed (tabs.ts tool): the press closed
  *  the menu already, or closes it now; either way it stays closed. */
 export function openNewMenu({ centered = false, at = null, wasOpen = false }: NewMenuOpening = {}): void {
   const open = readShared(shared, OPEN_KEY, null);

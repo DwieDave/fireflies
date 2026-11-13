@@ -5,9 +5,9 @@
 // skin (lazygit.yml) over the lazygit config: moonfly colors, square 1-bit
 // borders, a dither spinner and moonfly git colors. A space on another
 // machine runs plain `nocturne-lazygit` from its PATH (else lazygit).
-// Docked, it's a terminal pane whose header (header.js) gives it the
+// Docked, it's a terminal pane whose header (header.ts) gives it the
 // dithered Nocturne chrome.
-// Nothing opens it any more (the git window, git.js, took its place); a lazygit
+// Nothing opens it any more (the git window, git.ts, took its place); a lazygit
 // pane or float started by hand still gets its header and float bar.
 
 import { spaces, panes, run, exec, appHome } from "herdr";

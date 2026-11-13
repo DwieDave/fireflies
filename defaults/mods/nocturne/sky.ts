@@ -1,15 +1,15 @@
 // The sidebar: a dithered night sky.
 //   moon     its lit share is the share of agents at rest (idle or done);
 //            new moon while everything works, full when the herd is quiet
-//   spaces   one row each (spaces.js), with inline create / rename / delete
+//   spaces   one row each (spaces.ts), with inline create / rename / delete
 //            spaces in a repo's worktrees sit indented under its main one
-//   usage    Claude's or Codex's 5-hour and weekly limits (usage.js), foldable,
+//   usage    Claude's or Codex's 5-hour and weekly limits (usage.ts), foldable,
 //            at the foot; the hills rest on top of it
 //   meadow   every agent is a firefly: blocked blinks red at the top,
-//            working drifts amber, done glows green below them (kit.js
+//            working drifts amber, done glows green below them (kit.ts
 //            agentRank), idle rests in the grass; how each flies and
-//            glows is flight.js;
-//            pinned ones (pins.js) sit above them all in a glass jar at
+//            glows is flight.ts;
+//            pinned ones (pins.ts) sit above them all in a glass jar at
 //            the top, in the order pinned, status and all; the glass
 //            glints when one flies in and breathes red while one needs you;
 //            other pinned panes (web, editor, files, a shell) sit as tiles
@@ -18,12 +18,12 @@
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
 //            nocturne.agent-next / agent-prev walk the agents, then the shelf's
-//            tiles, wrapping (walk.js; the layout's cmd-] / cmd-[);
-//            its pane's name leads (kit.js givenName, else the agent's own, "Claude Code";
+//            tiles, wrapping (walk.ts; the layout's cmd-] / cmd-[);
+//            its pane's name leads (kit.ts givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
 //            (esc: keep, empty: the agent's name back);
-//            right-click for a menu: focus, rename, delete its tab (menu.js)
+//            right-click for a menu: focus, rename, delete its tab (menu.ts)
 //   clock    the time and date beside the moon
 //   fold    « at the top (or cmd-b / cmd-s) folds the sky into a rail: the
 //            moon and the hour, a row per space (its first letters; the shown
@@ -33,10 +33,10 @@
 //            again. On macOS the rail is wide enough for the window buttons
 //            at any zoom.
 //   glow     the pointer carries a firefly's light over the sky and the rail
-//            (glow.js): a nested view, so following it never redraws the sky
+//            (glow.ts): a nested view, so following it never redraws the sky
 //   keys     the sidebar takes the keyboard from pane.go (cmd-alt-left from
 //            the leftmost pane) or nocturne.sidebar (layout.focus): a cursor
-//            walks every control (nav.js SIDEBAR_KEYS; ? lists them), the
+//            walks every control (nav.ts SIDEBAR_KEYS; ? lists them), the
 //            hint line at its foot says the main ones; l / → goes back to
 //            the panes, esc / q to the pane it came from.
 
@@ -270,7 +270,7 @@ const OPEN_DEFAULT = 252;
 // How long a fold gets to land before its width is checked (ms).
 const SETTLE = 350;
 
-// The jar of pinned fireflies (pins.js) at the top of the sky: where its
+// The jar of pinned fireflies (pins.ts) at the top of the sky: where its
 // first lane starts under the lid, the glass under its last, the clear sky
 // before the next firefly (layout px).
 const JAR = { at: 4, top: 38, bottom: 12, gap: 10, min: 112 } as const;
@@ -307,7 +307,7 @@ const PAIR_REACH: RailReach = { x: 1, y: 1 };
 const GLINT = 1800;
 
 // The shelf at the jar's foot, where pinned panes that aren't agents sit as
-// tiles (pins.js onShelf): a tile's size and the gap between tiles, the
+// tiles (pins.ts onShelf): a tile's size and the gap between tiles, the
 // room above it under the last firefly (clear of its halo: air before the
 // board), its dithered board, the board's gap to the tiles, the caption line
 // under them (its gap above, its height); SHELF_PAD (above) is its inset from

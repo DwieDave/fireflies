@@ -7,7 +7,7 @@
 //
 // A job: { at, name, watch?, steps: [{ hc: argv, start? }] }, in order. A
 // `start` step is `hc run --json`: its address is followed until it ends
-// (scripts.js trackRuns) and, with `watch`, floated over the tab; when it
+// (scripts.ts trackRuns) and, with `watch`, floated over the tab; when it
 // fails, a toast says why.
 
 import { hc, run, shared, setShared, notify } from "herdr";

@@ -1,16 +1,16 @@
 // The dock: one space of this app's own, tied to no folder, for panes that
 // belong to no project (a web page you keep open, a docs pane, a shell in ~).
-// Its panes are pinned to the jar's shelf (pins.js), so a tile goes to them
+// Its panes are pinned to the jar's shelf (pins.ts), so a tile goes to them
 // from any space.
 //   made     on first use (the pane menu's "Dock", "New web pane in the dock"
 //            from the palette or the shelf's + tile), with
 //            space.new {name: "dock", folder: ~}: its terminals start in ~,
-//            and kit.js spaceFolder answers null for it, so the git and GitHub
+//            and kit.ts spaceFolder answers null for it, so the git and GitHub
 //            windows never see a repo there, wherever its shells cd to
 //   kept     its id in shared DOCK_KEY; the core keeps the space across restarts.
 //            Closed (`herdr-app do space.close`), the next use makes a new one.
 //   guarded  its menu has no Change folder, New worktree or Delete, and the
-//            sidebar's f / w / d skip it (spaces.js)
+//            sidebar's f / w / d skip it (spaces.ts)
 // Space ids come back from space.new only through spaces(): the record holds
 // { making: { at, before, next } } until the sky sees a new space named
 // "dock" that wasn't there before (adopt()), then { id }; `next` is what to

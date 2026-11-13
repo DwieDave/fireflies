@@ -1,4 +1,4 @@
-// The sky's usage section, at its foot below the hills (sky.js lifts them to
+// The sky's usage section, at its foot below the hills (sky.ts lifts them to
 // make room): the picked provider's limits (limits.ts) in two small rows.
 //
 //   the switch   the providers' logos in the eyebrow (Claude, Codex); the lit
@@ -210,7 +210,7 @@ export class UsageSection {
   /** The folded rail's usage: one small meter per window (its name, what's
    *  left, the path with the clock's plus). No art and no provider switch:
    *  those live in the open sidebar; the tooltip names the provider. Click:
-   *  the usage pane. Its height lifts the rail's hills (sky.js). */
+   *  the usage pane. Its height lifts the rail's hills (sky.ts). */
   rail(t: Theme, nav?: Nav): Element {
     const d = reading();
 
@@ -247,7 +247,7 @@ export class UsageSection {
     return wk ? withSession.child(meter("usage-rail-wk", wk, windowName(wk, "week"))) : withSession;
   }
 
-  /** `nav` (sky.js): registers a control with the keyboard's cursor, true while it's on it. */
+  /** `nav` (sky.ts): registers a control with the keyboard's cursor, true while it's on it. */
   render(t: Theme, nav?: Nav): Element {
     const d = reading();
     const note = usageNote();
@@ -271,7 +271,7 @@ export class UsageSection {
         .when(folded && Boolean(nums), (el) => el.child(div().flex_none().text_size(11).text_color(t.muted).child(nums))))
       .child(this.switcher(t, nav));
 
-    // Its height lifts the sky's hills (sky.js), so the landscape rests on it.
+    // Its height lifts the sky's hills (sky.ts), so the landscape rests on it.
     const box = v_flex().id("usage").pt(4).pb(8).flex_none().child(head)
       .on_size_change((size: Size, cx: Context) => {
         if (size.height !== this.height) {

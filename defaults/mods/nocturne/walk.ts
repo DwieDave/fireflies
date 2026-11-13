@@ -1,8 +1,8 @@
 // The walk: nocturne.agent-next / nocturne.agent-prev (the layout's cmd-] /
 // cmd-[ in place of the core's agent.next / agent.prev). It goes through the
-// agents in the order the sidebar shows them (pinned ones first, kit.js
+// agents in the order the sidebar shows them (pinned ones first, kit.ts
 // sortedAgents), then on through the jar's shelf (every tile in shelf order:
-// web pages, editors, files, plain shells; pins.js jarItems + onShelf), then
+// web pages, editors, files, plain shells; pins.ts jarItems + onShelf), then
 // back to the first agent; backwards the other way round.
 // Each shelf item is a stop of its own, also when several share a pane (a pin
 // of one web tab): its jar key tells them apart.
@@ -24,7 +24,7 @@ export interface WalkFocus {
  * The walk's stops, in order: `agents` (addresses, the sidebar's order), then
  * `shelf` (jar items on the shelf, in shelf order).
  *   { key: address, agent: address }   an agent
- *   { key: jar key, item }             a shelf item (goes through kit.js goToPin)
+ *   { key: jar key, item }             a shelf item (goes through kit.ts goToPin)
  * An agent pinned as a shelf terminal too is walked once, as an agent.
  */
 export function walkStops(agents: readonly string[], shelf: readonly JarItem[]): WalkStop[] {

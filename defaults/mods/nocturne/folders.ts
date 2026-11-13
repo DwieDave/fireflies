@@ -1,6 +1,6 @@
 // Where something opened "here" looks: the folders worth trying, best first.
-// No herdr imports at run time, so every opener (picker.js, files.js,
-// panels.js) and its tests can use it as is.
+// No herdr imports at run time, so every opener (picker.ts, files.ts,
+// panels.ts) and its tests can use it as is.
 //
 // A space that isn't attached keeps the folder it was made in, even after
 // that folder is moved or deleted; a mod pane (the editor, the web pane) has

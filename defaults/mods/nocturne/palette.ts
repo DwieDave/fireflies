@@ -1,12 +1,12 @@
 // The command palette in Nocturne's look (the layout's palette_mod, on the
 // DwieDave fork): the shipped palette's commands, fuzzy ranking and recents,
-// drawn square and 1-bit like popup.js. The row under the cursor sits on a
+// drawn square and 1-bit like popup.ts. The row under the cursor sits on a
 // dithered band with a blue edge; groups are eyebrows; keys are plain glyphs.
 // Enter runs, ↑/↓ (ctrl-n/p, ctrl-j/k, page up/down) move, Esc closes. Places (spaces, tabs) stay
 // in the picker.
-// The "Open" group holds Nocturne's own panels (panels.js): each beside the
+// The "Open" group holds Nocturne's own panels (panels.ts): each beside the
 // focused pane (or where it always goes) and in a new tab, plus the sidebar fold.
-// "Find" is the file picker and grep (picker.js). The focused pane's own
+// "Find" is the file picker and grep (picker.ts). The focused pane's own
 // commands (an editor's, a web pane's, ...) lead the list while it's focused
 // (PANE); the git and GitHub windows' while they're open.
 // Every command a person can trigger is either an entry here or in OUT with
@@ -564,7 +564,7 @@ export const OUT = {
   "image.open": "needs a path (the old name of preview.open)",
   "space.folder": "needs a folder: Change this space's folder… asks for it",
   "tab.unsettle": "needs a put-away tab: showing it from the picker brings it back",
-  // Nocturne's own (sky.js, tabs.js) and its mods' internal commands.
+  // Nocturne's own (sky.ts, tabs.ts) and its mods' internal commands.
   "nocturne.focus": "internal: overlay.focus and pane.go hand a block the keyboard with it",
   "nocturne.lazygit": "the old name of nocturne.git (Git)",
   "nocturne.scripts-grant": "the failed nix-darwin toast's click (App Management): nothing to grant otherwise",

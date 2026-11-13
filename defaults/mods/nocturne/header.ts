@@ -1,15 +1,15 @@
 // A pane's header: name and folder, then a dithered band that fills the
 // rest; the band turns moonfly blue on the pane with the keyboard. Hover
 // shows text size (− / +, the % resets), float, split, even out (▦, with
-// more than one pane: equalize.js), gridify (with more than two:
-// gridify.js), park (pane.park, while another pane stays in place), zoom
+// more than one pane: equalize.ts), gridify (with more than two:
+// gridify.ts), park (pane.park, while another pane stays in place), zoom
 // and close; a
-// right-click opens the pane's menu (menu.js: rename, split, zoom, move to
+// right-click opens the pane's menu (menu.ts: rename, split, zoom, move to
 // another tab or a new one, close). Props from the app: { pane, terminal }.
-// A terminal pane goes by the name a person gave it (kit.js givenName), else
+// A terminal pane goes by the name a person gave it (kit.ts givenName), else
 // its agent's or program's; double-click the name, or the menu's "Rename",
 // to name it in place (enter: keep, esc: leave it, empty: the default back).
-// A lazygit pane (lazygit.js) gets its own: a git mark, the branch, and a
+// A lazygit pane (lazygit.ts) gets its own: a git mark, the branch, and a
 // band that fades out in steps toward ahead/behind and the changed files.
 //
 // Narrow panes give way in order, never overlapping: the folder shrinks
@@ -19,10 +19,10 @@
 // below. Close is always the rightmost, ⋯ right before it. The name and the
 // pip stay.
 //
-// Keys: the tab strip's cursor (tabs.js, nav.js) walks the focused pane's
+// Keys: the tab strip's cursor (tabs.ts, nav.ts) walks the focused pane's
 // header as its second row: the name (rename), every button here (the
 // header shows them all while the cursor is in it, the one under it in a
-// blue ring), ⋯ and close; it says where through shared(nav.js CURSOR).
+// blue ring), ⋯ and close; it says where through shared(nav.ts CURSOR).
 
 import { div, svg } from "gpui-kit";
 import type { Context, Element, Size } from "gpui-kit";
@@ -39,7 +39,7 @@ import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
 
-/** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.js). */
+/** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {
   readonly pane: string | null;
   readonly terminal: string | null;
@@ -97,7 +97,7 @@ export function mark(t: Theme, p: HeaderPane): Element {
 /** What a mark is drawn from: a mod, a program. */
 type Marked = Pick<HeaderPane, "program" | "mod">;
 
-/** The svg of a pane's mark (mark()): also the jar's for a pinned pane (sky.js). */
+/** The svg of a pane's mark (mark()): also the jar's for a pinned pane (sky.ts). */
 export function markPath(p: Marked | null | undefined): string {
   const logo = LOGO.get(p?.program?.key ?? "");
 
@@ -134,7 +134,7 @@ function viewerName(p: HeaderPane): string | null {
 
 const CHROME = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
-/** The pane menu (menu.js), as on a right-click (`centered`: from the keyboard). */
+/** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard). */
 export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false): void {
   // 260: its rows' names beside the longest keys ("Move right" by cmd-alt-shift-]).
   openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered });
@@ -234,7 +234,7 @@ export default class Header {
     cx.timer.every(4000, (later) => this.poll(later));
   }
 
-  /** The pane this header is for (peek.js describes a pane-less terminal instead). */
+  /** The pane this header is for (peek.ts describes a pane-less terminal instead). */
   target(): HeaderPane | null {
     const p = props();
     const pane = isHeaderProps(p) ? p.pane : undefined;
@@ -366,7 +366,7 @@ export default class Header {
       .on_click(() => run("pane.focus", { pane: p.pane }));
   }
 
-  /** The pane menu (menu.js), as on a right-click: rename, split, zoom, even out, move, close. */
+  /** The pane menu (menu.ts), as on a right-click: rename, split, zoom, even out, move, close. */
   menu(p: HeaderPane): void {
     paneMenu(p);
   }
@@ -419,7 +419,7 @@ export default class Header {
     if (isLazygit(p)) return this.buttons(t, this.lazygit(t, p), p);
 
     // The pane menu's Rename is answered just after this render, from a task:
-    // a render can't start the field and draw again (sky.js does the same).
+    // a render can't start the field and draw again (sky.ts does the same).
     const ask = readShared(shared, NAME_ASK, null);
 
     if (ask && ask.at !== this.nameAsked) {

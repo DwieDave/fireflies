@@ -1,4 +1,4 @@
-// The pointer's own firefly (sky.js): while the pointer is over the sidebar,
+// The pointer's own firefly (sky.ts): while the pointer is over the sidebar,
 // open or folded, it carries a firefly's light. A small dithered diamond of a
 // halo (art/fireglow-halo.svg) around a heart, a pixel + at the pointer's
 // tip, in the theme's ansi11, a firefly's yellow-green that no status uses;
@@ -13,13 +13,13 @@
 //            only the dim + and the halo show. The blinks are a few frames
 //            (PULSE_FRAMES) the glow's own view steps through on timers, as a
 //            sprite would: a native loop can't swap the heart's shape.
-//   calm     (flight.js: the window isn't in front, or less motion is asked
+//   calm     (flight.ts: the window isn't in front, or less motion is asked
 //            for) it holds still: the resting +, no blinks, no trail
 //   leaves   when the pointer leaves the sidebar it fades out
 //
 // It is a nested view (cx.new): a move rebuilds only this layer (about 0.1 ms
 // of script), never the sky (about 4 ms), and moves inside one 2 px cell send
-// nothing (sky.js pointer()). A blink's frames rebuild it too, nine times a
+// nothing (sky.ts pointer()). A blink's frames rebuild it too, nine times a
 // PULSE, and never while it is calm, fading or gone.
 
 import { View, div, svg } from "gpui-kit";
@@ -191,7 +191,7 @@ export function drawGlow(t: Theme, p: GlowProps): Element {
 /** The glow's props as handed over: proven, else none. */
 const glowProps = (props: Props | undefined): GlowProps => (isGlowProps(props) ? props : {});
 
-/** The nested view (sky.js makes it with cx.new and feeds it set_props); it
+/** The nested view (sky.ts makes it with cx.new and feeds it set_props); it
  *  steps through the pulse's frames on timers while it shows and isn't calm. */
 export class Fireglow extends View {
   p: GlowProps = {};

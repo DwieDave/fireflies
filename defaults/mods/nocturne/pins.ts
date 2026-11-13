@@ -17,7 +17,7 @@
 //                                tab id, "web", "web-2", …, kept across restarts)
 // A record without `tab` pins the whole pane; with one, that tab alone: a tile
 // of its own, named by the tab's title (browser.tab-titles), going to
-// the pane and showing that tab (kit.js goToPin). One pane may have its own pin
+// the pane and showing that tab (kit.ts goToPin). One pane may have its own pin
 // and several tab pins at once; the browser drops a tab's pin when the tab closes.
 // It ends when the pane closes (tidy(): missing from panes() for GONE_AFTER ms);
 // a parked pane stays pinned. Going to it brings a parked pane back.

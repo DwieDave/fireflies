@@ -1,4 +1,4 @@
-// How a firefly flies and glows, by status (sky.js draws them).
+// How a firefly flies and glows, by status (sky.ts draws them).
 //
 //   working   drifts on a slow looping path: two swings at unrelated
 //             periods, so the path keeps turning (a lazy figure eight that
