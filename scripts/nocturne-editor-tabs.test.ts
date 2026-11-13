@@ -1056,6 +1056,10 @@ test("the tab's menu: a right-click on a tab, its entries, j / k / enter and let
   p.openTabMenu(cx(), 1);
   p.tabMenuKeyDown(keyc("h"), cx());
   expect(order(p)).toEqual(["n.md", "a.rs"]);
+  // Another tab shown (a file opened, a step) closes it.
+  p.openTabMenu(cx(), 0);
+  p.stepTab(1, cx());
+  expect(p.tabMenu).toBe(null);
   // esc closes it; a click on an entry runs it.
   p.openTabMenu(cx(), 0);
   p.tabMenuKeyDown(keyc("escape"), cx());

@@ -441,6 +441,8 @@ export default class EditorPane extends View {
         this.mode = null;
         this.asking = null;
         this.keysShown = false;
+        // A tab's menu belongs to the tab it opened on: another one shown closes it.
+        this.tabMenu = null;
       }
       this.cur = d;
       this.vimSettled(this.vimOn());
