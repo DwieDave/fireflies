@@ -2232,7 +2232,9 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
 - `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
   parsed from `exec` or a file are `unknown`: another mod or an older version
   may have written them, so prove what they are before using them (a type
-  guard: `isPane(x)`), never with `as`.
+  guard: `isPane(x)`), never with `as`. `mods/pip/guard.ts` is a small kit
+  of them to copy (`object`, `arrayOf`, `literal`, `parseJson`, typed
+  `shared()` keys, records keyed by data read as a `Map`).
 - Size: put `.id("root").on_size_change((size, cx) => { this.size = size; cx.notify(); })`
   on the root `div()`, `h_flex()` or `v_flex()`. It reports `{width, height}`
   in logical pixels after the first layout and whenever the size changes,

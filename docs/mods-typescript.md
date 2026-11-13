@@ -7,7 +7,8 @@ Nothing is compiled and nothing is checked at run time: the checking is
 mod meets and the steps to convert one. The shipped mods to convert are
 `nocturne` and the ones listed in `scripts/nocturne-mods.ts` (once
 `nocturne-<name>`). `pip` and `usage` (with `nocturne/limits.ts`) are
-converted: read them as the pattern.
+converted, and so are the files the mods share (below): read them as the
+pattern, preview's `viewer.ts` for a whole view.
 
 ## The standard
 
@@ -61,9 +62,9 @@ the exact versions in `package.json` (`bun install` puts them in
 2. Imports name the file as it is: `from "./kit.ts"`, also from a `.js` file
    that stays. Types come in with `import type { X }` (a plain import of a
    type stays in the code and fails at load: `verbatimModuleSyntax` reports it).
-3. Copy `guard.ts` from `pip/` if the mod reads anything from
-   outside (it will). Copy `keyhelp.d.ts` beside `keyhelp.ts` if it imports
-   keyhelp.
+3. `guard.ts` is already in the mod (nocturne and each of its mods carry
+   it), and so are the shared files below, already TypeScript: import them
+   as they are.
 4. Type it. The view: fields with initializers instead of assignments in
    `init` (`playing = true;`, `handle: FocusHandle | null = null;`), methods
    that override `View`'s marked `override` (`init`, `render`, `close`), `init`'s
@@ -121,11 +122,33 @@ version in another shape reads as the fallback. `readShared` takes `shared`
 as an argument (guard.ts imports nothing at run time), which is also how
 `limits.ts` reads through its test seam (`host.shared`).
 
+Two more shapes, both in guard.ts:
+
+- A record keyed by data (a slot, a file name): `sharedMapKey(name, entryGuard)`,
+  `readSharedMap(shared, KEY)` (a `ReadonlyMap`, entries in another shape left
+  out), `writeSharedMap(setShared, KEY, map)`; a JSON file of that shape,
+  `parseJsonMap(text, entryGuard)`. Examples: `editor.paths`
+  (editor-route.ts `PATHS_KEY`), the preview's titles, the scratchpad's
+  index.json.
+- A list other mods append to: `sharedListKey(name, itemGuard)`,
+  `readSharedList(shared, KEY)`: one entry in another shape is left out, not
+  the whole list (follow.ts `CHANGES_KEY`, the files pane's moves).
+
+A record another mod reads by its old string name keeps the name exported
+as a string beside its typed key (`OPEN = "editor.open"`, `OPEN_KEY`), so the
+`.js` files that still call `shared(OPEN)` keep working until they convert.
+
 ### props(), native views, exec, files
 
 - `props()`: a guard for the props the mod is opened with (above).
 - `nativeViewCall()` answers and `nextNativeViewEvent()` text: a guard,
-  `parseJson(text, isEvent)`; `undefined` means skip it.
+  `parseJson(text, isEvent)`; `undefined` means skip it. viewer.ts's
+  `ask(action, guard)` is the pattern: the answer proven or null, and
+  `act(action)` when it isn't read.
+- A nested view's props (the host passes them, `init`/`update` get
+  `Props | undefined`): a guard over them; a field a `.js` host may leave
+  `undefined` is `oneOf(isString, isNull, isUndefined)` until the host
+  converts (viewer.ts `isViewerProps`).
 - `exec`: `r.stdout` is a string; JSON in it goes through `parseJson`
   (`limits.ts`: the usage endpoints' answers, the machine's record file).
 - `terminals()` is herdr-core's listing, `readonly unknown[]`: a guard for the
@@ -144,23 +167,43 @@ as an argument (guard.ts imports nothing at run time), which is also how
 | `xs.filter(f).map(g)` | `xs.flatMap((x) => (f(x) ? [g(x)] : []))` |
 | `declare field: T` set in `init` | a field with an initializer, `T \| null` when there is no value yet |
 | `{ then: … }` in props | another name (`then` makes an object a thenable) |
-| a `.js` helper's inferred types (`list = []` reads as `never[]`) | a `.d.ts` beside it (`keyhelp.d.ts`) until it converts |
+| `x.list.filter(Boolean)` mixing data and absence | `flatMap` with a guard, or an explicit `string \| null` and a test |
+| a lookup table `{ a: [...], b: [...] }` read by a key from data | a `Map` (`CALLOUTS.get(type)`), or a `switch` when the keys are a union (kinds.ts `tag`) |
+| a parameter `e: unknown` in a `.catch` | name it `cause` (anti-slop allows it): `(cause: unknown) => …` |
+| `a?.b?.c` on a value of known type | the type says what's there; keep `?.` for what really may be missing |
 
 ### Shared copies
 
 A mod can't import another mod's files, so a shared file is copied into
-every mod that uses it, byte for byte, and a test fails when copies drift:
+every mod that uses it, byte for byte, and a test fails when copies drift.
+All of them are TypeScript now; each one's exported types are the contract
+the mods build on (read the file's top and its `export type`s):
 
-- `guard.ts`, `keyhelp.d.ts`: `scripts/mods-typescript.test.ts` (it also
-  checks that every mod importing guard.ts has the copy).
-- `limits.ts` (nocturne, usage): `scripts/usage-limits.test.ts`.
-- `keyhelp.ts` (14 mods): `scripts/keyhelp.test.ts`. It stays `.js` until
-  the migration converts all its copies in one commit; then `keyhelp.d.ts`
-  goes, the test's paths turn `.ts`, and each importer's
-  `from "./keyhelp.ts"` becomes `"./keyhelp.ts"`.
+| file | copies | test | what it types |
+|---|---|---|---|
+| `guard.ts` | nocturne and all 16 mods | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
+| `keyhelp.ts` | 14 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
+| `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
+| `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
+| `viewer.ts`, `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree | `preview-shared.test.ts` | `ViewerProps`; `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
+| `markdown.ts` | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
+| `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |
+| `scratch.ts` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry`, `ScratchIo`, `Autosave`, `AutosaveState` |
+| `limits.ts` | nocturne, usage | `usage-limits.test.ts` | the usage windows |
 
-Convert a shared file in all its copies at once, edit one, copy it over the
-others (`for m in ...; do cp ...; done`), and rename the paths in its test.
+Not copies (same name, different file per mod): `kit.js`, `logic.js`,
+`tabs.js`, `graph.js`, git's `keys.js` and `kinds.js`. One part of a kit is
+held equal: the toolbar's ground and hover in nocturne's and notifications'
+`kit.js` (`nocturne-tab-seam.test.ts` compares the text from
+`// ---- the toolbar's ground` to the end of `toolHover`): type it the same
+way, word for word, in both.
+
+To change a shared file, edit one, copy it over the others
+(`for m in ...; do cp ...; done`), run its test. Tests that read a mod's
+source and evaluate it (`load()` in preview.test.ts and the like) pass a
+`.ts` file through `scripts/mod-source.ts` (`asJs`) and put guard.ts's
+exports in their scope (`guard`); a view made in a test is `new View()`, not
+`Object.create(View.prototype)`, so its fields get their initial values.
 
 ## Common errors
 
