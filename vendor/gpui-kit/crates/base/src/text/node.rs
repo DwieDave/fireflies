@@ -2946,17 +2946,20 @@ struct TableColumn {
 }
 
 /// Horizontal padding of a table cell: `px_3` unless `style.table_cell`
-/// sets it.
+/// sets it. `px_3` is in rems, so it grows with the window's rem size (an
+/// app's zoom) while the measured widths carry `CELL_PAD_PX`, its size at
+/// the default 16px rem.
 fn table_cell_padding_x(style: &TextViewStyle, rem_size: Pixels) -> f32 {
     let padding = &style.table_cell().padding;
     let side = |length: Option<DefiniteLength>| match length {
         Some(DefiniteLength::Absolute(length)) => f32::from(length.to_pixels(rem_size)),
-        _ => CELL_PAD_PX / 2.,
+        _ => f32::from(rems(CELL_PAD_REMS).to_pixels(rem_size)),
     };
     side(padding.left) + side(padding.right)
 }
 
-const CELL_PAD_PX: f32 = 24.0; // px_3 horizontal padding
+const CELL_PAD_PX: f32 = 24.0; // px_3 horizontal padding at a 16px rem
+const CELL_PAD_REMS: f32 = 0.75; // px_3, one side
 const CELL_MIN_PX: f32 = 48.0;
 const CELL_BORDER_PX: f32 = 1.0; // border_r_1 drawn by every column but the last
 
@@ -4496,6 +4499,27 @@ mod tests {
                 });
             }
         });
+    }
+
+    /// The cell's `px_3` padding is in rems: at an app's zoom (a larger rem)
+    /// the column must make room for the padding the cell draws, or its last
+    /// word breaks onto a line of its own ("uni|t").
+    #[test]
+    fn table_cell_padding_follows_the_rem_size() {
+        let style = TextViewStyle::default();
+        assert_eq!(table_cell_padding_x(&style, px(16.)), CELL_PAD_PX);
+        // An app's rem at zoom 0.9, 1.0 and 1.7 of a 13px interface font.
+        for (rem, padding) in [(11.7, 17.55), (13., 19.5), (22.1, 33.15)] {
+            let got = table_cell_padding_x(&style, px(rem));
+            assert!(
+                (got - padding).abs() < 0.001,
+                "rem {rem}: padding {got}, the cell draws {padding}"
+            );
+        }
+        // A caller's own absolute padding is taken as it is.
+        let style = TextViewStyle::default()
+            .with_table_cell(StyleRefinement::default().px(px(5.)));
+        assert_eq!(table_cell_padding_x(&style, px(22.1)), 10.);
     }
 
     #[test]
