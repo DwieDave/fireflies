@@ -1,5 +1,5 @@
-// Pictures in a Markdown file (editor's images.js, live.js's image
-// unit, rendered.js's image block, main.js's paste and pick): an image line
+// Pictures in a Markdown file (editor's images.ts, live.ts's image
+// unit, rendered.ts's image block, main.js's paste and pick): an image line
 // drawn as its own block (a broken path says so, a web one is drawn by the
 // Markdown view, the copy for drawing made once), pasting a screenshot or a
 // copied image file (cmd-v, the editors' paste-without-text, vim's p) saves it
@@ -45,7 +45,7 @@ const FIXTURE = `${import.meta.dir}/fixtures/editor/moth.png`;
 let clip: { text?: string; image?: boolean; file?: string } = {};
 let picked: string | null = null;
 const ran: [string, string[]][] = [];
-/** herdr's exec, faked for what images.js and markdown.ts run: the clipboard (osascript), the
+/** herdr's exec, faked for what images.ts and markdown.ts run: the clipboard (osascript), the
  *  file into its place (sh paste-image), the cache copy (sh md-image), mkdir. Real files. */
 async function fakeExec(cmd: string, args: string[]) {
   ran.push([cmd, args]);
@@ -200,9 +200,9 @@ let store: Record<string, string> = {};
 (globalThis as any).localStorage = { getItem: (k: string) => store[k] ?? null, setItem: (k: string, v: string) => { store[k] = v; } };
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.js");
-const { KINDS } = await import("../defaults/mods/editor/rendered.js");
-const images = await import("../defaults/mods/editor/images.js");
-const live = await import("../defaults/mods/editor/live.js");
+const { KINDS } = await import("../defaults/mods/editor/rendered.ts");
+const images = await import("../defaults/mods/editor/images.ts");
+const live = await import("../defaults/mods/editor/live.ts");
 
 let later: [number, (cx: any) => void][] = [];
 function cx(): any {
