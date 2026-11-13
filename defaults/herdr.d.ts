@@ -613,6 +613,9 @@ export interface NativeViewProps {
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
    *  Changing only `zoom` zooms the page in place; it doesn't reload. */
   zoom?: number;
+  /** Any kind: a revision of the content the mod keeps (the preview: the file's stamp). The view
+   *  compares its props as a whole, so a new `rev` loads the same `path` again (a file changed in place). */
+  rev?: string;
 }
 /** HUP: a real macOS view (WKWebView, PDFView, AVPlayerView, QLPreviewView) placed where this element
  *  is drawn, inside the window. Children draw underneath (shown while it loads or steps aside for a

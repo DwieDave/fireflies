@@ -184,11 +184,11 @@ function modCommands(): [string, string, string?][] {
   const out: [string, string, string?][] = [];
   const dirs = ["nocturne", ...NOCTURNE_MODS];
   for (const d of dirs) {
-    for (const f of readdirSync(root + `defaults/mods/${d}`).filter((x) => x.endsWith(".js"))) {
+    for (const f of readdirSync(root + `defaults/mods/${d}`).filter((x) => /\.(js|ts)$/.test(x) && !x.endsWith(".d.ts"))) {
       const text = read(`defaults/mods/${d}/${f}`);
       if (!text.includes("nextCommand()")) continue;
       // file-tree' copy of the preview's viewer: its commands are the preview's (embedded, it takes none).
-      if (d !== "preview" && f === "viewer.js" && text === read(`defaults/mods/preview/${f}`)) continue;
+      if (d !== "preview" && f === "viewer.ts" && text === read(`defaults/mods/preview/${f}`)) continue;
       for (const [, c] of text.matchAll(/(?<!typeof )\bc === "([a-z0-9_-]+)"/g)) out.push([`${d}.${c}`, `defaults/mods/${d}/${f}`]);
     }
   }

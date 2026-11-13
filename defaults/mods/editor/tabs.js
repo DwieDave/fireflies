@@ -8,7 +8,7 @@
 // viewer: a picture, a PDF, a table).
 
 import { basename, dirname } from "./logic.js";
-import { kindOf } from "./kinds.js";
+import { kindOf } from "./kinds.ts";
 
 /** Where a file opened in the pane goes: the index of its tab when it is
  *  open already, else a new tab right after the shown one. -> { index, added } */

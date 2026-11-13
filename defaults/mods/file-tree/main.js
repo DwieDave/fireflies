@@ -120,7 +120,7 @@ import { props, theme, settings, exec, run, panes, spaces, terminals, focused, w
 import { keyColumn, parent, filterDefaults, parseIgnored, isIgnored, isHidden, lists, fuzzy, grouped, nvimLaunch, menuItems, marks, newNav, navGo, navBack, navForward, lensLayout, toolbarFit, KEYS, ADDS, lensStops, lensStep, isHtml, fileUrl, webOpen, lookSide, lookSize, clampShare, dragShare, newLook, folderFacts, LOOK_STEP, DIVIDER, rangePaths, topLevel, deleteManyQuestion, dropRefusal, withChanges, cutItems, setMenuItems, treeTop, ROW_H, rowIndexAt, base, dirOf, join, relTo, resolveName, renameTarget, moveRefusal, stemRange, deleteQuestion, neighbour, movedFolders, parentsOf, cleanError, PROBE, OPS } from "./logic.js";
 import { keysHint, keysView, keysKey, SECTION } from "./keyhelp.ts";
 // The preview split: the preview pane's own viewer (a copy of preview/viewer.js).
-import Viewer from "./viewer.js";
+import Viewer from "./viewer.ts";
 
 const ROW = 22;
 const PER_FOLDER = 500, TOTAL = 5000;

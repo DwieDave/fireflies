@@ -70,10 +70,10 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 
-const kinds = await load("preview/kinds.js");
-const imageLogic = await load("preview/image.js", kinds);
-const T = await load("preview/table.js");
-const D = await load("preview/diff.js");
+const kinds = await load("preview/kinds.ts");
+const imageLogic = await load("preview/image.ts", kinds);
+const T = await load("preview/table.ts");
+const D = await load("preview/diff.ts");
 const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -90,7 +90,7 @@ const nativeHerdr = {
   },
   nextNativeViewEvent: () => new Promise(() => {}),
 };
-const keyLogic = await load("preview/keys.js");
+const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
 const { kindOf, sniffKind, route, rasterArgv, pageCount, duration, siblings, tag, noun, previewable } = kinds;
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
@@ -134,8 +134,8 @@ test("next / previous stays with the same kind (audio and video together)", () =
 });
 
 async function nativeView(extra: Record<string, any>) {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   Object.assign(view, {
     on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 900, height: 600 }, names: [], copied: 0, gen: 1,
     note: null, sy: 0, sx: 0, cursor: 0, ...extra,

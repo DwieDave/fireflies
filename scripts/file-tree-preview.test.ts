@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { asJs, guard } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.js, logic.js) and the
-// preview pane's viewer it mounts (its copy of preview/viewer.js),
+// preview pane's viewer it mounts (its copy of preview/viewer.ts),
 // with stand-ins for the app's modules (as file-tree.test.ts).
 class Element {
   calls: [string, any[]][] = [];
@@ -82,13 +82,13 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 const F = "file-tree";
-const kinds = await load(`${F}/kinds.js`);
-const imageLogic = await load(`${F}/image.js`, kinds);
-const { parse: parseTable, ...tableRest } = await load(`${F}/table.js`);
-const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.js`);
+const kinds = await load(`${F}/kinds.ts`);
+const imageLogic = await load(`${F}/image.ts`, kinds);
+const { parse: parseTable, ...tableRest } = await load(`${F}/table.ts`);
+const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
 const keyhelp = await load(`${F}/keyhelp.ts`);
-const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.js`)), ...keyhelp };
-const { default: Viewer } = await load(`${F}/viewer.js`, shared);
+const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
+const { default: Viewer } = await load(`${F}/viewer.ts`, shared);
 const logic = await load(`${F}/logic.js`);
 const route = await load(`${F}/editor-route.ts`);
 const { default: Files } = await load(`${F}/main.js`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor });
@@ -379,7 +379,7 @@ const PNG = hex([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x
 const ascii = (s: string) => hex([...s].map((c) => c.charCodeAt(0)));
 
 async function viewer(path: string, on: string | null = null) {
-  const v: any = Object.create(Viewer.prototype);
+  const v: any = new Viewer();
   v.init({ embedded: true, path, on }, cx);
   await settle();
   v.port = { width: 600, height: 400 };
@@ -507,7 +507,7 @@ test("stepped by props: another file loads, the native view of the last one goes
   v.update({ embedded: true, path: null, on: null });
   v.render(cx);
   await tick();
-  expect([v.path, v.how, v.text]).toEqual([null, null, null]);
+  expect([v.path, v.how, v.text]).toEqual(["", null, null]);
 });
 
 /** What the app does with set_props on a nested view: it journals every
@@ -612,11 +612,11 @@ test("code wraps to the preview's width: a narrow panel shows whole lines, the n
   const shown = words(drawn).join("");
   // Every character is drawn, over several rows; one line number.
   expect(shown.replace(/\s+/g, "")).toContain(long.trim().replace(/\s+/g, ""));
-  expect(v.wrapped().rows).toBeGreaterThan(1);
+  expect(v.wrapped(v.text).rows).toBeGreaterThan(1);
   expect(words(drawn).filter((w: string) => w === "1").length).toBe(1);
   // Wide: a row a line (the text's last, empty line too).
   v.port = { width: 1200, height: 400 };
-  expect(v.wrapped().rows).toBe(2);
+  expect(v.wrapped(v.text).rows).toBe(2);
 });
 
 test("the divider lights under the pointer and while held", () => {

@@ -784,7 +784,7 @@ test("H / L: the previous / next tab while there are several (a count: that many
 
 // ---- every kind of file as a tab: drawn tabs (the preview's viewer), Markdown to read
 
-const { default: Viewer } = await import("../defaults/mods/editor/viewer.js");
+const { default: Viewer } = await import("../defaults/mods/editor/viewer.ts");
 const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
 const keyc = (c: string, mods: any = {}) => ({ key: c.length === 1 ? c.toLowerCase() : c, key_char: c.length === 1 ? c : null, modifiers: { shift: c.length === 1 && c !== c.toLowerCase(), control: false, alt: false, platform: false, ...mods } });
 

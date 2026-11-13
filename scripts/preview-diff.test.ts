@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { asJs, guard } from "./mod-source.ts";
 
-// The preview's patches (.diff, .patch): preview/diff.js and its view.
+// The preview's patches (.diff, .patch): preview/diff.ts and its view.
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
 class Element {
   calls: [string, any[]][] = [];
@@ -70,16 +70,16 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 
-const kinds = await load("preview/kinds.js");
-const imageLogic = await load("preview/image.js", kinds);
-const T = await load("preview/table.js");
-const D = await load("preview/diff.js");
+const kinds = await load("preview/kinds.ts");
+const imageLogic = await load("preview/image.ts", kinds);
+const T = await load("preview/table.ts");
+const D = await load("preview/diff.ts");
 const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
 
 const colors = { ...herdr.theme(), ansi1: "#ff5189", ansi2: "#36c692", ansi3: "#e3c78a" };
-const keyLogic = await load("preview/keys.js");
+const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
 const { parse, fileStarts, nextFile } = D;
 
@@ -146,8 +146,8 @@ test("next / previous file from a row", () => {
 });
 
 test("the view: colored rows as the diff pane draws them, file heads with counts; } jumps files", async () => {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   const patch = parse(GIT);
   patch.starts = fileStarts(patch.rows);
   Object.assign(view, {

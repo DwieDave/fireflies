@@ -2,7 +2,7 @@ import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
 import { asJs, guard } from "./mod-source.ts";
 
-// The preview's tables: CSV / TSV and SQLite (preview/table.js and its view).
+// The preview's tables: CSV / TSV and SQLite (preview/table.ts and its view).
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
 class Element {
   calls: [string, any[]][] = [];
@@ -70,13 +70,13 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 
-const kinds = await load("preview/kinds.js");
-const imageLogic = await load("preview/image.js", kinds);
-const T = await load("preview/table.js");
-const D = await load("preview/diff.js");
+const kinds = await load("preview/kinds.ts");
+const imageLogic = await load("preview/image.ts", kinds);
+const T = await load("preview/table.ts");
+const D = await load("preview/diff.ts");
 const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
-const keyLogic = await load("preview/keys.js");
+const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
 const { separator, parse, table, numeric, columnName, oneLine, wholeLines, shownNote, tablesOf, sqliteError, rowsSql, countSql, quoteId, MAX_COLS, MIN_CH, MAX_CH } = T;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -157,8 +157,8 @@ test("SQLite: names quoted, tables read from sqlite3's CSV, errors in plain word
 
 /** A preview showing `grid`, in an 800 × 600 pane. */
 async function tableView(rows: string[][], extra: Record<string, any> = {}) {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   Object.assign(view, {
     path: "/data/people.csv", kind: "table", how: { how: "table" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true },
     port: { width: 800, height: 600 }, names: ["people.csv", "zoo.csv"], info: { bytes: 4096 }, grid: { ...table(rows), sep: "," },

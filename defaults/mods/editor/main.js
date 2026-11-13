@@ -141,7 +141,7 @@ import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 import { placeTab, afterClose, stepTab, restoreTabs, keptTabs, unsavedNote, tabLabels, tabWidth, visibleTabs, MORE, showStrip, DRAG_START, gapAt, dropIndex, stakeAt, moved, tabKind, startsDrawn, drawnAfter, LOOK_KEYS, lookAction, tabMenuItems, tabMenuKey, handover, handoverFor } from "./tabs.js";
 // Drawn tabs (a picture, a PDF, a table): the preview pane's own viewer, a copy
 // of preview/viewer.js and what it imports (scripts/preview-shared.test.ts).
-import Viewer from "./viewer.js";
+import Viewer from "./viewer.ts";
 import { OPEN, LAST, PATHS, HANDOVER, filesOf, editorPaths, isScratchpad } from "./editor-route.ts";
 import { cardLinks, linkTarget, linkWhere } from "./cardlinks.js";
 import { Rendered, editBetween } from "./rendered.js";

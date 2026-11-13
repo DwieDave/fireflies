@@ -52,6 +52,6 @@
 // What's drawn, and how, is viewer.js: the files pane's preview split
 // (file-tree) shows a file with the same code.
 
-import Viewer from "./viewer.js";
+import Viewer from "./viewer.ts";
 
 export default class PreviewView extends Viewer {}

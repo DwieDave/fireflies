@@ -68,14 +68,14 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-const kinds = await load("preview/kinds.js");
-const imageLogic = await load("preview/image.js", kinds);
-const tableLogic = await load("preview/table.js");
-const diffLogic = await load("preview/diff.js");
+const kinds = await load("preview/kinds.ts");
+const imageLogic = await load("preview/image.ts", kinds);
+const tableLogic = await load("preview/table.ts");
+const diffLogic = await load("preview/diff.ts");
 const { parse: parseTable, ...tableRest } = tableLogic;
 const { parse: parsePatch, ...diffRest } = diffLogic;
 /** Everything main.js imports, as its imports name it. */
-const keyLogic = await load("preview/keys.js");
+const keyLogic = await load("preview/keys.ts");
 const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
 const { sizeFromFile, isImage, formatOf, hexBytes, sniff, svgSize, plan, cantShow, fitScale, fitted, clampPan, zoomTo, step, panBy, rotate, placed, percent, wrapper, sharpness, turned, PAD } = imageLogic;
 const { extension, siblings, stepIn, fileSize } = kinds;
@@ -310,8 +310,8 @@ test("the wrapper SVG turns a picture (and its EXIF orientation) and draws vecto
 // ---- the view
 
 test("the viewer: a fitted picture, keys zoom, pan, step through the folder and toggle the background", async () => {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   const focus = { focus() {}, is_focused: () => true };
   Object.assign(view, {
     path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: focus, port: { width: 800, height: 600 }, checker: true, copied: 0,
@@ -368,8 +368,8 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   Object.assign(view, {
     path: "/shots/s.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => false }, port: { width: 800, height: 600 }, checker: true, copied: 0,
     names: [], info: { format: "png", width: 3752, height: 2078, bytes: 2048 },
@@ -406,8 +406,8 @@ test("the bar's fit and 100% do what they say, in either state, and stay put", a
 });
 
 test("the viewer says what's wrong instead of a picture", async () => {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   Object.assign(view, { path: "/x/a.heic", kind: "image", how: { how: "image" }, handle: { is_focused: () => false }, port: { width: 800, height: 600 }, names: [], info: { format: "heic", width: 0, height: 0 }, error: cantShow("heic", "linux") });
   const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
   expect(text).toEqual(expect.arrayContaining(["Can't preview this picture", cantShow("heic", "linux"), "open in its app  o"]));
@@ -415,8 +415,8 @@ test("the viewer says what's wrong instead of a picture", async () => {
 });
 
 test("the bar by keys: tab rings its controls in order, enter presses one, ? lists the keys, esc backs out", async () => {
-  const { default: PreviewView } = await load("preview/viewer.js", logic);
-  const view: any = Object.create(PreviewView.prototype);
+  const { default: PreviewView } = await load("preview/viewer.ts", logic);
+  const view: any = new PreviewView();
   Object.assign(view, {
     path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,
     names: ["a.png", "b.png"], info: { format: "png", width: 1600, height: 1200, bytes: 2048 },
