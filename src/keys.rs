@@ -82,6 +82,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     include_str!("keys/shipped/fireflies-tabkeys-keys.macos.json"),
     // With the mods under their new names and the editor's tab keys, before cmd-shift-b opened the Databases window.
     include_str!("keys/shipped/fireflies-panes-keys.macos.json"),
+    // With cmd-shift-b for the Databases window, before the Nocturne layout's cmd-] / cmd-[ walked the agents and then the
+    // shelf's pinned panes (nocturne.agent-next / agent-prev) in place of the core's agent.next / agent.prev.
+    include_str!("keys/shipped/fireflies-databases-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]
@@ -541,8 +544,8 @@ mod tests {
         }
         // The window holding the keys (a pane focused without a click): Nocturne's and the app's.
         assert_eq!(runs("cmd-p", &window).as_deref(), Some("nocturne.picker"));
-        assert_eq!(runs("cmd-[", &window).as_deref(), Some("agent.prev"));
-        assert_eq!(runs("cmd-]", &window).as_deref(), Some("agent.next"));
+        assert_eq!(runs("cmd-[", &window).as_deref(), Some("nocturne.agent-prev"));
+        assert_eq!(runs("cmd-]", &window).as_deref(), Some("nocturne.agent-next"));
         assert_eq!(runs("cmd-l", &window), None);
         // The editor pane likewise (it takes the keyboard on `focus`): cmd-s saves, not Nocturne's fold.
         let editor = [&window[..], &["Mod mod = editor"]].concat();

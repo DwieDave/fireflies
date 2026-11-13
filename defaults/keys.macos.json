@@ -108,7 +108,9 @@
     "cmd-shift-n": "nocturne.space-new",
     "cmd-shift-o": "nocturne.procs",
     "cmd-shift-;": "nocturne.scratchpad",
-    "cmd-shift-b": "nocturne.databases"
+    "cmd-shift-b": "nocturne.databases",
+    "cmd-]": "nocturne.agent-next",
+    "cmd-[": "nocturne.agent-prev"
   },
   "mod:editor": {
     "cmd-s": "editor.save",
