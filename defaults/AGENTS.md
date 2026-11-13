@@ -1647,8 +1647,9 @@ the button's, inside the window (a key opens it centered): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
 the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
-u, Scratchpad s: the repository's note; the panels that float over the tab, Git, its diff, worktrees and GitHub,
-open from the git button, its ▾, their keys and the palette instead), every
+u, Scratchpad s: the repository's note; Git l, GitHub h, Scripts r, Processes p and Databases b
+as normal panes (or tabs); their windows, the diff and worktrees open from the git
+button, its ▾, their keys and the palette), every
 installed agent (1-9; the ones that aren't installed hide behind a dim
 "2 not installed · show" row: enter or a click shows them, again hides them,
 remembered in shared `nocturne.newShowMissing`; the numbers never move), then
