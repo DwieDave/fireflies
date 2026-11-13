@@ -4,8 +4,10 @@ Fireflies runs a mod's `.ts` files by blanking their types out and running
 the rest (`swc_ts_fast_strip` in the loader, `vendor/gpui-kit/crates/shell/src/typescript.rs`).
 Nothing is compiled and nothing is checked at run time: the checking is
 `tsc` and `oxlint`, before the code ships. This page is the bar a converted
-mod meets and the steps to convert one. `nocturne-pip` and `nocturne-usage`
-(with `nocturne/limits.ts`) are converted: read them as the pattern.
+mod meets and the steps to convert one. The shipped mods to convert are
+`nocturne` and the ones listed in `scripts/nocturne-mods.ts` (once
+`nocturne-<name>`). `pip` and `usage` (with `nocturne/limits.ts`) are
+converted: read them as the pattern.
 
 ## The standard
 
@@ -59,7 +61,7 @@ the exact versions in `package.json` (`bun install` puts them in
 2. Imports name the file as it is: `from "./kit.ts"`, also from a `.js` file
    that stays. Types come in with `import type { X }` (a plain import of a
    type stays in the code and fails at load: `verbatimModuleSyntax` reports it).
-3. Copy `guard.ts` from `nocturne-pip/` if the mod reads anything from
+3. Copy `guard.ts` from `pip/` if the mod reads anything from
    outside (it will). Copy `keyhelp.d.ts` beside `keyhelp.js` if it imports
    keyhelp.
 4. Type it. The view: fields with initializers instead of assignments in
@@ -71,7 +73,7 @@ the exact versions in `package.json` (`bun install` puts them in
    load every shipped mod in the real engine).
 6. Rename the paths in its tests (`../defaults/mods/<mod>/main.ts`). A test
    that reads a mod's source as text and evaluates it (`load()` in
-   `scripts/nocturne-browser.test.ts`) passes `.ts` through
+   `scripts/browser.test.ts`) passes `.ts` through
    `new Bun.Transpiler({ loader: "ts" })` first.
 
 ## Patterns
@@ -108,7 +110,7 @@ parameter (`no-unknown-parameters`).
 
 ```ts
 const isPaneNote = object({ of: isString, pane: isString, park: isBoolean });
-const PANE = sharedKey("nocturne-pip.pane", nullable(isPaneNote));
+const PANE = sharedKey("pip.pane", nullable(isPaneNote));
 
 const noted = readShared(shared, PANE, null);        // PaneNote | null: the fallback when absent or another shape
 writeShared(setShared, PANE, { of, pane, park });     // checked against the key's type
@@ -151,7 +153,7 @@ every mod that uses it, byte for byte, and a test fails when copies drift:
 
 - `guard.ts`, `keyhelp.d.ts`: `scripts/mods-typescript.test.ts` (it also
   checks that every mod importing guard.ts has the copy).
-- `limits.ts` (nocturne, nocturne-usage): `scripts/nocturne-usage-limits.test.ts`.
+- `limits.ts` (nocturne, usage): `scripts/usage-limits.test.ts`.
 - `keyhelp.js` (14 mods): `scripts/keyhelp.test.ts`. It stays `.js` until
   the migration converts all its copies in one commit; then `keyhelp.d.ts`
   goes, the test's paths turn `.ts`, and each importer's

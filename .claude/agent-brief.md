@@ -5,7 +5,7 @@ name) and `<orchestrator>` (your `$HC_TERMINAL_ID`, e.g. `t7y`).
 
 ---
 
-You work in the git worktree /Volumes/data/coding/fireflies-wt/<name> (branch feat/<name>, from integrate) of fireflies, Developer's fork of the Herdr desktop app (Rust/GPUI core in src/, JS mods in defaults/mods/, nocturne UI mods named nocturne-*; Developer runs the nocturne layout at zoom 0.9). Read AGENTS.md first.
+You work in the git worktree /Volumes/data/coding/fireflies-wt/<name> (branch feat/<name>, from integrate) of fireflies, Developer's fork of the Herdr desktop app (Rust/GPUI core in src/, JS mods in defaults/mods/, the nocturne layout mod plus the mods that grew out of it, listed in scripts/nocturne-mods.ts (editor, file-tree, finder, browser, git, github …); Developer runs the nocturne layout at zoom 0.9). Read AGENTS.md first.
 
 Rules:
 - Stay inside this worktree. Main, other worktrees, and Developer's running app and core belong to others.

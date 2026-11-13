@@ -21,15 +21,32 @@ desktop app). Under the name it is still Herdr: same config folder
   | mod | what it is |
   | --- | --- |
   | `nocturne` | the sky sidebar, tab strip, pane headers, menus, dialogs, toasts, palette |
-  | `nocturne-browser` | a web page in a pane (native view) |
-  | `nocturne-diff` | the git diff beside lazygit |
-  | `nocturne-files` | a file tree that opens picks in `$EDITOR` |
-  | `nocturne-agents` | Claude Code's agents as a graph |
-  | `nocturne-usage` | Claude's or Codex's usage limits |
+  | `editor` | the code editor (tabs, vim, LSP, Markdown preview) |
+  | `file-tree` | a folder's tree in a pane or the tab's panel |
+  | `finder` | find a file or a line (cmd-p, cmd-shift-f) |
+  | `markdown` | a Markdown file, rendered |
+  | `preview` | pictures, PDFs, tables, databases, patches, fonts, audio, video |
+  | `browser` | a web page in a pane (native view) |
+  | `pip` | a video from a web pane, picture in picture |
+  | `git` | lazygit in Nocturne's look, with the review |
+  | `diff` | the old diff pane, handing over to the git window |
+  | `github` | pull requests, Actions and Projects boards |
+  | `scripts` | the script runner |
+  | `procs` | processes and ports |
+  | `notifications` | what agents need from you, in one place |
+  | `agent-graph` | Claude Code's agents as a graph |
+  | `usage` | Claude's or Codex's usage limits |
+  | `equalize-panes` | evens out a tab's panes |
+
+  They were named `nocturne-<name>` until they lost the prefix to stand on
+  their own (`nocturne-files`, `-picker` and `-agents` took names of their
+  own: Herdr's `files`, `picker` and `agents` are stock mods); old names in
+  saved panes, keys.json and shared state keep working (`RENAMED_MODS`,
+  src/layout.rs).
 
   With them: `defaults/layouts/nocturne.json` (+ `.svg` preview),
   `defaults/themes/moonfly.json`, and its keys in `defaults/keys.macos.json`
-  (`layout:nocturne`, `mod:nocturne-browser`). The git pane needs `lazygit`
+  (`layout:nocturne`, `mod:browser`). The git pane needs `lazygit`
   on PATH; the files pane uses `$EDITOR` (nvim gets one instance per tab).
   Herdr's `main` and its other layouts are still there (cmd-shift-l).
 - **Branding**: the name Fireflies in the window and the app's text, and its own
