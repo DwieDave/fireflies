@@ -6,8 +6,8 @@ import { div, svg } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex, v_flex, Input, v_virtual_list, Scrollbar } from "gpui-base";
-import type { Range, Row, Side } from "./logic.ts";
-import { lists, marks, folderFacts, DIVIDER, base } from "./logic.ts";
+import type { Range, Row } from "./logic.ts";
+import { lists, marks, base } from "./logic.ts";
 import type { LookDir } from "./state.ts";
 import { ROW, ART, tilde } from "./state.ts";
 import { stop, dither, typeMark, markColor } from "./paint.ts";
@@ -15,6 +15,8 @@ import { saveLook } from "./look.ts";
 import { addNew } from "./search.ts";
 import { absOf, isCut } from "./file-ops.ts";
 import type { default as Files } from "./main.ts";
+import type { Side } from "./split-size.ts";
+import { folderFacts, DIVIDER } from "./split-size.ts";
 
 export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
   // The name's input (a new item's row, or the row being renamed) in place of the name.

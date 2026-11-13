@@ -184,7 +184,7 @@ test("web pane: ? lists every key, the cmd ones too; its bar's last control is ?
 });
 
 const files = await import("../defaults/mods/file-tree/main.ts");
-const filesLogic = await import("../defaults/mods/file-tree/logic.ts");
+const filesLogic = await import("../defaults/mods/file-tree/fit.ts");
 test("files: ? lists every key, in the list and while the filter types", () => {
   const rows = [{ path: "a.txt", name: "a.txt", dir: false, depth: 0 }, { path: "b", name: "b", dir: true, depth: 0 }];
   const make = (typing: boolean, sel: string) => () => { const v = surface(files.default, ["key"], { menu: null, typing, query: "", alone: false, keysShown: false, shown: () => rows, sel, folders: new Set(), root: "/r", input: { focus() {}, set_value() {}, value: () => "" }, handle: { focus() {} }, marked: new Set(), range: null, drag: null, draft: null, ask: null, msg: null, stop: null, gAt: 0, lensAdd: "both", lookState: { on: false }, look: null, size: { width: 400, height: 600 }, nav: { back: [], forward: [] }, on: null, entries: new Map(), cut: { hidden: 0, ignored: 0 }, filters: { hidden: false, ignored: false } }); return (e: any, cx: any) => v.key(e, cx); };

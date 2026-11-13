@@ -23,7 +23,6 @@ defaults/mods/editor/markdown.ts
 defaults/mods/editor/markdown.ts blocks
 defaults/mods/editor/viewer.ts
 defaults/mods/file-tree/diff.ts parse
-defaults/mods/file-tree/logic.ts
 defaults/mods/file-tree/viewer.ts
 defaults/mods/finder/main.ts render
 defaults/mods/github/markdown.ts

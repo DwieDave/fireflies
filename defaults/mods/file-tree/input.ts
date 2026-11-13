@@ -11,11 +11,12 @@ import { cancelDrag, markRange, markToggle } from "./drag.ts";
 import { clearSearch, pressStop, startFind, reveal, openWeb } from "./search.ts";
 import { stepRow, selectRow } from "./list-view.ts";
 import { keysKey } from "./keyhelp.ts";
-import { lensStep, lensStops, parent } from "./logic.ts";
+import { parent } from "./logic.ts";
 import { toggleLook, resizeLook } from "./look.ts";
 import { closePane, terminalEdit, nvim, previewRow, openPane, copyPath } from "./opening.ts";
 import { viewerFor } from "./state.ts";
 import { rootRow } from "./menu.ts";
+import { lensStep, lensStops } from "./fit.ts";
 
 /** What the list's keys read: the key and its modifiers, the rows, the selected one. */
 interface ListKey {
