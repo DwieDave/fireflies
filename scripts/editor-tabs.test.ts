@@ -397,7 +397,7 @@ test("the picker opens into the focused editor, else the shown tab's; the files 
   const pick = readFileSync(new URL("../defaults/mods/finder/main.ts", import.meta.url), "utf8");
   expect(pick).toMatch(/openInEditor\(herdr, "match" in r \? \{ path, line/);
   const files = readFileSync(new URL("../defaults/mods/file-tree/opening.ts", import.meta.url), "utf8");
-  expect(files).toMatch(/openInEditor\(herdr, \{ path: `\$\{v\.root\}\/\$\{path\}`, pane: beside\?\.pane \?\? null, prefer: v\.editorSlot/);
+  expect(files).toMatch(/openInEditor\(herdr, \{ path: abs, pane: beside\?\.pane \?\? null, prefer: mine \? editorProps\(mine\)\.slot \?\? null : null/);
   // The picker's case: a terminal focused, the shown tab's editor takes it.
   paneList = [{ pane: "t", tab: "t1", terminal: "x" }, ed("e1", "s1", "t1", "/a.rs")];
   focusedPane = "t";
@@ -945,6 +945,24 @@ test("files sent as tabs with look (the open record) and an editor opened on one
   storage = {};
   const r = await pane("/p/docs/n.md");
   expect([r.view, r.look]).toEqual(["split", false]);
+});
+
+test("an editor a files pane made in its preview pane's place: its props' picture first (drawn), the file sent to its slot just before it started second and shown; an old one isn't opened again", async () => {
+  sharedNow["editor.open"] = { slot: "s1", path: "/p/src/b.rs", n: 5, at: Date.now() };
+  const p = await pane("/p/img/logo.png", { look: true });
+  p.render(cx());
+  tick();
+  await flush();
+  expect(p.docs.map((d: any) => [d.path, d.look])).toEqual([["/p/img/logo.png", true], ["/p/src/b.rs", false]]);
+  expect(p.path).toBe("/p/src/b.rs");
+  // A record for its slot from long ago (a restart): left alone.
+  storage = {};
+  sharedNow["editor.open"] = { slot: "s1", path: "/p/src/b.rs", n: 6, at: Date.now() - 60000 };
+  const q = await pane("/p/img/logo.png", { look: true });
+  q.render(cx());
+  tick();
+  await flush();
+  expect(q.docs.map((d: any) => d.path)).toEqual(["/p/img/logo.png"]);
 });
 
 test("route: look rides along to the editor (the open record) and to editor.open when there's none; the picker looks at a picked file, edits a grep hit", () => {
