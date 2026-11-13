@@ -11,7 +11,7 @@ import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { exec } from "herdr";
 import { ghRun, api, graphql } from "./gh.js";
-import { candidates } from "./remotes.js";
+import { candidates } from "./remotes.ts";
 import { fillFrom, templatesIn, startBody, parseLog, parseNumstat, parseBranches, remoteFor, pushPlan, prErrors, prArgs, createdNumber } from "./pr-create.js";
 import { shellLine } from "./dispatch.js";
 import { Form } from "./form.js";

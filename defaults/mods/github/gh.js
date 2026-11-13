@@ -5,7 +5,7 @@
 
 import { exec } from "herdr";
 import { parseHeaders } from "./model.js";
-import { candidates, slug } from "./remotes.js";
+import { candidates, slug } from "./remotes.ts";
 
 const cache = new Map(); // `${on}|${path}` -> { etag, data }
 

@@ -40,7 +40,7 @@ import { h_flex, v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
 import { repoOf, viewRepo } from "./gh.js";
 import { readAgo } from "./model.js";
-import { slug } from "./remotes.js";
+import { slug } from "./remotes.ts";
 import { lookup, entryFor, repoKey, slimRepo } from "./cache.js";
 import * as store from "./store.js";
 import { dither, chip, hints, empty, stop, pip, band, ART, unzoom, unzoomSize, popupScrim } from "./kit.js";

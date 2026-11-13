@@ -10,7 +10,7 @@
 import { div } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { ghJson, ghRun, api, fileAt } from "./gh.js";
-import { slug } from "./remotes.js";
+import { slug } from "./remotes.ts";
 import { dispatchOf, startValue, inputError, dispatchArgs, newRun, shellLine, workflowFile } from "./dispatch.js";
 import { Form } from "./form.js";
 import { panel, empty, band } from "./kit.js";
