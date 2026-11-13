@@ -8,7 +8,7 @@
 
 import { shared, setShared } from "herdr";
 import { kind, KINDS } from "./kinds.js";
-import { diffKey } from "./git.js";
+import { diffKey } from "./git.ts";
 
 export const MARKS = "diff.reviewed";
 export const HIDE = "diff.hide";
