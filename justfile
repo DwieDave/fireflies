@@ -197,6 +197,8 @@ test:
     bun test scripts/databases-run.test.ts
     # The Databases window's data: mysql's XML, libSQL over HTTP, the catalog against SQLite, connections found in a folder, exports, history, a throwaway keychain.
     bun test scripts/databases-data.test.ts
+    # The Databases window's view: window and pane (no frame or ✕ in a pane, esc leaves it, the move both ways), narrow widths, keys and menus, the asks before a write, a connection another mod sends, no secret shared or on an argv.
+    bun test scripts/databases-view.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

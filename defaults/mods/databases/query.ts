@@ -17,6 +17,7 @@ import { allowedReadOnly, asks, classify, worst } from "./safety.ts";
 import type { Ran } from "./session.ts";
 import { IO, dataHome, needsPassword, runOn } from "./session.ts";
 import { cancel } from "./runner.ts";
+import { closest, namedIn, resultWords } from "./parse-out.ts";
 import { addHistory } from "./store.ts";
 import type { HistoryEntry } from "./store.ts";
 import type { QueryTab } from "./state.ts";
@@ -66,7 +67,7 @@ export function newQuery(v: DbView, text = ""): QueryTab {
 
   ids += 1;
 
-  const tab: QueryTab = { id: ids, name: `Query ${ids}`, editor, outcome: null, shown: 0, running: null, ms: null, inResults: false, at: gridStart(), ranText: "" };
+  const tab: QueryTab = { id: ids, name: `Query ${ids}`, editor, outcome: null, shown: 0, running: null, ms: null, inResults: false, at: gridStart(), ranText: "", verdicts: [] };
 
   editor.on("key", (e, cx) => editorKey(v, tab, e, cx));
   editor.on("change", () => {
@@ -125,7 +126,9 @@ function askText(c: Conn, v: Verdict, count: number): string {
   const what = `${v.verb}${v.target ? ` ${v.target}` : ""}`;
   const more = count > 1 ? ` (and ${count - 1} more)` : "";
 
-  return v.risk === "destructive" ? `${what}${more} on ${c.name}? It can't be undone.` : `Run ${what}${more} on ${c.name}?`;
+  const said = v.risk === "destructive" ? `${what}${more} on ${c.name}? It can't be undone.` : `Run ${what}${more} on ${c.name}?`;
+
+  return said.charAt(0).toUpperCase() + said.slice(1);
 }
 
 /** Runs the tab's statements, after the asks. */
@@ -183,7 +186,7 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   });
 
   tab.running = null;
-  tab.outcome = o;
+  tab.outcome = withSuggestion(v, o);
   tab.ms = o.ms;
   tab.at = gridStart();
 
@@ -193,12 +196,22 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   tab.shown = withRows >= 0 ? withRows : Math.max(0, o.results.length - 1);
   tab.inResults = false;
   placeError(tab, list, o);
-  record(v, c, list, o);
+  record(v, c, list, verdicts, o);
+  tab.verdicts = verdicts.map((x) => x.risk);
 
   // A statement that changed the schema: read the tables again.
   if (verdicts.some((x) => x.risk !== "read" && x.risk !== "session") && !o.error) v.refreshCatalog(cx);
 
   cx.notify();
+}
+
+/** A missing table's error with the nearest table named ("did you mean lanterns?"). */
+function withSuggestion(v: DbView, o: Ran): Ran {
+  const e = o.error;
+  const name = e && !e.hint ? namedIn(e.message) : null;
+  const near = name ? closest(name, v.catalog.tables.map((t) => t.name)) : null;
+
+  return e && near ? { ...o, error: { ...e, hint: `did you mean ${near}?` } } : o;
 }
 
 /** Underlines the error where the client says (its statement's first line when it doesn't). */
@@ -217,7 +230,7 @@ function placeError(tab: QueryTab, list: readonly Statement[], o: Ran): void {
 }
 
 /** The Log panel's lines and the history's entries for a run. */
-function record(v: DbView, c: Conn, list: readonly Statement[], o: Ran): void {
+function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], o: Ran): void {
   list.forEach((s, i) => {
     const r = o.results.find((x) => x.index === i);
     const failed = o.error?.index === i;
@@ -225,7 +238,8 @@ function record(v: DbView, c: Conn, list: readonly Statement[], o: Ran): void {
     if (!r && !failed) return;
 
     const rows = r?.set ? r.set.rows.length : null;
-    const said = failed ? o.error?.message ?? "" : r?.affected !== null && r?.affected !== undefined ? `${r.affected} changed` : rows !== null ? `${rows} row${rows === 1 ? "" : "s"}` : "done";
+    const writes = verdicts[i]?.risk !== "read";
+    const said = failed ? o.error?.message ?? "" : resultWords(r, writes);
 
     v.logLine({ sql: s.text, ok: !failed, ms: o.ms, said, conn: c.name });
 

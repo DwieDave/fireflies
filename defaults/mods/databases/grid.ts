@@ -16,7 +16,7 @@ import type { GridAt } from "./state.ts";
 import { dither, stop } from "./kit.ts";
 
 /** A character's width and a row's height, in px at the grid's text size. */
-export const CH = 6.9;
+export const CH = 7.8;
 export const ROW = 20;
 export const HEAD = 22;
 const PAD = 16;
@@ -98,9 +98,12 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly Column[
   const cells = shown.map((i) => {
     const name = set.columns[i] ?? "";
     const sorted = look.sort?.column === name;
-    const type = look.types?.[i];
+    const c = cols[i] ?? { name, num: false, ch: 4 };
+    // The name whole first: the type only where it fits beside it.
+    const fits = (name.length + 2 + (look.types?.[i]?.length ?? 0)) * CH + PAD <= colWidth(c);
+    const type = fits ? look.types?.[i] : undefined;
 
-    return h_flex().id(`${look.id}-h-${i}`).relative().flex_none().w(colWidth(cols[i] ?? { name, num: false, ch: 4 })).h(HEAD).px(8).gap(6).items_center().overflow_hidden()
+    return h_flex().id(`${look.id}-h-${i}`).relative().flex_none().w(colWidth(c)).h(HEAD).px(8).gap(6).items_center().overflow_hidden()
       .border_r(1).border_color(t.ansi0).cursor_pointer()
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {

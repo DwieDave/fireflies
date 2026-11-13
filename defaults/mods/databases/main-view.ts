@@ -17,6 +17,7 @@ import { cellMenu } from "./menus.ts";
 import { loadRows } from "./session.ts";
 import { cancelQuery } from "./query.ts";
 import { count } from "./panels.ts";
+import { resultWords } from "./parse-out.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The grid's handlers for the shown grid (the Rows tab's or a query's). */
@@ -152,8 +153,7 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
   if (!o) return head.child(div().text_color(t.dim).child("ctrl-enter runs the statement under the caret (or the selection) · ctrl-shift-enter every one"));
 
   const r = o.results[q.shown];
-  const rows = r?.set ? r.set.rows.length : null;
-  const said = r?.affected !== null && r?.affected !== undefined ? `${r.affected} changed` : rows !== null ? `${rows} row${rows === 1 ? "" : "s"}` : r ? "done" : "";
+  const said = resultWords(r, (q.verdicts[r?.index ?? 0] ?? "read") !== "read");
   const sets = o.results.length > 1 ? o.results.map((x, i) => chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; })) : [];
 
   return head
@@ -174,7 +174,7 @@ function queryBody(t: Theme, v: DbView, q: QueryTab, active: boolean): Element {
 
   const result = !o || q.running ? div().flex_1()
     : set && set.columns.length ? grid(t, { id: `q${q.id}-grid`, width: v.gridSize.width, height: v.gridSize.height, active: active && q.inResults, sort: null, types: set.types }, set, colsOf(set), q.at, handlers(v, q))
-    : empty(t, o.error ? "Stopped at the error" : "No rows to show", o.error ? "the last good result stays in the other tabs; fix it and run again" : null, null);
+    : empty(t, o.error ? "Nothing to show: it stopped at the error" : "No rows", o.error ? "the error is underlined in the statement above; fix it and run it again" : null, null);
 
   return v_flex().size_full()
     .child(div().id(`q${q.id}-editor`).relative().h(edH).flex_none().pl(2).text_size(12)

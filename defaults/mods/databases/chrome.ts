@@ -47,7 +47,9 @@ function header(t: Theme, v: DbView): Element {
     .when(Boolean(c?.readonly), (el) => el.child(chip(t, "db-ro", h_flex().gap(5).items_center().child(lock(t.ansi3)).child(div().child("read only")), false, (cx) => v.act("conns", "conn-edit", cx), t.ansi3)))
     .child(div().flex_1())
     .child(div().relative().flex_none().child(status))
-    .child(chip(t, "db-move", v.overlay ? "◧" : "⧉", false, (cx) => v.move(cx)))
+    // Where the window's ✕ is, the move (opening.ts): ◧ into a pane, from a pane ⧉ out to a window.
+    .child(h_flex().id("db-move-tip").relative().flex_none().tooltip(v.overlay ? "Into a pane · ctrl-t" : "Out to a window · ctrl-t")
+      .child(chip(t, "db-move", v.overlay ? "◧" : "⧉", false, (cx) => v.move(cx))))
     .child(chip(t, "db-refresh", "↻", false, (cx) => v.act("window", "refresh", cx)))
     .when(Boolean(v.overlay), (el) => el.child(chip(t, "db-close", "✕", false, () => v.closeWindow())));
 }

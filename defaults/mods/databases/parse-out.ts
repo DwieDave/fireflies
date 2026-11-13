@@ -134,12 +134,13 @@ export function parsePsql(stdout: string, stderr: string, code: number, writes: 
 const CHANGES = /^changes: +(\d+) +total_changes: +\d+$/;
 
 /** A sqlite3 section: CSV rows, then `.changes on`'s line. */
-function sqliteSection(index: number, text: string): StatementResult {
+function sqliteSection(index: number, text: string, writes: boolean): StatementResult {
   const lines = text.replace(/\n$/, "").split("\n");
   const changed = CHANGES.exec(lines.at(-1) ?? "");
   const body = changed ? lines.slice(0, -1).join("\n") : text;
 
-  return { index, set: csvSet(body), affected: changed ? Number(changed[1]) : null, tag: null };
+  // .changes on speaks after every statement: a read changed nothing, it returned rows.
+  return { index, set: csvSet(body), affected: changed && writes ? Number(changed[1]) : null, tag: null };
 }
 
 /** sqlite3's error: `Parse error near line N: …` (or Runtime error, or Error: …), then the
@@ -164,12 +165,86 @@ export function sqliteError(stderr: string, index: number | null, statement: str
 }
 
 /** What sqlite3 printed; `statements` the texts run (for an error's place). */
-export function parseSqlite(stdout: string, stderr: string, code: number, statements: readonly string[], cut = false): Outcome {
+export function parseSqlite(stdout: string, stderr: string, code: number, statements: readonly string[], cut = false, writes: readonly boolean[] = []): Outcome {
   const { parts, last } = sections(stdout);
-  const results = parts.map(([i, text]) => sqliteSection(i, text));
+  const results = parts.map(([i, text]) => sqliteSection(i, text, writes[i] ?? false));
 
   const error = code === 0 ? null : sqliteError(stderr, last, last === null ? null : statements[last] ?? null)
     ?? { index: last, message: `sqlite3 exited with ${code}`, line: null, col: null, hint: null };
 
   return { results: error && error.index !== null ? results.filter((r) => r.index !== error.index || r.set) : results, error, cut };
+}
+
+/** A statement's answer in a few words: a read's rows ("10 rows"), a write's changed rows
+ *  ("3 changed"; a write that returned rows, its rows), else "done". */
+export function resultWords(r: StatementResult | undefined, writes: boolean): string {
+  const rows = r?.set && r.set.columns.length ? r.set.rows.length : null;
+  const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
+
+  if (rows !== null) return n(rows, "row", "rows");
+
+  if (!writes) return n(0, "row", "rows");
+
+  return r?.affected !== null && r?.affected !== undefined ? `${r.affected} changed` : "done";
+}
+
+// "no such table: x", 'relation "x" does not exist', "Table 'db.x' doesn't exist", "Unknown column 'x'".
+const NAMED = /(?:no such (?:table|column|function)|relation|column|table|unknown column|function)\s*:?\s*["'`]?([A-Za-z_][\w$.]*)["'`]?/i;
+
+/** The name an error is about ("lantern" in "no such table: lantern"), its last dotted part. */
+export function namedIn(message: string): string | null {
+  return NAMED.exec(message)?.[1]?.split(".").at(-1) ?? null;
+}
+
+/** Where in the statement an error without a place is: at the name it is about, if that's there. */
+export function placeByName(message: string, statement: string): { readonly line: number; readonly col: number } | null {
+  const name = namedIn(message);
+
+  if (!name) return null;
+
+  const m = new RegExp(`(?<![\\w$])["'\`]?${name.replace(/[$]/g, "\\$")}["'\`]?(?![\\w$])`, "i").exec(statement);
+
+  return m ? lineCol(statement, m.index) : null;
+}
+
+/** An error placed where it can be: its own place, else at the name it is about. */
+export function placed(e: RunError, statements: readonly string[]): RunError {
+  if (e.line !== null || e.index === null) return e;
+
+  const at = placeByName(e.message, statements[e.index] ?? "");
+
+  return at ? { ...e, line: at.line, col: at.col } : e;
+}
+
+/** Edits between two names (insertions, deletions, changes). */
+function distance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_x, j) => j);
+
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i];
+
+    for (let j = 1; j <= b.length; j++) next.push(Math.min((row[j] ?? 0) + 1, (next[j - 1] ?? 0) + 1, (row[j - 1] ?? 0) + (a[i - 1] === b[j - 1] ? 0 : 1)));
+
+    row = next;
+  }
+
+  return row[b.length] ?? 0;
+}
+
+/** The known name closest to a missing one (a typo, a plural), or null when none is near. */
+export function closest(name: string, known: readonly string[]): string | null {
+  const low = name.toLowerCase();
+  let best: string | null = null;
+  let bestD = Math.max(1, Math.floor(name.length / 4)) + 1;
+
+  for (const k of known) {
+    const d = distance(low, k.toLowerCase());
+
+    if (d > 0 && d < bestD) {
+      best = k;
+      bestD = d;
+    }
+  }
+
+  return best;
 }

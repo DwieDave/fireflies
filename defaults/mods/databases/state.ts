@@ -11,7 +11,7 @@ import type { Kind } from "./kinds.ts";
 import { isKind } from "./kinds.ts";
 import type { Browse, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
-import type { Verdict } from "./safety.ts";
+import type { Risk, Verdict } from "./safety.ts";
 import type { HistoryEntry } from "./store.ts";
 
 export const MOD = "databases";
@@ -90,6 +90,8 @@ export interface QueryTab {
   at: GridAt;
   /** The editor's text when the run started (an error's place is in that text). */
   ranText: string;
+  /** What each statement of the last run could change (a read says its rows, a write its changes). */
+  verdicts: readonly Risk[];
 }
 
 /** What a run asks before it goes: the verdict, and for a destructive one the name typed. */

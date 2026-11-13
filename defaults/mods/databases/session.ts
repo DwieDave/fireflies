@@ -10,7 +10,7 @@ import { onFile } from "./kinds.ts";
 import type { RunIo } from "./runner.ts";
 import { run, NO_KEYCHAIN_ITEM } from "./runner.ts";
 import type { Outcome } from "./parse-out.ts";
-import { parsePsql, parseSqlite } from "./parse-out.ts";
+import { parsePsql, parseSqlite, placed } from "./parse-out.ts";
 import { parseMysql } from "./parse-mysql.ts";
 import { runHrana } from "./hrana.ts";
 import type { Fetch } from "./hrana.ts";
@@ -106,11 +106,11 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
   const texts = statements.map((s) => s.text);
   const writes = statements.map((s) => s.risk !== "read");
 
-  const o = onFile(c) ? parseSqlite(r.stdout, r.stderr, r.code, texts, r.cut)
+  const o = onFile(c) ? parseSqlite(r.stdout, r.stderr, r.code, texts, r.cut, writes)
     : c.kind === "postgres" ? parsePsql(r.stdout, r.stderr, r.code, writes, r.cut)
     : parseMysql(r.stdout, r.stderr, r.code, script.lines, texts, r.cut);
 
-  return { ...o, ms: r.ms, noSecret: r.code === NO_KEYCHAIN_ITEM };
+  return { ...o, error: o.error ? placed(o.error, texts) : null, ms: r.ms, noSecret: r.code === NO_KEYCHAIN_ITEM };
 }
 
 /** Reads the active connection's tables (and, for SQLite, counts them). */

@@ -299,7 +299,7 @@ export function structPanel(t: Theme, v: DbView): Element {
   const s = v.struct;
 
   return panel(t, "p-structure", titleTabs(t, "struct", PANEL_KEY.structure, tabs, v.structTab, active, (k, cx) => v.setStructTab(k, cx)), active, structBody(t, v, active), {
-    right: div().text_color(t.dim).child(s.table ? `${s.table.name}${s.data ? ` · ${s.data.columns.length}` : ""}` : ""),
+    right: div().text_color(t.dim).child(s.data ? String(s.data.columns.length) : ""),
     onPress: () => v.setPanel("structure"),
   });
 }

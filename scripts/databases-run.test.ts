@@ -11,7 +11,7 @@ import { splitStatements, statementAt, blankLiterals, lineCol } from "../default
 import { classify, worst, allowedReadOnly } from "../defaults/mods/databases/safety.ts";
 import { scriptOf, MARK } from "../defaults/mods/databases/script.ts";
 import { run, runnerArgs, privateDir, removeDir, cancel, RUNNER } from "../defaults/mods/databases/runner.ts";
-import { parsePsql, parseSqlite, psqlError } from "../defaults/mods/databases/parse-out.ts";
+import { parsePsql, parseSqlite, psqlError, resultWords, placeByName, placed, closest, namedIn } from "../defaults/mods/databases/parse-out.ts";
 
 const FIX = new URL("./fixtures/databases/", import.meta.url).pathname;
 
@@ -165,6 +165,26 @@ describe("psql's output (recorded from postgres 17)", () => {
   });
 });
 
+describe("an error's words", () => {
+  test("a read says its rows, an empty read 0 rows, a write its changes", () => {
+    expect(resultWords({ index: 0, set: { columns: ["a"], rows: [["1"]] }, affected: 0, tag: null }, false)).toBe("1 row");
+    expect(resultWords(undefined, false)).toBe("0 rows");
+    expect(resultWords({ index: 0, set: null, affected: 4, tag: "UPDATE 4" }, true)).toBe("4 changed");
+    expect(resultWords({ index: 0, set: null, affected: null, tag: null }, true)).toBe("done");
+  });
+
+  test("an error without a place is placed at the name it's about; the nearest table suggested", () => {
+    expect(namedIn("no such table: lantern")).toBe("lantern");
+    expect(namedIn('relation "public.lantern" does not exist')).toBe("lantern");
+    expect(namedIn("Table 'shop.lantern' doesn't exist")).toBe("lantern");
+    expect(placeByName("no such table: lantern", "select name, count(*)\n  from lantern\n group by name")).toEqual({ line: 2, col: 8 });
+    expect(placeByName("no such table: lantern", "select * from lanterns")).toBeNull(); // a word of its own, not a part
+    expect(placed({ index: 0, message: "no such table: lantern", line: null, col: null, hint: null }, ["select 1 from lantern"])).toMatchObject({ line: 1, col: 15 });
+    expect(closest("lantern", ["users", "lanterns", "tags"])).toBe("lanterns");
+    expect(closest("x", ["users", "lanterns"])).toBeNull();
+  });
+});
+
 describe("the runner, for real with sqlite3", () => {
   const dbDir = mkdtempSync(join(tmpdir(), "ffdb-"));
   const db = join(dbDir, "t.db");
@@ -185,7 +205,10 @@ describe("the runner, for real with sqlite3", () => {
     const statements = ["select * from t order by id", "update t set v = 3 where id = 2", "select x from\n  t"];
     const script = scriptOf("sqlite", statements.map((text) => ({ text, risk: classify(text, "sqlite").risk })));
     const r = await run(io, { kind: "sqlite", dir, program: "sqlite3", args: args(), script: script.text });
-    const o = parseSqlite(r.stdout, r.stderr, r.code, statements);
+    const o = parseSqlite(r.stdout, r.stderr, r.code, statements, false, [false, true, false]);
+    expect(o.results[0]!.affected).toBeNull(); // a read changed nothing: it says its rows
+    expect(resultWords(o.results[0], false)).toBe("3 rows");
+    expect(resultWords(o.results[1], true)).toBe("1 changed");
     expect(o.results[0]!.set!.rows).toEqual([["1", "a,b", "1.5"], ["2", null, null], ["3", "", "2.0"]]);
     expect(o.results[1]!.affected).toBe(1);
     expect(o.error).toEqual({ index: 2, message: "no such column: x", line: 1, col: 8, hint: null });
