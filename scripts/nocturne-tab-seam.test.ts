@@ -71,7 +71,7 @@ const cx: any = {
   focus_handle: () => ({ focus() {}, is_focused: () => false }), new: () => ({ set_props() {} }), timer: { every() {}, after() {} },
 };
 
-const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs, SEAM, seamFade, seam, fadeCover } = await import("../defaults/mods/nocturne/tabs.ts");
 const kit = await import("../defaults/mods/nocturne/kit.ts");
 const nkit = await import("../defaults/mods/notifications/kit.ts");
 const { default: Bell } = await import("../defaults/mods/notifications/bell.ts");

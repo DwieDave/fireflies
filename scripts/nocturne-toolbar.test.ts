@@ -88,7 +88,7 @@ const cx: any = {
 const newmenu = await import("../defaults/mods/nocturne/newmenu.ts");
 const { default: NewMenu, menuPanels, WIDTH: NEW_W } = newmenu;
 const { panels } = await import("../defaults/mods/nocturne/panels.ts");
-const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 const { menuItems } = await import("../defaults/mods/nocturne/menu.ts");
 const { readFileSync } = await import("node:fs");
 

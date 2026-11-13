@@ -35,7 +35,7 @@ const herdr: Record<string, any> = {
   run: (name: string, args: any) => { commands.push([name, args]); return null; },
   setAgentOrder: () => {}, setShared: (k: string, v: unknown) => { sharedState[k] = v; },
   settings: () => ({ zoom: 1 }), shared: (k: string) => sharedState[k] ?? null,
-  spaces: () => spacesNow, terminals: () => terminalsNow, theme: () => theme, updates: () => null,
+  spaces: () => spacesNow, terminals: () => terminalsNow, theme: () => theme, updates: () => ({ app: { version: "1.0", ready: null, updates: false }, core: { version: null, managed: null, ready: null, updating: false, error: null }, checked: null, checks: true, checking: false, notes: [] }),
   window: () => ({ platform: "linux" }),
 };
 mock.module("herdr", () => herdr);
@@ -69,7 +69,7 @@ const kit = await import("../defaults/mods/nocturne/kit.ts");
 const pins = await import("../defaults/mods/nocturne/pins.ts");
 const { menuItems } = await import("../defaults/mods/nocturne/menu.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
-const palette = await import("../defaults/mods/nocturne/palette.js");
+const palette = await import("../defaults/mods/nocturne/palette.ts");
 
 const WEB = { pane: "p2", tab: "c1", terminal: null, mod: "browser", props: { slot: "w1" }, title: "browser", focused: false, parked: false };
 const EDIT = { pane: "p3", tab: "c9", terminal: null, mod: "editor", props: { file: "/a/PLAN.md" }, title: "editor", focused: false, parked: false };
@@ -289,6 +289,15 @@ test("a closed pane's pin goes after a while; a pane missing at first (loading) 
     for (const f of timers.splice(0)) f(cx);
     expect(records().map((r: any) => r.pane)).toEqual(["p2"]);
   } finally { Date.now = real; }
+});
+
+test("a pin found under its pane's new id is stored with that id and its props as they were (plain JSON)", () => {
+  sharedState[pins.PANES_KEY] = [{ pane: "old", mod: WEB.mod, props: WEB.props, at: 1 }];
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  s.render(cx);
+  for (const f of timers.splice(0)) f(cx);
+  expect(sharedState[pins.PANES_KEY]).toEqual([{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 1 }]);
 });
 
 // ---- the dock: a space tied to no folder for panes that belong to no project (dock.js)

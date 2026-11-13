@@ -39,7 +39,7 @@ const herdr: Record<string, any> = {
   spaces: () => [{ id: "s1", active: true, folder: "/code/app", machine: null, tabs: [{ id: "c1", active: true }] }],
   panes: () => (focusedPane ? [focusedPane] : []),
   hc: async () => ({ code: 0, stdout: "", stderr: "" }), pickFolder: async () => null, knownAgents: async () => [],
-  setAgentOrder: () => {}, nextCommand: () => new Promise(() => {}), presentUpdateNotes: () => {}, updates: () => null,
+  setAgentOrder: () => {}, nextCommand: () => new Promise(() => {}), presentUpdateNotes: () => {}, updates: () => ({ app: { version: "1.0", ready: null, updates: false }, core: { version: null, managed: null, ready: null, updating: false, error: null }, checked: null, checks: true, checking: false, notes: [] }),
 };
 mock.module("herdr", () => herdr);
 mock.module("gpui-kit", () => ({ div: () => el, svg: () => el, image: () => el, View: class {}, PathBuilder: { fill: () => el, stroke: () => el }, Background: { checkerboard: () => el } }));
@@ -52,7 +52,7 @@ mock.module("gpui-base", () => ({
 (globalThis as any).window = { paint_path: () => el, viewport_size: () => ({ width: 1600, height: 1000 }) };
 (globalThis as any).localStorage = { getItem: () => null, setItem: () => {} };
 
-const { default: Palette } = await import("../defaults/mods/nocturne/palette.js");
+const { default: Palette } = await import("../defaults/mods/nocturne/palette.ts");
 const { default: NewMenu } = await import("../defaults/mods/nocturne/newmenu.ts");
 const { openScratchpad, askScratchpad } = await import("../defaults/mods/nocturne/scratchpad.ts");
 const cx: any = { notify() {}, focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, stop_propagation() {}, bind_keys() {} };

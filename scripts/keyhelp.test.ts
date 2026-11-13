@@ -238,7 +238,7 @@ test("Nocturne's chrome (sidebar, tab strip, header, parked chips): ? opens the 
 });
 
 test("welcome and what's new: ? opens the overview over the page, ? or esc closes it", async () => {
-  const s = await import("../defaults/mods/nocturne/screens.js");
+  const s = await import("../defaults/mods/nocturne/screens.ts");
   const c = { focus_handle: () => ({ focus() {} }), timer: { after() {}, every() {} }, spawn() {}, notify() {} };
   const w: any = new s.Welcome();
   w.init({}, c);

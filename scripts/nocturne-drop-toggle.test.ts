@@ -93,7 +93,7 @@ function send(c: string) { const w = waiting; waiting = []; for (const f of w) f
 const scripts = await import("../defaults/mods/nocturne/scripts.ts");
 const newmenu = await import("../defaults/mods/nocturne/newmenu.ts");
 const { default: NewMenu } = newmenu;
-const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
 const { default: Deck } = await import("../defaults/mods/scripts/main.ts");
 const { default: Bell } = await import("../defaults/mods/notifications/bell.ts");

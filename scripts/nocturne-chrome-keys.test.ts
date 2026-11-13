@@ -78,7 +78,7 @@ function key(k: string, mods: Record<string, boolean> = {}, char?: string) {
 
 const nav = await import("../defaults/mods/nocturne/nav.ts");
 const { default: Sky } = await import("../defaults/mods/nocturne/sky.js");
-const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.js");
+const { default: Tabs } = await import("../defaults/mods/nocturne/tabs.ts");
 const toast = await import("../defaults/mods/nocturne/toast.ts");
 const { headerControls, default: Header } = await import("../defaults/mods/nocturne/header.ts");
 
