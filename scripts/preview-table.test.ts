@@ -71,13 +71,14 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 
 const kinds = await load("preview/kinds.ts");
+const fileIcons = await load("preview/file-icons.ts", kinds);
 const imageLogic = await load("preview/image.ts", kinds);
 const T = await load("preview/table.ts");
 const D = await load("preview/diff.ts");
 const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
 const keyLogic = await load("preview/keys.ts");
-const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
+const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr } };
 const { separator, parse, table, numeric, columnName, oneLine, wholeLines, shownNote, tablesOf, sqliteError, rowsSql, countSql, quoteId, MAX_COLS, MIN_CH, MAX_CH } = T;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
 

@@ -71,6 +71,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 
 
 const kinds = await load("preview/kinds.ts");
+const fileIcons = await load("preview/file-icons.ts", kinds);
 const imageLogic = await load("preview/image.ts", kinds);
 const T = await load("preview/table.ts");
 const D = await load("preview/diff.ts");
@@ -80,7 +81,7 @@ const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typ
 
 const colors = { ...herdr.theme(), ansi1: "#ff5189", ansi2: "#36c692", ansi3: "#e3c78a" };
 const keyLogic = await load("preview/keys.ts");
-const logic = { ...kinds, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
+const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: { ...herdr }, theme: () => colors };
 const { parse, fileStarts, nextFile } = D;
 
 const GIT = `diff --git a/src/a.rs b/src/a.rs

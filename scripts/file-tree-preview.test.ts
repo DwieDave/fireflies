@@ -87,11 +87,12 @@ const imageLogic = await load(`${F}/image.ts`, kinds);
 const { parse: parseTable, ...tableRest } = await load(`${F}/table.ts`);
 const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
 const keyhelp = await load(`${F}/keyhelp.ts`);
-const shared = { ...kinds, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
+const fileIcons = await load(`${F}/file-icons.ts`, kinds);
+const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
 const { default: Viewer } = await load(`${F}/viewer.ts`, shared);
 const logic = await load(`${F}/logic.ts`);
 const route = await load(`${F}/editor-route.ts`);
-const { default: Files } = await load(`${F}/main.ts`, { ...logic, ...keyhelp, Viewer, openInEditor: route.openInEditor, editorProps: route.editorProps });
+const { default: Files } = await load(`${F}/main.ts`, { ...logic, ...keyhelp, ...fileIcons, Viewer, openInEditor: route.openInEditor, editorProps: route.editorProps });
 const { lookSide, lookSize, clampShare, dragShare, lookRoom, LOOK_MIN, DIVIDER, menuItems, KEYS } = logic;
 
 // ---- a context: tasks run, timers wait until `tick()`, nested views record their props
