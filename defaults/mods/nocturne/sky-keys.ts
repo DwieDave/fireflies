@@ -5,11 +5,11 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { spaces, run, focused } from "herdr";
 import type { AgentInfo, SpaceInfo } from "herdr";
-import { pin, movePin, goToPin, unpin } from "./kit.ts";
+import { pin, movePin, goToPin, unpin, pinFocused, moveFocused, pinShownTab } from "./kit.ts";
 import type { JarItem } from "./pins.ts";
 import { paneMenu } from "./header.ts";
 import { isDock } from "./dock.ts";
-import { openKeys, newWorktree, tabTileMenu } from "./menu.ts";
+import { openKeys, newWorktree, tabTileMenu, openToSpace } from "./menu.ts";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { openSpacePicker } from "./newspace.ts";
@@ -108,6 +108,21 @@ export function sidebarKey(sky: Sky, e: KeyEvent, cx: Context): void {
   sky.navAt = Math.max(0, items.findIndex((x) => x.id === sky.cursor));
   cx.notify();
 }
+
+/** The jar's commands (nocturne.<c>): the focused pane pinned (pin) or moved in
+ *  the jar (pin-up, pin-down), the shown tab pinned whole (pin-tab) or sent to a
+ *  space (tab-to-space). False: not one of them. */
+export function jarCommand(c: string): boolean {
+  const go = JAR_COMMANDS.get(c);
+
+  go?.();
+
+  return Boolean(go);
+}
+
+const JAR_COMMANDS: ReadonlyMap<string, () => void> = new Map([
+  ["pin", pinFocused], ["pin-up", () => moveFocused(-1)], ["pin-down", () => moveFocused(1)], ["pin-tab", pinShownTab], ["tab-to-space", () => openToSpace()],
+]);
 
 /** The verbs on a firefly. */
 export function flyActs(sky: Sky, a: AgentInfo): NavActs {

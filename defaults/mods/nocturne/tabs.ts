@@ -119,23 +119,11 @@ export function seam(t: Theme, look: ToolLook = TOOL_LOOK): Element {
 /** What a control of the strip's rows does for the verbs the keyboard gives it. */
 type Act = (cx: Context) => void;
 
-/** A control the strip's cursor walks: a tab, a tool, a header control, a parked chip. */
-interface StripItem {
-  readonly id: string;
-  readonly active?: boolean;
-  readonly pane?: string;
-  readonly go?: Act;
-  readonly menu?: Act;
-  readonly rename?: Act;
-  readonly close?: Act;
-  readonly "move-left"?: Act;
-  readonly "move-right"?: Act;
-  readonly pin?: Act;
-  readonly "to-space"?: Act;
-}
-
 /** The verbs a control acts on itself. */
 type ItemVerb = "go" | "menu" | "rename" | "close" | "move-left" | "move-right" | "pin" | "to-space";
+
+/** A control the strip's cursor walks: a tab, a tool, a header control, a parked chip; what it does per verb. */
+type StripItem = { readonly id: string; readonly active?: boolean; readonly pane?: string } & { readonly [V in ItemVerb]?: Act };
 
 const ITEM_VERBS: ReadonlySet<string> = new Set<ItemVerb>(["go", "menu", "rename", "close", "move-left", "move-right", "pin", "to-space"]);
 

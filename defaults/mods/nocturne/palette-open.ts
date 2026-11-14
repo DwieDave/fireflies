@@ -199,6 +199,7 @@ function tabEntries(): Entry[] {
   if (!tab) return [];
 
   const on = tabPinnedNow(tab);
+
   const out: Entry[] = [{ name: "nocturne.pin-tab", args: {}, group: "Tab", icon: on ? "pin-off" : "pin", bind: "nocturne.pin-tab",
     title: on ? "Unpin this tab from the jar" : "Pin this tab to the jar", words: "pin unpin tab whole jar shelf sidebar keep tile", go: () => pinTab(tab, !on) }];
 

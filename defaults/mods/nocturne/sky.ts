@@ -50,13 +50,13 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, pinShownTab, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, tidyTabs, onShelf, storedRecords, PANES_KEY, TABS_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
-import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys, openToSpace } from "./menu.ts";
+import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
 import { SIDEBAR_HELP, blockOf, isLayoutNode } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
@@ -83,7 +83,7 @@ export { GLOW_SQUARE };
 
 import { stop, clock, moonPhase, REDRAW_ON_SHOW, CHECK, REDRAW_DELAY, railWidth, RAIL_BELOW, OPEN_WIDTH, OPEN_DEFAULT, SETTLE, SECTION_RANK } from "./sky-plan.ts";
 import type { Clock, NavEntry, Landing, GlowSky, RailTops } from "./sky-plan.ts";
-import { placeCursor, toggleKeys, sidebarKey, railActs } from "./sky-keys.ts";
+import { placeCursor, toggleKeys, sidebarKey, railActs, jarCommand } from "./sky-keys.ts";
 import { noteLandings, glint, stamp, meadowView } from "./meadow.ts";
 import { pinLit, pinName, pinWhere } from "./shelf.ts";
 import { railView } from "./rail.ts";
@@ -220,15 +220,11 @@ export default class Sky {
         else if (c === "gridify") gridify(later);
         else if (c === "new") openNewMenu({ centered: true });
         else if (c === "space-new") openSpacePicker();
-        else if (c === "pin") pinFocused();
-        else if (c === "pin-tab") pinShownTab();
-        else if (c === "tab-to-space") openToSpace();
+        else if (jarCommand(c)) { /* pinned, moved in the jar, or the tab sent to a space */ }
         else if (c === "dock") dockFocused();
         else if (c === "dock-web") dockWeb();
         else if (c === "dock-shell") dockShell();
         else if (c === "dock-files") dockFiles();
-        else if (c === "pin-up") moveFocused(-1);
-        else if (c === "pin-down") moveFocused(1);
         else if (c === "agent-next") this.walk(1);
         else if (c === "agent-prev") this.walk(-1);
         // With no toast on show, closing one closes the update note.

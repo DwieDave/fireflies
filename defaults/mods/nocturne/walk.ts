@@ -63,7 +63,13 @@ function paneOf(s: WalkStop): string | undefined {
 export function walkAt(stops: readonly WalkStop[], f: WalkFocus | null | undefined, last: string | null = null): number {
   if (!f) return -1;
 
-  const tabAt = (pick: (s: WalkStop) => boolean) => stops.findIndex((s) => { const it = itemOf(s); return it?.kind === "tab" && Boolean(f.tab) && it.tabInfo.id === f.tab && pick(s); });
+  const inTab = (s: WalkStop) => {
+    const it = itemOf(s);
+
+    return it?.kind === "tab" && Boolean(f.tab) && it.tabInfo.id === f.tab;
+  };
+
+  const tabAt = (pick: (s: WalkStop) => boolean) => stops.findIndex((s) => inTab(s) && pick(s));
   const wentTo = tabAt((s) => s.key === last);
 
   if (wentTo >= 0) return wentTo;
