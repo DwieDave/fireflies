@@ -85,6 +85,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // With cmd-shift-b for the Databases window, before the Nocturne layout's cmd-] / cmd-[ walked the agents and then the
     // shelf's pinned panes (nocturne.agent-next / agent-prev) in place of the core's agent.next / agent.prev.
     include_str!("keys/shipped/fireflies-databases-keys.macos.json"),
+    // With the walk on cmd-] / cmd-[ and cmd-s for the Databases window, before a whole tab got its keys: cmd-alt-shift-p pins
+    // it to the jar's shelf (nocturne.pin-tab), cmd-alt-shift-s moves it to another space (nocturne.tab-to-space).
+    include_str!("keys/shipped/fireflies-walk-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

@@ -1055,6 +1055,8 @@ fn shipped_layouts_and_keys() {
         "databases.save",
         "nocturne.agent-next",
         "nocturne.agent-prev",
+        "nocturne.pin-tab",
+        "nocturne.tab-to-space",
         "nocturne.picker",
         "nocturne.grep",
         "editor.save",

@@ -91,6 +91,8 @@
     "cmd-shift-a": "notifications.open",
     "cmd-e": "nocturne.files",
     "cmd-alt-p": "nocturne.pin",
+    "cmd-alt-shift-p": "nocturne.pin-tab",
+    "cmd-alt-shift-s": "nocturne.tab-to-space",
     "cmd-alt-shift-[": "nocturne.pin-up",
     "cmd-alt-shift-]": "nocturne.pin-down",
     "cmd-alt-=": "pane.font_bigger",
