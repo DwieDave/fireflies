@@ -62,6 +62,9 @@ import { props, theme, settings, closeOverlay, openOverlay, run, panes, focused,
 import type { OverlaySpec, PaneInfo, Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
+import type { Command, ControlId } from "./commands.ts";
+import { KEYS, SKIP, keyControl, menuMove, parseCommand } from "./commands.ts";
+import { GLYPH_DROP, lift, mix, seamTone } from "./look.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
 
@@ -87,7 +90,6 @@ export const snapOn = (): boolean => readShared(shared, SNAP, null) !== false;
 
 /** The window as it opens now: snapping as the mode is. */
 const windowSpec = (): OverlaySpec => ({ ...WINDOW, snap: snapOn() });
-const SKIP = 10;
 const ROW = 26;
 
 // The ⋯ menu's rule between two sections.
@@ -157,27 +159,6 @@ type Label = string | ((s: PlayerState) => string);
 
 const label = (v: Label, s: PlayerState): string => (isString(v) ? v : v(s));
 
-type ControlId = "back" | "rewind" | "toggle" | "forward" | "mute" | "pane" | "park" | "out" | "snap" | "keys" | "close";
-
-/** Where `to:` moves the window: one of the pane grid's eight places, or the next place that way. */
-type SnapTo = "top-left" | "top" | "top-right" | "right" | "bottom-right" | "bottom" | "bottom-left" | "left" | "up" | "down";
-
-const isSnapTo = literal("top-left", "top", "top-right", "right", "bottom-right", "bottom", "bottom-left", "left", "up", "down");
-
-/** What a key or a command asks of the player: a control, the keyboard back to the
- *  pane, snapping set on or off, or the window onto a place (`to:<place | left | right | up | down>`). */
-type Command = ControlId | "unfocus" | "snap:on" | "snap:off" | `to:${SnapTo}`;
-
-const isControlCommand = literal("back", "rewind", "toggle", "forward", "mute", "pane", "park", "out", "snap", "keys", "close", "unfocus", "snap:on", "snap:off");
-
-/** A command's text (`pip.` taken off) as a Command, or null. */
-export function parseCommand(c: string): Command | null {
-  if (isControlCommand(c)) return c;
-
-  const to = c.startsWith("to:") ? c.slice(3) : null;
-
-  return to !== null && isSnapTo(to) ? `to:${to}` : null;
-}
 
 type Section = "from" | "play" | "to" | "window";
 
@@ -212,11 +193,6 @@ const CONTROLS: readonly Control[] = [
   { id: "close", section: "window", keep: 1, mark: { glyph: "✕" }, name: "Close" },
 ];
 
-/** What ? lists: every key keyControl() takes, ? keys last. */
-export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
-  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["s", "snap to corners on / off"],
-  ["⇧← ⇧→  H L", "to the corner or edge middle left / right"], ["⇧↑ ⇧↓  K J", "… above / below"],
-  ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
 /** The keys popup's height: the list in KEYS_W, and its 1 px border. */
 const KEYS_H = keysHeight(KEYS, KEYS_W) + 2;
@@ -241,39 +217,6 @@ const TITLE = 70;
 // icons are. Its place on the bar is 8 px, the seam in the middle.
 const SEAM = 8;
 const SEAM_H = 8;
-
-/** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either
- *  isn't one (../nocturne/toolground.ts's mix: a mod can't import another's files). */
-export function mix(a: Color, b: Color, k: number): Color {
-  const ch = (c: Color) => (/^#[0-9a-f]{6}$/i.test(c) ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null);
-  const x = ch(a);
-  const y = ch(b);
-
-  if (!x || !y) return a;
-
-  return `#${x.map((v, i) => Math.round(v + ((y[i] ?? v) - v) * k).toString(16).padStart(2, "0")).join("")}`;
-}
-
-/** The seams' and the ⋯ menu's rules' tone: a third of the way from the
- *  icons' dim to ansi0, the bar's hover (moonfly: #5f6d6d → #505a5b). One
- *  step darker than the dim they had, still there. */
-export const seamTone = (t: Theme): Color => mix(t.dim, t.ansi0, 1 / 3);
-
-/**
- * How far each glyph's ink sits below the middle of its box, in em. An svg
- * centres its drawing on its box; a glyph sits by its font's line box, and
- * each one's ink lands differently. Measured on the bar at zoom 0.9 (2×
- * pixels, 11 px text: 19.8 px to the em), where ❚❚ and ◧ sat 1.6 px low, ⇱
- * 1.5, ✕ 1, ↩ « » ⤓ about 0.5, and ? 0.5 high (▶ and ⋯ weren't on the
- * shot: none). In em, so the lift scales
- * with the text size and the zoom: the same at zoom 1, and in the ⋯ menu.
- */
-export const GLYPH_DROP: ReadonlyMap<string, number> = new Map([
-  ["↩", 0.035], ["«", 0.025], ["❚❚", 0.08], ["»", 0.025], ["◧", 0.085], ["⤓", 0.025], ["⇱", 0.075], ["?", -0.025], ["✕", 0.05],
-]);
-
-/** How far up a glyph is moved at text size `size` (px) to centre its ink. */
-export const lift = (glyph: string, size: number): number => Math.round((GLYPH_DROP.get(glyph) ?? 0) * size * 100) / 100;
 
 /** `list` cut into its sections, in order: [[control, …], …]; none empty. */
 export function sections<C extends { readonly section: string }>(list: readonly C[]): C[][] {
@@ -319,38 +262,9 @@ function seam(t: Theme) {
   return div().relative().flex_none().w(1).h(SEAM_H).mx((SEAM - 1) / 2).child(dither(seamTone(t), 1));
 }
 
-const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
-  ["space", "toggle"], ["k", "toggle"], ["left", "rewind"], ["h", "rewind"], ["right", "forward"], ["l", "forward"], ["m", "mute"], ["b", "back"],
-  ["p", "pane"], ["P", "park"], ["o", "out"], ["s", "snap"], ["x", "close"], ["q", "close"], ["escape", "unfocus"], ["?", "keys"],
-  // From place to place on the pane grid (shift with the arrows, or with h j k l).
-  ["H", "to:left"], ["L", "to:right"], ["K", "to:up"], ["J", "to:down"],
-  ["shift-left", "to:left"], ["shift-right", "to:right"], ["shift-up", "to:up"], ["shift-down", "to:down"],
-]);
 
-/** A key as keyControl() reads it: GPUI's key event, or the fields a test gives. */
-type Key = Pick<KeyEvent, "key"> & { readonly key_char?: string | null | undefined; readonly modifiers?: Partial<KeyEvent["modifiers"]> | undefined };
-
-/** The player's control for a key event, or null. "unfocus": esc, the keyboard back to the pane. */
-export function keyControl(e: Key | null | undefined): Command | null {
-  const m = e?.modifiers;
-
-  if (m?.platform || m?.control || m?.alt) return null;
-
-  const c = e?.key_char;
-  const key = e?.key ?? "";
-  // Shift with an arrow (the arrows type no character).
-  const arrow = m?.shift && ["left", "right", "up", "down"].includes(key) ? `shift-${key}` : null;
-  const k = arrow ?? (isString(c) && c.length === 1 && c.trim() !== "" ? c : key);
-
-  return KEY_COMMANDS.get(k) ?? null;
-}
-
-/** The ⋯ menu's cursor after a key (null: not a moving key). */
-export function menuMove(k: string, at: number, n: number): number | null {
-  const d = k === "down" || k === "j" ? 1 : k === "up" || k === "k" ? -1 : 0;
-
-  return d !== 0 && n > 0 ? (at + d + n) % n : null;
-}
+// What the tests read here too.
+export { GLYPH_DROP, KEYS, keyControl, lift, menuMove, mix, parseCommand, seamTone };
 
 export default class Pip extends View {
   menu: readonly string[] | null = null;

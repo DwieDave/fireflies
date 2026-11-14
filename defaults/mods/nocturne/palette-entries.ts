@@ -348,6 +348,7 @@ export const OUT = {
   "usage.focus": "internal: hands the usage pane the keyboard",
   "pip.focus": "internal: hands the player the keyboard",
   "pip.unfocus": "the player's key that hands the keyboard back: esc in the player",
+  "pip.unpark": "internal: the app tells a parked player's chip it was unparked (a click on the chip)",
   "git.focus": "internal: hands the git window the keyboard",
   "scripts.focus": "internal: hands the script runner the keyboard",
   "scripts.keys": "the open script runner's ? (cmd-k ? while it filters): it lists its keys in place",

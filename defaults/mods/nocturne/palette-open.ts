@@ -270,6 +270,7 @@ function pipEntries(): Entry[] {
       ] : [["out", "square", "Picture in picture out of the pane", "pip video player window float undock"] as const]),
       ["toggle", "square", "Picture in picture: play / pause", "pip video player pause resume"],
       ["keys", "square", "Picture in picture: keys", "pip video player help shortcuts list ? keybindings"],
+      ["snap", "square", "Picture in picture: snap to corners on / off", "pip video player magnet snapping corner edge grid align"],
       ["mute", "square", "Picture in picture: sound off / on", "pip video player mute unmute volume audio"],
       ["rewind", "chevron-left", "Picture in picture: back 10 seconds", "pip video player skip rewind seek"],
       ["forward", "chevron-right", "Picture in picture: on 10 seconds", "pip video player skip forward seek"],
