@@ -174,8 +174,10 @@ mod; found in the shown space's folder: a `DATABASE_URL`-like variable in its
 `.env` files or its direnv environment, `*.db` / `*.sqlite*` files), [2]
 Tables · Views · Schemas with row counts, [3] Structure · Indexes · Keys ·
 Value (a key leads to its table; Value is the picked cell whole, JSON
-pretty-printed), [0] the main view: Rows (a table's page of 200: `s` sorts
-by the column, `/` a WHERE line, `<` `>` pages) and a tab per query (an SQL
+pretty-printed), [0] the main view: Rows (a table's page of 200: `o` (or
+`s`, or a click on its header) sorts by the column with an ORDER BY the
+database runs, shown after the WHERE line as the statement has it; `/` a
+WHERE line, `<` `>` pages) and a tab per query (an SQL
 editor with tree-sitter colours over its result; ctrl-enter runs the
 statement under the caret or the selection, ctrl-shift-enter all of them in
 one session, esc cancels a run; the error is underlined where the client
@@ -198,8 +200,33 @@ drag one, double-click it to put it back; `+` / `-` grow and shrink the
 focused panel; the sizes are kept (one set for the window, one for panes).
 `e` exports a table (whole, its page, its filtered rows)
 or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
-the connection's history; `?` lists every key; right-click (or `m`) opens a
-row's menu. Nothing runs on open. A statement that writes asks first (`y`);
+the connection's history; `?` lists every key. Mouse and keyboard both reach
+everything: a right click opens a menu at the pointer and `m` the same menu
+on what the cursor is on (a connection: connect / disconnect `x`, test, edit,
+duplicate `D` (never its password), copy its address `y` (no secret), save,
+remove; a table or view: rows, select, count, its name, copy, export, and
+"Empty it…" / "Drop it…", which put the statement in a query tab and run it
+through the ask; a schema, a structure row, a log line; a cell: change, NULL,
+undo, its value, copy it or the selection, the row as TSV / JSON / CSV /
+INSERT, filter by this value, sort; `O` (a right click on a header) a
+column's: sort ↑ ↓ off, filter by it, hide `H`, show the hidden ones, wider
+`}` / narrower `{` (or drag the header's right edge; a double click there
+fits it), its name; a row number's; `T` (a right click on a tab) a tab's:
+run, rename (a double click too), duplicate, close, close the others). Each
+menu row shows the key that does the same. A query result sorts too (`o`,
+a header's click): the rows that came back, sorted in the window and said
+so. Columns hidden, moved (drag a header onto another) and resized are kept
+per connection and table (shared `databases.columns`). A range: shift +
+arrows, a drag across cells, the row numbers (click, shift-click, drag), `V`
+the row, cmd-a all; `y` / cmd-c copy one cell's value or a range as TSV, esc
+drops the range. A table's or column's name dragged onto a query's editor
+goes in quoted at its caret; a table dropped on the Rows tab opens there;
+query tabs and saved connections (`J` / `K` too) drag to another place; a
+SQLite file dropped on the window opens as a connection (not saved), a
+`.sql` file as a query tab (not run): nothing that writes starts from a
+drop. A double click is enter everywhere; a cut cell, a header, a
+connection and a table say more on hover; the wheel scrolls (shift: a grid
+sideways). Nothing runs on open. A statement that writes asks first (`y`);
 DROP, TRUNCATE, ALTER … DROP and a DELETE or UPDATE without WHERE ask twice,
 the second time by typing the object's name; a read-only connection (the
 default for one found in a folder) refuses writes, and the client is told so

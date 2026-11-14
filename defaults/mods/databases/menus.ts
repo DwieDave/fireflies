@@ -1,41 +1,79 @@
-// The right-click menus (and `m` on a row: the same menu by keyboard): a
-// connection's, a table's, a structure row's, a cell's; the history as a
-// menu (ctrl-h); the ask before a connection is removed. Each row says the
-// key that does the same, so the menu teaches the keys.
+// The context menus: a right click opens one at the pointer, `m` the same one
+// on what the cursor is on (M a grid column's, T the main view's tab). A
+// connection's, a table's or view's, a schema's, a structure row's, a cell's,
+// a column header's, a row number's, a tab's, a log line's; the history as a
+// menu (ctrl-h); the ask before a connection is removed. Each row names the
+// action it does and shows that action's key from keys.ts (entry()), so the
+// menu teaches the keys and can't drift from them or from `?`.
 
 import type { Context } from "gpui-kit";
+import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
 import { qualified, quoteName } from "./catalog.ts";
-import type { MenuRow } from "./state.ts";
+import type { MenuRow, QueryTab } from "./state.ts";
+import type { Place } from "./keys.ts";
+import { keyOf } from "./keys.ts";
 import { connect, remove, saveFound, test } from "./conns.ts";
 import { openForm } from "./conn-form.ts";
 import { openExport } from "./export-form.ts";
-import { cellAt, rowText } from "./grid.ts";
-import { exportShown, shownGrid, showValue, sortBy } from "./act-grid.ts";
-import { insertName, openTable } from "./actions.ts";
+import type { GridNow } from "./act-grid.ts";
+import {
+  closeQuery, copy, copyText, equalsSql, exportShown, filterTo, fitColumn, hideColumn, openFilter, rangeRows, rawCol, rowsText, setLocalSort, setSort,
+  showColumns, shownGrid, showValue, sortColumn, widen,
+} from "./act-grid.ts";
+import { addressOf, disconnect, duplicateConn, insertName, openTable, refresh } from "./actions.ts";
 import type { StructRow } from "./panels.ts";
 import { changeAt } from "./edits.ts";
 import { editableNow, liveEdits, stageNull, startEdit, undoCell } from "./cell-edit.ts";
+import { WIDTH_STEP } from "./columns.ts";
+import { everything, hasRange, rangeOf, rowsSelected, wholeRows } from "./select.ts";
+import { runQuery } from "./query.ts";
+import { saveQueries } from "./queries.ts";
 import type { default as DbView } from "./main.ts";
 
-/** Opens a menu over the body. */
-export function openMenu(v: DbView, title: string, rows: readonly MenuRow[]): void {
-  v.menu = rows.length ? { title, rows, at: 0 } : null;
+/** A menu row that does an action of a place: its key is that action's (none: no key does it). */
+export function entry(place: Place, act: string | null, label: string, go: () => void, more: { readonly sub?: string; readonly danger?: boolean } = {}): MenuRow {
+  const key = act ? keyOf(place, act) : undefined;
+
+  return act && key ? { label, go, ...more, act, key } : { label, go, ...more };
 }
 
+/** Opens a menu over the body: at the pointer when a right click asked for it (atPointer). */
+export function openMenu(v: DbView, title: string, rows: readonly MenuRow[]): void {
+  const near = v.menuNear;
+
+  v.menuNear = null;
+  v.menu = rows.length ? { title, rows, at: 0, near } : null;
+}
+
+/** Runs `open` (a menu's) so the menu stands at the pointer: a right click's way. */
+export function atPointer(v: DbView, open: () => void): void {
+  v.menuNear = v.pointer;
+  open();
+  v.menuNear = null;
+}
+
+// ---- [1] a connection
+
 export function connMenu(v: DbView, c: Conn, cx: Context): void {
+  const live = v.active?.id === c.id;
+  const address = addressOf(c);
+
   const rows: MenuRow[] = [
-    { label: "Connect", key: "enter", go: () => void connect(v, c, cx) },
-    { label: "Test", key: "t", go: () => void test(v, c, cx) },
-    { label: "Edit…", key: "e", go: () => openForm(v, c, cx) },
+    live ? entry("conns", "disconnect", "Disconnect", () => disconnect(v), { sub: "its tables close; the query tabs stay" })
+      : entry("conns", "connect", "Connect", () => void connect(v, c, cx)),
+    entry("conns", "conn-test", "Test", () => void test(v, c, cx)),
+    entry("conns", "conn-edit", "Edit…", () => openForm(v, c, cx)),
+    entry("conns", "conn-duplicate", "Duplicate…", () => duplicateConn(v, c, cx), { sub: "a new one with its fields; the password isn't copied" }),
+    entry("conns", "copy", "Copy its address", () => copy(v, address, cx), { sub: address }),
   ];
 
-  if (c.origin !== "saved") rows.push({ label: "Save it", sub: "kept in connections, its password in the keychain", key: "s", go: () => void saveFound(v, c, cx) });
+  if (c.origin !== "saved") rows.push(entry("conns", "conn-save", "Save it", () => void saveFound(v, c, cx), { sub: "kept in connections, its password in the keychain" }));
 
-  rows.push({ label: "New connection…", key: "n", go: () => openForm(v, null, cx) });
+  rows.push(entry("conns", "conn-new", "New connection…", () => openForm(v, null, cx)));
 
-  if (c.origin !== "found") rows.push({ label: "Remove…", key: "d", danger: true, go: () => confirmRemove(v, c, cx) });
+  if (c.origin !== "found") rows.push(entry("conns", "conn-remove", "Remove…", () => confirmRemove(v, c, cx), { danger: true }));
 
   openMenu(v, c.name, rows);
 }
@@ -47,32 +85,79 @@ export function confirmRemove(v: DbView, c: Conn, cx: Context): void {
   v.ask = { verdict: { risk: "write", verb: "remove", target: null }, text: `Remove ${c.name}? ${what}`, step: 1, input: null, go: () => void remove(v, c, cx) };
 }
 
+// ---- [2] a table, a view, a schema
+
+/** A statement in a new query tab, run there: what it does is shown, and it asks as any run does
+ *  (twice for a destructive one, refused on a read-only connection). */
+function runInTab(v: DbView, sql: string, cx: Context): void {
+  runQuery(v, v.addQuery(sql, cx), false, cx);
+}
+
 export function tableMenu(v: DbView, t: TableRef, cx: Context): void {
   const kind = v.active?.kind ?? "sqlite";
   const name = qualified(kind, t);
+  const view = t.type === "view";
+  const empty = kind === "postgres" || kind === "mysql" ? `truncate table ${name};` : `delete from ${name};`;
+  const asked = "in a query tab; it asks twice, its name typed";
 
-  openMenu(v, t.name, [
-    { label: "Rows and structure", key: "enter", go: () => openTable(v, t, cx) },
-    { label: "Select it in a query", key: "s", go: () => void v.addQuery(`select * from ${name} limit 100;`, cx) },
-    { label: "Count its rows in a query", go: () => void v.addQuery(`select count(*) from ${name};`, cx) },
-    { label: "Its name into the query", key: "i", go: () => insertName(v, name, cx) },
-    { label: "Copy its name", key: "y", go: () => cx.write_to_clipboard(t.name) },
-    { label: "Export…", key: "e", go: () => openExport(v, { table: t }, cx) },
+  openMenu(v, `${t.name}${view ? " · view" : ""}`, [
+    entry("tables", "open", "Rows and structure", () => openTable(v, t, cx)),
+    entry("tables", "table-query", "Select it in a query", () => void v.addQuery(`select * from ${name} limit 100;`, cx)),
+    entry("tables", null, "Count its rows in a query", () => void v.addQuery(`select count(*) from ${name};`, cx)),
+    entry("tables", "insert", "Its name into the query", () => insertName(v, name, cx), { sub: "or drag the row into the query" }),
+    entry("tables", "copy", "Copy its name", () => copy(v, t.name, cx)),
+    entry("tables", "export", "Export…", () => openExport(v, { table: t }, cx)),
+    ...(view ? [] : [entry("tables", null, "Empty it…", () => runInTab(v, empty, cx), { sub: `${empty} · ${asked}`, danger: true })]),
+    entry("tables", null, view ? "Drop the view…" : "Drop it…", () => runInTab(v, `drop ${view ? "view" : "table"} ${name};`, cx), { sub: asked, danger: true }),
   ]);
 }
+
+export function schemaMenu(v: DbView, schema: string | null, cx: Context): void {
+  const kind = v.active?.kind ?? "postgres";
+
+  openMenu(v, schema ?? "every schema", [
+    entry("tables", "open", schema ? "Its tables" : "Every schema's tables", () => { v.schema = schema; v.tablesTab = "tables"; v.tableAt = 0; }),
+    ...(schema ? [
+      entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(kind, schema), cx)),
+      entry("tables", "copy", "Copy its name", () => copy(v, schema, cx)),
+    ] : []),
+  ]);
+}
+
+// ---- [3] a structure row
 
 export function structMenu(v: DbView, r: StructRow, cx: Context): void {
   const kind = v.active?.kind ?? "sqlite";
   const rows: MenuRow[] = [];
-
-  if (r.name) rows.push({ label: "The name into the query", key: "i", go: () => insertName(v, quoteName(kind, r.name ?? ""), cx) });
-
   const other = r.table ? v.catalog.tables.find((t) => t.name === r.table) : undefined;
 
-  if (other) rows.push({ label: `Open ${other.name}`, key: "enter", go: () => openTable(v, other, cx) });
+  if (other) rows.push(entry("structure", "open", `Open ${other.name}`, () => openTable(v, other, cx)));
 
-  rows.push({ label: "Copy", key: "y", go: () => cx.write_to_clipboard(r.copy) });
+  if (r.name) rows.push(entry("structure", "insert", "The name into the query", () => insertName(v, quoteName(kind, r.name ?? ""), cx), { sub: "or drag the row into the query" }));
+
+  rows.push(entry("structure", "copy", "Copy", () => copy(v, r.copy, cx), { sub: r.copy }));
   openMenu(v, r.name ?? r.copy, rows);
+}
+
+// ---- [0] the grids: a cell, a column's header, a row's number, a tab
+
+/** The rows a row's menu copies: the selected whole rows when it's among them, else it alone. */
+function rowsFor(g: GridNow, row: number): number[] {
+  const r = rangeOf(g.at);
+
+  return hasRange(g.at) && wholeRows(r, g.set.columns.length) && row >= r.r0 && row <= r.r1 ? rangeRows(g) : [row];
+}
+
+/** Copying rows in each format, as menu rows. */
+function rowCopies(v: DbView, g: GridNow, rows: readonly number[], cx: Context): MenuRow[] {
+  const what = rows.length > 1 ? `the ${rows.length} rows` : "the row";
+
+  return [
+    entry(g.place, "copy-row", `Copy ${what}`, () => copy(v, rowsText(v, g, "tsv", rows), cx), { sub: "tab-separated, as shown" }),
+    entry(g.place, null, `Copy ${what} as JSON`, () => copy(v, rowsText(v, g, "json", rows), cx)),
+    entry(g.place, null, `Copy ${what} as CSV`, () => copy(v, rowsText(v, g, "csv", rows), cx)),
+    ...(g.place === "rows" ? [entry(g.place, null, `Copy ${what} as INSERT`, () => copy(v, rowsText(v, g, "insert", rows), cx))] : []),
+  ];
 }
 
 export function cellMenu(v: DbView, row: number, col: number, cx: Context): void {
@@ -81,30 +166,206 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
   if (!g) return;
 
   const column = g.set.columns[col] ?? "";
+  const place = g.place;
+  const range = hasRange(g.at);
+  const value = g.set.rows[row]?.[col];
+  const rows: MenuRow[] = [];
 
-  const rows: MenuRow[] = [
-    { label: "Its whole value", key: "enter", go: () => showValue(v) },
-    { label: "Copy the cell", key: "y", go: () => cx.write_to_clipboard(cellAt(g.set, { ...g.at, row, col }) ?? "") },
-    { label: "Copy the row", key: "Y", go: () => cx.write_to_clipboard(rowText(g.set, row)) },
-    { label: "Export…", key: "e", go: () => exportShown(v, cx) },
-  ];
+  // Editing: only where the rows can be (else no row for it: c says why).
+  if (place === "rows" && !("why" in editableNow(v)) && !range) {
+    const changed = g.raw ? changeAt(liveEdits(v), g.raw, row, column) : null;
 
-  if (!v.shownQuery()) {
-    rows.splice(3, 0, { label: `Sort by ${column}`, key: "s", go: () => sortBy(v, column, cx) });
-    rows.splice(4, 0, { label: "Filter…", key: "/", go: () => { v.rows.filtering = true; } });
-
-    // Editing: only where the rows can be (else the first row says why).
-    const e = editableNow(v);
-    const changed = changeAt(liveEdits(v), g.set, row, column);
-
-    rows.unshift(...("why" in e ? [] : [
-      { label: `Change ${column}…`, key: "c", go: () => { startEdit(v); } },
-      { label: "Set it NULL", key: "N", go: () => stageNull(v) },
-      ...(changed ? [{ label: "Undo this change", sub: `back to ${changed.was ?? "NULL"}`, key: "u", go: () => undoCell(v) }] : []),
-    ]));
+    rows.push(
+      entry(place, "cell-edit", `Change ${column}…`, () => { startEdit(v); }),
+      entry(place, "cell-null", "Set it NULL", () => stageNull(v)),
+      ...(changed ? [entry(place, "cell-undo", "Undo this change", () => undoCell(v), { sub: `back to ${changed.was ?? "NULL"}` })] : []),
+    );
   }
 
-  openMenu(v, `${column} · row ${row + 1}`, rows);
+  rows.push(
+    entry(place, "value", "Its whole value", () => showValue(v), { sub: "in [3] Value" }),
+    entry(place, "copy", range ? "Copy the selection" : "Copy the value", () => copy(v, copyText(g), cx), { sub: range ? "tab-separated: a spreadsheet takes it" : "as it is" }),
+    entry(place, "select-all", "Select every cell", () => g.put(everything(g.at, g.set)), { sub: "shift + arrows, a drag or the row numbers select some" }),
+    ...rowCopies(v, g, rowsFor(g, row), cx),
+  );
+
+  if (place === "rows" && value !== undefined) {
+    const where = equalsSql(v, column, value);
+
+    rows.push(entry(place, null, "Filter by this value", () => filterTo(v, where, cx), { sub: `where ${where}` }));
+  }
+
+  rows.push(
+    entry(place, "sort", `Sort by ${column}`, () => sortColumn(v, column, cx), { sub: place === "rows" ? "ORDER BY: ↑, ↓, off" : "the rows that came back: ↑, ↓, off" }),
+    entry(place, "column-menu", `${column}'s menu…`, () => columnMenu(v, col, cx)),
+    entry(place, "export", "Export…", () => exportShown(v, cx)),
+  );
+
+  openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows);
+}
+
+/** A column's header menu: its sort (the database's on a table, the result's own), filter, width,
+ *  hide, the hidden ones back, its name. */
+export function columnMenu(v: DbView, col: number, cx: Context): void {
+  const g = shownGrid(v);
+
+  if (!g) return;
+
+  const name = g.set.columns[col] ?? "";
+  const place = g.place;
+  const kind = v.active?.kind ?? "sqlite";
+  const now = g.sort?.column === name ? g.sort.desc ? "desc" : "asc" : "off";
+  // s goes ↑, ↓, off: its key shows on the one it would do next.
+  const next = now === "off" ? "asc" : now === "asc" ? "desc" : "off";
+
+  const sort = (to: "asc" | "desc" | "off") => {
+    const s = to === "off" ? null : { column: name, desc: to === "desc" };
+
+    if (g.q) setLocalSort(v, g.q, s);
+    else setSort(v, s, cx);
+  };
+
+  const sortRow = (to: "asc" | "desc" | "off", label: string) => entry(place, to === next ? "sort" : null, `${label}${to === now ? "  ✓" : ""}`, () => sort(to));
+  const c = g.cols[col];
+  const raw = rawCol(g, col);
+  const type = g.raw.types?.[raw] ?? (place === "rows" ? v.columnTypes()?.[raw] : undefined);
+
+  const rows: MenuRow[] = [
+    sortRow("asc", place === "rows" ? "Sort ascending (ORDER BY … asc)" : "Sort ascending (here)"),
+    sortRow("desc", place === "rows" ? "Sort descending (ORDER BY … desc)" : "Sort descending (here)"),
+    sortRow("off", place === "rows" ? "Not sorted" : "As the database answered"),
+  ];
+
+  if (place === "rows") rows.push(entry(place, "filter", "Filter by this column…", () => openFilter(v, `${quoteName(kind, name)} `)));
+
+  rows.push(
+    entry(place, "hide", "Hide it", () => hideColumn(v, g, col)),
+    ...(g.shown.hidden ? [entry(place, null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g))] : []),
+    entry(place, "wider", "Wider", () => widen(v, g, col, WIDTH_STEP), { sub: "or drag the header's right edge" }),
+    entry(place, "narrower", "Narrower", () => widen(v, g, col, -WIDTH_STEP)),
+    ...(c && g.layout.widths[c.name] !== undefined ? [entry(place, null, "Fit it to its cells", () => fitColumn(g, col), { sub: "a double click on its edge too" })] : []),
+    entry(place, null, "Its name into the query", () => insertName(v, quoteName(kind, name), cx), { sub: "or drag the header into the query" }),
+    entry(place, null, "Copy its name", () => copy(v, name, cx)),
+  );
+
+  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows);
+}
+
+/** A row number's menu: select it, copy it (or the selected rows it's among). */
+export function rowMenu(v: DbView, row: number, cx: Context): void {
+  const g = shownGrid(v);
+
+  if (!g) return;
+
+  const rows = rowsFor(g, row);
+
+  openMenu(v, rows.length > 1 ? `rows ${(rows[0] ?? 0) + 1}–${(rows.at(-1) ?? 0) + 1}` : `row ${row + 1}`, [
+    entry(g.place, "select-row", "Select it", () => g.put(rowsSelected({ ...g.at, row }, g.set, row, row))),
+    ...rowCopies(v, g, rows, cx),
+  ]);
+}
+
+/** The main view's tab `n` (0 the Rows, else a query tab): its menu. */
+export function tabMenu(v: DbView, n: number, cx: Context): void {
+  const q = n > 0 ? v.queries[n - 1] : null;
+
+  if (q) {
+    queryTabMenu(v, q, cx);
+
+    return;
+  }
+
+  const b = v.rows.browse;
+  const g = shownGrid(v);
+  const rows: MenuRow[] = [];
+
+  if (b && v.active) {
+    rows.push(entry("rows", "refresh", "Read it again", () => refresh(v, cx)));
+
+    if (b.filter) rows.push(entry("rows", null, "Clear the filter", () => filterTo(v, "", cx), { sub: `where ${b.filter}` }));
+
+    if (b.sort) rows.push(entry("rows", null, "Not sorted", () => setSort(v, null, cx), { sub: `order by ${b.sort.column}` }));
+
+    if (g?.shown.hidden) rows.push(entry("rows", null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g)));
+
+    rows.push(
+      entry("rows", "export", "Export…", () => exportShown(v, cx)),
+      entry("rows", null, "Select it in a query", () => void v.addQuery(`select * from ${qualified(v.active?.kind ?? "sqlite", b.table)} limit 100;`, cx)),
+    );
+  }
+
+  rows.push(entry("rows", "query-new", "New query tab", () => void v.addQuery("", cx)));
+
+  if (v.active) rows.push(entry("rows", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }));
+
+  openMenu(v, b ? `Rows · ${b.table.name}` : "Rows", rows);
+}
+
+function queryTabMenu(v: DbView, q: QueryTab, cx: Context): void {
+  const others = v.queries.length > 1;
+
+  openMenu(v, q.name, [
+    entry("editor", "run", "Run the statement", () => runQuery(v, q, false, cx), { sub: "under the caret, or the selection" }),
+    entry("editor", "run-all", "Run every statement", () => runQuery(v, q, true, cx)),
+    entry("results", null, "Rename…", () => startRename(v, q), { sub: "a double click on the tab too" }),
+    entry("results", null, "Duplicate", () => {
+      const copyOf = v.addQuery(q.editor.value(), cx);
+
+      copyOf.name = `${q.name} copy`;
+    }),
+    entry("results", "query-close", "Close", () => closeQuery(v, q, cx)),
+    ...(others ? [entry("results", null, "Close the others", () => closeOthers(v, q))] : []),
+    entry("results", "query-new", "New query tab", () => void v.addQuery("", cx)),
+    entry("results", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }),
+  ]);
+}
+
+/** Every query tab but `q` closed. */
+export function closeOthers(v: DbView, q: QueryTab): void {
+  v.queries = [q];
+  v.mainTab = 1;
+  v.queriesDirty = true;
+  void saveQueries(v);
+  v.focusShown();
+}
+
+/** A query tab's name asked for (enter keeps it, esc leaves it). */
+export function startRename(v: DbView, q: QueryTab): void {
+  const input = InputState.new({ placeholder: "the tab's name", value: q.name });
+
+  v.rename = { tab: q, input };
+  input.focus();
+}
+
+/** The rename kept (an empty name leaves it as it was). */
+export function keepRename(v: DbView): void {
+  const r = v.rename;
+
+  if (!r) return;
+
+  const name = r.input.value().trim().slice(0, 60);
+
+  if (name) {
+    r.tab.name = name;
+    v.queriesDirty = true;
+  }
+
+  v.rename = null;
+  v.focusShown();
+}
+
+// ---- [4] a log line
+
+export function logMenu(v: DbView, i: number, cx: Context): void {
+  const line = v.log[i];
+
+  if (!line) return;
+
+  openMenu(v, line.sql.replace(/\s+/g, " ").slice(0, 80), [
+    entry("log", "open", "Into a query tab", () => void v.addQuery(`${line.sql};`, cx), { sub: "not run" }),
+    entry("log", "copy", "Copy the statement", () => copy(v, line.sql, cx)),
+    ...(line.ok ? [] : [entry("log", null, "Copy what it said", () => copy(v, line.said, cx), { sub: line.said })]),
+  ]);
 }
 
 /** How long ago, in a few letters. */

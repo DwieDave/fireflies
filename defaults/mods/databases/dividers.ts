@@ -19,7 +19,7 @@
 //   root: tracking(view, ds, cx => cx.notify()); keys: ds.stepAll(edges, +1 | -1)
 
 import { div } from "gpui-kit";
-import type { Color, Context, Element, MouseButtonEvent, Point } from "gpui-kit";
+import type { Color, Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import { settings } from "herdr";
 import type { Theme } from "herdr";
 
@@ -219,9 +219,17 @@ export function divider(t: Theme, id: string, d: Divider, ds: Dividers, thick = 
     .when(shown, (el) => el.child(line(held ? t.accent : t.ansi8, held ? 2 : 1)).child(grip(held ? t.accent : t.ansi8)));
 }
 
+/** What else the root follows besides the dividers (one handler each per element, so a view
+ *  with its own drags hands them in here): true from one asks for a redraw. */
+export interface Also {
+  readonly move?: (e: MouseMoveEvent, cx: Context) => boolean;
+  readonly up?: (cx: Context) => boolean;
+  readonly leave?: (cx: Context) => boolean;
+}
+
 /** The view's root follows a drag: the pointer's moves resize, a release or leaving the view ends
  *  it (and saves), the resize pointer stays while it's held. */
-export function tracking(el: Element, ds: Dividers): Element {
+export function tracking(el: Element, ds: Dividers, also: Also = {}): Element {
   const axis = ds.drag?.divider.axis ?? null;
 
   return el
@@ -229,13 +237,20 @@ export function tracking(el: Element, ds: Dividers): Element {
     .when(axis === "y", (e) => e.cursor_row_resize())
     .on_mouse_move((e, cx) => {
       const g = ds.drag;
+      const moved = g ? ds.move(along(g.divider.axis, e.position)) : false;
 
-      if (g && ds.move(along(g.divider.axis, e.position))) cx.notify();
+      if (also.move?.(e, cx) || moved) cx.notify();
     })
     .on_mouse_up("left", (_e, cx) => {
-      if (ds.up()) cx.notify();
+      const up = ds.up();
+
+      if (also.up?.(cx) || up) cx.notify();
     })
     .on_hover((over, cx) => {
-      if (!over && ds.up()) cx.notify();
+      if (over) return;
+
+      const up = ds.up();
+
+      if (also.leave?.(cx) || up) cx.notify();
     });
 }

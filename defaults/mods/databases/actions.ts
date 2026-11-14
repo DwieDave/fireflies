@@ -6,16 +6,20 @@
 
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
-import { run } from "herdr";
+import { home, run } from "herdr";
 import type { Binding, Place } from "./keys.ts";
-import { BINDINGS, actionFor } from "./keys.ts";
-import { PANELS, STRUCT_TABS, TABLES_TABS } from "./state.ts";
+import { BINDINGS, actionsFor } from "./keys.ts";
+import { PANELS, STRUCT_TABS, TABLES_TABS, gridStart } from "./state.ts";
 import type { PanelId } from "./state.ts";
+import type { Conn, ConnDraft } from "./kinds.ts";
+import { DEFAULT_PORT, onFile, tilde } from "./kinds.ts";
 import { connAtCursor, connList, connect, discover, saveFound, test } from "./conns.ts";
-import { browse, loadRows, loadStructure } from "./session.ts";
+import { writeConnections } from "./store.ts";
+import { IO, browse, dataHome, loadRows, loadStructure } from "./session.ts";
 import { insertAtCaret } from "./query.ts";
-import { gridAct } from "./act-grid.ts";
-import { connMenu, historyMenu, structMenu, tableMenu, confirmRemove } from "./menus.ts";
+import { saveQueries } from "./queries.ts";
+import { copy, gridAct } from "./act-grid.ts";
+import { connMenu, historyMenu, logMenu, schemaMenu, structMenu, tableMenu, confirmRemove } from "./menus.ts";
 import { openForm } from "./conn-form.ts";
 import { openExport } from "./export-form.ts";
 import { keepCopy, ownPane } from "./opening.ts";
@@ -31,14 +35,17 @@ const isAction = (place: Place, name: string): boolean => [...BINDINGS[place], .
 
 /** Does what a key (or an action's name) asks in a place; false when it means nothing there. */
 export function act(v: DbView, place: Place, key: string, cx: Context): boolean {
-  const action = actionFor(place, key) ?? (isAction(place, key) ? key : null);
+  const bound = actionsFor(place, key);
+  const actions = bound.length ? bound : isAction(place, key) ? [key] : [];
 
-  if (key === "escape" && !action) return escape(v);
+  // A key may mean more than one thing here (esc: drop the selection, else …): the first that acts.
+  for (const action of actions) if (windowAct(v, action, cx) || placeAct(v, place, action, cx)) return true;
 
-  if (!action) return false;
+  return key === "escape" ? escape(v) : false;
+}
 
-  if (windowAct(v, action, cx)) return true;
-
+/** An action of a place's own. */
+function placeAct(v: DbView, place: Place, action: string, cx: Context): boolean {
   switch (place) {
     case "conns": return connAct(v, action, cx);
     case "tables": return tableAct(v, action, cx);
@@ -153,11 +160,96 @@ function connAct(v: DbView, action: string, cx: Context): boolean {
     case "conn-remove": if (c) confirmRemove(v, c, cx); break;
     case "conn-save": if (c) void saveFound(v, c, cx); break;
     case "conn-test": if (c) void test(v, c, cx); break;
+    case "conn-duplicate": if (c) duplicateConn(v, c, cx); break;
+    case "disconnect": if (!v.active) v.say("nothing is connected", "failed"); else disconnect(v); break;
+    case "copy": if (c) copy(v, addressOf(c), cx); break;
+    case "conn-down":
+    case "conn-up": if (c) moveConn(v, c, action === "conn-down" ? 1 : -1, cx); break;
     case "menu": if (c) connMenu(v, c, cx); break;
     default: return false;
   }
 
   return true;
+}
+
+/** Where a connection is, as a URL a client takes, never a password (a file: its path). */
+export function addressOf(c: Conn): string {
+  if (c.kind === "libsql" && c.url) return c.url;
+
+  if (onFile(c)) return tilde(c.path ?? "", home());
+
+  const scheme = c.kind === "postgres" ? "postgresql" : "mysql";
+  const port = c.port && c.port !== DEFAULT_PORT[c.kind] ? `:${c.port}` : "";
+
+  return `${scheme}://${c.user ? `${encodeURIComponent(c.user)}@` : ""}${c.host || "localhost"}${port}${c.database ? `/${encodeURIComponent(c.database)}` : ""}`;
+}
+
+/** A new connection's form with a connection's fields (not its password: nothing secret is copied). */
+export function duplicateConn(v: DbView, c: Conn, cx: Context): void {
+  const { source, ...rest } = c;
+  const draft: ConnDraft = { ...rest, id: `copy:${c.id}`, name: `${c.name} copy`, origin: "found", secret: c.secret === "ask" ? "ask" : "none" };
+
+  // A cluster's secret is where the password lives, not the password: the copy reads it too.
+  if (c.secret === "kubernetes" && source) {
+    draft.secret = "kubernetes";
+    draft.source = source;
+  }
+
+  openForm(v, draft, cx);
+}
+
+/** Closes the connection: its tables, structure and rows go (changes not saved are asked about
+ *  first); the query tabs stay, they're the connection's and are kept. */
+export function disconnect(v: DbView): void {
+  const c = v.active;
+
+  if (!c) return;
+
+  if (counted(v.edits).cells) {
+    beforeLeaving(v, `disconnect from ${c.name}`, () => disconnect(v));
+
+    return;
+  }
+
+  void saveQueries(v);
+  v.active = null;
+  v.catalog = { tables: [], error: null, busy: false };
+  v.struct = { table: null, data: null, busy: false, error: null };
+  v.rows = { browse: null, set: null, total: null, error: null, busy: false, at: gridStart(), filtering: false };
+  v.edits = null;
+  v.cellEdit = null;
+  v.columnsAt = null;
+  v.history = [];
+  v.mainTab = 0;
+  v.say(`disconnected from ${c.name}`, "done");
+  keepCopy(v);
+}
+
+/** A saved connection moved `by` places among the saved ones (J / K, a drag), kept. */
+export function moveConn(v: DbView, c: Conn, by: number, cx: Context): void {
+  const i = v.saved.findIndex((s) => s.id === c.id);
+
+  if (i < 0) {
+    v.say("only saved connections keep an order (s saves it)", "failed");
+
+    return;
+  }
+
+  placeConn(v, c, Math.max(0, Math.min(v.saved.length - 1, i + by)), cx);
+}
+
+/** A saved connection put at place `to` among the saved ones, kept; the cursor goes with it. */
+export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
+  const i = v.saved.findIndex((s) => s.id === c.id);
+
+  if (i < 0 || i === to) return;
+
+  const list = v.saved.filter((s) => s.id !== c.id);
+
+  list.splice(to, 0, c);
+  v.saved = list;
+  v.connAt = to;
+  void writeConnections(IO, dataHome(), list).then(() => cx.notify());
 }
 
 /** The query tab names go into: the shown one, else a new one. */
@@ -193,7 +285,7 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
     case "open": if (t) openTable(v, t, cx); break;
     case "table-query": if (t) v.addQuery(`select * from ${tableSql(v, t.schema, t.name)} limit 100;`, cx); break;
     case "insert": if (t) insertName(v, tableSql(v, t.schema, t.name), cx); break;
-    case "copy": if (t) cx.write_to_clipboard(t.name); break;
+    case "copy": if (t) copy(v, t.name, cx); break;
     case "export": if (t) openExport(v, { table: t }, cx); break;
     case "menu": if (t) tableMenu(v, t, cx); break;
     case "table-find": openFind(v); break;
@@ -231,6 +323,8 @@ function schemaAct(v: DbView, action: string, cx: Context): boolean {
     // The first row is "every schema".
     case "open": v.schema = v.tableAt === 0 ? null : list[v.tableAt - 1] ?? null; v.tablesTab = "tables"; v.tableAt = 0; break;
     case "insert": if (v.tableAt > 0 && v.active) insertName(v, quoteName(v.active.kind, list[v.tableAt - 1] ?? ""), cx); break;
+    case "copy": if (v.tableAt > 0) copy(v, list[v.tableAt - 1] ?? "", cx); break;
+    case "menu": schemaMenu(v, v.tableAt === 0 ? null : list[v.tableAt - 1] ?? null, cx); break;
     default: return false;
   }
 
@@ -248,7 +342,7 @@ function structAct(v: DbView, action: string, cx: Context): boolean {
     case "subtab-prev": v.structTab = STRUCT_TABS[(STRUCT_TABS.indexOf(v.structTab) + (action === "subtab-next" ? 1 : 3)) % 4] ?? "columns"; v.structAt = 0; break;
     case "open": if (r) structOpen(v, r, cx); break;
     case "insert": if (r?.name && v.active) insertName(v, quoteName(v.active.kind, r.name), cx); break;
-    case "copy": if (r) cx.write_to_clipboard(r.copy); break;
+    case "copy": if (r) copy(v, r.copy, cx); break;
     case "menu": if (r) structMenu(v, r, cx); break;
     default: return false;
   }
@@ -271,7 +365,8 @@ function logAct(v: DbView, action: string, cx: Context): boolean {
     case "down": v.logAt = step(v.logAt, 1, v.log.length); break;
     case "up": v.logAt = step(v.logAt, -1, v.log.length); break;
     case "open": if (line) v.addQuery(`${line.sql};`, cx); break;
-    case "copy": if (line) cx.write_to_clipboard(line.sql); break;
+    case "copy": if (line) copy(v, line.sql, cx); break;
+    case "menu": if (line) logMenu(v, v.logAt, cx); break;
     default: return false;
   }
 

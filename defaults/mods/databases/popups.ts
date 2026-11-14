@@ -1,6 +1,8 @@
 // What's over the Databases view and has the keyboard first: a connection's
-// form, the export, the password asked before connecting, the ask in the bar
-// (y; for a destructive statement then its name typed), a menu, the keys
+// form, the export, the password asked before connecting, a query tab's new
+// name, the ask in the bar
+// (y; for a destructive statement then its name typed), a menu (in the middle,
+// or at the pointer for a right click), the keys
 // overview, the filter and find lines. modalKey() hands a key to whichever is
 // up; overBody() and askBar() draw them.
 //
@@ -15,7 +17,8 @@ import type { Theme } from "herdr";
 import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
 import { keysKey, keysView } from "./keyhelp.ts";
-import { helpSections } from "./keys.ts";
+import { helpSections, keyName, shown } from "./keys.ts";
+import { keepRename } from "./menus.ts";
 import { applyFilter } from "./act-grid.ts";
 import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
@@ -66,15 +69,23 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
   return true;
 }
 
+/** Each menu row's digit: a row with a key of its own shows that key alone; the others take 1-9 in
+ *  order (one shortcut per row, of one kind or the other). */
+export function digitsOf(rows: Menu["rows"]): (number | null)[] {
+  let n = 0;
+
+  return rows.map((r) => (r.key || n >= 9 ? null : ++n));
+}
+
 function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
-  const k = e.key_char && e.key_char.length === 1 ? e.key_char : e.key;
+  const k = shown(keyName(e));
   const n = Number(k);
 
-  if (k === "escape" || k === "q") v.menu = null;
-  else if (k === "j" || k === "down") m.at = Math.min(m.rows.length - 1, m.at + 1);
-  else if (k === "k" || k === "up") m.at = Math.max(0, m.at - 1);
-  else if (k === "enter" || (n >= 1 && n <= 9 && n <= m.rows.length)) {
-    const row = m.rows[k === "enter" ? m.at : n - 1];
+  if (k === "esc" || k === "q") v.menu = null;
+  else if (k === "j" || k === "↓") m.at = Math.min(m.rows.length - 1, m.at + 1);
+  else if (k === "k" || k === "↑") m.at = Math.max(0, m.at - 1);
+  else if (k === "enter" || (n >= 1 && n <= 9 && digitsOf(m.rows).includes(n))) {
+    const row = m.rows[k === "enter" ? m.at : digitsOf(m.rows).indexOf(n)];
 
     v.menu = null;
     row?.go();
@@ -128,6 +139,17 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   return "typing";
 }
 
+/** A query tab's new name: enter keeps it, esc leaves it; the rest is typed. */
+function renameKey(v: DbView, e: KeyEvent): Taken {
+  if (e.key === "enter") keepRename(v);
+  else if (e.key === "escape") {
+    v.rename = null;
+    v.focusShown();
+  } else return "typing";
+
+  return true;
+}
+
 /** The password asked before connecting: enter takes it, esc drops it; the rest is typed. */
 function passwordKey(v: DbView, e: KeyEvent): Taken {
   if (e.key === "enter") v.password?.done();
@@ -146,6 +168,8 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   if (v.exporting) return v.exporting.key(e, cx);
 
   if (v.password) return passwordKey(v, e);
+
+  if (v.rename) return renameKey(v, e);
 
   if (v.review) {
     reviewKey(v, e, cx);
@@ -215,19 +239,40 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
     .child(chip(t, "db-ask-no", "esc  no", false, () => { v.ask = null; }));
 }
 
-/** A box in the middle of the body over the dim (a menu, the password ask). */
-function centered(id: string, box: Element, close: (cx: Context) => void): Element {
-  return div().id(id).absolute().inset_0().flex().items_center().justify_center().text_size(12)
+/** The top bar's height over the body (chrome.ts header). */
+const TOP_BAR = 34;
+
+/** A box over the dim: in the middle of the body, or at `near` (a right click's place in the view,
+ *  layout px; the body starts under the top bar), kept inside the body. */
+function centered(id: string, box: Element, close: (cx: Context) => void, near: { readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly room: { readonly width: number; readonly height: number } } | null = null): Element {
+  const outside = div().id(id).absolute().inset_0().text_size(12)
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       close(cx);
       cx.notify();
     })
-    .child(popupScrim(`${id}-scrim`))
-    .child(box.relative().on_mouse_down("left", stop));
+    .on_mouse_down("right", (_e, cx) => {
+      cx.stop_propagation();
+      close(cx);
+      cx.notify();
+    })
+    .child(popupScrim(`${id}-scrim`));
+
+  if (!near) return outside.flex().items_center().justify_center().child(box.relative().on_mouse_down("left", stop));
+
+  const x = Math.max(8, Math.min(near.room.width - near.w - 8, near.x + 2));
+  const y = Math.max(8, Math.min(near.room.height - near.h - 8, near.y - TOP_BAR + 2));
+
+  return outside.child(box.absolute().left(x).top(y).on_mouse_down("left", stop));
 }
 
+
 function menuPanel(t: Theme, v: DbView, m: Menu): Element {
+  const digits = digitsOf(m.rows);
+  const w = Math.min(m.near ? 380 : 560, v.size.width - 40);
+  const h = Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0));
+  const room = { width: v.size.width, height: v.bodyH };
+
   const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${t.ansi0}55`))
     .when(i === m.at, (el) => el.children(band(t, true)))
@@ -236,15 +281,29 @@ function menuPanel(t: Theme, v: DbView, m: Menu): Element {
       r.go();
       cx.notify();
     })
-    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(i < 9 ? String(i + 1) : ""))
+    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(digits[i] ? String(digits[i]) : ""))
     .child(v_flex().relative().flex_1().min_w(0)
       .child(div().truncate().text_color(r.danger ? t.blocked : i === m.at ? t.foreground : t.muted).child(r.label))
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? ""))))
     .when(Boolean(r.key), (el) => el.child(div().relative().flex_none().text_color(t.accent).child(r.key ?? ""))));
 
-  return centered("db-menu", v_flex().id("db-menu-box").w(Math.min(560, v.size.width - 40)).max_h(Math.min(440, v.size.height - 80)).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
+  return centered("db-menu", v_flex().id("db-menu-box").w(w).max_h(h).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
     .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).truncate().child(m.title))
-    .children(rows), () => { v.menu = null; });
+    .children(rows), () => { v.menu = null; }, m.near ? { ...m.near, w, h, room } : null);
+}
+
+/** A query tab's name asked for. */
+function renamePanel(t: Theme, v: DbView): Element {
+  const r = v.rename;
+
+  if (!r) return div();
+
+  return centered("db-rename", v_flex().id("db-rename-box").w(Math.min(380, v.size.width - 40)).bg(t.background).border(1).border_color(t.accent).p(14).gap(10)
+    .child(div().text_color(t.foreground).child(`Rename ${r.tab.name}`))
+    .child(div().border(1).border_color(t.accent).px(8).py(4).child(Input.new(r.input).text_size(12).text_color(t.foreground)))
+    .child(h_flex().gap(8).justify_end()
+      .child(chip(t, "db-rename-ok", "enter  rename", false, () => keepRename(v), t.accent))
+      .child(chip(t, "db-rename-no", "esc  leave it", false, () => { v.rename = null; }))), () => { v.rename = null; });
 }
 
 function passwordPanel(t: Theme, v: DbView): Element {
@@ -283,6 +342,8 @@ export function overBody(t: Theme, v: DbView): Element[] {
   if (v.review) out.push(reviewPanel(t, v));
 
   if (v.password) out.push(passwordPanel(t, v));
+
+  if (v.rename) out.push(renamePanel(t, v));
 
   if (v.form) out.push(v.form.draw(t));
 

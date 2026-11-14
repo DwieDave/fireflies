@@ -24,39 +24,48 @@ const WINDOW: readonly Binding[] = [
 ];
 
 const CONNS: readonly Binding[] = [
-  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "connect", "connect"],
-  [["n"], "new connection", "conn-new"], [["e"], "edit", "conn-edit"], [["d"], "remove", "conn-remove"],
-  [["s"], "save a found one", "conn-save"], [["t"], "test", "conn-test"], [["m"], "menu", "menu"],
+  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "connect (a double click too)", "connect"],
+  [["x"], "disconnect", "disconnect"], [["n"], "new connection", "conn-new"], [["e"], "edit", "conn-edit"],
+  [["D"], "duplicate", "conn-duplicate"], [["d"], "remove", "conn-remove"], [["s"], "save a found one", "conn-save"],
+  [["t"], "test", "conn-test"], [["y"], "copy its address (never a password)", "copy"],
+  [["J"], "move it down (or drag it)", "conn-down"], [["K"], "move it up", "conn-up"], [["m"], "menu (a right click too)", "menu"],
 ];
 
 const TABLES: readonly Binding[] = [
-  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure", "open"],
+  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure (a double click too)", "open"],
   [["["], "tables / views / schemas", "subtab-prev"], [["]"], "tables / views / schemas", "subtab-next"],
-  [["s"], "select it in a query", "table-query"], [["i"], "its name into the query", "insert"],
-  [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"], [["m"], "menu", "menu"],
+  [["s"], "select it in a query", "table-query"], [["i"], "its name into the query (or drag it there)", "insert"],
+  [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"], [["m"], "menu (a right click too)", "menu"],
 ];
 
 const STRUCTURE: readonly Binding[] = [
   [["j", "down"], "down", "down"], [["k", "up"], "up", "up"],
   [["["], "columns / indexes / keys / value", "subtab-prev"], [["]"], "columns / indexes / keys / value", "subtab-next"],
-  [["enter"], "a key's table, or the name into the query", "open"], [["i"], "the name into the query", "insert"],
-  [["y"], "copy", "copy"], [["m"], "menu", "menu"],
+  [["enter"], "a key's table, or the name into the query", "open"], [["i"], "the name into the query (or drag it there)", "insert"],
+  [["y"], "copy", "copy"], [["m"], "menu (a right click too)", "menu"],
 ];
 
 const GRID: readonly Binding[] = [
   [["h", "left"], "left", "left"], [["l", "right"], "right", "right"], [["j", "down"], "down", "down"], [["k", "up"], "up", "up"],
-  [["g"], "first row", "first"], [["G"], "last row", "last"], [["enter", "v"], "the cell's whole value", "value"],
-  [["y"], "copy the cell", "copy"], [["Y"], "copy the row", "copy-row"], [["e"], "export", "export"], [["m"], "menu", "menu"],
+  [["g"], "first row", "first"], [["G"], "last row", "last"],
+  [["shift-left"], "select: stretch left (or drag across cells)", "select-left"], [["shift-right"], "select: stretch right", "select-right"],
+  [["shift-down"], "select: stretch down", "select-down"], [["shift-up"], "select: stretch up", "select-up"],
+  [["V"], "select the row (or click its number)", "select-row"], [["cmd-a"], "select every cell", "select-all"], [["escape"], "drop the selection", "unselect"],
+  [["enter", "v"], "the cell's whole value", "value"],
+  [["y", "cmd-c"], "copy the cell (a selection as TSV)", "copy"], [["Y"], "copy the row", "copy-row"], [["e"], "export", "export"],
+  [["}"], "the column wider (or drag its header's edge)", "wider"], [["{"], "the column narrower", "narrower"], [["H"], "hide the column", "hide"],
+  [["m"], "the cell's menu (a right click too)", "menu"], [["O"], "the column's menu (a right click on its header)", "column-menu"], [["T"], "the tab's menu", "tab-menu"],
 ];
 
 const ROWS: readonly Binding[] = [
   ...GRID, [["c"], "change the cell (a double click too)", "cell-edit"], [["N"], "the cell to NULL", "cell-null"], [["u"], "undo the cell's change", "cell-undo"],
-  [["s"], "sort by this column", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
+  [["o", "s"], "sort by the column (ORDER BY: ↑, ↓, off; or click its header)", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
   [[">"], "next page", "page-next"], [["<"], "previous page", "page-prev"], [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"],
 ];
 
 const RESULTS: readonly Binding[] = [
-  ...GRID, [["c"], "change the cell (a table's rows only)", "cell-edit"], [["i", "escape"], "back to the editor", "edit"], [[">"], "next result", "result-next"], [["<"], "previous result", "result-prev"],
+  ...GRID, [["c"], "change the cell (a table's rows only)", "cell-edit"], [["o", "s"], "sort what came back (↑, ↓, off; or click a header)", "sort"],
+  [["i", "escape"], "back to the editor", "edit"], [[">"], "next result", "result-next"], [["<"], "previous result", "result-prev"],
   [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"], [["x"], "close the tab", "query-close"],
 ];
 
@@ -67,7 +76,8 @@ const EDITOR: readonly Binding[] = [
 ];
 
 const LOG: readonly Binding[] = [
-  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "into a query tab", "open"], [["y"], "copy the statement", "copy"],
+  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "into a query tab (a double click too)", "open"], [["y"], "copy the statement", "copy"],
+  [["m"], "menu (a right click too)", "menu"],
 ];
 
 export const BINDINGS = { window: WINDOW, conns: CONNS, tables: TABLES, structure: STRUCTURE, rows: ROWS, results: RESULTS, editor: EDITOR, log: LOG } as const satisfies { readonly [P in Place]: readonly Binding[] };
@@ -85,21 +95,33 @@ export function keyName(e: KeyEvent): string {
   return [...mods, e.key].join("-");
 }
 
+/** The first key of an action in a place (its own table, then the window's), as the menus and the
+ *  key bar show it; undefined when no key does it. */
+export function keyOf(place: Place, action: string): string | undefined {
+  const b = BINDINGS[place].find(([, , a]) => a === action) ?? BINDINGS.window.find(([, , a]) => a === action);
+
+  return b ? shown(b[0][0] ?? "") : undefined;
+}
+
 /** The action a key names in a place (its own table first, then the window's), or null. */
 export function actionFor(place: Place, key: string): string | null {
-  const own = BINDINGS[place].find(([keys]) => keys.includes(key));
+  return actionsFor(place, key)[0] ?? null;
+}
 
-  if (own) return own[2];
-
-  return BINDINGS.window.find(([keys]) => keys.includes(key))?.[2] ?? null;
+/** Every action a key names in a place, in the order they're tried (esc in a result: drop the
+ *  selection, else back to the editor). */
+export function actionsFor(place: Place, key: string): string[] {
+  return [...BINDINGS[place], ...BINDINGS.window].flatMap(([keys, , a]) => (keys.includes(key) ? [a] : []));
 }
 
 const PLACE_NAME = {
   window: "window", conns: "connections", tables: "tables", structure: "structure", rows: "rows", results: "results", editor: "query editor", log: "log",
 } as const satisfies { readonly [P in Place]: string };
 
-/** A key as the overview writes it (escape as esc). */
-const shown = (k: string): string => (k === "escape" ? "esc" : k);
+/** A key as the overview writes it (escape as esc, arrows as arrows). */
+const ARROWS: readonly (readonly [string, string])[] = [["left", "←"], ["right", "→"], ["up", "↑"], ["down", "↓"]];
+
+export const shown = (k: string): string => (k === "escape" ? "esc" : k.replace(/\b(left|right|up|down)$/, (m) => ARROWS.find(([n]) => n === m)?.[1] ?? m));
 
 /** The ? overview: the place's keys, then the window's. */
 export function helpSections(place: Place): KeySection[] {
@@ -110,9 +132,9 @@ export function helpSections(place: Place): KeySection[] {
 
 /** The actions the key bar names, per place. */
 const BAR = {
-  window: [], conns: ["connect", "conn-new", "conn-edit", "conn-test"], tables: ["open", "table-query", "insert", "export"],
-  structure: ["subtab-next", "open", "insert"], rows: ["cell-edit", "value", "sort", "filter", "page-next", "export"],
-  results: ["value", "edit", "copy", "export"], editor: ["run", "run-all", "results", "history"], log: ["open", "copy"],
+  window: [], conns: ["connect", "conn-new", "conn-edit", "conn-test", "menu"], tables: ["open", "table-query", "insert", "export", "menu"],
+  structure: ["subtab-next", "open", "insert", "menu"], rows: ["cell-edit", "sort", "filter", "page-next", "menu", "column-menu"],
+  results: ["edit", "copy", "sort", "menu", "column-menu"], editor: ["run", "run-all", "results", "history"], log: ["open", "copy", "menu"],
 } as const satisfies { readonly [P in Place]: readonly string[] };
 
 /** The key bar's few entries for a place. */

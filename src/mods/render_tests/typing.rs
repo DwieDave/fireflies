@@ -142,6 +142,12 @@ fn database_fields() -> Vec<Field> {
             value: "v.cellEdit?.input.value()",
         },
         Field {
+            name: "query tab: its new name",
+            imports: "import { startRename } from './mods/databases/menus.ts';".into(),
+            open: shown("const q = v.addQuery('', cx); startRename(v, q); v.rename.input.set_value('')"),
+            value: "v.rename?.input.value()",
+        },
+        Field {
             name: "query editor",
             imports: "".into(),
             open: shown("v.addQuery('', cx); v.panel = 'main'; v.shownQuery()?.editor.focus()"),
@@ -154,8 +160,9 @@ fn database_fields() -> Vec<Field> {
 fn typed_text_reaches_the_databases_windows_fields(cx: &mut TestAppContext) {
     cx.update(gpui_shell::init);
     let staged = Staged::new();
-    // Letters the window binds (? keys, q close, j / k move, n new, e edit…) are typed like any other.
-    let typed = "lantern?qjkne";
+    // Letters the window binds (? keys, q close, j / k move, n new, e edit, o sort, O the column's
+    // menu, { } widths, H hide, V a row, T the tab's menu, x, D, J, K, m…) are typed like any other.
+    let typed = "lantern?qjkneoO{}HVTxDJKm";
     let wrong: Vec<String> = database_fields()
         .iter()
         .filter_map(|f| {

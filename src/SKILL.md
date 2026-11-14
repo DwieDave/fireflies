@@ -75,7 +75,11 @@ databases.table:lanterns` shows a table's rows and structure,
 a tab (`databases.run` runs it; a write asks the person first, so don't
 expect it to run unattended). A change to a table's cell
 (`databases.set:<text>` on the cursor's cell) is only staged: the person
-reviews and saves it themselves (`w`, then `y`).
+reviews and saves it themselves (`w`, then `y`). To sort what it shows,
+`databases.sort` on the cursor's column (the database's ORDER BY, shown on
+the WHERE line; again: descending, then off), `databases.right` /
+`databases.left` move the cursor; `databases.wider`, `databases.hide`,
+`databases.menu` (the cell's menu) work the same way, by the key's action.
 
 To show them a Markdown file you wrote (a plan, a report), `herdr-app do
 markdown.open --path /abs/path/PLAN.md` opens it rendered beside the focused

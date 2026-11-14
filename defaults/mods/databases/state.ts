@@ -15,6 +15,7 @@ import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
 import type { HistoryEntry } from "./store.ts";
 import type { SaveStatement } from "./save-sql.ts";
+import type { ColumnLayout, LocalSort } from "./columns.ts";
 
 export const MOD = "databases";
 
@@ -60,6 +61,9 @@ export interface GridAt {
   col: number;
   top: number;
   left: number;
+  /** Where a range of cells starts (shift + arrows, a drag, the row numbers, cmd-a); the cursor
+   *  is its other corner. None: the cursor's cell alone. */
+  anchor?: { readonly row: number; readonly col: number } | null;
 }
 
 export const gridStart = (): GridAt => ({ row: 0, col: 0, top: 0, left: 0 });
@@ -95,6 +99,9 @@ export interface QueryTab {
   ranText: string;
   /** What each statement of the last run could change (a read says its rows, a write its changes). */
   verdicts: readonly Risk[];
+  /** Its result's columns as arranged (widths, hidden, order) and its local sort (columns.ts). */
+  layout: ColumnLayout;
+  sort: LocalSort | null;
 }
 
 /** What a run asks before it goes: the verdict, and for a destructive one the name typed. */
@@ -137,16 +144,26 @@ export interface Review {
 export interface MenuRow {
   readonly label: string;
   readonly sub?: string;
+  /** The key that does the same where the menu was opened (keys.ts keyOf: never typed by hand). */
   readonly key?: string;
+  /** The action that key names (a test holds the two together). */
+  readonly act?: string;
   readonly danger?: boolean;
   readonly go: () => void;
 }
 
-/** A menu over the body. */
+/** A menu over the body: at the pointer (a right click; layout px in the view) or in the middle. */
 export interface Menu {
   readonly title: string;
   readonly rows: readonly MenuRow[];
   at: number;
+  readonly near?: { readonly x: number; readonly y: number } | null;
+}
+
+/** A query tab being renamed (a double click on it, its menu): the tab and the name's input. */
+export interface Rename {
+  readonly tab: QueryTab;
+  readonly input: InputState;
 }
 
 /** A password asked for before connecting (an "ask each time" connection, a found one without it). */
