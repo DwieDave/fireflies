@@ -17,8 +17,9 @@
 //            (shelf.ts);
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
-//            nocturne.agent-next / agent-prev walk the agents, then the shelf's
-//            tiles, wrapping (walk.ts; the layout's cmd-] / cmd-[);
+//            nocturne.agent-next / agent-prev walk the jar's agents, its
+//            shelf's tiles, then the other agents, as drawn, wrapping
+//            (walk.ts; the layout's cmd-] / cmd-[);
 //            its pane's name leads (kit.ts givenName, else the agent's own, "Claude Code";
 //            its space only when it's another one, awake ones add their status;
 //            resting ones keep to one line); double-click to rename it
@@ -47,7 +48,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, onShelf, storedRecords, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
@@ -267,11 +268,16 @@ export default class Sky {
     });
   }
 
-  /** nocturne.agent-next / agent-prev (walk.ts): the next / previous agent in
-   *  the sidebar's order, then on through the shelf's tiles, wrapping. A tile
-   *  is gone to the way a click on it goes (kit.ts goToPin). */
+  /** nocturne.agent-next / agent-prev (walk.ts): the next / previous stop in
+   *  the order drawn: the jar's agents, its shelf's tiles, the other agents,
+   *  wrapping. A tile is gone to the way a click on it goes (kit.ts goToPin). */
   walk(dir: number): void {
-    const stops = walkStops(sortedAgents().all.map((a) => a.address), jarNow().filter(onShelf));
+    const { pinned, all } = sortedAgents();
+    const inJar = new Set(pinned.map((a) => a.address));
+    // Under the jar as meadow.ts and rail.ts draw them: the awake ones, then those at rest.
+    const free = all.filter((a) => !inJar.has(a.address));
+    const rest = [...free.filter((a) => !atRest(a)), ...free.filter(atRest)].map((a) => a.address);
+    const stops = walkStops([...inJar], jarNow().filter(onShelf), rest);
     const to = walkNext(stops, walkAt(stops, focused(), this.walkedTo), dir);
 
     if (!to) return;

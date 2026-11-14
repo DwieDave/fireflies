@@ -1536,11 +1536,12 @@ palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
 firefly up or down in the jar, a tile left or right on the shelf.
 `nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
-place of the core's `agent.next` / `agent.prev`) walk the agents in the
-sidebar's order, then on through every tile on the shelf in its order (web
-pages, editors, files, shells; each pinned web tab its own stop), then back to
-the first agent, and the other way round; a tile is gone to as a click on it
-goes. The dock
+place of the core's `agent.next` / `agent.prev`) walk the sidebar top to
+bottom as it's drawn, open or folded: the pinned agents in the jar, every tile
+on the jar's shelf in its order (web pages, editors, files, shells; each pinned
+web tab its own stop), then the other agents under the jar (awake ones, then
+those done or idle), then back to the first, and the other way round; a tile is gone to as a click on it goes. The
+sidebar's own j / k walk its controls in the same order. The dock
 (dock.ts) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no

@@ -349,17 +349,24 @@ export function meadowView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarre
   const jarLanes = placed.filter(([a]) => inJar.has(a.address));
   const reaches = laneReach(placed.map(([a, y, l]) => ({ y, h: l, jar: inJar.has(a.address) })));
 
+  // Made top to bottom, as the keyboard walks them (sky.nav lists each as it's
+  // made): the jar's fireflies, its shelf, then the meadow's.
+  // The jar's lanes sit inside its walls, the same margin on both sides.
+  const flies = placed.map(([a, y, l], i) => (inJar.has(a.address) ? firefly(sky, t, a, y, l, w - 2 * JAR_INSET, reaches[i]).left(JAR_INSET) : null));
+  const shelf = kept.length > 0 ? shelfView(sky, t, kept, shelfW) : null;
+
+  placed.forEach(([a, y, l], i) => {
+    if (!inJar.has(a.address)) flies[i] = firefly(sky, t, a, y, l, w, reaches[i]);
+  });
+
   return div().id("meadow").relative().flex_1().min_h(0).w_full()
     .on_size_change((size, cx) => {
       sky.field = size;
       cx.notify();
     })
     .when(jarH > 0, (el) => el.child(jarGlass(sky, t, jarred, jarH, w)).children(jarLanes.map(([a, y, l]) => jarGlow(sky, t, a, y, l))))
-    // The jar's lanes sit inside its walls, the same margin on both sides.
-    .children(placed.map(([a, y, l], i) => (inJar.has(a.address)
-      ? firefly(sky, t, a, y, l, w - 2 * JAR_INSET, reaches[i]).left(JAR_INSET)
-      : firefly(sky, t, a, y, l, w, reaches[i]))))
-    .when(kept.length > 0, (el) => el.child(div().absolute().left(JAR_INSET).top(shelfY).w(shelfW).child(shelfView(sky, t, kept, shelfW))))
+    .children(flies.flatMap((f) => (f ? [f] : [])))
+    .when(Boolean(shelf), (el) => (shelf ? el.child(div().absolute().left(JAR_INSET).top(shelfY).w(shelfW).child(shelf)) : el))
     .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(moreY).h(MORE_H).flex().items_center()
       .map((m) => navRing(t, m, sky.nav("more", "flies", { go: () => run("agent.next") })))
       .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
