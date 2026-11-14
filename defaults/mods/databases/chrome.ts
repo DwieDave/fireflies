@@ -1,5 +1,6 @@
-// The Databases view's frame: the top bar (the moon, the connection, read
-// only, how it's going, the move chip ◧ / ⧉, ↻, and in a window ✕), the
+// The Databases view's frame: the top bar (the moon, the connection's state
+// mark with its database and user (connmark.ts), the connection, its address
+// and source, the move chip ◧ / ⧉, ↻, and in a window ✕), the
 // body (wide: the three side panels left, the main view and the log right;
 // narrow, under NARROW: one panel, the others folded into a row of numbered
 // tabs), the ask bar and the key bar. What only a window has is here alone.
@@ -14,7 +15,8 @@ import type { Theme } from "herdr";
 import { where } from "./kinds.ts";
 import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
-import { ART, chip, dither, kindBadge, lock, pip, toneColor, unzoom } from "./kit.ts";
+import { ART, chip, dither, kindBadge, toneColor, unzoom } from "./kit.ts";
+import { stateMark } from "./connmark.ts";
 import { hint, keysHint } from "./keyhelp.ts";
 import { barHints } from "./keys.ts";
 import { connsPanel, logPanel, structPanel, tablesPanel, NARROW_ORDER } from "./panels.ts";
@@ -24,15 +26,14 @@ import { divider } from "./dividers.ts";
 import { GAP_X, GAP_Y, NARROW, wideDividers } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
 
-/** The top bar: where the window drags from (presses on it aren't stopped). */
+/** The top bar: where the window drags from (presses on it aren't stopped). First after the
+ *  title, the connection's state (connmark.ts); then which connection, where, from where. */
 function header(t: Theme, v: DbView): Element {
   const c = v.active;
-
-  const status = v.catalog.busy ? h_flex().gap(5).items_center().child(pip(t.working, 6, true)).child(div().text_color(t.dim).child("reading…"))
-    : c && v.catalog.error ? h_flex().gap(5).items_center().child(pip(t.blocked, 6)).child(div().text_color(t.dim).truncate().max_w(240).child("didn't answer"))
-    : c ? h_flex().gap(5).items_center().child(pip(t.done, 6)).child(div().text_color(t.dim).child(`${v.catalog.tables.length} tables`)) : div();
-
   const narrow = v.size.width < NARROW;
+  const live = c !== null && !v.catalog.busy && !v.catalog.error && v.alive?.conn === c.id && v.alive.ok;
+  // The server's address without the database: the mark names the database it's in.
+  const server = c ? where({ ...c, database: "" }, home()) : "";
 
   return h_flex().id("db-head").relative().h(34).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
     .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
@@ -40,20 +41,22 @@ function header(t: Theme, v: DbView): Element {
     .child(h_flex().relative().flex_none().gap(8).items_center()
       .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
       .when(!narrow, (el) => el.child(div().text_color(t.foreground).child("DATABASES"))))
-    .when(c !== null, (el) => el.child(h_flex().relative().flex_shrink(1).min_w(0).gap(8).items_center()
-      .child(div().flex_none().text_color(t.muted).child(c?.name ?? ""))
+    .child(stateMark(t, v, narrow))
+    // Which connection gives way before where it is (the mark's words).
+    .when(c !== null, (el) => el.child(h_flex().relative().flex_shrink(4).min_w(0).gap(8).items_center().overflow_hidden()
+      .child(div().flex_none().text_color(t.ansi8).child("·"))
+      .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(c?.name ?? ""))
       .child(c ? kindBadge(t, c.kind) : div())
-      .when(!narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(c ? where(c, home()) : "")))
-      .when(Boolean(c?.from), (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi8).child(`· ${c?.from ?? ""}`)))
+      .when(!narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(server)))
+      .when(Boolean(c?.from) && !narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi8).child(`· ${c?.from ?? ""}`)))
       .map((x) => {
         // Where a cluster-secret connection's password came from (or why it didn't): never the value.
         const read = c ? v.sourced.get(c.id) : undefined;
 
-        return read ? x.child(div().id("db-sourced").flex_shrink(1).min_w(0).truncate().text_color(read.ok ? t.ansi6 : t.blocked).child(`· ${read.text}`)) : x;
+        return read && !narrow ? x.child(div().id("db-sourced").flex_shrink(1).min_w(0).truncate().text_color(read.ok ? t.ansi6 : t.blocked).child(`· ${read.text}`)) : x;
       })))
-    .when(Boolean(c?.readonly), (el) => el.child(h_flex().id("db-ro-tip").relative().flex_none().tooltip("Writes are refused · e on the connection changes it").child(chip(t, "db-ro", h_flex().gap(5).items_center().child(lock(t.ansi3)).child(div().child("read only")), false, (cx) => v.act("conns", "conn-edit", cx), t.ansi3))))
     .child(div().flex_1())
-    .child(div().relative().flex_none().child(status))
+    .when(live && !narrow, (el) => el.child(div().relative().flex_none().text_color(t.dim).child(`${v.catalog.tables.length} tables`)))
     // Where the window's ✕ is, the move (opening.ts): ◧ into a pane, from a pane ⧉ out to a window.
     .child(h_flex().id("db-move-tip").relative().flex_none().tooltip(v.overlay ? "Into a pane · ctrl-t" : "Out to a window · ctrl-t")
       .child(chip(t, "db-move", v.overlay ? "◧" : "⧉", false, (cx) => v.move(cx))))

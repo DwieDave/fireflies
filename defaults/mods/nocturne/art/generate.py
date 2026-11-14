@@ -264,3 +264,8 @@ write(
     "pip.svg",
     svg(6, 6, '<rect x="2" y="0" width="2" height="2"/><rect x="0" y="2" width="6" height="2"/><rect x="2" y="4" width="2" height="2"/>'),
 )
+# The same diamond's outline (nothing lit: the Databases window's "not connected").
+write(
+    "pip-hollow.svg",
+    svg(6, 6, '<rect x="2" y="0" width="2" height="1"/><rect x="1" y="1" width="1" height="1"/><rect x="4" y="1" width="1" height="1"/><rect x="0" y="2" width="1" height="2"/><rect x="5" y="2" width="1" height="2"/><rect x="1" y="4" width="1" height="1"/><rect x="4" y="4" width="1" height="1"/><rect x="2" y="5" width="2" height="1"/>'),
+)
