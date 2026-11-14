@@ -527,6 +527,19 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   v.key(key("m"), cx);
   expect(v.menu.near).toBe(null);
   expect(anchor.keyedAnchor(v)).toBe(null);
+  v.menu = null;
+  // The head mark's menu (connmark.ts): C with the grid's keys stands in the middle, not at the cell;
+  // a click on the mark (a click carries no position) at the pointer as the root last heard it.
+  v.panel = "main";
+  v.key(key("C"), cx);
+  expect(v.menu.title).toContain("lantern.db");
+  expect(v.menu.cell).toBe(false);
+  expect(v.menu.near).toBe(null);
+  v.menu = null;
+  const mark = await import("../defaults/mods/databases/connmark.ts");
+  v.pointer = { x: 120, y: 18 };
+  ux.menus.atPointer(v, () => mark.stateMenu(v, cx));
+  expect(v.menu.near).toEqual({ x: 120, y: 18 });
 });
 
 test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Rows tab it opens; a query tab and a saved connection to another place", async () => {

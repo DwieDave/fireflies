@@ -44,14 +44,14 @@ export function entry(place: Place, act: string | null, label: string, go: () =>
   return act && key ? { label, go, ...more, act, key } : { label, go, ...more };
 }
 
-/** Opens a menu over the view: at the press when a right click asked for it (atPointer), else at
- *  what the keys are on (the grid's cursor cell, found as it's drawn: popups.ts menuLayer), else in
- *  the middle (menu-place.ts). */
-export function openMenu(v: DbView, title: string, rows: readonly MenuRow[]): void {
+/** Opens a menu over the view: at the press when a right click asked for it (atPointer), else, for
+ *  the grid's own menus (`cell`: a cell's, a row's, a column's), under the cursor's cell (found as
+ *  it's drawn: popups.ts menuLayer), else in the middle (menu-place.ts). */
+export function openMenu(v: DbView, title: string, rows: readonly MenuRow[], cell = false): void {
   const near = v.menuNear;
 
   v.menuNear = null;
-  v.menu = rows.length ? { title, rows, at: 0, near } : null;
+  v.menu = rows.length ? { title, rows, at: 0, near, cell } : null;
 }
 
 /** A press's place in the view (layout px): its window position less the view's origin (both
@@ -237,7 +237,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
     entry(place, "export", "Export…", () => exportShown(v, cx)),
   );
 
-  openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows);
+  openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows, true);
 }
 
 /** A column's header menu: its sort (the database's on a table, the result's own), filter, width,
@@ -284,7 +284,7 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
     entry(place, null, "Copy its name", () => copy(v, name, cx)),
   );
 
-  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows);
+  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows, true);
 }
 
 /** A row number's menu: select it, copy it (or the selected rows it's among). */
@@ -298,7 +298,7 @@ export function rowMenu(v: DbView, row: number, cx: Context): void {
   openMenu(v, rows.length > 1 ? `rows ${(rows[0] ?? 0) + 1}–${(rows.at(-1) ?? 0) + 1}` : `row ${row + 1}`, [
     entry(g.place, "select-row", "Select it", () => g.put(rowsSelected({ ...g.at, row }, g.set, row, row))),
     ...rowCopies(v, g, rows, cx),
-  ]);
+  ], true);
 }
 
 /** The main view's tab `n` (0 the Rows, else a query tab): its menu. */

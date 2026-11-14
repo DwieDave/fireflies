@@ -171,6 +171,8 @@ export interface Menu {
   readonly rows: readonly MenuRow[];
   at: number;
   readonly near?: Pt | null;
+  /** A grid's own menu (a cell's, a row's, a column's): by key it stands under the cursor's cell. */
+  readonly cell?: boolean;
 }
 
 /** A query tab being renamed (a double click on it, its menu): the tab and the name's input. */
