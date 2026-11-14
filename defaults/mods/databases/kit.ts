@@ -78,8 +78,18 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
     .child(edgeRow(`${id}-bottom`, edge, "bottom", null, foot ? div().text_color(active ? t.accent : t.dim).child(foot) : null));
 }
 
+/** What else a title's tabs do: a press (that may become a drag), a double click, a right click,
+ *  each tab dressed further (a drop target), its hover. */
+export interface TabMore {
+  readonly press?: (key: string, e: MouseButtonEvent, cx: Context) => void;
+  readonly open?: (key: string, cx: Context) => void;
+  readonly menu?: (key: string, cx: Context) => void;
+  readonly dress?: (key: string, el: Element) => Element;
+  readonly tip?: (key: string) => string | null;
+}
+
 /** A panel title's parts: "[1] Name · Other · Other", the shown one bright, each a click target. */
-export function titleTabs(t: Theme, id: string, num: string | null, tabs: readonly (readonly [key: string, label: string])[], shown: string, active: boolean, pick: (key: string, cx: Context) => void): Element[] {
+export function titleTabs(t: Theme, id: string, num: string | null, tabs: readonly (readonly [key: string, label: string])[], shown: string, active: boolean, pick: (key: string, cx: Context) => void, more: TabMore = {}): Element[] {
   const parts: Element[] = [];
 
   if (num !== null) parts.push(div().flex_none().text_color(active ? t.accent : t.dim).child(`[${num}]`));
@@ -87,14 +97,30 @@ export function titleTabs(t: Theme, id: string, num: string | null, tabs: readon
   tabs.forEach(([key, label], i) => {
     if (i > 0) parts.push(div().flex_none().text_color(t.dim).child("·"));
 
-    parts.push(div().id(`${id}-tab-${key}`).flex_none().cursor_pointer()
+    const tip = more.tip?.(key) ?? null;
+
+    const tab = div().id(`${id}-tab-${key}`).relative().flex_none().cursor_pointer()
       .text_color(key === shown ? (active ? t.foreground : t.muted) : t.dim).hover((s) => s.text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => {
+      .when(tip !== null, (el) => el.tooltip(tip ?? ""))
+      .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
-        pick(key, cx);
+
+        if (e.click_count >= 2 && more.open) more.open(key, cx);
+        else {
+          pick(key, cx);
+          more.press?.(key, e, cx);
+        }
+
         cx.notify();
       })
-      .child(label));
+      .when(Boolean(more.menu), (el) => el.on_mouse_down("right", (_e, cx) => {
+        cx.stop_propagation();
+        more.menu?.(key, cx);
+        cx.notify();
+      }))
+      .child(label);
+
+    parts.push(more.dress ? more.dress(key, tab) : tab);
   });
 
   return parts;

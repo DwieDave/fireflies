@@ -23,6 +23,7 @@ import type { HistoryEntry } from "./store.ts";
 import type { QueryTab } from "./state.ts";
 import { gridStart, noteOf } from "./state.ts";
 import { selectionColor, syntaxColors } from "./kit.ts";
+import { NO_LAYOUT } from "./columns.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A place in the editor (0-based line, UTF-16 column). */
@@ -67,7 +68,7 @@ export function newQuery(v: DbView, text = ""): QueryTab {
 
   ids += 1;
 
-  const tab: QueryTab = { id: ids, name: `Query ${ids}`, editor, outcome: null, shown: 0, running: null, ms: null, inResults: false, at: gridStart(), ranText: "", verdicts: [] };
+  const tab: QueryTab = { id: ids, name: `Query ${ids}`, editor, outcome: null, shown: 0, running: null, ms: null, inResults: false, at: gridStart(), ranText: "", verdicts: [], layout: NO_LAYOUT, sort: null };
 
   editor.on("key", (e, cx) => editorKey(v, tab, e, cx));
   editor.on("change", () => {

@@ -8,8 +8,13 @@
 //       paged) and one tab per query (an SQL editor over its result)
 //   [4] Log           what ran in this window
 //
-// Keys: keys.ts (? lists them); every row, tab, header and cell is a click
-// target, right-click opens a row's menu, the wheel scrolls a grid.
+// Keys: keys.ts (? lists them, m opens the menu of what the cursor is on, the
+// same menu a right click opens: menus.ts). Mouse: every row, tab, header and
+// cell is a click target, a double click is enter, a right click its menu;
+// a grid's header sorts, drags its width or its place, its row numbers and a
+// drag across cells select; names drag into a query, tabs and saved
+// connections drag to reorder, a SQLite file dropped on the window opens it
+// (press.ts, drops.ts). The wheel scrolls (a grid sideways with shift).
 // Nothing runs on open; a write asks once, a destructive statement twice;
 // read-only connections refuse writes (safety.ts). Secrets never leave the
 // keychain or this window's memory (runner.ts, secrets.ts); one that lives in
@@ -21,7 +26,7 @@
 // `connect` (another mod's databases.connect) connects at once, not saved; its
 // `secret` names where a cluster keeps the password (never the password).
 
-import { View, div } from "gpui-kit";
+import { View } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
@@ -33,13 +38,13 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
 import { keyName } from "./keys.ts";
 import { act, setPanel } from "./actions.ts";
-import { colsOf, shownGrid } from "./act-grid.ts";
+import { shownGrid } from "./act-grid.ts";
 import { scrollGrid } from "./grid.ts";
 import { modalKey } from "./popups.ts";
 import { askPassword, connect, discover } from "./conns.ts";
@@ -53,9 +58,13 @@ import type { ExportForm } from "./export-form.ts";
 import { here, start, command, handoverOut } from "./opening.ts";
 import { IO, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
-import { unzoomSize } from "./kit.ts";
+import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
+import type { Pressing } from "./press.ts";
+import { ghost, pressLeave, pressMove, pressUp } from "./press.ts";
+import type { ColumnLayout } from "./columns.ts";
+import { dropFiles } from "./drops.ts";
 import type { Room } from "./layout.ts";
 import { keepSizes, keptSizes } from "./layout.ts";
 
@@ -105,6 +114,8 @@ export default class Databases extends View {
   edits: Edits | null = null;
   /** The cell being edited. */
   cellEdit: CellEdit | null = null;
+  /** The shown table's columns as arranged (columns.ts), by the table's key. */
+  columnsAt: { readonly key: string; readonly layout: ColumnLayout } | null = null;
   queries: QueryTab[] = [];
   /** The main view's tab: 0 the Rows, n the n-th query. */
   mainTab = 0;
@@ -122,6 +133,14 @@ export default class Databases extends View {
   exporting: ExportForm | null = null;
   help = false;
   note: Note | null = null;
+  /** A query tab being renamed: the tab and its name's input. */
+  rename: Rename | null = null;
+  /** A press going on, perhaps a drag (press.ts). */
+  press: Pressing | null = null;
+  /** The pointer over the view as last seen (layout px), where a right click's menu opens. */
+  pointer: { x: number; y: number } | null = null;
+  /** Where the next menu opens (atPointer sets it for a right click). */
+  menuNear: { x: number; y: number } | null = null;
 
   // ---- drawing
   /** The shown grid's box, as last measured (the keys move by its rows). */
@@ -212,7 +231,7 @@ export default class Databases extends View {
 
   /** The keyboard back to the view (or the shown query's editor). */
   focusShown(): void {
-    if (this.closed || this.form || this.password || this.exporting) return;
+    if (this.closed || this.form || this.password || this.exporting || this.rename) return;
 
     const q = this.shownQuery();
 
@@ -325,7 +344,7 @@ export default class Databases extends View {
   scrollGrid(by: number, across: number, _cx: Context): void {
     const g = shownGrid(this);
 
-    if (g) g.put(scrollGrid(g.at, g.set, colsOf(g.set), by, across, this.gridSize.height));
+    if (g) g.put(scrollGrid(g.at, g.set, g.cols, by, across, this.gridSize.height));
   }
 
   /** The Rows grid's column types, from the table's structure. */
@@ -375,7 +394,20 @@ export default class Databases extends View {
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
-      .map((el) => tracking(el, this.dividers))
+      .map((el) => tracking(el, this.dividers, {
+        move: (e, cx) => {
+          this.pointer = { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) };
+
+          return pressMove(this, e, cx);
+        },
+        up: (cx) => pressUp(this, cx),
+        leave: (cx) => pressLeave(this, cx),
+      }))
+      // A file dropped from outside: a SQLite file opens as a connection (drops.ts).
+      .on_drop((e, cx) => {
+        dropFiles(this, e.paths, cx);
+        cx.notify();
+      })
       .on_size_change((drawn, cx) => {
         const size = unzoomSize(drawn);
 
@@ -385,6 +417,10 @@ export default class Databases extends View {
         }
       })
       .children(frame(this, t))
-      .child(div());
+      .map((el) => {
+        const g = ghost(t, this);
+
+        return g ? el.child(g) : el;
+      });
   }
 }

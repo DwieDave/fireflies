@@ -214,12 +214,16 @@ export interface Browse {
   readonly rowid?: boolean;
 }
 
+/** A sort as the page's statement says it (the Rows tab shows this same text). */
+export const orderSql = (kind: Kind, sort: { readonly column: string; readonly desc: boolean }): string => `order by ${quoteName(kind, sort.column)} ${sort.desc ? "desc" : "asc"}`;
+
 /** The page's statements (the rows, and the count when filtered), or why the filter can't run. */
 export function browseSql(kind: Kind, b: Browse): { readonly statements: ScriptStatement[] } | { readonly refused: string } {
   const filter = b.filter.trim().replace(/^where\s+/i, "").replace(/;\s*$/, "");
   const from = qualified(kind, b.table);
   const where = filter ? ` where ${filter}` : "";
-  const rows = `select ${b.rowid ? "rowid, " : ""}* from ${from}${where}${b.sort ? ` order by ${quoteName(kind, b.sort.column)} ${b.sort.desc ? "desc" : "asc"}` : ""} limit ${b.limit} offset ${b.offset}`;
+  const order = b.sort ? ` ${orderSql(kind, b.sort)}` : "";
+  const rows = `select ${b.rowid ? "rowid, " : ""}* from ${from}${where}${order} limit ${b.limit} offset ${b.offset}`;
 
   if (filter) {
     // The filter is the person's SQL inside ours: one statement, and only a read.

@@ -13,6 +13,7 @@ import { chip, dither, pip, popupScrim, stop } from "./kit.ts";
 import { changeAt, changesWord, counted } from "./edits.ts";
 import type { SaveStatement } from "./save-sql.ts";
 import { discardAll, dropEdit, keepEdit, liveEdits, nextEdit, openReview, runSave, toggleNull, undoCell } from "./cell-edit.ts";
+import { shownGrid } from "./act-grid.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A key and what it does, as one click target. */
@@ -29,7 +30,7 @@ export function changesBar(t: Theme, v: DbView): Element | null {
   if (!edit && !n.cells) return null;
 
   const set = v.rows.set;
-  const onChange = Boolean(e && set && changeAt(e, set, v.rows.at.row, set.columns[v.rows.at.col] ?? ""));
+  const onChange = Boolean(e && set && changeAt(e, set, v.rows.at.row, shownGrid(v)?.set.columns[v.rows.at.col] ?? ""));
 
   const bar = h_flex().id("rows-changes").relative().h(24).flex_none().px(10).gap(6).items_center().text_size(11)
     .child(div().absolute().inset_0().child(dither(`${t.ansi3}30`, 1)))

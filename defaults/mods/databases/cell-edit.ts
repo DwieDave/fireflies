@@ -17,7 +17,7 @@ import { saveError, saveStatements } from "./save-sql.ts";
 import type { SaveStatement } from "./save-sql.ts";
 import type { CellEdit, Taken } from "./state.ts";
 import type { ColumnInfo } from "./catalog.ts";
-import { colsOf } from "./act-grid.ts";
+import { rawCol, shownGrid } from "./act-grid.ts";
 import { moveGrid, rowsIn } from "./grid.ts";
 import { loadRows, needsPassword, runOn } from "./session.ts";
 import { openMenu } from "./menus.ts";
@@ -54,8 +54,10 @@ function cursorCell(v: DbView): { readonly why: string } | { readonly column: st
 
   if ("why" in e || !set) return { why: "why" in e ? e.why : "no rows to edit" };
 
-  const column = set.columns[v.rows.at.col] ?? "";
-  const value = shownCell(liveEdits(v), set, v.rows.at.row, v.rows.at.col);
+  // The cursor is on a shown column (some may be hidden or moved): its name and place as read.
+  const g = shownGrid(v);
+  const column = g?.set.columns[v.rows.at.col] ?? "";
+  const value = shownCell(liveEdits(v), set, v.rows.at.row, g ? rawCol(g, v.rows.at.col) : v.rows.at.col);
   const why = cellRefusal(e, gridFacts(v).columns, column, value);
 
   return why ? { why } : { column, value, keyCols: e.keyCols };
@@ -139,9 +141,10 @@ export function settleEdit(v: DbView): void {
 
 /** tab / shift-tab: kept, then the next (previous) cell that can be edited, wrapping to the next row. */
 export function nextEdit(v: DbView, by: 1 | -1): void {
-  const set = v.rows.set;
+  const g = shownGrid(v);
+  const set = g?.set;
 
-  if (!set || !keepEdit(v)) return;
+  if (!g || !set || !keepEdit(v)) return;
 
   const width = set.columns.length;
 
@@ -152,7 +155,7 @@ export function nextEdit(v: DbView, by: 1 | -1): void {
 
     const row = Math.floor(flat / width);
 
-    v.rows.at = moveGrid(v.rows.at, set, colsOf(set), row - v.rows.at.row, (flat % width) - v.rows.at.col, rowsIn(v.gridSize.height), v.gridSize.width);
+    v.rows.at = moveGrid(v.rows.at, set, g.cols, row - v.rows.at.row, (flat % width) - v.rows.at.col, rowsIn(v.gridSize.height), v.gridSize.width);
 
     if (!("why" in cursorCell(v))) {
       startEdit(v);
@@ -223,7 +226,7 @@ export function stageNull(v: DbView): void {
 export function undoCell(v: DbView): void {
   const e = liveEdits(v);
   const set = v.rows.set;
-  const column = set?.columns[v.rows.at.col] ?? "";
+  const column = shownGrid(v)?.set.columns[v.rows.at.col] ?? "";
 
   if (!e || !set || !changeAt(e, set, v.rows.at.row, column)) {
     v.say("no change on this cell", "failed");

@@ -217,6 +217,8 @@ test:
     bun test scripts/databases-editview.test.ts
     # A password in a Kubernetes secret: the names checked, one fixed kubectl read into memory (never on an argv, in shared state or a file), where it came from shown, the ask after a failed read or a refusal, read again at each connect, the source saved.
     bun test scripts/databases-k8s.test.ts
+    # The Databases window, mouse and keyboard first: columns resized (o/O/{/} and the header's edge), hidden, moved and kept per table; ORDER BY shown and quoted, a result's own sort; ranges copied as TSV, rows as JSON / CSV / INSERT; every context menu and the keys it shows; names dragged into a query, tabs and connections reordered, files dropped; rename, disconnect, duplicate; the new keys type in fields.
+    bun test scripts/databases-ux.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

@@ -1,17 +1,19 @@
 // The Databases window's side panels, drawn: [1] Connections (saved, sent,
 // found in the folder), [2] Tables · Views · Schemas, [3] Structure ·
 // Indexes · Keys · Value (the picked cell, whole), [4] Log. Every row is a
-// click target (a click picks, a double click opens, a right click its menu);
-// the cursor's row stays in view.
+// click target (a click picks, a double click opens, a right click its menu
+// at the pointer) and says more on hover; a table's or column's name drags
+// into a query, a saved connection to another place; the cursor's row stays
+// in view.
 
 import { div, svg } from "gpui-kit";
-import type { Color, Context, Element } from "gpui-kit";
+import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { ScrollHandle } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
 import type { Conn } from "./kinds.ts";
-import { where } from "./kinds.ts";
+import { KIND_NAME, where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
 import type { PanelId, StructTab, TablesTab } from "./state.ts";
 import { PANEL_KEY, schemaWord } from "./state.ts";
@@ -21,34 +23,65 @@ import { cellAt, prettyValue } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
 import { changeAt } from "./edits.ts";
 import { liveEdits } from "./cell-edit.ts";
+import { atPointer } from "./menus.ts";
+import { addressOf, insertName, openTable, placeConn } from "./actions.ts";
+import { dropTarget, pressAt } from "./press.ts";
+import { qualified, quoteName } from "./catalog.ts";
 import type { default as DbView } from "./main.ts";
 
-/** A row's handlers: picked (a click), opened (a double click), its menu (a right click). */
+/** A row's handlers: picked (a click), opened (a double click), its menu (a right click, at the
+ *  pointer); a press that may become a drag (press.ts), the drop target it is, its hover. */
 interface RowHandlers {
   readonly pick: (cx: Context) => void;
   readonly open: (cx: Context) => void;
   readonly menu: (cx: Context) => void;
+  readonly press?: ((e: MouseButtonEvent, cx: Context) => void) | undefined;
+  readonly target?: string | undefined;
+  readonly tip?: string | undefined;
 }
 
 /** A list row: its band when it's the cursor's, its parts. */
-function listRow(t: Theme, id: string, cursor: boolean, active: boolean, parts: readonly Element[], h: RowHandlers): Element {
-  return h_flex().id(id).relative().h(19).flex_none().pl(10).pr(8).gap(8).items_center().overflow_hidden().cursor_pointer()
+function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boolean, parts: readonly Element[], h: RowHandlers): Element {
+  const row = h_flex().id(id).relative().h(19).flex_none().pl(10).pr(8).gap(8).items_center().overflow_hidden().cursor_pointer()
     .when(cursor, (el) => el.children(band(t, active)))
+    .when(Boolean(h.tip), (el) => el.tooltip(h.tip ?? ""))
     .on_mouse_down("left", (e, cx) => {
       cx.stop_propagation();
 
       if (e.click_count >= 2) h.open(cx);
-      else h.pick(cx);
+      else {
+        h.pick(cx);
+        h.press?.(e, cx);
+      }
 
       cx.notify();
     })
     .on_mouse_down("right", (_e, cx) => {
       cx.stop_propagation();
       h.pick(cx);
-      h.menu(cx);
+      atPointer(v, () => h.menu(cx));
       cx.notify();
     })
     .children(parts.map((p) => p.relative()));
+
+  return h.target ? dropTarget(t, row, v, h.target) : row;
+}
+
+/** Where a connection's password comes from, in words (never the password). */
+function secretWords(c: Conn): string {
+  switch (c.secret) {
+    case "keychain": return "password in the keychain";
+    case "ask": return "password asked, kept in memory";
+    case "pgpass": return "password from ~/.pgpass";
+    case "kubernetes": return c.source ? `password read from secret ${c.source.name} at each connect` : "password from a cluster's secret";
+    case "none": return "";
+  }
+}
+
+/** A connection's hover: where it is, what it is, where it came from and its password. */
+function connTip(c: Conn): string {
+  return [addressOf(c), KIND_NAME[c.kind], c.readonly ? "read only" : "", c.from ? `sent by ${c.from}` : c.origin === "found" ? "found in the folder" : "", secretWords(c)]
+    .filter(Boolean).join(" · ");
 }
 
 /** A list in a scrolled column, the cursor's row kept in view once per move. */
@@ -100,10 +133,23 @@ function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Elem
     div().flex_1(), ...(c.readonly ? [lock(t.ansi3)] : []), text(t, where(c, home()), t.dim).flex_shrink(1).min_w(0).max_w(220),
   ];
 
-  return listRow(t, `conn-${i}`, v.connAt === i, active, parts, {
+  const saved = c.origin === "saved";
+
+  return listRow(t, v, `conn-${i}`, v.connAt === i, active, parts, {
     pick: () => { v.connAt = i; v.panel = "conns"; v.focusSelf(); },
     open: (cx) => v.connectTo(c, cx),
     menu: (cx) => v.act("conns", "menu", cx),
+    tip: connTip(c),
+    // A saved one drags to another place among the saved (kept in connections.json).
+    press: saved ? (e) => pressAt(v, e, {
+      kind: "conn", label: c.name, takes: ["conn:"],
+      drop: (to, cx) => {
+        const at = to ? v.saved.findIndex((s) => `conn:${s.id}` === to) : -1;
+
+        if (at >= 0) placeConn(v, c, at, cx);
+      },
+    }) : undefined,
+    target: saved ? `conn:${c.id}` : undefined,
   });
 }
 
@@ -172,7 +218,9 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 
   const many = schemasOf(v).length > 1 && v.schema === null;
 
-  const rows = shownTables(v).map((x, i) => listRow(t, `table-${i}`, v.tableAt === i, active, [
+  const kind = v.active.kind;
+
+  const rows = shownTables(v).map((x, i) => listRow(t, v, `table-${i}`, v.tableAt === i, active, [
     ...(many && x.schema ? [text(t, `${x.schema}.`, t.dim).flex_none()] : []),
     text(t, x.name, v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0), div().flex_1(),
     text(t, count(x.rows), t.dim).flex_none(),
@@ -180,6 +228,15 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
     pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
     open: (cx) => v.act("tables", "open", cx),
     menu: (cx) => v.act("tables", "menu", cx),
+    tip: `${x.schema ? `${x.schema}.` : ""}${x.name} · ${x.type}${x.rows !== null ? ` · ${count(x.rows)} rows` : ""} · drag it into a query`,
+    // Its name drags into a query's editor (quoted); onto the Rows tab, it opens there.
+    press: (e) => pressAt(v, e, {
+      kind: "name", label: qualified(kind, x), takes: ["editor:", "rows-tab"],
+      drop: (to, cx) => {
+        if (to?.startsWith("editor:")) insertName(v, qualified(kind, x), cx);
+        else if (to === "rows-tab") openTable(v, x, cx);
+      },
+    }),
   }));
 
   const find = v.tableFind;
@@ -192,12 +249,12 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 function schemasBody(t: Theme, v: DbView, active: boolean): Element {
   const names = ["every schema", ...schemasOf(v)];
 
-  const rows = names.map((s, i) => listRow(t, `schema-${i}`, v.tableAt === i, active, [
+  const rows = names.map((s, i) => listRow(t, v, `schema-${i}`, v.tableAt === i, active, [
     text(t, s, (i === 0 ? v.schema === null : v.schema === s) ? t.ansi5 : t.muted).flex_1(),
   ], {
     pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
     open: (cx) => v.act("tables", "open", cx),
-    menu: () => {},
+    menu: (cx) => v.act("tables", "menu", cx),
   }));
 
   return list("schemas-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables);
@@ -268,7 +325,9 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
 
   const markColor = { pk: t.ansi3, fk: t.ansi6, in: t.ansi6, "": t.dim } as const;
 
-  return list("struct-list", v.scrolls.structure, rows.map((r, i) => listRow(t, `struct-${i}`, v.structAt === i, active, [
+  const kind = v.active?.kind ?? "sqlite";
+
+  return list("struct-list", v.scrolls.structure, rows.map((r, i) => listRow(t, v, `struct-${i}`, v.structAt === i, active, [
     text(t, r.mark, markColor[r.markColor]).w(16).flex_none(),
     h_flex().flex_shrink(1).min_w(0).gap(6).child(text(t, r.name ?? r.note, v.structAt === i && active ? t.foreground : t.muted)).when(r.name !== null && r.note !== "", (el) => el.child(text(t, r.note, t.dim))),
     div().flex_1(), text(t, r.right, t.ansi10).flex_shrink(1).min_w(0).max_w(200),
@@ -276,6 +335,13 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
     pick: () => { v.structAt = i; v.panel = "structure"; v.focusSelf(); },
     open: (cx) => v.act("structure", "open", cx),
     menu: (cx) => v.act("structure", "menu", cx),
+    // A column's (an index's, a key's) name drags into a query's editor, quoted.
+    press: r.name ? (e) => pressAt(v, e, {
+      kind: "name", label: quoteName(kind, r.name ?? ""), takes: ["editor:"],
+      drop: (to, cx) => {
+        if (to?.startsWith("editor:")) insertName(v, quoteName(kind, r.name ?? ""), cx);
+      },
+    }) : undefined,
   })), v.structAt, v.seen.structure);
 }
 
@@ -297,7 +363,7 @@ function valueBody(t: Theme, v: DbView): Element {
 
   const column = g.set.columns[g.at.col] ?? "";
   // A staged change shows its new value, and what was read under the title.
-  const change = v.shownQuery() ? null : changeAt(liveEdits(v), g.set, g.at.row, column);
+  const change = g.place === "results" ? null : changeAt(liveEdits(v), g.raw, g.at.row, column);
   const cell = change ? change.now : read;
   const lines = prettyValue(cell).split("\n").slice(0, 400);
 
@@ -325,7 +391,7 @@ export function structPanel(t: Theme, v: DbView): Element {
 export function logPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "log";
 
-  const rows = v.log.map((l, i) => listRow(t, `log-${i}`, v.logAt === i, active, [
+  const rows = v.log.map((l, i) => listRow(t, v, `log-${i}`, v.logAt === i, active, [
     text(t, l.ok ? "✓" : "✕", l.ok ? t.done : t.blocked).flex_none(),
     text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(1).min_w(0),
     ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(1).min_w(0)]),
@@ -333,7 +399,8 @@ export function logPanel(t: Theme, v: DbView): Element {
   ], {
     pick: () => { v.logAt = i; v.panel = "log"; v.focusSelf(); },
     open: (cx) => v.act("log", "open", cx),
-    menu: () => {},
+    menu: (cx) => v.act("log", "menu", cx),
+    tip: l.ok ? undefined : l.said,
   }));
 
   return panel(t, "p-log", titleTabs(t, "log", PANEL_KEY.log, [["l", "Log"]], "l", active, () => v.setPanel("log")), active,
