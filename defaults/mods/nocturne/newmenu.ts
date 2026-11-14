@@ -26,7 +26,8 @@
 //   space     a new space, or a worktree (made or opened)
 //   footer    what the item under the cursor will do, in words
 //
-// Keys: the letter on a tile / 1..9 for an agent (shift: the other landing
+// Keys: the letter on a tile (a launcher's too, when its mod.json asks for one
+// that's free: launchers.ts) / 1..9 for an agent (shift: the other landing
 // spot, once); ← → ↑ ↓ move, enter picks, tab flips the landing, esc or q closes.
 
 import { div, svg, image } from "gpui-kit";

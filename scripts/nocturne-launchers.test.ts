@@ -19,7 +19,7 @@ mock.module("fs/promises", () => ({
   readdir: () => Promise.resolve([...new Set([...files.keys()].map((p) => p.split("/")[3] ?? ""))]),
 }));
 
-const { readLaunchers, launchers, launcherPanels } = await import("../defaults/mods/nocturne/launchers.ts");
+const { readLaunchers, launchers, launcherPanels, launcherKey } = await import("../defaults/mods/nocturne/launchers.ts");
 
 beforeEach(() => {
   files.clear();
@@ -69,5 +69,21 @@ describe("launchers", () => {
     const first = shared.get("nocturne.launchers");
     await readLaunchers();
     expect(shared.get("nocturne.launchers")).toBe(first);
+  });
+
+  test("a launcher's key: one letter or digit, kept as its mod.json says it and taken lower case", async () => {
+    files.set("/h/mods/k8s/mod.json", JSON.stringify({ launcher: { title: "Kubernetes", window: true, pane: true, key: "k" } }));
+    await readLaunchers();
+    expect(launchers()[0]?.key).toBe("k");
+    expect(launcherPanels(["t", "w"]).map((p) => p.key)).toEqual(["k"]);
+    expect(["k", "K", "7", "kk", "", "ü", "-", " ", undefined].map(launcherKey)).toEqual(["k", "k", "7", null, null, null, null, null, null]);
+  });
+
+  test("a key already taken goes nowhere: Nocturne's own tiles', the menu's own (q, 1-9), the first launcher's by folder name", async () => {
+    const asks = { a: "k", b: "k", c: "t", d: "q", e: "3", f: "kk", g: "0" };
+    for (const [mod, key] of Object.entries(asks)) files.set(`/h/mods/${mod}/mod.json`, JSON.stringify({ launcher: { title: mod.toUpperCase(), pane: true, key } }));
+    await readLaunchers();
+    const keys = Object.fromEntries(launcherPanels(["t", "w", "f"]).map((p) => [p.id, p.key]));
+    expect(keys).toEqual({ "mod:a": "k", "mod:b": "", "mod:c": "", "mod:d": "", "mod:e": "", "mod:f": "", "mod:g": "0" });
   });
 });

@@ -2327,7 +2327,10 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"launcher"` in `mod.json` puts a mod Nocturne doesn't ship (one installed from
   its own repository) into "+ new" and the palette, nothing in Nocturne naming it:
   `"launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
-  "window": true, "pane": true }`. `window`: it opens as its `mod.json` overlay
+  "window": true, "pane": true, "key": "k" }`. `key`: its tile's letter in
+  "+ new" (one letter or digit; Nocturne's own tiles' letters, q and 1-9 stay
+  theirs, and of two launchers asking the same the first by folder name gets
+  it). `window`: it opens as its `mod.json` overlay
   (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
   (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
   switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
