@@ -907,18 +907,36 @@ pub(crate) fn run_blocking(command: &str, args: &[String], cwd: Option<String>, 
         .stderr(Stdio::piped())
         .spawn()
         .map_err(|e| format!("cannot run {command}: {e}"))?;
-    // Bounded: a chatty command can't fill memory; the rest is drained and dropped.
+    // Bounded: a chatty command can't fill memory; the rest is drained and dropped. Read into a
+    // shared buffer, so what came is there even while something the program left behind keeps
+    // the pipe open (a credential plugin's helper): `ended` says the pipe closed.
     let drain = |r: Box<dyn Read + Send>| {
+        let buf = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let (ended, closed) = std::sync::mpsc::channel::<()>();
+        let into = buf.clone();
         std::thread::spawn(move || {
-            let mut buf = Vec::new();
-            let mut r = r;
-            let _ = (&mut r).take(EXEC_OUTPUT).read_to_end(&mut buf);
-            let _ = std::io::copy(&mut r, &mut std::io::sink());
-            String::from_utf8_lossy(&buf).into_owned()
-        })
+            let mut r = r.take(EXEC_OUTPUT);
+            let mut chunk = [0u8; 16 * 1024];
+            while let Ok(n) = r.read(&mut chunk) {
+                if n == 0 {
+                    break;
+                }
+                into.lock().unwrap_or_else(std::sync::PoisonError::into_inner).extend_from_slice(&chunk[..n]);
+            }
+            let _ = std::io::copy(&mut r.into_inner(), &mut std::io::sink());
+            let _ = ended.send(());
+        });
+        (buf, closed)
     };
     let out = drain(Box::new(child.stdout.take().unwrap()));
     let err = drain(Box::new(child.stderr.take().unwrap()));
+    // After the program's exit its output is all in the pipes: wait for them to close for a
+    // moment, then take what came (never past AFTER_EXIT: exec's deadline holds either way).
+    let collect = |(buf, closed): (std::sync::Arc<std::sync::Mutex<Vec<u8>>>, std::sync::mpsc::Receiver<()>), until: std::time::Instant| {
+        let _ = closed.recv_timeout(until.saturating_duration_since(std::time::Instant::now()));
+        let bytes = buf.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
     let start = std::time::Instant::now();
     let status = loop {
         match child.try_wait() {
@@ -932,8 +950,13 @@ pub(crate) fn run_blocking(command: &str, args: &[String], cwd: Option<String>, 
             Err(e) => return Err(e.to_string()),
         }
     };
-    Ok((status.code().unwrap_or(-1), out.join().unwrap_or_default(), err.join().unwrap_or_default()))
+    let until = std::time::Instant::now() + AFTER_EXIT;
+    Ok((status.code().unwrap_or(-1), collect(out, until), collect(err, until)))
 }
+
+/// How long exec waits for a finished program's output pipes to close (something it started may
+/// hold them open for ever) before it returns what came.
+const AFTER_EXIT: Duration = Duration::from_millis(500);
 
 /// Runs a program on another machine through the core's exec: its exact output.
 pub fn run_remote(machine: &str, command: &str, args: &[String], cwd: Option<String>) -> Result<(i32, Vec<u8>, Vec<u8>), String> {
@@ -1502,6 +1525,20 @@ mod tests {
         assert!(error.contains("0.03 s"), "{error}");
         let (code, stdout, _) = run_blocking("sh", &args, None, Duration::from_secs(2)).unwrap();
         assert_eq!((code, stdout.as_str()), (0, "done"));
+    }
+
+    /// A program that answers and exits, leaving something behind that holds
+    /// its output open (a kubeconfig credential plugin's helper does), still
+    /// comes back with what it printed: the output isn't waited for past
+    /// `AFTER_EXIT` once the program itself has gone.
+    #[cfg(unix)]
+    #[test]
+    fn exec_returns_when_the_program_exits_though_a_child_holds_its_output() {
+        let args = ["-c".into(), "printf answer; printf said >&2; sleep 30 & exit 3".into()];
+        let at = std::time::Instant::now();
+        let (code, stdout, stderr) = run_blocking("sh", &args, None, Duration::from_secs(20)).unwrap();
+        assert_eq!((code, stdout.as_str(), stderr.as_str()), (3, "answer", "said"));
+        assert!(at.elapsed() < AFTER_EXIT + Duration::from_secs(2), "took {:?}", at.elapsed());
     }
 
     #[cfg(unix)]
