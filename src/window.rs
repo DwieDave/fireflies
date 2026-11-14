@@ -3682,7 +3682,34 @@ impl AppWindow {
                 c.name = name.trim().to_owned();
             }
             "tab.move" => {
-                let (Some(id), Some(i)) = (Self::arg(a, "id"), a.get("index").and_then(Value::as_u64)) else { return self.fail("tab.move needs id and index") };
+                let index = a.get("index").and_then(Value::as_u64);
+                // Into another space: the whole tab, then it's shown there.
+                if let Some(space) = Self::owned(a, "space")
+                    && let Some(id) = Self::owned(a, "id")
+                    && self.model.space_of(&id).is_some_and(|s| s.id != space)
+                {
+                    if let Err(e) = self.model.move_tab_to_space(&id, &space, index.map(|i| i as usize)) {
+                        return self.fail(e);
+                    }
+                    // Its terminals' labels say which space they live in (a restart or
+                    // another client places them by it); the tab's id stays.
+                    let addrs = self.model.tab(&id).map(model::Tab::addresses).unwrap_or_default();
+                    let core = self.core.clone();
+                    cx.background_executor().spawn(async move {
+                        for addr in addrs {
+                            let machine = addr.split_once('/').map(|(m, _)| m);
+                            let labels = json!({ "herdr.space": crate::mirror::local(&space, machine) });
+                            if let Err(e) = core.call("terminal.label", json!({ "terminal": addr, "labels": labels })) {
+                                tracing::warn!("tab.move label: {e:#}");
+                            }
+                        }
+                    }).detach();
+                    self.focused_block = None;
+                    self.focused_pane = None;
+                    self.agent = self.model.focused_pane().and_then(|p| self.model.address_of(&p));
+                    return self.answer(Ok(json!({ "tab": id })));
+                }
+                let (Some(id), Some(i)) = (Self::arg(a, "id"), index) else { return self.fail("tab.move needs id and index (or space)") };
                 let Some(pid) = self.model.space_of(id).map(|p| p.id.clone()) else { return self.fail(format!("no tab {id:?}")) };
                 let p = self.model.space_mut(&pid).unwrap();
                 let from = p.tabs.iter().position(|c| c.id == id).unwrap();
@@ -8363,6 +8390,57 @@ export default class SystemToast extends View {
         assert_eq!(super::close_detail(&mixed, "tab"), "2 agents: claude is working \u{b7} codex is idle\nvim running \u{b7} 1 unsaved file\n\nClosing the tab ends them.");
         let many: Vec<Ending> = ["a", "b", "c", "d"].iter().map(|n| e(Agent, &format!("{n} is idle"))).collect();
         assert_eq!(super::endings_summary(&many), "4 agents: a is idle \u{b7} b is idle \u{b7} c is idle \u{b7} +1 more");
+    }
+
+    #[test]
+    fn a_whole_tab_moves_to_another_space_by_command() {
+        in_own_process("tab_moves_to_a_space");
+    }
+
+    #[gpui::test]
+    fn tab_moves_to_a_space(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("tab_moves_to_a_space") {
+            return;
+        }
+        let (view, cx) = open_window(cx, "unused", "", json!({
+            "id": "root", "type": "block", "content": { "tab": "active" }
+        }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            macro_rules! run {
+                ($name:expr, $args:expr) => {{
+                    this.reply = None;
+                    this.dispatch($name, &$args, true, window, cx);
+                    this.reply.take().unwrap_or_else(|| json!({ "ok": true }))
+                }};
+            }
+            // sp1: tb1 (p1 beside p2, p3 parked) and tb2; sp2: tb9.
+            this.model.add_space("sp1", "api", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            assert!(this.model.split_toward("p1", crate::model::Direction::Right, crate::model::pane("p2", "t2")));
+            assert!(this.model.split_toward("p2", crate::model::Direction::Right, crate::model::pane("p3", "t3")));
+            this.model.park_pane("p3", None).unwrap();
+            assert!(this.model.add_tab("sp1", crate::model::Tab::new("tb2", "", "p4", "t4")));
+            this.model.add_space("sp2", "pip", "/tmp", crate::model::Tab::new("tb9", "", "p9", "t9"));
+            this.model.select_tab("tb1");
+            this.model.focus_pane("p2");
+            assert_eq!(run!("tab.move", json!({ "id": "tb1", "space": "sp2", "index": 1 })), json!({ "tab": "tb1" }));
+            assert_eq!(this.model.space_of("tb1").map(|s| s.id.as_str()), Some("sp2"));
+            assert_eq!(this.model.space("sp2").unwrap().tabs[0].id, "tb1");
+            assert_eq!(this.model.tab("tb1").unwrap().parked.len(), 1);
+            assert_eq!(this.model.focused_pane().as_deref(), Some("p2"));
+            assert_eq!(this.model.active.as_deref(), Some("sp2"));
+            // Index alone still moves it inside its space; space naming its own space too.
+            assert_eq!(run!("tab.move", json!({ "id": "tb1", "index": 2 })), json!({ "ok": true }));
+            assert_eq!(this.model.space("sp2").unwrap().tabs[1].id, "tb1");
+            assert_eq!(run!("tab.move", json!({ "id": "tb1", "space": "sp2", "index": 1 })), json!({ "ok": true }));
+            assert_eq!(this.model.space("sp2").unwrap().tabs[0].id, "tb1");
+            // No such space; neither space nor index.
+            assert!(run!("tab.move", json!({ "id": "tb1", "space": "nope" }))["error"].is_string());
+            assert!(run!("tab.move", json!({ "id": "tb1" }))["error"].is_string());
+            // The last tab of a space moved away closes that space.
+            assert_eq!(run!("tab.move", json!({ "id": "tb2", "space": "sp2" })), json!({ "tab": "tb2" }));
+            assert!(this.model.space("sp1").is_none());
+        }));
     }
 
     #[test]

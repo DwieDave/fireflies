@@ -203,6 +203,16 @@ own). The tab it leaves closes when it was its last pane:
 herdr-app do pane.move '{"pane":"p12","tab":"tb3"}'
 ```
 
+`tab.move {id, space, index?}` takes a whole tab into another space on its
+machine: every pane, their arrangement and sizes, parked panes, the focus and
+the name (terminals keep running, mod panes their props), at `index` (1 =
+first; default: last), and shows it there. The space it leaves closes when that
+was its last tab. Without `space`, `index` moves it inside its own space:
+
+```sh
+herdr-app do tab.move '{"id":"tb3","space":"sp2"}'
+```
+
 Closing ends what runs there. `tab.close`, `pane.close` and `space.close`
 from a script fail with what they would end (an agent in any status, idle
 too; for a tab also a busy program or unsaved work) until you pass

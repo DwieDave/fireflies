@@ -1844,7 +1844,11 @@ The main ones:
   shell in front or unsaved work asks the person first however it is closed (keys,
   menus, middle-click, a mod's `run`), naming the agents and counting them, and from a
   script fails unless confirmed; a tab of shells at their prompts just closes),
-  `tab.rename {id?, name}` ("": its number again), `tab.move {id, index}`,
+  `tab.rename {id?, name}` ("": its number again), `tab.move {id, index?, space?}`
+  (index alone: its place in its space, 1 = first; with `space`, another space on
+  its machine: the whole tab goes there, every pane with its arrangement, sizes,
+  parked panes and focus, terminals running on, at `index` (default: last), and
+  is shown there; the space it leaves closes when that was its last tab),
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
   skip settled tabs).
