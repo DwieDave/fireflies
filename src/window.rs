@@ -505,6 +505,11 @@ pub struct AppWindow {
     pane_grip_hover: Option<String>,
     /// The parking row chip under the pointer (parking.rs).
     chip_hover: Option<String>,
+    /// Mod panes made parked (`pane.split {park: true}`): never laid out in
+    /// the tab, their copies load and are drawn out of sight (their native
+    /// views load, hidden), and unparking one tells its mod (`unpark`)
+    /// instead of placing it. For as long as they stay parked; not kept.
+    mod_chips: HashSet<String>,
     /// Each pane's top row the grip sits centered in: its top header, else a strip.
     pane_grip_rows: RefCell<HashMap<String, f32>>,
     /// A window (`kind: "window"` overlay) being pressed or dragged.
@@ -647,6 +652,7 @@ impl AppWindow {
             pane_drag: None,
             pane_grip_hover: None,
             chip_hover: None,
+            mod_chips: HashSet::new(),
             pane_grip_rows: RefCell::default(),
             win_drag: None,
             float_anims: HashMap::new(),
@@ -1717,7 +1723,16 @@ impl AppWindow {
         for slot in gone {
             self.remove_copy(&slot, window, cx);
         }
-        let want: HashMap<String, Instance> = mods_visible.into_iter().collect();
+        let mut want: HashMap<String, Instance> = mods_visible.into_iter().collect();
+        // Chips made parked load too (drawn out of sight, parking.rs), not shown.
+        let parked: Vec<(String, Instance)> = self.model.tabs().flat_map(|c| c.parked.iter()).filter_map(|p| match p.pane.content() {
+            Some(Content::Mod { name, props }) => Some((p.pane.id.clone(), Instance { name: name.clone(), props: props.clone() })),
+            _ => None,
+        }).collect();
+        self.mod_chips.retain(|id| parked.iter().any(|(p, _)| p == id));
+        for (id, inst) in parked.into_iter().filter(|(p, _)| self.mod_chips.contains(p)) {
+            want.entry(id).or_insert(inst);
+        }
         for (slot, inst) in want {
             if !self.copies.contains_key(&slot) {
                 let copy = self.load(inst, window, cx);
@@ -3750,6 +3765,21 @@ impl AppWindow {
                         None => self.split(Self::owned(a, "pane"), dir, Self::argv(a), Self::owned(a, "folder"), window),
                     }
                 };
+                // `park: true` with a mod: a chip from the start. Parked in the
+                // same step, before any frame: the tab's panes never move.
+                let r = match r {
+                    Ok(v) if a.get("park").and_then(Value::as_bool) == Some(true) && Self::owned(a, "mod").is_some() => {
+                        let pane = v["pane"].as_str().unwrap_or_default().to_owned();
+                        match self.model.park_pane(&pane, None) {
+                            Ok(()) => {
+                                self.mod_chips.insert(pane);
+                                Ok(json!({ "pane": v["pane"], "parked": true }))
+                            }
+                            Err(e) => Err(e),
+                        }
+                    }
+                    r => r,
+                };
                 self.answer(r);
             }
             "pane.close" => {
@@ -3849,6 +3879,14 @@ impl AppWindow {
             "pane.unpark" => {
                 let pane = Self::owned(a, "pane").or_else(|| self.model.active_tab().and_then(|t| t.parked.last()).map(|p| p.pane.id.clone()));
                 let Some(pane) = pane else { return self.fail("no parked pane") };
+                // A chip made parked: its mod decides what unparking it means
+                // (picture in picture opens its window); it never takes a place.
+                if self.mod_chips.contains(&pane) && self.model.parked_tab_of(&pane).is_some() {
+                    if let Some(copy) = self.copies.get(&pane).map(|c| c.id) {
+                        mods::send_command_to_copy(copy, "unpark");
+                    }
+                    return self.answer(Ok(json!({ "pane": pane, "unpark": "mod" })));
+                }
                 let edge = match Self::arg(a, "edge") {
                     None => None,
                     Some(e) => match split_edge(e) {
@@ -7435,6 +7473,87 @@ mod tests {
         cx.run_until_parked();
         assert!(cx.update(|_, cx| view.read(cx).model.parked_tab_of("pm").is_none()), "a press unparks it");
         assert_eq!(copy(cx), first);
+    }
+
+    #[test]
+    fn a_mod_pane_made_parked_never_moves_the_other_panes() {
+        in_own_process("made_parked");
+    }
+
+    /// `pane.split {mod, park: true}` (picture in picture's ⤓): the pane is a
+    /// chip from the start. No frame lays it out in the tab: the other panes
+    /// keep their bounds, before, while and after. Its mod runs all the same,
+    /// drawn out of sight; unparking the chip asks its mod (`unpark`) and the
+    /// panes still don't move.
+    #[gpui::test]
+    fn made_parked(cx: &mut gpui::TestAppContext) {
+        use crate::layout::{Axis, Content, Node};
+        use serde_json::json;
+        if !running_alone("made_parked") {
+            return;
+        }
+        let probe = "import { View, div } from \"gpui-kit\"; import { nextCommand, shared, setShared } from \"herdr\";
+            export default class P extends View {
+              init(_p, cx) { cx.spawn(async () => { for (;;) { const c = await nextCommand(); setShared(\"probe.cmd\", c); } }); }
+              render() { setShared(\"probe.rendered\", true); return div().size_full(); } }";
+        let frame = json!({ "background": "#080808", "border": { "width": 1, "color": "#323437" }, "radius": 0, "gap": 8, "lone": true });
+        let (view, cx) = open_window(cx, "probe", probe, json!({ "id": "root", "type": "block", "content": { "tab": "active", "pane": frame } }));
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.sync_folders(window, cx);
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            assert!(this.model.split_with("p1", Axis::Row, Node::block("p2", Content::Mod { name: "probe".into(), props: json!({ "n": 2 }) })));
+            // A chip already in the row (so the row's own height is no change).
+            assert!(this.model.split_with("p1", Axis::Column, Node::block("p3", Content::Mod { name: "probe".into(), props: json!({ "n": 3 }) })));
+            this.model.park_pane("p3", None).unwrap();
+            // The core is offline here: the layout document counts as read.
+            this.documents.get_mut("").unwrap().available = true;
+            this.sync(window, cx);
+        }));
+        let frames = |cx: &mut gpui::VisualTestContext| {
+            for _ in 0..3 {
+                view.update(cx, |_, cx| cx.notify());
+                cx.run_until_parked();
+            }
+        };
+        frames(cx);
+        let rects = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| {
+            let b = this.bounds.borrow();
+            (b["p1"], b["p2"])
+        });
+        let before = rects(cx);
+        crate::mods::set_shared("probe.rendered".into(), json!(false));
+        let made = view.update_in(cx, |this, window, cx| {
+            let r = this.run_as("pane.split", json!({ "pane": "p2", "direction": "right", "mod": "probe", "props": { "n": 4 }, "park": true }), false, window, cx);
+            // In the same step: parked, never in the tab's arrangement.
+            let pane = r["pane"].as_str().unwrap().to_owned();
+            assert!(this.model.active_tab().unwrap().root.find(&pane).is_none(), "never laid out: {r}");
+            assert!(this.model.parked_tab_of(&pane).is_some());
+            pane
+        });
+        for _ in 0..4 {
+            view.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            assert_eq!(rects(cx), before, "the other panes never move");
+        }
+        assert!(view.update(cx, |this, _| this.copies.contains_key(&made)), "its mod runs");
+        assert_eq!(crate::mods::shared("probe.rendered"), Some(json!(true)), "and is drawn (out of sight)");
+        let shown = view.update(cx, |this, _| this.copies[&made].id);
+        assert!(!crate::mods::shown_copies().contains(&shown), "not a shown copy: commands for the shown ones don't reach it");
+        // Unparking the chip (a click on it runs pane.unpark): its mod hears it; it stays a chip.
+        let r = view.update_in(cx, |this, window, cx| this.run_as("pane.unpark", json!({ "pane": made }), false, window, cx));
+        assert_eq!(r["unpark"], "mod", "{r}");
+        frames(cx);
+        assert_eq!(crate::mods::shared("probe.cmd"), Some(json!("unpark")));
+        assert!(view.update(cx, |this, _| this.model.parked_tab_of(&made).is_some()));
+        assert_eq!(rects(cx), before, "still nothing moved");
+        // Its mod closes it: gone from the row, the panes as they were.
+        view.update_in(cx, |this, window, cx| this.run_as("pane.close", json!({ "pane": made }), false, window, cx));
+        frames(cx);
+        assert_eq!(rects(cx), before);
+        assert!(view.update(cx, |this, _| !this.copies.contains_key(&made) && !this.mod_chips.contains(&made)));
+        // A pane parked the usual way unparks into the tab as before.
+        view.update_in(cx, |this, window, cx| this.run_as("pane.unpark", json!({ "pane": "p3" }), false, window, cx));
+        assert!(view.update(cx, |this, _| this.model.active_tab().unwrap().root.find("p3").is_some()));
     }
 
     #[test]

@@ -168,6 +168,15 @@ impl AppWindow {
         let width = look.and_then(|l| l.width).or(drawn.then_some(MOD_WIDTH));
         let bounds = self.bounds.clone();
         let dragged = self.pane_drag.as_ref().filter(|d| d.moving()).map(|d| d.pane().to_owned());
+        // Chips made parked (`pane.split {park: true}`): their mods drawn out of
+        // sight, at the tab's size, so they run and their native views load
+        // (hidden: nothing of them is visible), as a pane's would.
+        let room = bounds.borrow().get(&tab.root.id).map(|b| b.size).unwrap_or_else(|| size(px(400.), px(300.)));
+        let unseen: Vec<AnyElement> = tab.parked.iter().filter(|p| self.mod_chips.contains(&p.pane.id) && self.copies.contains_key(&p.pane.id)).map(|p| {
+            div().absolute().top_0().left_0().size_0().overflow_hidden()
+                .child(div().w(room.width).h(room.height).child(self.render_slot(&p.pane.id, cx)))
+                .into_any_element()
+        }).collect();
         let chips = tab.parked.iter().map(|p| {
             let pane = p.pane.id.clone();
             let id = chip_id(&pane);
@@ -207,6 +216,7 @@ impl AppWindow {
             .overflow_x_scroll()
             .child(canvas(move |bb, _, _| { b.borrow_mut().insert(ROW.to_owned(), bb); }, |_, _, _, _| {}).absolute().size_full())
             .children(chips)
+            .children(unseen)
             .into_any_element()
     }
 

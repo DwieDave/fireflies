@@ -545,7 +545,15 @@ fn players_of(web_key: &str) -> Vec<(String, u64)> {
 
 fn put(view: &NSView, into: &NSView) {
     view.removeFromSuperview();
-    view.setFrame(into.bounds());
+    // A holder not laid out (a chip's player, drawn out of sight): the page
+    // keeps its size meanwhile rather than being laid out at nothing; the
+    // next holder sets it again.
+    let b = into.bounds();
+    if b.size.width >= 1.0 && b.size.height >= 1.0 {
+        view.setFrame(b);
+    } else {
+        view.setFrameOrigin(NSPoint::new(0.0, 0.0));
+    }
     view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
     into.addSubview(view);
 }

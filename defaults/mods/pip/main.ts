@@ -47,8 +47,9 @@
 // Opened by browser (`openOverlay` WINDOW below, props { of: the
 // browser's web view key }). As a pane (◧): props { of, pane: true }; the pane
 // closes when the video leaves it. Parked (⤓): props { of, pane: true, park:
-// true }, a pane that parks itself once it holds the video and turns back into
-// the window when unparked. The ⋯ menu: this mod as a popup, props { menu }.
+// true }, a pane made parked (pane.split park: true: never laid out in the tab,
+// it runs out of sight and takes the video there); unparking its chip sends it
+// `unpark`, and it turns back into the window. The ⋯ menu: this mod as a popup, props { menu }.
 // Any site's video works: the page itself moves into the player and its
 // video is lifted to fill it (native view `pip`).
 
@@ -439,6 +440,8 @@ export default class Pip extends View {
         const command = parseCommand(c);
 
         if (c === "focus") handle.focus();
+        // A chip (pane.split park: true) unparked: the window again, which takes the video.
+        else if (c === "unpark") this.unpark();
         else if (command !== null) this.command(command);
         cx.notify();
       }
@@ -533,6 +536,15 @@ export default class Pip extends View {
     return all.length === 1 ? all[0] ?? null : null;
   }
 
+  /** The chip unparked (a click on it, pane.unpark): its mod's to answer, as the
+   *  app never lays a chip made parked out in the tab. The window opens and takes
+   *  the video; this pane then gets `pip.moved` and closes. */
+  unpark() {
+    if (!this.parks || this.closing) return;
+
+    openOverlay({ ...windowSpec(), props: { of: pipProps().of } });
+  }
+
   /** A parking pane: parks itself once the video is in it; when the chip is
    *  unparked (clicked, dragged back, focused), opens the window again,
    *  which takes the video, and this pane closes (`pip.moved`). */
@@ -614,7 +626,9 @@ export default class Pip extends View {
     const f = focused();
     const args = f?.pane ? { direction: "right", pane: f.pane } : { edge: "right" };
 
-    run("pane.split", { ...args, mod: MOD, props: park ? { of, pane: true, park: true } : { of, pane: true } });
+    // A chip is made parked (park: true): it never takes a place in the tab, so
+    // no pane shows up among the others for a moment.
+    run("pane.split", park ? { ...args, mod: MOD, props: { of, pane: true, park: true }, park: true } : { ...args, mod: MOD, props: { of, pane: true } });
     // Noted when the new pane takes the video (`pip.moved`).
     this.made = { of, before, park };
   }

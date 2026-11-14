@@ -232,3 +232,26 @@ test("out of Fireflies, the window gets the mode and the colours of its seams an
   expect(args.colors).toMatchObject({ accent: theme.accent, seam: pip.seamTone(theme), dim: theme.dim });
   store.clear();
 });
+
+test("park (⤓, P): the chip is made parked, never a pane in the tab for a moment; unparked, the window comes back", () => {
+  runs.length = 0; opened.length = 0;
+  propsNow = { of: "1:web", overlay: "o7" };
+  const p = player(480);
+  p.intoPane(true);
+  const [name, args] = runs.at(-1)!;
+  expect(name).toBe("pane.split");
+  expect(args).toMatchObject({ mod: "pip", park: true, props: { of: "1:web", pane: true, park: true } });
+  // Into a pane (◧) lays it out, as before.
+  p.intoPane(false);
+  expect(runs.at(-1)![1].park).toBeUndefined();
+  // The chip's copy hears `unpark` (a click on the chip): the window, snapping as the mode is.
+  propsNow = { of: "1:web", pane: true, park: true };
+  const chip = player(480, { inPane: true, parks: true, closing: false });
+  chip.unpark();
+  expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "window", key: "pip", snap: true, props: { of: "1:web" } });
+  // A pane that isn't a chip doesn't.
+  opened.length = 0;
+  player(480, { inPane: true, parks: false }).unpark();
+  expect(opened).toEqual([]);
+  propsNow = { of: "1:web" };
+});

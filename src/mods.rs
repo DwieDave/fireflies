@@ -811,6 +811,16 @@ pub fn send_command_to(copy: u64, command: &str) -> bool {
     })
 }
 
+/// Delivers `command` to one copy, shown or not (a chip's mod, `pane.split
+/// {park: true}`, hears `unpark` while out of sight).
+pub fn send_command_to_copy(copy: u64, command: &str) -> bool {
+    COMMANDS.with(|c| {
+        let mut c = c.borrow_mut();
+        c.retain(|(_, _, tx)| !tx.is_closed());
+        c.iter().any(|(id, _, tx)| *id == copy && tx.try_send(command.to_owned()).is_ok())
+    })
+}
+
 /// HUP: the copies on screen now, for native views (src/native_view.rs).
 pub fn shown_copies() -> std::collections::HashSet<u64> {
     SHOWN_COPIES.with(|s| s.borrow().clone())

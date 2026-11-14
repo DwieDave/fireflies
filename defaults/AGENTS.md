@@ -360,7 +360,11 @@ the highlighted line shows where it will land.
   viewer, a board, a git panel): `pane.split {direction, mod, props}`. A
   mod pane splits, zooms, closes and gets a header like any pane, keeps
   the keyboard when clicked, and is saved with its tab; its `props` tell
-  it what to show (a file, a folder). Closing a terminal pane ends its
+  it what to show (a file, a folder). `pane.split {direction, mod, props, park: true}`
+  makes it a chip in the tab's parked row from the start, never laid out in the tab (the
+  other panes don't move): its mod runs out of sight (native views load, hidden), and
+  unparking the chip (a click, `pane.unpark`) sends the mod `unpark` from `nextCommand()`
+  instead of placing it (picture in picture's chip opens its window again). Closing a terminal pane ends its
   terminal, and a program exiting closes its pane, even if Fireflies was closed.
   Terminal panes are kept by their machine's core (`keep: true`). A lost
   terminal (core crash, reboot, logout) gets a shell in its last folder,
