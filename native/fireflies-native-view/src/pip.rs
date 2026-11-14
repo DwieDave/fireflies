@@ -10,20 +10,24 @@
 //! played one) and starts a session; `pip.enter { of }` tells the page's mod,
 //! which opens a player; the player's view attaching takes the web view.
 
+use crate::Rect;
 use crate::macos::emit_event;
+use crate::snap::{self, Dir, Place};
 use block2::RcBlock;
 use objc2::rc::{Retained, Weak};
 use objc2::runtime::{AnyObject, ProtocolObject};
 use objc2::runtime::{NSObject, NSObjectProtocol};
-use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
+use objc2::{AnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, Message, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSBackingStoreType, NSBox, NSBoxType, NSButton, NSCellImagePosition, NSColor,
-    NSControl, NSEvent, NSFloatingWindowLevel, NSFont, NSFontAttributeName, NSForegroundColorAttributeName, NSImage,
-    NSPanel, NSResponder, NSTextField, NSTitlePosition, NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindow,
-    NSWindowCollectionBehavior, NSWindowDelegate, NSWindowStyleMask,
+    NSApplication, NSApplicationDidChangeScreenParametersNotification, NSAutoresizingMaskOptions, NSBackingStoreType, NSBox,
+    NSBoxType, NSButton, NSCellImagePosition, NSColor, NSControl, NSEvent, NSEventModifierFlags, NSEventType,
+    NSFloatingWindowLevel, NSFont, NSFontAttributeName, NSForegroundColorAttributeName, NSImage, NSPanel, NSResponder,
+    NSScreen, NSTextField, NSTitlePosition, NSTrackingArea, NSTrackingAreaOptions, NSView, NSWindow,
+    NSWindowCollectionBehavior, NSWindowDelegate, NSWindowOrderingMode, NSWindowStyleMask,
 };
 use objc2_foundation::{
-    NSAttributedString, NSAttributedStringKey, NSData, NSDictionary, NSError, NSPoint, NSRect, NSSize, NSString,
+    NSAttributedString, NSAttributedStringKey, NSData, NSDictionary, NSError, NSNotification, NSNotificationCenter, NSPoint,
+    NSRect, NSSize, NSString,
 };
 use objc2_web_kit::{
     WKContentWorld, WKFrameInfo, WKScriptMessageHandler, WKUserContentController, WKUserScript,
@@ -682,7 +686,10 @@ pub(crate) fn action(mtm: MainThreadMarker, key: &str, action: &str, args: &Valu
         "pip.popOut" => {
             let host = ATTACHED.with(|a| a.borrow().get(key).and_then(|p| p.host.load())).ok_or("this view shows nothing")?;
             let rect = corner(&host).ok_or("this view is not on screen")?;
-            let popped = Popped::new(mtm, &of, rect, &args["colors"]);
+            // Snapping (the player's mode, default on): on its screen's usable area.
+            let snap = args.get("snap").and_then(Value::as_bool).unwrap_or(true);
+            let screen = host.window().and_then(|w| w.screen());
+            let popped = Popped::new(mtm, &of, rect, &args["colors"], snap, screen.as_deref());
             let target = popped.target.clone();
             with_session(&of, |s| {
                 if let Some(old) = s.popped.replace(popped) {
@@ -721,14 +728,105 @@ const CHROME_H: f64 = BAR + 2.0;
 /// The title keeps this much before the buttons (as the Fireflies player's bar).
 const TITLE_MIN: f64 = 70.0;
 const TITLE: &str = "picture in picture";
+/// A seam between two of the bar's sections: its place, the seam (1 wide,
+/// 8 tall, every other point lit: the Fireflies bar's dither) in its middle.
+const SEAM: f64 = 8.0;
+/// Snapping: the window keeps this far inside its screen's usable area (the
+/// menu bar and the Dock left out), points.
+const SCREEN_MARGIN: f64 = 10.0;
+/// How near one of its places (points, on both axes) a dragged window is caught.
+const SNAP_CATCH: f64 = 24.0;
 // Copies of pip's icons: the Nix app build leaves defaults/mods out of
 // the crate's sources (they ship in the bundle), so the crate carries its own.
 const VOLUME_SVG: &str = include_str!("../icons/volume.svg");
 const VOLUME_X_SVG: &str = include_str!("../icons/volume-x.svg");
+const MAGNET_SVG: &str = include_str!("../icons/magnet.svg");
+
+/// The bar's controls, in order, by section (where it came from · playback ·
+/// where it goes · the player's own), as the Fireflies player's bar: ⇲ in
+/// the place of ⇱. (id, glyph, icon, name, section).
+const CONTROLS: [(&str, &str, Option<&str>, &str, u8); 11] = [
+    ("back", "↩", None, "Back to the page", 0),
+    ("rewind", "«", None, "Back 10 seconds", 1),
+    ("toggle", "❚❚", None, "Pause", 1),
+    ("forward", "»", None, "On 10 seconds", 1),
+    ("mute", "", Some(VOLUME_SVG), "Sound off", 1),
+    ("pane", "◧", None, "Into a pane", 2),
+    ("park", "⤓", None, "Park as a chip", 2),
+    ("home", "⇲", None, "Back into Fireflies", 2),
+    ("snap", "", Some(MAGNET_SVG), "Snap to corners: on", 3),
+    ("keys", "?", None, "Keys", 3),
+    ("close", "✕", None, "Close", 3),
+];
+
+/// The bar's controls and seams, from its right end: how wide.
+const CONTROLS_W: f64 = BAR * CONTROLS.len() as f64 + SEAM * 3.0;
+
+/// What `?` lists out of Fireflies: every key `key_action` takes.
+const KEYS: [(&str, &str); 12] = [
+    ("space k", "pause / play"),
+    ("← →  h l", "10 s back / on"),
+    ("m", "sound off / on"),
+    ("b", "back to the page"),
+    ("p", "into a pane"),
+    ("P", "park as a chip"),
+    ("o", "back into Fireflies"),
+    ("s", "snap to corners on / off"),
+    ("⇧← ⇧→  H L", "next place left / right"),
+    ("⇧↑ ⇧↓  K J", "next place up / down"),
+    ("x q", "close"),
+    ("? esc", "these keys / close them"),
+];
+
+/// What a key does to the window out of Fireflies, by the control it acts as
+/// (`to:<dir>`: to the next place that way; `escape`: the keys close), or
+/// None: not the player's (it goes on to the page). `chars`: what it types
+/// (shift applied), `code`: its key code (the arrows, esc); `command`: with
+/// ⌘, ⌃ or ⌥, never the player's.
+fn key_action(chars: &str, code: u16, shift: bool, command: bool) -> Option<&'static str> {
+    if command {
+        return None;
+    }
+    match (code, shift) {
+        (123, false) => return Some("rewind"),
+        (124, false) => return Some("forward"),
+        (123, true) => return Some("to:left"),
+        (124, true) => return Some("to:right"),
+        (126, true) => return Some("to:up"),
+        (125, true) => return Some("to:down"),
+        (125 | 126, false) => return None,
+        (53, _) => return Some("escape"),
+        _ => {}
+    }
+    Some(match chars {
+        " " | "k" => "toggle",
+        "h" => "rewind",
+        "l" => "forward",
+        "m" => "mute",
+        "b" => "back",
+        "p" => "pane",
+        "P" => "park",
+        "o" => "home",
+        "s" => "snap",
+        "x" | "q" => "close",
+        "?" => "keys",
+        "H" => "to:left",
+        "L" => "to:right",
+        "K" => "to:up",
+        "J" => "to:down",
+        _ => return None,
+    })
+}
+
+thread_local! {
+    /// Where the window out of Fireflies sat last (snapping): the next one opens there.
+    static LAST_ANCHOR: std::cell::Cell<Place> = const { std::cell::Cell::new(Place::BottomRight) };
+}
 
 /// The popped-out player: the video under the Fireflies player's bar, the same
-/// controls in the same order (↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕; ⇲ in the place of ⇱),
-/// Nocturne's colors, square corners. It resizes keeping the video's shape.
+/// controls in the same order and sections (↩ « ❚❚ » sound ◧ ⤓ ⇲ magnet ? ✕;
+/// ⇲ in the place of ⇱), Nocturne's colors, square corners. It resizes keeping
+/// the video's shape. Snapping on, it snaps to its screen's usable area.
 struct Popped {
     panel: Retained<NSPanel>,
     host: Retained<NSView>,
@@ -741,6 +839,18 @@ pub struct PopIvars {
     title: RefCell<Option<Retained<NSTextField>>>,
     /// The video's width / height (0: not known yet).
     aspect: std::cell::Cell<f64>,
+    colors: RefCell<Option<Colors>>,
+    panel: RefCell<Option<Weak<NSPanel>>>,
+    host: RefCell<Option<Weak<NSView>>>,
+    /// Snapping (the mode, as the player's was); the place it sits on.
+    snap: std::cell::Cell<bool>,
+    anchor: std::cell::Cell<Option<Place>>,
+    /// A drag by the bar: the pointer and the window's origin when pressed,
+    /// and the place it is caught on now.
+    drag: std::cell::Cell<Option<(NSPoint, NSPoint)>>,
+    caught: std::cell::Cell<Option<Place>>,
+    /// The keys, while `?` shows them (over the video).
+    keys: RefCell<Option<Retained<NSView>>>,
 }
 
 #[derive(Clone)]
@@ -748,18 +858,23 @@ struct Colors {
     background: Retained<NSColor>,
     foreground: Retained<NSColor>,
     dim: Retained<NSColor>,
+    muted: Retained<NSColor>,
     border: Retained<NSColor>,
     hover: Retained<NSColor>,
+    accent: Retained<NSColor>,
+    seam: Retained<NSColor>,
 }
 
 /// One control of the bar, as the Fireflies player draws it: a glyph or an icon,
-/// dim; hovered: bright on the hover color, its name in the bar's title.
+/// dim (in the accent while `lit`: a mode that's on, the keys shown); hovered:
+/// bright on the hover color, its name in the bar's title.
 pub struct ButtonIvars {
     id: &'static str,
     name: RefCell<String>,
     glyph: RefCell<String>,
     icon: RefCell<Option<Retained<NSImage>>>,
     hovered: std::cell::Cell<bool>,
+    lit: std::cell::Cell<bool>,
     back: Retained<NSBox>,
     colors: Colors,
     title: Weak<NSTextField>,
@@ -784,6 +899,12 @@ define_class!(
             self.ivars().hovered.set(false);
             self.refresh();
         }
+
+        /// A click on the window while another app is in front works at once.
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
+        }
     }
 );
 
@@ -795,6 +916,7 @@ impl PipButton {
             glyph: RefCell::new(String::new()),
             icon: RefCell::new(None),
             hovered: std::cell::Cell::new(false),
+            lit: std::cell::Cell::new(false),
             back,
             colors,
             title: Weak::from(title),
@@ -815,10 +937,24 @@ impl PipButton {
         self.refresh();
     }
 
+    fn set_lit(&self, lit: bool, name: Option<&str>) {
+        self.ivars().lit.set(lit);
+        if let Some(n) = name {
+            *self.ivars().name.borrow_mut() = n.to_owned();
+        }
+        self.refresh();
+    }
+
     fn refresh(&self) {
         let i = self.ivars();
         let on = i.hovered.get();
-        let color = if on { &i.colors.foreground } else { &i.colors.dim };
+        let color = if on {
+            &i.colors.foreground
+        } else if i.lit.get() {
+            &i.colors.accent
+        } else {
+            &i.colors.dim
+        };
         i.back.setHidden(!on);
         match i.icon.borrow().as_ref() {
             Some(img) => {
@@ -846,6 +982,115 @@ impl PipButton {
     }
 }
 
+pub struct BarIvars {
+    target: Weak<PopTarget>,
+}
+
+define_class!(
+    // SAFETY: NSView may be subclassed; mouse handling is added; no Drop impl.
+    #[unsafe(super(NSView, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = BarIvars]
+    /// The bar: a press anywhere but on a control drags the window, snapping.
+    struct PipBar;
+
+    impl PipBar {
+        /// Its title and seams are the bar's: a press on them drags too.
+        #[unsafe(method_id(hitTest:))]
+        fn hit_test(&self, point: NSPoint) -> Option<Retained<NSView>> {
+            let hit: Option<Retained<NSView>> = unsafe { msg_send![super(self), hitTest: point] };
+            match hit {
+                Some(v) if v.downcast_ref::<PipButton>().is_some() => Some(v),
+                Some(_) => Some(Retained::into_super(self.retain())),
+                None => None,
+            }
+        }
+
+        /// The window doesn't drag itself by the bar: the bar drags it (to snap it).
+        #[unsafe(method(mouseDownCanMoveWindow))]
+        fn can_move_window(&self) -> bool {
+            false
+        }
+
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
+        }
+
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_start();
+            }
+        }
+
+        #[unsafe(method(mouseDragged:))]
+        fn mouse_dragged(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_to();
+            }
+        }
+
+        #[unsafe(method(mouseUp:))]
+        fn mouse_up(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_end();
+            }
+        }
+    }
+);
+
+impl PipBar {
+    fn new(mtm: MainThreadMarker, frame: NSRect, target: &PopTarget) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(BarIvars { target: Weak::from(target) });
+        unsafe { msg_send![super(this), initWithFrame: frame] }
+    }
+}
+
+pub struct PanelIvars {
+    target: RefCell<Option<Weak<PopTarget>>>,
+}
+
+define_class!(
+    // SAFETY: NSPanel may be subclassed; key handling is added; no Drop impl.
+    #[unsafe(super(NSPanel, NSWindow, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = PanelIvars]
+    /// The window out of Fireflies: it takes the keyboard when clicked (a
+    /// borderless panel otherwise never does), and the player's keys go to
+    /// the player before the page.
+    struct PipPanel;
+
+    impl PipPanel {
+        #[unsafe(method(canBecomeKeyWindow))]
+        fn can_become_key(&self) -> bool {
+            true
+        }
+
+        #[unsafe(method(sendEvent:))]
+        fn send_event(&self, event: &NSEvent) {
+            if event.r#type() == NSEventType::KeyDown {
+                let target = self.ivars().target.borrow().as_ref().and_then(|t| t.load());
+                let mods = event.modifierFlags();
+                let command = mods.intersects(NSEventModifierFlags::Command | NSEventModifierFlags::Control | NSEventModifierFlags::Option);
+                let chars = event.characters().map(|c| c.to_string()).unwrap_or_default();
+                if let (Some(t), Some(action)) = (target, key_action(&chars, event.keyCode(), mods.contains(NSEventModifierFlags::Shift), command)) {
+                    t.act(action);
+                    return;
+                }
+            }
+            unsafe { msg_send![super(self), sendEvent: event] }
+        }
+    }
+);
+
+impl PipPanel {
+    fn new(mtm: MainThreadMarker, frame: NSRect, style: NSWindowStyleMask) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(PanelIvars { target: RefCell::new(None) });
+        unsafe { msg_send![super(this), initWithContentRect: frame, styleMask: style, backing: NSBackingStoreType::Buffered, defer: false] }
+    }
+}
+
 define_class!(
     // SAFETY: NSObject has no subclassing requirements; no Drop impl.
     #[unsafe(super(NSObject))]
@@ -862,36 +1107,33 @@ define_class!(
             let now = sender.frame().size;
             fit_aspect(self.ivars().aspect.get(), now, to)
         }
+
+        /// Resized by the video's shape (not by hand): still on its place.
+        #[unsafe(method(windowDidResize:))]
+        fn window_did_resize(&self, _n: &NSNotification) {
+            if self.panel().is_some_and(|p| !p.inLiveResize()) {
+                self.reanchor();
+            }
+        }
+
+        /// Resized by hand: on its place again once let go.
+        #[unsafe(method(windowDidEndLiveResize:))]
+        fn window_did_end_live_resize(&self, _n: &NSNotification) {
+            self.reanchor();
+        }
     }
 
     impl PopTarget {
         #[unsafe(method(press:))]
         fn press(&self, sender: Option<&AnyObject>) {
             let Some(id) = sender.and_then(|s| s.downcast_ref::<PipButton>()).map(|b| b.ivars().id) else { return };
-            let Some(mtm) = MainThreadMarker::new() else { return };
-            let k = self.ivars().source.clone();
-            match id {
-                "back" => {
-                    back(mtm, &k);
-                    #[allow(deprecated)]
-                    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
-                }
-                "rewind" => self.media(Media::Seek(-10.0)),
-                "toggle" => self.media(Media::Toggle),
-                "forward" => self.media(Media::Seek(10.0)),
-                "mute" => self.media(Media::Mute(None)),
-                // Back into Fireflies (as a window, or then into a pane or a chip):
-                // the page's mod opens a player again; it takes the video.
-                "home" | "pane" | "park" => {
-                    let g = with_session(&k, |s| s.generation).unwrap_or(0);
-                    let then = if id == "home" { Value::Null } else { json!(id) };
-                    emit_event(&k, g, "pip.popIn", json!({ "of": k, "then": then }));
-                    #[allow(deprecated)]
-                    NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
-                }
-                "close" => end(mtm, &k, false),
-                _ => {}
-            }
+            self.act(id);
+        }
+
+        /// The screens changed (the Dock moved, a display came or went): on its place.
+        #[unsafe(method(screensChanged:))]
+        fn screens_changed(&self, _n: &NSNotification) {
+            self.reanchor();
         }
     }
 );
@@ -913,8 +1155,236 @@ fn fit_aspect(aspect: f64, now: NSSize, to: NSSize) -> NSSize {
     }
 }
 
-/// Room for the title's minimum and every control.
-const MIN_W: f64 = 8.0 + TITLE_MIN + BAR * 9.0 + CHROME_W;
+/// Room for the title's minimum and every control and seam.
+const MIN_W: f64 = 8.0 + TITLE_MIN + CONTROLS_W + CHROME_W;
+
+/// A screen's usable area for snapping: its visible frame (no menu bar, no
+/// Dock), `SCREEN_MARGIN` in from every side. Screen points, y-up.
+fn usable(screen: &NSScreen) -> NSRect {
+    let f = screen.visibleFrame();
+    NSRect::new(
+        NSPoint::new(f.origin.x + SCREEN_MARGIN, f.origin.y + SCREEN_MARGIN),
+        NSSize::new((f.size.width - 2.0 * SCREEN_MARGIN).max(0.0), (f.size.height - 2.0 * SCREEN_MARGIN).max(0.0)),
+    )
+}
+
+fn rect_of(r: NSRect) -> Rect {
+    Rect { x: r.origin.x, y: r.origin.y, w: r.size.width, h: r.size.height }
+}
+
+/// Where a window of `size` goes to sit on `place` of `area` (both y-up, AppKit's).
+fn place_on(area: NSRect, place: Place, size: NSSize, scale: f64) -> NSPoint {
+    let (x, y) = snap::origin(place, snap::flip(rect_of(area)), (size.width, size.height), scale);
+    let up = snap::flip(Rect { x, y, w: size.width, h: size.height });
+    NSPoint::new(up.x, up.y)
+}
+
+/// The place of `area` a window at `origin` (y-up) is caught on while dragged, and its origin there.
+fn catch_on(area: NSRect, origin: NSPoint, size: NSSize, scale: f64) -> Option<(Place, NSPoint)> {
+    let down = snap::flip(Rect { x: origin.x, y: origin.y, w: size.width, h: size.height });
+    let (p, (x, y)) = snap::catch(snap::flip(rect_of(area)), (down.x, down.y), (size.width, size.height), SNAP_CATCH, scale)?;
+    let up = snap::flip(Rect { x, y, w: size.width, h: size.height });
+    Some((p, NSPoint::new(up.x, up.y)))
+}
+
+/// The nearest place of `area` to a window at `origin`, however far.
+fn closest_on(area: NSRect, origin: NSPoint, size: NSSize, scale: f64) -> Place {
+    let down = snap::flip(Rect { x: origin.x, y: origin.y, w: size.width, h: size.height });
+    snap::closest(snap::flip(rect_of(area)), (down.x, down.y), (size.width, size.height), scale)
+}
+
+/// The screen a point is on, else the main one.
+fn screen_at(mtm: MainThreadMarker, at: NSPoint) -> Option<Retained<NSScreen>> {
+    let all = NSScreen::screens(mtm);
+    all.iter().find(|s| {
+        let f = s.frame();
+        at.x >= f.origin.x && at.x < f.origin.x + f.size.width && at.y >= f.origin.y && at.y < f.origin.y + f.size.height
+    })
+    .or_else(|| NSScreen::mainScreen(mtm))
+}
+
+impl PopTarget {
+    fn panel(&self) -> Option<Retained<NSPanel>> {
+        self.ivars().panel.borrow().as_ref().and_then(|p| p.load())
+    }
+
+    /// What a control (or its key) does.
+    fn act(&self, id: &str) {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let k = self.ivars().source.clone();
+        match id {
+            "back" => {
+                back(mtm, &k);
+                #[allow(deprecated)]
+                NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+            }
+            "rewind" => self.media(Media::Seek(-10.0)),
+            "toggle" => self.media(Media::Toggle),
+            "forward" => self.media(Media::Seek(10.0)),
+            "mute" => self.media(Media::Mute(None)),
+            // Back into Fireflies (as a window, or then into a pane or a chip):
+            // the page's mod opens a player again; it takes the video.
+            "home" | "pane" | "park" => {
+                let g = with_session(&k, |s| s.generation).unwrap_or(0);
+                let then = if id == "home" { Value::Null } else { json!(id) };
+                emit_event(&k, g, "pip.popIn", json!({ "of": k, "then": then }));
+                #[allow(deprecated)]
+                NSApplication::sharedApplication(mtm).activateIgnoringOtherApps(true);
+            }
+            "close" => end(mtm, &k, false),
+            "snap" => self.set_snap(!self.ivars().snap.get()),
+            "keys" => self.toggle_keys(mtm),
+            "escape" => {
+                if self.ivars().keys.borrow().is_some() {
+                    self.toggle_keys(mtm);
+                }
+            }
+            to => {
+                if let Some(dir) = to.strip_prefix("to:").and_then(Dir::parse) {
+                    self.step(dir);
+                }
+            }
+        }
+    }
+
+    /// Snapping on or off: the window's, the button's mark, and the page's mod
+    /// keeps it as the player's mode (`pip.snapped { on }`).
+    fn set_snap(&self, on: bool) {
+        self.ivars().snap.set(on);
+        if !on {
+            self.ivars().anchor.set(None);
+        }
+        if let Some(b) = self.button("snap") {
+            b.set_lit(on, Some(if on { "Snap to corners: on" } else { "Snap to corners: off" }));
+        }
+        let k = self.ivars().source.clone();
+        let g = with_session(&k, |s| s.generation).unwrap_or(0);
+        emit_event(&k, g, "pip.snapped", json!({ "on": on }));
+    }
+
+    /// The window onto its anchor again (its size or its screen changed).
+    fn reanchor(&self) {
+        let (Some(place), Some(panel)) = (self.ivars().anchor.get().filter(|_| self.ivars().snap.get()), self.panel()) else { return };
+        if self.ivars().drag.get().is_some() {
+            return;
+        }
+        let Some(screen) = panel.screen() else { return };
+        let f = panel.frame();
+        let at = place_on(usable(&screen), place, f.size, screen.backingScaleFactor());
+        if at.x != f.origin.x || at.y != f.origin.y {
+            panel.setFrameOrigin(at);
+        }
+    }
+
+    /// To the next place `dir` of the one it's on (else of the nearest); anchored there while snapping.
+    fn step(&self, dir: Dir) {
+        let Some(panel) = self.panel() else { return };
+        let Some(screen) = panel.screen() else { return };
+        let (f, area, scale) = (panel.frame(), usable(&screen), screen.backingScaleFactor());
+        let from = self.ivars().anchor.get().unwrap_or_else(|| closest_on(area, f.origin, f.size, scale));
+        let to = from.step(dir);
+        panel.setFrameOrigin(place_on(area, to, f.size, scale));
+        if self.ivars().snap.get() {
+            self.ivars().anchor.set(Some(to));
+            LAST_ANCHOR.with(|a| a.set(to));
+        }
+    }
+
+    fn drag_start(&self) {
+        let Some(panel) = self.panel() else { return };
+        self.ivars().drag.set(Some((NSEvent::mouseLocation(), panel.frame().origin)));
+        self.ivars().caught.set(None);
+    }
+
+    /// The window follows the pointer; snapping, within `SNAP_CATCH` of a
+    /// place of the screen under the pointer it lands exactly on it.
+    fn drag_to(&self) {
+        let (Some((down, from)), Some(panel), Some(mtm)) = (self.ivars().drag.get(), self.panel(), MainThreadMarker::new()) else { return };
+        let at = NSEvent::mouseLocation();
+        let free = NSPoint::new(from.x + at.x - down.x, from.y + at.y - down.y);
+        let size = panel.frame().size;
+        let caught = if self.ivars().snap.get() {
+            screen_at(mtm, at).and_then(|s| catch_on(usable(&s), free, size, s.backingScaleFactor()))
+        } else {
+            None
+        };
+        self.ivars().caught.set(caught.map(|(p, _)| p));
+        panel.setFrameOrigin(caught.map_or(free, |(_, o)| o));
+    }
+
+    /// Let go: on a place it's anchored there (and the next window opens there); elsewhere free.
+    fn drag_end(&self) {
+        let Some((down, _)) = self.ivars().drag.take() else { return };
+        let at = NSEvent::mouseLocation();
+        // A press that didn't move leaves things as they were.
+        if (at.x - down.x).abs() < 1.0 && (at.y - down.y).abs() < 1.0 {
+            return;
+        }
+        if self.ivars().snap.get() {
+            let caught = self.ivars().caught.get();
+            self.ivars().anchor.set(caught);
+            if let Some(p) = caught {
+                LAST_ANCHOR.with(|a| a.set(p));
+            }
+        }
+    }
+
+    /// `?`: the keys over the video, or gone again.
+    fn toggle_keys(&self, mtm: MainThreadMarker) {
+        let open = self.ivars().keys.borrow_mut().take();
+        if let Some(v) = open {
+            v.removeFromSuperview();
+            if let Some(b) = self.button("keys") {
+                b.set_lit(false, None);
+            }
+            return;
+        }
+        let (Some(host), Some(colors)) = (self.ivars().host.borrow().as_ref().and_then(|h| h.load()), self.ivars().colors.borrow().clone()) else { return };
+        let Some(content) = (unsafe { host.superview() }) else { return };
+        let view = keys_view(mtm, host.frame(), &colors);
+        content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, Some(&host));
+        *self.ivars().keys.borrow_mut() = Some(view);
+        if let Some(b) = self.button("keys") {
+            b.set_lit(true, None);
+        }
+        // The keyboard to the window, so esc and ? reach it.
+        if let Some(p) = self.panel() {
+            p.makeKeyWindow();
+        }
+    }
+}
+
+/// The keys out of Fireflies, as keyhelp.ts draws them in Fireflies: KEYS and
+/// the title, a rule, then each key in the accent and what it does muted.
+fn keys_view(mtm: MainThreadMarker, frame: NSRect, c: &Colors) -> Retained<NSView> {
+    let view: Retained<NSView> = Retained::into_super(flat_box(mtm, frame, &c.background, None));
+    view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+    let top = frame.size.height;
+    let pinned = NSAutoresizingMaskOptions::ViewMinYMargin;
+    let label = |text: &str, color: &NSColor, x: f64, y: f64, w: f64| {
+        let l = NSTextField::labelWithString(&NSString::from_str(text), mtm);
+        l.setFont(Some(&font()));
+        l.setTextColor(Some(color));
+        l.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
+        l.setFrame(NSRect::new(NSPoint::new(x, y), NSSize::new(w, 15.0)));
+        l.setAutoresizingMask(pinned);
+        view.addSubview(&l);
+    };
+    let w = frame.size.width;
+    label("KEYS", &c.dim, 12.0, top - 20.0, 40.0);
+    label(TITLE, &c.muted, 52.0, top - 20.0, (w - 52.0 - 96.0).max(0.0));
+    label("? esc", &c.accent, w - 92.0, top - 20.0, 40.0);
+    label("close", &c.dim, w - 50.0, top - 20.0, 40.0);
+    let rule = flat_box(mtm, NSRect::new(NSPoint::new(0.0, top - 26.0), NSSize::new(w, 1.0)), &c.hover, None);
+    rule.setAutoresizingMask(pinned | NSAutoresizingMaskOptions::ViewWidthSizable);
+    view.addSubview(&rule);
+    for (i, (key, what)) in KEYS.iter().enumerate() {
+        let y = top - 26.0 - 6.0 - 14.0 * (i as f64 + 1.0);
+        label(key, &c.accent, 12.0, y, 96.0);
+        label(what, &c.muted, 112.0, y, (w - 112.0 - 8.0).max(0.0));
+    }
+    view
+}
 
 impl PopTarget {
     /// Does `m` to the video; the buttons then show how it is, and the
@@ -931,7 +1401,8 @@ impl PopTarget {
                 let (w, h) = (r["width"].as_f64().unwrap_or(0.0), r["height"].as_f64().unwrap_or(0.0));
                 if w > 0.0 && h > 0.0 && (me.ivars().aspect.get() - w / h).abs() > 0.001 {
                     me.ivars().aspect.set(w / h);
-                    // Its width stays, the height follows; the top edge stays put.
+                    // Its width stays, the height follows; the top edge stays put
+                    // (anchored: it stays on its place, windowDidResize).
                     let f = panel.frame();
                     let size = fit_aspect(w / h, f.size, f.size);
                     let top = f.origin.y + f.size.height;
@@ -966,13 +1437,20 @@ fn icon(svg: &str) -> Option<Retained<NSImage>> {
 
 impl Popped {
     /// `rect`: the Fireflies player's video on screen; the window adds the bar
-    /// and border around it.
-    fn new(mtm: MainThreadMarker, source: &str, rect: NSRect, colors: &Value) -> Popped {
+    /// and border around it. Snapping (`snap`), it opens on the last place of
+    /// `screen`'s usable area (first: bottom right), else at `rect`'s origin.
+    fn new(mtm: MainThreadMarker, source: &str, rect: NSRect, colors: &Value, snap: bool, screen: Option<&NSScreen>) -> Popped {
         let colors = Colors::parse(colors);
         let size = NSSize::new((rect.size.width + CHROME_W).max(MIN_W), rect.size.height + CHROME_H);
-        let frame = NSRect::new(rect.origin, size);
+        let anchor = LAST_ANCHOR.with(|a| a.get());
+        let origin = match screen.filter(|_| snap) {
+            Some(s) => place_on(usable(s), anchor, size, s.backingScaleFactor()),
+            None => rect.origin,
+        };
+        let frame = NSRect::new(origin, size);
         let style = NSWindowStyleMask::Borderless | NSWindowStyleMask::NonactivatingPanel | NSWindowStyleMask::Resizable;
-        let panel = NSPanel::initWithContentRect_styleMask_backing_defer(NSPanel::alloc(mtm), frame, style, NSBackingStoreType::Buffered, false);
+        let pip_panel = PipPanel::new(mtm, frame, style);
+        let panel: Retained<NSPanel> = Retained::into_super(pip_panel.clone());
         unsafe { panel.setReleasedWhenClosed(false) };
         panel.setLevel(NSFloatingWindowLevel);
         panel.setCollectionBehavior(NSWindowCollectionBehavior::CanJoinAllSpaces | NSWindowCollectionBehavior::FullScreenAuxiliary);
@@ -992,8 +1470,10 @@ impl Popped {
         let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - CHROME_W, h - CHROME_H)));
         host.setAutoresizingMask(sizing);
         content.addSubview(&host);
+        let target = PopTarget::new(mtm, source);
+        *pip_panel.ivars().target.borrow_mut() = Some(Weak::from(&*target));
         // The bar (22 px with its rule, as in Fireflies): the title, then the controls flush right.
-        let bar = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, h - 1.0 - BAR), NSSize::new(w - CHROME_W, BAR)));
+        let bar = PipBar::new(mtm, NSRect::new(NSPoint::new(1.0, h - 1.0 - BAR), NSSize::new(w - CHROME_W, BAR)), &target);
         bar.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewMinYMargin);
         content.addSubview(&bar);
         let rule = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(w - CHROME_W, 1.0)), &colors.border, None);
@@ -1002,26 +1482,20 @@ impl Popped {
         let title = NSTextField::labelWithString(&NSString::from_str(TITLE), mtm);
         title.setFont(Some(&font()));
         title.setTextColor(Some(&colors.dim));
-        let target = PopTarget::new(mtm, source);
-        let controls: [(&'static str, &str, Option<&str>, &str); 9] = [
-            ("back", "↩", None, "Back to the page"),
-            ("rewind", "«", None, "Back 10 seconds"),
-            ("toggle", "❚❚", None, "Pause"),
-            ("forward", "»", None, "On 10 seconds"),
-            ("mute", "", Some(VOLUME_SVG), "Sound off"),
-            ("pane", "◧", None, "Into a pane"),
-            ("park", "⤓", None, "Park as a chip"),
-            ("home", "⇲", None, "Back into Fireflies"),
-            ("close", "✕", None, "Close"),
-        ];
         let inner = w - CHROME_W;
-        let mut x = inner - BAR * controls.len() as f64;
+        let mut x = inner - CONTROLS_W;
         // The title up to the controls, cut short (…) when the window is narrow.
         title.setFrame(NSRect::new(NSPoint::new(8.0, 3.0), NSSize::new((x - 12.0).max(0.0), 15.0)));
         title.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable);
         title.setLineBreakMode(objc2_app_kit::NSLineBreakMode::ByTruncatingTail);
         bar.addSubview(&title);
-        for (id, glyph, svg, name) in controls {
+        let mut section = None;
+        for (id, glyph, svg, name, part) in CONTROLS {
+            if section.is_some_and(|s| s != part) {
+                seam(mtm, &bar, x, &colors.seam);
+                x += SEAM;
+            }
+            section = Some(part);
             let cell = NSRect::new(NSPoint::new(x, 1.0), NSSize::new(BAR, BAR - 1.0));
             let back = flat_box(mtm, cell, &colors.hover, None);
             back.setHidden(true);
@@ -1039,10 +1513,37 @@ impl Popped {
             x += BAR;
         }
         *target.ivars().title.borrow_mut() = Some(title);
+        *target.ivars().colors.borrow_mut() = Some(colors.clone());
+        *target.ivars().panel.borrow_mut() = Some(Weak::from(&*panel));
+        *target.ivars().host.borrow_mut() = Some(Weak::from(&*host));
+        target.ivars().snap.set(snap);
+        target.ivars().anchor.set(snap.then_some(anchor));
+        if let Some(b) = target.button("snap") {
+            b.set_lit(snap, Some(if snap { "Snap to corners: on" } else { "Snap to corners: off" }));
+        }
         panel.setDelegate(Some(ProtocolObject::from_ref(&*target)));
         panel.setContentMinSize(NSSize::new(MIN_W, 100.0));
+        unsafe {
+            NSNotificationCenter::defaultCenter().addObserver_selector_name_object(
+                &target,
+                sel!(screensChanged:),
+                Some(NSApplicationDidChangeScreenParametersNotification),
+                None,
+            );
+        }
         panel.orderFrontRegardless();
         Popped { panel, host, target }
+    }
+}
+
+/// A seam at `x` of the bar: 1 point wide in the middle of its `SEAM`, 8
+/// tall in the middle of the bar, every other point lit (the Fireflies bar's
+/// dither at 2 device pixels a cell).
+fn seam(mtm: MainThreadMarker, bar: &NSView, x: f64, color: &NSColor) {
+    for row in 0..4 {
+        let dot = flat_box(mtm, NSRect::new(NSPoint::new(x + ((SEAM - 1.0) / 2.0).floor(), 8.0 + 2.0 * f64::from(row)), NSSize::new(1.0, 1.0)), color, None);
+        dot.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+        bar.addSubview(&dot);
     }
 }
 
@@ -1053,21 +1554,33 @@ impl PopTarget {
             buttons: RefCell::new(Vec::new()),
             title: RefCell::new(None),
             aspect: std::cell::Cell::new(0.0),
+            colors: RefCell::new(None),
+            panel: RefCell::new(None),
+            host: RefCell::new(None),
+            snap: std::cell::Cell::new(true),
+            anchor: std::cell::Cell::new(None),
+            drag: std::cell::Cell::new(None),
+            caught: std::cell::Cell::new(None),
+            keys: RefCell::new(None),
         });
         unsafe { msg_send![super(this), init] }
     }
 }
 
 impl Colors {
-    /// `{ background, foreground, dim, border, hover }` as `#rrggbb[aa]`; Nocturne's dark defaults.
+    /// `{ background, foreground, dim, muted, border, hover, accent, seam }` as
+    /// `#rrggbb[aa]`; Nocturne's dark defaults (moonfly).
     fn parse(v: &Value) -> Colors {
         let get = |k: &str, d: &str| color(v.get(k).and_then(Value::as_str).and_then(hex).unwrap_or_else(|| hex(d).unwrap()));
         Colors {
             background: get("background", "#0b0b0d"),
             foreground: get("foreground", "#d6d6d6"),
             dim: get("dim", "#6b6b6b"),
+            muted: get("muted", "#949494"),
             border: get("border", "#2a2a2e"),
             hover: get("hover", "#1c1c20"),
+            accent: get("accent", "#80a0ff"),
+            seam: get("seam", "#505a5b"),
         }
     }
 }
@@ -1140,7 +1653,7 @@ fn screen_rect(view: &NSView) -> Option<NSRect> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CHROME_H, CHROME_W, MIN_W, Media, fit_aspect, hex, media_state, seek_by};
+    use super::{CHROME_H, CHROME_W, CONTROLS, KEYS, MIN_W, Media, fit_aspect, hex, key_action, media_state, seek_by};
     use objc2_foundation::NSSize;
 
     #[test]
@@ -1182,6 +1695,47 @@ mod tests {
     }
 
     #[test]
+    fn the_players_keys_out_of_fireflies() {
+        // As in Fireflies: space / k, h l and the arrows, m b p P x q ?.
+        assert_eq!(key_action(" ", 49, false, false), Some("toggle"));
+        assert_eq!(key_action("k", 40, false, false), Some("toggle"));
+        assert_eq!((key_action("", 123, false, false), key_action("", 124, false, false)), (Some("rewind"), Some("forward")));
+        assert_eq!((key_action("h", 4, false, false), key_action("l", 37, false, false)), (Some("rewind"), Some("forward")));
+        assert_eq!(key_action("P", 35, true, false), Some("park"));
+        assert_eq!(key_action("p", 35, false, false), Some("pane"));
+        assert_eq!(key_action("?", 44, true, false), Some("keys"));
+        assert_eq!(key_action("", 53, false, false), Some("escape"));
+        // o: here back into Fireflies (the window's ⇲, where Fireflies' bar has ⇱).
+        assert_eq!(key_action("o", 31, false, false), Some("home"));
+        // Snapping, and from place to place: shift with the arrows or H L K J.
+        assert_eq!(key_action("s", 1, false, false), Some("snap"));
+        for (code, chars, to) in [(123, "H", "to:left"), (124, "L", "to:right"), (126, "K", "to:up"), (125, "J", "to:down")] {
+            assert_eq!(key_action("", code, true, false), Some(to));
+            assert_eq!(key_action(chars, 0, true, false), Some(to));
+        }
+        // Up and down alone, ⌘ chords, other letters: the page's.
+        assert_eq!(key_action("", 126, false, false), None);
+        assert_eq!(key_action("q", 12, false, true), None);
+        assert_eq!(key_action("z", 6, false, false), None);
+        // ? lists them: every key the window takes has a row.
+        let listed: String = KEYS.iter().map(|(k, _)| *k).collect::<Vec<_>>().join(" ");
+        for k in ["space", "k", "h", "l", "m", "b", "p", "P", "o", "s", "H", "L", "K", "J", "x", "q", "?", "esc", "⇧←", "⇧↑"] {
+            assert!(listed.split_whitespace().any(|w| w == k), "{k} in {listed}");
+        }
+    }
+
+    #[test]
+    fn the_bar_matches_the_fireflies_players() {
+        // The same controls and sections as pip's bar (main.ts CONTROLS), ⇲ for ⇱.
+        let ids: Vec<&str> = CONTROLS.iter().map(|c| c.0).collect();
+        assert_eq!(ids, ["back", "rewind", "toggle", "forward", "mute", "pane", "park", "home", "snap", "keys", "close"]);
+        let sections: Vec<u8> = CONTROLS.iter().map(|c| c.4).collect();
+        assert_eq!(sections, [0, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3]);
+        // Room for the title's 70 px, eleven controls and three seams.
+        assert_eq!(MIN_W, 8.0 + 70.0 + 11.0 * 22.0 + 3.0 * 8.0 + 2.0);
+    }
+
+    #[test]
     fn theme_colors_parse_as_hex() {
         assert_eq!(hex("#ff0080"), Some([1.0, 0.0, 128.0 / 255.0, 1.0]));
         assert_eq!(hex("#00000080").map(|c| c[3]), Some(128.0 / 255.0));
@@ -1197,5 +1751,6 @@ mod icon_copies {
     fn match_the_mods_icons() {
         assert_eq!(super::VOLUME_SVG, include_str!("../../../defaults/mods/pip/icons/volume.svg"));
         assert_eq!(super::VOLUME_X_SVG, include_str!("../../../defaults/mods/pip/icons/volume-x.svg"));
+        assert_eq!(super::MAGNET_SVG, include_str!("../../../defaults/mods/pip/icons/magnet.svg"));
     }
 }

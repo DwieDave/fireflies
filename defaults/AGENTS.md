@@ -2022,11 +2022,18 @@ The main ones:
   with event `pip.state { result: "playing" | "paused", muted, width, height }` (the video's
   own size, for its real shape). While lifted, the video's own controls are hidden. `pip.back` (the page goes
   home playing on, and its pane takes focus, across tabs and spaces, out of a chip too),
-  `pip.close` (home, paused), `pip.popOut { colors: { background, foreground, dim, border } }`
-  (a square, resizable window above every app and space, in the screen's bottom right
-  corner, with the Nocturne player's bar in its order, ↩ « ❚❚ » sound ◧ ⤓ ⇲ ✕, keeping the
-  video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn { of, then }` (`then`:
-  null, `"pane"` or `"park"`, for the player to go on with); the view may go). The newest `pip` view of a page holds its video: when another takes it (a pane, out
+  `pip.close` (home, paused), `pip.popOut { colors: { background, foreground, dim, muted,
+  border, hover, accent, seam }, snap? }` (a square, resizable window above every app and
+  space, with the Nocturne player's bar in its order and sections, ↩ « ❚❚ » sound ◧ ⤓ ⇲
+  magnet ? ✕, keeping the video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn
+  { of, then }` (`then`: null, `"pane"` or `"park"`, for the player to go on with); the view
+  may go). With `snap` (default true) it snaps to its screen's usable area (menu bar and Dock
+  left out, 10 pt in): dragged by its bar within 24 pt of a corner or an edge's middle it
+  lands exactly there and stays on it as its size or the screens change; it opens on the place
+  it sat on last (first: bottom right). Without, it opens in the screen's bottom right corner.
+  Its magnet switches that and sends the page `pip.snapped { on }`; its ? shows its keys over
+  the video. Clicked, it takes the keyboard: the Fireflies player's keys (`o` back into
+  Fireflies), `s` snapping, shift with the arrows or `H L K J` to the next place, `?` / esc. The newest `pip` view of a page holds its video: when another takes it (a pane, out
   of Fireflies), the old one and the page get `pip.moved` (the page's with `{ popped }`). Event
   `pip.ended`: the page went home (also on a new page, a crash, a closed pane, or the video
   leaving the page). One video at a time.
