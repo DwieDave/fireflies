@@ -35,7 +35,8 @@ const TABLES: readonly Binding[] = [
   [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure (a double click too)", "open"],
   [["["], "tables / views / schemas", "subtab-prev"], [["]"], "tables / views / schemas", "subtab-next"],
   [["s"], "select it in a query", "table-query"], [["i"], "its name into the query (or drag it there)", "insert"],
-  [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"], [["m"], "menu (a right click too)", "menu"],
+  [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"],
+  [["#"], "count its rows exactly (the list shows the server's estimate)", "count"], [["m"], "menu (a right click too)", "menu"],
 ];
 
 const STRUCTURE: readonly Binding[] = [

@@ -31,7 +31,7 @@ import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Size } from
 import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
-import { props, theme, nextCommand, shared, setShared, closeOverlay } from "herdr";
+import { props, theme, nextCommand, shared, setShared, closeOverlay, exec } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import type { Conn, Kind } from "./kinds.ts";
@@ -47,7 +47,7 @@ import { act, setPanel } from "./actions.ts";
 import { shownGrid } from "./act-grid.ts";
 import { scrollGrid } from "./grid.ts";
 import { modalKey } from "./popups.ts";
-import { askPassword, connect, discover } from "./conns.ts";
+import { askPassword, connList, connect, discover } from "./conns.ts";
 import { readConnections } from "./store.ts";
 import { loadTables } from "./session.ts";
 import { newQuery } from "./query.ts";
@@ -56,8 +56,14 @@ import { frame } from "./chrome.ts";
 import type { ConnForm } from "./conn-form.ts";
 import type { ExportForm } from "./export-form.ts";
 import { here, start, command, handoverOut } from "./opening.ts";
-import { IO, dataHome } from "./session.ts";
+import { IO, clientOf, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
+import type { FolderEnv } from "./folderenv.ts";
+import type { Setup } from "./clients.ts";
+import { setupOf } from "./clients.ts";
+import { loadFolderEnv } from "./folderenv.ts";
+import type { Read } from "./reads.ts";
+import { overdue } from "./reads.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
@@ -92,7 +98,12 @@ export default class Databases extends View {
   /** How each cluster-secret connection's last read went, in words (never the value). */
   sourced = new Map<string, Sourced>();
   clients = new Map<Kind, ClientFound>();
-  envPath: string | null = null;
+  /** The space folder's environment for the clients (folderenv.ts). */
+  env: FolderEnv = { kind: "none" };
+  /** The reads going on (reads.ts): what each panel says runs, and its stop. */
+  reads: Read[] = [];
+  /** How this machine gets its programs (the install line a missing client offers). */
+  setup: Setup = "other";
   /** The private folder (0700) runs hand files over in. */
   dir: string | null = null;
 
@@ -174,11 +185,22 @@ export default class Databases extends View {
     this.beat();
     cx.spawn(async (cx) => {
       this.dir = await privateDir(IO);
+      void setupOf(exec).then((s) => {
+        this.setup = s;
+      });
       this.saved = await readConnections(IO, dataHome());
+      // The folder's environment loads beside the first connect (a client may come from it).
+      const env = loadFolderEnv(this, cx);
+
       await start(this, pr, cx);
-      await discover(this, cx);
+      await discover(this, cx, env);
+      // Each listed kind's client looked for once the folder's environment is known: a row whose
+      // client is missing says so before it's connected to.
+      await env;
+      await Promise.all([...new Set(connList(this).map((c) => c.kind))].map((k) => clientOf(this, k)));
+      cx.notify();
     });
-    cx.timer.every(2000, (cx) => this.tick(cx));
+    cx.timer.every(1000, (cx) => this.tick(cx));
     cx.spawn(async (cx) => {
       for (;;) {
         command(this, await nextCommand(), cx);
@@ -197,6 +219,12 @@ export default class Databases extends View {
 
   tick(cx: Context): void {
     if (Date.now() - this.beatAt >= BEAT) this.beat();
+
+    // A read's seconds count up where it's shown; one past its deadline ends.
+    if (this.reads.length) {
+      overdue(this);
+      cx.notify();
+    }
 
     if (this.queriesDirty) void saveQueries(this);
 

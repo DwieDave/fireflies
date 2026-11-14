@@ -13,12 +13,14 @@ import type { Conn, ConnDraft } from "./kinds.ts";
 import { newId, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import { ENV_FILES, FIND_SCRIPT, foundFile, foundInVars, mergeFound, parseEnvFile } from "./discover.ts";
-import { projectEnv } from "./envrc.ts";
 import { deleteSecret, hasSecret, saveSecret } from "./secrets.ts";
 import type { KubeSource } from "./kube.ts";
 import { kubeProblem, kubeWords, readKube } from "./kube.ts";
 import { clearHistory, readHistory, writeConnections } from "./store.ts";
-import { IO, dataHome, loadTables, needsPassword, runOn } from "./session.ts";
+import { IO, clientFrom, clientOf, dataHome, loadTables, needsPassword, runLine, runOn } from "./session.ts";
+import { PROGRAMS } from "./clients.ts";
+import { endWords, reading } from "./reads.ts";
+import { folderEnvReady } from "./folderenv.ts";
 import type { ConnectArgs } from "./state.ts";
 import { gridStart, noteOf } from "./state.ts";
 import { counted } from "./edits.ts";
@@ -35,7 +37,7 @@ export const connAtCursor = (v: DbView): Conn | null => connList(v)[v.connAt] ??
 
 /** Finds connections in the space's folder: its .env files, its direnv environment (only when
  *  direnv already allows it: never allowed from here), its SQLite files. */
-export async function discover(v: DbView, cx: Context): Promise<void> {
+export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = Promise.resolve()): Promise<void> {
   const folder = v.folder;
 
   if (!folder || v.on) return;
@@ -54,13 +56,13 @@ export async function discover(v: DbView, cx: Context): Promise<void> {
   setFound(v, mergeFound(lists));
   cx.notify();
 
-  // direnv last: a flake's shell can take a while the first time.
-  const env = await projectEnv(exec, folder).catch(() => null);
+  // direnv last: a flake's shell can take a while the first time (folderenv.ts loads it).
+  await envLoad;
 
-  if (env?.kind !== "ready") return;
+  const env = v.env;
 
-  v.envPath = env.env.get("PATH") ?? null;
-  v.clients.clear();
+  if (env.kind !== "ready") return;
+
   lists.splice(lists.length - 1, 0, foundInVars(env.env, "direnv", folder));
   setFound(v, mergeFound(lists));
   cx.notify();
@@ -163,24 +165,59 @@ function placed(v: DbView, c: Conn, user: string | undefined, database: string |
   return next;
 }
 
+/** How long the secret's read may take (kubectl's own --request-timeout is 10 s, exec's 15 s). */
+export const KUBE_DEADLINE = 20000;
+
 /** Reads the password from the cluster's secret (again at every connect), then connects; a failed
- *  read says why and asks for it instead. Nothing of the value is said, logged or written. */
+ *  read says why and asks for it instead. The client is looked for first: without one there is
+ *  nothing to read the secret for. Nothing of the value is said, logged or written. */
 export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Context): Promise<void> {
   v.active = c;
-  v.catalog = { tables: [], error: null, busy: true };
-  v.say(`reading the password from secret ${s.name}…`, "working");
+  v.catalog = { tables: [], error: null, busy: false };
   cx.notify();
 
-  const r = await readKube(exec, s);
+  const cat = v.catalog;
+  let r: Awaited<ReturnType<typeof readKube>>;
 
-  if (v.active !== c) return;
+  try {
+    const missing = await clientMissing(v, c, cx);
+
+    if (v.active !== c || v.catalog !== cat) return;
+
+    if (missing) {
+      cat.error = missing;
+      v.say(missing, "failed");
+
+      return;
+    }
+
+    v.say(`reading the password from secret ${s.name}…`, "working");
+
+    const e = await reading(v, `reading the password from secret ${s.name}`, "tables", cx, () => readKube(exec, s), KUBE_DEADLINE);
+
+    if (v.active !== c || v.catalog !== cat) return;
+
+    if (!("value" in e)) {
+      cat.error = endWords(e, `reading the password from secret ${s.name}`);
+      v.say(cat.error ?? "", "failed");
+
+      return;
+    }
+
+    r = e.value;
+  } catch (error) {
+    if (v.catalog === cat) cat.error = `reading the password from secret ${s.name} failed: ${error instanceof Error ? error.message : String(error)}`;
+
+    return;
+  } finally {
+    cx.notify();
+  }
 
   if ("error" in r) {
     const why = `couldn't read secret ${s.name} · ${s.key}: ${r.error}`;
 
     v.secrets.delete(c.id);
     v.sourced.set(c.id, { ok: false, text: why });
-    v.catalog = { tables: [], error: null, busy: false };
     v.say(`${why} · type the password`, "failed");
     v.askPassword(c, false, cx, () => void open(v, c, cx));
     cx.notify();
@@ -195,6 +232,24 @@ export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Contex
   v.say(`password from ${kubeWords(s)}`, "done");
 
   return open(v, next, cx);
+}
+
+/** Why the connection's client can't run (said before anything is read for it), or null. The
+ *  folder's environment is waited for first (it may bring the client). */
+export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<string | null> {
+  if (c.kind === "libsql" && c.url) return null;
+
+  await folderEnvReady(v, cx);
+
+  const f = await clientOf(v, c.kind);
+
+  if (!("missing" in f)) return null;
+
+  const said = `${f.missing} (${clientFrom(v, f)})`;
+
+  v.logLine({ sql: `looking for ${PROGRAMS[c.kind].join(" / ")}`, ok: false, ms: 0, said, conn: c.name, run: runLine(v, c.kind, f, []) });
+
+  return said;
 }
 
 /** Connects with what the window has (the password in memory, the keychain's, none). */
@@ -234,35 +289,58 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
   return tables;
 }
 
-/** Tests a connection: one `select 1`, said in the bar. */
+/** Tests a connection: one `select 1`, said in the bar (a read: its seconds shown, esc stops it). */
 export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
-  if (c.secret === "kubernetes" && c.source) {
-    const r = await readKube(exec, c.source);
+  try {
+    const missing = await clientMissing(v, c, cx);
 
-    if ("error" in r) {
-      v.note = noteOf(`${c.name}: couldn't read secret ${c.source.name}: ${r.error}`, "failed");
-      cx.notify();
+    if (missing) {
+      v.note = noteOf(`${c.name}: ${missing}`, "failed");
 
       return;
     }
 
-    v.secrets.set(c.id, r.password);
+    const source = c.secret === "kubernetes" ? c.source ?? null : null;
+
+    if (source) {
+      const e = await reading(v, `reading the password from secret ${source.name}`, "conns", cx, () => readKube(exec, source), KUBE_DEADLINE);
+      const r = "value" in e ? e.value : { error: endWords(e, "the read") ?? "" };
+
+      if ("error" in r) {
+        v.note = noteOf(`${c.name}: couldn't read secret ${source.name}: ${r.error}`, "failed");
+
+        return;
+      }
+
+      v.secrets.set(c.id, r.password);
+    }
+
+    if (needsPassword(v, c)) {
+      v.askPassword(c, false, cx, () => void test(v, c, cx));
+
+      return;
+    }
+
+    v.note = noteOf(`testing ${c.name}…`, "working");
+    cx.notify();
+
+    const e = await reading(v, `testing ${c.name}`, "conns", cx, (started) => runOn(v, c, [{ text: "select 1", risk: "read" }], started, undefined, `test of ${c.name}`));
+
+    if (!("value" in e)) {
+      v.note = noteOf(endWords(e, `testing ${c.name}`) ?? "", "failed");
+
+      return;
+    }
+
+    const o = e.value;
+
+    v.note = o.noSecret ? noteOf(`${c.name}: the keychain has no password for it (e to set one)`, "failed")
+      : o.error ? noteOf(`${c.name}: ${o.error.message}`, "failed") : noteOf(`${c.name} answers · ${o.ms} ms`, "done");
+  } catch (error) {
+    v.note = noteOf(`testing ${c.name} failed: ${error instanceof Error ? error.message : String(error)}`, "failed");
+  } finally {
+    cx.notify();
   }
-
-  if (needsPassword(v, c)) {
-    v.askPassword(c, false, cx, () => void test(v, c, cx));
-
-    return;
-  }
-
-  v.note = noteOf(`testing ${c.name}…`, "working");
-  cx.notify();
-
-  const o = await runOn(v, c, [{ text: "select 1", risk: "read" }]);
-
-  v.note = o.noSecret ? noteOf(`${c.name}: the keychain has no password for it (e to set one)`, "failed")
-    : o.error ? noteOf(`${c.name}: ${o.error.message}`, "failed") : noteOf(`${c.name} answers · ${o.ms} ms`, "done");
-  cx.notify();
 }
 
 /** Saves a found or sent connection: kept, its password (if one) moved to the keychain. */

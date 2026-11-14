@@ -146,7 +146,7 @@ test.skipIf(!SQLITE)("c edits the cursor's cell, enter keeps it staged, nothing 
   expect(v.edits).toBe(null);
   expect(v.note.text).toBe("saved 2 changes to lanterns");
   expect(v.rows.set.rows[0][1]).toBe("it's lit");
-  expect(v.log.map((l: any) => l.said)).toEqual(["saved", "saved"]);
+  expect(v.log.filter((l: any) => l.said !== "exit 0").map((l: any) => l.said)).toEqual(["saved", "saved"]);
 });
 
 test.skipIf(!SQLITE)("esc drops an edit; tab keeps it and edits the next cell; q types a q while editing", async () => {

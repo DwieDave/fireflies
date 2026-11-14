@@ -15,7 +15,7 @@ import type { Conn, ConnDraft } from "./kinds.ts";
 import { DEFAULT_PORT, onFile, tilde } from "./kinds.ts";
 import { connAtCursor, connList, connect, discover, saveFound, test } from "./conns.ts";
 import { writeConnections } from "./store.ts";
-import { IO, browse, dataHome, loadRows, loadStructure } from "./session.ts";
+import { IO, browse, countRows, dataHome, loadRows, loadStructure } from "./session.ts";
 import { insertAtCaret } from "./query.ts";
 import { saveQueries } from "./queries.ts";
 import { copy, gridAct } from "./act-grid.ts";
@@ -28,6 +28,7 @@ import { schemasOf, shownTables, structRows } from "./panels.ts";
 import { edgesOf } from "./layout.ts";
 import { counted } from "./edits.ts";
 import { beforeLeaving, discardAll, openReview, runSave } from "./cell-edit.ts";
+import { stopReads } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -35,6 +36,13 @@ const isAction = (place: Place, name: string): boolean => [...BINDINGS[place], .
 
 /** Does what a key (or an action's name) asks in a place; false when it means nothing there. */
 export function act(v: DbView, place: Place, key: string, cx: Context): boolean {
+  // esc stops a read going on (the tables, a secret, the folder's environment) before anything else.
+  if (key === "escape" && place !== "editor" && stopReads(v)) {
+    v.say("stopped", "done");
+
+    return true;
+  }
+
   const bound = actionsFor(place, key);
   const actions = bound.length ? bound : isAction(place, key) ? [key] : [];
 
@@ -287,6 +295,7 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
     case "insert": if (t) insertName(v, tableSql(v, t.schema, t.name), cx); break;
     case "copy": if (t) copy(v, t.name, cx); break;
     case "export": if (t) openExport(v, { table: t }, cx); break;
+    case "count": if (t) void countRows(v, t, cx); break;
     case "menu": if (t) tableMenu(v, t, cx); break;
     case "table-find": openFind(v); break;
     default: return false;

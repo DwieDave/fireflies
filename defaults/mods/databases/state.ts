@@ -76,6 +76,8 @@ export interface Rows {
   total: number | null;
   error: string | null;
   busy: boolean;
+  /** Whose busy it is (a read clears only its own). */
+  by?: number;
   at: GridAt;
   /** The filter line: open while typing a WHERE clause. */
   filtering: boolean;
@@ -186,6 +188,8 @@ export interface LogLine {
   readonly ms: number;
   readonly said: string;
   readonly conn: string;
+  /** The client run: its program and arguments (nothing secret in them), where it came from, its exit. */
+  readonly run?: string | undefined;
 }
 
 /** A note at the right of the key bar. */
@@ -202,6 +206,8 @@ export interface Catalog {
   tables: TableRef[];
   error: string | null;
   busy: boolean;
+  /** Whose busy it is (a read clears only its own). */
+  by?: number;
 }
 
 /** The structure of the picked table. */
@@ -213,7 +219,9 @@ export interface Struct {
 }
 
 /** A client found for a kind: its path, or why there is none. */
-export type ClientFound = { readonly path: string } | { readonly missing: string };
+/** A kind's client: where it was found (the folder's direnv environment or the app's PATH), or
+ *  what to install. */
+export type ClientFound = { readonly path: string; readonly from: "folder" | "app" } | { readonly missing: string };
 
 /** The window's note that it's open (nocturne's toggle reads it). */
 export const WINDOW_KEY = sharedKey("databases.window", nullable(object({ id: isString }, { beat: isNumber })));

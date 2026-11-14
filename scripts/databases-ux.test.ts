@@ -420,7 +420,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   // A table, a view: the destructive ones only through a run (asked twice).
   v.panel = "tables";
   v.key(key("m"), cx);
-  expect(labels()).toEqual(["Rows and structure", "Select it in a query", "Count its rows in a query", "Its name into the query", "Copy its name", "Export…", "Empty it…", "Drop it…"]);
+  expect(labels()).toEqual(["Rows and structure", "Select it in a query", "Count its rows", "Its name into the query", "Copy its name", "Export…", "Empty it…", "Drop it…"]);
   check("tables");
   const empty = v.menu.rows.find((r: any) => r.label === "Empty it…");
   v.menu = null;

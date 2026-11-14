@@ -214,10 +214,11 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 {
                     Some(json!({"code":3,"stdout":"","stderr":""}))
                 }
-                // databases makes its private folder and looks for SQLite files and direnv: none here.
+                // databases makes its private folder, looks for SQLite files, direnv, its clients and how
+                // the machine installs programs: none here.
                 "exec"
                     if first == "sh"
-                        && a.get(1).map(from_host).and_then(|v| v.get(2).and_then(Value::as_str).map(|s| ["ff-dir", "ff-find", "probe"].contains(&s))) == Some(true) =>
+                        && a.get(1).map(from_host).and_then(|v| v.get(2).and_then(Value::as_str).map(|s| ["ff-dir", "ff-find", "probe", "ff-setup", "lookup"].contains(&s))) == Some(true) =>
                 {
                     Some(json!({"code":0,"stdout":"","stderr":""}))
                 }

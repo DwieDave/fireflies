@@ -30,6 +30,7 @@ import { WIDTH_STEP } from "./columns.ts";
 import { everything, hasRange, rangeOf, rowsSelected, wholeRows } from "./select.ts";
 import { runQuery } from "./query.ts";
 import { saveQueries } from "./queries.ts";
+import { countRows } from "./session.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A menu row that does an action of a place: its key is that action's (none: no key does it). */
@@ -103,7 +104,7 @@ export function tableMenu(v: DbView, t: TableRef, cx: Context): void {
   openMenu(v, `${t.name}${view ? " · view" : ""}`, [
     entry("tables", "open", "Rows and structure", () => openTable(v, t, cx)),
     entry("tables", "table-query", "Select it in a query", () => void v.addQuery(`select * from ${name} limit 100;`, cx)),
-    entry("tables", null, "Count its rows in a query", () => void v.addQuery(`select count(*) from ${name};`, cx)),
+    entry("tables", "count", "Count its rows", () => void countRows(v, t, cx), { sub: "exactly: it reads every row (the list shows the server's estimate)" }),
     entry("tables", "insert", "Its name into the query", () => insertName(v, name, cx), { sub: "or drag the row into the query" }),
     entry("tables", "copy", "Copy its name", () => copy(v, t.name, cx)),
     entry("tables", "export", "Export…", () => openExport(v, { table: t }, cx)),

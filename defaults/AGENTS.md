@@ -172,7 +172,7 @@ layout) speaks Postgres (psql), MySQL / MariaDB (mysql or mariadb), SQLite
 over its HTTP API), lazygit's way: [1] Connections (saved; sent by another
 mod; found in the shown space's folder: a `DATABASE_URL`-like variable in its
 `.env` files or its direnv environment, `*.db` / `*.sqlite*` files), [2]
-Tables · Views · Schemas with row counts, [3] Structure · Indexes · Keys ·
+Tables · Views · Schemas with row counts (estimates on Postgres and MySQL), [3] Structure · Indexes · Keys ·
 Value (a key leads to its table; Value is the picked cell whole, JSON
 pretty-printed), [0] the main view: Rows (a table's page of 200: `o` (or
 `s`, or a click on its header) sorts by the column with an ORDER BY the
@@ -230,7 +230,25 @@ sideways). Nothing runs on open. A statement that writes asks first (`y`);
 DROP, TRUNCATE, ALTER … DROP and a DELETE or UPDATE without WHERE ask twice,
 the second time by typing the object's name; a read-only connection (the
 default for one found in a folder) refuses writes, and the client is told so
-too. A missing client is named with what installs it, never installed.
+too. A missing client is named with what installs it (on nix psql comes with
+`postgresql`: `libpq` alone has no psql) and a line to copy for this machine
+(nix-darwin, brew or a nix profile), never installed; it is said before
+anything is read for the connection (its row says "no psql", so does the new
+connection form). The client is looked for in the shown space folder's direnv
+environment first (only an `.envrc` direnv already allows: a project's flake
+or devenv may bring its own psql; the window waits for it as a read, esc
+skips it), then on the app's PATH, and runs with that PATH. Every read the
+window runs (a secret, the folder's environment, the tables, a structure, a
+page of rows, a test) shows in its panel what runs and for how long
+("reading the tables… 4 s · esc stops it", a ■ stop chip); esc or the chip
+stops it (the client is interrupted), a secret's read gives up after 20 s,
+psql stops connecting after 10 s (`PGCONNECT_TIMEOUT` unless the environment
+sets one; mysql `--connect-timeout=10`), and a port that takes the connection
+but never answers (a port-forward whose pod is gone) is said so. The Log
+names each client run: the program and its arguments (no secret is one),
+where it came from, its exit. Postgres and MySQL list the server's row
+estimate; an exact count is asked for (`#` on a table, its menu's "Count its
+rows": it reads every row).
 Passwords and tokens live in the system keychain (service
 `fireflies.databases`, account the connection's id) or only in the window's
 memory ("ask each time", found ones); they reach the client through its
@@ -240,7 +258,8 @@ command line, shared state, settings, the log or the history. It keeps
 password literal blanked) and `queries/<id>.json` (each tab's text). Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
-rows and structure), `databases.cancel`, and any key's action by name
+rows and structure), `databases.cancel`, `databases.stop` (what esc does to a
+read going on), and any key's action by name
 (`databases.export`, `databases.refresh`, `databases.save`…);
 `databases.set:<text>` puts text in the edited cell's input, or with none
 edited stages the cursor's cell as that text. Another mod hands it a connection,

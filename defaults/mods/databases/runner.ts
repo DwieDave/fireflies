@@ -11,6 +11,7 @@
 
 import type { ExecResult } from "herdr";
 import type { Kind } from "./kinds.ts";
+import { CONNECT_SECONDS } from "./words.ts";
 
 /** What the runner uses of the app (herdr's exec and writeTextFile; a test's stand-ins). */
 export interface RunIo {
@@ -32,6 +33,7 @@ export const RUN_TIMEOUT = 600000;
 
 // $1 private folder, $2 nonce, $3 kind, $4 client, $5 PATH ("" keeps the app's),
 // $6 keychain account ("": none), $7 "1" read only, $8 output limit, then the client's own arguments.
+// psql gives up connecting after PGCONNECT_TIMEOUT (10 s unless the environment says otherwise).
 // The password reaches only the client: PGPASSWORD (postgres) or a 0600 [client] file (mysql),
 // written by the printf builtin, so it is in no process's arguments. The client runs as a child
 // that writes its own pid and then becomes the client (exec), so a cancel interrupts the client itself.
@@ -47,6 +49,7 @@ fi
 case $kind in
 postgres)
   if [ -n "$pw" ]; then PGPASSWORD=$pw; export PGPASSWORD; fi
+  PGCONNECT_TIMEOUT=${'$'}{PGCONNECT_TIMEOUT:-${CONNECT_SECONDS}}; export PGCONNECT_TIMEOUT
   if [ -n "$ro" ]; then PGOPTIONS="-c default_transaction_read_only=on"; export PGOPTIONS; fi
   set -- "$@" -f "$q";;
 mysql)

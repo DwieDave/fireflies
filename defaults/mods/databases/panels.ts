@@ -27,6 +27,11 @@ import { atPointer } from "./menus.ts";
 import { addressOf, insertName, openTable, placeConn } from "./actions.ts";
 import { dropTarget, pressAt } from "./press.ts";
 import { qualified, quoteName } from "./catalog.ts";
+import { readIn } from "./reads.ts";
+import { PROGRAMS } from "./clients.ts";
+import { RUNNING } from "./session.ts";
+import { clientFrom } from "./session.ts";
+import { missingView, readingView } from "./read-view.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A row's handlers: picked (a click), opened (a double click), its menu (a right click, at the
@@ -126,10 +131,20 @@ function secretMark(t: Theme, v: DbView, c: Conn, name: string): Element {
     .child(svg(`${ART}/shield.svg`).size(9).flex_none().text_color(color)).child(text(t, name, color).min_w(0));
 }
 
+/** A connection whose client isn't on this machine: "no psql" on its row (said before connecting). */
+function clientMark(t: Theme, v: DbView, c: Conn): Element[] {
+  const f = v.clients.get(c.kind);
+
+  if (!f || !("missing" in f) || (c.kind === "libsql" && c.url)) return [];
+
+  return [h_flex().id(`conn-noclient-${c.id}`).flex_none().tooltip(f.missing).child(text(t, `no ${PROGRAMS[c.kind][0]}`, t.ansi3))];
+}
+
 function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Element {
   const parts = [
     connPip(t, v, c), kindBadge(t, c.kind), text(t, c.name, v.connAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
     ...(c.secret === "kubernetes" && c.source ? [secretMark(t, v, c, c.source.name)] : []),
+    ...clientMark(t, v, c),
     div().flex_1(), ...(c.readonly ? [lock(t.ansi3)] : []), text(t, where(c, home()), t.dim).flex_shrink(1).min_w(0).max_w(220),
   ];
 
@@ -209,6 +224,14 @@ export const schemasOf = (v: DbView): string[] => [...new Set(v.catalog.tables.f
 
 function tablesBody(t: Theme, v: DbView, active: boolean): Element {
   if (!v.active) return empty(t, "Pick a connection", "in [1], and enter", null);
+
+  const read = readIn(v, "tables");
+
+  if (read && !v.catalog.tables.length) return readingView(t, "tables-read", read);
+
+  const missing = v.clients.get(v.active.kind);
+
+  if (v.catalog.error && missing && "missing" in missing) return missingView(t, v, "tables-missing", v.active.kind, clientFrom(v, missing));
 
   if (v.catalog.error) return empty(t, "It didn't answer", v.catalog.error, 1);
 
@@ -321,6 +344,10 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
 
   const rows = structRows(v);
 
+  const read = readIn(v, "structure");
+
+  if (read && !rows.length) return readingView(t, "struct-read", read);
+
   if (!rows.length) return empty(t, v.struct.busy ? "reading…" : v.structTab === "keys" ? "No foreign keys" : v.structTab === "indexes" ? "No indexes" : "No columns", null, null);
 
   const markColor = { pk: t.ansi3, fk: t.ansi6, in: t.ansi6, "": t.dim } as const;
@@ -392,15 +419,19 @@ export function logPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "log";
 
   const rows = v.log.map((l, i) => listRow(t, v, `log-${i}`, v.logAt === i, active, [
-    text(t, l.ok ? "✓" : "✕", l.ok ? t.done : t.blocked).flex_none(),
-    text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(1).min_w(0),
-    ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(1).min_w(0)]),
+    // A run still going (its line written as it started): a working pip, not a ✓.
+    l.said === RUNNING ? pip(t.working, 6, true) : text(t, l.ok ? "✓" : "✕", l.ok ? t.done : t.blocked).flex_none(),
+    // A read's label is short ("the tables"): kept whole beside its run's line.
+    text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(l.run ? 0 : 1).min_w(0),
+    ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(l.said.length < 24 ? 0 : 1).min_w(0)]),
+    // The client run behind it: the program, its arguments, where it came from, its exit.
+    ...(l.run ? [text(t, l.run, t.ansi8).flex_shrink(3).min_w(0)] : []),
     div().flex_1(), text(t, `${l.ok ? `${l.said} · ` : ""}${l.ms} ms`, t.dim).flex_none(),
   ], {
     pick: () => { v.logAt = i; v.panel = "log"; v.focusSelf(); },
     open: (cx) => v.act("log", "open", cx),
     menu: (cx) => v.act("log", "menu", cx),
-    tip: l.ok ? undefined : l.said,
+    tip: [l.ok ? null : l.said, l.run ?? null].filter(Boolean).join("\n") || undefined,
   }));
 
   return panel(t, "p-log", titleTabs(t, "log", PANEL_KEY.log, [["l", "Log"]], "l", active, () => v.setPanel("log")), active,

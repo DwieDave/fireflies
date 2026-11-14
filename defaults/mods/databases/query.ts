@@ -242,7 +242,7 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     const writes = verdicts[i]?.risk !== "read";
     const said = failed ? o.error?.message ?? "" : resultWords(r, writes);
 
-    v.logLine({ sql: s.text, ok: !failed, ms: o.ms, said, conn: c.name });
+    v.logLine({ sql: s.text, ok: !failed, ms: o.ms, said, conn: c.name, run: o.run });
 
     if (c.origin === "saved") {
       const entry: HistoryEntry = rows === null ? { sql: s.text, at: Date.now(), ms: o.ms, ok: !failed } : { sql: s.text, at: Date.now(), ms: o.ms, ok: !failed, rows };
@@ -253,7 +253,7 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     }
   });
 
-  if (o.error && o.error.index === null) v.logLine({ sql: list.map((s) => s.text).join("; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name });
+  if (o.error && o.error.index === null) v.logLine({ sql: list.map((s) => s.text).join("; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name, run: o.run });
 }
 
 /** Stops the tab's run. */

@@ -14,6 +14,7 @@ import { connList, connect, receive } from "./conns.ts";
 import { act, openTable } from "./actions.ts";
 import { runQuery } from "./query.ts";
 import { setCell } from "./cell-edit.ts";
+import { stopReads } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A folder and the machine it's on. */
@@ -162,6 +163,13 @@ export function command(v: DbView, c: string, cx: Context): void {
 
   if (name === "cancel") {
     dismiss(v);
+
+    return;
+  }
+
+  // What esc does to a read going on (the tables, a secret, the folder's environment).
+  if (name === "stop") {
+    if (stopReads(v)) v.say("stopped", "done");
 
     return;
   }

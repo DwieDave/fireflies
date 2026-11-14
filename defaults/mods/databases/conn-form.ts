@@ -15,6 +15,8 @@ import { formHints, formKey, ring } from "./form-keys.ts";
 import type { Conn, ConnDraft, Kind } from "./kinds.ts";
 import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId } from "./kinds.ts";
+import { clientOf } from "./session.ts";
+import { installLine } from "./clients.ts";
 import { parseDbUrl } from "./discover.ts";
 import { saveSecret } from "./secrets.ts";
 import { writeConnections } from "./store.ts";
@@ -316,11 +318,17 @@ export class ConnForm {
   }
 
   kindRow(t: Theme, focused: boolean): Element {
+    // Its client missing on this machine: said here, before anything is saved or tried.
+    const found = this.v.clients.get(this.kind);
+    const missing = found && "missing" in found && !(this.kind === "libsql" && this.remote) ? found.missing : null;
+
     return v_flex().gap(4).child(div().text_color(t.foreground).child("kind"))
       .child(ring(h_flex().gap(4).p(2), focused, t.accent).children(KINDS.map((k) => chip(t, `form-kind-${k}`, KIND_NAME[k], this.kind === k, () => {
         this.kind = k;
         this.at = 0;
-      }))));
+        void clientOf(this.v, k);
+      }))))
+      .when(missing !== null, (el) => el.child(div().id("form-client-missing").text_color(t.ansi3).child(`${missing ?? ""} · ${installLine(this.kind, this.v.setup)}`)));
   }
 
   fieldGrid(t: Theme, on: (id: string) => boolean): Element {

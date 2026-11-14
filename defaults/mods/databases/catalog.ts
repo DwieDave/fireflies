@@ -1,7 +1,8 @@
 // What the window asks a database about itself, per kind, and how the answers
 // read: its tables and views (by schema, with a row estimate where the server
 // keeps one), a table's structure (columns with types, nullability, defaults
-// and keys; indexes; foreign keys both ways; its row count) and a page of its
+// and keys; indexes; foreign keys both ways; SQLite's row count: Postgres and
+// MySQL keep an estimate, an exact count is asked for, it reads every row) and a page of its
 // rows (sorted, filtered). Every statement here is a read; a filter typed by
 // the person must be one read statement (browseSql refuses anything else).
 
@@ -109,7 +110,8 @@ export function countsSql(kind: Kind, tables: readonly TableRef[], max = 200): S
   return tables.filter((t) => t.type === "table").slice(0, max).map((t) => read(`select count(*) as n from ${qualified(kind, t)}`));
 }
 
-/** The structure's statements: columns, indexes, foreign keys (both ways), count. */
+/** The structure's statements: columns, indexes, foreign keys (both ways); SQLite's count (the
+ *  servers' estimate stands for Postgres and MySQL: a count reads every row, countRows asks it). */
 export function structureSql(kind: Kind, t: Pick<TableRef, "schema" | "name">): ScriptStatement[] {
   const q = (s: string): string => quoteText(kind, s);
 
@@ -120,7 +122,6 @@ export function structureSql(kind: Kind, t: Pick<TableRef, "schema" | "name">): 
       read(`select a.attname as name, format_type(a.atttypid, a.atttypmod) as type, case when a.attnotnull then 'no' else 'yes' end as nullable, pg_get_expr(d.adbin, d.adrelid) as "default", case when exists (select 1 from pg_index i where i.indrelid = a.attrelid and i.indisprimary and a.attnum = any(i.indkey)) then 'pk' else '' end as key from pg_attribute a left join pg_attrdef d on d.adrelid = a.attrelid and d.adnum = a.attnum where a.attrelid = ${rel}::regclass and a.attnum > 0 and not a.attisdropped order by a.attnum`),
       read(`select c.relname as name, case when i.indisprimary then 'primary' when i.indisunique then 'unique' else '' end as kind, am.amname as method, pg_get_indexdef(i.indexrelid) as def from pg_index i join pg_class c on c.oid = i.indexrelid join pg_am am on am.oid = c.relam where i.indrelid = ${rel}::regclass order by i.indisprimary desc, c.relname`),
       read(`select conname as name, conrelid::regclass::text as from_table, confrelid::regclass::text as to_table, pg_get_constraintdef(oid) as def from pg_constraint where contype = 'f' and (conrelid = ${rel}::regclass or confrelid = ${rel}::regclass) order by 1`),
-      read(`select count(*) as n from ${qualified(kind, t)}`),
     ];
   }
 
@@ -131,7 +132,6 @@ export function structureSql(kind: Kind, t: Pick<TableRef, "schema" | "name">): 
       read(`select column_name as name, column_type as type, case is_nullable when 'YES' then 'yes' else 'no' end as nullable, column_default as \`default\`, case column_key when 'PRI' then 'pk' else '' end as \`key\` from information_schema.columns where ${where} order by ordinal_position`),
       read(`select index_name as name, case when index_name = 'PRIMARY' then 'primary' when non_unique = 0 then 'unique' else '' end as kind, lower(index_type) as method, group_concat(column_name order by seq_in_index separator ', ') as cols from information_schema.statistics where ${where} group by index_name, non_unique, index_type order by index_name = 'PRIMARY' desc, index_name`),
       read(`select constraint_name as name, table_name as from_table, group_concat(column_name order by ordinal_position separator ', ') as from_cols, referenced_table_name as to_table, group_concat(referenced_column_name order by ordinal_position separator ', ') as to_cols from information_schema.key_column_usage where referenced_table_name is not null and ((${where}) or (referenced_table_schema = ${q(t.schema ?? "")} and referenced_table_name = ${q(t.name)})) group by constraint_name, table_name, referenced_table_name order by 1`),
-      read(`select count(*) as n from ${qualified(kind, t)}`),
     ];
   }
 
