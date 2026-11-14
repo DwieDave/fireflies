@@ -2,7 +2,7 @@
 // cmd-[ in place of the core's agent.next / agent.prev). It goes top to bottom
 // the way the sidebar draws its jar and meadow (open and folded alike): the
 // pinned agents in the jar (kit.ts sortedAgents), the jar's shelf at their
-// foot (every tile in shelf order: web pages, editors, files, plain shells;
+// foot (every tile in shelf order: web pages, editors, files, plain shells, whole tabs;
 // pins.ts jarItems + onShelf), then the other agents under the jar (awake
 // ones, then those at rest: sky.ts walk), then back to the first; backwards the other way round.
 // Each shelf item is a stop of its own, also when several share a pane (a pin
@@ -19,6 +19,7 @@ export interface WalkFocus {
   readonly pane: string | null;
   readonly terminal: string | null;
   readonly shown: string | null;
+  readonly tab?: string | null;
 }
 
 /**
@@ -51,14 +52,21 @@ function paneOf(s: WalkStop): string | undefined {
 }
 
 /**
- * Where the walk stands (an index in `stops`, or -1): the agent shown in the
- * focused pane, else the shelf item holding the focus. Shelf items that share
- * the focused pane (tab pins) are told apart by `last`, the key the walk went
- * to last; else the first of them.
- * `f`: focused() ({ pane, terminal, shown }).
+ * Where the walk stands (an index in `stops`, or -1): the whole tab's tile the
+ * walk went to last (`last`) while the focus is still in that tab; else the
+ * agent shown in the focused pane, else the shelf item holding the focus.
+ * Shelf items that share the focused pane (tab pins) are told apart by
+ * `last`, the key the walk went to last; else the first of them; a whole
+ * tab's tile is the last resort.
+ * `f`: focused() ({ pane, terminal, shown, tab }).
  */
 export function walkAt(stops: readonly WalkStop[], f: WalkFocus | null | undefined, last: string | null = null): number {
   if (!f) return -1;
+
+  const tabAt = (pick: (s: WalkStop) => boolean) => stops.findIndex((s) => { const it = itemOf(s); return it?.kind === "tab" && Boolean(f.tab) && it.tabInfo.id === f.tab && pick(s); });
+  const wentTo = tabAt((s) => s.key === last);
+
+  if (wentTo >= 0) return wentTo;
 
   const term = f.shown ?? f.terminal;
 
@@ -68,12 +76,10 @@ export function walkAt(stops: readonly WalkStop[], f: WalkFocus | null | undefin
     if (i >= 0) return i;
   }
 
-  if (!f.pane) return -1;
-
-  const here = stops.flatMap((s, i): (readonly [WalkStop, number])[] => (paneOf(s) === f.pane ? [[s, i]] : []));
+  const here = f.pane ? stops.flatMap((s, i): (readonly [WalkStop, number])[] => (paneOf(s) === f.pane ? [[s, i]] : [])) : [];
   const at = here.find(([s]) => s.key === last) ?? here[0];
 
-  return at ? at[1] : -1;
+  return at ? at[1] : tabAt(() => true);
 }
 
 /** The stop `dir` (+1 next, -1 previous) from `at`, wrapping both ways; from

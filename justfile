@@ -155,6 +155,8 @@ test:
     bun test scripts/nocturne-scratchpad-open.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
     bun test scripts/nocturne-pane-pins.test.ts
+    # Whole tabs: pinned to the jar's shelf as one tile (record, tidy, order, walk, keys, menus) and moved to another space (the tab menu's Move to space, the strip's s, the palette).
+    bun test scripts/nocturne-tab-pins.test.ts
     # The picture in picture player's bar in sections (a dithered seam between), wide and narrow, and its ⋯ menu's sections.
     bun test scripts/pip.test.ts
     # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.

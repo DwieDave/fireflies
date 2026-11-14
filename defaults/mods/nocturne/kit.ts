@@ -9,8 +9,9 @@ import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
 import { isDock, toDock, newSlot, adoptShell } from "./dock.ts";
-import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY } from "./pins.ts";
-import type { JarItem, PaneRecord, SortedAgents } from "./pins.ts";
+import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY,
+  TABS_KEY, tabRecords, tabPinnedWhole, pinWholeTab, retimeTabs, isTabKey, findTab } from "./pins.ts";
+import type { JarItem, PaneRecord, SortedAgents, TabRecord } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
 import { dither } from "./toolground.ts";
@@ -99,8 +100,36 @@ export const sortedAgents = (): SortedAgents<AgentInfo> => sortAgents([...agents
 /** The mod panes' pins (pins.ts PANES_KEY), as stored. */
 export const paneRecordsNow = (): PaneRecord[] => paneRecords(shared);
 
-/** Everything in the jar, in its order (pins.ts jarItems): agents, plain terminals, mod panes. */
-export const jar = (): JarItem[] => jarItems({ agents: [...agents()], terminals: terminalsNow(), panes: panes(), records: paneRecordsNow() });
+/** The whole tabs' pins (pins.ts TABS_KEY), as stored. */
+export const tabRecordsNow = (): TabRecord[] => tabRecords(shared);
+
+/** Everything in the jar, in its order (pins.ts jarItems): agents, plain terminals, mod panes, whole tabs. */
+export const jar = (): JarItem[] => jarItems({ agents: [...agents()], terminals: terminalsNow(), panes: panes(), records: paneRecordsNow(), spaces: spaces(), tabs: tabRecordsNow() });
+
+/** Stores the whole tabs' pins. */
+const storeTabs = (records: readonly TabRecord[]) => setShared(TABS_KEY, records);
+
+/** A whole tab (its id) is in the jar. */
+export const tabPinnedNow = (tab: string | null | undefined): boolean => Boolean(tab) && tabPinnedWhole(tabRecordsNow(), tab ?? "");
+
+/** Pins a whole tab of a space to the jar's shelf, or unpins it (pins.ts TABS_KEY). */
+export function pinTab(tab: string | null | undefined, on = !tabPinnedNow(tab)): void {
+  if (!tab) return;
+
+  const found = findTab(tab, spaces());
+
+  if (on && !found) return;
+
+  storeTabs(pinWholeTab(tabRecordsNow(), tab, found?.space.id ?? null, on, Date.now()));
+}
+
+/** The shown tab (the focused space's), or null. */
+export const shownTab = (): string | null => focused()?.tab ?? spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id ?? null;
+
+/** nocturne.pin-tab: pins the shown tab to the jar's shelf, or unpins it. */
+export function pinShownTab(): void {
+  pinTab(shownTab());
+}
 
 /** A pane as a pin's target: a PaneInfo, or a menu's target. A mod pane has
  *  no terminal; a terminal shown in a layout block has no pane. */
@@ -150,9 +179,11 @@ export function movePin(key: string | null | undefined, dir: number): void {
 
   if (!times.length) return;
 
-  for (const [k, at] of times) if (!isPaneKey(k)) hc(["label", k, `${AT_LABEL}=${at}`]).catch(() => {});
+  for (const [k, at] of times) if (!isPaneKey(k) && !isTabKey(k)) hc(["label", k, `${AT_LABEL}=${at}`]).catch(() => {});
 
   if (times.some(([k]) => isPaneKey(k))) storeRecords(retime(paneRecordsNow(), times));
+
+  if (times.some(([k]) => isTabKey(k))) storeTabs(retimeTabs(tabRecordsNow(), times));
 }
 
 /** The focused pane's terminal (keys and the palette pin it). */
@@ -196,8 +227,16 @@ const isWebProps = object({}, { slot: isString });
 
 /** Goes to a pin of any kind (a jar item, pins.ts jarItems): in whatever tab
  *  and space it is; a parked pane comes back (pane.focus). A web tab's pin
- *  (`it.tab`): its pane, then that tab (browser.show). */
+ *  (`it.tab`): its pane, then that tab (browser.show). A whole tab: tab.select. */
 export function goToPin(it: JarItem): void {
+  // A whole tab: shown, its space too (a settled one comes back), the
+  // keyboard to the pane focused in it last.
+  if (it.kind === "tab") {
+    run("tab.select", { id: it.tabInfo.id });
+
+    return;
+  }
+
   if (it.kind === "pane" && it.tab) {
     const props = it.pane.props;
     const want = { slot: (isWebProps(props) ? props.slot : undefined) ?? null, tab: it.tab };
@@ -220,7 +259,8 @@ export function goToPin(it: JarItem): void {
 
 /** Takes a jar item out of the jar (a web tab's pin: that tab's alone). */
 export function unpin(it: JarItem): void {
-  if (it.kind === "pane" && it.tab) storeRecords(pinTabRecord(paneRecordsNow(), it.pane, it.tab, false, Date.now()));
+  if (it.kind === "tab") pinTab(it.tabInfo.id, false);
+  else if (it.kind === "pane" && it.tab) storeRecords(pinTabRecord(paneRecordsNow(), it.pane, it.tab, false, Date.now()));
   else if (it.kind === "pane") pinPane({ pane: it.pane.pane, terminal: null }, false);
   else pin(it.key, false);
 }

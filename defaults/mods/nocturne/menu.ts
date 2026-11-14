@@ -1,5 +1,11 @@
 // Right-click menus in Nocturne's look (popup.ts), with Fireflies' items:
-//   tab    the tab strip's tabs (tabs.ts opens it, props { role: "menu", tab: "tab", target })
+//   tab    the tab strip's tabs (tabs.ts opens it, props { role: "menu", tab: "tab", target }):
+//          rename, new tab, pin the whole tab to the jar's shelf (or unpin it, move
+//          its tile), "Move to space…" (tab.move {space}: the tab whole), close
+//   jartab a whole tab's tile on the shelf (shelf.ts opens it, props { tab: "jartab",
+//          target: { id } }): show it, unpin, move the tile, move the tab to a space, close it
+//   tospace the spaces a tab can move to, alone (props { tab: "tospace", target: { id } }):
+//          the strip's s, the palette, nocturne.tab-to-space
 //   pane   a terminal's menu: the layout's `terminal_menu` is "nocturne", and
 //          Fireflies opens it with props { tab: "pane", target: { pane, terminal } };
 //          renaming happens inline in the pane's header, asked for through shared(NAME_PANE)
@@ -22,7 +28,7 @@ import type { Color, Context, Element, FocusHandle } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { theme, props, run, terminals, keys, shared, setShared, spaces, panes, openOverlay, closeOverlay } from "herdr";
 import type { PaneInfo, SpaceInfo, TabInfo, Theme } from "herdr";
-import { arrayOf, isNumber, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
+import { arrayOf, isNumber, isString, literal, nullable, object, readShared, readSharedList, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
@@ -30,10 +36,11 @@ import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.ts";
-import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked } from "./kit.ts";
+import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab } from "./kit.ts";
 import type { DropAt, PinTarget } from "./kit.ts";
 import { isDock } from "./dock.ts";
-import { onShelf } from "./pins.ts";
+import { onShelf, tabKey } from "./pins.ts";
+import { tabMove, SPACE_ROWS_KEY } from "./tabmove.ts";
 import { isHelpLine } from "./nav.ts";
 import type { HelpLine } from "./nav.ts";
 
@@ -175,13 +182,19 @@ function layoutKey(action: string): string {
 }
 
 /** The shelf's "+" tile (shelf.ts newTile): what can go into the dock (dock.ts),
- *  pinned to the shelf. The focused pane first, when it can go (kit.ts dockable). */
+ *  pinned to the shelf. The focused pane first, when it can go (kit.ts dockable);
+ *  the shown tab, pinned whole where it is (kit.ts pinTab), unless it is already. */
 function dockItems(t: Theme): PopupItem[] {
   const f = focusedPane();
   const p = f?.pane ? panes().find((x) => x.pane === f.pane) : undefined;
 
+  const tab = shownTab();
+  // The shown tab, whole, as a tile here (it stays in its space).
+  const tabRow = tab && !tabPinnedNow(tab) ? [{ id: "dock-tab", mark: icon(t, "pin"), name: "Pin the shown tab here", hint: layoutKey("nocturne.pin-tab"), go: () => pinTab(tab, true) }] : [];
+  const first = [...(dockable(p) ? [{ id: "dock-this", mark: icon(t, "archive"), name: "Move the focused pane here", hint: "", go: () => dockPane(p) }] : []), ...tabRow];
+
   return [
-    ...(dockable(p) ? [{ id: "dock-this", mark: icon(t, "archive"), name: "Move the focused pane here", hint: "", go: () => dockPane(p) }, { rule: true } as const] : []),
+    ...(first.length ? [...first, { rule: true } as const] : []),
     { id: "dock-web", mark: icon(t, "monitor"), name: "New web pane", hint: "", go: () => dockWeb() },
     { id: "dock-shell", mark: icon(t, "terminal"), name: "New shell", hint: "", go: () => dockShell() },
     { id: "dock-files", mark: icon(t, "files"), name: "New files pane", hint: "", go: () => dockFiles() },
@@ -213,6 +226,71 @@ export function pinItems(t: Theme, p: PinTarget): PopupItem[] {
   ];
 }
 
+/** Moving a jar item (its key) left or right among the shelf's tiles, while
+ *  there's a neighbor that way: "Move left" / "Move right". */
+function shelfMoves(t: Theme, key: string): PopupItem[] {
+  const all = jar();
+  const it = all.find((x) => x.key === key);
+  const group = it ? all.filter((x) => onShelf(x) === onShelf(it)) : [];
+  const i = it ? group.indexOf(it) : -1;
+  const glyph = (name: string) => svg(`mods/workspace-chrome/${name}.svg`).size(14).flex_none().text_color(t.accent);
+
+  return [
+    ...(i > 0 ? [{ id: "pin-up", mark: glyph("chevron-left"), name: "Move left", hint: layoutKey("nocturne.pin-up"), go: () => movePin(key, -1) }] : []),
+    ...(i >= 0 && i < group.length - 1 ? [{ id: "pin-down", mark: glyph("chevron-right"), name: "Move right", hint: layoutKey("nocturne.pin-down"), go: () => movePin(key, 1) }] : []),
+  ];
+}
+
+/** "Pin tab to the jar" for a whole tab of a space (its tile on the shelf: kit.ts
+ *  pinTab), or, pinned, "Unpin from the jar" and moving its tile left / right. */
+export function tabPinItems(t: Theme, tab: string): PopupItem[] {
+  if (!tabPinnedNow(tab)) return [{ id: "pin-tab", mark: icon(t, "pin"), name: "Pin tab to the jar", hint: layoutKey("nocturne.pin-tab"), go: () => pinTab(tab, true) }];
+
+  return [
+    { id: "unpin-tab", mark: icon(t, "pin-off"), name: "Unpin from the jar", hint: layoutKey("nocturne.pin-tab"), go: () => pinTab(tab, false) },
+    ...shelfMoves(t, tabKey(tab)),
+  ];
+}
+
+/** The spaces tab `tab` can move to (tabmove.ts: its machine's other spaces, the
+ *  sidebar's order, worktree spaces indented under their repo's), as rows that
+ *  move it there whole (tab.move {id, space}), 1 to 9 keyed. A space's last tab
+ *  says first that its space closes. */
+export function toSpaceRows(t: Theme, tab: string): PopupItem[] {
+  const m = tabMove(tab, spaces(), readSharedList(shared, SPACE_ROWS_KEY));
+
+  if (!m || !m.to.length) return [];
+
+  return [
+    ...(m.last ? [{ note: `${m.from.name} closes: this is its last tab` }] : []),
+    ...m.to.map(({ space: s, depth }, i): PopupItem => {
+      const row = { id: `to-space-${s.id}`, mark: icon(t, depth ? "git-branch" : "layers"), name: depth ? `  ${s.name}` : s.name, hint: String(i + 1), go: () => run("tab.move", { id: tab, space: s.id }) };
+
+      return i < 9 ? { ...row, key: String(i + 1) } : row;
+    }),
+  ];
+}
+
+/** "Move to space…": one row whose level lists the spaces (toSpaceRows). None
+ *  when there's no other space on its machine. */
+export function tabMoveItems(t: Theme, tab: string): PopupItem[] {
+  if (!toSpaceRows(t, tab).length) return [];
+
+  return [{ id: "to-space", mark: icon(t, "layers"), name: "Move to space…", hint: layoutKey("nocturne.tab-to-space"), title: "Move to space", sub: () => toSpaceRows(t, tab) }];
+}
+
+/** A whole tab's tile's menu (shelf.ts), at the pointer or `centered` (keys). */
+export function tabTileMenu(tab: string, centered = false): void {
+  openMenu({ tab: "jartab", target: { id: tab } }, { centered });
+}
+
+/** nocturne.tab-to-space: the spaces a tab (default: the shown one) can move to, alone. */
+export function openToSpace(tab: string | null = shownTab()): void {
+  if (!tab || !tabMove(tab, spaces())?.to.length) return;
+
+  openMenu({ tab: "tospace", target: { id: tab } }, { centered: true, width: 260 });
+}
+
 /** A new worktree for a space's repo: the git window's Worktrees tab asks
  *  for the branch, checks it out in its own folder and opens it as a new
  *  space (indented under the repo's). */
@@ -226,7 +304,7 @@ export function newWorktree(id: string | undefined): void {
 const isMenuTarget = object({}, { id: isString, address: isString, space: nullable(isString), pane: nullable(isString), terminal: nullable(isString) });
 
 /** A menu's props: which (tab, pane, fly, space, git), on what (`target`), and its overlay. */
-const isMenuProps = object({}, { tab: literal("tab", "pane", "fly", "space", "git", "dock"), target: isMenuTarget, overlay: isString, role: isString });
+const isMenuProps = object({}, { tab: literal("tab", "pane", "fly", "space", "git", "dock", "jartab", "tospace"), target: isMenuTarget, overlay: isString, role: isString });
 
 export type MenuProps = Guarded<typeof isMenuProps>;
 
@@ -392,8 +470,30 @@ export function menuItems(t: Theme, p: MenuProps | null | undefined): PopupItem[
       item(t, "rename", "square-pen", "Rename", "tab.rename", { id }),
       item(t, "new", "plus", "New tab", "tab.new", { space: tg.space ?? null }),
       { rule: true },
+      ...tabPinItems(t, id),
+      ...tabMoveItems(t, id),
+      { rule: true },
       item(t, "close", "x", "Close", "tab.close", { id }, t.blocked),
     ];
+  }
+
+  if (p?.tab === "jartab") {
+    const id = tg.id ?? "";
+
+    return [
+      item(t, "show", "layers", "Show tab", "tab.select", { id }),
+      ...tabPinItems(t, id),
+      ...tabMoveItems(t, id),
+      { rule: true },
+      item(t, "close", "x", "Close tab", "tab.close", { id }, t.blocked),
+    ];
+  }
+
+  if (p?.tab === "tospace") {
+    const id = tg.id ?? "";
+    const c = spaces().flatMap((s) => s.tabs).find((x) => x.id === id);
+
+    return [{ section: `Move ${c ? (c.named ? c.name : `tab ${c.index}`) : "the tab"} to` }, ...toSpaceRows(t, id)];
   }
 
   return paneItems(t, tg);

@@ -143,6 +143,8 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["nocturne.pin", "Pin the focused pane (an agent, a web page, an editor...) to the top, or unpin it"],
   ["nocturne.pin-up", "Move the pinned agent up in the jar, a pinned pane left on its shelf"],
   ["nocturne.pin-down", "Move the pinned agent down in the jar, a pinned pane right on its shelf"],
+  ["nocturne.pin-tab", "Pin the shown tab, whole, to the jar's shelf (a tile with a tab's ear), or unpin it"],
+  ["nocturne.tab-to-space", "Move the shown tab, whole, to another space"],
   ["nocturne.agent-next", "Next agent or shelf tile, top to bottom as the sidebar draws them"],
   ["nocturne.agent-prev", "Previous agent or shelf tile, bottom to top"],
   ["nocturne.dock", "Move the focused pane to the dock (a space tied to no folder) and pin it to the shelf"],

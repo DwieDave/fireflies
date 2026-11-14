@@ -9,7 +9,7 @@ import { pin, movePin, goToPin, unpin } from "./kit.ts";
 import type { JarItem } from "./pins.ts";
 import { paneMenu } from "./header.ts";
 import { isDock } from "./dock.ts";
-import { openKeys, newWorktree } from "./menu.ts";
+import { openKeys, newWorktree, tabTileMenu } from "./menu.ts";
 import { SIDEBAR_KEYS, SIDEBAR_HELP, keyVerb, move, moveSection, keep } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { openSpacePicker } from "./newspace.ts";
@@ -123,14 +123,15 @@ export function flyActs(sky: Sky, a: AgentInfo): NavActs {
   };
 }
 
-/** The verbs on a pinned pane that isn't an agent's (pinLane, railPin). */
+/** The verbs on a pinned pane that isn't an agent's, or a whole tab's tile (pinLane, railPin). */
 export function pinActs(it: JarItem): NavActs {
   const p = paneOf(it);
 
   return {
     go: () => goToPin(it),
     menu: () => {
-      if (p) paneMenu(p, true);
+      if (it.kind === "tab") tabTileMenu(it.tabInfo.id, true);
+      else if (p) paneMenu(p, true);
     },
     pin: () => unpin(it),
     "pin-up": () => movePin(it.key, -1),

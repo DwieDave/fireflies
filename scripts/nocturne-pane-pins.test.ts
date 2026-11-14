@@ -548,10 +548,16 @@ test("a docked pane closes as any pane does: its menu's Close runs pane.close (t
   expect(menuItems(theme, { tab: "pane", target: { pane: "p5", terminal: "t5" } }).some((r: any) => r.id === "dock")).toBe(false);
 });
 
-test("the + tile's menu: the focused pane (when it can go), a new web pane, shell or files pane", () => {
+test("the + tile's menu: the focused pane (when it can go), the shown tab whole, a new web pane, shell or files pane", () => {
   withDock();
   const ids = () => menuItems(theme, { tab: "dock" }).filter((r: any) => !r.rule).map((r: any) => r.id);
+  const tab = kit.shownTab();
+  // The shown tab is offered while it isn't pinned whole.
+  expect(ids()).toEqual(tab ? ["dock-this", "dock-tab", "dock-web", "dock-shell", "dock-files"] : ["dock-this", "dock-web", "dock-shell", "dock-files"]);
+  if (tab) kit.pinTab(tab, true);
   expect(ids()).toEqual(["dock-this", "dock-web", "dock-shell", "dock-files"]);
+  if (tab) kit.pinTab(tab, false);
+  sharedState[pins.TABS_KEY] = spacesNow.flatMap((s: any) => s.tabs.map((c: any) => ({ tab: c.id, space: s.id, at: 1 })));
   menuItems(theme, { tab: "dock" }).find((r: any) => r.id === "dock-this").go();
   expect(commands.at(-1)).toEqual(["pane.move", { pane: "p2", space: "s3" }]);
   // A pane in the dock already, or on another machine, isn't offered.
