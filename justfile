@@ -229,6 +229,8 @@ test:
     bun test scripts/databases-reads.test.ts
     # Pinned connections and a connection's port-forward: one list for the machine, every window told, a restart, no secret in the file; the forward's facts checked; its port looked at first, the ask with its overview, the forward started as the k8s mod starts one (the shared fixture), a pod that's gone, a port another program holds, stopping it.
     bun test scripts/databases-pin.test.ts
+    # Where a Databases connection is and whether it's connected: the server's default database said, the server's databases listed and picked (-d, kept in a pin), an empty database's words, the state mark and the three places that draw it, a dead server turning it, the focus check; FF_TEST_PG_BIN runs it on a throwaway PostgreSQL too.
+    bun test scripts/databases-where.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

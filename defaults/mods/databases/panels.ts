@@ -1,10 +1,10 @@
 // The Databases window's side panels, drawn: [1] Connections (saved, sent,
-// found in the folder), [2] Tables · Views · Schemas, [3] Structure ·
-// Indexes · Keys · Value (the picked cell, whole), [4] Log. Every row is a
-// click target (a click picks, a double click opens, a right click its menu
-// at the pointer) and says more on hover; a table's or column's name drags
-// into a query, a saved connection to another place; the cursor's row stays
-// in view.
+// found in the folder), [2] Tables · Views · Schemas · Databases (an empty
+// database offers the server's others), [3] Structure · Indexes · Keys ·
+// Value (the picked cell, whole), [4] Log. Every row is a click target (a
+// click picks, a double click opens, a right click its menu at the pointer)
+// and says more on hover; a table's or column's name drags into a query, a
+// saved connection to another place; the cursor's row stays in view.
 
 import { div, svg } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
@@ -13,11 +13,15 @@ import type { ScrollHandle } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
 import type { Conn } from "./kinds.ts";
-import { KIND_NAME, where } from "./kinds.ts";
+import { KIND_NAME, onFile, where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
 import type { PanelId, StructTab, TablesTab } from "./state.ts";
-import { PANEL_KEY, schemaWord } from "./state.ts";
-import { ART, band, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "./kit.ts";
+import { PANEL_KEY, tablesTabsOf } from "./state.ts";
+import { ART, band, chip, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "./kit.ts";
+import { connState, stateTip, stateWord, whereOf } from "./connstate.ts";
+import { statePip } from "./connmark.ts";
+import type { EmptyWords } from "./dbs.ts";
+import { dbRows, dbsNow, emptyWords, hasDatabases, showDatabases, useDatabase, whereNow } from "./dbs.ts";
 import { connList } from "./conns.ts";
 import { cellAt, prettyValue } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
@@ -114,13 +118,11 @@ export function count(n: number | null): string {
 
 const text = (_t: Theme, s: string, color: Color) => div().truncate().text_color(color).child(s);
 
-/** The pip of a connection: connected, connecting, failed, or none. */
+/** The pip of a connection: its state as the head's mark says it (connstate.ts), small. */
 function connPip(t: Theme, v: DbView, c: Conn): Element {
-  if (v.active?.id !== c.id) return pip(t.ansi0);
+  const s = connState(v, c);
 
-  if (v.catalog.busy) return pip(t.working, 6, true);
-
-  return pip(v.catalog.error ? t.blocked : t.done);
+  return h_flex().id(`conn-state-${c.id}`).flex_none().tooltip(stateTip(s, whereOf(v, c), c.readonly)).child(s.kind === "off" ? pip(t.ansi0) : statePip(t, s, 6));
 }
 
 /** A cluster-secret connection's mark: the secret it reads its password from (red when the read failed). */
@@ -149,13 +151,24 @@ function pinMark(t: Theme, v: DbView, c: Conn): Element[] {
   const pinned = c.origin === "saved";
 
   return [h_flex().id(`conn-pin-${c.id}`).flex_none().w(11).h(14).items_center().justify_center().cursor_pointer()
-    .tooltip(pinned ? "Pinned: every Databases window lists it · P or a click unpins it" : "P or a click pins it: every Databases window lists it")
+    .tooltip(`${pinned ? "Pinned: every Databases window lists it · P or a click unpins it" : "P or a click pins it: every Databases window lists it"}${pinState(v, c)}`)
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       togglePin(v, c, cx);
       cx.notify();
     })
     .child(svg(`${ART}/pin.svg`).size(7).text_color(pinned ? t.accent : t.ansi8).opacity(pinned ? 1 : 0.7))];
+}
+
+/** The state a pin's hover adds for the active connection ("· connected · in lantern as app"). */
+function pinState(v: DbView, c: Conn): string {
+  const s = connState(v, c);
+
+  if (s.kind === "off") return "";
+
+  const w = whereOf(v, c);
+
+  return ` · ${stateWord(s)}${w && (s.kind === "connected" || s.kind === "reading") ? ` · in ${w.database ?? "every database"}${w.user ? ` as ${w.user}` : ""}` : s.kind === "failed" ? `: ${s.why}` : ""}`;
 }
 
 /** A forward's connection: its forward running (localhost:15432), or down. */
@@ -268,9 +281,16 @@ function tablesBody(t: Theme, v: DbView, active: boolean): Element {
 
   if (v.catalog.error) return empty(t, "It didn't answer", v.catalog.error, 1);
 
+  if (v.tablesTab === "databases") return databasesBody(t, v, active);
+
   if (v.catalog.busy && !v.catalog.tables.length) return empty(t, "reading the tables…", null, null);
 
   if (v.tablesTab === "schemas") return schemasBody(t, v, active);
+
+  // An empty database: which one, the server's others, enter's way on (dbs.ts).
+  const none = emptyWords(v);
+
+  if (none && v.tablesTab !== "views") return emptyDbView(t, v, none);
 
   const many = schemasOf(v).length > 1 && v.schema === null;
 
@@ -316,17 +336,111 @@ function schemasBody(t: Theme, v: DbView, active: boolean): Element {
   return list("schemas-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables);
 }
 
-/** [2] Tables · Views · Schemas. */
+/** The tabs' names. */
+const TAB_NAME = { tables: "Tables", views: "Views", schemas: "Schemas", databases: "Databases" } as const satisfies { readonly [K in TablesTab]: string };
+
+/** [2]'s count (top edge) and where it is (bottom edge: the database it's in, its schema when
+ *  one is picked; the fallback is said in the head and the empty words). The four tabs keep the
+ *  top edge's room. */
+export interface TablesCaption {
+  readonly count: string;
+  readonly where: string;
+}
+
+export function tablesCaption(v: DbView): TablesCaption {
+  const c = v.active;
+  const n = v.tablesTab === "schemas" ? schemasOf(v).length : v.tablesTab === "databases" ? dbsNow(v)?.list.length ?? 0 : shownTables(v).length;
+
+  if (!c) return { count: String(n), where: "" };
+
+  if (onFile(c) || (c.kind === "libsql" && c.url)) return { count: String(n), where: where(c, home()).split("/").at(-1) ?? "" };
+
+  const db = whereNow(c, v.catalog.here).database ?? "every database";
+
+  return { count: String(n), where: `in ${v.schema ? `${db} · ${v.schema}` : db}` };
+}
+
+/** [2] Tables · Views · Schemas · Databases (by kind: state.ts tablesTabsOf). */
 export function tablesPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "tables";
-  const word = schemaWord(v.active?.kind ?? "postgres");
-  const tabs: readonly (readonly [TablesTab, string])[] = [["tables", "Tables"], ["views", "Views"], ["schemas", word[0]?.toUpperCase() + word.slice(1)]];
-  const n = v.tablesTab === "schemas" ? schemasOf(v).length : shownTables(v).length;
+  const tabs = tablesTabsOf(v.active?.kind ?? "postgres").map((k) => [k, TAB_NAME[k]] as const);
+
+  const caption = tablesCaption(v);
 
   return panel(t, "p-tables", titleTabs(t, "tables", PANEL_KEY.tables, tabs, v.tablesTab, active, (k, cx) => v.setTablesTab(k, cx)), active, tablesBody(t, v, active), {
-    right: div().text_color(t.dim).child(`${v.schema ?? (v.active ? where(v.active, home()).split("/").at(-1) ?? "" : "")} · ${n}`),
+    right: div().min_w(0).truncate().text_color(t.dim).child(caption.count),
+    foot: caption.where || null,
     onPress: () => v.setPanel("tables"),
   });
+}
+
+/** An empty database's words in [2]: which database, the server's others as chips (a click
+ *  connects to one), enter's way on, and the list one click away. */
+function emptyDbView(t: Theme, v: DbView, e: EmptyWords): Element {
+  return v_flex().size_full().items_center().justify_center().gap(8).px(16).text_size(11)
+    .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6).loop("opacity", { from: 0.35, to: 0.7, period: 5200 }))
+    .child(div().text_center().text_color(t.muted).child(e.title))
+    .child(div().text_center().max_w(460).text_color(t.dim).child(e.note))
+    .when(e.others.length > 0, (el) => el.child(h_flex().flex_wrap().justify_center().gap(4).max_w(460)
+      .children(e.others.map((name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.ansi8, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
+      .child(chip(t, "tables-empty-list", "the list · b", false, (cx) => showDatabases(v, cx)))));
+}
+
+/** A size in bytes, short: "8.1 MB". */
+export function bytes(n: number | null): string {
+  if (n === null) return "";
+
+  const units = ["B", "kB", "MB", "GB", "TB"];
+  let x = n;
+  let u = 0;
+
+  while (x >= 1024 && u < units.length - 1) {
+    x /= 1024;
+    u++;
+  }
+
+  return `${x >= 100 || u === 0 ? Math.round(x) : x.toFixed(1)} ${units[u]}`;
+}
+
+/** [2]'s Databases tab: the server's databases (the one it's in lit), a pick connects to it. */
+function databasesBody(t: Theme, v: DbView, active: boolean): Element {
+  const c = v.active;
+  const d = dbsNow(v);
+
+  if (!c || !hasDatabases(c)) return empty(t, "A file has no other databases", null, null);
+
+  const read = readIn(v, "tables");
+
+  if (read && !d?.list.length) return readingView(t, "dbs-read", read);
+
+  if (d?.error && !d.list.length) return empty(t, "The server's databases couldn't be read", d.error, null);
+
+  const here = whereNow(c, v.catalog.here).database;
+  const names = dbRows(v);
+
+  if (!names.length) return empty(t, d?.busy || !d ? "reading the server's databases…" : "No databases this connection may use", null, null);
+
+  const rows = names.map((name, i) => {
+    const on = name === here;
+    const size = name === null ? null : d?.list.find((x) => x.name === name)?.size ?? null;
+
+    return listRow(t, v, `db-${i}`, v.tableAt === i, active, [
+      on ? pip(t.done, 6) : pip(t.ansi0, 6),
+      text(t, name ?? "every database", on ? t.ansi5 : v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
+      ...(on ? [text(t, "connected here", t.dim).flex_none()] : []),
+      div().flex_1(),
+      text(t, bytes(size), t.dim).flex_none(),
+    ], {
+      pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
+      open: (cx) => v.act("tables", "open", cx),
+      menu: (cx) => v.act("tables", "menu", cx),
+      tip: on ? `${name ?? "every database"} · connected here` : `${name ?? "every database (none named)"} · enter or a double click connects to it${c.origin === "saved" ? " (kept in its pin)" : ""}`,
+    });
+  });
+
+  const foot = d?.sized ? null : h_flex().h(20).px(10).gap(6).items_center().text_color(t.dim).child(div().child("# their sizes"));
+
+  return v_flex().size_full().child(list("dbs-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables).flex_1()).when(foot !== null, (el) => (foot ? el.child(foot) : el));
 }
 
 /** A Structure row: its parts, the name it puts into a query, the table it leads to, what's copied. */

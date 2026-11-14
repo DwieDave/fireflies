@@ -172,7 +172,8 @@ layout) speaks Postgres (psql), MySQL / MariaDB (mysql or mariadb), SQLite
 over its HTTP API), lazygit's way: [1] Connections (saved; sent by another
 mod; found in the shown space's folder: a `DATABASE_URL`-like variable in its
 `.env` files or its direnv environment, `*.db` / `*.sqlite*` files), [2]
-Tables · Views · Schemas with row counts (estimates on Postgres and MySQL), [3] Structure · Indexes · Keys ·
+Tables · Views · Schemas · Databases with row counts (estimates on Postgres and MySQL; MySQL has
+Tables · Views · Databases, SQLite no Databases), [3] Structure · Indexes · Keys ·
 Value (a key leads to its table; Value is the picked cell whole, JSON
 pretty-printed), [0] the main view: Rows (a table's page of 200: `o` (or
 `s`, or a click on its header) sorts by the column with an ORDER BY the
@@ -198,6 +199,34 @@ closing with changes staged asks first (save, discard, stay). The gaps
 between panels (and between a query's editor and its result) are dividers:
 drag one, double-click it to put it back; `+` / `-` grow and shrink the
 focused panel; the sizes are kept (one set for the window, one for panes).
+Where a server connection is: the window asks the server with the tables
+(`current_database()`, `current_user`): a Postgres connection that names no
+database is in the server's default, `postgres`, and the head says so
+("postgres (the server's default: none was named) as app"); a MySQL one
+without a database lists every database's tables. [2]'s Databases tab (`b`
+anywhere, or a click on the head's database) lists the server's databases
+(Postgres: `pg_database` without templates and those that take no
+connections; MySQL: its schemata without its own; `#` asks their sizes);
+enter or a double click connects to one (a new client run with `-d`, the
+password kept in memory, the tables read anew; staged cell edits ask first),
+kept in a pinned connection's record (`database`; a cluster secret's
+`databaseKey` is dropped so the pick stands) and for a sent one while the
+window is open. An empty database says so in [2] instead of a bare 0: "postgres
+has no tables · 3 other databases on this server: … · enter opens the list"
+(one other: by name, enter connects to it), each one a click away; on MySQL
+it adds that only the tables the user may use are listed. The head's first
+mark after its title says whether it's connected, drawn by one function that
+also draws the connection's pip in [1] and its pin's hover: a hollow dim pip
+(not connected), the breathing pip (connecting, reading), green "connected ·
+<database> as <user>" (the last client run answered: the window holds no
+standing connection, so this is what connected means; its hover says since
+when), red "not connected" with the reason in its hover (a run that couldn't
+reach the server: psql's exit 2, MySQL's connect errors, a read past its
+deadline), the lock when read only. The window checks again with one `select
+1` when it gets the keyboard back after 30 s without an answer. A click on
+the mark or `C` opens the connection's menu (read again, reconnect, the
+server's databases, test, copy its address, disconnect). In a narrow pane
+the words go and the mark stays.
 `e` exports a table (whole, its page, its filtered rows)
 or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
 the connection's history; `?` lists every key. Mouse and keyboard both reach

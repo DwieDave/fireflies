@@ -161,9 +161,9 @@ fn typed_text_reaches_the_databases_windows_fields(cx: &mut TestAppContext) {
     cx.update(gpui_shell::init);
     let staged = Staged::new();
     // Letters the window binds (? keys, q close, j / k move, n new, e edit, o sort, O the column's
-    // menu, { } widths, H hide, V a row, T the tab's menu, x, D, J, K, m, P pin, # count…) are typed
-    // like any other.
-    let typed = "lantern?qjkneoO{}HVTxDJKmP#";
+    // menu, { } widths, H hide, V a row, T the tab's menu, x, D, J, K, m, P pin, # count, b the
+    // server's databases, C the connection's menu…) are typed like any other.
+    let typed = "lantern?qjkneoO{}HVTxDJKmP#bC";
     let wrong: Vec<String> = database_fields()
         .iter()
         .filter_map(|f| {

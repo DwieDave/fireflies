@@ -10,7 +10,7 @@ import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } f
 import type { Conn, Kind } from "./kinds.ts";
 import { isKind } from "./kinds.ts";
 import { isKubeForward, isKubeSource } from "./kube.ts";
-import type { Browse, Structure, TableRef } from "./catalog.ts";
+import type { Browse, DbInfo, Here, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
 import type { HistoryEntry } from "./store.ts";
@@ -46,10 +46,18 @@ export const PANEL_KEY = { conns: "1", tables: "2", structure: "3", main: "0", l
 
 export const PANEL_NAME = { conns: "Connections", tables: "Tables", structure: "Structure", main: "Rows", log: "Log" } as const satisfies { readonly [P in PanelId]: string };
 
-/** The Tables panel's tabs. */
-export type TablesTab = "tables" | "views" | "schemas";
+/** The Tables panel's tabs: "databases" lists the server's databases (a pick connects to it). */
+export type TablesTab = "tables" | "views" | "schemas" | "databases";
 
-export const TABLES_TABS: readonly TablesTab[] = ["tables", "views", "schemas"];
+export const TABLES_TABS: readonly TablesTab[] = ["tables", "views", "schemas", "databases"];
+
+/** A kind's tabs in [2]: Postgres' schemas live inside a database, so it has both; a MySQL
+ *  database is its schema (one tab); a SQLite file has no other database. */
+export function tablesTabsOf(kind: Kind): readonly TablesTab[] {
+  if (kind === "postgres") return ["tables", "views", "schemas", "databases"];
+
+  return kind === "mysql" ? ["tables", "views", "databases"] : ["tables", "views", "schemas"];
+}
 
 /** The Structure panel's tabs; "value" is the picked cell's whole value. */
 export type StructTab = "columns" | "indexes" | "keys" | "value";
@@ -218,8 +226,31 @@ export interface Catalog {
   tables: TableRef[];
   error: string | null;
   busy: boolean;
+  /** Where the connection landed, as the server said it with the tables (null: not yet, SQLite). */
+  here?: Here | null;
   /** Whose busy it is (a read clears only its own). */
   by?: number;
+}
+
+/** The server's databases, as last read for a connection (on demand: the Databases tab, b, an
+ *  empty database's words). */
+export interface ServerDbs {
+  readonly conn: string;
+  list: DbInfo[];
+  busy: boolean;
+  error: string | null;
+  /** The sizes were asked for (Postgres reads each database's files for them). */
+  sized: boolean;
+}
+
+/** Whether the active connection answers: its last answer (ok), or the failure that ended it;
+ *  `since` when it first answered, `at` its latest answer (a read, a check). */
+export interface Alive {
+  readonly conn: string;
+  ok: boolean;
+  since: number;
+  at: number;
+  why: string | null;
 }
 
 /** The structure of the picked table. */
@@ -252,9 +283,6 @@ export type KeptCopy = Guarded<typeof isKeptCopy>;
 
 /** How long a handover note is good for. */
 export const HANDOVER_FRESH = 5000;
-
-/** A kind's word for its schemas (MySQL's are databases). */
-export const schemaWord = (kind: Kind): string => (kind === "mysql" ? "databases" : "schemas");
 
 /** History rows as the menu lists them. */
 export type History = readonly HistoryEntry[];

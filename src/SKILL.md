@@ -71,7 +71,10 @@ password: the window asks for it, or, for a port-forward on 127.0.0.1, reads
 it itself from the Kubernetes secret `"secret":{"from":"kubernetes","context":…,"namespace":…,"name":…,"key":…}`
 names, and `"forward":{"context":…,"namespace":…,"target":"pod/…","remote":5432,"local":15432}`
 the port-forward it came from, started again when the person says so if its
-port is down: defaults/AGENTS.md has the whole contract), then `herdr-app do
+port is down: defaults/AGENTS.md has the whole contract; without a
+`"database"` a Postgres connection is in the server's default, `postgres`, and
+`herdr-app do databases.databases` shows them the server's databases to pick
+from), then `herdr-app do
 databases.table:lanterns` shows a table's rows and structure,
 `herdr-app do 'databases.sql:select count(*) from lanterns;'` puts a query in
 a tab (`databases.run` runs it; a write asks the person first, so don't

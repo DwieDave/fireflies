@@ -9,7 +9,7 @@ import { InputState } from "gpui-base";
 import { home, run } from "herdr";
 import type { Binding, Place } from "./keys.ts";
 import { BINDINGS, actionsFor } from "./keys.ts";
-import { PANELS, STRUCT_TABS, TABLES_TABS, gridStart } from "./state.ts";
+import { PANELS, STRUCT_TABS, gridStart, tablesTabsOf } from "./state.ts";
 import type { PanelId } from "./state.ts";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { DEFAULT_PORT, onFile, tilde } from "./kinds.ts";
@@ -29,6 +29,8 @@ import { edgesOf } from "./layout.ts";
 import { counted } from "./edits.ts";
 import { beforeLeaving, discardAll, openReview, runSave } from "./cell-edit.ts";
 import { stopReads } from "./reads.ts";
+import { dbRows, enterEmpty, loadDatabases, showDatabases, useDatabase } from "./dbs.ts";
+import { dbMenu, stateMenu } from "./connmark.ts";
 import type { default as DbView } from "./main.ts";
 
 /** Whether `name` is an action of the place's or the window's table (a command by name). */
@@ -96,6 +98,8 @@ function windowAct(v: DbView, action: string, cx: Context): boolean {
   } else if (action === "query-new") v.addQuery("", cx);
   else if (action === "history") historyMenu(v, cx);
   else if (action === "refresh") refresh(v, cx);
+  else if (action === "databases") showDatabases(v, cx);
+  else if (action === "conn-menu") stateMenu(v, cx);
   else if (action === "move") v.move(cx);
   else if (action === "help") v.help = !v.help;
   else if (action === "close") closeCopy(v);
@@ -291,8 +295,29 @@ export function insertName(v: DbView, name: string, cx: Context): void {
 /** A table's name for a statement (quoted where it must be). */
 const tableSql = (v: DbView, schema: string | null, name: string): string => (v.active ? qualified(v.active.kind, { schema, name }) : name);
 
+/** [ / ]: the next or previous of the kind's tabs in [2] (the Databases tab read when it shows). */
+function nextTablesTab(v: DbView, by: 1 | -1, cx: Context): void {
+  const tabs = tablesTabsOf(v.active?.kind ?? "postgres");
+  const at = Math.max(0, tabs.indexOf(v.tablesTab));
+  const next = tabs[(at + by + tabs.length) % tabs.length] ?? "tables";
+
+  if (next === "databases") showDatabases(v, cx);
+  else {
+    v.tablesTab = next;
+    v.tableAt = 0;
+  }
+}
+
 function tableAct(v: DbView, action: string, cx: Context): boolean {
+  if (action === "subtab-next" || action === "subtab-prev") {
+    nextTablesTab(v, action === "subtab-next" ? 1 : -1, cx);
+
+    return true;
+  }
+
   if (v.tablesTab === "schemas") return schemaAct(v, action, cx);
+
+  if (v.tablesTab === "databases") return dbAct(v, action, cx);
 
   const list = shownTables(v);
   const t = list[v.tableAt];
@@ -300,9 +325,8 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
   switch (action) {
     case "down": v.tableAt = step(v.tableAt, 1, list.length); break;
     case "up": v.tableAt = step(v.tableAt, -1, list.length); break;
-    case "subtab-next":
-    case "subtab-prev": v.tablesTab = TABLES_TABS[(TABLES_TABS.indexOf(v.tablesTab) + (action === "subtab-next" ? 1 : 2)) % 3] ?? "tables"; v.tableAt = 0; break;
-    case "open": if (t) openTable(v, t, cx); break;
+    // An empty database: enter connects to the server's one other database, or opens the list.
+    case "open": if (t) openTable(v, t, cx); else return enterEmpty(v, cx); break;
     case "table-query": if (t) v.addQuery(`select * from ${tableSql(v, t.schema, t.name)} limit 100;`, cx); break;
     case "insert": if (t) insertName(v, tableSql(v, t.schema, t.name), cx); break;
     case "copy": if (t) copy(v, t.name, cx); break;
@@ -339,13 +363,32 @@ function schemaAct(v: DbView, action: string, cx: Context): boolean {
   switch (action) {
     case "down": v.tableAt = step(v.tableAt, 1, list.length + 1); break;
     case "up": v.tableAt = step(v.tableAt, -1, list.length + 1); break;
-    case "subtab-next":
-    case "subtab-prev": v.tablesTab = action === "subtab-next" ? "tables" : "views"; v.tableAt = 0; break;
     // The first row is "every schema".
     case "open": v.schema = v.tableAt === 0 ? null : list[v.tableAt - 1] ?? null; v.tablesTab = "tables"; v.tableAt = 0; break;
     case "insert": if (v.tableAt > 0 && v.active) insertName(v, quoteName(v.active.kind, list[v.tableAt - 1] ?? ""), cx); break;
     case "copy": if (v.tableAt > 0) copy(v, list[v.tableAt - 1] ?? "", cx); break;
     case "menu": schemaMenu(v, v.tableAt === 0 ? null : list[v.tableAt - 1] ?? null, cx); break;
+    default: return false;
+  }
+
+  return true;
+}
+
+/** The Databases tab: enter connects to the database (MySQL's first row: every database). */
+function dbAct(v: DbView, action: string, cx: Context): boolean {
+  const list = dbRows(v);
+  const at = Math.min(v.tableAt, Math.max(0, list.length - 1));
+  const name = list[at];
+  const has = at < list.length;
+
+  switch (action) {
+    case "down": v.tableAt = step(v.tableAt, 1, list.length); break;
+    case "up": v.tableAt = step(v.tableAt, -1, list.length); break;
+    case "open": if (has) useDatabase(v, name ?? null, cx); break;
+    case "insert": if (name && v.active) insertName(v, quoteName(v.active.kind, name), cx); break;
+    case "copy": if (name) copy(v, name, cx); break;
+    case "count": void loadDatabases(v, cx, true); break;
+    case "menu": if (has) dbMenu(v, name ?? null, cx); break;
     default: return false;
   }
 
