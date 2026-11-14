@@ -201,8 +201,9 @@ focused panel; the sizes are kept (one set for the window, one for panes).
 `e` exports a table (whole, its page, its filtered rows)
 or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
 the connection's history; `?` lists every key. Mouse and keyboard both reach
-everything: a right click opens a menu at the pointer and `m` the same menu
-on what the cursor is on (a connection: connect / disconnect `x`, test, edit,
+everything: a right click opens a menu at the pointer (flipped left or up
+near the window's edges, never under the pointer) and `m` the same menu
+under what the cursor is on (the grid's cell; elsewhere in the middle) (a connection: connect / disconnect `x`, test, edit,
 duplicate `D` (never its password), copy its address `y` (no secret), save,
 remove; a table or view: rows, select, count, its name, copy, export, and
 "Empty it…" / "Drop it…", which put the statement in a query tab and run it

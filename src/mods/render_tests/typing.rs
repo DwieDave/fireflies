@@ -85,7 +85,7 @@ export default class Scenario extends Real {{
 const DB: &str = "mods/databases";
 
 /// A table shown in the Rows grid (made up: nothing runs).
-const SHOWN: &str = "v.active = { id: 'sq-1', name: 'lamps', kind: 'sqlite', path: '/var/tmp/no-such.db', readonly: false, secret: 'none', origin: 'saved' };
+pub(super) const SHOWN: &str = "v.active = { id: 'sq-1', name: 'lamps', kind: 'sqlite', path: '/var/tmp/no-such.db', readonly: false, secret: 'none', origin: 'saved' };
     v.catalog = { tables: [{ schema: null, name: 'lamps', type: 'table', rows: 1 }], error: null, busy: false };
     v.rows = { ...v.rows, browse: { table: { schema: null, name: 'lamps' }, sort: null, filter: '', offset: 0, limit: 100 }, set: { columns: ['name'], rows: [['a']] }, total: 1 };";
 

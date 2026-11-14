@@ -466,13 +466,49 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   void q;
 });
 
-test.skipIf(!SQLITE)("a menu by right click stands at the pointer; by key in the middle", async () => {
+test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's origin learned from its moves); by key at the cursor's cell", async () => {
   seed();
   const v = await opened();
-  v.pointer = { x: 400, y: 300 };
-  ux.menus.atPointer(v, () => ux.menus.cellMenu(v, 0, 0, cx));
-  expect(v.menu.near).toEqual({ x: 400, y: 300 });
+  render(v);
+  // The root's move handler (dividers.ts tracking: the first one registered) learns where the view
+  // sits in the window: a window overlay 60 px in and 40 px down.
+  const rootMove = drawn.find(([m]) => m === "on_mouse_move")?.[1].at(-1);
+  rootMove({ position: { x: 300, y: 200 }, local_position: { x: 240, y: 160 }, modifiers: {} }, cx);
+  expect(v.origin).toEqual({ x: 60, y: 40 });
+  // A press far from where the root last heard the pointer: the menu stands at the press.
+  ux.menus.atPointer(v, () => ux.menus.cellMenu(v, 0, 0, cx), { position: { x: 560, y: 400 } });
+  expect(v.menu.near).toEqual({ x: 500, y: 360 });
   v.menu = null;
+  // Every right press drawn passes its press: each menu it opens stands there.
+  render(v);
+  const rights = drawn.filter(([m, a]) => m === "on_mouse_down" && a[0] === "right").map(([, a]) => a.at(-1));
+  let menus = 0;
+  for (const press of rights) {
+    v.menu = null;
+    press({ button: "right", click_count: 1, position: { x: 760, y: 520 }, modifiers: {} }, cx);
+    if (!v.menu) continue;
+    menus++;
+    expect(v.menu.near).toEqual({ x: 700, y: 480 });
+  }
+  // The panels' rows, the query tabs, the grid's header, cells and row numbers.
+  expect(menus).toBeGreaterThan(6);
+  v.menu = null;
+  // By key, the main panel with the keys: under the cursor's cell (the Rows tab: under the filter line).
+  v.panel = "main";
+  v.rows.at = { row: 0, col: 0, top: 0, left: 0 };
+  v.key(key("m"), cx);
+  const left = 6 + 330 + 6 + 1;
+  expect(v.menu.near).toEqual({ x: left + ux.gridView.gutterWidth(v.rows.set.rows.length), y: 34 + 12 + 7 + 24 + 22, w: ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]), h: 20 });
+  v.menu = null;
+  // The cursor two rows down and a column on: the cell moved with it.
+  v.rows.at = { row: 2, col: 1, top: 0, left: 0 };
+  v.key(key("m"), cx);
+  expect(v.menu.near.y).toBe(34 + 12 + 7 + 24 + 22 + 40);
+  expect(v.menu.near.x).toBe(left + ux.gridView.gutterWidth(v.rows.set.rows.length) + ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]));
+  v.menu = null;
+  // Another panel with the keys: the middle.
+  v.panel = "log";
+  v.logLine({ sql: "select 1", ok: true, ms: 1, said: "", conn: "lantern.db" });
   v.key(key("m"), cx);
   expect(v.menu.near).toBe(null);
 });

@@ -4,6 +4,7 @@
 // nocturne's toggle, the one-shot handover when it moves between a window and
 // a pane), and the things a panel holds (a query tab, a page of rows, an ask).
 
+import type { Anchor } from "./menu-place.ts";
 import type { EditorState, InputState } from "gpui-base";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
@@ -155,12 +156,13 @@ export interface MenuRow {
   readonly go: () => void;
 }
 
-/** A menu over the body: at the pointer (a right click; layout px in the view) or in the middle. */
+/** A menu over the view: at the press (a right click: a point), at what a key opened it for (a
+ *  rectangle: the grid's cursor cell), or in the middle (null); layout px in the view (menu-place.ts). */
 export interface Menu {
   readonly title: string;
   readonly rows: readonly MenuRow[];
   at: number;
-  readonly near?: { readonly x: number; readonly y: number } | null;
+  readonly near?: Anchor;
 }
 
 /** A query tab being renamed (a double click on it, its menu): the tab and the name's input. */

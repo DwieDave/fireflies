@@ -7,6 +7,10 @@
 // menu teaches the keys and can't drift from them or from `?`.
 
 import type { Context } from "gpui-kit";
+import type { Pt } from "./menu-place.ts";
+import { inView } from "./menu-place.ts";
+import { keyedAnchor } from "./menu-anchor.ts";
+import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
@@ -41,17 +45,27 @@ export function entry(place: Place, act: string | null, label: string, go: () =>
   return act && key ? { label, go, ...more, act, key } : { label, go, ...more };
 }
 
-/** Opens a menu over the body: at the pointer when a right click asked for it (atPointer). */
+/** Opens a menu over the view: at the press when a right click asked for it (atPointer), else at
+ *  what the keys are on (the grid's cursor cell), else in the middle (menu-place.ts). */
 export function openMenu(v: DbView, title: string, rows: readonly MenuRow[]): void {
-  const near = v.menuNear;
+  const near = v.menuNear ?? keyedAnchor(v);
 
   v.menuNear = null;
   v.menu = rows.length ? { title, rows, at: 0, near } : null;
 }
 
-/** Runs `open` (a menu's) so the menu stands at the pointer: a right click's way. */
-export function atPointer(v: DbView, open: () => void): void {
-  v.menuNear = v.pointer;
+/** A press's place in the view (layout px): its window position less the view's origin (both
+ *  known: the press's own place, exact wherever the view's root last heard the pointer), else
+ *  the pointer as the root last saw it. */
+export function pressPoint(v: DbView, e: { readonly position?: Pt } | null | undefined): Pt | null {
+  const o = v.origin;
+
+  return e?.position && o ? inView(e.position, o, zoom()) : v.pointer;
+}
+
+/** Runs `open` (a menu's) so the menu stands at the press `e`: a right click's way. */
+export function atPointer(v: DbView, open: () => void, e?: { readonly position?: Pt } | null): void {
+  v.menuNear = pressPoint(v, e);
   open();
   v.menuNear = null;
 }

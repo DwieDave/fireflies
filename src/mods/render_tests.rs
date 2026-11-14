@@ -1168,3 +1168,5 @@ fn status_bar_shows_the_real_palette_key(cx: &mut TestAppContext) {
 
 #[cfg(test)]
 mod typing;
+#[cfg(test)]
+mod menus;

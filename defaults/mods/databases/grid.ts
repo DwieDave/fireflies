@@ -90,12 +90,12 @@ export function moveGrid(at: GridAt, set: ResultSet, cols: readonly GridColumn[]
 export interface GridHandlers {
   readonly pick: (row: number, col: number, shift: boolean, e: MouseButtonEvent, cx: Context) => void;
   readonly open: (row: number, col: number, cx: Context) => void;
-  readonly menu: (row: number, col: number, cx: Context) => void;
+  readonly menu: (row: number, col: number, cx: Context, e?: MouseButtonEvent) => void;
   /** A press on a header: on its right edge (`edge`) the width, else a click (sort) or a move. */
   readonly head: (col: number, edge: boolean, e: MouseButtonEvent, cx: Context) => void;
-  readonly headMenu: (col: number, cx: Context) => void;
+  readonly headMenu: (col: number, cx: Context, e?: MouseButtonEvent) => void;
   readonly gutter: (row: number, shift: boolean, e: MouseButtonEvent, cx: Context) => void;
-  readonly gutterMenu: (row: number, cx: Context) => void;
+  readonly gutterMenu: (row: number, cx: Context, e?: MouseButtonEvent) => void;
   readonly scroll: (rows: number, cols: number, cx: Context) => void;
   readonly target: (el: Element, key: string) => Element;
 }
@@ -154,9 +154,9 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridCol
         h.head(i, x >= w - EDGE, e, cx);
         cx.notify();
       })
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        h.headMenu(i, cx);
+        h.headMenu(i, cx, e);
         cx.notify();
       })
       .child(div().flex_none().truncate().text_color(sorted ? t.accent : t.foreground).child(`${name}${sorted ? (look.sort?.desc ? " ↓" : " ↑") : ""}`))
@@ -224,9 +224,9 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
 
         cx.notify();
       })
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        h.menu(r, i, cx);
+        h.menu(r, i, cx, e);
         cx.notify();
       })
       .child(div().relative().truncate().text_color(color).child(text));
@@ -245,9 +245,9 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
       h.gutter(r, e.modifiers.shift, e, cx);
       cx.notify();
     })
-    .on_mouse_down("right", (_e, cx) => {
+    .on_mouse_down("right", (e, cx) => {
       cx.stop_propagation();
-      h.gutterMenu(r, cx);
+      h.gutterMenu(r, cx, e);
       cx.notify();
     })
     .child(marked ? pip(t.ansi3, 6) : div().w(6))

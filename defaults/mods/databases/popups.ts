@@ -1,8 +1,9 @@
 // What's over the Databases view and has the keyboard first: a connection's
 // form, the export, the password asked before connecting, a query tab's new
 // name, the ask in the bar
-// (y; for a destructive statement then its name typed), a menu (in the middle,
-// or at the pointer for a right click), the keys
+// (y; for a destructive statement then its name typed), a menu (over the whole
+// view: at the press for a right click, at the cursor's cell for a key, else in
+// the middle: menuLayer, menu-place.ts), the keys
 // overview, the filter and find lines. modalKey() hands a key to whichever is
 // up; overBody() and askBar() draw them.
 //
@@ -24,6 +25,8 @@ import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
 import { forwardAskKey, forwardAskPanel } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
+import type { Box } from "./menu-place.ts";
+import { placeMenu } from "./menu-place.ts";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
 function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
@@ -242,13 +245,9 @@ export function askBar(t: Theme, v: DbView, ask: Ask): Element {
     .child(chip(t, "db-ask-no", "esc  no", false, () => { v.ask = null; }));
 }
 
-/** The top bar's height over the body (chrome.ts header). */
-const TOP_BAR = 34;
-
-/** A box over the dim: in the middle of the body, or at `near` (a right click's place in the view,
- *  layout px; the body starts under the top bar), kept inside the body. */
-function centered(id: string, box: Element, close: (cx: Context) => void, near: { readonly x: number; readonly y: number; readonly w: number; readonly h: number; readonly room: { readonly width: number; readonly height: number } } | null = null): Element {
-  const outside = div().id(id).absolute().inset_0().text_size(12)
+/** The dim over the body or the view: a press on it (either button) closes what's on it. */
+function dimLayer(id: string, close: (cx: Context) => void): Element {
+  return div().id(id).absolute().inset_0().text_size(12)
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       close(cx);
@@ -260,21 +259,31 @@ function centered(id: string, box: Element, close: (cx: Context) => void, near: 
       cx.notify();
     })
     .child(popupScrim(`${id}-scrim`));
-
-  if (!near) return outside.flex().items_center().justify_center().child(box.relative().on_mouse_down("left", stop));
-
-  const x = Math.max(8, Math.min(near.room.width - near.w - 8, near.x + 2));
-  const y = Math.max(8, Math.min(near.room.height - near.h - 8, near.y - TOP_BAR + 2));
-
-  return outside.child(box.absolute().left(x).top(y).on_mouse_down("left", stop));
 }
 
+/** A box over the dim, in the middle of the body. */
+function centered(id: string, box: Element, close: (cx: Context) => void): Element {
+  return dimLayer(id, close).flex().items_center().justify_center().child(box.relative().on_mouse_down("left", stop));
+}
 
-function menuPanel(t: Theme, v: DbView, m: Menu): Element {
+/** The menu's size: narrower when it stands at something (a press, a cell), as tall as its rows. */
+export function menuSize(v: DbView, m: Menu): Box {
+  return {
+    width: Math.min(m.near ? 380 : 560, v.size.width - 40),
+    height: Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0)),
+  };
+}
+
+/** The menu over the whole view (its top left corner is the view's, where presses and cells are
+ *  measured from): at the press, at the cursor's cell, or in the middle (menu-place.ts). */
+export function menuLayer(t: Theme, v: DbView): Element | null {
+  const m = v.menu;
+
+  if (!m) return null;
+
   const digits = digitsOf(m.rows);
-  const w = Math.min(m.near ? 380 : 560, v.size.width - 40);
-  const h = Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0));
-  const room = { width: v.size.width, height: v.bodyH };
+  const { width: w, height: h } = menuSize(v, m);
+  const at = placeMenu({ width: w, height: h }, v.size, m.near ?? null);
 
   const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${t.ansi0}55`))
@@ -290,9 +299,11 @@ function menuPanel(t: Theme, v: DbView, m: Menu): Element {
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? ""))))
     .when(Boolean(r.key), (el) => el.child(div().relative().flex_none().text_color(t.accent).child(r.key ?? ""))));
 
-  return centered("db-menu", v_flex().id("db-menu-box").w(w).max_h(h).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
-    .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).truncate().child(m.title))
-    .children(rows), () => { v.menu = null; }, m.near ? { ...m.near, w, h, room } : null);
+  return dimLayer("db-menu", () => { v.menu = null; })
+    .child(v_flex().id("db-menu-box").absolute().left(at.x).top(at.y).w(w).max_h(h).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll()
+      .on_mouse_down("left", stop)
+      .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).truncate().child(m.title))
+      .children(rows));
 }
 
 /** A query tab's name asked for. */
@@ -334,13 +345,10 @@ function passwordPanel(t: Theme, v: DbView): Element {
 /** What's drawn over the body, top last. */
 export function overBody(t: Theme, v: DbView): Element[] {
   const out: Element[] = [];
-  const menu = v.menu;
 
   if (v.help) {
     out.push(keysView(t, { id: "db-help", title: "Databases", list: helpSections(v.place()), close: () => { v.help = false; } }));
   }
-
-  if (menu) out.push(menuPanel(t, v, menu));
 
   if (v.review) out.push(reviewPanel(t, v));
 

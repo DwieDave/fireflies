@@ -86,18 +86,18 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
       if (q || "why" in editableNow(v) || !startEdit(v)) showValue(v);
     },
     // A right click inside the selection keeps it (its menu copies it).
-    menu: (row, col, cx) => {
+    menu: (row, col, cx, e) => {
       const g = now();
 
       if (!g || !hasRange(g.at) || !inRange(rangeOf(g.at), row, col)) put(row, col);
 
       focus();
-      atPointer(v, () => cellMenu(v, row, col, cx));
+      atPointer(v, () => cellMenu(v, row, col, cx), e);
     },
     head: (col, edge, e) => headPress(v, now, focus, col, edge, e),
-    headMenu: (col, cx) => {
+    headMenu: (col, cx, e) => {
       focus();
-      atPointer(v, () => columnMenu(v, col, cx));
+      atPointer(v, () => columnMenu(v, col, cx), e);
     },
     gutter: (row, shift, e) => {
       const g = now();
@@ -124,9 +124,9 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
         });
       }
     },
-    gutterMenu: (row, cx) => {
+    gutterMenu: (row, cx, e) => {
       focus();
-      atPointer(v, () => rowMenu(v, row, cx));
+      atPointer(v, () => rowMenu(v, row, cx), e);
     },
     scroll: (by, across, cx) => v.scrollGrid(by, across, cx),
     target: (el, key) => dropTarget(t, el, v, key, key.startsWith("col:")),
@@ -454,8 +454,8 @@ export function mainPanel(t: Theme, v: DbView): Element {
 
       if (tab) startRename(v, tab);
     },
-    menu: (key, cx) => {
-      if (key !== "+") atPointer(v, () => tabMenu(v, Number(key), cx));
+    menu: (key, cx, e) => {
+      if (key !== "+") atPointer(v, () => tabMenu(v, Number(key), cx), e);
     },
     dress: (key, el) => (key === "+" ? el : dropTarget(t, el, v, `tab:${key}`)),
     tip: (key) => (key === "+" ? "new query tab · ctrl-n" : key === "0" ? "the table's rows · drop a table here to open it · T: its menu" : "double click: rename · drag: another place · T: its menu"),

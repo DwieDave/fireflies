@@ -83,7 +83,7 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
 export interface TabMore {
   readonly press?: (key: string, e: MouseButtonEvent, cx: Context) => void;
   readonly open?: (key: string, cx: Context) => void;
-  readonly menu?: (key: string, cx: Context) => void;
+  readonly menu?: (key: string, cx: Context, e?: MouseButtonEvent) => void;
   readonly dress?: (key: string, el: Element) => Element;
   readonly tip?: (key: string) => string | null;
 }
@@ -113,9 +113,9 @@ export function titleTabs(t: Theme, id: string, num: string | null, tabs: readon
 
         cx.notify();
       })
-      .when(Boolean(more.menu), (el) => el.on_mouse_down("right", (_e, cx) => {
+      .when(Boolean(more.menu), (el) => el.on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        more.menu?.(key, cx);
+        more.menu?.(key, cx, e);
         cx.notify();
       }))
       .child(label);

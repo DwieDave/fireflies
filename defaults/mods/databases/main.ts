@@ -46,7 +46,7 @@ import { keyName } from "./keys.ts";
 import { act, setPanel } from "./actions.ts";
 import { shownGrid } from "./act-grid.ts";
 import { scrollGrid } from "./grid.ts";
-import { modalKey } from "./popups.ts";
+import { menuLayer, modalKey } from "./popups.ts";
 import { askPassword, connList, connect, discover } from "./conns.ts";
 import { readConnections } from "./store.ts";
 import { loadTables } from "./session.ts";
@@ -68,6 +68,8 @@ import { syncPinned } from "./pinned.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
+import type { Anchor, Pt } from "./menu-place.ts";
+import { originOf } from "./menu-place.ts";
 import type { Pressing } from "./press.ts";
 import { ghost, pressLeave, pressMove, pressUp } from "./press.ts";
 import type { ColumnLayout } from "./columns.ts";
@@ -159,8 +161,11 @@ export default class Databases extends View {
   press: Pressing | null = null;
   /** The pointer over the view as last seen (layout px), where a right click's menu opens. */
   pointer: { x: number; y: number } | null = null;
+  /** The view's top left corner in the window (window px), from its own pointer moves: a press's
+   *  window position less it is the press in the view (menu-place.ts). */
+  origin: Pt | null = null;
   /** Where the next menu opens (atPointer sets it for a right click). */
-  menuNear: { x: number; y: number } | null = null;
+  menuNear: Anchor = null;
 
   // ---- drawing
   /** The shown grid's box, as last measured (the keys move by its rows). */
@@ -441,6 +446,7 @@ export default class Databases extends View {
       .map((el) => tracking(el, this.dividers, {
         move: (e, cx) => {
           this.pointer = { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) };
+          this.origin = originOf(e);
 
           return pressMove(this, e, cx);
         },
@@ -461,6 +467,12 @@ export default class Databases extends View {
         }
       })
       .children(frame(this, t))
+      // The menu over the whole view: its place is measured from the view's corner (menu-place.ts).
+      .map((el) => {
+        const m = menuLayer(t, this);
+
+        return m ? el.child(m) : el;
+      })
       .map((el) => {
         const g = ghost(t, this);
 

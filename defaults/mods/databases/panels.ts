@@ -63,10 +63,10 @@ function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boole
 
       cx.notify();
     })
-    .on_mouse_down("right", (_e, cx) => {
+    .on_mouse_down("right", (e, cx) => {
       cx.stop_propagation();
       h.pick(cx);
-      atPointer(v, () => h.menu(cx));
+      atPointer(v, () => h.menu(cx), e);
       cx.notify();
     })
     .children(parts.map((p) => p.relative()));
