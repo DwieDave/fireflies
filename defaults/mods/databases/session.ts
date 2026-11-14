@@ -98,7 +98,8 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
   }
 
   const script = scriptOf(c.kind, statements, c.readonly);
-  const secret = c.secret === "ask" ? v.secrets.get(c.id) ?? null : null;
+  // Asked for, or read from a cluster's secret at connect (kube.ts): both in the window's memory.
+  const secret = c.secret === "ask" || c.secret === "kubernetes" ? v.secrets.get(c.id) ?? null : null;
 
   const r = await run(IO, {
     kind: c.kind, dir, program: found.path, args: client.args, script: script.text, path: v.envPath,

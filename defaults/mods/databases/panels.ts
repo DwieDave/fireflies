@@ -4,7 +4,7 @@
 // click target (a click picks, a double click opens, a right click its menu);
 // the cursor's row stays in view.
 
-import { div } from "gpui-kit";
+import { div, svg } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { ScrollHandle } from "gpui-base";
@@ -15,7 +15,7 @@ import { where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
 import type { PanelId, StructTab, TablesTab } from "./state.ts";
 import { PANEL_KEY, schemaWord } from "./state.ts";
-import { band, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "./kit.ts";
+import { ART, band, empty, groupRule, kindBadge, lock, panel, pip, titleTabs } from "./kit.ts";
 import { connList } from "./conns.ts";
 import { cellAt, prettyValue } from "./grid.ts";
 import { shownGrid } from "./act-grid.ts";
@@ -83,9 +83,20 @@ function connPip(t: Theme, v: DbView, c: Conn): Element {
   return pip(v.catalog.error ? t.blocked : t.done);
 }
 
+/** A cluster-secret connection's mark: the secret it reads its password from (red when the read failed). */
+function secretMark(t: Theme, v: DbView, c: Conn, name: string): Element {
+  const read = v.sourced.get(c.id);
+
+  const color = read && !read.ok ? t.blocked : t.ansi6;
+
+  return h_flex().flex_shrink(2).min_w(0).max_w(180).gap(4).items_center()
+    .child(svg(`${ART}/shield.svg`).size(9).flex_none().text_color(color)).child(text(t, name, color).min_w(0));
+}
+
 function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Element {
   const parts = [
     connPip(t, v, c), kindBadge(t, c.kind), text(t, c.name, v.connAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
+    ...(c.secret === "kubernetes" && c.source ? [secretMark(t, v, c, c.source.name)] : []),
     div().flex_1(), ...(c.readonly ? [lock(t.ansi3)] : []), text(t, where(c, home()), t.dim).flex_shrink(1).min_w(0).max_w(220),
   ];
 

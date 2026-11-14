@@ -256,6 +256,12 @@ function passwordPanel(t: Theme, v: DbView): Element {
 
   return centered("db-password", v_flex().id("db-password-box").w(Math.min(420, v.size.width - 40)).bg(t.background).border(1).border_color(t.accent).p(14).gap(10)
     .child(div().text_color(t.foreground).child(`Password for ${c?.name ?? "the connection"}`))
+    .map((el) => {
+      // Asked because a cluster's secret couldn't be read (or was refused): why, in words.
+      const read = c ? v.sourced.get(c.id) : undefined;
+
+      return read && !read.ok ? el.child(div().id("db-pw-why").text_size(10).text_color(t.blocked).child(read.text)) : el;
+    })
     .child(div().border(1).border_color(t.accent).px(8).py(4).child(Input.new(pw.input).text_size(12).text_color(t.foreground)))
     .child(div().text_size(10).text_color(t.dim).child(c?.secret === "keychain" ? "kept in the system keychain" : "kept in this window's memory until it closes; never written anywhere"))
     .child(h_flex().gap(8).justify_end()

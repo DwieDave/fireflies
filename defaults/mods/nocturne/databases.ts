@@ -6,10 +6,13 @@
 //
 // Another mod hands it a connection (the contract in docs and briefs:
 // procs3's ports, the Kubernetes mod's port-forwards, the files pane's *.db):
-//   nocturne.databases:{"kind": …, "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?, "readonly"?, "from"?}
+//   nocturne.databases:{"kind": …, "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?, "readonly"?, "from"?, "secret"?}
 // opens the window on it, or gives it to an open window (databases.connect);
 // with "as": "pane" | "tab" it opens there instead (inpane.ts). No secret
-// travels: the window asks for the password or takes it from the keychain.
+// travels: the window asks for the password or takes it from the keychain,
+// or reads it itself from the cluster's secret that "secret" names
+// ({"from": "kubernetes", "context", "namespace", "name", "key", "userKey"?,
+// "databaseKey"?, "kubectl"?}: the databases mod's kube.ts checks and reads it).
 
 import { openOverlay, closeOverlay, shared, setShared, run } from "herdr";
 import { isBoolean, isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
@@ -20,10 +23,15 @@ import { here } from "./panels.ts";
 const WINDOW = sharedKey("databases.window", nullable(object({ id: isString }, { beat: isNumber })));
 const FRESH = 10000;
 
+/** Where a cluster keeps the password (the databases mod's kube.ts guard, copied: a place, never a value). */
+const isKubeSource = object({ from: literal("kubernetes"), context: isString, namespace: isString, name: isString, key: isString }, {
+  userKey: isString, databaseKey: isString, kubectl: isString,
+});
+
 /** A connection another mod sends (the databases mod's own guard, copied: no secret in it). */
 export const isConnectArgs = object({ kind: literal("postgres", "mysql", "sqlite", "libsql") }, {
   name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
-  as: literal("pane", "tab", "window"),
+  secret: isKubeSource, as: literal("pane", "tab", "window"),
 });
 
 export type ConnectArgs = Guarded<typeof isConnectArgs>;

@@ -5,6 +5,8 @@
 
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, object } from "./guard.ts";
+import type { KubeSource } from "./kube.ts";
+import { isKubeSource } from "./kube.ts";
 
 /** The kinds of database the window speaks. */
 export const isKind = literal("postgres", "mysql", "sqlite", "libsql");
@@ -17,8 +19,9 @@ export const KINDS: readonly Kind[] = ["postgres", "mysql", "sqlite", "libsql"];
  *  keychain  the system keychain's item (secrets.ts), read when it runs
  *  ask       asked when it connects, kept in memory while the window is open
  *  pgpass    the client's own file (~/.pgpass, ~/.my.cnf), read by the client
+ *  kubernetes  a cluster's secret (`source`, kube.ts), read with kubectl at each connect into memory
  *  none      it has none (a SQLite file, a local server that trusts its socket) */
-export const isSecret = literal("keychain", "ask", "pgpass", "none");
+export const isSecret = literal("keychain", "ask", "pgpass", "kubernetes", "none");
 
 export type Secret = Guarded<typeof isSecret>;
 
@@ -30,6 +33,7 @@ export type Origin = "saved" | "found" | "sent";
  *  held in memory): no secret in any field. */
 export const isConnJson = object({ id: isString, name: isString, kind: isKind }, {
   host: isString, port: isNumber, user: isString, database: isString, path: isString, url: isString, readonly: isBoolean, secret: isSecret,
+  source: isKubeSource,
 });
 
 export type ConnJson = Guarded<typeof isConnJson>;
@@ -49,6 +53,8 @@ export interface Conn {
   readonly url?: string;
   readonly readonly: boolean;
   readonly secret: Secret;
+  /** Where a `kubernetes` one's password is (never the password). */
+  readonly source?: KubeSource;
   readonly origin: Origin;
   /** Where a found or sent one came from, in words (".env · DATABASE_URL", "port :5432 (postgres in t3)"). */
   readonly from?: string;
@@ -59,7 +65,10 @@ export type ConnDraft = { -readonly [K in keyof Conn]: Conn[K] };
 
 /** A connection from its kept JSON (a saved one). */
 export function connOf(j: ConnJson): Conn {
-  return { ...j, readonly: j.readonly ?? false, secret: j.secret ?? (j.kind === "sqlite" ? "none" : "keychain"), origin: "saved" };
+  const secret = j.secret ?? (j.kind === "sqlite" ? "none" : "keychain");
+
+  // A cluster's secret without its source (an edited file): asked instead.
+  return { ...j, readonly: j.readonly ?? false, secret: secret === "kubernetes" && !j.source ? "ask" : secret, origin: "saved" };
 }
 
 /** What connections.json keeps of a connection: the fields, never its origin's words or a secret. */

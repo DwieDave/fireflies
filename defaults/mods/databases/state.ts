@@ -9,6 +9,7 @@ import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
 import type { Kind } from "./kinds.ts";
 import { isKind } from "./kinds.ts";
+import { isKubeSource } from "./kube.ts";
 import type { Browse, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
@@ -18,9 +19,10 @@ import type { SaveStatement } from "./save-sql.ts";
 export const MOD = "databases";
 
 /** What another mod sends to open a connection here (databases.connect, nocturne.databases:{…}):
- *  never a secret; `from` says who sent it. */
+ *  never a secret; `from` says who sent it; `secret` where a cluster keeps the password (kube.ts). */
 export const isConnectArgs = object({ kind: isKind }, {
   name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
+  secret: isKubeSource,
 });
 
 export type ConnectArgs = Guarded<typeof isConnectArgs>;
@@ -152,6 +154,12 @@ export interface PasswordAsk {
   readonly conn: string;
   readonly input: InputState;
   readonly done: () => void;
+}
+
+/** How a cluster-secret connection's password read went, in words for its row and the ask. */
+export interface Sourced {
+  readonly ok: boolean;
+  readonly text: string;
 }
 
 /** A line of the Log panel: a statement run in this window (never kept on disk: that's the history). */
