@@ -3,7 +3,8 @@
 // shows text size (− / +, the % resets), float, split, even out (▦, with
 // more than one pane: equalize.ts), gridify (with more than two:
 // gridify.ts), park (pane.park, while another pane stays in place), zoom
-// and close; a
+// and close; a middle click on the bar closes the pane as close does (its
+// asks stay; not on a button); a
 // right-click opens the pane's menu (menu.ts: rename, split, zoom, move to
 // another tab or a new one, close). Props from the app: { pane, terminal }.
 // A terminal pane goes by the name a person gave it (kit.ts givenName), else
@@ -155,6 +156,42 @@ function viewerName(p: HeaderPane): string | null {
 
 const CHROME = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
+/** Where a middle press on a bar is kept until it's let go. */
+export interface MiddleHeld {
+  middle: boolean;
+}
+
+/** Stops a middle click here (a header's buttons: theirs is not the bar's). */
+const keepMiddle = (el: Element): Element => el.on_mouse_down("middle", (_e, cx) => cx.stop_propagation()).on_mouse_up("middle", (_e, cx) => cx.stop_propagation());
+
+/**
+ * A middle click on `el` closes `pane` the way the header's close control
+ * does (`pane.close` without `confirmed`, so every ask stays: a working agent,
+ * a program in front of the shell, unsaved work). It closes on the release,
+ * and only when the press was on `el` too (`held`): a slip can be dragged off
+ * before letting go.
+ */
+export function middleCloses(el: Element, pane: string | null, held: MiddleHeld): Element {
+  if (!pane) return el;
+
+  return el
+    .on_mouse_down("middle", (_e, cx) => {
+      cx.stop_propagation();
+      held.middle = true;
+    })
+    .on_mouse_down_out(() => {
+      held.middle = false;
+    })
+    .on_mouse_up("middle", (_e, cx) => {
+      cx.stop_propagation();
+
+      if (!held.middle) return;
+
+      held.middle = false;
+      run("pane.close", { pane });
+    });
+}
+
 /** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard). */
 export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false): void {
   // 260: its rows' names beside the longest keys ("Move right" by cmd-alt-shift-]).
@@ -230,6 +267,8 @@ const isHeaderProps = object({}, { pane: isString });
 
 export default class Header {
   hovered = false;
+  /** A middle press on the bar, until it's let go (middleCloses). */
+  held: MiddleHeld = { middle: false };
   width = 1000; // the header's, as last drawn
   git: GitState | null = null;
   naming = false;
@@ -364,11 +403,12 @@ export default class Header {
     return mark(t, p);
   }
 
-  /** The row every header draws on: click focuses the pane, hover shows its buttons.
+  /** The row every header draws on: click focuses the pane, hover shows its
+   *  buttons, a middle click closes it (middleCloses; not while it's being named).
    *  Name, folder and branch truncate so a narrow pane still has
    *  room for every button: close, the last, used to be pushed off the edge. */
   frame(t: Theme, p: HeaderPane): Element {
-    return h_flex().id(`head-${p.pane ?? ""}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
+    return middleCloses(h_flex().id(`head-${p.pane ?? ""}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
       .text_size(11)
       .on_size_change((size: Size, cx: Context) => {
         if (Math.abs(size.width - this.width) >= 1) {
@@ -384,7 +424,7 @@ export default class Header {
         cx.stop_propagation();
         this.menu(p);
       })
-      .on_click(() => run("pane.focus", { pane: p.pane }));
+      .on_click(() => run("pane.focus", { pane: p.pane })), this.naming ? null : p.pane, this.held);
   }
 
   /** The pane menu (menu.ts), as on a right-click: rename, split, zoom, even out, move, close. */
@@ -405,6 +445,7 @@ export default class Header {
       .hover((s) => s.text_color(t.foreground))
       .when(Boolean(c.tip) && !c.text, (b) => b.tooltip(c.tip ?? ""))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .map(keepMiddle)
       .on_click((_e, cx) => {
         cx.stop_propagation();
         c.go();

@@ -1673,6 +1673,14 @@ you, done; idle muted). While it works its wings beat a little and slowly
 (only while the window is in front and more motion is fine); it blinks while
 it needs you; done and resting hold still. A plain terminal's tab and header
 keep its plain mark, without wings.
+Nocturne's pane header by mouse: a click focuses the pane, a right-click opens
+its menu, a middle click on the bar (its mark, name, folder or band; not its
+buttons) closes the pane as its close button does (`pane.close` without
+`confirmed`, so the app still asks about a working agent, a program in front
+of the shell or unsaved work). It closes on the release, and only when the
+press was on the bar too: a slip can be dragged off first. A parked pane's chip
+closes the same way, and a tab on the strip on a middle press (`tab.close`,
+also asking).
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
