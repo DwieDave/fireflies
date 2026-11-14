@@ -39,6 +39,7 @@ import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
+import { launchers, launcherIcon } from "./launchers.ts";
 
 /** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {
@@ -55,7 +56,7 @@ export interface HeaderPane {
   readonly tab?: string;
 }
 
-// Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
+// Mod panes: their name and mark (a workspace-chrome icon's name, or an svg path).
 const MODS: ReadonlyMap<string, readonly [string, string]> = new Map([
   ["agent-graph", ["Agents", "layers"]], ["browser", ["Web", "monitor"]],
   ["diff", ["Diff", "git-compare"]], ["git", ["Git", "git-compare"]], ["file-tree", ["Files", "files"]],
@@ -63,7 +64,26 @@ const MODS: ReadonlyMap<string, readonly [string, string]> = new Map([
   ["markdown", ["Markdown", "file-text"]], ["preview", ["Preview", "eye"]],
   ["editor", ["Editor", "file-text"]],
   ["nocturne", ["Worktrees", "git-branch"]],
+  ["databases", ["Databases", `${ART}/database.svg`]],
 ]);
+
+/** A mod pane's name and mark ([name, icon]): Nocturne's own (MODS), else
+ *  what an optional mod's launcher declares in its mod.json (launchers.ts:
+ *  its title and icon), else null (the bare mod name and the terminal mark). */
+export function modLook(mod: string | null | undefined): readonly [string, string] | null {
+  if (!mod) return null;
+
+  const own = MODS.get(mod);
+
+  if (own) return own;
+
+  const l = launchers().find((x) => x.mod === mod);
+
+  return l ? [l.title, launcherIcon(l)] : null;
+}
+
+/** An icon as panels name it (a workspace-chrome name, or an svg path) as svg() takes it. */
+export const iconPath = (icon: string): string => (icon.includes("/") ? icon : `mods/workspace-chrome/${icon}.svg`);
 
 // Header widths (px) at which parts give way.
 const FOLDER_MIN = 260;
@@ -104,16 +124,16 @@ export function markPath(p: Marked | null | undefined): string {
 
   return logo ? `${ART}/logo-${logo}.svg`
     : p?.program?.agent ? `${ART}/logo-agent.svg`
-    : `mods/workspace-chrome/${MODS.get(p?.mod ?? "")?.[1] ?? PROGRAMS.get(p?.program?.key ?? "") ?? "terminal"}.svg`;
+    : iconPath(modLook(p?.mod)?.[1] ?? PROGRAMS.get(p?.program?.key ?? "") ?? "terminal");
 }
 
-/** A mod pane's kind in a word ("web", "editor", "files"), null for a terminal. */
-export const modKind = (p: Marked | null | undefined): string | null => (p?.mod ? (MODS.get(p.mod)?.[0] ?? p.mod).toLowerCase() : null);
+/** A mod pane's kind in a word ("web", "editor", "files", "databases"), null for a terminal. */
+export const modKind = (p: Marked | null | undefined): string | null => (p?.mod ? (modLook(p.mod)?.[0] ?? p.mod).toLowerCase() : null);
 
 /** What a pane is called: the name a person gave its terminal, its mod's
  *  name, its agent's or shell's, its title, its program's. */
 export function paneName(p: HeaderPane): string {
-  return givenName(p.terminal) ?? viewerName(p) ?? MODS.get(p.mod ?? "")?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
+  return givenName(p.terminal) ?? viewerName(p) ?? modLook(p.mod)?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
 }
 
 /** A viewer's props, as far as its name goes: its file or folder, and its slot. */

@@ -2331,7 +2331,10 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
   (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
   switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
-  mod's folder, tinted like the other tiles. Nocturne reads every `mods/*/mod.json`
+  mod's folder, tinted like the other tiles (draw it in `currentColor`, to read at
+  11 px). `title` and `icon` also name and mark the mod's own panes: the pane's
+  header, its parked chip, its tab and its tile on the shelf (as Databases' and
+  every shipped mod's). Nocturne reads every `mods/*/mod.json`
   at its start and whenever "+ new" or the palette opens.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then

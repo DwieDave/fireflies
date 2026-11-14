@@ -6,8 +6,9 @@
 //   "launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
 //                 "window": true, "pane": true }
 //
-//   title    the tile's and the palette's name
-//   icon     an svg in the mod's folder (tinted as the tiles are), else a stock one
+//   title    the tile's and the palette's name, and its panes' (header.ts modLook)
+//   icon     an svg in the mod's folder (tinted as the tiles are), else a stock one;
+//            also the mark of its panes, their tabs and their tiles on the shelf
 //   words    what the palette also finds it by
 //   window   it opens as its mod.json overlay (`mod.open`): the tile's pick and
 //            the palette's plain entry toggle it
@@ -67,10 +68,14 @@ export async function readLaunchers(): Promise<void> {
 /** A new pane's or tab's slot (the mod finds its own pane by it). */
 const slot = (): string => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
+/** A launcher's icon: the svg in its mod's folder, else the stock "layers"
+ *  (as panels name icons). Also its mod's panes', tabs' and tiles' mark (header.ts modLook). */
+export const launcherIcon = (l: Pick<Launcher, "mod" | "icon">): string => (l.icon && plainName(l.icon) ? `mods/${l.mod}/${l.icon}` : "layers");
+
 /** The launchers as panels (panels.ts lists them after Nocturne's own). */
 export function launcherPanels(): Panel[] {
   return launchers().map((l): Panel => {
-    const icon = l.icon && plainName(l.icon) ? `mods/${l.mod}/${l.icon}` : "layers";
+    const icon = launcherIcon(l);
     const inPane = () => run("pane.split", { direction: "auto", mod: l.mod, props: { slot: slot() } });
     const inTab = () => run("tab.new", { name: l.title.toLowerCase(), mod: l.mod, props: { slot: slot() } });
     const words = `${l.words ?? ""} ${l.mod}`.trim();
