@@ -219,11 +219,32 @@ rows and structure), `databases.cancel`, and any key's action by name
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
 0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
+A password in a Kubernetes secret: a Postgres or MySQL connection to a server
+on this machine (`host` 127.0.0.1, localhost or ::1, as a port-forward is)
+may name where a cluster keeps its password, never the password:
+`"secret": {"from": "kubernetes", "context": "<kubeconfig context>",
+"namespace": "<namespace>", "name": "<secret>", "key": "<the password's
+key>", "userKey"?: "<the user name's key>", "databaseKey"?: "<the database's
+key>", "kubectl"?: "kubectl" | "/abs/path/to/kubectl"}`. The window checks
+the names (a namespace and a secret's name as Kubernetes allows them, keys of
+`-._a-zA-Z0-9`, kubectl by that name only; a bad one refuses the request) and
+at every connect runs the one read it builds itself, `kubectl
+--context=<context> --namespace=<namespace> get secret <name>
+--request-timeout=10s -o go-template=…` (each named key's base64 on a line),
+decoded into its memory; a user or database read there fills `user` /
+`database`. The password then goes the way every password goes (the client's
+environment or a 0600 file), never an argument, shared state, props, the log,
+the history or a file. The connection's row and head say where it came from
+("password from secret lantern-db-auth · password (nightjar-dev/lantern),
+read with kubectl"); a failed read (no access, the secret gone, kubectl
+missing) or a password the server refuses says why and asks for it. Saved
+(`s`), it keeps the secret's place and reads again at each connect; a
+password typed in its form moves it to the keychain.
 The keychain is macOS's; elsewhere a typed password is asked each time.
 
 **Window mods in panes.** Git, GitHub, the script runner, the processes deck and Databases open as
