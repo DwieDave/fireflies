@@ -12,12 +12,14 @@
 // target, right-click opens a row's menu, the wheel scrolls a grid.
 // Nothing runs on open; a write asks once, a destructive statement twice;
 // read-only connections refuse writes (safety.ts). Secrets never leave the
-// keychain or this window's memory (runner.ts, secrets.ts).
+// keychain or this window's memory (runner.ts, secrets.ts); one that lives in
+// a cluster's secret is read from there at each connect (kube.ts).
 //
 // A window (props.overlay, opened by nocturne.databases) or a pane (props
 // .slot: pane.split { mod: "databases", props: { slot, folder, on } }); ctrl-t
 // moves it between the two (opening.ts). Props: { folder?, on?, connect? }:
-// `connect` (another mod's databases.connect) connects at once, not saved.
+// `connect` (another mod's databases.connect) connects at once, not saved; its
+// `secret` names where a cluster keeps the password (never the password).
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Size } from "gpui-kit";
@@ -31,7 +33,7 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Review, Rows, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
@@ -78,6 +80,8 @@ export default class Databases extends View {
   active: Conn | null = null;
   /** Passwords and tokens asked for or found: this window's memory only. */
   secrets = new Map<string, string>();
+  /** How each cluster-secret connection's last read went, in words (never the value). */
+  sourced = new Map<string, Sourced>();
   clients = new Map<Kind, ClientFound>();
   envPath: string | null = null;
   /** The private folder (0700) runs hand files over in. */
@@ -191,6 +195,7 @@ export default class Databases extends View {
     if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
 
     this.secrets.clear();
+    this.sourced.clear();
     await saveQueries(this);
 
     if (this.dir) await removeDir(IO, this.dir);

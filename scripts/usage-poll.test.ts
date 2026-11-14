@@ -28,6 +28,8 @@ async function machine(_cmd: string, args: string[]) {
     if (op === "lock") { if (locks.has(p)) return { code: 1, stdout: "", stderr: "" }; locks.add(p); return { code: 0, stdout: "", stderr: "" }; }
     if (op === "unlock") { locks.delete(p); return { code: 0, stdout: "", stderr: "" }; }
   }
+  // The scratch check alone (limits.ts scratchApp): no request, and this isn't a scratch app.
+  if (!script.includes("https://")) return { code: 0, stdout: "", stderr: "" };
   const p = script.includes("anthropic.com") ? "claude" : "codex";
   requests.push({ p, t: Date.now() - T0 });
   await tick(); await tick();

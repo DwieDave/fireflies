@@ -3,17 +3,20 @@
 // password asked first where it must be), finding connections in the folder
 // (discover.ts: .env files, direnv, SQLite files), testing, saving a found one
 // (its password into the keychain) and removing one (its keychain item and
-// history too).
+// history too). A connection whose password is a cluster's secret (kube.ts)
+// reads it at each connect, into memory; a failed read says why and asks.
 
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { exec, readTextFile } from "herdr";
-import type { Conn } from "./kinds.ts";
+import type { Conn, ConnDraft } from "./kinds.ts";
 import { newId, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import { ENV_FILES, FIND_SCRIPT, foundFile, foundInVars, mergeFound, parseEnvFile } from "./discover.ts";
 import { projectEnv } from "./envrc.ts";
 import { deleteSecret, hasSecret, saveSecret } from "./secrets.ts";
+import type { KubeSource } from "./kube.ts";
+import { kubeProblem, kubeWords, readKube } from "./kube.ts";
 import { clearHistory, readHistory, writeConnections } from "./store.ts";
 import { IO, dataHome, loadTables, needsPassword, runOn } from "./session.ts";
 import type { ConnectArgs } from "./state.ts";
@@ -76,10 +79,22 @@ function setFound(v: DbView, list: readonly Found[]): void {
   if (again >= 0) v.connAt = again;
 }
 
-/** A connection another mod sent (databases.connect): listed and connected, not saved. */
+/** A connection another mod sent (databases.connect): listed and connected, not saved. A
+ *  cluster's secret named in it is checked first (kube.ts): a bad one refuses the request. */
 export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
-  const base: Conn = { id: `sent:${a.kind}:${a.host ?? ""}:${a.port ?? ""}:${a.path ?? a.url ?? ""}:${a.database ?? ""}`, name: a.name ?? a.database ?? a.path ?? a.host ?? a.kind, kind: a.kind, readonly: a.readonly ?? false, secret: a.kind === "sqlite" ? "none" : "ask", origin: "sent", from: a.from ?? "another mod" };
-  const conn: Conn = { ...base, ...pick(a) };
+  const problem = a.secret ? kubeProblem(a.secret, a.kind, a.host) : null;
+
+  if (problem) {
+    v.say(`databases.connect: ${problem}`, "failed");
+
+    return;
+  }
+
+  const secret = a.secret ? "kubernetes" : a.kind === "sqlite" ? "none" : "ask";
+  const base: Conn = { id: `sent:${a.kind}:${a.host ?? ""}:${a.port ?? ""}:${a.path ?? a.url ?? ""}:${a.database ?? ""}`, name: a.name ?? a.database ?? a.path ?? a.host ?? a.kind, kind: a.kind, readonly: a.readonly ?? false, secret, origin: "sent", from: a.from ?? "another mod" };
+  const conn: ConnDraft = { ...base, ...pick(a) };
+
+  if (a.secret) conn.source = a.secret;
 
   v.sent = [conn, ...v.sent.filter((c) => c.id !== conn.id)];
   v.connAt = v.saved.length;
@@ -109,8 +124,9 @@ function pick(a: ConnectArgs): Place {
   return out;
 }
 
-/** Connects: the password first where it must be asked, then the tables. A local server that
- *  trusts its socket needs none, so a sent one tries without and asks when refused. */
+/** Connects: the password first where it must be asked (or read from a cluster's secret), then
+ *  the tables. A local server that trusts its socket needs none, so a sent one tries without and
+ *  asks when refused. */
 export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
   if (counted(v.edits).cells) {
     beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
@@ -118,12 +134,71 @@ export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
     return Promise.resolve();
   }
 
+  if (c.secret === "kubernetes" && c.source) return readThenOpen(v, c, c.source, cx);
+
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
     v.askPassword(c, false, cx, () => void connect(v, c, cx));
 
     return Promise.resolve();
   }
 
+  return open(v, c, cx);
+}
+
+/** The connection with what the read gave that isn't secret (its user, its database), in its list. */
+function placed(v: DbView, c: Conn, user: string | undefined, database: string | undefined): Conn {
+  if ((user === undefined || user === c.user) && (database === undefined || database === c.database)) return c;
+
+  const next: ConnDraft = { ...c };
+
+  if (user !== undefined) next.user = user;
+
+  if (database !== undefined) next.database = database;
+
+  const swap = (list: Conn[]): Conn[] => list.map((x) => (x.id === c.id ? next : x));
+
+  v.saved = swap(v.saved);
+  v.sent = swap(v.sent);
+
+  return next;
+}
+
+/** Reads the password from the cluster's secret (again at every connect), then connects; a failed
+ *  read says why and asks for it instead. Nothing of the value is said, logged or written. */
+export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Context): Promise<void> {
+  v.active = c;
+  v.catalog = { tables: [], error: null, busy: true };
+  v.say(`reading the password from secret ${s.name}…`, "working");
+  cx.notify();
+
+  const r = await readKube(exec, s);
+
+  if (v.active !== c) return;
+
+  if ("error" in r) {
+    const why = `couldn't read secret ${s.name} · ${s.key}: ${r.error}`;
+
+    v.secrets.delete(c.id);
+    v.sourced.set(c.id, { ok: false, text: why });
+    v.catalog = { tables: [], error: null, busy: false };
+    v.say(`${why} · type the password`, "failed");
+    v.askPassword(c, false, cx, () => void open(v, c, cx));
+    cx.notify();
+
+    return;
+  }
+
+  const next = placed(v, c, r.user, r.database);
+
+  v.secrets.set(next.id, r.password);
+  v.sourced.set(next.id, { ok: true, text: `password from ${kubeWords(s)}` });
+  v.say(`password from ${kubeWords(s)}`, "done");
+
+  return open(v, next, cx);
+}
+
+/** Connects with what the window has (the password in memory, the keychain's, none). */
+function open(v: DbView, c: Conn, cx: Context): Promise<void> {
   v.active = c;
   v.catalog = { tables: [], error: null, busy: true };
   v.struct = { table: null, data: null, busy: false, error: null };
@@ -136,8 +211,15 @@ export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
   const tables = loadTables(v, cx).then(() => {
     // A sent one refused without a password: ask for it, then again.
     const e = v.catalog.error ?? "";
+    const refused = v.active === c && /password|authentication/i.test(e);
 
-    if (c.origin === "sent" && v.active === c && /password|authentication/i.test(e) && !v.secrets.has(c.id)) v.askPassword(c, false, cx, () => void connect(v, c, cx));
+    if (refused && c.origin === "sent" && !v.secrets.has(c.id)) v.askPassword(c, false, cx, () => void connect(v, c, cx));
+
+    // A secret's password the server refused (the wrong secret picked, rotated since): asked once.
+    if (refused && c.secret === "kubernetes" && c.source && v.sourced.get(c.id)?.ok) {
+      v.sourced.set(c.id, { ok: false, text: `the server refused the password from secret ${c.source.name} · ${c.source.key}` });
+      v.askPassword(c, false, cx, () => void open(v, c, cx));
+    }
   });
 
   if (c.origin === "saved") void readHistory(IO, dataHome(), c.id).then((h) => {
@@ -154,6 +236,19 @@ export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
 
 /** Tests a connection: one `select 1`, said in the bar. */
 export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
+  if (c.secret === "kubernetes" && c.source) {
+    const r = await readKube(exec, c.source);
+
+    if ("error" in r) {
+      v.note = noteOf(`${c.name}: couldn't read secret ${c.source.name}: ${r.error}`, "failed");
+      cx.notify();
+
+      return;
+    }
+
+    v.secrets.set(c.id, r.password);
+  }
+
   if (needsPassword(v, c)) {
     v.askPassword(c, false, cx, () => void test(v, c, cx));
 
@@ -176,10 +271,18 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
   const id = newId(c.kind);
   const secret = v.secrets.get(c.id) ?? null;
-  const kept: Conn = { ...c, id, origin: "saved", secret: secret ? "keychain" : c.secret === "ask" ? "ask" : "none" };
+  const kube = c.secret === "kubernetes" && c.source ? c.source : null;
+  const kept: Conn = { ...c, id, origin: "saved", secret: kube ? "kubernetes" : secret ? "keychain" : c.secret === "ask" ? "ask" : "none" };
   const dir = v.dir;
 
-  if (secret && dir) {
+  // A cluster's secret is saved as where it is (read again at each connect), never its value.
+  if (kube) {
+    if (secret) v.secrets.set(id, secret);
+
+    const read = v.sourced.get(c.id);
+
+    if (read) v.sourced.set(id, read);
+  } else if (secret && dir) {
     const failed = await saveSecret(IO, dir, id, `Fireflies database ${c.name}`, secret);
 
     if (failed) {
@@ -197,7 +300,7 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
   if (v.active?.id === c.id) v.active = kept;
 
   v.connAt = v.saved.length - 1;
-  v.say(`saved ${c.name}${secret ? " · its password is in the keychain" : ""}`, "done");
+  v.say(`saved ${c.name}${kube ? ` · its password is read from secret ${kube.name} at each connect` : secret ? " · its password is in the keychain" : ""}`, "done");
   cx.notify();
 }
 

@@ -87,6 +87,10 @@ test:
     bun test scripts/nocturne-palette.test.ts
     # Optional mods in "+ new" and the palette: each installed mod's mod.json launcher, nothing named.
     bun test scripts/nocturne-launchers.test.ts
+    # Mod panes' marks and names (Databases, a launcher's mod) in the header, the parked chip, the tab and the shelf's tile.
+    bun test scripts/nocturne-modmarks.test.ts
+    # A middle click on a pane's header bar or parked chip closes it as its close button does (asks kept); not from a button.
+    bun test scripts/nocturne-middle-close.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
     bun test scripts/palette-commands.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.
@@ -215,6 +219,8 @@ test:
     bun test scripts/databases-edit.test.ts
     # Editing cells through the window's keys and handlers on a throwaway SQLite file: c / a double click, enter, esc, tab, ctrl-n, N, u, U, w and y; changes kept through pages and sorting; the asks before leaving; q types while editing.
     bun test scripts/databases-editview.test.ts
+    # A password in a Kubernetes secret: the names checked, one fixed kubectl read into memory (never on an argv, in shared state or a file), where it came from shown, the ask after a failed read or a refusal, read again at each connect, the source saved.
+    bun test scripts/databases-k8s.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

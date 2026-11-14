@@ -219,11 +219,32 @@ rows and structure), `databases.cancel`, and any key's action by name
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
 0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
+A password in a Kubernetes secret: a Postgres or MySQL connection to a server
+on this machine (`host` 127.0.0.1, localhost or ::1, as a port-forward is)
+may name where a cluster keeps its password, never the password:
+`"secret": {"from": "kubernetes", "context": "<kubeconfig context>",
+"namespace": "<namespace>", "name": "<secret>", "key": "<the password's
+key>", "userKey"?: "<the user name's key>", "databaseKey"?: "<the database's
+key>", "kubectl"?: "kubectl" | "/abs/path/to/kubectl"}`. The window checks
+the names (a namespace and a secret's name as Kubernetes allows them, keys of
+`-._a-zA-Z0-9`, kubectl by that name only; a bad one refuses the request) and
+at every connect runs the one read it builds itself, `kubectl
+--context=<context> --namespace=<namespace> get secret <name>
+--request-timeout=10s -o go-template=…` (each named key's base64 on a line),
+decoded into its memory; a user or database read there fills `user` /
+`database`. The password then goes the way every password goes (the client's
+environment or a 0600 file), never an argument, shared state, props, the log,
+the history or a file. The connection's row and head say where it came from
+("password from secret lantern-db-auth · password (nightjar-dev/lantern),
+read with kubectl"); a failed read (no access, the secret gone, kubectl
+missing) or a password the server refuses says why and asks for it. Saved
+(`s`), it keeps the secret's place and reads again at each connect; a
+password typed in its form moves it to the keychain.
 The keychain is macOS's; elsewhere a typed password is asked each time.
 
 **Window mods in panes.** Git, GitHub, the script runner, the processes deck and Databases open as
@@ -1540,11 +1561,12 @@ palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
 firefly up or down in the jar, a tile left or right on the shelf.
 `nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
-place of the core's `agent.next` / `agent.prev`) walk the agents in the
-sidebar's order, then on through every tile on the shelf in its order (web
-pages, editors, files, shells; each pinned web tab its own stop), then back to
-the first agent, and the other way round; a tile is gone to as a click on it
-goes. The dock
+place of the core's `agent.next` / `agent.prev`) walk the sidebar top to
+bottom as it's drawn, open or folded: the pinned agents in the jar, every tile
+on the jar's shelf in its order (web pages, editors, files, shells; each pinned
+web tab its own stop), then the other agents under the jar (awake ones, then
+those done or idle), then back to the first, and the other way round; a tile is gone to as a click on it goes. The
+sidebar's own j / k walk its controls in the same order. The dock
 (dock.ts) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
@@ -1655,6 +1677,14 @@ you, done; idle muted). While it works its wings beat a little and slowly
 (only while the window is in front and more motion is fine); it blinks while
 it needs you; done and resting hold still. A plain terminal's tab and header
 keep its plain mark, without wings.
+Nocturne's pane header by mouse: a click focuses the pane, a right-click opens
+its menu, a middle click on the bar (its mark, name, folder or band; not its
+buttons) closes the pane as its close button does (`pane.close` without
+`confirmed`, so the app still asks about a working agent, a program in front
+of the shell or unsaved work). It closes on the release, and only when the
+press was on the bar too: a slip can be dragged off first. A parked pane's chip
+closes the same way, and a tab on the strip on a middle press (`tab.close`,
+also asking).
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
@@ -2343,11 +2373,17 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"launcher"` in `mod.json` puts a mod Nocturne doesn't ship (one installed from
   its own repository) into "+ new" and the palette, nothing in Nocturne naming it:
   `"launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
-  "window": true, "pane": true }`. `window`: it opens as its `mod.json` overlay
+  "window": true, "pane": true, "key": "k" }`. `key`: its tile's letter in
+  "+ new" (one letter or digit; Nocturne's own tiles' letters, q and 1-9 stay
+  theirs, and of two launchers asking the same the first by folder name gets
+  it). `window`: it opens as its `mod.json` overlay
   (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
   (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
   switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
-  mod's folder, tinted like the other tiles. Nocturne reads every `mods/*/mod.json`
+  mod's folder, tinted like the other tiles (draw it in `currentColor`, to read at
+  11 px). `title` and `icon` also name and mark the mod's own panes: the pane's
+  header, its parked chip, its tab and its tile on the shelf (as Databases' and
+  every shipped mod's). Nocturne reads every `mods/*/mod.json`
   at its start and whenever "+ new" or the palette opens.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then

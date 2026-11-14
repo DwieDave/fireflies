@@ -67,7 +67,9 @@ To show them a database (`nocturne.databases`, or `mod.open
 '{"name":"databases"}'` in any layout): open it on a connection with
 `herdr-app do 'nocturne.databases:{"kind":"sqlite","path":"/abs/app.db"}'`
 (`"kind":"postgres","host":…,"port":…,"database":…,"user":…`; never a
-password: the window asks for it), then `herdr-app do
+password: the window asks for it, or, for a port-forward on 127.0.0.1, reads
+it itself from the Kubernetes secret `"secret":{"from":"kubernetes","context":…,"namespace":…,"name":…,"key":…}`
+names: defaults/AGENTS.md has the whole contract), then `herdr-app do
 databases.table:lanterns` shows a table's rows and structure,
 `herdr-app do 'databases.sql:select count(*) from lanterns;'` puts a query in
 a tab (`databases.run` runs it; a write asks the person first, so don't
@@ -143,7 +145,8 @@ a files pane at ~); `herdr-app do nocturne.dock` moves the focused pane there,
 whatever it shows (a terminal, an agent, an editor, a files or web pane; not a
 pane on another machine). There,
 `nocturne.agent-next` / `nocturne.agent-prev` (cmd-] / cmd-[) walk the
-agents in the sidebar's order and then on through the shelf's tiles, wrapping;
+sidebar top to bottom as drawn: the pinned agents in the jar, the shelf's tiles
+at its foot, then the other agents (awake, then done or idle), wrapping;
 the core's `agent.next` / `agent.prev` visit agents only.
 
 For a remote space:

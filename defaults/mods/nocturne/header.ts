@@ -3,7 +3,8 @@
 // shows text size (− / +, the % resets), float, split, even out (▦, with
 // more than one pane: equalize.ts), gridify (with more than two:
 // gridify.ts), park (pane.park, while another pane stays in place), zoom
-// and close; a
+// and close; a middle click on the bar closes the pane as close does (its
+// asks stay; not on a button); a
 // right-click opens the pane's menu (menu.ts: rename, split, zoom, move to
 // another tab or a new one, close). Props from the app: { pane, terminal }.
 // A terminal pane goes by the name a person gave it (kit.ts givenName), else
@@ -39,6 +40,7 @@ import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
+import { launchers, launcherIcon } from "./launchers.ts";
 
 /** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {
@@ -55,7 +57,7 @@ export interface HeaderPane {
   readonly tab?: string;
 }
 
-// Mod panes: their name and mark (mods/workspace-chrome/<icon>.svg).
+// Mod panes: their name and mark (a workspace-chrome icon's name, or an svg path).
 const MODS: ReadonlyMap<string, readonly [string, string]> = new Map([
   ["agent-graph", ["Agents", "layers"]], ["browser", ["Web", "monitor"]],
   ["diff", ["Diff", "git-compare"]], ["git", ["Git", "git-compare"]], ["file-tree", ["Files", "files"]],
@@ -63,7 +65,26 @@ const MODS: ReadonlyMap<string, readonly [string, string]> = new Map([
   ["markdown", ["Markdown", "file-text"]], ["preview", ["Preview", "eye"]],
   ["editor", ["Editor", "file-text"]],
   ["nocturne", ["Worktrees", "git-branch"]],
+  ["databases", ["Databases", `${ART}/database.svg`]],
 ]);
+
+/** A mod pane's name and mark ([name, icon]): Nocturne's own (MODS), else
+ *  what an optional mod's launcher declares in its mod.json (launchers.ts:
+ *  its title and icon), else null (the bare mod name and the terminal mark). */
+export function modLook(mod: string | null | undefined): readonly [string, string] | null {
+  if (!mod) return null;
+
+  const own = MODS.get(mod);
+
+  if (own) return own;
+
+  const l = launchers().find((x) => x.mod === mod);
+
+  return l ? [l.title, launcherIcon(l)] : null;
+}
+
+/** An icon as panels name it (a workspace-chrome name, or an svg path) as svg() takes it. */
+export const iconPath = (icon: string): string => (icon.includes("/") ? icon : `mods/workspace-chrome/${icon}.svg`);
 
 // Header widths (px) at which parts give way.
 const FOLDER_MIN = 260;
@@ -104,16 +125,16 @@ export function markPath(p: Marked | null | undefined): string {
 
   return logo ? `${ART}/logo-${logo}.svg`
     : p?.program?.agent ? `${ART}/logo-agent.svg`
-    : `mods/workspace-chrome/${MODS.get(p?.mod ?? "")?.[1] ?? PROGRAMS.get(p?.program?.key ?? "") ?? "terminal"}.svg`;
+    : iconPath(modLook(p?.mod)?.[1] ?? PROGRAMS.get(p?.program?.key ?? "") ?? "terminal");
 }
 
-/** A mod pane's kind in a word ("web", "editor", "files"), null for a terminal. */
-export const modKind = (p: Marked | null | undefined): string | null => (p?.mod ? (MODS.get(p.mod)?.[0] ?? p.mod).toLowerCase() : null);
+/** A mod pane's kind in a word ("web", "editor", "files", "databases"), null for a terminal. */
+export const modKind = (p: Marked | null | undefined): string | null => (p?.mod ? (modLook(p.mod)?.[0] ?? p.mod).toLowerCase() : null);
 
 /** What a pane is called: the name a person gave its terminal, its mod's
  *  name, its agent's or shell's, its title, its program's. */
 export function paneName(p: HeaderPane): string {
-  return givenName(p.terminal) ?? viewerName(p) ?? MODS.get(p.mod ?? "")?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
+  return givenName(p.terminal) ?? viewerName(p) ?? modLook(p.mod)?.[0] ?? (((p.program?.agent || p.program?.shell) && p.program.name) || p.title || p.program?.name || (p.mod ? p.mod : "shell"));
 }
 
 /** A viewer's props, as far as its name goes: its file or folder, and its slot. */
@@ -134,6 +155,42 @@ function viewerName(p: HeaderPane): string | null {
 }
 
 const CHROME = (n: string) => `mods/workspace-chrome/${n}.svg`;
+
+/** Where a middle press on a bar is kept until it's let go. */
+export interface MiddleHeld {
+  middle: boolean;
+}
+
+/** Stops a middle click here (a header's buttons: theirs is not the bar's). */
+const keepMiddle = (el: Element): Element => el.on_mouse_down("middle", (_e, cx) => cx.stop_propagation()).on_mouse_up("middle", (_e, cx) => cx.stop_propagation());
+
+/**
+ * A middle click on `el` closes `pane` the way the header's close control
+ * does (`pane.close` without `confirmed`, so every ask stays: a working agent,
+ * a program in front of the shell, unsaved work). It closes on the release,
+ * and only when the press was on `el` too (`held`): a slip can be dragged off
+ * before letting go.
+ */
+export function middleCloses(el: Element, pane: string | null, held: MiddleHeld): Element {
+  if (!pane) return el;
+
+  return el
+    .on_mouse_down("middle", (_e, cx) => {
+      cx.stop_propagation();
+      held.middle = true;
+    })
+    .on_mouse_down_out(() => {
+      held.middle = false;
+    })
+    .on_mouse_up("middle", (_e, cx) => {
+      cx.stop_propagation();
+
+      if (!held.middle) return;
+
+      held.middle = false;
+      run("pane.close", { pane });
+    });
+}
 
 /** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard). */
 export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false): void {
@@ -210,6 +267,8 @@ const isHeaderProps = object({}, { pane: isString });
 
 export default class Header {
   hovered = false;
+  /** A middle press on the bar, until it's let go (middleCloses). */
+  held: MiddleHeld = { middle: false };
   width = 1000; // the header's, as last drawn
   git: GitState | null = null;
   naming = false;
@@ -344,11 +403,12 @@ export default class Header {
     return mark(t, p);
   }
 
-  /** The row every header draws on: click focuses the pane, hover shows its buttons.
+  /** The row every header draws on: click focuses the pane, hover shows its
+   *  buttons, a middle click closes it (middleCloses; not while it's being named).
    *  Name, folder and branch truncate so a narrow pane still has
    *  room for every button: close, the last, used to be pushed off the edge. */
   frame(t: Theme, p: HeaderPane): Element {
-    return h_flex().id(`head-${p.pane ?? ""}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
+    return middleCloses(h_flex().id(`head-${p.pane ?? ""}`).size_full().overflow_hidden().px(10).gap(8).items_center().bg(t.background)
       .text_size(11)
       .on_size_change((size: Size, cx: Context) => {
         if (Math.abs(size.width - this.width) >= 1) {
@@ -364,7 +424,7 @@ export default class Header {
         cx.stop_propagation();
         this.menu(p);
       })
-      .on_click(() => run("pane.focus", { pane: p.pane }));
+      .on_click(() => run("pane.focus", { pane: p.pane })), this.naming ? null : p.pane, this.held);
   }
 
   /** The pane menu (menu.ts), as on a right-click: rename, split, zoom, even out, move, close. */
@@ -385,6 +445,7 @@ export default class Header {
       .hover((s) => s.text_color(t.foreground))
       .when(Boolean(c.tip) && !c.text, (b) => b.tooltip(c.tip ?? ""))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .map(keepMiddle)
       .on_click((_e, cx) => {
         cx.stop_propagation();
         c.go();

@@ -44,7 +44,13 @@ function header(t: Theme, v: DbView): Element {
       .child(div().flex_none().text_color(t.muted).child(c?.name ?? ""))
       .child(c ? kindBadge(t, c.kind) : div())
       .when(!narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(c ? where(c, home()) : "")))
-      .when(Boolean(c?.from), (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi8).child(`· ${c?.from ?? ""}`)))))
+      .when(Boolean(c?.from), (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi8).child(`· ${c?.from ?? ""}`)))
+      .map((x) => {
+        // Where a cluster-secret connection's password came from (or why it didn't): never the value.
+        const read = c ? v.sourced.get(c.id) : undefined;
+
+        return read ? x.child(div().id("db-sourced").flex_shrink(1).min_w(0).truncate().text_color(read.ok ? t.ansi6 : t.blocked).child(`· ${read.text}`)) : x;
+      })))
     .when(Boolean(c?.readonly), (el) => el.child(chip(t, "db-ro", h_flex().gap(5).items_center().child(lock(t.ansi3)).child(div().child("read only")), false, (cx) => v.act("conns", "conn-edit", cx), t.ansi3)))
     .child(div().flex_1())
     .child(div().relative().flex_none().child(status))

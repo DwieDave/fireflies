@@ -128,6 +128,25 @@ test("+ new menu: no tile floats over the tab; ten three to a row, the scratchpa
   expect(menuPanels().every((p: any) => !p.fixed)).toBe(true);
 });
 
+test("+ new menu: a launcher's tile wears the letter its mod.json asks for, and the letter picks it (shift: the other landing)", () => {
+  sharedState["nocturne.launchers"] = [{ mod: "k8s", title: "Kubernetes", icon: "icon.svg", window: true, pane: true, key: "k" }];
+  const { m, rows, letters } = menuGrid();
+  expect(rows.at(-1)).toEqual(["procs", "databases", "mod:k8s"]);
+  expect(letters["mod:k8s"]).toBe("k");
+  expect(words(ids["nm-mod:k8s"]).filter(Boolean)).toEqual(["k", "Kubernetes"]);
+  const kx: any = { stop_propagation() {}, notify() {} };
+  m.key({ key: "k", key_char: "k", modifiers: {} }, kx, liveTiles());
+  expect(ran.at(-1)).toMatchObject(["pane.split", { mod: "k8s" }]);
+  m.key({ key: "k", key_char: "K", modifiers: { shift: true } }, kx, liveTiles());
+  expect(ran.at(-1)).toMatchObject(["tab.new", { mod: "k8s", name: "kubernetes" }]);
+  // Asking for a shipped tile's letter: no letter on its tile, and t stays Terminal's.
+  sharedState["nocturne.launchers"] = [{ mod: "k8s", title: "Kubernetes", icon: "icon.svg", window: true, pane: true, key: "t" }];
+  expect(menuGrid().letters["mod:k8s"] || null).toBe(null);
+  ran = [];
+  m.key({ key: "t", key_char: "t", modifiers: {} }, kx, liveTiles());
+  expect(ran.at(-1)?.[0]).toBe("terminal.open");
+});
+
 test("+ new menu: its height has room for the four rows of tiles it shows", () => {
   sharedState["new-menu.agents"] = { "": [] };
   const h = newmenu.newMenuHeight();

@@ -96,7 +96,9 @@ export class ConnForm {
     switch (f) {
       case "host": return "localhost, or a URL: postgres://user@host/db";
       case "port": return String(DEFAULT_PORT[this.kind] || "");
-      case "password": return this.editing?.secret === "keychain" ? "kept in the keychain (type to replace)" : this.kind === "libsql" ? "the token" : "none, or ~/.pgpass";
+      case "password": return this.editing?.secret === "keychain" ? "kept in the keychain (type to replace)"
+        : this.editing?.secret === "kubernetes" && this.editing.source ? `read from secret ${this.editing.source.name} at connect (type one to keep it in the keychain instead)`
+        : this.kind === "libsql" ? "the token" : "none, or ~/.pgpass";
       case "path": return "/path/to/data.db";
       case "url": return "libsql://name-org.turso.io";
       default: return LABEL[f];
@@ -201,10 +203,16 @@ export class ConnForm {
     // Off macOS there's no keychain here: a typed password is asked each time (kept in memory).
     const keychain = appWindow().platform === "macos";
 
+    // A cluster's secret stays where the password comes from until one is typed (or ask is set).
+    const source = !typed && !this.ask && this.editing?.secret === "kubernetes" && (this.kind === "postgres" || this.kind === "mysql") ? this.editing.source : undefined;
+
     const secret = this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? "none"
+      : source ? "kubernetes"
       : this.ask || (typed && !keychain) ? "ask" : typed || this.editing?.secret === "keychain" ? "keychain" : "none";
 
     const c: ConnDraft = { id, name: this.value("name") || this.value("database") || this.value("path").split("/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
+
+    if (source) c.source = source;
 
     if (has("host")) c.host = this.value("host");
 
@@ -235,8 +243,11 @@ export class ConnForm {
 
     this.v.secrets.set(c.id, this.value("password") || (this.editing ? this.v.secrets.get(this.editing.id) ?? "" : ""));
 
-    // An edited one whose password is in the keychain tests with that one.
-    const tried: Conn = !this.value("password") && this.editing?.secret === "keychain" ? { ...c, id: this.editing.id, secret: "keychain" } : c;
+    // An edited one whose password is in the keychain (or a cluster's secret) tests with that one.
+    const kept = this.conn(c.id);
+
+    const tried: Conn = !this.value("password") && this.editing?.secret === "keychain" ? { ...c, id: this.editing.id, secret: "keychain" }
+      : kept.secret === "kubernetes" ? kept : c;
 
     await test(this.v, tried, cx);
     this.v.secrets.delete(c.id);

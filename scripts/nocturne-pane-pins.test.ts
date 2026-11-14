@@ -623,3 +623,66 @@ test("a plain shell as the app lists it (status null) is a terminal to nocturne:
   expect(kit.terminalsNow().map((x: any) => x.address)).toEqual(["t5"]);
   expect(kit.jar().filter(pins.onShelf).map((x: any) => x.key)).toEqual(["t5"]);
 });
+
+// ---- walkicons item 1: the walk and the sidebar's j / k go through the
+// shelf where it's drawn: in the jar, under the pinned agents and above the
+// rest ("The j and k are wrongly applied to the pinned tabs when walking through them").
+
+/** All four groups the sidebar draws, top to bottom: t1 pinned (in the jar), a
+ *  web pane and a shell on the jar's shelf, t6 working and t7 done under the
+ *  jar (t7 listed first by agents(): the sidebar's order puts it last). */
+function jarAndMeadow() {
+  pinTerminal("t1", 1);
+  sharedState[pins.PANES_KEY] = [{ pane: "p2", mod: WEB.mod, props: WEB.props, at: 2 }];
+  pinTerminal("t5", 3);
+  const agentPane = (n: string) => ({ pane: `p${n}`, tab: "c1", terminal: `t${n}`, program: { agent: true, name: "Claude Code" }, focused: false });
+  panesNow = [...panesNow, agentPane("6"), agentPane("7")];
+  agentsNow = [agentsNow[0], { ...agentsNow[0], address: "t7", status: "done", focused: false }, { ...agentsNow[0], address: "t6", focused: false }];
+  terminalsNow = [...terminalsNow, { address: "t6", state: "live", labels: {} }, { address: "t7", state: "live", labels: {} }];
+}
+
+test("the walk goes as the sidebar draws: the pinned agents, the shelf's tiles, the working agents, the resting ones; previous the other way", async () => {
+  jarAndMeadow();
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  s.render(cx);
+  const walkTo = async (c: string, from: any) => {
+    focusedNow = { space: "s1", tab: "c1", block: null, ...from };
+    await new Promise((r) => setTimeout(r, 0));
+    waiting.shift()!(c);
+    await new Promise((r) => setTimeout(r, 0));
+    return commands.at(-1);
+  };
+  const next = (from: any) => walkTo("nocturne.agent-next", from);
+  const prev = (from: any) => walkTo("nocturne.agent-prev", from);
+  expect(await next({ pane: "p1", terminal: "t1" })).toEqual(["pane.focus", { pane: "p2" }]);
+  expect(await next({ pane: "p2", terminal: null })).toEqual(["pane.focus", { pane: "p5" }]);
+  expect(await next({ pane: "p5", terminal: "t5" })).toEqual(["agent.focus", { terminal: "t6" }]);
+  expect(await next({ pane: "p6", terminal: "t6" })).toEqual(["agent.focus", { terminal: "t7" }]);
+  expect(await next({ pane: "p7", terminal: "t7" })).toEqual(["agent.focus", { terminal: "t1" }]);
+  expect(await prev({ pane: "p1", terminal: "t1" })).toEqual(["agent.focus", { terminal: "t7" }]);
+  expect(await prev({ pane: "p7", terminal: "t7" })).toEqual(["agent.focus", { terminal: "t6" }]);
+  expect(await prev({ pane: "p6", terminal: "t6" })).toEqual(["pane.focus", { pane: "p5" }]);
+  expect(await prev({ pane: "p5", terminal: "t5" })).toEqual(["pane.focus", { pane: "p2" }]);
+  expect(await prev({ pane: "p2", terminal: null })).toEqual(["agent.focus", { terminal: "t1" }]);
+});
+
+test("the sidebar's keyboard walks the jar's agents, its shelf, then the meadow: open and folded", () => {
+  jarAndMeadow();
+  const s = new Sky();
+  s.init({ role: "sky" }, cx);
+  focusedNow = { ...focusedNow, block: "sidebar" };
+  for (const folded of [false, true]) {
+    s.want = folded;
+    s.render(cx);
+    s.takeKeys();
+    s.render(cx);
+    const ids = s.navList.map((x: any) => x.id).filter((id: string) => /^(fly|pin):/.test(id));
+    expect([folded, ids]).toEqual([folded, ["fly:t1", "pin:pane:p2", "pin:t5", "fly:t6", "fly:t7"]]);
+    // j from the jar's last agent goes down onto the shelf, not past it.
+    s.cursor = "fly:t1";
+    cx.stopped = false;
+    s.key({ key: "j", key_char: "j", modifiers: { control: false, platform: false, alt: false, shift: false } }, cx);
+    expect(s.cursor).toBe("pin:pane:p2");
+  }
+});
