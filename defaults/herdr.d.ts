@@ -111,7 +111,7 @@ export function playSound(sound: string): null;
  *   space.move {id, index}, space.select {index | id}, space.next, space.prev.
  * Tabs: tab.new {name?, space?, folder?, argv?, task?} (argv: an agent, task: its first message)
  *   or {name?, space?, mod, props?} (a tab whose only pane is a mod),
- *   tab.close {id?}, tab.rename {id?, name}, tab.move {id, index}, tab.select {index | id},
+ *   tab.close {id?}, tab.rename {id?, name}, tab.move {id, index?, space?} (space: the whole tab into another space on its machine, shown there), tab.select {index | id},
  *   tab.next, tab.prev.
  * Panes: pane.split {direction: "right" | "down" | "left" | "up" | "auto", pane?, argv? | mod?, props?}
  *   (left/up: before the pane; auto: below a pane in a side-by-side split, right of one in a stacked

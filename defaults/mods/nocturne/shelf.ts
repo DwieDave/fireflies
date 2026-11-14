@@ -6,13 +6,14 @@
 import { div, svg, image } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
-import { shared, focused } from "herdr";
+import { shared, focused, panes } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
 import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
 import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
-import { openMenu } from "./menu.ts";
+import { openMenu, tabTileMenu } from "./menu.ts";
+import { tabLead } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
@@ -91,9 +92,11 @@ export function shownFile(p: PaneInfo | null | undefined): string | null {
  *    files pane    the folder mark
  *    terminal      its program's logo (an agent's art logo in its status colour,
  *                  else the program's own icon, else header.ts markPath)
- *    other mods    their mark (header.ts markPath) */
+ *    other mods    their mark (header.ts markPath)
+ *    a whole tab   its lead pane's (pins.ts tabLead: its agent's, else its first pane's),
+ *                  as the tab strip marks the tab */
 export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): Element {
-  const p = paneOf(it);
+  const p = it.kind === "tab" ? tabLead(it.tabInfo.id, panes()) : paneOf(it);
   const id = `pin-icon-${it.key}`;
   const icon = p?.mod === "browser" ? webIcon(p, it.kind === "pane" ? (it.tab ?? null) : null) : null;
 
@@ -126,6 +129,8 @@ export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): 
 
 /** On screen now: its tab is the shown one of the shown space, not parked. */
 export function pinLit(sky: Sky, it: JarItem): boolean {
+  if (it.kind === "tab") return sky.shownTabs.has(it.tabInfo.id);
+
   const p = paneOf(it);
 
   return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "");
@@ -135,11 +140,15 @@ export function pinLit(sky: Sky, it: JarItem): boolean {
 export function pinFocus(it: JarItem): boolean {
   const f = focused();
 
+  if (it.kind === "tab") return Boolean(f?.tab) && f?.tab === it.tabInfo.id;
+
   return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane : Boolean(f?.terminal) && f?.terminal === it.key;
 }
 
 /** What a tile is called: the pane's name (header.ts paneName), a terminal's given name. */
 export function pinName(it: JarItem): string {
+  if (it.kind === "tab") return tabName(it);
+
   const p = paneOf(it);
 
   if (p?.mod === "browser") return webName(p, it.kind === "pane" ? (it.tab ?? null) : null);
@@ -149,9 +158,32 @@ export function pinName(it: JarItem): string {
   return givenName(it.key) ?? (it.kind === "terminal" ? it.terminal.name : null) ?? "shell";
 }
 
+type TabItem = Extract<JarItem, { kind: "tab" }>;
+
+/** A whole tab's name: the one it was given, else its lead pane's (as the strip names it), else "tab <n>". */
+export function tabName(it: TabItem): string {
+  const c = it.tabInfo;
+
+  if (c.named) return c.name;
+
+  const lead = tabLead(c.id, panes());
+
+  return (lead && paneName(lead)) || `tab ${c.index}`;
+}
+
+/** What a whole tab's tile says of it: "tab", its space, its panes, settled. */
+export function tabWhere(it: TabItem): string {
+  const c = it.tabInfo;
+  const n = c.panes + c.parked;
+
+  return ["tab", it.space.name, `${n} ${n === 1 ? "pane" : "panes"}`, c.settled ? "settled" : null].flatMap((x) => (x ? [x] : [])).join(" · ");
+}
+
 /** Where and what a tile is: its kind ("web", "editor", "shell"), its space when
  *  that's not the shown one, "parked". The kind goes when the name says it already. */
 export function pinWhere(sky: Sky, it: JarItem): string {
+  if (it.kind === "tab") return tabWhere(it);
+
   const p = paneOf(it);
   const program = p?.program;
   const kind = it.kind === "pane" ? modKind(p) : (program?.name && !program.shell ? program.name : "shell");
@@ -180,12 +212,14 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
   const small = size < TILE;
   const glyph = small ? 12 : 14;
   const plate = glyph + 2;
+  // A whole tab's tile stands its body under an ear (tabEar): the body is `ear` px shorter.
+  const ear = it.kind === "tab" ? (small ? 3 : 4) : 0;
   const at = (size - plate) / 2;
   const where = pinWhere(sky, it);
   const p = paneOf(it);
   const bright = lit || on || focus || hot;
 
-  return div().id(`pin-${it.key}`).relative().size(size).flex_none().flex().items_center().justify_center()
+  return div().id(`pin-${it.key}`).relative().size(size).flex_none().flex().items_center().justify_center().pt(ear)
     .tooltip(`${pinName(it)}${where ? ` · ${where}` : ""}`)
     .on_hover((h, cx) => {
       if (h ? sky.tileHover !== it.key : sky.tileHover === it.key) {
@@ -197,17 +231,36 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     .on_mouse_down("right", (_e, cx) => {
       cx.stop_propagation();
 
-      if (p) paneMenu(p);
+      if (it.kind === "tab") tabTileMenu(it.tabInfo.id);
+      else if (p) paneMenu(p);
     })
     .on_click(() => goToPin(it))
-    .when(lit, (el) => el.child(div().absolute().top(1).left(1).size(size - 2).opacity(0.35).child(dither(t.ansi4, 1))))
-    .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
-    .child(div().absolute().top(0).left(0).size_full().border(1).border_color(lit ? t.ansi8 : t.ansi0))
-    .child(div().absolute().top(at).left(at).size(plate).bg(t.background))
+    .when(lit, (el) => el.child(div().absolute().top(ear + 1).left(1).w(size - 2).h(size - ear - 2).opacity(0.35).child(dither(t.ansi4, 1))))
+    .when(hot, (el) => el.child(div().absolute().top(ear).left(0).w(size).h(size - ear).bg(`${t.ansi0}88`)))
+    .child(div().absolute().top(ear).left(0).w(size).h(size - ear).border(1).border_color(lit ? t.ansi8 : t.ansi0))
+    .when(ear > 0, (el) => el.child(tabEar(t, lit, ear, small)))
+    .child(div().absolute().top(at + ear / 2).left(at).size(plate).bg(t.background))
     // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
     .child(tileMark(t, it, glyph, bright))
     .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
     .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+}
+
+/**
+ * A whole tab's ear: a tab as the strip draws one, standing on the tile's
+ * top edge, set in from its left corner (a folder's tab sits flush on its
+ * corner and opens into it; this one stands on a closed edge, as the strip's
+ * tabs stand on its horizon). Shown (lit), it fills with the accent checker
+ * the strip puts under the shown tab. `h` px tall (the body sits that far
+ * down), on the full tile or the rail's small one.
+ */
+export function tabEar(t: Theme, lit: boolean, h: number, small: boolean): Element {
+  const w = small ? 8 : 12;
+
+  // h px tall, open below: the tile's top edge runs on under it.
+  return div().absolute().top(0).left(small ? 3 : 4).w(w).h(h)
+    .border_t(1).border_l(1).border_r(1).border_color(lit ? t.ansi8 : t.ansi0)
+    .when(lit, (el) => el.child(div().absolute().top(1).left(1).w(w - 4).h(h - 2).child(dither(t.accent, 1))));
 }
 
 /** The dock's menu (menu.ts dockItems): what can go into the dock, pinned
@@ -227,7 +280,7 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
   const hot = sky.tileHover === "shelf-new";
 
   return div().id("shelf-new").relative().size(size).flex_none().flex().items_center().justify_center()
-    .tooltip("Into the dock: this pane, a web page, a shell, files")
+    .tooltip("Into the dock: this pane, a web page, a shell, files; or pin this tab")
     .on_hover((h, cx) => {
       if (h ? sky.tileHover !== "shelf-new" : sky.tileHover === "shelf-new") {
         sky.tileHover = h ? "shelf-new" : null;

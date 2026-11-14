@@ -556,6 +556,39 @@ impl Model {
         Ok(landed)
     }
 
+    /// Moves a whole tab (its arrangement and sizes, parked panes, focus,
+    /// name, settled state) into another space on the same machine, at
+    /// `index` there (1 = first; None: last), and shows it there. Ids stay, so
+    /// terminals run on and mod panes keep their props. The space it leaves
+    /// closes when it was its last tab, as closing that tab would (remembered
+    /// in `recent`). Returns whether it did.
+    pub fn move_tab_to_space(&mut self, tab: &str, space: &str, index: Option<usize>) -> Result<bool, String> {
+        let from = self.space_of(tab).filter(|s| s.tab(tab).is_some()).ok_or_else(|| format!("no tab {tab:?}"))?;
+        let dest = self.space(space).ok_or_else(|| format!("no space {space:?}"))?;
+        if from.id == dest.id {
+            return Err("the tab is in that space already (tab.move with index alone moves it inside its space)".into());
+        }
+        if from.machine != dest.machine {
+            return Err("A tab's terminals must stay on their own machine: move it to a space on the same machine.".into());
+        }
+        let from_id = from.id.clone();
+        let p = self.space_mut(&from_id).unwrap();
+        let at = p.tabs.iter().position(|c| c.id == tab).unwrap();
+        let moved = p.tabs.remove(at);
+        if p.active.as_deref() == Some(tab) {
+            p.active = p.tabs.get(at).or(p.tabs.last()).map(|c| c.id.clone());
+        }
+        let closed = p.tabs.is_empty();
+        if closed {
+            self.remove_space(&from_id);
+        }
+        let d = self.space_mut(space).unwrap();
+        let to = index.map_or(d.tabs.len(), |i| i.saturating_sub(1).min(d.tabs.len()));
+        d.tabs.insert(to, moved);
+        self.select_tab(tab);
+        Ok(closed)
+    }
+
     pub fn swap_panes(&mut self, pane: &str, target: &str) -> Result<(), String> {
         let is_pane = |m: &Model, id: &str| m.tab_of(id).and_then(|c| c.root.find(id)).is_some_and(Node::is_pane);
         if !is_pane(self, pane) {
@@ -1372,6 +1405,58 @@ mod tests {
 
     fn pane_order(m: &Model, tab: &str) -> Vec<String> {
         m.tab(tab).unwrap().root.panes().iter().map(|n| n.id.clone()).collect()
+    }
+
+    #[test]
+    fn a_whole_tab_moves_to_another_space_with_its_panes_parked_one_sizes_and_focus() {
+        use crate::layout::Size;
+        let mut m = three_panes_and_another_tab();
+        m.park_pane("x3", None).unwrap();
+        m.tab_of_mut("x2").unwrap().root.find_mut("x2").unwrap().size = Some(Size::Px { px: 300. });
+        m.focus_pane("x2");
+        m.tab_mut("c1").unwrap().name = "api work".into();
+        m.add_space("p2", "pip", "/src/pip", Tab::new("c9", "pip-fixes", "x9", "t9"));
+        let before = format!("{:?}", m.tab("c1").unwrap());
+        assert_eq!(m.move_tab_to_space("c1", "p2", Some(1)), Ok(false));
+        // Whole: the same tab (arrangement, sizes, parked row, focus, name), first in p2.
+        assert_eq!(format!("{:?}", m.tab("c1").unwrap()), before);
+        assert_eq!(m.space_of("c1").unwrap().id, "p2");
+        assert_eq!(m.spaces.iter().find(|s| s.id == "p2").unwrap().tabs.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["c1", "c9"]);
+        for (pane, address) in [("x1", "t1"), ("x2", "t2"), ("x3", "t3")] {
+            assert_eq!(m.address_of(pane).as_deref(), Some(address));
+        }
+        assert_eq!(m.parked_tab_of("x3").unwrap().id, "c1");
+        // It is shown there, its focus kept.
+        assert_eq!(m.active_space().unwrap().id, "p2");
+        assert_eq!(m.focused_pane().as_deref(), Some("x2"));
+        // The space it left keeps its other tab, now the selected one.
+        assert_eq!(m.space("p1").unwrap().tabs.len(), 1);
+        assert_eq!(m.space("p1").unwrap().active.as_deref(), Some("c2"));
+    }
+
+    #[test]
+    fn moving_a_spaces_last_tab_away_closes_that_space_as_closing_the_tab_would() {
+        let mut m = model_with_one();
+        m.add_space("p2", "pip", "/src/pip", Tab::new("c9", "pip-fixes", "x9", "t9"));
+        assert_eq!(m.move_tab_to_space("c9", "p1", None), Ok(true));
+        assert!(m.space("p2").is_none());
+        assert_eq!(m.recent.first().map(|r| r.name.as_str()), Some("pip"));
+        assert_eq!(m.space("p1").unwrap().tabs.iter().map(|c| c.id.as_str()).collect::<Vec<_>>(), ["c1", "c9"]);
+        assert_eq!(m.active_tab().unwrap().id, "c9");
+    }
+
+    #[test]
+    fn tab_moves_that_cannot_be_leave_the_model_alone() {
+        let mut m = three_panes_and_another_tab();
+        m.add_space("p2", "remote", "/", Tab::new("r1", "", "y1", "box/t1"));
+        m.spaces.last_mut().unwrap().machine = Some("box".into());
+        let before = format!("{:?}", m.spaces);
+        assert!(m.move_tab_to_space("c1", "p1", None).is_err(), "its own space");
+        assert!(m.move_tab_to_space("c1", "nope", None).is_err(), "no such space");
+        assert!(m.move_tab_to_space("nope", "p1", None).is_err(), "no such tab");
+        assert!(m.move_tab_to_space("x1", "p2", None).is_err(), "a pane is not a tab");
+        assert!(m.move_tab_to_space("c1", "p2", None).is_err(), "another machine");
+        assert_eq!(format!("{:?}", m.spaces), before);
     }
 
     #[test]
