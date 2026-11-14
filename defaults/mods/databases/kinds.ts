@@ -5,8 +5,8 @@
 
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, object } from "./guard.ts";
-import type { KubeSource } from "./kube.ts";
-import { isKubeSource } from "./kube.ts";
+import type { KubeForward, KubeSource } from "./kube.ts";
+import { isKubeForward, isKubeSource } from "./kube.ts";
 
 /** The kinds of database the window speaks. */
 export const isKind = literal("postgres", "mysql", "sqlite", "libsql");
@@ -33,7 +33,7 @@ export type Origin = "saved" | "found" | "sent";
  *  held in memory): no secret in any field. */
 export const isConnJson = object({ id: isString, name: isString, kind: isKind }, {
   host: isString, port: isNumber, user: isString, database: isString, path: isString, url: isString, readonly: isBoolean, secret: isSecret,
-  source: isKubeSource,
+  source: isKubeSource, forward: isKubeForward,
 });
 
 export type ConnJson = Guarded<typeof isConnJson>;
@@ -55,6 +55,8 @@ export interface Conn {
   readonly secret: Secret;
   /** Where a `kubernetes` one's password is (never the password). */
   readonly source?: KubeSource;
+  /** The port-forward it came from (kube.ts): started again, when asked, if its port is down. */
+  readonly forward?: KubeForward;
   readonly origin: Origin;
   /** Where a found or sent one came from, in words (".env · DATABASE_URL", "port :5432 (postgres in t3)"). */
   readonly from?: string;

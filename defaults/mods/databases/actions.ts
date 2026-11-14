@@ -14,8 +14,8 @@ import type { PanelId } from "./state.ts";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { DEFAULT_PORT, onFile, tilde } from "./kinds.ts";
 import { connAtCursor, connList, connect, discover, saveFound, test } from "./conns.ts";
-import { writeConnections } from "./store.ts";
-import { IO, browse, countRows, dataHome, loadRows, loadStructure } from "./session.ts";
+import { changePinned, togglePin } from "./pinned.ts";
+import { browse, countRows, loadRows, loadStructure } from "./session.ts";
 import { insertAtCaret } from "./query.ts";
 import { saveQueries } from "./queries.ts";
 import { copy, gridAct } from "./act-grid.ts";
@@ -167,6 +167,7 @@ function connAct(v: DbView, action: string, cx: Context): boolean {
     case "conn-edit": if (c) openForm(v, c, cx); break;
     case "conn-remove": if (c) confirmRemove(v, c, cx); break;
     case "conn-save": if (c) void saveFound(v, c, cx); break;
+    case "conn-pin": if (c) togglePin(v, c, cx); break;
     case "conn-test": if (c) void test(v, c, cx); break;
     case "conn-duplicate": if (c) duplicateConn(v, c, cx); break;
     case "disconnect": if (!v.active) v.say("nothing is connected", "failed"); else disconnect(v); break;
@@ -257,7 +258,18 @@ export function placeConn(v: DbView, c: Conn, to: number, cx: Context): void {
   list.splice(to, 0, c);
   v.saved = list;
   v.connAt = to;
-  void writeConnections(IO, dataHome(), list).then(() => cx.notify());
+  // On the file as it is now: before the one that stands at `to` here (else last).
+  const before = list[to + 1]?.id ?? null;
+
+  void changePinned(v, (now) => {
+    const rest = now.filter((s) => s.id !== c.id);
+    const at = before ? rest.findIndex((s) => s.id === before) : -1;
+    const kept = now.find((s) => s.id === c.id) ?? c;
+
+    rest.splice(at < 0 ? rest.length : at, 0, kept);
+
+    return rest;
+  }, cx);
 }
 
 /** The query tab names go into: the shown one, else a new one. */

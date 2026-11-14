@@ -197,7 +197,7 @@ test("keys: panels by number and tab, ? the overview, n the form, m a row's menu
   v.key(key("j"), cx);
   expect(v.connAt).toBe(1);
   v.key(key("m"), cx);
-  expect(v.menu.rows.map((r: any) => [r.label, r.key ?? ""])).toEqual([["Connect", "enter"], ["Test", "t"], ["Edit…", "e"], ["Duplicate…", "D"], ["Copy its address", "y"], ["New connection…", "n"], ["Remove…", "d"]]);
+  expect(v.menu.rows.map((r: any) => [r.label, r.key ?? ""])).toEqual([["Connect", "enter"], ["Test", "t"], ["Edit…", "e"], ["Duplicate…", "D"], ["Copy its address", "y"], ["New connection…", "n"], ["Unpin it…", "P"]]);
   v.key(key("escape"), cx);
   expect(v.menu).toBeNull();
   v.key(key("?"), cx);

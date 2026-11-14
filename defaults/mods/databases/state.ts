@@ -7,9 +7,9 @@
 import type { EditorState, InputState } from "gpui-base";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
-import type { Kind } from "./kinds.ts";
+import type { Conn, Kind } from "./kinds.ts";
 import { isKind } from "./kinds.ts";
-import { isKubeSource } from "./kube.ts";
+import { isKubeForward, isKubeSource } from "./kube.ts";
 import type { Browse, Structure, TableRef } from "./catalog.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { Risk, Verdict } from "./safety.ts";
@@ -20,10 +20,11 @@ import type { ColumnLayout, LocalSort } from "./columns.ts";
 export const MOD = "databases";
 
 /** What another mod sends to open a connection here (databases.connect, nocturne.databases:{…}):
- *  never a secret; `from` says who sent it; `secret` where a cluster keeps the password (kube.ts). */
+ *  never a secret; `from` says who sent it; `secret` where a cluster keeps the password, `forward`
+ *  the port-forward it came from (kube.ts). */
 export const isConnectArgs = object({ kind: isKind }, {
   name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
-  secret: isKubeSource,
+  secret: isKubeSource, forward: isKubeForward,
 });
 
 export type ConnectArgs = Guarded<typeof isConnectArgs>;
@@ -173,6 +174,17 @@ export interface PasswordAsk {
   readonly conn: string;
   readonly input: InputState;
   readonly done: () => void;
+}
+
+/** The ask before a connection whose port-forward is down (forward.ts): why, what went wrong
+ *  starting it, the local port it starts on, and since when it's starting. */
+export interface ForwardAsk {
+  readonly conn: Conn;
+  /** down: nothing listens there; taken: something else answers there; gone: its pod isn't there. */
+  why: "down" | "taken" | "gone";
+  note: string | null;
+  readonly local: number;
+  starting: number | null;
 }
 
 /** How a cluster-secret connection's password read went, in words for its row and the ask. */

@@ -4,7 +4,7 @@
 // statements run, newest first, a password literal blanked by redact()).
 
 import type { Guarded } from "./guard.ts";
-import { arrayOf, isBoolean, isNumber, isString, object, parseJson } from "./guard.ts";
+import { arrayOf, isBoolean, isNumber, isString, nullable, object, parseJson, sharedKey } from "./guard.ts";
 import type { Conn } from "./kinds.ts";
 import { connJson, connOf, isConnJson } from "./kinds.ts";
 import { redact } from "./secrets.ts";
@@ -28,6 +28,37 @@ export async function readConnections(io: FileIo, appHome: string): Promise<Conn
   const doc = text ? parseJson(text, isConnectionsDoc) : undefined;
 
   return doc ? doc.connections.map(connOf) : [];
+}
+
+/** The pinned (saved) connections changed, in some window: when, so every other window reads the
+ *  file again (the file is the truth; this is the notice). */
+export const PINNED_KEY = sharedKey("databases.pinned", nullable(object({ at: isNumber }, { by: isString })));
+
+/** Changes the pinned connections as the file has them now (another window may have changed it
+ *  since this one read it): `change` gets the file's list, its result is written (only if the file
+ *  is still what was read: else read and changed again). A file that isn't a list is left alone. */
+export async function changeConnections(io: FileIo, appHome: string, change: (list: Conn[]) => Conn[]): Promise<Conn[]> {
+  const path = connectionsFile(appHome);
+
+  for (let tries = 0; tries < 5; tries++) {
+    const was = await io.readTextFile(path).catch(() => null);
+    const doc = was ? parseJson(was, isConnectionsDoc) : undefined;
+
+    if (was && !doc) throw new Error(`${path} isn't a list of connections: left as it is`);
+
+    const next = change(doc ? doc.connections.map(connOf) : []);
+    const text = `${JSON.stringify({ connections: next.flatMap((c) => (c.origin === "saved" ? [connJson(c)] : [])) }, null, 2)}\n`;
+
+    try {
+      await io.writeTextFile(path, text, was);
+
+      return next;
+    } catch {
+      // Changed meanwhile (another window): read it again.
+    }
+  }
+
+  throw new Error(`${path} kept changing: try again`);
 }
 
 /** Writes the saved connections (only saved ones; never a secret: connJson has no field for one). */

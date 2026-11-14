@@ -6,13 +6,14 @@
 //
 // Another mod hands it a connection (the contract in docs and briefs:
 // procs3's ports, the Kubernetes mod's port-forwards, the files pane's *.db):
-//   nocturne.databases:{"kind": …, "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?, "readonly"?, "from"?, "secret"?}
+//   nocturne.databases:{"kind": …, "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?, "readonly"?, "from"?, "secret"?, "forward"?}
 // opens the window on it, or gives it to an open window (databases.connect);
 // with "as": "pane" | "tab" it opens there instead (inpane.ts). No secret
 // travels: the window asks for the password or takes it from the keychain,
 // or reads it itself from the cluster's secret that "secret" names
 // ({"from": "kubernetes", "context", "namespace", "name", "key", "userKey"?,
-// "databaseKey"?, "kubectl"?}: the databases mod's kube.ts checks and reads it).
+// "databaseKey"?, "kubectl"?}: the databases mod's kube.ts checks and reads it), and "forward"
+// the port-forward it came from ({"context", "namespace", "target", "remote", "local", "kubectl"?}).
 
 import { openOverlay, closeOverlay, shared, setShared, run } from "herdr";
 import { isBoolean, isNumber, isString, literal, nullable, object, parseJson, readShared, sharedKey, writeShared } from "./guard.ts";
@@ -28,10 +29,13 @@ const isKubeSource = object({ from: literal("kubernetes"), context: isString, na
   userKey: isString, databaseKey: isString, kubectl: isString,
 });
 
+/** The port-forward a connection came from (the databases mod's kube.ts guard, copied: nothing secret). */
+const isKubeForward = object({ context: isString, namespace: isString, target: isString, remote: isNumber, local: isNumber }, { kubectl: isString });
+
 /** A connection another mod sends (the databases mod's own guard, copied: no secret in it). */
 export const isConnectArgs = object({ kind: literal("postgres", "mysql", "sqlite", "libsql") }, {
   name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
-  secret: isKubeSource, as: literal("pane", "tab", "window"),
+  secret: isKubeSource, forward: isKubeForward, as: literal("pane", "tab", "window"),
 });
 
 export type ConnectArgs = Guarded<typeof isConnectArgs>;

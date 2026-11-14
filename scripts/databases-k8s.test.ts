@@ -272,7 +272,7 @@ test("saved: the source is kept (read again at each connect), never the password
   expect(doc.connections[0]).toMatchObject({ kind: "postgres", host: "127.0.0.1", port: 15432, user: "lantern", secret: "kubernetes", source: SOURCE });
   expect(file?.[1]).not.toContain(PASSWORD);
   expect(execs.some((a) => a[0] === "security" || (a[0] === "sh" && a[3] === "ff-keychain"))).toBe(false);
-  expect(v.note.text).toBe("saved lantern-db (nightjar-dev/lantern) · its password is read from secret lantern-db-auth at each connect");
+  expect(v.note.text).toBe("pinned lantern-db (nightjar-dev/lantern): every Databases window lists it · its password is read from secret lantern-db-auth at each connect");
   expect(v.active?.secret).toBe("kubernetes");
   expect(v.secrets.get(v.active.id)).toBe(PASSWORD);
   // Connected again later: read again.

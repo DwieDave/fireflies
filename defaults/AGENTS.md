@@ -259,17 +259,27 @@ password literal blanked) and `queries/<id>.json` (each tab's text). Commands
 to the window: `databases.sql:<text>` (a query tab with that text),
 `databases.run` / `databases.run-all`, `databases.table:<name>` (a table's
 rows and structure), `databases.cancel`, `databases.stop` (what esc does to a
-read going on), and any key's action by name
+read going on), `databases.forward-start` / `databases.forward-anyway` /
+`databases.forward-k8s` (the forward ask's enter, c and k), and any key's action by name
 (`databases.export`, `databases.refresh`, `databases.save`…);
 `databases.set:<text>` puts text in the edited cell's input, or with none
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "secret"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "forward"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
-0.88, props: {connect}})`. It is unsaved until the person saves it (`s`).
+0.88, props: {connect}})`. It is listed under "sent here" in that window
+until the person pins it. Pinned connections (saved: `P` or `s` on a sent or
+found one, its menu's "Pin it", a click on the row's pin, or the new
+connection form) are one list for the machine, `data/databases/connections.json`
+(no secret in it): every Databases window and pane, in every space, after
+every restart, lists them first under "pinned"; `P` (or the lit pin, the
+menu's "Unpin it…") unpins one after asking. A change is made to the file as
+it is then (another window may have changed it) and every open window reads it
+again within a second (shared `databases.pinned` is the notice); `J` / `K` and
+a drag order them.
 A password in a Kubernetes secret: a Postgres or MySQL connection to a server
 on this machine (`host` 127.0.0.1, localhost or ::1, as a port-forward is)
 may name where a cluster keeps its password, never the password:
@@ -291,6 +301,27 @@ read with kubectl"); a failed read (no access, the secret gone, kubectl
 missing) or a password the server refuses says why and asks for it. Saved
 (`s`), it keeps the secret's place and reads again at each connect; a
 password typed in its form moves it to the keychain.
+The port-forward it came from: a Postgres or MySQL connection to a server on
+this machine may carry the forward's facts, nothing secret: `"forward":
+{"context": "<kubeconfig context>", "namespace": "<namespace>", "target":
+"pod/<name>" | "svc/<name>" | "deploy/<name>" | "sts/<name>", "remote":
+<the target's port>, "local": <the connection's port>, "kubectl"?: "kubectl" |
+"/abs/path/to/kubectl"}`. The window checks them as it checks a secret's names
+(and `local` must be the connection's `port`; a bad one refuses the request).
+Pinned (`P`), the connection keeps them with its secret's place. Connecting to
+it looks at 127.0.0.1:<local> first; nothing there, the window asks, showing
+the context, the namespace, the target and its port → localhost:<local> and the
+command, and only when told starts the forward the way the Kubernetes mod
+starts its own: `hc run --bg --no-parent --no-notify --json --label
+k8s.forward=<{"context", "namespace", "target", "local", "remote", "db", "web":
+null, "name"} as JSON, in that order> --label "nocturne.name=forward <name>
+:<local>" -- <kubectl> --context <context> -n <namespace> port-forward
+<target> <local>:<remote> --address 127.0.0.1` (`name` is the target without
+its kind). It is a terminal of its own: the Kubernetes window lists it on its
+shelf and stops it, and it stays up when the Databases window closes. The
+window waits for the port (kubectl's own words when it fails), then connects;
+a pod that's gone is said, with the Kubernetes window offered to pick it
+again; a port another program holds is said, with another local port offered.
 The keychain is macOS's; elsewhere a typed password is asked each time.
 
 **Window mods in panes.** Git, GitHub, the script runner, the processes deck and Databases open as

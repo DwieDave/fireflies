@@ -31,6 +31,8 @@ import { readIn } from "./reads.ts";
 import { PROGRAMS } from "./clients.ts";
 import { RUNNING } from "./session.ts";
 import { clientFrom } from "./session.ts";
+import { togglePin } from "./pinned.ts";
+import { forwardRunning } from "./forward.ts";
 import { missingView, readingView } from "./read-view.ts";
 import type { default as DbView } from "./main.ts";
 
@@ -140,10 +142,39 @@ function clientMark(t: Theme, v: DbView, c: Conn): Element[] {
   return [h_flex().id(`conn-noclient-${c.id}`).flex_none().tooltip(f.missing).child(text(t, `no ${PROGRAMS[c.kind][0]}`, t.ansi3))];
 }
 
+/** The pin: a pinned one's (lit; a click asks to unpin it), a sent one's (dim; a click pins it). */
+function pinMark(t: Theme, v: DbView, c: Conn): Element[] {
+  if (c.origin === "found") return [];
+
+  const pinned = c.origin === "saved";
+
+  return [h_flex().id(`conn-pin-${c.id}`).flex_none().w(11).h(14).items_center().justify_center().cursor_pointer()
+    .tooltip(pinned ? "Pinned: every Databases window lists it · P or a click unpins it" : "P or a click pins it: every Databases window lists it")
+    .on_mouse_down("left", (_e, cx) => {
+      cx.stop_propagation();
+      togglePin(v, c, cx);
+      cx.notify();
+    })
+    .child(svg(`${ART}/pin.svg`).size(7).text_color(pinned ? t.accent : t.ansi8).opacity(pinned ? 1 : 0.7))];
+}
+
+/** A forward's connection: its forward running (localhost:15432), or down. */
+function forwardMark(t: Theme, c: Conn): Element[] {
+  const f = c.forward;
+
+  if (!f) return [];
+
+  const live = forwardRunning(f)?.live === true;
+
+  return [h_flex().id(`conn-fwd-${c.id}`).flex_none().tooltip(`${f.target} :${f.remote} in ${f.context}/${f.namespace} → localhost:${f.local}${live ? " · the forward runs (m stops it)" : " · started again when you connect (asked first)"}`)
+    .child(text(t, live ? `↔ :${f.local}` : "↮ forward", live ? t.ansi6 : t.ansi8))];
+}
+
 function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Element {
   const parts = [
-    connPip(t, v, c), kindBadge(t, c.kind), text(t, c.name, v.connAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
+    connPip(t, v, c), ...pinMark(t, v, c), kindBadge(t, c.kind), text(t, c.name, v.connAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
     ...(c.secret === "kubernetes" && c.source ? [secretMark(t, v, c, c.source.name)] : []),
+    ...forwardMark(t, c),
     ...clientMark(t, v, c),
     div().flex_1(), ...(c.readonly ? [lock(t.ansi3)] : []), text(t, where(c, home()), t.dim).flex_shrink(1).min_w(0).max_w(220),
   ];
@@ -176,6 +207,8 @@ export function connsPanel(t: Theme, v: DbView): Element {
   const folder = v.folder ? v.folder.replace(home(), "~") : "";
 
   all.forEach((c, i) => {
+    if (c.origin === "saved" && i === 0) rows.push(groupRule(t, "g-pinned", "pinned · every window"));
+
     if (c.origin === "sent" && (i === 0 || all[i - 1]?.origin !== "sent")) rows.push(groupRule(t, "g-sent", "sent here"));
 
     if (c.origin === "found" && (i === 0 || all[i - 1]?.origin !== "found")) rows.push(groupRule(t, "g-found", `found in ${folder}`));
@@ -205,7 +238,7 @@ function rowsBefore(all: readonly Conn[], i: number): number {
   for (let k = 0; k <= i && k < all.length; k++) {
     const c = all[k];
 
-    if (c && c.origin !== "saved" && (k === 0 || all[k - 1]?.origin !== c.origin)) n++;
+    if (c && (k === 0 || all[k - 1]?.origin !== c.origin)) n++;
   }
 
   return n;

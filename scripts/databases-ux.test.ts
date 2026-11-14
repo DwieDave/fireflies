@@ -441,7 +441,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   v.panel = "conns";
   v.connAt = 0;
   v.key(key("m"), cx);
-  expect(labels()).toEqual(["Disconnect", "Test", "Edit…", "Duplicate…", "Copy its address", "New connection…", "Remove…"]);
+  expect(labels()).toEqual(["Disconnect", "Test", "Edit…", "Duplicate…", "Copy its address", "New connection…", "Unpin it…"]);
   check("conns");
   v.menu = null;
   v.connAt = 1;
@@ -515,7 +515,9 @@ test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Ro
   expect([v.queries.map((x: any) => x.name), v.mainTab]).toEqual([["c", "a", "b"], 1]);
   moveQuery(v, 1, /^tab:(\d+)$/.exec("tab:3"));
   expect(v.queries.map((x: any) => x.name)).toEqual(["a", "b", "c"]);
-  // A saved connection: J moves it down, kept in connections.json.
+  // A saved connection: J moves it down, kept in connections.json (the file is the truth: it holds them).
+  mkdirSync(join(HOME, "data/databases"), { recursive: true });
+  writeFileSync(join(HOME, "data/databases/connections.json"), JSON.stringify({ connections: v.saved.map(({ origin, ...c }: any) => c) }));
   v.panel = "conns";
   v.connAt = 0;
   v.key(key("J"), cx);

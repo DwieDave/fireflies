@@ -38,7 +38,7 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Ask, Catalog, ForwardAsk, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
@@ -55,7 +55,7 @@ import { loadQueries, saveQueries } from "./queries.ts";
 import { frame } from "./chrome.ts";
 import type { ConnForm } from "./conn-form.ts";
 import type { ExportForm } from "./export-form.ts";
-import { here, start, command, handoverOut } from "./opening.ts";
+import { here, start, command, handoverOut, newSlot } from "./opening.ts";
 import { IO, clientOf, dataHome } from "./session.ts";
 import { privateDir, removeDir } from "./runner.ts";
 import type { FolderEnv } from "./folderenv.ts";
@@ -64,6 +64,7 @@ import { setupOf } from "./clients.ts";
 import { loadFolderEnv } from "./folderenv.ts";
 import type { Read } from "./reads.ts";
 import { overdue } from "./reads.ts";
+import { syncPinned } from "./pinned.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
@@ -102,6 +103,14 @@ export default class Databases extends View {
   env: FolderEnv = { kind: "none" };
   /** The reads going on (reads.ts): what each panel says runs, and its stop. */
   reads: Read[] = [];
+  /** The ask before a connection whose port-forward is down (forward.ts). */
+  forwardAsk: ForwardAsk | null = null;
+  /** Whether the Kubernetes mod is installed (null: not looked yet). */
+  k8s: boolean | null = null;
+  /** This copy, as the pinned list's notice names who changed it. */
+  me = newSlot();
+  /** When this window last read or changed the pinned list (pinned.ts). */
+  pinnedAt = 0;
   /** How this machine gets its programs (the install line a missing client offers). */
   setup: Setup = "other";
   /** The private folder (0700) runs hand files over in. */
@@ -189,6 +198,7 @@ export default class Databases extends View {
         this.setup = s;
       });
       this.saved = await readConnections(IO, dataHome());
+      this.pinnedAt = Date.now();
       // The folder's environment loads beside the first connect (a client may come from it).
       const env = loadFolderEnv(this, cx);
 
@@ -219,6 +229,9 @@ export default class Databases extends View {
 
   tick(cx: Context): void {
     if (Date.now() - this.beatAt >= BEAT) this.beat();
+
+    // Another window changed the pinned connections: read them again.
+    void syncPinned(this, cx);
 
     // A read's seconds count up where it's shown; one past its deadline ends.
     if (this.reads.length) {

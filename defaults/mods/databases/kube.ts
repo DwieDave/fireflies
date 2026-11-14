@@ -13,7 +13,7 @@
 //               "userKey"?: …, "databaseKey"?: …, "kubectl"?: "kubectl" | "/abs/…/kubectl" }
 
 import type { Guarded } from "./guard.ts";
-import { isString, literal, object } from "./guard.ts";
+import { isNumber, isString, literal, object } from "./guard.ts";
 import type { ExecResult } from "herdr";
 
 /** Where a connection's password is in a cluster (the connect request's `secret`, a saved one's `source`). */
@@ -30,13 +30,16 @@ const KEY = /^[-._a-zA-Z0-9]{1,253}$/;
 const KUBECTL = /^(kubectl|\/[^\0\n\r]*\/kubectl)$/;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
 
+/** A kubeconfig context's name: anything printable, not too long. */
+const contextOk = (c: string): boolean => Boolean(c) && c.length <= 253 && ![...c].some((ch) => ch.charCodeAt(0) < 0x20 || ch.charCodeAt(0) === 0x7f);
+
 /** Why the window won't read this source for a connection to `host`, or null. */
 export function kubeProblem(s: KubeSource, kind: string, host: string | undefined): string | null {
   if (kind !== "postgres" && kind !== "mysql") return "a secret is read only for Postgres and MySQL";
 
   if (!host || !LOOPBACK.has(host)) return "a secret is read only for a server on this machine (127.0.0.1, a port-forward)";
 
-  if (!s.context || s.context.length > 253 || [...s.context].some((ch) => ch.charCodeAt(0) < 0x20)) return "its context isn't a context's name";
+  if (!contextOk(s.context)) return "its context isn't a context's name";
 
   if (!NAMESPACE.test(s.namespace)) return "its namespace isn't a namespace's name";
 
@@ -201,3 +204,70 @@ export async function readKube(exec: KubeExec, s: KubeSource): Promise<KubeRead 
     return { error: /not found|no such file|ENOENT/i.test(said) ? "kubectl isn't there (not on the app's PATH)" : said };
   }
 }
+
+// ---- the port-forward a connection came from (the contract's `forward`)
+//   "forward": { "context": …, "namespace": …, "target": "pod/<name>" | "svc/…" | "deploy/…" | "sts/…",
+//                "remote": 5432, "local": 15432, "kubectl"?: "kubectl" | "/abs/…/kubectl" }
+// Nothing secret; only with a 127.0.0.1 / localhost / ::1 host and `local` the connection's port.
+// The window starts it again when it's down and Developer says so (forward.ts), as the k8s mod
+// starts one: forwardStartArgs is its startArgs, word for word.
+
+/** The forward a connection came from: what `kubectl port-forward` it is. */
+export const isKubeForward = object({ context: isString, namespace: isString, target: isString, remote: isNumber, local: isNumber }, { kubectl: isString });
+
+export type KubeForward = Guarded<typeof isKubeForward>;
+
+/** A forward's target: a pod, a service, a deployment or a statefulset by its name. */
+const TARGET = /^(pod|svc|deploy|sts)\/[a-z0-9]([-a-z0-9.]{0,251}[a-z0-9])?$/;
+
+const isPort = (n: number): boolean => Number.isInteger(n) && n >= 1 && n <= 65535;
+
+/** Why the window won't keep or start this forward for a connection to `host`:`port`, or null. */
+export function forwardProblem(f: KubeForward, kind: string, host: string | undefined, port: number | undefined): string | null {
+  if (kind !== "postgres" && kind !== "mysql") return "a forward is kept only for Postgres and MySQL";
+
+  if (!host || !LOOPBACK.has(host)) return "a forward is kept only for a server on this machine (127.0.0.1)";
+
+  if (!contextOk(f.context)) return "its forward's context isn't a context's name";
+
+  if (!NAMESPACE.test(f.namespace)) return "its forward's namespace isn't a namespace's name";
+
+  if (!TARGET.test(f.target)) return "its forward's target isn't pod/, svc/, deploy/ or sts/ and a name";
+
+  if (!isPort(f.remote) || !isPort(f.local)) return "its forward's ports aren't ports";
+
+  if (port !== f.local) return "its forward's local port isn't the connection's port";
+
+  if (f.kubectl !== undefined && !KUBECTL.test(f.kubectl)) return "kubectl must be kubectl or a path ending in /kubectl";
+
+  return null;
+}
+
+/** The terminal label the k8s mod finds its forwards by (its forwards.ts LABEL). */
+export const FORWARD_LABEL = "k8s.forward" as const;
+
+/** The forward's note in its label (the k8s mod's noteFor, key for key and in its order). */
+export function forwardNote(f: KubeForward, kind: "postgres" | "mysql") {
+  return { context: f.context, namespace: f.namespace, target: f.target, local: f.local, remote: f.remote, db: kind, web: null, name: f.target.replace(/^[a-z]+\//, "") };
+}
+
+/** kubectl port-forward's argv (the program first). */
+export function forwardArgv(f: KubeForward): string[] {
+  return [f.kubectl ?? "kubectl", "--context", f.context, "-n", f.namespace, "port-forward", f.target, `${f.local}:${f.remote}`, "--address", "127.0.0.1"];
+}
+
+/** hc's arguments that start it: a terminal of its own in the background, labelled as the k8s mod
+ *  labels its forwards (so its window lists it, and stops it). */
+export function forwardStartArgs(f: KubeForward, kind: "postgres" | "mysql"): string[] {
+  const n = forwardNote(f, kind);
+
+  return [
+    "run", "--bg", "--no-parent", "--no-notify", "--json",
+    "--label", `${FORWARD_LABEL}=${JSON.stringify(n)}`,
+    "--label", `nocturne.name=forward ${n.name} :${n.local}`,
+    "--", ...forwardArgv(f),
+  ];
+}
+
+/** The command in words, as the ask shows it. */
+export const forwardCommand = (f: KubeForward): string => forwardArgv(f).join(" ");

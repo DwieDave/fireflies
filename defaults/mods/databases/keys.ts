@@ -26,7 +26,8 @@ const WINDOW: readonly Binding[] = [
 const CONNS: readonly Binding[] = [
   [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "connect (a double click too)", "connect"],
   [["x"], "disconnect", "disconnect"], [["n"], "new connection", "conn-new"], [["e"], "edit", "conn-edit"],
-  [["D"], "duplicate", "conn-duplicate"], [["d"], "remove", "conn-remove"], [["s"], "save a found one", "conn-save"],
+  [["D"], "duplicate", "conn-duplicate"], [["d"], "remove", "conn-remove"],
+  [["P"], "pin / unpin (every Databases window lists a pinned one)", "conn-pin"], [["s"], "pin a found or sent one", "conn-save"],
   [["t"], "test", "conn-test"], [["y"], "copy its address (never a password)", "copy"],
   [["J"], "move it down (or drag it)", "conn-down"], [["K"], "move it up", "conn-up"], [["m"], "menu (a right click too)", "menu"],
 ];

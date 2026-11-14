@@ -31,6 +31,7 @@ import { everything, hasRange, rangeOf, rowsSelected, wholeRows } from "./select
 import { runQuery } from "./query.ts";
 import { saveQueries } from "./queries.ts";
 import { countRows } from "./session.ts";
+import { askForward, forwardRunning, stopForward } from "./forward.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A menu row that does an action of a place: its key is that action's (none: no key does it). */
@@ -70,20 +71,40 @@ export function connMenu(v: DbView, c: Conn, cx: Context): void {
     entry("conns", "copy", "Copy its address", () => copy(v, address, cx), { sub: address }),
   ];
 
-  if (c.origin !== "saved") rows.push(entry("conns", "conn-save", "Save it", () => void saveFound(v, c, cx), { sub: "kept in connections, its password in the keychain" }));
+  if (c.origin !== "saved") rows.push(entry("conns", "conn-pin", "Pin it", () => void saveFound(v, c, cx), { sub: pinWords(c) }));
+
+  // Its forward: stop the running one, or start it (the ask shows what it runs).
+  const fwd = c.forward ? forwardRunning(c.forward) : null;
+
+  if (c.forward && fwd?.live) rows.push(entry("conns", null, `Stop its forward (localhost:${c.forward.local})`, () => stopForward(v, c, cx), { sub: `${c.forward.target} in ${c.forward.context}/${c.forward.namespace}; the Kubernetes window lists it too` }));
+  else if (c.forward) rows.push(entry("conns", null, "Start its forward…", () => askForward(v, c, "down", cx), { sub: `${c.forward.target} :${c.forward.remote} → localhost:${c.forward.local}` }));
 
   rows.push(entry("conns", "conn-new", "New connection…", () => openForm(v, null, cx)));
 
-  if (c.origin !== "found") rows.push(entry("conns", "conn-remove", "Remove…", () => confirmRemove(v, c, cx), { danger: true }));
+  if (c.origin === "saved") rows.push(entry("conns", "conn-pin", "Unpin it…", () => confirmRemove(v, c, cx), { sub: "every Databases window drops it", danger: true }));
+  else if (c.origin === "sent") rows.push(entry("conns", "conn-remove", "Remove…", () => confirmRemove(v, c, cx), { danger: true }));
 
   openMenu(v, c.name, rows);
 }
 
 /** Asks before a connection goes (its keychain item and history with it). */
 export function confirmRemove(v: DbView, c: Conn, cx: Context): void {
-  const what = c.origin === "saved" ? "Its password leaves the keychain and its history goes too." : "It was never saved.";
+  if (c.origin !== "saved") {
+    v.ask = { verdict: { risk: "write", verb: "remove", target: null }, text: `Remove ${c.name}? It was never pinned.`, step: 1, input: null, go: () => void remove(v, c, cx) };
 
-  v.ask = { verdict: { risk: "write", verb: "remove", target: null }, text: `Remove ${c.name}? ${what}`, step: 1, input: null, go: () => void remove(v, c, cx) };
+    return;
+  }
+
+  const what = c.secret === "kubernetes" ? "its password stays in the cluster's secret; its history goes" : c.secret === "keychain" ? "its password leaves the keychain and its history goes too" : "its history goes too";
+
+  v.ask = { verdict: { risk: "write", verb: "unpin", target: null }, text: `Unpin ${c.name}? Every Databases window drops it; ${what}.`, step: 1, input: null, go: () => void remove(v, c, cx) };
+}
+
+/** What pinning a connection keeps, in words (the menu's line under "Pin it"). */
+export function pinWords(c: Conn): string {
+  const pw = c.secret === "kubernetes" && c.source ? `its password read from secret ${c.source.name} at each connect` : "its password in the keychain";
+
+  return `every Databases window lists it, after a restart too; ${pw}${c.forward ? "; its forward started again when asked" : ""}`;
 }
 
 // ---- [2] a table, a view, a schema

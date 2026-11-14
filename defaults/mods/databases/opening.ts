@@ -15,6 +15,7 @@ import { act, openTable } from "./actions.ts";
 import { runQuery } from "./query.ts";
 import { setCell } from "./cell-edit.ts";
 import { stopReads } from "./reads.ts";
+import { askActions } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
 
 /** A folder and the machine it's on. */
@@ -163,6 +164,16 @@ export function command(v: DbView, c: string, cx: Context): void {
 
   if (name === "cancel") {
     dismiss(v);
+
+    return;
+  }
+
+  // The forward's ask: its buttons by name (enter, c, k).
+  const ask = v.forwardAsk;
+  const press = { "forward-start": "enter", "forward-anyway": "c", "forward-k8s": "k" }[name];
+
+  if (press) {
+    if (ask) askActions(v, ask).find((x) => x.key === press)?.go(cx);
 
     return;
   }

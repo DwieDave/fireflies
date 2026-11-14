@@ -15,12 +15,14 @@ import type { Found } from "./discover.ts";
 import { ENV_FILES, FIND_SCRIPT, foundFile, foundInVars, mergeFound, parseEnvFile } from "./discover.ts";
 import { deleteSecret, hasSecret, saveSecret } from "./secrets.ts";
 import type { KubeSource } from "./kube.ts";
-import { kubeProblem, kubeWords, readKube } from "./kube.ts";
-import { clearHistory, readHistory, writeConnections } from "./store.ts";
+import { forwardProblem, kubeProblem, kubeWords, readKube } from "./kube.ts";
+import { clearHistory, readHistory } from "./store.ts";
+import { changePinned } from "./pinned.ts";
 import { IO, clientFrom, clientOf, dataHome, loadTables, needsPassword, runLine, runOn } from "./session.ts";
 import { PROGRAMS } from "./clients.ts";
 import { endWords, reading } from "./reads.ts";
 import { folderEnvReady } from "./folderenv.ts";
+import { forwardFirst, takenAfter } from "./forward.ts";
 import type { ConnectArgs } from "./state.ts";
 import { gridStart, noteOf } from "./state.ts";
 import { counted } from "./edits.ts";
@@ -84,7 +86,7 @@ function setFound(v: DbView, list: readonly Found[]): void {
 /** A connection another mod sent (databases.connect): listed and connected, not saved. A
  *  cluster's secret named in it is checked first (kube.ts): a bad one refuses the request. */
 export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
-  const problem = a.secret ? kubeProblem(a.secret, a.kind, a.host) : null;
+  const problem = (a.secret ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward ? forwardProblem(a.forward, a.kind, a.host, a.port) : null);
 
   if (problem) {
     v.say(`databases.connect: ${problem}`, "failed");
@@ -97,6 +99,8 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
   const conn: ConnDraft = { ...base, ...pick(a) };
 
   if (a.secret) conn.source = a.secret;
+
+  if (a.forward) conn.forward = a.forward;
 
   v.sent = [conn, ...v.sent.filter((c) => c.id !== conn.id)];
   v.connAt = v.saved.length;
@@ -129,13 +133,21 @@ function pick(a: ConnectArgs): Place {
 /** Connects: the password first where it must be asked (or read from a cluster's secret), then
  *  the tables. A local server that trusts its socket needs none, so a sent one tries without and
  *  asks when refused. */
-export function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
+export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
   if (counted(v.edits).cells) {
     beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
 
-    return Promise.resolve();
+    return;
   }
 
+  // A connection from a port-forward: its port looked at first (down: the ask, forward.ts).
+  if (c.forward && !(await forwardFirst(v, c, cx))) return;
+
+  return connectNow(v, c, cx);
+}
+
+/** Connects without looking at its forward (after the port was found open, or started). */
+export function connectNow(v: DbView, c: Conn, cx: Context): Promise<void> {
   if (c.secret === "kubernetes" && c.source) return readThenOpen(v, c, c.source, cx);
 
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
@@ -270,6 +282,10 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
 
     if (refused && c.origin === "sent" && !v.secrets.has(c.id)) v.askPassword(c, false, cx, () => void connect(v, c, cx));
 
+    // Something other than the database on a forward's port (another program holds it): said, with
+    // another local port offered.
+    if (v.active === c && e && c.forward) void takenAfter(v, c, e, cx);
+
     // A secret's password the server refused (the wrong secret picked, rotated since): asked once.
     if (refused && c.secret === "kubernetes" && c.source && v.sourced.get(c.id)?.ok) {
       v.sourced.set(c.id, { ok: false, text: `the server refused the password from secret ${c.source.name} · ${c.source.key}` });
@@ -370,15 +386,16 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
     }
   }
 
-  v.saved = [...v.saved, kept];
-  v.found = v.found.filter((f) => f.conn.id !== c.id);
-  v.sent = v.sent.filter((s) => s.id !== c.id);
-  await writeConnections(IO, dataHome(), v.saved);
-
   if (v.active?.id === c.id) v.active = kept;
 
-  v.connAt = v.saved.length - 1;
-  v.say(`saved ${c.name}${kube ? ` · its password is read from secret ${kube.name} at each connect` : secret ? " · its password is in the keychain" : ""}`, "done");
+  const list = await changePinned(v, (now) => [...now.filter((x) => x.id !== id), kept], cx);
+
+  if (!list) return;
+
+  v.found = v.found.filter((f) => f.conn.id !== c.id);
+  v.sent = v.sent.filter((s) => s.id !== c.id);
+  v.connAt = Math.max(0, v.saved.findIndex((x) => x.id === id));
+  v.say(`pinned ${c.name}: every Databases window lists it${kube ? ` · its password is read from secret ${kube.name} at each connect` : secret ? " · its password is in the keychain" : ""}${c.forward ? ` · its forward (${c.forward.target}) is offered when its port is down` : ""}`, "done");
   cx.notify();
 }
 
@@ -391,15 +408,15 @@ export async function remove(v: DbView, c: Conn, cx: Context): Promise<void> {
     return;
   }
 
-  v.saved = v.saved.filter((s) => s.id !== c.id);
-  await writeConnections(IO, dataHome(), v.saved);
+  if (!(await changePinned(v, (now) => now.filter((s) => s.id !== c.id), cx))) return;
+
   await deleteSecret(IO, c.id);
   await clearHistory(IO, dataHome(), c.id);
 
   if (v.active?.id === c.id) v.active = null;
 
   v.connAt = Math.max(0, Math.min(v.connAt, connList(v).length - 1));
-  v.say(`removed ${c.name}`, "done");
+  v.say(`unpinned ${c.name}`, "done");
   cx.notify();
 }
 

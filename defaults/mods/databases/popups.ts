@@ -22,6 +22,7 @@ import { keepRename } from "./menus.ts";
 import { applyFilter } from "./act-grid.ts";
 import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
+import { forwardAskKey, forwardAskPanel } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
@@ -163,6 +164,8 @@ function passwordKey(v: DbView, e: KeyEvent): Taken {
 
 /** Hands a key to what's over the view: taken, "typing" (the focused field's), or not. */
 export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
+  if (v.forwardAsk) return forwardAskKey(v, v.forwardAsk, e, cx);
+
   if (v.form) return v.form.key(e, cx);
 
   if (v.exporting) return v.exporting.key(e, cx);
@@ -348,6 +351,8 @@ export function overBody(t: Theme, v: DbView): Element[] {
   if (v.form) out.push(v.form.draw(t));
 
   if (v.exporting) out.push(v.exporting.draw(t));
+
+  if (v.forwardAsk) out.push(forwardAskPanel(t, v, v.forwardAsk, (id, box, close) => centered(id, box, close)));
 
   return out;
 }

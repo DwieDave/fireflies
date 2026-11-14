@@ -19,8 +19,8 @@ import { clientOf } from "./session.ts";
 import { installLine } from "./clients.ts";
 import { parseDbUrl } from "./discover.ts";
 import { saveSecret } from "./secrets.ts";
-import { writeConnections } from "./store.ts";
-import { IO, dataHome } from "./session.ts";
+import { changePinned } from "./pinned.ts";
+import { IO } from "./session.ts";
 import { test } from "./conns.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "./keyhelp.ts";
@@ -285,8 +285,9 @@ export class ConnForm {
     const v = this.v;
     const i = v.saved.findIndex((s) => s.id === id);
 
-    v.saved = i >= 0 ? v.saved.map((s) => (s.id === id ? c : s)) : [...v.saved, c];
-    await writeConnections(IO, dataHome(), v.saved);
+    const list = await changePinned(v, (now) => (now.some((s) => s.id === id) ? now.map((s) => (s.id === id ? c : s)) : [...now, c]), cx);
+
+    if (!list) return;
 
     if (v.active?.id === id) v.active = c;
 

@@ -227,6 +227,8 @@ test:
     bun test scripts/databases-ux.test.ts
     # The Databases window's reads: nothing sits in "reading" without something running (a missing client said before anything is read, a throw, a read delivered twice); a read's seconds, esc and its stop chip, its deadline; the client from the space folder's direnv first; the Log names each run; no exact count unasked.
     bun test scripts/databases-reads.test.ts
+    # Pinned connections and a connection's port-forward: one list for the machine, every window told, a restart, no secret in the file; the forward's facts checked; its port looked at first, the ask with its overview, the forward started as the k8s mod starts one (the shared fixture), a pod that's gone, a port another program holds, stopping it.
+    bun test scripts/databases-pin.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view
