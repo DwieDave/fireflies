@@ -34,6 +34,7 @@ mock.module("herdr", () => ({
 const { readUsage, refreshUsage, lastUsage, usageNote } = await import("../defaults/mods/nocturne/limits.ts");
 const cache = join(root, "cache");
 
+const curls = () => asked().filter((c) => c === "curl").length;
 const asked = () => (existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n").filter(Boolean) : []);
 beforeEach(() => { rmSync(calls, { force: true }); rmSync(cache, { recursive: true, force: true }); env = { HERDR_USAGE_DIR: cache }; for (const k of Object.keys(store)) delete store[k]; });
 
@@ -77,9 +78,37 @@ test("off: the views get no numbers (not a scratch home's stale ones), and it is
   expect(asked()).toEqual([]);
 });
 
+test("off: a scratch app stays out of the machine's record (the real app never adopts its off, the scratch app shows none of the real numbers)", async () => {
+  // The real app reads and writes the record.
+  await refreshUsage();
+  const file = join(cache, "usage-claude.json");
+  const before = readFileSync(file, "utf8");
+  expect(JSON.parse(before).note).toBe(null);
+  // A scratch app on the same machine: its own shared() store, the same cache folder.
+  const scratch: any = await import(`../defaults/mods/nocturne/limits.ts?scratch=${Math.random()}`);
+  const its: Record<string, unknown> = {};
+  scratch.setHost({ shared: (k: string) => its[k] ?? null, setShared: (k: string, v: unknown) => { its[k] = v; return null; } });
+  env = { HERDR_USAGE_DIR: cache, HERDR_APP_HOME: "/var/tmp/scratch-home" };
+  await scratch.refreshUsage("force");
+  expect(scratch.usageNote()?.state).toBe("off");
+  expect(scratch.lastUsage()).toBe(null);
+  expect(Object.values(its).some((v) => JSON.stringify(v).includes('"session"'))).toBe(false);
+  expect(readFileSync(file, "utf8")).toBe(before);
+  expect(existsSync(`${file}.lock`)).toBe(false);
+});
+
+test("off: an off note an older scratch app left in the machine's record isn't the real app's, which asks again at its pace", async () => {
+  mkdirSync(cache, { recursive: true });
+  const old = Date.now() - 3600_000;
+  writeFileSync(join(cache, "usage-claude.json"), JSON.stringify({ answer: { state: "ok", session: { used: 15, resets: null, length: 1 }, week: { used: 74, resets: null, length: 1 }, scoped: [], plan: "max 5x", at: old }, note: { state: "off", local: true, at: Date.now() }, tried: Date.now(), until: 0, fails: 0 }));
+  await refreshUsage();
+  expect(usageNote()).toBe(null);
+  expect(curls()).toBe(1);
+  expect(JSON.parse(readFileSync(join(cache, "usage-claude.json"), "utf8")).note).toBe(null);
+});
+
 // ---- the machine's record: the real file and lock script
 
-const curls = () => asked().filter((c) => c === "curl").length;
 
 test("the machine's file: one app asks and writes it, another app adopts it without asking", async () => {
   await refreshUsage();

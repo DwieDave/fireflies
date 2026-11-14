@@ -18,7 +18,9 @@
 // ~/.config/herdr-app): its login is still this machine's, so every scratch
 // app would ask the same account's endpoint on top of the real app's.
 // HERDR_APP_USAGE=1 turns it on there. Checked by the scripts themselves,
-// before the login is read: no request leaves a scratch app.
+// before the login is read: no request leaves a scratch app. It also stays
+// out of the machine's record below (it reads no numbers from it and writes
+// nothing there: its "off" is its own, never the real app's).
 //
 // Two mods show it (Nocturne's sidebar and the usage pane), and a
 // mod can't import another's files: this file is in both, byte for byte.
@@ -259,8 +261,25 @@ async function fileStep(op: "lock" | "write" | "unlock", p: ProviderId, arg: str
 /** The machine's record, or null (none yet, or not one). */
 async function readRecord(p: ProviderId): Promise<MachineRecord | null> {
   const r = await host.exec("sh", ["-c", FILE, "sh", "read", p, ""]).catch(() => ({ stdout: "" }));
+  const rec = parseJson(r.stdout, isMachineRecord) ?? null;
 
-  return parseJson(r.stdout, isMachineRecord) ?? null;
+  // An "off" in the file is a scratch app's (one from before they kept out of
+  // it), not this machine's reading: dropped, and the last try is the last
+  // answer's, so the real app asks at its own pace again.
+  return rec?.note?.state === "off" ? { ...rec, note: null, tried: rec.answer?.at ?? 0 } : rec;
+}
+
+/** Whether this is a scratch app (OFF's check alone: nothing read, nothing asked). */
+async function scratchApp(): Promise<boolean> {
+  const r = await host.exec("sh", ["-c", OFF]).catch(() => ({ code: 0 }));
+
+  return r.code === 5;
+}
+
+/** Off, in this app only: its note and its pace, nothing in the machine's record. */
+function offHere(p: ProviderId, now: number) {
+  writeShared(host.setShared, noteKey(p), { state: "off", local: true, at: now });
+  writeShared(host.setShared, stateKey(p), { tried: now, until: 0, fails: 0 });
 }
 
 /** Shows the machine's record here (every copy of this app redraws). */
@@ -287,6 +306,10 @@ export async function refreshUsage(asked: Why | boolean | null = "tick", p: Prov
   writeShared(host.setShared, askingKey(p), now);
 
   try {
+    // A scratch app stays out of the machine's record: it shows none of its
+    // numbers and never writes its own "off" there for the real app to adopt.
+    if (await scratchApp()) return offHere(p, host.now());
+
     let rec = await readRecord(p);
 
     adopt(p, rec);
