@@ -132,9 +132,9 @@ export function helpSections(place: Place): KeySection[] {
 
 /** The actions the key bar names, per place. */
 const BAR = {
-  window: [], conns: ["connect", "conn-new", "conn-edit", "conn-test"], tables: ["open", "table-query", "insert", "export"],
-  structure: ["subtab-next", "open", "insert"], rows: ["cell-edit", "value", "sort", "filter", "page-next", "export"],
-  results: ["value", "edit", "copy", "export"], editor: ["run", "run-all", "results", "history"], log: ["open", "copy"],
+  window: [], conns: ["connect", "conn-new", "conn-edit", "conn-test", "menu"], tables: ["open", "table-query", "insert", "export", "menu"],
+  structure: ["subtab-next", "open", "insert", "menu"], rows: ["cell-edit", "sort", "filter", "page-next", "menu", "column-menu"],
+  results: ["edit", "copy", "sort", "menu", "column-menu"], editor: ["run", "run-all", "results", "history"], log: ["open", "copy", "menu"],
 } as const satisfies { readonly [P in Place]: readonly string[] };
 
 /** The key bar's few entries for a place. */

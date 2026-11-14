@@ -342,7 +342,7 @@ function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
 
   const r = o.results[q.shown];
   const said = resultWords(r, (q.verdicts[r?.index ?? 0] ?? "read") !== "read");
-  const sets = o.results.length > 1 ? o.results.map((x, i) => chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; })) : [];
+  const sets = o.results.length > 1 ? o.results.map((x, i) => h_flex().id(`result-${i}-tip`).flex_none().tooltip("statement's result · < > step through them").child(chip(t, `result-${i}`, String(x.index + 1), i === q.shown, () => { q.shown = i; }))) : [];
 
   const sort = q.sort;
 

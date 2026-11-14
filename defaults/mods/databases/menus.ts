@@ -27,7 +27,7 @@ import type { StructRow } from "./panels.ts";
 import { changeAt } from "./edits.ts";
 import { editableNow, liveEdits, stageNull, startEdit, undoCell } from "./cell-edit.ts";
 import { WIDTH_STEP } from "./columns.ts";
-import { hasRange, rangeOf, rowsSelected, wholeRows } from "./select.ts";
+import { everything, hasRange, rangeOf, rowsSelected, wholeRows } from "./select.ts";
 import { runQuery } from "./query.ts";
 import { saveQueries } from "./queries.ts";
 import type { default as DbView } from "./main.ts";
@@ -185,6 +185,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
   rows.push(
     entry(place, "value", "Its whole value", () => showValue(v), { sub: "in [3] Value" }),
     entry(place, "copy", range ? "Copy the selection" : "Copy the value", () => copy(v, copyText(g), cx), { sub: range ? "tab-separated: a spreadsheet takes it" : "as it is" }),
+    entry(place, "select-all", "Select every cell", () => g.put(everything(g.at, g.set)), { sub: "shift + arrows, a drag or the row numbers select some" }),
     ...rowCopies(v, g, rowsFor(g, row), cx),
   );
 
@@ -294,6 +295,9 @@ export function tabMenu(v: DbView, n: number, cx: Context): void {
   }
 
   rows.push(entry("rows", "query-new", "New query tab", () => void v.addQuery("", cx)));
+
+  if (v.active) rows.push(entry("rows", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }));
+
   openMenu(v, b ? `Rows · ${b.table.name}` : "Rows", rows);
 }
 
@@ -312,6 +316,7 @@ function queryTabMenu(v: DbView, q: QueryTab, cx: Context): void {
     entry("results", "query-close", "Close", () => closeQuery(v, q, cx)),
     ...(others ? [entry("results", null, "Close the others", () => closeOthers(v, q))] : []),
     entry("results", "query-new", "New query tab", () => void v.addQuery("", cx)),
+    entry("results", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }),
   ]);
 }
 

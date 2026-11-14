@@ -388,7 +388,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   // A cell: edit, value, copies, filter by it, sort, the column's menu, export.
   v.key(key("l"), cx);
   v.key(key("m"), cx);
-  expect(labels()).toEqual(["Change name…", "Set it NULL", "Its whole value", "Copy the value", "Copy the row", "Copy the row as JSON", "Copy the row as CSV", "Copy the row as INSERT", "Filter by this value", "Sort by name", "name's menu…", "Export…"]);
+  expect(labels()).toEqual(["Change name…", "Set it NULL", "Its whole value", "Copy the value", "Select every cell", "Copy the row", "Copy the row as JSON", "Copy the row as CSV", "Copy the row as INSERT", "Filter by this value", "Sort by name", "name's menu…", "Export…"]);
   check("rows");
   v.menu.rows.find((r: any) => r.label === "Copy the row as INSERT").go();
   expect(clipboard).toBe(`INSERT INTO "lanterns" ("id", "name", "lumens", "note") VALUES (1, 'lantern 1', 37, NULL);\n`);
@@ -408,7 +408,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   v.menu = null;
   // The tab's menu (T) on the Rows tab.
   v.key(key("T"), cx);
-  expect(labels()).toEqual(["Read it again", "Clear the filter", "Export…", "Select it in a query", "New query tab"]);
+  expect(labels()).toEqual(["Read it again", "Clear the filter", "Export…", "Select it in a query", "New query tab", "History…"]);
   check("rows");
   v.menu.rows[1].go();
   await until(() => !v.rows.busy && v.rows.browse.filter === "");
@@ -460,7 +460,7 @@ test.skipIf(!SQLITE)("the menus: each target's rows, and each key a row shows do
   // A query tab's menu: run, rename, duplicate, close, the others.
   const q = v.queries[0];
   ux.menus.tabMenu(v, 1, cx);
-  expect(labels()).toEqual(["Run the statement", "Run every statement", "Rename…", "Duplicate", "Close", "Close the others", "New query tab"]);
+  expect(labels()).toEqual(["Run the statement", "Run every statement", "Rename…", "Duplicate", "Close", "Close the others", "New query tab", "History…"]);
   expect(v.menu.rows[0].key).toBe("ctrl-enter");
   v.menu = null;
   void q;
