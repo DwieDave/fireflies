@@ -460,6 +460,12 @@ struct Overlay {
     /// A dialog or popup: the window that held the keyboard when it opened,
     /// which gets it back when it closes (the palette over the GitHub window).
     back_to: Option<String>,
+    /// A window with `snap: true`: magnetic to the shown tab's pane grid's
+    /// corners and edge middles while dragged (`movable.rs`).
+    snap: bool,
+    /// The place it sits on (dropped there, or `overlay.snap {to}`): it stays
+    /// there as the grid or its size changes, until dragged off.
+    anchor: Option<movable::Place>,
 }
 
 struct Drag {
@@ -4331,6 +4337,13 @@ impl AppWindow {
                 }
                 return;
             }
+            "overlay.snap" => {
+                let on = a.get("on").and_then(Value::as_bool);
+                if let Err(e) = self.snap_window_cmd(Self::owned(a, "id"), on, Self::arg(a, "to"), window.viewport_size(), window, cx) {
+                    return self.fail(e);
+                }
+                return;
+            }
             "overlay.close" => {
                 let id = Self::owned(a, "id").or_else(|| self.overlays.iter().rev().find(|o| o.kind.modal_keys()).map(|o| o.id.clone()));
                 if let Some(id) = id {
@@ -4658,10 +4671,13 @@ impl AppWindow {
         let key = spec.get("key").and_then(Value::as_str).filter(|k| !k.is_empty() && kind == OverlayKind::Window).map(str::to_owned);
         // One window per name: opening it again replaces it, in its place.
         let mut place = key.as_deref().and_then(movable::place_of);
+        let snap = kind == OverlayKind::Window && spec.get("snap").and_then(Value::as_bool) == Some(true);
+        let mut anchor = movable::opening_anchor(snap, key.as_deref(), place.is_some());
         if let Some(k) = &key
-            && let Some(old) = self.overlays.iter().find(|o| o.key.as_ref() == Some(k)).map(|o| (o.id.clone(), o.place))
+            && let Some(old) = self.overlays.iter().find(|o| o.key.as_ref() == Some(k)).map(|o| (o.id.clone(), o.place, o.anchor))
         {
             place = old.1.or(place);
+            anchor = old.2.filter(|_| snap).or(anchor);
             self.remove_overlay(&old.0, window, cx);
         }
         let layout = spec.get("layout").filter(|_| kind != OverlayKind::Toast).and_then(|l| match serde_json::from_value::<Node>(l.clone()) {
@@ -4771,6 +4787,8 @@ impl AppWindow {
             sizes,
             frame: app_screen,
             back_to,
+            snap,
+            anchor,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -5703,7 +5721,7 @@ impl AppWindow {
                                 .into_any_element(),
                         );
                     }
-                    out.push(self.render_window(o, body, viewport, cx));
+                    out.push(self.render_window(o, body, viewport, scale, cx));
                 }
                 OverlayKind::Dialog => out.push(
                     div()
@@ -8844,6 +8862,149 @@ export default class W extends View {
         cx.run_until_parked();
         let left_open = view.update(cx, |this, _| (this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count(), this.overlays.iter().any(|o| o.id == id)));
         assert_eq!(left_open, (0, true));
+    }
+
+    #[test]
+    fn a_snapping_window_lands_on_the_pane_grids_corners_and_edge_middles() {
+        in_own_process("snap_to_grid");
+    }
+
+    /// A window with `snap` (the picture in picture player): dragged near one
+    /// of the eight places of the shown tab's pane grid it lands exactly
+    /// there, its outer edge on the panes' outer edge (not the sidebar's, not
+    /// the window's), on whole device pixels at zoom 1 and 0.9; it stays on
+    /// its place as the grid changes; dragged into the open it's free. Off,
+    /// nothing catches it.
+    #[gpui::test]
+    fn snap_to_grid(cx: &mut gpui::TestAppContext) {
+        use crate::layout::{Axis, Content, Node};
+        use serde_json::json;
+        if !running_alone("snap_to_grid") {
+            return;
+        }
+        let plain = "import { View, div } from \"gpui-kit\"; export default class P extends View { render() { return div().size_full(); } }";
+        let frame = json!({ "background": "#080808", "border": { "width": 1, "color": "#323437" }, "focus": { "width": 1, "color": "#80a0ff" }, "radius": 0, "gap": 8, "lone": true });
+        // A sidebar left of the tab, as Nocturne has: the grid starts past it.
+        let layout = json!({ "id": "root", "type": "row", "children": [
+            { "id": "side", "type": "block", "size": { "px": 173 }, "content": { "mod": "plain" } },
+            { "id": "main", "type": "block", "content": { "tab": "active", "pane": frame } }
+        ] });
+        let (view, cx) = open_window(cx, "plain", plain, layout);
+        cx.update(|window, cx| view.update(cx, |this, cx| {
+            this.sync_folders(window, cx);
+            this.model.add_space("sp1", "", "/tmp", crate::model::Tab::new("tb1", "", "p1", "t1"));
+            assert!(this.model.split_with("p1", Axis::Row, Node::block("pm", Content::Mod { name: "plain".into(), props: json!({}) })));
+            this.sync(window, cx);
+        }));
+        cx.run_until_parked();
+        let id = view.update_in(cx, |this, window, cx| {
+            let id = crate::mods::new_overlay_id();
+            this.open_overlay(id.clone(), json!({ "mod": "plain", "kind": "window", "key": "player", "frame": "none", "width": 301, "height": 197, "snap": true }), window, cx);
+            id
+        });
+        let frames = |cx: &mut gpui::VisualTestContext| {
+            for _ in 0..3 {
+                view.update(cx, |_, cx| cx.notify());
+                cx.run_until_parked();
+            }
+        };
+        frames(cx);
+        let win = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.bounds.borrow()[&format!("overlay:{id}")]);
+        let grid = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| {
+            let b = this.bounds.borrow();
+            (b["p1"].union(&b["pm"]), b["side"])
+        });
+        let anchor = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().find(|o| o.id == id).and_then(|o| o.anchor));
+        let on_pixels = |v: gpui::Pixels| (f32::from(v) * 2.0).fract() == 0.0;
+        let none = gpui::Modifiers::default();
+        let left = gpui::MouseButton::Left;
+        // Drags the window by its middle so its top left goes near `to` (+ a few px off).
+        let drag = |to: gpui::Point<gpui::Pixels>, cx: &mut gpui::VisualTestContext| {
+            let w = win(cx);
+            let grab = w.center();
+            let by = to - w.origin;
+            cx.simulate_mouse_down(grab, left, none);
+            cx.simulate_mouse_move(grab + point(px(6.0), px(6.0)), left, none);
+            cx.run_until_parked();
+            cx.simulate_mouse_move(grab + by, left, none);
+            cx.run_until_parked();
+            cx.simulate_mouse_up(grab + by, left, none);
+            frames(cx);
+        };
+        for zoom in [1.0_f32, 0.9] {
+            let mut st = (*crate::settings::get()).clone();
+            st.zoom = zoom;
+            crate::settings::set(st);
+            view.update_in(cx, |this, window, cx| this.sync(window, cx));
+            frames(cx);
+            let (g, side) = grid(cx);
+            assert!(g.left() >= side.right(), "zoom {zoom}: the grid is right of the sidebar: {g:?} {side:?}");
+            assert_eq!(view.update(cx, |this, _| this.snap_area()), Some(super::movable::to_rect_for_tests(g)));
+            // Never anchored before: it opens on the grid's bottom right corner.
+            if zoom == 1.0 {
+                let w = win(cx);
+                assert_eq!((anchor(cx), w.bottom_right()), (Some(super::movable::Place::BottomRight), g.bottom_right()), "zoom {zoom}: opens bottom right");
+            }
+            // Near the top's middle (10 px off on both axes): exactly on it.
+            let w = win(cx);
+            drag(point(g.left() + (g.size.width - w.size.width) / 2.0 + px(10.0), g.top() + px(10.0)), cx);
+            let w = win(cx);
+            assert_eq!(anchor(cx), Some(super::movable::Place::Top), "zoom {zoom}");
+            assert_eq!(w.top(), g.top(), "zoom {zoom}: its top on the grid's top");
+            assert!((f32::from(w.center().x - g.center().x)).abs() <= 0.5, "zoom {zoom}: centred along it: {w:?} in {g:?}");
+            assert!(on_pixels(w.left()) && on_pixels(w.top()), "zoom {zoom}: on device pixels: {w:?}");
+            // Near the top left (just past the grid, over the sidebar): on the grid's corner, not the sidebar's.
+            drag(point(g.left() - px(15.0), g.top() + px(12.0)), cx);
+            let w = win(cx);
+            assert_eq!((anchor(cx), w.origin), (Some(super::movable::Place::TopLeft), g.origin), "zoom {zoom}");
+            // The bottom right: both far edges exact.
+            drag(point(g.right() - w.size.width - px(20.0), g.bottom() - w.size.height - px(5.0)), cx);
+            let w = win(cx);
+            assert_eq!((anchor(cx), w.bottom_right()), (Some(super::movable::Place::BottomRight), g.bottom_right()), "zoom {zoom}");
+            // The app window gets smaller: the grid with it, and the window stays on its corner.
+            let before = cx.update(|window, _| window.viewport_size());
+            cx.simulate_resize(gpui::size(before.width - px(97.0), before.height - px(61.0)));
+            frames(cx);
+            let (g2, _) = grid(cx);
+            assert_ne!(g2, g, "zoom {zoom}: the grid changed");
+            assert_eq!(win(cx).bottom_right(), g2.bottom_right(), "zoom {zoom}: still on the corner of the new grid");
+            cx.simulate_resize(before);
+            frames(cx);
+            assert_eq!(win(cx).bottom_right(), grid(cx).0.bottom_right());
+            // Into the open: free, where it was dropped.
+            let to = g.center() - point(px(100.0), px(80.0));
+            drag(to, cx);
+            // (Where it was dropped; drawn on the nearest device pixel, as always.)
+            let place = view.update(cx, |this, _| this.overlays.iter().find(|o| o.id == id).and_then(|o| o.place));
+            assert_eq!((anchor(cx), place), (None, Some(to)), "zoom {zoom}: free in the open");
+        }
+        // Keys: overlay.snap to a place, and on from there by direction.
+        let snap = |args: serde_json::Value, cx: &mut gpui::VisualTestContext| {
+            let r = view.update_in(cx, |this, window, cx| this.run_as("overlay.snap", args, false, window, cx));
+            frames(cx);
+            r
+        };
+        assert!(snap(json!({ "id": id, "to": "bottom-left" }), cx).get("error").is_none());
+        let g = grid(cx).0;
+        assert_eq!((anchor(cx), win(cx).bottom_left()), (Some(super::movable::Place::BottomLeft), g.bottom_left()));
+        snap(json!({ "id": id, "to": "up" }), cx);
+        assert_eq!(anchor(cx), Some(super::movable::Place::Left));
+        snap(json!({ "id": id, "to": "right" }), cx);
+        assert_eq!(anchor(cx), Some(super::movable::Place::Right));
+        assert_eq!(win(cx).right(), g.right());
+        assert!(snap(json!({ "id": id, "to": "middle" }), cx).get("error").is_some());
+        // Off: it stays where it is, unanchored, and nothing catches it near a corner.
+        let at = win(cx).origin;
+        snap(json!({ "id": id, "on": false }), cx);
+        assert_eq!((anchor(cx), win(cx).origin), (None, at));
+        let near = point(g.left() + px(9.0), g.top() + px(7.0));
+        drag(near, cx);
+        let place = view.update(cx, |this, _| this.overlays.iter().find(|o| o.id == id).and_then(|o| o.place));
+        assert_eq!((anchor(cx), place), (None, Some(near)), "off: free next to the corner");
+        // Remembered: the last anchor (none: it was dropped free) and where it is.
+        snap(json!({ "id": id, "on": true, "to": "top-right" }), cx);
+        let read: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(crate::mods::app_dir().join("windows.json")).unwrap()).unwrap();
+        assert_eq!(read["anchors"]["player"], "top-right");
     }
 
     #[test]

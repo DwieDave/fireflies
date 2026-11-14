@@ -16,18 +16,27 @@
 //        video plays on, unparking the chip brings the window back
 //   ⇱    out of Fireflies: a window above every app and space, in the screen's
 //        bottom right corner (pip.out; its ⇲ brings it back)
+//   magnet  snapping on / off (pip.snap; pip.snap:on / :off set it), in the
+//        accent while on, shared `pip.snap` (unset: on; browser opens the
+//        window with it too). On, the window snaps to the shown tab's pane
+//        grid (OverlaySpec snap, src/window/movable.rs): dragged within 24 px
+//        of a corner or an edge's middle it lands exactly there and stays on
+//        it as the grid changes; out of Fireflies, to its screen's usable area
+//        (native pip.rs). pip.to:<place> (top-left … left, or the next one
+//        left / right / up / down) puts the window on one (overlay.snap to).
 //   ✕    close: the video goes back to its page, paused (pip.close)
 //   ⋯    when the bar is too narrow for them all: the rest, as a menu.
 //        Play/pause and close always stay on the bar.
 // The bar is in sections, a dithered seam between them: ↩ where it came from ·
-// « ❚❚ » 🔈 playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own (⋯ joins
-// these). A section with nothing left on a narrow bar takes its seam along; the
+// « ❚❚ » 🔈 playback · ◧ ⤓ ⇱ where it goes · magnet ? ✕ the player's own (⋯
+// joins these). A section with nothing left on a narrow bar takes its seam along; the
 // ⋯ menu lists what went into it in the same sections, a dithered rule between.
 // Seams and rules are in seamTone (a step darker than the icons' dim).
 // Keys while it has the keyboard (overlay.focus to the window, pane.go to its
 // pane, a click on it; its bar's edge turns blue meanwhile):
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
-//   p  into a pane   P  park   o  out of Fireflies   x q  close
+//   p  into a pane   P  park   o  out of Fireflies   s  snapping   x q  close
+//   ⇧← ⇧→ ⇧↑ ⇧↓ (H L K J)  the window to the next corner or edge middle that way
 //   esc  (the window) the keyboard back to the pane (overlay.focus none)
 //   ?    these keys (KEYS), keyhelp.ts's overview in a popup: the video is a
 //        native view, drawn over the panes and the overlays opened before it
@@ -64,8 +73,19 @@ const ICONS = "mods/pip/icons";
 // a 22 px bar in a 1 px border.
 const RESIZE = { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } satisfies OverlaySpec["resizable"];
 
-// The window, as browser opens it too.
+// The window, as browser opens it too (its away.ts PLAYER).
 const WINDOW = { mod: MOD, kind: "window", key: MOD, frame: "none", width: 384, height: 238, resizable: RESIZE } satisfies OverlaySpec;
+
+// Snapping (on unless set false): the window snaps to the shown tab's pane grid
+// (OverlaySpec snap), out of Fireflies to its screen's usable area. Shared with
+// browser, which opens the player too and keeps the window out of Fireflies' toggle.
+const SNAP = sharedKey("pip.snap", nullable(isBoolean));
+
+/** Whether the player snaps (pip.snap; unset: yes). */
+export const snapOn = (): boolean => readShared(shared, SNAP, null) !== false;
+
+/** The window as it opens now: snapping as the mode is. */
+const windowSpec = (): OverlaySpec => ({ ...WINDOW, snap: snapOn() });
 const SKIP = 10;
 const ROW = 26;
 
@@ -88,6 +108,7 @@ const isPipProps = object({}, {
   keys: isBoolean,
   playing: isBoolean,
   muted: isBoolean,
+  snap: isBoolean,
 });
 
 type PipProps = Guarded<typeof isPipProps>;
@@ -128,19 +149,34 @@ const isPipState = object({}, {
 type PipSession = { readonly showing: boolean | undefined };
 
 /** What a control's glyph and name depend on. */
-interface PlayerState { readonly playing: boolean; readonly muted: boolean }
+interface PlayerState { readonly playing: boolean; readonly muted: boolean; readonly snap: boolean }
 
 /** A glyph or name: fixed, or following the player. */
 type Label = string | ((s: PlayerState) => string);
 
 const label = (v: Label, s: PlayerState): string => (isString(v) ? v : v(s));
 
-type ControlId = "back" | "rewind" | "toggle" | "forward" | "mute" | "pane" | "park" | "out" | "keys" | "close";
+type ControlId = "back" | "rewind" | "toggle" | "forward" | "mute" | "pane" | "park" | "out" | "snap" | "keys" | "close";
 
-/** What a key or a command asks of the player: a control, or the keyboard back to the pane. */
-type Command = ControlId | "unfocus";
+/** Where `to:` moves the window: one of the pane grid's eight places, or the next place that way. */
+type SnapTo = "top-left" | "top" | "top-right" | "right" | "bottom-right" | "bottom" | "bottom-left" | "left" | "up" | "down";
 
-const isCommand = literal("back", "rewind", "toggle", "forward", "mute", "pane", "park", "out", "keys", "close", "unfocus");
+const isSnapTo = literal("top-left", "top", "top-right", "right", "bottom-right", "bottom", "bottom-left", "left", "up", "down");
+
+/** What a key or a command asks of the player: a control, the keyboard back to the
+ *  pane, snapping set on or off, or the window onto a place (`to:<place | left | right | up | down>`). */
+type Command = ControlId | "unfocus" | "snap:on" | "snap:off" | `to:${SnapTo}`;
+
+const isControlCommand = literal("back", "rewind", "toggle", "forward", "mute", "pane", "park", "out", "snap", "keys", "close", "unfocus", "snap:on", "snap:off");
+
+/** A command's text (`pip.` taken off) as a Command, or null. */
+export function parseCommand(c: string): Command | null {
+  if (isControlCommand(c)) return c;
+
+  const to = c.startsWith("to:") ? c.slice(3) : null;
+
+  return to !== null && isSnapTo(to) ? `to:${to}` : null;
+}
 
 type Section = "from" | "play" | "to" | "window";
 
@@ -153,6 +189,8 @@ interface Control {
   readonly name: Label;
   /** Only on the window, not in a pane. */
   readonly window?: true;
+  /** Its mark in the accent while this holds (a mode that is on). */
+  readonly lit?: (s: PlayerState) => boolean;
 }
 
 // The bar's controls, in bar order, in four sections with a dithered seam
@@ -168,13 +206,16 @@ const CONTROLS: readonly Control[] = [
   { id: "pane", section: "to", keep: 7, mark: { glyph: "◧" }, name: "Into a pane", window: true },
   { id: "park", section: "to", keep: 4, mark: { glyph: "⤓" }, name: "Park as a chip" },
   { id: "out", section: "to", keep: 8, mark: { glyph: "⇱" }, name: "Out of Fireflies" },
+  { id: "snap", section: "window", keep: 10, mark: { icon: () => "magnet" }, name: (s) => (s.snap ? "Snap to corners: on" : "Snap to corners: off"), lit: (s) => s.snap },
   { id: "keys", section: "window", keep: 9, mark: { glyph: "?" }, name: "Keys" },
   { id: "close", section: "window", keep: 1, mark: { glyph: "✕" }, name: "Close" },
 ];
 
 /** What ? lists: every key keyControl() takes, ? keys last. */
 export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
-  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
+  ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["s", "snap to corners on / off"],
+  ["⇧← ⇧→  H L", "to the corner or edge middle left / right"], ["⇧↑ ⇧↓  K J", "… above / below"],
+  ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
 /** The keys popup's height: the list in KEYS_W, and its 1 px border. */
 const KEYS_H = keysHeight(KEYS, KEYS_W) + 2;
@@ -279,7 +320,10 @@ function seam(t: Theme) {
 
 const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
   ["space", "toggle"], ["k", "toggle"], ["left", "rewind"], ["h", "rewind"], ["right", "forward"], ["l", "forward"], ["m", "mute"], ["b", "back"],
-  ["p", "pane"], ["P", "park"], ["o", "out"], ["x", "close"], ["q", "close"], ["escape", "unfocus"], ["?", "keys"],
+  ["p", "pane"], ["P", "park"], ["o", "out"], ["s", "snap"], ["x", "close"], ["q", "close"], ["escape", "unfocus"], ["?", "keys"],
+  // From place to place on the pane grid (shift with the arrows, or with h j k l).
+  ["H", "to:left"], ["L", "to:right"], ["K", "to:up"], ["J", "to:down"],
+  ["shift-left", "to:left"], ["shift-right", "to:right"], ["shift-up", "to:up"], ["shift-down", "to:down"],
 ]);
 
 /** A key as keyControl() reads it: GPUI's key event, or the fields a test gives. */
@@ -292,7 +336,10 @@ export function keyControl(e: Key | null | undefined): Command | null {
   if (m?.platform || m?.control || m?.alt) return null;
 
   const c = e?.key_char;
-  const k = isString(c) && c.length === 1 && c.trim() !== "" ? c : e?.key ?? "";
+  const key = e?.key ?? "";
+  // Shift with an arrow (the arrows type no character).
+  const arrow = m?.shift && ["left", "right", "up", "down"].includes(key) ? `shift-${key}` : null;
+  const k = arrow ?? (isString(c) && c.length === 1 && c.trim() !== "" ? c : key);
 
   return KEY_COMMANDS.get(k) ?? null;
 }
@@ -389,8 +436,10 @@ export default class Pip extends View {
       for (;;) {
         const c = String(await nextCommand()).replace(/^pip\./, "");
 
+        const command = parseCommand(c);
+
         if (c === "focus") handle.focus();
-        else if (isCommand(c)) this.command(c);
+        else if (command !== null) this.command(command);
         cx.notify();
       }
     });
@@ -399,7 +448,7 @@ export default class Pip extends View {
   key(e: KeyEvent, cx: Context) {
     const c = keyControl(e);
 
-    if (!c || ((c === "pane" || c === "unfocus") && this.inPane) || (c === "park" && this.parks)) return;
+    if (!c || ((c === "pane" || c === "unfocus" || c.startsWith("to:")) && this.inPane) || (c === "park" && this.parks)) return;
 
     if (c === "unfocus") run("overlay.focus", { dir: "none" });
     else this.command(c);
@@ -420,6 +469,15 @@ export default class Pip extends View {
     else if (c === "pane" && !this.inPane) this.intoPane(false);
     else if (c === "park" && !this.parks) this.park();
     else if (c === "keys") this.openKeys();
+    else if (c === "snap" || c === "snap:on" || c === "snap:off") this.setSnap(c === "snap" ? !snapOn() : c === "snap:on");
+    else if (c.startsWith("to:") && !this.inPane) run("overlay.snap", { id: pipProps().overlay, to: c.slice(3) });
+  }
+
+  /** Snapping on or off: the mode for every player (shared), and this window now. */
+  setSnap(on: boolean) {
+    writeShared(setShared, SNAP, on);
+
+    if (!this.inPane && pipProps().overlay !== undefined) run("overlay.snap", { id: pipProps().overlay, on });
   }
 
   /** ?: the keys, a popup over the video. */
@@ -493,7 +551,7 @@ export default class Pip extends View {
 
     if (this.wasParked) {
       this.wasParked = false;
-      openOverlay({ ...WINDOW, props: { of: pipProps().of } });
+      openOverlay({ ...windowSpec(), props: { of: pipProps().of } });
 
       return;
     }
@@ -534,7 +592,10 @@ export default class Pip extends View {
     const t = theme();
 
     try {
-      herdr.nativeViewCall(ID, "pip.popOut", { colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0 } });
+      herdr.nativeViewCall(ID, "pip.popOut", {
+        colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0, accent: t.accent, seam: seamTone(t) },
+        snap: snapOn(),
+      });
       this.leave();
     } catch (err) {
       this.error = err instanceof Error ? err.message : String(err);
@@ -592,7 +653,7 @@ export default class Pip extends View {
   }
 
   button(t: Theme, c: Control) {
-    const s: PlayerState = { playing: this.playing, muted: this.muted };
+    const s: PlayerState = { playing: this.playing, muted: this.muted, snap: snapOn() };
     const on = this.hover?.id === c.id;
 
     return this.hovers(div().id(`pip-${c.id}`).flex_none().w(BAR).h_full().flex().items_center().justify_center()
@@ -600,7 +661,7 @@ export default class Pip extends View {
       // A press on a button isn't a drag of the window.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.command(c.id); cx.notify(); })
-      .child(this.mark(c, on ? t.foreground : t.dim, s));
+      .child(this.mark(c, on ? t.foreground : c.lit?.(s) ? t.accent : t.dim, s));
   }
 
   /** ⋯: the controls that didn't fit, as a popup under the pointer. */
@@ -618,7 +679,7 @@ export default class Pip extends View {
     const parts = sections(CONTROLS.filter((c) => ids.includes(c.id))).length;
 
     openOverlay({ mod: MOD, kind: "popup", frame: "none", width: 240, height: ids.length * ROW + Math.max(0, parts - 1) * RULE + 10,
-      props: { menu: ids, playing: this.playing, muted: this.muted } });
+      props: { menu: ids, playing: this.playing, muted: this.muted, snap: snapOn() } });
   }
 
   bar(t: Theme) {
@@ -687,7 +748,7 @@ export default class Pip extends View {
   renderMenu(t: Theme) {
     const menu = this.menu ?? [];
     const p = pipProps();
-    const s: PlayerState = { playing: p.playing === true, muted: p.muted === true };
+    const s: PlayerState = { playing: p.playing === true, muted: p.muted === true, snap: snapOn() };
     const items = CONTROLS.filter((c) => menu.includes(c.id));
 
     this.cursor = Math.min(this.cursor, Math.max(0, items.length - 1));
@@ -700,7 +761,7 @@ export default class Pip extends View {
         .on_hover((h, cx) => { if (h) { this.cursor = i; cx.notify(); } })
         .on_click(() => this.pick(c))
         .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-        .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on ? t.accent : t.dim, s, 12)))
+        .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on || c.lit?.(s) ? t.accent : t.dim, s, 12)))
         .child(div().relative().flex_1().min_w(0).truncate().child(label(c.name, s)));
     };
 

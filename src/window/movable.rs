@@ -6,8 +6,15 @@
 //! A layout switch closes them (they belong to their layout, like its mods).
 //! With `resizable`, their edges and corners resize them (keeping an aspect
 //! ratio if asked, never below a minimum), and a keyed one remembers its size.
+//! With `snap`, a window is magnetic to the eight places of the shown tab's
+//! pane grid (its outer corners and edge middles): dragged within
+//! `SNAP_CATCH` of one it lands exactly there, its outer edge on the grid's,
+//! on whole device pixels, and stays anchored there (the grid or its size
+//! changing) until dragged off; a keyed one opens on its last anchor.
 
 use super::*;
+pub use fireflies_native_view::snap::Place;
+use fireflies_native_view::snap::{self, Dir};
 
 /// How far the pointer moves before a press becomes a drag.
 const DRAG_START: f32 = 4.0;
@@ -16,6 +23,10 @@ const KEEP_SHOWN: f32 = 48.0;
 
 /// The grips around a resizable window: this far out from its edges, px.
 const GRIP: f32 = 6.0;
+
+/// How near one of its places (px at zoom 1, on both axes) a dragged
+/// snapping window is caught; further off it moves freely.
+const SNAP_CATCH: f32 = 24.0;
 
 pub struct WinDrag {
     pub id: String,
@@ -29,6 +40,8 @@ pub struct WinDrag {
     resize: Option<([bool; 4], Bounds<Pixels>)>,
     /// The app window's size when pressed (a window never outgrows it).
     room: Size<Pixels>,
+    /// Device pixels to a point, for a snapped window's spot.
+    scale: f32,
 }
 
 /// `resizable` on a window: its smallest size and, if any, the aspect ratio
@@ -128,6 +141,65 @@ fn remember_size(key: &str, s: Size<f32>) {
     edit(|v| v["sizes"][key] = json!([s.width.round(), s.height.round()]));
 }
 
+/// The place a keyed window was last anchored on: Some(None) when it was
+/// last dropped off every place, None when nothing is known.
+fn anchor_of(key: &str) -> Option<Option<Place>> {
+    let v = read().get("anchors")?.get(key)?.clone();
+    Some(v.as_str().and_then(Place::parse))
+}
+
+fn remember_anchor(key: &str, anchor: Option<Place>) {
+    edit(|v| v["anchors"][key] = anchor.map_or(Value::Null, |p| json!(p.name())));
+}
+
+/// What a window opening with `snap` sits on: its key's last anchor; never
+/// anchored before, bottom right; last dropped off every place, none (it
+/// opens where it was dropped, `placed`; without a spot, bottom right).
+pub fn opening_anchor(snap: bool, key: Option<&str>, placed: bool) -> Option<Place> {
+    if !snap {
+        return None;
+    }
+    match key.and_then(anchor_of) {
+        Some(Some(p)) => Some(p),
+        Some(None) if placed => None,
+        _ => Some(Place::BottomRight),
+    }
+}
+
+fn to_rect(b: Bounds<Pixels>) -> fireflies_native_view::Rect {
+    fireflies_native_view::Rect { x: f64::from(f32::from(b.origin.x)), y: f64::from(f32::from(b.origin.y)), w: f64::from(f32::from(b.size.width)), h: f64::from(f32::from(b.size.height)) }
+}
+
+#[cfg(test)]
+pub(super) fn to_rect_for_tests(b: Bounds<Pixels>) -> fireflies_native_view::Rect {
+    to_rect(b)
+}
+
+/// A window's spot on `place` of `area` at `size`, on whole device pixels.
+fn snapped(place: Place, area: fireflies_native_view::Rect, size: Size<Pixels>, scale: f32) -> Point<Pixels> {
+    let (x, y) = snap::origin(place, area, (f64::from(f32::from(size.width)), f64::from(f32::from(size.height))), f64::from(scale));
+    point(px(x as f32), px(y as f32))
+}
+
+/// The place within `SNAP_CATCH` of a window at `at` (top left) and its
+/// spot there, if any.
+fn caught(area: fireflies_native_view::Rect, at: Point<Pixels>, size: Size<Pixels>, scale: f32) -> Option<(Place, Point<Pixels>)> {
+    let zoom = f64::from(f32::from(settings::z(1.0)));
+    let (place, (x, y)) = snap::catch(
+        area,
+        (f64::from(f32::from(at.x)), f64::from(f32::from(at.y))),
+        (f64::from(f32::from(size.width)), f64::from(f32::from(size.height))),
+        f64::from(SNAP_CATCH) * zoom,
+        f64::from(scale),
+    )?;
+    Some((place, point(px(x as f32), px(y as f32))))
+}
+
+/// The outer border of `panes` together, from where each was drawn.
+fn grid_of(bounds: &HashMap<String, Bounds<Pixels>>, panes: &[String]) -> Option<fireflies_native_view::Rect> {
+    panes.iter().filter_map(|p| bounds.get(p).copied()).reduce(|a, b| a.union(&b)).map(to_rect)
+}
+
 pub fn keep(layout: &str, key: &str, spec: &Value) {
     edit(|v| v["kept"][layout][key] = spec.clone());
 }
@@ -148,6 +220,22 @@ fn kept(layout: &str) -> Vec<Value> {
 }
 
 impl AppWindow {
+    /// The panes a snapping window snaps to: the shown tab's, as drawn (only
+    /// the zoomed one while one is), none while no tab shows.
+    fn snap_panes(&self) -> Vec<String> {
+        if !self.shows_tab() {
+            return vec![];
+        }
+        let Some(tab) = self.model.active_tab() else { return vec![] };
+        tab.shown().visible_blocks().into_iter().filter(|n| n.is_pane()).map(|n| n.id.clone()).collect()
+    }
+
+    /// The shown tab's pane grid: the outer border of its panes together (not
+    /// the sidebar, the tab strip or the parked row), as last drawn.
+    pub(super) fn snap_area(&self) -> Option<fireflies_native_view::Rect> {
+        grid_of(&self.bounds.borrow(), &self.snap_panes())
+    }
+
     /// The windows a layout keeps, reopened (at start, or on switching to it).
     pub(super) fn open_kept_windows(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         for spec in kept(&self.layout_name) {
@@ -166,10 +254,14 @@ impl AppWindow {
 
     /// A window at its spot: where it was dropped, else centered once its size
     /// is known (it stays invisible until then), always partly on screen.
-    pub(super) fn render_window(&self, o: &Overlay, body: Stateful<Div>, viewport: Size<Pixels>, cx: &mut Context<Self>) -> AnyElement {
+    pub(super) fn render_window(&self, o: &Overlay, body: Stateful<Div>, viewport: Size<Pixels>, scale: f32, cx: &mut Context<Self>) -> AnyElement {
         let measured = self.bounds.borrow().get(&o.slot).map(|b| b.size);
         let mut size = measured.unwrap_or_default();
         let resizing = self.win_drag.as_ref().filter(|d| d.id == o.id && d.moving).and_then(|d| Some((d, d.resize?, o.resize?)));
+        // Snapping: the shown tab's pane grid, as last drawn.
+        let panes = if o.snap { self.snap_panes() } else { vec![] };
+        let area = grid_of(&self.bounds.borrow(), &panes);
+        let anchored = o.anchor.zip(area);
         let mut body = body;
         let at = match (&self.win_drag, o.place) {
             _ if resizing.is_some() => {
@@ -183,9 +275,20 @@ impl AppWindow {
                 );
                 size = gpui::size(px(w), px(h));
                 body = body.w(px(w)).h(px(h)).max_h(px(h));
-                point(px(x), px(y))
+                // Anchored: it grows and shrinks on its place.
+                match anchored {
+                    Some((p, a)) => snapped(p, a, size, scale),
+                    None => point(px(x), px(y)),
+                }
             }
-            (Some(d), _) if d.id == o.id && d.moving => d.pointer - d.grab,
+            (Some(d), _) if d.id == o.id && d.moving => {
+                let free = d.pointer - d.grab;
+                area.and_then(|a| caught(a, free, size, scale)).map_or(free, |(_, at)| at)
+            }
+            _ if anchored.is_some() && measured.is_some() => {
+                let (p, a) = anchored.unwrap();
+                snapped(p, a, size, scale)
+            }
             (_, Some(p)) => p,
             _ => point((viewport.width - size.width) / 2.0, (viewport.height - size.height) / 2.0),
         };
@@ -196,7 +299,9 @@ impl AppWindow {
             let (bounds, slot, known) = (self.bounds.clone(), o.slot.clone(), measured.is_some());
             canvas(
                 move |b, window, _| {
-                    if !known {
+                    // Unmeasured, or the grid it snaps to drawn elsewhere this
+                    // frame (a resize, the sidebar folding, another tab): once more.
+                    if !known || (!panes.is_empty() && grid_of(&bounds.borrow(), &panes) != area) {
                         window.request_animation_frame();
                     }
                     bounds.borrow_mut().insert(slot, b);
@@ -214,9 +319,9 @@ impl AppWindow {
             .capture_any_mouse_down(cx.listener(move |this, _, _, cx| this.raise_window(&raise, cx)))
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, ev: &MouseDownEvent, _, cx| {
+                cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
                     cx.stop_propagation();
-                    this.window_press(&press, ev.position, cx);
+                    this.window_press(&press, ev.position, window.scale_factor(), cx);
                 }),
             );
         let grips = o.resize.is_some().then(|| self.grips(&o.id, cx));
@@ -253,7 +358,7 @@ impl AppWindow {
                         cx.listener(move |this, ev: &MouseDownEvent, window, cx| {
                             cx.stop_propagation();
                             this.raise_window(&id, cx);
-                            this.resize_press(&id, e, ev.position, window.viewport_size(), cx);
+                            this.resize_press(&id, e, ev.position, window.viewport_size(), window.scale_factor(), cx);
                         }),
                     )
                     .into_any_element()
@@ -289,9 +394,9 @@ impl AppWindow {
         Ok(())
     }
 
-    fn resize_press(&mut self, id: &str, edges: [bool; 4], at: Point<Pixels>, room: Size<Pixels>, cx: &mut Context<Self>) {
+    fn resize_press(&mut self, id: &str, edges: [bool; 4], at: Point<Pixels>, room: Size<Pixels>, scale: f32, cx: &mut Context<Self>) {
         let Some(b) = self.bounds.borrow().get(&format!("overlay:{id}")).copied() else { return };
-        self.win_drag = Some(WinDrag { id: id.to_owned(), grab: at - b.origin, down: at, pointer: at, moving: false, resize: Some((edges, b)), room });
+        self.win_drag = Some(WinDrag { id: id.to_owned(), grab: at - b.origin, down: at, pointer: at, moving: false, resize: Some((edges, b)), room, scale });
         cx.notify();
     }
 
@@ -304,7 +409,7 @@ impl AppWindow {
         }
     }
 
-    fn window_press(&mut self, id: &str, at: Point<Pixels>, cx: &mut Context<Self>) {
+    fn window_press(&mut self, id: &str, at: Point<Pixels>, scale: f32, cx: &mut Context<Self>) {
         // A terminal in the window keeps its presses (selecting text).
         let on_terminal = self.overlays.iter().find(|o| o.id == id).and_then(|o| o.layout.as_ref()).is_some_and(|l| {
             let bounds = self.bounds.borrow();
@@ -314,7 +419,7 @@ impl AppWindow {
             return;
         }
         let Some(b) = self.bounds.borrow().get(&format!("overlay:{id}")).copied() else { return };
-        self.win_drag = Some(WinDrag { id: id.to_owned(), grab: at - b.origin, down: at, pointer: at, moving: false, resize: None, room: Size::default() });
+        self.win_drag = Some(WinDrag { id: id.to_owned(), grab: at - b.origin, down: at, pointer: at, moving: false, resize: None, room: Size::default(), scale });
         cx.notify();
     }
 
@@ -343,7 +448,11 @@ impl AppWindow {
         }
         let zoom = f32::from(settings::z(1.0));
         let viewport = d.room;
+        let area = self.snap_area();
+        let measured = self.bounds.borrow().get(&format!("overlay:{}", d.id)).map(|b| b.size);
+        let scale = d.scale;
         let Some(o) = self.overlays.iter_mut().find(|o| o.id == d.id) else { return true };
+        let area = area.filter(|_| o.snap);
         let at = match (d.resize, o.resize) {
             (Some((edges, b)), Some(r)) => {
                 let (x, y, w, h) = r.resized(
@@ -359,9 +468,24 @@ impl AppWindow {
                 if let Some(k) = &o.key {
                     remember_size(k, o.size);
                 }
-                point(px(x), px(y))
+                // Anchored: it stays on its place at its new size.
+                match o.anchor.zip(area) {
+                    Some((p, a)) => snapped(p, a, gpui::size(px(w), px(h)), scale),
+                    None => point(px(x), px(y)),
+                }
             }
-            _ => d.pointer - d.grab,
+            _ => {
+                let free = d.pointer - d.grab;
+                // Dropped on a place: anchored there; anywhere else: free.
+                let on = area.zip(measured).and_then(|(a, s)| caught(a, free, s, scale));
+                if o.snap {
+                    o.anchor = on.map(|(p, _)| p);
+                    if let Some(k) = &o.key {
+                        remember_anchor(k, o.anchor);
+                    }
+                }
+                on.map_or(free, |(_, at)| at)
+            }
         };
         o.place = Some(at);
         if let Some(k) = &o.key {
@@ -470,6 +594,71 @@ impl AppWindow {
         o.place = Some(at);
         if let Some(k) = &o.key {
             remember(k, at);
+        }
+        // Moved (not only sized): off its place, as a drag takes it.
+        if (dx != 0.0 || dy != 0.0) && o.anchor.take().is_some()
+            && let Some(k) = &o.key
+        {
+            remember_anchor(k, None);
+        }
+        cx.notify();
+        Ok(())
+    }
+
+    /// `overlay.snap`: a window's snapping `on` or off, and/or onto a place
+    /// `to` (a place's name, or `left`/`right`/`up`/`down`: the next place
+    /// that way from the one it's on, else from the nearest). Default: the
+    /// window holding the keyboard, else the top one. Off, it stays where it is.
+    pub(super) fn snap_window_cmd(&mut self, id: Option<String>, on: Option<bool>, to: Option<&str>, room: Size<Pixels>, window: &Window, cx: &mut Context<Self>) -> Result<(), String> {
+        let id = match id {
+            Some(id) => id,
+            None => {
+                let wins = self.overlays.iter().filter(|o| o.kind == OverlayKind::Window);
+                let held = wins.clone().find(|o| o.focus.contains_focused(window, cx));
+                held.or_else(|| wins.last()).map(|o| o.id.clone()).ok_or("no window open")?
+            }
+        };
+        let b = self.bounds.borrow().get(&format!("overlay:{id}")).copied();
+        let area = self.snap_area();
+        let scale = window.scale_factor();
+        let o = self.overlays.iter_mut().find(|o| o.id == id && o.kind == OverlayKind::Window).ok_or_else(|| format!("no window {id:?}"))?;
+        if let Some(on) = on {
+            o.snap = on;
+            if !on {
+                // Where it shows now (an anchored window follows its place, not `place`).
+                if let Some(b) = b.filter(|_| o.anchor.is_some()) {
+                    o.place = Some(b.origin);
+                    if let Some(k) = &o.key {
+                        remember(k, b.origin);
+                    }
+                }
+                o.anchor = None;
+            }
+        }
+        if let Some(to) = to {
+            let place = Place::parse(to);
+            let dir = Dir::parse(to);
+            if place.is_none() && dir.is_none() {
+                return Err(format!("overlay.snap to is a place (top-left, top, top-right, right, bottom-right, bottom, bottom-left, left) or left, right, up, down, not {to:?}"));
+            }
+            let area = area.ok_or("no pane grid shown to snap to")?;
+            let b = b.ok_or_else(|| format!("no window {id:?} on screen"))?;
+            let r = to_rect(b);
+            let place = place.unwrap_or_else(|| {
+                let from = o.anchor.unwrap_or_else(|| snap::closest(area, (r.x, r.y), (r.w, r.h), f64::from(scale)));
+                from.step(dir.unwrap())
+            });
+            let at = snapped(place, area, b.size, scale);
+            let keep = px(KEEP_SHOWN);
+            let at = point(at.x.min(room.width - keep).max(keep - b.size.width), at.y.min(room.height - keep).max(px(0.0)));
+            o.place = Some(at);
+            o.anchor = o.snap.then_some(place);
+            if let Some(k) = &o.key {
+                remember(k, at);
+            }
+        }
+        if let Some(k) = o.key.clone().filter(|_| o.snap) {
+            remember_anchor(&k, o.anchor);
         }
         cx.notify();
         Ok(())

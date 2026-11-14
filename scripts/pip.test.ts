@@ -22,12 +22,17 @@ const walk = (el: any): any[] => (el && typeof el === "object" && Array.isArray(
 const callOf = (el: any, name: string) => el.calls.filter(([k]: any) => k === name).map(([, a]: any) => a);
 const idOf = (el: any) => callOf(el, "id")[0]?.[0] ?? null;
 const opened: any[] = [];
+const runs: [string, any][] = [];
+const calls: [string, string, any][] = [];
+const store = new Map<string, any>();
 let propsNow: any = { of: "1:web" };
 const theme: any = new Proxy({}, { get: (_t, k) => `#${String(k)}` });
 mock.module("herdr", () => ({
   props: () => propsNow, theme: () => theme, settings: () => ({ zoom: 1 }), closeOverlay() {}, openOverlay: (s: any) => { opened.push(s); },
-  run() {}, panes: () => [], focused: () => null, shared: () => null, setShared() {}, nextCommand: () => new Promise(() => {}),
-  window: () => ({ platform: "macos" }), nativeView: undefined, nextNativeViewEvent: () => new Promise(() => {}), nativeViewCall() {},
+  run: (name: string, args: any) => { runs.push([name, args]); }, panes: () => [], focused: () => null,
+  shared: (k: string) => store.get(k) ?? null, setShared: (k: string, v: any) => { store.set(k, v); }, nextCommand: () => new Promise(() => {}),
+  window: () => ({ platform: "macos" }), nativeView: undefined, nextNativeViewEvent: () => new Promise(() => {}),
+  nativeViewCall: (id: string, action: string, args: any) => { calls.push([id, action, args]); },
 }));
 mock.module("gpui-kit", () => ({ View: class {}, div: () => new Element(), svg: () => new Element(), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: (c: string) => { dithered.push(c); return {}; } } }));
 mock.module("gpui-base", () => ({ h_flex: () => new Element(), v_flex: () => new Element() }));
@@ -40,7 +45,7 @@ const { default: Pip, fit, sections, lift, GLYPH_DROP } = pip;
 /** A player as the window draws it, `width` px wide. */
 function player(width: number, extra: any = {}) {
   const p: any = Object.create(Pip.prototype);
-  Object.assign(p, { width, inPane: false, parks: false, hover: null, playing: true, muted: false, handle: { is_focused: () => false }, ...extra });
+  Object.assign(p, { width, menu: null, inPane: false, parks: false, hover: null, playing: true, muted: false, handle: { is_focused: () => false }, ...extra });
   return p;
 }
 /** The bar's row, left to right: control ids ("more" for ⋯) and "|" for a seam. */
@@ -50,7 +55,7 @@ function row(p: any) {
 }
 
 test("wide, the bar is four sections with a seam between: where it came from, playback, where it goes, the window's own", () => {
-  expect(row(player(480))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "keys", "close"]);
+  expect(row(player(480))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "snap", "keys", "close"]);
   // A seam: a short dithered upright, not a control (no id, no click): 1 px
   // wide, 8 tall (the icons are 12, the bar 21), its dots half lit, in the
   // seam tone (a step darker than the icons' dim); its 8 px place, the seam in the middle.
@@ -58,15 +63,17 @@ test("wide, the bar is four sections with a seam between: where it came from, pl
   expect([callOf(seam, "w"), callOf(seam, "h"), callOf(seam, "mx"), callOf(seam, "on_click").length, seam.nodes.length]).toEqual([[[1]], [[8]], [[3.5]], 0, 1]);
   expect(dithered.at(-1)).toBe(pip.seamTone(theme));
   // As a pane (◧ is the window's): its section keeps ⤓ ⇱.
-  expect(row(player(480, { inPane: true }))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "park", "out", "|", "keys", "close"]);
+  expect(row(player(480, { inPane: true }))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "park", "out", "|", "snap", "keys", "close"]);
 });
 
 test("narrow doesn't fit goes into ⋯ (before ✕): a section left empty takes its seam along", () => {
-  const widths = [480, 322, 321, 300, 260, 240];
+  const widths = [480, 344, 343, 300, 260, 240];
   const rows = widths.map((w) => row(player(w)));
-  // 322 px: everything (ten controls, three seams, the title's room).
-  expect(rows[1]).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "keys", "close"]);
-  expect(rows[2]).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "|", "more", "close"]);
+  // 344 px: everything (eleven controls, three seams, the title's room).
+  expect(rows[1]).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "snap", "keys", "close"]);
+  // A px less: the snapping toggle and ? go into ⋯ (it takes a place itself).
+  expect(rows[2]).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "more", "close"]);
+  expect(rows[3]).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "|", "more", "close"]);
   expect(rows[4]).toEqual(["back", "|", "rewind", "toggle", "mute", "|", "park", "|", "more", "close"]);
   // The window's narrowest.
   expect(rows[5]).toEqual(["back", "|", "toggle", "mute", "|", "park", "|", "more", "close"]);
@@ -93,19 +100,19 @@ test("sections() cuts a run of controls where the section changes; an empty run 
 test("the ⋯ menu lists the controls that went into it in the same sections, a dithered rule between; its height counts them", () => {
   const p = player(240);
   const more = fit(p.controls(), 240).more.map((c: any) => c.id);
-  expect(more).toEqual(["rewind", "forward", "pane", "out", "keys"]);
+  expect(more).toEqual(["rewind", "forward", "pane", "out", "snap", "keys"]);
   opened.length = 0;
   p.openMore(more);
-  expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "popup", height: 5 * 26 + 2 * 9 + 10, props: { menu: more } });
+  expect(opened.at(-1)).toMatchObject({ mod: "pip", kind: "popup", height: 6 * 26 + 2 * 9 + 10, props: { menu: more } });
   propsNow = { menu: more, playing: true, muted: false };
   const m: any = Object.create(Pip.prototype);
   m.menu = more; m.cursor = 0; m.handle = {};
   const menu = m.renderMenu(theme);
   expect(dithered).toContain(pip.seamTone(theme)); // its rules in the bar's seams' tone
   const kinds = menu.nodes.map((el: any) => (idOf(el)?.startsWith("pm-") ? idOf(el).slice(3) : "rule"));
-  expect(kinds).toEqual(["rewind", "forward", "rule", "pane", "out", "rule", "keys"]);
-  // The cursor walks the rows alone (the rules aren't stops): from ⇱ (3) j goes to ? (4).
-  expect(pip.menuMove("j", 3, 5)).toBe(4);
+  expect(kinds).toEqual(["rewind", "forward", "rule", "pane", "out", "rule", "snap", "keys"]);
+  // The cursor walks the rows alone (the rules aren't stops): from ⇱ (3) j goes to the toggle (4).
+  expect(pip.menuMove("j", 3, 6)).toBe(4);
   // The row under the cursor is lit by its index among the rows, past a rule too.
   m.cursor = 3;
   const lit = m.renderMenu(theme).nodes.find((el: any) => idOf(el) === "pm-out");
@@ -162,4 +169,66 @@ test("the seam tone: a third of the way from the icons' dim to ansi0, one small 
   expect(lum(pip.seamTone(moonfly)) - lum(moonfly.ansi0)).toBeGreaterThan((lum(moonfly.dim) - lum(moonfly.ansi0)) / 2);
   // Not a hex colour: the dim as it was.
   expect(pip.mix("red", "#000000", 0.5)).toBe("red");
+});
+
+test("snapping: on unless set false; the toggle (s, pip.snap, the bar's magnet) flips the shared mode and the window now", () => {
+  store.clear(); runs.length = 0;
+  expect(pip.snapOn()).toBe(true);
+  propsNow = { of: "1:web", overlay: "o7" };
+  const p = player(480);
+  // The magnet: in the accent while on, dim off; its name says which.
+  const mark = (pl: any) => pl.bar(theme).nodes.find((el: any) => idOf(el) === "pip-snap").nodes[0];
+  expect(callOf(mark(p), "text_color")).toEqual([[theme.accent]]);
+  p.command(pip.keyControl({ key: "s", key_char: "s" }));
+  expect(store.get("pip.snap")).toBe(false);
+  expect(runs.at(-1)).toEqual(["overlay.snap", { id: "o7", on: false }]);
+  expect(callOf(mark(p), "text_color")).toEqual([[theme.dim]]);
+  // Set, not flipped: pip.snap:on.
+  p.command(pip.parseCommand("snap:on"));
+  expect([store.get("pip.snap"), runs.at(-1)]).toEqual([true, ["overlay.snap", { id: "o7", on: true }]]);
+  // As a pane there's no window to tell: the mode alone.
+  runs.length = 0;
+  player(480, { inPane: true }).command("snap");
+  expect([store.get("pip.snap"), runs]).toEqual([false, []]);
+  store.clear();
+  propsNow = { of: "1:web" };
+});
+
+test("from place to place: shift with the arrows and H J K L move the window over the pane grid (overlay.snap to)", () => {
+  const key = (k: string, c: string | null = null, shift = false) => pip.keyControl({ key: k, key_char: c, modifiers: { shift } });
+  expect([key("left", null, true), key("right", null, true), key("up", null, true), key("down", null, true)]).toEqual(["to:left", "to:right", "to:up", "to:down"]);
+  expect([key("h", "H", true), key("l", "L", true), key("k", "K", true), key("j", "J", true)]).toEqual(["to:left", "to:right", "to:up", "to:down"]);
+  // Unshifted they stay what they were: 10 s back / on, pause.
+  expect([key("left"), key("right"), key("h", "h"), key("k", "k")]).toEqual(["rewind", "forward", "rewind", "toggle"]);
+  // Commands too, for keys.json: pip.to:<place | direction>.
+  expect(pip.parseCommand("to:bottom-right")).toBe("to:bottom-right");
+  expect(pip.parseCommand("to:middle")).toBeNull();
+  runs.length = 0;
+  propsNow = { of: "1:web", overlay: "o7" };
+  player(480).command("to:up");
+  player(480).command("to:top-left");
+  expect(runs).toEqual([["overlay.snap", { id: "o7", to: "up" }], ["overlay.snap", { id: "o7", to: "top-left" }]]);
+  // A pane doesn't move.
+  runs.length = 0;
+  const pane = player(480, { inPane: true });
+  let stopped = false;
+  pane.key({ key: "left", modifiers: { shift: true } }, { stop_propagation: () => { stopped = true; }, notify() {} });
+  expect([runs, stopped]).toEqual([[], false]);
+  propsNow = { of: "1:web" };
+  // Every key it takes is listed in ?.
+  const listed = pip.KEYS.map(([k]: any) => k).join(" ");
+  for (const k of ["s", "H", "L", "K", "J", "⇧←", "⇧→", "⇧↑", "⇧↓"]) expect([k, listed.includes(k)]).toEqual([k, true]);
+});
+
+test("out of Fireflies, the window gets the mode and the colours of its seams and its lit toggle", () => {
+  calls.length = 0;
+  store.set("pip.snap", false);
+  const p = player(480);
+  p.leave = () => {};
+  p.popOut();
+  const [, action, args] = calls.at(-1)!;
+  expect(action).toBe("pip.popOut");
+  expect(args.snap).toBe(false);
+  expect(args.colors).toMatchObject({ accent: theme.accent, seam: pip.seamTone(theme), dim: theme.dim });
+  store.clear();
 });

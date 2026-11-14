@@ -2,15 +2,24 @@
 // lately, the one to show instead, parking the pane or settling its tab, and
 // bringing it back.
 
-import { run, panes, spaces, focused } from "herdr";
+import { run, panes, spaces, focused, shared } from "herdr";
 import type { OverlaySpec, TabInfo } from "herdr";
-import { isBoolean, isString, nullable, object, sharedKey } from "./guard.ts";
+import { isBoolean, isString, nullable, object, readShared, sharedKey } from "./guard.ts";
 import type Browser from "./main.ts";
 
 // The picture in picture player: one window, whichever page's video it shows.
 // The picture in picture player window (as pip opens it): 16:9 under its bar, resizable.
 export const PLAYER = { mod: "pip", kind: "window", key: "pip", frame: "none", width: 384, height: 238,
   resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } } satisfies OverlaySpec;
+
+// The player's snapping (pip's toggle, its s key): true or false, unset is on.
+// The window then snaps to the shown tab's pane grid (OverlaySpec snap); out of
+// Fireflies, to its screen. The window out of Fireflies' toggle reaches the page
+// as event `pip.snapped { on }`, written here (that window's player is gone).
+export const PIP_SNAP = sharedKey("pip.snap", nullable(isBoolean));
+
+/** Whether the player snaps (pip.snap; unset: yes). */
+export const snapOn = (): boolean => readShared(shared, PIP_SNAP, null) !== false;
 
 // The pane the player put the video in (pip): { of, pane, park }.
 export const PIP_PANE = sharedKey("pip.pane", nullable(object({ of: isString, pane: isString, park: isBoolean })));

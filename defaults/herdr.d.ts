@@ -150,7 +150,7 @@ export function playSound(sound: string): null;
  *   Shipped layouts/mods are replaced at start; edits move to <name>-edited.
  *   Fireflies (main) inherits settings; Fireflies 98 and Terminals bring their own look. Clone to change shipped looks beyond theme picks.
  *   layout.reset {name?} resets a shipped layout and its clicks.
- * App: mod.open {name}, overlay.close {id?}, overlay.resizable {id, resizable}, app.help, app.reset, app.theme {name}, app.zoom_in|zoom_out|zoom_reset.
+ * App: mod.open {name}, overlay.close {id?}, overlay.resizable {id, resizable}, overlay.snap {id?, on?, to?}, app.help, app.reset, app.theme {name}, app.zoom_in|zoom_out|zoom_reset.
  * Mods: "<mod>.<command>" delivers <command> to that mod's nextCommand().
  */
 export function run(name: string, args?: Record<string, unknown>): null;
@@ -561,6 +561,13 @@ export interface OverlaySpec {
    *  by a bar or border, width and height) is taken off. With `key`, its size is remembered.
    *  `run("overlay.resizable", { id, resizable })` changes it while open (a new aspect refits it). */
   resizable?: boolean | { min?: [number, number]; aspect?: number; chrome?: [number, number] };
+  /** A window magnetic to the shown tab's pane grid: dragged within 24 px of one of its eight
+   *  places (the grid's outer corners and edge middles) it lands exactly there, its outer edge on
+   *  the panes' (whole device pixels), and stays on that place as the grid or its size changes,
+   *  until dragged off. With `key` it opens on its last place (first time: bottom right).
+   *  `run("overlay.snap", { id, on?, to? })`: snapping on / off, or onto a place (`"top-left"`,
+   *  `"top"`, …, `"left"`) or the next place `"left" | "right" | "up" | "down"`. */
+  snap?: boolean;
   /** px, or up to 1: a share of the window. */
   width?: number;
   height?: number;

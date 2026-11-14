@@ -21,6 +21,9 @@ mod tabs;
 // Picture in picture's live resize, its decisions pure (tested everywhere, used on macOS).
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 mod resize;
+// Snapping a window to an area's corners and edge middles (picture in
+// picture: the app's movable windows and the window out of Fireflies).
+pub mod snap;
 
 
 

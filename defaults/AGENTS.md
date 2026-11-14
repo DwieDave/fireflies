@@ -2042,8 +2042,11 @@ The main ones:
   only tab of the only space stays shown. The player's bar: ↩ « ❚❚ »
   sound ◧ (into a pane beside the focused one) ⤓ (park: the player becomes a chip in the
   shown tab's parked row, playing on; unparking it brings the window back) ⇱ (out of Fireflies)
-  ? ✕, in four sections with a short dithered seam between them (↩ where it came from ·
-  « ❚❚ » sound, playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own); what doesn't fit a
+  a magnet ? ✕, in four sections with a short dithered seam between them, a step darker than
+  the icons (↩ where it came from · « ❚❚ » sound, playback · ◧ ⤓ ⇱ where it goes · magnet ? ✕
+  the player's own); the magnet switches snapping (on unless shared `pip.snap` is false; in
+  the accent while on): the window snaps to the shown tab's pane grid's corners and edge
+  middles (OverlaySpec `snap`), out of Fireflies to those of its screen's usable area; what doesn't fit a
   narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
   takes its seam along), which lists them in the same sections, a dithered rule between. The
   window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
@@ -2051,11 +2054,14 @@ The main ones:
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
-  `.close`; Nocturne's palette lists them while the player window is open. Keys while the
-  player has the keyboard (`overlay.focus`, or a click on it; its bar's edge turns blue):
-  Space / `k`, ← → (`h l`), `m`, `b`, `p` pane, `P` park, `o` out, `x` / `q` close; esc
-  gives the keyboard back to the pane.
-- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `overlay.focus {dir?, id?}` (`overlay.focus:prev` in keys.json) and `overlay.move {id?, dx?, dy?, dw?, dh?}` (a window by keyboard, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
+  `.close`, `.keys`, `.snap` (snapping on / off; `pip.snap:on`, `pip.snap:off` set it) and
+  `pip.to:<place>` (the window onto a place of the pane grid: `top-left` … `left`, or the next
+  one `left`, `right`, `up`, `down`); Nocturne's palette lists them while the player window is
+  open. Keys while the player has the keyboard (`overlay.focus`, or a click on it; its bar's
+  edge turns blue): Space / `k`, ← → (`h l`), `m`, `b`, `p` pane, `P` park, `o` out, `s`
+  snapping, shift with the arrows or `H L K J` to the next corner or edge middle that way,
+  `x` / `q` close, `?` these keys; esc gives the keyboard back to the pane.
+- App: `mod.clone {name, as?}` (duplicate; default `<name>-copy`), `mod.open {name}` (again: closes it), `overlay.close {id?}`, `overlay.resizable {id, resizable}` (a window's `resizable`, see Windows), `overlay.focus {dir?, id?}` (`overlay.focus:prev` in keys.json), `overlay.move {id?, dx?, dy?, dw?, dh?}` (a window by keyboard, see Windows) and `overlay.snap {id?, on?, to?}` (a window's snapping to the pane grid's corners and edge middles, see Windows), `app.help` (again: closes it), `app.palette` (again: closes it), `app.settings {section?}`
   (sections: `look`, `editor`, `machines`, `alerts`, `updates`; Machines lists, updates, renames and removes ssh machines; settings edit the same files you do).
   `app.check_updates` (only a successful check reports Up to date; a failed check clears the checked time and can be retried), `app.update_core` (a newer herdr-core of this generation, terminals kept;
   never one a package manager owns), `app.welcome`, `app.whats_new`,
@@ -2611,8 +2617,21 @@ All of it is in `herdr.d.ts`. In short:
   keyboard back to that window when it closes. A mod gets
   `focus` from `nextCommand()`: take the keyboard then (`handle.focus()`), and show it.
   `overlay.move {dx, dy}` moves the window holding the keyboard (else the top one) and
-  `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag. A video player:
+  `{dw, dh}` resizes a resizable one by its right and bottom edges, kept like a drag (and off
+  its snapping place). A video player:
   `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
+  `snap: true` makes a window magnetic to the shown tab's pane grid (the outer border of its
+  panes together, not the sidebar, tab strip or parked row): dragged within 24 px (on both
+  axes) of one of its eight places, the four corners and four edge middles, it lands exactly
+  there, its outer edge on the panes' outer edge on whole device pixels; further off it moves
+  freely. Dropped on a place it is anchored there and stays on it when the grid changes (the
+  app window resized, the sidebar folded, another tab) or the window is resized, until dragged
+  off; a keyed one opens on its last place (the first time: bottom right). `overlay.snap
+  {id?, on?, to?}`: `on` switches it (off, the window stays where it is, as without `snap`);
+  `to` puts it on a place (`"top-left"`, `"top"`, `"top-right"`, `"right"`, `"bottom-right"`,
+  `"bottom"`, `"bottom-left"`, `"left"`) or the next place `"left" | "right" | "up" | "down"`
+  from the one it is on (else the nearest); default: the window holding the keyboard, else
+  the top one.
   A window can hold a layout, terminals too: a terminal keeps its presses
   (selecting text), so give it a mod block to drag by, a title bar:
   `openOverlay({ kind: "window", key: "t7", width: 600, height: 400, layout: { type: "column", children: [{ type: "block", size: { px: 28 }, content: { mod: "my-titlebar" } }, { type: "block", content: { terminal: "t7" } }] } })`.

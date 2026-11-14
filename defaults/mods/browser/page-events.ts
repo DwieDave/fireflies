@@ -3,15 +3,15 @@
 // does to its tab (onEvent).
 
 import type { Context } from "gpui-kit";
-import { shared, panes, openOverlay } from "herdr";
+import { shared, setShared, panes, openOverlay } from "herdr";
 import type { Guarded } from "./guard.ts";
 import type { Tab } from "./tabs.ts";
-import { isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared } from "./guard.ts";
+import { isBoolean, isNumber, isString, literal, nullable, object, oneOf, parseJson, readShared, writeShared } from "./guard.ts";
 import { openTab } from "./tab-ops.ts";
 import { saveTabs, fetchIcon } from "./publish.ts";
 import { focusPage } from "./address.ts";
 import { toggleInspector, openInspector } from "./inspector.ts";
-import { PLAYER, PIP_PANE, hidePane, unhide } from "./away.ts";
+import { PLAYER, PIP_PANE, PIP_SNAP, snapOn, hidePane, unhide } from "./away.ts";
 import type Browser from "./main.ts";
 
 /** web.newTab: what would open a window. */
@@ -67,6 +67,7 @@ export const isWebEvent = oneOf(
   object({ event: literal("web.video") }, { ...FROM, data: object({}, { present: isBoolean }) }),
   object({ event: literal("web.icon") }, { ...FROM, data: object({}, { href: nullable(isString) }) }),
   object({ event: literal("pip.start") }, { ...FROM, data: object({}, { result: isString, error: isString }) }),
+  object({ event: literal("pip.snapped"), data: object({ on: isBoolean }) }, FROM),
   object({ event: literal("view.click", "view.escapeKey", "web.inspectKey", "web.reloadKey", "pip.leave", "pip.moved") }, { ...FROM, data: isNoData }),
 );
 
@@ -236,7 +237,7 @@ export function onEvent(view: Browser, e: WebEvent, cx: Context) {
     case "pip.popIn": {
       const after = thenOf(e.data);
 
-      openOverlay({ ...PLAYER, props: after ? { of: e.data.of, after } : { of: e.data.of } });
+      openOverlay({ ...PLAYER, snap: snapOn(), props: after ? { of: e.data.of, after } : { of: e.data.of } });
 
       if (e.event === "pip.enter") {
         view.away = true;
@@ -259,6 +260,11 @@ export function onEvent(view: Browser, e: WebEvent, cx: Context) {
 
         if (n?.of === view.pipOf && !n.park && panes().some((x) => x.pane === n.pane)) unhide(view, false);
       });
+
+      return;
+    // The window out of Fireflies' snapping toggle: the player's mode, kept for every player.
+    case "pip.snapped":
+      writeShared(setShared, PIP_SNAP, e.data.on);
 
       return;
     case "pip.start":

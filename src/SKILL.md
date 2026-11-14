@@ -295,6 +295,11 @@ those files or the generated guide. The app rewrites them on start.
   (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
   backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
   layer, holes and dim, so check those instead of a screenshot.
+- A window overlay opened with `snap: true` (the picture in picture player,
+  while its snapping is on) snaps to the eight places of the shown tab's pane
+  grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`
+  switches that (`on`) or puts the window on a place (`to: "bottom-right"`,
+  …, or `"left"`, `"right"`, `"up"`, `"down"`: the next one that way).
 - Shipped mods belong to Fireflies: duplicate with `mod.clone` before editing.
   Shipped layouts likewise use `layout.clone` for a personal copy.
   Discover required arguments with `herdr-app commands`.

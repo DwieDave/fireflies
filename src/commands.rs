@@ -98,6 +98,7 @@ pub const COMMANDS: &[Command] = &[
     cmd("overlay.close", &[opt("id")], "Close an overlay (default: the top dialog or popup)."),
     cmd("overlay.focus", &[opt("dir"), opt("id")], "Give a window (kind \"window\": GitHub, Git, a floating terminal) the keyboard and bring it to the front: id, or the next one (dir \"next\", default) or \"prev\" in the order they opened; past the last, or dir \"none\", the keyboard goes back to the pane."),
     cmd("overlay.move", &[opt("id"), opt("dx"), opt("dy"), opt("dw"), opt("dh")], "Move a window by dx/dy px and, when it resizes, size it by dw/dh (its right and bottom edges, within its limits). Default: the window holding the keyboard, else the top one. Kept like a drag."),
+    cmd("overlay.snap", &[opt("id"), opt("on"), opt("to")], "A window's snapping: on (true/false) makes it magnetic to the shown tab's pane grid's corners and edge middles; to (top-left, top, top-right, right, bottom-right, bottom, bottom-left, left, or left/right/up/down: the next place that way) puts it on one, anchored there while snapping is on. Default: the window holding the keyboard, else the top one."),
     cmd("overlay.resizable", &[req("id"), req("resizable")], "Change how a window resizes (min, aspect, chrome); a new aspect refits its height now."),
     // The app.
     // Native content views (native-view/0).
