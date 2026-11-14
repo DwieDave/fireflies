@@ -69,6 +69,14 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
   return true;
 }
 
+/** Each menu row's digit: a row with a key of its own shows that key alone; the others take 1-9 in
+ *  order (one shortcut per row, of one kind or the other). */
+export function digitsOf(rows: Menu["rows"]): (number | null)[] {
+  let n = 0;
+
+  return rows.map((r) => (r.key || n >= 9 ? null : ++n));
+}
+
 function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
   const k = shown(keyName(e));
   const n = Number(k);
@@ -76,8 +84,8 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
   if (k === "esc" || k === "q") v.menu = null;
   else if (k === "j" || k === "↓") m.at = Math.min(m.rows.length - 1, m.at + 1);
   else if (k === "k" || k === "↑") m.at = Math.max(0, m.at - 1);
-  else if (k === "enter" || (n >= 1 && n <= 9 && n <= m.rows.length)) {
-    const row = m.rows[k === "enter" ? m.at : n - 1];
+  else if (k === "enter" || (n >= 1 && n <= 9 && digitsOf(m.rows).includes(n))) {
+    const row = m.rows[k === "enter" ? m.at : digitsOf(m.rows).indexOf(n)];
 
     v.menu = null;
     row?.go();
@@ -260,6 +268,7 @@ function centered(id: string, box: Element, close: (cx: Context) => void, near: 
 
 
 function menuPanel(t: Theme, v: DbView, m: Menu): Element {
+  const digits = digitsOf(m.rows);
   const w = Math.min(m.near ? 380 : 560, v.size.width - 40);
   const h = Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0));
   const room = { width: v.size.width, height: v.bodyH };
@@ -272,7 +281,7 @@ function menuPanel(t: Theme, v: DbView, m: Menu): Element {
       r.go();
       cx.notify();
     })
-    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(i < 9 ? String(i + 1) : ""))
+    .child(div().relative().w(14).flex_none().text_color(i === m.at ? t.accent : t.dim).child(digits[i] ? String(digits[i]) : ""))
     .child(v_flex().relative().flex_1().min_w(0)
       .child(div().truncate().text_color(r.danger ? t.blocked : i === m.at ? t.foreground : t.muted).child(r.label))
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? ""))))

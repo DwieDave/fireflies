@@ -44,6 +44,9 @@ export const colWidth = (c: GridColumn): number => c.px ?? measuredWidth(c);
 /** A column's width from its cells (a double click on its edge fits it back to this). */
 export const measuredWidth = (c: Column): number => Math.ceil(Math.max(c.ch, 4) * CH) + PAD;
 
+/** A sorted column's least width: its name and its mark whole. */
+export const sortedWidth = (name: string): number => Math.ceil((Math.max(name.length, 2) + 2) * CH) + PAD;
+
 /** How far into a header its right edge grabs the width (layout px). */
 export const EDGE = 6;
 

@@ -56,7 +56,7 @@ class Input {
   value() { return this.v; } set_value(v: string) { this.v = v; } focus() { this.focused = true; } release() { return true; } set_masked() {}
   type(v: string) { this.v = v; this.handlers.change?.({}, cx); }
 }
-class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } cursor() { return { line: 0, col: 0 }; } selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
+class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } caretAt: any = null; cursor() { return { line: 0, col: 0 }; } set_cursor(line: number, col: number) { this.caretAt = { line, col }; } selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
 mock.module("gpui-base", () => ({
   h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
   InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
@@ -481,7 +481,9 @@ test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Ro
   seed();
   sharedState = {};
   const v = await opened();
-  const q = v.addQuery("select * from ", cx);
+  // A new tab's caret is after its text (a name dropped goes there).
+  const q = v.addQuery("select *\nfrom ", cx);
+  expect(q.editor.caretAt).toEqual({ line: 1, col: 5 });
   q.editor.cursor = () => ({ line: 0, col: 14 });
   let put = "";
   q.editor.edit = (e: any[]) => { put = e[0].text; };
@@ -585,4 +587,34 @@ test.skipIf(!SQLITE)("disconnect: the tables close, the query tabs stay; changes
   expect(v.note.text).toBe("disconnected from lantern.db");
   v.key(key("x"), cx);
   expect(v.note.text).toBe("nothing is connected");
+});
+
+test.skipIf(!SQLITE)("a sorted column is at least as wide as its name and mark, however far { narrows it", async () => {
+  seed();
+  sharedState = {};
+  const v = await opened();
+  v.key(key("l"), cx); v.key(key("l"), cx); // lumens
+  for (let i = 0; i < 12; i++) v.key(key("{"), cx);
+  const narrow = ux.grid.shownGrid(v)!.cols[2];
+  expect(ux.gridView.colWidth(narrow)).toBe(36);
+  v.key(key("o"), cx);
+  await until(() => !v.rows.busy && v.rows.browse.sort !== null);
+  const least = ux.gridView.sortedWidth("lumens");
+  expect(ux.gridView.colWidth(ux.grid.shownGrid(v)!.cols[2])).toBe(least);
+  v.key(key("{"), cx);
+  expect(v.note.text).toBe("it's as narrow as it gets");
+  expect(ux.gridView.colWidth(ux.grid.shownGrid(v)!.cols[2])).toBe(least);
+  // Its least width is no dragged one: fitting is offered only for that.
+  ux.grid.fitColumn(ux.grid.shownGrid(v)!, 2);
+  v.key(key("O"), cx);
+  expect(v.menu.rows.map((r: any) => r.label)).not.toContain("Fit it to its cells");
+  v.menu = null;
+  expect(ux.gridView.colWidth(ux.grid.shownGrid(v)!.cols[2])).toBe(least);
+});
+
+test("a menu's shortcuts: a row with its own key shows that alone, the others take 1-9 in order; a digit picks among those", async () => {
+  const { digitsOf } = await import("../defaults/mods/databases/popups.ts");
+  const rows = [{ label: "a", key: "c", go() {} }, { label: "b", go() {} }, { label: "c", key: "y", go() {} }, { label: "d", go() {} }];
+  expect(digitsOf(rows)).toEqual([null, 1, null, 2]);
+  expect(digitsOf(Array.from({ length: 11 }, (_x, i) => ({ label: String(i), go() {} }))).slice(8)).toEqual([9, null, null]);
 });

@@ -243,7 +243,7 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
     ...(g.shown.hidden ? [entry(place, null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g))] : []),
     entry(place, "wider", "Wider", () => widen(v, g, col, WIDTH_STEP), { sub: "or drag the header's right edge" }),
     entry(place, "narrower", "Narrower", () => widen(v, g, col, -WIDTH_STEP)),
-    ...(c?.px !== undefined ? [entry(place, null, "Fit it to its cells", () => fitColumn(g, col), { sub: "a double click on its edge too" })] : []),
+    ...(c && g.layout.widths[c.name] !== undefined ? [entry(place, null, "Fit it to its cells", () => fitColumn(g, col), { sub: "a double click on its edge too" })] : []),
     entry(place, null, "Its name into the query", () => insertName(v, quoteName(kind, name), cx), { sub: "or drag the header into the query" }),
     entry(place, null, "Copy its name", () => copy(v, name, cx)),
   );

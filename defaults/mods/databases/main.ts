@@ -289,7 +289,10 @@ export default class Databases extends View {
 
   addQuery(text: string, cx: Context): QueryTab {
     const q = newQuery(this, text);
+    // The caret after the text: what's typed or dropped next follows it.
+    const lines = text.split("\n");
 
+    q.editor.set_cursor(lines.length - 1, lines.at(-1)?.length ?? 0);
     this.queries.push(q);
     this.mainTab = this.queries.length;
     this.panel = "main";

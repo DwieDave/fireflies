@@ -12,7 +12,7 @@ import { InputState } from "gpui-base";
 import type { Column } from "./table.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt, QueryTab } from "./state.ts";
-import { cellAt, columnsOf, measuredWidth, moveGrid, rowsIn } from "./grid.ts";
+import { cellAt, colWidth, columnsOf, measuredWidth, moveGrid, rowsIn, sortedWidth } from "./grid.ts";
 import { loadRows } from "./session.ts";
 import { cellMenu, columnMenu, tabMenu } from "./menus.ts";
 import { openExport } from "./export-form.ts";
@@ -71,6 +71,15 @@ export function rowsLayout(v: DbView): ColumnLayout {
   return v.columnsAt.layout;
 }
 
+/** The sorted column at least as wide as its name and its mark (" ↓"), however narrow it was made. */
+export function marked(cols: GridColumn[], sort: { readonly column: string } | null): GridColumn[] {
+  return cols.map((c) => {
+    const least = sortedWidth(c.name);
+
+    return c.name === sort?.column && colWidth(c) < least ? { ...c, px: least } : c;
+  });
+}
+
 /** The grid shown now (the Rows tab's or the shown query's), or null. */
 export function shownGrid(v: DbView): GridNow | null {
   const q = v.shownQuery();
@@ -84,7 +93,7 @@ export function shownGrid(v: DbView): GridNow | null {
     const shown = shownOf(raw, q.layout, q.sort, (i) => nums[i]?.num ?? false);
 
     return {
-      place: "results", raw, shown, set: shown.set, cols: withWidths(colsOf(shown.set), q.layout), at: q.at, put: (at) => { q.at = at; },
+      place: "results", raw, shown, set: shown.set, cols: marked(withWidths(colsOf(shown.set), q.layout), q.sort), at: q.at, put: (at) => { q.at = at; },
       layout: q.layout, arrange: (l) => { q.layout = l; }, sort: q.sort, q,
     };
   }
@@ -97,7 +106,7 @@ export function shownGrid(v: DbView): GridNow | null {
   const shown = shownOf(raw, layout, null);
 
   return {
-    place: "rows", raw, shown, set: shown.set, cols: withWidths(colsOf(shown.set), layout), at: v.rows.at, put: (at) => { v.rows.at = at; },
+    place: "rows", raw, shown, set: shown.set, cols: marked(withWidths(colsOf(shown.set), layout), v.rows.browse?.sort ?? null), at: v.rows.at, put: (at) => { v.rows.at = at; },
     layout,
     arrange: (l, keep) => {
       const key = v.columnsAt?.key;
@@ -232,7 +241,9 @@ export function widen(v: DbView, g: GridNow, col: number, by: number): void {
   if (!c) return;
 
   const now = c.px ?? measuredWidth(c);
-  const px = clampWidth(now + by);
+  // A sorted column keeps its mark whole.
+  const least = g.sort?.column === c.name ? sortedWidth(c.name) : 0;
+  const px = Math.max(least, clampWidth(now + by));
 
   if (px === now) {
     v.say(by > 0 ? "it's as wide as it gets" : "it's as narrow as it gets", "done");

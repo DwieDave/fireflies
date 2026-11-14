@@ -59,12 +59,12 @@ const GRID: readonly Binding[] = [
 
 const ROWS: readonly Binding[] = [
   ...GRID, [["c"], "change the cell (a double click too)", "cell-edit"], [["N"], "the cell to NULL", "cell-null"], [["u"], "undo the cell's change", "cell-undo"],
-  [["o", "s"], "sort by the column: ORDER BY ↑, ↓, off (or click its header)", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
+  [["o", "s"], "sort by the column (ORDER BY: ↑, ↓, off; or click its header)", "sort"], [["/"], "filter (a WHERE clause)", "filter"],
   [[">"], "next page", "page-next"], [["<"], "previous page", "page-prev"], [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"],
 ];
 
 const RESULTS: readonly Binding[] = [
-  ...GRID, [["c"], "change the cell (a table's rows only)", "cell-edit"], [["o", "s"], "sort what came back: ↑, ↓, off (or click a header)", "sort"],
+  ...GRID, [["c"], "change the cell (a table's rows only)", "cell-edit"], [["o", "s"], "sort what came back (↑, ↓, off; or click a header)", "sort"],
   [["i", "escape"], "back to the editor", "edit"], [[">"], "next result", "result-next"], [["<"], "previous result", "result-prev"],
   [["["], "previous tab", "tab-prev"], [["]"], "next tab", "tab-next"], [["x"], "close the tab", "query-close"],
 ];
