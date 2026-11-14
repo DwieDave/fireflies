@@ -493,24 +493,40 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   // The panels' rows, the query tabs, the grid's header, cells and row numbers.
   expect(menus).toBeGreaterThan(6);
   v.menu = null;
-  // By key, the main panel with the keys: under the cursor's cell (the Rows tab: under the filter line).
+  // By key, the main panel with the keys: under the cursor's cell (the Rows tab: under the filter
+  // line), found as the menu is drawn (a window resized since moves it with the cell).
+  const anchor = await import("../defaults/mods/databases/menu-anchor.ts");
+  const popups = await import("../defaults/mods/databases/popups.ts");
   v.panel = "main";
   v.rows.at = { row: 0, col: 0, top: 0, left: 0 };
   v.key(key("m"), cx);
+  expect(v.menu.near).toBe(null);
   const left = 6 + 330 + 6 + 1;
-  expect(v.menu.near).toEqual({ x: left + ux.gridView.gutterWidth(v.rows.set.rows.length), y: 34 + 12 + 7 + 24 + 22, w: ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]), h: 20 });
+  const first = { x: left + ux.gridView.gutterWidth(v.rows.set.rows.length), y: 34 + 12 + 7 + 24 + 22, w: ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]), h: 20 };
+  expect(anchor.keyedAnchor(v)).toEqual(first);
+  const drawnAt = () => {
+    drawn = [];
+    popups.menuLayer({}, v);
+    const i = drawn.findIndex(([m, a]) => m === "id" && a[0] === "db-menu-box");
+    const after = drawn.slice(i);
+    return { x: after.find(([m]) => m === "left")?.[1][0], y: after.find(([m]) => m === "top")?.[1][0] };
+  };
+  expect(drawnAt()).toEqual({ x: Math.round(first.x), y: first.y + 20 });
+  // The window wider (the left column with it): the menu follows the cell.
+  v.size = { width: 1600, height: 720 };
+  expect(drawnAt().x).toBe(Math.round(6 + 400 + 6 + 1 + ux.gridView.gutterWidth(v.rows.set.rows.length)));
+  v.size = { width: 1100, height: 720 };
   v.menu = null;
   // The cursor two rows down and a column on: the cell moved with it.
   v.rows.at = { row: 2, col: 1, top: 0, left: 0 };
-  v.key(key("m"), cx);
-  expect(v.menu.near.y).toBe(34 + 12 + 7 + 24 + 22 + 40);
-  expect(v.menu.near.x).toBe(left + ux.gridView.gutterWidth(v.rows.set.rows.length) + ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]));
-  v.menu = null;
+  expect(anchor.keyedAnchor(v).y).toBe(34 + 12 + 7 + 24 + 22 + 40);
+  expect(anchor.keyedAnchor(v).x).toBe(left + ux.gridView.gutterWidth(v.rows.set.rows.length) + ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]));
   // Another panel with the keys: the middle.
   v.panel = "log";
   v.logLine({ sql: "select 1", ok: true, ms: 1, said: "", conn: "lantern.db" });
   v.key(key("m"), cx);
   expect(v.menu.near).toBe(null);
+  expect(anchor.keyedAnchor(v)).toBe(null);
 });
 
 test.skipIf(!SQLITE)("drags: a table's name into the query (quoted), onto the Rows tab it opens; a query tab and a saved connection to another place", async () => {

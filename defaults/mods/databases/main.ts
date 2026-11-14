@@ -68,7 +68,7 @@ import { syncPinned } from "./pinned.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
-import type { Anchor, Pt } from "./menu-place.ts";
+import type { Pt } from "./menu-place.ts";
 import { originOf } from "./menu-place.ts";
 import type { Pressing } from "./press.ts";
 import { ghost, pressLeave, pressMove, pressUp } from "./press.ts";
@@ -165,7 +165,7 @@ export default class Databases extends View {
    *  window position less it is the press in the view (menu-place.ts). */
   origin: Pt | null = null;
   /** Where the next menu opens (atPointer sets it for a right click). */
-  menuNear: Anchor = null;
+  menuNear: Pt | null = null;
 
   // ---- drawing
   /** The shown grid's box, as last measured (the keys move by its rows). */

@@ -27,6 +27,7 @@ import { forwardAskKey, forwardAskPanel } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
 import type { Box } from "./menu-place.ts";
 import { placeMenu } from "./menu-place.ts";
+import { keyedAnchor } from "./menu-anchor.ts";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
 function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
@@ -269,7 +270,7 @@ function centered(id: string, box: Element, close: (cx: Context) => void): Eleme
 /** The menu's size: narrower when it stands at something (a press, a cell), as tall as its rows. */
 export function menuSize(v: DbView, m: Menu): Box {
   return {
-    width: Math.min(m.near ? 380 : 560, v.size.width - 40),
+    width: Math.min(m.near || keyedAnchor(v) ? 380 : 560, v.size.width - 40),
     height: Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0)),
   };
 }
@@ -283,7 +284,8 @@ export function menuLayer(t: Theme, v: DbView): Element | null {
 
   const digits = digitsOf(m.rows);
   const { width: w, height: h } = menuSize(v, m);
-  const at = placeMenu({ width: w, height: h }, v.size, m.near ?? null);
+  // The cursor's cell is found now, not when the menu opened: the window may have been resized since.
+  const at = placeMenu({ width: w, height: h }, v.size, m.near ?? keyedAnchor(v));
 
   const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${t.ansi0}55`))

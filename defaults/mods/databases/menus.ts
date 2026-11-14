@@ -9,7 +9,6 @@
 import type { Context } from "gpui-kit";
 import type { Pt } from "./menu-place.ts";
 import { inView } from "./menu-place.ts";
-import { keyedAnchor } from "./menu-anchor.ts";
 import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
@@ -46,9 +45,10 @@ export function entry(place: Place, act: string | null, label: string, go: () =>
 }
 
 /** Opens a menu over the view: at the press when a right click asked for it (atPointer), else at
- *  what the keys are on (the grid's cursor cell), else in the middle (menu-place.ts). */
+ *  what the keys are on (the grid's cursor cell, found as it's drawn: popups.ts menuLayer), else in
+ *  the middle (menu-place.ts). */
 export function openMenu(v: DbView, title: string, rows: readonly MenuRow[]): void {
-  const near = v.menuNear ?? keyedAnchor(v);
+  const near = v.menuNear;
 
   v.menuNear = null;
   v.menu = rows.length ? { title, rows, at: 0, near } : null;
