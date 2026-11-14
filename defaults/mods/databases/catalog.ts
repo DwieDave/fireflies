@@ -78,9 +78,74 @@ const MY_TABLES = "select table_schema as `schema`, table_name as name, case whe
 
 const LITE_TABLES = "select 'main' as schema, name, type, null as estimate from sqlite_schema where type in ('table','view') and name not like 'sqlite_%' order by type, name";
 
-/** The statement listing the tables and views. */
+/** Where the connection landed: the database the server put it in (Postgres' default is
+ *  `postgres` when none was named; MySQL has none then) and who it is there. */
+const PG_HERE = "select current_database() as db, current_user as who";
+
+const MY_HERE = "select database() as db, current_user() as who";
+
+/** The statements listing the tables and views; a server's also asks where it landed (hereOf). */
 export function tablesSql(kind: Kind): ScriptStatement[] {
-  return [read(kind === "postgres" ? PG_TABLES : kind === "mysql" ? MY_TABLES : LITE_TABLES)];
+  if (kind === "postgres") return [read(PG_TABLES), read(PG_HERE)];
+
+  return kind === "mysql" ? [read(MY_TABLES), read(MY_HERE)] : [read(LITE_TABLES)];
+}
+
+/** Where a connection is on its server, as the server says it. */
+export interface Here {
+  /** The database it's in (null: MySQL without one chosen). */
+  readonly database: string | null;
+  readonly user: string | null;
+}
+
+/** tablesSql's answer to where it landed, or null (SQLite, or not answered). */
+export function hereOf(kind: Kind, o: Outcome): Here | null {
+  if (kind !== "postgres" && kind !== "mysql") return null;
+
+  const r = records(o.results.find((x) => x.index === 1)?.set)[0];
+
+  if (!r) return null;
+
+  // MySQL's user is user@host: the name is what the person typed.
+  const who = r.get("who") ?? null;
+
+  return { database: r.get("db") || null, user: who && kind === "mysql" ? who.replace(/@[^@]*$/, "") : who };
+}
+
+/** A database on the server: its name, and its size once asked (pg_database_size reads its files). */
+export interface DbInfo {
+  readonly name: string;
+  readonly size: number | null;
+}
+
+const MY_SYSTEM = "('mysql','information_schema','performance_schema','sys')";
+
+/** The server's databases a connection may use: Postgres' that take connections (templates left
+ *  out), MySQL's schemata (its own left out). `sized`: Postgres also says each one's size, where
+ *  the user may connect (it reads each database's files: asked for, never on its own). */
+export function databasesSql(kind: Kind, sized = false): ScriptStatement[] {
+  if (kind === "postgres") {
+    const size = sized ? "case when has_database_privilege(datname, 'CONNECT') then pg_database_size(datname) end" : "null";
+
+    return [read(`select datname as name, ${size} as size from pg_database where not datistemplate and datallowconn order by 1`)];
+  }
+
+  if (kind === "mysql") {
+    const size = sized ? `(select sum(data_length + index_length) from information_schema.tables t where t.table_schema = s.schema_name)` : "null";
+
+    return [read(`select schema_name as name, ${size} as size from information_schema.schemata s where schema_name not in ${MY_SYSTEM} order by 1`)];
+  }
+
+  return [];
+}
+
+/** The databases of databasesSql's answer. */
+export function databasesOf(o: Outcome): DbInfo[] {
+  return records(o.results[0]?.set).flatMap((r) => {
+    const name = r.get("name");
+
+    return name ? [{ name, size: num(r.get("size")) }] : [];
+  });
 }
 
 /** A result's rows as objects by column name. */

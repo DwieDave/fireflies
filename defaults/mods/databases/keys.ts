@@ -17,7 +17,8 @@ const WINDOW: readonly Binding[] = [
   [["0"], "rows / queries", "panel-main"], [["4"], "log", "panel-log"],
   [["tab"], "next panel", "panel-next"], [["shift-tab"], "previous panel", "panel-prev"],
   [["ctrl-n"], "new query tab", "query-new"], [["ctrl-h"], "history", "history"],
-  [["r"], "read again", "refresh"], [["ctrl-t"], "into a pane / out to a window", "move"],
+  [["r"], "read again", "refresh"], [["b"], "the server's databases (a click on the head's database too)", "databases"],
+  [["C"], "the connection's menu (a click on the head's mark too)", "conn-menu"], [["ctrl-t"], "into a pane / out to a window", "move"],
   [["+", "="], "grow the panel (drag a gap; double click: back)", "grow"], [["-"], "shrink the panel", "shrink"],
   [["w", "cmd-s", "ctrl-s"], "save the changes (the statements shown first)", "save"], [["U"], "discard every change", "discard"],
   [["q"], "close", "close"], [["?"], "keys", "help"],
@@ -33,11 +34,11 @@ const CONNS: readonly Binding[] = [
 ];
 
 const TABLES: readonly Binding[] = [
-  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure (a double click too)", "open"],
-  [["["], "tables / views / schemas", "subtab-prev"], [["]"], "tables / views / schemas", "subtab-next"],
+  [["j", "down"], "down", "down"], [["k", "up"], "up", "up"], [["enter"], "rows and structure (a double click too; in Databases: connect to it)", "open"],
+  [["["], "tables / views / schemas / databases", "subtab-prev"], [["]"], "tables / views / schemas / databases", "subtab-next"],
   [["s"], "select it in a query", "table-query"], [["i"], "its name into the query (or drag it there)", "insert"],
   [["/"], "find a table", "table-find"], [["y"], "copy its name", "copy"], [["e"], "export", "export"],
-  [["#"], "count its rows exactly (the list shows the server's estimate)", "count"], [["m"], "menu (a right click too)", "menu"],
+  [["#"], "count its rows exactly (the list shows the server's estimate); databases: their sizes", "count"], [["m"], "menu (a right click too)", "menu"],
 ];
 
 const STRUCTURE: readonly Binding[] = [

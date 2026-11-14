@@ -2,7 +2,9 @@
 // in Nocturne's night look, lazygit's way (the git window's anatomy):
 //
 //   [1] Connections   saved, sent by another mod, found in the space's folder
-//   [2] Tables        · Views · Schemas, with their row counts
+//   [2] Tables        · Views · Schemas · Databases (the server's: a pick connects
+//                     to it, dbs.ts), with their row counts; an empty database says
+//                     so and offers the others
 //   [3] Structure     · Indexes · Keys · Value (the picked cell, whole)
 //   [0] the main view: Rows (a table's page: sorted, filtered by a WHERE line,
 //       paged) and one tab per query (an SQL editor over its result)
@@ -25,6 +27,14 @@
 // moves it between the two (opening.ts). Props: { folder?, on?, connect? }:
 // `connect` (another mod's databases.connect) connects at once, not saved; its
 // `secret` names where a cluster keeps the password (never the password).
+//
+// The head says where the connection is and whether it is connected, first
+// after its title (connmark.ts, connstate.ts: one function for the head's
+// mark, the [1] row's pip and the pin's hover): connected means the last
+// client run answered; a run that can't reach the server turns it, and the
+// window checks again when it gets the keyboard back after a while. A
+// Postgres connection that names no database is in the server's default,
+// `postgres`, and says so.
 
 import { View } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, Size } from "gpui-kit";
@@ -38,7 +48,7 @@ import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";
 import type { HistoryEntry } from "./store.ts";
-import type { Ask, Catalog, ForwardAsk, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
+import type { Alive, Ask, Catalog, ForwardAsk, ServerDbs, CellEdit, ClientFound, DbProps, LogLine, Menu, Note, PanelId, PasswordAsk, QueryTab, Rename, Review, Rows, Sourced, Struct, StructTab, TablesTab } from "./state.ts";
 import type { Edits } from "./edits.ts";
 import { STRUCT_TABS, TABLES_TABS, WINDOW_KEY, gridStart, isDbProps, noteOf } from "./state.ts";
 import type { Place } from "./keys.ts";
@@ -65,6 +75,8 @@ import { loadFolderEnv } from "./folderenv.ts";
 import type { Read } from "./reads.ts";
 import { overdue } from "./reads.ts";
 import { syncPinned } from "./pinned.ts";
+import { focusArrived } from "./connstate.ts";
+import { dbsNow, loadDatabases } from "./dbs.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import { Dividers, tracking } from "./dividers.ts";
@@ -107,6 +119,17 @@ export default class Databases extends View {
   reads: Read[] = [];
   /** The ask before a connection whose port-forward is down (forward.ts). */
   forwardAsk: ForwardAsk | null = null;
+  /** Whether the active connection answers (connstate.ts): its last answer or its failure. */
+  alive: Alive | null = null;
+  /** A check that it still answers runs (connstate.ts recheck). */
+  checking = false;
+  /** Whether the view had the keyboard at the last draw, and when it got it again. */
+  hadFocus = false;
+  focusAt = 0;
+  /** The server's databases as last read (dbs.ts). */
+  dbs: ServerDbs | null = null;
+  /** A database picked on a sent connection, by its id (dbs.ts): kept while the window lives. */
+  picked = new Map<string, string | null>();
   /** Whether the Kubernetes mod is installed (null: not looked yet). */
   k8s: boolean | null = null;
   /** This copy, as the pinned list's notice names who changed it. */
@@ -237,6 +260,12 @@ export default class Databases extends View {
 
     // Another window changed the pinned connections: read them again.
     void syncPinned(this, cx);
+
+    // The window got the keyboard back after a while: its connection is asked once more.
+    if (this.focusAt) {
+      this.focusAt = 0;
+      focusArrived(this, cx);
+    }
 
     // A read's seconds count up where it's shown; one past its deadline ends.
     if (this.reads.length) {
@@ -378,6 +407,9 @@ export default class Databases extends View {
 
     this.tableAt = 0;
     this.setPanel("tables");
+
+    // The server's databases, read each time the tab is shown (one small catalog read).
+    if (tab === "databases" && !dbsNow(this)?.busy) void loadDatabases(this, _cx);
   }
 
   setStructTab(key: string, _cx: Context): void {
@@ -435,6 +467,12 @@ export default class Databases extends View {
   override render(): Element {
     const t = theme();
     const handle = this.handle;
+    // The keyboard coming back to the view (the tick asks the connection again: connstate.ts).
+    const focused = handle?.is_focused() ?? false;
+
+    if (focused && !this.hadFocus) this.focusAt = Date.now();
+
+    this.hadFocus = focused;
     const formOpen = Boolean(this.form || this.exporting);
 
     const view = v_flex().id("databases").relative().size_full().bg(t.background).text_size(11).text_color(t.foreground)

@@ -26,6 +26,7 @@ import { forwardFirst, takenAfter } from "./forward.ts";
 import type { ConnectArgs } from "./state.ts";
 import { gridStart, noteOf } from "./state.ts";
 import { counted } from "./edits.ts";
+import { withDatabase } from "./dbs.ts";
 import { beforeLeaving } from "./cell-edit.ts";
 import type { default as DbView } from "./main.ts";
 
@@ -102,10 +103,14 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
 
   if (a.forward) conn.forward = a.forward;
 
-  v.sent = [conn, ...v.sent.filter((c) => c.id !== conn.id)];
+  // A database picked on it earlier in this window (dbs.ts) stands when it's sent again.
+  const picked = v.picked.get(conn.id);
+  const kept = picked === undefined ? conn : withDatabase(conn, picked);
+
+  v.sent = [kept, ...v.sent.filter((c) => c.id !== conn.id)];
   v.connAt = v.saved.length;
   v.panel = "conns";
-  void connect(v, conn, cx);
+  void connect(v, kept, cx);
 }
 
 /** Where a connection is: the fields a connect request may carry. */
@@ -185,6 +190,7 @@ export const KUBE_DEADLINE = 20000;
  *  nothing to read the secret for. Nothing of the value is said, logged or written. */
 export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Context): Promise<void> {
   v.active = c;
+  v.alive = null;
   v.catalog = { tables: [], error: null, busy: false };
   cx.notify();
 
@@ -265,8 +271,13 @@ export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<st
 }
 
 /** Connects with what the window has (the password in memory, the keychain's, none). */
+export function openConn(v: DbView, c: Conn, cx: Context): Promise<void> {
+  return open(v, c, cx);
+}
+
 function open(v: DbView, c: Conn, cx: Context): Promise<void> {
   v.active = c;
+  v.alive = null;
   v.catalog = { tables: [], error: null, busy: true };
   v.struct = { table: null, data: null, busy: false, error: null };
   v.rows = { browse: null, set: null, total: null, error: null, busy: false, at: gridStart(), filtering: false };

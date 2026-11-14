@@ -24,7 +24,9 @@ import { lookup } from "./envrc.ts";
 import { readSecret } from "./secrets.ts";
 import type { FileIo } from "./store.ts";
 import type { Browse, TableRef } from "./catalog.ts";
-import { browseSql, countsSql, structureOf, structureSql, tablesOf, tablesSql } from "./catalog.ts";
+import { browseSql, countsSql, hereOf, structureOf, structureSql, tablesOf, tablesSql } from "./catalog.ts";
+import { hasDatabases, loadDatabases } from "./dbs.ts";
+import { heard, lostRun } from "./connstate.ts";
 import type { ClientFound, LogLine, Struct } from "./state.ts";
 import { gridStart } from "./state.ts";
 import { readsRowid } from "./edits.ts";
@@ -112,6 +114,9 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
     const token = c.secret === "ask" ? v.secrets.get(c.id) ?? null : c.secret === "keychain" ? await readSecret(IO, c.id) : null;
     const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })));
 
+    // An error of no statement is the request's own (the server not reached, the token refused).
+    heard(v, c, !(o.error && o.error.index === null), o.error?.message ?? null);
+
     return { ...o, ms: Date.now() - at };
   }
 
@@ -151,10 +156,13 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 
   const error = o.error ? connectWords(c, placed(o.error, texts)) : null;
   const line = `${runs} · exit ${r.code}`;
+  const stopped = r.code === 130 || r.code === 137;
+
+  // What the run says of the connection (connstate.ts): an answer, or the connection gone.
+  if (!stopped && r.code !== NO_KEYCHAIN_ITEM) heard(v, c, !lostRun(c.kind, r.code, r.stderr), error?.message ?? null);
 
   if (pending) {
     // Interrupted or killed (the window's stop): said so, not as the shell's words for it.
-    const stopped = r.code === 130 || r.code === 137;
     const done: LogLine = { sql: pending.sql, ok: !error, ms: r.ms, said: stopped ? "stopped" : error ? error.message : `exit ${r.code}`, conn: c.name, run: line };
 
     v.log = v.log.map((l) => (l === pending ? done : l));
@@ -187,6 +195,9 @@ export async function loadTables(v: DbView, cx: Context): Promise<void> {
     if (!("value" in e)) {
       cat.error = endWords(e, "reading the tables");
 
+      // No answer in time: the connection isn't known to stand (a stop says nothing of it).
+      if ("late" in e) heard(v, c, false, cat.error);
+
       return;
     }
 
@@ -200,8 +211,12 @@ export async function loadTables(v: DbView, cx: Context): Promise<void> {
 
     cat.error = o.error ? o.error.message : null;
     cat.tables = o.error ? [] : tablesOf(c.kind, o);
+    cat.here = o.error ? null : hereOf(c.kind, o);
     v.connected(c, !o.error);
     cx.notify();
+
+    // An empty database: the server's others are read, so its words can offer them (dbs.ts).
+    if (!o.error && !cat.tables.length && hasDatabases(c)) void loadDatabases(v, cx);
 
     if (!o.error && (c.kind === "sqlite" || c.kind === "libsql")) await countTables(v, c, cx);
   } catch (error) {

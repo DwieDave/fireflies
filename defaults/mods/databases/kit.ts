@@ -53,7 +53,8 @@ function edgeRow(id: string, edge: Color, where: "top" | "bottom", left: Element
   const lead = left ? placed.child(label(left).flex_shrink(1)) : placed;
   const mid = lead.child(line().flex_1().min_w(8));
 
-  return right ? mid.child(label(right)).child(line().w(8).flex_none()) : mid;
+  // The right label (a count, a caption) gives way before the title's tabs.
+  return right ? mid.child(label(right).flex_shrink(4)).child(line().w(8).flex_none()) : mid;
 }
 
 /** A panel's extras: `right` cut into its top edge, `foot` into its bottom, a press on its title. */
