@@ -21,9 +21,18 @@
 // and several tab pins at once; the browser drops a tab's pin when the tab closes.
 // It ends when the pane closes (tidy(): missing from panes() for GONE_AFTER ms);
 // a parked pane stays pinned. Going to it brings a parked pane back.
+// A whole tab of a space (all its panes, as the tab strip shows it) is pinned
+// as one tile too: a record in TABS_KEY (persisted),
+//   [{ tab, space, at }]   tab: its id (kept across restarts); space: the one it
+//                          was in when last seen (it follows a tab.move {space});
+//                          at: as above
+// It ends when the tab closes (tidyTabs(): missing from spaces() for
+// GONE_AFTER ms); a settled tab, or one in another space, stays pinned. Going
+// to it shows it (tab.select: its space too, its focus where it was in it).
+// A pane of a pinned tab may be pinned on its own as well: two tiles.
 // Pure functions: no herdr imports at run time, so the tests can load this file.
 
-import type { AgentInfo, PaneInfo, shared } from "herdr";
+import type { AgentInfo, PaneInfo, SpaceInfo, TabInfo, shared } from "herdr";
 import { isNull, isNumber, isString, nullable, object, oneOf, readSharedList, sharedListKey } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import { canonical, isJsonMap, isRawJson, jsonOf, rawOf } from "./guards.ts";
@@ -250,7 +259,7 @@ export const isPaneKey = (key: string): boolean => key.startsWith("pane:");
 export const recordKey = (r: PaneRecord): string => paneKey(r.pane, recordTab(r));
 
 /** A record's time (ms), or null. */
-function recordAt(r: PaneRecord): number | null {
+function recordAt(r: { readonly at?: number | string | null }): number | null {
   const n = Number(r.at);
 
   return r.at != null && Number.isFinite(n) ? n : null;
@@ -263,14 +272,19 @@ export type JarItem =
   /** A pinned terminal that isn't an agent, and its pane if it has one. */
   | { readonly kind: "terminal"; readonly key: string; readonly terminal: Terminal; readonly pane: PaneInfo | null; readonly at: number | null }
   /** A pinned mod pane that's there now; with `tab`, one web tab of it. */
-  | { readonly kind: "pane"; readonly key: string; readonly record: PaneRecord; readonly pane: PaneInfo; readonly tab?: string; readonly at: number | null };
+  | { readonly kind: "pane"; readonly key: string; readonly record: PaneRecord; readonly pane: PaneInfo; readonly tab?: string; readonly at: number | null }
+  /** A whole tab of a space, pinned (TABS_KEY), there now: the tab and its space. */
+  | { readonly kind: "tab"; readonly key: string; readonly record: TabRecord; readonly tabInfo: TabInfo; readonly space: SpaceInfo; readonly at: number | null };
 
-/** What the jar is made of: agents(), terminals(), panes(), paneRecords(). */
+/** What the jar is made of: agents(), terminals(), panes(), paneRecords();
+ *  spaces() and tabRecords() for whole tabs. */
 export interface JarSources {
   readonly agents: readonly AgentInfo[];
   readonly terminals: readonly Terminal[];
   readonly panes: readonly PaneInfo[];
   readonly records: readonly PaneRecord[];
+  readonly spaces?: readonly SpaceInfo[];
+  readonly tabs?: readonly TabRecord[];
 }
 
 /**
@@ -279,6 +293,7 @@ export interface JarSources {
  *   { kind: "terminal", key: address, terminal, pane }    a pinned terminal that isn't an agent
  *   { kind: "pane", key: "pane:<id>", record, pane }      a pinned mod pane that's there now
  *   { kind: "pane", key: "pane:<id>#<tab>", record, pane, tab }   one web tab of it, pinned
+ *   { kind: "tab", key: "tab:<id>", record, tabInfo, space }      a whole tab of a space, pinned
  */
 export function jarItems(from: JarSources): JarItem[] {
   const out: JarItem[] = [];
@@ -305,6 +320,12 @@ export function jarItems(from: JarSources): JarItem[] {
     const at = recordAt(r);
 
     out.push(tab ? { kind: "pane", key, record: r, pane: p, tab, at } : { kind: "pane", key, record: r, pane: p, at });
+  }
+
+  for (const r of from.tabs ?? []) {
+    const found = findTab(r.tab, from.spaces ?? []);
+
+    if (found) out.push({ kind: "tab", key: tabKey(r.tab), record: r, tabInfo: found.tab, space: found.space, at: recordAt(r) });
   }
 
   return out.sort((a, b) => {
@@ -406,4 +427,113 @@ export function tidy(records: readonly PaneRecord[], panes: readonly PaneInfo[],
   for (const pane of gone) missing.delete(pane);
 
   return changed ? out : null;
+}
+
+// ---- whole tabs
+
+/** shared() key: the whole tabs' pins, [{ tab, space, at }]. */
+export const TABS_KEY = "nocturne.pinned-tabs";
+
+const isStoredTab = object({ tab: isString }, { space: nullable(isString), at: oneOf(isNumber, isString, isNull) });
+
+/** A whole tab's pin: its id, the space it was last seen in, when it was pinned. */
+export type TabRecord = Guarded<typeof isStoredTab>;
+
+/** TABS_KEY, read entry by entry. */
+export const TABS = sharedListKey(TABS_KEY, isStoredTab);
+
+/** The whole tabs' pins as stored (shared(TABS_KEY), read with `read`), well formed only. */
+export function tabRecords(read: typeof shared): TabRecord[] {
+  return readSharedList(read, TABS).filter((r) => r.tab !== "");
+}
+
+/** The jar's key for a whole tab's pin. */
+export const tabKey = (tab: string): string => `tab:${tab}`;
+export const isTabKey = (key: string): boolean => key.startsWith("tab:");
+
+/** A tab (its id) and the space it is in, among `spaces`; null: not there now. */
+export function findTab(tab: string, spaces: readonly SpaceInfo[]): { readonly tab: TabInfo; readonly space: SpaceInfo } | null {
+  for (const space of spaces) {
+    const c = space.tabs.find((x) => x.id === tab);
+
+    if (c) return { tab: c, space };
+  }
+
+  return null;
+}
+
+/** A whole tab is pinned. */
+export const tabPinnedWhole = (records: readonly TabRecord[], tab: string): boolean => records.some((r) => r.tab === tab);
+
+/** The records with tab `tab` (in `space`) pinned (at `now`) or unpinned. */
+export function pinWholeTab(records: readonly TabRecord[], tab: string, space: string | null, on: boolean, now: number): TabRecord[] {
+  const rest = records.filter((r) => r.tab !== tab);
+
+  return on ? [...rest, { tab, space, at: now }] : rest;
+}
+
+/** The tab records with new times (`times`, [key, at] from reorder) for their tabs. */
+export function retimeTabs(records: readonly TabRecord[], times: readonly JarTime[]): TabRecord[] {
+  const at = new Map(times.filter(([k]) => isTabKey(k)));
+
+  return records.map((r) => {
+    const t = at.get(tabKey(r.tab));
+
+    return t === undefined ? r : { ...r, at: t };
+  });
+}
+
+/**
+ * Keeping the tab records true to spaces() (once per draw): a tab now in
+ * another space (tab.move {space}) keeps its pin and notes the space; one
+ * missing for GONE_AFTER ms goes (it closed). `missing`: Map tab -> since when
+ * (ms), kept by the caller. A remote tab ("machine/…") whose machine shows no
+ * spaces now is left alone: it's away, not closed; so is everything while
+ * spaces() is empty (a window still loading).
+ * Returns the records to store, or null when nothing changed.
+ */
+export function tidyTabs(records: readonly TabRecord[], spaces: readonly SpaceInfo[], missing: Map<string, number>, now: number): TabRecord[] | null {
+  let changed = false;
+  const machines = new Set(spaces.flatMap((s) => s.tabs.map((c) => machineOf(c.id))));
+  const out: TabRecord[] = [];
+
+  for (const r of records) {
+    const found = findTab(r.tab, spaces);
+
+    if (found) {
+      missing.delete(r.tab);
+
+      if ((r.space ?? null) !== found.space.id) {
+        changed = true;
+        out.push({ ...r, space: found.space.id });
+      } else out.push(r);
+
+      continue;
+    }
+
+    if (!spaces.length || !machines.has(machineOf(r.tab))) {
+      out.push(r);
+      continue;
+    }
+
+    const since = missing.get(r.tab) ?? now;
+
+    missing.set(r.tab, since);
+
+    if (now - since >= GONE_AFTER) {
+      changed = true;
+      missing.delete(r.tab);
+      continue;
+    }
+
+    out.push(r);
+  }
+
+  return changed ? out : null;
+}
+
+/** The pane a tab goes by (the tab strip's lead): its first agent's pane, else
+ *  its first pane. Null: none listed (yet). */
+export function tabLead(tab: string, panes: readonly PaneInfo[]): PaneInfo | null {
+  return panes.find((p) => p.tab === tab && p.program?.agent) ?? panes.find((p) => p.tab === tab) ?? null;
 }

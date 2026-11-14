@@ -40,12 +40,12 @@ import { spaces, panes, run, theme, shared, setShared, layout, focused, nextComm
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { isBoolean, readShared, writeShared } from "./guard.ts";
 import { statusMark } from "./winged.ts";
-import { dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK } from "./kit.ts";
+import { dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
-import { openMenu, openKeys, toggleGitMenu, gitMenuOpen } from "./menu.ts";
+import { openMenu, openKeys, toggleGitMenu, gitMenuOpen, openToSpace } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
 import { headerControls, iconPath, modLook, paneMenu, renamePane } from "./header.ts";
 import { CURSOR_KEY, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod, isLayoutNode } from "./nav.ts";
@@ -119,23 +119,13 @@ export function seam(t: Theme, look: ToolLook = TOOL_LOOK): Element {
 /** What a control of the strip's rows does for the verbs the keyboard gives it. */
 type Act = (cx: Context) => void;
 
-/** A control the strip's cursor walks: a tab, a tool, a header control, a parked chip. */
-interface StripItem {
-  readonly id: string;
-  readonly active?: boolean;
-  readonly pane?: string;
-  readonly go?: Act;
-  readonly menu?: Act;
-  readonly rename?: Act;
-  readonly close?: Act;
-  readonly "move-left"?: Act;
-  readonly "move-right"?: Act;
-}
-
 /** The verbs a control acts on itself. */
-type ItemVerb = "go" | "menu" | "rename" | "close" | "move-left" | "move-right";
+type ItemVerb = "go" | "menu" | "rename" | "close" | "move-left" | "move-right" | "pin" | "to-space";
 
-const ITEM_VERBS: ReadonlySet<string> = new Set<ItemVerb>(["go", "menu", "rename", "close", "move-left", "move-right"]);
+/** A control the strip's cursor walks: a tab, a tool, a header control, a parked chip; what it does per verb. */
+type StripItem = { readonly id: string; readonly active?: boolean; readonly pane?: string } & { readonly [V in ItemVerb]?: Act };
+
+const ITEM_VERBS: ReadonlySet<string> = new Set<ItemVerb>(["go", "menu", "rename", "close", "move-left", "move-right", "pin", "to-space"]);
 
 const isItemVerb = (verb: string): verb is ItemVerb => ITEM_VERBS.has(verb);
 
@@ -307,6 +297,9 @@ export default class Tabs {
       "move-right": () => {
         if (c.index < s.tabs.length) run("tab.move", { id: c.id, index: c.index + 1 });
       },
+      // The whole tab: a tile on the jar's shelf (kit.ts pinTab), or into another space (menu.ts openToSpace).
+      pin: () => pinTab(c.id),
+      "to-space": () => openToSpace(c.id),
     });
 
     const gitMenu = () => toggleGitMenu({ centered: true });

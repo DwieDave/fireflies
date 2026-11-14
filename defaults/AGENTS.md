@@ -1551,7 +1551,24 @@ shown tab's, `browser.icons`), keyed `pane:<id>#<tab>` in the jar. Several tabs 
 whole, can each have a tile. Going to it focuses the pane, then
 `browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
 screen yet takes the same wish from shared `browser.show` when it
-shows). Closing the tab drops its pin. Pin or unpin
+shows). Closing the tab drops its pin. A whole tab of a space (all its panes,
+as the tab strip shows it) can be pinned as one tile too: the tab's right-click
+menu ("Pin tab to the jar" / "Unpin from the jar"), `p` on a tab in the strip,
+the shelf's "+" menu ("Pin the shown tab here"), the palette or
+`nocturne.pin-tab` (the shown tab). Its tile stands under a tab's ear (set in
+from its corner, on the tile's top edge, filled with the strip's blue checker
+while the tab is shown) and wears the tab's lead pane's mark (its agent's, else
+its first pane's); its tooltip names the tab, then "tab", its space and its
+panes ("settled" when put away). It is lit, with the corner ticks, while it is
+the shown tab. A click or enter shows the tab (`tab.select`: its space too, a
+settled tab back, the keyboard to the pane focused in it last); right-click
+(or `m` on it in the sidebar) opens its own menu: Show tab, Unpin, Move left /
+right, Move to space…, Close tab (the app asks first for what runs there).
+The tab stays in its space (there is no "move to the dock" for a tab: it
+belongs to its repo). Its record is kept in shared `nocturne.pinned-tabs`
+(`[{tab, space, at}]`, keyed `tab:<id>` in the jar), follows the tab into
+another space and goes once the tab has been closed for 15 s. A pane of a
+pinned tab can have its own tile as well. Pin or unpin
 from a firefly's or any pane's right-click menu (open sky and rail), the
 palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
@@ -1559,8 +1576,8 @@ firefly up or down in the jar, a tile left or right on the shelf.
 `nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
 place of the core's `agent.next` / `agent.prev`) walk the sidebar top to
 bottom as it's drawn, open or folded: the pinned agents in the jar, every tile
-on the jar's shelf in its order (web pages, editors, files, shells; each pinned
-web tab its own stop), then the other agents under the jar (awake ones, then
+on the jar's shelf in its order (web pages, editors, files, shells, whole tabs;
+each pinned web tab its own stop), then the other agents under the jar (awake ones, then
 those done or idle), then back to the first, and the other way round; a tile is gone to as a click on it goes. The
 sidebar's own j / k walk its controls in the same order. The dock
 (dock.ts) is a space tied to no folder for panes that belong to no project:
@@ -1626,7 +1643,8 @@ each of those mods (a mod can't import another's files): change the source
 and copy it, a copy of your own goes with your own mod.
 The sidebar walks the fold key, spaces (n new: the folder list, t new tab, f folder: the same list, w worktree,
 d delete: y/n), fireflies (p pin, J/K in the jar) and usage. The tab strip's
-rows are the tabs (x close, H/L move, 1-9), its buttons, the bell and "+ new"; the
+rows are the tabs (x close, H/L move, p pin the tab whole to the jar, s move it
+to another space, 1-9), its buttons, the bell and "+ new"; the
 focused pane's header (name, text size, float, splits, even out, gridify,
 park, zoom, ⋯, then close, always the rightmost); the shown tab's parked chips (enter unparks).
 
@@ -1685,7 +1703,17 @@ Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
 half of the tab under the pointer picks before or after it, the strip past the
 last tab is the end. Letting go drops it there (`tab.move`); leaving the strip
-drops nothing. Two blue corner ticks mark what's shown: the shown space (its plate in
+drops nothing. A tab's right-click menu (or `m` on it in the strip): Rename,
+New tab, Pin tab to the jar (pinned: Unpin from the jar, Move left / right on
+the shelf), Move to space… and Close. "Move to space…" lists the other spaces
+on the tab's machine in the sidebar's order, a worktree's space indented under
+its repo's (the sidebar publishes its rows in shared `nocturne.space-rows`,
+`[{id, depth}]`), 1-9 keyed; a pick moves the whole tab there
+(`tab.move {id, space}`: every pane, the arrangement and sizes, parked panes,
+the focus; terminals run on, mod panes keep their props) and shows it there.
+For a space's last tab the list says first that its space closes.
+`s` on a tab in the strip, the palette's "Move tab to space…" and
+`nocturne.tab-to-space` (the shown tab) open that list on its own. Two blue corner ticks mark what's shown: the shown space (its plate in
 the open sidebar, its initials on the folded rail), the focused agent in the sky (around its firefly's dotted square,
 in the jar too; its name stands in the moonlit path) and on the rail.
 
@@ -1852,7 +1880,11 @@ The main ones:
   shell in front or unsaved work asks the person first however it is closed (keys,
   menus, middle-click, a mod's `run`), naming the agents and counting them, and from a
   script fails unless confirmed; a tab of shells at their prompts just closes),
-  `tab.rename {id?, name}` ("": its number again), `tab.move {id, index}`,
+  `tab.rename {id?, name}` ("": its number again), `tab.move {id, index?, space?}`
+  (index alone: its place in its space, 1 = first; with `space`, another space on
+  its machine: the whole tab goes there, every pane with its arrangement, sizes,
+  parked panes and focus, terminals running on, at `index` (default: last), and
+  is shown there; the space it leaves closes when that was its last tab),
   `tab.select {index | id}`, `tab.next`, `tab.prev`,
   `tab.settle {id?}`, `tab.unsettle {id?}` (index, next and prev
   skip settled tabs).

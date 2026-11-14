@@ -137,7 +137,10 @@ the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
 a web pane can have a tile of its own (its tab's menu, or `herdr-app do
 browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
-wears its favicon, as the web pane's tab strip does. For a pane
+wears its favicon, as the web pane's tab strip does. A whole tab of a space
+can be pinned as one tile too (`herdr-app do nocturne.pin-tab` for the shown
+tab, or the tab's right-click menu; kept in `nocturne.pinned-tabs`): its tile
+shows the tab, wherever it is. For a pane
 that belongs to no project (a docs page, a dashboard), `herdr-app do
 nocturne.dock-web` opens a web pane in the dock, a space tied to no folder (no
 repo for git or GitHub, terminals start in ~), pinned to the shelf (`nocturne.dock-shell` a shell in ~, `nocturne.dock-files`
@@ -201,6 +204,16 @@ own). The tab it leaves closes when it was its last pane:
 
 ```sh
 herdr-app do pane.move '{"pane":"p12","tab":"tb3"}'
+```
+
+`tab.move {id, space, index?}` takes a whole tab into another space on its
+machine: every pane, their arrangement and sizes, parked panes, the focus and
+the name (terminals keep running, mod panes their props), at `index` (1 =
+first; default: last), and shows it there. The space it leaves closes when that
+was its last tab. Without `space`, `index` moves it inside its own space:
+
+```sh
+herdr-app do tab.move '{"id":"tb3","space":"sp2"}'
 ```
 
 Closing ends what runs there. `tab.close`, `pane.close` and `space.close`

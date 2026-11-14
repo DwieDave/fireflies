@@ -61,7 +61,7 @@ export function hasMod(node: LayoutNode | null | undefined, mod: string): boolea
 /** What a key does in the chrome. */
 export type Verb =
   | "down" | "up" | "left" | "right" | "first" | "last" | "next" | "prev" | "go" | "menu" | "rename" | "back" | "help"
-  | "new" | "folder" | "delete" | "tab" | "worktree" | "pin" | "pin-down" | "pin-up" | "close" | "move-left" | "move-right";
+  | "new" | "folder" | "delete" | "tab" | "worktree" | "pin" | "pin-down" | "pin-up" | "close" | "move-left" | "move-right" | "to-space";
 
 /** A digit key: select that tab. */
 export type DigitVerb = "n1" | "n2" | "n3" | "n4" | "n5" | "n6" | "n7" | "n8" | "n9";
@@ -89,7 +89,7 @@ export const SIDEBAR_KEYS: Keymap = new Map([
 ]);
 
 /** The tab strip's own verbs on top of COMMON. */
-export const STRIP_KEYS: Keymap = new Map([...COMMON, ["x", "close"], ["n", "new"], ["H", "move-left"], ["L", "move-right"]]);
+export const STRIP_KEYS: Keymap = new Map([...COMMON, ["x", "close"], ["n", "new"], ["H", "move-left"], ["L", "move-right"], ["p", "pin"], ["s", "to-space"]]);
 
 /** What a control does for each verb the keyboard gives it (the sidebar's nav). */
 export interface NavActs {
@@ -133,6 +133,7 @@ export const STRIP_HELP: readonly HelpLine[] = [
   ["⏎  space", "select the tab, press the button"], ["1 … 9", "select that tab"],
   ["m  .", "the tab's menu (on a button: its menu)"], ["r", "rename the tab"],
   ["x", "close the tab"], ["n", "new tab"], ["H L", "move the tab left / right"],
+  ["p", "pin the whole tab to the jar's shelf (again: unpin)"], ["s", "move the whole tab to another space"],
   ["esc  q", "back to the pane"], ["?", "keys"],
 ];
 

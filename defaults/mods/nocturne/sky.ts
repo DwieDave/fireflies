@@ -17,6 +17,8 @@
 //            (shelf.ts);
 //            nocturne.pin (cmd-alt-p) pins the focused pane, whatever it shows,
 //            nocturne.pin-up / pin-down move it in the jar (on the shelf: left / right);
+//            nocturne.pin-tab pins the shown tab whole (a tile with a tab's ear),
+//            nocturne.tab-to-space moves it whole to another space (menu.ts);
 //            nocturne.agent-next / agent-prev walk the jar's agents, its
 //            shelf's tiles, then the other agents, as drawn, wrapping
 //            (walk.ts; the layout's cmd-] / cmd-[);
@@ -48,8 +50,8 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, pinFocused, moveFocused, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
-import { tidy, onShelf, storedRecords, PANES_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
+import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { tidy, tidyTabs, onShelf, storedRecords, PANES_KEY, TABS_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
@@ -81,7 +83,7 @@ export { GLOW_SQUARE };
 
 import { stop, clock, moonPhase, REDRAW_ON_SHOW, CHECK, REDRAW_DELAY, railWidth, RAIL_BELOW, OPEN_WIDTH, OPEN_DEFAULT, SETTLE, SECTION_RANK } from "./sky-plan.ts";
 import type { Clock, NavEntry, Landing, GlowSky, RailTops } from "./sky-plan.ts";
-import { placeCursor, toggleKeys, sidebarKey, railActs } from "./sky-keys.ts";
+import { placeCursor, toggleKeys, sidebarKey, railActs, jarCommand } from "./sky-keys.ts";
 import { noteLandings, glint, stamp, meadowView } from "./meadow.ts";
 import { pinLit, pinName, pinWhere } from "./shelf.ts";
 import { railView } from "./rail.ts";
@@ -136,6 +138,7 @@ export default class Sky {
   tileHover: string | null = null;
   railHover: string | null = null;
   missing = new Map<string, number>();
+  missingTabs = new Map<string, number>(); // whole tabs' pins, as `missing` (pins.ts tidyTabs)
   tidyLater = false;
   shownTab: string | undefined = undefined;
   shownSpace: string | null = null;
@@ -217,13 +220,11 @@ export default class Sky {
         else if (c === "gridify") gridify(later);
         else if (c === "new") openNewMenu({ centered: true });
         else if (c === "space-new") openSpacePicker();
-        else if (c === "pin") pinFocused();
+        else if (jarCommand(c)) { /* pinned, moved in the jar, or the tab sent to a space */ }
         else if (c === "dock") dockFocused();
         else if (c === "dock-web") dockWeb();
         else if (c === "dock-shell") dockShell();
         else if (c === "dock-files") dockFiles();
-        else if (c === "pin-up") moveFocused(-1);
-        else if (c === "pin-down") moveFocused(1);
         else if (c === "agent-next") this.walk(1);
         else if (c === "agent-prev") this.walk(-1);
         // With no toast on show, closing one closes the update note.
@@ -531,14 +532,20 @@ export default class Sky {
    *  back under a new id keeps its pin, a closed one's goes. Writes from a task. */
   tidyPins(cx: Context): void {
     const recs = paneRecordsNow();
+    const tabs = tabRecordsNow();
 
-    if (!recs.length) return;
+    if (!recs.length && !tabs.length) return;
 
-    const out = tidy(recs, panes(), this.missing, Date.now());
+    const out = recs.length ? tidy(recs, panes(), this.missing, Date.now()) : null;
 
     if (out) cx.timer.after(0, () => setShared(PANES_KEY, storedRecords(out)));
 
-    if (this.missing.size && !this.tidyLater) {
+    // Whole tabs' pins (pins.ts tidyTabs): one that moved space notes it, one closed goes.
+    const outTabs = tabs.length ? tidyTabs(tabs, spaces(), this.missingTabs, Date.now()) : null;
+
+    if (outTabs) cx.timer.after(0, () => setShared(TABS_KEY, outTabs));
+
+    if ((this.missing.size || this.missingTabs.size) && !this.tidyLater) {
       this.tidyLater = true;
       cx.timer.after(PIN_GONE + 200, (later) => {
         this.tidyLater = false;

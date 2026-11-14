@@ -1,22 +1,23 @@
 // The palette's "Open" entries and Nocturne's other own rows (palette-entries.ts
 // lists them first among its own): the panels, the folder's files pane, the
 // script runner and processes, the agents to start, the space's worktree and
-// folder, the git window's diff, pins, the dock, the toast and update note, the
+// folder, the git window's diff, pins (a whole tab too), moving the tab to a space, the dock, the toast and update note, the
 // keyboard's ways into the chrome, the picture in picture player.
 
-import { run, shared, setShared, agents, panes } from "herdr";
+import { run, shared, setShared, agents, panes, spaces } from "herdr";
 import { writeShared } from "./guard.ts";
 import { isList } from "./guards.ts";
-import { focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb, dockShell, dockFiles, dockable } from "./kit.ts";
+import { focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, dockWeb, dockShell, dockFiles, dockable, shownTab, tabPinnedNow, pinTab } from "./kit.ts";
 import type { PinTarget } from "./kit.ts";
 import { onShelf } from "./pins.ts";
+import { tabMove } from "./tabmove.ts";
 import { panels, here, terminalPane, terminalTab } from "./panels.ts";
 import type { Here } from "./panels.ts";
 import { toggleDeck, lastFailed } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
 import { gitOpen, openWorktrees } from "./git.ts";
 import { openNewMenu, lastKnownAgents } from "./newmenu.ts";
-import { NAME_PANE, EDIT_SPACE_KEY } from "./menu.ts";
+import { NAME_PANE, EDIT_SPACE_KEY, openToSpace } from "./menu.ts";
 import { TOASTS, toastKey } from "./toast.ts";
 import { updateShown, dismissUpdate } from "./screens.ts";
 import type { Entry, EntryArgs } from "./palette-entries.ts";
@@ -190,6 +191,26 @@ function pinEntries(target: PinTarget | null): Entry[] {
   return out;
 }
 
+/** The shown tab as a whole: pinned to the jar's shelf (kit.ts pinTab), moved to
+ *  another space (menu.ts openToSpace; tab.move {space}). */
+function tabEntries(): Entry[] {
+  const tab = shownTab();
+
+  if (!tab) return [];
+
+  const on = tabPinnedNow(tab);
+
+  const out: Entry[] = [{ name: "nocturne.pin-tab", args: {}, group: "Tab", icon: on ? "pin-off" : "pin", bind: "nocturne.pin-tab",
+    title: on ? "Unpin this tab from the jar" : "Pin this tab to the jar", words: "pin unpin tab whole jar shelf sidebar keep tile", go: () => pinTab(tab, !on) }];
+
+  if (tabMove(tab, spaces())?.to.length) {
+    out.push({ name: "nocturne.tab-to-space", args: {}, group: "Tab", icon: "layers", bind: "nocturne.tab-to-space",
+      title: "Move tab to space…", words: "move tab whole space another send transfer worktree repo", go: () => openToSpace(tab) });
+  }
+
+  return out;
+}
+
 /** The dock (dock.ts): a space tied to no folder for panes that belong to no
  *  project; what goes there is pinned to the jar's shelf. The toast and the update note. */
 function dockAndNoteEntries(target: PinTarget | null): Entry[] {
@@ -292,5 +313,5 @@ export function openEntries(): Entry[] {
   const target = focusedPane();
 
   return [...panelEntries(), ...folderEntries(h), ...toolEntries(), ...agentAndSpaceEntries(h), ...gitAndGridEntries(),
-    ...pinEntries(target), ...dockAndNoteEntries(target), ...keyboardEntries(h), ...pipEntries()];
+    ...pinEntries(target), ...tabEntries(), ...dockAndNoteEntries(target), ...keyboardEntries(h), ...pipEntries()];
 }

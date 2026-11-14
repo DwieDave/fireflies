@@ -4,7 +4,9 @@
 // level in Fireflies' order; only a space on a linked worktree is indented, under
 // the space on its repo's main checkout (or under the repo's name when the
 // main checkout has no space).
-// nocturne.next / nocturne.prev (keys.json) walk the rows in this order.
+// nocturne.next / nocturne.prev (keys.json) walk the rows in this order, and
+// the rows are published (tabmove.ts SPACE_ROWS) for the menus that list
+// spaces in it ("Move to space", a tab moved whole).
 //
 //   click a row   shows it
 //   + new         the new-space picker (newspace.ts) hangs under it: a list
@@ -30,7 +32,7 @@
 import { div, svg } from "gpui-kit";
 import type { Context, Element, KeyEvent, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, InputState } from "gpui-base";
-import { spaces, panes, agents, run, exec, shared } from "herdr";
+import { spaces, panes, agents, run, exec, shared, setShared } from "herdr";
 import type { PaneInfo, SpaceInfo, Theme } from "herdr";
 import { readShared } from "./guard.ts";
 import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.ts";
@@ -42,6 +44,7 @@ import type { Stop } from "./form-keys.ts";
 import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.ts";
 import { EDIT_SPACE_KEY, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";
+import { SPACE_ROWS, spaceRowsOf } from "./tabmove.ts";
 import type { Nav, NavActs } from "./nav.ts";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
@@ -262,7 +265,24 @@ export default class Spaces {
       for (const k of list) out.push({ s: k, depth: 1 });
     }
 
+    this.publishRows(out);
+
     return out;
+  }
+
+  /** What `rows` gave last, as published (tabmove.ts SPACE_ROWS). */
+  published = "";
+
+  /** Publishes the rows' order and indents for the menus that list spaces
+   *  (tabmove.ts: a tab moved to another space), when they changed. */
+  publishRows(rows: readonly SpaceRow[]): void {
+    const list = spaceRowsOf(rows);
+    const sig = JSON.stringify(list);
+
+    if (sig === this.published) return;
+
+    this.published = sig;
+    setShared(SPACE_ROWS, list);
   }
 
   /** nocturne.next / nocturne.prev: the next space down (or up) the rows, wrapping. */
