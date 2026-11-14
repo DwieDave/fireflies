@@ -158,6 +158,11 @@ test("the keys popup is as tall as its list: a popup sizes to its content, and t
   expect(callOf(host, "h")).toEqual([[spec.height]]);
   expect(callOf(host, "size_full")).toEqual([]);
   expect(spec.height).toBeGreaterThan(200);
+  // Centred on the player: its window (props().overlay), where the core draws it now.
+  propsNow = { of: "1:web", overlay: "o7" };
+  player(480).openKeys();
+  expect(opened.at(-1).at).toEqual({ over: "o7" });
+  propsNow = { of: "1:web" };
 });
 
 test("the seam tone: a third of the way from the icons' dim to ansi0, one small step darker", () => {

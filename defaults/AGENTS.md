@@ -1621,7 +1621,7 @@ It takes the body's place and the bars stay; `?`, esc or q close it. Where
 `?` types (the editor, a filter) its chord opens it (`space ?`, `cmd-k ?`),
 and the bar's entry says so. Over a native view (a web page, a PDF, a video)
 the view hides while the keys show and comes back as it was; picture in
-picture opens them as a popup over its video. Git's rows run their action
+picture opens them as a popup centred on the player (`at: { over }`). Git's rows run their action
 (j k, enter or the row's own key), as lazygit's menu does. Every overview
 also opens by command: `<mod>.keys` (agent-graph, browser, editor,
 file-tree, git, github, markdown, notifications, pip, preview, scripts,
@@ -2627,6 +2627,9 @@ All of it is in `herdr.d.ts`. In short:
   returns an id; the mod gets `props().overlay` and closes itself with
   `closeOverlay(id)`; Esc closes the top dialog or popup. `frame: "none"`
   drops Fireflies' border, corners and shadow so the mod draws its own.
+  A popup opens at `at`: the pointer (default), `{ x, y }` (its top left), or `{ over: id }`,
+  centred on that window (an overlay's id) or pane where it is drawn now, kept inside the app
+  window, so it opens over what it belongs to however that got there.
   `notify({ title, body, level, icon, timeout })` posts a notification, drawn
   by the layout-chosen mod (default: `toast`).
 - Windows (`kind: "window"`): stay open until closed, over the layout and

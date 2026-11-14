@@ -466,6 +466,9 @@ struct Overlay {
     /// The place it sits on (dropped there, or `overlay.snap {to}`): it stays
     /// there as the grid or its size changes, until dragged off.
     anchor: Option<movable::Place>,
+    /// A popup opened `at: { over }`: centred on that window (an overlay's id)
+    /// or pane, where it is drawn now, never cut by the app window's edge.
+    over: Option<String>,
 }
 
 struct Drag {
@@ -4761,6 +4764,7 @@ impl AppWindow {
             _ => self.pointer,
         };
         let top = (spec.get("at").and_then(Value::as_str) == Some("top")).then(|| num("offset", 0.0));
+        let over = spec.get("at").and_then(|a| a.get("over")).and_then(Value::as_str).filter(|_| kind == OverlayKind::Popup).map(str::to_owned);
         let fit = layout.is_none() && resized.is_none() && (kind == OverlayKind::Popup || (matches!(kind, OverlayKind::Dialog | OverlayKind::Window) && spec.get("height").is_none()));
         if kind == OverlayKind::Window && place.is_none() && spec.get("at").is_some_and(|v| v.get("x").is_some()) {
             place = Some(at);
@@ -4827,6 +4831,7 @@ impl AppWindow {
             back_to,
             snap,
             anchor,
+            over,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -5776,10 +5781,16 @@ impl AppWindow {
                         .into_any_element(),
                 ),
                 OverlayKind::Popup => {
-                    let at = match o.top {
+                    // Over a window or pane: centred on it where it is drawn now.
+                    let over = o.over.as_ref().and_then(|id| {
+                        let bounds = self.bounds.borrow();
+                        bounds.get(&format!("overlay:{id}")).or_else(|| bounds.get(id)).copied()
+                    });
+                    let at = match (o.top, over) {
                         // Centered, hanging from `offset` px below the top (a drop-down from a bar).
-                        Some(off) => point((viewport.width - w) / 2.0, settings::z(off)),
-                        None => o.at,
+                        (Some(off), _) => point((viewport.width - w) / 2.0, settings::z(off)),
+                        (None, Some(b)) => popup_over(b, size(w, h), viewport),
+                        (None, None) => o.at,
                     };
                     out.push(
                         div()
@@ -5970,6 +5981,14 @@ fn nearest(cur: Bounds<Pixels>, dir: &str, candidates: impl IntoIterator<Item = 
         })
         .reduce(|best, next| if cmp(next.0, best.0).then(best.1.cmp(&next.1)).then(cmp(best.2, next.2)).is_lt() { next } else { best })
         .map(|(_, _, _, id)| id)
+}
+
+/// Where a `size` popup's top left goes to be centred on `b`, kept 8 px
+/// inside the `viewport` (where it doesn't fit, its top left edge shows).
+fn popup_over(b: Bounds<Pixels>, size: Size<Pixels>, viewport: Size<Pixels>) -> Point<Pixels> {
+    let m = px(8.0);
+    let keep = |v: Pixels, len: Pixels, room: Pixels| v.min(room - m - len).max(m);
+    point(keep(b.center().x - size.width / 2.0, size.width, viewport.width), keep(b.center().y - size.height / 2.0, size.height, viewport.height))
 }
 
 fn position_popup(at: Point<Pixels>, body: Stateful<Div>) -> Anchored {
@@ -8951,36 +8970,73 @@ export default class W extends View {
             let id = crate::mods::new_overlay_id();
             this.open_overlay(id.clone(), json!({ "mod": "pip", "kind": "window", "key": "pip", "frame": "none", "width": 384, "height": 238,
                 "resizable": { "min": [240, 158], "aspect": 16.0 / 9.0, "chrome": [2, 24] }, "props": { "of": "1:web" } }), window, cx);
-            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
+            // Away from every corner of the app window: the popup must come to it.
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(420.0), px(260.0)));
             id
         });
         cx.run_until_parked();
         cx.run_until_parked();
         let none = gpui::Modifiers::default();
         let left = gpui::MouseButton::Left;
-        // ? sits before ✕ at the bar's right end: 22 px places inside the 1 px border.
-        let keys = point(px(100.0 + 384.0 - 1.0 - 22.0 - 11.0), px(100.0 + 1.0 + 11.0));
-        cx.simulate_mouse_down(keys, left, none);
-        cx.run_until_parked();
-        cx.simulate_mouse_up(keys, left, none);
-        cx.run_until_parked();
-        cx.run_until_parked();
-        let popups = view.update(cx, |this, _| this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count());
-        assert_eq!(popups, 1, "the ? opened one popup and it stays open");
-        // The popup's card as painted: the hole it cuts in the player's native views below it.
+        let popups = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count());
+        let player_at = |cx: &mut gpui::VisualTestContext| view.update(cx, |this, _| this.bounds.borrow()[&format!("overlay:{id}")]);
         let player = view.update(cx, |this, _| this.copies[&format!("overlay:{id}")].id);
-        view.update(cx, |_, cx| cx.notify());
-        cx.run_until_parked();
-        let (_, covers, _) = crate::native_view::last_frame(player).expect("the player was drawn");
-        let card = covers.first().copied().expect("the keys popup is drawn over the player");
-        // keyhelp.ts's keysHeight for pip's ten keys at 340 px (~250), and the popup's 1 px border.
-        assert!(card.rect.h >= 200.0, "the keys popup is as tall as its list, not {:?}", card.rect);
-        assert_eq!(card.rect.w, 340.0);
+        // The popup's card as painted: the hole it cuts in the player's native views below it.
+        let card = |cx: &mut gpui::VisualTestContext| {
+            view.update(cx, |_, cx| cx.notify());
+            cx.run_until_parked();
+            let (_, covers, _) = crate::native_view::last_frame(player).expect("the player was drawn");
+            covers.first().copied().expect("the keys popup is drawn over the player").rect
+        };
+        // Clicks the bar's ?: before ✕ at the bar's right end, 22 px places inside the 1 px border.
+        let press_keys = |cx: &mut gpui::VisualTestContext| {
+            let p = player_at(cx);
+            let keys = point(p.right() - px(1.0 + 22.0 + 11.0), p.top() + px(1.0 + 11.0));
+            cx.simulate_mouse_down(keys, left, none);
+            cx.run_until_parked();
+            cx.simulate_mouse_up(keys, left, none);
+            cx.run_until_parked();
+            cx.run_until_parked();
+        };
+        let viewport = cx.update(|window, _| window.viewport_size());
+        let centred = |c: fireflies_native_view::Rect, p: gpui::Bounds<gpui::Pixels>| {
+            ((c.x + c.w / 2.0) - f64::from(f32::from(p.center().x))).abs() <= 1.0 && ((c.y + c.h / 2.0) - f64::from(f32::from(p.center().y))).abs() <= 1.0
+        };
+        let inside = |c: fireflies_native_view::Rect| c.x >= 8.0 && c.y >= 8.0 && c.x + c.w <= f64::from(f32::from(viewport.width)) - 8.0 + 0.5 && c.y + c.h <= f64::from(f32::from(viewport.height)) - 8.0 + 0.5;
+        press_keys(cx);
+        assert_eq!(popups(cx), 1, "the ? opened one popup and it stays open");
+        let c = card(cx);
+        // keyhelp.ts's keysHeight for pip's keys at 340 px, and the popup's 1 px border.
+        assert!(c.h >= 200.0, "the keys popup is as tall as its list, not {c:?}");
+        assert_eq!(c.w, 340.0);
+        let p = player_at(cx);
+        assert!(centred(c, p), "the keys popup is centred on the player: {c:?} over {p:?}");
         // Esc closes it, the window stays.
         cx.simulate_keystrokes("escape");
         cx.run_until_parked();
         let left_open = view.update(cx, |this, _| (this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count(), this.overlays.iter().any(|o| o.id == id)));
         assert_eq!(left_open, (0, true));
+        // The ? key, the player against the app window's bottom right: over it, never cut.
+        view.update(cx, |this, cx| {
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(viewport.width - px(390.0), viewport.height - px(200.0)));
+            cx.notify();
+        });
+        cx.run_until_parked();
+        let p = player_at(cx);
+        // A click on the bar's title gives the player the keyboard.
+        let title = point(p.left() + px(30.0), p.top() + px(11.0));
+        cx.simulate_mouse_down(title, left, none);
+        cx.simulate_mouse_up(title, left, none);
+        cx.run_until_parked();
+        cx.simulate_keystrokes("?");
+        cx.run_until_parked();
+        cx.run_until_parked();
+        assert_eq!(popups(cx), 1, "the ? key opened it");
+        let c = card(cx);
+        assert!(inside(c), "kept inside the app window ({viewport:?}): {c:?}");
+        let overlap_x = (c.x + c.w).min(f64::from(f32::from(p.right()))) - c.x.max(f64::from(f32::from(p.left())));
+        let overlap_y = (c.y + c.h).min(f64::from(f32::from(p.bottom()))) - c.y.max(f64::from(f32::from(p.top())));
+        assert!(overlap_x > 300.0 && overlap_y > 150.0, "over the player: {c:?} {p:?}");
     }
 
     #[test]

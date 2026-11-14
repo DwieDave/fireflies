@@ -397,9 +397,13 @@ export default class Pip extends View {
     if (!this.inPane && pipProps().overlay !== undefined) run("overlay.snap", { id: pipProps().overlay, on });
   }
 
-  /** ?: the keys, a popup over the video. */
+  /** ?: the keys, a popup centred on the player (its window, or its pane), never cut by the app window. */
   openKeys() {
-    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: KEYS_W, height: KEYS_H, props: { keys: true } });
+    const over = this.inPane ? this.ownPane()?.pane : pipProps().overlay;
+    const spec: OverlaySpec = { mod: MOD, kind: "popup", frame: "none", width: KEYS_W, height: KEYS_H, props: { keys: true } };
+
+    if (over !== undefined) spec.at = { over };
+    openOverlay(spec);
   }
 
   /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
