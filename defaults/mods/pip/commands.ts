@@ -34,7 +34,7 @@ export function parseCommand(c: string): Command | null {
 /** What ? lists: every key keyControl() takes, ? keys last. */
 export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
   ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["s", "snap to corners on / off"],
-  ["⇧← ⇧→  H L", "to the corner or edge middle left / right"], ["⇧↑ ⇧↓  K J", "… above / below"],
+  ["⇧← ⇧→  H L", "next place left / right"], ["⇧↑ ⇧↓  K J", "next place up / down"],
   ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
 const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
