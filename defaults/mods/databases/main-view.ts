@@ -6,7 +6,7 @@
 // a run going on with its cancel). The grids' pointer work is handlers().
 
 import { div } from "gpui-kit";
-import type { Context, Element } from "gpui-kit";
+import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Editor } from "gpui-base";
 import type { Theme } from "herdr";
 import type { QueryTab } from "./state.ts";
@@ -94,62 +94,7 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
       focus();
       atPointer(v, () => cellMenu(v, row, col, cx));
     },
-    head: (col, edge, e, cx) => {
-      const g = now();
-      const c = g?.cols[col];
-
-      if (!g || !c) return;
-
-      focus();
-
-      // Its right edge: the width dragged, or fitted back by a double click.
-      if (edge) {
-        if (e.click_count >= 2) {
-          fitColumn(g, col);
-
-          return;
-        }
-
-        const from = colWidth(c);
-
-        pressAt(v, e, {
-          kind: "width", takes: [],
-          move: (dx) => {
-            const x = now();
-
-            x?.arrange(setWidth(x.layout, c.name, from + dx), false);
-          },
-          drop: () => {
-            const x = now();
-
-            x?.arrange(x.layout, true);
-          },
-        });
-
-        return;
-      }
-
-      const name = g.set.columns[col] ?? "";
-      const kind = v.active?.kind ?? "sqlite";
-
-      // A click sorts; dragged, it moves the column (or its name goes into a query).
-      pressAt(v, e, {
-        kind: "column", label: name, takes: ["col:", "editor:"],
-        click: (x) => sortColumn(v, name, x),
-        drop: (to, x) => {
-          const at = /^col:(\d+)$/.exec(to ?? "");
-          const g2 = now();
-
-          if (at && g2) {
-            const target = Number(at[1]);
-
-            // Dropped on a header: it takes that header's place (after it when moving right).
-            moveTo(g2, col, col < target ? (target + 1 < g2.set.columns.length ? target + 1 : null) : target);
-          } else if (to?.startsWith("editor:")) insertName(v, quoteName(kind, name), x);
-        },
-      });
-      void cx;
-    },
+    head: (col, edge, e) => headPress(v, now, focus, col, edge, e),
     headMenu: (col, cx) => {
       focus();
       atPointer(v, () => columnMenu(v, col, cx));
@@ -186,6 +131,64 @@ function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
     scroll: (by, across, cx) => v.scrollGrid(by, across, cx),
     target: (el, key) => dropTarget(t, el, v, key, key.startsWith("col:")),
   };
+}
+
+/** A press on a header: its right edge drags the width (a double click fits it); elsewhere a
+ *  click sorts and a drag moves the column (or puts its name into a query). */
+function headPress(v: DbView, now: () => GridNow | null, focus: () => void, col: number, edge: boolean, e: MouseButtonEvent): void {
+  const g = now();
+  const c = g?.cols[col];
+
+  if (!g || !c) return;
+
+  focus();
+
+  // Its right edge: the width dragged, or fitted back by a double click.
+  if (edge) {
+    if (e.click_count >= 2) {
+      fitColumn(g, col);
+
+      return;
+    }
+
+    const from = colWidth(c);
+
+    pressAt(v, e, {
+      kind: "width", takes: [],
+      move: (dx) => {
+        const x = now();
+
+        x?.arrange(setWidth(x.layout, c.name, from + dx), false);
+      },
+      drop: () => {
+        const x = now();
+
+        x?.arrange(x.layout, true);
+      },
+    });
+
+    return;
+  }
+
+  const name = g.set.columns[col] ?? "";
+  const kind = v.active?.kind ?? "sqlite";
+
+  // A click sorts; dragged, it moves the column (or its name goes into a query).
+  pressAt(v, e, {
+    kind: "column", label: name, takes: ["col:", "editor:"],
+    click: (x) => sortColumn(v, name, x),
+    drop: (to, x) => {
+      const at = /^col:(\d+)$/.exec(to ?? "");
+      const g2 = now();
+
+      if (at && g2) {
+        const target = Number(at[1]);
+
+        // Dropped on a header: it takes that header's place (after it when moving right).
+        moveTo(g2, col, col < target ? (target + 1 < g2.set.columns.length ? target + 1 : null) : target);
+      } else if (to?.startsWith("editor:")) insertName(v, quoteName(kind, name), x);
+    },
+  });
 }
 
 /** What editing lays over the Rows grid: the staged changes, the rows with some, the edited cell
