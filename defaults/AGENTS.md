@@ -2121,7 +2121,7 @@ The main ones:
   magnet ? ✕, keeping the video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn
   { of, then }` (`then`: null, `"pane"` or `"park"`, for the player to go on with); the view
   may go). With `snap` (default true) it snaps to its screen's usable area (menu bar and Dock
-  left out, 10 pt in): dragged by its bar within 24 pt of a corner or an edge's middle it
+  left out, 10 pt in): dragged by its bar within 64 pt of a corner or an edge's middle it
   lands exactly there and stays on it as its size or the screens change; it opens on the place
   it sat on last (first: bottom right). Without, it opens in the screen's bottom right corner.
   Its magnet switches that and sends the page `pip.snapped { on }`; its ? shows its keys over
@@ -2730,7 +2730,7 @@ All of it is in `herdr.d.ts`. In short:
   its snapping place). A video player:
   `{ width: 384, height: 238, resizable: { min: [240, 158], aspect: 16 / 9, chrome: [2, 24] } }`.
   `snap: true` makes a window magnetic to the shown tab's pane grid (the outer border of its
-  panes together, not the sidebar, tab strip or parked row): dragged within 24 px (on both
+  panes together, not the sidebar, tab strip or parked row): dragged within 64 px (on both
   axes) of one of its eight places, the four corners and four edge middles, it lands exactly
   there, its outer edge on the panes' outer edge on whole device pixels; further off it moves
   freely. Dropped on a place it is anchored there and stays on it when the grid changes (the

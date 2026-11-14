@@ -19,7 +19,7 @@
 //   magnet  snapping on / off (pip.snap; pip.snap:on / :off set it), in the
 //        accent while on, shared `pip.snap` (unset: on; browser opens the
 //        window with it too). On, the window snaps to the shown tab's pane
-//        grid (OverlaySpec snap, src/window/movable.rs): dragged within 24 px
+//        grid (OverlaySpec snap, src/window/movable.rs): dragged within 64 px
 //        of a corner or an edge's middle it lands exactly there and stays on
 //        it as the grid changes; out of Fireflies, to its screen's usable area
 //        (native pip.rs). pip.to:<place> (top-left … left, or the next one

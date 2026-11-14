@@ -26,7 +26,7 @@ const GRIP: f32 = 6.0;
 
 /// How near one of its places (px at zoom 1, on both axes) a dragged
 /// snapping window is caught; further off it moves freely.
-const SNAP_CATCH: f32 = 24.0;
+const SNAP_CATCH: f32 = 64.0;
 
 pub struct WinDrag {
     pub id: String,

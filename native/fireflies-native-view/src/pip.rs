@@ -743,7 +743,7 @@ const SEAM: f64 = 8.0;
 /// menu bar and the Dock left out), points.
 const SCREEN_MARGIN: f64 = 10.0;
 /// How near one of its places (points, on both axes) a dragged window is caught.
-const SNAP_CATCH: f64 = 24.0;
+const SNAP_CATCH: f64 = 64.0;
 // Copies of pip's icons: the Nix app build leaves defaults/mods out of
 // the crate's sources (they ship in the bundle), so the crate carries its own.
 const VOLUME_SVG: &str = include_str!("../icons/volume.svg");
