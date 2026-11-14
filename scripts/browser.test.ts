@@ -494,8 +494,8 @@ test("picture in picture: the pane is parked meanwhile, p brings the video back,
 });
 
 test("the player by keys, and j / k in its ⋯ menu", async () => {
-  const { mod } = await load("pip/main.ts");
-  const { keyControl, menuMove } = mod;
+  // pip's keys are pure (pip/commands.ts): the real module.
+  const { keyControl, menuMove } = await import("../defaults/mods/pip/commands.ts");
   const k = (key: string, extra: any = {}) => keyControl({ key, modifiers: {}, ...extra });
   expect([k("space"), k("k", { key_char: "k" }), k("left"), k("l", { key_char: "l" }), k("m", { key_char: "m" }), k("b", { key_char: "b" }),
     k("p", { key_char: "p" }), k("p", { key_char: "P", modifiers: { shift: true } }), k("o", { key_char: "o" }), k("q", { key_char: "q" }), k("z", { key_char: "z" }),
