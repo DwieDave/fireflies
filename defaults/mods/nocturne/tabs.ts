@@ -47,7 +47,7 @@ import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
 import { openMenu, openKeys, toggleGitMenu, gitMenuOpen } from "./menu.ts";
 import { keysHint } from "./keyhelp.ts";
-import { headerControls, paneMenu, renamePane } from "./header.ts";
+import { headerControls, iconPath, modLook, paneMenu, renamePane } from "./header.ts";
 import { CURSOR_KEY, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod, isLayoutNode } from "./nav.ts";
 import type { ChromeCursor, LayoutNode } from "./nav.ts";
 import { gitState } from "./lazygit.ts";
@@ -631,15 +631,20 @@ export default class Tabs {
   tabItem(t: Theme, c: TabInfo, space: SpaceInfo | undefined, at: StakeAt | null): Element {
     const lead = panes().find((p) => p.tab === c.id && p.program?.agent) ?? panes().find((p) => p.tab === c.id);
     const prog = lead?.program;
-    // An unnamed tab goes by its lead pane: the name it was given, else its agent's or program's.
-    const name = c.named ? c.name : givenName(lead?.terminal) ?? (prog?.agent ? prog.name : lead?.title || prog?.name || c.name);
+    // A mod pane's name and mark (header.ts modLook: Databases, a launcher's mod such as Kubernetes).
+    const look = modLook(lead?.mod);
+    // An unnamed tab goes by its lead pane: the name it was given, else its agent's, mod's or program's.
+    const name = c.named ? c.name : givenName(lead?.terminal) ?? (prog?.agent ? prog.name : look?.[0] || lead?.title || prog?.name || c.name);
     const lifted = this.drag?.id === c.id;
     const icon = prog?.icon;
+    const tint = c.active ? t.foreground : t.dim;
 
     // An agent's tab wears its one mark: the sidebar's winged one in its status
-    // colour (winged.ts statusMark); any other tab its program's icon.
+    // colour (winged.ts statusMark); a mod pane's tab its mod's mark, as the
+    // pane's header; any other tab its program's icon.
     const mark = c.status ? statusMark(t, lead ?? {}, c.status, `tab-mark-${c.id}`)
-      : icon ? (prog?.tint ? svg(icon).size(12).text_color(c.active ? t.foreground : t.dim) : image(icon).size(12)) : null;
+      : look ? svg(iconPath(look[1])).size(12).flex_none().text_color(tint)
+      : icon ? (prog?.tint ? svg(icon).size(12).text_color(tint) : image(icon).size(12)) : null;
 
     return h_flex().id(`tab-${c.id}`).relative().h_full().px(12).gap(7).items_center().flex_none()
       .text_size(11).text_color(c.active || lifted ? t.foreground : t.muted)

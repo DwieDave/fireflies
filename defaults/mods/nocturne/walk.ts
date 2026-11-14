@@ -1,9 +1,10 @@
 // The walk: nocturne.agent-next / nocturne.agent-prev (the layout's cmd-] /
-// cmd-[ in place of the core's agent.next / agent.prev). It goes through the
-// agents in the order the sidebar shows them (pinned ones first, kit.ts
-// sortedAgents), then on through the jar's shelf (every tile in shelf order:
-// web pages, editors, files, plain shells; pins.ts jarItems + onShelf), then
-// back to the first agent; backwards the other way round.
+// cmd-[ in place of the core's agent.next / agent.prev). It goes top to bottom
+// the way the sidebar draws its jar and meadow (open and folded alike): the
+// pinned agents in the jar (kit.ts sortedAgents), the jar's shelf at their
+// foot (every tile in shelf order: web pages, editors, files, plain shells;
+// pins.ts jarItems + onShelf), then the other agents under the jar (awake
+// ones, then those at rest: sky.ts walk), then back to the first; backwards the other way round.
 // Each shelf item is a stop of its own, also when several share a pane (a pin
 // of one web tab): its jar key tells them apart.
 // Pure functions: no herdr imports at run time, so the tests can load this file.
@@ -21,18 +22,21 @@ export interface WalkFocus {
 }
 
 /**
- * The walk's stops, in order: `agents` (addresses, the sidebar's order), then
- * `shelf` (jar items on the shelf, in shelf order).
+ * The walk's stops, in the order drawn: `pinned` (the jar's agents, addresses),
+ * then `shelf` (jar items on the shelf, in shelf order), then `rest` (the
+ * other agents, the sidebar's order).
  *   { key: address, agent: address }   an agent
  *   { key: jar key, item }             a shelf item (goes through kit.ts goToPin)
  * An agent pinned as a shelf terminal too is walked once, as an agent.
  */
-export function walkStops(agents: readonly string[], shelf: readonly JarItem[]): WalkStop[] {
-  const seen = new Set(agents);
+export function walkStops(pinned: readonly string[], shelf: readonly JarItem[], rest: readonly string[] = []): WalkStop[] {
+  const seen = new Set([...pinned, ...rest]);
+  const agent = (a: string): WalkStop => ({ key: a, agent: a });
 
   return [
-    ...agents.map((a): WalkStop => ({ key: a, agent: a })),
+    ...pinned.map(agent),
     ...shelf.flatMap((it): WalkStop[] => (seen.has(it.key) ? [] : [{ key: it.key, item: it }])),
+    ...rest.map(agent),
   ];
 }
 

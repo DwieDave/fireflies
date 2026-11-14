@@ -142,6 +142,14 @@ export function railView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarred:
   const inJar = new Set(jarred.map((a) => a.address));
   const free = list.filter((a) => !inJar.has(a.address));
 
+  // Made top to bottom, as the keyboard walks them (sky.nav lists each as it's
+  // made): the jar's fireflies, its tiles, then the awake ones under the jar.
+  // The pinned ones' marks for their small jar, resting ones lit a little.
+  const jarCells = jarred.map((a) => div().relative().size(32).flex_none()
+    .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
+      .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
+    .child(div().absolute().top(0).left(0).child(railFly(sky, t, a))));
+
   // The pinned panes that aren't agents: smaller tiles two abreast on a board under them.
   sky.tileOn = null;
 
@@ -151,13 +159,10 @@ export function railView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarred:
     .when(jarred.length > 0, (el) => el.child(div().relative().w(40).h(BOARD).opacity(0.7).child(dither(t.ansi8, 1))))
     .children(Array.from({ length: Math.ceil(tiles.length / 2) }, (_, i) => h_flex().gap(RAIL_TILE_GAP).children(tiles.slice(i * 2, i * 2 + 2)))) : null;
 
-  // The pinned ones' marks in a small jar of their own, resting ones lit a little.
+  // The pinned ones' marks in a small jar of their own.
   const jar = jarred.length || kept.length ? v_flex().id("rail-jar").relative().w(48).flex_none().items_center().pt(BODY + 2).pb(4).gap(2).mb(6)
     .child(railGlass(sky, t, jarred, RAIL_NECK))
-    .children(jarred.map((a) => div().relative().size(32).flex_none()
-      .when(a.status === "idle", (el) => el.child(svg(`${ART}/glow.svg`).absolute().top(0).left(0).size(32).text_color(t.muted).opacity(0.45))
-        .child(div().absolute().top(8).left(8).size(16).bg(t.background)))
-      .child(div().absolute().top(0).left(0).child(railFly(sky, t, a)))))
+    .children(jarCells)
     .when(Boolean(shelf), (el) => (shelf ? el.child(shelf) : el)) : null;
 
   // Awake ones under the jar at the top; those at rest on the ground at the foot (railGround).

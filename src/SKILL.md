@@ -145,7 +145,8 @@ a files pane at ~); `herdr-app do nocturne.dock` moves the focused pane there,
 whatever it shows (a terminal, an agent, an editor, a files or web pane; not a
 pane on another machine). There,
 `nocturne.agent-next` / `nocturne.agent-prev` (cmd-] / cmd-[) walk the
-agents in the sidebar's order and then on through the shelf's tiles, wrapping;
+sidebar top to bottom as drawn: the pinned agents in the jar, the shelf's tiles
+at its foot, then the other agents (awake, then done or idle), wrapping;
 the core's `agent.next` / `agent.prev` visit agents only.
 
 For a remote space:

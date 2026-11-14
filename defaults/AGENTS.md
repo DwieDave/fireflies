@@ -1557,11 +1557,12 @@ palette or cmd-alt-p (`nocturne.pin`: the focused pane, whatever it shows);
 `nocturne.pin-up` / `nocturne.pin-down` (cmd-alt-shift-[ / ] on macOS) move a
 firefly up or down in the jar, a tile left or right on the shelf.
 `nocturne.agent-next` / `nocturne.agent-prev` (the layout's cmd-] / cmd-[, in
-place of the core's `agent.next` / `agent.prev`) walk the agents in the
-sidebar's order, then on through every tile on the shelf in its order (web
-pages, editors, files, shells; each pinned web tab its own stop), then back to
-the first agent, and the other way round; a tile is gone to as a click on it
-goes. The dock
+place of the core's `agent.next` / `agent.prev`) walk the sidebar top to
+bottom as it's drawn, open or folded: the pinned agents in the jar, every tile
+on the jar's shelf in its order (web pages, editors, files, shells; each pinned
+web tab its own stop), then the other agents under the jar (awake ones, then
+those done or idle), then back to the first, and the other way round; a tile is gone to as a click on it goes. The
+sidebar's own j / k walk its controls in the same order. The dock
 (dock.ts) is a space tied to no folder for panes that belong to no project:
 made on first use as `space.new {name: "dock", folder: ~}` (its id in shared
 `nocturne.dock-space`), never a repo for the git and GitHub windows, with no
@@ -2347,11 +2348,17 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
 - `"launcher"` in `mod.json` puts a mod Nocturne doesn't ship (one installed from
   its own repository) into "+ new" and the palette, nothing in Nocturne naming it:
   `"launcher": { "title": "Kubernetes", "icon": "icon.svg", "words": "k8s pods",
-  "window": true, "pane": true }`. `window`: it opens as its `mod.json` overlay
+  "window": true, "pane": true, "key": "k" }`. `key`: its tile's letter in
+  "+ new" (one letter or digit; Nocturne's own tiles' letters, q and 1-9 stay
+  theirs, and of two launchers asking the same the first by folder name gets
+  it). `window`: it opens as its `mod.json` overlay
   (`mod.open`, the tile's and the palette's plain pick); `pane`: as a normal pane
   (`pane.split {mod, props: {slot}}`) or a tab of its own ("+ new" by its landing
   switch, the palette's "… in a pane" / "… in a new tab"). `icon` is an svg in the
-  mod's folder, tinted like the other tiles. Nocturne reads every `mods/*/mod.json`
+  mod's folder, tinted like the other tiles (draw it in `currentColor`, to read at
+  11 px). `title` and `icon` also name and mark the mod's own panes: the pane's
+  header, its parked chip, its tab and its tile on the shelf (as Databases' and
+  every shipped mod's). Nocturne reads every `mods/*/mod.json`
   at its start and whenever "+ new" or the palette opens.
 - `"focusable": true` in `mod.json` lets `pane.go` give a shown copy the keyboard.
   It gets `"focus"` from `nextCommand()`: focus your own handle then

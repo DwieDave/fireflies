@@ -87,6 +87,8 @@ test:
     bun test scripts/nocturne-palette.test.ts
     # Optional mods in "+ new" and the palette: each installed mod's mod.json launcher, nothing named.
     bun test scripts/nocturne-launchers.test.ts
+    # Mod panes' marks and names (Databases, a launcher's mod) in the header, the parked chip, the tab and the shelf's tile.
+    bun test scripts/nocturne-modmarks.test.ts
     # The shipped palette: every app command and global or terminal key is an entry or stays out with a reason.
     bun test scripts/palette-commands.test.ts
     # The picker's render cost and typing, herdr and gpui stand-ins.

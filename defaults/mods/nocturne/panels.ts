@@ -172,7 +172,7 @@ export function panels(): Panel[] {
   const h = here();
   const agentsProps = (): ModProps => (h.terminal ? { terminal: h.terminal } : {});
 
-  return [
+  const own: Panel[] = [
     { id: "terminal", name: "Terminal", icon: "terminal", key: "t", words: "shell new",
       pane: () => terminalPane(), tab: () => terminalTab() },
     { id: "web", name: "Web", icon: "monitor", key: "w", words: "browser page url",
@@ -199,7 +199,9 @@ export function panels(): Panel[] {
       pane: () => toggleProcs({ centered: true }), tab: () => openAs("procs", { as: "tab" }), beside: () => openAs("procs", { as: "pane" }) },
     { id: "databases", name: "Databases", icon: `${ART}/database.svg`, key: "b", words: "database db sql postgres mysql mariadb sqlite libsql turso tables query", bind: "nocturne.databases", fixed: "float", open: () => Boolean(databasesOpen()),
       pane: () => toggleDatabases(), tab: () => openAs("databases", { as: "tab" }), beside: () => openAs("databases", { as: "pane" }) },
-    // Mods Nocturne doesn't ship that declare a launcher in their mod.json (launchers.ts).
-    ...launcherPanels(),
   ];
+
+  // Mods Nocturne doesn't ship that declare a launcher in their mod.json
+  // (launchers.ts); a letter one asks for, if none of these has it.
+  return [...own, ...launcherPanels(own.map((p) => p.key))];
 }
