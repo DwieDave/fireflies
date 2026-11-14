@@ -8784,6 +8784,69 @@ export default class W extends View {
     }
 
     #[test]
+    fn the_pip_players_keys_button_shows_its_keys() {
+        in_own_process("pip_keys_button");
+    }
+
+    /// The shipped player's ? (the bar's control before ✕) opens its keys in
+    /// a popup: as tall as the list, over the player (a popup sizes to its
+    /// content, so an overview laid out only absolutely would be 0 px tall).
+    #[gpui::test]
+    fn pip_keys_button(cx: &mut gpui::TestAppContext) {
+        use serde_json::json;
+        if !running_alone("pip_keys_button") {
+            return;
+        }
+        let shipped = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("defaults/mods/pip");
+        let home = crate::mods::app_dir();
+        let to = home.join("mods/pip");
+        std::fs::create_dir_all(to.join("icons")).unwrap();
+        for e in std::fs::read_dir(&shipped).unwrap().flatten().chain(std::fs::read_dir(shipped.join("icons")).unwrap().flatten()) {
+            if e.path().is_file() {
+                let rel = e.path().strip_prefix(&shipped).unwrap().to_owned();
+                std::fs::copy(e.path(), to.join(rel)).unwrap();
+            }
+        }
+        let layout = json!({ "id": "root", "type": "row", "children": [] });
+        let (view, cx) = open_window(cx, "noop", "", layout);
+        let id = view.update_in(cx, |this, window, cx| {
+            this.sync_folders(window, cx);
+            let id = crate::mods::new_overlay_id();
+            this.open_overlay(id.clone(), json!({ "mod": "pip", "kind": "window", "key": "pip", "frame": "none", "width": 384, "height": 238,
+                "resizable": { "min": [240, 158], "aspect": 16.0 / 9.0, "chrome": [2, 24] }, "props": { "of": "1:web" } }), window, cx);
+            this.overlays.iter_mut().find(|o| o.id == id).unwrap().place = Some(point(px(100.0), px(100.0)));
+            id
+        });
+        cx.run_until_parked();
+        cx.run_until_parked();
+        let none = gpui::Modifiers::default();
+        let left = gpui::MouseButton::Left;
+        // ? sits before ✕ at the bar's right end: 22 px places inside the 1 px border.
+        let keys = point(px(100.0 + 384.0 - 1.0 - 22.0 - 11.0), px(100.0 + 1.0 + 11.0));
+        cx.simulate_mouse_down(keys, left, none);
+        cx.run_until_parked();
+        cx.simulate_mouse_up(keys, left, none);
+        cx.run_until_parked();
+        cx.run_until_parked();
+        let popups = view.update(cx, |this, _| this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count());
+        assert_eq!(popups, 1, "the ? opened one popup and it stays open");
+        // The popup's card as painted: the hole it cuts in the player's native views below it.
+        let player = view.update(cx, |this, _| this.copies[&format!("overlay:{id}")].id);
+        view.update(cx, |_, cx| cx.notify());
+        cx.run_until_parked();
+        let (_, covers, _) = crate::native_view::last_frame(player).expect("the player was drawn");
+        let card = covers.first().copied().expect("the keys popup is drawn over the player");
+        // keyhelp.ts's keysHeight for pip's ten keys at 340 px (~250), and the popup's 1 px border.
+        assert!(card.rect.h >= 200.0, "the keys popup is as tall as its list, not {:?}", card.rect);
+        assert_eq!(card.rect.w, 340.0);
+        // Esc closes it, the window stays.
+        cx.simulate_keystrokes("escape");
+        cx.run_until_parked();
+        let left_open = view.update(cx, |this, _| (this.overlays.iter().filter(|o| o.kind == super::OverlayKind::Popup).count(), this.overlays.iter().any(|o| o.id == id)));
+        assert_eq!(left_open, (0, true));
+    }
+
+    #[test]
     fn nocturnes_update_note_closes_from_its_close_button() {
         in_own_process("nocturne_update_note");
     }

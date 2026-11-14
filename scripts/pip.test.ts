@@ -138,3 +138,17 @@ test("every mark sits on the bar's middle line: an svg centres on its box, each 
   // Every place on the bar is its full height, its mark centred in it.
   for (const id of ["back", "toggle", "mute", "keys", "close"]) expect([id, callOf(button(id), "items_center").length, callOf(button(id), "h_full").length]).toEqual([id, 1, 1]);
 });
+
+test("the keys popup is as tall as its list: a popup sizes to its content, and the overview inside fills it absolutely", () => {
+  opened.length = 0;
+  player(480).openKeys();
+  const spec = opened.at(-1);
+  expect(spec).toMatchObject({ mod: "pip", kind: "popup", width: 340, props: { keys: true } });
+  const k: any = Object.create(Pip.prototype);
+  k.keysList = true; k.handle = {};
+  const host = k.renderKeys(theme);
+  // Its own height, the popup's: never size_full (0 in a popup that fits its content).
+  expect(callOf(host, "h")).toEqual([[spec.height]]);
+  expect(callOf(host, "size_full")).toEqual([]);
+  expect(spec.height).toBeGreaterThan(200);
+});

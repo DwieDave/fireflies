@@ -175,6 +175,9 @@ const CONTROLS: readonly Control[] = [
 export const KEYS: readonly (readonly [string, string])[] = [["space k", "pause / play"], ["← →  h l", `${SKIP} s back / on`], ["m", "sound off / on"], ["b", "back to the page"],
   ["p", "into a pane"], ["P", "park as a chip"], ["o", "out of Fireflies"], ["x q", "close"], ["esc", "the keyboard back to the pane"], ["?", "keys"]];
 
+/** The keys popup's height: the list in KEYS_W, and its 1 px border. */
+const KEYS_H = keysHeight(KEYS, KEYS_W) + 2;
+
 // Not on stock Herdr: the module has no nativeView there.
 const available = () => typeof herdr.nativeView !== "undefined";
 
@@ -403,7 +406,7 @@ export default class Pip extends View {
 
   /** ?: the keys, a popup over the video. */
   openKeys() {
-    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: KEYS_W, height: keysHeight(KEYS, KEYS_W) + 2, props: { keys: true } });
+    openOverlay({ mod: MOD, kind: "popup", frame: "none", width: KEYS_W, height: KEYS_H, props: { keys: true } });
   }
 
   /** The window keeps the video's real shape (`videoWidth` × `videoHeight`). */
@@ -651,10 +654,12 @@ export default class Pip extends View {
     run(`pip.${c.id}`);
   }
 
-  /** The keys, keyhelp.ts's overview in a popup: ? esc q close it. */
+  /** The keys, keyhelp.ts's overview in a popup: ? esc q close it. A popup is
+   *  as tall as what's in it, and the overview fills its host absolutely (it
+   *  adds no height): so the host is as tall as the list itself, KEYS_H. */
   renderKeys(t: Theme) {
     const handle = this.handle;
-    const view = div().id("pip-keys").relative().size_full().bg(t.background).border(1).border_color(t.ansi0);
+    const view = div().id("pip-keys").relative().w_full().h(KEYS_H).flex_none().bg(t.background).border(1).border_color(t.ansi0);
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); closeOwn(); } })
