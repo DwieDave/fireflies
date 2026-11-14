@@ -174,6 +174,8 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 /** Reads the active connection's tables (and, for SQLite, counts them): a read of [2], stoppable,
  *  busy cleared however it ends. */
 export async function loadTables(v: DbView, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c) return;
@@ -233,6 +235,8 @@ let reads = 0;
 
 /** SQLite keeps no estimate: count each table (one run). */
 async function countTables(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const list = countsSql(c.kind, v.catalog.tables);
 
   if (!list.length) return;
@@ -256,6 +260,8 @@ async function countTables(v: DbView, c: Conn, cx: Context): Promise<void> {
 /** Reads a table's structure into the Structure panel (a read of [3]). Postgres and MySQL give
  *  the server's estimate of its rows; an exact count is asked for (countRows). */
 export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c) return;
@@ -303,6 +309,8 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
 
 /** Counts a table's rows exactly (asked for: on a big table it reads every row). */
 export async function countRows(v: DbView, t: TableRef, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c) return;
@@ -332,6 +340,8 @@ export const PAGE = 200;
 
 /** Reads the Rows tab's page (the table, its sort, filter and offset). */
 export async function loadRows(v: DbView, cx: Context, keepCursor = false): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
   const b = v.rows.browse;
 

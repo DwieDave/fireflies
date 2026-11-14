@@ -409,3 +409,39 @@ test("databases.stop does what esc does to a read going on", async () => {
   expect(v.log[0]).toMatchObject({ sql: "the tables", said: "running…" });
   expect(v.log[0].run).toStartWith("/usr/bin/psql -X -A --csv");
 });
+
+/** A handler's cx as the app hands it out: it speaks for one call and refuses once that call has
+ *  returned (after an await it's gone). `end()` is the call returning. */
+function callCx() {
+  let live = true;
+  const gone = () => { throw new TypeError("cx is no longer valid: it was captured during an earlier call and used later. Use cx.spawn or take cx from the callback arguments instead."); };
+  const one: any = new Proxy({}, { get: (_t, k) => (live ? cx[k as string] : gone()) });
+  return { cx: one, end: () => { live = false; } };
+}
+
+test("a key's or a click's cx ends with its call: a table opened by enter still reads its rows and structure", async () => {
+  reset();
+  world.psqlAt = "/usr/bin/psql";
+  world.run = async () => { await sleep(5); return ok(""); };
+  const v = await sent();
+  await until(() => runs().length > 0 && !v.catalog.busy);
+  v.catalog.tables = [{ schema: "public", name: "lanterns", type: "table", rows: 1200 }];
+  v.panel = "tables";
+  v.tableAt = 0;
+  const before = runs().length;
+  const call = callCx();
+  v.key(key("enter"), call.cx);
+  call.end();
+  await until(() => runs().length >= before + 2 && !v.rows.busy && !v.struct.busy);
+  expect(v.rows.error).toBeNull();
+  expect(v.struct.error).toBeNull();
+  expect(v.reads).toEqual([]);
+
+  // The same for a count asked by key (it says what it counted, not that its cx went away).
+  const count = callCx();
+  v.key(key("#"), count.cx);
+  count.end();
+  await until(() => v.log[0].sql === "lanterns's rows counted" && v.log[0].said !== "running…");
+  await flush();
+  expect(drawnText(v)).not.toContain("no longer valid");
+});

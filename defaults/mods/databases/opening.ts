@@ -104,6 +104,8 @@ export function keepCopy(v: DbView): void {
 
 /** Where to start: the handover note (fresh, this folder), else a pane's own place; then a sent connection. */
 export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const note = readShared(shared, HANDOVER_KEY, null);
   const fresh = note && Date.now() - note.at < HANDOVER_FRESH && (note.folder ?? null) === v.folder ? note : null;
   let kept: KeptCopy | null = null;
@@ -134,6 +136,8 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
 
 /** Back where a copy was: its connection (connected again: reads only), its panel and table. */
 function restore(v: DbView, kept: KeptCopy | null, cx: Context): void {
+  cx = v.held(cx);
+
   const c = kept?.conn ? connList(v).find((x) => x.id === kept.conn) : undefined;
 
   if (!kept || !c) return;

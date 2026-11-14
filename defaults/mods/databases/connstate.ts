@@ -137,6 +137,8 @@ export function focusArrived(v: DbView, cx: Context, now = Date.now()): void {
 
 /** One `select 1` on the active connection (runOn notes what it says). */
 export async function recheck(v: DbView, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c) return;

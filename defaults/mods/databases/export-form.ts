@@ -151,6 +151,8 @@ export class ExportForm {
   }
 
   async go(cx: Context): Promise<void> {
+    cx = this.v.held(cx);
+
     const v = this.v;
     const c = v.active;
 
@@ -185,6 +187,8 @@ export class ExportForm {
 
   /** Writes the text where asked; says where, or null (the error is shown). */
   async write(text: string, cx: Context): Promise<string | null> {
+    cx = this.v.held(cx);
+
     if (!this.toFile) {
       cx.write_to_clipboard(text);
 

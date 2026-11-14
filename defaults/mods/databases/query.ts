@@ -177,6 +177,8 @@ export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): v
 
 /** Runs them (asked already) and shows the answer. */
 async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Statement[], verdicts: readonly Verdict[], cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   tab.running = { nonce: null, at: Date.now() };
   tab.ranText = tab.editor.value();
   tab.editor.set_diagnostics([]);
@@ -258,6 +260,8 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
 
 /** Stops the tab's run. */
 export async function cancelQuery(v: DbView, tab: QueryTab, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const n = tab.running?.nonce;
   const dir = v.dir;
 

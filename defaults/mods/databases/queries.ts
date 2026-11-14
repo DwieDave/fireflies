@@ -19,6 +19,8 @@ const owner = new WeakMap<DbView, string>();
 
 /** Opens the connection's kept tabs (one empty tab when it has none). */
 export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   await saveQueries(v);
 
   const text = c.origin === "saved" ? await IO.readTextFile(queriesFile(dataHome(), c.id)).catch(() => null) : null;

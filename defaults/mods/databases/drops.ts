@@ -39,6 +39,8 @@ export function dropFiles(v: DbView, paths: readonly string[], cx: Context): voi
 
 /** A .sql file's text in a new query tab named after it (not run). */
 async function openSql(v: DbView, path: string, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const text = await readTextFile(path).catch(() => null);
 
   if (text === null) {

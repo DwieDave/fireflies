@@ -70,6 +70,8 @@ export function withDatabase(c: Conn, name: string | null): Conn {
 
 /** Reads the server's databases into the Databases tab (`sized`: with each one's size, asked). */
 export async function loadDatabases(v: DbView, cx: Context, sized = false): Promise<void> {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c || !hasDatabases(c)) return;
@@ -139,6 +141,8 @@ export function showDatabases(v: DbView, cx: Context): void {
  *  rows ask first; the secret stays in memory (nothing read again); the tables, structure and rows
  *  are read anew; a pinned one keeps the pick in its record, a sent one while the window lives. */
 export function useDatabase(v: DbView, name: string | null, cx: Context): void {
+  cx = v.held(cx);
+
   const c = v.active;
 
   if (!c) return;

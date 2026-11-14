@@ -41,6 +41,8 @@ export const connAtCursor = (v: DbView): Conn | null => connList(v)[v.connAt] ??
 /** Finds connections in the space's folder: its .env files, its direnv environment (only when
  *  direnv already allows it: never allowed from here), its SQLite files. */
 export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = Promise.resolve()): Promise<void> {
+  cx = v.held(cx);
+
   const folder = v.folder;
 
   if (!folder || v.on) return;
@@ -139,6 +141,8 @@ function pick(a: ConnectArgs): Place {
  *  the tables. A local server that trusts its socket needs none, so a sent one tries without and
  *  asks when refused. */
 export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   if (counted(v.edits).cells) {
     beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
 
@@ -153,6 +157,8 @@ export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
 
 /** Connects without looking at its forward (after the port was found open, or started). */
 export function connectNow(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   if (c.secret === "kubernetes" && c.source) return readThenOpen(v, c, c.source, cx);
 
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
@@ -189,6 +195,8 @@ export const KUBE_DEADLINE = 20000;
  *  read says why and asks for it instead. The client is looked for first: without one there is
  *  nothing to read the secret for. Nothing of the value is said, logged or written. */
 export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   v.active = c;
   v.alive = null;
   v.catalog = { tables: [], error: null, busy: false };
@@ -255,6 +263,8 @@ export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Contex
 /** Why the connection's client can't run (said before anything is read for it), or null. The
  *  folder's environment is waited for first (it may bring the client). */
 export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<string | null> {
+  cx = v.held(cx);
+
   if (c.kind === "libsql" && c.url) return null;
 
   await folderEnvReady(v, cx);
@@ -276,6 +286,8 @@ export function openConn(v: DbView, c: Conn, cx: Context): Promise<void> {
 }
 
 function open(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   v.active = c;
   v.alive = null;
   v.catalog = { tables: [], error: null, busy: true };
@@ -318,6 +330,8 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
 
 /** Tests a connection: one `select 1`, said in the bar (a read: its seconds shown, esc stops it). */
 export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   try {
     const missing = await clientMissing(v, c, cx);
 
@@ -372,6 +386,8 @@ export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
 
 /** Saves a found or sent connection: kept, its password (if one) moved to the keychain. */
 export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   if (c.origin === "saved") return;
 
   const id = newId(c.kind);
@@ -412,6 +428,8 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
 /** Removes a saved connection (asked first by the caller): its keychain item and history go too. */
 export async function remove(v: DbView, c: Conn, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   if (c.origin !== "saved") {
     v.sent = v.sent.filter((s) => s.id !== c.id);
     cx.notify();

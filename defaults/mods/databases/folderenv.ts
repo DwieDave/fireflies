@@ -27,6 +27,8 @@ export const tilde = (p: string): string => (p.startsWith(home()) ? `~${p.slice(
 
 /** Starts loading the folder's environment (once per window). */
 export function loadFolderEnv(v: DbView, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const folder = v.folder;
 
   if (!folder || v.on) return Promise.resolve();
@@ -56,6 +58,8 @@ async function settleEnv(v: DbView, folder: string): Promise<void> {
 
 /** Waits for the folder's environment while it loads (a read of `panel`; esc skips it). */
 export async function folderEnvReady(v: DbView, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const e = v.env;
 
   if (e.kind !== "loading") return;

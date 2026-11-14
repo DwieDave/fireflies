@@ -53,6 +53,8 @@ export function forwardRunning(f: KubeForward): { readonly address: string; read
 /** Before connecting: true to go on (no forward kept, its port open, or a forward that can't be
  *  kept: said); false when the ask is shown (its port is down). */
 export async function forwardFirst(v: DbView, c: Conn, cx: Context): Promise<boolean> {
+  cx = v.held(cx);
+
   const f = c.forward;
 
   if (!f) return true;
@@ -101,6 +103,8 @@ const GONE = /pods? "[^"]*" not found|NotFound|unable to forward port because po
 
 /** Starts the ask's forward (on `ask.local`), waits for its port, then connects with `connectNow`. */
 export async function startForward(v: DbView, ask: ForwardAsk, cx: Context, connectNow: (c: Conn) => void): Promise<void> {
+  cx = v.held(cx);
+
   const c = ask.conn;
   const kept = c.forward;
 
@@ -194,6 +198,8 @@ const lastLine = (s: string): string => s.split("\n").map((l) => l.trim()).filte
 /** The connection on the forward's port (another one when its own was taken): the pinned record
  *  or the sent list follows. */
 async function placedOn(v: DbView, c: Conn, f: KubeForward, cx: Context): Promise<Conn> {
+  cx = v.held(cx);
+
   if (c.port === f.local) return c;
 
   const next: ConnDraft = { ...c, port: f.local, forward: f };
@@ -217,6 +223,8 @@ const NOT_THE_DATABASE = /invalid response to SSL|unsupported frontend protocol|
 /** After a failed connect: another program on the forward's port (no forward of ours there)
  *  is said, with another local port offered. True when the ask is shown. */
 export async function takenAfter(v: DbView, c: Conn, error: string, cx: Context): Promise<boolean> {
+  cx = v.held(cx);
+
   const f = c.forward;
 
   if (!f || !NOT_THE_DATABASE.test(error) || forwardRunning(f)?.live) return false;

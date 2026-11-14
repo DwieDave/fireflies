@@ -21,6 +21,8 @@ import type { default as DbView } from "./main.ts";
 /** Changes the pinned list (on the file as it is now), then tells the other windows. Null when
  *  the file refused (said in the bar). */
 export async function changePinned(v: DbView, change: (list: Conn[]) => Conn[], cx: Context): Promise<Conn[] | null> {
+  cx = v.held(cx);
+
   try {
     const next = await changeConnections(IO, dataHome(), change);
 
@@ -54,6 +56,8 @@ export function togglePin(v: DbView, c: Conn, cx: Context): void {
 
 /** Reads the pinned list again when another window changed it (the window's tick). */
 export async function syncPinned(v: DbView, cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const n = readShared(shared, PINNED_KEY, null);
 
   if (!n || n.at <= v.pinnedAt || n.by === v.me) return;

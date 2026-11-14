@@ -38,6 +38,8 @@ let ids = 0;
 /** Runs `work` as a read of `panel`: listed while it runs; `started(nonce)` makes it stoppable by
  *  interrupting the client. A throw in `work` comes back as a thrown error, the read unlisted. */
 export async function reading<T>(v: DbView, what: string, panel: ReadPanel, cx: Context, work: (started: (nonce: string) => void) => Promise<T>, deadline: number | null = null): Promise<Ended<T>> {
+  cx = v.held(cx);
+
   let settle: (e: Ended<T>) => void = () => {};
 
   const ended = new Promise<Ended<T>>((resolve) => {

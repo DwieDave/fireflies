@@ -241,6 +241,8 @@ export class ConnForm {
   }
 
   async test(cx: Context): Promise<void> {
+    cx = this.v.held(cx);
+
     const c = { ...this.conn(`test-${Date.now()}`), secret: "ask" as const };
 
     this.v.secrets.set(c.id, this.value("password") || (this.editing ? this.v.secrets.get(this.editing.id) ?? "" : ""));
@@ -256,6 +258,8 @@ export class ConnForm {
   }
 
   async save(cx: Context): Promise<void> {
+    cx = this.v.held(cx);
+
     const problem = this.problem();
 
     if (problem) {
@@ -389,6 +393,8 @@ export class ConnForm {
   }
 
   async pick(cx: Context): Promise<void> {
+    cx = this.v.held(cx);
+
     const path = await pickFile({ prompt: "Open the database" });
 
     if (path) this.inputs.get("path")?.set_value(path);

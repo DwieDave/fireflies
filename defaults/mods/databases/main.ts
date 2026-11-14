@@ -101,6 +101,8 @@ export default class Databases extends View {
   handle: FocusHandle | null = null;
   closed = false;
   beatAt = 0;
+  /** The view's own cx (cx.spawn's): it holds across an await and into a later call. */
+  own: AsyncContext | null = null;
 
   // ---- connections
   saved: Conn[] = [];
@@ -221,6 +223,7 @@ export default class Databases extends View {
 
     this.beat();
     cx.spawn(async (cx) => {
+      this.own = cx;
       this.dir = await privateDir(IO);
       void setupOf(exec).then((s) => {
         this.setup = s;
@@ -392,8 +395,15 @@ export default class Databases extends View {
   }
 
   /** An action in a place (a click's way to what a key does). */
+  /** The cx for work that awaits or keeps it for later: the view's own. A handler's speaks for
+   *  its call only and refuses once that call has returned, so a read started by a key or a click
+   *  would end in "cx is no longer valid" at its first await. */
+  held(cx: Context): Context {
+    return this.own ?? cx;
+  }
+
   act(place: Place, action: string, cx: Context): boolean {
-    return act(this, place, action, cx);
+    return act(this, place, action, this.held(cx));
   }
 
   setPanel(p: PanelId): void {
@@ -444,7 +454,9 @@ export default class Databases extends View {
   }
 
   key(e: KeyEvent, cx: Context): void {
-    const taken = modalKey(this, e, cx);
+    // What the key starts may await or keep its cx: it gets the view's own. The event is cx's.
+    const own = this.held(cx);
+    const taken = modalKey(this, e, own);
 
     // A text field's key, left unclaimed: a claimed one never reaches the field (popups.ts).
     if (taken === "typing") return;
@@ -458,7 +470,7 @@ export default class Databases extends View {
 
     const place = this.place();
 
-    if (act(this, place, keyName(e), cx)) {
+    if (act(this, place, keyName(e), own)) {
       cx.stop_propagation();
       cx.notify();
     }

@@ -299,6 +299,8 @@ export function runSave(v: DbView, cx: Context): void {
 }
 
 async function save(v: DbView, statements: readonly SaveStatement[], cx: Context): Promise<void> {
+  cx = v.held(cx);
+
   const r = v.review;
   const c = v.active;
 
