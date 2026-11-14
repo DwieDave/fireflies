@@ -314,9 +314,9 @@ test("sidebar, tab strip, header and parked chips: each ? list names every key o
   expect(unnamed(nav.SIDEBAR_HELP, keysOf(nav.SIDEBAR_KEYS))).toEqual([]);
   const digits = (l: any) => [...l, ["1-9", ""]];
   expect(unnamed(digits(nav.STRIP_HELP), keysOf(nav.STRIP_KEYS))).toEqual([]);
-  // H / L move a tab: nothing on the header's or the chips' rows.
-  expect(unnamed(nav.HEADER_HELP, keysOf(nav.STRIP_KEYS, ["H", "L"]))).toEqual([]);
-  expect(unnamed(nav.PARKED_HELP, keysOf(nav.STRIP_KEYS, ["H", "L", "r"]))).toEqual([]);
+  // H / L move a tab, p pins it whole, s moves it to a space: nothing on the header's or the chips' rows.
+  expect(unnamed(nav.HEADER_HELP, keysOf(nav.STRIP_KEYS, ["H", "L", "p", "s"]))).toEqual([]);
+  expect(unnamed(nav.PARKED_HELP, keysOf(nav.STRIP_KEYS, ["H", "L", "r", "p", "s"]))).toEqual([]);
   for (const l of [nav.SIDEBAR_HELP, nav.STRIP_HELP, nav.HEADER_HELP, nav.PARKED_HELP]) {
     expect(l.at(-1)).toEqual(["?", "keys"]);
     expect(l.flat().join(" ")).not.toMatch(/\bf\d+\b/);

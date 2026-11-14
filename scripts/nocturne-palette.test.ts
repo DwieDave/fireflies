@@ -216,6 +216,8 @@ const COVER_STATES: (() => void)[] = [
     state.panes.push({ pane: "p2", tab: "c1", focused: false, cwd: "/src", terminal: "t9" }); },
   () => { state.shared[GIT_WINDOW] = { id: "o9", beat: Date.now() }; state.shared["github.window"] = { id: "o8", beat: Date.now() }; },
   () => { state.shared["pip.player"] = { t: 1 }; },
+  // A second space: the shown tab can move there whole (nocturne.tab-to-space).
+  () => { state.spaces.push({ id: "s2", active: false, folder: "/src2", machine: null, tabs: [{ id: "c2", active: true }] }); },
   () => { state.panes.push({ pane: "p3", tab: "c1", focused: false, mod: "pip" }); },
   // The update note ("Updated to …") on show: its close is offered.
   () => { state.shared["nocturne.update-shown"] = "Updated to 0.1.15"; },
