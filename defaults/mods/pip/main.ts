@@ -23,6 +23,7 @@
 // « ❚❚ » 🔈 playback · ◧ ⤓ ⇱ where it goes · ? ✕ the player's own (⋯ joins
 // these). A section with nothing left on a narrow bar takes its seam along; the
 // ⋯ menu lists what went into it in the same sections, a dithered rule between.
+// Seams and rules are in seamTone (a step darker than the icons' dim).
 // Keys while it has the keyboard (overlay.focus to the window, pane.go to its
 // pane, a click on it; its bar's edge turns blue meanwhile):
 //   space k  pause / play   ← → (h l)  10 s back / on   m  sound   b  back
@@ -194,10 +195,27 @@ function dither(color: Color, cell = 1) {
 const TITLE = 70;
 
 // A seam between two sections: 1 px of dither, 8 px tall (the icons are
-// 12, the bar 21), in the dim of the icons: half its dots lit, so quieter
-// than they are. Its place on the bar is 8 px, the seam in the middle.
+// 12, the bar 21), in SEAM_TONE: half its dots lit, so quieter than the
+// icons are. Its place on the bar is 8 px, the seam in the middle.
 const SEAM = 8;
 const SEAM_H = 8;
+
+/** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either
+ *  isn't one (../nocturne/toolground.ts's mix: a mod can't import another's files). */
+export function mix(a: Color, b: Color, k: number): Color {
+  const ch = (c: Color) => (/^#[0-9a-f]{6}$/i.test(c) ? [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)) : null);
+  const x = ch(a);
+  const y = ch(b);
+
+  if (!x || !y) return a;
+
+  return `#${x.map((v, i) => Math.round(v + ((y[i] ?? v) - v) * k).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** The seams' and the ⋯ menu's rules' tone: a third of the way from the
+ *  icons' dim to ansi0, the bar's hover (moonfly: #5f6d6d → #505a5b). One
+ *  step darker than the dim they had, still there. */
+export const seamTone = (t: Theme): Color => mix(t.dim, t.ansi0, 1 / 3);
 
 /**
  * How far each glyph's ink sits below the middle of its box, in em. An svg
@@ -256,7 +274,7 @@ export function fit(controls: readonly Control[], width: number): Fitted {
 
 /** The seam between two sections of the bar: a short, quiet dithered upright. */
 function seam(t: Theme) {
-  return div().relative().flex_none().w(1).h(SEAM_H).mx((SEAM - 1) / 2).child(dither(t.dim, 1));
+  return div().relative().flex_none().w(1).h(SEAM_H).mx((SEAM - 1) / 2).child(dither(seamTone(t), 1));
 }
 
 const KEY_COMMANDS: ReadonlyMap<string, Command> = new Map<string, Command>([
@@ -708,7 +726,7 @@ export default class Pip extends View {
       })
       .children(sections(items).flatMap((part, n) => [
         // The bar's seam lying down: as quiet, and short of the edges.
-        ...(n ? [div().relative().h(RULE).flex_none().mx(24).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.dim, 1)))] : []),
+        ...(n ? [div().relative().h(RULE).flex_none().mx(24).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(seamTone(t), 1)))] : []),
         ...part.map((c) => row(c, items.indexOf(c))),
       ]));
   }

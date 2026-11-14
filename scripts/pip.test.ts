@@ -52,11 +52,11 @@ function row(p: any) {
 test("wide, the bar is four sections with a seam between: where it came from, playback, where it goes, the window's own", () => {
   expect(row(player(480))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "pane", "park", "out", "|", "keys", "close"]);
   // A seam: a short dithered upright, not a control (no id, no click): 1 px
-  // wide, 8 tall (the icons are 12, the bar 21), in the icons' dim, its dots
-  // half lit, so quieter than they are; its 8 px place, the seam in the middle.
+  // wide, 8 tall (the icons are 12, the bar 21), its dots half lit, in the
+  // seam tone (a step darker than the icons' dim); its 8 px place, the seam in the middle.
   const seam = player(480).bar(theme).nodes[2];
   expect([callOf(seam, "w"), callOf(seam, "h"), callOf(seam, "mx"), callOf(seam, "on_click").length, seam.nodes.length]).toEqual([[[1]], [[8]], [[3.5]], 0, 1]);
-  expect(dithered.at(-1)).toBe(theme.dim);
+  expect(dithered.at(-1)).toBe(pip.seamTone(theme));
   // As a pane (◧ is the window's): its section keeps ⤓ ⇱.
   expect(row(player(480, { inPane: true }))).toEqual(["back", "|", "rewind", "toggle", "forward", "mute", "|", "park", "out", "|", "keys", "close"]);
 });
@@ -101,7 +101,7 @@ test("the ⋯ menu lists the controls that went into it in the same sections, a 
   const m: any = Object.create(Pip.prototype);
   m.menu = more; m.cursor = 0; m.handle = {};
   const menu = m.renderMenu(theme);
-  expect(dithered).toContain(theme.dim); // its rules as quiet as the bar's seams
+  expect(dithered).toContain(pip.seamTone(theme)); // its rules in the bar's seams' tone
   const kinds = menu.nodes.map((el: any) => (idOf(el)?.startsWith("pm-") ? idOf(el).slice(3) : "rule"));
   expect(kinds).toEqual(["rewind", "forward", "rule", "pane", "out", "rule", "keys"]);
   // The cursor walks the rows alone (the rules aren't stops): from ⇱ (3) j goes to ? (4).
@@ -151,4 +151,15 @@ test("the keys popup is as tall as its list: a popup sizes to its content, and t
   expect(callOf(host, "h")).toEqual([[spec.height]]);
   expect(callOf(host, "size_full")).toEqual([]);
   expect(spec.height).toBeGreaterThan(200);
+});
+
+test("the seam tone: a third of the way from the icons' dim to ansi0, one small step darker", () => {
+  const moonfly: any = { dim: "#5F6D6D", ansi0: "#323437" };
+  expect(pip.seamTone(moonfly)).toBe("#505a5b");
+  const lum = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).reduce((a, b) => a + b, 0);
+  // Darker than the dim, still well above ansi0 (the hover colour): a step, not gone.
+  expect(lum(pip.seamTone(moonfly))).toBeLessThan(lum(moonfly.dim));
+  expect(lum(pip.seamTone(moonfly)) - lum(moonfly.ansi0)).toBeGreaterThan((lum(moonfly.dim) - lum(moonfly.ansi0)) / 2);
+  // Not a hex colour: the dim as it was.
+  expect(pip.mix("red", "#000000", 0.5)).toBe("red");
 });
