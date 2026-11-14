@@ -424,3 +424,45 @@ test("a query's editor and result split: a divider between them, + in the result
   // The editor (start: 38 % of the box under the result line) gave 24 px to the result.
   expect(kept.editor).toBe(Math.round((500 - 22) * 0.38) - 24);
 });
+
+test("a key a field types is left unclaimed (a claimed one never reaches it); the find line types until ↓, then the list has the keys", () => {
+  fresh();
+  let stopped = 0;
+  const kx: any = { ...cx, stop_propagation: () => { stopped++; } };
+  /** Whether the window claimed key `k` (stopped it), and so kept it from the focused field. */
+  const claims = (v: any, k: string, mods: any = {}) => { stopped = 0; v.key(key(k, mods), kx); return stopped > 0; };
+  const v = open({ folder: "/w", overlay: "w1" });
+  v.saved = [LITE, PG];
+  v.key(key("n"), kx);
+  // In the name field: letters the window binds (q close, j move, ? keys) are typed, esc and enter are the form's.
+  expect(["q", "j", "?", "a", "backspace", "left"].map((k) => claims(v, k))).toEqual([false, false, false, false, false, false]);
+  expect(v.form).not.toBeNull();
+  expect(claims(v, "l", { alt: true })).toBe(false); // ⌥l types @ on a German layout
+  expect(claims(v, "escape")).toBe(true);
+  expect(v.form).toBeNull();
+  // The find line over the tables.
+  v.active = LITE;
+  v.catalog = { tables: ["alpha", "beta", "gamma"].map((name) => ({ schema: null, name, type: "table", rows: 1 })), error: null, busy: false };
+  v.panel = "tables";
+  v.key(key("/"), kx);
+  expect(v.tableFind).not.toBeNull();
+  expect(["j", "k", "e", "?"].map((k) => claims(v, k))).toEqual([false, false, false, false]);
+  expect([v.tableAt, v.help, v.exporting]).toEqual([0, false, null]);
+  // ↓ leaves the line onto the list's first match below; the list's keys are back.
+  expect(claims(v, "down")).toBe(true);
+  expect(claims(v, "j")).toBe(true);
+  expect(v.tableAt).toBe(2);
+  // A click back into the line: its focus event gives it the keyboard again.
+  v.key(key("/"), kx);
+  expect(claims(v, "j")).toBe(false);
+  expect(claims(v, "escape")).toBe(true);
+  expect(v.tableFind).toBeNull();
+  // The password ask, the WHERE line, an edited cell: typing is theirs, enter and esc the window's.
+  v.password = { conn: "pg-1", input: { value: () => "", focus() {} }, done: () => { v.password = null; } };
+  expect([claims(v, "q"), claims(v, "enter")]).toEqual([false, true]);
+  v.rows = { ...v.rows, filtering: true };
+  v.filterInput = { value: () => "", focus() {} };
+  expect([claims(v, "q"), claims(v, "escape")]).toEqual([false, true]);
+  v.cellEdit = { row: 0, col: 0, column: "name", input: { value: () => "", set_value() {}, focus() {} }, isNull: false };
+  expect([claims(v, "q"), claims(v, "escape")]).toEqual([false, true]);
+});

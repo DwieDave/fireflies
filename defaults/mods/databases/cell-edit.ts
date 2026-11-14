@@ -15,7 +15,7 @@ import { cellRefusal, changeAt, changesWord, counted, editability, noEdits, show
 import { refusal, typeOf } from "./quote.ts";
 import { saveError, saveStatements } from "./save-sql.ts";
 import type { SaveStatement } from "./save-sql.ts";
-import type { CellEdit } from "./state.ts";
+import type { CellEdit, Taken } from "./state.ts";
 import type { ColumnInfo } from "./catalog.ts";
 import { colsOf } from "./act-grid.ts";
 import { moveGrid, rowsIn } from "./grid.ts";
@@ -164,7 +164,7 @@ export function nextEdit(v: DbView, by: 1 | -1): void {
 
 /** A key while a cell is edited: the input has typed it; the edit's own keys act here. Every key
  *  stays with the edit (q types a q). */
-export function editKey(v: DbView, e: KeyEvent): boolean {
+export function editKey(v: DbView, e: KeyEvent): Taken {
   const edit = v.cellEdit;
 
   if (!edit) return false;
@@ -175,6 +175,7 @@ export function editKey(v: DbView, e: KeyEvent): boolean {
   else if (e.key === "escape") dropEdit(v);
   else if (e.key === "tab") nextEdit(v, m.shift ? -1 : 1);
   else if (m.control && e.key === "n") toggleNull(v);
+  else return "typing";
 
   return true;
 }

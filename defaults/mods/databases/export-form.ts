@@ -14,6 +14,7 @@ import { formHints, formKey, ring } from "./form-keys.ts";
 import type { TableRef } from "./catalog.ts";
 import { browseSql, qualified } from "./catalog.ts";
 import type { ResultSet } from "./parse-out.ts";
+import type { Taken } from "./state.ts";
 import type { Format } from "./export.ts";
 import { FORMATS, FORMAT_NAME, exportName, exportText, writeOut } from "./export.ts";
 import { IO, runOn } from "./session.ts";
@@ -78,12 +79,15 @@ export class ExportForm {
     ];
   }
 
-  key(e: KeyEvent, cx: Context): boolean {
+  /** A form key: taken while the form is up, but what the name field types (and an app chord) is "typing". */
+  key(e: KeyEvent, cx: Context): Taken {
     const stops = this.stops();
     const s = stops[this.at];
     const a = formKey(stops, this.at, e.key === " " ? "space" : e.key, e.modifiers, e.key_char ?? null);
 
-    if (!a || this.busy) return true;
+    if (!a || a.act === "type") return "typing";
+
+    if (this.busy) return true;
 
     switch (a.act) {
       case "move": this.at = a.to; this.focus(); break;

@@ -1162,3 +1162,6 @@ fn status_bar_shows_the_real_palette_key(cx: &mut TestAppContext) {
     assert!(tree.contains("commands"), "unbound hint still offers commands: {tree}");
     assert!(!tree.contains("Shift P"), "unbound hint must not invent a key: {tree}");
 }
+
+#[cfg(test)]
+mod typing;

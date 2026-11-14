@@ -196,7 +196,7 @@ function tableAct(v: DbView, action: string, cx: Context): boolean {
     case "copy": if (t) cx.write_to_clipboard(t.name); break;
     case "export": if (t) openExport(v, { table: t }, cx); break;
     case "menu": if (t) tableMenu(v, t, cx); break;
-    case "table-find": v.tableFind = v.tableFind ?? InputState.new({ placeholder: "a table's name" }); v.tableFind.focus(); break;
+    case "table-find": openFind(v); break;
     default: return false;
   }
 
@@ -276,4 +276,26 @@ function logAct(v: DbView, action: string, cx: Context): boolean {
   }
 
   return true;
+}
+
+/** The find line over the tables (f): it has the keyboard until ↓, enter or esc (popups.ts lineKey),
+ *  or a click elsewhere; a click back into it gives it the keyboard again. */
+function openFind(v: DbView): void {
+  let find = v.tableFind;
+
+  if (!find) {
+    const input = InputState.new({ placeholder: "a table's name" });
+
+    input.on("focus", () => {
+      v.findTyping = true;
+    });
+    input.on("blur", () => {
+      v.findTyping = false;
+    });
+    find = input;
+    v.tableFind = input;
+  }
+
+  v.findTyping = true;
+  find.focus();
 }

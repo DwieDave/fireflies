@@ -3,12 +3,16 @@
 // (y; for a destructive statement then its name typed), a menu, the keys
 // overview, the filter and find lines. modalKey() hands a key to whichever is
 // up; overBody() and askBar() draw them.
+//
+// A key a text field types is answered "typing": the window must leave it
+// unclaimed (no stop_propagation, none of its own keys), or GPUI counts it as
+// handled and never hands its character to the focused input.
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Ask, Menu } from "./state.ts";
+import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
 import { keysKey, keysView } from "./keyhelp.ts";
 import { helpSections } from "./keys.ts";
@@ -17,15 +21,15 @@ import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
 import type { default as DbView } from "./main.ts";
 
-/** The ask's answer to a key. */
-function askKey(v: DbView, ask: Ask, e: KeyEvent): void {
+/** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
+function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {
   const k = e.key;
 
   if (k === "escape" || (ask.step === 1 && k === "n")) {
     v.ask = null;
     v.focusShown();
 
-    return;
+    return true;
   }
 
   if (ask.step === 1 && (k === "y" || k === "enter")) {
@@ -33,29 +37,33 @@ function askKey(v: DbView, ask: Ask, e: KeyEvent): void {
       ask.step = 2;
       ask.input.focus();
 
-      return;
+      return true;
     }
 
     v.ask = null;
     v.focusShown();
     ask.go();
 
-    return;
+    return true;
   }
 
-  if (ask.step === 2 && k === "enter") {
-    const want = ask.verdict.target ?? "yes";
+  if (ask.step !== 2) return true;
 
-    if ((ask.input?.value() ?? "").trim() !== want) {
-      v.say(`type ${want} to go on, or esc`, "failed");
+  if (k !== "enter") return "typing";
 
-      return;
-    }
+  const want = ask.verdict.target ?? "yes";
 
-    v.ask = null;
-    v.focusShown();
-    ask.go();
+  if ((ask.input?.value() ?? "").trim() !== want) {
+    v.say(`type ${want} to go on, or esc`, "failed");
+
+    return true;
   }
+
+  v.ask = null;
+  v.focusShown();
+  ask.go();
+
+  return true;
 }
 
 function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
@@ -82,14 +90,14 @@ function menuKey(v: DbView, m: Menu, e: KeyEvent): void {
 }
 
 /** A line input's keys (the filter, the find): enter keeps it, esc drops it; the rest is typing. */
-function lineKey(v: DbView, e: KeyEvent, cx: Context): boolean {
+function lineKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   if (v.rows.filtering) {
     if (e.key === "enter") applyFilter(v, cx);
     else if (e.key === "escape") {
       v.rows.filtering = false;
       v.filterInput = null;
       v.focusSelf();
-    }
+    } else return "typing";
 
     return true;
   }
@@ -99,6 +107,7 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): boolean {
   if (!find) return false;
 
   if (e.key === "enter" || e.key === "down") {
+    v.findTyping = false;
     v.focusSelf();
 
     return e.key === "enter";
@@ -106,33 +115,37 @@ function lineKey(v: DbView, e: KeyEvent, cx: Context): boolean {
 
   if (e.key === "escape") {
     v.tableFind = null;
+    v.findTyping = false;
     v.focusSelf();
 
     return true;
   }
 
+  if (!v.findTyping) return false;
+
   v.tableAt = 0;
 
-  return false;
+  return "typing";
 }
 
-/** Hands a key to what's over the view; true when it took it. */
-export function modalKey(v: DbView, e: KeyEvent, cx: Context): boolean {
+/** The password asked before connecting: enter takes it, esc drops it; the rest is typed. */
+function passwordKey(v: DbView, e: KeyEvent): Taken {
+  if (e.key === "enter") v.password?.done();
+  else if (e.key === "escape") {
+    v.password = null;
+    v.focusShown();
+  } else return "typing";
+
+  return true;
+}
+
+/** Hands a key to what's over the view: taken, "typing" (the focused field's), or not. */
+export function modalKey(v: DbView, e: KeyEvent, cx: Context): Taken {
   if (v.form) return v.form.key(e, cx);
 
   if (v.exporting) return v.exporting.key(e, cx);
 
-  const pw = v.password;
-
-  if (pw) {
-    if (e.key === "enter") pw.done();
-    else if (e.key === "escape") {
-      v.password = null;
-      v.focusShown();
-    }
-
-    return true;
-  }
+  if (v.password) return passwordKey(v, e);
 
   if (v.review) {
     reviewKey(v, e, cx);
@@ -142,11 +155,7 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): boolean {
 
   const ask = v.ask;
 
-  if (ask) {
-    askKey(v, ask, e);
-
-    return true;
-  }
+  if (ask) return askKey(v, ask, e);
 
   const m = v.menu;
 
@@ -156,7 +165,15 @@ export function modalKey(v: DbView, e: KeyEvent, cx: Context): boolean {
     return true;
   }
 
-  if (editKey(v, e)) return true;
+  const edit = editKey(v, e);
+
+  if (edit) return edit;
+
+  // The SQL editor has the keyboard: its typing (a ? too) is its own, not the window's.
+  if (!v.help && v.place() === "editor" && v.shownQuery()?.editor.focused()) return "typing";
+
+  // A line being typed in (the WHERE filter, the find) takes its ? too.
+  if (v.rows.filtering || v.findTyping) return lineKey(v, e, cx);
 
   const help = keysKey(e, v.help);
 

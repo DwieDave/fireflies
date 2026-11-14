@@ -96,6 +96,11 @@ export interface QueryTab {
 }
 
 /** What a run asks before it goes: the verdict, and for a destructive one the name typed. */
+/** What a key is to the window: taken (true: claimed, the window's own), "typing" (the focused
+ *  field's: left unclaimed, or GPUI counts it handled and the field never gets its character),
+ *  or not taken (false). */
+export type Taken = boolean | "typing";
+
 export interface Ask {
   readonly verdict: Verdict;
   readonly text: string;

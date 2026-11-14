@@ -90,6 +90,8 @@ export default class Databases extends View {
   tableAt = 0;
   schema: string | null = null;
   tableFind: InputState | null = null;
+  /** The find line has the keyboard (its typing is its own; after ↓ the list's keys are). */
+  findTyping = false;
   struct: Struct = { table: null, data: null, busy: false, error: null };
   structTab: StructTab = "columns";
   structAt = 0;
@@ -337,7 +339,12 @@ export default class Databases extends View {
   }
 
   key(e: KeyEvent, cx: Context): void {
-    if (modalKey(this, e, cx)) {
+    const taken = modalKey(this, e, cx);
+
+    // A text field's key, left unclaimed: a claimed one never reaches the field (popups.ts).
+    if (taken === "typing") return;
+
+    if (taken) {
       cx.stop_propagation();
       cx.notify();
 
@@ -345,10 +352,6 @@ export default class Databases extends View {
     }
 
     const place = this.place();
-    const q = this.shownQuery();
-
-    // The editor has the keyboard: it took what it wanted (query.ts editorKey).
-    if (place === "editor" && q?.editor.focused()) return;
 
     if (act(this, place, keyName(e), cx)) {
       cx.stop_propagation();

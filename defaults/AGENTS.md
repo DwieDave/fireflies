@@ -2306,7 +2306,11 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   mod (a mod can't import another's files). `formKey(stops, at, key,
   modifiers, char)` says what a key does on the focused stop (`{ act: "move",
   to }`, `"submit"`, `"cancel"`, `"press"`, `"step"`, `"flip"`, `"open"`,
-  `"type"`: let the input have it), `formHints()` is the hint line, `ring()`
+  `"type"`: let the input have it: return from your `on_key_down` without
+  `cx.stop_propagation()` and without running your own keys, or GPUI counts
+  the key as handled and never hands its character to the focused input; a
+  `null` (an app chord, ⌥ letters such as ⌥l for @) is let through the same
+  way), `formHints()` is the hint line, `ring()`
   the focus ring; stops are `{ id, kind: "text" | "area" | "choice" |
   "multi" | "toggle" | "button", submit? }` in tab order. Tab never reaches
   an `on_key_down` (key bindings run first and the root binds tab to move the

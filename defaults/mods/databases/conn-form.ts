@@ -13,6 +13,7 @@ import type { Theme } from "herdr";
 import type { Stop } from "./form-keys.ts";
 import { formHints, formKey, ring } from "./form-keys.ts";
 import type { Conn, ConnDraft, Kind } from "./kinds.ts";
+import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId } from "./kinds.ts";
 import { parseDbUrl } from "./discover.ts";
 import { saveSecret } from "./secrets.ts";
@@ -79,7 +80,13 @@ export class ConnForm {
 
       if (f === "password") input.set_masked(true);
 
-      if (f === "host") input.on("change", () => this.fromUrl());
+      // A URL typed or pasted: the kind and the fields change, so the form draws again.
+      if (f === "host") {
+        input.on("change", (_e, cx) => {
+          this.fromUrl();
+          cx.notify();
+        });
+      }
 
       this.inputs.set(f, input);
     }
@@ -140,14 +147,14 @@ export class ConnForm {
     else this.v.focusSelf();
   }
 
-  /** A form key; always taken while the form is up. */
-  key(e: KeyEvent, cx: Context): boolean {
+  /** A form key: taken while the form is up, but what a field types (and an app chord) is "typing". */
+  key(e: KeyEvent, cx: Context): Taken {
     const stops = this.stops();
     const k = e.key === " " ? "space" : e.key;
     const a = formKey(stops, this.at, k, e.modifiers, e.key_char ?? null);
     const s = stops[this.at];
 
-    if (!a) return true;
+    if (!a || a.act === "type") return "typing";
 
     switch (a.act) {
       case "move": this.at = a.to; this.focusStop(); break;
