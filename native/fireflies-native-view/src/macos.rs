@@ -1765,7 +1765,7 @@ define_class!(
 
 /// The mouse event AppKit is handing out now (hit tests run inside its
 /// dispatch), as a Press; none: Other.
-fn current_press(mtm: MainThreadMarker) -> Press {
+pub(crate) fn current_press(mtm: MainThreadMarker) -> Press {
     let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
     app.currentEvent().map_or(Press::Other, |e| {
         Press::of_event(e.r#type().0 as u64, e.modifierFlags().contains(NSEventModifierFlags::Control))

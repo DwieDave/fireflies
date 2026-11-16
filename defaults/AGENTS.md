@@ -2250,8 +2250,10 @@ The main ones:
   space, with the Nocturne player's bar in its order and sections, ↩ « ❚❚ » sound ◧ ⤓ ⇲
   magnet ? ✕, keeping the video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn
   { of, then }` (`then`: null, `"pane"` or `"park"`, for the player to go on with); the view
-  may go). With `snap` (default true) it snaps to its screen's usable area (menu bar and Dock
-  left out, 10 pt in): dragged by its bar within 64 pt of a corner or an edge's middle it
+  may go). It moves by its bar or anywhere on its video, as the Fireflies player's window: a
+  left press on the video that moves 4 pt drags it, less is a click (right-clicks and the wheel
+  stay the page's). With `snap` (default true) it snaps to its screen's usable area (menu bar
+  and Dock left out, 10 pt in): dragged within 64 pt of a corner or an edge's middle it
   lands exactly there and stays on it as its size or the screens change; it opens on the place
   it sat on last (first: bottom right). Without, it opens in the screen's bottom right corner.
   Its magnet switches that and sends the page `pip.snapped { on }`; its ? shows its keys over
@@ -2280,7 +2282,7 @@ The main ones:
   narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
   takes its seam along), which lists them in the same sections, a dithered rule between. The
   window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
-  video gives the player the keyboard), and resizes by its edges and corners. The
+  video gives the player the keyboard), out of Fireflies too, and resizes by its edges and corners. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
