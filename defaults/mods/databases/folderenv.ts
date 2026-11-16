@@ -11,6 +11,7 @@ import type { Context } from "gpui-kit";
 import { exec, home } from "herdr";
 import { projectEnv } from "@fireflies/envrc";
 import type { EnvVars } from "@fireflies/envrc";
+import { String as Str } from "effect";
 import { reading } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
 
@@ -31,7 +32,7 @@ export function loadFolderEnv(v: DbView, cx: Context): Promise<void> {
 
   const folder = v.folder;
 
-  if (!folder || v.on) return Promise.resolve();
+  if ((folder === null || Str.isEmpty(folder)) || (v.on !== null && Str.isNonEmpty(v.on))) return Promise.resolve();
 
   const done = settleEnv(v, folder).then(() => {
     v.clients.clear();
@@ -64,11 +65,11 @@ export async function folderEnvReady(v: DbView, cx: Context): Promise<void> {
 
   if (e.kind !== "loading") return;
 
-  const what = `loading ${v.folder ? tilde(v.folder) : "the folder"}'s environment (direnv)`;
+  const what = `loading ${v.folder !== null && Str.isNonEmpty(v.folder) ? tilde(v.folder) : "the folder"}'s environment (direnv)`;
   const ended = await reading(v, what, "tables", cx, () => e.done).catch(() => null);
 
   // Skipped (esc) or late: the app's PATH until the load ends by itself (then the folder's again).
-  if (v.env === e && !(ended && "value" in ended)) v.env = { kind: "unused", dir: v.folder ?? "", note: "skipped: the app's PATH is used" };
+  if (v.env === e && (ended && "value" in ended) !== true) v.env = { kind: "unused", dir: v.folder ?? "", note: "skipped: the app's PATH is used" };
 }
 
 /** The PATH clients run with: the folder's when it's ready, else the app's (null). */

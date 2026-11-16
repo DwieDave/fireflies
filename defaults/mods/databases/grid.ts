@@ -17,6 +17,7 @@ import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Column } from "@fireflies/viewer/table";
 import { table, oneLine } from "@fireflies/viewer/table";
+import { String as Str } from "effect";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt } from "./state.ts";
 import type { GridColumn } from "./columns.ts";
@@ -143,14 +144,14 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridCol
     // The name whole first: the type only where it fits beside it.
     const fits = (name.length + 2 + (look.types?.[i]?.length ?? 0)) * CH + PAD <= w;
     const type = fits ? look.types?.[i] : undefined;
-    const tip = look.tips?.[i] ?? (look.types?.[i] ? `${name} · ${look.types[i]}` : name);
+    const tip = look.tips?.[i] ?? (look.types?.[i] !== undefined && Str.isNonEmpty(look.types?.[i]) ? `${name} · ${look.types[i]}` : name);
 
     const cell = h_flex().id(`${look.id}-h-${i}`).relative().flex_none().w(w).h(HEAD).px(8).gap(6).items_center().overflow_hidden()
       .border_r(1).border_color(edgeTone(t)).cursor_pointer().tooltip(tip)
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
 
-        const x = e.local_position ? e.local_position.x / zoom() : -1;
+        const x = e.local_position !== undefined ? e.local_position.x / zoom() : -1;
 
         h.head(i, x >= w - EDGE, e, cx);
         cx.notify();
@@ -202,12 +203,12 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
     if (ed?.col === i) return editCell(t, look, r, i, c, ed);
 
     const change = o?.change(r, i) ?? null;
-    const value = change ? change.now : data[i] ?? null;
+    const value = change !== null ? change.now : data[i] ?? null;
     const [text, plain] = cellLook(t, value, c.num);
-    const color = change ? t.ansi3 : plain;
+    const color = change !== null ? t.ansi3 : plain;
     const picked = cur && i === at.col;
     const w = colWidth(c);
-    const tip = change ? null : cutTip(value, w);
+    const tip = change !== null ? null : cutTip(value, w);
     const ranged = range !== null && inRange(range, r, i);
 
     const cell = div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(w).h(ROW).px(8).flex().items_center().overflow_hidden()

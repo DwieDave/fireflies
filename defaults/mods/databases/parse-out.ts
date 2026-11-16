@@ -5,6 +5,7 @@
 // libSQL's JSON hrana.ts's; all of them answer with an Outcome.
 
 import { parse as parseCsv } from "@fireflies/viewer/table";
+import { String as Str } from "effect";
 import { MARK, NULL_MARK } from "./script.ts";
 import { lineCol } from "./split.ts";
 
@@ -72,12 +73,12 @@ function sections(stdout: string): Sections {
 
 /** CSV with a header row as a result set (NULL_MARK as null); null when there was nothing. */
 export function csvSet(text: string): ResultSet | null {
-  if (!text.trim()) return null;
+  if (Str.isEmpty(text.trim())) return null;
 
   const rows = parseCsv(text, ",").rows;
   const [head, ...body] = rows;
 
-  if (!head) return null;
+  if (head === undefined) return null;
 
   return { columns: head, rows: body.map((r) => r.map((v) => (v === NULL_MARK ? null : v))) };
 }
@@ -90,7 +91,7 @@ function psqlSection(index: number, text: string, writes: boolean): StatementRes
   const lastLine = lines.at(-1) ?? "";
   const tagged = writes ? TAG.exec(lastLine) : null;
 
-  if (!tagged) return { index, set: csvSet(text), affected: null, tag: null };
+  if (tagged === null) return { index, set: csvSet(text), affected: null, tag: null };
 
   const counts = (tagged[2] ?? "").trim().split(" ").map(Number);
 
@@ -103,7 +104,7 @@ export function psqlError(stderr: string, index: number | null): RunError | null
   const lines = stderr.split("\n");
   const at = lines.findIndex((l) => /^(psql:.*?:\d+: )?(ERROR|FATAL|PANIC):/.test(l) || l.startsWith("psql: error:") || l.startsWith("fireflies-db:"));
 
-  if (at < 0) return stderr.trim() ? { index, message: lines.find((l) => l.trim()) ?? "", line: null, col: null, hint: null } : null;
+  if (at < 0) return Str.isNonEmpty(stderr.trim()) ? { index, message: lines.find((l) => l.trim()) ?? "", line: null, col: null, hint: null } : null;
 
   const head = lines[at] ?? "";
 
@@ -113,11 +114,11 @@ export function psqlError(stderr: string, index: number | null): RunError | null
   const lineAt = lines.findIndex((l, i) => i > at && /^LINE \d+: /.test(l));
   const where = lineAt >= 0 ? /^LINE (\d+): (\.\.\.)?/.exec(lines[lineAt] ?? "") : null;
   const caret = lineAt >= 0 ? (lines[lineAt + 1] ?? "").indexOf("^") : -1;
-  const lead = where ? where[0].length - (where[2] ? 3 : 0) : 0;
+  const lead = where !== null ? where[0].length - (where[2] !== undefined && Str.isNonEmpty(where[2]) ? 3 : 0) : 0;
   const hint = lines.find((l, i) => i > at && l.startsWith("HINT:"))?.replace(/^HINT:\s+/, "") ?? null;
   const startup = !head.startsWith("psql:") || head.startsWith("psql: error:");
 
-  return { index: startup ? null : index, message, line: where ? Number(where[1]) : null, col: where && caret >= 0 ? caret - lead + 1 : null, hint };
+  return { index: startup ? null : index, message, line: where !== null ? Number(where[1]) : null, col: where !== null && caret >= 0 ? caret - lead + 1 : null, hint };
 }
 
 /** What psql printed for statements `writes` (true where a statement writes, so a last line
@@ -128,7 +129,7 @@ export function parsePsql(stdout: string, stderr: string, code: number, writes: 
   const error = code === 0 ? null : psqlError(stderr, last) ?? { index: last, message: `psql exited with ${code}`, line: null, col: null, hint: null };
 
   // The statement that failed printed nothing of its own.
-  return { results: error && error.index !== null ? results.filter((r) => r.index !== error.index || r.set) : results, error, cut };
+  return { results: error !== null && error.index !== null ? results.filter((r) => r.index !== error.index || r.set) : results, error, cut };
 }
 
 const CHANGES = /^changes: +(\d+) +total_changes: +\d+$/;
@@ -137,10 +138,10 @@ const CHANGES = /^changes: +(\d+) +total_changes: +\d+$/;
 function sqliteSection(index: number, text: string, writes: boolean): StatementResult {
   const lines = text.replace(/\n$/, "").split("\n");
   const changed = CHANGES.exec(lines.at(-1) ?? "");
-  const body = changed ? lines.slice(0, -1).join("\n") : text;
+  const body = changed !== null ? lines.slice(0, -1).join("\n") : text;
 
   // .changes on speaks after every statement: a read changed nothing, it returned rows.
-  return { index, set: csvSet(body), affected: changed && writes ? Number(changed[1]) : null, tag: null };
+  return { index, set: csvSet(body), affected: changed !== null && writes ? Number(changed[1]) : null, tag: null };
 }
 
 /** sqlite3's error: `Parse error near line N: …` (or Runtime error, or Error: …), then the
@@ -150,7 +151,7 @@ export function sqliteError(stderr: string, index: number | null, statement: str
   const lines = stderr.split("\n");
   const at = lines.findIndex((l) => /^(Parse error|Runtime error|Error)\b/.test(l) || l.startsWith("fireflies-db:"));
 
-  if (at < 0) return stderr.trim() ? { index, message: lines.find((l) => l.trim())?.trim() ?? "", line: null, col: null, hint: null } : null;
+  if (at < 0) return Str.isNonEmpty(stderr.trim()) ? { index, message: lines.find((l) => l.trim())?.trim() ?? "", line: null, col: null, hint: null } : null;
 
   const head = lines[at] ?? "";
   const message = head.replace(/^(Parse error|Runtime error|Error)[^:]*:\s*/, "").replace(/^fireflies-db: /, "").replace(/^in prepare,\s*/, "").replace(/\s*\(\d+\)$/, "");
@@ -172,13 +173,13 @@ export function parseSqlite(stdout: string, stderr: string, code: number, statem
   const error = code === 0 ? null : sqliteError(stderr, last, last === null ? null : statements[last] ?? null)
     ?? { index: last, message: `sqlite3 exited with ${code}`, line: null, col: null, hint: null };
 
-  return { results: error && error.index !== null ? results.filter((r) => r.index !== error.index || r.set) : results, error, cut };
+  return { results: error !== null && error.index !== null ? results.filter((r) => r.index !== error.index || r.set) : results, error, cut };
 }
 
 /** A statement's answer in a few words: a read's rows ("10 rows"), a write's changed rows
  *  ("3 changed"; a write that returned rows, its rows), else "done". */
 export function resultWords(r: StatementResult | undefined, writes: boolean): string {
-  const rows = r?.set && r.set.columns.length ? r.set.rows.length : null;
+  const rows = (r?.set !== null && r?.set !== undefined) && r.set.columns.length !== 0 ? r.set.rows.length : null;
   const n = (k: number, one: string, many: string) => `${k} ${k === 1 ? one : many}`;
 
   if (rows !== null) return n(rows, "row", "rows");
@@ -200,11 +201,11 @@ export function namedIn(message: string): string | null {
 export function placeByName(message: string, statement: string): { readonly line: number; readonly col: number } | null {
   const name = namedIn(message);
 
-  if (!name) return null;
+  if (name === null || Str.isEmpty(name)) return null;
 
   const m = new RegExp(`(?<![\\w$])["'\`]?${name.replace(/[$]/g, "\\$")}["'\`]?(?![\\w$])`, "i").exec(statement);
 
-  return m ? lineCol(statement, m.index) : null;
+  return m !== null ? lineCol(statement, m.index) : null;
 }
 
 /** An error placed where it can be: its own place, else at the name it is about. */
@@ -213,7 +214,7 @@ export function placed(e: RunError, statements: readonly string[]): RunError {
 
   const at = placeByName(e.message, statements[e.index] ?? "");
 
-  return at ? { ...e, line: at.line, col: at.col } : e;
+  return at !== null ? { ...e, line: at.line, col: at.col } : e;
 }
 
 /** Edits between two names (insertions, deletions, changes). */

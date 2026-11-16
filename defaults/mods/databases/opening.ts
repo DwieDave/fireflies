@@ -7,6 +7,7 @@
 
 import type { Context } from "gpui-kit";
 import { spaces, panes, focused, shared, setShared, run, openOverlay, closeOverlay } from "herdr";
+import { String as Str } from "effect";
 import { parseJson, readShared, writeShared } from "./guard.ts";
 import type { DbProps, Handover, KeptCopy } from "./state.ts";
 import { HANDOVER_FRESH, HANDOVER_KEY, MOD, WINDOW_KEY, isConnectArgs, isKeptCopy } from "./state.ts";
@@ -30,7 +31,7 @@ export function here(): Place {
   const tab = space?.tabs.find((c) => c.active)?.id ?? null;
   const ps = panes();
   const pane = ps.find((p) => p.focused && p.tab === tab) ?? ps.find((p) => p.tab === tab && p.terminal !== null && p.cwd);
-  const cwd = pane && pane.terminal !== null ? pane.cwd : null;
+  const cwd = pane !== undefined && pane.terminal !== null ? pane.cwd : null;
 
   return { folder: (space?.attached && space.folder) || cwd || focused()?.cwd || space?.folder || null, on: space?.machine ?? null };
 }
@@ -45,7 +46,7 @@ export const newSlot = (): string => Date.now().toString(36) + Math.random().toS
 
 /** This copy's pane (a mod isn't told its pane: it finds itself by its slot). */
 export function ownPane(v: DbView): string | null {
-  if (!v.slot) return null;
+  if (v.slot === null || Str.isEmpty(v.slot)) return null;
 
   const slot = v.slot;
 
@@ -58,11 +59,11 @@ const isKeptSlot = (p: unknown): p is { readonly slot: string } => typeof p === 
 /** Whether this copy acts on a command sent to every copy: the window when one is open, else the
  *  copy whose pane is focused. */
 export function acts(v: DbView): boolean {
-  if (v.overlay) return true;
+  if (v.overlay !== null && Str.isNonEmpty(v.overlay)) return true;
 
   const w = readShared(shared, WINDOW_KEY, null);
 
-  if (w && Date.now() - (w.beat ?? 0) < 10000) return false;
+  if (w !== null && Date.now() - (w.beat ?? 0) < 10000) return false;
 
   const own = ownPane(v);
 
@@ -84,16 +85,16 @@ type SplitArgs = {
 function placeNow(v: DbView): KeptCopy {
   const out: KeptDraft = { panel: v.panel, query: v.mainTab };
 
-  if (v.active) out.conn = v.active.id;
+  if (v.active !== null) out.conn = v.active.id;
 
-  if (v.rows.browse) out.table = v.rows.browse.table.name;
+  if (v.rows.browse !== null) out.table = v.rows.browse.table.name;
 
   return out;
 }
 
 /** A pane keeps its place (localStorage is per mod and props: per slot). */
 export function keepCopy(v: DbView): void {
-  if (!v.slot) return;
+  if (v.slot === null || Str.isEmpty(v.slot)) return;
 
   try {
     localStorage.setItem("copy", JSON.stringify(placeNow(v)));
@@ -107,13 +108,13 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
   cx = v.held(cx);
 
   const note = readShared(shared, HANDOVER_KEY, null);
-  const fresh = note && Date.now() - note.at < HANDOVER_FRESH && (note.folder ?? null) === v.folder ? note : null;
+  const fresh = note !== null && Date.now() - note.at < HANDOVER_FRESH && (note.folder ?? null) === v.folder ? note : null;
   let kept: KeptCopy | null = null;
 
-  if (fresh) {
+  if (fresh !== null) {
     writeShared(setShared, HANDOVER_KEY, null);
     kept = fresh;
-  } else if (v.slot) {
+  } else if (v.slot !== null && Str.isNonEmpty(v.slot)) {
     let text: string | null = null;
 
     try {
@@ -122,10 +123,10 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
       text = null;
     }
 
-    kept = text ? parseJson(text, isKeptCopy) ?? null : null;
+    kept = text !== null && Str.isNonEmpty(text) ? parseJson(text, isKeptCopy) ?? null : null;
   }
 
-  if (pr.connect) {
+  if (pr.connect !== undefined) {
     receive(v, pr.connect, cx);
 
     return;
@@ -138,14 +139,14 @@ export async function start(v: DbView, pr: DbProps, cx: Context): Promise<void> 
 function restore(v: DbView, kept: KeptCopy | null, cx: Context): void {
   cx = v.held(cx);
 
-  const c = kept?.conn ? connList(v).find((x) => x.id === kept.conn) : undefined;
+  const c = kept?.conn !== undefined && Str.isNonEmpty(kept?.conn) ? connList(v).find((x) => x.id === kept.conn) : undefined;
 
-  if (!kept || !c) return;
+  if (kept === null || c === undefined) return;
 
   const table = kept.table;
 
   void connect(v, c, cx).then(() => {
-    if (table && v.active === c) openNamed(v, table, cx);
+    if ((table !== undefined && Str.isNonEmpty(table)) && v.active === c) openNamed(v, table, cx);
 
     v.panel = kept.panel ?? "tables";
     v.mainTab = kept.query ?? 0;
@@ -176,8 +177,8 @@ export function command(v: DbView, c: string, cx: Context): void {
   const ask = v.forwardAsk;
   const press = { "forward-start": "enter", "forward-anyway": "c", "forward-k8s": "k" }[name];
 
-  if (press) {
-    if (ask) askActions(v, ask).find((x) => x.key === press)?.go(cx);
+  if (press !== undefined && Str.isNonEmpty(press)) {
+    if (ask !== null) askActions(v, ask).find((x) => x.key === press)?.go(cx);
 
     return;
   }
@@ -192,14 +193,14 @@ export function command(v: DbView, c: string, cx: Context): void {
   if (name.startsWith("connect:")) {
     const args = parseJson(name.slice("connect:".length), isConnectArgs);
 
-    if (args) receive(v, args, cx);
+    if (args !== undefined) receive(v, args, cx);
     else v.say("databases.connect: its argument isn't a connection", "failed");
   } else if (name.startsWith("sql:")) v.addQuery(name.slice("sql:".length), cx);
   else if (name === "run" || name === "run-all") runShown(v, name === "run-all", cx);
   else if (name.startsWith("table:")) openNamed(v, name.slice("table:".length), cx);
   else if (name.startsWith("set:")) setCell(v, name.slice("set:".length));
-  else if (name === "to-pane" && v.overlay) handoverOut(v, cx);
-  else if (name === "to-window" && !v.overlay) handoverOut(v, cx);
+  else if (name === "to-pane" && (v.overlay !== null && Str.isNonEmpty(v.overlay))) handoverOut(v, cx);
+  else if (name === "to-window" && (v.overlay === null || Str.isEmpty(v.overlay))) handoverOut(v, cx);
   // A command is no keystroke: in a query tab it reaches the results' actions, not the editor.
   else act(v, v.place() === "editor" ? "results" : v.place(), name, cx);
 }
@@ -216,7 +217,7 @@ function dismiss(v: DbView): void {
   v.rename = null;
   v.press = null;
 
-  if (!v.review?.busy) v.review = null;
+  if (v.review?.busy !== true) v.review = null;
 
   v.focusShown();
 }
@@ -225,7 +226,7 @@ function dismiss(v: DbView): void {
 function runShown(v: DbView, all: boolean, cx: Context): void {
   const q = v.shownQuery() ?? v.queries.at(-1);
 
-  if (!q) return;
+  if (q === undefined) return;
 
   v.mainTab = v.queries.indexOf(q) + 1;
   v.panel = "main";
@@ -237,8 +238,8 @@ function openNamed(v: DbView, name: string, cx: Context): void {
   const [a, b] = name.includes(".") ? name.split(".", 2) : [null, name];
   const t = v.catalog.tables.find((x) => x.name === b && (a === null || x.schema === a));
 
-  if (!t) {
-    v.say(v.active ? `no table ${name} on ${v.active.name}` : "connect first", "failed");
+  if (t === undefined) {
+    v.say(v.active !== null ? `no table ${name} on ${v.active.name}` : "connect first", "failed");
 
     return;
   }
@@ -255,11 +256,11 @@ export function handoverOut(v: DbView, cx: Context): void {
 
   writeShared(setShared, HANDOVER_KEY, h);
 
-  if (v.overlay) {
+  if (v.overlay !== null && Str.isNonEmpty(v.overlay)) {
     const pane = focused()?.pane ?? null;
     const args: SplitArgs = { direction: "auto", mod: MOD, props: { slot: newSlot(), folder: v.folder, on: v.on } };
 
-    if (pane) args.pane = pane;
+    if (pane !== null && Str.isNonEmpty(pane)) args.pane = pane;
 
     run("pane.split", args);
     cx.timer.after(300, () => v.closeWindow());
@@ -269,11 +270,11 @@ export function handoverOut(v: DbView, cx: Context): void {
 
   const open = readShared(shared, WINDOW_KEY, null);
 
-  if (open && Date.now() - (open.beat ?? 0) < 10000) closeOverlay(open.id);
+  if (open !== null && Date.now() - (open.beat ?? 0) < 10000) closeOverlay(open.id);
 
   openOverlay(windowSpec({ folder: v.folder, on: v.on }));
 
   const own = ownPane(v);
 
-  if (own) cx.timer.after(300, () => run("pane.close", { pane: own }));
+  if (own !== null && Str.isNonEmpty(own)) cx.timer.after(300, () => run("pane.close", { pane: own }));
 }

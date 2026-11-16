@@ -4,6 +4,7 @@
 // The token is a header of fetch: in no process's arguments. Values come back
 // typed (integer as text, float, text, blob as base64, null).
 
+import { String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, literal, nullable, object, oneOf, parseJson } from "./guard.ts";
 import type { Cell, Outcome, StatementResult } from "./parse-out.ts";
@@ -27,7 +28,7 @@ export interface HranaStatement {
 const hranaValue = (b: BoundValue) => (b.type === "null" ? { type: "null" } : { type: b.type, value: b.value });
 
 /** A statement as Hrana writes it. */
-const stmt = (s: HranaStatement) => (s.args ? { sql: s.sql, args: s.args.map(hranaValue) } : { sql: s.sql });
+const stmt = (s: HranaStatement) => (s.args !== undefined ? { sql: s.sql, args: s.args.map(hranaValue) } : { sql: s.sql });
 
 /** The pipeline's body: one batch of the statements, each after the one before went well, then close. */
 export function pipelineBody(statements: readonly HranaStatement[]): string {
@@ -68,7 +69,7 @@ function cell(v: Value): Cell {
 export function parseHrana(status: number, text: string, count: number): Outcome {
   const answer = parseJson(text, isAnswer);
 
-  if (status !== 200 || !answer) {
+  if (status !== 200 || answer === undefined) {
     const said = parseJson(text, object({}, { message: isString, error: isString }));
     const message = said?.message ?? said?.error ?? (status === 401 || status === 403 ? "the token was refused" : `the server answered ${status}`);
 
@@ -77,7 +78,7 @@ export function parseHrana(status: number, text: string, count: number): Outcome
 
   const first = answer.results[0];
 
-  if (!first || first.type === "error" || !first.response?.result) {
+  if (first === undefined || first.type === "error" || first.response?.result === undefined) {
     return { results: [], error: { index: null, message: first?.error?.message ?? "no answer to the batch", line: null, col: null, hint: null }, cut: false };
   }
 
@@ -87,24 +88,24 @@ export function parseHrana(status: number, text: string, count: number): Outcome
   for (let i = 0; i < count; i++) {
     const r = done[i];
 
-    if (!r) continue;
+    if (r === null || r === undefined) continue;
 
     const columns = r.cols.map((c, n) => c.name ?? `column ${n + 1}`);
     const types = r.cols.map((c) => c.decltype ?? "");
 
-    results.push({ index: i, set: columns.length ? { columns, types, rows: r.rows.map((row) => row.map(cell)) } : null, affected: r.affected_row_count ?? null, tag: null });
+    results.push({ index: i, set: columns.length !== 0 ? { columns, types, rows: r.rows.map((row) => row.map(cell)) } : null, affected: r.affected_row_count ?? null, tag: null });
   }
 
   const failed = errors.findIndex((e) => e !== null);
   const e = failed >= 0 ? errors[failed] : null;
 
-  return { results, error: e ? { index: failed, message: e.message.replace(/^SQLite error: /, ""), line: null, col: null, hint: null } : null, cut: false };
+  return { results, error: e !== null && e !== undefined ? { index: failed, message: e.message.replace(/^SQLite error: /, ""), line: null, col: null, hint: null } : null, cut: false };
 }
 
 /** Runs the statements on a remote libSQL database. */
 export async function runHrana(fetcher: Fetch, url: string, token: string | null, statements: readonly HranaStatement[]): Promise<Outcome> {
   const json = { "content-type": "application/json" };
-  const headers = token ? { ...json, authorization: `Bearer ${token}` } : json;
+  const headers = token !== null && Str.isNonEmpty(token) ? { ...json, authorization: `Bearer ${token}` } : json;
 
   try {
     const r = await fetcher(`${httpBase(url)}/v2/pipeline`, { method: "POST", headers, body: pipelineBody(statements) });

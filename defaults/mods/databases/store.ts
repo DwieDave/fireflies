@@ -3,6 +3,7 @@
 // it, ever) and each connection's query history (history/<id>.json: the
 // statements run, newest first, a password literal blanked by redact()).
 
+import { String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNumber, isString, nullable, object, parseJson, sharedKey } from "./guard.ts";
 import type { Conn } from "./kinds.ts";
@@ -25,9 +26,9 @@ const isConnectionsDoc = object({ connections: arrayOf(isConnJson) });
 /** The saved connections (an absent or broken file: none). */
 export async function readConnections(io: FileIo, appHome: string): Promise<Conn[]> {
   const text = await io.readTextFile(connectionsFile(appHome)).catch(() => null);
-  const doc = text ? parseJson(text, isConnectionsDoc) : undefined;
+  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isConnectionsDoc) : undefined;
 
-  return doc ? doc.connections.map(connOf) : [];
+  return doc !== undefined ? doc.connections.map(connOf) : [];
 }
 
 /** The pinned (saved) connections changed, in some window: when, so every other window reads the
@@ -42,11 +43,11 @@ export async function changeConnections(io: FileIo, appHome: string, change: (li
 
   for (let tries = 0; tries < 5; tries++) {
     const was = await io.readTextFile(path).catch(() => null);
-    const doc = was ? parseJson(was, isConnectionsDoc) : undefined;
+    const doc = was !== null && Str.isNonEmpty(was) ? parseJson(was, isConnectionsDoc) : undefined;
 
-    if (was && !doc) throw new Error(`${path} isn't a list of connections: left as it is`);
+    if ((was !== null && Str.isNonEmpty(was)) && doc === undefined) throw new Error(`${path} isn't a list of connections: left as it is`);
 
-    const next = change(doc ? doc.connections.map(connOf) : []);
+    const next = change(doc !== undefined ? doc.connections.map(connOf) : []);
     const text = `${JSON.stringify({ connections: next.flatMap((c) => (c.origin === "saved" ? [connJson(c)] : [])) }, null, 2)}\n`;
 
     try {
@@ -83,9 +84,9 @@ export const HISTORY_MAX = 300;
 /** A connection's history, newest first. */
 export async function readHistory(io: FileIo, appHome: string, id: string): Promise<HistoryEntry[]> {
   const text = await io.readTextFile(historyFile(appHome, id)).catch(() => null);
-  const doc = text ? parseJson(text, isHistoryDoc) : undefined;
+  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isHistoryDoc) : undefined;
 
-  return doc ? [...doc.entries] : [];
+  return doc !== undefined ? [...doc.entries] : [];
 }
 
 /** The history with `entry` first (redacted; the same statement run again moves up, not twice). */
@@ -99,8 +100,8 @@ export function withEntry(list: readonly HistoryEntry[], entry: HistoryEntry): H
 export async function addHistory(io: FileIo, appHome: string, id: string, entry: HistoryEntry): Promise<HistoryEntry[]> {
   const path = historyFile(appHome, id);
   const was = await io.readTextFile(path).catch(() => null);
-  const doc = was ? parseJson(was, isHistoryDoc) : undefined;
-  const list = withEntry(doc ? doc.entries : [], entry);
+  const doc = was !== null && Str.isNonEmpty(was) ? parseJson(was, isHistoryDoc) : undefined;
+  const list = withEntry(doc !== undefined ? doc.entries : [], entry);
 
   await io.writeTextFile(path, `${JSON.stringify({ entries: list })}\n`, was).catch(() => null);
 

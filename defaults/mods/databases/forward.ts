@@ -13,6 +13,7 @@
 
 import type { Context } from "gpui-kit";
 import { appHome, exec, hc, openOverlay, readTextFile, run, terminals } from "herdr";
+import { String as Str } from "effect";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import type { KubeForward } from "./kube.ts";
 import { FORWARD_LABEL, forwardProblem, forwardStartArgs } from "./kube.ts";
@@ -42,7 +43,7 @@ export function forwardRunning(f: KubeForward): { readonly address: string; read
     const raw = t.labels?.[FORWARD_LABEL];
     const n = raw === undefined ? undefined : parseJson(raw, isForwardLabel);
 
-    if (n && n.context === f.context && n.namespace === f.namespace && n.target === f.target && n.local === f.local) {
+    if (n !== undefined && n.context === f.context && n.namespace === f.namespace && n.target === f.target && n.local === f.local) {
       return { address: t.address, live: t.state !== "exited" && t.state !== "dead" };
     }
   }
@@ -57,11 +58,11 @@ export async function forwardFirst(v: DbView, c: Conn, cx: Context): Promise<boo
 
   const f = c.forward;
 
-  if (!f) return true;
+  if (f === undefined) return true;
 
   const problem = forwardProblem(f, c.kind, c.host, c.port);
 
-  if (problem) {
+  if (problem !== null && Str.isNonEmpty(problem)) {
     v.say(`${c.name}: its forward isn't used: ${problem}`, "failed");
 
     return true;
@@ -76,7 +77,7 @@ export async function forwardFirst(v: DbView, c: Conn, cx: Context): Promise<boo
 
 /** Shows the ask for a connection's forward. */
 export function askForward(v: DbView, c: Conn, why: ForwardAsk["why"], cx: Context, local: number | null = null): void {
-  if (!c.forward) return;
+  if (c.forward === undefined) return;
 
   v.forwardAsk = { conn: c, why, note: null, local: local ?? c.forward.local, starting: null };
   void k8sInstalled(v);
@@ -108,7 +109,7 @@ export async function startForward(v: DbView, ask: ForwardAsk, cx: Context, conn
   const c = ask.conn;
   const kept = c.forward;
 
-  if (!kept || (c.kind !== "postgres" && c.kind !== "mysql")) return;
+  if (kept === undefined || (c.kind !== "postgres" && c.kind !== "mysql")) return;
 
   const f: KubeForward = { ...kept, local: ask.local };
 
@@ -144,12 +145,12 @@ export async function startForward(v: DbView, ask: ForwardAsk, cx: Context, conn
 
     // Ended: listed as exited, or gone from the list (herdr-core hides a finished terminal) after
     // it was there or after 2 s.
-    const t = address ? terminalOf(address) : null;
+    const t = address !== null && Str.isNonEmpty(address) ? terminalOf(address) : null;
 
     seen ||= t !== null;
 
-    if ((t && !t.live) || (address && !t && (seen || i >= 4))) {
-      failed(v, ask, address ? await outputOf(address) : "", cx);
+    if ((t && !t.live) === true || (address && t === null && (seen || i >= 4))) {
+      failed(v, ask, address !== null && Str.isNonEmpty(address) ? await outputOf(address) : "", cx);
 
       return;
     }
@@ -157,7 +158,7 @@ export async function startForward(v: DbView, ask: ForwardAsk, cx: Context, conn
     await pause(cx, 500);
   }
 
-  failed(v, ask, address ? await outputOf(address) : "", cx, `no forward on localhost:${f.local} after ${(TRIES * 500) / 1000} s`);
+  failed(v, ask, address !== null && Str.isNonEmpty(address) ? await outputOf(address) : "", cx, `no forward on localhost:${f.local} after ${(TRIES * 500) / 1000} s`);
 }
 
 /** The ask after a failed start: kubectl's words, a pod that's gone said plainly. */
@@ -170,7 +171,7 @@ function failed(v: DbView, ask: ForwardAsk, output: string, cx: Context, head: s
 
   if (GONE.test(output)) {
     ask.why = "gone";
-    ask.note = `${ask.conn.forward?.target.startsWith("pod/") ? `the pod ${pod}` : ask.conn.forward?.target ?? "its target"} isn't there any more (a deployment's pods change names): ${lastLine(output)}`;
+    ask.note = `${ask.conn.forward?.target.startsWith("pod/") === true ? `the pod ${pod}` : ask.conn.forward?.target ?? "its target"} isn't there any more (a deployment's pods change names): ${lastLine(output)}`;
   } else {
     ask.note = [head, lastLine(output)].filter(Boolean).join(": ") || "the forward ended";
   }
@@ -227,7 +228,7 @@ export async function takenAfter(v: DbView, c: Conn, error: string, cx: Context)
 
   const f = c.forward;
 
-  if (!f || !NOT_THE_DATABASE.test(error) || forwardRunning(f)?.live) return false;
+  if (f === undefined || !NOT_THE_DATABASE.test(error) || forwardRunning(f)?.live === true) return false;
 
   askForward(v, c, "taken", cx, await freePort(f.local));
 
@@ -236,9 +237,9 @@ export async function takenAfter(v: DbView, c: Conn, error: string, cx: Context)
 
 /** Stops the connection's forward (its terminal ends: the k8s window's shelf drops it too). */
 export function stopForward(v: DbView, c: Conn, cx: Context): void {
-  const t = c.forward ? forwardRunning(c.forward) : null;
+  const t = c.forward !== undefined ? forwardRunning(c.forward) : null;
 
-  if (!t) return;
+  if (t === null) return;
 
   run("terminal.kill", { terminal: t.address });
   v.say(`stopped the forward on localhost:${c.forward?.local ?? ""}`, "done");
@@ -249,7 +250,7 @@ export function stopForward(v: DbView, c: Conn, cx: Context): void {
 export function openKubernetes(v: DbView, c: Conn): void {
   const f = c.forward;
 
-  if (!f) return;
+  if (f === undefined) return;
 
   openOverlay({ mod: "k8s", kind: "window", key: "k8s", frame: "none", scrim: true, width: 0.88, height: 0.88, props: { context: f.context, namespace: f.namespace, kind: "pods" } });
   v.forwardAsk = null;

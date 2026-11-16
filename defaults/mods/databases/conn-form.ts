@@ -14,6 +14,7 @@ import { pickFile, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
+import { String as Str } from "effect";
 import type { Conn, ConnDraft, Kind, SslMode } from "./kinds.ts";
 import type { Taken } from "./state.ts";
 import { DEFAULT_PORT, KINDS, KIND_NAME, newId, speaksTls } from "./kinds.ts";
@@ -78,10 +79,10 @@ export class ConnForm {
     this.sslOn = c?.sslmode === "disable" ? undefined : c?.sslmode;
 
     const value = (f: Field): string => {
-      if (!c) return "";
+      if (c === null) return "";
 
       switch (f) {
-        case "port": return c.port ? String(c.port) : "";
+        case "port": return c.port !== undefined && c.port !== 0 ? String(c.port) : "";
         case "password": return "";
         default: return c[f] ?? "";
       }
@@ -109,7 +110,7 @@ export class ConnForm {
       case "host": return "localhost, or a URL: postgres://user@host/db";
       case "port": return String(DEFAULT_PORT[this.kind] || "");
       case "password": return this.editing?.secret === "keychain" ? "kept in the keychain (type to replace)"
-        : this.editing?.secret === "kubernetes" && this.editing.source ? `read from secret ${this.editing.source.name} at connect (type one to keep it in the keychain instead)`
+        : this.editing?.secret === "kubernetes" && this.editing.source !== undefined ? `read from secret ${this.editing.source.name} at connect (type one to keep it in the keychain instead)`
         : this.kind === "libsql" ? "the token" : "none, or ~/.pgpass";
       case "path": return "/path/to/data.db";
       case "url": return "libsql://name-org.turso.io";
@@ -125,7 +126,7 @@ export class ConnForm {
   fromUrl(): void {
     const u = /^[a-z0-9+]+:\/\//i.test(this.value("host")) ? parseDbUrl(this.value("host")) : null;
 
-    if (!u || (u.kind !== "postgres" && u.kind !== "mysql")) return;
+    if (u === null || (u.kind !== "postgres" && u.kind !== "mysql")) return;
 
     this.kind = u.kind;
 
@@ -136,7 +137,7 @@ export class ConnForm {
     put("user", u.user);
     put("database", u.database);
 
-    if (u.password) put("password", u.password);
+    if (u.password !== null && Str.isNonEmpty(u.password)) put("password", u.password);
 
     // The URL says how it asks for TLS, or nothing (the client's default).
     this.sslmode = u.sslmode;
@@ -160,9 +161,9 @@ export class ConnForm {
   /** The keyboard onto the stop the form is at. */
   focusStop(): void {
     const s = this.stops()[this.at];
-    const input = s ? this.inputs.get(s.id === "kind" ? "name" : fieldOf(s.id) ?? "name") : undefined;
+    const input = s !== undefined ? this.inputs.get(s.id === "kind" ? "name" : fieldOf(s.id) ?? "name") : undefined;
 
-    if (s?.kind === "text" && input) input.focus();
+    if (s?.kind === "text" && input !== undefined) input.focus();
     else this.v.focusSelf();
   }
 
@@ -173,7 +174,7 @@ export class ConnForm {
     const a = formKey(stops, this.at, k, e.modifiers, e.key_char ?? null);
     const s = stops[this.at];
 
-    if (!a || a.act === "type") return "typing";
+    if (a === null || a.act === "type") return "typing";
 
     switch (a.act) {
       case "move": this.at = a.to; this.focusStop(); break;
@@ -227,15 +228,15 @@ export class ConnForm {
     const keychain = appWindow().platform === "macos";
 
     // A cluster's secret stays where the password comes from until one is typed (or ask is set).
-    const source = !typed && !this.ask && this.editing?.secret === "kubernetes" && (this.kind === "postgres" || this.kind === "mysql") ? this.editing.source : undefined;
+    const source = Str.isEmpty(typed) && !this.ask && this.editing?.secret === "kubernetes" && (this.kind === "postgres" || this.kind === "mysql") ? this.editing.source : undefined;
 
     const secret = this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? "none"
-      : source ? "kubernetes"
-      : this.ask || (typed && !keychain) ? "ask" : typed || this.editing?.secret === "keychain" ? "keychain" : "none";
+      : source !== undefined ? "kubernetes"
+      : this.ask || (typed && !keychain) ? "ask" : Str.isNonEmpty(typed) || this.editing?.secret === "keychain" ? "keychain" : "none";
 
     const c: ConnDraft = { id, name: this.value("name") || this.value("database") || this.value("path").split("/").at(-1) || KIND_NAME[this.kind], kind: this.kind, readonly: this.readonly, secret, origin: "saved" };
 
-    if (source) c.source = source;
+    if (source !== undefined) c.source = source;
 
     if (has("host")) c.host = this.value("host");
 
@@ -249,16 +250,16 @@ export class ConnForm {
 
     if (has("url")) c.url = this.value("url");
 
-    if (this.sslmode && speaksTls(this.kind)) c.sslmode = this.sslmode;
+    if (this.sslmode !== undefined && speaksTls(this.kind)) c.sslmode = this.sslmode;
 
     return c;
   }
 
   /** Why the fields can't be saved yet, or null. */
   problem(): string | null {
-    if ((this.kind === "sqlite" || (this.kind === "libsql" && !this.remote)) && !this.value("path")) return "a file is needed";
+    if ((this.kind === "sqlite" || (this.kind === "libsql" && !this.remote)) && Str.isEmpty(this.value("path"))) return "a file is needed";
 
-    if (this.kind === "libsql" && this.remote && !this.value("url")) return "the URL is needed";
+    if (this.kind === "libsql" && this.remote && Str.isEmpty(this.value("url"))) return "the URL is needed";
 
     return null;
   }
@@ -268,12 +269,12 @@ export class ConnForm {
 
     const c = { ...this.conn(`test-${Date.now()}`), secret: "ask" as const };
 
-    this.v.secrets.set(c.id, this.value("password") || (this.editing ? this.v.secrets.get(this.editing.id) ?? "" : ""));
+    this.v.secrets.set(c.id, this.value("password") || (this.editing !== null ? this.v.secrets.get(this.editing.id) ?? "" : ""));
 
     // An edited one whose password is in the keychain (or a cluster's secret) tests with that one.
     const kept = this.conn(c.id);
 
-    const tried: Conn = !this.value("password") && this.editing?.secret === "keychain" ? { ...c, id: this.editing.id, secret: "keychain" }
+    const tried: Conn = Str.isEmpty(this.value("password")) && this.editing?.secret === "keychain" ? { ...c, id: this.editing.id, secret: "keychain" }
       : kept.secret === "kubernetes" ? kept : c;
 
     await test(this.v, tried, cx);
@@ -285,7 +286,7 @@ export class ConnForm {
 
     const problem = this.problem();
 
-    if (problem) {
+    if (problem !== null && Str.isNonEmpty(problem)) {
       this.error = problem;
 
       return;
@@ -296,10 +297,10 @@ export class ConnForm {
     const pw = this.value("password");
     const dir = this.v.dir;
 
-    if (pw && c.secret === "keychain" && dir) {
+    if (Str.isNonEmpty(pw) && c.secret === "keychain" && (dir !== null && Str.isNonEmpty(dir))) {
       const failed = await saveSecret(IO, dir, id, `Fireflies database ${c.name}`, pw);
 
-      if (failed) {
+      if (failed !== null && Str.isNonEmpty(failed)) {
         this.error = `the keychain refused it: ${failed}`;
         cx.notify();
 
@@ -307,14 +308,14 @@ export class ConnForm {
       }
     }
 
-    if (pw && c.secret === "ask") this.v.secrets.set(id, pw);
+    if (Str.isNonEmpty(pw) && c.secret === "ask") this.v.secrets.set(id, pw);
 
     const v = this.v;
     const i = v.saved.findIndex((s) => s.id === id);
 
     const list = await changePinned(v, (now) => (now.some((s) => s.id === id) ? now.map((s) => (s.id === id ? c : s)) : [...now, c]), cx);
 
-    if (!list) return;
+    if (list === null) return;
 
     if (v.active?.id === id) v.active = c;
 
@@ -348,7 +349,7 @@ export class ConnForm {
   kindRow(t: Theme, focused: boolean): Element {
     // Its client missing on this machine: said here, before anything is saved or tried.
     const found = this.v.clients.get(this.kind);
-    const missing = found && "missing" in found && !(this.kind === "libsql" && this.remote) ? found.missing : null;
+    const missing = found !== undefined && "missing" in found && !(this.kind === "libsql" && this.remote) ? found.missing : null;
 
     return v_flex().gap(4).child(div().text_color(t.foreground).child("kind"))
       .child(ring(h_flex().gap(4).p(2), focused, t.accent).children(KINDS.map((k) => chip(t, `form-kind-${k}`, KIND_NAME[k], this.kind === k, () => {
@@ -366,7 +367,7 @@ export class ConnForm {
       const input = this.inputs.get(f);
 
       const box = h_flex().h(26).px(8).items_center().border(1).border_color(on(f) ? t.accent : t.muted).when(on(f), (el) => el.bg(`${edge(t)}66`))
-        .child(input ? Input.new(input).flex_1().text_size(12).text_color(t.foreground) : div())
+        .child(input !== undefined ? Input.new(input).flex_1().text_size(12).text_color(t.foreground) : div())
         .when(f === "path", (el) => el.child(chip(t, "form-pick", "pick…", false, (cx) => void this.pick(cx))));
 
       const note = f === "password" ? (this.ask ? "asked each time" : "kept in the keychain") : f === "host" ? "or a URL" : "";
@@ -422,7 +423,7 @@ export class ConnForm {
 
     const path = await pickFile({ prompt: "Open the database" });
 
-    if (path) this.inputs.get("path")?.set_value(path);
+    if (path !== null && Str.isNonEmpty(path)) this.inputs.get("path")?.set_value(path);
 
     cx.notify();
   }
@@ -430,7 +431,7 @@ export class ConnForm {
 
 /** The ssl toggle's note: the sslmode it saves, so one from a pasted URL isn't hidden. */
 export function sslWords(mode: SslMode | undefined): string {
-  return mode ? `sslmode=${mode}` : "client default";
+  return mode !== undefined ? `sslmode=${mode}` : "client default";
 }
 
 /** A stop id that names a field. */

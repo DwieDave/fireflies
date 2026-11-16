@@ -12,6 +12,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { ScrollHandle } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
+import { String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import { KIND_NAME, onFile, where } from "./kinds.ts";
 import type { TableRef } from "./catalog.ts";
@@ -76,7 +77,7 @@ function listRow(t: Theme, v: DbView, id: string, cursor: boolean, active: boole
     })
     .children(parts.map((p) => p.relative()));
 
-  return h.target ? dropTarget(t, row, v, h.target) : row;
+  return h.target !== undefined && Str.isNonEmpty(h.target) ? dropTarget(t, row, v, h.target) : row;
 }
 
 /** Where a connection's password comes from, in words (never the password). */
@@ -85,14 +86,14 @@ function secretWords(c: Conn): string {
     case "keychain": return "password in the keychain";
     case "ask": return "password asked, kept in memory";
     case "pgpass": return "password from ~/.pgpass";
-    case "kubernetes": return c.source ? `password read from secret ${c.source.name} at each connect` : "password from a cluster's secret";
+    case "kubernetes": return c.source !== undefined ? `password read from secret ${c.source.name} at each connect` : "password from a cluster's secret";
     case "none": return "";
   }
 }
 
 /** A connection's hover: where it is, what it is, where it came from and its password. */
 function connTip(c: Conn): string {
-  return [addressOf(c), KIND_NAME[c.kind], c.readonly ? "read only" : "", c.from ? `sent by ${c.from}` : c.origin === "found" ? "found in the folder" : "", secretWords(c)]
+  return [addressOf(c), KIND_NAME[c.kind], c.readonly ? "read only" : "", c.from !== undefined && Str.isNonEmpty(c.from) ? `sent by ${c.from}` : c.origin === "found" ? "found in the folder" : "", secretWords(c)]
     .filter(Boolean).join(" · ");
 }
 
@@ -130,7 +131,7 @@ function connPip(t: Theme, v: DbView, c: Conn): Element {
 function secretMark(t: Theme, v: DbView, c: Conn, name: string): Element {
   const read = v.sourced.get(c.id);
 
-  const color = read && !read.ok ? t.blocked : t.ansi6;
+  const color = read !== undefined && !read.ok ? t.blocked : t.ansi6;
 
   return h_flex().flex_shrink(2).min_w(0).max_w(180).gap(4).items_center()
     .child(svg(`${ART}/shield.svg`).size(9).flex_none().text_color(color)).child(text(t, name, color).min_w(0));
@@ -140,7 +141,7 @@ function secretMark(t: Theme, v: DbView, c: Conn, name: string): Element {
 function clientMark(t: Theme, v: DbView, c: Conn): Element[] {
   const f = v.clients.get(c.kind);
 
-  if (!f || !("missing" in f) || (c.kind === "libsql" && c.url)) return [];
+  if (f === undefined || !("missing" in f) || (c.kind === "libsql" && c.url)) return [];
 
   return [h_flex().id(`conn-noclient-${c.id}`).flex_none().tooltip(f.missing).child(text(t, `no ${PROGRAMS[c.kind][0]}`, t.ansi3))];
 }
@@ -169,14 +170,14 @@ function pinState(v: DbView, c: Conn): string {
 
   const w = whereOf(v, c);
 
-  return ` · ${stateWord(s)}${w && (s.kind === "connected" || s.kind === "reading") ? ` · in ${w.database ?? "every database"}${w.user ? ` as ${w.user}` : ""}` : s.kind === "failed" ? `: ${s.why}` : ""}`;
+  return ` · ${stateWord(s)}${w !== null && (s.kind === "connected" || s.kind === "reading") ? ` · in ${w.database ?? "every database"}${w.user !== null && Str.isNonEmpty(w.user) ? ` as ${w.user}` : ""}` : s.kind === "failed" ? `: ${s.why}` : ""}`;
 }
 
 /** A forward's connection: its forward running (localhost:15432), or down. */
 function forwardMark(t: Theme, c: Conn): Element[] {
   const f = c.forward;
 
-  if (!f) return [];
+  if (f === undefined) return [];
 
   const live = forwardRunning(f)?.live === true;
 
@@ -187,7 +188,7 @@ function forwardMark(t: Theme, c: Conn): Element[] {
 function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Element {
   const parts = [
     connPip(t, v, c), ...pinMark(t, v, c), kindBadge(t, c.kind), text(t, c.name, v.connAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
-    ...(c.secret === "kubernetes" && c.source ? [secretMark(t, v, c, c.source.name)] : []),
+    ...(c.secret === "kubernetes" && c.source !== undefined ? [secretMark(t, v, c, c.source.name)] : []),
     ...forwardMark(t, c),
     ...clientMark(t, v, c),
     div().flex_1(), ...(c.readonly ? [lock(t.ansi3)] : []), text(t, where(c, home()), t.dim).flex_shrink(1).min_w(0).max_w(220),
@@ -204,7 +205,7 @@ function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Elem
     press: saved ? (e) => pressAt(v, e, {
       kind: "conn", label: c.name, takes: ["conn:"],
       drop: (to, cx) => {
-        const at = to ? v.saved.findIndex((s) => `conn:${s.id}` === to) : -1;
+        const at = to !== null && Str.isNonEmpty(to) ? v.saved.findIndex((s) => `conn:${s.id}` === to) : -1;
 
         if (at >= 0) placeConn(v, c, at, cx);
       },
@@ -218,7 +219,7 @@ export function connsPanel(t: Theme, v: DbView): Element {
   const active = v.panel === "conns";
   const all = connList(v);
   const rows: Element[] = [];
-  const folder = v.folder ? v.folder.replace(home(), "~") : "";
+  const folder = v.folder !== null && Str.isNonEmpty(v.folder) ? v.folder.replace(home(), "~") : "";
 
   all.forEach((c, i) => {
     if (c.origin === "saved" && i === 0) rows.push(groupRule(t, "g-pinned", "pinned · every window"));
@@ -238,7 +239,7 @@ export function connsPanel(t: Theme, v: DbView): Element {
     })
     .child(div().w(10).child("+")).child(div().flex_1().child("new connection")).child(div().text_color(t.accent).child("n")));
 
-  const body = all.length ? list("conns-list", v.scrolls.conns, rows, v.connAt + rowsBefore(all, v.connAt), v.seen.conns)
+  const body = all.length !== 0 ? list("conns-list", v.scrolls.conns, rows, v.connAt + rowsBefore(all, v.connAt), v.seen.conns)
     : v_flex().size_full().child(empty(t, "No connections yet", "n adds one; a DATABASE_URL in the folder's .env or a *.db file shows up here by itself", null)).child(rows.at(-1) ?? div());
 
   return panel(t, "p-conns", titleTabs(t, "conns", PANEL_KEY.conns, [["c", "Connections"]], "c", active, () => v.setPanel("conns")), active, body,
@@ -252,7 +253,7 @@ export function rowsBefore(all: readonly Conn[], i: number): number {
   for (let k = 0; k <= i && k < all.length; k++) {
     const c = all[k];
 
-    if (c && (k === 0 || all[k - 1]?.origin !== c.origin)) n++;
+    if (c !== undefined && (k === 0 || all[k - 1]?.origin !== c.origin)) n++;
   }
 
   return n;
@@ -263,64 +264,64 @@ export function shownTables(v: DbView): TableRef[] {
   const find = v.tableFind?.value().trim().toLowerCase() ?? "";
   const type = v.tablesTab === "views" ? "view" : "table";
 
-  return v.catalog.tables.filter((x) => x.type === type && (v.schema === null || x.schema === v.schema) && (!find || x.name.toLowerCase().includes(find)));
+  return v.catalog.tables.filter((x) => x.type === type && (v.schema === null || x.schema === v.schema) && (Str.isEmpty(find) || x.name.toLowerCase().includes(find)));
 }
 
 /** The schemas the tables are in. */
-export const schemasOf = (v: DbView): string[] => [...new Set(v.catalog.tables.flatMap((x) => (x.schema ? [x.schema] : [])))];
+export const schemasOf = (v: DbView): string[] => [...new Set(v.catalog.tables.flatMap((x) => (x.schema !== null && Str.isNonEmpty(x.schema) ? [x.schema] : [])))];
 
 function tablesBody(t: Theme, v: DbView, active: boolean): Element {
-  if (!v.active) return empty(t, "Pick a connection", "in [1], and enter", null);
+  if (v.active === null) return empty(t, "Pick a connection", "in [1], and enter", null);
 
   const read = readIn(v, "tables");
 
-  if (read && !v.catalog.tables.length) return readingView(t, "tables-read", read);
+  if (read !== null && v.catalog.tables.length === 0) return readingView(t, "tables-read", read);
 
   const missing = v.clients.get(v.active.kind);
 
-  if (v.catalog.error && missing && "missing" in missing) return missingView(t, v, "tables-missing", v.active.kind, clientFrom(v, missing));
+  if ((v.catalog.error !== null && Str.isNonEmpty(v.catalog.error)) && missing !== undefined && "missing" in missing) return missingView(t, v, "tables-missing", v.active.kind, clientFrom(v, missing));
 
-  if (v.catalog.error) return empty(t, "It didn't answer", v.catalog.error, 1);
+  if (v.catalog.error !== null && Str.isNonEmpty(v.catalog.error)) return empty(t, "It didn't answer", v.catalog.error, 1);
 
   if (v.tablesTab === "databases") return databasesBody(t, v, active);
 
-  if (v.catalog.busy && !v.catalog.tables.length) return empty(t, "reading the tables…", null, null);
+  if (v.catalog.busy && v.catalog.tables.length === 0) return empty(t, "reading the tables…", null, null);
 
   if (v.tablesTab === "schemas") return schemasBody(t, v, active);
 
   // An empty database: which one, the server's others, enter's way on (dbs.ts).
   const none = emptyWords(v);
 
-  if (none && v.tablesTab !== "views") return emptyDbView(t, v, none);
+  if (none !== null && v.tablesTab !== "views") return emptyDbView(t, v, none);
 
   const many = schemasOf(v).length > 1 && v.schema === null;
 
   const kind = v.active.kind;
 
   const rows = shownTables(v).map((x, i) => listRow(t, v, `table-${i}`, v.tableAt === i, active, [
-    ...(many && x.schema ? [text(t, `${x.schema}.`, t.dim).flex_none()] : []),
+    ...(many && (x.schema !== null && Str.isNonEmpty(x.schema)) ? [text(t, `${x.schema}.`, t.dim).flex_none()] : []),
     text(t, x.name, v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0), div().flex_1(),
     text(t, count(x.rows), t.dim).flex_none(),
   ], {
     pick: () => { v.tableAt = i; v.panel = "tables"; v.focusSelf(); },
     open: (cx) => v.act("tables", "open", cx),
     menu: (cx) => v.act("tables", "menu", cx),
-    tip: `${x.schema ? `${x.schema}.` : ""}${x.name} · ${x.type}${x.rows !== null ? ` · ${count(x.rows)} rows` : ""} · drag it into a query`,
+    tip: `${x.schema !== null && Str.isNonEmpty(x.schema) ? `${x.schema}.` : ""}${x.name} · ${x.type}${x.rows !== null ? ` · ${count(x.rows)} rows` : ""} · drag it into a query`,
     // Its name drags into a query's editor (quoted); onto the Rows tab, it opens there.
     press: (e) => pressAt(v, e, {
       kind: "name", label: qualified(kind, x), takes: ["editor:", "rows-tab"],
       drop: (to, cx) => {
-        if (to?.startsWith("editor:")) insertName(v, qualified(kind, x), cx);
+        if (to?.startsWith("editor:") === true) insertName(v, qualified(kind, x), cx);
         else if (to === "rows-tab") openTable(v, x, cx);
       },
     }),
   }));
 
   const find = v.tableFind;
-  const findRow = find ? h_flex().h(22).px(8).gap(6).items_center().child(div().text_color(t.accent).child("/")).child(Input.new(find).flex_1().text_size(11)) : null;
+  const findRow = find !== null ? h_flex().h(22).px(8).gap(6).items_center().child(div().text_color(t.accent).child("/")).child(Input.new(find).flex_1().text_size(11)) : null;
 
-  return v_flex().size_full().when(findRow !== null, (el) => (findRow ? el.child(findRow) : el))
-    .child(rows.length ? list("tables-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables) : empty(t, v.tablesTab === "views" ? "No views" : "No tables", null, null));
+  return v_flex().size_full().when(findRow !== null, (el) => (findRow !== null ? el.child(findRow) : el))
+    .child(rows.length !== 0 ? list("tables-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables) : empty(t, v.tablesTab === "views" ? "No views" : "No tables", null, null));
 }
 
 function schemasBody(t: Theme, v: DbView, active: boolean): Element {
@@ -352,13 +353,13 @@ export function tablesCaption(v: DbView): TablesCaption {
   const c = v.active;
   const n = v.tablesTab === "schemas" ? schemasOf(v).length : v.tablesTab === "databases" ? dbsNow(v)?.list.length ?? 0 : shownTables(v).length;
 
-  if (!c) return { count: String(n), where: "" };
+  if (c === null) return { count: String(n), where: "" };
 
   if (onFile(c) || (c.kind === "libsql" && c.url)) return { count: String(n), where: where(c, home()).split("/").at(-1) ?? "" };
 
   const db = whereNow(c, v.catalog.here).database ?? "every database";
 
-  return { count: String(n), where: `in ${v.schema ? `${db} · ${v.schema}` : db}` };
+  return { count: String(n), where: `in ${v.schema !== null && Str.isNonEmpty(v.schema) ? `${db} · ${v.schema}` : db}` };
 }
 
 /** [2] Tables · Views · Schemas · Databases (by kind: state.ts tablesTabsOf). */
@@ -408,18 +409,18 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
   const c = v.active;
   const d = dbsNow(v);
 
-  if (!c || !hasDatabases(c)) return empty(t, "A file has no other databases", null, null);
+  if (c === null || !hasDatabases(c)) return empty(t, "A file has no other databases", null, null);
 
   const read = readIn(v, "tables");
 
-  if (read && !d?.list.length) return readingView(t, "dbs-read", read);
+  if (read !== null && (d?.list.length === undefined || d?.list.length === 0)) return readingView(t, "dbs-read", read);
 
-  if (d?.error && !d.list.length) return empty(t, "The server's databases couldn't be read", d.error, null);
+  if ((d?.error !== null && d?.error !== undefined && Str.isNonEmpty(d?.error)) && d.list.length === 0) return empty(t, "The server's databases couldn't be read", d.error, null);
 
   const here = whereNow(c, v.catalog.here).database;
   const names = dbRows(v);
 
-  if (!names.length) return empty(t, d?.busy || !d ? "reading the server's databases…" : "No databases this connection may use", null, null);
+  if (names.length === 0) return empty(t, d?.busy === true || d === null ? "reading the server's databases…" : "No databases this connection may use", null, null);
 
   const rows = names.map((name, i) => {
     const on = name === here;
@@ -439,9 +440,9 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
     });
   });
 
-  const foot = d?.sized ? null : h_flex().h(20).px(10).gap(6).items_center().text_color(t.dim).child(div().child("# their sizes"));
+  const foot = d?.sized === true ? null : h_flex().h(20).px(10).gap(6).items_center().text_color(t.dim).child(div().child("# their sizes"));
 
-  return v_flex().size_full().child(list("dbs-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables).flex_1()).when(foot !== null, (el) => (foot ? el.child(foot) : el));
+  return v_flex().size_full().child(list("dbs-list", v.scrolls.tables, rows, v.tableAt, v.seen.tables).flex_1()).when(foot !== null, (el) => (foot !== null ? el.child(foot) : el));
 }
 
 /** A Structure row: its parts, the name it puts into a query, the table it leads to, what's copied. */
@@ -459,14 +460,14 @@ export interface StructRow {
 export function structRows(v: DbView): StructRow[] {
   const s = v.struct.data;
 
-  if (!s) return [];
+  if (s === null) return [];
 
   if (v.structTab === "columns") {
     return s.columns.map((c) => {
       const fk = s.keys.find((k) => !k.incoming && k.fromColumns.split(", ").includes(c.name));
       const right = `${c.type}${c.default !== null ? ` = ${c.default}` : c.nullable ? " null" : ""}`;
 
-      return { mark: c.pk ? "pk" : fk ? "fk" : "", markColor: c.pk ? "pk" : fk ? "fk" : "", name: c.name, note: fk ? `→ ${fk.to}.${fk.toColumns}` : "", right, table: fk?.to ?? null, copy: c.name };
+      return { mark: c.pk ? "pk" : fk !== undefined ? "fk" : "", markColor: c.pk ? "pk" : fk !== undefined ? "fk" : "", name: c.name, note: fk !== undefined ? `→ ${fk.to}.${fk.toColumns}` : "", right, table: fk?.to ?? null, copy: c.name };
     });
   }
 
@@ -486,17 +487,17 @@ export function structRows(v: DbView): StructRow[] {
 function structBody(t: Theme, v: DbView, active: boolean): Element {
   if (v.structTab === "value") return valueBody(t, v);
 
-  if (!v.struct.table) return empty(t, "Pick a table", "in [2], and enter", null);
+  if (v.struct.table === null) return empty(t, "Pick a table", "in [2], and enter", null);
 
-  if (v.struct.error) return empty(t, "Couldn't read it", v.struct.error, null);
+  if (v.struct.error !== null && Str.isNonEmpty(v.struct.error)) return empty(t, "Couldn't read it", v.struct.error, null);
 
   const rows = structRows(v);
 
   const read = readIn(v, "structure");
 
-  if (read && !rows.length) return readingView(t, "struct-read", read);
+  if (read !== null && rows.length === 0) return readingView(t, "struct-read", read);
 
-  if (!rows.length) return empty(t, v.struct.busy ? "reading…" : v.structTab === "keys" ? "No foreign keys" : v.structTab === "indexes" ? "No indexes" : "No columns", null, null);
+  if (rows.length === 0) return empty(t, v.struct.busy ? "reading…" : v.structTab === "keys" ? "No foreign keys" : v.structTab === "indexes" ? "No indexes" : "No columns", null, null);
 
   const markColor = { pk: t.ansi3, fk: t.ansi6, in: t.ansi6, "": t.dim } as const;
 
@@ -511,10 +512,10 @@ function structBody(t: Theme, v: DbView, active: boolean): Element {
     open: (cx) => v.act("structure", "open", cx),
     menu: (cx) => v.act("structure", "menu", cx),
     // A column's (an index's, a key's) name drags into a query's editor, quoted.
-    press: r.name ? (e) => pressAt(v, e, {
+    press: r.name !== null && Str.isNonEmpty(r.name) ? (e) => pressAt(v, e, {
       kind: "name", label: quoteName(kind, r.name ?? ""), takes: ["editor:"],
       drop: (to, cx) => {
-        if (to?.startsWith("editor:")) insertName(v, quoteName(kind, r.name ?? ""), cx);
+        if (to?.startsWith("editor:") === true) insertName(v, quoteName(kind, r.name ?? ""), cx);
       },
     }) : undefined,
   })), v.structAt, v.seen.structure);
@@ -532,14 +533,14 @@ function jsonLine(t: Theme, line: string, i: number): Element {
 /** The Value tab: the picked cell of the shown grid, whole (JSON pretty-printed). */
 function valueBody(t: Theme, v: DbView): Element {
   const g = shownGrid(v);
-  const read = g ? cellAt(g.set, g.at) : undefined;
+  const read = g !== null ? cellAt(g.set, g.at) : undefined;
 
-  if (!g || read === undefined) return empty(t, "Pick a cell", "in the rows or a result; enter shows it here", null);
+  if (g === null || read === undefined) return empty(t, "Pick a cell", "in the rows or a result; enter shows it here", null);
 
   const column = g.set.columns[g.at.col] ?? "";
   // A staged change shows its new value, and what was read under the title.
   const change = g.place === "results" ? null : changeAt(liveEdits(v), g.raw, g.at.row, column);
-  const cell = change ? change.now : read;
+  const cell = change !== null ? change.now : read;
   const lines = prettyValue(cell).split("\n").slice(0, 400);
 
   return v_flex().size_full().px(10).pt(2).gap(4)
@@ -557,7 +558,7 @@ export function structPanel(t: Theme, v: DbView): Element {
   const s = v.struct;
 
   return panel(t, "p-structure", titleTabs(t, "struct", PANEL_KEY.structure, tabs, v.structTab, active, (k, cx) => v.setStructTab(k, cx)), active, structBody(t, v, active), {
-    right: div().text_color(t.dim).child(s.data ? String(s.data.columns.length) : ""),
+    right: div().text_color(t.dim).child(s.data !== null ? String(s.data.columns.length) : ""),
     onPress: () => v.setPanel("structure"),
   });
 }
@@ -570,10 +571,10 @@ export function logPanel(t: Theme, v: DbView): Element {
     // A run still going (its line written as it started): a working pip, not a ✓.
     l.said === RUNNING ? pip(t.working, 6, true) : text(t, l.ok ? "✓" : "✕", l.ok ? t.done : t.blocked).flex_none(),
     // A read's label is short ("the tables"): kept whole beside its run's line.
-    text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(l.run ? 0 : 1).min_w(0),
+    text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(l.run !== undefined && Str.isNonEmpty(l.run) ? 0 : 1).min_w(0),
     ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(l.said.length < 24 ? 0 : 1).min_w(0)]),
     // The client run behind it: the program, its arguments, where it came from, its exit.
-    ...(l.run ? [text(t, l.run, t.muted).flex_shrink(3).min_w(0)] : []),
+    ...(l.run !== undefined && Str.isNonEmpty(l.run) ? [text(t, l.run, t.muted).flex_shrink(3).min_w(0)] : []),
     div().flex_1(), text(t, `${l.ok ? `${l.said} · ` : ""}${l.ms} ms`, t.dim).flex_none(),
   ], {
     pick: () => { v.logAt = i; v.panel = "log"; v.focusSelf(); },
@@ -583,7 +584,7 @@ export function logPanel(t: Theme, v: DbView): Element {
   }));
 
   return panel(t, "p-log", titleTabs(t, "log", PANEL_KEY.log, [["l", "Log"]], "l", active, () => v.setPanel("log")), active,
-    rows.length ? list("log-list", v.scrolls.log, rows, v.logAt, v.seen.log) : div().px(10).pt(2).text_color(t.dim).child("What runs here shows here (this window only; the history keeps a saved connection's)."),
+    rows.length !== 0 ? list("log-list", v.scrolls.log, rows, v.logAt, v.seen.log) : div().px(10).pt(2).text_color(t.dim).child("What runs here shows here (this window only; the history keeps a saved connection's)."),
     { right: div().text_color(t.dim).child("no secrets"), onPress: () => v.setPanel("log") });
 }
 

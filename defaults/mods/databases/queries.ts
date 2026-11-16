@@ -3,6 +3,7 @@
 // answered. Found and sent connections keep theirs in memory only.
 
 import type { Context } from "gpui-kit";
+import { String as Str } from "effect";
 import { arrayOf, isString, object, parseJson } from "./guard.ts";
 import type { Conn } from "./kinds.ts";
 import { IO, dataHome } from "./session.ts";
@@ -24,8 +25,8 @@ export async function loadQueries(v: DbView, c: Conn, cx: Context): Promise<void
   await saveQueries(v);
 
   const text = c.origin === "saved" ? await IO.readTextFile(queriesFile(dataHome(), c.id)).catch(() => null) : null;
-  const doc = text ? parseJson(text, isQueriesDoc) : undefined;
-  const tabs = doc?.tabs.length ? doc.tabs : [{ name: "Query 1", text: "" }];
+  const doc = text !== null && Str.isNonEmpty(text) ? parseJson(text, isQueriesDoc) : undefined;
+  const tabs = doc?.tabs.length !== undefined && doc?.tabs.length !== 0 ? doc.tabs : [{ name: "Query 1", text: "" }];
 
   if (v.active !== c) return;
 
@@ -49,7 +50,7 @@ export async function saveQueries(v: DbView): Promise<void> {
 
   v.queriesDirty = false;
 
-  if (!c) return;
+  if (c === undefined) return;
 
   const path = queriesFile(dataHome(), c.id);
   const was = await IO.readTextFile(path).catch(() => null);

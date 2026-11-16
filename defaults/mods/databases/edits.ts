@@ -6,6 +6,7 @@
 // and which cells (not a blob, not the rowid, one line). Plain functions: no
 // app calls (scripts/databases-edit.test.ts).
 
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { Browse, ColumnInfo, TableRef } from "./catalog.ts";
@@ -38,7 +39,7 @@ export const ROWID = "rowid";
 export function rowKeyOf(set: ResultSet, r: number, keyCols: readonly string[]): { readonly id: string; readonly values: readonly Cell[] } | null {
   const row = set.rows[r];
 
-  if (!row) return null;
+  if (row === undefined) return null;
 
   const values: Cell[] = [];
 
@@ -55,20 +56,20 @@ export function rowKeyOf(set: ResultSet, r: number, keyCols: readonly string[]):
 
 /** The change staged on a cell of the shown rows, or null. */
 export function changeAt(edits: Edits | null, set: ResultSet, r: number, column: string): CellChange | null {
-  if (!edits) return null;
+  if (edits === null) return null;
 
   const key = rowKeyOf(set, r, edits.keyCols);
 
-  return key ? edits.rows.get(key.id)?.cells.get(column) ?? null : null;
+  return key !== null ? edits.rows.get(key.id)?.cells.get(column) ?? null : null;
 }
 
 /** Whether a shown row has a change staged. */
 export function rowChanged(edits: Edits | null, set: ResultSet, r: number): boolean {
-  if (!edits) return false;
+  if (edits === null) return false;
 
   const key = rowKeyOf(set, r, edits.keyCols);
 
-  return key ? edits.rows.has(key.id) : false;
+  return key !== null ? edits.rows.has(key.id) : false;
 }
 
 /** The cell's value as shown: the staged one, else as read. */
@@ -76,7 +77,7 @@ export function shownCell(edits: Edits | null, set: ResultSet, r: number, c: num
   const read = set.rows[r]?.[c] ?? null;
   const change = changeAt(edits, set, r, set.columns[c] ?? "");
 
-  return change ? change.now : read;
+  return change !== null ? change.now : read;
 }
 
 /** A new, empty set of changes for a table. */
@@ -87,7 +88,7 @@ export function stage(edits: Edits, set: ResultSet, r: number, column: string, n
   const key = rowKeyOf(set, r, edits.keyCols);
   const c = set.columns.indexOf(column);
 
-  if (!key || c < 0) return edits;
+  if (key === null || c < 0) return edits;
 
   const before = edits.rows.get(key.id);
   const was = before?.cells.get(column)?.was ?? set.rows[r]?.[c] ?? null;
@@ -98,7 +99,7 @@ export function stage(edits: Edits, set: ResultSet, r: number, column: string, n
 
   const rows = new Map(edits.rows);
 
-  if (cells.size) rows.set(key.id, { key: key.values, cells });
+  if (cells.size !== 0) rows.set(key.id, { key: key.values, cells });
   else rows.delete(key.id);
 
   return { ...edits, rows };
@@ -108,7 +109,7 @@ export function stage(edits: Edits, set: ResultSet, r: number, column: string, n
 export function unstage(edits: Edits, set: ResultSet, r: number, column: string): Edits {
   const change = changeAt(edits, set, r, column);
 
-  return change ? stage(edits, set, r, column, change.was) : edits;
+  return change !== null ? stage(edits, set, r, column, change.was) : edits;
 }
 
 /** How many cells are changed, in how many rows. */
@@ -119,7 +120,7 @@ export interface Counted {
 
 /** How many cells are changed, in how many rows. */
 export function counted(edits: Edits | null): Counted {
-  if (!edits) return { cells: 0, rows: 0 };
+  if (edits === null) return { cells: 0, rows: 0 };
 
   let cells = 0;
 
@@ -155,23 +156,23 @@ export function editability(f: GridFacts): Editability {
 
   const b = f.browse;
 
-  if (!b || !f.set) return { why: "no rows to edit" };
+  if (b === null || f.set === null) return { why: "no rows to edit" };
 
   if (f.readonly) return { why: `${f.connName} is read only (e on the connection changes that)` };
 
   if (f.table?.type === "view") return { why: `${b.table.name} is a view: its rows aren't edited here` };
 
-  if (!f.columns) return { why: "reading its structure… a moment" };
+  if (f.columns === null) return { why: "reading its structure… a moment" };
 
   const keyCols = f.columns.filter((c) => c.pk).map((c) => c.name);
 
-  if (keyCols.length) {
-    const missing = keyCols.find((k) => !f.set?.columns.includes(k));
+  if (keyCols.length !== 0) {
+    const missing = keyCols.find((k) => f.set?.columns.includes(k) !== true);
 
-    return missing ? { why: `its key ${missing} isn't in the rows` } : { keyCols };
+    return missing !== undefined && Str.isNonEmpty(missing) ? { why: `its key ${missing} isn't in the rows` } : { keyCols };
   }
 
-  if ((f.kind === "sqlite" || f.kind === "libsql") && f.set.columns[0] === ROWID && b.rowid) return { keyCols: [ROWID] };
+  if ((f.kind === "sqlite" || f.kind === "libsql") && f.set.columns[0] === ROWID && b.rowid === true) return { keyCols: [ROWID] };
 
   return { why: `${b.table.name} has no primary key: its rows can't be told apart for an UPDATE` };
 }

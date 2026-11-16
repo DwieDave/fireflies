@@ -9,6 +9,7 @@
 import type { Context } from "gpui-kit";
 import type { Pt } from "@fireflies/menu-place";
 import { inView } from "@fireflies/menu-place";
+import { String as Str } from "effect";
 import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";
@@ -39,9 +40,9 @@ import type { default as DbView } from "./main.ts";
 
 /** A menu row that does an action of a place: its key is that action's (none: no key does it). */
 export function entry(place: Place, act: string | null, label: string, go: () => void, more: { readonly sub?: string; readonly danger?: boolean } = {}): MenuRow {
-  const key = act ? keyOf(place, act) : undefined;
+  const key = act !== null && Str.isNonEmpty(act) ? keyOf(place, act) : undefined;
 
-  return act && key ? { label, go, ...more, act, key } : { label, go, ...more };
+  return (act !== null && Str.isNonEmpty(act)) && (key !== undefined && Str.isNonEmpty(key)) ? { label, go, ...more, act, key } : { label, go, ...more };
 }
 
 /** Opens a menu over the view: at the press when a right click asked for it (atPointer), else
@@ -52,7 +53,7 @@ export function openMenu(v: DbView, title: string, rows: readonly MenuRow[], at:
   const near = v.menuNear;
 
   v.menuNear = null;
-  v.menu = rows.length ? { title, rows, at: 0, near, keyed: at === "row" ? v.place() : at } : null;
+  v.menu = rows.length !== 0 ? { title, rows, at: 0, near, keyed: at === "row" ? v.place() : at } : null;
 }
 
 /** A press's place in the view (layout px): its window position less the view's origin (both
@@ -61,7 +62,7 @@ export function openMenu(v: DbView, title: string, rows: readonly MenuRow[], at:
 export function pressPoint(v: DbView, e: { readonly position?: Pt } | null | undefined): Pt | null {
   const o = v.origin;
 
-  return e?.position && o ? inView(e.position, o, zoom()) : v.pointer;
+  return e?.position !== undefined && o !== null ? inView(e.position, o, zoom()) : v.pointer;
 }
 
 /** Runs `open` (a menu's) so the menu stands at the press `e`: a right click's way. */
@@ -89,10 +90,10 @@ export function connMenu(v: DbView, c: Conn, cx: Context): void {
   if (c.origin !== "saved") rows.push(entry("conns", "conn-pin", "Pin it", () => void saveFound(v, c, cx), { sub: pinWords(c) }));
 
   // Its forward: stop the running one, or start it (the ask shows what it runs).
-  const fwd = c.forward ? forwardRunning(c.forward) : null;
+  const fwd = c.forward !== undefined ? forwardRunning(c.forward) : null;
 
-  if (c.forward && fwd?.live) rows.push(entry("conns", null, `Stop its forward (localhost:${c.forward.local})`, () => stopForward(v, c, cx), { sub: `${c.forward.target} in ${c.forward.context}/${c.forward.namespace}; the Kubernetes window lists it too` }));
-  else if (c.forward) rows.push(entry("conns", null, "Start its forward…", () => askForward(v, c, "down", cx), { sub: `${c.forward.target} :${c.forward.remote} → localhost:${c.forward.local}` }));
+  if (c.forward !== undefined && fwd?.live === true) rows.push(entry("conns", null, `Stop its forward (localhost:${c.forward.local})`, () => stopForward(v, c, cx), { sub: `${c.forward.target} in ${c.forward.context}/${c.forward.namespace}; the Kubernetes window lists it too` }));
+  else if (c.forward !== undefined) rows.push(entry("conns", null, "Start its forward…", () => askForward(v, c, "down", cx), { sub: `${c.forward.target} :${c.forward.remote} → localhost:${c.forward.local}` }));
 
   rows.push(entry("conns", "conn-new", "New connection…", () => openForm(v, null, cx)));
 
@@ -117,9 +118,9 @@ export function confirmRemove(v: DbView, c: Conn, cx: Context): void {
 
 /** What pinning a connection keeps, in words (the menu's line under "Pin it"). */
 export function pinWords(c: Conn): string {
-  const pw = c.secret === "kubernetes" && c.source ? `its password read from secret ${c.source.name} at each connect` : "its password in the keychain";
+  const pw = c.secret === "kubernetes" && c.source !== undefined ? `its password read from secret ${c.source.name} at each connect` : "its password in the keychain";
 
-  return `every Databases window lists it, after a restart too; ${pw}${c.forward ? "; its forward started again when asked" : ""}`;
+  return `every Databases window lists it, after a restart too; ${pw}${c.forward !== undefined ? "; its forward started again when asked" : ""}`;
 }
 
 // ---- [2] a table, a view, a schema
@@ -153,8 +154,8 @@ export function schemaMenu(v: DbView, schema: string | null, cx: Context): void 
   const kind = v.active?.kind ?? "postgres";
 
   openMenu(v, schema ?? "every schema", [
-    entry("tables", "open", schema ? "Its tables" : "Every schema's tables", () => { v.schema = schema; v.tablesTab = "tables"; v.tableAt = 0; }),
-    ...(schema ? [
+    entry("tables", "open", schema !== null && Str.isNonEmpty(schema) ? "Its tables" : "Every schema's tables", () => { v.schema = schema; v.tablesTab = "tables"; v.tableAt = 0; }),
+    ...(schema !== null && Str.isNonEmpty(schema) ? [
       entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(kind, schema), cx)),
       entry("tables", "copy", "Copy its name", () => copy(v, schema, cx)),
     ] : []),
@@ -166,11 +167,11 @@ export function schemaMenu(v: DbView, schema: string | null, cx: Context): void 
 export function structMenu(v: DbView, r: StructRow, cx: Context): void {
   const kind = v.active?.kind ?? "sqlite";
   const rows: MenuRow[] = [];
-  const other = r.table ? v.catalog.tables.find((t) => t.name === r.table) : undefined;
+  const other = r.table !== null && Str.isNonEmpty(r.table) ? v.catalog.tables.find((t) => t.name === r.table) : undefined;
 
-  if (other) rows.push(entry("structure", "open", `Open ${other.name}`, () => openTable(v, other, cx)));
+  if (other !== undefined) rows.push(entry("structure", "open", `Open ${other.name}`, () => openTable(v, other, cx)));
 
-  if (r.name) rows.push(entry("structure", "insert", "The name into the query", () => insertName(v, quoteName(kind, r.name ?? ""), cx), { sub: "or drag the row into the query" }));
+  if (r.name !== null && Str.isNonEmpty(r.name)) rows.push(entry("structure", "insert", "The name into the query", () => insertName(v, quoteName(kind, r.name ?? ""), cx), { sub: "or drag the row into the query" }));
 
   rows.push(entry("structure", "copy", "Copy", () => copy(v, r.copy, cx), { sub: r.copy }));
   openMenu(v, r.name ?? r.copy, rows, "row");
@@ -200,7 +201,7 @@ function rowCopies(v: DbView, g: GridNow, rows: readonly number[], cx: Context):
 export function cellMenu(v: DbView, row: number, col: number, cx: Context): void {
   const g = shownGrid(v);
 
-  if (!g) return;
+  if (g === null) return;
 
   const column = g.set.columns[col] ?? "";
   const place = g.place;
@@ -215,7 +216,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
     rows.push(
       entry(place, "cell-edit", `Change ${column}…`, () => { startEdit(v); }),
       entry(place, "cell-null", "Set it NULL", () => stageNull(v)),
-      ...(changed ? [entry(place, "cell-undo", "Undo this change", () => undoCell(v), { sub: `back to ${changed.was ?? "NULL"}` })] : []),
+      ...(changed !== null ? [entry(place, "cell-undo", "Undo this change", () => undoCell(v), { sub: `back to ${changed.was ?? "NULL"}` })] : []),
     );
   }
 
@@ -246,7 +247,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
 export function columnMenu(v: DbView, col: number, cx: Context): void {
   const g = shownGrid(v);
 
-  if (!g) return;
+  if (g === null) return;
 
   const name = g.set.columns[col] ?? "";
   const place = g.place;
@@ -258,7 +259,7 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
   const sort = (to: "asc" | "desc" | "off") => {
     const s = to === "off" ? null : { column: name, desc: to === "desc" };
 
-    if (g.q) setLocalSort(v, g.q, s);
+    if (g.q !== null) setLocalSort(v, g.q, s);
     else setSort(v, s, cx);
   };
 
@@ -277,22 +278,22 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
 
   rows.push(
     entry(place, "hide", "Hide it", () => hideColumn(v, g, col)),
-    ...(g.shown.hidden ? [entry(place, null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g))] : []),
+    ...(g.shown.hidden !== 0 ? [entry(place, null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g))] : []),
     entry(place, "wider", "Wider", () => widen(v, g, col, WIDTH_STEP), { sub: "or drag the header's right edge" }),
     entry(place, "narrower", "Narrower", () => widen(v, g, col, -WIDTH_STEP)),
-    ...(c && g.layout.widths[c.name] !== undefined ? [entry(place, null, "Fit it to its cells", () => fitColumn(g, col), { sub: "a double click on its edge too" })] : []),
+    ...(c !== undefined && g.layout.widths[c.name] !== undefined ? [entry(place, null, "Fit it to its cells", () => fitColumn(g, col), { sub: "a double click on its edge too" })] : []),
     entry(place, null, "Its name into the query", () => insertName(v, quoteName(kind, name), cx), { sub: "or drag the header into the query" }),
     entry(place, null, "Copy its name", () => copy(v, name, cx)),
   );
 
-  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows, "cell");
+  openMenu(v, `${name}${type !== undefined && Str.isNonEmpty(type) ? ` · ${type}` : ""}`, rows, "cell");
 }
 
 /** A row number's menu: select it, copy it (or the selected rows it's among). */
 export function rowMenu(v: DbView, row: number, cx: Context): void {
   const g = shownGrid(v);
 
-  if (!g) return;
+  if (g === null) return;
 
   const rows = rowsFor(g, row);
 
@@ -306,7 +307,7 @@ export function rowMenu(v: DbView, row: number, cx: Context): void {
 export function tabMenu(v: DbView, n: number, cx: Context): void {
   const q = n > 0 ? v.queries[n - 1] : null;
 
-  if (q) {
+  if (q !== null && q !== undefined) {
     queryTabMenu(v, q, cx);
 
     return;
@@ -316,14 +317,14 @@ export function tabMenu(v: DbView, n: number, cx: Context): void {
   const g = shownGrid(v);
   const rows: MenuRow[] = [];
 
-  if (b && v.active) {
+  if (b !== null && v.active !== null) {
     rows.push(entry("rows", "refresh", "Read it again", () => refresh(v, cx)));
 
-    if (b.filter) rows.push(entry("rows", null, "Clear the filter", () => filterTo(v, "", cx), { sub: `where ${b.filter}` }));
+    if (Str.isNonEmpty(b.filter)) rows.push(entry("rows", null, "Clear the filter", () => filterTo(v, "", cx), { sub: `where ${b.filter}` }));
 
-    if (b.sort) rows.push(entry("rows", null, "Not sorted", () => setSort(v, null, cx), { sub: `order by ${b.sort.column}` }));
+    if (b.sort !== null) rows.push(entry("rows", null, "Not sorted", () => setSort(v, null, cx), { sub: `order by ${b.sort.column}` }));
 
-    if (g?.shown.hidden) rows.push(entry("rows", null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g)));
+    if (g?.shown.hidden !== undefined && g?.shown.hidden !== 0) rows.push(entry("rows", null, `Show every column (${g.shown.hidden} hidden)`, () => showColumns(g)));
 
     rows.push(
       entry("rows", "export", "Export…", () => exportShown(v, cx)),
@@ -333,9 +334,9 @@ export function tabMenu(v: DbView, n: number, cx: Context): void {
 
   rows.push(entry("rows", "query-new", "New query tab", () => void v.addQuery("", cx)));
 
-  if (v.active) rows.push(entry("rows", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }));
+  if (v.active !== null) rows.push(entry("rows", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }));
 
-  openMenu(v, b ? `Rows · ${b.table.name}` : "Rows", rows, "tab");
+  openMenu(v, b !== null ? `Rows · ${b.table.name}` : "Rows", rows, "tab");
 }
 
 function queryTabMenu(v: DbView, q: QueryTab, cx: Context): void {
@@ -378,11 +379,11 @@ export function startRename(v: DbView, q: QueryTab): void {
 export function keepRename(v: DbView): void {
   const r = v.rename;
 
-  if (!r) return;
+  if (r === null) return;
 
   const name = r.input.value().trim().slice(0, 60);
 
-  if (name) {
+  if (Str.isNonEmpty(name)) {
     r.tab.name = name;
     v.queriesDirty = true;
   }
@@ -396,7 +397,7 @@ export function keepRename(v: DbView): void {
 export function logMenu(v: DbView, i: number, cx: Context): void {
   const line = v.log[i];
 
-  if (!line) return;
+  if (line === undefined) return;
 
   openMenu(v, line.sql.replace(/\s+/g, " ").slice(0, 80), [
     entry("log", "open", "Into a query tab", () => void v.addQuery(`${line.sql};`, cx), { sub: "not run" }),
@@ -414,13 +415,13 @@ export function ago(at: number, now = Date.now()): string {
 
 /** The connection's history (ctrl-h): picking one opens it in a new query tab. */
 export function historyMenu(v: DbView, cx: Context): void {
-  if (!v.active) {
+  if (v.active === null) {
     v.say("connect first: the history is the connection's", "failed");
 
     return;
   }
 
-  if (!v.history.length) {
+  if (v.history.length === 0) {
     v.say(v.active.origin === "saved" ? "nothing run here yet" : "a connection that isn't saved keeps no history", "working");
 
     return;

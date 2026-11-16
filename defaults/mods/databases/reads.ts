@@ -9,6 +9,7 @@
 
 import type { Context } from "gpui-kit";
 import { exec, writeTextFile } from "herdr";
+import { String as Str } from "effect";
 import { cancel } from "./runner.ts";
 import type { default as DbView } from "./main.ts";
 
@@ -56,7 +57,7 @@ export async function reading<T>(v: DbView, what: string, panel: ReadPanel, cx: 
       v.reads = v.reads.filter((r) => r !== read);
       settle(how === "stopped" ? { stopped: true } : { late: deadline ?? Date.now() - at });
 
-      if (read.nonce && v.dir) void cancel({ exec, writeTextFile }, v.dir, read.nonce);
+      if ((read.nonce !== null && Str.isNonEmpty(read.nonce)) && (v.dir !== null && Str.isNonEmpty(v.dir))) void cancel({ exec, writeTextFile }, v.dir, read.nonce);
     },
   };
 

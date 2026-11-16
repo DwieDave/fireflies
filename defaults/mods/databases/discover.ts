@@ -5,6 +5,7 @@
 // otherwise. A password or token found with them is handed back apart from
 // the connection (Found.secret): the window keeps it in memory only.
 
+import { String as Str } from "effect";
 import type { Conn, Kind, SslMode } from "./kinds.ts";
 import { baseName, isSslMode } from "./kinds.ts";
 
@@ -39,7 +40,7 @@ export function parseEnvFile(text: string): Map<string, string> {
   for (const raw of text.split(/\r?\n/)) {
     const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(raw);
 
-    if (!m?.[1]) continue;
+    if (m?.[1] === undefined || Str.isEmpty(m?.[1])) continue;
 
     let v = (m[2] ?? "").trim();
     const q = v[0];
@@ -113,15 +114,15 @@ export function sslOfQuery(kind: Kind, query: string): SslMode | undefined {
 /** A server URL's parts: scheme://user:password@host:port/database?params. */
 function serverUrl(kind: Kind, rest: string): DbUrl {
   const m = /^\/\/(?:([^:@/]*)(?::([^@/]*))?@)?([^/:?]*|\[[^\]]*\])(?::(\d+))?(?:\/([^?]*))?/.exec(rest);
-  const password = m?.[2] ? dec(m[2]) : null;
-  const user = m?.[1] ? dec(m[1]) : undefined;
+  const password = m?.[2] !== undefined && Str.isNonEmpty(m?.[2]) ? dec(m[2]) : null;
+  const user = m?.[1] !== undefined && Str.isNonEmpty(m?.[1]) ? dec(m[1]) : undefined;
   const host = m?.[3] || undefined;
-  const port = m?.[4] ? Number(m[4]) : undefined;
-  const database = m?.[5] ? dec(m[5]) : undefined;
+  const port = m?.[4] !== undefined && Str.isNonEmpty(m?.[4]) ? Number(m[4]) : undefined;
+  const database = m?.[5] !== undefined && Str.isNonEmpty(m?.[5]) ? dec(m[5]) : undefined;
 
   const sslmode = sslOfQuery(kind, rest.split("?")[1] ?? "");
 
-  return withParts(sslmode ? { kind, password, sslmode } : { kind, password }, { user, host, port, database });
+  return withParts(sslmode !== undefined ? { kind, password, sslmode } : { kind, password }, { user, host, port, database });
 }
 
 /** A libSQL URL: its token (authToken in the query) taken out. */
@@ -130,7 +131,7 @@ function libsqlUrl(scheme: string, rest: string): DbUrl {
   const token = query.split("&").map((p) => p.split("=")).find(([k]) => k === "authToken" || k === "auth_token")?.[1] ?? null;
   const url = `${scheme === "libsql" ? "libsql" : scheme}:${base}`.replace(/\/+$/, "");
 
-  return { kind: "libsql", url, password: token ? dec(token) : null };
+  return { kind: "libsql", url, password: token !== null && Str.isNonEmpty(token) ? dec(token) : null };
 }
 
 /** A database URL's parts, or null. `folder` resolves a relative file. */
@@ -140,7 +141,7 @@ export function parseDbUrl(text: string, folder = ""): DbUrl | null {
   const kind = SCHEMES.get(scheme.replace(/\+.*$/, ""));
   const rest = m?.[2] ?? "";
 
-  if (!kind) return null;
+  if (kind === undefined) return null;
 
   if (kind === "libsql" || (scheme === "https" && rest.includes("turso.io"))) return libsqlUrl(scheme, rest);
 
@@ -149,7 +150,7 @@ export function parseDbUrl(text: string, folder = ""): DbUrl | null {
     const p = rest.replace(/^\/\/(?=\/)/, "").replace(/\?.*$/, "");
     const path = p.startsWith("/") ? p : `${folder.replace(/\/$/, "")}/${p.replace(/^\.\//, "")}`;
 
-    return p ? { kind, path, password: null } : null;
+    return Str.isNonEmpty(p) ? { kind, path, password: null } : null;
   }
 
   return serverUrl(kind, rest);
@@ -169,14 +170,14 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
   const token = get("TURSO_AUTH_TOKEN") ?? get("LIBSQL_AUTH_TOKEN") ?? get("DATABASE_AUTH_TOKEN");
 
   for (const [name, value] of vars) {
-    if (!value || !looksLikeUrlName(name)) continue;
+    if ((value === null || Str.isEmpty(value)) || !looksLikeUrlName(name)) continue;
 
     const u = parseDbUrl(value, folder);
 
-    if (!u) continue;
+    if (u === null) continue;
 
     const { password, ...parts } = u;
-    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: password || (u.kind === "libsql" && token) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
+    const conn: Conn = { ...parts, id: foundId(`${source}:${name}`), name, readonly: true, secret: (password !== null && Str.isNonEmpty(password)) || (u.kind === "libsql" && token) ? "ask" : "none", origin: "found", from: `${source} · ${name}` };
 
     out.push({ conn, secret: password ?? (u.kind === "libsql" ? token : null) });
   }
@@ -184,13 +185,13 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
   const host = get("PGHOST");
   const db = get("PGDATABASE");
 
-  if (host || db) {
+  if ((host !== null && Str.isNonEmpty(host)) || (db !== null && Str.isNonEmpty(db))) {
     const pw = get("PGPASSWORD");
 
-    const base = { id: foundId(`${source}:PG`), name: db ?? "PGHOST", kind: "postgres" as const, readonly: true, secret: pw ? "ask" as const : "none" as const, origin: "found" as const, from: `${source} · PG*` };
+    const base = { id: foundId(`${source}:PG`), name: db ?? "PGHOST", kind: "postgres" as const, readonly: true, secret: pw !== null && Str.isNonEmpty(pw) ? "ask" as const : "none" as const, origin: "found" as const, from: `${source} · PG*` };
     const port = get("PGPORT");
     const ssl = get("PGSSLMODE");
-    const parts: ServerParts = { host: host ?? undefined, port: port ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined };
+    const parts: ServerParts = { host: host ?? undefined, port: port !== null && Str.isNonEmpty(port) ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined };
     const conn: Conn = withParts(isSslMode(ssl) ? { ...base, sslmode: ssl } : base, parts);
 
     out.push({ conn, secret: pw });

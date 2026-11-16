@@ -129,11 +129,11 @@ export function saveStatements(t: SaveTarget, edits: Edits): { readonly statemen
 export function saveError(statements: readonly SaveStatement[], o: Outcome): string | null {
   const e = o.error;
 
-  if (!e) return null;
+  if (e === null) return null;
 
   const st = e.index !== null ? statements[e.index] : undefined;
 
-  if (!st) return `${e.message} · nothing was saved`;
+  if (st === undefined) return `${e.message} · nothing was saved`;
 
   if (st.role === "guard") return `${st.where}: 0 rows changed: the row was changed elsewhere (or is gone) · nothing was saved`;
 

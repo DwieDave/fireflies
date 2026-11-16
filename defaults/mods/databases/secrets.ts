@@ -5,6 +5,7 @@
 // security reads it from stdin, the file goes. Also what the query history
 // keeps of a statement that holds one (CREATE USER … PASSWORD '…').
 
+import { String as Str } from "effect";
 import type { RunIo } from "./runner.ts";
 import { KEYCHAIN_SERVICE, nonce } from "./runner.ts";
 
@@ -30,12 +31,12 @@ export async function saveSecret(io: RunIo, dir: string, account: string, label:
 
   const r = await io.exec("sh", ["-c", 'security -i < "$1" 2>&1; r=$?; rm -f "$1"; exit $r', "ff-keychain", file]).catch(() => null);
 
-  if (!r) return "couldn't run security";
+  if (r === null) return "couldn't run security";
 
   // security -i reports a failed command on its output and still exits 0.
   const said = r.stdout.trim();
 
-  return r.code === 0 && !/error|failed|denied/i.test(said) ? null : said || `security exited with ${r.code}`;
+  return r.code === 0 && !/error|failed|denied/i.test(said) ? null : (Str.isNonEmpty(said) ? said : `security exited with ${r.code}`);
 }
 
 /** Whether the keychain holds the connection's secret (not reading it). */

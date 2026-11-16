@@ -5,6 +5,7 @@
 
 import type { Context } from "gpui-kit";
 import { exec, writeTextFile, readTextFile, appHome } from "herdr";
+import { String as Str } from "effect";
 import type { Conn, Kind } from "./kinds.ts";
 import { onFile } from "./kinds.ts";
 import type { RunIo } from "./runner.ts";
@@ -62,19 +63,19 @@ export interface Ran extends Outcome {
 export async function clientOf(v: DbView, kind: Kind): Promise<ClientFound> {
   const known = v.clients.get(kind);
 
-  if (known) return known;
+  if (known !== undefined) return known;
 
   const programs = PROGRAMS[kind];
   const folder = envPath(v);
   let found: ClientFound = { missing: INSTALL[kind] };
 
   for (const p of programs) {
-    const inFolder = folder ? await lookup(exec, p, new Map([["PATH", folder]])) : null;
+    const inFolder = folder !== null && Str.isNonEmpty(folder) ? await lookup(exec, p, new Map([["PATH", folder]])) : null;
     const onApp = await lookup(exec, p, null);
     const path = inFolder ?? onApp;
 
-    if (path) {
-      const from = inFolder && inFolder !== onApp ? "folder" : "app";
+    if (path !== null && Str.isNonEmpty(path)) {
+      const from = (inFolder !== null && Str.isNonEmpty(inFolder)) && inFolder !== onApp ? "folder" : "app";
 
       // A mysql may be MariaDB's (their TLS flags differ): its --version says which.
       found = kind === "mysql" ? { path, from, flavor: await flavorFound(path) } : { path, from };
@@ -121,12 +122,12 @@ export const RUNNING = "running…";
 export async function runOn(v: DbView, c: Conn, statements: readonly ScriptStatement[], started?: (nonce: string) => void, limit?: number, label?: string): Promise<Ran> {
   const at = Date.now();
 
-  if (c.kind === "libsql" && c.url) {
+  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) {
     const token = c.secret === "ask" ? v.secrets.get(c.id) ?? null : c.secret === "keychain" ? await readSecret(IO, c.id) : null;
-    const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args ? { sql: s.text, args: s.args } : { sql: s.text })));
+    const o = await runHrana(FETCH, c.url, token, statements.map((s) => (s.args !== undefined ? { sql: s.text, args: s.args } : { sql: s.text })));
 
     // An error of no statement is the request's own (the server not reached, the token refused).
-    heard(v, c, !(o.error && o.error.index === null), o.error?.message ?? null);
+    heard(v, c, (o.error && o.error.index === null) !== true, o.error?.message ?? null);
 
     return { ...o, ms: Date.now() - at };
   }
@@ -135,10 +136,10 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
   const client = clientFor(c, "flavor" in found ? found.flavor : undefined);
   const dir = v.dir;
 
-  if (!client || "missing" in found || !dir) {
+  if (client === null || "missing" in found || (dir === null || Str.isEmpty(dir))) {
     const message = "missing" in found ? `${found.missing} (${clientFrom(v, found)})` : "the window's private folder couldn't be made";
 
-    if (label) v.logLine({ sql: label, ok: false, ms: 0, said: message, conn: c.name, run: runLine(v, c.kind, found, client?.args ?? []) });
+    if (label !== undefined && Str.isNonEmpty(label)) v.logLine({ sql: label, ok: false, ms: 0, said: message, conn: c.name, run: runLine(v, c.kind, found, client?.args ?? []) });
 
     return { results: [], error: { index: null, message, line: null, col: null, hint: null }, cut: false, ms: 0, run: runLine(v, c.kind, found, []) };
   }
@@ -149,9 +150,9 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
 
   // The run is named in the Log as it starts (a run stopped or never answering is named too).
   const runs = `${runLine(v, c.kind, found, client.args)}`;
-  const pending: LogLine | null = label ? { sql: label, ok: true, ms: 0, said: RUNNING, conn: c.name, run: runs } : null;
+  const pending: LogLine | null = label !== undefined && Str.isNonEmpty(label) ? { sql: label, ok: true, ms: 0, said: RUNNING, conn: c.name, run: runs } : null;
 
-  if (pending) v.logLine(pending);
+  if (pending !== null) v.logLine(pending);
 
   const r = await run(IO, {
     kind: c.kind, dir, program: found.path, args: client.args, script: script.text, path: envPath(v),
@@ -165,16 +166,16 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
     : c.kind === "postgres" ? parsePsql(r.stdout, r.stderr, r.code, writes, r.cut)
     : parseMysql(r.stdout, r.stderr, r.code, script.lines, texts, r.cut);
 
-  const error = o.error ? connectWords(c, placed(o.error, texts)) : null;
+  const error = o.error !== null ? connectWords(c, placed(o.error, texts)) : null;
   const line = `${runs} · exit ${r.code}`;
   const stopped = r.code === 130 || r.code === 137;
 
   // What the run says of the connection (connstate.ts): an answer, or the connection gone.
   if (!stopped && r.code !== NO_KEYCHAIN_ITEM) heard(v, c, !lostRun(c.kind, r.code, r.stderr), error?.message ?? null);
 
-  if (pending) {
+  if (pending !== null) {
     // Interrupted or killed (the window's stop): said so, not as the shell's words for it.
-    const done: LogLine = { sql: pending.sql, ok: !error, ms: r.ms, said: stopped ? "stopped" : error ? error.message : `exit ${r.code}`, conn: c.name, run: line };
+    const done: LogLine = { sql: pending.sql, ok: error === null, ms: r.ms, said: stopped ? "stopped" : error !== null ? error.message : `exit ${r.code}`, conn: c.name, run: line };
 
     v.log = v.log.map((l) => (l === pending ? done : l));
   }
@@ -189,7 +190,7 @@ export async function loadTables(v: DbView, cx: Context): Promise<void> {
 
   const c = v.active;
 
-  if (!c) return;
+  if (c === null) return;
 
   const cat = v.catalog;
   const mine = ++reads;
@@ -216,22 +217,22 @@ export async function loadTables(v: DbView, cx: Context): Promise<void> {
 
     const o = e.value;
 
-    if (o.noSecret) {
+    if (o.noSecret === true) {
       v.askPassword(c, true, cx);
 
       return;
     }
 
-    cat.error = o.error ? o.error.message : null;
-    cat.tables = o.error ? [] : tablesOf(c.kind, o);
-    cat.here = o.error ? null : hereOf(c.kind, o);
-    v.connected(c, !o.error);
+    cat.error = o.error !== null ? o.error.message : null;
+    cat.tables = o.error !== null ? [] : tablesOf(c.kind, o);
+    cat.here = o.error !== null ? null : hereOf(c.kind, o);
+    v.connected(c, o.error === null);
     cx.notify();
 
     // An empty database: the server's others are read, so its words can offer them (dbs.ts).
-    if (!o.error && !cat.tables.length && hasDatabases(c)) void loadDatabases(v, cx);
+    if (o.error === null && cat.tables.length === 0 && hasDatabases(c)) void loadDatabases(v, cx);
 
-    if (!o.error && (c.kind === "sqlite" || c.kind === "libsql")) await countTables(v, c, cx);
+    if (o.error === null && (c.kind === "sqlite" || c.kind === "libsql")) await countTables(v, c, cx);
   } catch (error) {
     if (v.catalog === cat) cat.error = `reading the tables failed: ${error instanceof Error ? error.message : String(error)}`;
   } finally {
@@ -250,7 +251,7 @@ async function countTables(v: DbView, c: Conn, cx: Context): Promise<void> {
 
   const list = countsSql(c.kind, v.catalog.tables);
 
-  if (!list.length) return;
+  if (list.length === 0) return;
 
   const e = await reading(v, "counting the rows", "tables", cx, (started) => runOn(v, c, list, started));
 
@@ -262,7 +263,7 @@ async function countTables(v: DbView, c: Conn, cx: Context): Promise<void> {
     const t = counted[r.index];
     const n = Number(r.set?.rows[0]?.[0]);
 
-    if (t && Number.isFinite(n)) v.catalog.tables = v.catalog.tables.map((x) => (x === t ? { ...x, rows: n } : x));
+    if (t !== undefined && Number.isFinite(n)) v.catalog.tables = v.catalog.tables.map((x) => (x === t ? { ...x, rows: n } : x));
   }
 
   cx.notify();
@@ -275,7 +276,7 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
 
   const c = v.active;
 
-  if (!c) return;
+  if (c === null) return;
 
   const s: Struct = { table: t, data: v.struct.table?.name === t.name ? v.struct.data : null, busy: true, error: null };
 
@@ -295,7 +296,7 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
 
     const o = e.value;
 
-    s.data = o.error ? null : structureOf(c.kind, o, t.name);
+    s.data = o.error !== null ? null : structureOf(c.kind, o, t.name);
     s.error = o.error?.message ?? null;
 
     // A count read now is better than the server's estimate.
@@ -306,7 +307,7 @@ export async function loadStructure(v: DbView, t: TableRef, cx: Context): Promis
     // A SQLite table without a primary key: its rows read again with their rowid, so they can be edited.
     const b = v.rows.browse;
 
-    if (b && !b.rowid && b.table.name === t.name && s.data && readsRowid(c.kind, s.data.columns, t.type)) {
+    if (b !== null && b.rowid !== true && b.table.name === t.name && s.data !== null && readsRowid(c.kind, s.data.columns, t.type)) {
       v.rows.browse = { ...b, rowid: true };
       void loadRows(v, cx, true);
     }
@@ -324,7 +325,7 @@ export async function countRows(v: DbView, t: TableRef, cx: Context): Promise<vo
 
   const c = v.active;
 
-  if (!c) return;
+  if (c === null) return;
 
   try {
     const e = await reading(v, `counting ${t.name}'s rows`, "tables", cx, (started) => runOn(v, c, countsSql(c.kind, [{ ...t, type: "table" }]), started, undefined, `${t.name}'s rows counted`));
@@ -334,7 +335,7 @@ export async function countRows(v: DbView, t: TableRef, cx: Context): Promise<vo
     const n = "value" in e ? Number(e.value.results[0]?.set?.rows[0]?.[0]) : NaN;
 
     if (!("value" in e)) v.say(endWords(e, `counting ${t.name}'s rows`) ?? "", "failed");
-    else if (e.value.error) v.say(`${t.name}: ${e.value.error.message}`, "failed");
+    else if (e.value.error !== null) v.say(`${t.name}: ${e.value.error.message}`, "failed");
     else if (Number.isFinite(n)) {
       v.catalog.tables = v.catalog.tables.map((x) => (x.name === t.name && x.schema === t.schema ? { ...x, rows: n } : x));
       v.say(`${t.name}: ${n} rows, counted`, "done");
@@ -356,7 +357,7 @@ export async function loadRows(v: DbView, cx: Context, keepCursor = false): Prom
   const c = v.active;
   const b = v.rows.browse;
 
-  if (!c || !b) return;
+  if (c === null || b === null) return;
 
   settleEdit(v);
 
@@ -389,17 +390,17 @@ export async function loadRows(v: DbView, cx: Context, keepCursor = false): Prom
 
     const o = e.value;
 
-    rows.error = o.error ? o.error.message : null;
+    rows.error = o.error !== null ? o.error.message : null;
 
     const set = o.results.find((r) => r.index === 0)?.set ?? null;
-    const columns = v.struct.data && v.struct.table?.name === b.table.name ? v.struct.data.columns.map((x) => x.name) : [];
+    const columns = v.struct.data !== null && v.struct.table?.name === b.table.name ? v.struct.data.columns.map((x) => x.name) : [];
 
     // An empty page prints no header: the structure's columns stand in.
-    rows.set = o.error ? null : set ?? { columns, rows: [] };
+    rows.set = o.error !== null ? null : set ?? { columns, rows: [] };
 
     const counted = o.results.find((r) => r.index === 1)?.set?.rows[0]?.[0];
 
-    rows.total = counted !== undefined && counted !== null ? Number(counted) : b.filter.trim() ? null : v.tableRows(b.table);
+    rows.total = counted !== undefined && counted !== null ? Number(counted) : Str.isNonEmpty(b.filter.trim()) ? null : v.tableRows(b.table);
 
     if (!keepCursor) rows.at = gridStart();
   } catch (error) {

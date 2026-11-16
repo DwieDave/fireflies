@@ -9,6 +9,7 @@ import type { Color, Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import { KIND_MARK } from "./kinds.ts";
 import { edge as edgeTone } from "@fireflies/tones";
@@ -36,7 +37,7 @@ export const unzoomSize = (size: Size): Size => ({ width: unzoom(size.width), he
 export function dither(color: Color, cell = 1): Element {
   const plain = flat(color, cell);
 
-  if (plain) return plain;
+  if (plain !== null) return plain;
 
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
@@ -55,12 +56,12 @@ function edgeRow(id: string, edge: Color, where: "top" | "bottom", left: Element
   const line = () => div().h(1).bg(edge);
   const label = (el: Element) => h_flex().flex_none().min_w(0).px(4).gap(5).items_center().overflow_hidden().child(el);
   const row = h_flex().id(id).absolute().left(0).right(0).h(13).items_center().text_size(11);
-  const placed = (where === "top" ? row.top(-6) : row.bottom(-6)).child(line().w(left ? 8 : 0).flex_none());
-  const lead = left ? placed.child(label(left).flex_shrink(1)) : placed;
+  const placed = (where === "top" ? row.top(-6) : row.bottom(-6)).child(line().w(left !== null ? 8 : 0).flex_none());
+  const lead = left !== null ? placed.child(label(left).flex_shrink(1)) : placed;
   const mid = lead.child(line().flex_1().min_w(8));
 
   // The right label (a count, a caption) gives way before the title's tabs.
-  return right ? mid.child(label(right).flex_shrink(4)).child(line().w(8).flex_none()) : mid;
+  return right !== null ? mid.child(label(right).flex_shrink(4)).child(line().w(8).flex_none()) : mid;
 }
 
 /** A panel's extras: `right` cut into its top edge, `foot` into its bottom, a press on its title. */
@@ -82,7 +83,7 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
     })
     .child(div().relative().flex_1().min_h(0).pt(7).pb(2).overflow_hidden().child(body))
     .child(edgeRow(`${id}-top`, edge, "top", titled, right))
-    .child(edgeRow(`${id}-bottom`, edge, "bottom", null, foot ? div().text_color(active ? t.accent : t.dim).child(foot) : null));
+    .child(edgeRow(`${id}-bottom`, edge, "bottom", null, foot !== null && Str.isNonEmpty(foot) ? div().text_color(active ? t.accent : t.dim).child(foot) : null));
 }
 
 /** What else a title's tabs do: a press (that may become a drag), a double click, a right click,
@@ -112,7 +113,7 @@ export function titleTabs(t: Theme, id: string, num: string | null, tabs: readon
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
 
-        if (e.click_count >= 2 && more.open) more.open(key, cx);
+        if (e.click_count >= 2 && more.open !== undefined) more.open(key, cx);
         else {
           pick(key, cx);
           more.press?.(key, e, cx);
@@ -127,7 +128,7 @@ export function titleTabs(t: Theme, id: string, num: string | null, tabs: readon
       }))
       .child(label);
 
-    parts.push(more.dress ? more.dress(key, tab) : tab);
+    parts.push(more.dress !== undefined ? more.dress(key, tab) : tab);
   });
 
   return parts;

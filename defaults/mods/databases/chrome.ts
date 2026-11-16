@@ -12,6 +12,7 @@ import type { Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { home } from "herdr";
 import type { Theme } from "herdr";
+import { String as Str } from "effect";
 import { where } from "./kinds.ts";
 import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
@@ -32,9 +33,9 @@ import { edge } from "@fireflies/tones";
 function header(t: Theme, v: DbView): Element {
   const c = v.active;
   const narrow = v.size.width < NARROW;
-  const live = c !== null && !v.catalog.busy && !v.catalog.error && v.alive?.conn === c.id && v.alive.ok;
+  const live = c !== null && !v.catalog.busy && (v.catalog.error === null || Str.isEmpty(v.catalog.error)) && v.alive?.conn === c.id && v.alive.ok;
   // The server's address without the database: the mark names the database it's in.
-  const server = c ? where({ ...c, database: "" }, home()) : "";
+  const server = c !== null ? where({ ...c, database: "" }, home()) : "";
 
   return h_flex().id("db-head").relative().h(34).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
     .child(div().absolute().inset_0().opacity(0.5).child(dither(edge(t), 2)))
@@ -47,20 +48,20 @@ function header(t: Theme, v: DbView): Element {
     .when(c !== null, (el) => el.child(h_flex().relative().flex_shrink(4).min_w(0).gap(8).items_center().overflow_hidden()
       .child(div().flex_none().text_color(t.muted).child("·"))
       .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(c?.name ?? ""))
-      .child(c ? kindBadge(t, c.kind) : div())
+      .child(c !== null ? kindBadge(t, c.kind) : div())
       .when(!narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(server)))
       .when(Boolean(c?.from) && !narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(`· ${c?.from ?? ""}`)))
       .map((x) => {
         // Where a cluster-secret connection's password came from (or why it didn't): never the value.
-        const read = c ? v.sourced.get(c.id) : undefined;
+        const read = c !== null ? v.sourced.get(c.id) : undefined;
 
-        return read && !narrow ? x.child(div().id("db-sourced").flex_shrink(1).min_w(0).truncate().text_color(read.ok ? t.ansi6 : t.blocked).child(`· ${read.text}`)) : x;
+        return read !== undefined && !narrow ? x.child(div().id("db-sourced").flex_shrink(1).min_w(0).truncate().text_color(read.ok ? t.ansi6 : t.blocked).child(`· ${read.text}`)) : x;
       })))
     .child(div().flex_1())
     .when(live && !narrow, (el) => el.child(div().relative().flex_none().text_color(t.dim).child(`${v.catalog.tables.length} tables`)))
     // Where the window's ✕ is, the move (opening.ts): ◧ into a pane, from a pane ⧉ out to a window.
-    .child(h_flex().id("db-move-tip").relative().flex_none().tooltip(v.overlay ? "Into a pane · ctrl-t" : "Out to a window · ctrl-t")
-      .child(chip(t, "db-move", v.overlay ? "◧" : "⧉", false, (cx) => v.move(cx))))
+    .child(h_flex().id("db-move-tip").relative().flex_none().tooltip(v.overlay !== null && Str.isNonEmpty(v.overlay) ? "Into a pane · ctrl-t" : "Out to a window · ctrl-t")
+      .child(chip(t, "db-move", v.overlay !== null && Str.isNonEmpty(v.overlay) ? "◧" : "⧉", false, (cx) => v.move(cx))))
     .child(h_flex().id("db-refresh-tip").relative().flex_none().tooltip("Read it again · r").child(chip(t, "db-refresh", "↻", false, (cx) => v.act("window", "refresh", cx))))
     .when(Boolean(v.overlay), (el) => el.child(h_flex().id("db-close-tip").relative().flex_none().tooltip("Close · q, esc").child(chip(t, "db-close", "✕", false, () => v.closeWindow()))));
 }
@@ -123,7 +124,7 @@ function body(t: Theme, v: DbView): Element {
     .child(divider(t, "db-split-left", w.left, ds, GAP_X))
     .child(v_flex().flex_1().min_w(0).h_full()
       .child(mainPanel(t, v).flex_1())
-      .when(log !== null, (el) => (log ? el.child(divider(t, "db-split-log", log, ds, GAP_Y)).child(logPanel(t, v).h(ds.size(log)).flex_none()) : el)));
+      .when(log !== null, (el) => (log !== null ? el.child(divider(t, "db-split-log", log, ds, GAP_Y)).child(logPanel(t, v).h(ds.size(log)).flex_none()) : el)));
 }
 
 /** The view's children: the top bar, the body (with what's over it), the ask, the key bar. */
@@ -147,7 +148,7 @@ export function frame(v: DbView, t: Theme): Element[] {
       })
       .child(body(t, v))
       .children(overBody(t, v)),
-    ...(ask ? [askBar(t, v, ask)] : []),
+    ...(ask !== null ? [askBar(t, v, ask)] : []),
     keyBar(t, v),
   ];
 }

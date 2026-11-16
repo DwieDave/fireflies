@@ -10,6 +10,7 @@
 // query on the server, mysql kills it, sqlite3 stops).
 
 import type { ExecResult } from "herdr";
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import { CONNECT_SECONDS } from "./words.ts";
 
@@ -116,7 +117,7 @@ export const nonce = (): string => `${Date.now().toString(36)}${(nonces++).toStr
 
 /** The argv of a run (what `ps` could show): nothing secret in it. */
 export function runnerArgs(spec: RunSpec, n: string): string[] {
-  return ["-c", RUNNER, "ff-db", spec.dir, n, spec.kind, spec.program, spec.path ?? "", spec.account ?? "", spec.readonly ? "1" : "", String(spec.limit ?? OUTPUT_LIMIT), ...spec.args];
+  return ["-c", RUNNER, "ff-db", spec.dir, n, spec.kind, spec.program, spec.path ?? "", spec.account ?? "", spec.readonly === true ? "1" : "", String(spec.limit ?? OUTPUT_LIMIT), ...spec.args];
 }
 
 /** Runs the client on the script; `started(n)` hears the nonce (for cancel). Never rejects: a
@@ -128,7 +129,7 @@ export async function run(io: RunIo, spec: RunSpec, started?: (n: string) => voi
   try {
     await io.writeTextFile(`${spec.dir}/q-${n}.sql`, spec.script, null);
 
-    if (spec.secret) await io.writeTextFile(`${spec.dir}/s-${n}`, spec.secret, null);
+    if (spec.secret !== null && spec.secret !== undefined && Str.isNonEmpty(spec.secret)) await io.writeTextFile(`${spec.dir}/s-${n}`, spec.secret, null);
 
     started?.(n);
 
@@ -140,7 +141,7 @@ export async function run(io: RunIo, spec: RunSpec, started?: (n: string) => voi
     return { stdout: r.stdout, stderr: r.stderr, code: cut && r.code === 141 ? 0 : r.code, cut, ms: Date.now() - at };
   } catch (error) {
     // The one-shot secret file must not outlive a run that never started.
-    if (spec.secret) await io.exec("rm", ["-f", `${spec.dir}/s-${n}`]).catch(() => null);
+    if (spec.secret !== null && spec.secret !== undefined && Str.isNonEmpty(spec.secret)) await io.exec("rm", ["-f", `${spec.dir}/s-${n}`]).catch(() => null);
 
     return { stdout: "", stderr: error instanceof Error ? error.message : String(error), code: -1, cut: false, ms: Date.now() - at };
   }

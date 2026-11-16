@@ -8,6 +8,7 @@
 // Turso's Hrana takes instead, and the check that a cell still holds what was
 // read (the old value in the UPDATE's WHERE). Names are catalog.ts' quoteName.
 
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Cell } from "./parse-out.ts";
 import type { BoundValue } from "./script.ts";
@@ -93,7 +94,7 @@ export type Literal = { readonly sql: string } | { readonly refused: string };
 export function literal(kind: Kind, value: Cell, type: ColType): Literal {
   const why = refusal(value, type);
 
-  if (why) return { refused: why };
+  if (why !== null && Str.isNonEmpty(why)) return { refused: why };
 
   if (value === null) return { sql: "NULL" };
 
@@ -119,7 +120,7 @@ export type Bound = BoundValue;
 export function bound(value: Cell, type: ColType): Bound | { readonly refused: string } {
   const why = refusal(value, type);
 
-  if (why) return { refused: why };
+  if (why !== null && Str.isNonEmpty(why)) return { refused: why };
 
   if (value === null) return { type: "null" };
 

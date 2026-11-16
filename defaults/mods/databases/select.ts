@@ -36,7 +36,7 @@ export function stretched(at: GridAt, row: number, col: number): GridAt {
 
 /** Every cell selected, the cursor at the last. */
 export function everything(at: GridAt, set: ResultSet): GridAt {
-  if (!set.rows.length || !set.columns.length) return at;
+  if (set.rows.length === 0 || set.columns.length === 0) return at;
 
   return { ...at, anchor: { row: 0, col: 0 }, row: set.rows.length - 1, col: set.columns.length - 1 };
 }

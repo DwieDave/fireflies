@@ -5,6 +5,7 @@
 // file's line, read back to the statement and its own line; MySQL's "near
 // '…' at line N" places it in that line. MariaDB prints the same.
 
+import { String as Str } from "effect";
 import type { Cell, Outcome, ResultSet, RunError, StatementResult } from "./parse-out.ts";
 import { MARK } from "./script.ts";
 
@@ -40,9 +41,9 @@ function resultset(body: string): Xml {
     const row: Cell[] = [];
 
     for (const f of (r[1] ?? "").matchAll(FIELD)) {
-      if (!rows.length) columns.push(unescapeXml(f[1] ?? ""));
+      if (rows.length === 0) columns.push(unescapeXml(f[1] ?? ""));
 
-      row.push(f[2] ? null : unescapeXml(f[4] ?? ""));
+      row.push(f[2] !== undefined && Str.isNonEmpty(f[2]) ? null : unescapeXml(f[4] ?? ""));
     }
 
     rows.push(row);
@@ -60,15 +61,15 @@ export function resultsets(stdout: string): Xml[] {
 export function mysqlError(stderr: string, lines: readonly number[], statements: readonly string[]): RunError | null {
   const head = stderr.split("\n").find((l) => /^ERROR \d+/.test(l) || l.startsWith("fireflies-db:"));
 
-  if (!head) {
+  if (head === undefined || Str.isEmpty(head)) {
     const said = stderr.split("\n").find((l) => l.trim() && !l.includes("[Warning]"));
 
-    return said ? { index: null, message: said.trim(), line: null, col: null, hint: null } : null;
+    return said !== undefined && Str.isNonEmpty(said) ? { index: null, message: said.trim(), line: null, col: null, hint: null } : null;
   }
 
   const m = /^ERROR (\d+) \(([0-9A-Z]+)\)(?: at line (\d+))?: (.*)$/.exec(head);
-  const message = m ? m[4] ?? head : head.replace(/^fireflies-db: /, "");
-  const fileLine = m?.[3] ? Number(m[3]) : null;
+  const message = m !== null ? m[4] ?? head : head.replace(/^fireflies-db: /, "");
+  const fileLine = m?.[3] !== undefined && Str.isNonEmpty(m?.[3]) ? Number(m[3]) : null;
   // The statement whose lines hold the file's line; connecting errors (2002, 1045) name none.
   let index: number | null = null;
 
@@ -83,12 +84,12 @@ export function mysqlError(stderr: string, lines: readonly number[], statements:
 function place(message: string, statement: string): { line: number; col: number | null } | null {
   const m = /near '([\s\S]*)' at line (\d+)$/.exec(message);
 
-  if (!m) return null;
+  if (m === null) return null;
 
   const line = Number(m[2]);
   const text = statement.split("\n")[line - 1] ?? "";
   const near = (m[1] ?? "").split("\n")[0] ?? "";
-  const at = near ? text.indexOf(near) : -1;
+  const at = Str.isNonEmpty(near) ? text.indexOf(near) : -1;
 
   return { line, col: at >= 0 ? at + 1 : null };
 }
@@ -104,22 +105,22 @@ export function parseMysql(stdout: string, stderr: string, code: number, lines: 
     if (name === "__ff") {
       const m = new RegExp(`^${MARK} (\\d+)$`).exec(set.rows[0]?.[0] ?? "");
 
-      index = m ? Number(m[1]) : null;
+      index = m !== null ? Number(m[1]) : null;
 
       if (index !== null) results.push({ index, set: null, affected: null, tag: null });
     } else if (name === "__ff_affected") {
       const last = results.at(-1);
 
-      if (last) results[results.length - 1] = { ...last, affected: Number(set.rows[0]?.[0] ?? 0) };
+      if (last !== undefined) results[results.length - 1] = { ...last, affected: Number(set.rows[0]?.[0] ?? 0) };
     } else if (index !== null) {
       const last = results.at(-1);
       const rs: ResultSet = { columns: set.columns, rows: set.rows };
 
-      if (last) results[results.length - 1] = { ...last, set: rs };
+      if (last !== undefined) results[results.length - 1] = { ...last, set: rs };
     }
   }
 
   const error = code === 0 ? null : mysqlError(stderr, lines, statements) ?? { index, message: `mysql exited with ${code}`, line: null, col: null, hint: null };
 
-  return { results: results.filter((r) => !error || r.index !== error.index), error, cut };
+  return { results: results.filter((r) => error === null || r.index !== error.index), error, cut };
 }

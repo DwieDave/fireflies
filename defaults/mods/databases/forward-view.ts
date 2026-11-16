@@ -37,7 +37,7 @@ export function askActions(v: DbView, a: ForwardAsk): { readonly key: string; re
   // While it starts, only cancel (the ask goes; the forward keeps coming up).
   if (a.starting !== null) return [cancel];
 
-  return [start, ...(a.why === "gone" && v.k8s ? [k8s] : []), ...(a.why === "taken" ? [] : [anyway]), cancel];
+  return [start, ...(a.why === "gone" && v.k8s === true ? [k8s] : []), ...(a.why === "taken" ? [] : [anyway]), cancel];
 }
 
 /** A key while the ask is up: its buttons' keys; the rest is taken (nothing types here). */
@@ -75,7 +75,7 @@ function commandRow(t: Theme, v: DbView, argv: readonly string[]): Element {
 export function forwardAskPanel(t: Theme, v: DbView, a: ForwardAsk, centered: (id: string, box: Element, close: (cx: Context) => void) => Element): Element {
   const f = a.conn.forward;
 
-  if (!f) return div();
+  if (f === undefined) return div();
 
   const shown = { ...f, local: a.local };
   const secs = a.starting === null ? 0 : Math.floor((Date.now() - a.starting) / 1000);

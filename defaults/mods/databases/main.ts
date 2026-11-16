@@ -42,6 +42,7 @@ import type { Props } from "gpui-shell";
 import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { props, theme, nextCommand, shared, setShared, closeOverlay, exec } from "herdr";
+import { String as Str } from "effect";
 import { readShared, writeShared } from "./guard.ts";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Conn, Kind } from "./kinds.ts";
@@ -219,7 +220,7 @@ export default class Databases extends View {
     this.handle.focus();
 
     // A window doesn't take the keyboard when it opens: take it, again once it's shown.
-    if (this.overlay) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.focusShown());
+    if (this.overlay !== null && Str.isNonEmpty(this.overlay)) for (const ms of [60, 250, 600]) cx.timer.after(ms, () => this.focusShown());
 
     this.beat();
     cx.spawn(async (cx) => {
@@ -252,7 +253,7 @@ export default class Databases extends View {
 
   /** A window's note that it's open (nocturne's toggle), renewed every few seconds. */
   beat(): void {
-    if (!this.overlay) return;
+    if (this.overlay === null || Str.isEmpty(this.overlay)) return;
 
     this.beatAt = Date.now();
     writeShared(setShared, WINDOW_KEY, { id: this.overlay, beat: this.beatAt });
@@ -265,20 +266,20 @@ export default class Databases extends View {
     void syncPinned(this, cx);
 
     // The window got the keyboard back after a while: its connection is asked once more.
-    if (this.focusAt) {
+    if (this.focusAt !== 0) {
       this.focusAt = 0;
       focusArrived(this, cx);
     }
 
     // A read's seconds count up where it's shown; one past its deadline ends.
-    if (this.reads.length) {
+    if (this.reads.length !== 0) {
       overdue(this);
       cx.notify();
     }
 
     if (this.queriesDirty) void saveQueries(this);
 
-    if (this.note && this.note.tone !== "working" && Date.now() - this.note.at > 6000) {
+    if (this.note !== null && this.note.tone !== "working" && Date.now() - this.note.at > 6000) {
       this.note = null;
       cx.notify();
     }
@@ -289,13 +290,13 @@ export default class Databases extends View {
 
     const w = readShared(shared, WINDOW_KEY, null);
 
-    if (this.overlay && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
+    if ((this.overlay !== null && Str.isNonEmpty(this.overlay)) && w?.id === this.overlay) writeShared(setShared, WINDOW_KEY, null);
 
     this.secrets.clear();
     this.sourced.clear();
     await saveQueries(this);
 
-    if (this.dir) await removeDir(IO, this.dir);
+    if (this.dir !== null && Str.isNonEmpty(this.dir)) await removeDir(IO, this.dir);
   }
 
   // ---- what the modules ask of the view
@@ -304,16 +305,16 @@ export default class Databases extends View {
   closeWindow(): void {
     const id = this.overlay;
 
-    if (id) beforeLeaving(this, "close", () => closeOverlay(id));
+    if (id !== null && Str.isNonEmpty(id)) beforeLeaving(this, "close", () => closeOverlay(id));
   }
 
   /** The keyboard back to the view (or the shown query's editor). */
   focusShown(): void {
-    if (this.closed || this.form || this.password || this.exporting || this.rename) return;
+    if (this.closed || this.form !== null || this.password !== null || this.exporting !== null || this.rename !== null) return;
 
     const q = this.shownQuery();
 
-    if (this.panel === "main" && q && !q.inResults) q.editor.focus();
+    if (this.panel === "main" && q !== null && !q.inResults) q.editor.focus();
     else this.handle?.focus();
   }
 
@@ -332,7 +333,7 @@ export default class Databases extends View {
 
   /** The room the dividers share: the view, its body inside its padding, the shown query's box. */
   room(): Room {
-    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() ? this.queryBox : null };
+    return { width: this.size.width, height: this.size.height, inner: this.bodyH - 18, query: this.shownQuery() !== null ? this.queryBox : null };
   }
 
   /** Where keys go now. */
@@ -341,7 +342,7 @@ export default class Databases extends View {
 
     const q = this.shownQuery();
 
-    return q ? (q.inResults ? "results" : "editor") : "rows";
+    return q !== null ? (q.inResults ? "results" : "editor") : "rows";
   }
 
   connected(c: Conn, ok: boolean): void {
@@ -413,19 +414,19 @@ export default class Databases extends View {
   setTablesTab(key: string, _cx: Context): void {
     const tab = TABLES_TABS.find((x) => x === key);
 
-    if (tab) this.tablesTab = tab;
+    if (tab !== undefined) this.tablesTab = tab;
 
     this.tableAt = 0;
     this.setPanel("tables");
 
     // The server's databases, read each time the tab is shown (one small catalog read).
-    if (tab === "databases" && !dbsNow(this)?.busy) void loadDatabases(this, _cx);
+    if (tab === "databases" && dbsNow(this)?.busy !== true) void loadDatabases(this, _cx);
   }
 
   setStructTab(key: string, _cx: Context): void {
     const tab = STRUCT_TABS.find((x) => x === key);
 
-    if (tab) this.structTab = tab;
+    if (tab !== undefined) this.structTab = tab;
 
     this.structAt = 0;
     this.setPanel("structure");
@@ -435,7 +436,7 @@ export default class Databases extends View {
   scrollGrid(by: number, across: number, _cx: Context): void {
     const g = shownGrid(this);
 
-    if (g) g.put(scrollGrid(g.at, g.set, g.cols, by, across, this.gridSize.height));
+    if (g !== null) g.put(scrollGrid(g.at, g.set, g.cols, by, across, this.gridSize.height));
   }
 
   /** The Rows grid's column types, from the table's structure. */
@@ -443,14 +444,14 @@ export default class Databases extends View {
     const set = this.rows.set;
     const s = this.struct.data;
 
-    if (!set || !s || this.struct.table?.name !== this.rows.browse?.table.name) return undefined;
+    if (set === null || s === null || this.struct.table?.name !== this.rows.browse?.table.name) return undefined;
 
     return set.columns.map((c) => s.columns.find((x) => x.name === c)?.type ?? "");
   }
 
   /** Leaves for a pane or a window (ctrl-t, the ◧ / ⧉ chip). */
   move(cx: Context): void {
-    beforeLeaving(this, this.overlay ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
+    beforeLeaving(this, this.overlay !== null && Str.isNonEmpty(this.overlay) ? "move into a pane" : "move out to a window", () => handoverOut(this, cx));
   }
 
   key(e: KeyEvent, cx: Context): void {
@@ -490,7 +491,7 @@ export default class Databases extends View {
     const view = v_flex().id("databases").relative().size_full().bg(t.background).text_size(11).text_color(t.foreground)
       .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.muted));
 
-    return (handle ? view.track_focus(handle) : view)
+    return (handle !== null ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx), formOpen))
       .map((el) => tracking(el, this.dividers, {
@@ -521,12 +522,12 @@ export default class Databases extends View {
       .map((el) => {
         const m = menuLayer(t, this);
 
-        return m ? el.child(m) : el;
+        return m !== null ? el.child(m) : el;
       })
       .map((el) => {
         const g = ghost(t, this);
 
-        return g ? el.child(g) : el;
+        return g !== null ? el.child(g) : el;
       });
   }
 }

@@ -105,11 +105,11 @@ export function shownOf(raw: ResultSet, layout: ColumnLayout, sort: LocalSort | 
   let cols = orderOf(raw.columns, layout).filter((i) => !hiddenIdx.has(i));
 
   // Never every column hidden: the grid always has one to stand on.
-  if (!cols.length) cols = raw.columns.length ? [0] : [];
+  if (cols.length === 0) cols = raw.columns.length !== 0 ? [0] : [];
 
-  const by = sort ? raw.columns.indexOf(sort.column) : -1;
+  const by = sort !== null ? raw.columns.indexOf(sort.column) : -1;
 
-  const rows = by >= 0 && sort ? raw.rows.map((_r, i) => i).sort((a, b) => {
+  const rows = by >= 0 && sort !== null ? raw.rows.map((_r, i) => i).sort((a, b) => {
     const c = compareCells(raw.rows[a]?.[by] ?? null, raw.rows[b]?.[by] ?? null, num(by));
     // NULL stays last when descending; ties keep the order read.
     const nulls = (raw.rows[a]?.[by] ?? null) === null || (raw.rows[b]?.[by] ?? null) === null;
@@ -123,7 +123,7 @@ export function shownOf(raw: ResultSet, layout: ColumnLayout, sort: LocalSort | 
   const columns = cols.map((c) => raw.columns[c] ?? "");
   const picked = (rows ?? raw.rows.map((_r, i) => i)).map((i) => pick(raw.rows[i] ?? []));
   const types = raw.types;
-  const set: ResultSet = plain ? raw : types ? { columns, types: cols.map((c) => types[c] ?? ""), rows: picked } : { columns, rows: picked };
+  const set: ResultSet = plain ? raw : types !== undefined ? { columns, types: cols.map((c) => types[c] ?? ""), rows: picked } : { columns, rows: picked };
 
   const shown: Shown = { set, cols, rows, hidden: raw.columns.length - cols.length };
 
@@ -151,7 +151,7 @@ export function setWidth(layout: ColumnLayout, name: string, px: number | null):
 export function hide(layout: ColumnLayout, columns: readonly string[], name: string): ColumnLayout | null {
   const left = columns.filter((c) => c !== name && !layout.hidden.includes(c));
 
-  if (!left.length || layout.hidden.includes(name)) return null;
+  if (left.length === 0 || layout.hidden.includes(name)) return null;
 
   return { ...layout, hidden: [...layout.hidden, name] };
 }
@@ -177,7 +177,7 @@ export function moveColumn(layout: ColumnLayout, columns: readonly string[], nam
 }
 
 /** Whether a layout changes anything. */
-export const plainLayout = (l: ColumnLayout): boolean => !Object.keys(l.widths).length && !l.hidden.length && !l.order.length;
+export const plainLayout = (l: ColumnLayout): boolean => Object.keys(l.widths).length === 0 && l.hidden.length === 0 && l.order.length === 0;
 
 // ---- kept per table
 
@@ -198,7 +198,7 @@ export const tableKey = (conn: string, schema: string | null, name: string): str
 export function keptLayout(key: string): ColumnLayout {
   const k = readSharedMap(shared, COLUMNS_KEY).get(key);
 
-  if (!k) return NO_LAYOUT;
+  if (k === undefined) return NO_LAYOUT;
 
   return { widths: Object.fromEntries((k.widths ?? []).map((w) => [w.name, clampWidth(w.px)])), hidden: k.hidden ?? [], order: k.order ?? [] };
 }

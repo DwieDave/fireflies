@@ -9,6 +9,7 @@
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { exec, readTextFile } from "herdr";
+import { String as Str } from "effect";
 import type { Conn, ConnDraft } from "./kinds.ts";
 import { isSslMode, newId, speaksTls, sslProblem, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
@@ -45,14 +46,14 @@ export async function discover(v: DbView, cx: Context, envLoad: Promise<void> = 
 
   const folder = v.folder;
 
-  if (!folder || v.on) return;
+  if ((folder === null || Str.isEmpty(folder)) || (v.on !== null && Str.isNonEmpty(v.on))) return;
 
   const lists: Found[][] = [];
 
   for (const f of ENV_FILES) {
     const text = await readTextFile(`${folder}/${f}`).catch(() => null);
 
-    if (text) lists.push(foundInVars(parseEnvFile(text), f, folder));
+    if (text !== null && Str.isNonEmpty(text)) lists.push(foundInVars(parseEnvFile(text), f, folder));
   }
 
   const files = await exec("sh", ["-c", FIND_SCRIPT, "ff-find", folder]).catch(() => null);
@@ -79,7 +80,7 @@ function setFound(v: DbView, list: readonly Found[]): void {
 
   v.found = list.filter((f) => !v.saved.some((s) => where(s) === where(f.conn) && s.kind === f.conn.kind));
 
-  for (const f of v.found) if (f.secret) v.secrets.set(f.conn.id, f.secret);
+  for (const f of v.found) if (f.secret !== null && Str.isNonEmpty(f.secret)) v.secrets.set(f.conn.id, f.secret);
 
   const again = connList(v).findIndex((c) => c.id === at);
 
@@ -90,22 +91,22 @@ function setFound(v: DbView, list: readonly Found[]): void {
  *  cluster's secret named in it is checked first (kube.ts), and its sslmode: a bad one refuses the
  *  request. */
 export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
-  const problem = (a.secret ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward ? forwardProblem(a.forward, a.kind, a.host, a.port) : null)
+  const problem = (a.secret !== undefined ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward !== undefined ? forwardProblem(a.forward, a.kind, a.host, a.port) : null)
     ?? (a.sslmode !== undefined ? sslProblem(a.sslmode) : null);
 
-  if (problem) {
+  if (problem !== null && Str.isNonEmpty(problem)) {
     v.say(`databases.connect: ${problem}`, "failed");
 
     return;
   }
 
-  const secret = a.secret ? "kubernetes" : a.kind === "sqlite" ? "none" : "ask";
+  const secret = a.secret !== undefined ? "kubernetes" : a.kind === "sqlite" ? "none" : "ask";
   const base: Conn = { id: `sent:${a.kind}:${a.host ?? ""}:${a.port ?? ""}:${a.path ?? a.url ?? ""}:${a.database ?? ""}`, name: a.name ?? a.database ?? a.path ?? a.host ?? a.kind, kind: a.kind, readonly: a.readonly ?? false, secret, origin: "sent", from: a.from ?? "another mod" };
   const conn: ConnDraft = { ...base, ...pick(a) };
 
-  if (a.secret) conn.source = a.secret;
+  if (a.secret !== undefined) conn.source = a.secret;
 
-  if (a.forward) conn.forward = a.forward;
+  if (a.forward !== undefined) conn.forward = a.forward;
 
   // A database picked on it earlier in this window (dbs.ts) stands when it's sent again.
   const picked = v.picked.get(conn.id);
@@ -148,14 +149,14 @@ function pick(a: ConnectArgs): Place {
 export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
   cx = v.held(cx);
 
-  if (counted(v.edits).cells) {
+  if (counted(v.edits).cells !== 0) {
     beforeLeaving(v, `connect to ${c.name}`, () => void connect(v, c, cx));
 
     return;
   }
 
   // A connection from a port-forward: its port looked at first (down: the ask, forward.ts).
-  if (c.forward && !(await forwardFirst(v, c, cx))) return;
+  if (c.forward !== undefined && !(await forwardFirst(v, c, cx))) return;
 
   return connectNow(v, c, cx);
 }
@@ -164,7 +165,7 @@ export async function connect(v: DbView, c: Conn, cx: Context): Promise<void> {
 export function connectNow(v: DbView, c: Conn, cx: Context): Promise<void> {
   cx = v.held(cx);
 
-  if (c.secret === "kubernetes" && c.source) return readThenOpen(v, c, c.source, cx);
+  if (c.secret === "kubernetes" && c.source !== undefined) return readThenOpen(v, c, c.source, cx);
 
   if (c.secret === "ask" && c.origin !== "sent" && needsPassword(v, c)) {
     v.askPassword(c, false, cx, () => void connect(v, c, cx));
@@ -215,7 +216,7 @@ export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Contex
 
     if (v.active !== c || v.catalog !== cat) return;
 
-    if (missing) {
+    if (missing !== null && Str.isNonEmpty(missing)) {
       cat.error = missing;
       v.say(missing, "failed");
 
@@ -270,7 +271,7 @@ export async function readThenOpen(v: DbView, c: Conn, s: KubeSource, cx: Contex
 export async function clientMissing(v: DbView, c: Conn, cx: Context): Promise<string | null> {
   cx = v.held(cx);
 
-  if (c.kind === "libsql" && c.url) return null;
+  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return null;
 
   await folderEnvReady(v, cx);
 
@@ -312,10 +313,10 @@ function open(v: DbView, c: Conn, cx: Context): Promise<void> {
 
     // Something other than the database on a forward's port (another program holds it): said, with
     // another local port offered.
-    if (v.active === c && e && c.forward) void takenAfter(v, c, e, cx);
+    if (v.active === c && Str.isNonEmpty(e) && c.forward !== undefined) void takenAfter(v, c, e, cx);
 
     // A secret's password the server refused (the wrong secret picked, rotated since): asked once.
-    if (refused && c.secret === "kubernetes" && c.source && v.sourced.get(c.id)?.ok) {
+    if (refused && c.secret === "kubernetes" && c.source !== undefined && v.sourced.get(c.id)?.ok === true) {
       v.sourced.set(c.id, { ok: false, text: `the server refused the password from secret ${c.source.name} · ${c.source.key}` });
       v.askPassword(c, false, cx, () => void open(v, c, cx));
     }
@@ -340,7 +341,7 @@ export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
   try {
     const missing = await clientMissing(v, c, cx);
 
-    if (missing) {
+    if (missing !== null && Str.isNonEmpty(missing)) {
       v.note = noteOf(`${c.name}: ${missing}`, "failed");
 
       return;
@@ -348,7 +349,7 @@ export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
 
     const source = c.secret === "kubernetes" ? c.source ?? null : null;
 
-    if (source) {
+    if (source !== null) {
       const e = await reading(v, `reading the password from secret ${source.name}`, "conns", cx, () => readKube(exec, source), KUBE_DEADLINE);
       const r = "value" in e ? e.value : { error: endWords(e, "the read") ?? "" };
 
@@ -380,8 +381,8 @@ export async function test(v: DbView, c: Conn, cx: Context): Promise<void> {
 
     const o = e.value;
 
-    v.note = o.noSecret ? noteOf(`${c.name}: the keychain has no password for it (e to set one)`, "failed")
-      : o.error ? noteOf(`${c.name}: ${o.error.message}`, "failed") : noteOf(`${c.name} answers · ${o.ms} ms`, "done");
+    v.note = o.noSecret === true ? noteOf(`${c.name}: the keychain has no password for it (e to set one)`, "failed")
+      : o.error !== null ? noteOf(`${c.name}: ${o.error.message}`, "failed") : noteOf(`${c.name} answers · ${o.ms} ms`, "done");
   } catch (error) {
     v.note = noteOf(`testing ${c.name} failed: ${error instanceof Error ? error.message : String(error)}`, "failed");
   } finally {
@@ -397,21 +398,21 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
   const id = newId(c.kind);
   const secret = v.secrets.get(c.id) ?? null;
-  const kube = c.secret === "kubernetes" && c.source ? c.source : null;
-  const kept: Conn = { ...c, id, origin: "saved", secret: kube ? "kubernetes" : secret ? "keychain" : c.secret === "ask" ? "ask" : "none" };
+  const kube = c.secret === "kubernetes" && c.source !== undefined ? c.source : null;
+  const kept: Conn = { ...c, id, origin: "saved", secret: kube !== null ? "kubernetes" : secret !== null && Str.isNonEmpty(secret) ? "keychain" : c.secret === "ask" ? "ask" : "none" };
   const dir = v.dir;
 
   // A cluster's secret is saved as where it is (read again at each connect), never its value.
-  if (kube) {
-    if (secret) v.secrets.set(id, secret);
+  if (kube !== null) {
+    if (secret !== null && Str.isNonEmpty(secret)) v.secrets.set(id, secret);
 
     const read = v.sourced.get(c.id);
 
-    if (read) v.sourced.set(id, read);
-  } else if (secret && dir) {
+    if (read !== undefined) v.sourced.set(id, read);
+  } else if ((secret !== null && Str.isNonEmpty(secret)) && (dir !== null && Str.isNonEmpty(dir))) {
     const failed = await saveSecret(IO, dir, id, `Fireflies database ${c.name}`, secret);
 
-    if (failed) {
+    if (failed !== null && Str.isNonEmpty(failed)) {
       v.say(`the keychain refused it: ${failed}`, "failed");
 
       return;
@@ -422,12 +423,12 @@ export async function saveFound(v: DbView, c: Conn, cx: Context): Promise<void> 
 
   const list = await changePinned(v, (now) => [...now.filter((x) => x.id !== id), kept], cx);
 
-  if (!list) return;
+  if (list === null) return;
 
   v.found = v.found.filter((f) => f.conn.id !== c.id);
   v.sent = v.sent.filter((s) => s.id !== c.id);
   v.connAt = Math.max(0, v.saved.findIndex((x) => x.id === id));
-  v.say(`pinned ${c.name}: every Databases window lists it${kube ? ` · its password is read from secret ${kube.name} at each connect` : secret ? " · its password is in the keychain" : ""}${c.forward ? ` · its forward (${c.forward.target}) is offered when its port is down` : ""}`, "done");
+  v.say(`pinned ${c.name}: every Databases window lists it${kube !== null ? ` · its password is read from secret ${kube.name} at each connect` : secret !== null && Str.isNonEmpty(secret) ? " · its password is in the keychain" : ""}${c.forward !== undefined ? ` · its forward (${c.forward.target}) is offered when its port is down` : ""}`, "done");
   cx.notify();
 }
 
@@ -442,7 +443,7 @@ export async function remove(v: DbView, c: Conn, cx: Context): Promise<void> {
     return;
   }
 
-  if (!(await changePinned(v, (now) => now.filter((s) => s.id !== c.id), cx))) return;
+  if ((await changePinned(v, (now) => now.filter((s) => s.id !== c.id), cx)) === null) return;
 
   await deleteSecret(IO, c.id);
   await clearHistory(IO, dataHome(), c.id);
@@ -471,9 +472,9 @@ export function askPassword(v: DbView, c: Conn, keychain: boolean, cx: Context, 
 
       const go = then ?? (() => void connect(v, keychain ? { ...c, secret: "ask" } : c, cx));
 
-      if (keychain && v.dir && pw) {
+      if (keychain && (v.dir !== null && Str.isNonEmpty(v.dir)) && Str.isNonEmpty(pw)) {
         void saveSecret(IO, v.dir, c.id, `Fireflies database ${c.name}`, pw).then((failed) => {
-          if (failed) v.say(`the keychain refused it: ${failed}`, "failed");
+          if (failed !== null && Str.isNonEmpty(failed)) v.say(`the keychain refused it: ${failed}`, "failed");
 
           go();
         });

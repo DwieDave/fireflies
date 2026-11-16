@@ -15,6 +15,7 @@
 import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import type { Theme } from "herdr";
+import { String as Str } from "effect";
 import { dither, unzoom } from "./kit.ts";
 import { edge } from "@fireflies/tones";
 
@@ -66,7 +67,7 @@ export function pressAt(o: PressOwner, e: Pick<MouseButtonEvent, "position">, p:
 export function pressMove(o: PressOwner, e: Pick<MouseMoveEvent, "position"> & { readonly local_position?: Point }, cx: Context): boolean {
   const p = o.press;
 
-  if (!p) return false;
+  if (p === null) return false;
 
   const x = unzoom(e.position.x), y = unzoom(e.position.y);
   const dx = x - p.from.x, dy = y - p.from.y;
@@ -79,13 +80,13 @@ export function pressMove(o: PressOwner, e: Pick<MouseMoveEvent, "position"> & {
   if (changed) {
     p.target = hit;
 
-    if (hit) p.over?.(hit, cx);
+    if (hit !== null && Str.isNonEmpty(hit)) p.over?.(hit, cx);
   }
 
   if (!p.moved && Math.hypot(dx, dy) < DRAG_FROM) return changed;
 
   p.moved = true;
-  p.at = e.local_position ? { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) } : { x, y };
+  p.at = e.local_position !== undefined ? { x: unzoom(e.local_position.x), y: unzoom(e.local_position.y) } : { x, y };
   p.move?.(dx, dy, cx);
 
   return true;
@@ -95,7 +96,7 @@ export function pressMove(o: PressOwner, e: Pick<MouseMoveEvent, "position"> & {
 export function pressUp(o: PressOwner, cx: Context): boolean {
   const p = o.press;
 
-  if (!p) return false;
+  if (p === null) return false;
 
   o.press = null;
 
@@ -109,7 +110,7 @@ export function pressUp(o: PressOwner, cx: Context): boolean {
 export function pressLeave(o: PressOwner, cx: Context): boolean {
   const p = o.press;
 
-  if (!p) return false;
+  if (p === null) return false;
 
   o.press = null;
 
@@ -125,7 +126,7 @@ export const takes = (p: Press | null, target: string): boolean => Boolean(p?.ta
 export function overTarget(o: PressOwner, target: string): void {
   const p = o.press;
 
-  if (p && takes(p, target)) p.hit = target;
+  if (p !== null && takes(p, target)) p.hit = target;
 }
 
 /** An element as a drop target: it says when the pointer moves over it (a move, not a hover:
@@ -142,10 +143,10 @@ export function dropTarget(t: Theme, el: Element, o: PressOwner, target: string,
 export function ghost(t: Theme, o: PressOwner): Element | null {
   const p = o.press;
 
-  if (!p?.moved || !p.label) return null;
+  if (p?.moved !== true || (p.label === undefined || Str.isEmpty(p.label))) return null;
 
   return div().id("db-ghost").absolute().left(p.at.x + 12).top(p.at.y + 10).h(20).px(8).flex().items_center()
-    .bg(t.background).border_1().border_color(p.target ? t.accent : t.muted).text_size(11).text_color(t.foreground)
+    .bg(t.background).border_1().border_color(p.target !== null && Str.isNonEmpty(p.target) ? t.accent : t.muted).text_size(11).text_color(t.foreground)
     .child(div().absolute().inset_0().child(dither(`${edge(t)}88`, 1)))
     .child(div().relative().max_w(320).truncate().child(p.label));
 }

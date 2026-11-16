@@ -45,7 +45,7 @@ export function gridOrigin(v: DbView): { readonly x: number; readonly y: number 
   const x = 6 + left + GAP_X + 1;
   const top = TOP_BAR + 12 + 7;
   const q = v.shownQuery();
-  const over = q ? ds.size(editorDivider(v.queryBox)) + GRAB + RESULT_HEAD : FILTER_LINE;
+  const over = q !== null ? ds.size(editorDivider(v.queryBox)) + GRAB + RESULT_HEAD : FILTER_LINE;
 
   return { x, y: top + over };
 }
@@ -57,7 +57,7 @@ export function keyedAnchor(v: DbView): Rect | null {
   const g = shownGrid(v);
   const o = gridOrigin(v);
 
-  if (!g || !o) return null;
+  if (g === null || o === null) return null;
 
   const { at, cols, set } = g;
 
@@ -96,14 +96,14 @@ function panels(v: DbView): { readonly conns: Rect; readonly tables: Rect; reado
   const structH = ds.size(w.struct);
   const rx = PAD + left + GAP_X;
   const rw = v.size.width - PAD - rx;
-  const logH = w.log ? ds.size(w.log) : 0;
+  const logH = w.log !== null ? ds.size(w.log) : 0;
 
   return {
     conns: { x: PAD, y: top, w: left, h: connsH },
     tables: { x: PAD, y: top + connsH + GAP_Y, w: left, h: foot - structH - GAP_Y - (top + connsH + GAP_Y) },
     structure: { x: PAD, y: foot - structH, w: left, h: structH },
-    main: { x: rx, y: top, w: rw, h: (w.log ? foot - logH - GAP_Y : foot) - top },
-    log: w.log ? { x: rx, y: foot - logH, w: rw, h: logH } : null,
+    main: { x: rx, y: top, w: rw, h: (w.log !== null ? foot - logH - GAP_Y : foot) - top },
+    log: w.log !== null ? { x: rx, y: foot - logH, w: rw, h: logH } : null,
   };
 }
 
@@ -115,11 +115,11 @@ const scrolledOf = (h: { offset(): { readonly x: number; readonly y: number } })
 export function rowAnchor(v: DbView, place: Place): Rect | null {
   const all = panels(v);
 
-  if (!all) return null;
+  if (all === null) return null;
 
   // `over`: what stands over the list in the panel; `down`: the row's top in the list.
   const row = (box: Rect | null, over: number, down: number, scroll: { offset(): { readonly x: number; readonly y: number } }): Rect | null => {
-    if (!box || down < 0) return null;
+    if (box === null || down < 0) return null;
 
     const listTop = box.y + PANEL_TOP + over;
     const y = listTop + down - scrolledOf(scroll);
@@ -132,7 +132,7 @@ export function rowAnchor(v: DbView, place: Place): Rect | null {
   if (place === "conns") return row(all.conns, 0, v.connAt * LIST_ROW + rowsBefore(connList(v), v.connAt) * RULE, v.scrolls.conns);
 
   if (place === "tables") {
-    const find = v.tableFind && (v.tablesTab === "tables" || v.tablesTab === "views") ? FIND_LINE : 0;
+    const find = v.tableFind !== null && (v.tablesTab === "tables" || v.tablesTab === "views") ? FIND_LINE : 0;
 
     return row(all.tables, find, v.tableAt * LIST_ROW, v.scrolls.tables);
   }
@@ -146,5 +146,5 @@ export function rowAnchor(v: DbView, place: Place): Rect | null {
 export function tabAnchor(v: DbView): Rect | null {
   const main = panels(v)?.main;
 
-  return main ? { x: main.x + BORDER, y: main.y - PANEL_TOP, w: main.w - 2 * BORDER, h: PANEL_TOP * 2 } : null;
+  return main !== undefined ? { x: main.x + BORDER, y: main.y - PANEL_TOP, w: main.w - 2 * BORDER, h: PANEL_TOP * 2 } : null;
 }

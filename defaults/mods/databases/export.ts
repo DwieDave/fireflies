@@ -45,7 +45,7 @@ export function toJson(set: ResultSet): string {
   const rows = set.rows.map((r) => Object.fromEntries(set.columns.map((c, i) => {
     const v = r[i] ?? null;
 
-    return [c, v === null ? null : nums[i] ? Number(v) : v];
+    return [c, v === null ? null : nums[i] === true ? Number(v) : v];
   })));
 
   return `${JSON.stringify(rows, null, 2)}\n`;
@@ -60,7 +60,7 @@ export function toInserts(set: ResultSet, kind: Kind, table: string): string {
     const values = set.columns.map((_c, i) => {
       const v = r[i] ?? null;
 
-      return v === null ? "NULL" : nums[i] ? v : quoteText(kind, v);
+      return v === null ? "NULL" : nums[i] === true ? v : quoteText(kind, v);
     });
 
     return `INSERT INTO ${table} (${cols}) VALUES (${values.join(", ")});`;

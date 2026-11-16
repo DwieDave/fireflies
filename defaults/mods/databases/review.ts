@@ -28,7 +28,7 @@ export function changesBar(t: Theme, v: DbView): Element | null {
   const e = liveEdits(v);
   const n = counted(e);
 
-  if (!edit && !n.cells) return null;
+  if (edit === null && n.cells === 0) return null;
 
   const set = v.rows.set;
   const onChange = Boolean(e && set && changeAt(e, set, v.rows.at.row, shownGrid(v)?.set.columns[v.rows.at.col] ?? ""));
@@ -38,7 +38,7 @@ export function changesBar(t: Theme, v: DbView): Element | null {
     .child(div().absolute().left(0).right(0).top(0).h(1).bg(`${t.ansi3}66`))
     .child(pip(t.ansi3, 6).relative());
 
-  if (edit) {
+  if (edit !== null) {
     return bar.child(div().relative().text_color(t.ansi3).child(`editing ${edit.column} · row ${edit.row + 1}`))
       .child(div().relative().flex_1())
       .child(action(t, "edit-keep", "enter", "keep", () => keepEdit(v)))
@@ -81,8 +81,8 @@ export function statementLines(sql: string): string[][] {
     const breaks = word === "SET" || word === "WHERE" || word === "AND";
     const line = lines.at(-1) ?? [];
 
-    if (breaks && line.length) {
-      while (line.length && /^\s+$/.test(line.at(-1) ?? "")) line.pop();
+    if (breaks && line.length !== 0) {
+      while (line.length !== 0 && /^\s+$/.test(line.at(-1) ?? "")) line.pop();
 
       lines.push([word === "WHERE" ? " " : word === "SET" ? "   " : "   ", tok]);
     } else line.push(tok);
@@ -120,7 +120,7 @@ function reviewRow(t: Theme, s: SaveStatement, i: number, failed: boolean, error
 export function reviewPanel(t: Theme, v: DbView): Element {
   const r = v.review;
 
-  if (!r) return div();
+  if (r === null) return div();
 
   const rowsChanged = new Set(r.statements.filter((s) => s.role === "update").map((s) => s.row)).size;
   const err = r.error;
@@ -130,7 +130,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
     .when(r.busy, (el) => el.child(pip(t.working, 6, true)).child(div().text_color(t.working).child("saving…")))
     .when(!r.busy && err !== null, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi1).child("nothing was saved: the changes stay staged")))
     .child(div().flex_1())
-    .child(chip(t, "review-yes", err ? "y  try again" : `y  commit to ${where}`, false, (cx) => runSave(v, cx), t.ansi3))
+    .child(chip(t, "review-yes", err !== null ? "y  try again" : `y  commit to ${where}`, false, (cx) => runSave(v, cx), t.ansi3))
     .child(chip(t, "review-no", "esc  back", false, () => { if (!r.busy) v.review = null; }));
 
   const box = v_flex().id("db-review-box").w(Math.min(760, v.size.width - 40)).max_h(Math.min(560, v.size.height - 80)).bg(t.background).border(1).border_color(t.ansi3).p(12).gap(6).text_size(11)
@@ -142,7 +142,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
     .child(div().relative().h(2).flex_none().child(dither(edge(t), 1)))
     .child(v_flex().id("db-review-list").flex_1().min_h(0).overflow_y_scroll().gap(2).py(4)
       .children(r.statements.map((s, i) => reviewRow(t, s, i, err?.index === i, err?.message ?? ""))))
-    .when(err !== null && (err.index === null || !r.statements[err.index]), (el) => el.child(div().text_color(t.ansi1).child(`✕ ${err?.message ?? ""}`)))
+    .when(err !== null && (err.index === null || r.statements[err.index] === undefined), (el) => el.child(div().text_color(t.ansi1).child(`✕ ${err?.message ?? ""}`)))
     .child(foot);
 
   return div().id("db-review").absolute().inset_0().flex().items_center().justify_center()
@@ -161,7 +161,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
 export function reviewKey(v: DbView, e: KeyEvent, cx: Context): void {
   const r = v.review;
 
-  if (!r) return;
+  if (r === null) return;
 
   if (e.key === "y" || e.key === "enter") runSave(v, cx);
   else if ((e.key === "escape" || e.key === "n" || e.key === "q") && !r.busy) {

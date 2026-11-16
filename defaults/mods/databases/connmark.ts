@@ -12,6 +12,7 @@ import { div, svg } from "gpui-kit";
 import type { Context, Element } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { String as Str } from "effect";
 import type { MenuRow } from "./state.ts";
 import type { ConnState } from "./connstate.ts";
 import { breathes, connState, stateColor, stateTip, stateWord, whereOf } from "./connstate.ts";
@@ -56,7 +57,7 @@ export function stateMark(t: Theme, v: DbView, narrow: boolean): Element {
     .when(ro, (el) => el.child(lock(t.ansi3)).when(!narrow, (x) => x.child(div().flex_none().text_color(t.ansi3).child("read only"))));
 
   // Connected: the database (a click lists the server's) and who it is there.
-  if (!live || !w || !c) return mark;
+  if (!live || w === null || c === null) return mark;
 
   const db = h_flex().id("db-where-db").flex_shrink(1).min_w(0).gap(4).items_center().overflow_hidden().cursor_pointer()
     .tooltip(hasDatabases(c) ? `${databaseWords(w)} · b or a click: the server's databases` : databaseWords(w))
@@ -81,7 +82,7 @@ export function stateMark(t: Theme, v: DbView, narrow: boolean): Element {
 export function stateMenu(v: DbView, cx: Context): void {
   const c = v.active;
 
-  if (!c) {
+  if (c === null) {
     v.say("nothing is connected: enter on a connection in [1] connects", "failed");
     v.setPanel("conns");
 
@@ -111,7 +112,7 @@ export function stateMenu(v: DbView, cx: Context): void {
 export function dbMenu(v: DbView, name: string | null, cx: Context): void {
   const c = v.active;
 
-  if (!c) return;
+  if (c === null) return;
 
   const here = whereOf(v, c)?.database ?? null;
 
@@ -119,14 +120,14 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
     entry("tables", "open", name === here ? "Read it again" : `Connect to ${name ?? "every database"}`, () => useDatabase(v, name, cx), { sub: c.origin === "saved" ? "kept in its pin" : "kept while this window is open" }),
   ];
 
-  if (name) {
+  if (name !== null && Str.isNonEmpty(name)) {
     rows.push(
       entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(c.kind, name), cx)),
       entry("tables", "copy", "Copy its name", () => copy(v, name, cx)),
     );
   }
 
-  if (!dbsNow(v)?.sized) rows.push(entry("tables", "count", "Their sizes", () => void loadDatabases(v, cx, true), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
+  if (dbsNow(v)?.sized !== true) rows.push(entry("tables", "count", "Their sizes", () => void loadDatabases(v, cx, true), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
 
   openMenu(v, name ?? "every database", rows, "row");
 }

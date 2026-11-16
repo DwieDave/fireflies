@@ -12,6 +12,7 @@
 //   "secret": { "from": "kubernetes", "context": …, "namespace": …, "name": …, "key": …,
 //               "userKey"?: …, "databaseKey"?: …, "kubectl"?: "kubectl" | "/abs/…/kubectl" }
 
+import { String as Str } from "effect";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, object } from "./guard.ts";
 import type { ExecResult } from "herdr";
@@ -37,7 +38,7 @@ const contextOk = (c: string): boolean => Boolean(c) && c.length <= 253 && ![...
 export function kubeProblem(s: KubeSource, kind: string, host: string | undefined): string | null {
   if (kind !== "postgres" && kind !== "mysql") return "a secret is read only for Postgres and MySQL";
 
-  if (!host || !LOOPBACK.has(host)) return "a secret is read only for a server on this machine (127.0.0.1, a port-forward)";
+  if ((host === undefined || Str.isEmpty(host)) || !LOOPBACK.has(host)) return "a secret is read only for a server on this machine (127.0.0.1, a port-forward)";
 
   if (!contextOk(s.context)) return "its context isn't a context's name";
 
@@ -53,7 +54,7 @@ export function kubeProblem(s: KubeSource, kind: string, host: string | undefine
 }
 
 /** The keys one read prints, in order: the password's, then the user's and the database's when named. */
-const keysOf = (s: KubeSource): string[] => [s.key, ...(s.userKey ? [s.userKey] : []), ...(s.databaseKey ? [s.databaseKey] : [])];
+const keysOf = (s: KubeSource): string[] => [s.key, ...(s.userKey !== undefined && Str.isNonEmpty(s.userKey) ? [s.userKey] : []), ...(s.databaseKey !== undefined && Str.isNonEmpty(s.databaseKey) ? [s.databaseKey] : [])];
 
 /** The template: each key's base64 on a line of its own (an absent key: an empty line). */
 export function kubeTemplate(s: KubeSource): string {
@@ -122,7 +123,7 @@ export function utf8(bytes: readonly number[]): string | null {
     const b = bytes[i] ?? 0;
     const n = b < 0x80 ? 0 : b >> 5 === 6 ? 1 : b >> 4 === 14 ? 2 : b >> 3 === 30 ? 3 : -1;
 
-    if (n < 0 || i + n >= bytes.length + (n ? 0 : 1)) return null;
+    if (n < 0 || i + n >= bytes.length + (n !== 0 ? 0 : 1)) return null;
 
     let cp = n === 0 ? b : b & (0x3f >> n);
 
@@ -143,11 +144,11 @@ export function utf8(bytes: readonly number[]): string | null {
 
 /** A key's line decoded: its text, "" when absent, or null when it isn't text. */
 function decoded(line: string | undefined): string | null {
-  if (!line) return "";
+  if (line === undefined || Str.isEmpty(line)) return "";
 
   const bytes = base64Bytes(line);
 
-  return bytes ? utf8(bytes) : null;
+  return bytes !== null ? utf8(bytes) : null;
 }
 
 /** kubectl's answer to the read: the values, or why there are none (never the value in the words). */
@@ -165,25 +166,25 @@ export function parseKubeRead(s: KubeSource, r: ExecResult): KubeRead | { readon
   const values = keys.map((_k, i) => decoded(lines[i]));
   const bad = keys.find((_k, i) => values[i] === null);
 
-  if (bad) return { error: `the secret's ${bad} isn't text` };
+  if (bad !== undefined && Str.isNonEmpty(bad)) return { error: `the secret's ${bad} isn't text` };
 
   const [password = "", ...rest] = values.map((x) => x ?? "");
 
-  if (!password) return { error: `the secret ${s.name} has no ${s.key}` };
+  if (Str.isEmpty(password)) return { error: `the secret ${s.name} has no ${s.key}` };
 
   const out: ReadDraft = { password };
   let i = 0;
 
-  if (s.userKey) {
+  if (s.userKey !== undefined && Str.isNonEmpty(s.userKey)) {
     const u = rest[i++];
 
-    if (u) out.user = u;
+    if (u !== undefined && Str.isNonEmpty(u)) out.user = u;
   }
 
-  if (s.databaseKey) {
+  if (s.databaseKey !== undefined && Str.isNonEmpty(s.databaseKey)) {
     const d = rest[i];
 
-    if (d) out.database = d;
+    if (d !== undefined && Str.isNonEmpty(d)) out.database = d;
   }
 
   return out;
@@ -226,7 +227,7 @@ const isPort = (n: number): boolean => Number.isInteger(n) && n >= 1 && n <= 655
 export function forwardProblem(f: KubeForward, kind: string, host: string | undefined, port: number | undefined): string | null {
   if (kind !== "postgres" && kind !== "mysql") return "a forward is kept only for Postgres and MySQL";
 
-  if (!host || !LOOPBACK.has(host)) return "a forward is kept only for a server on this machine (127.0.0.1)";
+  if ((host === undefined || Str.isEmpty(host)) || !LOOPBACK.has(host)) return "a forward is kept only for a server on this machine (127.0.0.1)";
 
   if (!contextOk(f.context)) return "its forward's context isn't a context's name";
 

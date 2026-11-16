@@ -103,7 +103,7 @@ export function keyName(e: KeyEvent): string {
 export function keyOf(place: Place, action: string): string | undefined {
   const b = BINDINGS[place].find(([, , a]) => a === action) ?? BINDINGS.window.find(([, , a]) => a === action);
 
-  return b ? shown(b[0][0] ?? "") : undefined;
+  return b !== undefined ? shown(b[0][0] ?? "") : undefined;
 }
 
 /** The action a key names in a place (its own table first, then the window's), or null. */
@@ -145,6 +145,6 @@ export function barHints(place: Place): (readonly [string, string])[] {
   return BAR[place].flatMap((a) => {
     const b = BINDINGS[place].find(([, , x]) => x === a);
 
-    return b ? [[shown(b[0][0] ?? ""), b[1].split(" (")[0] ?? b[1]] as const] : [];
+    return b !== undefined ? [[shown(b[0][0] ?? ""), b[1].split(" (")[0] ?? b[1]] as const] : [];
   });
 }

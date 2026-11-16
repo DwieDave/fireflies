@@ -6,6 +6,7 @@
 
 import type { Context } from "gpui-kit";
 import { readTextFile } from "herdr";
+import { String as Str } from "effect";
 import { baseName } from "./kinds.ts";
 import { receive } from "./conns.ts";
 import type { default as DbView } from "./main.ts";
@@ -26,13 +27,13 @@ export function dropFiles(v: DbView, paths: readonly string[], cx: Context): voi
   const db = paths.find((p) => droppedAs(p) === "sqlite");
   const sql = paths.filter((p) => droppedAs(p) === "sql");
 
-  if (!db && !sql.length) {
+  if ((db === undefined || Str.isEmpty(db)) && sql.length === 0) {
     v.say("only a SQLite file (.db, .sqlite, .sqlite3, .db3) or a .sql file opens here", "failed");
 
     return;
   }
 
-  if (db) receive(v, { kind: "sqlite", path: db, name: baseName(db), from: "dropped here" }, cx);
+  if (db !== undefined && Str.isNonEmpty(db)) receive(v, { kind: "sqlite", path: db, name: baseName(db), from: "dropped here" }, cx);
 
   for (const p of sql) void openSql(v, p, cx);
 }

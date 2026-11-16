@@ -9,6 +9,7 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { EditorState, InputState } from "gpui-base";
 import { settings, theme } from "herdr";
+import { String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import type { Statement } from "./split.ts";
 import { splitStatements, statementAt } from "./split.ts";
@@ -87,7 +88,7 @@ export function editorKey(v: DbView, tab: QueryTab, e: KeyEvent, cx: Context): b
   if (e.key === "enter" && mod) {
     runQuery(v, tab, m.shift, cx);
   } else if (e.key === "escape") {
-    if (tab.running) void cancelQuery(v, tab, cx);
+    if (tab.running !== null) void cancelQuery(v, tab, cx);
     else {
       tab.inResults = true;
       v.focusSelf();
@@ -106,7 +107,7 @@ export function pickStatements(tab: QueryTab, kind: Conn["kind"], all: boolean):
   const text = tab.editor.value();
   const sel = tab.editor.selection();
 
-  if (sel.text.trim()) {
+  if (Str.isNonEmpty(sel.text.trim())) {
     const base = offsetOf(text, sel.start);
     const lineBase = sel.start.line;
 
@@ -119,12 +120,12 @@ export function pickStatements(tab: QueryTab, kind: Conn["kind"], all: boolean):
 
   const at = statementAt(list, text, offsetOf(text, tab.editor.cursor()));
 
-  return at ? [at] : [];
+  return at !== null ? [at] : [];
 }
 
 /** The words of an ask (and for a destructive one, what to type). */
 function askText(c: Conn, v: Verdict, count: number): string {
-  const what = `${v.verb}${v.target ? ` ${v.target}` : ""}`;
+  const what = `${v.verb}${v.target !== null && Str.isNonEmpty(v.target) ? ` ${v.target}` : ""}`;
   const more = count > 1 ? ` (and ${count - 1} more)` : "";
 
   const said = v.risk === "destructive" ? `${what}${more} on ${c.name}? It can't be undone.` : `Run ${what}${more} on ${c.name}?`;
@@ -136,17 +137,17 @@ function askText(c: Conn, v: Verdict, count: number): string {
 export function runQuery(v: DbView, tab: QueryTab, all: boolean, cx: Context): void {
   const c = v.active;
 
-  if (!c) {
+  if (c === null) {
     v.say("connect first: pick a connection in [1] and press enter", "failed");
 
     return;
   }
 
-  if (tab.running) return;
+  if (tab.running !== null) return;
 
   const list = pickStatements(tab, c.kind, all);
 
-  if (!list.length) {
+  if (list.length === 0) {
     v.say("nothing to run here", "failed");
 
     return;
@@ -203,7 +204,7 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
   tab.verdicts = verdicts.map((x) => x.risk);
 
   // A statement that changed the schema: read the tables again.
-  if (verdicts.some((x) => x.risk !== "read" && x.risk !== "session") && !o.error) v.refreshCatalog(cx);
+  if (verdicts.some((x) => x.risk !== "read" && x.risk !== "session") && o.error === null) v.refreshCatalog(cx);
 
   cx.notify();
 }
@@ -211,18 +212,18 @@ async function execute(v: DbView, tab: QueryTab, c: Conn, list: readonly Stateme
 /** A missing table's error with the nearest table named ("did you mean lanterns?"). */
 function withSuggestion(v: DbView, o: Ran): Ran {
   const e = o.error;
-  const name = e && !e.hint ? namedIn(e.message) : null;
-  const near = name ? closest(name, v.catalog.tables.map((t) => t.name)) : null;
+  const name = e !== null && (e.hint === null || Str.isEmpty(e.hint)) ? namedIn(e.message) : null;
+  const near = name !== null && Str.isNonEmpty(name) ? closest(name, v.catalog.tables.map((t) => t.name)) : null;
 
-  return e && near ? { ...o, error: { ...e, hint: `did you mean ${near}?` } } : o;
+  return e !== null && (near !== null && Str.isNonEmpty(near)) ? { ...o, error: { ...e, hint: `did you mean ${near}?` } } : o;
 }
 
 /** Underlines the error where the client says (its statement's first line when it doesn't). */
 function placeError(tab: QueryTab, list: readonly Statement[], o: Ran): void {
   const e = o.error;
-  const s = e && e.index !== null ? list[e.index] : null;
+  const s = e !== null && e.index !== null ? list[e.index] : null;
 
-  if (!e || !s) return;
+  if (e === null || (s === null || s === undefined)) return;
 
   const start = posOf(tab.ranText, s.start);
   const line = start.line + (e.line ?? 1) - 1;
@@ -238,9 +239,9 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     const r = o.results.find((x) => x.index === i);
     const failed = o.error?.index === i;
 
-    if (!r && !failed) return;
+    if (r === undefined && !failed) return;
 
-    const rows = r?.set ? r.set.rows.length : null;
+    const rows = r?.set !== null && r?.set !== undefined ? r.set.rows.length : null;
     const writes = verdicts[i]?.risk !== "read";
     const said = failed ? o.error?.message ?? "" : resultWords(r, writes);
 
@@ -255,7 +256,7 @@ function record(v: DbView, c: Conn, list: readonly Statement[], verdicts: readon
     }
   });
 
-  if (o.error && o.error.index === null) v.logLine({ sql: list.map((s) => s.text).join("; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name, run: o.run });
+  if (o.error !== null && o.error.index === null) v.logLine({ sql: list.map((s) => s.text).join("; "), ok: false, ms: o.ms, said: o.error.message, conn: c.name, run: o.run });
 }
 
 /** Stops the tab's run. */
@@ -265,7 +266,7 @@ export async function cancelQuery(v: DbView, tab: QueryTab, cx: Context): Promis
   const n = tab.running?.nonce;
   const dir = v.dir;
 
-  if (!n || !dir) return;
+  if ((n === null || n === undefined || Str.isEmpty(n)) || (dir === null || Str.isEmpty(dir))) return;
 
   v.note = noteOf("cancelling…", "working");
   cx.notify();

@@ -10,6 +10,7 @@
 
 import type { Context } from "gpui-kit";
 import { setShared, shared } from "herdr";
+import { String as Str } from "effect";
 import type { Conn } from "./kinds.ts";
 import { readShared, writeShared } from "./guard.ts";
 import { PINNED_KEY, changeConnections, readConnections } from "./store.ts";
@@ -45,7 +46,7 @@ export async function changePinned(v: DbView, change: (list: Conn[]) => Conn[], 
 function keepActive(v: DbView, list: Conn[]): Conn[] {
   const a = v.active;
 
-  return a ? list.map((c) => (c.id === a.id && JSON.stringify(c) === JSON.stringify(a) ? a : c)) : list;
+  return a !== null ? list.map((c) => (c.id === a.id && JSON.stringify(c) === JSON.stringify(a) ? a : c)) : list;
 }
 
 /** P: a pinned one asks to be unpinned (every window drops it); another is pinned. */
@@ -60,7 +61,7 @@ export async function syncPinned(v: DbView, cx: Context): Promise<void> {
 
   const n = readShared(shared, PINNED_KEY, null);
 
-  if (!n || n.at <= v.pinnedAt || n.by === v.me) return;
+  if (n === null || n.at <= v.pinnedAt || n.by === v.me) return;
 
   v.pinnedAt = n.at;
 
@@ -71,7 +72,7 @@ export async function syncPinned(v: DbView, cx: Context): Promise<void> {
   // A pinned one also listed as found or sent here: the pinned one stands.
   v.sent = v.sent.filter((s) => !list.some((p) => p.id === s.id));
 
-  const again = at ? v.saved.findIndex((c) => c.id === at) : -1;
+  const again = at !== null && Str.isNonEmpty(at) ? v.saved.findIndex((c) => c.id === at) : -1;
 
   if (again >= 0) v.connAt = again;
 

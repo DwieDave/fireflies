@@ -11,6 +11,7 @@ import { pickFolder, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "@fireflies/form-keys";
 import { formHints, formKey, ring } from "@fireflies/form-keys";
+import { String as Str } from "effect";
 import type { TableRef } from "./catalog.ts";
 import { browseSql, qualified } from "./catalog.ts";
 import type { ResultSet } from "./parse-out.ts";
@@ -56,7 +57,7 @@ export class ExportForm {
 
     const shown = "table" in of && v.rows.browse?.table.name === of.table.name ? v.rows.browse : null;
 
-    this.which = shown?.filter ? "filtered" : "whole";
+    this.which = shown?.filter !== undefined && Str.isNonEmpty(shown?.filter) ? "filtered" : "whole";
     this.name = InputState.new({ value: exportName("table" in of ? of.table.name : of.name, "csv") });
   }
 
@@ -67,7 +68,7 @@ export class ExportForm {
     const b = this.v.rows.browse;
     const shown = b?.table.name === this.of.table.name;
 
-    return ["whole", ...(shown ? ["page" as const] : []), ...(shown && b?.filter ? ["filtered" as const] : [])];
+    return ["whole", ...(shown ? ["page" as const] : []), ...(shown && Str.isNonEmpty(b?.filter) ? ["filtered" as const] : [])];
   }
 
   stops(): Stop[] {
@@ -85,7 +86,7 @@ export class ExportForm {
     const s = stops[this.at];
     const a = formKey(stops, this.at, e.key === " " ? "space" : e.key, e.modifiers, e.key_char ?? null);
 
-    if (!a || a.act === "type") return "typing";
+    if (a === null || a.act === "type") return "typing";
 
     if (this.busy) return true;
 
@@ -134,18 +135,18 @@ export class ExportForm {
     const c = v.active;
     const b = v.rows.browse;
 
-    if (this.which === "page" && v.rows.set) return { set: v.rows.set };
+    if (this.which === "page" && v.rows.set !== null) return { set: v.rows.set };
 
-    if (!c) return { error: "not connected" };
+    if (c === null) return { error: "not connected" };
 
-    const filter = this.which === "filtered" && b ? b.filter : "";
+    const filter = this.which === "filtered" && b !== null ? b.filter : "";
     const sql = browseSql(c.kind, { table: of.table, sort: b?.table.name === of.table.name ? b.sort : null, filter, offset: 0, limit: 1_000_000_000 });
 
     if ("refused" in sql) return { error: sql.refused };
 
     const o = await runOn(v, c, sql.statements.slice(0, 1), undefined, EXPORT_LIMIT);
 
-    if (o.error) return { error: o.error.message };
+    if (o.error !== null) return { error: o.error.message };
 
     return { set: o.results[0]?.set ?? { columns: [], rows: [] } };
   }
@@ -170,14 +171,14 @@ export class ExportForm {
       return;
     }
 
-    const table = "table" in this.of && c ? qualified(c.kind, this.of.table) : "result";
+    const table = "table" in this.of && c !== null ? qualified(c.kind, this.of.table) : "result";
     const set = got.set;
     const text = exportText(set, this.format, c?.kind ?? "sqlite", table);
     const done = await this.write(text, cx);
 
     this.busy = false;
 
-    if (done) {
+    if (done !== null && Str.isNonEmpty(done)) {
       v.say(`${set.rows.length} rows as ${FORMAT_NAME[this.format]} ${done}`, "done");
       this.close();
     }
@@ -198,8 +199,8 @@ export class ExportForm {
     const folder = await pickFolder({ prompt: "Export here" });
     const dir = this.v.dir;
 
-    if (!folder || !dir) {
-      this.error = folder ? "the window's private folder is missing" : null;
+    if ((folder === null || Str.isEmpty(folder)) || (dir === null || Str.isEmpty(dir))) {
+      this.error = folder !== null && Str.isNonEmpty(folder) ? "the window's private folder is missing" : null;
 
       return null;
     }
@@ -209,7 +210,7 @@ export class ExportForm {
 
     this.error = failed;
 
-    return failed ? null : `to ${dest}`;
+    return failed !== null && Str.isNonEmpty(failed) ? null : `to ${dest}`;
   }
 
   draw(t: Theme): Element {

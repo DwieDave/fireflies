@@ -5,6 +5,7 @@
 // hrana.ts speaks to it over HTTP. Also what to install when a client is
 // missing (said, never done).
 
+import { String as Str } from "effect";
 import type { Conn, Kind, SslMode } from "./kinds.ts";
 import { DEFAULT_PORT, onFile } from "./kinds.ts";
 import { NULL_MARK } from "./script.ts";
@@ -75,15 +76,15 @@ const conninfo = (s: string): string => `'${s.replace(/[\\']/g, (ch) => `\\${ch}
 function psqlArgs(c: Conn): string[] {
   const out = ["-X", "-A", "--csv", "-w", "-v", "ON_ERROR_STOP=1", "-v", "FETCH_COUNT=500", "-P", `null=${NULL_MARK}`];
 
-  if (c.host) out.push("-h", c.host);
+  if (c.host !== undefined && Str.isNonEmpty(c.host)) out.push("-h", c.host);
 
-  if (c.port && c.port !== DEFAULT_PORT.postgres) out.push("-p", String(c.port));
+  if ((c.port !== undefined && c.port !== 0) && c.port !== DEFAULT_PORT.postgres) out.push("-p", String(c.port));
 
-  if (c.user) out.push("-U", c.user);
+  if (c.user !== undefined && Str.isNonEmpty(c.user)) out.push("-U", c.user);
 
   const database = c.database || "postgres";
 
-  out.push("-d", c.sslmode ? `dbname=${conninfo(database)} sslmode=${c.sslmode}` : database);
+  out.push("-d", c.sslmode !== undefined ? `dbname=${conninfo(database)} sslmode=${c.sslmode}` : database);
 
   return out;
 }
@@ -94,7 +95,7 @@ export type MysqlFlavor = "mysql" | "mariadb";
 
 /** The flavor from the client's `--version` ("… from 11.4.13-MariaDB, client 15.2 …"), else from its name. */
 export function flavorOf(version: string, path: string): MysqlFlavor {
-  return /MariaDB/.test(version) || (!version.trim() && path.endsWith("/mariadb")) ? "mariadb" : "mysql";
+  return /MariaDB/.test(version) || (Str.isEmpty(version.trim()) && path.endsWith("/mariadb")) ? "mariadb" : "mysql";
 }
 
 /** MySQL's --ssl-mode for each sslmode (it has no allow: preferred is the nearest). The verify
@@ -108,7 +109,7 @@ const MARIADB_SSL = { disable: ["--skip-ssl"], allow: [], prefer: [], require: [
 
 /** The client's TLS flags for an sslmode (none when it has none). */
 export function mysqlSslArgs(mode: SslMode | undefined, flavor: MysqlFlavor): string[] {
-  if (!mode) return [];
+  if (mode === undefined) return [];
 
   return flavor === "mariadb" ? [...MARIADB_SSL[mode]] : [`--ssl-mode=${MYSQL_SSL[mode]}`];
 }
@@ -117,13 +118,13 @@ export function mysqlSslArgs(mode: SslMode | undefined, flavor: MysqlFlavor): st
 function mysqlArgs(c: Conn, flavor: MysqlFlavor): string[] {
   const out = ["--xml", "--batch", "--connect-timeout=10", ...mysqlSslArgs(c.sslmode, flavor)];
 
-  if (c.host) out.push("-h", c.host);
+  if (c.host !== undefined && Str.isNonEmpty(c.host)) out.push("-h", c.host);
 
-  if (c.port && c.port !== DEFAULT_PORT.mysql) out.push("-P", String(c.port));
+  if ((c.port !== undefined && c.port !== 0) && c.port !== DEFAULT_PORT.mysql) out.push("-P", String(c.port));
 
-  if (c.user) out.push("-u", c.user);
+  if (c.user !== undefined && Str.isNonEmpty(c.user)) out.push("-u", c.user);
 
-  if (c.database) out.push(c.database);
+  if (c.database !== undefined && Str.isNonEmpty(c.database)) out.push(c.database);
 
   return out;
 }
@@ -136,7 +137,7 @@ export function sqliteArgs(path: string, readonly: boolean): string[] {
 /** The client for a connection, or null (a remote libSQL database). `flavor`: which mysql client
  *  runs it (session.ts clientOf finds out). */
 export function clientFor(c: Conn, flavor: MysqlFlavor = "mysql"): Client | null {
-  if (c.kind === "libsql" && c.url) return null;
+  if (c.kind === "libsql" && (c.url !== undefined && Str.isNonEmpty(c.url))) return null;
 
   if (onFile(c)) return { programs: PROGRAMS.sqlite, args: sqliteArgs(c.path ?? "", c.readonly) };
 

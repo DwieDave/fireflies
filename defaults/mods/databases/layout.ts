@@ -103,12 +103,12 @@ export function editorDivider(box: number): Divider {
  *  growing the panel shrinks it. Narrow, only a query's split is there to move. */
 export function edgesOf(place: Place, room: Room, size: (d: Divider) => number): Edge[] {
   const editor = room.query !== null ? editorDivider(room.query) : null;
-  const split: Edge[] = editor && (place === "results" || place === "editor") ? [{ divider: editor, sign: place === "editor" ? 1 : -1 }] : [];
+  const split: Edge[] = editor !== null && (place === "results" || place === "editor") ? [{ divider: editor, sign: place === "editor" ? 1 : -1 }] : [];
 
   if (room.width < NARROW) return split;
 
   const w = wideDividers(room, size);
-  const log = w.log ? [w.log] : [];
+  const log = w.log !== null ? [w.log] : [];
 
   switch (place) {
     case "conns": return [{ divider: w.left, sign: 1 }, { divider: w.conns, sign: 1 }];

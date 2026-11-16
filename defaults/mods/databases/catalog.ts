@@ -6,6 +6,7 @@
 // rows (sorted, filtered). Every statement here is a read; a filter typed by
 // the person must be one read statement (browseSql refuses anything else).
 
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import type { Outcome, ResultSet } from "./parse-out.ts";
 import type { ScriptStatement } from "./script.ts";
@@ -64,7 +65,7 @@ export const quoteName = (kind: Kind, name: string): string => (kind === "mysql"
 export const quoteText = (kind: Kind, text: string): string => `'${(kind === "mysql" ? text.replace(/\\/g, "\\\\") : text).replace(/'/g, "''")}'`;
 
 /** A table's name for a statement: schema-qualified where there is a schema. */
-export const qualified = (kind: Kind, t: Pick<TableRef, "schema" | "name">): string => (t.schema && kind !== "sqlite" && kind !== "libsql" ? `${quoteName(kind, t.schema)}.${quoteName(kind, t.name)}` : quoteName(kind, t.name));
+export const qualified = (kind: Kind, t: Pick<TableRef, "schema" | "name">): string => ((t.schema !== null && Str.isNonEmpty(t.schema)) && kind !== "sqlite" && kind !== "libsql" ? `${quoteName(kind, t.schema)}.${quoteName(kind, t.name)}` : quoteName(kind, t.name));
 
 const read = (text: string): ScriptStatement => ({ text, risk: "read" });
 
@@ -104,12 +105,12 @@ export function hereOf(kind: Kind, o: Outcome): Here | null {
 
   const r = records(o.results.find((x) => x.index === 1)?.set)[0];
 
-  if (!r) return null;
+  if (r === undefined) return null;
 
   // MySQL's user is user@host: the name is what the person typed.
   const who = r.get("who") ?? null;
 
-  return { database: r.get("db") || null, user: who && kind === "mysql" ? who.replace(/@[^@]*$/, "") : who };
+  return { database: r.get("db") || null, user: (who !== null && Str.isNonEmpty(who)) && kind === "mysql" ? who.replace(/@[^@]*$/, "") : who };
 }
 
 /** A database on the server: its name, and its size once asked (pg_database_size reads its files). */
@@ -144,13 +145,13 @@ export function databasesOf(o: Outcome): DbInfo[] {
   return records(o.results[0]?.set).flatMap((r) => {
     const name = r.get("name");
 
-    return name ? [{ name, size: num(r.get("size")) }] : [];
+    return name !== null && name !== undefined && Str.isNonEmpty(name) ? [{ name, size: num(r.get("size")) }] : [];
   });
 }
 
 /** A result's rows as objects by column name. */
 function records(set: ResultSet | null | undefined): ReadonlyMap<string, string | null>[] {
-  if (!set) return [];
+  if (set === null || set === undefined) return [];
 
   return set.rows.map((r) => new Map(set.columns.map((c, i) => [c, r[i] ?? null])));
 }
@@ -162,7 +163,7 @@ export function tablesOf(kind: Kind, o: Outcome): TableRef[] {
   return records(o.results[0]?.set).flatMap((r): TableRef[] => {
     const name = r.get("name");
 
-    if (!name) return [];
+    if (name === null || name === undefined || Str.isEmpty(name)) return [];
 
     const schema = kind === "sqlite" || kind === "libsql" ? null : r.get("schema") ?? null;
 
@@ -233,15 +234,15 @@ function keysOf(kind: Kind, set: ResultSet | null | undefined, table: string): F
   return records(set).map((r) => {
     const from = bare(r.get("from_table") ?? "");
     const pg = kind === "postgres" ? pgForeignKey(r.get("def") ?? "") : null;
-    const to = bare(pg ? pg.to : r.get("to_table") ?? "");
+    const to = bare(pg !== null ? pg.to : r.get("to_table") ?? "");
 
     return {
       name: r.get("name") ?? "",
       from,
-      fromColumns: pg ? pg.fromColumns : r.get("from_cols") ?? "",
+      fromColumns: pg !== null ? pg.fromColumns : r.get("from_cols") ?? "",
       to,
-      toColumns: pg ? pg.toColumns : r.get("to_cols") ?? "",
-      onDelete: pg ? pg.onDelete : (r.get("on_delete") ?? "").toLowerCase().replace("no action", "") || null,
+      toColumns: pg !== null ? pg.toColumns : r.get("to_cols") ?? "",
+      onDelete: pg !== null ? pg.onDelete : (r.get("on_delete") ?? "").toLowerCase().replace("no action", "") || null,
       incoming: from !== table,
     };
   });
@@ -259,7 +260,7 @@ export function structureOf(kind: Kind, o: Outcome, table: string): Structure {
     const k = r.get("kind");
     const def = r.get("def");
     // Postgres' definition: the part in parentheses after USING.
-    const cols = def ? (/USING \w+ \((.*)\)/.exec(def)?.[1] ?? def) : r.get("cols") ?? "";
+    const cols = def !== null && def !== undefined && Str.isNonEmpty(def) ? (/USING \w+ \((.*)\)/.exec(def)?.[1] ?? def) : r.get("cols") ?? "";
 
     return { name: r.get("name") ?? "", kind: k === "primary" || k === "unique" ? k : "", method: r.get("method") ?? "", columns: cols };
   });
@@ -286,11 +287,11 @@ export const orderSql = (kind: Kind, sort: { readonly column: string; readonly d
 export function browseSql(kind: Kind, b: Browse): { readonly statements: ScriptStatement[] } | { readonly refused: string } {
   const filter = b.filter.trim().replace(/^where\s+/i, "").replace(/;\s*$/, "");
   const from = qualified(kind, b.table);
-  const where = filter ? ` where ${filter}` : "";
-  const order = b.sort ? ` ${orderSql(kind, b.sort)}` : "";
-  const rows = `select ${b.rowid ? "rowid, " : ""}* from ${from}${where}${order} limit ${b.limit} offset ${b.offset}`;
+  const where = Str.isNonEmpty(filter) ? ` where ${filter}` : "";
+  const order = b.sort !== null ? ` ${orderSql(kind, b.sort)}` : "";
+  const rows = `select ${b.rowid === true ? "rowid, " : ""}* from ${from}${where}${order} limit ${b.limit} offset ${b.offset}`;
 
-  if (filter) {
+  if (Str.isNonEmpty(filter)) {
     // The filter is the person's SQL inside ours: one statement, and only a read.
     const parts = splitStatements(rows, kind);
 

@@ -5,6 +5,7 @@
 // lands in the editor. Also the text with comments and literals blanked, which
 // safety.ts reads.
 
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 
 /** A statement: its text (trimmed, without its closing semicolon), where it starts and ends in
@@ -102,7 +103,7 @@ function codeStep(sc: Scan, c: string, next: string): boolean {
   if (c === "$" && sc.kind === "postgres") {
     const m = DOLLAR.exec(sc.s.slice(sc.i, sc.i + 64));
 
-    if (m) {
+    if (m !== null) {
       sc.tag = m[0];
 
       return opens("dollar", m[0].length);
@@ -142,7 +143,7 @@ function statementOf(text: string, kind: Kind, from: number, to: number): Statem
   const lead = piece.length - piece.trimStart().length;
   const body = piece.trim();
 
-  if (!blankLiterals(body, kind).trim()) return null;
+  if (Str.isEmpty(blankLiterals(body, kind).trim())) return null;
 
   const start = from + lead;
   const line = text.slice(0, start).split("\n").length;
@@ -169,14 +170,14 @@ export function splitStatements(text: string, kind: Kind): Statement[] {
 
     const st = statementOf(text, kind, from, at);
 
-    if (st) out.push(st);
+    if (st !== null) out.push(st);
 
     from = at + 1;
   }
 
   const last = statementOf(text, kind, from, text.length);
 
-  if (last) out.push(last);
+  if (last !== null) out.push(last);
 
   return out;
 }
@@ -186,7 +187,7 @@ export function splitStatements(text: string, kind: Kind): Statement[] {
 export function statementAt(list: readonly Statement[], text: string, caret: number): Statement | null {
   const holding = list.find((s) => caret >= s.start && caret <= s.end + 1);
 
-  if (holding) return holding;
+  if (holding !== undefined) return holding;
 
   const lineStart = text.lastIndexOf("\n", caret - 1) + 1;
   const before = [...list].reverse().find((s) => s.end <= caret && s.end >= lineStart);

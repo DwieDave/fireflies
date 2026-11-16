@@ -5,6 +5,7 @@
 // twice, the second time by typing the object's name). Read with comments and
 // literals blanked (split.ts), so a word inside a string never counts.
 
+import { String as Str } from "effect";
 import type { Kind } from "./kinds.ts";
 import { blankLiterals } from "./split.ts";
 
@@ -48,7 +49,7 @@ function nameAt(raw: string, blank: string, word: number): string | null {
     const rest = raw.slice(m.index).match(/^(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+)(?:\.(?:"(?:[^"]|"")*"|`[^`]*`|\[[^\]]*\]|[A-Za-z0-9_$]+))*/);
     const last = rest?.[0].split(".").at(-1) ?? null;
 
-    return last ? last.replace(/^["`[]|["`\]]$/g, "").replace(/""/g, '"') : null;
+    return last !== null && Str.isNonEmpty(last) ? last.replace(/^["`[]|["`\]]$/g, "").replace(/""/g, '"') : null;
   }
 
   return null;
@@ -90,7 +91,7 @@ export function classify(sql: string, kind: Kind): Verdict {
   if (first === "with") {
     const writes = ws.find((w) => WRITES_IN_WITH.has(w));
 
-    return writes ? { risk: "write", verb: `with … ${writes}`, target: null } : { risk: "read", verb: "with … select", target: null };
+    return writes !== undefined && Str.isNonEmpty(writes) ? { risk: "write", verb: `with … ${writes}`, target: null } : { risk: "read", verb: "with … select", target: null };
   }
 
   if (SESSION.has(first)) {
