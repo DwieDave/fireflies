@@ -12,6 +12,7 @@ import type { Theme } from "herdr";
 import type { Kind } from "./kinds.ts";
 import { KIND_MARK } from "./kinds.ts";
 import { edge as edgeTone } from "./tones.ts";
+import { flat } from "./layout-look.ts";
 
 export const ART = "mods/nocturne/art";
 
@@ -33,6 +34,10 @@ export const unzoomSize = (size: Size): Size => ({ width: unzoom(size.width), he
 
 /** A layer filling its parent with a 50% checker dither (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
