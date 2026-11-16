@@ -383,6 +383,32 @@ test("the page has the keyboard: a press, cmd-esc, cmd-r and cmd-alt-i", async (
   expect(app.ran.at(-1)?.[0]).toBe("pane.split");
 });
 
+test("a mouse's side buttons over the page go back and forward in the shown tab, as the bar's arrows", async () => {
+  reset();
+  const store = storage();
+  try {
+    const { view, cx, native, mod } = await webPane({ slot: "b1", url: "https://a.example/x", copy: 1 });
+    // As the native view sends them (nextNativeViewEvent's text): proven where they come in.
+    const back = mod.parseEvent(JSON.stringify({ id: "web", generation: 1, event: "web.backButton", data: {} }));
+    const forward = mod.parseEvent(JSON.stringify({ id: "web", generation: 1, event: "web.forwardButton", data: {} }));
+    expect([back?.event, forward?.event]).toEqual(["web.backButton", "web.forwardButton"]);
+    native.length = 0;
+    view.onEvent(back, cx);
+    view.onEvent(forward, cx);
+    expect(native).toEqual([["web", "browser.back", {}], ["web", "browser.forward", {}]]);
+    // The bar's arrows take the same way.
+    native.length = 0;
+    view.command("back");
+    view.command("forward");
+    expect(native).toEqual([["web", "browser.back", {}], ["web", "browser.forward", {}]]);
+    // A tab behind isn't under the pointer: its word moves nothing.
+    view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+    native.length = 0;
+    view.onEvent({ id: "web-2", event: "web.backButton", data: {} }, cx);
+    expect(native).toEqual([]);
+  } finally { store.done(); }
+});
+
 test("two web panes: a command acts only in the focused one, however the focus got there", async () => {
   reset();
   const a = await webPane({ slot: "a", url: "https://a.example", copy: 1 });

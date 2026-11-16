@@ -43,8 +43,8 @@ their `links` setting). A web pane keeps tabs: `herdr-app do
 browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
-the shown one). A page may go fullscreen there (a video's button; Esc
-comes back).
+the shown one). The mouse's side buttons and a two-finger swipe go back and
+forward there, and a page may go fullscreen (a video's button; Esc comes back).
 
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports

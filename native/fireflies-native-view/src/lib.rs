@@ -572,6 +572,17 @@ pub fn click_opens_tab(link: bool, button: i64, cmd: bool, shift: bool) -> Optio
     (link && (middle || cmd)).then_some(!shift)
 }
 
+/// A mouse's side buttons over a web view (NSEvent `buttonNumber`, zero-based:
+/// 3 back, 4 forward): the event its mod gets, to go back or forward in the
+/// page's history. None: another button, left to the page.
+pub fn nav_button(button: i64) -> Option<&'static str> {
+    match button {
+        3 => Some("web.backButton"),
+        4 => Some("web.forwardButton"),
+        _ => None,
+    }
+}
+
 /// WKFullscreenState in words, for `native.debug`.
 pub fn fullscreen_name(state: i64) -> &'static str {
     match state {
@@ -718,6 +729,16 @@ mod tests {
         // In an 800pt-high unflipped view the top edge at y=20 becomes 800-20-50.
         assert_eq!(a.flipped(800.0), (10.0, 730.0, 100.0, 50.0));
         assert!(a.contains(10.0, 20.0) && !a.contains(110.0, 20.0));
+    }
+
+    #[test]
+    fn side_buttons_go_back_and_forward() {
+        assert_eq!(nav_button(3), Some("web.backButton"));
+        assert_eq!(nav_button(4), Some("web.forwardButton"));
+        // Left, right and middle stay the page's (a middle click opens a tab).
+        for b in [0, 1, 2, 5] {
+            assert_eq!(nav_button(b), None, "{b}");
+        }
     }
 
     #[test]

@@ -386,6 +386,8 @@ fn out_of_fullscreen(key: String, generation: u64, web: Weak<WKWebView>, tries: 
 fn begin(web_key: &str, generation: u64, web: &Weak<WKWebView>, frame: Option<Retained<WKFrameInfo>>) {
     let Some(w) = web.load() else { return };
     let Some(home) = (unsafe { w.superview() }) else { return };
+    // A swipe over the player would take the page (and its video) back.
+    unsafe { w.setAllowsBackForwardNavigationGestures(false) };
     SESSION.with(|s| {
         *s.borrow_mut() = Some(Session {
             source: web_key.to_owned(),
@@ -470,7 +472,8 @@ pub(crate) fn navigated(web_key: &str) {
 
 // ---- the session
 
-fn active(web_key: &str) -> bool {
+/// Whether the page `web_key`'s video is out in a player now.
+pub(crate) fn active(web_key: &str) -> bool {
     SESSION.with(|s| s.try_borrow().is_ok_and(|s| s.as_ref().is_some_and(|s| s.source == web_key)))
 }
 
@@ -520,6 +523,9 @@ fn go_home(s: &Session) {
 
 /// An ended session: its window goes, its players and its page's mod are told.
 fn close(s: Session) {
+    if let Some(w) = s.web.load() {
+        unsafe { w.setAllowsBackForwardNavigationGestures(true) };
+    }
     if let Some(p) = &s.popped {
         p.panel.orderOut(None);
     }

@@ -444,6 +444,9 @@ fn make(
                 // Its link menu says "in New Tab" when the mod keeps tabs (crate::tabs).
                 let view = crate::tabs::new_web_view(mtm, frame, &config);
                 let _: () = msg_send![&*view, setInspectable: true];
+                // A trackpad's two-finger swipe goes back and forward, as in Safari
+                // (off while its video is out in a player: crate::pip).
+                view.setAllowsBackForwardNavigationGestures(true);
                 let delegate = WebDelegate::new(mtm, key, generation);
                 if spec.pip {
                     crate::pip::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
@@ -1284,6 +1287,17 @@ pub(crate) fn web_view_key(web: &WKWebView) -> Option<(String, bool)> {
         let v = v.try_borrow().ok()?;
         v.iter().find_map(|(k, e)| match &e.renderer {
             Renderer::Web { view, .. } if std::ptr::eq(Retained::as_ptr(view), web) => Some((k.clone(), e.spec.tabs)),
+            _ => None,
+        })
+    })
+}
+
+/// The key and load generation of a web view, for an event of its own.
+pub(crate) fn web_view_load(web: &WKWebView) -> Option<(String, u64)> {
+    VIEWS.with(|v| {
+        let v = v.try_borrow().ok()?;
+        v.iter().find_map(|(k, e)| match &e.renderer {
+            Renderer::Web { view, .. } if std::ptr::eq(Retained::as_ptr(view), web) => Some((k.clone(), e.generation)),
             _ => None,
         })
     })

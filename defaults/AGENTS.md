@@ -707,7 +707,9 @@ the highlighted line shows where it will land.
   Nocturne's and the global keys (Cmd-P is not the picker there, Cmd-[ / Cmd-]
   not agents), and only in the focused web pane. Enter in the address goes
   and puts the keyboard into the page; Esc leaves the address the same way.
-  A page may go fullscreen (a video's
+  Over the page, a mouse's side buttons (back, forward) and a trackpad's
+  two-finger swipe go back / forward in the shown tab, as `H` / `L` do (neither
+  while its video is out in the player). A page may go fullscreen (a video's
   fullscreen button, YouTube's `f`, any `requestFullscreen`): it fills the
   screen in a macOS fullscreen space of its own, as in Safari, and Esc (or the
   page's own button) brings it back into its pane. Picture in picture (`p`, ⧉)
@@ -2168,7 +2170,13 @@ The main ones:
   A web view's page may go fullscreen (`WKPreferences.elementFullscreenEnabled`, so
   `document.fullscreenEnabled` is true): WebKit moves the view into a fullscreen window of
   its own and back into its place on Esc; `native.debug` shows it per web view as
-  `fullscreen { enabled, state }` (`state`: `none`, `entering`, `in`, `exiting`).
+  `fullscreen { enabled, state }` (`state`: `none`, `entering`, `in`, `exiting`). A
+  mouse's side buttons over a web view don't reach the page: on their release its mod
+  gets `web.backButton` / `web.forwardButton` (no data; not while its video is out in a
+  `pip` view), to go back or forward as it sees fit (Nocturne's browser: `browser.back` /
+  `browser.forward` on the shown tab). A trackpad's two-finger swipe goes back and
+  forward in the view itself (`allowsBackForwardNavigationGestures`; off while its video
+  is out).
   A web view sends `web.location` (its state: `href`, `title`, `canGoBack`, …) whenever its
   address, history or title changes, also within a page (links in single-page apps, pushState,
   #fragments), so an address bar can follow it; `load.*` alone misses those.
