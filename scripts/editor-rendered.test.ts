@@ -188,6 +188,27 @@ test("enter on a list item starts the next one; on an empty one it ends the list
   expect(block(p).cursor()).toEqual({ line: 1, col: 2 });
 });
 
+test("the Markdown commands' list: by a key under the lit block (rendered) or the caret (text), by the bar's chip under the chip", async () => {
+  const p = await pane();
+  const at = () => { const m = byId(p.mdMenuView(theme), "editor-md-menu"); return { x: m.calls.left[0][0], y: m.calls.top[0][0] }; };
+  block(p).handlers.key(key("down"), cx());
+  block(p).handlers.key(key(".", { platform: true }), cx());
+  const r = p.cur.rendered;
+  // Rendered: under the lit block, at the text's left edge.
+  expect(at()).toEqual({ x: 12, y: Math.round(p.textTop() + r.litTop + r.litHeight()) });
+  p.mdMenu = null;
+  // The chip (a click on the bar's markdown button): under the bar at the right, where the chip is.
+  p.mdMenu = { at: 0, chip: true };
+  expect(at()).toEqual({ x: 900 - 16 - 400, y: p.textTop() + 8 });
+  p.mdMenu = null;
+  // The text view: under the caret as the editor drew it (window px over the zoom, past the gutter).
+  p.cur.view = "text";
+  p.editor.bounds = () => ({ x: 140, y: 200, width: 8, height: 18, view: { x: 40, y: 100, width: 800, height: 500 } });
+  p.mdMenu = { at: 0, chip: false };
+  expect(at()).toEqual({ x: 100 + 12, y: p.textTop() + 100 + 18 });
+  p.mdMenu = null;
+});
+
 test("cmd-. then a letter runs a Markdown command at the caret (b: bold the word; again: off)", async () => {
   const p = await pane();
   block(p).handlers.key(key("down"), cx());

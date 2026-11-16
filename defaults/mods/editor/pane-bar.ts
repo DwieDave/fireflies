@@ -350,7 +350,7 @@ function mdChip(ed: EditorPane, t: Theme, vim: boolean): Element {
           focusText(ed);
           cx.notify();
         } else {
-          openMdMenu(ed, cx);
+          openMdMenu(ed, cx, true);
           focusText(ed);
         }
       })
@@ -403,6 +403,7 @@ export function tabStrip(ed: EditorPane, t: Theme): Element {
 
   // Where each drawn tab starts (px, unzoomed): the tab menu opens under it.
   ed.tabX = (i) => (i < fit.from || i >= fit.to ? 8 : (fit.before > 0 ? MORE : 0) + widths.slice(fit.from, i).reduce((a, b) => a + b, 0));
+  ed.tabW = (i) => (i < fit.from || i >= fit.to ? 0 : widths[i] ?? 0);
 
   const drag = ed.tabDrag;
   const stake = drag ? stakeAt(docs.length, drag.from, dropIndex(docs.length, drag.from, drag.gap)) : null;
@@ -511,9 +512,13 @@ function stripTab(ed: EditorPane, t: Theme, d: Doc, i: number, l: TabLabel, stak
         closeTab(ed, cx, d);
         cx.notify();
       })
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        openTabMenu(ed, cx, i);
+        // At the press: the tab's own place on the strip plus where in it.
+        const l = e.local_position;
+        const z = zoom();
+
+        openTabMenu(ed, cx, i, l ? { x: (ed.tabX?.(i) ?? 0) + l.x / z, y: l.y / z } : null);
         cx.notify();
       })
       // Unsaved: the bar's yellow dithered square; nothing when clean.

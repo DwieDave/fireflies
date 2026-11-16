@@ -1,4 +1,5 @@
-// The editor pane's tab menu (a right-click on a tab, space b m) and
+// The editor pane's tab menu (a right-click on a tab: at the pointer; space b m:
+// under the shown tab, under the bar when there's no strip; menu-place.ts) and
 // dragging a tab along the strip (tabs.ts says where it lands).
 
 import type EditorPane from "./main.ts";
@@ -10,21 +11,23 @@ import type { Context, Element, KeyEvent, MouseMoveEvent } from "gpui-kit";
 import { div } from "gpui-kit";
 import type { Theme } from "herdr";
 import type { Doc } from "./pane-kit.ts";
-import { dither, focusOn, stop, zoom } from "./pane-kit.ts";
+import type { Pt, Rect } from "./menu-place.ts";
+import { placeMenu } from "./menu-place.ts";
+import { BAR, dither, focusOn, stop, zoom } from "./pane-kit.ts";
 import { closeCard } from "./card.ts";
 import { focusText } from "./md-pane.ts";
 import { closeTab, moveTab, otherEditor, popIn, popOut, select } from "./pane-tabs.ts";
 
 /** Opens the menu of tab `index` (the shown one by default): a right-click
- *  on it, space b m, the tab-menu command. */
-export function openTabMenu(ed: EditorPane, cx: Context, index = ed.docs.indexOf(ed.shown())): void {
+ *  on it (at the press `near`, pane px), space b m, the tab-menu command. */
+export function openTabMenu(ed: EditorPane, cx: Context, index = ed.docs.indexOf(ed.shown()), near: Pt | null = null): void {
   const d = ed.docs[index];
 
   if (!d) return;
 
   const items = tabMenuItems({ count: ed.docs.length, index, others: Boolean(otherEditor(ed)), scratch: d.scratch });
 
-  ed.tabMenu = { index, at: 0, items };
+  ed.tabMenu = { index, at: 0, items, near };
   closeCard(ed, cx);
   cx.timer.after(0, () => ed.menuHandle?.focus());
   cx.notify();
@@ -92,20 +95,33 @@ export function tabMenuKeyDown(ed: EditorPane, e: KeyEvent, cx: Context): void {
   cx.notify();
 }
 
-/** The menu, under its tab on the strip (at the bar's left with one tab). */
+/** What a key's tab menu stands under (pane px): its tab on the strip, else (one tab, no strip,
+ *  or the tab folded away) the bar over the text. */
+export function tabRect(ed: EditorPane, index: number): Rect {
+  const w = ed.tabW?.(index) ?? 0;
+
+  return ed.stripH() && w > 0 ? { x: ed.tabX?.(index) ?? 0, y: 0, w, h: ed.stripH() } : { x: 0, y: 0, w: ed.size.width / zoom(), h: ed.stripH() + BAR };
+}
+
+/** The menu's width, and a row's height. */
+const MENU_W = 228;
+const MENU_ROW = 22;
+
+/** The menu: at the press, else under its tab (menu-place.ts), whole inside the pane. */
 export function tabMenuView(ed: EditorPane, t: Theme): Element {
   const m = ed.tabMenu;
 
   if (!m) return div();
 
   const z = zoom();
-  const x = Math.max(4, Math.min(ed.tabX?.(m.index) ?? 8, ed.size.width / z - 236));
+  const room = { width: ed.size.width / z, height: ed.size.height / z };
+  const { x, y } = placeMenu({ width: MENU_W, height: m.items.length * MENU_ROW + 8 }, room, m.near ?? tabRect(ed, m.index));
 
   const row = (it: MenuItem, i: number): Element =>
     h_flex()
       .id(`editor-tab-menu-${it.act}`)
       .relative()
-      .h(22)
+      .h(MENU_ROW)
       .px(10)
       .gap(10)
       .items_center()
@@ -122,7 +138,7 @@ export function tabMenuView(ed: EditorPane, t: Theme): Element {
       .child(div().relative().w(14).flex_none().text_color(t.accent).child(it.key))
       .child(div().relative().flex_1().child(it.label));
 
-  return focusOn(div().id("editor-tab-menu").absolute().top(ed.stripH()).left(x).w(228).py(4).bg(t.background).border(1).border_color(t.accent), ed.menuHandle)
+  return focusOn(div().id("editor-tab-menu").absolute().top(y).left(x).w(MENU_W).py(4).bg(t.background).border(1).border_color(t.accent), ed.menuHandle)
     .on_key_down((e, cx) => tabMenuKeyDown(ed, e, cx))
     .on_mouse_down("left", stop)
     .child(div().absolute().left(4).right(-4).top(4).bottom(-4).child(dither(t.ansi0, 1)))

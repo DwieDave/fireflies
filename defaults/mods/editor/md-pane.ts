@@ -16,7 +16,9 @@ import { div, svg } from "gpui-kit";
 import type { Theme } from "herdr";
 import { readTextFile, settings, theme, writeTextFile } from "herdr";
 import type { Doc } from "./pane-kit.ts";
-import { dither, errorText, HINTS, selectionColor, zoom } from "./pane-kit.ts";
+import { dither, errorText, GUTTER_INSET, HINTS, selectionColor, zoom } from "./pane-kit.ts";
+import type { Pt, Rect } from "./menu-place.ts";
+import { placeMenu } from "./menu-place.ts";
 import { imageOf, loadImageSrcs, pasteImageBlock, pickImage, previewLink } from "./preview-pane.ts";
 
 /** A Markdown command's entry in the list: [title, its letter after cmd-., what it writes]. */
@@ -83,11 +85,12 @@ export function blockKey(ed: EditorPane, e: KeyEvent, cx: Context): boolean {
   return taken;
 }
 
-/** Opens the Markdown commands' list (cmd-., vim: space .) at the caret. */
-export function openMdMenu(ed: EditorPane, cx: Context): void {
+/** Opens the Markdown commands' list: by a key (cmd-., vim: space .) under the caret (the lit
+ *  block in the rendered view), by the bar's chip under the chip. */
+export function openMdMenu(ed: EditorPane, cx: Context, chip = false): void {
   if (!ed.markdown) return ed.say("the Markdown commands are for Markdown files");
 
-  ed.mdMenu = { at: Date.now() };
+  ed.mdMenu = { at: Date.now(), chip };
   cx.notify();
 }
 
@@ -288,13 +291,14 @@ export function mdMenuView(ed: EditorPane, t: Theme): Element {
   const names: string[] = Object.keys(MD_COMMANDS);
   const row = (n: string): Element => mdRow(ed, t, n, on);
   const group = (name: string): Element => div().text_size(10.5).text_color(t.dim).mt(4).child(name);
+  const place = mdMenuPlace(ed, d);
 
   return v_flex()
     .id("editor-md-menu")
     .absolute()
-    .right(16)
-    .top(mdMenuTop(ed, d))
-    .w(400)
+    .left(place.x)
+    .top(place.y)
+    .w(MENU_W)
     .bg(t.background)
     .border(1)
     .border_color(t.ansi0)
@@ -345,20 +349,38 @@ export function mdMenuView(ed: EditorPane, t: Theme): Element {
     );
 }
 
-/** Where the list sits: under the lit block (rendered), above it when it doesn't fit there; under the bar in the text views. */
-function mdMenuTop(ed: EditorPane, d: Doc): number {
-  const MENU_H = 270;
-  const paneH = ed.size.height / zoom();
-  let top = ed.textTop() + 8;
+/** The list's size (layout px; its height about what its rows take). */
+const MENU_W = 400;
+const MENU_H = 270;
 
-  if (d.view === "rendered" && d.rendered) {
-    const litTop = ed.textTop() + d.rendered.litTop;
-    const litBottom = litTop + d.rendered.litHeight();
+/** What a key's list stands at (pane px): the lit block in the rendered view, else the caret as
+ *  the editor last drew it; null when it's out of sight. */
+function mdAnchor(ed: EditorPane, d: Doc): Rect | null {
+  const width = ed.size.width / zoom();
 
-    top = litBottom + 6 + MENU_H < paneH - HINTS ? litBottom + 6 : Math.max(ed.textTop() + 4, litTop - MENU_H - 6);
-  }
+  if (d.view === "rendered" && d.rendered) return { x: GUTTER_INSET, y: ed.textTop() + d.rendered.litTop, w: width - 2 * GUTTER_INSET, h: d.rendered.litHeight() };
 
-  return top;
+  const b = ed.editor.bounds(ed.editor.cursor());
+
+  if (!b?.view) return null;
+
+  const z = zoom();
+  const y = (b.y - b.view.y) / z;
+
+  if (y < 0 || y > b.view.height / z) return null;
+
+  return { x: (b.x - b.view.x) / z + GUTTER_INSET, y: y + ed.textTop(), w: Math.max(1, b.width / z), h: b.height / z };
+}
+
+/** Where the list sits: opened by a key, under the caret or the lit block (above it near the
+ *  foot, clear of the hints: menu-place.ts); by the chip (or the caret out of sight), under the
+ *  bar at the right, where the chip is. */
+function mdMenuPlace(ed: EditorPane, d: Doc): Pt {
+  const z = zoom();
+  const room = { width: ed.size.width / z, height: ed.size.height / z - HINTS };
+  const at = ed.mdMenu?.chip ? null : mdAnchor(ed, d);
+
+  return at ? placeMenu({ width: MENU_W, height: MENU_H }, room, at) : { x: Math.max(8, room.width - 16 - MENU_W), y: ed.textTop() + 8 };
 }
 
 /** A command's row: its letter, its title (lit when it's on at the caret), the mark it writes; a click runs it. */

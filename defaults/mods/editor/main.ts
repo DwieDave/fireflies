@@ -159,6 +159,7 @@ import { closeTab, leave, openFile, ownPane, popIn, popOut, select, stepMove, st
 import { setWrap, vimCommand, vimDoc, vimKey, vimOn, vimSettled } from "./pane-vim.ts";
 import { closePane, imageOf, previewLink, setView, tick } from "./preview-pane.ts";
 import { closeTabMenu, openTabMenu, tabMenuKeyDown, tabMenuView } from "./tab-menu.ts";
+import type { Pt } from "./menu-place.ts";
 import { TabFields } from "./tab-fields.ts";
 
 
@@ -167,6 +168,8 @@ interface TabMenu {
   readonly index: number;
   at: number;
   readonly items: readonly MenuItem[];
+  /** The press (pane px) when a right click opened it, else (a key) null: under its tab. */
+  readonly near: Pt | null;
 }
 
 /** A tab dragged along the strip: from where, the gap it's over, off the strip. */
@@ -221,6 +224,9 @@ export default class EditorPane extends TabFields {
 
   /** Where each drawn tab starts on the strip (px, unzoomed): the tab menu opens under it. */
   tabX: ((i: number) => number) | null = null;
+
+  /** How wide each drawn tab is (px, unzoomed; 0: folded away): a key's tab menu stands under it. */
+  tabW: ((i: number) => number) | null = null;
 
   menuHandle: FocusHandle | null = null;
 
@@ -278,7 +284,8 @@ export default class EditorPane extends TabFields {
   appKeys: { readonly at: number; readonly map: ReadonlyMap<string, Bound> } | null = null;
 
   /** The Markdown commands' list, open since. */
-  mdMenu: { readonly at: number } | null = null;
+  /** The Markdown commands' list: when it opened, whether the bar's chip opened it (else a key). */
+  mdMenu: { readonly at: number; readonly chip: boolean } | null = null;
 
   /** The context of the last change, for the autosave's timer. */
   timerCx: Context | null = null;
