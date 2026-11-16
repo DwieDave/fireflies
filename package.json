@@ -6,6 +6,7 @@
   "devDependencies": {
     "@effect/tsgo": "0.69.0",
     "@fireflies/kit": "workspace:*",
+    "@fireflies/look": "workspace:*",
     "@oxlint/plugins": "1.93.0",
     "@types/bun": "1.4.4",
     "effect": "4.1.4",

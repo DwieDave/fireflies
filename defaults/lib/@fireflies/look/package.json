@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/look",
+  "private": true,
+  "type": "module",
+  "description": "The look the shown layout asks for, drawn: Nocturne's dithered chrome where the layout is dithered, herdr-app's plain one elsewhere (docs/plain-look.md). Served by the app as a built-in module; this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}
