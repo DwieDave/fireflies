@@ -30,6 +30,7 @@ import { Engine, items, OPEN_KEY, terminalsNow } from "./engine.ts";
 import { counts } from "./model.ts";
 import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.ts";
 import { ART, dither, stop, toolGround, toolHover } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 const POLL = 1500;
 
@@ -186,7 +187,7 @@ export default class Bell {
         })
         .on_click(() => toggleOverview({ press: this.press?.e ?? null, wasOpen: Boolean(this.press?.open) }))
         // Open: the strip's open look, a dithered band and a blue foot.
-        .when(open, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
+        .when(open, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
         .when(c.needs > 0, (el) => el
           .child(mark(t.blocked, true))
           .child(div().h(15).px(4).flex().items_center().bg(t.blocked).text_color(t.background).child(String(c.needs))))
