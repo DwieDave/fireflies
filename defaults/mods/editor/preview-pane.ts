@@ -10,9 +10,9 @@ import { readShared, readSharedMap, writeShared, writeSharedMap } from "./guard.
 import { assetPlace, imageMarkdown, insertImage, isImagePath, maybeCopiedImage, readClipboardImage, relative, stamp } from "./images.ts";
 import { unitFor, units as liveUnits } from "./live.ts";
 import { basename, dirname, uri } from "./logic.ts";
-import { cacheImage, isLocalSource, taskToggle } from "./markdown.ts";
+import { cacheImage, isLocalSource, taskToggle } from "@fireflies/markdown";
 import { editBetween } from "./md-text.ts";
-import { follow, join } from "./paths.ts";
+import { follow, join } from "@fireflies/markdown/paths";
 import type { Picture } from "./rendered.ts";
 import { v_flex } from "gpui-base";
 import type { Context, Element, KeyEvent } from "gpui-kit";

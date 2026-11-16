@@ -95,7 +95,7 @@ mock.module("gpui-base", () => ({
 const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const tabs = await import("../defaults/mods/editor/tabs.ts");
 const route = await import("@fireflies/editor-route");
-const icons = await import("../defaults/mods/editor/file-icons.ts");
+const icons = await import("@fireflies/viewer/file-icons");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
 let later: [number, (cx: any) => void][] = [];
@@ -789,7 +789,7 @@ test("H / L: the previous / next tab while there are several (a count: that many
 
 // ---- every kind of file as a tab: drawn tabs (the preview's viewer), Markdown to read
 
-const { default: Viewer } = await import("../defaults/mods/editor/viewer.ts");
+const { default: Viewer } = await import("@fireflies/viewer");
 const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
 const keyc = (c: string, mods: any = {}) => ({ key: c.length === 1 ? c.toLowerCase() : c, key_char: c.length === 1 ? c : null, modifiers: { shift: c.length === 1 && c !== c.toLowerCase(), control: false, alt: false, platform: false, ...mods } });
 
@@ -1254,15 +1254,18 @@ test("file marks: one tab (no strip): the bar's name has its mark; a scratchpad'
   expect(markOf(p.tabStrip(theme), "editor-tab-icon-1").src).toBe("mods/nocturne/art/scratchpad.svg");
 });
 
-test("file marks are shared: file-tree's, preview's and nocturne's file-icons.ts and icons/*.svg are editor's, byte for byte", () => {
+test("file marks are shared: every mod imports @fireflies/viewer/file-icons (no copy), and file-tree's, preview's and nocturne's icons/*.svg are editor's, byte for byte", async () => {
+  const { copiesOf } = await import("./mod-source.ts");
   const read = (mod: string, file: string) => readFileSync(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
   for (const mod of ["file-tree", "preview", "nocturne"]) {
-    for (const file of ["file-icons.ts", ...icons.FILE_ICONS.map((i: string) => `icons/${i}.svg`)]) expect([mod, file, read(mod, file) === read("editor", file)]).toEqual([mod, file, true]);
+    for (const file of icons.FILE_ICONS.map((i: string) => `icons/${i}.svg`)) expect([mod, file, read(mod, file) === read("editor", file)]).toEqual([mod, file, true]);
   }
-  // nocturne (its shelf's tiles) carries kinds.ts for it, as editor's.
-  expect(read("nocturne", "kinds.ts") === read("editor", "kinds.ts")).toBe(true);
-  // It imports only kinds.ts, itself a shared copy in both.
-  expect([...read("editor", "file-icons.ts").matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1])).toEqual(["kinds.ts", "kinds.ts"]);
+  expect(copiesOf("file-icons.ts")).toEqual([]);
+  // kinds.ts is the library's too; databases and git keep kinds.ts files of their own (other contents).
+  expect(copiesOf("kinds.ts").sort()).toEqual(["mods/databases", "mods/git"]);
+  // It imports only kinds.ts, its neighbour in the library.
+  const lib = readFileSync(new URL("../defaults/lib/@fireflies/viewer/file-icons.ts", import.meta.url), "utf8");
+  expect([...lib.matchAll(/from "\.\/([^"]+)"/g)].map((m) => m[1])).toEqual(["kinds.ts", "kinds.ts"]);
 });
 
 test("focus that comes by key (a tab switch, agent.next, a pane closing): the editor's text takes it, so mod:editor (cmd-s) applies", async () => {

@@ -9,7 +9,7 @@
 
 import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
-import type { Column } from "./table.ts";
+import type { Column } from "@fireflies/viewer/table";
 import type { Cell, ResultSet } from "./parse-out.ts";
 import type { GridAt, QueryTab } from "./state.ts";
 import { cellAt, colWidth, columnsOf, measuredWidth, moveGrid, rowsIn, sortedWidth } from "./grid.ts";

@@ -10,8 +10,8 @@ the conversion settled on.
 `nocturne` and all seventeen of its mods (listed in `scripts/nocturne-mods.ts`,
 once `nocturne-<name>`) are TypeScript, with the files they share (below). The stock mods (agents, files, picker, pane, tabs,
 spaces, win98, …) and the frame's older pages are JavaScript and stay as
-they are. Read `pip` as a small pattern (`usage` is on Effect now: docs/effect-mods.md), preview's `viewer.ts`
-for a whole view, github's `gh.ts` and `cache.ts` for outside data read and
+they are. Read `pip` as a small pattern (`usage` is on Effect now: docs/effect-mods.md), `@fireflies/viewer`
+for a whole view on Effect (defaults/lib/@fireflies/viewer), github's `gh.ts` and `cache.ts` for outside data read and
 kept.
 
 ## The standard
@@ -237,7 +237,7 @@ Two more shapes, both in guard.ts:
   index.json.
 - A list other mods append to: `sharedListKey(name, itemGuard)`,
   `readSharedList(shared, KEY)`: one entry in another shape is left out, not
-  the whole list (follow.ts `CHANGES_KEY`, the files pane's moves).
+  the whole list (the files pane's moves; on Schema: `@fireflies/markdown/follow`'s `fileChanges`).
 
 A record another mod reads by its old string name keeps the name exported
 as a string beside its typed key (`OPEN = "editor.open"`, `OPEN_KEY`): the app
@@ -253,12 +253,12 @@ what the owner drops.
   `Guarded<…>` type is a mapped type, so it is assignable to `Props`: a proven
   props value goes straight to `set_props` or a nested view's `init`.
 - `nativeViewCall()` answers and `nextNativeViewEvent()` text: a guard,
-  `parseJson(text, isEvent)`; `undefined` means skip it. viewer.ts's
-  `ask(action, guard)` is the pattern: the answer proven or null, and
-  `act(action)` when it isn't read.
+  `parseJson(text, isEvent)`; `undefined` means skip it. On Effect:
+  `@fireflies/viewer`'s `askNative(v, action, schema)` (the answer decoded, or
+  none) and `actNative(v, action)` when it isn't read.
 - A nested view's props (the host passes them, `init`/`update` get
   `Props | undefined`): a guard over them, written to what the hosts pass
-  (viewer.ts `isViewerProps`).
+  (`@fireflies/viewer`'s `ViewerPropsSchema`).
 - `exec`: `r.stdout` is a string; JSON in it goes through `parseJson` (on
   the kit: `execJson(schema)`, `decodeJson`; `@fireflies/usage-limits` reads
   the usage endpoints' answers and the machine's record file so).
@@ -379,6 +379,11 @@ build on (read the file's top and its `export type`s):
 | `@fireflies/scratch` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry` (`IndexEntrySchema`), `ScratchIo`, `Autosave`, `AutosaveState`; `ownerOf`, `locateIn` on the kit's `Exec` and `Files` |
 | `@fireflies/envrc` | editor, databases | `editor-env.test.ts`, `databases-data.test.ts` | `Exec`, `EnvVars`, `Probe`, `ProjectEnv`, `EnvCache`, `KeptEnv`; `probeIn`, `projectEnvIn`, `lookupIn` on the kit's `Exec` |
 | `@fireflies/usage-limits` | nocturne, usage | `usage-limits.test.ts`, `usage-poll.test.ts` | the usage windows, `UsageEndpoint`, `refreshUsage` |
+| `@fireflies/viewer` (`viewer.ts` and its parts `viewer-*.ts`: state, load, text, table, native, pan, keys, bars, views, fx) | preview, editor, file-tree | `preview-shared.test.ts`, `preview*.test.ts`, `file-tree-preview.test.ts` | the `Viewer` view (default), `ViewerProps` (`ViewerPropsSchema`), its native views' answers (`PdfFactsSchema`, `MediaFactsSchema`, `NativeEventSchema`), its runtime (viewer-fx.ts: `Exec`, `Files`, `Commands`), `hasDatabases`, `openInDatabases` |
+| `@fireflies/viewer/kinds`, `/image`, `/table`, `/diff`, `/keys` | the viewer; `kinds` editor (its tabs); `table` databases | `preview*.test.ts`, `databases-data.test.ts` | `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
+| `@fireflies/viewer/file-icons` (the marks stay in each mod's `icons/*.svg`) | editor, file-tree, nocturne (the jar shelf's tiles), the viewer | `editor-tabs.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
+| `@fireflies/markdown` (`markdown.ts`, its parser `markdown-parse.ts`) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map), `MarkdownDoc`; `imageCopy` on the kit's `Exec` (`cacheImage` its promise for mods not on Effect yet) |
+| `@fireflies/markdown/paths`, `/follow` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange` (`FileChangeSchema`), `Followed` |
 
 Each library's test checks that no mod carries a copy of it again.
 
@@ -392,13 +397,10 @@ the contract the mods build on:
 | file | copies | test | what it types |
 |---|---|---|---|
 | `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
-| `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts; `table.ts` also databases) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`; databases' `table.ts`: `databases-data.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
-| `file-icons.ts` (and `icons/*.svg`) | editor, file-tree, preview (viewer.ts imports it), nocturne (the jar shelf's tiles) | `editor-tabs.test.ts`, `preview-shared.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
-| `markdown.ts`, `markdown-parse.ts` (its blocks) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
-| `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |
 
 Not copies (same name, different file per mod): `kit.ts`, `logic.ts`,
-`tabs.ts`, `graph.ts`, git's `keys.ts` and `kinds.ts`.
+`tabs.ts`, `graph.ts`, databases', git's and procs' `keys.ts`, databases'
+and git's `kinds.ts`.
 
 To change a shared file, edit one, copy it over the others
 (`for m in ...; do cp ...; done`), run its test.

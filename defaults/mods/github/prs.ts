@@ -17,7 +17,7 @@ import type { CheckRow, PrFilter, PrRow, PrView, ReviewComment, WebLink } from "
 import { checkRows, rollupTone, prListQuery, prRows, readAgo, SLOW, linksIn, isPrList, isPrView, isReviewComments, isPrFilter, isPrRow, isReviewComment } from "./model.ts";
 import type { Pieces } from "./cache.ts";
 import { slimPr, slimPrRow, slimReviewComment, newest, LIMITS } from "./cache.ts";
-import { markdown } from "./markdown.ts";
+import { markdown } from "@fireflies/markdown";
 import { PrForm } from "./prForm.ts";
 import type { Hint } from "./kit.ts";
 import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";

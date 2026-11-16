@@ -10,7 +10,7 @@ import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { ItemParts, Unit } from "./live.ts";
 import { itemParts, quoteBody } from "./live.ts";
-import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
+import { markdown, CALLOUTS, imagesAsLinks, fenced } from "@fireflies/markdown";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addAfter } from "./rendered-keys.ts";
 import { edge } from "@fireflies/tones";

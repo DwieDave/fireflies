@@ -9,7 +9,7 @@
 
 import { setShared, shared } from "herdr";
 import type { Cell, ResultSet } from "./parse-out.ts";
-import type { Column } from "./table.ts";
+import type { Column } from "@fireflies/viewer/table";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isNumber, isString, object, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
 

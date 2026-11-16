@@ -6,7 +6,7 @@ import type { EditorView } from "@fireflies/editor-route";
 import { isEditorView } from "@fireflies/editor-route";
 import { isNumber, isString, nullable, object, parseJson } from "./guard.ts";
 import { dirname } from "./logic.ts";
-import { join } from "./paths.ts";
+import { join } from "@fireflies/markdown/paths";
 import type { Context } from "gpui-kit";
 import { cardShown, closeCard, hoverLevel, showCard } from "./card.ts";
 import { toggleDrawn } from "./drawn-tabs.ts";

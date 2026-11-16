@@ -6,7 +6,7 @@ import type EditorPane from "./main.ts";
 import { keysHint } from "@fireflies/keyhelp";
 import type { LookAct } from "./tabs.ts";
 import { lookAction } from "./tabs.ts";
-import Viewer from "./viewer.ts";
+import Viewer from "@fireflies/viewer";
 import { h_flex } from "gpui-base";
 import type { Context, Element, KeyEvent } from "gpui-kit";
 import { div } from "gpui-kit";

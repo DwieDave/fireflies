@@ -38,13 +38,13 @@ import { openInEditor } from "@fireflies/editor-route";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isString, nullable, object, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";
-import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./markdown.ts";
-import { follow, dirname, basename, join, tilde } from "./paths.ts";
+import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "@fireflies/markdown";
+import { follow, dirname, basename, join, tilde } from "@fireflies/markdown/paths";
 import type { DocLink } from "./links.ts";
 import { anchorOf, documentLinks, lastIndex, nextLink, nextHeading } from "./links.ts";
 import { keysKey } from "@fireflies/keyhelp";
 import type { KeyRow } from "@fireflies/keyhelp";
-import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
+import { fileChanges, newestId, follow as followFiles } from "@fireflies/markdown/follow";
 import * as Bars from "./bars.ts";
 
 const MOD = "markdown";

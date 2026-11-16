@@ -2,7 +2,7 @@
 // the mode, the file's name and marks, the server's word, the tabs.
 
 import type EditorPane from "./main.ts";
-import { fileIcon, ICON_SIZE, iconColor, iconSvg } from "./file-icons.ts";
+import { fileIcon, ICON_SIZE, iconColor, iconSvg } from "@fireflies/viewer/file-icons";
 import { basename, dirname, serverNote, tilde } from "./logic.ts";
 import { busy, counts, progressWord } from "./lsp-replies.ts";
 import { noteName } from "@fireflies/scratch";

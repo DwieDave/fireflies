@@ -1,0 +1,12 @@
+{
+  "name": "@fireflies/markdown",
+  "private": true,
+  "type": "module",
+  "description": "Markdown in Nocturne's look (github, markdown, editor): rendered blocks, their parser, where links go, files followed across renames. Served by the app as a built-in module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts",
+    "./markdown-parse": "./markdown-parse.ts",
+    "./paths": "./paths.ts",
+    "./follow": "./follow.ts"
+  }
+}

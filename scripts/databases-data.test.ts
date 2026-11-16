@@ -283,9 +283,9 @@ describe.skipIf(!KEYCHAIN)("the keychain (a throwaway one)", () => {
 });
 
 describe("shared copies", () => {
-  test("databases' table.ts is the preview's, byte for byte; envrc.ts is a library (@fireflies/envrc), no mod carries it", () => {
+  test("databases imports the viewer's table.ts (@fireflies/viewer/table) and envrc.ts (@fireflies/envrc): no mod carries either", () => {
     const mods = new URL("../defaults/mods/", import.meta.url).pathname;
-    expect(readFileSync(`${mods}databases/table.ts`, "utf8")).toBe(readFileSync(`${mods}preview/table.ts`, "utf8"));
+    expect(copiesOf("table.ts")).toEqual([]);
     expect(copiesOf("envrc.ts")).toEqual([]);
   });
 });

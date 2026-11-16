@@ -3,7 +3,7 @@
 // formatting, the bar's short note.
 
 import type EditorPane from "./main.ts";
-import { fileChanges, follow as followFiles } from "./follow.ts";
+import { fileChanges, follow as followFiles } from "@fireflies/markdown/follow";
 import { readSharedMap, writeSharedMap } from "./guard.ts";
 import { basename, dirname, languageId, languageSettings, tilde, uri } from "./logic.ts";
 import { noteName } from "@fireflies/scratch";

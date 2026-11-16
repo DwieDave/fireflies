@@ -1,5 +1,5 @@
 // The editor follows a file renamed, moved or deleted from the files pane
-// (editor/follow.ts): through shared("nocturne.files.changes"),
+// (@fireflies/markdown/follow): through shared("nocturne.files.changes"),
 // only entries newer than its start, only its own machine's. herdr and gpui
 // stand-ins (mock.module is process-wide: this file runs alone).
 import { test, expect, mock, beforeEach } from "bun:test";
@@ -56,7 +56,7 @@ mock.module("gpui-base", () => ({
 
 
 
-const { CHANGES, follow, changeFor, newestId } = await import("../defaults/mods/editor/follow.ts");
+const { CHANGES, follow, changeFor, newestId } = await import("@fireflies/markdown/follow");
 const { default: Editor } = await import("../defaults/mods/editor/main.ts");
 
 beforeEach(() => { sharedNow = {}; lsp.length = 0; unsaved.length = 0; for (const k of Object.keys(storage)) delete storage[k]; });
@@ -167,10 +167,9 @@ test("the Markdown viewer follows a move too, its scroll and its back history wi
   expect(m.path).toBe("/w/guide/a.md");
 });
 
-test("the editor's and the Markdown viewer's follow.ts are the same file", async () => {
-  const { readFileSync } = await import("fs");
-  const read = (m: string) => readFileSync(`${import.meta.dir}/../defaults/mods/${m}/follow.ts`, "utf8");
-  expect(read("markdown")).toBe(read("editor"));
+test("the editor and the Markdown viewer import @fireflies/markdown/follow: neither carries a copy", async () => {
+  const { copiesOf } = await import("./mod-source.ts");
+  expect(copiesOf("follow.ts")).toEqual([]);
 });
 
 test("macOS's /private links: /var/... and /private/var/... are the same file, either way round", () => {

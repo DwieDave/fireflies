@@ -16,7 +16,7 @@ import type { OpenRequest } from "@fireflies/editor-route";
 import { bindTab } from "@fireflies/form-keys";
 import { command } from "./pane-commands.ts";
 import { createVim } from "./vim.ts";
-import { fileChanges, newestId } from "./follow.ts";
+import { fileChanges, newestId } from "@fireflies/markdown/follow";
 import { focusText } from "./md-pane.ts";
 import { followChanges, loadDoc } from "./file-io.ts";
 import { goLine, search, step } from "./find.ts";

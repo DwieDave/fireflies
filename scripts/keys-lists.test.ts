@@ -195,7 +195,7 @@ test("files: ? lists every key, in the list and while the filter types", () => {
 });
 
 const preview = await import("../defaults/mods/preview/main.ts");
-const previewKeys = await import("../defaults/mods/preview/keys.ts");
+const previewKeys = await import("@fireflies/viewer/keys");
 test("preview: ? lists every key for each way it shows a file", () => {
   const cases: [string, string | null, Record<string, any>][] = [
     ["image", "image", {}], ["raster", "pdf", { paged: true }], ["native", "pdf", {}], ["native", "video", {}], ["table", "csv", {}], ["diff", "patch", {}], ["table", "sqlite", { db: true }],

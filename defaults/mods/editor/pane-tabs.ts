@@ -7,7 +7,7 @@ import type { EditorView } from "@fireflies/editor-route";
 import { editorPaths, isScratchpad, LAST_KEY, OPEN_KEY, PATHS_KEY } from "@fireflies/editor-route";
 import { readShared, writeShared, writeSharedMap } from "./guard.ts";
 import { basename, languageSettings, syntaxColors, uri } from "./logic.ts";
-import { MarkdownDoc } from "./markdown.ts";
+import { MarkdownDoc } from "@fireflies/markdown";
 import { Rendered } from "./rendered.ts";
 import { Autosave, isNote } from "@fireflies/scratch";
 import type { Handover } from "./tabs.ts";

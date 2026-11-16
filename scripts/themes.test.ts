@@ -25,9 +25,7 @@ const ALLOWED: Record<string, readonly string[]> = {
   // letterbox black behind the native video
   "pip/main.ts": ["#000000"],
   // a PDF page's paper
-  "preview/viewer-views.ts": ["#ffffff"],
-  "editor/viewer-views.ts": ["#ffffff"],
-  "file-tree/viewer-views.ts": ["#ffffff"],
+  "../lib/@fireflies/viewer/viewer-views.ts": ["#ffffff"],
 };
 
 /** Art that brings its own colors (the rest of the art is one color, tinted by text_color). */
@@ -41,7 +39,10 @@ function files(dir: string): string[] {
   });
 }
 
-const sources = CONVERTED.flatMap((m) => files(m)).filter((f) => /\.(ts|js)$/.test(f) && !f.endsWith(".d.ts"));
+/** The libraries the mods draw with (@fireflies/viewer, markdown, keyhelp, …; the kit draws nothing), by path from defaults/mods. */
+const drawing = readdirSync(LIB).filter((l) => l !== "kit").flatMap((l) => files(`../lib/@fireflies/${l}`)).filter((f) => !f.includes("/node_modules/"));
+
+const sources = [...CONVERTED.flatMap((m) => files(m)), ...drawing].filter((f) => /\.(ts|js)$/.test(f) && !f.endsWith(".d.ts"));
 
 /** A source without its comments (a comment may name the hex a tone lands on). */
 const code = (text: string) => text.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`\\])\/\/.*$/gm, "$1");

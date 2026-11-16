@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, tones, tonesFor, importMod, keyhelpFor } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod, importLibrary, keyhelpFor } from "./mod-source.ts";
 
 // The preview's PDFs, fonts, audio and video: macOS views where they exist, else pdftoppm or a plain "can't".
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
@@ -60,11 +60,11 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 }
 
 
-const kinds = await load("preview/kinds.ts");
-const fileIcons = await load("preview/file-icons.ts", kinds);
-const imageLogic = await load("preview/image.ts", kinds);
-const T = await load("preview/table.ts");
-const D = await load("preview/diff.ts");
+const kinds = await import("../defaults/lib/@fireflies/viewer/kinds.ts");
+const fileIcons = await import("../defaults/lib/@fireflies/viewer/file-icons.ts");
+const imageLogic = await import("../defaults/lib/@fireflies/viewer/image.ts");
+const T = await import("../defaults/lib/@fireflies/viewer/table.ts");
+const D = await import("../defaults/lib/@fireflies/viewer/diff.ts");
 const { parse: parseTable, ...tableRest } = T;
 const { parse: parsePatch, ...diffRest } = D;
 const text = (el: any) => walk(el).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
@@ -81,14 +81,14 @@ const nativeHerdr = {
   },
   nextNativeViewEvent: () => new Promise(() => {}),
 };
-const keyLogic = await load("preview/keys.ts");
+const keyLogic = await import("../defaults/lib/@fireflies/viewer/keys.ts");
 const logic = { ...kinds, ...fileIcons, ...keyLogic, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, herdr: nativeHerdr };
 /** viewer.ts imported for real (the shared files it imports as the app loads
  *  them), with the stand-ins above for the app's modules. */
 const viewerMod = (): Promise<any> => {
   (globalThis as any).window = { paint_path: () => new Element() };
   const named: any = logic;
-  return importMod("preview/viewer.ts", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
+  return importLibrary("@fireflies/viewer", { herdr: { ...herdr, ...named.herdr, ...("theme" in named ? { theme: named.theme } : {}) }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
 };
 const { kindOf, sniffKind, route, rasterArgv, pageCount, duration, siblings, tag, noun, previewable } = kinds;
 const ascii = (s: string) => [...s].map((c) => c.charCodeAt(0));
@@ -161,8 +161,11 @@ test("a PDF on macOS: the system's PDF view on the cached copy; pages and zoom i
   expect(view.pdf.page).toBe(5);
   // Loaded: it fits the page once it has its size, without an event; the bar asks again.
   calls.length = 0;
-  const later = { notify() {}, timer: { after: (_ms: number, f: any) => f(later) } };
+  // The view's runtime (as init attaches it) on a context whose timers fire at once.
+  const later: any = { notify() {}, timer: { after: (_ms: number, f: any) => { f(later); return { cancel() {} }; } } };
+  view.attach(later);
   view.nativeEvent({ id: "preview-pdf", event: "load.finish", data: { page: 1, pageCount: 9, scale: 0.1, autoScales: true } }, later);
+  await Bun.sleep(1);
   expect(calls.map(([, a]) => a)).toEqual(["state"]);
   view.nativeEvent({ id: "preview-pdf", event: "load.error", data: { message: "This PDF is damaged" } }, cx);
   expect(text(view.render())).toEqual(expect.arrayContaining(["Can't preview this PDF", "This PDF is damaged", "open in its app  o"]));

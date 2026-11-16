@@ -5,7 +5,7 @@
 import type { EditorView } from "@fireflies/editor-route";
 import type { LanguageOptions, ServerState } from "./logic.ts";
 import type { Problem, Work } from "./lsp-replies.ts";
-import type { MarkdownDoc } from "./markdown.ts";
+import type { MarkdownDoc } from "@fireflies/markdown";
 import type { Rendered } from "./rendered.ts";
 import type { Autosave, AutosaveState } from "@fireflies/scratch";
 import type { TabKind } from "./tabs.ts";

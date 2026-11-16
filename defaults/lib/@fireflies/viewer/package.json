@@ -1,0 +1,15 @@
+{
+  "name": "@fireflies/viewer",
+  "private": true,
+  "type": "module",
+  "description": "The preview's viewer (preview, editor, file-tree) and the file kinds, icons and tables it reads with (nocturne, databases). Served by the app as a built-in module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts",
+    "./file-icons": "./file-icons.ts",
+    "./kinds": "./kinds.ts",
+    "./table": "./table.ts",
+    "./keys": "./keys.ts",
+    "./image": "./image.ts",
+    "./diff": "./diff.ts"
+  }
+}

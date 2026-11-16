@@ -17,3 +17,5 @@ export * from "./services.ts";
 export * from "./runtime.ts";
 
 export * from "./http.ts";
+
+export * from "./text.ts";

@@ -7,7 +7,7 @@ import type { Color, Context, Element, Size } from "gpui-kit";
 import { h_flex, v_flex, v_virtual_list, Input } from "gpui-base";
 import type { Theme } from "herdr";
 import { readAgo, ago } from "./model.ts";
-import { markdown } from "./markdown.ts";
+import { markdown } from "@fireflies/markdown";
 import { dither, pip, empty, band, stop, unzoom, ART, ansiColor } from "./kit.ts";
 import type { Board, Content, Field, FieldValue, Item } from "./board.ts";
 import type { At, Layout, Lane } from "./board-layout.ts";
