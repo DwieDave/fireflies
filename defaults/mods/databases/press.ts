@@ -16,6 +16,7 @@ import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import type { Theme } from "herdr";
 import { dither, unzoom } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 /** Past this many layout px a press is a drag. */
 export const DRAG_FROM = 4;
@@ -144,7 +145,7 @@ export function ghost(t: Theme, o: PressOwner): Element | null {
   if (!p?.moved || !p.label) return null;
 
   return div().id("db-ghost").absolute().left(p.at.x + 12).top(p.at.y + 10).h(20).px(8).flex().items_center()
-    .bg(t.background).border_1().border_color(p.target ? t.accent : t.ansi8).text_size(11).text_color(t.foreground)
-    .child(div().absolute().inset_0().child(dither(`${t.ansi0}88`, 1)))
+    .bg(t.background).border_1().border_color(p.target ? t.accent : t.muted).text_size(11).text_color(t.foreground)
+    .child(div().absolute().inset_0().child(dither(`${edge(t)}88`, 1)))
     .child(div().relative().max_w(320).truncate().child(p.label));
 }

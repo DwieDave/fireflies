@@ -13,6 +13,7 @@ import { sideList } from "./lists.ts";
 import type { default as GitView } from "./main.ts";
 import { loadMain } from "./content.ts";
 import { cycleScreen } from "./navigate.ts";
+import { edge } from "./tones.ts";
 
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];
@@ -34,7 +35,7 @@ export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: 
   const tabs: readonly (readonly [Tab, string])[] = TABS[p];
 
   tabs.forEach(([id, label], k) => {
-    if (k) parts.push(div().text_color(t.ansi0).child("-"));
+    if (k) parts.push(div().text_color(edge(t)).child("-"));
 
     const on = v.tabOf[p] === id;
 

@@ -18,6 +18,7 @@ import { menuEntries, runAct } from "./menu.ts";
 import { dither, unzoom } from "./paint.ts";
 import { moveTo, procOf } from "./listing.ts";
 import type { default as ProcsDeck } from "./main.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export const MENU_W = 288;
 export const MENU_ROW = 20;
@@ -159,7 +160,7 @@ export function menuBox(v: ProcsDeck, t: Theme, m: Menu): Element {
       v.focus();
       cx.notify();
     })
-    .when(i === m.n, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(x.danger ? t.blocked : t.accent)))
+    .when(i === m.n, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(x.danger ? t.blocked : t.accent)))
     .child(div().relative().w(keyW).flex_none().text_color(x.danger ? t.blocked : t.accent).child(x.key))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(i === m.n ? (x.danger ? t.blocked : t.foreground) : t.muted).child(x.label)));
 

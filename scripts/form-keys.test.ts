@@ -225,7 +225,7 @@ test("git confirm: its checks, then yes and cancel, wrapping; space flips a chec
   pops.key("tab", null, cx()); pops.key("tab", null, cx());
   expect(id()).toBe("cf-no");
   let r = pops.render(t, { width: 900, height: 600 });
-  expect(find(r, "cf-no")!.calls.bg?.[0]).toBe(t.ansi0); // the focused one wears the ring's band
+  expect(find(r, "cf-no")!.calls.bg?.[0]).toBe(t.input); // the focused one wears the ring's band (tones.ts edge: the theme's input)
   pops.key("tab", null, cx());
   expect(id()).toBe("cf-c-0"); // wraps
   pops.key("shift-tab", null, cx());

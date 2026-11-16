@@ -179,6 +179,10 @@ export class Rendered {
   viewH = 400;
   litTop = 0;
   reveal = true; // keep the lit block in view on the next draw
+  /** The unit drawn at the top as last drawn: its first line, the scroll past its top (layout px). */
+  topAt: { line: number; dy: number } | null = null;
+  /** A line to put back at the top on the next draw (a reload, keepTop), before revealing the lit block. */
+  keep: { line: number; dy: number } | null = null;
   hover: string | null = null; // the drawn unit under the pointer (its key): its "+" shows
   pushing = false;
   pre: Pre | null = null;
@@ -288,6 +292,15 @@ export class Rendered {
     this.lightAt(cx, true);
     this.reveal = true;
     cx?.notify();
+  }
+
+  /** After the file's text was replaced (a reload, open() first): the unit that was at the top
+   *  stays there, found by where its first line is now (`moved`, keep-place.ts), instead of
+   *  the view scrolling to the lit block. */
+  keepTop(moved: (line: number) => number): void {
+    const t = this.topAt;
+
+    this.keep = t ? { line: moved(t.line), dy: t.dy } : null;
   }
 
   /** The file's caret and selection: { anchor, head } (file coordinates). */

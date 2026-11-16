@@ -20,6 +20,8 @@ import { dither } from "./toolground.ts";
 
 export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 
+import { edge } from "./tones.ts";
+
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
 
@@ -401,7 +403,7 @@ export function pip(t: Theme, status: Status | null | undefined, size = 6): Elem
 
 /** Uppercase eyebrow label. */
 export function eyebrow(t: Theme, text: string): Element {
-  return div().text_size(11).text_color(t.ansi8).child(text.toUpperCase());
+  return div().text_size(11).text_color(t.muted).child(text.toUpperCase());
 }
 
 /** A stable small number from a string, for per-agent drift. */
@@ -463,7 +465,7 @@ export function keyedSpec(spec: OverlaySpec): OverlaySpec {
 /** On a row (a space, a firefly, a usage window): the popup's current-row
  *  look, a dithered band with a blue edge. `el` must be relative. */
 export function navRow<E extends Element>(t: Theme, el: E, on: boolean): E {
-  return on ? el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)).child(cursorMark(div().absolute().inset_0())) : el;
+  return on ? el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)).child(cursorMark(div().absolute().inset_0())) : el;
 }
 
 /** On a button or a chip: a square blue ring around it. `el` must be relative. */

@@ -24,6 +24,7 @@ import type { Guarded } from "./guard.ts";
 import { isString, object } from "./guard.ts";
 import type { ScopeRow } from "./scopes.ts";
 import { rows, shortcut } from "./scopes.ts";
+import { edge } from "./tones.ts";
 
 const ROW = 26;
 const HERE = "mods/equalize-panes";
@@ -113,14 +114,14 @@ export default class EqualizePanes extends View {
         }))
         .on_click(() => this.pick(r))
         .when(on, (el) => el
-          .child(dither(t.ansi0, 1))
+          .child(dither(edge(t), 1))
           .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
         .child(svg(`${HERE}/${r.icon}.svg`).relative().size(14).flex_none().text_color(r.off ? t.dim : t.accent))
         .child(div().relative().flex_1().min_w(0).truncate().child(r.name))
         .child(div().relative().flex_none().text_size(11).text_color(on && !r.off ? t.accent : t.dim).child(hint));
     };
 
-    const root = v_flex().id("nocturne-equalize").size_full().bg(t.background).border(1).border_color(t.ansi0).pb(4);
+    const root = v_flex().id("nocturne-equalize").size_full().bg(t.background).border(1).border_color(edge(t)).pb(4);
 
     return (this.handle ? root.track_focus(this.handle) : root)
       .on_key_down((e, cx) => {
@@ -156,7 +157,7 @@ export default class EqualizePanes extends View {
         .child(div().relative().text_size(11).text_color(t.foreground).child("Even out"))
         .child(div().flex_1())
         .child(div().relative().text_size(11).text_color(t.dim).child(count < 2 ? "one pane" : `${count} panes`))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
+        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))))
       .children(list.map(row))
       .child(div().px(12).pt(4).flex_none().text_size(10).text_color(t.dim).child("fixed widths stay"));
   }

@@ -728,6 +728,13 @@ the highlighted line shows where it will land.
   Nocturne's and the global keys (Cmd-P is not the picker there, Cmd-[ / Cmd-]
   not agents), and only in the focused web pane. Enter in the address goes
   and puts the keyboard into the page; Esc leaves the address the same way.
+  Over the page, a mouse's side buttons (back, forward) and a trackpad's
+  two-finger swipe go back / forward in the shown tab, as `H` / `L` do (neither
+  while its video is out in the player). A page may go fullscreen (a video's
+  fullscreen button, YouTube's `f`, any `requestFullscreen`): it fills the
+  screen in a macOS fullscreen space of its own, as in Safari, and Esc (or the
+  page's own button) brings it back into its pane. Picture in picture (`p`, ⧉)
+  from a page in fullscreen brings it back first.
   **Web tabs**: one web pane holds several pages, each alive (its video, scroll
   and forms survive a switch); from two on, a strip over the bar shows them
   (number, title, ×, and + for a blank one). A middle click or Cmd-click on a
@@ -808,34 +815,39 @@ the highlighted line shows where it will land.
   SQLite databases (`.sqlite`, `.sqlite3`, `.db`, `.db3`), patches (`.diff`,
   `.patch`) and, on macOS, fonts (`.ttf`, `.otf`, `.ttc`, `.woff`, `.woff2`),
   audio (`.mp3`, `.m4a`, `.aac`, `.wav`, `.aif` / `.aiff`, `.flac`, `.caf`) and
-  video (`.mp4`, `.m4v`, `.mov`). A link to one in a terminal (any of the forms
-  above, a bare `shot.png` in the terminal's folder too; `path:42` is ignored)
-  opens it as a tab of the editor, drawn by the preview's viewer (Editing
-  files: a drawn tab), or shows that tab; so do the file picker, and such
-  links and drawn images in the editor's Markdown preview. Nocturne's files
-  pane (a double click, enter, the menu's Open) opens a picture, PDF, font,
-  clip or database in a preview pane of its own (one: the next one shows
-  there), unless an editor it opened files in is in the tab: then as a drawn
-  tab of that editor (a table or patch is a drawn tab either way;
-  alt-double-click or `e`: the system's app, a table's or patch's text). A
-  text or Markdown file opened from it while its preview pane shows a picture
-  and it has no editor: the editor takes the preview pane's place, the
-  picture its first tab, the file the second. The preview pane (`preview`,
-  called `nocturne-image` and `nocturne-preview` before: panes and keys
-  saved with those names keep working) is for whoever opens it on purpose: the files pane's `p`, a drawn
-  tab's `p`, links and drawn images in the Markdown viewer, another machine's
-  file, and `preview.open {path, in?, pane?, on?}` from a mod or an agent
-  (`image.open` is the same); web URLs stay web pages. JSON, YAML, TOML, source
+  video (`.mp4`, `.m4v`, `.mov`). Pictures, PDFs, databases, fonts, audio and
+  video open in a **preview pane**: a link to one in a terminal (any of the
+  forms above, a bare `shot.png` in the terminal's folder too; `path:42` is
+  ignored), the file picker's pick, Nocturne's files pane (a double click,
+  enter, the menu's Open), the Markdown viewer's links and drawn images, and
+  `preview.open {path, in?, pane?, on?}` from a mod or an agent (`image.open`
+  is the same). A preview pane already in the tab shows the next file instead
+  of a new pane opening each time (the one showing it; else the one the
+  request comes from, the one that last had the keyboard, shared
+  `preview.last`, or the tab's first; `in: "pane"` opens a new one beside);
+  a files pane's own preview pane first (Files panes). Tables and patches are
+  text: their links, the picker and the files pane open them as a drawn tab of
+  the editor (Editing files), Markdown in the editor's view for it; text
+  opened after a picture goes to the editor and the preview pane stays a
+  preview. Alt-double-click or `e` in the files pane: the system's app, a
+  table's or patch's text. The preview pane (`preview`, called
+  `nocturne-image` and `nocturne-preview` before: panes and keys saved with
+  those names keep working) is also for whoever opens it on purpose: the
+  files pane's `p`, a drawn tab's `p`, another machine's file. Web URLs stay
+  web pages. JSON, YAML, TOML, source
   code and other text you edit open in the editor (Editing files). Per kind:
   - pictures fit the pane; `+` / `-` zoom, `0` fit, `1` 100%, `h j k l` /
-    arrows / drag pan (scroll pans, Cmd/Ctrl-scroll zooms at the pointer), `r` /
-    `R` turn, `b` checker / dark background. Animated GIF and WebP play. HEIC
+    arrows / drag / a trackpad's two-finger scroll pan when zoomed in (fitted,
+    ← → step through the folder); a mouse wheel, Cmd/Ctrl-scroll and a
+    trackpad pinch zoom at the pointer (a wheel counts lines, a trackpad
+    pixels: that tells them apart), `r` /
+    `R` turn, `b` checker / dark background; the bar shows the zoom. Animated GIF and WebP play. HEIC
     and AVIF are converted to a PNG copy in `cache/preview` (macOS:
     sips, qlmanage; Linux: heif-convert, avifdec, ImageMagick or ffmpeg, else it
     says what to install).
-  - PDFs: on macOS the system's PDF view (scroll, `+` / `-` zoom, `0` fit
-    width, ← → / PageUp PageDown pages, `g` / `G` first / last; the bar shows
-    the page and page count); elsewhere one page at a time drawn by `pdftoppm`
+  - PDFs: on macOS the system's PDF view (scroll, pinch, `+` / `-` zoom, `0`
+    fit width, `1` 100%, ← → / PageUp PageDown pages, `g` / `G` first / last;
+    the bar shows the page, page count and zoom); elsewhere one page at a time drawn by `pdftoppm`
     when it's installed, zoomed and panned as a picture.
   - tables: the header row and row numbers stay put, numbers align right;
     `j k` / arrows rows, `J K` / PageUp PageDown pages, `g` / `G` top / bottom,
@@ -869,8 +881,9 @@ the highlighted line shows where it will land.
   (Nocturne's: double click or `e`; `E` and folders: $EDITOR in a terminal beside), the
   Markdown viewer's and the preview's edit (`e`: Markdown, tables, patches, SVG
   as text), the file picker, or `editor.open {path, line?, col?, in?, pane?, on?}`.
-  **Every kind of file is a tab**: a picture, PDF, table, patch, database,
-  font or clip opens as a drawn tab of the editor, shown by the preview's own
+  **Every kind of file can be a tab**: a picture, PDF, table, patch, database,
+  font or clip opens as a drawn tab of the editor (`editor.open {path, look:
+  true}`, a link in its Markdown preview), shown by the preview's own
   viewer (`viewer.ts`, the files pane's split's: fitted pictures, PDFs, tables,
   patches; its slim bar says kind, name and facts; clips never play by
   themselves). Its keys: H / L, gt / gT, ]b / [b tabs, ]B / [B move it, j k
@@ -880,9 +893,10 @@ the highlighted line shows where it will land.
   line along the bottom is clickable. A file opened to be looked at (a
   terminal's link, the files pane's double click or enter, the picker's pick:
   `look`) starts drawn, a Markdown file in the pane's Markdown view (rendered, split, preview or text: the last one picked there); an edit (`e`, a grep
-  hit, definitions) opens its text. Another machine's pictures open in the
-  preview pane, as before; the files pane's pictures too while it has no
-  editor in the tab (Files panes).
+  hit, definitions) opens its text. Pictures, PDFs, databases, fonts and
+  clips from a terminal's link, the picker and the files pane go to a preview
+  pane instead (Previews); `editor.open --look true` still makes them a drawn
+  tab.
   **File tabs**: an editor pane holds several files, each a tab on the strip
   along its top (an unsaved mark, the file's type mark (a pixel mark tinted
   by kind: Markdown, code, settings, a picture, a PDF, a table, video or
@@ -953,7 +967,10 @@ the highlighted line shows where it will land.
   counts (the shown tab's name and unsaved `●` in the pane header) (click: the problems drawer), the language server, language and
   indent, line:col. Saving writes only over what was read: a file changed
   outside while edited says so (reload theirs / keep mine), a clean one
-  reloads by itself, keeping the caret. Closing an edited editor's pane or tab
+  reloads by itself, keeping its place: the line at the top (of the text,
+  the preview and the rendered view), the caret and the selection stay on the
+  text they were on, moved by lines added or removed above (cmd-r and
+  "reload theirs" too). Closing an edited editor's pane or tab
   asks first (`setUnsaved`). Keys while it has focus (keys.json
   `mod:editor`, macOS; no function keys): cmd-s save, cmd-f find
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go
@@ -1217,16 +1234,14 @@ the highlighted line shows where it will land.
   files pane has its own editor and preview pane in the shown tab (shared
   `file-tree.opened` by its slot: `{ editor, preview }`, each `{ slot }`, or
   `{ path }` till the app's new pane is seen):
-  - a picture, PDF, font, clip or database: a tab of an editor already
-    holding it; else a drawn tab of the files pane's editor; else its preview
-    pane, which shows it (one file at a time; shared `preview.show`
-    `{ slot, path, n, at }` asks the preview pane with that slot to show
-    another file); else a new preview pane beside;
+  - a picture, PDF, font, clip or database: its preview pane, which shows it
+    (one file at a time; shared `preview.show` `{ slot, path, n, at }` asks
+    the preview pane with that slot to show another file); else
+    `preview.open` beside: a preview pane already in the tab shows it, else a
+    new one opens (Previews); never a tab of the editor;
   - any other file: a tab of the editor (the files pane's, else the shown
-    tab's: Markdown in the editor's view for it, a table drawn). With no
-    editor of its own but its preview pane there, the editor takes the
-    preview pane's place: the preview's file its first tab (drawn), this one
-    the second, shown; the preview pane closes.
+    tab's: Markdown in the editor's view for it, a table drawn), beside; the
+    preview pane stays a preview.
   An editor or preview pane closed (or in another tab) is no longer the files
   pane's: the rules start over. A tab popped out of the editor keeps its file
   (opening that file again shows it) and takes no others.
@@ -1552,8 +1567,10 @@ layout's look and a block can differ:
   "terminal_padding": [10, 6], "terminal_opacity": 1, ... }
 ```
 
-- `theme`: `graphite`, `ink`, `moss` (dark), `paper` (light), or the name
-  of a file in `themes/`; or one for each appearance:
+- `theme`: `moonfly` (Nocturne's), `graphite` (herdr-app's default look),
+  `paper` (light), or the name of a file in `themes/`; `ink`, `moss` and
+  `atom-one-dark` still load when named but the pickers (Settings, the
+  palette, the menu) no longer offer them; or one for each appearance:
   `"theme": { "light": "paper", "dark": "graphite" }` follows the system's
   light or dark mode (or the person's `appearance`). `app.theme {name}`
   sets the half of the name's lightness. A layout without a theme shows
@@ -1564,10 +1581,25 @@ layout's look and a block can differ:
 - `themes/<name>.json`: `{ "background", "foreground", "selection",
   "cursor"?, "ansi": [16 colors], "colors"?: {...} }`, all `#rrggbb`; panel
   colors are derived from these, `colors` overrides them. Fireflies ships
-  `atom-one-dark`. The original unedited Atom One Dark and Win98 theme files
+  `moonfly` (and `atom-one-dark`, no longer offered). The original unedited Atom One Dark and Win98 theme files
   are upgraded to readable terminal colors; edited theme files are kept.
   A theme named like a layout (`themes/win98.json`) is
   that layout's own: Settings offers it only there.
+- Your own theme reaches the mods (this fork): Nocturne and its mods
+  (editor, git, github, databases, …) draw only with `theme()` colors, so a
+  `themes/<name>.json` picked in the theme menu (or set as a layout's or
+  settings.json's `theme`) recolors them too, the nocturne layout's panes,
+  borders and focus ring included. What they use: `background`, `foreground`,
+  `muted` (dim text, horizons), `dim`, `accent`, `working` / `blocked` /
+  `done`, the hues `ansi1`–`ansi6`, `ansi9`–`ansi14` (status, syntax, graph
+  lanes, the fireflies' glow), `ansi7` (the moon, the stars) and the edge:
+  lines, plates, dithers, the lit row and faint text, drawn in your `input`
+  laid opaque over your `background` (moonfly: `#323437`). So for the look,
+  set `colors.input` (and `muted`, `accent`) in your theme; a light
+  background works (the edge comes out a light grey). `ansi0` and `ansi8`
+  color only terminals (and a CI log's ANSI codes). Writing a mod: use these
+  names, never hex; the shipped mods' `tones.ts` (`edge(t)`, `tone(t, k)`)
+  is the copy to take for the edge.
 - `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
   (their text sizes are their own, in px, and follow zoom). Optional: without
   them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).
@@ -2219,6 +2251,16 @@ The main ones:
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
   shows Safari's Web Inspector for that page in its place.
+  A web view's page may go fullscreen (`WKPreferences.elementFullscreenEnabled`, so
+  `document.fullscreenEnabled` is true): WebKit moves the view into a fullscreen window of
+  its own and back into its place on Esc; `native.debug` shows it per web view as
+  `fullscreen { enabled, state }` (`state`: `none`, `entering`, `in`, `exiting`). A
+  mouse's side buttons over a web view don't reach the page: on their release its mod
+  gets `web.backButton` / `web.forwardButton` (no data; not while its video is out in a
+  `pip` view), to go back or forward as it sees fit (Nocturne's browser: `browser.back` /
+  `browser.forward` on the shown tab). A trackpad's two-finger swipe goes back and
+  forward in the view itself (`allowsBackForwardNavigationGestures`; off while its video
+  is out).
   A web view sends `web.location` (its state: `href`, `title`, `canGoBack`, …) whenever its
   address, history or title changes, also within a page (links in single-page apps, pushState,
   #fragments), so an address bar can follow it; `load.*` alone misses those.
@@ -2259,8 +2301,10 @@ The main ones:
   space, with the Nocturne player's bar in its order and sections, ↩ « ❚❚ » sound ◧ ⤓ ⇲
   magnet ? ✕, keeping the video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn
   { of, then }` (`then`: null, `"pane"` or `"park"`, for the player to go on with); the view
-  may go). With `snap` (default true) it snaps to its screen's usable area (menu bar and Dock
-  left out, 10 pt in): dragged by its bar within 64 pt of a corner or an edge's middle it
+  may go). It moves by its bar or anywhere on its video, as the Fireflies player's window: a
+  left press on the video that moves 4 pt drags it, less is a click (right-clicks and the wheel
+  stay the page's). With `snap` (default true) it snaps to its screen's usable area (menu bar
+  and Dock left out, 10 pt in): dragged within 64 pt of a corner or an edge's middle it
   lands exactly there and stays on it as its size or the screens change; it opens on the place
   it sat on last (first: bottom right). Without, it opens in the screen's bottom right corner.
   Its magnet switches that and sends the page `pip.snapped { on }`; its ? shows its keys over
@@ -2289,7 +2333,7 @@ The main ones:
   narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
   takes its seam along), which lists them in the same sections, a dithered rule between. The
   window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
-  video gives the player the keyboard), and resizes by its edges and corners. The
+  video gives the player the keyboard), out of Fireflies too, and resizes by its edges and corners. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,
@@ -2316,7 +2360,9 @@ The main ones:
   heading; `in: "system"` the system's app; a relative path is the pane's folder's; `on` the
   machine the file is on; the reply says `opened` and the absolute `path`),
   `preview.open {path, in?, pane?, on?}` (the same for a picture, PDF, table, SQLite database,
-  patch, font or clip, in the preview; `image.open` is the same command),
+  patch, font or clip, in the preview; a preview pane already in `pane`'s tab shows it instead of
+  a new one (the reply says `as: "shown"`; `in: "pane"`: a new one beside); `image.open` is the
+  same command),
   `files.open {path, in?, pane?, on?}` (a folder in a new files pane beside `pane`, or the one
   there already rooted at it; `in: "tab"` a tab of its own, `"system"` the system's file manager;
   see Files panes),
@@ -2708,9 +2754,13 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
 - Nothing checks types at run time. Check them: `herdr-app types <mod folder>`
   writes `gpui-kit.d.ts` there (every module, `herdr` included) and the app
   writes a strict `tsconfig.json` into a `main.ts` mod's folder (never over
-  yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod in a
-  repository of its own does the same: run `herdr-app types .` in it after
-  each Fireflies update and keep both files out of git.
+  yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod folder
+  the app can't write into (one linked from the nix store) gets neither: the
+  `tsconfig.json` next to this file, rewritten on every start, covers those
+  mods against `gpui-kit.d.ts` and `herdr.d.ts` here, so an editor's
+  language server finds their modules too (yours in its place is kept). A
+  mod in a repository of its own does the same: run `herdr-app types .` in
+  it after each Fireflies update and keep both files out of git.
 - `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
   parsed from `exec` or a file are `unknown`: another mod or an older version
   may have written them, so prove what they are before using them (a type
@@ -2767,7 +2817,7 @@ Chained builders with GPUI's snake_case names: `div()`, `h_flex()`,
 `.overflow_y_scrollbar()`; `.child("text")`, `.text_size(n)`, `.font_semibold()`,
 `.truncate()`, `.text_color(c)`; `.bg(c)`, `.border(1)`, `.border_color(c)`,
 `.rounded(n)`; `.id("unique")` then `.on_click(...)`, `.on_mouse_down("right", ...)`,
-`.hover((s) => s.bg(c))`, `.on_scroll_wheel(...)`; keyboard: `this.h = cx.focus_handle()`
+`.hover((s) => s.bg(c))`, `.on_scroll_wheel(...)`, `.on_pinch(...)` (a trackpad pinch: `delta` 0.1 is ten percent larger, `local_position`); keyboard: `this.h = cx.focus_handle()`
 in init, `.track_focus(this.h).on_key_down((e, cx) => …)`, `this.h.focus()`.
 `ScrollHandle` from `gpui-base` scrolls a plain `overflow_*_scroll()` or
 `overflow_*_scrollbar()` area from code. Create `this.scroll = ScrollHandle.new()`

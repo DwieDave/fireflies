@@ -19,6 +19,7 @@ import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
 import { pinActs } from "./sky-keys.ts";
 import type Sky from "./sky.ts";
+import { edge } from "./tones.ts";
 
 /** A web pane's props, as far as its name goes: its slot and the address it opened on. */
 export const isWebProps = object({}, { slot: isString, url: isString });
@@ -248,8 +249,8 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     })
     .on_click(() => goToPin(it))
     .when(lit, (el) => el.child(div().absolute().top(ear + 1).left(1).w(size - 2).h(size - ear - 2).opacity(0.35).child(dither(t.ansi4, 1))))
-    .when(hot, (el) => el.child(div().absolute().top(ear).left(0).w(size).h(size - ear).bg(`${t.ansi0}88`)))
-    .child(div().absolute().top(ear).left(0).w(size).h(size - ear).border(1).border_color(lit ? t.ansi8 : t.ansi0))
+    .when(hot, (el) => el.child(div().absolute().top(ear).left(0).w(size).h(size - ear).bg(`${edge(t)}88`)))
+    .child(div().absolute().top(ear).left(0).w(size).h(size - ear).border(1).border_color(lit ? t.muted : edge(t)))
     .when(ear > 0, (el) => el.child(tabEar(t, lit, ear, small)))
     .child(div().absolute().top(at + ear / 2).left(at).size(plate).bg(t.background))
     // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
@@ -271,7 +272,7 @@ export function tabEar(t: Theme, lit: boolean, h: number, small: boolean): Eleme
 
   // h px tall, open below: the tile's top edge runs on under it.
   return div().absolute().top(0).left(small ? 3 : 4).w(w).h(h)
-    .border_t(1).border_l(1).border_r(1).border_color(lit ? t.ansi8 : t.ansi0)
+    .border_t(1).border_l(1).border_r(1).border_color(lit ? t.muted : edge(t))
     .when(lit, (el) => el.child(div().absolute().top(1).left(1).w(w - 4).h(h - 2).child(dither(t.accent, 1))));
 }
 
@@ -305,8 +306,8 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
       dockMenu();
     })
     .on_click(() => dockMenu())
-    .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
-    .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
+    .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${edge(t)}88`)))
+    .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(edge(t), 1)))
     .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))
     .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none().text_color(hot || on ? t.foreground : t.dim))
     .when(on, (el) => el.child(cursorMark(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent))));
@@ -321,6 +322,6 @@ export function shelfView(sky: Sky, t: Theme, kept: readonly JarItem[], w: numbe
   const tiles = [...kept.map((it) => pinTile(sky, t, it)), newTile(sky, t)];
 
   return v_flex().id("shelf").w(w)
-    .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.ansi8, 1)))
+    .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.muted, 1)))
     .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles));
 }

@@ -62,8 +62,9 @@
 // PATH, envrc.ts; or settings.json's `editor.languages.<id>.server`), is
 // shared by every editor of that workspace, and stops a while after the last
 // closes. Saving writes only if the file is still what was read (otherwise
-// it says so); a change on disk reloads a clean file and offers a choice to
-// an edited one. Closing an edited editor asks first.
+// it says so); a change on disk reloads a clean file (the line at the top,
+// the caret and the selection kept on the text they were on: keep-place.ts)
+// and offers a choice to an edited one. Closing an edited editor asks first.
 //
 // Markdown files get a live preview beside the text (under it when the pane
 // is narrow; each tab keeps its view, an "edit" from the viewer turns it on), drawn as it's typed by the Markdown viewer's renderer

@@ -17,6 +17,7 @@ import { BAR, dither, focusOn, stop, zoom } from "./pane-kit.ts";
 import { closeCard } from "./card.ts";
 import { focusText } from "./md-pane.ts";
 import { closeTab, moveTab, otherEditor, popIn, popOut, select } from "./pane-tabs.ts";
+import { edge } from "./tones.ts";
 
 /** Opens the menu of tab `index` (the shown one by default): a right-click
  *  on it (at the press `near`, pane px), space b m, the tab-menu command. */
@@ -126,7 +127,7 @@ export function tabMenuView(ed: EditorPane, t: Theme): Element {
       .gap(10)
       .items_center()
       .text_color(i === m.at ? t.foreground : t.muted)
-      .when(i === m.at, (el) => el.child(div().absolute().inset_0().opacity(0.6).child(dither(t.ansi0, 1))).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(i === m.at, (el) => el.child(div().absolute().inset_0().opacity(0.6).child(dither(edge(t), 1))).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .hover((s) => s.text_color(t.foreground))
       .on_mouse_move(() => {
         if (m.at !== i) m.at = i;
@@ -141,7 +142,7 @@ export function tabMenuView(ed: EditorPane, t: Theme): Element {
   return focusOn(div().id("editor-tab-menu").absolute().top(y).left(x).w(MENU_W).py(4).bg(t.background).border(1).border_color(t.accent), ed.menuHandle)
     .on_key_down((e, cx) => tabMenuKeyDown(ed, e, cx))
     .on_mouse_down("left", stop)
-    .child(div().absolute().left(4).right(-4).top(4).bottom(-4).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(4).right(-4).top(4).bottom(-4).child(dither(edge(t), 1)))
     .child(div().absolute().inset_0().bg(t.background))
     .children(m.items.map(row));
 }

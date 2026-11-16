@@ -303,7 +303,7 @@ export function ghost(v: Files, t: Theme, d: Drag): Element {
   const y = d.at.y + 10;
 
   return h_flex().id("nf-ghost").absolute().left(x).top(y).max_w(200).h(20).px(8).gap(6).items_center().text_size(11)
-    .bg(t.background).border_1().border_color(d.ok ? t.accent : t.ansi8)
+    .bg(t.background).border_1().border_color(d.ok ? t.accent : t.muted)
     .child(svg(`mods/files/${n === 1 && !rowAt(v, first)?.dir ? "file" : "folder"}.svg`).relative().size(11).flex_none().text_color(d.ok ? t.accent : t.dim))
     .child(div().min_w(0).truncate().text_color(d.ok ? t.foreground : t.muted).child(n === 1 ? base(first) : `${n} items`));
 }

@@ -8,6 +8,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import { ART } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 
@@ -17,7 +18,7 @@ export type Action = (cx: Context) => void;
 /** A small text button. */
 export function chip(t: Theme, id: string, label: string, action: Action, color?: Color): Element {
   return div().id(id).relative().flex_none().px(5).h(18).flex().items_center().text_size(11).text_color(color ?? t.muted)
-    .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+    .hover((s) => s.text_color(t.foreground).bg(edge(t)))
     .on_mouse_down("left", stop)
     .on_click((_e: ClickEvent, cx: Context) => {
       cx.stop_propagation();
@@ -52,7 +53,7 @@ export function check(t: Theme, id: string, label: string, on: boolean, action: 
       cx.stop_propagation();
       action(cx);
     })
-    .child(div().size(10).flex_none().border(1).border_color(on ? t.blocked : t.ansi8).when(on, (el) => el.bg(t.blocked)))
+    .child(div().size(10).flex_none().border(1).border_color(on ? t.blocked : t.muted).when(on, (el) => el.bg(t.blocked)))
     .child(label);
 }
 
@@ -85,7 +86,7 @@ export interface Confirm {
 /** A destructive step asked about in place of a row (Confirm says what's in it). */
 export function confirm(t: Theme, id: string, { title, facts = [], options = [], go, keep, keepLabel = "keep", busy, at = null }: Confirm): Element {
   return v_flex().id(id).mx(10).my(3).px(8).py(6).gap(4).text_size(11)
-    .bg(`${t.ansi0}66`).border_l(2).border_color(t.blocked)
+    .bg(`${edge(t)}66`).border_l(2).border_color(t.blocked)
     .on_mouse_down("left", stop)
     .child(div().truncate().text_color(t.foreground).child(title))
     .children(facts.map(([color, text], i) => div().id(`${id}-fact-${i}`).text_color(color).child(text)))
@@ -101,6 +102,6 @@ export function confirm(t: Theme, id: string, { title, facts = [], options = [],
             go.action(cx);
           })
           .child(go.label))
-        .child(chip(t, `${id}-keep`, keepLabel, keep).when(at === "keep", (b) => b.text_color(t.foreground).bg(t.ansi0).child(div().absolute().inset_0().border(1).border_color(t.accent))))))
+        .child(chip(t, `${id}-keep`, keepLabel, keep).when(at === "keep", (b) => b.text_color(t.foreground).bg(edge(t)).child(div().absolute().inset_0().border(1).border_color(t.accent))))))
     .when(Boolean(busy), (el) => el.child(working(t, `${id}-busy`, busy ?? "")));
 }

@@ -43,6 +43,7 @@ import { onShelf, tabKey } from "./pins.ts";
 import { tabMove, SPACE_ROWS_KEY } from "./tabmove.ts";
 import { isHelpLine } from "./nav.ts";
 import type { HelpLine } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 /** A menu row's command arguments (the commands these rows run). */
 type MenuArgs = { terminal?: string; pane?: string | null; id?: string; space?: string | null; direction?: "right" | "down"; to?: "menu" | "program"; tab?: string };
@@ -400,7 +401,7 @@ export class KeysDialog {
       if (p.overlay) closeOverlay(p.overlay);
     };
 
-    return tracked(div().id("keys-dialog").relative().size_full().bg(t.background).border(1).border_color(t.ansi0), this.handle)
+    return tracked(div().id("keys-dialog").relative().size_full().bg(t.background).border(1).border_color(edge(t)), this.handle)
       .on_key_down((e, cx) => {
         if (keysKey(e, true)) {
           cx.stop_propagation();

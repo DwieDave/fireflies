@@ -16,6 +16,7 @@ import { isTerminal } from "./guards.ts";
 import Header from "./header.ts";
 import type { HeaderPane } from "./header.ts";
 import { dither } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 /** The bar's props: the terminal, whether it floats, its overlay, the float's views' names. */
 const isPeekProps = object({}, { terminal: isString, float: isBoolean, overlay: isString, views: arrayOf(isString) });
@@ -81,7 +82,7 @@ export default class Peek extends Header {
         cx.stop_propagation();
         run("float.view", { index: i });
       })
-      .when(i === shown, (el) => el.child(dither(t.ansi0, 1)))
+      .when(i === shown, (el) => el.child(dither(edge(t), 1)))
       .child(div().relative().child(name))));
   }
 

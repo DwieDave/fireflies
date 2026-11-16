@@ -68,7 +68,7 @@ export const isWebEvent = oneOf(
   object({ event: literal("web.icon") }, { ...FROM, data: object({}, { href: nullable(isString) }) }),
   object({ event: literal("pip.start") }, { ...FROM, data: object({}, { result: isString, error: isString }) }),
   object({ event: literal("pip.snapped"), data: object({ on: isBoolean }) }, FROM),
-  object({ event: literal("view.click", "view.escapeKey", "web.inspectKey", "web.reloadKey", "pip.leave", "pip.moved") }, { ...FROM, data: isNoData }),
+  object({ event: literal("view.click", "view.escapeKey", "web.inspectKey", "web.reloadKey", "web.backButton", "web.forwardButton", "pip.leave", "pip.moved") }, { ...FROM, data: isNoData }),
 );
 
 export type WebEvent = Guarded<typeof isWebEvent>;
@@ -202,6 +202,14 @@ export function onEvent(view: Browser, e: WebEvent, cx: Context) {
     // ⌘R while the page has the keyboard: reload (or stop, while it loads).
     case "web.reloadKey":
       view.command("reload");
+
+      return;
+    // A mouse's side buttons over the page: back / forward, as the bar's arrows
+    // (only the shown tab's page is under the pointer; its video out in a
+    // player keeps the page where it is: the view doesn't send them then).
+    case "web.backButton":
+    case "web.forwardButton":
+      if (tab === view.tab) view.command(e.event === "web.backButton" ? "back" : "forward");
 
       return;
     // web.location: the address changed without a load too (links in

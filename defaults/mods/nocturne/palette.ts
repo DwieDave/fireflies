@@ -24,6 +24,7 @@ import type { Binding } from "./keymap.ts";
 import { entries, keyOf, sections } from "./palette-entries.ts";
 import type { Listed } from "./palette-entries.ts";
 import { readLaunchers } from "./launchers.ts";
+import { edge } from "./tones.ts";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;
@@ -271,15 +272,15 @@ export default class Palette {
   keycap(t: Theme, k: string, on: boolean): Element {
     return h_flex().flex_none().gap(3).children(k.split(" ").map((stroke, i) =>
       div().id(`kc-${i}`).h(18).px(5).flex().items_center().text_size(10)
-        .border(1).border_color(on ? t.accent : t.ansi0).text_color(on ? t.accent : t.dim).child(stroke)));
+        .border(1).border_color(on ? t.accent : edge(t)).text_color(on ? t.accent : t.dim).child(stroke)));
   }
 
   /** A group's head: its mark, the eyebrow, a dithered hairline, how many it holds. */
   groupHead(t: Theme, name: string, count: number): Element {
     return h_flex().px(16).pb(6).gap(8).items_end()
-      .child(svg(chrome(ICONS.get(name) ?? "square")).size(11).flex_none().text_color(t.ansi8))
+      .child(svg(chrome(ICONS.get(name) ?? "square")).size(11).flex_none().text_color(t.muted))
       .child(div().flex_none().child(eyebrow(t, name)))
-      .child(div().flex_1().h(1).mb(5).relative().opacity(0.6).child(dither(t.ansi8, 1)))
+      .child(div().flex_1().h(1).mb(5).relative().opacity(0.6).child(dither(t.muted, 1)))
       .child(div().flex_none().text_size(10).text_color(t.dim).child(String(count)));
   }
 
@@ -385,9 +386,9 @@ export default class Palette {
         })
         .on_click(() => this.go(r.e))
         .when(on, (el) => el
-          .child(dither(t.ansi0, 1))
+          .child(dither(edge(t), 1))
           .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-        .child(svg(chrome(icon)).size(13).flex_none().relative().text_color(on ? t.accent : t.ansi8))
+        .child(svg(chrome(icon)).size(13).flex_none().relative().text_color(on ? t.accent : t.muted))
         .child(div().relative().flex_1().min_w(0).child(this.title(t, r.e.title, r.hits, on)))
         .when(Boolean(this.query), (el) => el.child(div().relative().flex_none().text_size(10).text_color(t.dim).child(r.e.group.toLowerCase())))
         .when(Boolean(k), (el) => (k ? el.child(div().relative().child(this.keycap(t, k, on))) : el)));
@@ -396,7 +397,7 @@ export default class Palette {
     const hint = (key: string, what: string) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(key)).child(div().text_color(t.dim).child(what));
     const handle = this.handle;
     const input = this.input;
-    const rule: Color = t.ansi0;
+    const rule: Color = edge(t);
 
     return v_flex().id("nocturne-palette").when(Boolean(handle), (el) => (handle ? el.track_focus(handle) : el)).w_full().min_h(0)
       .bg(t.background).border(1).border_color(rule)
@@ -408,7 +409,7 @@ export default class Palette {
           .child(div().relative().text_size(13).text_color(t.foreground).child(">")))
         .when(Boolean(input), (el) => (input ? el.child(Input.new(input).flex_1().h_full().text_size(13).text_color(t.foreground)) : el))
         .child(div().flex_none().text_size(10).text_color(t.dim).child(this.query ? `${rows.length} found` : `${rows.length} commands`))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
+        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))))
       .child(rows.length
         ? div().id("palette-rows").relative().pt(4)
           .when(fixed, (el) => el.h(LIST_H + 4).overflow_hidden())
@@ -427,7 +428,7 @@ export default class Palette {
           .child(div().text_color(t.muted).child(`Nothing matches "${this.query}".`))
           .child(div().text_color(t.dim).child(this.elsewhere(bound, mac, order))))
       .child(h_flex().relative().h(26).mt(4).flex_none().px(16).gap(14).items_center().text_size(10)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
         .child(hint("↑↓ ctrl-n/p", "move")).child(hint("enter", "run")).child(hint("esc", "close"))
         .child(div().flex_1())
         .child(div().text_color(t.dim).child("type to filter")));

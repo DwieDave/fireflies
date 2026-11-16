@@ -22,6 +22,7 @@ import { closeOverlay, props } from "herdr";
 import type { Theme } from "herdr";
 import { isString, object } from "./guard.ts";
 import { dither, eyebrow } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 export const ROW = 26;
 
@@ -220,7 +221,7 @@ export class Popup {
     const row = (x: PopupItem, i: number): Element => {
       if ("section" in x) return div().id(`pm-sec-${i}`).px(12).pt(10).pb(3).flex_none().child(eyebrow(t, x.section));
 
-      if ("rule" in x) return div().id(`pm-rule-${i}`).mx(12).my(4).h(2).flex_none().relative().child(dither(t.ansi0, 1));
+      if ("rule" in x) return div().id(`pm-rule-${i}`).mx(12).my(4).h(2).flex_none().relative().child(dither(edge(t), 1));
 
       if ("note" in x) return div().id(`pm-note-${i}`).px(12).h(ROW).flex().items_center().text_size(11).text_color(t.dim).child(x.note);
 
@@ -239,7 +240,7 @@ export class Popup {
           cx.notify();
         })
         .when(on, (el) => el
-          .child(dither(t.ansi0, 1))
+          .child(dither(edge(t), 1))
           .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
         .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(x.mark ?? div()))
         .child(div().relative().flex_1().min_w(0).truncate().child(x.name))
@@ -250,7 +251,7 @@ export class Popup {
 
     // In a level: its head, "‹ title", a click (or ←, h, esc) back up.
     const head = level ? h_flex().id("pm-back").relative().h(ROW).mt(-4).mb(2).flex_none().px(12).gap(10).items_center().text_size(12)
-      .text_color(t.foreground).hover((s) => s.bg(t.ansi0))
+      .text_color(t.foreground).hover((s) => s.bg(edge(t)))
       .on_mouse_down("left", (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation())
       .on_click((_e: ClickEvent, cx: Context) => {
         this.back();
@@ -260,7 +261,7 @@ export class Popup {
         .child(svg("mods/workspace-chrome/chevron-left.svg").size(14).flex_none().text_color(t.accent)))
       .child(div().relative().flex_1().min_w(0).truncate().child(level.title))
       .child(div().relative().flex_none().text_size(11).text_color(t.dim).child("esc"))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))) : null;
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))) : null;
 
     const handle = this.handle;
 
@@ -268,7 +269,7 @@ export class Popup {
     // to its content, up to its `height`, which popupHeight makes the tallest
     // level's): said outright, since a column whose list grows to fill it
     // doesn't follow its content when the rows change.
-    return v_flex().id("nocturne-popup").w_full().when(!level, (el) => el.size_full()).when(Boolean(level), (el) => el.h(levelHeight(items, level?.title))).bg(t.background).border(1).border_color(t.ansi0).py(4)
+    return v_flex().id("nocturne-popup").w_full().when(!level, (el) => el.size_full()).when(Boolean(level), (el) => el.h(levelHeight(items, level?.title))).bg(t.background).border(1).border_color(edge(t)).py(4)
       .when(Boolean(handle), (el) => (handle ? el.track_focus(handle) : el))
       .on_key_down((e: KeyEvent, cx: Context) => {
         if (!this.key(e, live, items)) return;
@@ -281,7 +282,7 @@ export class Popup {
         .child(div().text_size(11).text_color(t.foreground).child(title ?? ""))
         .child(div().flex_1())
         .child(div().text_size(11).text_color(t.dim).child(hint ?? ""))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))))
+        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)))))
       .child(v_flex().id("pm-list").flex_1().min_h(0).overflow_y_scroll().track_scroll(this.scroll).children(items.map(row)));
   }
 }

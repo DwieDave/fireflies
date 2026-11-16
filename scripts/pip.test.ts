@@ -165,13 +165,14 @@ test("the keys popup is as tall as its list: a popup sizes to its content, and t
   propsNow = { of: "1:web" };
 });
 
-test("the seam tone: a third of the way from the icons' dim to ansi0, one small step darker", () => {
-  const moonfly: any = { dim: "#5F6D6D", ansi0: "#323437" };
+test("the seam tone: a third of the way from the icons' dim to the edge (tones.ts), one small step darker", () => {
+  const moonfly: any = { dim: "#5F6D6D", input: "#323437", background: "#080808" };
+  const edge = moonfly.input; // moonfly's input is opaque: the edge is it
   expect(pip.seamTone(moonfly)).toBe("#505a5b");
   const lum = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)).reduce((a, b) => a + b, 0);
-  // Darker than the dim, still well above ansi0 (the hover colour): a step, not gone.
+  // Darker than the dim, still well above the edge (the hover colour): a step, not gone.
   expect(lum(pip.seamTone(moonfly))).toBeLessThan(lum(moonfly.dim));
-  expect(lum(pip.seamTone(moonfly)) - lum(moonfly.ansi0)).toBeGreaterThan((lum(moonfly.dim) - lum(moonfly.ansi0)) / 2);
+  expect(lum(pip.seamTone(moonfly)) - lum(edge)).toBeGreaterThan((lum(moonfly.dim) - lum(edge)) / 2);
   // Not a hex colour: the dim as it was.
   expect(pip.mix("red", "#000000", 0.5)).toBe("red");
 });

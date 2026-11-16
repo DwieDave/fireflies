@@ -16,6 +16,7 @@ import type { Rect } from "./state.ts";
 import { SPARK } from "./state.ts";
 import { dither, dotCell, zoom } from "./paint.ts";
 import type { default as ProcsDeck } from "./main.ts";
+import { edge } from "./tones.ts";
 
 const pc = (v: number): `${number}%` => `${v}%`;
 
@@ -26,7 +27,7 @@ export function spark(view: ProcsDeck, t: Theme, id: string, values: readonly nu
   const hs = scale(v, { max: max === null ? Math.max(1, ...v) * 1.25 : Math.max(max, ...v), floor: 1 });
 
   return div().id(id).relative().w(SPARK * 2).h(12).flex_none()
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1)))
     .children(layer(view, hs.map((h, i) => {
       const tall = Math.max(1, Math.round((h ?? 0) * 12));
 
@@ -127,12 +128,12 @@ function cell(v: ProcsDeck, t: Theme, k: Vital, w: number): Element {
       }
     })
     .child(h_flex().h(NAME_H).gap(6).items_center().text_size(10)
-      .child(div().flex_none().text_color(on ? t.foreground : t.ansi8).child(c.name.toUpperCase()))
+      .child(div().flex_none().text_color(on ? t.foreground : t.muted).child(c.name.toUpperCase()))
       .children(c.flag ? [div().flex_none().text_color(tone ?? t.working).child(c.flag.toUpperCase())] : [])
       .child(div().flex_1())
       .child(div().flex_none().text_size(11).text_color(c.value === "none" || c.value === "…" ? t.dim : on ? t.foreground : t.muted).child(c.value)))
     .child(div().id(`g-${k}`).relative().w_full().h(LINE_H).flex_none()
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1)))
       .children(seriesOf(v, t, k).flatMap(seriesPaths)));
 }
 
@@ -157,5 +158,5 @@ export function vitalsStrip(v: ProcsDeck, t: Theme): Element {
       }
     })
     .children(rows)
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }

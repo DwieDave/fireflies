@@ -23,6 +23,7 @@ import type { GridColumn } from "./columns.ts";
 import type { Range } from "./select.ts";
 import { hasRange, inRange, rangeOf } from "./select.ts";
 import { dither, pip, stop, zoom } from "./kit.ts";
+import { edge as edgeTone, tone } from "./tones.ts";
 
 /** A character's width and a row's height, in px at the grid's text size. */
 export const CH = 7.8;
@@ -128,7 +129,7 @@ function cellLook(t: Theme, v: Cell, num: boolean): readonly [string, Color] {
   if (v === null) return ["null", t.dim];
 
   // An empty text, apart from NULL.
-  if (v === "") return ["''", t.ansi8];
+  if (v === "") return ["''", t.muted];
 
   return [oneLine(v), num ? t.ansi3 : t.foreground];
 }
@@ -145,7 +146,7 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridCol
     const tip = look.tips?.[i] ?? (look.types?.[i] ? `${name} · ${look.types[i]}` : name);
 
     const cell = h_flex().id(`${look.id}-h-${i}`).relative().flex_none().w(w).h(HEAD).px(8).gap(6).items_center().overflow_hidden()
-      .border_r(1).border_color(t.ansi0).cursor_pointer().tooltip(tip)
+      .border_r(1).border_color(edgeTone(t)).cursor_pointer().tooltip(tip)
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
 
@@ -168,7 +169,7 @@ function header(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridCol
   });
 
   return h_flex().relative().h(HEAD).flex_none()
-    .child(div().absolute().inset_0().child(dither(`${t.ansi0}99`, 1)))
+    .child(div().absolute().inset_0().child(dither(`${edgeTone(t)}99`, 1)))
     .child(div().relative().flex_none().w(gutter))
     .children(cells);
 }
@@ -210,12 +211,12 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
     const ranged = range !== null && inRange(range, r, i);
 
     const cell = div().id(`${look.id}-c-${r}-${i}`).relative().flex_none().w(w).h(ROW).px(8).flex().items_center().overflow_hidden()
-      .border_r(1).border_color("#1c1d1f")
+      .border_r(1).border_color(tone(t, 0.48))
       .when(c.num, (el) => el.justify_end())
       .when(ranged, (el) => el.child(dither(`${t.accent}33`, 1)))
       .when(change !== null, (el) => el.child(dither(`${t.ansi3}66`, 1)).tooltip(`was: ${change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : oneLine(change?.was ?? "")}`))
       .when(tip !== null, (el) => el.tooltip(tip ?? ""))
-      .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.ansi8).bg(`${t.accent}1a`))
+      .when(picked, (el) => el.border_1().border_color(look.active ? t.accent : t.muted).bg(`${t.accent}1a`))
       .on_mouse_down("left", (e, cx) => {
         cx.stop_propagation();
 
@@ -254,8 +255,8 @@ function row(t: Theme, look: GridLook, set: ResultSet, cols: readonly GridColumn
     .child(div().flex_1().flex().justify_end().child(String(r + 1)));
 
   return h_flex().id(`${look.id}-r-${r}`).relative().h(ROW).flex_none()
-    .when(r % 2 === 1, (el) => el.bg("#0d0d0e"))
-    .when(cur, (el) => el.child(div().absolute().inset_0().child(dither(`${t.ansi0}66`, 1))))
+    .when(r % 2 === 1, (el) => el.bg(tone(t, 0.12)))
+    .when(cur, (el) => el.child(div().absolute().inset_0().child(dither(`${edgeTone(t)}66`, 1))))
     .child(h.target(num, `row:${r}`))
     .children(cells);
 }

@@ -78,6 +78,7 @@ import { calm } from "./flight.ts";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.ts";
 import type { GlowPlace, GlowProps } from "./glow.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
+import { edge } from "./tones.ts";
 
 export { GLOW_SQUARE };
 
@@ -423,7 +424,7 @@ export default class Sky {
 
     return div().id("fold").relative().flex_none().px(5).h(18).flex().items_center().text_size(11).text_color(on ? t.foreground : t.dim)
       .map((el) => navRing(t, el, on))
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {
         cx.stop_propagation();
@@ -518,13 +519,13 @@ export default class Sky {
       .child(svg(`${ART}/moon-${moonPhase(list)}.svg`).w(88).h(88).flex_none().text_color(t.ansi7))
       .child(v_flex().min_w(0).gap(2)
         .child(div().text_size(22).text_color(t.foreground).child(this.clock.time))
-        .child(div().truncate().text_size(11).text_color(t.ansi8).child(this.clock.date.toUpperCase()))
+        .child(div().truncate().text_size(11).text_color(t.muted).child(this.clock.date.toUpperCase()))
         .child(div().h(6))
         .child(list.length
           ? h_flex().items_baseline().gap(5).min_w(0)
             .child(div().flex_none().text_size(11).text_color(t.foreground).child(`${rest}/${list.length}`))
-            .child(div().truncate().text_size(11).text_color(t.ansi8).child("at rest"))
-          : div().truncate().text_size(11).text_color(t.ansi8).child("no agents"))
+            .child(div().truncate().text_size(11).text_color(t.muted).child("at rest"))
+          : div().truncate().text_size(11).text_color(t.muted).child("no agents"))
         .children(lines.map(([c, s, check], i) => h_flex().id(`sum-${i}`).min_w(0).gap(4).items_center()
           .when(check, (el) => el.child(svg(CHECK).size(10).flex_none().text_color(c)))
           .child(div().truncate().text_size(11).text_color(c).child(s)))));
@@ -698,10 +699,10 @@ export default class Sky {
     if (this.folded) {
       return ordered(withGlow(sky
         // Fainter stars than open: here they'd sit between small controls.
-        .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.3))
+        .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.muted).opacity(0.3))
         // The hills rest on the usage, as open, never behind its numbers.
         .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.background))
-        .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.ansi8).opacity(0.5)))
+        .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(this.usage.railHeight).left(0).text_color(t.muted).opacity(0.5)))
         .child(railView(this, t, list, jarred, kept)));
     }
 
@@ -713,10 +714,10 @@ export default class Sky {
 
     return ordered(withGlow(sky.when(on, (el) => el.pb(20))
       // Backdrop, back to front: stars, moonlight haze, ground, its lit rim.
-      .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.55))
+      .child(svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(0).left(0).text_color(t.muted).opacity(0.55))
       .child(svg(`${ART}/haze.svg`).w(480).h(1400).absolute().bottom(lift).left(0).text_color(t.ansi4).opacity(0.2))
       .child(svg(`${ART}/hills-fill.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.background))
-      .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.ansi8).opacity(0.5)))
+      .child(svg(`${ART}/hills-rim.svg`).w(480).h(144).absolute().bottom(lift).left(0).text_color(t.muted).opacity(0.5)))
       .child(div().absolute().top(14).right(10).child(this.foldButton(t, "«")))
       .child(this.header(t, list))
       .child(this.spaces.render(t, this.nav))

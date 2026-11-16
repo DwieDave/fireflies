@@ -55,6 +55,7 @@ import { outputKey, typedKey } from "./input.ts";
 import type { RunMenu } from "./run-menu.ts";
 import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
+import { edge } from "./tones.ts";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [
@@ -390,7 +391,7 @@ export default class ScriptsDeck extends View {
     const handle = this.handle;
     // Over the tab it draws its frame; a pane has the pane's.
     const root = v_flex().id("scripts-deck").size_full().bg(t.background);
-    const deck = inPane(this) ? root : root.border(1).border_color(t.ansi0);
+    const deck = inPane(this) ? root : root.border(1).border_color(edge(t));
 
     return (handle ? deck.track_focus(handle) : deck)
       .key_context(CONTEXT)

@@ -13,7 +13,7 @@ import { nvimLaunch } from "./logic.ts";
 import type { EditorPlace } from "./state.ts";
 import { MOD, FROM, isSlotted, isTerminal, isEdit, isMarkdown, isPreviewFile, viewerFor, editTool, TITLES, PATHS } from "./state.ts";
 import type { EditorAsk } from "./routing.ts";
-import { editorForPreview, heldInTab, noteMine, ownEditor, ownPreview, showInPreview } from "./routing.ts";
+import { noteMine, ownEditor, ownPreview, showInPreview } from "./routing.ts";
 import { keptFor, liveSlots, rowAt } from "./tree.ts";
 import type { default as Files } from "./main.ts";
 import { absOf } from "./file-ops.ts";
@@ -71,37 +71,18 @@ export function openLooked(v: Files, path: string): void {
 }
 
 /** A file (relative to the root) in the editor: as a tab of the one holding
- *  it, else this pane's own, else the shown tab's (editor-route.ts); with
- *  none of its own but its preview pane there, the editor takes that pane's
- *  place with the preview's file first (routing.ts); with no editor at all,
- *  a new one beside, noted as this pane's by its file. */
+ *  it, else this pane's own, else the shown tab's (editor-route.ts); with no
+ *  editor at all, a new one beside, noted as this pane's by its file. A
+ *  preview pane of this pane's stays a preview. */
 export function toEditor(v: Files, path: string, ask: EditorAsk): void {
   const abs = `${v.root}/${path}`;
   const mine = ownEditor(v);
-  const preview = mine || heldInTab(v, abs) ? null : ownPreview(v);
-
-  if (preview) {
-    editorForPreview(v, preview, abs, ask);
-
-    return;
-  }
-
   const beside = besidePane(v);
   const to = openInEditor(herdr, { path: abs, pane: beside?.pane ?? null, prefer: mine ? editorProps(mine).slot ?? null : null, view: ask.view ?? null, look: ask.look === true });
   const slot = to ? editorProps(to).slot : undefined;
 
   // The editor it went to is this pane's from now on, unless it has its own.
   if (!mine) noteMine(v, "editor", slot ? { slot } : { path: abs });
-}
-
-/** A preview file (a picture, a PDF, a clip, a font, a database): a tab of
- *  the editor holding it or of this pane's editor, else this pane's preview
- *  pane, else a new one (routing.ts). */
-export function openPreviewFile(v: Files, path: string, cx: Context): void {
-  const abs = `${v.root}/${path}`;
-
-  if (ownEditor(v) || heldInTab(v, abs)) openLooked(v, path);
-  else openViewer(v, path, cx);
 }
 
 /** Opens a file or folder (relative to the root; "" is the root) in $EDITOR: in this
@@ -207,9 +188,9 @@ export function previewRow(v: Files, row: Row | undefined, cx: Context): void {
   if (row && !row.dir && !row.head) openViewer(v, row.path, cx);
 }
 
-/** Opens a file: a preview file in this pane's preview pane unless its
- *  editor is there (routing.ts), else as a tab of the editor: Markdown in its
- *  view, a table drawn (look), other text to edit; on
+/** Opens a file: a preview file in a preview pane (this pane's own, else
+ *  one the app finds in the tab, else a new one: routing.ts), else as a tab
+ *  of the editor: Markdown in its view, a table drawn (look), other text to edit; on
  *  another machine the viewers' panes, as before (the editor's drawn tabs
  *  read this computer's files). `other` (alt-double-click, `e`): Markdown,
  *  tables and patches as text, a picture in the system's app. */
@@ -218,8 +199,7 @@ export function openFileAt(v: Files, path: string, cx: Context, other = false): 
 
   if (!viewer || (other && viewer.other === "edit")) v.edit(path, cx);
   else if (other) run(viewer.open, { path: `${v.root}/${path}`, in: "system", ...(v.on ? { on: v.on } : null) });
-  else if (v.on) openViewer(v, path, cx);
-  else if (isPreviewFile(path)) openPreviewFile(v, path, cx);
+  else if (v.on || isPreviewFile(path)) openViewer(v, path, cx);
   else openLooked(v, path);
 }
 

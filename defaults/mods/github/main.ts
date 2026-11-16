@@ -673,12 +673,12 @@ export default class GitHub extends View implements Host {
     };
 
     const right = note ? div().text_color(note.tone === "failed" ? t.blocked : note.tone === "done" ? t.done : t.working).truncate().max_w(420).child(note.text)
-      : this.stale ? div().text_color(t.ansi8).truncate().max_w(420).child(this.stale) : null;
+      : this.stale ? div().text_color(t.muted).truncate().max_w(420).child(this.stale) : null;
 
     const handle = this.handle, resizing = this.resizing, picker = this.picker, confirm = this.confirm;
     // A window draws its frame; a pane has the pane's (place.ts).
     const root = v_flex().id("github").size_full().bg(t.background);
-    const view = this.overlay ? root.border(1).border_color(t.ansi8) : root;
+    const view = this.overlay ? root.border(1).border_color(t.muted) : root;
     // A form open: ctrl-tab moves through it from any stop, not the app's tabs.
     const formOpen = !!this.shown().form;
 

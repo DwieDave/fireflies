@@ -1,0 +1,30 @@
+{
+  "// why": [
+    "The bun tests and tools here, for an editor's language server (it finds this",
+    "file from a script's folder). Not part of `just typecheck`: the tests' fakes",
+    "stand in for herdr and gpui with partial objects, which strict typing reports;",
+    "typing them is a refactoring of the tests (docs/mods-typescript.md).",
+    "",
+    "Strict like the mods: the mod files a test imports narrow their unions only",
+    "with strictNullChecks. `types: [\"bun\"]` is @types/bun (package.json; `bun",
+    "install`), which declares bun:test, node:* and the globals; from the mods'",
+    "typings only the gpui modules (../defaults/types/gpui-kit.d.ts) and `window`",
+    "(mod-globals.d.ts) come in, since runtime.d.ts's globals are bun's here.",
+    "`herdr` is ../defaults/herdr.d.ts, as for the mods."
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext"],
+    "types": ["bun"],
+    "strict": true,
+    "noEmit": true,
+    "allowJs": true,
+    "checkJs": false,
+    "allowImportingTsExtensions": true,
+    "verbatimModuleSyntax": true,
+    "paths": { "herdr": ["../defaults/herdr.d.ts"] }
+  },
+  "include": ["**/*.ts", "../defaults/types/gpui-kit.d.ts"]
+}

@@ -194,7 +194,7 @@ export function syntaxColors(t: Theme): ReadonlyMap<string, Color> {
     ["type", t.ansi10], ["type.builtin", t.ansi10], ["tag", t.ansi10], ["attribute", t.ansi13], ["namespace", t.ansi6], ["module", t.ansi6],
     ["string", t.ansi11], ["string.escape", t.ansi9], ["string.special", t.ansi3], ["string.regex", t.ansi3], ["character", t.ansi11], ["escape", t.ansi9],
     ["number", t.ansi3], ["float", t.ansi3], ["boolean", t.ansi3], ["constant", t.ansi3], ["constant.builtin", t.ansi3],
-    ["comment", t.ansi8], ["comment.documentation", t.ansi8],
+    ["comment", t.muted], ["comment.documentation", t.muted],
     ["property", t.ansi6], ["field", t.ansi6], ["label", t.ansi3], ["operator", t.ansi9],
     ["variable.builtin", t.ansi4], ["variable.parameter", t.foreground], ["embedded", t.foreground],
     ["text.title", t.ansi4], ["text.literal", t.ansi11], ["text.uri", t.ansi6], ["text.reference", t.ansi12], ["text.emphasis", t.ansi5], ["text.strong", t.ansi5],
@@ -295,6 +295,13 @@ export const PREVIEW_CHROME = 48 + 26 + 26 + 6;
 export function previewLines(height: number): number {
   return Math.max(12, Math.ceil(Math.max(0, height - PREVIEW_CHROME) / PREVIEW_LINE) + 3);
 }
+
+/** A file the preview draws and the editor doesn't edit (a picture, SVG too,
+ *  a PDF, a database, a font, a clip): picked, it opens in a preview pane, as
+ *  from the files pane (file-tree/state.ts isPreviewFile, the same list). */
+export const PREVIEW_FILE = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|sqlite3?|db3?|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
+
+export const isPreviewFile = (path: string): boolean => PREVIEW_FILE.test(path);
 
 /** The other mode. */
 export const otherMode = (mode: Mode): Mode => (mode === "files" ? "grep" : "files");

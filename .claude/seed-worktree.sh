@@ -18,7 +18,14 @@ python3 - "$from" "$to" <<'PY'
 import os, subprocess, sys
 src, dst = (p.encode() for p in sys.argv[1:])
 names = subprocess.run(["git", "-C", src, "ls-files", "-z", "--recurse-submodules"], capture_output=True, check=True).stdout
-for name in filter(None, names.split(b"\0")):
+files = [n for n in names.split(b"\0") if n]
+# Folders too: a build script that watches a folder (ghostty-sys: vendor/ghostty/src)
+# is stale when the folder itself is newer. Deepest first, after their files.
+folders = set()
+for name in files:
+    while (name := os.path.dirname(name)):
+        folders.add(name)
+for name in files + sorted(folders, key=len, reverse=True):
     try:
         st = os.lstat(os.path.join(src, name))
         os.utime(os.path.join(dst, name), ns=(st.st_atime_ns, st.st_mtime_ns), follow_symlinks=False)

@@ -12,6 +12,7 @@ import { div, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
+import { edge } from "./tones.ts";
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
@@ -39,14 +40,14 @@ export function toolGround(t: Theme, look: ToolLook = TOOL_LOOK): Element[] {
 
   if (look === "plate") {
     return [
-      layer().top(0).bottom(0).opacity(0.55).child(dither(t.ansi0, 1)), // the plate
-      layer().bottom(0).h(2).child(dither(t.ansi8, 1)), // its foot: the horizon, lit
+      layer().top(0).bottom(0).opacity(0.55).child(dither(edge(t), 1)), // the plate
+      layer().bottom(0).h(2).child(dither(t.muted, 1)), // its foot: the horizon, lit
     ];
   }
 
   return [
-    layer().bottom(0).h(4).child(dither(t.ansi8, 1)), // the ledge, dithered
-    layer().bottom(4).h(1).bg(t.ansi8).opacity(0.8), // its lit edge
+    layer().bottom(0).h(4).child(dither(t.muted, 1)), // the ledge, dithered
+    layer().bottom(4).h(1).bg(t.muted).opacity(0.8), // its lit edge
   ];
 }
 
@@ -70,7 +71,7 @@ export function mix(a: Color, b: Color, k: number): Color {
 }
 
 /** A tool's plate under the pointer: on the plate a step brighter than it
- *  (ansi0 lifted toward ansi8, the text still reads on it); on the ledge ansi0. */
+ *  (the edge lifted toward muted, the text still reads on it); on the ledge the edge. */
 export function toolHover(t: Theme, look: ToolLook = TOOL_LOOK): Color {
-  return look === "plate" ? mix(t.ansi0, t.ansi8, 0.3) : t.ansi0;
+  return look === "plate" ? mix(edge(t), t.muted, 0.3) : edge(t);
 }
