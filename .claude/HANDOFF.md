@@ -137,6 +137,9 @@ Each report answers the three AGENTS.md questions. In short:
   `defaults/lib` and skips `node_modules`. `src/settings.rs`: `web_engine`,
   `chromium_video`. `Cargo.toml`: the `chromium` feature.
 - `src/keys.rs`, `defaults/keys.macos.json`: `layout:main` window keys.
+- `build.rs`: a `defaults/` folder that isn't there embeds nothing (the nix
+  dependency step builds from a stub without `defaults/lib`; the first nix
+  build of this batch failed there).
 - Test code: `src/mods/render_tests.rs` registers the libraries and answers
   scripts' probe of the shown space.
 
