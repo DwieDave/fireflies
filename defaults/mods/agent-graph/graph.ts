@@ -13,6 +13,7 @@ import type { Status, Theme } from "herdr";
 import { ART, dither, pip } from "./kit.ts";
 import type { Agent, Run, Snapshot } from "./claude.ts";
 import { ranFor, span } from "./claude.ts";
+import { edge } from "./tones.ts";
 
 // Sizes at zoom 1; dims(z) scales them (zooming lays the graph out again,
 // text and all, so it stays crisp).
@@ -32,10 +33,13 @@ export type Dims = ReturnType<typeof dims>;
 export type NodeStatus = "working" | "blocked" | "done" | "failed" | "killed" | "stopped" | "idle" | "waiting" | "pending";
 
 /** The theme colors a status is drawn in. */
-type Tone = "working" | "blocked" | "done" | "ansi8" | "muted" | "ansi0";
+type Tone = "working" | "blocked" | "done" | "muted" | "edge";
 
 /** Status -> theme color name. */
-export const TONE = { working: "working", blocked: "blocked", done: "done", failed: "blocked", killed: "ansi8", stopped: "ansi8", idle: "muted", waiting: "muted", pending: "ansi0" } as const satisfies { readonly [S in NodeStatus]: Tone };
+export const TONE = { working: "working", blocked: "blocked", done: "done", failed: "blocked", killed: "muted", stopped: "muted", idle: "muted", waiting: "muted", pending: "edge" } as const satisfies { readonly [S in NodeStatus]: Tone };
+
+/** The color a status is drawn in (TONE's name; "edge": tones.ts's edge). */
+export const toneOf = (t: Theme, s: NodeStatus): Color => (TONE[s] === "edge" ? edge(t) : t[TONE[s]]);
 
 export const WORDS = { working: "working", done: "done", failed: "failed", killed: "stopped", stopped: "stopped", idle: "quiet", waiting: "waiting", pending: "not started", blocked: "needs you" } as const satisfies { readonly [S in NodeStatus]: string };
 
@@ -260,14 +264,14 @@ function edges(t: Theme, n: GraphNode, d: Dims): Element[] {
   const ys = n.children.map((c) => c.y + Math.round(c.h / 2));
   const top = Math.min(py, ...ys), bottom = Math.max(py, ...ys);
 
-  out.push(seg(live ? t.working : t.ansi8, px, py - 1, mid - px, 2));
-  out.push(seg(t.ansi8, mid - 1, top - 1, 2, bottom - top + 2));
+  out.push(seg(live ? t.working : t.muted, px, py - 1, mid - px, 2));
+  out.push(seg(t.muted, mid - 1, top - 1, 2, bottom - top + 2));
 
   for (const c of n.children) {
     const cy = c.y + Math.round(c.h / 2);
-    const color = t[TONE[c.status]];
+    const color = toneOf(t, c.status);
 
-    out.push(seg(c.status === "pending" ? t.ansi0 : c.status === "working" ? color : t.ansi8, mid, cy - 1, c.x - mid, 2));
+    out.push(seg(c.status === "pending" ? edge(t) : c.status === "working" ? color : t.muted, mid, cy - 1, c.x - mid, 2));
 
     // A pulse running into what's working.
     if (c.status === "working") {
@@ -287,11 +291,11 @@ export type OnPick = (n: GraphNode, cx: Context) => void;
 
 /** One node at zoom d. */
 function node(t: Theme, n: GraphNode, selected: string | null, onPick: OnPick, d: Dims): Element {
-  const color = t[TONE[n.status]];
+  const color = toneOf(t, n.status);
   const sel = selected === n.key;
 
   const box = div().id(`node-${n.key}`).absolute().left(n.x).top(n.y).w(d.NW).h(n.h).bg(t.background)
-    .border(1).border_color(sel ? t.accent : n.status === "working" ? color : t.ansi0)
+    .border(1).border_color(sel ? t.accent : n.status === "working" ? color : edge(t))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => onPick(n, cx))
     .hover((s) => s.border_color(t.foreground));
@@ -347,7 +351,7 @@ export function canvas(t: Theme, root: GraphNode, selected: string | null, onPic
  * depth), dimming a touch out of step, and rarely a faint shooting star.
  */
 export function sky(t: Theme, panX: number, panY: number): Element {
-  const far = (dx: number, dy: number) => svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(dy).left(dx).text_color(t.ansi8);
+  const far = (dx: number, dy: number) => svg(`${ART}/stars.svg`).w(480).h(900).absolute().top(dy).left(dx).text_color(t.muted);
 
   const layer = (k: number, period: number, drift: number, opacity: number, twinkle: number) => {
     const ox = ((panX * k) % 480 + 480) % 480 - 480, oy = ((panY * k) % 900 + 900) % 900 - 900;
@@ -363,7 +367,7 @@ export function sky(t: Theme, panX: number, panY: number): Element {
   return div().id("graph-sky").absolute().inset_0().overflow_hidden()
     .child(layer(0.1, 240000, 480, 0.2, 7000))
     .child(layer(0.25, 160000, 480, 0.3, 5300))
-    .child(div().absolute().w(28).h(1).child(dither(t.ansi8, 1)).opacity(0.4)
+    .child(div().absolute().w(28).h(1).child(dither(t.muted, 1)).opacity(0.4)
       .loop("left", { from: -2000, to: 2400, period: 40000, easing: "linear" })
       .loop("top", { from: 30, to: 260, period: 40000, easing: "linear" }));
 }

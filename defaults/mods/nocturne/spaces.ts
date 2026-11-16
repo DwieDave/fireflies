@@ -35,7 +35,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, shared, setShared } from "herdr";
 import type { PaneInfo, SpaceInfo, Theme } from "herdr";
 import { readShared } from "./guard.ts";
-import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.ts";
+import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow, keyedAt } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { chip, field, confirm } from "./inline.ts";
 import type { Action } from "./inline.ts";
@@ -46,6 +46,7 @@ import { EDIT_SPACE_KEY, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";
 import { SPACE_ROWS, spaceRowsOf } from "./tabmove.ts";
 import type { Nav, NavActs } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
@@ -120,7 +121,10 @@ export default class Spaces {
 
   /** A space's right-click menu (`centered`: opened from the keyboard). */
   menu(s: SpaceInfo, centered = false, e: MouseButtonEvent | null = null): void {
-    this.pressed = e ? { id: s.id, at: dropBelow(e, PICKER_WIDTH), when: Date.now() } : null;
+    // Where its Change folder… hangs: under the pressed row, or under the cursor's row (a key).
+    const row = e ? null : keyedAt();
+
+    this.pressed = e ? { id: s.id, at: dropBelow(e, PICKER_WIDTH), when: Date.now() } : row ? { id: s.id, at: { x: Math.round(row.x), y: Math.round(row.y + row.h) }, when: Date.now() } : null;
     openMenu({ tab: "space", target: { id: s.id } }, { centered });
   }
 
@@ -434,7 +438,7 @@ export default class Spaces {
   /** A worktree space's indent: a faint guide line, then the row's own padding. */
   indent(t: Theme): Element {
     return div().relative().w(10).h_full().flex_none().ml(-2)
-      .child(div().absolute().left(2).top(0).bottom(0).w(1).bg(`${t.ansi8}55`));
+      .child(div().absolute().left(2).top(0).bottom(0).w(1).bg(`${t.muted}55`));
   }
 
   row(t: Theme, s: SpaceInfo, depth: number, nav?: Nav): Element {
@@ -461,8 +465,8 @@ export default class Spaces {
       return confirm(t, id, {
         title: `Delete ${s.name}?`,
         facts: [
-          terms ? [ags ? t.blocked : t.ansi8, `ends ${n(terms, "terminal", "terminals")}${ags ? `, ${n(ags, "agent", "agents")} among them` : ""}`]
-            : [t.ansi8, "nothing running in it"],
+          terms ? [ags ? t.blocked : t.muted, `ends ${n(terms, "terminal", "terminals")}${ags ? `, ${n(ags, "agent", "agents")} among them` : ""}`]
+            : [t.muted, "nothing running in it"],
           [t.dim, "its folders and files stay"],
         ],
         go: { label: on ? "delete (y)" : "delete", action: (cx) => this.remove(s, cx) },
@@ -479,11 +483,11 @@ export default class Spaces {
         this.menu(s, false, e);
       })
       .on_click(() => run("space.select", { id: s.id }))
-      .hover((st) => st.bg(`${t.ansi0}55`))
+      .hover((st) => st.bg(`${edge(t)}55`))
       // Shown: a plate of the ground, in from the sidebar's edges, with the
       // blue corner ticks on its corners, as its initials wear them on the rail.
       .when(s.active, (el) => el.child(div().absolute().top(0).bottom(0).left(SHOWN_INSET).right(SHOWN_INSET)
-        .child(dither(t.ansi0, 1)).children(cornerTicks(t, 0))))
+        .child(dither(edge(t), 1)).children(cornerTicks(t, 0))))
       .map((el) => navRow(t, el, on))
       .when(depth > 0, (el) => el.child(this.indent(t)))
       .child(pip(t, s.status))
@@ -496,7 +500,7 @@ export default class Spaces {
   header(t: Theme, r: { readonly header: string; readonly key: string }): Element {
     return h_flex().id(`repo-${r.key}`).h(22).px(16).gap(8).items_center().text_size(11)
       .child(div().w(6).flex_none())
-      .child(div().min_w(0).truncate().text_color(t.ansi8).child(r.header));
+      .child(div().min_w(0).truncate().text_color(t.muted).child(r.header));
   }
 
   /** `nav` (sky.ts): registers a control with the keyboard's cursor, true while it's on it. */
@@ -512,7 +516,7 @@ export default class Spaces {
           .on_mouse_down("left", (e) => {
             this.press = { e, open: pickerOpen() };
           })
-          .when(open, (el) => el.bg(t.ansi0)), newOn)))
+          .when(open, (el) => el.bg(edge(t))), newOn)))
       .children(this.rows().map((r) => ("s" in r ? this.row(t, r.s, r.depth, nav) : this.header(t, r))));
   }
 }

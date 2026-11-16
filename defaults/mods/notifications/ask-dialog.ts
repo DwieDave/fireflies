@@ -23,6 +23,7 @@ import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
 import type { Question, QuestionRequest } from "./request.ts";
+import { edge } from "./tones.ts";
 
 /** The dialog's props: the terminal whose questions it answers, its overlay. */
 const isAskProps = object({}, { terminal: isString, overlay: isString });
@@ -186,7 +187,7 @@ export default class AskDialog {
     if (this.item && (!now || JSON.stringify(now.request.questions) !== this.asked) && !this.busy) this.changed = true;
 
     const it = this.item;
-    const root = v_flex().id("notify-ask").relative().size_full().bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11);
+    const root = v_flex().id("notify-ask").relative().size_full().bg(t.background).border(1).border_color(edge(t)).text_color(t.foreground).text_size(11);
 
     const frame = (this.handle ? root.track_focus(this.handle) : root)
       .on_key_down((e, cx) => this.key(e, cx))
@@ -219,7 +220,7 @@ export default class AskDialog {
       const on = s.q === i;
       const done = i < qs.length ? answered(qs, s, i) : false;
       const review = i === qs.length;
-      const color = on ? t.accent : done ? t.done : t.ansi0;
+      const color = on ? t.accent : done ? t.done : edge(t);
 
       return div().id(`cell-${i}`).relative().w(review ? 22 : 34).h(8).flex_none().border(1).border_color(color).cursor_pointer()
         .on_mouse_down("left", stop)
@@ -254,7 +255,7 @@ export default class AskDialog {
     const row = (r: number, label: string | null, desc: string | null, on: boolean, content?: Element) => h_flex().id(`q${i}-row-${r}`).relative().px(18).py(6).gap(10).items_start().flex_none().cursor_pointer()
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => this.pick(qs, { ...s, cursor: s.cursor.map((c, j) => (j === i ? r : c)) }, cx))
-      .when(r === cur, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(r === cur, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(div().relative().pt(3).w(14).flex_none().flex().justify_center().child(box(on)))
       .child(content ?? v_flex().relative().flex_1().min_w(0).gap(2)
         .child(div().text_color(on || r === cur ? t.foreground : t.muted).child(label ?? ""))
@@ -291,7 +292,7 @@ export default class AskDialog {
         .text_color(on ? t.foreground : t.muted)
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => this.pick(qs, { ...s, reviewCursor: i }, cx))
-        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(k === "submit" ? t.done : t.accent)))
+        .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(k === "submit" ? t.done : t.accent)))
         .child(div().relative().w(14).flex_none().text_color(on ? t.accent : t.dim).child(String(i + 1)))
         .child(div().relative().child(label));
     };
@@ -303,7 +304,7 @@ export default class AskDialog {
       .child(div().px(18).pt(12).text_color(t.dim).child("review · nothing is sent until you submit"))
       .child(v_flex().px(18).pt(10).pb(12).gap(8)
         .children(qs.map((q, i) => h_flex().gap(10).items_start()
-          .child(div().pt(4).child(pip(answered(qs, s, i) ? t.done : t.ansi0, 6)))
+          .child(div().pt(4).child(pip(answered(qs, s, i) ? t.done : edge(t), 6)))
           .child(v_flex().flex_1().min_w(0).gap(2)
             .child(div().text_color(t.muted).child(q.question))
             .child(div().text_color(answered(qs, s, i) ? t.foreground : t.dim).child(answered(qs, s, i) ? reviewText(q, a[i] ?? { picked: [], other: null }) : "not answered yet"))))))
@@ -317,7 +318,7 @@ export default class AskDialog {
     const q = qs[s.q];
 
     return h_flex().relative().h(30).flex_none().px(18).gap(12).items_center()
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
       .when(s.editing, (el) => el.child(hint("↵", "keep")).child(hint("⇥ ⇧⇥", "keep, move")).child(hint("esc", "drop")))
       .when(!s.editing, (el) => el
         .child(hint("⇥ ⇧⇥", "move"))

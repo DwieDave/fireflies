@@ -89,14 +89,14 @@
                 "height": 24,
                 "position": "top"
               },
-              "background": "#080808",
+              "background": "background",
               "border": {
                 "width": 1,
-                "color": "#323437"
+                "color": "border"
               },
               "focus": {
                 "width": 1,
-                "color": "#80a0ff"
+                "color": "accent"
               },
               "radius": 0,
               "gap": 8,
@@ -122,7 +122,7 @@
       "resizable": false
     }
   ],
-  "background": "#080808",
+  "background": "background",
   "theme": "moonfly",
   "ui_font": "Departure Mono",
   "terminal_padding": [
@@ -131,7 +131,7 @@
   ],
   "divider": {
     "width": 1,
-    "color": "#323437"
+    "color": "border"
   },
   "titlebar": "none",
   "traffic_lights": [

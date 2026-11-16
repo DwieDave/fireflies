@@ -70,7 +70,7 @@ export function stateWord(s: ConnState): string {
 /** The state's colour: dim off, the work colour while it connects or reads, green connected, red failed. */
 export function stateColor(t: Theme, s: ConnState): Color {
   switch (s.kind) {
-    case "off": return t.ansi8;
+    case "off": return t.muted;
     case "connecting":
     case "reading": return t.working;
     case "connected": return t.done;

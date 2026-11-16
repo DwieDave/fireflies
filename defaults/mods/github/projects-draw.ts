@@ -16,6 +16,7 @@ import { cardFields, editableFields, initials, loginSlot, valueText, wrap, ansiK
 import { choose, menuFields, openProjects, options } from "./projects-menus.ts";
 import { flipped, toggleFold } from "./projects-keys.ts";
 import type { default as Projects, ColumnRow, Menu } from "./projects.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export const FOLD_W = 28, GAP = 6, DETAIL_W = 340, CHAR = 7.7, LINE = 15, LANE_H = 22;
 
@@ -55,14 +56,14 @@ export function bar(proj: Projects, t: Theme, b: Board | null, lay: Layout | nul
       proj.setView(v.id);
       cx.notify();
     })
-    .when(v.id === cur?.id, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+    .when(v.id === cur?.id, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
     .child(div().relative().child(v.name)));
 
   const tokens = filterTokens(proj.filterText);
   const typing = proj.typing === "filter";
 
   const filter = h_flex().id("pf-filter").relative().flex_1().min_w(120).h(22).px(8).gap(6).items_center().text_size(11)
-    .border(1).border_color(typing ? t.accent : t.ansi0)
+    .border(1).border_color(typing ? t.accent : edgeTone(t))
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       proj.menu = null;
@@ -85,7 +86,7 @@ export function bar(proj: Projects, t: Theme, b: Board | null, lay: Layout | nul
       .child(div().text_color(t.accent).child("p"))
       .child(div().truncate().text_color(t.foreground).hover((s) => s.text_color(t.accent)).child(p?.title ?? "Project"))
       .when(Boolean(p?.number), (el) => el.child(div().flex_none().text_color(t.dim).child(`#${p?.number ?? ""}`))))
-    .child(div().w(2).h(14).relative().flex_none().child(dither(t.ansi0, 1)))
+    .child(div().w(2).h(14).relative().flex_none().child(dither(edgeTone(t), 1)))
     .child(h_flex().flex_none().gap(2).children(viewChips))
     .child(filter);
 }
@@ -177,8 +178,8 @@ export function foldStrip(proj: Projects, t: Theme, lay: Layout, ci: number): El
 
   const letters = Array.from(c.name.slice(0, 14), (ch, i) => div().id(`pfl-${i}`).h(11).text_size(10).text_color(t.dim).child(ch === " " ? " " : ch));
 
-  return v_flex().id(`pfold-${ci}`).w(FOLD_W).flex_none().h_full().items_center().pt(6).gap(6).border(1).border_color(t.ansi0)
-    .hover((s) => s.border_color(t.ansi8))
+  return v_flex().id(`pfold-${ci}`).w(FOLD_W).flex_none().h_full().items_center().pt(6).gap(6).border(1).border_color(edgeTone(t))
+    .hover((s) => s.border_color(t.muted))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       toggleFold(proj, lay, ci);
@@ -200,7 +201,7 @@ export function column(proj: Projects, t: Theme, b: Board, lay: Layout, ci: numb
 
   const active = a.col === ci && proj.focus === "board";
   const over = c.limit !== null && (c.count + (proj.carrying && proj.carrying.col === ci && proj.carrying.from.col !== ci ? 1 : 0)) > c.limit;
-  const edge = over ? t.blocked : active ? t.accent : t.ansi0;
+  const edge = over ? t.blocked : active ? t.accent : edgeTone(t);
   const rows = columnRows(proj, lay, ci);
   const chars = proj.chars;
   const heights = rows.map((r) => ("lane" in r ? LANE_H : "pad" in r ? r.pad : cardH(proj, r.item, chars, fields)));
@@ -281,10 +282,10 @@ export function clicked(proj: Projects, lay: Layout, ci: number, key: string, cx
 
 export function laneRow(proj: Projects, t: Theme, r: { readonly lane: Lane; readonly n: number }, ci: number, i: number): Element {
   return h_flex().id(`plane-${ci}-${i}`).relative().h(LANE_H).px(8).gap(6).items_center().text_size(10)
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edgeTone(t)}55`))
     .child(div().flex_none().text_color(r.lane.done ? t.dim : t.ansi6).child(`${r.lane.folded ? "+" : "−"} ${r.lane.name}`))
     .child(div().flex_none().text_color(t.dim).child(String(r.n)))
-    .child(div().relative().flex_1().h(2).child(dither(t.ansi0, 1)));
+    .child(div().relative().flex_1().h(2).child(dither(edgeTone(t), 1)));
 }
 
 export function cardH(proj: Projects, item: Item, chars: number, fields: readonly Field[]): number {
@@ -319,13 +320,13 @@ export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, ch
   const titleColor = lifted || sel ? t.foreground : c.kind === "draft" ? t.dim : t.muted;
 
   return v_flex().id(`pcard-${item.id}`).relative().w_full().h(cardH(proj, item, chars, fields)).pl(10).pr(8).pt(6).gap(4).flex_none()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edgeTone(t)}55`))
     .when(sel && !lifted, (el) => el.children(band(t, active)))
     .when(lifted, (el) => el.border(1).border_color(t.accent).child(dither(`${t.accent}30`, 1)))
-    .when(!sel && !lifted, (el) => el.child(div().absolute().left(8).right(8).top(0).h(1).child(dither(t.ansi0, 1))))
+    .when(!sel && !lifted, (el) => el.child(div().absolute().left(8).right(8).top(0).h(1).child(dither(edgeTone(t), 1))))
     .child(h_flex().relative().gap(7).items_start().text_size(12)
       .when(lifted, (el) => el.child(svg(`${ART}/wings.svg`).w(16).h(6).mt(4).flex_none().text_color(t.working).loop("opacity", { from: 0.3, to: 1, period: 700 })))
-      .child(div().flex_none().text_color(sel || lifted ? t.accent : c.kind === "draft" ? t.dim : t.ansi8).child(num))
+      .child(div().flex_none().text_color(sel || lifted ? t.accent : c.kind === "draft" ? t.dim : t.muted).child(num))
       .child(v_flex().flex_1().min_w(0).children(lines.map((l, i) => div().id(`pt-${i}`).h(LINE).truncate().text_color(titleColor).child(l)))))
     .when(c.labels.length > 0, (el) => el.child(h_flex().relative().gap(4).pl(2).h(16).overflow_hidden().children(c.labels.slice(0, 4).map((l, i) =>
       div().id(`pl-${i}`).relative().px(5).h(16).flex_none().flex().items_center().text_size(10).text_color(t.foreground)
@@ -343,7 +344,7 @@ export function card(proj: Projects, t: Theme, item: Item, a: At, ci: number, ch
 /** The card docked right: its fields, its body (markdown) and the conversation. */
 export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element {
   const item = proj.current(lay), active = proj.focus === "detail";
-  const edge = active ? t.accent : t.ansi0;
+  const edge = active ? t.accent : edgeTone(t);
 
   const frame = (body: Element, right?: string) => v_flex().id("pdetail").w(DETAIL_W).flex_none().h_full().min_h(0).border(1).border_color(edge)
     .on_mouse_down("left", (_e, cx) => {
@@ -398,12 +399,12 @@ export function detail(proj: Projects, t: Theme, b: Board, lay: Layout): Element
       .child(div().text_color(state[1]).child(state[0]))
       .when(Boolean(d?.createdAt), (el) => el.child(div().text_color(t.dim).child(`opened ${ago(d?.createdAt)} ago${d?.author ? ` by ${d.author}` : ""}`))))
     .child(grid2)
-    .child(div().relative().h(2).child(dither(t.ansi0, 1)))
+    .child(div().relative().h(2).child(dither(edgeTone(t), 1)))
     .child(kept?.error ? div().text_size(11).text_color(t.blocked).child(kept.error) : md(`pd-body-${c.id ?? item.id}`, d ? d.body : c.id ? "_Reading…_" : ""))
     .when(comments.length > 0, (el) => el
-      .child(h_flex().pt(8).gap(8).items_center().child(div().text_size(10).text_color(t.ansi8).child(`COMMENTS · ${comments.length + (d?.more ?? 0)}`)).child(div().relative().flex_1().h(2).child(dither(t.ansi0, 1))))
+      .child(h_flex().pt(8).gap(8).items_center().child(div().text_size(10).text_color(t.muted).child(`COMMENTS · ${comments.length + (d?.more ?? 0)}`)).child(div().relative().flex_1().h(2).child(dither(edgeTone(t), 1))))
       .children(comments.map((cm, i) => v_flex().id(`pdc-${i}`).relative().gap(4).pl(12).py(6)
-        .child(div().absolute().left(2).top(6).bottom(6).w(2).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(2).top(6).bottom(6).w(2).child(dither(edgeTone(t), 1)))
         .child(h_flex().gap(8).text_size(11).child(div().text_color(t.accent).child(cm.who)).child(div().flex_1()).child(div().text_color(t.dim).child(ago(cm.at))))
         .child(md(`pd-c-${c.id ?? ""}-${i}`, cm.body)))))
     .child(div().h(20));
@@ -442,7 +443,7 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
   const row = (id: string, text: string, { on = false, cur = false, dim = false, color = null, right = "", hex = null, toggle = false }: RowLook = {}) =>
     h_flex().id(id).relative().h(20).px(10).gap(7).items_center().text_size(11)
       .text_color(on ? t.foreground : dim ? t.dim : t.muted)
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .when(toggle, (el) => el.child(div().relative().flex_none().w(10).text_color(cur ? t.accent : t.dim).child(cur ? "■" : "□")))
       .when(color !== null, (el) => (color ? el.child(div().relative().child(pip(t, "done", 7).text_color(color))) : el))
       .when(Boolean(hex), (el) => el.child(div().relative().size(8).flex_none().child(dither(`#${hex ?? ""}`, 1))))
@@ -480,7 +481,7 @@ export function menuPanel(proj: Projects, t: Theme, b: Board, m: Menu): Element 
   const fields = menuFields(proj, b, m.fields);
   const f = fields[m.at], opts = f ? options(proj, b, item, f) : [];
 
-  const left = v_flex().w(170).flex_none().py(4).border_r(1).border_color(t.ansi0).children(fields.map((x, i) => {
+  const left = v_flex().w(170).flex_none().py(4).border_r(1).border_color(edgeTone(t)).children(fields.map((x, i) => {
     const v = x.type === "labels" ? String(item.content.labels.length || "") : x.type === "assignees" ? String(item.content.assignees.length || "") : x.type === "title" ? "" : valueText(x, item.values.get(x.id));
 
     return row(`pmf-${i}`, x.name, { on: i === m.at && m.side === "fields", right: v }).when(i === m.at && m.side !== "fields", (el) => el.text_color(t.foreground))

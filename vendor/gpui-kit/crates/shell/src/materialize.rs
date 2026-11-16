@@ -378,6 +378,8 @@ struct Behavior {
     on_drop: Option<CallbackId>,
     /// Wheel and trackpad scrolling over this element.
     on_scroll_wheel: Option<CallbackId>,
+    /// A trackpad pinch over this element.
+    on_pinch: Option<CallbackId>,
     /// Handlers for named actions, one entry per action listened for.
     ///
     /// A list because an element that responds to actions usually responds to
@@ -443,6 +445,9 @@ struct Behavior {
     /// Reports the panel sizes of a resizable group once a drag has ended.
     on_resize: Option<CallbackId>,
     on_size_change: Option<CallbackId>,
+    /// HERDR: reports where the element is drawn (window px) whenever that
+    /// changes: a moved, scrolled or resized element.
+    on_bounds_change: Option<CallbackId>,
     /// Reports which item of a `VirtualList` was clicked.
     ///
     /// One handler for the whole list rather than one per row, and that is a
@@ -576,6 +581,7 @@ impl Behavior {
             || !self.on_mouse_up.is_empty()
             || self.on_mouse_down_out.is_some()
             || self.on_scroll_wheel.is_some()
+            || self.on_pinch.is_some()
             || self.on_hover.is_some()
     }
 
@@ -603,6 +609,7 @@ impl Behavior {
             || !self.on_mouse_up.is_empty()
             || self.on_mouse_down_out.is_some()
             || self.on_scroll_wheel.is_some()
+            || self.on_pinch.is_some()
             || !self.on_action.is_empty()
             || self.key_context.is_some()
     }
@@ -1891,6 +1898,16 @@ where
                 );
             });
         }
+        if let Some(callback) = behavior.on_pinch {
+            let runtime = Rc::downgrade(runtime);
+            let bounds = Rc::clone(&bounds);
+            element = element.on_pinch(move |event, window, cx| {
+                let Some(runtime) = runtime.upgrade() else {
+                    return;
+                };
+                runtime.dispatch_pinch(callback, event, bounds.get(), window, cx);
+            });
+        }
     }
 
     // The context has to be installed before the listeners for the same reason
@@ -2036,6 +2053,7 @@ fn warn_unhonoured_input(component: &Component, behavior: &Behavior) {
         ("on_mouse_up", !behavior.on_mouse_up.is_empty()),
         ("on_mouse_down_out", behavior.on_mouse_down_out.is_some()),
         ("on_scroll_wheel", behavior.on_scroll_wheel.is_some()),
+        ("on_pinch", behavior.on_pinch.is_some()),
         ("on_action", !behavior.on_action.is_empty()),
         ("key_context", behavior.key_context.is_some()),
     ];
@@ -2152,6 +2170,7 @@ fn flex_element(
         && behavior.on_click.is_none()
         && behavior.on_mouse_move.is_none()
         && behavior.on_size_change.is_none()
+        && behavior.on_bounds_change.is_none()
         && behavior.on_hover.is_none()
         && behavior.on_key_down.is_none()
         && behavior.on_key_up.is_none()
@@ -2160,6 +2179,7 @@ fn flex_element(
         && behavior.on_mouse_up.is_empty()
         && behavior.on_mouse_down_out.is_none()
         && behavior.on_scroll_wheel.is_none()
+        && behavior.on_pinch.is_none()
         && behavior.on_action.is_empty()
         && behavior.key_context.is_none()
         && !behavior.scroll_x
@@ -2234,7 +2254,7 @@ fn flex_element(
                 .into_any_element(),
             (false, false) => stateful.into_any_element(),
         };
-        return observe_size(element, identity, behavior.on_size_change, runtime, window, cx);
+        return observe_size(element, identity, (behavior.on_size_change, behavior.on_bounds_change), runtime, window, cx);
     }
     // The scroll position lives in window element state under this element's
     // own identity, which is the slot an explicit `Scrollbar` elsewhere in the
@@ -2256,20 +2276,25 @@ fn flex_element(
         }
         (false, false) => stateful,
     };
-    observe_size(finish(stateful, refinement, children), identity, behavior.on_size_change, runtime, window, cx)
+    observe_size(finish(stateful, refinement, children), identity, (behavior.on_size_change, behavior.on_bounds_change), runtime, window, cx)
 }
 
 fn observe_size(
-    element: AnyElement, identity: gpui::ElementId, callback: Option<CallbackId>,
+    element: AnyElement, identity: gpui::ElementId, (callback, bounds_callback): (Option<CallbackId>, Option<CallbackId>),
     runtime: &Rc<ShellRuntime>, window: &mut Window, cx: &mut App,
 ) -> AnyElement {
-    let Some(callback) = callback.filter(|_| !checking()) else { return element };
-    let last = window.use_keyed_state((identity, "size-change"), cx, |_, _| {
+    if checking() || (callback.is_none() && bounds_callback.is_none()) {
+        return element;
+    }
+    let last = window.use_keyed_state((identity.clone(), "size-change"), cx, |_, _| {
         Rc::new(Cell::new(None::<(Option<u64>, gpui::Size<Pixels>)>))
     }).read(cx).clone();
+    let last_bounds = window.use_keyed_state((identity, "bounds-change"), cx, |_, _| {
+        Rc::new(Cell::new(None::<(Option<u64>, Bounds<Pixels>)>))
+    }).read(cx).clone();
+    let application = callback.or(bounds_callback).and_then(|c| runtime.callback_application_id(c));
     SizeObserver {
-        element, last, callback,
-        application: runtime.callback_application_id(callback),
+        element, last, last_bounds, callback, bounds_callback, application,
         runtime: Rc::downgrade(runtime),
     }.into_any_element()
 }
@@ -2278,8 +2303,10 @@ fn observe_size(
 struct SizeObserver {
     element: AnyElement,
     last: Rc<Cell<Option<(Option<u64>, gpui::Size<Pixels>)>>>,
+    last_bounds: Rc<Cell<Option<(Option<u64>, Bounds<Pixels>)>>>,
     application: Option<u64>,
-    callback: CallbackId,
+    callback: Option<CallbackId>,
+    bounds_callback: Option<CallbackId>,
     runtime: Weak<ShellRuntime>,
 }
 
@@ -2308,12 +2335,24 @@ impl gpui::Element for SizeObserver {
     ) {
         self.element.prepaint(window, cx);
         let current = (self.application, bounds.size);
-        if self.last.replace(Some(current)) != Some(current) {
+        if let Some(callback) = self.callback
+            && self.last.replace(Some(current)) != Some(current)
+        {
             let runtime = self.runtime.clone();
-            let callback = self.callback;
             window.defer(cx, move |window, cx| {
                 if let Some(runtime) = runtime.upgrade() {
-                    runtime.dispatch_size_change(callback, bounds.size, window, cx);
+                    runtime.dispatch_size_change(callback, bounds, false, window, cx);
+                }
+            });
+        }
+        let placed = (self.application, bounds);
+        if let Some(callback) = self.bounds_callback
+            && self.last_bounds.replace(Some(placed)) != Some(placed)
+        {
+            let runtime = self.runtime.clone();
+            window.defer(cx, move |window, cx| {
+                if let Some(runtime) = runtime.upgrade() {
+                    runtime.dispatch_size_change(callback, bounds, true, window, cx);
                 }
             });
         }
@@ -2731,8 +2770,10 @@ pub(in crate::materialize) fn resolve_ops(
                 "on_mouse_down_out" => behavior.on_mouse_down_out = Some(*id),
                 "on_drop" => behavior.on_drop = Some(*id),
                 "on_scroll_wheel" => behavior.on_scroll_wheel = Some(*id),
+                "on_pinch" => behavior.on_pinch = Some(*id),
                 "on_resize" => behavior.on_resize = Some(*id),
                 "on_size_change" => behavior.on_size_change = Some(*id),
+                "on_bounds_change" => behavior.on_bounds_change = Some(*id),
                 "on_change" => behavior.on_change = Some(*id),
                 "token" => behavior.token = Some(*id),
                 "on_token_click" => behavior.on_token_click = Some(*id),

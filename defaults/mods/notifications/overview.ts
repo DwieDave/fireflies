@@ -40,6 +40,7 @@ import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.ts";
 import type { OptionKind, PermissionRequest, QuestionRequest } from "./request.ts";
+import { edge } from "./tones.ts";
 
 // How tall it is at the least with nothing waiting (layout px, up to the
 // popup's most): a center, not a sliver around its note.
@@ -332,7 +333,7 @@ export default class Overview {
     const list = this.list();
     const it = this.current(list);
 
-    const root = v_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground).text_size(11)
+    const root = v_flex().id("notify-overview").w_full().h(this.height(it)).bg(t.background).border(1).border_color(edge(t)).text_color(t.foreground).text_size(11)
       .when(!this.measured(it), (el) => el.opacity(0));
 
     // The key bar (and the ? list) spans the drop-down, under both columns.
@@ -363,7 +364,7 @@ export default class Overview {
 
       return v_flex().flex_none()
         .child(h_flex().h(30).mt(4).px(12).gap(8).items_center().flex_none()
-          .child(pip(n ? color : t.ansi0, 6))
+          .child(pip(n ? color : edge(t), 6))
           .child(div().flex_1().text_color(n ? t.foreground : t.dim).child(TITLE[k]))
           .child(n && urgent
             ? div().h(15).px(5).flex().items_center().bg(color).text_color(t.background).child(String(n))
@@ -371,7 +372,7 @@ export default class Overview {
         .children(g[k].map((x) => this.entry(t, x, x.id === it?.id)));
     });
 
-    return v_flex().w(280).h_full().flex_none().border_r_1().border_color(t.ansi0)
+    return v_flex().w(280).h_full().flex_none().border_r_1().border_color(edge(t))
       .child(head)
       .child(v_flex().id("notify-list").flex_1().min_h(0).pb(8).overflow_y_scrollbar()
         .child(v_flex().id("notify-list-body").flex_none().on_size_change(this.measure("list")).children(groups)));
@@ -390,7 +391,7 @@ export default class Overview {
         this.closeBut();
         cx.notify();
       })
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(h_flex().relative().gap(7).items_center().text_color(on ? t.foreground : t.muted)
         .child(logo(x.logo, on ? t.foreground : t.muted, 12))
         .child(div().flex_1().min_w(0).truncate().child(x.name))
@@ -433,7 +434,7 @@ export default class Overview {
 
   plate(t: Theme, kids: readonly Element[]): Element {
     return v_flex().relative().mx(20).px(12).py(10).gap(4).flex_none()
-      .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(dither(t.ansi0, 1)))
+      .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(dither(edge(t), 1)))
       .children(kids.map((k) => k.relative()));
   }
 
@@ -443,7 +444,7 @@ export default class Overview {
 
     const ls = it.tail.split("\n").slice(-12);
 
-    return v_flex().mx(20).mt(10).px(10).py(8).gap(1).border(1).border_color(t.ansi0).flex_none()
+    return v_flex().mx(20).mt(10).px(10).py(8).gap(1).border(1).border_color(edge(t)).flex_none()
       .children(ls.map((l) => div().truncate().text_color(t.muted).child(l || " ")));
   }
 
@@ -488,7 +489,7 @@ export default class Overview {
 
           cx.notify();
         })
-        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(c)))
+        .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(c)))
         .child(div().relative().w(14).flex_none().text_color(on ? c : t.dim).child(String(o.n)))
         .child(div().relative().flex_1().min_w(0).child(o.label))
         .child(div().relative().flex_none().text_color(t.dim).child(on ? (busy ?? (this.but ? "" : "enter")) : ""));
@@ -521,7 +522,7 @@ export default class Overview {
         .when(on, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(4).child(dither(color, 2))));
     };
 
-    return v_flex().mx(20).mt(12).border(1).border_color(t.ansi0).flex_none()
+    return v_flex().mx(20).mt(12).border(1).border_color(edge(t)).flex_none()
       .child(h_flex().relative().h(26).items_center()
         .child(tab("yes", "yes, but…", t.done))
         .child(tab("no", "no, but…", t.blocked))
@@ -552,7 +553,7 @@ export default class Overview {
 
     const q = (x: QuestionRequest["questions"][number], i: number) => v_flex().mx(20).mt(i ? 12 : 0).gap(4).flex_none()
       .child(h_flex().gap(8).items_center()
-        .child(div().h(15).px(4).flex().items_center().border(1).border_color(t.ansi0).text_color(t.muted).child(x.header || String(i + 1)))
+        .child(div().h(15).px(4).flex().items_center().border(1).border_color(edge(t)).text_color(t.muted).child(x.header || String(i + 1)))
         .child(div().text_color(t.dim).child(x.multiSelect ? "pick any" : "pick one")))
       .child(div().text_size(12).text_color(t.foreground).child(x.question))
       .child(div().text_color(t.dim).child([...x.options.map((o) => o.label), "other"].join(" · ")));
@@ -604,7 +605,7 @@ export default class Overview {
     const perm = permissionOf(it), asks = questionsOf(it);
 
     const bar = h_flex().id("ov-bar").relative().h(30).flex_none().px(20).gap(14).items_center().on_size_change(this.measure("bar", "width"))
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
       .child(hint("j k", "requests"))
       .when(perm !== null, (el) => el.child(hint("↑↓", "choose")).child(hint("1-9", "answer")).child(hint("⇥", "but…")))
       .when(asks !== null, (el) => el.child(hint("↵", "answer")))

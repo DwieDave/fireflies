@@ -2,12 +2,13 @@ import { test, expect, beforeEach } from "bun:test";
 import { importMod } from "./mod-source.ts";
 
 // Where a file a files pane opens goes (file-tree/routing.ts, opening.ts):
-// a preview file in the files pane's own preview pane unless its own editor
-// is there; a text file in the editor, which takes the preview pane's place
-// (the picture its first tab) when the files pane has a preview pane and no
-// editor. The preview pane's side: shared `preview.show` for its slot
-// (preview/main.ts). The panes the app would make are added to `world` by
-// hand, as the app would answer the commands.
+// a preview file (a picture, a PDF, a clip, a font, a database) in a preview
+// pane: the files pane's own, else preview.open (the app shows it in a
+// preview pane already in the tab, else opens one); a text file in the
+// editor, beside, the preview pane staying a preview. The preview pane's
+// side: shared `preview.show` for its slot (preview/main.ts). The panes the
+// app would make are added to `world` by hand, as the app would answer the
+// commands.
 class Element {
   calls: [string, any[]][] = [];
   nodes: any[] = [];
@@ -108,7 +109,7 @@ test("rule 1 holds beside another editor in the tab: one the files pane never se
   expect(commands).toEqual([["preview.open", { path: PIC, pane: "p1" }]]);
 });
 
-test("rule 2: an editor opened from this files pane first, then a picture: a new tab of that editor, drawn", () => {
+test("a picture after a text file: still the preview pane, never a tab of the editor", () => {
   const v = filesPane();
   dbl(v, "main.rs");
   // No editor in the tab: a new one beside, noted by its file until its slot is seen.
@@ -118,50 +119,48 @@ test("rule 2: an editor opened from this files pane first, then a picture: a new
   world.shared["editor.paths"] = { "ed-1": ["/repo/main.rs"] };
   commands.length = 0;
   dbl(v, "shots/a.png");
-  expect(commands).toEqual([["pane.focus", { pane: "e1" }]]);
-  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: PIC, look: true });
-  expect(world.shared["file-tree.opened"].f1.editor).toEqual({ slot: "ed-1" });
-  // Enter and the menu's Open do the same.
-  world.shared["editor.paths"] = { "ed-1": ["/repo/main.rs", PIC] };
+  expect(commands).toEqual([["preview.open", { path: PIC, pane: "p1" }]]);
+  expect(world.shared["editor.open"]).toBeUndefined();
+  // Enter and the menu's Open do the same: the preview pane the app made shows the next one.
+  preview("pv", "link-1", PIC);
+  world.shared["preview.paths"] = { "link-1": PIC };
   commands.length = 0;
   v.sel = "shots/b.png";
   v.key({ key: "enter", modifiers: {} }, cx);
-  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: "/repo/shots/b.png", look: true });
+  expect(commands).toEqual([["pane.focus", { pane: "pv" }]]);
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-1", path: "/repo/shots/b.png" });
   v.act("open", { path: "docs/r.pdf", dir: false }, cx);
-  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: "/repo/docs/r.pdf", look: true });
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-1", path: "/repo/docs/r.pdf" });
   expect(commands.every(([c]) => c === "pane.focus")).toBe(true);
+  expect(world.shared["editor.open"]).toBeUndefined();
 });
 
-test("rule 3: a picture in the preview pane, then a text file: the editor takes the preview pane's place, the picture first, the text file second and shown", () => {
+test("a text file after a picture goes to the editor beside; the preview pane stays a preview and takes the next picture", () => {
   const v = filesPane();
   dbl(v, "shots/a.png");
   preview("pv", "link-1", PIC);
   world.shared["preview.paths"] = { "link-1": PIC };
   commands.length = 0;
   dbl(v, "main.rs");
-  const split = lastOf("pane.split");
-  const slot = split.props.slot;
-  expect(slot).toMatch(/^ed-/);
-  // Split beside the preview pane, then the preview pane closes: the editor has its place.
-  expect(commands).toEqual([
-    ["pane.split", { direction: "auto", pane: "pv", mod: "editor", props: { path: PIC, slot, look: true } }],
-    ["pane.close", { pane: "pv" }],
-  ]);
-  // The text file waits for the new editor, addressed to its slot (it opens it on its first frame, after the picture).
-  expect(world.shared["editor.open"]).toMatchObject({ slot, path: "/repo/main.rs", n: 1 });
-  expect(world.shared["editor.open"].look).toBeUndefined();
-  expect(world.shared["file-tree.opened"].f1).toEqual({ editor: { slot }, preview: null });
-  // From then on rule 2: the next picture is a tab of that editor.
-  world.panes = world.panes.filter((p) => p.pane !== "pv");
-  editor("e1", slot, PIC, { look: true });
-  world.shared["editor.paths"] = { [slot]: [PIC, "/repo/main.rs"] };
+  // A new editor beside the tab's first other pane; no split of the preview pane, no close.
+  expect(commands).toEqual([["editor.open", { path: "/repo/main.rs", pane: "p1" }]]);
+  expect(world.shared["file-tree.opened"].f1).toEqual({ editor: { path: "/repo/main.rs" }, preview: { path: PIC } });
+  editor("e1", "ed-1", "/repo/main.rs");
+  world.shared["editor.paths"] = { "ed-1": ["/repo/main.rs"] };
+  // The next picture: the same preview pane.
   commands.length = 0;
   dbl(v, "shots/b.png");
+  expect(commands).toEqual([["pane.focus", { pane: "pv" }]]);
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-1", path: "/repo/shots/b.png" });
+  // Another text file: a tab of that editor; the preview pane still there.
+  commands.length = 0;
+  dbl(v, "README.md");
   expect(commands).toEqual([["pane.focus", { pane: "e1" }]]);
-  expect(world.shared["editor.open"]).toMatchObject({ slot, path: "/repo/shots/b.png", look: true });
+  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: "/repo/README.md", look: true });
+  expect(world.panes.some((p) => p.pane === "pv")).toBe(true);
 });
 
-test("rule 3 with Markdown (opened to look at) and with e (edited as text: Markdown's split)", () => {
+test("Markdown (opened to look at) and e (edited as text: Markdown's split) after a picture: the editor, the preview pane stays", () => {
   for (const [how, want] of [["dbl", { look: true }], ["e", { view: "split" }]] as const) {
     world.shared = {};
     world.panes = world.panes.filter((p) => p.mod !== "preview" && p.mod !== "editor");
@@ -171,12 +170,12 @@ test("rule 3 with Markdown (opened to look at) and with e (edited as text: Markd
     commands.length = 0;
     if (how === "dbl") dbl(v, "README.md");
     else { v.sel = "README.md"; v.key({ key: "e", modifiers: {} }, cx); }
-    expect(commands.map(([c]) => c)).toEqual(["pane.split", "pane.close"]);
-    expect(world.shared["editor.open"]).toMatchObject({ path: "/repo/README.md", ...want });
+    expect(commands.map(([c]) => c)).toEqual(["editor.open"]);
+    expect(world.shared["editor.open"]).toMatchObject({ slot: null, path: "/repo/README.md", ...want });
   }
 });
 
-test("rule 3 when the preview pane shows the very file opened (a table it showed with p): one tab", () => {
+test("a table the preview pane showed with p, then opened: a drawn tab of the editor; the preview pane keeps it", () => {
   const v = filesPane();
   v.sel = "data/t.csv";
   v.key({ key: "p", modifiers: {} }, cx);
@@ -184,41 +183,50 @@ test("rule 3 when the preview pane shows the very file opened (a table it showed
   preview("pv", "link-2", "/repo/data/t.csv");
   commands.length = 0;
   dbl(v, "data/t.csv");
-  expect(commands[0]).toEqual(["pane.split", { direction: "auto", pane: "pv", mod: "editor", props: { path: "/repo/data/t.csv", slot: commands[0][1].props.slot, look: true } }]);
-  expect(world.shared["editor.open"]).toBeUndefined();
+  expect(commands).toEqual([["editor.open", { path: "/repo/data/t.csv", pane: "p1", look: true }]]);
 });
 
-test("the editor closed again: rule 1 holds again; the preview pane closed by hand: the text file gets an editor of its own with one tab", () => {
+test("the editor closed again, or the preview pane closed by hand: each kind still goes its way", () => {
   const v = filesPane();
   world.shared["file-tree.opened"] = { f1: { editor: { slot: "ed-1" }, preview: null } };
-  // Its editor is gone: a picture opens in a preview pane.
   dbl(v, "shots/a.png");
   expect(commands).toEqual([["preview.open", { path: PIC, pane: "p1" }]]);
-  // That preview pane never came (closed by hand): a text file opens a new editor, no split, no close.
+  // That preview pane never came (closed by hand): a text file opens a new editor.
   commands.length = 0;
   dbl(v, "main.rs");
   expect(commands).toEqual([["editor.open", { path: "/repo/main.rs", pane: "p1" }]]);
-});
-
-test("the same file twice: its tab (any editor of the tab holding it, a popped-out one too), or its preview pane, no second copy", () => {
-  // A popped-out editor holds the picture: it shows it, and stays out of the files pane's own.
-  editor("ep", "ed-pop", PIC, { popped: true, look: true });
-  world.shared["editor.paths"] = { "ed-pop": [PIC] };
-  const v = filesPane();
-  dbl(v, "shots/a.png");
-  expect(commands).toEqual([["pane.focus", { pane: "ep" }]]);
-  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-pop", path: PIC });
-  // Another picture: the popped tab takes no other files, so a preview pane.
+  // And the next picture asks for a preview pane again.
   commands.length = 0;
   dbl(v, "shots/b.png");
   expect(commands).toEqual([["preview.open", { path: "/repo/shots/b.png", pane: "p1" }]]);
-  // A text file with this pane's preview pane there, but held by an editor already: that editor, no swap.
-  preview("pv", "link-1", "/repo/shots/b.png");
-  world.panes.push({ pane: "e2", tab: "tab1", mod: "editor", props: { path: "/repo/main.rs", slot: "ed-2" } });
-  world.shared["editor.paths"] = { "ed-pop": [PIC], "ed-2": ["/repo/main.rs"] };
+});
+
+test("a picture an editor holds as a drawn tab (editor.open --look) opens in the preview pane all the same", () => {
+  editor("ep", "ed-pop", PIC, { popped: true, look: true });
+  editor("e2", "ed-2", "/repo/main.rs");
+  world.shared["editor.paths"] = { "ed-pop": [PIC], "ed-2": ["/repo/main.rs", "/repo/shots/b.png"] };
+  const v = filesPane();
+  dbl(v, "shots/a.png");
+  expect(commands).toEqual([["preview.open", { path: PIC, pane: "p1" }]]);
+  commands.length = 0;
+  dbl(v, "shots/b.png");
+  expect(commands).toEqual([["preview.open", { path: "/repo/shots/b.png", pane: "p1" }]]);
+  // A text file an editor holds: that editor's tab.
   commands.length = 0;
   dbl(v, "main.rs");
   expect(commands).toEqual([["pane.focus", { pane: "e2" }]]);
+});
+
+test("a preview pane the app reused for this pane's file is its own from then on (found by the file it shows)", () => {
+  // Another preview pane in the tab showed it (the app's preview.open sent it there).
+  preview("pv", "link-7", "/repo/old.png");
+  world.shared["file-tree.opened"] = { f1: { editor: null, preview: { path: PIC } } };
+  world.shared["preview.paths"] = { "link-7": PIC };
+  const v = filesPane();
+  dbl(v, "shots/b.png");
+  expect(commands).toEqual([["pane.focus", { pane: "pv" }]]);
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-7", path: "/repo/shots/b.png" });
+  expect(world.shared["file-tree.opened"].f1.preview).toEqual({ slot: "link-7" });
 });
 
 test("each files pane has its own: another files pane's preview pane and editor aren't this one's; a pane in another tab isn't either", () => {
@@ -228,6 +236,7 @@ test("each files pane has its own: another files pane's preview pane and editor 
   preview("pv2", "link-2", "/repo/y.png");
   world.shared["editor.paths"] = { "ed-2": ["/repo/x.rs"] };
   const v = filesPane("f1");
+  // f1 has none: preview.open (the app may show it in pv2, the tab's preview pane).
   dbl(v, "shots/a.png");
   expect(commands).toEqual([["preview.open", { path: PIC, pane: "p1" }]]);
   expect(world.shared["file-tree.opened"].f2).toEqual({ editor: { slot: "ed-2" }, preview: { slot: "link-2" } });
@@ -235,7 +244,8 @@ test("each files pane has its own: another files pane's preview pane and editor 
   const w = filesPane("f2");
   commands.length = 0;
   dbl(w, "shots/a.png");
-  expect(commands).toEqual([["pane.focus", { pane: "e2" }]]);
+  expect(commands).toEqual([["pane.focus", { pane: "pv2" }]]);
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-2", path: PIC });
   world.panes = world.panes.map((p) => (p.pane === "e2" || p.pane === "pv2" ? { ...p, tab: "tab2" } : p));
   commands.length = 0;
   dbl(w, "shots/b.png");
@@ -258,12 +268,15 @@ test("p and the menu's 'Open in its viewer pane' stay an explicit preview pane, 
 });
 
 test("a files pane restarted keeps its own panes (shared file-tree.opened by its slot); a file on another machine goes to the viewer panes as before", () => {
+  preview("pv", "link-1", "/repo/old.png");
   editor("e1", "ed-1", "/repo/main.rs");
-  world.shared["file-tree.opened"] = { f1: { editor: { slot: "ed-1" }, preview: null } };
+  world.shared["file-tree.opened"] = { f1: { editor: { slot: "ed-1" }, preview: { slot: "link-1" } } };
   world.shared["editor.paths"] = { "ed-1": ["/repo/main.rs"] };
   const v = filesPane();
   dbl(v, "shots/a.png");
-  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: PIC, look: true });
+  expect(world.shared["preview.show"]).toMatchObject({ slot: "link-1", path: PIC });
+  dbl(v, "README.md");
+  expect(world.shared["editor.open"]).toMatchObject({ slot: "ed-1", path: "/repo/README.md", look: true });
   const box = filesPane();
   box.on = "box";
   commands.length = 0;
@@ -294,4 +307,47 @@ test("the preview pane shows the file preview.show sends to its slot; another sl
   step();
   step();
   expect(opened).toEqual(["/repo/shots/b.png"]);
+});
+
+test("the preview pane with the keyboard notes itself as shared preview.last (the app's preview.open shows the next file there)", async () => {
+  world.props = { path: PIC, slot: "link-1" };
+  const { default: PreviewView } = await importMod("preview/main.ts", standins);
+  const pv: any = new PreviewView();
+  pv.open = () => {};
+  const later: ((cx: any) => void)[] = [];
+  let focused = false;
+  const pcx: any = { notify() {}, timer: { after: (_ms: number, f: any) => later.push(f), every() {} }, spawn() {}, focus_handle: () => ({ focus() {}, is_focused: () => focused }) };
+  pv.init({}, pcx);
+  const step = () => { try { pv.render(pcx); } catch { /* the viewer's drawing needs more stand-ins than this test gives */ } for (const f of later.splice(0)) f(pcx); };
+  step();
+  expect(world.shared["preview.last"]).toBeUndefined();
+  focused = true;
+  step();
+  expect(world.shared["preview.last"]).toBe("link-1");
+});
+
+// ---- the picker (finder): a picked file
+
+test("the picker opens a picked picture, PDF, clip, font or database in a preview pane; a table, Markdown, code and a grep hit in the editor", async () => {
+  const { default: Picker } = await importMod("finder/main.ts", { ...standins, herdr: { ...herdr, closeOverlay() {}, findFiles: async () => ({ files: [] }), grep: async () => ({ matches: [] }), highlight: () => [], languageOf: () => null, keys: () => [], settings: () => ({ zoom: 1 }) } });
+  const { isPreviewFile: picks } = await importMod("finder/logic.ts", standins);
+  const names = ["a.png", "logo.SVG", "r.pdf", "app.sqlite", "f.woff2", "c.mov", "s.mp3", "main.rs", "README.md", "t.csv", "x.patch"];
+  // The same list as the files pane's.
+  expect(names.map(picks)).toEqual(names.map(isPreviewFile));
+  world.panes = [{ pane: "p1", tab: "tab1", terminal: "t1" }];
+  const p: any = new Picker();
+  p.root = "/repo";
+  p.dismiss = () => {};
+  const pick = (row: any) => { commands.length = 0; world.shared = {}; p.rows = [row]; p.at = 0; p.open(); };
+  pick({ path: "shots/a.png" });
+  expect(commands).toEqual([["preview.open", { path: PIC }]]);
+  pick({ path: "docs/r.pdf" });
+  expect(commands).toEqual([["preview.open", { path: "/repo/docs/r.pdf" }]]);
+  pick({ path: "data/t.csv" });
+  expect(commands).toEqual([["editor.open", { path: "/repo/data/t.csv", look: true }]]);
+  pick({ path: "main.rs" });
+  expect(commands).toEqual([["editor.open", { path: "/repo/main.rs", look: true }]]);
+  // A grep hit in an SVG: its text at the line.
+  pick({ path: "logo.svg", match: { line: 3, col: 4 } });
+  expect(commands).toEqual([["editor.open", { path: "/repo/logo.svg", line: 3, col: 5 }]]);
 });

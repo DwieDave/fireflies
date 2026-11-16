@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, importMod } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod } from "./mod-source.ts";
 
 // The preview's PDFs, fonts, audio and video: macOS views where they exist, else pdftoppm or a plain "can't".
 // The mods import the app's modules; stand-ins record what they're asked (as preview.test.ts).
@@ -50,7 +50,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
     settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
@@ -64,7 +64,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; })
     .replace(/^export const (\w+) = /gm, (_m, n) => { names.push(n); return `const ${n} = `; });
   const win = { paint_path: () => new Element() };
-  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
+  const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
@@ -163,7 +163,8 @@ test("a PDF on macOS: the system's PDF view on the cached copy; pages and zoom i
   view.key({ key: "+", modifiers: {} }, cx);
   view.key({ key: "0", modifiers: {} }, cx);
   view.key({ key: "G", modifiers: { shift: true } }, cx);
-  expect(calls.map(([, a, args]) => [a, args])).toEqual([["pdf.next", {}], ["pdf.zoomIn", {}], ["pdf.fitWidth", {}], ["pdf.goToPage", { page: 9 }]]);
+  view.key({ key: "1", modifiers: {} }, cx);
+  expect(calls.map(([, a, args]) => [a, args])).toEqual([["pdf.next", {}], ["pdf.zoomIn", {}], ["pdf.fitWidth", {}], ["pdf.goToPage", { page: 9 }], ["pdf.actualSize", {}]]);
   expect(view.pdf).toEqual({ page: 2, pageCount: 9, scale: 1.5, autoScales: false });
   // Page events from the view keep the bar current.
   view.nativeEvent({ id: "preview-pdf", event: "pdf.page", data: { page: 5, pageCount: 9 } }, cx);

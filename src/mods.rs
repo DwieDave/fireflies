@@ -94,7 +94,100 @@ pub fn write_workspace() -> std::io::Result<()> {
     }
     move_renamed_dirs(&dir);
     let shipped: Vec<(&str, &[u8])> = shipped_mods().iter().map(|(p, b)| (p.as_str(), b.as_slice())).collect();
-    sync_defaults(&mods_dir(), &dir.join("installed.json"), &shipped)
+    sync_defaults(&mods_dir(), &dir.join("installed.json"), &shipped)?;
+    write_home_tsconfig(&dir)
+}
+
+/// What marks the app home's tsconfig.json as Fireflies' (rewritten), not the person's (left alone).
+const HOME_TSCONFIG_MARK: &str = "Written by Fireflies on every start";
+
+/// The app home's tsconfig.json: the type check, for an editor's language
+/// server, of the mods that carry no tsconfig.json or jsconfig.json of their
+/// own. gpui-shell writes one into each mod folder it loads, beside a
+/// gpui-kit.d.ts; a read-only folder (a mod linked from the nix store by
+/// home-manager) gets neither, and its files would find no module. This
+/// one finds them in the home's gpui-kit.d.ts and herdr.d.ts. Nothing reads
+/// it at run time; a tsconfig.json of the person's own there is kept.
+fn write_home_tsconfig(home: &Path) -> std::io::Result<()> {
+    let path = home.join("tsconfig.json");
+    if std::fs::read_to_string(&path).is_ok_and(|was| !was.contains(HOME_TSCONFIG_MARK)) {
+        return Ok(());
+    }
+    write_if_changed(&path, home_tsconfig(&mods_without_config(&home.join("mods"))))
+}
+
+/// The mod folders under `mods` (links followed) holding TypeScript and no
+/// editor config, sorted. Shipped mods are left out: the app installs them as
+/// copies it can write into, so gpui-shell gives each its own as it loads
+/// (after this runs, on a first start).
+fn mods_without_config(mods: &Path) -> Vec<String> {
+    let mut names: Vec<String> = std::fs::read_dir(mods)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter(|e| e.path().is_dir() && !e.file_name().to_string_lossy().starts_with('.'))
+        .filter(|e| !is_shipped(&e.file_name().to_string_lossy()))
+        .filter(|e| !e.path().join("tsconfig.json").exists() && !e.path().join("jsconfig.json").exists())
+        .filter(|e| has_typescript(&e.path()))
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+    names.sort();
+    names
+}
+
+/// Whether `dir` holds a `.ts` file (not a declaration file) at its top or one level down.
+fn has_typescript(dir: &Path) -> bool {
+    let is_ts = |p: &Path| p.extension().is_some_and(|x| x == "ts") && !p.to_string_lossy().ends_with(".d.ts");
+    std::fs::read_dir(dir).into_iter().flatten().flatten().any(|e| {
+        let p = e.path();
+        is_ts(&p) || (p.is_dir() && std::fs::read_dir(&p).into_iter().flatten().flatten().any(|f| is_ts(&f.path())))
+    })
+}
+
+/// The home tsconfig.json for these mod folders: the same strictness as the
+/// one gpui-shell writes into a TypeScript mod, against the home's typings.
+fn home_tsconfig(mods: &[String]) -> String {
+    let include: Vec<String> = mods
+        .iter()
+        .map(|m| format!("mods/{m}/**/*.ts"))
+        .chain(["gpui-kit.d.ts".to_string()])
+        .collect();
+    let why = [
+        HOME_TSCONFIG_MARK,
+        "(a tsconfig.json of your own here is kept instead). For an editor's language server:",
+        "the mods without a tsconfig.json or jsconfig.json of their own (a read-only folder, such",
+        "as one linked from the nix store, gets none from the runtime), checked against the",
+        "typings beside this file: gpui-kit.d.ts (gpui-kit, gpui-base, gpui-shell, the",
+        "runtime's globals) and herdr.d.ts (`herdr`, through `paths`). A bare import of a",
+        "library resolves through a node_modules folder up from the mod's own.",
+    ];
+    let value = serde_json::json!({
+        "// why": why,
+        "compilerOptions": {
+            "target": "ES2022",
+            "module": "ES2022",
+            "moduleResolution": "bundler",
+            "lib": ["ES2022"],
+            "types": [],
+            "strict": true,
+            "noUncheckedIndexedAccess": true,
+            "exactOptionalPropertyTypes": true,
+            "noImplicitOverride": true,
+            "noImplicitReturns": true,
+            "noPropertyAccessFromIndexSignature": true,
+            "noFallthroughCasesInSwitch": true,
+            "allowJs": true,
+            "checkJs": false,
+            "noEmit": true,
+            "allowImportingTsExtensions": true,
+            "erasableSyntaxOnly": true,
+            "verbatimModuleSyntax": true,
+            "paths": { "herdr": ["./herdr.d.ts"] },
+        },
+        "include": include,
+        "exclude": ["mods/**/gpui-kit.d.ts"],
+    });
+    format!("{}\n", serde_json::to_string_pretty(&value).expect("a JSON value"))
 }
 
 /// The default mods: the ones built into the binary, plus whole mod folders
@@ -1515,6 +1608,46 @@ mod tests {
         assert_eq!(store_path(&dir, &opened), now);
         assert_eq!(std::fs::read_to_string(&now).unwrap(), "{\"tabs\":\"two\"}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The home tsconfig.json covers the mods with no editor config of their
+    /// own (a read-only folder linked from elsewhere), and is the person's once edited.
+    #[test]
+    fn the_home_tsconfig_covers_mods_without_their_own() {
+        let root = if cfg!(target_os = "linux") { PathBuf::from("/var/tmp") } else { std::env::temp_dir() };
+        let home = root.join(format!("herdr-home-tsconfig-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&home);
+        let file = |path: &str, text: &str| {
+            let at = home.join(path);
+            std::fs::create_dir_all(at.parent().unwrap()).unwrap();
+            std::fs::write(at, text).unwrap();
+        };
+        file("mods/own/main.ts", "");
+        file("mods/own/tsconfig.json", "{}");
+        file("mods/bare/main.ts", "");
+        file("mods/plain/main.js", "");
+        file("mods/typed-only/gpui-kit.d.ts", "");
+        // A shipped mod gets its own as it loads, after the start writes this.
+        file("mods/editor/main.ts", "");
+        file("elsewhere/linked/lib/kit.ts", "");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(home.join("elsewhere/linked"), home.join("mods/linked")).unwrap();
+
+        write_home_tsconfig(&home).unwrap();
+        let written: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(home.join("tsconfig.json")).unwrap()).unwrap();
+        let mut want = vec!["mods/bare/**/*.ts"];
+        if cfg!(unix) {
+            want.push("mods/linked/**/*.ts");
+        }
+        want.push("gpui-kit.d.ts");
+        assert_eq!(written["include"], serde_json::json!(want));
+        assert_eq!(written["compilerOptions"]["paths"]["herdr"], serde_json::json!(["./herdr.d.ts"]));
+
+        // The person's own is kept.
+        file("tsconfig.json", "{ \"compilerOptions\": {} }\n");
+        write_home_tsconfig(&home).unwrap();
+        assert_eq!(std::fs::read_to_string(home.join("tsconfig.json")).unwrap(), "{ \"compilerOptions\": {} }\n");
+        let _ = std::fs::remove_dir_all(&home);
     }
 
     #[test]

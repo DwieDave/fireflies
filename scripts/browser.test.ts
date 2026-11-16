@@ -1,6 +1,6 @@
 import { keysNow } from "./nocturne-mods.ts";
 import { test, expect } from "bun:test";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor } from "./mod-source.ts";
 import { readFile } from "node:fs/promises";
 
 // The web pane (browser) and the picture in picture player by keys,
@@ -64,7 +64,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
     settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
@@ -126,7 +126,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
       return state;
     } },
   };
-  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
+  const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
   // guards.ts and editor-route.ts only guard.ts): the real ones.
@@ -1305,6 +1305,22 @@ test("a web tab pinned from its menu (a right-click, at the pointer): the record
   on(again.view.render(), "on_key_down")({ key: "enter", keystroke: "enter", modifiers: {} }, again.cx);
   view.tabAct(app.ran.at(-1)![0].slice("browser.tab_act:".length), cx);
   expect(app.store[PINS]).toEqual([]);
+});
+
+test("the tab menu by keys hangs under its tab on the strip (where the tab says it's drawn); with one tab, no strip: the middle", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  app.focusedPane = "p1";
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  // One tab: no strip, the menu in the middle.
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "dialog" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  const root = view.render();
+  // The strip's tabs report where they're drawn (window px).
+  on(find(root, "webtab-web"), "on_bounds_change")({ x: 240.4, y: 80, width: 180, height: 28 }, cx);
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 240, y: 80, w: 180, h: 28 }, props: { tabMenu: { tab: "web" } } });
 });
 
 test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j k skip what can't be picked, esc closes; the wheel moves too", async () => {

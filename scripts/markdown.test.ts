@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, importMod } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -44,7 +44,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
     settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
@@ -56,7 +56,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^import [\s\S]*? from "[^"]+";\n/gm, "")
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
+  const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
@@ -356,8 +356,11 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
   const filesLog = await load("markdown/follow.ts");
-  const { default: Markdown } = await load("markdown/main.ts", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
-    fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+  const paint = { appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
+  // the viewer's bars (bars.ts), as main.ts's `import * as Bars` brings them
+  const Bars = await load("markdown/bars.ts", { dirname, basename, tilde, ...paint });
+  const { default: Markdown } = await load("markdown/main.ts", { ...md, follow, dirname, basename, join, tilde, ...linkLogic, Bars,
+    fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, ...paint });
   const view: any = Object.create(Markdown.prototype);
   const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
   const doc = new MarkdownDoc("md");

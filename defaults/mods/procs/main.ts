@@ -107,6 +107,7 @@ import { procsView } from "./procs-view.ts";
 import { vitalsStrip } from "./vitals-view.ts";
 import { portsView } from "./ports-view.ts";
 import { footBar, headBar } from "./bars.ts";
+import { edge } from "./tones.ts";
 
 export default class ProcsDeck extends View {
   static bound = false;
@@ -380,7 +381,7 @@ export default class ProcsDeck extends View {
     // Over the tab it draws its frame; a pane has the pane's.
     const root = v_flex().id("procs-deck").size_full().bg(t.background);
 
-    const el = (inPane() ? root : root.border(1).border_color(t.ansi0))
+    const el = (inPane() ? root : root.border(1).border_color(edge(t)))
       .key_context(CONTEXT)
       .on_size_change((drawn, cx) => {
         const h = Math.round(unzoom(drawn.height));

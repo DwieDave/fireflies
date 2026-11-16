@@ -5,6 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
+import type { Pt } from "./menu-place.ts";
 import { h_flex, v_virtual_list, v_flex } from "gpui-base";
 import { settings } from "herdr";
 import type { Theme } from "herdr";
@@ -15,6 +16,7 @@ import { dither, pip, panel, empty, band, TONE_WORD, sweep, stop, unzoom, unzoom
 import { canvas, layout, NW, NH } from "./graph.ts";
 import type { default as Actions } from "./actions.ts";
 import { ROW, STEP, LINE } from "./actions.ts";
+import { edge } from "./tones.ts";
 
 /** A run in the list: its tone, workflow and title; number, branch, event, how long or how long ago. */
 export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element {
@@ -22,7 +24,7 @@ export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element
   const live = k === "working" || k === "queued";
 
   return v_flex().id(`run-${r.id}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none().overflow_hidden()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .when(sel, (el) => el.children(band(t, active)))
     .when(k === "working", (el) => el.child(sweep(t, t.working, 420)))
     .child(h_flex().relative().gap(7).items_center().text_size(12)
@@ -30,7 +32,7 @@ export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element
       .child(div().flex_none().text_color(sel ? t.foreground : t.muted).child(r.name ?? ""))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(r.display_title ?? "")))
     .child(h_flex().relative().gap(6).pl(14).items_center().text_size(10).text_color(t.dim)
-      .child(div().flex_none().text_color(sel ? t.accent : t.ansi8).child(`#${r.run_number ?? ""}`))
+      .child(div().flex_none().text_color(sel ? t.accent : t.muted).child(`#${r.run_number ?? ""}`))
       .child(div().flex_1().min_w(0).truncate().text_color(t.ansi5).child(r.head_branch ?? ""))
       .child(div().flex_none().child(r.event ?? ""))
       .child(div().flex_none().text_color(live ? t.working : t.dim).child(live ? duration(r.run_started_at, null) : TONE_WORD[k] === "passed" ? ago(r.updated_at) : TONE_WORD[k])));
@@ -55,6 +57,14 @@ export function runsPanel(v: Actions, t: Theme): Element {
           v.selectRun(list.findIndex((r) => String(r.id) === key), cx);
           cx.notify();
         })
+        // A right-click on a run: that run's menu, at the pointer.
+        .on_item_secondary_click((key, e, cx) => {
+          cx.stop_propagation();
+          v.focus = "runs";
+          v.selectRun(list.findIndex((r) => String(r.id) === key), cx);
+          runsMenu(v, e);
+          cx.notify();
+        })
         .size_full().track_scroll(v.runsScroll));
 
   const running = list.filter((r) => r.status === "in_progress").length;
@@ -64,15 +74,15 @@ export function runsPanel(v: Actions, t: Theme): Element {
     .child(chip(t, "run-workflow", "▶ run workflow", false, (cx) => v.runWorkflow(cx), t.accent));
 
   return panel(t, "runs", v.filter ? `Runs · ${v.filter.label}` : "Runs", active, body, { right })
-    .on_mouse_down("right", (_e, cx) => {
+    .on_mouse_down("right", (e, cx) => {
       cx.stop_propagation();
-      runsMenu(v);
+      runsMenu(v, e);
       cx.notify();
     });
 }
 
-/** Right-click on the runs: what can be done from here. */
-export function runsMenu(v: Actions): void {
+/** Right-click on the runs (at the press `e`): what can be done from here. */
+export function runsMenu(v: Actions, e: { readonly position: Pt } | null = null): void {
   const r = v.run();
   const rows: PickRow[] = [{ label: "Run a workflow…", sub: "n", go: (cx) => v.runWorkflow(cx) }];
 
@@ -89,7 +99,7 @@ export function runsMenu(v: Actions): void {
       });
   }
 
-  v.app.picker = { title: "ACTIONS", at: 0, rows };
+  v.app.picker = { title: "ACTIONS", at: 0, rows, near: e ? v.app.pressAt(e) : null };
 }
 
 /** The selected run's jobs as a graph: panned to keep the selected job in view, dragged or scrolled by hand. */
@@ -196,7 +206,7 @@ export function stepsPanel(v: Actions, t: Theme): Element {
     const k = tone(s.status, s.conclusion), sel = s === cur;
 
     return h_flex().id(`step-${s.number}`).relative().h(STEP).px(10).gap(8).items_center().flex_none().text_size(11).overflow_hidden()
-      .hover((st) => st.bg(`${t.ansi0}55`))
+      .hover((st) => st.bg(`${edge(t)}55`))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {
         v.focus = "steps";
@@ -208,7 +218,7 @@ export function stepsPanel(v: Actions, t: Theme): Element {
       .when(sel, (el) => el.children(band(t, active)))
       .when(k === "working", (el) => el.child(sweep(t, t.working, 360)))
       // The timeline's thread: a dithered line through every pip.
-      .child(div().absolute().left(13).top(0).bottom(0).w(1).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(13).top(0).bottom(0).w(1).child(dither(edge(t), 1)))
       .child(div().relative().w(8).flex_none().flex().justify_center().child(pip(t, k, 7)))
       .child(div().relative().flex_1().min_w(0).truncate().text_color(k === "skipped" ? t.dim : sel ? t.foreground : t.muted).child(s.name))
       .child(div().relative().flex_none().text_color(k === "working" ? t.working : k === "failed" ? t.blocked : t.dim).child(k === "skipped" ? "skipped" : duration(s.started_at, s.completed_at)));
@@ -271,7 +281,7 @@ export function logPanel(v: Actions, t: Theme): Element {
         .child(v_virtual_list(`log-${j.id}-${s.number}`, lines.length, LINE, (i) => String(i),
           (range) => lines.slice(range.start, range.end).map((l, n) => h_flex().h(LINE).w_full().gap(8).items_center().font_family(code).text_size(11.5)
             .when(l.kind === "error", (el) => el.bg(`${t.blocked}1c`))
-            .child(div().w(38).flex_none().text_right().text_color(t.ansi0).child(String(range.start + n + 1)))
+            .child(div().w(38).flex_none().text_right().text_color(edge(t)).child(String(range.start + n + 1)))
             .child(div().flex_1().min_w(0).truncate().text_color(color[l.kind]).child(l.kind === "group" ? `▸ ${l.text}` : l.text || " "))))
           .size_full().track_scroll(v.logScroll));
   }

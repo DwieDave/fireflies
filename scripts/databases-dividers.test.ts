@@ -24,7 +24,7 @@ mock.module("gpui-kit", () => ({ div: () => element(calls) }));
 
 const { Dividers, clampSize, divider, tracking, STEP } = await import("../defaults/mods/databases/dividers.ts");
 
-const theme: any = { accent: "#ff0000", ansi8: "#808080" };
+const theme: any = { accent: "#ff0000", muted: "#808080" };
 const cx: any = { stop_propagation() {}, notify() {} };
 const LEFT = { key: "left", axis: "x", side: 1, min: 200, max: 700, start: 300 } as const;
 const LOG = { key: "log", axis: "y", side: -1, min: 40, max: 400, start: 92 } as const;
@@ -103,7 +103,7 @@ test("while held the root keeps the resize pointer and the line is the accent", 
   divider(theme, "split-left", LEFT, ds, 6);
   expect(calls.some(([m]) => m === "bg")).toBe(false);
   expect(calls.some(([m, a]) => m === "w" && a[0] === 6)).toBe(true);
-  // Hovered: the quiet mark.
+  // Hovered: the quiet mark (muted).
   handler(calls, "on_hover")(true, cx);
   calls = [];
   divider(theme, "split-left", LEFT, ds, 6);

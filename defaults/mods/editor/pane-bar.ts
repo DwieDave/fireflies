@@ -23,6 +23,7 @@ import { closeTab, select, stepShownTab } from "./pane-tabs.ts";
 import { setWrap, toggleVim } from "./pane-vim.ts";
 import { scratchBar } from "./scratch-bar.ts";
 import { dragOver, dropTab, leaveStrip, openTabMenu } from "./tab-menu.ts";
+import { edge } from "./tones.ts";
 
 export const TABS = 26;
 
@@ -85,7 +86,7 @@ export function bar(ed: EditorPane, t: Theme): Element {
     .gap(10)
     .items_center()
     .border_b(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .when(vim, (el) => el.child(modeChip(ed, t)))
     .when(vim && Boolean(recording), (el) => (recording ? el.child(div().flex_none().text_color(t.ansi1).child(`rec @${recording.reg}`)) : el))
     // One file (no strip): its unsaved mark and name are here, as before tabs.
@@ -143,7 +144,7 @@ function oneFile(ed: EditorPane, t: Theme): Element[] {
       .size(8)
       .flex_none()
       .border(1)
-      .border_color(ed.dirty ? t.ansi3 : t.ansi0)
+      .border_color(ed.dirty ? t.ansi3 : edge(t))
       .when(ed.dirty, (el) => el.child(dither(t.ansi3, 1)));
 
   const name =
@@ -224,7 +225,7 @@ function fileChips(ed: EditorPane, t: Theme, narrow: boolean, vim: boolean): Ele
         .px(6)
         .items_center()
         .border(1)
-        .border_color(t.ansi0)
+        .border_color(edge(t))
         .text_color(t.muted)
         .child(`${ed.lang} · ${ed.opts.insert_spaces === false ? "tab" : `${ed.opts.tab_size} sp`}`),
     );
@@ -253,7 +254,7 @@ function viewChips(ed: EditorPane, t: Theme, narrow: boolean, vim: boolean): Ele
         .flex()
         .items_center()
         .border(1)
-        .border_color(ed.view === "text" ? t.ansi0 : t.ansi5)
+        .border_color(ed.view === "text" ? edge(t) : t.ansi5)
         .text_color(ed.view === "text" ? t.dim : t.ansi5)
         .hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => ed.command("preview", cx))
@@ -272,7 +273,7 @@ function viewChips(ed: EditorPane, t: Theme, narrow: boolean, vim: boolean): Ele
         .flex()
         .items_center()
         .border(1)
-        .border_color(t.ansi0)
+        .border_color(edge(t))
         .text_color(t.dim)
         .hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => {
@@ -293,7 +294,7 @@ function viewChips(ed: EditorPane, t: Theme, narrow: boolean, vim: boolean): Ele
         .flex()
         .items_center()
         .border(1)
-        .border_color(ed.softWrap ? t.ansi4 : t.ansi0)
+        .border_color(ed.softWrap ? t.ansi4 : edge(t))
         .text_color(ed.softWrap ? t.ansi4 : t.dim)
         .hover((s) => s.text_color(t.foreground))
         .on_click((_e, cx) => setWrap(ed, null, cx))
@@ -310,7 +311,7 @@ function viewChips(ed: EditorPane, t: Theme, narrow: boolean, vim: boolean): Ele
       .flex()
       .items_center()
       .border(1)
-      .border_color(vim ? t.accent : t.ansi0)
+      .border_color(vim ? t.accent : edge(t))
       .text_color(vim ? t.accent : t.dim)
       .hover((s) => s.text_color(t.foreground))
       .on_click((_e, cx) => toggleVim(ed, cx))
@@ -331,9 +332,9 @@ function mdChip(ed: EditorPane, t: Theme, vim: boolean): Element {
       .gap(6)
       .items_center()
       .border(1)
-      .border_color(ed.mdMenu ? t.accent : t.ansi0)
+      .border_color(ed.mdMenu ? t.accent : edge(t))
       .text_color(ed.mdMenu ? t.accent : t.muted)
-      .hover((s) => s.text_color(t.foreground).border_color(t.ansi8))
+      .hover((s) => s.text_color(t.foreground).border_color(t.muted))
       .tooltip("bold, headings, lists, tasks, quotes, code: the Markdown commands")
       .on_click((_e, cx) => {
         if (ed.mdMenu) {
@@ -341,7 +342,7 @@ function mdChip(ed: EditorPane, t: Theme, vim: boolean): Element {
           focusText(ed);
           cx.notify();
         } else {
-          openMdMenu(ed, cx);
+          openMdMenu(ed, cx, true);
           focusText(ed);
         }
       })
@@ -394,6 +395,7 @@ export function tabStrip(ed: EditorPane, t: Theme): Element {
 
   // Where each drawn tab starts (px, unzoomed): the tab menu opens under it.
   ed.tabX = (i) => (i < fit.from || i >= fit.to ? 8 : (fit.before > 0 ? MORE : 0) + widths.slice(fit.from, i).reduce((a, b) => a + b, 0));
+  ed.tabW = (i) => (i < fit.from || i >= fit.to ? 0 : widths[i] ?? 0);
 
   const drag = ed.tabDrag;
   const stake = drag ? stakeAt(docs.length, drag.from, dropIndex(docs.length, drag.from, drag.gap)) : null;
@@ -431,7 +433,7 @@ export function tabStrip(ed: EditorPane, t: Theme): Element {
         cx.notify();
       }
     })
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1)))
     .when(fit.before > 0, (el) => el.child(moreTabs(ed, t, "editor-tabs-before", `‹ ${fit.before}`, -1)))
     .children(docs.slice(fit.from, fit.to).map((d, j) => stripTab(ed, t, d, fit.from + j, labels[fit.from + j] ?? { name: basename(d.path), hint: null }, stakeBefore)))
     .child(end)
@@ -479,11 +481,11 @@ function stripTab(ed: EditorPane, t: Theme, d: Doc, i: number, l: TabLabel, stak
       .gap(6)
       .items_center()
       .border_r(1)
-      .border_color(t.ansi0)
+      .border_color(edge(t))
       .text_color(on || lifted ? t.foreground : t.muted)
-      .when(on && !lifted, (el) => el.child(div().absolute().inset_0().opacity(0.45).child(dither(t.ansi0, 1))).child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent)))
+      .when(on && !lifted, (el) => el.child(div().absolute().inset_0().opacity(0.45).child(dither(edge(t), 1))).child(div().absolute().left(0).right(0).top(0).h(2).bg(t.accent)))
       // Dragged: lifted where it is (a plate edged in the accent, a dither shadow), behind its words.
-      .when(lifted, (el) => el.child(div().absolute().left(5).right(-1).top(5).bottom(1).child(dither(t.ansi0, 1))).child(div().absolute().left(2).right(2).top(2).bottom(4).bg(t.background).border(1).border_color(t.accent)))
+      .when(lifted, (el) => el.child(div().absolute().left(5).right(-1).top(5).bottom(1).child(dither(edge(t), 1))).child(div().absolute().left(2).right(2).top(2).bottom(4).bg(t.background).border(1).border_color(t.accent)))
       .when(!on && !drag, (el) => el.hover((s) => s.text_color(t.foreground)))
       .on_mouse_down("left", (e) => {
         ed.tabPress = { index: i, x: e.position.x };
@@ -502,9 +504,13 @@ function stripTab(ed: EditorPane, t: Theme, d: Doc, i: number, l: TabLabel, stak
         closeTab(ed, cx, d);
         cx.notify();
       })
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        openTabMenu(ed, cx, i);
+        // At the press: the tab's own place on the strip plus where in it.
+        const l = e.local_position;
+        const z = zoom();
+
+        openTabMenu(ed, cx, i, l ? { x: (ed.tabX?.(i) ?? 0) + l.x / z, y: l.y / z } : null);
         cx.notify();
       })
       // Unsaved: the bar's yellow dithered square; nothing when clean.
@@ -515,7 +521,7 @@ function stripTab(ed: EditorPane, t: Theme, d: Doc, i: number, l: TabLabel, stak
           .size(7)
           .flex_none()
           .border(1)
-          .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.ansi8 : t.ansi0)
+          .border_color(d.dirty ? t.ansi3 : bad ? t.ansi1 : on ? t.muted : edge(t))
           .when(d.dirty, (el) => el.child(dither(t.ansi3, 1))),
       )
       .child(typeMark(ed, t, d, `editor-tab-icon-${i}`, on || lifted))
@@ -537,7 +543,7 @@ function tabClose(ed: EditorPane, t: Theme, d: Doc, i: number, on: boolean): Ele
       .flex()
       .items_center()
       .justify_center()
-      .text_color(on ? t.muted : t.ansi8)
+      .text_color(on ? t.muted : t.muted)
       .hover((s) => s.text_color(t.ansi1))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {

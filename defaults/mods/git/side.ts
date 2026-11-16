@@ -5,7 +5,7 @@ import { div } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import { panel } from "./draw.ts";
+import { panel, unzoom } from "./draw.ts";
 import type { Panel, Tab, SideOptions } from "./state.ts";
 import { PANELS, isTabbed, TABS, WIDE_ROW, ROW } from "./state.ts";
 import { drawRow } from "./rows.ts";
@@ -13,6 +13,7 @@ import { sideList } from "./lists.ts";
 import type { default as GitView } from "./main.ts";
 import { loadMain } from "./content.ts";
 import { cycleScreen } from "./navigate.ts";
+import { edge } from "./tones.ts";
 
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];
@@ -34,7 +35,7 @@ export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: 
   const tabs: readonly (readonly [Tab, string])[] = TABS[p];
 
   tabs.forEach(([id, label], k) => {
-    if (k) parts.push(div().text_color(t.ansi0).child("-"));
+    if (k) parts.push(div().text_color(edge(t)).child("-"));
 
     const on = v.tabOf[p] === id;
 
@@ -113,6 +114,9 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
       loadMain(v);
       cx.notify();
     },
+  }).on_size_change((size) => {
+    // Where a key's menu finds the selected row (menu-anchor.ts).
+    v.panelPx[p] = { width: unzoom(size.width), height: unzoom(size.height) };
   }).on_mouse_down("left", (_e, cx) => {
     v.handle?.focus();
 

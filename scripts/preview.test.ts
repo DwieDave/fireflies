@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, importMod } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked (as markdown.test.ts).
 class Element {
@@ -49,7 +49,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
     settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
@@ -63,7 +63,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; })
     .replace(/^export const (\w+) = /gm, (_m, n) => { names.push(n); return `const ${n} = `; });
   const win = { paint_path: () => new Element() };
-  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
+  const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, appWindow: herdr.window, ...extra, window: win };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
@@ -377,6 +377,72 @@ test("the viewer: a fitted picture, keys zoom, pan, step through the folder and 
   view.title();
   expect(world.shared["preview.titles"]).toEqual({ s1: "b.png" });
   expect(world.shared["preview.paths"]).toEqual({ s1: "/shots/b.png" });
+});
+
+test("a trackpad pinch and a mouse wheel zoom the picture at the pointer; a trackpad scroll and keys pan it, the bar shows the zoom", async () => {
+  const { default: PreviewView } = await viewerMod();
+  const view: any = new PreviewView();
+  Object.assign(view, {
+    path: "/shots/b.png", kind: "image", how: { how: "image" }, on: null, slot: "s1", handle: { focus() {}, is_focused: () => true }, port: { width: 800, height: 600 }, checker: true, copied: 0,
+    names: ["b.png"], info: { format: "png", width: 1600, height: 1200, bytes: 2048 },
+    copy: { name: "1-2048.png", abs: "/c/1-2048.png", format: "png" }, src: "cache/preview/1-2048.png", view: null, gen: 1,
+  });
+  view.draw = () => {};
+  const cx = { notify() {}, stop_propagation() {} };
+  const tree: any = view.render();
+  // The picture's frame listens for pinches.
+  const frame = walk(tree).find((e) => call(e, "on_pinch"));
+  expect(frame).toBeDefined();
+  const fit = view.view.scale;
+  // Pinching out 50% at the picture's middle: half again as large, centred.
+  call(frame, "on_pinch")[0]({ delta: 0.5, touch_phase: "moved", position: { x: 400, y: 300 }, local_position: { x: 400, y: 300 }, modifiers: {} }, cx);
+  expect(view.view.scale).toBeCloseTo(fit * 1.5);
+  expect([view.view.fit, view.view.x, view.view.y]).toEqual([false, 0, 0]);
+  // Pinching in at a corner keeps that point where it was.
+  view.key({ key: "1", modifiers: {} }, cx);
+  const before = { ...view.view };
+  view.pinch({ delta: -0.2, local_position: { x: 600, y: 450 }, modifiers: {} }, cx);
+  expect(view.view.scale).toBeCloseTo(0.8);
+  expect(view.view.x).toBeCloseTo(200 - (200 - before.x) * 0.8);
+  // Zoomed in, the arrows pan instead of stepping through the folder.
+  view.key({ key: "+", modifiers: {} }, cx);
+  const x = view.view.x;
+  view.key({ key: "left", modifiers: {} }, cx);
+  expect(view.view.x).toBeGreaterThan(x);
+  const y = view.view.y;
+  view.key({ key: "down", modifiers: {} }, cx);
+  expect(view.view.y).toBeLessThan(y);
+  // The bar names the zoom.
+  const text = walk(view.render()).flatMap((e) => e.nodes.filter((n: any) => typeof n === "string"));
+  expect(text).toContain(`${Math.round(view.view.scale * 100)}%`);
+  // A mouse wheel (lines) zooms at the pointer, fitted or not; a notch up about a fifth larger.
+  view.key({ key: "0", modifiers: {} }, cx);
+  const fitted = view.view.scale;
+  view.wheel({ modifiers: {}, delta: { x: 0, y: 20 }, delta_lines: { x: 0, y: 1 }, local_position: { x: 400, y: 300 } }, cx);
+  expect(view.view.scale).toBeCloseTo(fitted * Math.exp(0.2));
+  expect([view.view.fit, view.view.x, view.view.y]).toEqual([false, 0, 0]);
+  view.wheel({ modifiers: {}, delta: { x: 0, y: 60 }, delta_lines: { x: 0, y: 3 }, local_position: { x: 700, y: 500 } }, cx);
+  const zoomed = view.view.scale;
+  expect(zoomed).toBeCloseTo(fitted * Math.exp(0.8));
+  // The point under the pointer stays put: 300 px right of the middle maps to the same picture point.
+  const first = fitted * Math.exp(0.2);
+  expect((300 - view.view.x) / zoomed).toBeCloseTo((300 - 0) / first);
+  // Down again zooms out.
+  view.wheel({ modifiers: {}, delta: { x: 0, y: -20 }, delta_lines: { x: 0, y: -1 }, local_position: { x: 400, y: 300 } }, cx);
+  expect(view.view.scale).toBeCloseTo(zoomed * Math.exp(-0.2));
+  // A trackpad's two-finger scroll (pixels, no lines) pans the zoomed picture instead; the scale stays.
+  const s0 = view.view.scale;
+  const x0 = view.view.x;
+  view.wheel({ modifiers: {}, delta: { x: -30, y: 0 }, local_position: { x: 400, y: 300 } }, cx);
+  expect([view.view.scale, view.view.x]).toEqual([s0, x0 - 30]);
+  // A wheel turned sideways (lines across only) pans too.
+  view.wheel({ modifiers: {}, delta: { x: 20, y: 0 }, delta_lines: { x: 1, y: 0 }, local_position: { x: 400, y: 300 } }, cx);
+  expect([view.view.scale, view.view.x]).toEqual([s0, x0 - 10]);
+  // Nothing to pinch: no picture yet, or a nonsense delta.
+  view.view = null;
+  view.info = null;
+  view.pinch({ delta: 0.5, modifiers: {} }, cx);
+  expect(view.view).toBe(null);
 });
 
 test("the bar's fit and 100% do what they say, in either state, and stay put", async () => {

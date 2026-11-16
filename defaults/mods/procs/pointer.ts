@@ -62,7 +62,7 @@ export function scrollbar(v: ProcsDeck, t: Theme, tab: ListTab, total: number, v
       v.focus();
       cx.notify();
     })
-    .child(div().absolute().right(2).top(ty).w(2).h(th).child(dither(v.drag?.tab === tab ? t.accent : t.ansi8, 1)))];
+    .child(div().absolute().right(2).top(ty).w(2).h(th).child(dither(v.drag?.tab === tab ? t.accent : t.muted, 1)))];
 }
 
 /** The scrollbar's thumb follows the pointer while it's held. */

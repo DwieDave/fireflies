@@ -24,6 +24,7 @@ import type { Choice, Command, Field, FormHost, Outcome, Values } from "./form-f
 import { flagIn, listIn, textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import { panel, empty, dither } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 const CHOICES = `query($owner: String!, $name: String!) { viewer { login }
   repository(owner: $owner, name: $name) {
@@ -394,9 +395,9 @@ export class PrForm {
           .child(div().absolute().inset_0().opacity(0.5).child(dither(`${t.ansi3}55`, 1)))
           .child(div().relative().flex_1().min_w(0).text_color(t.foreground).child(`${plan?.why ?? ""}: "push first" sends it before the pull request is made.`))))
         .children([...commits].reverse().map((c, i) => h_flex().id(`pc-${i}`).h(18).gap(8).items_center()
-          .child(div().flex_none().text_color(t.ansi8).child(c.sha.slice(0, 7)))
+          .child(div().flex_none().text_color(t.muted).child(c.sha.slice(0, 7)))
           .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(c.subject))))
-        .child(div().relative().h(2).my(8).child(dither(t.ansi0, 1)))
+        .child(div().relative().h(2).my(8).child(dither(edge(t), 1)))
         .children(fileRows.map((f, i) => h_flex().id(`pf-${i}`).h(18).gap(8).items_center()
           .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(f.path))
           .child(div().flex_none().text_color(f.binary ? t.dim : t.ansi2).child(f.binary ? "bin" : `+${f.add}`))

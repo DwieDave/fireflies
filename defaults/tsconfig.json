@@ -13,9 +13,13 @@
     "not a quiet compiler (docs/mods-typescript.md). `just lint` adds oxlint and",
     "anti-slop on the same files.",
     "",
-    "The typings: `herdr-app types ../target/mod-types` writes gpui-kit.d.ts there",
-    "(gpui-kit, gpui-base, gpui-fps and `herdr`, from defaults/herdr.d.ts as built",
-    "into that binary: `just typecheck` builds it first).",
+    "The typings, both committed, so that any checkout type-checks in any editor",
+    "(the language server finds this file from a mod's folder) with no build in it:",
+    "types/gpui-kit.d.ts (gpui-kit, gpui-base, gpui-shell, gpui-fps: what `herdr-app",
+    "types` writes for this build, without `herdr`; `just types` rewrites it and",
+    "cargo test fails while it is out of date), and `herdr` from herdr.d.ts itself",
+    "(`paths`), so a change there is seen at once. A bare import of a library",
+    "(`effect`) resolves through node_modules up the tree (`bun install`).",
     "",
     "`erasableSyntaxOnly` refuses what the loader cannot strip (enum, namespace,",
     "parameter properties) here instead of at load. Imports name the file as it is",
@@ -41,8 +45,9 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "paths": { "herdr": ["./herdr.d.ts"] }
   },
-  "include": ["mods/**/*.ts", "frame/**/*.ts", "lib/**/*.ts", "../target/mod-types/gpui-kit.d.ts"],
+  "include": ["mods/**/*.ts", "frame/**/*.ts", "lib/**/*.ts", "types/gpui-kit.d.ts", "types/runtime.d.ts"],
   "exclude": ["mods/**/gpui-kit.d.ts", "frame/**/gpui-kit.d.ts", "mods/win98/art"]
 }

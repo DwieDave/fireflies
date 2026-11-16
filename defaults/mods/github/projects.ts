@@ -43,6 +43,7 @@ import { FOLD_W, HANDLES, GAP, DETAIL_W, bar, columnRows, columns, detail, menuP
 import { options, submitValue } from "./projects-menus.ts";
 import { addDraft } from "./projects-edits.ts";
 import { key } from "./projects-keys.ts";
+import { edge } from "./tones.ts";
 
 const LIST_EVERY = 10 * 60000; // the picker's list is read again this rarely
 
@@ -694,10 +695,10 @@ export default class Projects {
       const can = this.scope.need === "project" ? "change" : "read";
 
       return v_flex().size_full().items_center().justify_center().gap(10).text_size(11)
-        .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6))
+        .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.muted).opacity(0.6))
         .child(div().text_color(t.foreground).child("Projects need another permission"))
-        .child(div().text_center().max_w(420).text_color(t.ansi8).child(`gh's token can't ${can} GitHub Projects. Run this in a terminal, then press r here:`))
-        .child(h_flex().relative().px(10).h(24).items_center().text_size(12).child(dither(t.ansi0, 1)).child(div().relative().text_color(t.accent).child(this.scope.command)));
+        .child(div().text_center().max_w(420).text_color(t.muted).child(`gh's token can't ${can} GitHub Projects. Run this in a terminal, then press r here:`))
+        .child(h_flex().relative().px(10).h(24).items_center().text_size(12).child(dither(edge(t), 1)).child(div().relative().text_color(t.accent).child(this.scope.command)));
     }
 
     if (!this.list && !this.base()) return empty(t, "Reading projects…", null, { moon: 3 });

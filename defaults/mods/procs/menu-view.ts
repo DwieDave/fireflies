@@ -1,7 +1,8 @@
 // The process deck's row menu drawn and driven: Nocturne's menu (the files
 // pane's and the editor's tab menu: accent edges, the row's name in the top
 // edge, a key column, a dithered band on the entry under the cursor) at the
-// pointer, kept inside the deck. j k ↑ ↓ move, enter runs, an entry's key
+// pointer (flipped left or up near the deck's edges), or under the selected
+// row when m opened it (above it near the foot): menu-place.ts. j k ↑ ↓ move, enter runs, an entry's key
 // runs it, esc or m closes; a click outside, or a second right-click, closes.
 
 import { div } from "gpui-kit";
@@ -9,12 +10,15 @@ import type { Context, Element, KeyEvent, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Item } from "./state.ts";
-import { W, H } from "./state.ts";
-import type { At, Menu } from "./menu.ts";
+import { W, H, PROW, ROW } from "./state.ts";
+import type { Menu } from "./menu.ts";
+import type { Anchor, Pt, Rect } from "./menu-place.ts";
+import { placeMenu } from "./menu-place.ts";
 import { menuEntries, runAct } from "./menu.ts";
 import { dither, unzoom } from "./paint.ts";
 import { moveTo, procOf } from "./listing.ts";
 import type { default as ProcsDeck } from "./main.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export const MENU_W = 288;
 export const MENU_ROW = 20;
@@ -22,18 +26,22 @@ export const MENU_ROW = 20;
 /** The menu's height: its entries and the air its edges take. */
 export const menuH = (n: number): number => n * MENU_ROW + 16;
 
-/** The menu's corner, kept inside the deck (8 px from its edges): down from `at`, or, where
- *  that would leave the deck, up from `above` (the pointer, or the top of the row it's for). */
-export function menuPlace(m: Pick<Menu, "at" | "above">, n: number, deck: { readonly w: number; readonly h: number } = { w: W - 2, h: H - 2 }): At {
-  const h = menuH(n);
-  const y = m.at.y + h <= deck.h - 8 ? m.at.y : m.above - h;
-
-  return { x: Math.max(8, Math.min(m.at.x, deck.w - MENU_W - 8)), y: Math.max(8, Math.min(y, deck.h - h - 8)) };
+/** The menu's corner in the deck (menu-place.ts): past the press, flipped near the edges; under
+ *  the row (above it near the foot); whole inside the deck. */
+export function menuPlace(m: Pick<Menu, "at">, n: number, deck: { readonly w: number; readonly h: number } = { w: W - 2, h: H - 2 }): Pt {
+  return placeMenu({ width: MENU_W, height: menuH(n) }, { width: deck.w, height: deck.h }, m.at);
 }
 
-/** Opens the menu for the row at `i` of the shown list, at `at` (deck px; up from `above` where
- *  there's no room under it): the row is selected. */
-export function openMenu(v: ProcsDeck, items: readonly Item[], i: number, at: At, above = at.y): void {
+/** The selected row (deck px) as the lists last drew it: what a key's menu stands at. */
+export function selectedRow(v: ProcsDeck): Rect {
+  const h = v.tab === "ports" ? PROW : ROW;
+
+  return { x: 0, y: v.selY - h, w: v.width, h };
+}
+
+/** Opens the menu for the row at `i` of the shown list, at `at` (deck px: a press, or the row's
+ *  rectangle): the row is selected. */
+export function openMenu(v: ProcsDeck, items: readonly Item[], i: number, at: Anchor): void {
   const item = items[i];
 
   if (!item) return;
@@ -45,7 +53,7 @@ export function openMenu(v: ProcsDeck, items: readonly Item[], i: number, at: At
   if (!entries.length) return;
 
   v.ask = null;
-  v.menu = { key: item.key, entries, at, above, n: 0 };
+  v.menu = { key: item.key, entries, at: at ?? selectedRow(v), n: 0 };
   v.focus();
 }
 
@@ -152,7 +160,7 @@ export function menuBox(v: ProcsDeck, t: Theme, m: Menu): Element {
       v.focus();
       cx.notify();
     })
-    .when(i === m.n, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(x.danger ? t.blocked : t.accent)))
+    .when(i === m.n, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(x.danger ? t.blocked : t.accent)))
     .child(div().relative().w(keyW).flex_none().text_color(x.danger ? t.blocked : t.accent).child(x.key))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(i === m.n ? (x.danger ? t.blocked : t.foreground) : t.muted).child(x.label)));
 

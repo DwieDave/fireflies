@@ -10,6 +10,7 @@ import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import type { Tone } from "./model.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export const ART = "mods/nocturne/art";
 
@@ -41,7 +42,7 @@ export function splitter(t: Theme, id: string, axis: Axis, dragging: boolean, on
 
   return div().id(id).relative().flex_none()
     .when(axis === "x", (el) => el.w(6).h_full().cursor_col_resize()).when(axis === "y", (el) => el.h(6).w_full().cursor_row_resize())
-    .hover((s) => s.bg(t.ansi0))
+    .hover((s) => s.bg(edgeTone(t)))
     .on_mouse_down("left", (e, cx) => {
       cx.stop_propagation();
       onDown(e, cx);
@@ -73,8 +74,8 @@ export function toneColor(t: Theme, tone: Tone | null | undefined): Color {
     case "working": return t.working;
     case "done": return t.done;
     case "failed": return t.blocked;
-    case "skipped": return t.ansi0;
-    default: return t.ansi8;
+    case "skipped": return edgeTone(t);
+    default: return t.muted;
   }
 }
 
@@ -104,7 +105,7 @@ export function pip(t: Theme, tone: Tone | null | undefined, size = 7): Element 
 
 /** Uppercase eyebrow label. */
 export function eyebrow(t: Theme, text: string): Element {
-  return div().text_size(10).text_color(t.ansi8).child(text.toUpperCase());
+  return div().text_size(10).text_color(t.muted).child(text.toUpperCase());
 }
 
 /** A panel's extras: a short label on the right of its title. */
@@ -115,7 +116,7 @@ export interface PanelOptions {
 /** A lazygit panel: a 1-bit frame with its title cut into the top edge,
  *  accent when it has the keyboard. */
 export function panel(t: Theme, id: string, title: string, active: boolean, body: Element, { right }: PanelOptions = {}): Element {
-  const edge = active ? t.accent : t.ansi0;
+  const edge = active ? t.accent : edgeTone(t);
 
   return v_flex().id(id).relative().min_h(0).min_w(0).border(1).border_color(edge)
     // A long title ends in an ellipsis inside its own panel; the right label (short) keeps its room.
@@ -137,7 +138,7 @@ export function chip(t: Theme, id: string, label: string | Element, on: boolean,
       action(cx);
       cx.notify();
     })
-    .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+    .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
     .child(div().relative().child(label));
 }
 
@@ -156,7 +157,7 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, ke
   const help = list.filter(([key]) => key === "?"), rest = list.filter(([key]) => key !== "?");
 
   return h_flex().id("gh-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
     .children(rest.map(([key, what], i) => hint(t, `gh-hint-${i}`, key, what)))
     .child(div().flex_1())
     .when(right !== null, (el) => (right ? el.child(right) : el))
@@ -172,15 +173,15 @@ export interface EmptyOptions {
 /** A quiet middle-of-the-panel note, with the moon. */
 export function empty(t: Theme, title: string, note: string | null | undefined, { moon = 8, small = false }: EmptyOptions = {}): Element {
   return v_flex().size_full().items_center().justify_center().gap(small ? 6 : 10).px(16).text_size(11)
-    .when(!small, (el) => el.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6)
+    .when(!small, (el) => el.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.muted).opacity(0.6)
       .loop("opacity", { from: 0.35, to: 0.7, period: 5200 })))
     .child(div().text_center().text_color(t.foreground).child(title))
-    .when(Boolean(note), (el) => el.child(div().text_center().max_w(420).text_color(t.ansi8).child(note ?? "")));
+    .when(Boolean(note), (el) => el.child(div().text_center().max_w(420).text_color(t.muted).child(note ?? "")));
 }
 
 /** A selected row's band: dither with an accent edge (as Nocturne's lists). */
 export function band(t: Theme, active: boolean): Element[] {
-  return [dither(active ? t.ansi0 : `${t.ansi0}88`, 1), div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.ansi8)];
+  return [dither(active ? edgeTone(t) : `${edgeTone(t)}88`, 1), div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted)];
 }
 
 /** A running bar: a dithered sweep across its parent, for what's in progress. */

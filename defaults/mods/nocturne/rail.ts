@@ -17,6 +17,7 @@ import { doneBadge, railGlass } from "./meadow.ts";
 import { flyMark } from "./winged.ts";
 import { pinTile } from "./shelf.ts";
 import type Sky from "./sky.ts";
+import { edge } from "./tones.ts";
 
 /** The rail's name for a space: its first letter, and the next one small ("Mo"). */
 export function initials(name: string): string {
@@ -32,8 +33,8 @@ export function openKey(sky: Sky, t: Theme): Element {
 
   return div().id("fold").relative().flex_none().w(28).h(20).flex().items_center().justify_center()
     .map((el) => navRing(t, el, on))
-    .border(1).border_color(t.ansi0).text_size(11).text_color(t.muted)
-    .hover((s) => s.text_color(t.foreground).bg(t.ansi0).border_color(t.ansi8))
+    .border(1).border_color(edge(t)).text_size(11).text_color(t.muted)
+    .hover((s) => s.text_color(t.foreground).bg(edge(t)).border_color(t.muted))
     .tooltip("Open the sidebar (⌘B)")
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
@@ -51,7 +52,7 @@ export function railSpace(sky: Sky, t: Theme, s: SpaceInfo, at: number, count: n
   const hot = sky.railHover === s.id || sky.nav(`space:${s.id}`, "spaces", railActs(sky, s));
 
   const thread = count > 1 ? div().absolute().left(0).right(0).top(at === 0 ? 13 : 0).bottom(at === count - 1 ? 13 : 0).flex().justify_center()
-    .child(div().relative().w(1).h_full().child(dither(`${t.ansi8}99`, 1))) : null;
+    .child(div().relative().w(1).h_full().child(dither(`${t.muted}99`, 1))) : null;
 
   return div().id(`rail-space-${s.id}`).relative().w_full().h(26).flex_none().flex().items_center().justify_center().text_size(11)
     .tooltip(s.name)
@@ -70,7 +71,7 @@ export function railSpace(sky: Sky, t: Theme, s: SpaceInfo, at: number, count: n
     .when(Boolean(thread), (el) => (thread ? el.child(thread) : el))
     // On a plate of the night's ground (the list is on it too, so no star
     // lands beside a letter like a stray mark), so the thread stops at the letters.
-    .child(div().relative().px(3).py(1).bg(hot ? t.ansi0 : t.background).text_color(s.active || hot ? t.foreground : t.muted)
+    .child(div().relative().px(3).py(1).bg(hot ? edge(t) : t.background).text_color(s.active || hot ? t.foreground : t.muted)
       .child(initials(s.name))
       .when(s.active, (el) => el.children(cornerTicks(t)))
       .when(Boolean(s.status) && s.status !== "idle", (el) => el.child(div().absolute().right(-13).top(5).child(pip(t, s.status)))));
@@ -87,7 +88,7 @@ export function railFly(sky: Sky, t: Theme, a: AgentInfo, size = 32, reach: Rail
   const plate = (size - 16) / 2;
 
   return div().id(`rail-fly-${a.address}`).relative().size(size).flex_none().flex().items_center().justify_center()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .tooltip(`${givenName(a.address) ?? a.program.name ?? a.title ?? a.address}${a.space_name ? ` · ${a.space_name}` : ""} · ${WORD[a.status]}`)
     // Pressed anywhere on the cell and the padding around it (`reach`), not only the mark.
     .child(div().id(`rail-hit-${a.address}`).absolute().left(-reach.x).top(-reach.y).w(size + 2 * reach.x).h(size + 2 * reach.y)
@@ -98,7 +99,7 @@ export function railFly(sky: Sky, t: Theme, a: AgentInfo, size = 32, reach: Rail
       })
       .on_click(() => run("agent.focus", { terminal: a.address })))
     // Focused: a plate of the ground, the corner ticks on its corners.
-    .when(a.focused, (el) => el.child(dither(t.ansi0, 1)).children(cornerTicks(t, 0)))
+    .when(a.focused, (el) => el.child(dither(edge(t), 1)).children(cornerTicks(t, 0)))
     .when(awake, (el) => el
       .child(flash(svg(`${ART}/glow.svg`).size(size).absolute().top(0).left(0).text_color(color), a.status, h))
       .child(div().absolute().top(plate).left(plate).size(16).bg(t.background)))
@@ -123,7 +124,7 @@ export function railGround(sky: Sky, t: Theme, resting: readonly AgentInfo[]): E
   const marks = [...shown.map((a) => railFly(sky, t, a, cell, pairs ? PAIR_REACH : RAIL_REACH)),
     ...(more > 0 ? [div().id("rail-ground-more").relative().size(cell).flex_none().flex().items_center().justify_center()
       .map((el) => navRing(t, el, sky.nav("more", "flies", { go: () => run("agent.next") })))
-      .text_size(10).text_color(t.ansi8).hover((s) => s.text_color(t.foreground).bg(`${t.ansi0}55`))
+      .text_size(10).text_color(t.muted).hover((s) => s.text_color(t.foreground).bg(`${edge(t)}55`))
       .tooltip(`${more} more at rest`)
       .on_mouse_down("left", stop).on_click(() => run("agent.next"))
       .child(`+${more}`)] : [])];
@@ -156,7 +157,7 @@ export function railView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarred:
   const tiles = kept.map((it) => pinTile(sky, t, it, RAIL_TILE));
 
   const shelf = kept.length ? v_flex().id("rail-shelf").flex_none().items_center().gap(RAIL_TILE_GAP).pt(jarred.length ? 2 : 0)
-    .when(jarred.length > 0, (el) => el.child(div().relative().w(40).h(BOARD).opacity(0.7).child(dither(t.ansi8, 1))))
+    .when(jarred.length > 0, (el) => el.child(div().relative().w(40).h(BOARD).opacity(0.7).child(dither(t.muted, 1))))
     .children(Array.from({ length: Math.ceil(tiles.length / 2) }, (_, i) => h_flex().gap(RAIL_TILE_GAP).children(tiles.slice(i * 2, i * 2 + 2)))) : null;
 
   // The pinned ones' marks in a small jar of their own.
@@ -168,7 +169,7 @@ export function railView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarred:
   // Awake ones under the jar at the top; those at rest on the ground at the foot (railGround).
   const flies = free.flatMap((a) => (atRest(a) ? [] : [railFly(sky, t, a)]));
   const ground = railGround(sky, t, free.filter(atRest));
-  const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.ansi8, 1));
+  const rule = () => div().w(28).h(2).flex_none().relative().child(dither(t.muted, 1));
   const glowList = sky.glowList;
   const spacesList = v_flex().id("rail-spaces").relative().overflow_hidden().w_full().flex_none().bg(t.background);
 

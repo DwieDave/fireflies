@@ -62,8 +62,9 @@
 // PATH, envrc.ts; or settings.json's `editor.languages.<id>.server`), is
 // shared by every editor of that workspace, and stops a while after the last
 // closes. Saving writes only if the file is still what was read (otherwise
-// it says so); a change on disk reloads a clean file and offers a choice to
-// an edited one. Closing an edited editor asks first.
+// it says so); a change on disk reloads a clean file (the line at the top,
+// the caret and the selection kept on the text they were on: keep-place.ts)
+// and offers a choice to an edited one. Closing an edited editor asks first.
 //
 // Markdown files get a live preview beside the text (under it when the pane
 // is narrow; each tab keeps its view, an "edit" from the viewer turns it on), drawn as it's typed by the Markdown viewer's renderer
@@ -159,6 +160,7 @@ import { closeTab, leave, openFile, ownPane, popIn, popOut, select, stepMove, st
 import { setWrap, vimCommand, vimDoc, vimKey, vimOn, vimSettled } from "./pane-vim.ts";
 import { closePane, imageOf, previewLink, setView, tick } from "./preview-pane.ts";
 import { closeTabMenu, openTabMenu, tabMenuKeyDown, tabMenuView } from "./tab-menu.ts";
+import type { Pt } from "./menu-place.ts";
 import { TabFields } from "./tab-fields.ts";
 
 
@@ -167,6 +169,8 @@ interface TabMenu {
   readonly index: number;
   at: number;
   readonly items: readonly MenuItem[];
+  /** The press (pane px) when a right click opened it, else (a key) null: under its tab. */
+  readonly near: Pt | null;
 }
 
 /** A tab dragged along the strip: from where, the gap it's over, off the strip. */
@@ -221,6 +225,9 @@ export default class EditorPane extends TabFields {
 
   /** Where each drawn tab starts on the strip (px, unzoomed): the tab menu opens under it. */
   tabX: ((i: number) => number) | null = null;
+
+  /** How wide each drawn tab is (px, unzoomed; 0: folded away): a key's tab menu stands under it. */
+  tabW: ((i: number) => number) | null = null;
 
   menuHandle: FocusHandle | null = null;
 
@@ -278,7 +285,8 @@ export default class EditorPane extends TabFields {
   appKeys: { readonly at: number; readonly map: ReadonlyMap<string, Bound> } | null = null;
 
   /** The Markdown commands' list, open since. */
-  mdMenu: { readonly at: number } | null = null;
+  /** The Markdown commands' list: when it opened, whether the bar's chip opened it (else a key). */
+  mdMenu: { readonly at: number; readonly chip: boolean } | null = null;
   /** A scratchpad's more menu (scratch-bar.ts), open. */
   moreMenu: { readonly at: number } | null = null;
 

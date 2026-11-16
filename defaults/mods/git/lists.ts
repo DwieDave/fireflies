@@ -19,6 +19,7 @@ import { graphFor, shownWidth } from "./rows.ts";
 import type { default as GitView } from "./main.ts";
 import { contextMenu } from "./bars.ts";
 import { loadMain, readMore } from "./content.ts";
+import { edge } from "./tones.ts";
 
 /** A list body: only the rows in view are drawn (lazygit scrolls by row). */
 export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, draw: DrawRow, active: boolean) {
@@ -31,6 +32,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   const vis = px ? rowWindow(n, 0, px, rowH).vis : Math.max(1, v.vis[ctx] ?? 12);
 
   v.vis[ctx] = vis;
+  v.rowPx[ctx] = rowH;
 
   let top = v.top[ctx] ?? 0;
   const sel = Math.min(v.sel[ctx] ?? 0, Math.max(0, n - 1));
@@ -55,7 +57,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
     const i = top + k, isSel = i === sel, inRange = range !== null && i >= range[0] && i <= range[1];
 
     const row = div().id(`${ctx}-row-${i}`).relative().h(rowH).flex_none().w_full()
-      .hover((s) => s.bg(`${t.ansi0}55`))
+      .hover((s) => s.bg(`${edge(t)}55`))
       .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); rowPress(v, ctx, i, e, cx); })
       .on_mouse_down("right", (_e, cx) => { cx.stop_propagation(); v.rowMenu(ctx, i, cx); });
 
@@ -81,7 +83,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
     .child(v_flex().size_full().children(shown).children(tail ? [tail] : []));
 
   const scrolled = n > vis
-    ? body.child(div().absolute().right(0).w(2).top(`${Math.round((top / n) * 100)}%`).h(`${Math.max(4, Math.round((vis / n) * 100))}%`).bg(active ? `${t.accent}aa` : `${t.ansi8}66`))
+    ? body.child(div().absolute().right(0).w(2).top(`${Math.round((top / n) * 100)}%`).h(`${Math.max(4, Math.round((vis / n) * 100))}%`).bg(active ? `${t.accent}aa` : `${t.muted}66`))
     : body;
 
   return n ? scrolled : scrolled.child(div().absolute().inset_0().child(empty(t, emptyText(v, ctx), null, { small: true })));
@@ -206,7 +208,7 @@ export function splitter(view: GitView, t: Theme, id: string, axis: "x" | "y", k
   const sized = axis === "x" ? el.w(6).h_full().cursor_col_resize() : el.h(6).w_full().cursor_row_resize();
 
   const live = sized
-    .hover((s) => s.bg(`${t.ansi0}88`))
+    .hover((s) => s.bg(`${edge(t)}88`))
     .on_mouse_down("left", (e, cx) => {
       cx.stop_propagation();
       resize(view, e, key, from, set, { axis, ...opts });

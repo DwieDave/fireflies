@@ -32,13 +32,14 @@ import type { ScrollHandle as Scroll } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import type { ExecResult, SpaceInfo, Theme } from "herdr";
 import { isString, nullable, object, readShared, readSharedList, sharedKey, sharedListKey, writeShared } from "./guard.ts";
-import { dither, eyebrow, spaceFolder } from "./kit.ts";
+import { dither, eyebrow, keyedSpec, spaceFolder } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail } from "./folderlist.ts";
 import type { FolderRow, Near, RankedRow, RowFrom } from "./folderlist.ts";
 import { FOOT, HEAD, ROW, fieldBox, pickRow, pickerFoot, pickerHead, sayNow } from "./newspace-draw.ts";
 import type { PickRow } from "./newspace-draw.ts";
+import { edge } from "./tones.ts";
 
 /** shared() key: the folders spaces were made in or attached to here, newest first. */
 export const RECENT = "nocturne.recent-folders";
@@ -109,7 +110,7 @@ export function openSpacePicker({ at = null, space = null, wasOpen = false, repl
 
   const id = openOverlay(at
     ? { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, at, height: HEAD + LIST_MAX + 4 * SEC + FOOT + 12, props }
-    : { mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props });
+    : keyedSpec({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props }));
 
   writeShared(setShared, OPEN_KEY, { id, space: space ?? null });
 
@@ -666,7 +667,7 @@ export default class NewSpace {
             .child(`nothing in ${tail(tilde(dir, this.home), 24)} starts with "${splitPath(this.query, this.home).prefix}"`));
         }
 
-        items.push(div().id("ns-rule").mx(12).my(4).h(2).flex_none().relative().child(dither(t.ansi0, 1)));
+        items.push(div().id("ns-rule").mx(12).my(4).h(2).flex_none().relative().child(dither(edge(t), 1)));
         lastFrom = "end";
       }
 
@@ -715,7 +716,7 @@ export default class NewSpace {
       cx.notify();
     };
 
-    return v_flex().id("nocturne-newspace").w_full().bg(t.background).border(1).border_color(t.ansi0)
+    return v_flex().id("nocturne-newspace").w_full().bg(t.background).border(1).border_color(edge(t))
       .key_context(CONTEXT)
       .on_action(TAB, (_e, cx) => {
         this.tab(false, cx);

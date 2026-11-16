@@ -6,6 +6,7 @@ import { div } from "gpui-kit";
 import type { AsyncContext, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run, openOverlay } from "herdr";
+import { overlayOf } from "./menu-place.ts";
 import type { Theme } from "herdr";
 import { isNull, isNumber, isString, nullable, object, oneOf, parseJson, readShared, readSharedList, sharedKey, writeShared } from "./guard.ts";
 import * as Tabs from "./tabs.ts";
@@ -15,6 +16,7 @@ import { dither } from "./dither.ts";
 import { keyOf, closeOwn } from "./props.ts";
 import type { TabMenu } from "./props.ts";
 import type Browser from "./main.ts";
+import { edge } from "./tones.ts";
 
 // A tab to show once this pane is on screen (nocturne's goToPin): { slot, tab, at }.
 export const SHOW = sharedKey("browser.show", nullable(object({ tab: isString }, { slot: oneOf(isString, isNumber, isNull), at: isNumber })));
@@ -72,8 +74,8 @@ export function takeShow(view: Browser, cx: Context) {
 
 // ---- the tab's menu: this mod as a popup (props { tabMenu })
 
-/** Opens tab `id`'s menu: at the pointer (a right-click), or in the middle
- *  from the keyboard (`keyboard`: m in the bar), as Nocturne's menus open. */
+/** Opens tab `id`'s menu: at the pointer (a right-click), or from the keyboard (`keyboard`: m in
+ *  the bar) under its tab, in the middle with one tab (no strip), as Nocturne's menus open. */
 export function openTabMenu(view: Browser, id: string, keyboard: boolean) {
   const index = Tabs.indexOf(view.tabs, id);
   const tab = view.tabs.list[index];
@@ -86,7 +88,10 @@ export function openTabMenu(view: Browser, id: string, keyboard: boolean) {
   const rows = Tabs.menuRows(menu);
   const height = rows.flat().length * MENU_ROW + (rows.length - 1) * MENU_RULE + MENU_ROW + 10;
 
-  openOverlay({ mod: "browser", kind: keyboard ? "dialog" : "popup", frame: "none", width: MENU_W, height, props: { tabMenu: menu } });
+  // From the keyboard: under its tab on the strip (menu-place.ts), in the middle with no strip.
+  const box = keyboard && view.tabs.list.length > 1 ? view.tabBoxes.get(id) ?? null : null;
+
+  openOverlay({ mod: "browser", ...overlayOf(keyboard ? (box ? { rect: box } : null) : "pointer"), frame: "none", width: MENU_W, height, props: { tabMenu: menu } });
 }
 
 /** `tab_act:{ slot, tab, act }`: a pick in a tab's menu, for the pane it names. */
@@ -148,7 +153,7 @@ export function renderMenu(view: Browser, t: Theme, menu: TabMenu): Element {
     const i = n++, on = i === view.cursor && r.enabled;
 
     return h_flex().id(`tm-${r.act}`).relative().h(MENU_ROW).flex_none().px(12).items_center().text_size(12)
-      .text_color(!r.enabled ? t.ansi0 : on ? t.foreground : t.muted)
+      .text_color(!r.enabled ? edge(t) : on ? t.foreground : t.muted)
       .on_hover((h, cx) => {
         if (h && r.enabled && view.cursor !== i) {
           view.cursor = i;
@@ -157,11 +162,11 @@ export function renderMenu(view: Browser, t: Theme, menu: TabMenu): Element {
       })
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click(() => pickRow(view, r))
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(div().relative().flex_1().min_w(0).truncate().child(r.name));
   };
 
-  const root = v_flex().id("tab-menu").size_full().bg(t.background).border(1).border_color(t.ansi0).py(4);
+  const root = v_flex().id("tab-menu").size_full().bg(t.background).border(1).border_color(edge(t)).py(4);
 
   return (view.handle ? root.track_focus(view.handle) : root)
     .on_key_down((e, cx) => menuKey(view, e, cx))
@@ -173,7 +178,7 @@ export function renderMenu(view: Browser, t: Theme, menu: TabMenu): Element {
     })
     .child(div().h(MENU_ROW).flex_none().px(12).flex().items_center().text_size(11).text_color(t.dim).truncate().child(menu.title))
     .children(sections.flatMap((part, k) => [
-      ...(k ? [div().relative().h(MENU_RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.ansi8, 1)))] : []),
+      ...(k ? [div().relative().h(MENU_RULE).flex_none().mx(12).child(div().absolute().left(0).right(0).top(4).h(1).child(dither(t.muted, 1)))] : []),
       ...part.map(row),
     ]));
 }

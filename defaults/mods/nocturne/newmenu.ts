@@ -38,13 +38,14 @@ import { theme, spaces, knownAgents, openOverlay, closeOverlay, props, window as
 import type { Theme } from "herdr";
 import { arrayOf, isBoolean, isString, literal, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { ART, LOGO, dither, eyebrow } from "./kit.ts";
+import { ART, LOGO, dither, eyebrow, keyedSpec } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.ts";
 import type { Panel } from "./panels.ts";
 import { openWorktrees } from "./git.ts";
 import { openSpacePicker } from "./newspace.ts";
 import { readLaunchers } from "./launchers.ts";
+import { edge } from "./tones.ts";
 
 /** An agent as knownAgents() reports it (and the shipped new-menu keeps it). */
 const isKnownAgent = object(
@@ -250,7 +251,7 @@ export function openNewMenu({ centered = false, at = null, wasOpen = false }: Ne
   const props = { role: "new" };
 
   const id = centered
-    ? openOverlay({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props })
+    ? openOverlay(keyedSpec({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props }))
     : openOverlay(at
       ? { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, height: MOST, at, props }
       : { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, height: MOST, props });
@@ -416,20 +417,20 @@ export default class NewMenu {
   /** The landing picture: the tab as a frame, the spot that's coming in dithered blue. */
   picture(t: Theme, dest: Dest): Element {
     const glow = (el: Element) => el.loop("opacity", { from: 0.55, to: 1, period: 1800 });
-    const frame = div().relative().w(30).h(18).flex_none().border(1).border_color(t.ansi8);
+    const frame = div().relative().w(30).h(18).flex_none().border(1).border_color(t.muted);
 
     if (dest === "tab") {
       return v_flex().flex_none().gap(1)
         .child(h_flex().gap(2).h(3)
-          .child(div().w(8).h_full().bg(t.ansi8))
+          .child(div().w(8).h_full().bg(t.muted))
           .child(glow(div().relative().w(8).h_full().child(dither(t.accent, 1)))))
         .child(frame.child(glow(div().absolute().top(2).bottom(2).left(2).right(2).child(dither(t.accent, 1)))));
     }
 
     return v_flex().flex_none().gap(1)
-      .child(h_flex().gap(2).h(3).child(div().w(8).h_full().bg(t.ansi8)))
+      .child(h_flex().gap(2).h(3).child(div().w(8).h_full().bg(t.muted)))
       .child(frame
-        .child(div().absolute().top(0).bottom(0).left(14).w(1).bg(t.ansi8))
+        .child(div().absolute().top(0).bottom(0).left(14).w(1).bg(t.muted))
         .child(glow(div().absolute().top(2).bottom(2).left(17).right(2).child(dither(t.accent, 1)))));
   }
 
@@ -446,7 +447,7 @@ export default class NewMenu {
           writeShared(setShared, DEST, id);
           cx.notify();
         })
-        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+        .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
         .child(div().relative().child(label));
     };
 
@@ -457,16 +458,16 @@ export default class NewMenu {
     return h_flex().relative().h(HEAD).flex_none().px(PAD).gap(10).items_center()
       .child(this.picture(t, dest))
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.foreground).child("New"))
-      .child(div().flex_none().h(16).px(4).flex().items_center().border(1).border_color(t.ansi0).text_size(10).text_color(t.dim)
+      .child(div().flex_none().h(16).px(4).flex().items_center().border(1).border_color(edge(t)).text_size(10).text_color(t.dim)
         .tooltip("tab flips where new things land").child("tab"))
       .child(this.switcher(t, dest))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
   }
 
   section(t: Theme, label: string, aside: string | null = null): Element {
     return h_flex().h(SECTION).flex_none().px(PAD).pt(6).gap(8).items_center()
       .child(eyebrow(t, label))
-      .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)))
+      .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)))
       .when(Boolean(aside), (el) => el.child(div().flex_none().text_size(10).text_color(t.dim).child(aside ?? "")));
   }
 
@@ -492,20 +493,20 @@ export default class NewMenu {
    *  tab, with a blue mark, left; its key, right), then its icon and name. */
   tile(t: Theme, x: TileItem, on: boolean, live: readonly NewItem[], dest: Dest): Element {
     const open = !x.off && Boolean(x.p.open?.());
-    const color = x.off ? t.ansi8 : on ? t.foreground : t.muted;
+    const color = x.off ? t.muted : on ? t.foreground : t.muted;
 
     // Every tile keeps its 1 px border (only its color changes), so hovering doesn't move anything.
     return v_flex().id(`nm-${x.id}`).relative().flex_1().min_w(0).h(TILE_H).px(5).pt(3).pb(7)
-      .border(1).border_color(on && !x.off ? t.ansi8 : t.ansi0)
+      .border(1).border_color(on && !x.off ? t.muted : edge(t))
       .on_hover(this.hoverTo(x, live))
       .on_click((e, cx) => this.pick(x, this.clickDest(e, dest), cx))
-      .when(on && !x.off, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+      .when(on && !x.off, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
       .child(h_flex().relative().h(12).flex_none().gap(3).items_center().text_size(9)
         .when(open, (el) => el.child(div().size(4).flex_none().bg(t.accent)))
         .child(div().flex_1().min_w(0).truncate().text_color(open ? t.accent : t.dim).child(open ? "open" : ""))
         .child(div().flex_none().text_size(10).text_color(on ? t.accent : t.dim).child(x.key)))
       .child(v_flex().relative().flex_1().items_center().justify_center().gap(5)
-        .child(svg(x.p.icon.includes("/") ? x.p.icon : chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.ansi8 : on || open ? t.accent : t.dim))
+        .child(svg(x.p.icon.includes("/") ? x.p.icon : chrome(x.p.icon)).size(16).flex_none().text_color(x.off ? t.muted : on || open ? t.accent : t.dim))
         .child(div().max_w_full().truncate().text_size(11).text_color(color).child(on && open ? "close" : x.p.name)));
   }
 
@@ -522,10 +523,10 @@ export default class NewMenu {
 
   row(t: Theme, x: NewItem, on: boolean, live: readonly NewItem[], dest: Dest, mark: Element, name: string, hint?: string): Element {
     return h_flex().id(`nm-${x.id}`).relative().h(ROW).flex_none().px(PAD).gap(10).items_center().text_size(12)
-      .text_color(x.off ? t.ansi8 : on ? t.foreground : t.muted)
+      .text_color(x.off ? t.muted : on ? t.foreground : t.muted)
       .on_hover(this.hoverTo(x, live))
       .on_click((e, cx) => this.pick(x, this.clickDest(e, dest), cx))
-      .when(on && !x.off, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+      .when(on && !x.off, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
       .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(mark))
       .child(div().relative().flex_1().min_w(0).truncate().child(name))
       .child(div().relative().flex_none().text_size(11).text_color(on && !x.off ? t.accent : t.dim).child(hint ?? ""));
@@ -533,14 +534,14 @@ export default class NewMenu {
 
   /** The dim last row of the agents: how many aren't installed, and show / hide. */
   missingRow(t: Theme, x: MissingItem, on: boolean, live: readonly NewItem[], dest: Dest): Element {
-    const icon = svg(chrome(x.shown ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(on ? t.accent : t.ansi8);
+    const icon = svg(chrome(x.shown ? "chevron-down" : "chevron-right")).size(12).flex_none().text_color(on ? t.accent : t.muted);
 
     return this.row(t, x, on, live, dest, icon, `${x.n} not installed`, x.shown ? "hide" : "show").text_color(on ? t.muted : t.dim);
   }
 
   foot(t: Theme, x: NewItem | undefined, dest: Dest): Element {
     return h_flex().relative().h(FOOT).flex_none().px(PAD).gap(6).items_center().text_size(11)
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
       .child(div().flex_none().text_color(t.accent).child("↳"))
       .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(this.say(x, dest)))
       .child(div().flex_none().text_color(t.dim).child("shift: other"));
@@ -650,7 +651,7 @@ export default class NewMenu {
     const machine = here().space?.machine;
     const handle = this.handle;
 
-    return v_flex().id("nocturne-new").w_full().h(menuHeight(this.agents)).bg(t.background).border(1).border_color(t.ansi0)
+    return v_flex().id("nocturne-new").w_full().h(menuHeight(this.agents)).bg(t.background).border(1).border_color(edge(t))
       .key_context(CONTEXT)
       .when(Boolean(handle), (el) => (handle ? el.track_focus(handle) : el))
       .on_action(FLIP, (_e, cx) => this.flip(cx))
@@ -662,13 +663,13 @@ export default class NewMenu {
         .child(v_flex().px(PAD).gap(GAP).children(grid))
         .child(this.section(t, "start an agent", machine ? `on ${machine}` : null))
         .children(ags.map((x) => (x.kind === "missing" ? this.missingRow(t, x, x === current, live, dest)
-          : this.row(t, x, x === current, live, dest, this.mark(t, x.a, x.off ? t.ansi8 : x === current ? t.foreground : t.dim),
+          : this.row(t, x, x === current, live, dest, this.mark(t, x.a, x.off ? t.muted : x === current ? t.foreground : t.dim),
             x.a.name, x.off ? "not installed" : (x.key ?? "")))))
         .when(!ags.length, (el) => el.child(div().h(ROW).px(PAD).flex().items_center().text_size(11).text_color(t.dim)
           .child(this.failed ? "couldn't ask for agents" : "looking for agents…")))
         .child(this.section(t, "space"))
         .children(rows.map((x) => this.row(t, x, x === current, live, dest,
-          svg(chrome(x.icon)).size(14).flex_none().text_color(x.off ? t.ansi8 : x === current ? t.accent : t.dim), x.name, x.hint)))
+          svg(chrome(x.icon)).size(14).flex_none().text_color(x.off ? t.muted : x === current ? t.accent : t.dim), x.name, x.hint)))
         .child(div().h(8).flex_none()))
       .child(this.foot(t, current, dest));
   }

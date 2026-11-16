@@ -174,8 +174,8 @@ for (const [what, list] of [
     expect(groundIn(newRoot)).toEqual(ground());
     // and both roots fill their blocks, so the ground reaches each block's edges
     for (const r of [bellRoot, newRoot]) expect(r.calls.size_full).toBeDefined();
-    // none of them still draws the old plain horizon (ansi0, 2 px) on top
-    for (const r of [bellRoot, newRoot]) expect(r.kids.some((k: any) => k.calls.h?.[0] === 2 && JSON.stringify(shape(k)).includes("ansi0") && !JSON.stringify(shape(k)).includes("ansi8"))).toBe(false);
+    // none of them still draws the old plain horizon (the edge, 2 px) on top
+    for (const r of [bellRoot, newRoot]) expect(r.kids.some((k: any) => k.calls.h?.[0] === 2 && JSON.stringify(shape(k)).includes("input") && !JSON.stringify(shape(k)).includes("muted"))).toBe(false);
   });
 }
 
@@ -189,19 +189,20 @@ test("the toolbar's ground is one file in both mods (nocturne, notifications), a
 
 // ---- Developer chose the plate, "with the brighter hover on the plate".
 
-const MOONFLY = { ansi0: "#323437", ansi8: "#949494", foreground: "#c6c6c6", background: "#080808" };
+const MOONFLY = { input: "#323437", muted: "#949494", foreground: "#c6c6c6", background: "#080808" };
+const EDGE = MOONFLY.input; // tones.ts edge: moonfly's input is opaque, so the edge is it
 const lum = (c: string) => {
   const [r, g, b] = [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 };
 const contrast = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m); return (x + 0.05) / (y + 0.05); };
 
-test("on the plate a hovered tool is a step brighter than the plain ansi0 hover, its text still readable", () => {
+test("on the plate a hovered tool is a step brighter than the plain edge hover, its text still readable", () => {
   const hover = kit.toolHover(MOONFLY, "plate");
   expect(hover).toMatch(/^#[0-9a-f]{6}$/);
-  expect(lum(hover)).toBeGreaterThan(lum(MOONFLY.ansi0)); // brighter than the old hover, so brighter than the plate (ansi0 dithered)
+  expect(lum(hover)).toBeGreaterThan(lum(EDGE)); // brighter than the old hover, so brighter than the plate (the edge dithered)
   expect(contrast(MOONFLY.foreground, hover)).toBeGreaterThanOrEqual(4.5);
-  expect(kit.toolHover(MOONFLY, "ledge")).toBe(MOONFLY.ansi0);
+  expect(kit.toolHover(MOONFLY, "ledge")).toBe(EDGE);
   expect(kit.mix("ansi0", "#ffffff", 0.5)).toBe("ansi0"); // a named color stays as it is
 });
 

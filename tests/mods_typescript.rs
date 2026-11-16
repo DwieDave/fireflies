@@ -36,9 +36,79 @@ fn passes(command: &mut Command, what: &str) {
 fn shipped_typescript_mods_type_check() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let Some(tsc) = tool(root, "tsc") else { return eprintln!("CI: the mods' type check is skipped") };
-    let types = root.join("target/mod-types");
-    passes(Command::new(env!("CARGO_BIN_EXE_herdr-app")).arg("types").arg(&types), "herdr-app types");
     passes(Command::new(tsc).arg("-p").arg(root.join("defaults/tsconfig.json")).arg("--pretty").arg("false"), "tsc -p defaults/tsconfig.json");
+}
+
+/// The committed typings the mods are checked and edited against
+/// (defaults/types/): what `herdr-app types` writes for this build, in two
+/// files, without its `herdr` module, which the tsconfig files read from
+/// defaults/herdr.d.ts itself (an ambient copy would win over that file and
+/// go stale with every change to it). gpui-kit.d.ts holds the gpui modules
+/// (gpui-kit, gpui-base, gpui-shell, gpui-fps), runtime.d.ts the runtime's
+/// globals and Node-like modules (console, Buffer, URL, "path", …), which
+/// the bun tests (scripts/tsconfig.json) take from bun's types instead.
+/// Committed so that a checkout with no build in it (Developer's own, the
+/// nix one) type-checks in any editor. `just types`
+/// (HERDR_APP_WRITE_TYPES=1) rewrites them.
+#[test]
+fn committed_mod_typings_are_current() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let out = std::env::temp_dir().join(format!("herdr-app-mod-typings-{}", std::process::id()));
+    passes(Command::new(env!("CARGO_BIN_EXE_herdr-app")).arg("types").arg(&out), "herdr-app types");
+    let written = std::fs::read_to_string(out.join("gpui-kit.d.ts")).unwrap();
+    let _ = std::fs::remove_dir_all(&out);
+    let (gpui, runtime) = split_after_module(&without_module(&written, "herdr"), "gpui-fps");
+    let files = [("defaults/types/gpui-kit.d.ts", gpui), ("defaults/types/runtime.d.ts", runtime)];
+
+    if std::env::var_os("HERDR_APP_WRITE_TYPES").is_some() {
+        for (path, text) in files {
+            std::fs::create_dir_all(root.join(path).parent().unwrap()).unwrap();
+            std::fs::write(root.join(path), text).unwrap();
+        }
+        return;
+    }
+
+    for (path, text) in files {
+        let current = std::fs::read_to_string(root.join(path)).unwrap_or_default();
+        assert!(current == text, "{path} is not what this build writes (gpui-kit's API changed): run `just types` and commit it");
+    }
+}
+
+/// Where `text`'s top-level `declare module "<name>" { … }` block starts (the
+/// newline before it) and ends (just past its closing line): it ends at the first `}` at the
+/// start of a line.
+fn module_block(text: &str, name: &str) -> Option<(usize, usize)> {
+    let head = format!("\ndeclare module \"{name}\" {{\n");
+    let start = text.find(&head)?;
+    let end = text[start + head.len()..].find("\n}\n").map(|at| start + head.len() + at + 3).expect("the module block ends");
+    Some((start, end))
+}
+
+/// `text` without its `declare module "<name>"` block.
+fn without_module(text: &str, name: &str) -> String {
+    let Some((start, end)) = module_block(text, name) else { return text.to_string() };
+    format!("{}{}", &text[..start + 1], &text[end..])
+}
+
+/// `text` up to and including its `declare module "<name>"` block, and the
+/// rest (with a header saying where it comes from).
+fn split_after_module(text: &str, name: &str) -> (String, String) {
+    let (_, end) = module_block(text, name).expect("the typings declare the module");
+    let rest = format!(
+        "// Generated with gpui-kit.d.ts beside it (`just types`): the runtime's globals and\n// Node-like modules, which the mods have and the bun tests take from bun instead.\n{}",
+        &text[end..]
+    );
+    (text[..end].to_string(), rest)
+}
+
+#[test]
+fn a_module_block_comes_out_whole() {
+    let text = "a\n\ndeclare module \"x\" {\n  b {\n  }\n}\n\ndeclare module \"herdr\" {\n  c;\n}\n\nd\n";
+    assert_eq!(without_module(text, "herdr"), "a\n\ndeclare module \"x\" {\n  b {\n  }\n}\n\n\nd\n");
+    assert_eq!(without_module(text, "none"), text);
+    let (head, rest) = split_after_module(text, "x");
+    assert_eq!(head, "a\n\ndeclare module \"x\" {\n  b {\n  }\n}\n");
+    assert!(rest.ends_with("\n\ndeclare module \"herdr\" {\n  c;\n}\n\nd\n"));
 }
 
 #[test]

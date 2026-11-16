@@ -21,6 +21,7 @@ import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { CURSOR_KEY, isLayoutNode } from "./nav.ts";
 import type { LayoutNode } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 export const ROLE = "newbutton";
 
@@ -90,7 +91,7 @@ export default class NewButton {
         this.press = { e, open };
       })
       .on_click(() => openNewMenu({ at: dropBelow(this.press?.e, NEW_W), wasOpen: Boolean(this.press?.open) }))
-      .when(open, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
+      .when(open, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
       .child(div().relative().text_color(open ? t.foreground : t.muted).child("+ new"))
       .map((el) => navRing(t, el, ring));
 
@@ -98,7 +99,7 @@ export default class NewButton {
       // The toolbar's ground runs on under it to the strip's right edge (kit.ts toolGround).
       .children(toolGround(t))
       .child(h_flex().id("new-tools").relative().flex_none().items_center().on_size_change((size) => fit(size.width))
-        .child(div().w(1).h(14).mx(4).flex_none().bg(t.ansi0))
+        .child(div().w(1).h(14).mx(4).flex_none().bg(edge(t)))
         .child(button));
   }
 }

@@ -38,6 +38,7 @@ import { PROVIDERS, UsageEndpoint, provider, pickProvider, lastUsage, usageNote,
 import type { Note, ProviderId, ScopedWindow, Usage, UsageServices, UsageWindow, Why } from "./limits.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
+import { edge } from "./tones.ts";
 
 const TICK = "30 seconds"; // countdowns, and asking again once the answer is old
 const FIRST = "1 second"; // the first read, this long after the pane first draws
@@ -263,13 +264,13 @@ export default class UsagePane extends View {
 
     const f = div().relative().size(box).flex_none()
       // The dish.
-      .child(div().absolute().bottom(0).left(at(2)).w(40 * s).h(2 * s).bg(t.ansi8))
-      .child(div().absolute().bottom(2 * s).left(at(6)).w(32 * s).h(2 * s).child(dither(t.ansi8, s)))
+      .child(div().absolute().bottom(0).left(at(2)).w(40 * s).h(2 * s).bg(t.muted))
+      .child(div().absolute().bottom(2 * s).left(at(6)).w(32 * s).h(2 * s).child(dither(t.muted, s)))
       // Wax, shaded on its right, with a drip down the left.
       .child(div().absolute().bottom(base).left(at(15)).w(14 * s).h(wax).bg(t.ansi7)
-        .child(div().absolute().top(0).right(0).w(5 * s).h_full().child(dither(t.ansi8, s))))
+        .child(div().absolute().top(0).right(0).w(5 * s).h_full().child(dither(t.muted, s))))
       .when(wax > 14 * s, (el) => el.child(div().absolute().bottom(top - 10 * s).left(at(13)).w(2 * s).h(8 * s).bg(t.ansi7)))
-      .child(div().absolute().bottom(top).left(at(21)).w(2 * s).h(4 * s).bg(t.ansi8));
+      .child(div().absolute().bottom(top).left(at(21)).w(2 * s).h(4 * s).bg(t.muted));
 
     if (r > 0) {
       const y = top + 2 * s;
@@ -284,7 +285,7 @@ export default class UsagePane extends View {
     }
 
     // Out: two wisps of smoke drifting up from the wick.
-    const wisp = (x: number, period: number, ch: string) => div().absolute().left(at(x)).text_size(small(s)).text_color(t.ansi8).child(ch)
+    const wisp = (x: number, period: number, ch: string) => div().absolute().left(at(x)).text_size(small(s)).text_color(t.muted).child(ch)
       .loop("top", { from: box - top - 16 * s, to: box - top - 44 * s, period, easing: "linear" })
       .loop("opacity", { from: 0.9, to: 0, period, easing: "linear" });
 
@@ -320,7 +321,7 @@ export default class UsagePane extends View {
       // The star sits centred on the path; the box is tall enough for both.
       .child(div().id(`path-${id}`).relative().h(star + 4 * s).w_full()
         .on_size_change((z, cx) => { if (Math.abs((this.paths.get(id) ?? 0) - z.width) > 1) { this.paths.set(id, z.width); cx.notify(); } })
-        .child(div().absolute().left(0).right(0).top(star / 2 + s).h(2 * s).child(dither(t.ansi8, s)))
+        .child(div().absolute().left(0).right(0).top(star / 2 + s).h(2 * s).child(dither(t.muted, s)))
         .child(div().absolute().left(0).top(star / 2).h(4 * s).w(Math.round((used / 100) * width)).bg(this.tone(t, used)))
         .when(now !== null, (el) => el.child(svg(`${ART}/pip.svg`).size(star).absolute().top(2 * s)
           .left(Math.max(0, Math.min(width - star, Math.round((now ?? 0) * width) - star / 2))).text_color(t.foreground))))
@@ -348,9 +349,9 @@ export default class UsagePane extends View {
       .when(!beside, (el) => el.w_full().items_center())
       .child(words).child(path);
 
-    return v_flex().id(id).relative().flex_1().min_w(0).min_h(0).p(12 * s).gap(10 * s).bg(t.background).border(1).border_color(t.ansi0)
+    return v_flex().id(id).relative().flex_1().min_w(0).min_h(0).p(12 * s).gap(10 * s).bg(t.background).border(1).border_color(edge(t))
       .child(h_flex().gap(8 * s).items_baseline().text_size(small(s))
-        .child(div().text_color(t.ansi8).child(Str.toUpperCase(title)))
+        .child(div().text_color(t.muted).child(Str.toUpperCase(title)))
         .child(div().text_color(t.dim).child(sub)))
       .child((beside ? h_flex().gap(16 * s) : v_flex().gap(12 * s)).flex_1().min_h(0).items_center().justify_center()
         .child(figure).child(text))
@@ -398,7 +399,7 @@ export default class UsagePane extends View {
 
     const body = div().relative().w(38 * k).h(24 * k).flex_none()
       .child(svg(`${OWN}/sheep-${kind}-wool.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.ansi7))
-      .child(svg(`${OWN}/sheep-${kind}-face.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.ansi8));
+      .child(svg(`${OWN}/sheep-${kind}-face.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.muted));
 
     const z = (x: number, period: number, rise: number) => div().absolute().left(x * k).text_size(small(k)).text_color(t.ansi4).child("z")
       .loop("top", { from: 8 * k, to: -rise * k, period, easing: "linear" })
@@ -413,7 +414,7 @@ export default class UsagePane extends View {
 
     return h_flex().absolute().left(16 * k).bottom(20 * k).gap(4 * k).items_end()
       .child(sheep)
-      .child(div().mb(20 * k).px(6).py(2).text_size(small(k)).bg(t.background).border(1).border_color(t.ansi0).text_color(asleep ? t.ansi4 : t.muted).child(says));
+      .child(div().mb(20 * k).px(6).py(2).text_size(small(k)).bg(t.background).border(1).border_color(edge(t)).text_color(asleep ? t.ansi4 : t.muted).child(says));
   }
 
   toolbar(t: Theme, d: Usage | null, note: Note | null) {
@@ -428,20 +429,20 @@ export default class UsagePane extends View {
     const plan = d?.plan ?? null;
 
     return h_flex().id("us-toolbar").relative().h(BAR).flex_none().px(12).gap(8).items_center().text_size(11)
-      .child(div().flex_none().text_color(t.ansi8).child("USAGE"))
+      .child(div().flex_none().text_color(t.muted).child("USAGE"))
       .child(this.providers(t))
       .when(plan !== null, (el) => el.child(div().flex_none().relative().px(6).h(20).flex().items_center().text_color(t.muted)
-        .child(dither(t.ansi0, 1)).child(div().relative().child(plan ?? ""))))
+        .child(dither(edge(t), 1)).child(div().relative().child(plan ?? ""))))
       .child(div().flex_1())
       .child(div().id("us-read").flex_none().px(6).h(20).flex().items_center().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .hover((s) => s.text_color(t.foreground).bg(edge(t)))
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => { cx.stop_propagation(); this.read(true); })
         .child(busy ? div().child("·").frames(["·", "✦", "✧", "·"], 220) : "↻")
         .child(div().ml(6).child(status)))
       // ? keys: the toolbar's last item (keyhelp.ts).
       .child(keysHint(t, "us-keys-chip", this.keysShown, () => { this.keysShown = !this.keysShown; }).ml(6))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
   }
 
   /** The providers, the shown one lit: click one to show it (here and in the sidebar). */
@@ -450,12 +451,12 @@ export default class UsagePane extends View {
 
     return h_flex().flex_none().gap(2).items_center()
       .children(Arr.map(PROVIDERS, (p) => h_flex().id(`us-provider-${p.id}`).flex_none().px(6).h(20).gap(5).items_center()
-        .text_color(p.id === on ? t.foreground : t.ansi8)
-        .when(p.id === on, (el) => el.bg(t.ansi0))
-        .when(p.id !== on, (el) => el.hover((s) => s.text_color(t.muted).bg(t.ansi0)))
+        .text_color(p.id === on ? t.foreground : t.muted)
+        .when(p.id === on, (el) => el.bg(edge(t)))
+        .when(p.id !== on, (el) => el.hover((s) => s.text_color(t.muted).bg(edge(t))))
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => { cx.stop_propagation(); this.pick(p.id); })
-        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).flex_none().text_color(p.id === on ? t.foreground : t.ansi8))
+        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).flex_none().text_color(p.id === on ? t.foreground : t.muted))
         .child(div().child(Str.toLowerCase(p.name)))));
   }
 
@@ -472,7 +473,7 @@ export default class UsagePane extends View {
 
     return v_flex().flex_1().items_center().justify_center().gap(6).px(16).pb(120).text_size(11)
       .child(div().text_color(t.foreground).child(title))
-      .child(div().text_center().text_color(t.ansi8).child(sub));
+      .child(div().text_center().text_color(t.muted).child(sub));
   }
 
   override render() {
@@ -503,10 +504,10 @@ export default class UsagePane extends View {
     const root = (handle === null ? base : base.track_focus(handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
-      .children(layer("stars", 900, t.ansi8, 0.55, true))
+      .children(layer("stars", 900, t.muted, 0.55, true))
       .children(layer("haze", 1400, t.ansi4, 0.2))
       .children(layer("hills-fill", 144, t.background, 1))
-      .children(layer("hills-rim", 144, t.ansi8, 0.5))
+      .children(layer("hills-rim", 144, t.muted, 0.5))
       .child(this.toolbar(t, d, note));
 
     // ?: the keys in the meadow's place, the toolbar stays (keyhelp.ts).
@@ -531,7 +532,7 @@ export default class UsagePane extends View {
 
     return root
       .child(div().id("us-body").flex_1().min_h(0).overflow_y_scroll().child(body.children(cards)))
-      .when(note !== null && note.state !== "busy", (el) => el.child(div().absolute().right(12).bottom(12).text_size(11).text_color(t.ansi8)
+      .when(note !== null && note.state !== "busy", (el) => el.child(div().absolute().right(12).bottom(12).text_size(11).text_color(t.muted)
         .child(note?.state === "expired" ? "login napping, showing the last read" : "couldn't read just now, showing the last read")))
       .when(meadow, (el) => el.child(this.sheep(t, d, k)));
   }

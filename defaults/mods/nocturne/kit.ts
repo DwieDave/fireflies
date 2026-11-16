@@ -4,8 +4,10 @@
 import { div, svg } from "gpui-kit";
 import type { Color, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
-import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
-import { isNumber, isString, nullable, object, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
+import type { AgentInfo, ExecResult, OverlaySpec, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
+import type { Rect } from "./menu-place.ts";
+import { overlayOf } from "./menu-place.ts";
+import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
 import { isDock, toDock, newSlot, adoptShell } from "./dock.ts";
@@ -17,6 +19,8 @@ import type { JarItem, PaneRecord, SortedAgents, TabRecord } from "./pins.ts";
 import { dither } from "./toolground.ts";
 
 export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
+
+import { edge } from "./tones.ts";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";
@@ -399,7 +403,7 @@ export function pip(t: Theme, status: Status | null | undefined, size = 6): Elem
 
 /** Uppercase eyebrow label. */
 export function eyebrow(t: Theme, text: string): Element {
-  return div().text_size(11).text_color(t.ansi8).child(text.toUpperCase());
+  return div().text_size(11).text_color(t.muted).child(text.toUpperCase());
 }
 
 /** A stable small number from a string, for per-agent drift. */
@@ -416,15 +420,57 @@ export const tracked = <E extends Element>(el: E, handle: FocusHandle | null): E
 
 // ---- the keyboard cursor (nav.ts): one look across the chrome
 
+// Where the cursor's thing is drawn (window px), as the band or ring on it last
+// reported it (on_bounds_change), shared since the block that draws it (the
+// pane header) may not be the one whose keys move it (the strip): what a menu
+// its key opens hangs from (menu-place.ts). byKey runs a cursor's key; while
+// it runs, an overlay that would open in the middle (or at the pointer) hangs
+// from the cursor's thing instead (keyedSpec), as a right click's opens at the
+// pointer.
+const CURSOR_BOX = sharedKey("nocturne.cursor-box", nullable(object({ x: isNumber, y: isNumber, w: isNumber, h: isNumber })));
+
+let keyed = false;
+
+/** The cursor's band or ring (or a box over the cursor's thing), reporting where it's drawn. */
+export const cursorMark = (el: Element): Element => el.id("nav-cursor").on_bounds_change((b) => {
+  writeShared(setShared, CURSOR_BOX, { x: Math.round(b.x), y: Math.round(b.y), w: Math.round(b.width), h: Math.round(b.height) });
+});
+
+/** Runs a key of the cursor's thing (a sidebar's or the strip's verb). */
+export function byKey<T>(go: () => T): T {
+  keyed = true;
+
+  try {
+    return go();
+  } finally {
+    keyed = false;
+  }
+}
+
+/** The cursor's thing (window px) while its key runs; null otherwise. */
+export function keyedAt(): Rect | null {
+  return keyed ? readShared(shared, CURSOR_BOX, null) : null;
+}
+
+/** An overlay opened while a cursor's key runs: a dialog (the middle) or a popup at the pointer
+ *  hangs from the cursor's thing instead (under it, above it near the foot); else as asked. */
+export function keyedSpec(spec: OverlaySpec): OverlaySpec {
+  const box = keyedAt();
+
+  if (!box || (spec.kind !== "dialog" && (spec.kind !== "popup" || spec.at))) return spec;
+
+  return { ...spec, ...overlayOf({ rect: box }) };
+}
+
 /** On a row (a space, a firefly, a usage window): the popup's current-row
  *  look, a dithered band with a blue edge. `el` must be relative. */
 export function navRow<E extends Element>(t: Theme, el: E, on: boolean): E {
-  return on ? el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : el;
+  return on ? el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)).child(cursorMark(div().absolute().inset_0())) : el;
 }
 
 /** On a button or a chip: a square blue ring around it. `el` must be relative. */
 export function navRing<E extends Element>(t: Theme, el: E, on: boolean): E {
-  return on ? el.child(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent)) : el;
+  return on ? el.child(cursorMark(div().absolute().top(0).left(0).size_full().border(1).border_color(t.accent))) : el;
 }
 
 // The open sky's firefly square: the dots of art/glow.svg span 8..34 of its

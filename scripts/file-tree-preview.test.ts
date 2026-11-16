@@ -66,7 +66,7 @@ const input = () => {
 };
 const base = {
   h_flex: () => new Element(), v_flex: () => new Element(), v_virtual_list: () => new Element(), Scrollbar: { vertical: () => new Element() },
-  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
+  VirtualListScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) }, InputState: { new: input }, Input: { new: () => new Element("input") },
   TextView: { markdown: (id: string, text: string) => new Element("markdown", text) },
 };
 

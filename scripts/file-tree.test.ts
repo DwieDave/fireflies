@@ -390,8 +390,7 @@ test("v opens Neovim beside; o a folder in a new files pane; y copies; q and esc
 test("the right-click menu runs by key or enter; it opens under the pointer and draws Open in Neovim", () => {
   world.panes = [{ pane: "pf", tab: "t1", mod: "file-tree", props: { path: "/repo", slot: "s1" } }];
   const view = pane({ path: "/repo", slot: "s1" }, TREE);
-  view.mouse = { x: 30, y: 90 };
-  view.openMenu({ path: "README.md", name: "README.md", dir: false }, cx);
+  view.openMenu({ path: "README.md", name: "README.md", dir: false }, cx, { x: 30, y: 90 });
   expect(view.menu.at).toEqual({ x: 30, y: 90 });
   const labels = walk(view.render()).flatMap((e: any) => e.nodes).filter((n: any) => typeof n === "string");
   expect(labels).toContain("Open in Neovim");
@@ -1580,6 +1579,47 @@ test("a scrolled list maps the pointer to the row under it", () => {
   scrollTop.y = 0;
   expect(view.hitAt({ x: 40, y: logic.TREE_TOP + 5 })).toEqual({ row: view.listed[0] });
   expect(view.hitAt({ x: 40, y: 20 })).toBeNull();
+});
+
+test("its menu stands at the pointer (flipped near the edges), under the selected row by m, in the middle for the root by m", () => {
+  world.panes = [{ pane: "pf", tab: "t1", mod: "file-tree", props: { path: "/repo", slot: "s1" } }];
+  const view = pane({ path: "/repo", slot: "s1" }, TREE);
+  view.size = { width: 400, height: 600 };
+  view.render(cx);
+  const box = () => {
+    const m = walk(view.render(cx)).find((e: any) => e.calls.some((c: any) => c[0] === "id" && c[1][0] === "nf-menu"));
+    const arg = (k: string) => m.calls.find((c: any) => c[0] === k)?.[1][0];
+    return { x: arg("left"), y: arg("top"), w: arg("w") };
+  };
+  const h = () => view.menu.items.length * 20 + 20;
+  // A right click in the open: just past the press.
+  view.openMenu(view.listed[1], cx, { x: 30, y: 90 });
+  expect(box()).toMatchObject({ x: 32, y: 92 });
+  // Near the right and bottom edges: flipped left of and above the press, never over it.
+  view.openMenu(view.listed[1], cx, { x: 390, y: 590 });
+  expect(box()).toEqual({ x: 390 - 2 - 240, y: 590 - 2 - h(), w: 240 });
+  view.menu = null;
+  // m on the selected row: under it at its left edge.
+  view.sel = view.listed[2].path;
+  view.key({ key: "m" }, cx);
+  expect(view.menu.at).toEqual({ x: 0, y: logic.TREE_TOP + 2 * logic.ROW_H, w: 400, h: logic.ROW_H });
+  expect(box()).toMatchObject({ x: 8, y: logic.TREE_TOP + 3 * logic.ROW_H });
+  view.menu = null;
+  // Scrolled: the row's place on screen; out of sight: the middle.
+  scrollTop.y = logic.ROW_H;
+  view.key({ key: "m" }, cx);
+  expect(view.menu.at.y).toBe(logic.TREE_TOP + logic.ROW_H);
+  view.menu = null;
+  scrollTop.y = 40 * logic.ROW_H;
+  view.key({ key: "m" }, cx);
+  expect(view.menu.at).toBeNull();
+  scrollTop.y = 0;
+  view.menu = null;
+  // Nothing selected: the root's menu, in the middle.
+  view.sel = "";
+  view.key({ key: "m" }, cx);
+  expect(view.menu.row.path).toBe("");
+  expect(box()).toMatchObject({ x: 80, y: Math.round((600 - h()) / 2.4) });
 });
 
 // ---- the narrow panel's filter line: two rows

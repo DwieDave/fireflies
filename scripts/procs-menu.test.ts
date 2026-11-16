@@ -225,23 +225,24 @@ test("a right-click opens the menu at the pointer (unzoomed), selects its row, a
   expect(t.cur()).toBe("p:50118");
   expect(t.d.menu.at).toEqual({ x: 120, y: 150 });
   t.draw();
-  expect(ids["pm-menu"].css.left[0]).toBe(120);
-  expect(ids["pm-menu"].css.top[0]).toBe(150);
+  // Just past the press (menu-place.ts GAP), never under it.
+  expect(ids["pm-menu"].css.left[0]).toBe(122);
+  expect(ids["pm-menu"].css.top[0]).toBe(152);
   // Its row's name in its top edge.
   expect(words(ids["pm-menu"])).toContain("node 50118");
-  // Near the right edge it moves in; near the bottom it opens upward, above the pointer.
+  // Near the right edge it flips left of the press; near the bottom it opens upward, above the press.
   const { menuPlace, menuH, MENU_W } = await import("../defaults/mods/procs/menu-view.ts");
   const { W, H } = await import("../defaults/mods/procs/state.ts");
-  expect(menuPlace({ at: { x: 460, y: 100 }, above: 100 }, 5).x).toBe(W - 2 - MENU_W - 8);
-  expect(menuPlace({ at: { x: 40, y: 520 }, above: 520 }, 5).y).toBe(520 - menuH(5));
-  expect(menuPlace({ at: { x: 40, y: 520 }, above: 496 }, 5).y).toBe(496 - menuH(5));
-  expect(menuPlace({ at: { x: 40, y: 100 }, above: 76 }, 5).y).toBe(100);
-  // Never over the top either.
-  expect(menuPlace({ at: { x: 40, y: 540 }, above: 20 }, 8).y).toBe(8);
-  expect(menuPlace({ at: { x: 40, y: 540 }, above: 540 }, 8).y + menuH(8)).toBeLessThanOrEqual(H - 2 - 8);
+  expect(menuPlace({ at: { x: 460, y: 100 } }, 5).x).toBe(460 - 2 - MENU_W);
+  expect(menuPlace({ at: { x: 40, y: 520 } }, 5).y).toBe(520 - 2 - menuH(5));
+  expect(menuPlace({ at: { x: 40, y: 100 } }, 5).y).toBe(102);
+  // Never over the top, nor past the foot.
+  expect(menuPlace({ at: { x: 40, y: 20 } }, 30).y).toBeGreaterThanOrEqual(8);
+  expect(menuPlace({ at: { x: 40, y: 540 } }, 8).y + menuH(8)).toBeLessThanOrEqual(H - 2 - 8);
+  expect(menuPlace({ at: { x: W - 10, y: 100 } }, 5).x + MENU_W).toBeLessThanOrEqual(W - 10);
 });
 
-test("m opens it under the selected row, and over the row near the deck's foot", async () => {
+test("m opens it under the selected row at its left edge, and over the row near the deck's foot", async () => {
   probeText = probe(PS + Array.from({ length: 40 }, (_, i) => `${70000 + i} 50118 50112 dev                     00:10   0.0   1000 /bin/sleep ${i}\n`).join(""), LSOF);
   const t = await deck();
   t.draw();
@@ -249,7 +250,11 @@ test("m opens it under the selected row, and over the row near the deck's foot",
   expect(t.d.menu.key).toBe("s:s1");
   const { menuPlace, menuH } = await import("../defaults/mods/procs/menu-view.ts");
   const { HEAD, COLS, ROW, STRIP_H, H } = await import("../defaults/mods/procs/state.ts");
-  expect(t.d.menu.at).toEqual({ x: 40, y: HEAD + STRIP_H + COLS + ROW });
+  // The row's rectangle: the menu stands right under it, at the deck's margin.
+  expect(t.d.menu.at).toEqual({ x: 0, y: HEAD + STRIP_H + COLS, w: t.d.width, h: ROW });
+  t.draw();
+  expect(ids["pm-menu"].css.top[0]).toBe(HEAD + STRIP_H + COLS + ROW);
+  expect(ids["pm-menu"].css.left[0]).toBe(8);
   await t.press("escape");
   expect(t.d.menu).toBe(null);
   // q closes it too (no entry is q's), and only it: the deck stays.
@@ -267,7 +272,7 @@ test("m opens it under the selected row, and over the row near the deck's foot",
   // (Another machine's space offers nothing: no menu opens on it.)
   const m = t.d.menu;
   const at = menuPlace(m, m.entries.length);
-  expect(at.y + menuH(m.entries.length)).toBeLessThanOrEqual(m.above);
+  expect(at.y + menuH(m.entries.length)).toBeLessThanOrEqual(m.at.y);
   expect(at.y + menuH(m.entries.length)).toBeLessThanOrEqual(H - 2);
 });
 

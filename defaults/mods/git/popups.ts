@@ -21,6 +21,8 @@ import type { FormModifiers, Stop } from "./form-keys.ts";
 import { formKey, formHints, ring } from "./form-keys.ts";
 import type { KeyRow, KeySection } from "./keyhelp.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
+import { type Anchor, placeMenu } from "./menu-place.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 const mac = () => appWindow().platform === "macos";
 
@@ -40,7 +42,8 @@ function split(k: string): [string, FormModifiers] {
   return [key, { ...(shift ? { shift } : null), ...(control ? { control } : null), ...(platform ? { platform } : null) }];
 }
 
-const ROW = 20;
+// A menu's row, and the options bar under the body (draw.ts hints) menus stay clear of.
+const ROW = 20, OPTIONS_BAR = 22;
 
 /** What the popups need of the window. */
 export interface PopupHost {
@@ -83,8 +86,9 @@ export interface KeysOptions {
 export interface MenuOptions {
   readonly title: string;
   readonly items: readonly MenuItem[];
-  /** Where it opens (a right-click), else centered. */
-  readonly at?: { readonly x: number; readonly y: number } | null;
+  /** What it stands at (menu-place.ts): the press (a right-click), the selected row (its key),
+   *  else (null) centered; left out: the view's menuNear. */
+  readonly at?: Anchor;
   /** What it says with no items. */
   readonly empty?: string | null;
 }
@@ -122,7 +126,7 @@ export interface CommitOptions {
 /** The popup that's open. */
 type Popup =
   | { readonly kind: "keys"; readonly title: string; readonly sections: readonly KeySection[]; readonly rows: readonly KeyRow[]; sel: number }
-  | { readonly kind: "menu"; readonly title: string; readonly items: readonly MenuItem[]; sel: number; readonly at: { readonly x: number; readonly y: number } | null; readonly empty: string | null }
+  | { readonly kind: "menu"; readonly title: string; readonly items: readonly MenuItem[]; sel: number; readonly at: Anchor; readonly empty: string | null }
   | ConfirmPopup
   | PromptPopup
   | CommitPopup;
@@ -593,21 +597,20 @@ export class Popups {
     const shown = Math.min(p.items.length || 1, Math.max(4, Math.floor((size.height - 120) / ROW)));
     const first = Math.max(0, Math.min(p.sel - Math.floor(shown / 2), p.items.length - shown));
     const h = shown * ROW + 20;
-    const mid = this.center(size, w, h);
-    const x = p.at ? Math.min(Math.max(8, p.at.x), size.width - w - 8) : mid.x;
-    const y = p.at ? Math.min(Math.max(8, p.at.y), size.height - h - 30) : mid.y;
+    // At the press or under the row (menu-place.ts), clear of the options bar; else the middle.
+    const { x, y } = p.at ? placeMenu({ width: w, height: h }, { width: size.width, height: size.height - OPTIONS_BAR }, p.at) : this.center(size, w, h);
     const keyW = Math.max(30, ...p.items.map((it) => keyLabel(it.key ?? "").length * 7 + 14));
 
     const rows = p.items.slice(first, first + shown).map((it, n) => {
       const i = first + n, sel = i === p.sel;
 
       if (it.section !== undefined) {
-        return h_flex().id(`mi-${i}`).h(ROW).px(10).items_center().text_size(10).text_color(t.ansi8).child(it.section.toUpperCase());
+        return h_flex().id(`mi-${i}`).h(ROW).px(10).items_center().text_size(10).text_color(t.muted).child(it.section.toUpperCase());
       }
 
       const row = h_flex().id(`mi-${i}`).relative().h(ROW).px(10).gap(10).items_center().text_size(11)
         .text_color(it.off ? t.dim : sel ? t.foreground : t.muted)
-        .hover((s) => s.bg(`${t.ansi0}66`))
+        .hover((s) => s.bg(`${edgeTone(t)}66`))
         .on_mouse_move((_e, cx) => {
           if (p.sel !== i && !it.off) {
             p.sel = i;
@@ -616,7 +619,7 @@ export class Popups {
         })
         .on_click((_e, cx) => { cx.stop_propagation(); this.runItem(it, cx); cx.notify(); });
 
-      const marked = sel ? row.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
+      const marked = sel ? row.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
 
       const labelled = marked
         .child(div().relative().w(keyW).flex_none().text_color(t.accent).child(keyLabel(it.key ?? "")))
@@ -641,7 +644,7 @@ export class Popups {
       .children(p.lines.map(([s, c], i) => div().id(`cf-l-${i}`).text_color(ink(t, c ?? "muted")).child(s)))) : text;
 
     const checked = p.checks.length ? lined.child(v_flex().gap(2).text_size(11)
-      .children(p.checks.map((c, i) => ring(h_flex().id(`cf-c-${i}`).px(4).gap(8).items_center().hover((s) => s.bg(`${t.ansi0}66`)), p.at === i, t.accent)
+      .children(p.checks.map((c, i) => ring(h_flex().id(`cf-c-${i}`).px(4).gap(8).items_center().hover((s) => s.bg(`${edgeTone(t)}66`)), p.at === i, t.accent)
         .on_click((_e, cx) => { cx.stop_propagation(); p.at = i; c.on = !c.on; cx.notify(); })
         .child(div().w(18).text_color(t.accent).child(c.key))
         .child(div().text_color(c.on ? t.foreground : t.dim).child(c.on ? "[x]" : "[ ]"))
@@ -667,9 +670,9 @@ export class Popups {
       if (!id) return pair.id(`hint-${i}`);
 
       const go = id === ids[0] ? yes : no;
-      const button = ring(pair.id(id).h(18).px(4).hover((s) => s.bg(`${t.ansi0}66`)), on === id, t.accent);
+      const button = ring(pair.id(id).h(18).px(4).hover((s) => s.bg(`${edgeTone(t)}66`)), on === id, t.accent);
 
-      return (on === id ? button.bg(t.ansi0) : button)
+      return (on === id ? button.bg(edgeTone(t)) : button)
         .on_mouse_down("left", stop)
         .on_click((_e, cx) => { cx.stop_propagation(); go(cx); cx.notify(); });
     }));
@@ -689,10 +692,10 @@ export class Popups {
 
     const listed = sug.length > 0 ? noted.child(v_flex().children(sug.map((s, i) => {
       const row = h_flex().id(`ps-${i}`).relative().h(ROW).px(6).gap(10).items_center().text_size(11)
-        .hover((st) => st.bg(`${t.ansi0}66`))
+        .hover((st) => st.bg(`${edgeTone(t)}66`))
         .on_click((_e, cx) => { cx.stop_propagation(); p.pick = i; this.submit(cx); cx.notify(); });
 
-      const marked = i === p.pick ? row.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
+      const marked = i === p.pick ? row.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : row;
       const valued = marked.child(div().relative().flex_1().min_w(0).truncate().text_color(i === p.pick ? t.foreground : t.muted).child(s.value));
 
       return s.sub ? valued.child(div().relative().flex_none().text_color(t.dim).child(s.sub)) : valued;
@@ -720,11 +723,11 @@ export class Popups {
 
     const body = v_flex().px(14).pt(6).pb(12)
       .child(label("Summary", h_flex().text_size(11).child(div().text_color(count).child(String(len))).child(div().text_color(t.dim).child(" / 50"))))
-      .child(div().id("cm-sum").border(1).border_color(p.at === 0 ? t.accent : t.ansi0).px(6).h(26).flex().items_center()
+      .child(div().id("cm-sum").border(1).border_color(p.at === 0 ? t.accent : edgeTone(t)).px(6).h(26).flex().items_center()
         .on_mouse_down("left", () => { p.at = 0; p.input.focus(); })
         .child(Input.new(p.input).w_full().text_size(12).text_color(t.foreground)))
       .child(label("Description"))
-      .child(div().id("cm-desc").border(1).border_color(p.at === 1 ? t.accent : t.ansi0).px(6).py(4).h(110)
+      .child(div().id("cm-desc").border(1).border_color(p.at === 1 ? t.accent : edgeTone(t)).px(6).py(4).h(110)
         .on_mouse_down("left", () => { p.at = 1; p.desc.focus(); })
         .child(Textarea.new(p.desc).w_full().h_full().text_size(12).text_color(t.foreground)))
       .child(div().mt(10).child(this.hintRow(t, p, (cx) => this.submit(cx), () => this.cancelCommit(p))));

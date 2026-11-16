@@ -16,6 +16,7 @@ import { BAR, codeAndSource, dither, FIND, GUTTER_INSET, HINTS, serverId, server
 import { cardOverflows, cardShown, followLink, hoverLevel, waitWords } from "./card.ts";
 import { logStep } from "./lsp-client.ts";
 import { stripH } from "./pane-bar.ts";
+import { edge } from "./tones.ts";
 
 export const CARD_W = 520;
 
@@ -89,7 +90,7 @@ export function cardLinksView(ed: EditorPane, t: Theme, c: Card): Element {
         .text_size(10)
         .text_color(t.dim)
         .child(div().flex_none().child("LINKS"))
-        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.muted, 1)))
         .when(c.links.length > list.length, (el) => el.child(div().flex_none().child(`${list.length} of ${c.links.length}`))),
     )
     .children(
@@ -108,8 +109,8 @@ export function cardLinksView(ed: EditorPane, t: Theme, c: Card): Element {
           .border(1)
           .border_color(on ? t.accent : t.background)
           .text_color(on ? t.foreground : t.muted)
-          .when(on, (el) => el.bg(t.ansi0))
-          .hover((s) => s.text_color(t.foreground).border_color(t.ansi0))
+          .when(on, (el) => el.bg(edge(t)))
+          .hover((s) => s.text_color(t.foreground).border_color(edge(t)))
           .on_mouse_down("left", stop)
           .on_click((_e, cx) => followLink(ed, l.url, cx))
           .child(
@@ -248,7 +249,7 @@ function problemRow(t: Theme, d: Problem, i: number, code: string): Element {
           .id(`card-problem-${i}`)
           .relative()
           .border_b(1)
-          .border_color(t.ansi0)
+          .border_color(edge(t))
           .child(div().absolute().left(0).right(0).top(0).h(3).child(dither(sevColor[d.severity], 1)))
           .child(div().px(12).pt(9).pb(4).text_size(11.5).text_color(t.foreground).font_family(code).child(d.message))
           .when(d.related.length > 0, (el) =>
@@ -287,7 +288,7 @@ function cardBox(ed: EditorPane, t: Theme, c: Card, place: CardPlace, content: E
     .max_h(place.maxH)
     .bg(t.background)
     .border(1)
-    .border_color(waiting ? t.ansi8 : t.ansi0)
+    .border_color(waiting ? t.muted : edge(t))
     .shadow_lg()
     .overflow_hidden()
     .on_hover((h, cx) => {
@@ -344,7 +345,7 @@ function cardFoot(ed: EditorPane, t: Theme, c: Card, lang: string): Element {
       .items_center()
       .justify_center()
       .border(1)
-      .border_color(on ? t.ansi0 : t.background)
+      .border_color(on ? edge(t) : t.background)
       .text_color(on ? t.foreground : t.dim)
       .when(on, (el) =>
         el
@@ -371,7 +372,7 @@ function cardFoot(ed: EditorPane, t: Theme, c: Card, lang: string): Element {
       .items_center()
       .overflow_hidden()
       .border_t(1)
-      .border_color(t.ansi0)
+      .border_color(edge(t))
       .text_size(10)
       .text_color(t.dim)
       // The server's name, unless the type depth needs the room.

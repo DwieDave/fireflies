@@ -17,6 +17,7 @@ import { v_flex } from "gpui-base";
 import { props, theme, panes, run, openOverlay, closeOverlay, setShared, nextCommand } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNull, isString, object, oneOf } from "./guard.ts";
+import { edge } from "./tones.ts";
 
 /** The props this mod was opened with, the fields read here: git's own
  *  (folder, on, pr, repo, scope, …) are handed on as they are. `back` is the
@@ -105,11 +106,11 @@ export default class DiffMoved extends View {
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => { if (e.key === "enter") { this.open(); cx.stop_propagation(); } })
-      .child(svg("mods/nocturne/art/moon-8.svg").w(40).h(40).text_color(t.ansi8).opacity(0.6))
+      .child(svg("mods/nocturne/art/moon-8.svg").w(40).h(40).text_color(t.muted).opacity(0.6))
       .child(div().text_color(t.foreground).child("The diff lives in Git now"))
-      .child(div().text_color(t.ansi8).child("Git's Files panel, Review tab: cmd-g, then 2 and ]"))
+      .child(div().text_color(t.muted).child("Git's Files panel, Review tab: cmd-g, then 2 and ]"))
       .child(div().id("diff-moved-open").px(8).py(3).border(1).border_color(t.accent).text_color(t.accent)
-        .hover((s) => s.bg(t.ansi0))
+        .hover((s) => s.bg(edge(t)))
         .on_click(() => this.open())
         .child("enter  open the review"));
   }

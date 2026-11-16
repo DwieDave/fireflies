@@ -31,7 +31,7 @@ const el: any = new Proxy(function () {}, {
 mock.module("gpui-kit", () => ({ View: class {}, div: () => el, svg: () => el, img: () => el, image: () => el, canvas: () => el, PathBuilder: { fill: () => el, stroke: () => el }, Background: { checkerboard: () => el } }));
 const any = new Proxy(function () {}, { get: (_t, k) => (k === "then" ? undefined : () => el), apply: () => el });
 mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {} }) }, VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) }, VirtualListScrollHandle: { new: () => ({ scroll_to_item() {} }) },
   InputState: { new: () => ({ on() {}, value: () => "" }) }, Input: { new: () => el }, EditorState: { new: () => ({ on() {} }) }, Editor: { new: () => el },
   TextView: any, Scrollbar: any, v_virtual_list: () => el,
 }));
