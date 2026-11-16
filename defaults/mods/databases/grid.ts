@@ -23,7 +23,7 @@ import type { GridColumn } from "./columns.ts";
 import type { Range } from "./select.ts";
 import { hasRange, inRange, rangeOf } from "./select.ts";
 import { dither, pip, stop, zoom } from "./kit.ts";
-import { edge as edgeTone, tone } from "./tones.ts";
+import { edge as edgeTone, tone } from "@fireflies/tones";
 
 /** A character's width and a row's height, in px at the grid's text size. */
 export const CH = 7.8;

@@ -16,7 +16,7 @@ import type { Color, Context, Element, FocusHandle, MouseButtonEvent } from "gpu
 import { Background, PathBuilder } from "gpui-kit";
 import type { PaneInfo, Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 export const MOD = "editor";
 

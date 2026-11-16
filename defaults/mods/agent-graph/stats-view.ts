@@ -13,7 +13,7 @@ import type { StatsGroup } from "./state.ts";
 import { STATS, stop, money } from "./state.ts";
 import { pickNode } from "./navigate.ts";
 import type { default as Agents } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** "41.2k tok · $0.82" for a transcript, once its tokens are known. */
 export function tokens(v: Agents, file: string | null): string | null {

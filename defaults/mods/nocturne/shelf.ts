@@ -19,7 +19,7 @@ import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
 import { pinActs } from "./sky-keys.ts";
 import type Sky from "./sky.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A web pane's props, as far as its name goes: its slot and the address it opened on. */
 export const isWebProps = object({}, { slot: isString, url: isString });

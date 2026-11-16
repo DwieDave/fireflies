@@ -45,7 +45,7 @@ import type { Panel } from "./panels.ts";
 import { openWorktrees } from "./git.ts";
 import { openSpacePicker } from "./newspace.ts";
 import { readLaunchers } from "./launchers.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** An agent as knownAgents() reports it (and the shipped new-menu keeps it). */
 const isKnownAgent = object(

@@ -39,7 +39,7 @@ import { togglePin } from "./pinned.ts";
 import { forwardRunning } from "./forward.ts";
 import { missingView, readingView } from "./read-view.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A row's handlers: picked (a click), opened (a double click), its menu (a right click, at the
  *  pointer); a press that may become a drag (press.ts), the drop target it is, its hover. */

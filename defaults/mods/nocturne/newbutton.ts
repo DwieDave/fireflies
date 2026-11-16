@@ -21,7 +21,7 @@ import { dither, dropBelow, navRing, toolGround, toolHover } from "./kit.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { CURSOR_KEY, isLayoutNode } from "./nav.ts";
 import type { LayoutNode } from "./nav.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const ROLE = "newbutton";
 

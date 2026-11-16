@@ -26,7 +26,7 @@ import { slimRun, slimJob, newest, LIMITS } from "./cache.ts";
 import type { Waiting } from "./dispatchForm.ts";
 import { DispatchForm } from "./dispatchForm.ts";
 import type { Host, ReadOptions, RunFilter } from "./host.ts";
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 import { runsPanel, graphPanel, stepsPanel, logPanel } from "./actions-panels.ts";
 
 export const ROW = 38, STEP = 24, LINE = 18;

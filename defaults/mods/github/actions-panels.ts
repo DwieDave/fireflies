@@ -16,7 +16,7 @@ import { dither, pip, panel, empty, band, TONE_WORD, sweep, stop, unzoom, unzoom
 import { canvas, layout, NW, NH } from "./graph.ts";
 import type { default as Actions } from "./actions.ts";
 import { ROW, STEP, LINE } from "./actions.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A run in the list: its tone, workflow and title; number, branch, event, how long or how long ago. */
 export function runRow(t: Theme, r: Run, sel: boolean, active: boolean): Element {

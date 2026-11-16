@@ -25,9 +25,9 @@ import { changePinned } from "./pinned.ts";
 import { IO } from "./session.ts";
 import { test } from "./conns.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
-import { hint } from "./keyhelp.ts";
+import { hint } from "@fireflies/keyhelp";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The form's text fields. */
 type Field = "name" | "host" | "port" | "user" | "database" | "path" | "url" | "password";

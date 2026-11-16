@@ -17,7 +17,7 @@ import type { DbTable, Separator, Table } from "./table.ts";
 import { MAX_BYTES } from "./table.ts";
 import type { Patch } from "./diff.ts";
 import type { default as Viewer } from "./viewer.ts";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 export const MOD = "preview";
 

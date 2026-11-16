@@ -21,7 +21,7 @@ import { contextMenu } from "./bars.ts";
 import { openPane } from "./panes.ts";
 import { pickedKeys, switchSide } from "./staging.ts";
 import { readMore } from "./content.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function mainPanel(v: GitView, t: Theme) {
   const active = v.focus === "main" && !v.popups.open;

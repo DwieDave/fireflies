@@ -16,7 +16,7 @@ import { BAR, codeAndSource, dither, FIND, GUTTER_INSET, HINTS, serverId, server
 import { cardOverflows, cardShown, followLink, hoverLevel, waitWords } from "./card.ts";
 import { logStep } from "./lsp-client.ts";
 import { stripH } from "./pane-bar.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const CARD_W = 520;
 

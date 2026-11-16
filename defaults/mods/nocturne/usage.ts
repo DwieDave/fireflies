@@ -29,7 +29,7 @@ import type { Nav } from "./nav.ts";
 import { runtime } from "./fx.ts";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.ts";
 import type { ProviderId, Usage, UsageServices, UsageWindow } from "./limits.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const FOLDED = sharedKey("nocturne.usageFolded", isBoolean);
 const TICK = "30 seconds";

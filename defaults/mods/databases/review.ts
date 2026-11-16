@@ -15,7 +15,7 @@ import type { SaveStatement } from "./save-sql.ts";
 import { discardAll, dropEdit, keepEdit, liveEdits, nextEdit, openReview, runSave, toggleNull, undoCell } from "./cell-edit.ts";
 import { shownGrid } from "./act-grid.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A key and what it does, as one click target. */
 function action(t: Theme, id: string, key: string, what: string, go: (cx: Context) => void, lit = false): Element {

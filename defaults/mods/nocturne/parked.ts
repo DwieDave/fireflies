@@ -17,7 +17,7 @@ import { dither, pip, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
 import { mark, middleCloses, paneMenu, paneName } from "./header.ts";
 import type { MiddleHeld } from "./header.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 
 /** A chip's props from the app: its pane. */

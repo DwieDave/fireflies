@@ -30,7 +30,7 @@ import { Engine, items, OPEN_KEY, terminalsNow } from "./engine.ts";
 import { counts } from "./model.ts";
 import { openOverview, toggleOverview, overviewOpen, noteWindow } from "./open.ts";
 import { ART, dither, stop, toolGround, toolHover } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const POLL = 1500;
 

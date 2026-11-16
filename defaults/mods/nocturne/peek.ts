@@ -16,7 +16,7 @@ import { isTerminal } from "./guards.ts";
 import Header from "./header.ts";
 import type { HeaderPane } from "./header.ts";
 import { dither } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The bar's props: the terminal, whether it floats, its overlay, the float's views' names. */
 const isPeekProps = object({}, { terminal: isString, float: isBoolean, overlay: isString, views: arrayOf(isString) });

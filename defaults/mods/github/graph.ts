@@ -19,7 +19,7 @@ import { route, NW, NH, RW } from "./wires.ts";
 
 export { NW, NH, GAP_X, GAP_Y, PAD, RW } from "./wires.ts";
 
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Which jobs each job waits for (model.ts jobParents), or null. */
 export type Parents = ReadonlyMap<number, readonly number[]> | null;

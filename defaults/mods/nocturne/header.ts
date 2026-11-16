@@ -41,7 +41,7 @@ import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
 import { launchers, launcherIcon } from "./launchers.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {

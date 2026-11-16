@@ -17,7 +17,7 @@ import { absOf, isCut } from "./file-ops.ts";
 import type { default as Files } from "./main.ts";
 import type { Side } from "./split-size.ts";
 import { folderFacts, DIVIDER } from "./split-size.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
   // The name's input (a new item's row, or the row being renamed) in place of the name.

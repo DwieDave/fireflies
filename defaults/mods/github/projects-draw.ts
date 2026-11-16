@@ -16,7 +16,7 @@ import { cardFields, editableFields, initials, loginSlot, valueText, wrap, ansiK
 import { choose, menuFields, openProjects, options } from "./projects-menus.ts";
 import { flipped, toggleFold } from "./projects-keys.ts";
 import type { default as Projects, ColumnRow, Menu } from "./projects.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 export const FOLD_W = 28, GAP = 6, DETAIL_W = 340, CHAR = 7.7, LINE = 15, LANE_H = 22;
 

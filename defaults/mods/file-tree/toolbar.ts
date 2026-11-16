@@ -7,7 +7,7 @@ import type { Context, Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex, v_flex, Input } from "gpui-base";
 import { parent, deleteManyQuestion, base } from "./logic.ts";
-import { keysHint, keysView, SECTION } from "./keyhelp.ts";
+import { keysHint, keysView, SECTION } from "@fireflies/keyhelp";
 import { MOD, PER_FOLDER, TOTAL, tilde, ICONS } from "./state.ts";
 import { stop, dither, ring } from "./paint.ts";
 import { toggleLook } from "./look.ts";
@@ -20,7 +20,7 @@ import type { NewKind } from "./fit.ts";
 import { lensLayout, toolbarFit, KEYS, ADDS } from "./fit.ts";
 import { lookSide } from "./split-size.ts";
 import { deleteQuestion } from "./ops.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function toolChip(v: Files, t: Theme, id: string, label: string, action: (cx: Context) => void, on = true): Element {
   return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()

@@ -243,6 +243,40 @@ fn mods_import_effect_and_the_kit_by_name_and_share_them(cx: &mut TestAppContext
     cx.run_until_parked();
 }
 
+/// Every library under defaults/lib/@fireflies (a folder with a package.json)
+/// resolves from a mod by its bare name, the app's modules it imports
+/// (`herdr`, `gpui-kit`) included: a library added there is served without
+/// registering it anywhere else.
+#[gpui::test]
+fn every_fireflies_library_resolves_from_a_mod_by_its_name(cx: &mut TestAppContext) {
+    cx.update(gpui_shell::init);
+    export_libraries();
+    let names: std::collections::BTreeSet<&str> = MOD_LIBRARIES
+        .iter()
+        .filter_map(|(path, _)| path.strip_prefix("@fireflies/")?.strip_suffix("/package.json"))
+        .collect();
+    assert!(names.len() > 3 && names.contains("kit") && names.contains("keyhelp"), "{names:?}");
+    let tree = Tree::new();
+    let imports: String = names.iter().enumerate().map(|(i, name)| format!("import * as l{i} from \"@fireflies/{name}\";\n")).collect();
+    let counts: Vec<String> = names.iter().enumerate().map(|(i, name)| format!("{name}=${{Object.keys(l{i}).length > 0}}")).collect();
+    tree.write("main.ts", &format!(
+        "import {{ View, div }} from \"gpui-kit\";\n{imports}export default class P extends View {{ render() {{ return div().child(`{}`); }} }}\n",
+        counts.join(" ")
+    ));
+    let policy = Policy::new().with_host_module(module(Instance { name: String::new(), props: Value::Null }, 0)).unwrap();
+    let runtime = ShellRuntime::new_isolated().unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    window.update(cx, |_, window, cx| {
+        let mut session = DescriptionSession::load(runtime.clone(), &tree.0, policy, window, cx).unwrap_or_else(|e| panic!("{e:#}"));
+        let tree = session.describe(window, cx).unwrap_or_else(|e| panic!("{e:#}"));
+        for name in &names {
+            assert!(tree.contains(&format!("{name}=true")), "@fireflies/{name}: {tree}");
+        }
+    }).unwrap();
+    window.update(cx, |_, window, _| window.remove_window()).unwrap();
+    cx.run_until_parked();
+}
+
 /// `herdr-app types <dir>` writes the @fireflies/* libraries where a mod in a
 /// repository of its own resolves them (node_modules), never Effect itself
 /// (that comes from npm at the kit's peer version).

@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, importMod } from "./mod-source.ts";
+import { asJs, guard, importMod, keyhelpWith } from "./mod-source.ts";
 
 // The files pane's preview split: file-tree (main.ts, logic.ts) and the
 // preview pane's viewer it mounts (its copy of preview/viewer.ts),
@@ -86,7 +86,7 @@ const kinds = await load(`${F}/kinds.ts`);
 const imageLogic = await load(`${F}/image.ts`, kinds);
 const { parse: parseTable, ...tableRest } = await load(`${F}/table.ts`);
 const { parse: parsePatch, ...diffRest } = await load(`${F}/diff.ts`);
-const keyhelp = await load(`${F}/keyhelp.ts`);
+const keyhelp = await keyhelpWith({ ...kit, ...base, ...herdr });
 const fileIcons = await load(`${F}/file-icons.ts`, kinds);
 const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable, ...diffRest, parsePatch, ...(await load(`${F}/keys.ts`)), ...keyhelp };
 // The viewer imported for real (the shared files it imports as the app loads them).

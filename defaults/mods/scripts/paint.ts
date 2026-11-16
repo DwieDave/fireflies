@@ -5,6 +5,7 @@ import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
 import type { Tone } from "./runs.ts";
 
+
 /** A run's state in the theme's colors. */
 export function toneColor(t: Theme, k: Tone): Color {
   switch (k) {

@@ -19,7 +19,7 @@ import type { Format } from "./export.ts";
 import { FORMATS, FORMAT_NAME, exportName, exportText, writeOut } from "./export.ts";
 import { IO, runOn } from "./session.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
-import { hint } from "./keyhelp.ts";
+import { hint } from "@fireflies/keyhelp";
 import type { default as DbView } from "./main.ts";
 
 /** What an export is of: a table (whole, its page, its filter), or a query's result. */

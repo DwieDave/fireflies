@@ -13,7 +13,7 @@ import { sideList } from "./lists.ts";
 import type { default as GitView } from "./main.ts";
 import { loadMain } from "./content.ts";
 import { cycleScreen } from "./navigate.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export function tabsTitle(v: GitView, t: Theme, p: Panel, active: boolean, num: number): Element[] {
   const parts = [div().text_color(active ? t.accent : t.dim).child(`[${num}]`)];

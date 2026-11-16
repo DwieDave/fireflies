@@ -16,7 +16,7 @@ import { div } from "gpui-kit";
 import type { Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import type { Theme } from "herdr";
 import { dither, unzoom } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Past this many layout px a press is a drag. */
 export const DRAG_FROM = 4;

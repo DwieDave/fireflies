@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/keyhelp",
+  "private": true,
+  "type": "module",
+  "description": "Nocturne's one key help: the ? keys entry that ends a bar and the keys overview. Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

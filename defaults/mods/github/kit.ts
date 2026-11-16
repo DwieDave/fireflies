@@ -8,10 +8,10 @@ import type { Color, Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { hint, keysHint } from "./keyhelp.ts";
+import { hint, keysHint } from "@fireflies/keyhelp";
 import type { Tone } from "./model.ts";
-import { edge as edgeTone } from "./tones.ts";
-import { flat } from "./layout-look.ts";
+import { edge as edgeTone } from "@fireflies/tones";
+import { flat } from "@fireflies/layout-look";
 
 export const ART = "mods/nocturne/art";
 

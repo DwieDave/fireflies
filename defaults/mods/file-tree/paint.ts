@@ -7,7 +7,7 @@ import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
 import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import { MOD } from "./state.ts";
-import { flat } from "./layout-look.ts";
+import { flat } from "@fireflies/layout-look";
 
 /** A git status letter's color (none for the folder's dot or a cut). */
 export function markColor(t: Theme, mark: string): Color | null {
