@@ -28,7 +28,7 @@ export function restoreTabs(view: Browser, url: string | null | undefined): void
     /* none kept */
   }
 
-  view.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(url ? target(url) : saved, zoom);
+  view.tabs = (savedTabs && Tabs.restore(savedTabs, zoom)) || Tabs.single(url ? target(url) : saved, zoom, view.engine);
 }
 
 /** The address field and the keyboard: a blank pane types into the field; one

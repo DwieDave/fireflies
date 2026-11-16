@@ -513,6 +513,10 @@ export interface Settings {
   readonly clipboard_write: boolean;
   readonly minimum_contrast: number;
   readonly links: "app" | "system";
+  /** The engine new web panes open in (cmd-click, "+ new" > Web); Chromium only counts while it is installed. */
+  readonly web_engine: "webkit" | "chromium";
+  /** What a Chromium tab does with a video it can't play (H.264, AAC, DRM). */
+  readonly chromium_video: "fallback" | "ask" | "error";
   readonly option_as_alt: "auto" | "off" | "on" | "left" | "right";
   readonly sounds: { readonly enabled: boolean; readonly done?: string; readonly blocked?: string };
   readonly editor: EditorLanguage & {

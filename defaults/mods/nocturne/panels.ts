@@ -15,6 +15,7 @@
 // instead (the menus say "Close …").
 
 import { spaces, panes, focused, run, home } from "herdr";
+import * as herdr from "herdr";
 import type { PaneInfo, SpaceInfo } from "herdr";
 import { folderCandidates } from "./folders.ts";
 import { ART } from "./kit.ts";
@@ -118,7 +119,28 @@ export function filesHere(inTab = false): void {
 
 /** The props this file opens mods with: a web pane's or files pane's slot, a
  *  folder and its machine, the agent graph's terminal, the git window's tab. */
-type ModProps = { slot?: string; folder?: string | null; on?: string | null; terminal?: string; review?: true; worktrees?: WorktreesAsk };
+type ModProps = { slot?: string; folder?: string | null; on?: string | null; terminal?: string; review?: true; worktrees?: WorktreesAsk; engine?: WebEngine };
+
+/** A web pane's engine (the browser mod's engine.ts). */
+export type WebEngine = "webkit" | "chromium";
+
+/** Chromium is enabled (Settings → Web): the native views list its kind. */
+export function chromiumReady(): boolean {
+  // Through the namespace: stock Herdr (and a test's stand-in) has no native views; the call throws.
+  try {
+    return herdr.nativeViewCapabilities().kinds.some((k) => k.kind === "chromium");
+  } catch {
+    return false;
+  }
+}
+
+/** What "+ new" > Web opens in: settings.json `web_engine`, Chromium only while ready. */
+export const webEngine = (): WebEngine => (chromiumReady() && herdr.settings().web_engine === "chromium" ? "chromium" : "webkit");
+
+/** A web pane in `engine` beside the focused one (the palette's "New web pane in …"). */
+export function webBeside(engine: WebEngine): void {
+  modBeside("browser", { slot: slot(), engine });
+}
 
 /** A mod beside the focused pane. */
 function modBeside(mod: string, props: ModProps): void {

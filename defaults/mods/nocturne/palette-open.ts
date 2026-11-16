@@ -11,7 +11,7 @@ import { focusedPane, panePinnedNow, pinPane, pinKey, movePin, jar, dockPane, do
 import type { PinTarget } from "./kit.ts";
 import { onShelf } from "./pins.ts";
 import { tabMove } from "./tabmove.ts";
-import { panels, here, terminalPane, terminalTab } from "./panels.ts";
+import { panels, here, terminalPane, terminalTab, chromiumReady, webEngine, webBeside } from "./panels.ts";
 import type { Here } from "./panels.ts";
 import { toggleDeck, lastFailed } from "./scripts.ts";
 import { toggleProcs } from "./procs.ts";
@@ -219,6 +219,14 @@ function tabEntries(): Entry[] {
  *  project; what goes there is pinned to the jar's shelf. The toast and the update note. */
 function dockAndNoteEntries(target: PinTarget | null): Entry[] {
   const out: Entry[] = [];
+
+  // The engine "+ new" > Web doesn't open (settings.json web_engine), while Chromium is enabled.
+  if (chromiumReady()) {
+    const other = webEngine() === "chromium" ? "webkit" : "chromium";
+
+    out.push({ name: `nocturne.web-${other}`, args: {}, group: "Open", icon: "monitor", title: `New web pane in ${other === "chromium" ? "Chromium" : "WebKit"}`,
+      words: "web browser page pane engine chromium chrome webkit safari other new", go: () => webBeside(other) });
+  }
 
   out.push({ name: "nocturne.dock-web", args: {}, group: "Open", icon: "monitor", bind: "nocturne.dock-web", title: "New web pane in the dock",
     words: "dock web browser page pane default space no folder shelf pin keep", go: () => dockWeb() });

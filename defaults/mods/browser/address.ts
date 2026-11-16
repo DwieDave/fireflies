@@ -107,8 +107,9 @@ export function editAddress(view: Browser) {
   view.input?.focus();
 }
 
-/** `browser.open:<{ url, slot? } or a URL>`: the page in a new tab
- *  in front, and this pane takes the keyboard (the editor's links). */
+/** `browser.open:<{ url, slot?, engine? } or a URL>`: the page in a new tab
+ *  in front (in `engine`, default the pane's), and this pane takes the
+ *  keyboard (the editor's links). */
 export function openCommand(view: Browser, value: string, cx: Context) {
   const a = Tabs.openArgs(value);
 
@@ -118,7 +119,7 @@ export function openCommand(view: Browser, value: string, cx: Context) {
 
   if (!url) return;
 
-  openTab(view, url, {}, cx);
+  openTab(view, url, a.engine ? { engine: a.engine } : {}, cx);
   view.claim();
 
   const me = view.ownPane();

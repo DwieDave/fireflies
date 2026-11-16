@@ -716,7 +716,10 @@ the highlighted line shows where it will land.
   from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
-  pages open in the system's browser. The web pane's bar, while it has the
+  pages open in the system's browser. A web pane opens in settings.json `web_engine`'s engine
+  (WebKit, or Chromium once enabled; see `web_engine`); each tab keeps its own, and a
+  Chromium tab's bar has a `chromium` chip before the address that reopens the page in
+  WebKit (`browser.other_engine` both ways). The web pane's bar, while it has the
   keyboard (whenever its pane is focused: a click on the bar, `pane.go`, a tab
   switch, agent.next, Cmd-Esc in the page): Enter / `i` into the page, `o` / `/` the address, `H` `L`
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
@@ -2485,6 +2488,15 @@ list or a machine's rename first.
 - `links`: `"app"` (default) opens web links in a web pane in Fireflies (macOS,
   the `browser` mod), `"system"` in the system's default browser
   (see Links above). Other schemes always go to the system. Applies at once.
+- `web_engine`: `"webkit"` (default) or `"chromium"`: the engine a new web pane opens in
+  (cmd-click on a link, "+ new" > Web, `browser.open` without `engine`). Chromium counts
+  only while it is enabled (Settings → Web, `chromium.install`); else WebKit. The other
+  engine opens from the palette ("New web pane in Chromium" / "… in WebKit", "Reopen the
+  page in the other engine") or with `engine` in the browser's props or `browser.open`.
+- `chromium_video`: what a Chromium tab does when its page asks for a video Chromium can't
+  play (H.264, AAC, DRM): `"fallback"` (default) reopens the page in WebKit at the same
+  address and says so in a toast, `"ask"` asks in a toast first, `"error"` leaves the page's
+  own error. Settings → Web.
 - `option_as_alt`: macOS only, `"auto"` (default), `"on"`, `"off"`, `"left"`, or `"right"`.
   Available in Settings → Keyboard.
   `"auto"` sends Option as Alt on US, US International, ABC and ABC-India;
