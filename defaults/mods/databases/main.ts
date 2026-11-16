@@ -79,7 +79,7 @@ import { focusArrived } from "./connstate.ts";
 import { dbsNow, loadDatabases } from "./dbs.ts";
 import { unzoom, unzoomSize } from "./kit.ts";
 import { beforeLeaving } from "./cell-edit.ts";
-import { Dividers, tracking } from "./dividers.ts";
+import { Dividers, tracking } from "@fireflies/dividers";
 import type { Pt } from "@fireflies/menu-place";
 import { originOf } from "@fireflies/menu-place";
 import type { Pressing } from "./press.ts";

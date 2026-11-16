@@ -7,8 +7,8 @@
 import { shared, setShared } from "herdr";
 import { isNumber, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import type { Divider, Edge, Sizes } from "./dividers.ts";
-import { GRAB } from "./dividers.ts";
+import type { Divider, Edge, Sizes } from "@fireflies/dividers";
+import { GRAB } from "@fireflies/dividers";
 import type { Place } from "./keys.ts";
 
 /** Under this width the view is one column (the pattern's one break per mod). */

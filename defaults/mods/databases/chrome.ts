@@ -22,7 +22,7 @@ import { barHints } from "./keys.ts";
 import { connsPanel, logPanel, structPanel, tablesPanel, NARROW_ORDER } from "./panels.ts";
 import { mainPanel } from "./main-view.ts";
 import { askBar, overBody } from "./popups.ts";
-import { divider } from "./dividers.ts";
+import { divider } from "@fireflies/dividers";
 import { GAP_X, GAP_Y, NARROW, wideDividers } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
 import { edge } from "@fireflies/tones";
