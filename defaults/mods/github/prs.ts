@@ -5,6 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
+import type { Pt } from "./menu-place.ts";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
@@ -574,6 +575,14 @@ export default class Prs {
             this.select(list.findIndex((p) => String(p.number) === key), cx);
             cx.notify();
           })
+          // A right-click on a row: that row's menu, at the pointer.
+          .on_item_secondary_click((key, e, cx) => {
+            cx.stop_propagation();
+            this.focus = "list";
+            this.select(list.findIndex((p) => String(p.number) === key), cx);
+            this.menu(e);
+            cx.notify();
+          })
           .size_full().track_scroll(this.listScroll));
 
     const right = h_flex().gap(6).items_center()
@@ -581,15 +590,15 @@ export default class Prs {
       .child(chip(t, "pr-new", "+ new", false, (cx) => this.newPr(cx), t.accent));
 
     return panel(t, "pr-list", `Pull requests · ${FILTER_WORD[this.filter]}`, active, body, { right }).flex_1()
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        this.menu();
+        this.menu(e);
         cx.notify();
       });
   }
 
-  /** Right-click on the list: what can be done from here. */
-  menu(): void {
+  /** Right-click on the list (at the press `e`): what can be done from here. */
+  menu(e: { readonly position: Pt } | null = null): void {
     const p = this.current();
     const rows: PickRow[] = [{ label: "New pull request…", sub: "n", go: (cx) => this.newPr(cx) }];
 
@@ -599,7 +608,7 @@ export default class Prs {
         { label: `#${p.number} in the browser`, sub: "o", go: (cx) => this.app.openUrl(this.urlOf(p), cx) });
     }
 
-    this.app.picker = { title: "PULL REQUESTS", at: 0, rows };
+    this.app.picker = { title: "PULL REQUESTS", at: 0, rows, near: e ? this.app.pressAt(e) : null };
   }
 
   checksPanel(t: Theme): Element | null {

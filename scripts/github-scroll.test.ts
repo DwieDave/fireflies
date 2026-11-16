@@ -164,6 +164,27 @@ for (const zoom of [0.9, 1]) {
   });
 }
 
+test("a right-click's menu stands at the press, on the pressed row; L's links in the middle", () => {
+  zoomNow = 0.9;
+  const g: any = new GitHub();
+  g.init({}, cx);
+  // Not drawn yet: no place for a press.
+  expect(g.pressAt({ position: { x: 10, y: 10 } })).toBeNull();
+  // The body as drawn (window px): a press is taken into it, over the zoom.
+  g.bodyBox = { x: 40, y: 70, w: 900, h: 600 };
+  expect(g.pressAt({ position: { x: 130, y: 160 } })).toEqual({ x: 100, y: 100 });
+  const at = { pressAt: (e: any) => g.pressAt(e) };
+  const p: any = new Prs({ ...app(), ...at, get picker() { return g.picker; }, set picker(v) { g.picker = v; } }, {});
+  p.list = [{ number: 7, title: "a", author: { login: "me" } }, { number: 6, title: "b", author: { login: "me" } }];
+  p.sel = 7;
+  p.menu({ position: { x: 130, y: 160 } });
+  expect(g.picker).toMatchObject({ title: "PULL REQUESTS", near: { x: 100, y: 100 } });
+  g.pickerPanel(theme);
+  // From a key (no press): the middle.
+  p.menu();
+  expect(g.picker.near).toBeNull();
+});
+
 test("the job graph: 55 % of the column by default (220..520), a dragged height stays", () => {
   expect(graphHeight(undefined, 680)).toBe(374); // the window at zoom 0.9: a column of six jobs fits
   expect(graphHeight(undefined, 300)).toBe(180); // short: the steps and log keep 120
