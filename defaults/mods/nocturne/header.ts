@@ -41,6 +41,7 @@ import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
 import { launchers, launcherIcon } from "./launchers.ts";
+import { edge } from "./tones.ts";
 
 /** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {
@@ -379,7 +380,7 @@ export default class Header {
   lazygit(t: Theme, p: HeaderPane): Element {
     const g = this.git;
     const on = p.focused;
-    const band = on ? t.accent : t.ansi0;
+    const band = on ? t.accent : edge(t);
     const step = (o: number) => div().flex_1().h_full().relative().opacity(o).child(dither(band, 2));
     const count = (s: string, c: Theme["accent"]) => div().flex_none().text_color(c).child(s);
     const branch = g?.branch || p.branch;
@@ -517,7 +518,7 @@ export default class Header {
       .child(label)
       // The folder gives way long before the name does (shrinks 50x faster), then goes.
       .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && !this.cursor(p) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))
-      .child(div().flex_1().min_w(8).h(6).relative().child(dither(p.focused ? t.accent : t.ansi0, 2)))
+      .child(div().flex_1().min_w(8).h(6).relative().child(dither(p.focused ? t.accent : edge(t), 2)))
       .when((st === "blocked" || st === "working") && this.width >= WORD_MIN, (el) => (st === "blocked" || st === "working" ? el.child(div().flex_none().text_color(t[st]).child(WORD[st])) : el)), p);
   }
 }

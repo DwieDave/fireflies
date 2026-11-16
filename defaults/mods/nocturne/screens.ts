@@ -30,6 +30,7 @@ import type { KeyEntry, MapRow } from "./keymap.ts";
 import { ART, dither, pip, tracked } from "./kit.ts";
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import type { HelpLine } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 const W = (name: string) => `mods/workspace-chrome/${name}.svg`;
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
@@ -63,8 +64,8 @@ export function dismissUpdate(): boolean {
 /** A square button: `strong` fills on hover in its color, the other is a quiet chip. */
 function button(t: Theme, id: string, label: string, color: Color, strong: boolean, action: (cx: Context) => void): Element {
   return div().id(id).flex_none().h(26).px(12).flex().items_center().text_size(12)
-    .border(1).border_color(strong ? color : t.ansi0).text_color(strong ? color : t.muted)
-    .hover((s) => (strong ? s.bg(color).text_color(t.background) : s.text_color(t.foreground).bg(t.ansi0)))
+    .border(1).border_color(strong ? color : edge(t)).text_color(strong ? color : t.muted)
+    .hover((s) => (strong ? s.bg(color).text_color(t.background) : s.text_color(t.foreground).bg(edge(t))))
     .cursor_pointer()
     .on_mouse_down("left", stop)
     .on_click((_e: ClickEvent, cx: Context) => {
@@ -75,11 +76,11 @@ function button(t: Theme, id: string, label: string, color: Color, strong: boole
 }
 
 /** The horizon under a header: a 2 px dithered line. */
-const horizon = (t: Theme, color?: Color) => div().absolute().left(0).right(0).bottom(0).h(2).child(dither(color ?? t.ansi0, 1));
+const horizon = (t: Theme, color?: Color) => div().absolute().left(0).right(0).bottom(0).h(2).child(dither(color ?? edge(t), 1));
 
 /** A screen's frame: square, a 1 px edge, the night behind. */
 function frame(t: Theme, id: string): Element {
-  return v_flex().id(id).size_full().relative().overflow_hidden().bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground);
+  return v_flex().id(id).size_full().relative().overflow_hidden().bg(t.background).border(1).border_color(edge(t)).text_color(t.foreground);
 }
 
 /** The header a window drags by: the mark, the title, "esc" or ×. */
@@ -87,10 +88,10 @@ function header(t: Theme, mark: Element, title: string, note: string | null, clo
   return h_flex().relative().h(40).flex_none().pl(14).pr(8).gap(10).items_center().cursor_grab()
     .child(mark)
     .child(div().text_size(13).text_color(t.foreground).child(title))
-    .when(Boolean(note), (el) => el.child(div().px(5).h(16).flex().items_center().border(1).border_color(t.ansi0).text_size(10).text_color(t.dim).child(note ?? "")))
+    .when(Boolean(note), (el) => el.child(div().px(5).h(16).flex().items_center().border(1).border_color(edge(t)).text_size(10).text_color(t.dim).child(note ?? "")))
     .child(div().flex_1())
     .child(div().id("scr-close").size(24).flex().items_center().justify_center().text_color(t.dim).cursor_pointer()
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop).on_click(() => close()).child(svg(W("x")).size(13)))
     .child(horizon(t));
 }
@@ -115,7 +116,7 @@ export const WHATS_NEW_KEYS: readonly HelpLine[] = [["j k  ↑ ↓", "step throu
   ["⏎ esc q", "close (esc q: keys away first)"], ["?", "keys"]];
 
 const para = (t: Theme, text: string) => div().text_size(12).line_height("19px").text_color(t.muted).child(text);
-const eyebrow = (t: Theme, text: string) => div().text_size(10).text_color(t.ansi8).child(text.toUpperCase());
+const eyebrow = (t: Theme, text: string) => div().text_size(10).text_color(t.muted).child(text.toUpperCase());
 
 /** A screen's overlay, from its props. */
 const isOverlayProps = object({ overlay: isString });
@@ -192,8 +193,8 @@ export class Welcome {
   /** The moonlit strip on top: stars, the hills, the firefly. */
   hero(t: Theme): Element {
     return div().relative().h(150).flex_none().overflow_hidden()
-      .child(svg(`${ART}/stars.svg`).w(660).h(1240).absolute().top(0).left(0).text_color(t.ansi8).opacity(0.6))
-      .child(svg(`${ART}/hills-rim.svg`).w(660).h(196).absolute().bottom(-110).left(0).text_color(t.ansi8).opacity(0.45))
+      .child(svg(`${ART}/stars.svg`).w(660).h(1240).absolute().top(0).left(0).text_color(t.muted).opacity(0.6))
+      .child(svg(`${ART}/hills-rim.svg`).w(660).h(196).absolute().bottom(-110).left(0).text_color(t.muted).opacity(0.45))
       .child(h_flex().absolute().left(22).bottom(18).gap(16).items_end()
         .child(fly(72))
         .child(v_flex().gap(4).pb(4)
@@ -217,18 +218,18 @@ export class Welcome {
       .child(div().w(10).flex_none().child(ok ? pip(t, "done", 7) : svg(`${ART}/pip.svg`).size(7).text_color(t.dim)))
       .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.foreground).child(name))
       .child(div().text_size(11).text_color(t.dim).child(note))
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).bg(t.ansi0));
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).bg(edge(t)));
   }
 
   pageTwo(t: Theme): Element {
     return v_flex().gap(14)
       .child(eyebrow(t, "other meadows"))
       .child(para(t, "A server or a Mac mini runs its own herdr-core, so its agents keep going while this laptop sleeps. Add one from your ssh config: it gets its own spaces in the sidebar."))
-      .child(v_flex().border(1).border_color(t.ansi0)
+      .child(v_flex().border(1).border_color(edge(t))
         .child(this.machineRow(t, "this computer", "here", true))
         .children(this.machines.map((m) => this.machineRow(t, m.name, m.state === "connected" ? "connected" : (m.state ?? "offline").replace(/_/g, " "), m.state === "connected")))
         .child(h_flex().id("w-add-machine").h(34).px(10).gap(10).items_center().cursor_pointer().text_size(12).text_color(t.accent)
-          .hover((s) => s.bg(t.ansi0))
+          .hover((s) => s.bg(edge(t)))
           .on_mouse_down("left", stop)
           .on_click(() => run("mod.open", { name: "machine-add" }))
           .child(div().w(10).flex_none().child("+")).child(div().flex_1().child("add a machine")).child(div().text_size(11).text_color(t.dim).child("a"))))
@@ -251,7 +252,7 @@ export class Welcome {
         .child(row(key("app.settings"), "settings")))
       .child(eyebrow(t, "make it yours"))
       .child(para(t, "Every part of this window is a layout or a mod: plain files your agent can change. Give it this line to start:"))
-      .child(v_flex().relative().gap(8).p(10).border(1).border_color(t.ansi0)
+      .child(v_flex().relative().gap(8).p(10).border(1).border_color(edge(t))
         .child(div().text_size(12).line_height("19px").text_color(t.foreground).child(ASK))
         .child(h_flex().gap(8).items_center()
           .child(button(t, "w-copy", this.copied ? "copied" : "copy", this.copied ? t.done : t.accent, !this.copied, (cx) => this.copy(cx)))
@@ -274,7 +275,7 @@ export class Welcome {
 
     const dots = h_flex().gap(6).items_center()
       .children(Array.from({ length: PAGES }, (_, i) => i + 1).map((p) => (p === this.page
-        ? pip(t, "done", 8) : svg(`${ART}/pip.svg`).size(6).flex_none().text_color(t.ansi0))));
+        ? pip(t, "done", 8) : svg(`${ART}/pip.svg`).size(6).flex_none().text_color(edge(t)))));
 
     const last = this.page === PAGES;
 
@@ -328,7 +329,7 @@ export class Welcome {
           .child(div().px(22).pt(18).pb(18).child(this.body(t))))
         .when(this.keysShown, (el) => el.child(keysView(t, { id: "w-keys-strip", title: "welcome", list: WELCOME_KEYS, close: () => { this.keysShown = false; } }))))
       .child(h_flex().relative().h(48).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
         .child(dots)
         .child(div().pl(8).text_size(11).text_color(t.dim).child("← → move · esc q skip ·"))
         .child(keysHint(t, "w-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
@@ -435,7 +436,7 @@ export class WhatsNew {
     const items = note.items;
     const width = this.width ?? 600;
 
-    const card = (item: ReleaseNote["items"][number]) => h_flex().relative().items_stretch().border(1).border_color(t.ansi0)
+    const card = (item: ReleaseNote["items"][number]) => h_flex().relative().items_stretch().border(1).border_color(edge(t))
       .child(div().relative().w(4).flex_none().child(dither(t.accent, 1)))
       .child(v_flex().flex_1().min_w(0)
         .children(item.media.map((media) => image(media.path).w_full().h(Math.max(1, width - 6) * media.height / media.width).flex_none()))
@@ -455,7 +456,7 @@ export class WhatsNew {
       ...(fixes.length > 0 ? [v_flex().gap(6).pt(4)
         .child(eyebrow(t, "also fixed"))
         .children(fixes.map((i) => h_flex().gap(10).items_start()
-          .child(div().w(8).pt(5).flex_none().child(svg(`${ART}/pip.svg`).size(6).text_color(t.ansi8)))
+          .child(div().w(8).pt(5).flex_none().child(svg(`${ART}/pip.svg`).size(6).text_color(t.muted)))
           .child(div().flex_1().min_w(0).text_size(11).line_height("17px").text_color(t.muted).child([i.headline, i.detail].filter(Boolean).join(" ")))))] : []),
     ];
   }
@@ -485,7 +486,7 @@ export class WhatsNew {
           .children(blocks.map(([b, gap], i) => div().px(22).pt(i === 0 ? 18 : gap).when(i === blocks.length - 1, (el) => el.pb(18)).child(b))))
         .when(this.keysShown, (el) => el.child(keysView(t, { id: "wn-keys-strip", title: "what's new", list: WHATS_NEW_KEYS, close: () => { this.keysShown = false; } }))))
       .child(h_flex().relative().h(46).flex_none().px(16).gap(8).items_center().on_mouse_down("left", stop)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child("↑↓ read · something off? settings › send feedback ·"))
         .child(keysHint(t, "wn-keys", this.keysShown, () => { this.keysShown = !this.keysShown; }))
         .child(button(t, "wn-done", "got it", t.accent, true, () => this.done())));
@@ -625,13 +626,13 @@ export class Keys {
       const surface = x.surface;
 
       return h_flex().id(`key-${j}`).relative().h(24).px(6).items_center().text_size(12)
-        .hover((s) => s.bg(t.ansi0))
+        .hover((s) => s.bg(edge(t)))
         .when(Boolean(surface), (el) => el.cursor_pointer().on_click((_e, cx) => {
           if (surface) this.toggle(surface);
 
           cx.notify();
         }))
-        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+        .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
         .child(keyCol(x.k.shown, t.accent))
         .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(x.label))
         .when(Boolean(surface), (el) => el.child(div().relative().flex_none().pl(8).text_size(11).text_color(on ? t.accent : t.dim)
@@ -654,7 +655,7 @@ export class Keys {
       .child((scroll ? listBox.track_scroll(scroll) : listBox).px(14).py(10)
         .children(list.length ? list.map(row) : [div().pt(8).text_size(12).text_color(t.dim).child("no key does that")]))
       .child(h_flex().relative().h(26).flex_none().px(14).gap(14).items_center().text_size(10)
-        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+        .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("↑↓")).child(div().text_color(t.dim).child("move")))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("⏎")).child(div().text_color(t.dim).child("a block's keys")))
         .child(h_flex().gap(4).child(div().text_color(t.accent).child("type")).child(div().text_color(t.dim).child("filter")))
@@ -687,7 +688,7 @@ export class UpdateNote {
     // selection, whose release would never reach the ×) doesn't see it.
     return h_flex().size_full().justify_end().child(h_flex().id("nocturne-update").relative().h_full().gap(6).items_center()
       .on_mouse_down("left", stop)
-      .bg(t.background).border(1).border_color(t.ansi0)
+      .bg(t.background).border(1).border_color(edge(t))
       .child(div().relative().w(6).h_full().flex_none().child(dither(p.success ? t.done : t.accent, 1)))
       .child(div().pl(6).flex_none().child(pip(t, p.success ? "done" : "working", 7)))
       .child(div().pl(2).pr(4).flex_none().text_size(12).text_color(t.foreground).child(p.label))
@@ -695,7 +696,7 @@ export class UpdateNote {
       .child(link("upd-notes", p.restart || p.success ? "what changed" : "updates", () => run("app.settings", { section: "updates" })))
       // The ×: the note's full height, 30 wide; closes on the press itself.
       .child(div().id("upd-x").w(30).h_full().flex().items_center().justify_center().cursor_pointer().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .hover((s) => s.text_color(t.foreground).bg(edge(t)))
         .on_mouse_down("left", (_e, cx) => {
           cx.stop_propagation();
           writeShared(setShared, DISMISSED, dismissal);
