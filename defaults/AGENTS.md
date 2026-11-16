@@ -955,7 +955,10 @@ the highlighted line shows where it will land.
   counts (the shown tab's name and unsaved `●` in the pane header) (click: the problems drawer), the language server, language and
   indent, line:col. Saving writes only over what was read: a file changed
   outside while edited says so (reload theirs / keep mine), a clean one
-  reloads by itself, keeping the caret. Closing an edited editor's pane or tab
+  reloads by itself, keeping its place: the line at the top (of the text,
+  the preview and the rendered view), the caret and the selection stay on the
+  text they were on, moved by lines added or removed above (cmd-r and
+  "reload theirs" too). Closing an edited editor's pane or tab
   asks first (`setUnsaved`). Keys while it has focus (keys.json
   `mod:editor`, macOS; no function keys): cmd-s save, cmd-f find
   (enter / shift-enter, Aa, esc), cmd-alt-f replace (cmd-enter: all), cmd-l go

@@ -70,8 +70,9 @@ interface Placed {
 /** A row's height as drawn (the lit one's, or its own). */
 const rowH = (v: Rendered, r: Row): number => (r.lit ? litHeight(v) : v.height(r.key, r.u));
 
-/** Places the rows top to bottom; scrolls the lit block into view (with room around it) when
- *  it asks to be shown, and keeps the scroll within the column. */
+/** Places the rows top to bottom; puts a kept line back at the top (a reload: rendered.ts
+ *  keepTop), else scrolls the lit block into view (with room around it) when it asks to be
+ *  shown; keeps the scroll within the column and notes the unit at the top. */
 function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const tops: number[] = [];
   let y = PAD_TOP;
@@ -85,7 +86,21 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const total = y + ADD_H + PAD_BOTTOM;
   const li = rows.findIndex((r) => r.lit);
 
-  if (v.reveal && li >= 0) {
+  const keep = v.keep;
+
+  if (keep) {
+    // The unit holding the kept line, else the first after it (it fell between units).
+    let i = rows.findIndex((r) => r.u.to >= keep.line);
+
+    if (i < 0) i = rows.length - 1;
+
+    const r = rows[i];
+
+    if (r) v.scrollY = (tops[i] ?? 0) + (r.u.from === keep.line ? Math.min(keep.dy, rowH(v, r)) : 0);
+
+    v.keep = null;
+    v.reveal = false;
+  } else if (v.reveal && li >= 0) {
     const top = tops[li] ?? 0;
     const bottom = top + litHeight(v);
 
@@ -97,6 +112,15 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
 
   v.scrollY = Math.max(0, Math.min(v.scrollY, Math.max(0, total - v.viewH)));
   v.litTop = li >= 0 ? (tops[li] ?? 0) - v.scrollY : 0;
+
+  // The unit at the top (the last one starting above the view's top edge, else the first).
+  let top = 0;
+
+  while (top + 1 < rows.length && (tops[top + 1] ?? 0) <= v.scrollY) top++;
+
+  const at = rows[top];
+
+  v.topAt = at ? { line: at.u.from, dy: v.scrollY - (tops[top] ?? 0) } : null;
 
   return { tops, total, li };
 }

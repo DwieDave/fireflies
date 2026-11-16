@@ -18,6 +18,8 @@ import { didChange } from "./lsp-client.ts";
 import { focusText } from "./md-pane.ts";
 import { focusedHere, keepTabs, noteUnsaved, publish, select } from "./pane-tabs.ts";
 import { refreshPreview } from "./preview-pane.ts";
+import type { Pos } from "./keep-place.ts";
+import { lineAfter, placeAfter, topAfter } from "./keep-place.ts";
 
 /** The pane header's name (nocturne/header.ts): the shown tab's. */
 export function setTitle(ed: EditorPane): void {
@@ -185,6 +187,9 @@ export function loadDoc(ed: EditorPane, cx: Context, go: Go | null, quiet: boole
       return;
     }
 
+    // Read again (cmd-r, "reload theirs"): where Developer was stays, as on a change on disk.
+    const was = d.state === "ready" && !d.hand && !go && !d.go && text !== null ? takePlace(d) : null;
+
     if (text === null) {
       d.state = "missing";
       d.saved = null;
@@ -205,6 +210,8 @@ export function loadDoc(ed: EditorPane, cx: Context, go: Go | null, quiet: boole
     d.text = hand?.text ?? text ?? "";
 
     if (d.markdown) refreshPreview(ed, cx, true, d);
+
+    const moved = was && text !== null ? putPlace(cx, d, was, text) : null;
 
     d.dirty = hand?.text !== null && hand?.text !== undefined && hand.text !== (d.saved ?? "");
     d.conflict = false;
@@ -227,6 +234,8 @@ export function loadDoc(ed: EditorPane, cx: Context, go: Go | null, quiet: boole
     if (d.markdown && d.view === "rendered") {
       d.rendered?.open(cx);
 
+      if (moved) d.rendered?.keepTop(moved);
+
       if (d === ed.cur && focusedHere(ed)) focusText(ed);
     }
 
@@ -237,9 +246,65 @@ export function loadDoc(ed: EditorPane, cx: Context, go: Go | null, quiet: boole
 }
 
 
+/** Where Developer was in tab `d` before its text is replaced (keep-place.ts): its text's
+ *  lines, the line at the top of the text and of the preview, the selection. */
+interface Place {
+  readonly lines: readonly string[];
+  readonly top: number | null;
+  readonly preview: number | null;
+  readonly start: Pos;
+  readonly end: Pos;
+}
+
+function takePlace(d: Doc): Place {
+  const s = d.editor.selection();
+
+  return {
+    lines: d.editor.value().split("\n"),
+    top: d.editor.top_line(),
+    preview: d.markdown ? d.preview.lineAtY(d.preview.scrollY + 4) : null,
+    start: s.start,
+    end: s.end,
+  };
+}
+
+/** `p` put back on the new `text` (already in the editor): the selection on the text it was
+ *  on, the same lines at the top of the text and of the preview. Returns where a line of the
+ *  old text is now, for the rendered view (rendered.ts keepTop). */
+function putPlace(cx: Context, d: Doc, p: Place, text: string): (line: number) => number {
+  const now = text.split("\n");
+  const a = placeAfter(p.lines, now, p.start);
+  const b = placeAfter(p.lines, now, p.end);
+
+  // With its end given the caret moves without taking the keyboard (without, set_cursor focuses the editor).
+  d.editor.set_cursor(a.line, a.col, b);
+
+  if (p.top !== null) keepTop(cx, d, topAfter(p.lines, now, p.top));
+
+  if (p.preview !== null) d.preview.setScroll(d.preview.yOfLine(topAfter(p.lines, now, p.preview)) - 4);
+
+  return (line) => lineAfter(p.lines, now, line);
+}
+
+/** Line `top` (fractional) at the top of tab `d`'s text. The first frame on a new text
+ *  scrolls to the caret when its place in the text moved (gpui-base follows a changed
+ *  selection), so the line is put back once that frame is drawn. */
+function keepTop(cx: Context, d: Doc, top: number): void {
+  d.editor.scroll_to_line(top);
+
+  cx.timer.after(60, () => {
+    if (d.gone) return;
+
+    const now = d.editor.top_line();
+
+    if (now !== null && Math.abs(now - top) >= 0.5) d.editor.scroll_to_line(top);
+  });
+}
+
 /** The file read again while watched (a change on disk): our own write isn't news; an edited
- *  tab asks (it never drops what's typed); else the new text, the caret where it was, the
- *  server told it's saved. */
+ *  tab asks (it never drops what's typed); else the new text, with the same line at the top
+ *  (of the text, the preview and the rendered view) and the caret and selection on the text
+ *  they were on (keep-place.ts), the server told it's saved. */
 function reloadFromDisk(ed: EditorPane, cx: Context, d: Doc, text: string | null): void {
   // Our own write (the autosave's, maybe read while it was under way) isn't news.
   if (text === null || text === d.saved || text === d.writing) return;
@@ -253,7 +318,7 @@ function reloadFromDisk(ed: EditorPane, cx: Context, d: Doc, text: string | null
     return;
   }
 
-  const at = d.editor.cursor();
+  const place = takePlace(d);
 
   d.saved = text;
   d.editor.set_value(text);
@@ -261,9 +326,12 @@ function reloadFromDisk(ed: EditorPane, cx: Context, d: Doc, text: string | null
 
   if (d.markdown) refreshPreview(ed, cx, true, d);
 
-  d.editor.set_cursor(at.line, at.col);
+  const moved = putPlace(cx, d, place, text);
 
-  if (d.view === "rendered") d.rendered?.open(cx);
+  if (d.view === "rendered") {
+    d.rendered?.open(cx);
+    d.rendered?.keepTop(moved);
+  }
 
   if (d === ed.cur && !d.scratch) ed.say("reloaded: it changed on disk");
 
