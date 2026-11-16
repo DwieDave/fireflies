@@ -88,6 +88,9 @@ const SHIPPED_MACOS_KEYS: &[&str] = &[
     // With the walk on cmd-] / cmd-[ and cmd-s for the Databases window, before a whole tab got its keys: cmd-alt-shift-p pins
     // it to the jar's shelf (nocturne.pin-tab), cmd-alt-shift-s moves it to another space (nocturne.tab-to-space).
     include_str!("keys/shipped/fireflies-walk-keys.macos.json"),
+    // With a tab's keys, before the default layout (layout:main) got the windows' keys Nocturne has:
+    // cmd-g, cmd-shift-g, cmd-shift-b, cmd-shift-o and cmd-shift-r open Git, GitHub, Databases, Processes and Scripts (mod.open).
+    include_str!("keys/shipped/fireflies-tabkeys2-keys.macos.json"),
 ];
 
 #[derive(serde::Deserialize)]

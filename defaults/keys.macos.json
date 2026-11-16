@@ -78,6 +78,13 @@
     "ctrl-`": "overlay.focus",
     "ctrl-shift-`": "overlay.focus:prev"
   },
+  "layout:main": {
+    "cmd-g": "mod.open:git",
+    "cmd-shift-g": "mod.open:github",
+    "cmd-shift-b": "mod.open:databases",
+    "cmd-shift-o": "mod.open:procs",
+    "cmd-shift-r": "mod.open:scripts"
+  },
   "layout:nocturne": {
     "cmd-alt-]": "nocturne.next",
     "cmd-alt-[": "nocturne.prev",

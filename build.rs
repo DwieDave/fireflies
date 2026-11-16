@@ -14,6 +14,11 @@ fn walk(dir: &Path, base: &Path, root: &Path, out: &mut Vec<String>) {
     let mut entries: Vec<_> = std::fs::read_dir(dir).unwrap().flatten().map(|e| e.path()).collect();
     entries.sort();
     for p in entries {
+        // A package's dependencies (bun links a library's peer, Effect, into
+        // defaults/lib/@fireflies/<name>/node_modules) are never embedded.
+        if p.file_name().is_some_and(|name| name == "node_modules") {
+            continue;
+        }
         if p.is_dir() {
             walk(&p, base, root, out);
         } else {

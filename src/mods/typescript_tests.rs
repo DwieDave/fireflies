@@ -243,6 +243,26 @@ fn mods_import_effect_and_the_kit_by_name_and_share_them(cx: &mut TestAppContext
     cx.run_until_parked();
 }
 
+/// `herdr-app types <dir>` writes the @fireflies/* libraries where a mod in a
+/// repository of its own resolves them (node_modules), never Effect itself
+/// (that comes from npm at the kit's peer version).
+#[test]
+fn types_write_the_fireflies_libraries_for_a_mod_outside_the_repo() {
+    let tree = Tree::new();
+    let written = write_library_types(&tree.0).unwrap();
+    assert!(written > 5, "{written}");
+    let kit = tree.0.join("node_modules/@fireflies/kit");
+    for file in ["index.ts", "live.ts", "testing.ts", "engine-globals.d.ts", "package.json"] {
+        assert!(kit.join(file).is_file(), "{file}");
+    }
+    let manifest = std::fs::read_to_string(kit.join("package.json")).unwrap();
+    assert!(manifest.contains("\"peerDependencies\"") && manifest.contains("\"effect\""), "{manifest}");
+    assert!(!tree.0.join("node_modules/effect").exists());
+    // Nor anything bun linked beside a library (its peer, Effect): build.rs never embeds a node_modules.
+    assert!(!kit.join("node_modules").exists(), "a library's node_modules was embedded");
+    assert!(MOD_LIBRARIES.iter().all(|(path, _)| !path.contains("node_modules/")));
+}
+
 #[test]
 fn a_folder_with_main_ts_is_a_mod() {
     let tree = Tree::new();
