@@ -260,6 +260,8 @@ test:
     bun test scripts/databases-where.test.ts
     # The fork's mods follow the theme: no color literal in a converted mod (an allow list for art and the black veils), no ansi0 / ansi8 as a UI tone, tones.ts the same in every mod, its edge on moonfly's old hex, the nocturne layout naming theme colors.
     bun test scripts/themes.test.ts
+    # @fireflies/look (docs/plain-look.md): in nocturne each primitive draws what the mods draw (recorded trees equal git's panel, dither, band); in main the cards, flat fills, line icons. Its own process: it stands in for gpui and herdr.
+    bun test scripts/look.test.ts
     # A connection's sslmode: kept in connections.json, a picked database and a pin; psql's -d conninfo, MySQL's --ssl-mode and MariaDB's --skip-ssl / --ssl-verify-server-cert (its --version tells them apart); the form's ssl toggle by key (a pasted require kept, shown beside it); a pasted URL, a found DATABASE_URL and PGSSLMODE; databases.connect carrying it, refusing an unknown one.
     bun test scripts/databases-ssl.test.ts
     cargo test --locked
