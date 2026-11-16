@@ -216,7 +216,7 @@ export function divider(t: Theme, id: string, d: Divider, ds: Dividers, thick = 
 
       cx.notify();
     })
-    .when(shown, (el) => el.child(line(held ? t.accent : t.ansi8, held ? 2 : 1)).child(grip(held ? t.accent : t.ansi8)));
+    .when(shown, (el) => el.child(line(held ? t.accent : t.muted, held ? 2 : 1)).child(grip(held ? t.accent : t.muted)));
 }
 
 /** What else the root follows besides the dividers (one handler each per element, so a view

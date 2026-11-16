@@ -39,6 +39,7 @@ import { togglePin } from "./pinned.ts";
 import { forwardRunning } from "./forward.ts";
 import { missingView, readingView } from "./read-view.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** A row's handlers: picked (a click), opened (a double click), its menu (a right click, at the
  *  pointer); a press that may become a drag (press.ts), the drop target it is, its hover. */
@@ -122,7 +123,7 @@ const text = (_t: Theme, s: string, color: Color) => div().truncate().text_color
 function connPip(t: Theme, v: DbView, c: Conn): Element {
   const s = connState(v, c);
 
-  return h_flex().id(`conn-state-${c.id}`).flex_none().tooltip(stateTip(s, whereOf(v, c), c.readonly)).child(s.kind === "off" ? pip(t.ansi0) : statePip(t, s, 6));
+  return h_flex().id(`conn-state-${c.id}`).flex_none().tooltip(stateTip(s, whereOf(v, c), c.readonly)).child(s.kind === "off" ? pip(edge(t)) : statePip(t, s, 6));
 }
 
 /** A cluster-secret connection's mark: the secret it reads its password from (red when the read failed). */
@@ -157,7 +158,7 @@ function pinMark(t: Theme, v: DbView, c: Conn): Element[] {
       togglePin(v, c, cx);
       cx.notify();
     })
-    .child(svg(`${ART}/pin.svg`).size(7).text_color(pinned ? t.accent : t.ansi8).opacity(pinned ? 1 : 0.7))];
+    .child(svg(`${ART}/pin.svg`).size(7).text_color(pinned ? t.accent : t.muted).opacity(pinned ? 1 : 0.7))];
 }
 
 /** The state a pin's hover adds for the active connection ("· connected · in lantern as app"). */
@@ -180,7 +181,7 @@ function forwardMark(t: Theme, c: Conn): Element[] {
   const live = forwardRunning(f)?.live === true;
 
   return [h_flex().id(`conn-fwd-${c.id}`).flex_none().tooltip(`${f.target} :${f.remote} in ${f.context}/${f.namespace} → localhost:${f.local}${live ? " · the forward runs (m stops it)" : " · started again when you connect (asked first)"}`)
-    .child(text(t, live ? `↔ :${f.local}` : "↮ forward", live ? t.ansi6 : t.ansi8))];
+    .child(text(t, live ? `↔ :${f.local}` : "↮ forward", live ? t.ansi6 : t.muted))];
 }
 
 function connRow(t: Theme, v: DbView, c: Conn, i: number, active: boolean): Element {
@@ -378,11 +379,11 @@ export function tablesPanel(t: Theme, v: DbView): Element {
  *  connects to one), enter's way on, and the list one click away. */
 function emptyDbView(t: Theme, v: DbView, e: EmptyWords): Element {
   return v_flex().size_full().items_center().justify_center().gap(8).px(16).text_size(11)
-    .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6).loop("opacity", { from: 0.35, to: 0.7, period: 5200 }))
+    .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.muted).opacity(0.6).loop("opacity", { from: 0.35, to: 0.7, period: 5200 }))
     .child(div().text_center().text_color(t.muted).child(e.title))
     .child(div().text_center().max_w(460).text_color(t.dim).child(e.note))
     .when(e.others.length > 0, (el) => el.child(h_flex().flex_wrap().justify_center().gap(4).max_w(460)
-      .children(e.others.map((name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.ansi8, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
+      .children(e.others.map((name, i) => chip(t, `tables-empty-db-${i}`, h_flex().gap(5).items_center().child(pip(t.muted, 5)).child(div().child(name)), false, (cx) => useDatabase(v, name, cx), t.ansi5)))
       .child(chip(t, "tables-empty-list", "the list · b", false, (cx) => showDatabases(v, cx)))));
 }
 
@@ -425,7 +426,7 @@ function databasesBody(t: Theme, v: DbView, active: boolean): Element {
     const size = name === null ? null : d?.list.find((x) => x.name === name)?.size ?? null;
 
     return listRow(t, v, `db-${i}`, v.tableAt === i, active, [
-      on ? pip(t.done, 6) : pip(t.ansi0, 6),
+      on ? pip(t.done, 6) : pip(edge(t), 6),
       text(t, name ?? "every database", on ? t.ansi5 : v.tableAt === i && active ? t.foreground : t.muted).flex_shrink(1).min_w(0),
       ...(on ? [text(t, "connected here", t.dim).flex_none()] : []),
       div().flex_1(),
@@ -542,9 +543,9 @@ function valueBody(t: Theme, v: DbView): Element {
   const lines = prettyValue(cell).split("\n").slice(0, 400);
 
   return v_flex().size_full().px(10).pt(2).gap(4)
-    .child(h_flex().gap(8).text_size(10).text_color(t.ansi8).child(div().child(`${column} · row ${g.at.row + 1}`)).child(div().flex_1()).child(div().text_color(t.accent).child("y")).child(div().child("copy")))
+    .child(h_flex().gap(8).text_size(10).text_color(t.muted).child(div().child(`${column} · row ${g.at.row + 1}`)).child(div().flex_1()).child(div().text_color(t.accent).child("y")).child(div().child("copy")))
     .when(change !== null, (el) => el.child(h_flex().gap(6).text_size(10).child(div().flex_none().text_color(t.ansi3).child("changed · was")).child(div().min_w(0).truncate().text_color(t.muted).child(change?.was === null ? "NULL" : change?.was === "" ? "'' (empty)" : change?.was ?? ""))))
-    .child(v_flex().id("value-text").relative().flex_1().min_h(0).p(8).overflow_y_scroll().bg(`${t.ansi0}55`)
+    .child(v_flex().id("value-text").relative().flex_1().min_h(0).p(8).overflow_y_scroll().bg(`${edge(t)}55`)
       .when(cell === null, (el) => el.text_color(t.dim))
       .children(lines.map((l, i) => jsonLine(t, l, i))));
 }
@@ -572,7 +573,7 @@ export function logPanel(t: Theme, v: DbView): Element {
     text(t, l.sql.replace(/\s+/g, " "), l.ok ? t.muted : t.foreground).flex_shrink(l.run ? 0 : 1).min_w(0),
     ...(l.ok ? [] : [text(t, `— ${l.said}`, t.blocked).flex_shrink(l.said.length < 24 ? 0 : 1).min_w(0)]),
     // The client run behind it: the program, its arguments, where it came from, its exit.
-    ...(l.run ? [text(t, l.run, t.ansi8).flex_shrink(3).min_w(0)] : []),
+    ...(l.run ? [text(t, l.run, t.muted).flex_shrink(3).min_w(0)] : []),
     div().flex_1(), text(t, `${l.ok ? `${l.said} · ` : ""}${l.ms} ms`, t.dim).flex_none(),
   ], {
     pick: () => { v.logAt = i; v.panel = "log"; v.focusSelf(); },

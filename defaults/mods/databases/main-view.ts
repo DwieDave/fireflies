@@ -33,6 +33,7 @@ import { hasRange, inRange, rangeOf, rowsSelected, stretched, wholeRows } from "
 import { dropTarget, pressAt } from "./press.ts";
 import { insertName } from "./actions.ts";
 import type { default as DbView } from "./main.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 /** The grid's handlers for the shown grid (the Rows tab's or a query's). */
 function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {
@@ -253,7 +254,7 @@ function filterLine(t: Theme, v: DbView): Element {
   const order = orderPart(t, v);
 
   const row = h_flex().id("rows-filter").relative().h(24).flex_none().px(10).gap(8).items_center()
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edgeTone(t), 1)))
     .child(div().relative().text_color(t.accent).child("/"))
     .child(div().relative().text_color(t.ansi5).child("where"));
 
@@ -301,8 +302,8 @@ function pager(t: Theme, v: DbView): Element {
 
       return g && hidden ? el.child(h_flex().id("rows-hidden-tip").flex_none().tooltip("O on a column: its menu hides or shows").child(chip(t, "rows-hidden", `${hidden} hidden · show`, false, () => showColumns(g)))) : el;
     })
-    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, (cx) => page(-1, cx), b.offset > 0 ? t.foreground : t.ansi0)))
-    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, (cx) => page(1, cx), more ? t.foreground : t.ansi0)));
+    .child(h_flex().id("rows-prev-tip").flex_none().tooltip("previous page · <").child(chip(t, "rows-prev", "‹", false, (cx) => page(-1, cx), b.offset > 0 ? t.foreground : edgeTone(t))))
+    .child(h_flex().id("rows-next-tip").flex_none().tooltip("next page · >").child(chip(t, "rows-next", "›", false, (cx) => page(1, cx), more ? t.foreground : edgeTone(t))));
 }
 
 function rowsBody(t: Theme, v: DbView, active: boolean): Element {
@@ -332,7 +333,7 @@ function rowsBody(t: Theme, v: DbView, active: boolean): Element {
 /** The line between a query's editor and its result: how it went. */
 function resultHead(t: Theme, v: DbView, q: QueryTab): Element {
   const head = h_flex().id("result-head").relative().h(22).flex_none().px(10).gap(10).items_center()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)));
 
   const o = q.outcome;
 
