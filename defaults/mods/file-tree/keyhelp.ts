@@ -32,6 +32,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import { edge } from "./tones.ts";
+import { flat } from "./layout-look.ts";
 
 /** One row: the key, what it does, and (git's runnable rows) what a press runs.
  *  git's rows also carry the key a press of the row's own letter runs (`key`)
@@ -87,6 +88,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** The dither fill, as nocturne/kit.ts has it. */
 function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

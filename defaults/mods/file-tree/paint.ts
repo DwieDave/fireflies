@@ -7,6 +7,7 @@ import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
 import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import { MOD } from "./state.ts";
+import { flat } from "./layout-look.ts";
 
 /** A git status letter's color (none for the folder's dot or a cut). */
 export function markColor(t: Theme, mark: string): Color | null {
@@ -25,6 +26,10 @@ export const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%",
 
 /** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
