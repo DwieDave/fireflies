@@ -788,6 +788,10 @@ const SEAM: f64 = 8.0;
 const SCREEN_MARGIN: f64 = 10.0;
 /// How near one of its places (points, on both axes) a dragged window is caught.
 const SNAP_CATCH: f64 = 64.0;
+/// A press on the video that moves this far (points) drags the window; less
+/// is a click (the window takes the keyboard). The Fireflies player's window
+/// drag starts at the same 4 (src/window/movable.rs DRAG_START).
+const VIDEO_DRAG_START: f64 = 4.0;
 // Copies of pip's icons: the Nix app build leaves defaults/mods out of
 // the crate's sources (they ship in the bundle), so the crate carries its own.
 const VOLUME_SVG: &str = include_str!("../icons/volume.svg");
@@ -897,12 +901,47 @@ pub struct PopIvars {
     /// Snapping (the mode, as the player's was); the place it sits on.
     snap: std::cell::Cell<bool>,
     anchor: std::cell::Cell<Option<Place>>,
-    /// A drag by the bar: the pointer and the window's origin when pressed,
-    /// and the place it is caught on now.
-    drag: std::cell::Cell<Option<(NSPoint, NSPoint)>>,
+    /// A press by the bar or the video, and the place it is caught on now.
+    drag: std::cell::Cell<Option<Drag>>,
     caught: std::cell::Cell<Option<Place>>,
     /// The keys, while `?` shows them (over the video).
     keys: RefCell<Option<Retained<NSView>>>,
+}
+
+/// A press that may drag the window out of Fireflies: the pointer and the
+/// window's origin when pressed, how far it must move before the window
+/// follows (0 by the bar, `VIDEO_DRAG_START` by the video), and whether it does.
+#[derive(Clone, Copy)]
+struct Drag {
+    down: (f64, f64),
+    from: (f64, f64),
+    start: f64,
+    moving: bool,
+}
+
+impl Drag {
+    fn new(down: (f64, f64), from: (f64, f64), start: f64) -> Drag {
+        Drag { down, from, start, moving: start <= 0.0 }
+    }
+
+    /// The pointer is at `at`: once it has moved `start` from where it was
+    /// pressed, the window follows (and keeps following, also back under it).
+    fn to(mut self, at: (f64, f64)) -> Drag {
+        let (dx, dy) = (at.0 - self.down.0, at.1 - self.down.1);
+        self.moving = self.moving || (dx * dx + dy * dy).sqrt() >= self.start;
+        self
+    }
+
+    /// Where the window's origin goes with the pointer at `at`, unsnapped.
+    fn origin(self, at: (f64, f64)) -> (f64, f64) {
+        (self.from.0 + at.0 - self.down.0, self.from.1 + at.1 - self.down.1)
+    }
+
+    /// Let go at `at`: whether it was a drag (else a click, leaving things as they were).
+    fn dragged(self, at: (f64, f64)) -> bool {
+        let (dx, dy) = (at.0 - self.down.0, at.1 - self.down.1);
+        self.moving && (dx.abs() >= 1.0 || dy.abs() >= 1.0)
+    }
 }
 
 #[derive(Clone)]
@@ -1072,7 +1111,7 @@ define_class!(
         #[unsafe(method(mouseDown:))]
         fn mouse_down(&self, _event: &NSEvent) {
             if let Some(t) = self.ivars().target.load() {
-                t.drag_start();
+                t.drag_start(0.0);
             }
         }
 
@@ -1093,6 +1132,68 @@ define_class!(
 );
 
 impl PipBar {
+    fn new(mtm: MainThreadMarker, frame: NSRect, target: &PopTarget) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(BarIvars { target: Weak::from(target) });
+        unsafe { msg_send![super(this), initWithFrame: frame] }
+    }
+}
+
+define_class!(
+    // SAFETY: NSView may be subclassed; hit testing and mouse handling are added; no Drop impl.
+    #[unsafe(super(NSView, NSResponder, NSObject))]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = BarIvars]
+    /// The video's holder: a left press on it is the window's, as inside
+    /// Fireflies (Kind::gives_left_presses). Moved `VIDEO_DRAG_START` it drags
+    /// the window, snapping, as the bar does; less is a click, which gives the
+    /// window the keyboard. Right-clicks and the wheel stay the page's.
+    struct PipVideo;
+
+    impl PipVideo {
+        #[unsafe(method_id(hitTest:))]
+        fn hit_test(&self, point: NSPoint) -> Option<Retained<NSView>> {
+            let hit: Option<Retained<NSView>> = unsafe { msg_send![super(self), hitTest: point] };
+            match hit {
+                Some(_) if crate::macos::current_press(self.mtm()) == crate::Press::Left => Some(Retained::into_super(self.retain())),
+                hit => hit,
+            }
+        }
+
+        /// The window doesn't drag itself by the video: the video drags it (to snap it).
+        #[unsafe(method(mouseDownCanMoveWindow))]
+        fn can_move_window(&self) -> bool {
+            false
+        }
+
+        #[unsafe(method(acceptsFirstMouse:))]
+        fn accepts_first_mouse(&self, _event: Option<&NSEvent>) -> bool {
+            true
+        }
+
+        #[unsafe(method(mouseDown:))]
+        fn mouse_down(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_start(VIDEO_DRAG_START);
+            }
+        }
+
+        #[unsafe(method(mouseDragged:))]
+        fn mouse_dragged(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_to();
+            }
+        }
+
+        #[unsafe(method(mouseUp:))]
+        fn mouse_up(&self, _event: &NSEvent) {
+            if let Some(t) = self.ivars().target.load() {
+                t.drag_end();
+            }
+        }
+    }
+);
+
+impl PipVideo {
     fn new(mtm: MainThreadMarker, frame: NSRect, target: &PopTarget) -> Retained<Self> {
         let this = Self::alloc(mtm).set_ivars(BarIvars { target: Weak::from(target) });
         unsafe { msg_send![super(this), initWithFrame: frame] }
@@ -1342,18 +1443,27 @@ impl PopTarget {
         }
     }
 
-    fn drag_start(&self) {
+    /// A press by the bar (`start` 0) or the video (`VIDEO_DRAG_START`).
+    fn drag_start(&self, start: f64) {
         let Some(panel) = self.panel() else { return };
-        self.ivars().drag.set(Some((NSEvent::mouseLocation(), panel.frame().origin)));
+        let (at, from) = (NSEvent::mouseLocation(), panel.frame().origin);
+        self.ivars().drag.set(Some(Drag::new((at.x, at.y), (from.x, from.y), start)));
         self.ivars().caught.set(None);
     }
 
-    /// The window follows the pointer; snapping, within `SNAP_CATCH` of a
-    /// place of the screen under the pointer it lands exactly on it.
+    /// Once the press has moved its start, the window follows the pointer;
+    /// snapping, within `SNAP_CATCH` of a place of the screen under the
+    /// pointer it lands exactly on it.
     fn drag_to(&self) {
-        let (Some((down, from)), Some(panel), Some(mtm)) = (self.ivars().drag.get(), self.panel(), MainThreadMarker::new()) else { return };
+        let (Some(drag), Some(panel), Some(mtm)) = (self.ivars().drag.get(), self.panel(), MainThreadMarker::new()) else { return };
         let at = NSEvent::mouseLocation();
-        let free = NSPoint::new(from.x + at.x - down.x, from.y + at.y - down.y);
+        let drag = drag.to((at.x, at.y));
+        self.ivars().drag.set(Some(drag));
+        if !drag.moving {
+            return;
+        }
+        let (x, y) = drag.origin((at.x, at.y));
+        let free = NSPoint::new(x, y);
         let size = panel.frame().size;
         let caught = if self.ivars().snap.get() {
             screen_at(mtm, at).and_then(|s| catch_on(usable(&s), free, size, s.backingScaleFactor()))
@@ -1366,10 +1476,11 @@ impl PopTarget {
 
     /// Let go: on a place it's anchored there (and the next window opens there); elsewhere free.
     fn drag_end(&self) {
-        let Some((down, _)) = self.ivars().drag.take() else { return };
+        let Some(drag) = self.ivars().drag.take() else { return };
         let at = NSEvent::mouseLocation();
-        // A press that didn't move leaves things as they were.
-        if (at.x - down.x).abs() < 1.0 && (at.y - down.y).abs() < 1.0 {
+        // A click (a press that didn't move, or the video's under its start)
+        // leaves things as they were.
+        if !drag.dragged((at.x, at.y)) {
             return;
         }
         if self.ivars().snap.get() {
@@ -1393,7 +1504,12 @@ impl PopTarget {
         }
         let (Some(host), Some(colors)) = (self.ivars().host.borrow().as_ref().and_then(|h| h.load()), self.ivars().colors.borrow().clone()) else { return };
         let Some(content) = (unsafe { host.superview() }) else { return };
-        let view = keys_view(mtm, host.frame(), &colors);
+        // Over the video, and dragged by as the video is.
+        let f = host.frame();
+        let sheet = keys_view(mtm, NSRect::new(NSPoint::new(0.0, 0.0), f.size), &colors);
+        let view: Retained<NSView> = Retained::into_super(PipVideo::new(mtm, f, self));
+        view.setAutoresizingMask(NSAutoresizingMaskOptions::ViewWidthSizable | NSAutoresizingMaskOptions::ViewHeightSizable);
+        view.addSubview(&sheet);
         content.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, Some(&host));
         *self.ivars().keys.borrow_mut() = Some(view);
         if let Some(b) = self.button("keys") {
@@ -1518,11 +1634,12 @@ impl Popped {
         let frame_box = flat_box(mtm, NSRect::new(NSPoint::new(0.0, 0.0), size), &colors.background, Some(&colors.border));
         frame_box.setAutoresizingMask(sizing);
         content.addSubview(&frame_box);
-        // The video, inside the border, under the bar.
-        let host = NSView::initWithFrame(NSView::alloc(mtm), NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - CHROME_W, h - CHROME_H)));
+        let target = PopTarget::new(mtm, source);
+        // The video, inside the border, under the bar: dragged by, as the bar.
+        let video = PipVideo::new(mtm, NSRect::new(NSPoint::new(1.0, 1.0), NSSize::new(w - CHROME_W, h - CHROME_H)), &target);
+        let host: Retained<NSView> = Retained::into_super(video);
         host.setAutoresizingMask(sizing);
         content.addSubview(&host);
-        let target = PopTarget::new(mtm, source);
         *pip_panel.ivars().target.borrow_mut() = Some(Weak::from(&*target));
         // The bar (22 px with its rule, as in Fireflies): the title, then the controls flush right.
         let bar = PipBar::new(mtm, NSRect::new(NSPoint::new(1.0, h - 1.0 - BAR), NSSize::new(w - CHROME_W, BAR)), &target);
@@ -1705,7 +1822,7 @@ fn screen_rect(view: &NSView) -> Option<NSRect> {
 
 #[cfg(test)]
 mod tests {
-    use super::{CHROME_H, CHROME_W, CONTROLS, KEYS, MIN_W, Media, fit_aspect, hex, key_action, media_state, seek_by};
+    use super::{CHROME_H, CHROME_W, CONTROLS, Drag, KEYS, MIN_W, Media, VIDEO_DRAG_START, fit_aspect, hex, key_action, media_state, seek_by};
     use objc2_foundation::NSSize;
 
     #[test]
@@ -1785,6 +1902,36 @@ mod tests {
         assert_eq!(sections, [0, 1, 1, 1, 1, 2, 2, 2, 3, 3, 3]);
         // Room for the title's 70 px, eleven controls and three seams.
         assert_eq!(MIN_W, 8.0 + 70.0 + 11.0 * 22.0 + 3.0 * 8.0 + 2.0);
+    }
+
+    #[test]
+    fn the_popped_window_drags_by_its_video_past_4_points_else_its_a_click() {
+        // The video: moved 3 points and let go, a click (the window stays, takes the keyboard).
+        let d = Drag::new((100.0, 100.0), (20.0, 30.0), VIDEO_DRAG_START);
+        assert!(!d.moving);
+        let d = d.to((103.0, 100.0));
+        assert!(!d.moving, "under 4 points the window stays");
+        assert!(!d.dragged((103.0, 100.0)), "a click");
+        // Past 4 (3, 3 is 4.2 away), it follows from where it was pressed, and
+        // keeps following when the pointer comes back nearer.
+        let d = Drag::new((100.0, 100.0), (20.0, 30.0), VIDEO_DRAG_START).to((103.0, 103.0));
+        assert!(d.moving);
+        assert_eq!(d.origin((103.0, 103.0)), (23.0, 33.0));
+        let d = d.to((101.0, 100.0));
+        assert!(d.moving);
+        assert_eq!(d.origin((140.0, 70.0)), (60.0, 0.0));
+        assert!(d.to((140.0, 70.0)).dragged((140.0, 70.0)), "let go there: a drag");
+        // Exactly 4 is a drag, as in Fireflies (movable.rs: dist >= DRAG_START).
+        assert!(Drag::new((0.0, 0.0), (0.0, 0.0), VIDEO_DRAG_START).to((0.0, -4.0)).moving);
+        // Dragged out and back to where it was pressed: nothing to anchor.
+        let back = Drag::new((0.0, 0.0), (0.0, 0.0), VIDEO_DRAG_START).to((30.0, 0.0)).to((0.0, 0.0));
+        assert!(!back.dragged((0.0, 0.0)));
+        // The bar follows at once, as before; a press that doesn't move is no drag.
+        let bar = Drag::new((0.0, 0.0), (5.0, 5.0), 0.0);
+        assert!(bar.moving);
+        assert_eq!(bar.to((1.0, 0.0)).origin((1.0, 0.0)), (6.0, 5.0));
+        assert!(!bar.dragged((0.4, 0.0)));
+        assert!(bar.dragged((1.0, 0.0)));
     }
 
     #[test]

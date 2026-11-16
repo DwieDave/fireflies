@@ -21,7 +21,7 @@ import { focusText } from "./md-pane.ts";
 import { followChanges, loadDoc } from "./file-io.ts";
 import { goLine, search, step } from "./find.ts";
 import { mountViewer } from "./drawn-tabs.ts";
-import { newDoc, publish, select } from "./pane-tabs.ts";
+import { focusedHere, newDoc, publish, select } from "./pane-tabs.ts";
 import { nextCommand, setShared, settings, shared, theme } from "herdr";
 import { syntaxColors } from "./logic.ts";
 import { vimSettled } from "./pane-vim.ts";
@@ -39,6 +39,8 @@ export function startFields(ed: EditorPane, pr: PaneProps, cx: AsyncContext): vo
   ed.on = pr.on ?? null;
   ed.slot = pr.slot ?? null;
   ed.seenChange = newestId(fileChanges(shared));
+  // The app's editor.open from before this pane started isn't for it (shared keeps the last one).
+  ed.seenGoto = readShared(shared, GOTO_KEY, null)?.n ?? null;
   // A file sent to this pane's own slot just before it started (the files
   // pane put this editor in its preview pane's place): opened on the first frame.
   const req = readShared(shared, OPEN_KEY, null);
@@ -163,8 +165,11 @@ export function runLoops(ed: EditorPane, cx: AsyncContext): void {
     });
   }
 
-  // A newly opened editor takes the keyboard.
-  for (const ms of [0, 120, 400]) cx.timer.after(ms, () => focusText(ed));
+  // A newly opened editor takes the keyboard: when it's the focused pane (a copy loaded out of
+  // sight, a pinned pane's, leaves it where it is).
+  for (const ms of [0, 120, 400]) cx.timer.after(ms, () => {
+    if (focusedHere(ed)) focusText(ed);
+  });
 
   cx.spawn(async (cx) => {
     for (;;) {
@@ -188,9 +193,13 @@ export function watchShared(ed: EditorPane, cx: Context): void {
   if (newestId(fileChanges(shared)) > ed.seenChange) cx.timer.after(0, (cx) => followChanges(ed, cx));
 
   // The app's editor.open on a file one of the tabs holds: that tab, at the line asked for.
+  // Only the pane the app focused for it: another editor on the same file (a pinned copy out of
+  // sight, a second pane on the scratchpad) leaves the keyboard where it is.
   if (goto && goto.n !== ed.seenGoto && ed.allDocs().some((d) => d.path === goto.path)) {
     ed.seenGoto = goto.n;
     cx.timer.after(0, (cx) => {
+      if (!focusedHere(ed)) return;
+
       ed.openFile(goto.path, cx, { line: goto.line ?? null, col: goto.col ?? null });
       cx.notify();
     });
