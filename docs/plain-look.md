@@ -171,7 +171,26 @@ stand-ins, `importLibrary(spec, standins)` loads one library; a stand-in for
 `herdr` gives `layout` (a layout tree, nocturne's for the dithered look) and
 `shared("layout")` (its name), as scripts/look.test.ts does.
 
-## Art that stays (both looks)
+## Opened outside nocturne: the folder
+
+In nocturne each window opens through nocturne's own opener, which passes
+the folder it found (props `{ folder, on }`). Elsewhere (`mod.open {name}`,
+the palette's Window rows, a pane made by `pane.split {mod}`) a mod gets no
+props and must find the folder itself: the shown space's own folder, else
+the focused terminal's, else a terminal's in the shown tab, else the space's
+(nocturne/panels.ts `here()`; scripts' `here.ts` is the small copy).
+
+| mod | opened without props | to do (its conversion firefly) |
+| --- | --- | --- |
+| scripts | fixed: `here.ts` (scripts-pane.test.ts proves both ways) | none |
+| git, github, databases | already: their own `here()` when `folder` is missing | none (keep it through the conversion) |
+| procs | needs none: the machine's processes; its tab defaults to "procs" | none |
+| file-tree | lists the home folder (main.ts `reroot(…, pr.path \|\| pr.folder \|\| home())`) | fall back to the shown space's folder, as scripts |
+| finder | "No folder: open a terminal in the project first" (main.ts) | the same fallback |
+| notifications | the overview needs `role` (nocturne passes it): `mod.open` can't open it | a default role when none is given, then a palette row |
+| editor, markdown, preview | need a file (`path`): "no file given" | nothing: they open from a file (the files pane, a link) |
+
+
 
 Not chrome, drawn as it is in every layout: nocturne's sky, moon, stars,
 hills, meadow and jar glass (`sky.ts`, `rail.ts`, `meadow.ts`, `glow.ts`, the

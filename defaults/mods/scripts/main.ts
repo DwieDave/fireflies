@@ -2,7 +2,8 @@
 // tab strip's ▶ (../nocturne/scripts.ts), or centered from cmd-shift-r.
 //
 //   head     ▶ Scripts and the folder they come from: the space's own
-//            folder, else the focused pane's (props { folder, on })
+//            folder, else the focused pane's (props { folder, on }; opened
+//            without them, by mod.open or as a pane: here.ts finds it)
 //   runs     every run (runs.ts), running first, a pip and a count per
 //            state in the header; each row a pip in its state's color, name, runner, running / ok / exit N / stopped, how long; the row
 //            under the cursor or pointer shows three chips (runChips): watch
@@ -56,6 +57,7 @@ import type { RunMenu } from "./run-menu.ts";
 import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, headHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
 import { frameBox, titleShown } from "@fireflies/look";
+import { shownFolder } from "./here.ts";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [
@@ -122,8 +124,11 @@ export default class ScriptsDeck extends View {
 
     this.overlay = p.overlay ?? null;
     this.slot = p.slot ?? null;
-    this.folder = p.folder ?? null;
-    this.on = p.on ?? null;
+    // No folder given (mod.open, a pane): the shown space's, as nocturne's opener finds it (here.ts).
+    const where = p.folder === undefined ? shownFolder() : { folder: p.folder, on: p.on ?? null };
+
+    this.folder = where.folder;
+    this.on = where.on;
     this.key = `${this.on ?? ""}:${this.folder ?? ""}`;
     this.scripts = readSharedMap(shared, FOUND).get(this.key) ?? null;
     this.cursor = p.focus === "runs" ? 0 : -1;

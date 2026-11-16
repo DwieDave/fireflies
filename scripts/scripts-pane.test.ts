@@ -13,13 +13,13 @@ mock.module("herdr", () => ({
   shared: (k: string) => st.shared[k] ?? null, setShared: (k: string, v: unknown) => { st.shared[k] = v; },
   run: (name: string, args?: any) => { st.runs.push([name, args]); return null; },
   closeOverlay: (id: unknown) => { st.closed.push(id); }, openOverlay: (spec: any) => { st.opened.push(spec); return "o9"; }, notify: () => null,
-  keys: () => [], spaces: () => [], panes: () => st.panes, terminals: () => [], agents: () => [], focused: () => st.focused,
+  keys: () => [], spaces: () => st.spaces, panes: () => st.panes, terminals: () => [], agents: () => [], focused: () => st.focused,
   hc: async () => ({ code: 1, stdout: "" }), home: () => "/h", appHome: () => "/tmp/none", exec: async () => ({ code: 1, stdout: "", stderr: "" }),
   nextCommand: () => new Promise(() => {}), readTextFile: async () => null, writeTextFile: async () => null, layout: () => null,
 }));
 
 beforeEach(() => {
-  Object.assign(st, { shared: {}, runs: [], closed: [], opened: [], panes: [], focused: null, props: { overlay: "d1", folder: "/src" } });
+  Object.assign(st, { shared: {}, runs: [], closed: [], opened: [], panes: [], spaces: [], focused: null, props: { overlay: "d1", folder: "/src" } });
 });
 
 const { default: Deck } = await import("../defaults/mods/scripts/main.ts");
@@ -113,4 +113,32 @@ test("ctrl-t moves the deck into a pane and back out, with its filter and cursor
   expect(closes()).toEqual([["pane.close", { pane: "p3" }]]);
   expect(st.shared["scripts.deck"]?.id).toBe("o9");
   expect(open({ ...st.opened.at(-1).props, overlay: "o9" }).d.query).toBe("te");
+});
+
+// Opened without a folder (mod.open {name: "scripts"}, the palette's Scripts in any
+// layout, or a scripts pane) it reads the shown space's, as nocturne's opener finds it.
+const space = (over: any) => ({ id: "s1", name: "themes", active: true, attached: false, folder: "/home/a", machine: null, tabs: [{ id: "t1", active: true }], ...over });
+
+test("a folder given (nocturne's opener) is the folder, on its machine; none given is looked up", () => {
+  st.spaces = [space({ attached: true, folder: "/elsewhere" })];
+  const given = open({ folder: "/src", on: "box", overlay: "d1" });
+  expect([given.d.folder, given.d.on]).toEqual(["/src", "box"]);
+  const none = open({ overlay: "d1" });
+  expect([none.d.folder, none.d.on]).toEqual(["/elsewhere", null]);
+});
+
+test("opened without one: the space's own folder, else the focused terminal's, else a terminal's in the shown tab", () => {
+  st.spaces = [space({ attached: true, folder: "/repo", machine: "lab" })];
+  expect([open({ slot: "s9" }).d.folder, open({ slot: "s9" }).d.on]).toEqual(["/repo", "lab"]);
+  // not chosen for the space: the focused terminal's live folder
+  st.spaces = [space({})];
+  st.panes = [{ pane: "p1", tab: "t1", terminal: "1:a", cwd: "/work/app", focused: true }, { pane: "p2", tab: "t1", terminal: null, mod: "scripts" }];
+  st.focused = { pane: "p1", cwd: "/work/app" };
+  expect(open({ slot: "s9" }).d.folder).toBe("/work/app");
+  // the scripts pane itself has the focus (a mod pane, no folder): a terminal's in the tab
+  st.focused = { pane: "p2", cwd: null };
+  expect(open({ slot: "s9" }).d.folder).toBe("/work/app");
+  // no terminal with a folder: the space's folder
+  st.panes = [];
+  expect(open({ slot: "s9" }).d.folder).toBe("/home/a");
 });
