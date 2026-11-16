@@ -1,1 +1,18 @@
-{ "place": "none", "focusable": true }
+{
+  "place": "none",
+  "focusable": true,
+  "overlay": {
+    "kind": "window",
+    "key": "github",
+    "frame": "none",
+    "scrim": true,
+    "width": 0.85,
+    "height": 0.85,
+    "resizable": {
+      "min": [
+        520,
+        360
+      ]
+    }
+  }
+}
