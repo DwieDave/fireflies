@@ -7368,9 +7368,10 @@ mod tests {
         let corner = point(vp.width - px(30.0), vp.height - px(20.0));
         let b = shown(super::Hang::Press, corner);
         assert_eq!(b.bottom_right(), corner, "flipped, not slid: {b:?}");
-        // Near the right edge only: flipped left, still below.
+        // Near the right edge only: flipped left (its top right corner at the press: GPUI's switched
+        // anchor drops the gap), still below.
         let right = point(vp.width - px(30.0), px(50.0));
-        assert_eq!(shown(super::Hang::Press, right).origin, point(right.x - menu.width, px(50.0) + gap));
+        assert_eq!(shown(super::Hang::Press, right).origin, point(right.x - menu.width, px(50.0)));
         // From a row: under it at its left edge.
         let row = |y: f32| super::Hang::Under { over: None, rect: [40.0, y, 300.0, 24.0] };
         assert_eq!(shown(row(200.0), corner).origin, point(px(40.0), px(224.0)));
