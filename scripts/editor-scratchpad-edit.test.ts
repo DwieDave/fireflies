@@ -1,11 +1,16 @@
-// The scratchpad edited as one document (Developer, 2026-11-16: "adds random
-// newlines on top of its markdown"): the rendered view driven by its key
-// handlers as his keys would, on a note like his (a heading, a task list with
-// long items, a blank line inside the list, a lone "- [ ] S", a blank line at
-// the end). Enter at a block's start opens a block above (no blank lines left
-// at the top); a new block left untouched leaves no blank lines, on disk too.
-// The harness is editor-mdlive.test.ts's, its stand-in editor wrapping at 60
-// characters.
+// The scratchpad edited as one document (Developer, 2026-11-16: "navigating
+// blocks feels very unintuitive still, very robotical and non expecting",
+// "adds random newlines on top of its markdown", "entering rows at a time too
+// small textarea"): the rendered view driven by its key handlers as his keys
+// would, on a note like his (a heading, a task list with long items, a blank
+// line inside the list, a lone "- [ ] S", a blank line at the end). The caret
+// crosses blocks as it crosses lines; enter in a list and a task list goes on
+// and ends the list without the next text joining its last item; enter at a
+// block's start opens a block above (no blank lines left at the top);
+// backspace takes a mark off, joins blocks and removes an empty one; a new
+// block left untouched leaves no blank lines; a long paragraph's box holds
+// every row; what isn't edited keeps its bytes. The harness is
+// editor-mdlive.test.ts's, its stand-in editor wrapping at 60 characters.
 // mock.module is process-wide: this file runs alone.
 import { test, expect, mock, beforeEach } from "bun:test";
 
@@ -267,7 +272,123 @@ const lines = (p: any) => main(p).value().split("\n");
 /** The note written to disk after the autosave's wait. */
 const saved = async () => { tick(); await flush(); tick(); await flush(); return files[PATH]; };
 
-// ---- enter at a block's start, a new block left untouched
+// ---- the caret crosses blocks as it crosses lines
+
+test("down from the heading lands in the first task's text, not in its box; up comes back to the same letter", async () => {
+  const p = await note();
+  expect(block(p).value()).toBe("# Ideas");
+  block(p).set_cursor(0, 4); // "# Id|eas"
+  press(p, "down");
+  expect(block(p).value()).toBe(`- [ ] ${LONG}`);
+  expect(caret(p)).toEqual({ line: 1, col: 8 }); // "- [ ] Br|owser"
+  press(p, "up");
+  expect(block(p).value()).toBe("# Ideas");
+  expect(caret(p)).toEqual({ line: 0, col: 4 });
+});
+
+test("down through a long task's wrapped rows, then into the next task's text at the same column (the text drawn right of the boxes)", async () => {
+  const p = await note();
+  press(p, "down");
+  // Down inside the long task is the editor's own: its second drawn row.
+  block(p).set_cursor(0, 10);
+  expect(press(p, "down")).toBe(false);
+  expect(block(p).cursor().col).toBeGreaterThan(60);
+  const row2 = block(p).bounds(block(p).cursor()).x / 8;
+  // Its last row: down leaves it for the next task, the caret under where it was.
+  press(p, "down");
+  expect(block(p).value()).toBe("- [x] Find out why port forwards drop");
+  expect(caret(p)).toEqual({ line: 2, col: 6 + row2 });
+});
+
+test("up into a long task lands on its last drawn row, not its first", async () => {
+  const p = await note();
+  onLine(p, 2);
+  expect(block(p).value()).toBe("- [x] Find out why port forwards drop");
+  block(p).set_cursor(0, 10); // "- [x] Find| out": 4 into its text
+  press(p, "up");
+  expect(block(p).value()).toBe(`- [ ] ${LONG}`);
+  const c = block(p).cursor();
+  const rows = drawnRows(block(p).value());
+  expect(c.col).toBeGreaterThanOrEqual(rows.at(-1)!.start);
+  expect(block(p).bounds(c).x / 8).toBe(4);
+});
+
+test("the blank line inside the list is passed over both ways; the lone \"- [ ] S\" is reached and left", async () => {
+  const p = await note();
+  for (let i = 0; i < 4; i++) press(p, "down");
+  expect(block(p).value()).toBe("- [ ] Scratchpad: blocks should feel like one document");
+  press(p, "down");
+  expect(block(p).value()).toBe("- [ ] Editor type checking of the mods");
+  press(p, "down");
+  expect(block(p).value()).toBe("- [ ] S");
+  expect(caret(p).line).toBe(6);
+  // At the note's end down stays: the editor's own key.
+  expect(press(p, "down")).toBe(false);
+  press(p, "up");
+  press(p, "up");
+  expect(block(p).value()).toBe("- [ ] Scratchpad: blocks should feel like one document");
+});
+
+test("left at a block's start goes to the end of the block before; right at its end to the next block's text", async () => {
+  const p = await note();
+  onLine(p, 2);
+  block(p).set_cursor(0, 0);
+  expect(press(p, "left")).toBe(true);
+  expect(block(p).value()).toBe(`- [ ] ${LONG}`);
+  expect(caret(p)).toEqual({ line: 1, col: LONG.length + 6 });
+  expect(press(p, "right")).toBe(true);
+  expect(block(p).value()).toBe("- [x] Find out why port forwards drop");
+  expect(caret(p)).toEqual({ line: 2, col: 6 }); // after the box
+  // Inside a block they're the editor's own.
+  expect(press(p, "right")).toBe(false);
+  expect(block(p).cursor()).toEqual({ line: 0, col: 7 });
+});
+
+test("a click lights a block with the caret about where it was pressed, not at its start", async () => {
+  const p = await note();
+  const v = p.renderedView(theme);
+  const row = byId(v, "rd-item-" + R(p).hashOf(R(p).src(R(p).units.find((u: any) => u.from === 2))));
+  expect(row).toBeTruthy();
+  // Pressed 14 characters into the item's text (its box and gap are 26 px).
+  row.calls.on_mouse_down[0][1]({ local_position: { x: 26 + 14 * 8 + 2, y: 6 }, bounds: { x: 0, y: 0, width: 700, height: 20 }, position: { x: 0, y: 0 } }, cx());
+  row.calls.on_click[0][0]({}, cx());
+  settle();
+  expect(block(p).value()).toBe("- [x] Find out why port forwards drop");
+  expect(caret(p)).toEqual({ line: 2, col: 6 + 14 });
+});
+
+// ---- enter
+
+test("enter in a task list makes the next task; on that empty task it ends the list, and what's typed then is a paragraph of its own", async () => {
+  const p = await note();
+  for (let i = 0; i < 6; i++) press(p, "down");
+  expect(block(p).value()).toBe("- [ ] S");
+  block(p).set_cursor(0, 7);
+  press(p, "enter");
+  expect(lines(p).slice(6, 8)).toEqual(["- [ ] S", "- [ ] "]);
+  expect(caret(p)).toEqual({ line: 7, col: 6 });
+  press(p, "enter");
+  // The list ends: the empty task gone, a blank line, the new block.
+  expect(lines(p).slice(6, 9)).toEqual(["- [ ] S", "", ""]);
+  expect(R(p).offersKinds()).toBe(true);
+  type(p, "Later");
+  expect(lines(p).slice(6, 9)).toEqual(["- [ ] S", "", "Later"]);
+  tick();
+  // Its own paragraph, not more of the task above.
+  R(p).recut(cx());
+  expect(R(p).all.find((u: any) => u.from === 8)?.kind).toBe("para");
+});
+
+test("enter in a plain list makes the next item; in the middle of an item it splits there", async () => {
+  const p = await note(["- one", "- two", ""].join("\n"));
+  block(p).set_cursor(0, 5);
+  press(p, "enter");
+  expect(main(p).value()).toBe(["- one", "- ", "- two", ""].join("\n"));
+  type(p, "half");
+  block(p).set_cursor(1, 4); // "- ha|lf"
+  press(p, "enter");
+  expect(main(p).value()).toBe(["- one", "- ha", "- lf", "- two", ""].join("\n"));
+});
 
 test("enter at the very start of the note opens a block above the heading: no blank lines left at the top", async () => {
   const p = await note();
@@ -288,7 +409,6 @@ test("enter at the very start of the note opens a block above the heading: no bl
   expect(main(p).value()).toBe("Today\n\n" + NOTE);
 });
 
-
 test("enter, enter at a block's end and walking away leaves no blank lines; nor does a + left empty", async () => {
   const p = await note();
   block(p).set_cursor(0, 7);
@@ -307,3 +427,111 @@ test("enter, enter at a block's end and walking away leaves no blank lines; nor 
   expect(await saved()).toBe(NOTE);
 });
 
+// ---- backspace and delete
+
+test("backspace at a task's text start takes its box off; again, the line joins the task above", async () => {
+  const p = await note();
+  onLine(p, 2);
+  block(p).set_cursor(0, 6);
+  expect(press(p, "backspace")).toBe(true);
+  expect(lines(p)[2]).toBe("Find out why port forwards drop");
+  expect(caret(p)).toEqual({ line: 2, col: 0 });
+  press(p, "backspace");
+  expect(lines(p)[1]).toBe(`- [ ] ${LONG}Find out why port forwards drop`);
+  expect(caret(p)).toEqual({ line: 1, col: LONG.length + 6 });
+  expect(lines(p).length).toBe(NOTE.split("\n").length - 1);
+});
+
+test("backspace at a paragraph's start joins it to the one before, the blank lines between gone", async () => {
+  const p = await note(["First words.", "", "", "Second words.", ""].join("\n"));
+  press(p, "down");
+  expect(block(p).value()).toBe("Second words.");
+  block(p).set_cursor(0, 0);
+  press(p, "backspace");
+  expect(main(p).value()).toBe("First words.Second words.\n");
+  expect(caret(p)).toEqual({ line: 0, col: 12 });
+  // A heading's mark goes the same way.
+  const q = await note(["# Title", "Text", ""].join("\n"));
+  block(q).set_cursor(0, 2);
+  press(q, "backspace");
+  expect(main(q).value()).toBe(["Title", "Text", ""].join("\n"));
+});
+
+test("backspace in an empty block removes it and goes to the end of the block before; a code block isn't joined", async () => {
+  const p = await note(["Text", "", "```", "code", "```", "", "After", ""].join("\n"));
+  press(p, "down");
+  press(p, "down");
+  press(p, "down");
+  press(p, "down");
+  expect(block(p).value()).toBe("After");
+  block(p).set_cursor(0, 0);
+  press(p, "backspace");
+  // Nothing joins a code block: the caret goes to its end.
+  expect(main(p).value()).toBe(["Text", "", "```", "code", "```", "", "After", ""].join("\n"));
+  expect(caret(p)).toEqual({ line: 4, col: 3 });
+  // An empty block made at "After"'s end, then backspace: gone, the caret back at "After"'s end.
+  press(p, "down");
+  block(p).set_cursor(0, 5);
+  press(p, "enter");
+  expect(R(p).offersKinds()).toBe(true);
+  press(p, "backspace");
+  expect(main(p).value()).toBe(["Text", "", "```", "code", "```", "", "After", ""].join("\n"));
+  expect(caret(p)).toEqual({ line: 6, col: 5 });
+});
+
+test("delete at a block's end joins the next block's text on (its mark off)", async () => {
+  const p = await note(["Words", "", "- more", ""].join("\n"));
+  block(p).set_cursor(0, 5);
+  press(p, "delete");
+  expect(main(p).value()).toBe("Wordsmore\n");
+});
+
+// ---- the box grows with its text
+
+test("a long paragraph typed into: its box always holds every row, measured or not yet", async () => {
+  const p = await note(["Start", ""].join("\n"));
+  block(p).set_cursor(0, 5);
+  for (let i = 0; i < 30; i++) {
+    type(p, " word");
+    // Before the measure (30 ms later): never shorter than the rows its text takes.
+    const rows = drawnRows(block(p).value()).length;
+    expect(litHeight(R(p))).toBeGreaterThanOrEqual(rows * 18 + 10);
+    tick();
+    expect(litHeight(R(p))).toBeGreaterThanOrEqual(rows * 18 + 10);
+  }
+});
+
+test("measured while the editor had scrolled inside a box too short, the whole text still counts", async () => {
+  const p = await note(["x ".repeat(100), ""].join("\n"));
+  block(p).scrolled = 18; // one row out of sight at the top
+  R(p).measure(cx());
+  expect(R(p).blockH).toBeGreaterThanOrEqual(drawnRows(block(p).value()).length * 18);
+});
+
+// ---- the note's bytes
+
+test("every edit leaves the note's first byte, and every line it didn't touch, as they were", async () => {
+  const edits: [string, (p: any) => void][] = [
+    ["enter at the start, left untouched", (p) => { press(p, "enter"); press(p, "down"); }],
+    ["enter at the heading's end, left", (p) => { block(p).set_cursor(0, 7); press(p, "enter"); press(p, "up"); }],
+    ["a new task typed", (p) => { press(p, "down"); block(p).set_cursor(0, LONG.length + 6); press(p, "enter"); type(p, "new"); }],
+    ["a box taken off and back", (p) => { onLine(p, 2); block(p).set_cursor(0, 6); press(p, "backspace"); main(p).undo(); settle(); }],
+    ["the caret walked down and up", (p) => { for (let i = 0; i < 6; i++) press(p, "down"); for (let i = 0; i < 6; i++) press(p, "up"); }],
+    ["left and right across every block", (p) => { for (let i = 0; i < 400; i++) press(p, "right"); for (let i = 0; i < 400; i++) press(p, "left"); }],
+    ["backspace at the note's start", (p) => { press(p, "backspace"); }],
+  ];
+  for (const [what, act] of edits) {
+    const p = await note();
+    act(p);
+    const now = main(p).value();
+    expect([what, now[0]]).toEqual([what, "#"]);
+    const was = NOTE.split("\n");
+    const kept = now.split("\n");
+    // The heading and the lines after the long task are kept byte for byte (an edit there excepted).
+    expect([what, kept[0]]).toEqual([what, was[0]]);
+    expect([what, kept.slice(-4)]).toEqual([what, was.slice(-4)]);
+    const disk = await saved();
+    if (disk !== now) console.log(what, JSON.stringify(writes.map((w) => w[1].slice(0, 20))), JSON.stringify(disk?.slice(0,20)), JSON.stringify(now.slice(0,20)), p.cur.saveState, p.cur.conflict);
+    expect([what, disk === undefined || disk === now]).toEqual([what, true]);
+  }
+});

@@ -20,13 +20,12 @@
 // keep their keys (named by their text, so moving down a line keeps their
 // height and drawing), and nothing is split again per drawn unit.
 //
-// Keys in the block (key): up / down past its first or last row step into the
-// unit before or after (blank lines between are passed over); enter on a list
-// item, task or quote starts the next one (mdedit.ts enter); enter on the
-// last line of any other block (on any line of a paragraph) starts a new
-// paragraph below it (the text after the caret goes with it; shift-enter: a
-// line break inside the block; on an empty new block it stays as it is);
-// with vim in normal mode, enter makes the new block below the lit one and
+// Keys in the block (rendered-keys.ts): the caret crosses blocks as it
+// crosses lines (up / down onto the nearest row at the same place in the
+// text, left / right at the ends); enter continues a list, opens a block
+// above at a block's start, else starts a paragraph below; backspace takes a
+// mark off and joins blocks; an untouched new block goes as the caret leaves
+// it; with vim in normal mode, enter makes the new block below the lit one and
 // types into it (main.ts vimKey);
 // undo and redo are the file's. With vim, the keys go to vim over the whole
 // text first (its caret mapped there), and the lit lines follow vim: the
@@ -109,6 +108,14 @@ export interface ViewOptions {
   readonly unzoom: (px: number) => number;
 }
 
+/** A press on a drawn unit: its key, where in it, and its size (layout px). */
+export interface Press {
+  readonly key: string;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
+}
+
 /** A caret and the selection's other end. */
 interface Placed {
   readonly anchor: Pos;
@@ -162,6 +169,7 @@ export class Rendered {
   srcs = new WeakMap<Unit, string>();
   blockH: number | null = null; // the block editor's measured content height
   blockHFor: string | null = null; // the text it was measured with
+  padTop = 0; // the room above the block editor's first row (layout px)
   litW = 600; // the block editor's width (layout px)
   cw = CHAR;
   rowH = ROW;
@@ -175,6 +183,8 @@ export class Rendered {
   made: number | null = null; // the line of an empty block made here (enter, a +)
   /** The lines that empty block added: they go again when the caret leaves it untouched. */
   madeSpan: Range | null = null;
+  /** Where the pointer pressed a drawn unit (its key, the press in it, its size: layout px). */
+  press: Press | null = null;
   block: EditorStateT;
 
   constructor(doc: RenderedDoc, host: RenderedHost) {

@@ -75,7 +75,7 @@ class Ed {
   redo() { const r = this.redos.pop(); if (r == null) return; this.undos.push(this.v); this.v = r; this.handlers.change?.({}, cx()); }
   /** Typing: the text becomes `v`, the caret at `at`, the change event fires. */
   type(v: string, at: P) { this.v = v; this.a = this.b = at; this.handlers.change?.({}, cx()); }
-  bounds() { return { x: 0, y: 10, width: 8, height: 18, view: { x: 0, y: 0, width: 600, height: 400 } }; }
+  bounds(p: P) { return { x: p.col * 8, y: 10 + p.line * 18, width: 8, height: 18, view: { x: 0, y: 0, width: 600, height: 400 } }; }
   focus() { this.focusedNow = true; } focused() { return this.focusedNow; }
   set_tab_size() {} set_cursor_shape() {} set_diagnostics() {} set_line_notes() {} find_close() {} top_line() { return 0; } set_selections() {} scroll_to_line() {} set_soft_wrap() {}
 }
@@ -153,13 +153,14 @@ test("typing into the block writes those lines into the file, every other byte k
   expect(unsaved.at(-1)).toBeTruthy();
 });
 
-test("down past the block's last line lights the next unit; up comes back, the column kept", async () => {
+test("down past the block's last line lights the next unit; up comes back, the place in the text kept", async () => {
   const p = await pane();
+  // "# Not|es": the heading's mark taken off, the same place in the paragraph's text ("Fir|st").
   block(p).set_cursor(0, 5);
   expect(block(p).handlers.key(key("down"), cx())).toBe(true);
   expect(block(p).value()).toBe("First **para**\ngoes on.");
-  expect(block(p).cursor()).toEqual({ line: 0, col: 5 });
-  expect(main(p).cursor()).toEqual({ line: 2, col: 5 });
+  expect(block(p).cursor()).toEqual({ line: 0, col: 3 });
+  expect(main(p).cursor()).toEqual({ line: 2, col: 3 });
   // Down inside a two-line block is the block's own.
   expect(block(p).handlers.key(key("down"), cx())).toBe(false);
   block(p).set_cursor(1, 3);

@@ -1004,14 +1004,26 @@ the highlighted line shows where it will land.
   block the caret is in (a heading, a paragraph, one list item or task, a
   quote, a code block, a table) shows as its own Markdown, in place, on a
   dithered ground with the accent rail and its kind at the corner; every
-  other block stays drawn. Up / down past a block's first or last row step
-  into the next block (blank lines between are passed over); a click on a
-  drawn block puts the caret in it; enter on a list item, task or quote starts
-  the next one (on an empty one it ends the list); enter on the last line of
-  any other block, or anywhere in a paragraph, starts a new paragraph under it
-  (the text after the caret goes with it; shift-enter is a line break inside
-  the block; inside a code block enter is a new line, at its closing line's
-  end a new block; on an empty new block it stays as it is); with vim in
+  other block stays drawn. The caret crosses blocks as it crosses lines:
+  up / down past a block's first or last drawn row step into the next block
+  (blank lines between are passed over), onto its nearest row and the same
+  place in the text (marks such as a heading's # or a task's box taken off);
+  left at a block's start goes to the end of the one before, right at its end
+  to the next one's text; a click on a drawn block puts the caret about where
+  it was pressed; enter on a list item, task or quote starts the next one (on
+  an empty one at the list's end the list ends and a new block starts under
+  it); enter at a block's very start opens an empty block above it; enter on
+  the last line of any other block, or anywhere in a paragraph, starts a new
+  paragraph under it (the text after the caret goes with it; shift-enter is a
+  line break inside the block; inside a code block enter is a new line, at
+  its closing line's end a new block; on an empty new block it stays as it
+  is); backspace at the start of a block's text takes its mark off (a
+  heading, item, task or quote becomes text), before the mark it joins the
+  block's text onto the block before (not onto a code block, table or
+  picture: the caret goes there), in an empty block it removes the block;
+  delete at a block's end joins the next block's text on. An empty block
+  made by enter or a "+" that the caret leaves without a key typed in it
+  goes again with the lines it added, so no blank lines pile up; with vim in
   normal mode, enter makes the new block under the lit one and types into it
   (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
@@ -1019,7 +1031,8 @@ the highlighted line shows where it will land.
   block, put an empty paragraph there. An empty block made so offers the
   kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
-  height kept, edited in place), and a key costs the same in a long file.
+  height kept, edited in place, never shorter than its text's rows), and a
+  key costs the same in a long file.
   The file's own editor holds the whole text, so saving, undo (cmd-z,
   vim's u), the unsaved mark and the language server are the text view's, and
   lines that aren't edited stay byte for byte. Vim works over the whole text
@@ -1027,8 +1040,8 @@ the highlighted line shows where it will land.
   blocks): the lit block follows its caret, and a visual selection lights
   every block it touches, drawn in the block. What it can't do: a block
   being typed into is code-font source (a heading isn't heading-size then), a
-  click lands on a block's first line, not the character clicked; find and
-  replace work in the text view.
+  click's place is an estimate from the drawn block's width (the source shows
+  marks the drawing hides); find and replace work in the text view.
   **Pictures**: a line holding only images (`![alt](path)`, `<img src>`) is an
   image block in the rendered view: each picture fits the column and keeps
   its shape; one on the web is drawn as the preview draws it; a path that

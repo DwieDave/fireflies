@@ -78,9 +78,9 @@
 // second code editor (lit: dithered ground, accent rail, its kind at the
 // corner); every keystroke goes into the tab's code editor as one edit of
 // those lines, so save, undo and the unsaved mark are the text view's and
-// untouched lines stay byte for byte. Up / down past a block's edge step into
-// the next; enter continues a list, at another block's end starts a paragraph
-// below; a "+" by a block and "add a block" under the last add one, an empty
+// untouched lines stay byte for byte. The caret crosses blocks as lines
+// (rendered-keys.ts: arrows, enter, backspace and delete at a block's edges);
+// a "+" by a block and "add a block" under the last add one, an empty
 // one offers the kinds; vim works over the whole text as on plain text (the
 // lit lines follow its caret and visual selection). The preview's blocks
 // aren't cut while the rendered view is shown (previewStale: cut on the way
