@@ -16,6 +16,18 @@ use std::time::{Duration, SystemTime};
 
 include!(concat!(env!("OUT_DIR"), "/default_mods.rs"));
 include!(concat!(env!("OUT_DIR"), "/frame_mods.rs"));
+include!(concat!(env!("OUT_DIR"), "/mod_libraries.rs"));
+
+/// The mods' libraries (defaults/lib: `effect`, `effect/http`, `@fireflies/kit`),
+/// served to every mod by name and evaluated once per window
+/// (docs/effect-mods.md). A folder under defaults/lib is the name it's
+/// imported by; only the code is served (.ts, .js; not .d.ts or package.json).
+pub fn export_libraries() {
+    gpui_shell::library_modules::export_libraries(MOD_LIBRARIES.iter().filter_map(|(path, bytes)| {
+        let code = (path.ends_with(".ts") && !path.ends_with(".d.ts")) || path.ends_with(".js");
+        code.then(|| ((*path).to_owned(), String::from_utf8_lossy(bytes).into_owned()))
+    }));
+}
 
 #[cfg(test)]
 mod render_tests;
@@ -1401,6 +1413,7 @@ pub fn install_check_policy() {
 
 /// What mods may touch, and the `herdr` module they import.
 pub fn install_policy() -> async_channel::Receiver<Request> {
+    export_libraries();
     gpui_shell::policy::update_default(|p| {
         p.with_capabilities(capabilities())
             .with_host_module(module(Instance { name: String::new(), props: Value::Null }, 0))

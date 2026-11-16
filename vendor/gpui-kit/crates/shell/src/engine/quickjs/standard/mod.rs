@@ -13,6 +13,7 @@ use rquickjs::{Ctx, Result, loader::BuiltinResolver, loader::ModuleLoader};
 
 mod connect;
 mod console;
+mod encoding;
 mod fetch;
 mod fs;
 mod net;
@@ -67,6 +68,7 @@ pub(super) fn install(ctx: &Ctx<'_>) -> Result<()> {
     // Order is significant: URL and Crypto consume Buffer-compatible byte
     // classes installed by the first initializer.
     quickjs_jit_stdlib::init(ctx)?;
+    encoding::install(ctx)?;
     console::install(ctx)?;
     super::sandbox::install_process(ctx)?;
     fetch::install(ctx)?;

@@ -1720,6 +1720,7 @@ impl ShellRuntime {
                 standard::resolver(),
                 builtin_resolver(),
                 host_modules::HostModuleLoader,
+                LibraryModules,
                 app_modules.clone(),
             ),
             (
@@ -1727,6 +1728,7 @@ impl ShellRuntime {
                 standard::loader(),
                 builtin_loader(),
                 host_modules::HostModuleLoader,
+                LibraryModules,
                 app_modules.clone(),
             ),
         );
@@ -5386,6 +5388,46 @@ impl Loader for RegisteredComponentModule {
             ));
         }
         Module::declare(ctx.clone(), name, self.source.clone())
+    }
+}
+
+/// HERDR: the host's library modules (crate::library_modules): a bare name
+/// it registered, or a relative import from one of its files. Evaluated once
+/// per runtime, shared by every application that imports them.
+#[derive(Clone, Copy)]
+struct LibraryModules;
+
+impl Resolver for LibraryModules {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<String> {
+        let found = if name.starts_with('.') {
+            crate::library_modules::resolve_relative(base, name)
+        } else if name.starts_with('/') {
+            None
+        } else {
+            crate::library_modules::resolve_bare(name)
+        };
+        found.ok_or_else(|| JsError::new_resolving(base, name))
+    }
+}
+
+impl Loader for LibraryModules {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<Module<'js, Declared>> {
+        match crate::library_modules::source(name) {
+            None => Err(JsError::new_loading(name)),
+            Some(Err(message)) => Err(Exception::throw_message(ctx, &message)),
+            Some(Ok(source)) => Module::declare(ctx.clone(), name, source),
+        }
     }
 }
 

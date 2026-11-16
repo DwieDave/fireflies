@@ -79,6 +79,7 @@ pub(crate) mod entities;
 pub(crate) mod error;
 pub mod host;
 pub mod host_modules;
+pub mod library_modules;
 pub(crate) mod materialize;
 pub mod metrics;
 pub(crate) mod path;
