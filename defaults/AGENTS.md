@@ -296,11 +296,29 @@ read going on), `databases.forward-start` / `databases.forward-anyway` /
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "secret"?, "forward"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "forward"?, "sslmode"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
-0.88, props: {connect}})`. It is listed under "sent here" in that window
+0.88, props: {connect}})`. `sslmode` is how a Postgres or MySQL connection
+asks for TLS, in libpq's names: `"disable" | "allow" | "prefer" | "require" |
+"verify-ca" | "verify-full"` (another value refuses the request:
+`databases.connect: sslmode "…" isn't one of …`; a file's is left out).
+Absent, the client's own default (psql's prefer). The Kubernetes mod's
+port-forwards send `"disable"`: through a forward that closes the connection
+on Postgres' TLS request, psql's prefer fails instead of going on in plain.
+psql gets it in `-d`'s conninfo (`dbname='lantern' sslmode=disable`, shown in
+the Log); MySQL's client `--ssl-mode=` (DISABLED, PREFERRED for allow and
+prefer, REQUIRED, VERIFY_CA, VERIFY_IDENTITY); MariaDB's (its `mysql` too:
+its `--version` tells them apart) `--skip-ssl` for disable, nothing for allow
+and prefer, `--ssl --ssl-verify-server-cert` for the rest (its only flag that
+insists on TLS, and it checks the certificate). The verify modes want a CA
+the window doesn't set (`~/.postgresql/root.crt`, or a client's own option
+file). The connection form's `ssl` toggle (Postgres, MySQL) is on by default
+(no sslmode); off saves `disable`; a pasted URL's `?sslmode=require` (MySQL's
+`ssl-mode=` / `sslMode=`), a found `DATABASE_URL`'s or direnv's `PGSSLMODE`
+fill it, and another value than disable is kept through an edit and shown
+beside the toggle (`sslmode=require`). It is listed under "sent here" in that window
 until the person pins it. Pinned connections (saved: `P` or `s` on a sent or
 found one, its menu's "Pin it", a click on the row's pin, or the new
 connection form) are one list for the machine, `data/databases/connections.json`
