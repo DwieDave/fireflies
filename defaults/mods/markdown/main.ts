@@ -28,10 +28,10 @@
 // Commands (keys.json, `herdr-app do markdown.<c>`; every shown
 // viewer takes them): down, up, top, bottom, raw, back, reload.
 
-import { View, div, svg, PathBuilder, Background } from "gpui-kit";
-import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
+import { View, div } from "gpui-kit";
+import type { AsyncContext, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { h_flex, v_flex } from "gpui-base";
+import { v_flex } from "gpui-base";
 import * as herdr from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { openInEditor } from "./editor-route.ts";
@@ -42,10 +42,10 @@ import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./ma
 import { follow, dirname, basename, join, tilde } from "./paths.ts";
 import type { DocLink } from "./links.ts";
 import { anchorOf, documentLinks, lastIndex, nextLink, nextHeading } from "./links.ts";
-import { keysHint, keysView, keysKey } from "./keyhelp.ts";
+import { keysKey } from "./keyhelp.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
-import { edge as edgeTone } from "./tones.ts";
+import * as Bars from "./bars.ts";
 
 const MOD = "markdown";
 
@@ -54,8 +54,6 @@ const TITLES = sharedMapKey("markdown.titles", isString);
 
 // ... and its path, for the app to find the viewer showing a file (`markdown.open`).
 const PATHS = sharedMapKey("markdown.paths", isString);
-
-const ART = "mods/nocturne/art";
 
 // Local images are copied here (under the app's folder, where image() reads).
 const IMAGES = "markdown";
@@ -107,16 +105,8 @@ interface ImageSpot {
   readonly name: string | null | undefined;
 }
 
-const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 const zoom = (): number => settings().zoom || 1;
 const unzoom = (v: number): number => v / zoom();
-
-/** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
-function dither(color: Color, cell = 1): Element {
-  const dpr = appWindow().platform === "macos" ? 2 : 1;
-
-  return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
-}
 
 /** A key's name: the typed character for printable keys ("G", "?", "]"), else GPUI's key. */
 function keyOf(e: KeyEvent): string {
@@ -634,46 +624,17 @@ export default class Markdown extends View {
 
   // ---- parts
 
+  /** The bars (bars.ts): a toolbar chip, the toolbar, the empty page. */
   chip(t: Theme, id: string, label: string, action: (cx: Context) => void, on = false): Element {
-    return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
-      .text_color(on ? t.foreground : t.muted).hover((s) => s.text_color(t.foreground))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .on_click((_e, cx) => {
-        cx.stop_propagation();
-        action(cx);
-        cx.notify();
-      })
-      .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
-      .child(div().relative().child(label));
+    return Bars.chip(t, id, label, action, on);
   }
 
   toolbar(t: Theme): Element {
-    const w = this.width;
-
-    return h_flex().id("md-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
-      .when(w >= 320, (el) => el.child(div().flex_none().text_color(t.muted).child("MD")))
-      .when(this.history.length > 0, (el) => el.child(this.chip(t, "md-back", "‹", (cx) => this.back(cx))))
-      .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
-        .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(basename(this.path || "Markdown")))
-        .when(w >= 420 && Boolean(this.path), (el) => el.child(div().flex_1().min_w(0).truncate().text_color(t.dim)
-          .child(`${this.on ? this.on + ":" : ""}${tilde(dirname(this.path), home())}`))))
-      .child(this.chip(t, "md-raw", this.raw ? "raw" : "rendered", () => {
-        this.raw = !this.raw;
-      }, this.raw))
-      .when(Boolean(this.path), (el) => el
-        .child(this.chip(t, "md-edit", "edit", () => this.edit()))
-        .when(w >= 300, (e2) => e2.child(this.chip(t, "md-files", "files", () => this.revealFolder()))))
-      .child(keysHint(t, "md-keys", Boolean(this.keysShown), () => {
-        this.keysShown = !this.keysShown;
-      }).ml(4))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edgeTone(t), 1)));
+    return Bars.toolbar(this, t);
   }
 
   empty(t: Theme, title: string, hint: string): Element {
-    return v_flex().size_full().items_center().justify_center().gap(10).px(16).text_size(11)
-      .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.muted).opacity(0.6))
-      .child(div().text_color(t.foreground).child(title))
-      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.muted).child(hint)));
+    return Bars.empty(t, title, hint);
   }
 
   /** A local image's place and its name in the cache (undefined while copying). */
@@ -686,23 +647,16 @@ export default class Markdown extends View {
     return { abs: this.on ? null : abs, name: name ? `cache/${IMAGES}/${name}` : name };
   }
 
-  /** `?`: every key, in the page's place (keyhelp.ts). */
+  /** `?`: every key, in the page's place (bars.ts, keyhelp.ts). */
   keysStrip(t: Theme): Element {
-    return keysView(t, {
-      id: "md-keys-strip", title: "markdown", list: KEYS, close: () => {
-        this.keysShown = false;
-      },
+    return Bars.keysStrip(t, KEYS, () => {
+      this.keysShown = false;
     });
   }
 
-  /** The chosen link, at the foot of the page: what it says and where it goes. */
+  /** The chosen link, at the foot of the page (bars.ts). */
   linkBar(t: Theme, l: DocLink, sel: number): Element {
-    return h_flex().id("md-link").absolute().left(0).right(0).bottom(0).h(24).px(10).gap(8).items_center().text_size(11).bg(t.background)
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
-      .child(div().flex_none().text_color(t.accent).child("enter"))
-      .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(`${l.image ? "▧ " : ""}${l.text}`))
-      .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(l.href))
-      .child(div().flex_none().text_color(t.dim).child(`${sel + 1}/${this.links.length}`));
+    return Bars.linkBar(t, l, sel, this.links.length);
   }
 
   /** The page: the file rendered (or raw), or why it can't be. */
@@ -725,7 +679,7 @@ export default class Markdown extends View {
       onImage: (abs) => {
         if (abs !== null) this.showImage(abs);
       },
-      dither: (color) => dither(color, 1),
+      dither: (color) => Bars.dither(color, 1),
       focused, size: this.raw ? 12 : 13, maxWidth: WIDTH, unzoom, notify: (cx) => cx.notify(), chosen,
     }));
 

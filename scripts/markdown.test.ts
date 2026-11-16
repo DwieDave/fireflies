@@ -356,8 +356,11 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
   const filesLog = await load("markdown/follow.ts");
-  const { default: Markdown } = await load("markdown/main.ts", { ...md, follow, dirname, basename, join, tilde, ...linkLogic,
-    fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } });
+  const paint = { appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
+  // the viewer's bars (bars.ts), as main.ts's `import * as Bars` brings them
+  const Bars = await load("markdown/bars.ts", { dirname, basename, tilde, ...paint });
+  const { default: Markdown } = await load("markdown/main.ts", { ...md, follow, dirname, basename, join, tilde, ...linkLogic, Bars,
+    fileChanges: filesLog.fileChanges, newestId: filesLog.newestId, followFiles: filesLog.follow, writeTextFile: async () => {}, ...paint });
   const view: any = Object.create(Markdown.prototype);
   const text = "# Top\nRead [next](next.md).\n\n![shot](shot.png)\n\n## Later\nSee [web](https://x.example).";
   const doc = new MarkdownDoc("md");
