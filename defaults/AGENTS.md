@@ -1500,8 +1500,10 @@ layout's look and a block can differ:
   "terminal_padding": [10, 6], "terminal_opacity": 1, ... }
 ```
 
-- `theme`: `graphite`, `ink`, `moss` (dark), `paper` (light), or the name
-  of a file in `themes/`; or one for each appearance:
+- `theme`: `moonfly` (Nocturne's), `graphite` (herdr-app's default look),
+  `paper` (light), or the name of a file in `themes/`; `ink`, `moss` and
+  `atom-one-dark` still load when named but the pickers (Settings, the
+  palette, the menu) no longer offer them; or one for each appearance:
   `"theme": { "light": "paper", "dark": "graphite" }` follows the system's
   light or dark mode (or the person's `appearance`). `app.theme {name}`
   sets the half of the name's lightness. A layout without a theme shows
@@ -1512,7 +1514,7 @@ layout's look and a block can differ:
 - `themes/<name>.json`: `{ "background", "foreground", "selection",
   "cursor"?, "ansi": [16 colors], "colors"?: {...} }`, all `#rrggbb`; panel
   colors are derived from these, `colors` overrides them. Fireflies ships
-  `atom-one-dark`. The original unedited Atom One Dark and Win98 theme files
+  `moonfly` (and `atom-one-dark`, no longer offered). The original unedited Atom One Dark and Win98 theme files
   are upgraded to readable terminal colors; edited theme files are kept.
   A theme named like a layout (`themes/win98.json`) is
   that layout's own: Settings offers it only there.

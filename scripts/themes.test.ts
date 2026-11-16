@@ -112,3 +112,35 @@ test("the nocturne layout names theme colors, not moonfly's hex (its scrim dims 
   expect(layout.theme).toBe("moonfly");
 });
 
+// ---- which shipped themes a person is offered (Developer: "not too keen on" upstream's;
+// graphite stays as herdr-app's default look, paper as the light one)
+
+const ROOT = `${import.meta.dir}/..`;
+const OFFERED = ["moonfly", "graphite", "paper"];
+const UNOFFERED = ["ink", "moss", "atom-one-dark"];
+const pickerNames = (file: string) => {
+  const text = readFileSync(join(ROOT, file), "utf8");
+  // the menu's rows ({ name: "…" } after "app.theme") and the palettes' [name, label, words] rows
+  const rows = [...text.matchAll(/"app\.theme", \{ name: "([\w-]+)" \}/g)].map((m) => m[1]);
+  const listed = [...text.matchAll(/\["([\w-]+)", "[^"]*\(?[^"]*", "[^"]*"\]/g)].map((m) => m[1]).filter((n) => [...OFFERED, ...UNOFFERED].includes(n!));
+  return [...rows, ...listed];
+};
+
+test("the theme pickers offer moonfly, graphite (herdr-app's default look) and paper, not ink, moss or atom-one-dark", () => {
+  for (const file of ["defaults/frame/palette/main.js", "defaults/mods/nocturne/palette-entries.ts", "defaults/mods/menu/main.js"]) {
+    expect([file, pickerNames(file).sort()]).toEqual([file, [...OFFERED].sort()]);
+    expect([file, readFileSync(join(ROOT, file), "utf8").includes("graphite (herdr-app default)")]).toEqual([file, true]);
+  }
+  const settings = readFileSync(join(ROOT, "defaults/frame/settings/main.js"), "utf8");
+  expect(/const UNOFFERED_THEMES = \[([^\]]*)\]/.exec(settings)?.[1]?.split(",").map((s) => s.trim().replace(/"/g, ""))).toEqual(UNOFFERED);
+  expect(settings).toContain('.filter((x) => !UNOFFERED_THEMES.includes(x.name) || x.name === current)');
+});
+
+test("a settings.json or layout naming ink, moss or atom-one-dark still loads: the presets and the shipped file stay", () => {
+  const rust = readFileSync(join(ROOT, "src/settings.rs"), "utf8");
+  const presets = /pub const PRESETS: &\[&str\] = &\[([^\]]*)\]/.exec(rust)?.[1] ?? "";
+  for (const n of ["graphite", "ink", "moss", "paper"]) expect(presets).toContain(`"${n}"`);
+  expect(rust).toContain('("atom-one-dark", include_str!("../defaults/themes/atom-one-dark.json"))');
+  const atom = JSON.parse(readFileSync(join(ROOT, "defaults/themes/atom-one-dark.json"), "utf8"));
+  expect(atom.ansi).toHaveLength(16);
+});

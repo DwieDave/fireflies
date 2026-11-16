@@ -88,7 +88,10 @@ const NAMED = [
   ["app.hide_others", {}, "App", "Hide other apps", "macos"],
   ["app.show_all", {}, "App", "Show all apps", "macos unhide"],
   ["app.quit", {}, "App", "Quit Fireflies", "exit"],
-  ...["graphite", "ink", "moss", "atom-one-dark"].map((n) => ["app.theme", { name: n }, "App", `Theme: ${n.replace(/-/g, " ")}`, "colors look"]),
+  // The shipped themes a person picks from (ink, moss and atom-one-dark still load
+  // when named, but aren't offered): moonfly is Nocturne's, graphite herdr-app's default look.
+  ...[["moonfly", "moonfly", ""], ["graphite", "graphite (herdr-app default)", " herdr default"], ["paper", "paper (light)", " light"]]
+    .map(([n, label, words]) => ["app.theme", { name: n }, "App", `Theme: ${label}`, `colors look${words}`]),
 ];
 
 // Commands that stay out of the list, each with why: most act on something
