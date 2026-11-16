@@ -513,6 +513,10 @@ export interface Settings {
   readonly clipboard_write: boolean;
   readonly minimum_contrast: number;
   readonly links: "app" | "system";
+  /** The engine new web panes open in (cmd-click, "+ new" > Web); Chromium only counts while it is installed. */
+  readonly web_engine: "webkit" | "chromium";
+  /** What a Chromium tab does with a video it can't play (H.264, AAC, DRM). */
+  readonly chromium_video: "fallback" | "ask" | "error";
   readonly option_as_alt: "auto" | "off" | "on" | "left" | "right";
   readonly sounds: { readonly enabled: boolean; readonly done?: string; readonly blocked?: string };
   readonly editor: EditorLanguage & {
@@ -640,9 +644,11 @@ export function watchFolder(path: string): Promise<string[]>;
 /** HUP (Herdr Preview Dev, interface native-view/0): where a native view's content comes from.
  *  Web: `url` (http/https; `localhost:3000` style input is normalized, never searched) or a local
  *  HTML `path` (absolute; `trust` "static" disables page scripts, "interactive" allows them; `root`
- *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`. */
+ *  bounds which sibling files it may read, default its folder). pdf / media / quicklook: `path`.
+ *  chromium: a Chromium page at `url` (http/https), once Chromium is enabled in Settings
+ *  (`nativeViewCapabilities().kinds` lists it then); else making one fails. */
 export interface NativeViewProps {
-  kind: "web" | "pdf" | "media" | "quicklook" | "inspector" | "pip"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
+  kind: "web" | "chromium" | "pdf" | "media" | "quicklook" | "inspector" | "pip"; url?: string; path?: string; trust?: "static" | "interactive"; root?: string;
   /** Inspector only: the web view to inspect, the `of` its `web.inspect` action returned. */
   of?: string;
   /** Web only: the page zoom (WKWebView pageZoom), 1 = 100% (default), clamped to 0.25–5.
@@ -669,7 +675,30 @@ export interface NativeViewProps {
  *  probe with `import * as herdr from "herdr"; if (herdr.nativeView) herdr.nativeView.new(id, props)`. */
 export const nativeView: { new: (id: string, props: NativeViewProps) => import("gpui-kit").NativeElement };
 /** HUP: `{ interface: "native-view/0", available, kinds: [{ kind, actions }] }`. */
-export function nativeViewCapabilities(): { interface: string; platform: string; available: boolean; kinds: { kind: string; actions: string[] }[] };
+export function nativeViewCapabilities(): { interface: string; platform: string; available: boolean; kinds: { kind: string; actions: string[] }[]; chromium: ChromiumStatus };
+
+/** Chromium for web panes (Settings → Web): downloaded when enabled (`chromium.install`). */
+export interface ChromiumStatus {
+  /** Offered on this computer (a Mac this build has a pinned download for). */
+  readonly available: boolean;
+  /** This build can run it (the `chromium` feature). */
+  readonly built?: boolean;
+  /** The pinned framework is unpacked: `kind: "chromium"` views can be made. */
+  readonly installed?: boolean;
+  /** Chromium's version, e.g. "156.0.8078.96". */
+  readonly version?: string;
+  readonly phase?: "idle" | "downloading" | "verifying" | "unpacking" | "failed";
+  /** Bytes downloaded so far, of `total`. */
+  readonly done?: number;
+  readonly total?: number;
+  /** The last attempt's failure, in words. */
+  readonly error?: string | null;
+  /** The engine's and its profile's (logins, cache) bytes on disk. */
+  readonly engineBytes?: number;
+  readonly dataBytes?: number;
+  /** Chromium runs in this app now: a removal finishes when the app restarts. */
+  readonly started?: boolean;
+}
 /** HUP: one whitelisted action on this mod's view `id` (see capabilities), e.g. ("v", "pdf.goToPage", { page: 2 }),
  *  ("v", "media.pause"), ("v", "browser.navigate", { url }), ("v", "state"). Throws on unknown actions. */
 export function nativeViewCall(id: string, action: string, args?: Record<string, unknown>): unknown;

@@ -4427,6 +4427,21 @@ impl AppWindow {
                 self.answer(r);
                 cx.notify();
             }
+            "chromium.install" => {
+                crate::native_view::ensure_home();
+                self.answer(fireflies_native_view::cef_install::install().map(|()| json!({ "started": true })));
+                cx.notify();
+            }
+            "chromium.cancel" => {
+                fireflies_native_view::cef_install::cancel();
+                self.answer(Ok(json!({ "cancelled": true })));
+            }
+            "chromium.remove" => {
+                crate::native_view::ensure_home();
+                let data = a.get("data").and_then(Value::as_bool).unwrap_or(false);
+                self.answer(fireflies_native_view::cef_install::remove(data).map(|()| json!({ "removed": true, "restart": crate::native_view::chromium_started() })));
+                cx.notify();
+            }
             "mod.open" => {
                 let name = Self::arg(a, "name").unwrap_or_default();
                 let Some(f) = self.folders.get(name) else { return self.fail(format!("no mod folder {name:?}")) };

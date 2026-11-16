@@ -90,6 +90,8 @@
 // is per props).
 // { inspect }: an inspector pane for the web view with that key.
 
+import { defaultEngine, otherEngine, viewKind, chromiumReady } from "./engine.ts";
+import type { Engine } from "./engine.ts";
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent } from "gpui-kit";
 import type { Rect } from "@fireflies/menu-place";
@@ -136,6 +138,8 @@ export default class Browser extends View {
 
   // An inspector pane: the web view it inspects, and why there's nothing to.
   inspect: string | null = null;
+  /** The engine new pages open in: WebKit, or Chromium (props `engine`, else settings.json `web_engine`). */
+  engine: Engine = "webkit";
   lost: string | null = null;
   // A tab's menu: what it is for, its rows, the one under the cursor.
   menu: TabMenu | null = null;
@@ -186,6 +190,8 @@ export default class Browser extends View {
 
     // An inspector pane: Safari's Web Inspector for another pane's page.
     this.inspect = pr.inspect ? String(pr.inspect) : null;
+    // The engine new pages open in: the props' (the palette's "New web pane in …"), else the setting.
+    this.engine = pr.engine ?? defaultEngine();
 
     if (this.inspect) {
       initInspector(this, cx);
@@ -424,7 +430,36 @@ export default class Browser extends View {
     else if (c === "tab_move_left" || c === "tab_move_right") stepTab(this, keyTab(this), c === "tab_move_right" ? 1 : -1);
     else if (c === "pin_tab") this.togglePin(keyTab(this));
     else if (c === "tab_menu") this.openTabMenu(keyTab(this), true);
+    else if (c === "other_engine") this.otherEngine(cx);
   }
+
+  /** The shown tab's page again in the other engine, at its address (the
+   *  bar's engine chip, the palette's "Reopen the page in the other engine").
+   *  Its view is made anew (another kind); its history stays behind. */
+  otherEngine(cx?: Context) {
+    const tab = this.tab;
+
+    this.reopenIn(tab, otherEngine(viewKind(tab.engine, tab.start) === "chromium" ? "chromium" : "webkit"), cx);
+  }
+
+  /** Tab `tab`'s page again in `engine`, at its address (its view is made anew). */
+  reopenIn(tab: Tab, engine: Engine, cx?: Context) {
+    if (engine === "chromium" && !chromiumReady()) return;
+
+    tab.engine = engine;
+    tab.start = tab.page.href ?? tab.start;
+    tab.failed = null;
+    // A page back in Chromium may say again what it can't play.
+    this.mediaTold.delete(tab.id);
+
+    if (tab === this.tab) this.error = null;
+
+    this.saveTabs();
+    cx?.notify();
+  }
+
+  /** Tabs whose page said it can't play its media in Chromium (media.ts): once per page. */
+  mediaTold = new Set<string>();
 
   key(e: KeyEvent, cx: Context) {
     this.claim();

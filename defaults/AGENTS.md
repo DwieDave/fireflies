@@ -716,7 +716,10 @@ the highlighted line shows where it will land.
   from a mod: `cx.open_url("file:///abs/shot.png")` or a `Link` `href` with a
   `file:` URL (a mod's `file:` links go nowhere else). Without
   the web pane (only macOS has one) or with `links: "system"` in settings.json,
-  pages open in the system's browser. The web pane's bar, while it has the
+  pages open in the system's browser. A web pane opens in settings.json `web_engine`'s engine
+  (WebKit, or Chromium once enabled; see `web_engine`); each tab keeps its own, and a
+  Chromium tab's bar has a `chromium` chip before the address that reopens the page in
+  WebKit (`browser.other_engine` both ways). The web pane's bar, while it has the
   keyboard (whenever its pane is focused: a click on the bar, `pane.go`, a tab
   switch, agent.next, Cmd-Esc in the page): Enter / `i` into the page, `o` / `/` the address, `H` `L`
   back / forward, `r` reload, `+ - 0` zoom, `p` picture in picture, `d` the
@@ -2246,6 +2249,26 @@ The main ones:
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
+- Chromium for web panes (macOS, this fork): not part of the app until the person enables it in
+  Settings → Web, which runs `chromium.install`: it downloads the pinned CEF build (about 135 MB)
+  into `<app home>/chromium`, checks it against the hash the app pins, and unpacks the framework
+  (about 330 MB on disk); a cut or cancelled download (`chromium.cancel`) resumes on the next
+  install. `chromium.remove {data?}` deletes it again (`data: true` also its logins and cache,
+  `<app home>/chromium/profile`); while Chromium runs, the removal finishes at the next start.
+  `nativeViewCapabilities().chromium` says how far it is (`installed`, `phase`: idle,
+  downloading, verifying, unpacking or failed, `done` / `total` bytes, `error` in words,
+  `engineBytes`, `dataBytes`); once installed, `kinds` lists `chromium` and a mod can make
+  `herdr.nativeView.new(id, { kind: "chromium", url })`: a Chromium page (Alloy style: no
+  `chrome://` pages, no extensions; VP9, AV1 and Opus play, H.264, AAC and DRM don't) with
+  the web view's events (`web.location`, `load.*`, `web.newTab`, `web.icon`, `web.video`) and
+  actions (`browser.*`, `web.inspect`), and one of its own: `web.mediaUnsupported { reason,
+  codec, sure }` when its page wants media this Chromium can't play (`reason`: `error`, a
+  media element's own; `nosource`, a source with nothing playable in it; `drm`, a refused
+  DRM request: all `sure`; `probe`, it asked for H.264 or AAC, heard no, then a play
+  started and nothing played for 8 s: likely). The browser follows `chromium_video`.
+  Building with Chromium: the app's `chromium` cargo feature (off by default; it needs the
+  pinned CEF archive's headers as `CEF_PATH`, cmake and ninja), and the
+  `fireflies-cef-helper` executable beside the app's own.
 - Native views (this fork, interface native-view/0): `native.debug` (every native view's frame,
   visibility, focus, content state and recent events), `native.call {key, action, args?}`
   (one whitelisted action, key `<copy>:<id>`). A web view takes a `zoom` prop
@@ -2482,6 +2505,15 @@ list or a machine's rename first.
 - `links`: `"app"` (default) opens web links in a web pane in Fireflies (macOS,
   the `browser` mod), `"system"` in the system's default browser
   (see Links above). Other schemes always go to the system. Applies at once.
+- `web_engine`: `"webkit"` (default) or `"chromium"`: the engine a new web pane opens in
+  (cmd-click on a link, "+ new" > Web, `browser.open` without `engine`). Chromium counts
+  only while it is enabled (Settings → Web, `chromium.install`); else WebKit. The other
+  engine opens from the palette ("New web pane in Chromium" / "… in WebKit", "Reopen the
+  page in the other engine") or with `engine` in the browser's props or `browser.open`.
+- `chromium_video`: what a Chromium tab does when its page asks for a video Chromium can't
+  play (H.264, AAC, DRM): `"fallback"` (default) reopens the page in WebKit at the same
+  address and says so in a toast, `"ask"` asks in a toast first, `"error"` leaves the page's
+  own error. Settings → Web.
 - `option_as_alt`: macOS only, `"auto"` (default), `"on"`, `"off"`, `"left"`, or `"right"`.
   Available in Settings → Keyboard.
   `"auto"` sends Option as Alt on US, US International, ABC and ABC-India;

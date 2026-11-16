@@ -16,6 +16,7 @@ import { openTabMenu } from "./tab-menu.ts";
 import { ICONS, available } from "./props.ts";
 import type Browser from "./main.ts";
 import { edge } from "@fireflies/tones";
+import { viewKind } from "./engine.ts";
 
 /** An address split for the bar: host, then the rest. */
 export function parts(href: string | null): readonly [string, string] {
@@ -53,6 +54,7 @@ export function addressField(view: Browser, t: Theme): Element {
 
   const [host, rest] = parts(view.page.href);
   const ringed = view.control("address", true, () => editAddress(view));
+  const chromium = Boolean(view.start) && viewKind(view.tab.engine, view.tab.start) === "chromium";
 
   return h_flex().id("address").relative().flex_1().min_w(0).h(22).px(6).items_center().gap(0).text_size(11)
     .hover((s) => s.bg(`${edge(t)}66`))
@@ -62,8 +64,27 @@ export function addressField(view: Browser, t: Theme): Element {
       editAddress(view);
       cx.notify();
     })
+    .when(chromium, (el) => el.child(engineChip(view, t)))
     .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(host || "blank"))
     .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(rest));
+}
+
+/** A Chromium tab's mark before its address: a square chip that says so. A
+ *  click (or enter on its ring) reopens the page in WebKit. WebKit, the
+ *  system's own engine, has no mark. */
+export function engineChip(view: Browser, t: Theme): Element {
+  const ringed = view.control("engine", true, (cx) => view.command("other_engine", cx));
+
+  return div().id("engine").relative().flex_none().mr(6).px(4).h(14).flex().items_center()
+    .border(1).border_color(ringed ? t.accent : t.muted).text_size(9).text_color(t.ansi6)
+    .hover((s) => s.border_color(t.muted))
+    .on_mouse_down("left", (e, cx) => view.stop(e, cx))
+    .on_click((_e, cx) => {
+      view.claim();
+      view.command("other_engine", cx);
+      cx.notify();
+    })
+    .child("chromium");
 }
 
 /** The bar: back, forward, reload, the address, zoom, picture in picture, the
@@ -156,8 +177,15 @@ export function blankPage(view: Browser, t: Theme, title: string, hint: string |
  *  dialog makes the view step aside. `tabs`: what would open a window
  *  comes as web.newTab. */
 export function webView(view: Browser, t: Theme, tab: Tab, start: string): Element {
-  return herdr.nativeView.new(tab.id, { kind: "web", ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true })
-    .child(view.away && tab === view.tab
-      ? blankPage(view, t, "Playing in picture in picture", "↩ in the player brings it back here.")
-      : blankPage(view, t, tab.page.loading ? "Loading…" : "", tab.page.href));
+  const kind = viewKind(tab.engine, start);
+  const chromium = kind === "chromium";
+  const el = herdr.nativeView.new(tab.id, { kind, ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true });
+
+  if (view.away && tab === view.tab) return el.child(blankPage(view, t, "Playing in picture in picture", "↩ in the player brings it back here."));
+
+  // A Chromium page under a dialog is dimmed by its opacity, so what's drawn
+  // under it shows through: the placeholder only while there's no page yet.
+  if (chromium && !tab.page.loading && tab.page.href) return el.child(div().flex_1());
+
+  return el.child(blankPage(view, t, tab.page.loading ? "Loading…" : "", tab.page.href));
 }

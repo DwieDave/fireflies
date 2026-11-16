@@ -329,6 +329,11 @@ those files or the generated guide. The app rewrites them on start.
   layer, holes and dim, so check those instead of a screenshot. A web view's
   entry there also says whether its page may go fullscreen and whether it is
   (`fullscreen { enabled, state }`).
+- Chromium web views (`kind: "chromium"`, macOS) exist once the person enables
+  Chromium in Settings → Web (`chromium.install` downloads the pinned CEF build
+  into `<app home>/chromium`; `chromium.cancel`, `chromium.remove {data?}`).
+  `native.debug`'s `chromium` says whether it is installed and running;
+  `nativeViewCapabilities().chromium` follows the download.
 - A window overlay opened with `snap: true` (the picture in picture player,
   while its snapping is on) snaps to the eight places of the shown tab's pane
   grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`

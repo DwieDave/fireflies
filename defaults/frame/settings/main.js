@@ -9,7 +9,7 @@
 
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup, ScrollHandle } from "gpui-base";
-import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window } from "herdr";
+import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window, nativeViewCapabilities } from "herdr";
 import { bindTab, tabActions } from "@fireflies/form-keys";
 
 const I = (name) => `frame/settings/${name}.svg`;
@@ -18,12 +18,23 @@ const SECTIONS = [
   { id: "look", title: "Look", icon: "palette" },
   ...(window()?.platform === "macos" ? [{ id: "keyboard", title: "Keyboard", icon: "keyboard" }] : []),
   { id: "editor", title: "Editor", icon: "code" },
+  // Web panes are native views: macOS only (and so is Chromium).
+  ...(window()?.platform === "macos" ? [{ id: "web", title: "Web", icon: "globe" }] : []),
   { id: "machines", title: "Machines", icon: "server" },
   { id: "alerts", title: "Alerts", icon: "bell" },
   { id: "updates", title: "Updates", icon: "refresh" },
 ];
 
 const LOOKS = { main: "Fireflies", terminals: "Terminals", win98: "Fireflies 98" };
+
+/** Chromium's download and install (nativeViewCapabilities().chromium); none: not offered. */
+export const chromiumStatus = () => {
+  try {
+    return nativeViewCapabilities()?.chromium ?? { available: false };
+  } catch {
+    return { available: false };
+  }
+};
 const APPEARANCES = [
   [null, "System"],
   ["light", "Light"],
@@ -91,6 +102,10 @@ export default class Settings extends View {
       if (updates().checking) this.asked = Date.now();
       else if (Date.now() - this.asked >= 3000) this.asked = null;
       cx.notify();
+    });
+    // Web: Chromium's download moves on its own; follow it while the page shows.
+    cx.timer.every(400, (cx) => {
+      if (this.section === "web") cx.notify();
     });
     cx.timer.every(3000, (cx) => {
       if (this.section !== "machines") return;
@@ -716,6 +731,77 @@ export default class Settings extends View {
     ];
   }
 
+  // Web ------------------------------------------------------------------
+
+  // Chromium (CEF) beside WebKit: off until enabled, which downloads the
+  // pinned build (chromium.install; nativeViewCapabilities().chromium follows
+  // it). Then settings.json `web_engine` picks what cmd-click and "+ new" > Web
+  // open, and `chromium_video` what a Chromium tab does with a video it can't play.
+  web(t) {
+    const c = chromiumStatus();
+    const mb = (b) => `${Math.round((b ?? 0) / 1e6)} MB`;
+    const primary = (id, label, f) =>
+      this.ring(div().id(id).px(12).py(5).rounded(7).cursor_pointer().bg(t.accent).text_color(t.accent_foreground).text_size(13).font_semibold().hover((s) => s.opacity(0.9)).on_click(f).child(label), id, { go: f });
+    const busy = c.phase === "downloading" || c.phase === "verifying" || c.phase === "unpacking";
+    const bar = (done, total) => h_flex().w(220).h(6).bg(t.hover)
+      .child(div().h_full().bg(t.accent).w(Math.max(2, Math.round((220 * Math.min(done, total)) / Math.max(total, 1)))));
+    let status, control;
+    if (!c.available) {
+      status = "Not offered on this computer.";
+      control = div();
+    } else if (c.built === false) {
+      status = "This build of Fireflies has no Chromium: it was built without its \u201cchromium\u201d feature.";
+      control = div();
+    } else if (busy) {
+      status = c.phase === "downloading" ? `Downloading ${mb(c.done)} of ${mb(c.total)}\u2026` : c.phase === "verifying" ? "Checking the download\u2026" : "Unpacking\u2026";
+      control = h_flex().gap(10).items_center()
+        .when(c.phase === "downloading", (el) => el.child(bar(c.done ?? 0, c.total ?? 1)))
+        .child(this.button(t, "st-cr-cancel", "Cancel", () => run("chromium.cancel")));
+    } else if (c.installed) {
+      status = `Chromium ${c.version} \u00b7 ${mb(c.engineBytes)} on disk, its logins and cache ${mb(c.dataBytes)}.`
+        + (this.removed && c.started ? " Restart Fireflies to finish removing it." : "");
+      control = this.button(t, "st-cr-remove", "Remove", (_e, cx) => { this.removed = true; run("chromium.remove"); cx?.notify(); });
+    } else {
+      const resume = (c.done ?? 0) > 0;
+      status = c.phase === "failed" && c.error
+        ? c.error
+        : resume
+          ? `${mb(c.done)} of ${mb(c.total)} downloaded: Enable resumes.`
+          : `A ${mb(c.total)} download, about 330 MB on disk. Fireflies checks it against the build it expects.`;
+      control = primary("st-cr-enable", resume || c.phase === "failed" ? "Enable again" : "Enable Chromium", () => { this.removed = false; run("chromium.install"); });
+    }
+    const on = Boolean(c.installed);
+    const radio = (id, picked, label, edit) => {
+      const el = h_flex().id(id).gap(10).px(12).py(10).rounded(7).items_center()
+        .child(div().text_color(!on ? t.border : picked ? t.accent : t.muted).child(picked ? "\u25c9" : "\u25cb"))
+        .child(div().text_size(14).text_color(on ? t.foreground : t.muted).child(label));
+      return on
+        ? this.ring(el.cursor_pointer().hover((s) => s.bg(t.hover)).on_click((_e, cx) => this.change(edit, cx)), id, { go: (cx) => this.change(edit, cx) })
+        : el;
+    };
+    const engine = on && this.person.web_engine === "chromium" ? "chromium" : "webkit";
+    const video = this.person.chromium_video ?? "fallback";
+    // An element is drawn once: a fresh one for each place it shows.
+    const why = () => on ? [] : [this.b(div().pb(8).text_size(12.5).text_color(t.dim).child("Enable Chromium first: until then every web pane is WebKit."))];
+    return [
+      this.b(this.heading(t, "Chromium")),
+      this.b(div().pb(12).text_size(13).line_height("19px").text_color(t.dim).child(
+        "Web panes run on Safari's engine, WebKit. Chromium is a second engine beside it: Chrome's DevTools, and sites that only work in Chrome. It isn't part of Fireflies until you enable it.")),
+      this.b(this.row(t, "Chromium", status, control)),
+      this.b(div().pt(18).child(this.heading(t, "New web panes"))),
+      this.b(div().pb(8).text_size(13).text_color(t.dim).child("What cmd-click on a link and \u201c+ new\u201d > Web open. The other engine opens from the command palette.")),
+      ...why(),
+      this.b(radio("st-engine-webkit", engine === "webkit", "WebKit", (p) => { delete p.web_engine; })),
+      this.b(radio("st-engine-chromium", engine === "chromium", "Chromium", (p) => { p.web_engine = "chromium"; })),
+      this.b(div().pt(18).child(this.heading(t, "Videos Chromium can't play"))),
+      this.b(div().pb(8).text_size(13).line_height("19px").text_color(t.dim).child("Chromium here plays VP9, AV1 and Opus, but not H.264 or AAC (MP4) and no DRM. When a page asks for one of those:")),
+      ...why(),
+      this.b(radio("st-video-fallback", video === "fallback", "Reopen the page in WebKit", (p) => { delete p.chromium_video; })),
+      this.b(radio("st-video-ask", video === "ask", "Ask, with a toast", (p) => { p.chromium_video = "ask"; })),
+      this.b(radio("st-video-error", video === "error", "Leave it: the page shows its own error", (p) => { p.chromium_video = "error"; })),
+    ];
+  }
+
   // Machines -------------------------------------------------------------
 
   async loadMachines() {
@@ -976,6 +1062,8 @@ export default class Settings extends View {
         ? this.keyboard(t)
       : this.section === "editor"
         ? this.editor(t)
+      : this.section === "web"
+        ? this.web(t)
       : this.section === "machines"
         ? this.machines(t)
       : this.section === "alerts"

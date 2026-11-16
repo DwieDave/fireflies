@@ -13,7 +13,19 @@ set -euo pipefail
 
 [[ $(uname -s) == Darwin ]] || { echo 'This installer requires macOS.' >&2; exit 1; }
 cd "$(dirname "$0")/.."
-cargo build --release
+# Chromium web panes (the `chromium` feature) need cmake and ninja to build
+# CEF's small C++ wrapper; cef-dll-sys fetches the pinned CEF archive itself
+# unless CEF_PATH names an unpacked one. The framework isn't installed here:
+# Fireflies downloads it when Chromium is enabled in Settings → Web.
+if command -v cmake >/dev/null && command -v ninja >/dev/null; then
+  chromium=1
+  cargo build --release --locked -p herdr-app -p fireflies-native-view --bin herdr-app --bin fireflies-cef-helper \
+    --features herdr-app/chromium,fireflies-native-view/chromium
+else
+  chromium=0
+  echo "No cmake/ninja: building without Chromium web panes (WebKit only)." >&2
+  cargo build --release
+fi
 
 version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 fork=$(git rev-parse --short HEAD)
@@ -37,6 +49,13 @@ mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources" "$HOME/.local/bin"
 cp target/release/herdr-app "$app/Contents/MacOS/Fireflies.new"
 mv -f "$app/Contents/MacOS/Fireflies.new" "$app/Contents/MacOS/Fireflies"
 chmod +x "$app/Contents/MacOS/Fireflies"
+# Chromium's helper, beside the app's executable (it builds its helper apps from it).
+if [[ $chromium == 1 ]]; then
+  cp target/release/fireflies-cef-helper "$app/Contents/MacOS/fireflies-cef-helper.new"
+  mv -f "$app/Contents/MacOS/fireflies-cef-helper.new" "$app/Contents/MacOS/fireflies-cef-helper"
+else
+  rm -f "$app/Contents/MacOS/fireflies-cef-helper"
+fi
 # The firefly icon: Liquid Glass (Assets.car, macOS 26+) and the flat fallback.
 cp assets/icons/Fireflies.car "$app/Contents/Resources/Assets.car"
 cp assets/icons/Fireflies.icns "$app/Contents/Resources/Fireflies.icns"

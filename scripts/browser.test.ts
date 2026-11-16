@@ -51,8 +51,13 @@ const app = {
   // exec's calls, and what each answers (`answer`: by the call; none: code 1).
   execs: [] as [string, string[]][],
   answer: null as null | ((cmd: string, args: string[]) => { code: number; stdout: string; stderr: string }),
+  /** Chromium is enabled (nativeViewCapabilities lists its kind), and settings.json web_engine. */
+  chromium: false,
+  webEngine: "webkit" as "webkit" | "chromium",
+  chromiumVideo: undefined as undefined | "fallback" | "ask" | "error",
+  notes: [] as any[],
 };
-const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; app.execs = []; app.answer = null; };
+const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; app.execs = []; app.answer = null; app.chromium = false; app.webEngine = "webkit"; app.chromiumVideo = undefined; app.notes = []; };
 /** An element that remembers its source (svg / image). */
 const sourced = (kind: string) => (src: string) => { const el: any = new Element(); el[kind] = src; return el; };
 const kit = { View: class {}, div: () => new Element(), svg: sourced("svg"), image: sourced("image"), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
@@ -91,7 +96,9 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   let waiting: ((c: string) => void) | null = null;
   const native: [string, string, any][] = [];
   const herdr = {
-    props: () => own.props ?? {}, theme: () => ({}), settings: () => ({ zoom: 1 }),
+    props: () => own.props ?? {}, theme: () => ({}), settings: () => ({ zoom: 1, web_engine: app.webEngine, chromium_video: app.chromiumVideo }),
+    notify: (n: any) => { app.notes.push(n); return `n${app.notes.length}`; },
+    nativeViewCapabilities: () => ({ kinds: app.chromium ? [{ kind: "web", actions: [] }, { kind: "chromium", actions: [] }] : [{ kind: "web", actions: [] }] }),
     nextCommand: () => (queue.length ? Promise.resolve(queue.shift()!) : new Promise<string>((r) => { waiting = r; })),
     shared: (k: string) => app.store[k] ?? null, setShared: (k: string, v: any) => { app.store[k] = v; return null; },
     run: (n: string, a: any) => { app.ran.push([n, a]); return null; },
@@ -1482,4 +1489,109 @@ test("the web view's events are parsed where they come in: one in another shape,
   expect(app.overlays.at(-1).props).toEqual({ of: "1:web" });
   feed({ id: "web", event: "pip.popIn", data: { of: "1:web", then: "park" } });
   expect(app.overlays.at(-1).props).toEqual({ of: "1:web", after: "park" });
+});
+
+// ---- engines: WebKit, and Chromium once enabled (engine.ts)
+
+test("engine: a new pane opens in settings.json web_engine, Chromium only while it is enabled", async () => {
+  reset();
+  app.webEngine = "chromium";
+  let { view } = await webPane({ slot: "e1", url: "https://a.example/" });
+  expect(view.engine).toBe("webkit");
+  expect(viewsOf(view.render())[0]?.[1].kind).toBe("web");
+  app.chromium = true;
+  ({ view } = await webPane({ slot: "e2", url: "https://a.example/" }));
+  expect(view.engine).toBe("chromium");
+  const root = view.render();
+  expect(viewsOf(root)[0]?.[1].kind).toBe("chromium");
+  expect(strings(root)).toContain("chromium");
+  // The props' engine wins over the setting (the palette's "New web pane in WebKit").
+  ({ view } = await webPane({ props: { slot: "e3", url: "https://a.example/", engine: "webkit" } }));
+  expect(viewsOf(view.render())[0]?.[1].kind).toBe("web");
+  expect(strings(view.render())).not.toContain("chromium");
+});
+
+test("engine: the chip reopens the page in WebKit; t opens the pane's engine, a page's tab its opener's", async () => {
+  reset();
+  app.chromium = true;
+  const { view, cx } = await webPane({ props: { slot: "e1", url: "https://a.example/", engine: "chromium" } });
+  view.page.href = "https://a.example/deep";
+  const chip = walk(view.render()).find((e: any) => callOf(e, "id").some((a: any) => a[0] === "engine"));
+  expect(chip).toBeDefined();
+  callOf(chip, "on_click")[0][0](null, cx);
+  expect(view.tab.engine).toBe("webkit");
+  expect(view.tab.start).toBe("https://a.example/deep");
+  expect(viewsOf(view.render())[0]?.[1].kind).toBe("web");
+  // The other way round, from the palette.
+  view.command("other_engine", cx);
+  expect(view.tab.engine).toBe("chromium");
+  // t: a blank tab in the pane's engine; a link's tab: its opener's.
+  view.tab.engine = "webkit";
+  view.command("tab_new", cx);
+  expect(view.tab.engine).toBe("chromium");
+  const first = view.tabs.list[0];
+  const opened = view.openTab("https://b.example/", { opener: first.id, background: true }, cx);
+  expect(opened.engine).toBe(first.engine);
+  // Chromium removed: a Chromium tab's page opens in WebKit (its engine is kept for later).
+  app.chromium = false;
+  view.showTab(view.tabs.list[1].id, cx);
+  expect(viewsOf(view.render()).find(([id]: any) => id === view.tab.id)?.[1].kind).toBe("web");
+});
+
+test("engine: a tab's engine survives a restart; browser.open takes one", async () => {
+  const Tabs = await import("../defaults/mods/browser/tabs.ts");
+  let m = Tabs.single("https://a.example/", 0.9, "chromium");
+  [m] = Tabs.open(m, "https://b.example/", { engine: "webkit" });
+  const back = Tabs.restore(Tabs.save(m), 0.9)!;
+  expect(back.list.map((t: any) => t.engine)).toEqual(["chromium", "webkit"]);
+  expect(JSON.parse(Tabs.save(m)).tabs[1].engine).toBeUndefined();
+  // A link's tab: its opener's engine, unless told.
+  const [, linked] = Tabs.open(m, "https://c.example/", { opener: m.list[0]!.id });
+  expect(linked.engine).toBe("chromium");
+  expect(Tabs.openArgs('{"url":"https://x.example","slot":"s1","engine":"chromium"}')).toEqual({ url: "https://x.example", slot: "s1", engine: "chromium" });
+  expect(Tabs.openArgs('{"url":"https://x.example","engine":"gecko"}')).toEqual({ url: "https://x.example", slot: null });
+});
+
+// ---- media Chromium can't play here (media.ts, chromium.rs MEDIA_SCRIPT)
+
+test("media: fallback (default) reopens the page in WebKit and says so; once per page", async () => {
+  reset();
+  app.chromium = true;
+  const { view, cx, mod } = await webPane({ props: { slot: "m1", url: "https://www.example.com/v.mp4", engine: "chromium" } });
+  view.page.href = "https://www.example.com/v.mp4";
+  mod.mediaUnsupported(view, view.tab, { reason: "nosource", codec: "video/mp4", sure: true }, cx);
+  expect(view.tab.engine).toBe("webkit");
+  expect(viewsOf(view.render())[0]?.[1].kind).toBe("web");
+  expect(app.notes).toEqual([{ title: "Reopened in WebKit", body: "example.com plays H.264 video, which Chromium here can't.", level: "info", timeout: 6000 }]);
+  // A WebKit tab hears nothing (the page is where it plays).
+  mod.mediaUnsupported(view, view.tab, { reason: "error", codec: null, sure: true }, cx);
+  expect(app.notes.length).toBe(1);
+});
+
+test("media: ask posts a toast whose click reopens that tab; error leaves the page", async () => {
+  reset();
+  app.chromium = true;
+  app.chromiumVideo = "ask";
+  const { view, cx, mod } = await webPane({ props: { slot: "m2", url: "https://tv.example/watch", engine: "chromium" } });
+  view.page.href = "https://tv.example/watch";
+  mod.mediaUnsupported(view, view.tab, { reason: "drm", codec: "com.widevine.alpha", sure: true }, cx);
+  expect(view.tab.engine).toBe("chromium");
+  const note = app.notes[0];
+  expect(note.body).toBe("tv.example wants protected (DRM) video. Click to reopen it in WebKit.");
+  expect(note.action.name).toBe('browser.reopen:{"slot":"m2","tab":"web","engine":"webkit"}');
+  // The toast's click: the command reaches this pane (by its slot) and that tab.
+  mod.reopenCommand(view, note.action.name.slice("browser.reopen:".length), cx);
+  expect(view.tab.engine).toBe("webkit");
+  // Another pane's slot: not this one.
+  view.tab.engine = "chromium";
+  mod.reopenCommand(view, '{"slot":"other","tab":"web","engine":"webkit"}', cx);
+  expect(view.tab.engine).toBe("chromium");
+  // error: nothing happens, nothing is said.
+  reset();
+  app.chromium = true;
+  app.chromiumVideo = "error";
+  const b = await webPane({ props: { slot: "m3", url: "https://a.example/", engine: "chromium" } });
+  b.mod.mediaUnsupported(b.view, b.view.tab, { reason: "error", codec: "mp4a.40.2", sure: true }, b.cx);
+  expect(b.view.tab.engine).toBe("chromium");
+  expect(app.notes).toEqual([]);
 });
