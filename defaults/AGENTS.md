@@ -1058,7 +1058,7 @@ the highlighted line shows where it will land.
   the system's own tool: macOS osascript, Linux wl-paste or xclip, Windows
   PowerShell.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
-  space .), or the bar's "markdown" chip, opens their list at the caret, lit
+  space .), or the bar's "markdown" chip (a scratchpad's "format"), opens their list at the caret, lit
   for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
   t task box, x tick, q quote, c code block, r rule, p image from a file, v
@@ -1151,7 +1151,8 @@ the highlighted line shows where it will land.
   `.preview-split`, `.preview-only`, `.preview-text`, `.preview-rendered`, `.md-menu` (the
   Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
   `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
-  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.next-tab`, `.prev-tab`,
+  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.more` and
+  `.copy-path` (a scratchpad's more menu, its path to the clipboard), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
@@ -1171,7 +1172,12 @@ the highlighted line shows where it will land.
   `scratchpad/index.json` maps each file to its repository: `{ name, dir,
   repo, machine? }`). It saves itself: 600 ms after the last key, and at once
   when its pane or tab closes; it never shows unsaved or asks on close, and
-  the bar says saving… / saved (not saved, red, when a write failed). The
+  the bar says saving… / saved (not saved, red, when a write failed). Its bar
+  is one quiet line: vim's mode, the kind of block the caret is in, the save,
+  "format" (the Markdown commands, cmd-. / space .) and "more" (a click or
+  `editor.more`: copy its path y, rendered r, text e, split with the preview
+  s, word wrap w, vim v; a letter or a click runs one); no language, indent,
+  server or line:col, and the header names the note. The
   pane's tab reads "scratchpad" and its repository; other files (a picker's,
   a link's) open in an editor beside it, never as its tabs. Agents may read
   and write the note like any file (`writeTextFile` semantics: an open pane

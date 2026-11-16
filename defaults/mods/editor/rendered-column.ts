@@ -1,7 +1,7 @@
 // The rendered view's column (rendered.ts draws through it): the rows placed
 // top to bottom and scrolled (the lit block kept in view), only those near
 // the view drawn, the scrollbar; the lit block's box (its block editor, its
-// kind at the corner, the kinds under an empty one) and its height, measured
+// kind at the corner unless the bar names it, the kinds under an empty one) and its height, measured
 // from where its editor drew its last line, else estimated from its lines.
 
 import type { Context, Element } from "gpui-kit";
@@ -263,11 +263,11 @@ function litView(v: Rendered, o: ViewOptions): Element {
     .ml(-12)
     .mr(-12)
     .pl(12)
-    .pr(92)
+    .pr(o.kindInBar ? 12 : 92)
     .py(5)
     .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(t.ansi0)))
     .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
-    .child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit)))
+    .when(!o.kindInBar, (el) => el.child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit))))
     .child(
       v_flex()
         .relative()

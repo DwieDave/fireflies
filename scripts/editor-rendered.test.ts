@@ -277,7 +277,8 @@ test("a scratchpad opens rendered, titled for its repository, and never shows un
   store = {};
   expect(p.scratch).toBe(true);
   expect(p.view).toBe("rendered");
-  expect(texts(p.bar(theme)).join(" ")).toContain("app · every worktree of it");
+  // Its name is the pane header's ("Scratchpad · app"); the bar is a scratchpad's quiet line (scratch-bar.ts).
+  expect(texts(p.bar(theme)).join(" ")).not.toContain("every worktree");
   expect(texts(p.bar(theme))).toContain("saved");
   // Empty: whose page it is, where it's kept.
   expect(texts(p.renderedView(theme)).join(" ")).toContain("A page for app");

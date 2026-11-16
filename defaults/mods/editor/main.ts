@@ -279,6 +279,8 @@ export default class EditorPane extends TabFields {
 
   /** The Markdown commands' list, open since. */
   mdMenu: { readonly at: number } | null = null;
+  /** A scratchpad's more menu (scratch-bar.ts), open. */
+  moreMenu: { readonly at: number } | null = null;
 
   /** The context of the last change, for the autosave's timer. */
   timerCx: Context | null = null;

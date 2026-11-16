@@ -38,6 +38,8 @@ const theme: any = new Proxy({}, { get: () => "#808080" });
 
 // ---- herdr
 const files: Record<string, string> = {};
+const toasts: any[] = [];
+const clipboard: string[] = [];
 const writes: [string, string][] = [];
 let propsNow: any = { path: "/p/notes.md", slot: "s1" };
 let writeGate: Promise<void> | null = null; // a write held open (a slow disk)
@@ -54,7 +56,7 @@ const herdr: Record<string, any> = {
   watchFolder: () => new Promise(() => {}), nextCommand: () => new Promise(() => {}),
   exec: () => new Promise(() => {}), languageOf: (p: string) => (/\.md$/.test(p) ? "markdown" : null),
   highlight: () => [], lspStart: () => new Promise(() => {}), lspNotify: () => {}, lspRequest: () => Promise.resolve(null),
-  lspNextMessage: () => new Promise(() => {}), lspRelease: () => null, setUnsaved: () => {}, notify: () => {},
+  lspNextMessage: () => new Promise(() => {}), lspRelease: () => null, setUnsaved: () => {}, notify: (n: any) => { toasts.push(n); },
 };
 mock.module("herdr", () => herdr);
 mock.module("gpui-kit", () => ({ View: class {}, div: () => new El(), svg: () => new El(), image: () => new El(), PathBuilder: { fill: () => new El() }, Background: { checkerboard: () => ({}) } }));
@@ -208,7 +210,7 @@ function cx(): any {
     stop_propagation() {}, notify() {},
     timer: { after: (ms: number, fn: any) => later.push([ms, fn]), every() {} },
     spawn: (fn: any) => { fn(cx()); }, focus_handle: () => ({ focus() {}, is_focused: () => false }),
-    read_from_clipboard: () => null, write_to_clipboard() {},
+    read_from_clipboard: () => null, write_to_clipboard: (t: string) => { clipboard.push(t); },
   };
 }
 function tick() { const due = later; later = []; for (const [, fn] of due) fn(cx()); settle(); }
@@ -534,4 +536,60 @@ test("every edit leaves the note's first byte, and every line it didn't touch, a
     if (disk !== now) console.log(what, JSON.stringify(writes.map((w) => w[1].slice(0, 20))), JSON.stringify(disk?.slice(0,20)), JSON.stringify(now.slice(0,20)), p.cur.saveState, p.cur.conflict);
     expect([what, disk === undefined || disk === now]).toEqual([what, true]);
   }
+});
+
+// ---- the bar (Developer, 2026-11-16: "Scratchpad toolbar way to overcrowded: multiple
+// \"markdown\" labels"; he picked concept A, "quiet line, one menu")
+
+test("a scratchpad's bar: vim's mode, the caret's block, the save, format and more; \"markdown\" nowhere, no language, indent or line:col", async () => {
+  const p = await note(NOTE, true);
+  const frame = p.render(cx());
+  const bar = byId(frame, "editor-bar");
+  const words = texts(bar);
+  expect(words).toContain("heading 1");
+  expect(words).toContain("saved");
+  expect(words).toContain("format");
+  expect(words).toContain("space .");
+  expect(words.join(" ")).not.toMatch(/markdown|2 sp|\d+:\d+|every worktree|scratchpad/);
+  expect(byId(bar, "bar-more")).toBeTruthy();
+  // The hint row along the foot doesn't say it again; the lit block has no kind at its corner.
+  expect(texts(byId(frame, "editor-hints"))).not.toContain("markdown");
+  expect(texts(byId(frame, "rendered-lit"))).not.toContain("heading 1");
+  // The caret's block, as it moves.
+  press(p, "down");
+  expect(texts(byId(p.render(cx()), "editor-bar"))).toContain("task");
+  // Another file keeps its bar.
+  const q = await pane("/p/notes.md", NOTE);
+  expect(texts(byId(q.render(cx()), "editor-bar")).join(" ")).toMatch(/markdown/);
+});
+
+test("format opens the Markdown commands (titled format); more opens its menu, a letter or a click runs an entry, anything else closes it", async () => {
+  const p = await note();
+  click(byId(p.render(cx()), "bar-md"));
+  expect(p.mdMenu).toBeTruthy();
+  expect(texts(byId(p.render(cx()), "editor-md-menu"))).toContain("cmd-.  format");
+  p.mdMenu = null;
+  click(byId(p.render(cx()), "bar-more"));
+  expect(p.moreMenu).toBeTruthy();
+  const menu = byId(p.render(cx()), "editor-more-menu");
+  expect(texts(menu)).toEqual(expect.arrayContaining(["Copy its path", "Rendered", "Text", "Split with the preview", "Word wrap", "Vim"]));
+  // y: the path copied, a toast says so; the menu closes.
+  toasts.length = 0; clipboard.length = 0;
+  expect(block(p).press("y")).toBe(true);
+  expect(clipboard).toEqual([PATH]);
+  expect(toasts[0]).toMatchObject({ title: "copied the scratchpad's path", level: "success" });
+  expect(p.moreMenu).toBeNull();
+  expect(main(p).value()).toBe(NOTE);
+  // A click on an entry: the text view.
+  click(byId(p.render(cx()), "bar-more"));
+  click(byId(p.render(cx()), "more-text"));
+  expect(p.view).toBe("text");
+  expect(p.moreMenu).toBeNull();
+  // Any other key closes it, typing nothing.
+  click(byId(p.render(cx()), "bar-more"));
+  p.command("preview-rendered", cx());
+  tick();
+  block(p).press("q");
+  expect(p.moreMenu).toBeNull();
+  expect(main(p).value()).toBe(NOTE);
 });

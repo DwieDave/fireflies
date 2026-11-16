@@ -15,6 +15,7 @@ import { closeFind, findLine } from "./find.ts";
 import { div } from "gpui-kit";
 import { lookView } from "./drawn-tabs.ts";
 import { mdMenuView } from "./md-pane.ts";
+import { moreView } from "./scratch-bar.ts";
 import { settings } from "herdr";
 import { showStrip } from "./tabs.ts";
 import { v_flex } from "gpui-base";
@@ -55,6 +56,11 @@ export function paneFrame(ed: EditorPane, t: Theme): Element {
     .on_mouse_down("left", (_e, cx) => {
       closeCard(ed, cx);
       closeTabMenu(ed, cx, false);
+
+      if (ed.moreMenu) {
+        ed.moreMenu = null;
+        cx.notify();
+      }
     })
     // A tab dragged off the strip and let go over the pane: popped out beside (tabs.ts).
     .on_mouse_up("left", (_e, cx) => {
@@ -78,6 +84,7 @@ export function paneFrame(ed: EditorPane, t: Theme): Element {
     .when(Boolean(card), (el) => (card ? el.child(card) : el))
     .when(Boolean(ed.which?.length) && ed.vimOn(), (el) => el.child(whichView(ed, t)))
     .when(Boolean(ed.mdMenu) && ed.markdown, (el) => el.child(mdMenuView(ed, t)))
+    .when(Boolean(ed.moreMenu) && ed.scratch, (el) => el.child(moreView(ed, t)))
     .when(Boolean(drag?.out), (el) => (drag ? el.child(dropZone(ed, t)) : el))
     .when(Boolean(tabMenu), (el) => (tabMenu ? el.child(tabMenuView(ed, t)) : el));
 }

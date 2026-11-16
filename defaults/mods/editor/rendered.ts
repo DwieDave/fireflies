@@ -106,6 +106,8 @@ export interface ViewOptions {
   readonly onTask: (line: number, cx: Context) => void;
   readonly maxWidth?: number;
   readonly unzoom: (px: number) => number;
+  /** The block's kind is named in the bar (a scratchpad's): none at the lit block's corner, its text the column's width. */
+  readonly kindInBar?: boolean;
 }
 
 /** A press on a drawn unit: its key, where in it, and its size (layout px). */
