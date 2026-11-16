@@ -13,6 +13,7 @@ import { cellOf, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TO
 import type { Choice, Field } from "./form-fields.ts";
 import { isText, isList } from "./form-fields.ts";
 import type { Form, PickerSpot } from "./form.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 /** The fields (scrolled when they don't fit) over the footer with the buttons. */
 export function body<R>(f: Form<R>, t: Theme): Element {
@@ -69,7 +70,7 @@ function footer<R>(f: Form<R>, t: Theme, pad: number, summary: string, buttons: 
   const sending = f.stage === "sending";
 
   return h_flex().id("form-foot").relative().h(FOOTER).flex_none().px(pad).gap(8).items_center()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(sending ? t.working : t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(sending ? t.working : edgeTone(t), 1)))
     .when(sending, (el) => el.child(div().absolute().left(0).right(0).top(0).h(2).overflow_hidden().child(sweep(t, t.working, f.width))))
     .child(div().relative().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(summary))
     .children(buttons);
@@ -78,8 +79,8 @@ function footer<R>(f: Form<R>, t: Theme, pad: number, summary: string, buttons: 
 /** A section's eyebrow over a dithered rule. */
 function section(t: Theme, r: LayoutRow<Field> & { readonly kind: "section" }, lay: Layout<Field>): Element {
   return h_flex().absolute().left(lay.pad).top(r.y).w(lay.inner).h(r.h).gap(8).items_center()
-    .child(div().flex_none().text_size(10).text_color(t.ansi8).child(r.title.toUpperCase()))
-    .child(div().relative().flex_1().h(1).child(dither(t.ansi0, 1)));
+    .child(div().flex_none().text_size(10).text_color(t.muted).child(r.title.toUpperCase()))
+    .child(div().relative().flex_1().h(1).child(dither(edgeTone(t), 1)));
 }
 
 /** One field at its place in the column: its label line (label, *, hint), the control, what's wrong under it. */
@@ -87,7 +88,7 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
   const f = c.field, i = c.index;
   const on = i === form.at && form.stage === "edit";
   const err = form.errors.get(f.id) ?? "";
-  const edge = err ? t.blocked : on ? t.accent : t.ansi0;
+  const edge = err ? t.blocked : on ? t.accent : edgeTone(t);
 
   const click = (_e: MouseButtonEvent, cx: Context) => {
     cx.stop_propagation();
@@ -107,7 +108,7 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
   if (f.kind === "toggle") {
     return cell
       .child(h_flex().id(`ff-${f.id}`).relative().h(TOGGLE).gap(8).items_center().cursor_pointer().on_mouse_down("left", click)
-        .child(div().relative().size(12).flex_none().border(1).border_color(on ? t.accent : f.value ? t.foreground : t.ansi8)
+        .child(div().relative().size(12).flex_none().border(1).border_color(on ? t.accent : f.value ? t.foreground : t.muted)
           .when(f.value, (el) => el.child(div().absolute().top(2).left(2).size(6).bg(on ? t.accent : t.foreground))))
         .child(div().flex_none().text_size(12).text_color(on || f.value ? t.foreground : t.muted).child(f.label))
         .when(Boolean(f.note), (el) => el.child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).child(f.note ?? ""))))
@@ -123,7 +124,7 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
 
   if (isText(f)) {
     const box = div().id(`ff-${f.id}`).relative().w_full().border(1).border_color(edge).px(7)
-      .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(t.ansi0, 1))))
+      .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(edgeTone(t), 1))))
       .on_mouse_down("left", (_e, cx) => {
         cx.stop_propagation();
         form.at = i;
@@ -142,8 +143,8 @@ function fieldCell<R>(form: Form<R>, t: Theme, c: Cell<Field>, lay: Layout<Field
     const shown = list?.length ? null : text || f.placeholder || (list ? "none" : "pick one");
 
     control = h_flex().id(`ff-${f.id}`).relative().w_full().h(CONTROL).px(7).gap(6).items_center().border(1).border_color(open ? t.accent : edge).cursor_pointer()
-      .hover((s) => s.border_color(on ? t.accent : t.ansi8))
-      .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(t.ansi0, 1))))
+      .hover((s) => s.border_color(on ? t.accent : t.muted))
+      .when(on, (el) => el.child(div().absolute().inset_0().opacity(0.35).child(dither(edgeTone(t), 1))))
       .on_mouse_down("left", click)
       .when(Boolean(list?.length), (el) => el.child(h_flex().relative().flex_1().min_w(0).gap(6).overflow_hidden()
         .children((list ?? []).map((v, k) => chipOf(t, `fc-${f.id}-${k}`, shownAs(v))))))
@@ -163,11 +164,11 @@ export function reviewBody<R>(f: Form<R>, t: Theme): Element {
   const pad = f.lay().pad;
 
   const lines = cmds.map((c, i) => v_flex().id(`fc-${i}`).relative().gap(4)
-    .child(h_flex().gap(8).text_size(10).text_color(t.ansi8)
+    .child(h_flex().gap(8).text_size(10).text_color(t.muted)
       .child(div().flex_none().text_color(t.accent).child(String(i + 1)))
       .child(div().flex_1().min_w(0).truncate().child(c.label)))
     .child(div().relative().px(8).py(6).text_size(11).text_color(t.foreground)
-      .child(div().absolute().inset_0().opacity(0.6).child(dither(t.ansi0, 1)))
+      .child(div().absolute().inset_0().opacity(0.6).child(dither(edgeTone(t), 1)))
       .child(div().relative().child(c.line))));
 
   const note = f.spec.confirmNote;
@@ -248,7 +249,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
   const chosen = (r: Choice) => (f.kind === "multi" ? f.value.includes(r.value) : f.value === r.value);
 
   const row = (r: Choice, i: number) => h_flex().id(`fp-${i}`).relative().h(hOf(r)).flex_none().px(8).gap(8).items_center().cursor_pointer()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edgeTone(t)}55`))
     .when(i === p.at, (el) => el.children(band(t, true)))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
@@ -256,7 +257,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
       form.pick(f, r, cx);
       cx.notify();
     })
-    .when(f.kind === "multi", (el) => el.child(div().relative().size(10).flex_none().border(1).border_color(chosen(r) ? t.accent : t.ansi8)
+    .when(f.kind === "multi", (el) => el.child(div().relative().size(10).flex_none().border(1).border_color(chosen(r) ? t.accent : t.muted)
       .when(chosen(r), (e2) => e2.child(div().absolute().top(2).left(2).size(4).bg(t.accent)))))
     .child(v_flex().relative().flex_1().min_w(0)
       .child(div().truncate().text_size(12).text_color(i === p.at ? t.foreground : r.typed ? t.accent : t.muted).child(r.label))
@@ -284,7 +285,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
         .child(div().text_size(11).text_color(t.accent).child("›"))
         .child(Input.new(p.query).flex_1().h_full().text_size(12).text_color(t.foreground))
         .child(div().flex_none().text_size(10).text_color(t.dim).child(count)))
-      .child(div().h(1).flex_none().bg(t.ansi0))
+      .child(div().h(1).flex_none().bg(edgeTone(t)))
       .child(body),
   ];
 }
@@ -293,7 +294,7 @@ function pickerBox<R>(form: Form<R>, t: Theme, lay: Layout<Field>): Element[] {
 /** A chosen value in a list field: a small dithered chip. */
 function chipOf(t: Theme, id: string, word: string): Element {
   return div().id(id).relative().flex_none().h(18).px(5).flex().items_center().text_size(11).text_color(t.foreground)
-    .child(div().absolute().inset_0().child(dither(t.ansi0, 1)))
+    .child(div().absolute().inset_0().child(dither(edgeTone(t), 1)))
     .child(div().relative().child(word));
 }
 
@@ -304,11 +305,11 @@ export function button(t: Theme, id: string, word: string, key: string, main: bo
   const filled = focused && main;
 
   return h_flex().id(id).relative().h(24).px(10).gap(8).flex_none().items_center().text_size(11).border(1)
-    .border_color(off ? t.ansi0 : focused || main ? t.accent : t.ansi8)
+    .border_color(off ? edgeTone(t) : focused || main ? t.accent : t.muted)
     .when(!off, (el) => el.cursor_pointer().hover((s) => s.border_color(t.foreground)))
-    .when(main && !off && !focused, (el) => el.child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 1))))
+    .when(main && !off && !focused, (el) => el.child(div().absolute().inset_0().opacity(0.5).child(dither(edgeTone(t), 1))))
     .when(filled, (el) => el.bg(t.accent))
-    .when(focused && !main, (el) => el.bg(t.ansi0))
+    .when(focused && !main, (el) => el.bg(edgeTone(t)))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       cx.stop_propagation();

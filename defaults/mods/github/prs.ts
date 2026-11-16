@@ -24,6 +24,7 @@ import type { Host, PickRow, ReadOptions } from "./host.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
+import { edge } from "./tones.ts";
 
 // What the right panel draws (no state, no mergeable: GitHub computes those slowly).
 const VIEW = "number,title,body,author,isDraft,baseRefName,headRefName,labels,reviewDecision,statusCheckRollup,url,createdAt,updatedAt,comments,reviews,additions,deletions,changedFiles";
@@ -663,7 +664,7 @@ export default class Prs {
       .child(md(`body-${pr.number}`, d ? pr.body : "_Reading…_"))
       .when(items.length > 0, (el) => el.child(h_flex().pt(18).pb(4).gap(8).items_center()
         .child(eyebrow(t, `Conversation · ${items.length}`))
-        .child(div().flex_1().h(2).relative().child(dither(t.ansi0, 1)))))
+        .child(div().flex_1().h(2).relative().child(dither(edge(t), 1)))))
       .children(items.map((c, i) => saidCard(t, c, i, md)))
       .when(composer !== null, (el) => (composer ? el.child(v_flex().mt(12).gap(6).p(8).border(1).border_color(t.accent)
         .on_mouse_down("left", stop)
@@ -695,7 +696,7 @@ export default class Prs {
       .child(content)
       // A thin dithered thumb shows where you are.
       .when(shown < 1, (el) => el.child(div().absolute().right(1).w(3).top(Math.round((this.scrollY / max) * this.viewH * (1 - shown))).h(Math.max(16, Math.round(this.viewH * shown)))
-        .child(dither(active ? t.accent : t.ansi8, 1))));
+        .child(dither(active ? t.accent : t.muted, 1))));
 
     const right = !d ? "reading…" : `read ${readAgo(d.at)}`;
 

@@ -18,6 +18,7 @@ import type { JobBox, Routed } from "./wires.ts";
 import { route, NW, NH, RW } from "./wires.ts";
 
 export { NW, NH, GAP_X, GAP_Y, PAD, RW } from "./wires.ts";
+import { edge } from "./tones.ts";
 
 /** Which jobs each job waits for (model.ts jobParents), or null. */
 export type Parents = ReadonlyMap<number, readonly number[]> | null;
@@ -29,7 +30,7 @@ export function layout(cols: readonly (readonly Job[])[], parents: Parents = nul
 
 /** The lines, under the boxes: dithered, a pulse running into what works. */
 function lines(t: Theme, g: Routed<Job>): Element[] {
-  const color = { working: t.working, done: t.ansi8, dim: t.dim } as const;
+  const color = { working: t.working, done: t.muted, dim: t.dim } as const;
 
   return [
     ...g.segs.map((s) => div().absolute().left(s.x).top(s.y).w(s.w).h(s.h).child(dither(color[s.tone], 1))),
@@ -45,7 +46,7 @@ function strip(t: Theme, steps: readonly Step[], w: number): Element {
 
   return h_flex().h(3).gap(1).overflow_hidden().children(steps.map((s, i) => {
     const k = tone(s.status, s.conclusion);
-    const el = div().id(`st-${i}`).relative().w(cell).h(3).flex_none().child(dither(k === "queued" ? t.ansi0 : toneColor(t, k), 1));
+    const el = div().id(`st-${i}`).relative().w(cell).h(3).flex_none().child(dither(k === "queued" ? edge(t) : toneColor(t, k), 1));
 
     return k === "working" ? el.loop("opacity", { from: 0.3, to: 1, period: 900 }) : el;
   }));
@@ -63,7 +64,7 @@ function jobNode(t: Theme, n: JobBox<Job>, sel: boolean, focused: boolean, onPic
   const stripe = div().absolute().left(0).top(0).bottom(0).w(4).child(dither(color, 1));
 
   return div().id(`job-${n.job.id}`).absolute().left(n.x).top(n.y).w(NW).h(NH).bg(t.background)
-    .border(1).border_color(sel ? (focused ? t.accent : t.foreground) : n.tone === "working" ? color : n.tone === "failed" ? `${color}aa` : t.ansi0)
+    .border(1).border_color(sel ? (focused ? t.accent : t.foreground) : n.tone === "working" ? color : n.tone === "failed" ? `${color}aa` : edge(t))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => onPick(n, cx))
     .hover((s) => s.border_color(t.foreground))
@@ -83,7 +84,7 @@ function jobNode(t: Theme, n: JobBox<Job>, sel: boolean, focused: boolean, onPic
 function runNode(t: Theme, r: Run, x: number, y: number): Element {
   const k = tone(r.status, r.conclusion), color = toneColor(t, k);
 
-  return div().id("run-node").absolute().left(x).top(y).w(RW).h(NH).bg(t.background).border(1).border_color(k === "working" ? color : t.ansi0)
+  return div().id("run-node").absolute().left(x).top(y).w(RW).h(NH).bg(t.background).border(1).border_color(k === "working" ? color : edge(t))
     .child(div().absolute().left(0).top(0).bottom(0).w(4).child(dither(color, 1)))
     .child(v_flex().relative().size_full().pl(12).pr(7).justify_center().gap(2)
       .child(h_flex().gap(6).items_center().text_size(11)

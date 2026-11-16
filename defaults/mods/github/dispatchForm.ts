@@ -24,6 +24,7 @@ import { textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import type { Note } from "./kit.ts";
 import { panel, empty, band, noteOf } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 const WAIT = 2000, WAIT_FOR = 120000; // how often, and how long, to look for the new run
 
@@ -413,7 +414,7 @@ export class DispatchForm {
     else {
       body = v_flex().id("wf-side").size_full().overflow_y_scroll().py(4).text_size(11)
         .children(list.map((w, i) => h_flex().id(`wf-${i}`).relative().h(32).flex_none().px(10).gap(8).items_center().cursor_pointer()
-          .hover((s) => s.bg(`${t.ansi0}55`))
+          .hover((s) => s.bg(`${edge(t)}55`))
           .when(w === cur, (el) => el.children(band(t, false)))
           .on_click((_e, cx) => {
             this.form.set("workflow", w.path, { force: true });
@@ -430,7 +431,7 @@ export class DispatchForm {
             .child(div().truncate().text_size(10).text_color(t.dim).child(w.path)))
           .child(div().relative().flex_none().text_size(10).text_color(t.dim).child(w.inputs.length ? `${w.inputs.length} in` : ""))))
         .when(Boolean(cur), (el) => el.child(v_flex().px(10).pt(10).gap(3)
-          .child(div().text_color(t.ansi8).child(this.inputs === null ? `Reading its inputs at ${ref}…` : this.inputsError ? "" : this.inputs.length ? `Inputs at ${ref}` : "No inputs: it runs as it is."))
+          .child(div().text_color(t.muted).child(this.inputs === null ? `Reading its inputs at ${ref}…` : this.inputsError ? "" : this.inputs.length ? `Inputs at ${ref}` : "No inputs: it runs as it is."))
           .when(Boolean(this.inputsError), (e2) => e2.child(div().text_color(t.blocked).child(this.inputsError)))
           .children((this.inputs ?? []).map((i, k) => h_flex().id(`wfi-${k}`).gap(8)
             .child(div().flex_1().min_w(0).truncate().text_color(t.muted).child(i.name))
