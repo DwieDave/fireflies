@@ -42,10 +42,8 @@ function split(k: string): [string, FormModifiers] {
   return [key, { ...(shift ? { shift } : null), ...(control ? { control } : null), ...(platform ? { platform } : null) }];
 }
 
-const ROW = 20;
-
-/** The options bar under the body (draw.ts hints): menus stay clear of it. */
-const OPTIONS_BAR = 22;
+// A menu's row, and the options bar under the body (draw.ts hints) menus stay clear of.
+const ROW = 20, OPTIONS_BAR = 22;
 
 /** What the popups need of the window. */
 export interface PopupHost {
@@ -599,8 +597,7 @@ export class Popups {
     const shown = Math.min(p.items.length || 1, Math.max(4, Math.floor((size.height - 120) / ROW)));
     const first = Math.max(0, Math.min(p.sel - Math.floor(shown / 2), p.items.length - shown));
     const h = shown * ROW + 20;
-    // At the press (flipped near the edges) or under the row (above it near the foot), clear of
-    // the options bar; else in the middle.
+    // At the press or under the row (menu-place.ts), clear of the options bar; else the middle.
     const { x, y } = p.at ? placeMenu({ width: w, height: h }, { width: size.width, height: size.height - OPTIONS_BAR }, p.at) : this.center(size, w, h);
     const keyW = Math.max(30, ...p.items.map((it) => keyLabel(it.key ?? "").length * 7 + 14));
 

@@ -21,7 +21,8 @@ import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.ts";
 import type { Hint } from "./kit.ts";
 import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";
-import type { Host, PickRow, ReadOptions } from "./host.ts";
+import type { Host, ReadOptions } from "./host.ts";
+import { prMenu, prRowMenu } from "./pr-menu.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
@@ -576,13 +577,7 @@ export default class Prs {
             cx.notify();
           })
           // A right-click on a row: that row's menu, at the pointer.
-          .on_item_secondary_click((key, e, cx) => {
-            cx.stop_propagation();
-            this.focus = "list";
-            this.select(list.findIndex((p) => String(p.number) === key), cx);
-            this.menu(e);
-            cx.notify();
-          })
+          .on_item_secondary_click((key, e, cx) => prRowMenu(this, key, e, cx))
           .size_full().track_scroll(this.listScroll));
 
     const right = h_flex().gap(6).items_center()
@@ -597,18 +592,9 @@ export default class Prs {
       });
   }
 
-  /** Right-click on the list (at the press `e`): what can be done from here. */
+  /** Right-click on the list (at the press `e`): what can be done from here (pr-menu.ts). */
   menu(e: { readonly position: Pt } | null = null): void {
-    const p = this.current();
-    const rows: PickRow[] = [{ label: "New pull request…", sub: "n", go: (cx) => this.newPr(cx) }];
-
-    if (p) {
-      rows.push({ label: `Diff of #${p.number}`, sub: "d", go: () => this.app.openDiff(p.number) },
-        { label: `Comment on #${p.number}`, sub: "c", go: (cx) => this.startComment(cx) },
-        { label: `#${p.number} in the browser`, sub: "o", go: (cx) => this.app.openUrl(this.urlOf(p), cx) });
-    }
-
-    this.app.picker = { title: "PULL REQUESTS", at: 0, rows, near: e ? this.app.pressAt(e) : null };
+    prMenu(this, e);
   }
 
   checksPanel(t: Theme): Element | null {

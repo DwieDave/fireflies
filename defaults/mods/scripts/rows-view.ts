@@ -15,6 +15,7 @@ import type { Asked, Chip, Item, Top } from "./state.ts";
 import { dither, eyebrow, toneColor } from "./paint.ts";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
+import { rightPress } from "./run-menu.ts";
 
 /** A word that acts on a click (‹ back, cancel): dim, lit under the pointer. */
 export function actionChip(t: Theme, id: string, label: string, color: Color | null, go: (cx: Context) => void) {
@@ -99,7 +100,9 @@ export function runRow(v: ScriptsDeck, t: Theme, r: Run, i: number, on: boolean)
 
       if (k !== v.hover) { v.hover = k; cx.notify(); }
     })
-    .on_click((_e, cx) => { v.cursor = i; v.act("watch", r, cx); }), t, on)
+    .on_click((_e, cx) => { v.cursor = i; v.act("watch", r, cx); })
+    // A right-click: the run's menu at the pointer (run-menu.ts).
+    .on_mouse_down("right", (e, cx) => { cx.stop_propagation(); rightPress(v, i, e); cx.notify(); }), t, on)
     .child(div().relative().w(8).flex_none().flex().items_center().child(pip(color, r.live)))
     .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
       .child(div().min_w(0).truncate().child(r.name))

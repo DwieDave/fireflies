@@ -53,7 +53,7 @@ import { emptyView, runRow, scriptRow, section, tally, placeRows } from "./rows-
 import { footBar, helpView, outputView, passwordBar, deckHead, filterLine } from "./bars.ts";
 import { outputKey, typedKey } from "./input.ts";
 import type { RunMenu } from "./run-menu.ts";
-import { openRunMenu, rightPress, runMenuKey, runMenuView } from "./run-menu.ts";
+import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
@@ -219,9 +219,6 @@ export default class ScriptsDeck extends View {
     const move = (d: number) => { if (n) this.cursor = Math.max(0, Math.min(n - 1, this.cursor + d)); };
     const done = () => { cx.stop_propagation(); cx.notify(); };
 
-    // A run's menu has every key while it's open.
-    if (this.runMenu) return runMenuKey(this, this.runMenu, e, cx);
-
     // cmd-k ?: the keys from anywhere, the filter too (where ? types), as the editor's.
     if (cmd && !m.alt && k === "k") {
       this.chord = Date.now();
@@ -309,8 +306,7 @@ export default class ScriptsDeck extends View {
     else if (k === "k") move(-1);
     else if (k === "end" || (k === "g" && m.shift)) move(n);
     else if (k === "home" || k === "g") move(-n);
-    else if (k === "w" && cur?.kind === "run") this.act("watch", cur.r, cx);
-    else if (k === "m" && cur?.kind === "run") openRunMenu(this, this.cursor);
+    else if ((k === "w" || k === "m") && cur?.kind === "run") void (k === "w" ? this.act("watch", cur.r, cx) : openRunMenu(this, this.cursor));
     else if (k === "x" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
     else if (k === "r" && m.shift && cur?.kind === "run") this.act("again", cur.r, cx);
     else if (k === "q") {
@@ -402,7 +398,8 @@ export default class ScriptsDeck extends View {
       // A click anywhere in it (a row too) leaves the keyboard here.
       .on_mouse_down("left", () => handle?.focus())
       .on_mouse_move(() => { this.moved = true; })
-      .on_key_down((e, cx) => this.onKey(e, cx, items))
+      // A run's menu (run-menu.ts) has every key while it's open.
+      .on_key_down((e, cx) => (this.runMenu ? runMenuKey(this, this.runMenu, e, cx) : this.onKey(e, cx, items)))
       .on_size_change((drawn, cx) => {
         const h = unzoom(drawn.height);
 
@@ -417,12 +414,7 @@ export default class ScriptsDeck extends View {
       .when(all.length > 0, (el) => el
         .child(section(t, "runs", tally(this, t, all)))
         .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll().track_scroll(this.runsScroll)
-          .children(all.map((r, i) => runRow(this, t, r, i, this.cursor === i)
-            .on_mouse_down("right", (e, cx) => {
-              cx.stop_propagation();
-              rightPress(this, i, e);
-              cx.notify();
-            }))))
+          .children(all.map((r, i) => runRow(this, t, r, i, this.cursor === i))))
         .child(div().h(4).flex_none()))
       .when(this.help, (el) => el.child(this.helpView(t, INPUT + 4 + listH)))
       .when(!this.help && o !== null, (el) => (o ? el.child(outputView(this, t, INPUT + 4 + listH, o)) : el))
@@ -443,10 +435,6 @@ export default class ScriptsDeck extends View {
           .children(list)
         : v_flex().h(listH).flex_none().mt(4).child(emptyView(this, t)))
       .child(this.foot(t, cur))
-      .map((el) => {
-        const menu = this.runMenu ? runMenuView(this, t, this.runMenu) : null;
-
-        return menu ? el.child(menu) : el;
-      });
+      .children(runMenuLayer(this, t));
   }
 }

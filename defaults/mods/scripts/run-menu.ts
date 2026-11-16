@@ -105,6 +105,13 @@ export function runMenuKey(v: ScriptsDeck, m: RunMenu, e: KeyEvent, cx: Context)
   cx.notify();
 }
 
+/** The open menu's layer, or nothing. */
+export function runMenuLayer(v: ScriptsDeck, t: Theme): Element[] {
+  const menu = v.runMenu ? runMenuView(v, t, v.runMenu) : null;
+
+  return menu ? [menu] : [];
+}
+
 /** The menu over the deck: a layer that closes it on a press beside it, the box at its place. */
 export function runMenuView(v: ScriptsDeck, t: Theme, m: RunMenu): Element | null {
   const r = runOf(m);

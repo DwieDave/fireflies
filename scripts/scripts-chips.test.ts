@@ -32,6 +32,7 @@ const deck = await import("../defaults/mods/scripts/main.ts");
 const { default: Deck } = deck;
 const { CHIP, CHIPS_W, ASK_MS } = await import("../defaults/mods/scripts/state.ts");
 const { JOBS } = await import("../defaults/mods/scripts/runs.ts");
+const menus = await import("../defaults/mods/scripts/run-menu.ts");
 
 function open() {
   const d: any = new Deck();
@@ -173,8 +174,9 @@ test("a run's menu: m under the cursor's run, a right-click at the press; its en
   expect(find(r, "rm-menu").calls.top[0]).toBe(HEAD + SECTION + 2 * ROW);
   expect(find(r, "rm-menu").calls.left[0]).toBe(8);
   expect(texts(find(r, "rm-menu"))).toEqual(expect.arrayContaining(["Its output", "Run it again", "Remove it from the list"]));
-  // esc closes it; the deck stays.
-  press(o, "escape");
+  // While it's open it has the keys (the deck's on_key_down hands them to it): esc closes it; the deck stays.
+  const menuKey = (name: string, mods: any = {}) => menus.runMenuKey(o.d, o.d.runMenu, k(name, mods), o.c);
+  menuKey("escape");
   expect(o.d.runMenu).toBeNull();
   expect(st.closed).toEqual([]);
   // A right press 30 px into the first run's row, 10 down: the menu just past it; x (remove? no: t1 runs: stop asks).
@@ -184,7 +186,7 @@ test("a run's menu: m under the cursor's run, a right-click at the press; its en
   r = o.draw();
   expect(find(r, "rm-menu").calls.left[0]).toBe(32);
   // Its entry's key runs it: R on a running one asks first, as its chip does.
-  press(o, "R", { shift: true });
+  menuKey("R", { shift: true });
   expect(o.d.runMenu).toBeNull();
   expect(o.d.asking).toMatchObject({ address: "t1", what: "again" });
 });
