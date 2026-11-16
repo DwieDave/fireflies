@@ -104,13 +104,17 @@ fn write_home_tsconfig(home: &Path) -> std::io::Result<()> {
     write_if_changed(&path, home_tsconfig(&mods_without_config(&home.join("mods"))))
 }
 
-/// The mod folders under `mods` (links followed) holding TypeScript and no editor config, sorted.
+/// The mod folders under `mods` (links followed) holding TypeScript and no
+/// editor config, sorted. Shipped mods are left out: the app installs them as
+/// copies it can write into, so gpui-shell gives each its own as it loads
+/// (after this runs, on a first start).
 fn mods_without_config(mods: &Path) -> Vec<String> {
     let mut names: Vec<String> = std::fs::read_dir(mods)
         .into_iter()
         .flatten()
         .flatten()
         .filter(|e| e.path().is_dir() && !e.file_name().to_string_lossy().starts_with('.'))
+        .filter(|e| !is_shipped(&e.file_name().to_string_lossy()))
         .filter(|e| !e.path().join("tsconfig.json").exists() && !e.path().join("jsconfig.json").exists())
         .filter(|e| has_typescript(&e.path()))
         .map(|e| e.file_name().to_string_lossy().into_owned())
@@ -1610,6 +1614,8 @@ mod tests {
         file("mods/bare/main.ts", "");
         file("mods/plain/main.js", "");
         file("mods/typed-only/gpui-kit.d.ts", "");
+        // A shipped mod gets its own as it loads, after the start writes this.
+        file("mods/editor/main.ts", "");
         file("elsewhere/linked/lib/kit.ts", "");
         #[cfg(unix)]
         std::os::unix::fs::symlink(home.join("elsewhere/linked"), home.join("mods/linked")).unwrap();
