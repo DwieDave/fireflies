@@ -213,3 +213,24 @@ test("every dither in a converted mod asks layout-look.ts first", () => {
     expect([f, /import \{ flat \} from "\.\/layout-look\.ts";/.test(text) && text.includes("const plain = flat(color, cell);")]).toEqual([f, true]);
   }
 });
+
+// ---- Fireflies' windows open in any layout: `mod.open {name}` reads the window from the
+// mod's mod.json (nocturne's commands exist only in the nocturne layout)
+
+const modJson = (m: string) => JSON.parse(readFileSync(join(MODS, m, "mod.json"), "utf8"));
+
+test("git's and github's mod.json open the window nocturne opens (same kind, key, size, frame)", () => {
+  for (const [m, file] of [["git", "git.ts"], ["github", "github.ts"]] as const) {
+    const opener = readFileSync(join(MODS, "nocturne", file), "utf8");
+    const spec = modJson(m).overlay;
+    expect([m, spec.kind, spec.key, spec.frame, spec.scrim]).toEqual([m, "window", m, "none", true]);
+    expect(opener).toContain(`openOverlay({ mod: "${m}", kind: "window", key: "${m}", frame: "none", scrim: true, width: ${spec.width}, height: ${spec.height}, resizable: { min: [${spec.resizable.min.join(", ")}] }`);
+  }
+});
+
+test("the frame palette's window rows open mods that say how their window opens", () => {
+  const palette = readFileSync(`${import.meta.dir}/../defaults/frame/palette/main.js`, "utf8");
+  const opened = [...palette.matchAll(/\["mod\.open", \{ name: "([\w-]+)" \}, "Window"/g)].map((m) => m[1]!);
+  expect(opened.sort()).toEqual(["databases", "git", "github", "procs", "scripts"]);
+  for (const m of opened) expect([m, Boolean(modJson(m).overlay)]).toEqual([m, true]);
+});

@@ -1600,6 +1600,16 @@ layout's look and a block can differ:
   color only terminals (and a CI log's ANSI codes). Writing a mod: use these
   names, never hex; the shipped mods' `tones.ts` (`edge(t)`, `tone(t, k)`)
   is the copy to take for the edge.
+- The look beyond colors follows the layout too (this fork): where the
+  layout's `scrim` is dithered (`"scrim": {"dither": true}`, as nocturne's)
+  the mods draw Nocturne's 1-bit checker fills; anywhere else (`main`,
+  herdr-app's default look, or your own layout) the same fills are flat.
+  `"corners": "square"` squares every corner. Writing a mod: take
+  `layout-look.ts` from a shipped mod (`flat(color, cell)` first in a dither
+  function, `dithered()`, `radius(n)`). The windows open in any layout with
+  `mod.open {name}` (the palette's Window rows: Git, GitHub, Databases,
+  Processes, Scripts; a second run closes): each mod's `mod.json` `overlay`
+  says how; Nocturne's own commands (`nocturne.git`, …) exist only there.
 - `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
   (their text sizes are their own, in px, and follow zoom). Optional: without
   them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).
