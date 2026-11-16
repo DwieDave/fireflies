@@ -126,7 +126,8 @@ export function barView(view: Browser, t: Theme): Element {
       .child(`${Math.round(view.zoom * 100)}%`))
     .child(barIcon(view, t, "zoom-in", "plus", view.zoom < 3, () => view.command("zoom_in")))
     // focus: the press focuses this pane first, so the pane hidden for the player is this one.
-    .when(Boolean(view.start && available() && (view.video || view.away)), (el) => el.child(barIcon(view, t, "pip", "picture-in-picture", true, () => view.command("pip"), true)))
+    // Picture in picture is WebKit's (its player takes a WKWebView): not for a Chromium tab.
+    .when(Boolean(view.start && available() && (view.video || view.away) && viewKind(view.tab.engine, view.tab.start) === "web"), (el) => el.child(barIcon(view, t, "pip", "picture-in-picture", true, () => view.command("pip"), true)))
     .child(barIcon(view, t, "inspect", "code", Boolean(view.start && available()), (cx) => toggleInspector(view, cx), true))
     .child(barIcon(view, t, "external", "external-link", Boolean(view.start && p.href), () => external(view)))
     .child(keysButton(view, t))

@@ -2284,7 +2284,10 @@ The main ones:
   `layers` shows, per mod copy, its layer (`z`, `float`), its holes and its dim.
   A web view is inspectable (right-click "Inspect Element"); its `web.inspect` action returns
   `{ of }`, and a native view `{ kind: "inspector", of }` (in any pane, e.g. a split beside it)
-  shows Safari's Web Inspector for that page in its place.
+  shows Safari's Web Inspector for that page in its place. For a Chromium view the same
+  inspector shows Chrome's DevTools: a Chromium view on the frontend CEF ships, talking to
+  the page through a WebSocket bridge inside the app (127.0.0.1, a random token per
+  inspector, only the frontend's origin; no remote-debugging port).
   A web view's page may go fullscreen (`WKPreferences.elementFullscreenEnabled`, so
   `document.fullscreenEnabled` is true): WebKit moves the view into a fullscreen window of
   its own and back into its place on Esc; `native.debug` shows it per web view as

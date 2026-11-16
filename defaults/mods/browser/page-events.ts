@@ -2,6 +2,7 @@
 // (parseEvent), what a failed load says (loadFailure), and what each event
 // does to its tab (onEvent).
 
+import { chromiumWords } from "./engine.ts";
 import { isMediaData, mediaUnsupported } from "./media.ts";
 import type { Context } from "gpui-kit";
 import { shared, setShared, panes, openOverlay } from "herdr";
@@ -95,6 +96,13 @@ export function loadFailure(d: LoadError): Failure | null {
   const web = domain === "WebKitErrorDomain" || (domain === null && code === 102);
 
   if ((domain === "NSURLErrorDomain" || domain === null) && code === -999) return null;
+
+  // A Chromium view's net::Error (its ERR_ABORTED never comes: chromium.rs drops it).
+  if (domain === "chromium") {
+    const host = /^[a-z]+:\/\/([^/?#]+)/i.exec(url ?? d.href ?? "")?.[1]?.replace(/^www\./, "") ?? "The site";
+
+    return { message: chromiumWords(code, host) ?? (d.message?.trim() || `The page didn't load (error ${code}).`), url };
+  }
 
   if (web && (code === 102 || code === 204)) return null;
 
