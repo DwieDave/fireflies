@@ -5,27 +5,22 @@ usage. His words: "ship what is there and leave docs (commited) for the rest
 to be picked up by a fresh orchestrator". Read CLAUDE.md first; this file is
 the state it does not hold. Delete it when the open work below is done.
 
-## FIRST: a regression in what shipped (not fixed)
+## The sidebar regression of the first ship (fixed)
 
-After `darwin-rebuild` and a restart on 49abe6f, Developer's nocturne sidebar
-shows "This view could not be re-rendered; showing the last version that
-worked · interrupted", with no spaces and no fireflies (he had 10+ agents and
-several spaces). `herdr-app status` lists no errors. "interrupted" is the
-engine's uncatchable budget stop (vendor/gpui-kit/crates/shell/src/engine/quickjs/mod.rs,
-`JS_IsUncatchableError`): nocturne's render, or its first load, runs past its
-budget with his real state. It did not show in scratch apps (few spaces, no
-agents) except as the same banner "under load". Suspects, unchecked: the
-library modules' first evaluation in a window (effect + kit, about 0.4 s in a
-debug build) landing inside a render's budget; layout-look / tones / look
-calls on every row of a long sidebar; the Effect-converted usage section in
-nocturne. Reproduce with a scratch home holding many spaces and fake agents
-(memory: scratch-fake-agents), find which call is cut, fix, test, ship.
-He was told to roll back meanwhile (below). The orchestrator hit its usage
-limit before it could do more than this note.
-
-Rollback he was given: in /private/etc/nix-darwin `git checkout flake.lock`
-(the batch's lock was uncommitted) and `sudo darwin-rebuild switch --flake
-/private/etc/nix-darwin`, or `sudo darwin-rebuild switch --rollback`.
+After the first ship Developer's nocturne sidebar showed "could not be
+re-rendered · interrupted" with no spaces and no fireflies. Cause: every
+`labelsOf()` in nocturne/kit.ts asked the app for the whole terminal listing
+(each terminal with its argv; his fireflies carried their briefs there), once
+per agent row and again in every comparison of the sidebar's sort, so a draw
+with a dozen agents ran past the render's 50 ms budget, every time. The batch
+added a schema decode to every dither() (layout-look) on top. Fixed: the
+sidebar draws with one listing (`oneListing`), the sort looks labels up once,
+and layout-look decodes the layout's name only when it changes. Measured in a
+scratch app with 18 labelled agents (debug build): the sort 23 ms -> 1 ms, the
+sidebar's draw 41-49 ms -> 9-16 ms. The reproduction is `/var/tmp/sb-run.sh`
+(not kept in the repository): a copy of the app home, three spaces, six
+labelled fake agents each. Lesson: a scratch app with one space and no agents
+proves nothing about the sidebar; shoot with a dozen agents.
 
 ## Shipped with this commit
 

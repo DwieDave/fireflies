@@ -50,7 +50,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, run, hc, theme, setAgentOrder, nextCommand, shared, setShared, settings, layout, focused } from "herdr";
 import type { AgentInfo, SpaceInfo, Status, Theme } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
+import { ART, WORD, atRest, dither, eyebrow, givenName, nameTerminal, oneListing, sortedAgents, goToPin, dockWeb, dockShell, dockFiles, pinDockShell, dockFocused, jar as jarNow, paneRecordsNow, tabRecordsNow, navRing, tracked, GLOW_SQUARE } from "./kit.ts";
 import { tidy, tidyTabs, onShelf, storedRecords, PANES_KEY, TABS_KEY, GONE_AFTER as PIN_GONE } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { walkStops, walkAt, walkNext } from "./walk.ts";
@@ -612,6 +612,11 @@ export default class Sky {
   }
 
   render(cx: Context): Element {
+    return oneListing(() => this.draw(cx));
+  }
+
+  /** The sidebar, drawn with one listing of the terminals (kit.ts oneListing). */
+  draw(cx: Context): Element {
     const t = theme();
 
     // The controls are listed again as they're drawn (nav()).
