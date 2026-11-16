@@ -197,6 +197,7 @@ pub fn ensure(key: &str, gpui_view: *mut c_void, props: &Value) -> Result<u64, S
     let host = HoleHost::new(mtm, zero);
     // Picture in picture's video gives its left presses to Fireflies: the window drags by it.
     host.ivars().gives_left.set(spec.kind.gives_left_presses());
+    host.ivars().dim_by_opacity.set(spec.kind == Kind::Chromium);
     let view: Retained<NSView> = Retained::into_super(host.clone());
     view.setHidden(true);
     container.addSubview_positioned_relativeTo(&view, NSWindowOrderingMode::Above, Some(&gpui));
@@ -1339,7 +1340,7 @@ pub fn debug() -> Value {
             .collect()
     });
     #[cfg(feature = "chromium")]
-    let chromium = json!({ "present": crate::chromium::present(), "started": crate::chromium::started(), "appProtocol": crate::chromium::app_protocol(), "home": crate::chromium::home() });
+    let chromium = json!({ "present": crate::chromium::present(), "started": crate::chromium::started(), "appProtocol": crate::chromium::app_protocol(), "home": crate::chromium::home(), "install": crate::cef_install::status() });
     #[cfg(not(feature = "chromium"))]
     let chromium = Value::Null;
     json!({ "interface": crate::INTERFACE, "views": views, "count": views.len(), "monitor": MONITOR.with(|m| m.borrow().is_some()), "events": LOG.with(|l| l.borrow().clone()), "chromium": chromium })
@@ -1787,6 +1788,20 @@ unsafe extern "C" {
     fn CGPathAddRect(path: *mut CGPath, m: *const c_void, rect: NSRect);
     fn CGPathAddRoundedRect(path: *mut CGPath, m: *const c_void, rect: NSRect, w: f64, h: f64);
     fn CGPathRelease(path: *mut CGPath);
+    fn CGPathAddPath(path: *mut CGPath, m: *const c_void, other: *const CGPath);
+}
+
+/// `CGPathCreateCopyBySubtractingPath` (macOS 13+), looked up at run time.
+type CgSubtract = unsafe extern "C" fn(*const CGPath, *const CGPath, bool) -> *const CGPath;
+
+fn cg_subtract() -> Option<CgSubtract> {
+    unsafe extern "C" {
+        fn dlsym(handle: *mut c_void, symbol: *const std::ffi::c_char) -> *mut c_void;
+    }
+    // RTLD_DEFAULT is (void *)-2 on Apple platforms.
+    let f = unsafe { dlsym(-2isize as *mut c_void, c"CGPathCreateCopyBySubtractingPath".as_ptr()) };
+    // SAFETY: the symbol has this signature (CoreGraphics, CGPath.h).
+    (!f.is_null()).then(|| unsafe { std::mem::transmute::<*mut c_void, CgSubtract>(f) })
 }
 
 pub struct HostIvars {
@@ -1797,6 +1812,10 @@ pub struct HostIvars {
     dimmed: Cell<bool>,
     /// Left presses go to Fireflies, not the view (Kind::gives_left_presses).
     gives_left: Cell<bool>,
+    /// Dim by the host layer's opacity, not a layer above the content
+    /// (Chromium: its page draws above a sibling layer whatever its order or
+    /// zPosition; the host's own opacity, like its mask, reaches it).
+    dim_by_opacity: Cell<bool>,
     dim: RefCell<Option<Retained<AnyObject>>>,
     /// Soft shadow around the holes, drawn on the page (the hole itself is
     /// masked away, so the shadow only shows outside the card).
@@ -1863,6 +1882,7 @@ impl HoleHost {
             cover: RefCell::new(Vec::new()),
             dimmed: Cell::new(false),
             gives_left: Cell::new(false),
+            dim_by_opacity: Cell::new(false),
             dim: RefCell::new(None),
             shadow: RefCell::new(None),
         });
@@ -1905,6 +1925,13 @@ impl HoleHost {
 
     /// A dialog's backdrop, continued over the page (Fireflies draws it below).
     fn update_dim(&self, layer: &AnyObject) {
+        if self.ivars().dim_by_opacity.get() {
+            // Fireflies' backdrop is drawn below the view: the page at 65%
+            // over it reads as the same 35% black.
+            let o: f32 = if self.ivars().dimmed.get() { 0.65 } else { 1.0 };
+            let _: () = unsafe { msg_send![layer, setOpacity: o] };
+            return;
+        }
         let dim = self.ivars().dimmed.get();
         let mut slot = self.ivars().dim.borrow_mut();
         if slot.is_none() {
@@ -1931,7 +1958,7 @@ impl HoleHost {
         }
     }
 
-    /// A shape mask: the whole view minus the holes (even-odd fill).
+    /// A shape mask: the whole view minus the union of the holes.
     fn update_mask(&self) {
         let holes = self.all_holes();
         let layer: Option<Retained<AnyObject>> = unsafe { msg_send![self, layer] };
@@ -1950,23 +1977,40 @@ impl HoleHost {
         // The view is flipped (top-left); its layer may or may not be.
         let layer_flipped: bool = unsafe { msg_send![&*layer, isGeometryFlipped] };
         unsafe {
-            let path = CGPathCreateMutable();
-            CGPathAddRect(path, std::ptr::null(), b);
+            // The holes, as one region: overlapping ones (a palette over a
+            // dialog) stay cut. Even-odd over bounds + holes drew the page
+            // again where two holes overlapped.
+            let cut = CGPathCreateMutable();
             for h in holes.iter() {
                 let mut r = h.rect(b.size.width);
                 if !layer_flipped {
                     r.origin.y = b.size.height - r.origin.y - r.size.height;
                 }
                 let rad = h.radius.min(r.size.width / 2.0).min(r.size.height / 2.0);
-                CGPathAddRoundedRect(path, std::ptr::null(), r, rad, rad);
+                CGPathAddRoundedRect(cut, std::ptr::null(), r, rad, rad);
             }
+            let whole = CGPathCreateMutable();
+            CGPathAddRect(whole, std::ptr::null(), b);
+            // macOS 13+: the bounds minus the holes' union (non-zero fill).
+            let subtracted = cg_subtract().map(|f| f(whole.cast_const(), cut.cast_const(), false));
             let shape: Retained<AnyObject> = msg_send![cls, layer];
             let _: () = msg_send![&*shape, setFrame: b];
-            let _: () = msg_send![&*shape, setPath: path.cast_const()];
-            let rule = NSString::from_str("even-odd");
-            let _: () = msg_send![&*shape, setFillRule: &*rule];
+            match subtracted.filter(|p| !p.is_null()) {
+                Some(p) => {
+                    let _: () = msg_send![&*shape, setPath: p];
+                    CGPathRelease(p.cast_mut());
+                }
+                None => {
+                    // Older systems: bounds and holes, even-odd (overlaps show through).
+                    CGPathAddPath(whole, std::ptr::null(), cut.cast_const());
+                    let _: () = msg_send![&*shape, setPath: whole.cast_const()];
+                    let rule = NSString::from_str("even-odd");
+                    let _: () = msg_send![&*shape, setFillRule: &*rule];
+                }
+            }
             let _: () = msg_send![&*layer, setMask: &*shape];
-            CGPathRelease(path);
+            CGPathRelease(cut);
+            CGPathRelease(whole);
             self.update_shadow(&layer, &holes, b, layer_flipped);
         }
     }

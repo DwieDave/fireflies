@@ -156,8 +156,14 @@ export function blankPage(view: Browser, t: Theme, title: string, hint: string |
  *  dialog makes the view step aside. `tabs`: what would open a window
  *  comes as web.newTab. */
 export function webView(view: Browser, t: Theme, tab: Tab, start: string): Element {
-  return herdr.nativeView.new(tab.id, { kind: view.engine === "chromium" ? "chromium" : "web", ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true })
-    .child(view.away && tab === view.tab
-      ? blankPage(view, t, "Playing in picture in picture", "↩ in the player brings it back here.")
-      : blankPage(view, t, tab.page.loading ? "Loading…" : "", tab.page.href));
+  const chromium = view.engine === "chromium";
+  const el = herdr.nativeView.new(tab.id, { kind: chromium ? "chromium" : "web", ...Tabs.source(start), persist: true, zoom: tab.zoom, pip: true, tabs: true });
+
+  if (view.away && tab === view.tab) return el.child(blankPage(view, t, "Playing in picture in picture", "↩ in the player brings it back here."));
+
+  // A Chromium page under a dialog is dimmed by its opacity, so what's drawn
+  // under it shows through: the placeholder only while there's no page yet.
+  if (chromium && !tab.page.loading && tab.page.href) return el.child(div().flex_1());
+
+  return el.child(blankPage(view, t, tab.page.loading ? "Loading…" : "", tab.page.href));
 }
