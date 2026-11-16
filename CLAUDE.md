@@ -5,6 +5,8 @@ upstream `herdrdev/herdr-app`). AGENTS.md holds the project's rules; this file
 is how *you*, the **orchestrator**, develop it: agents do the work in their own
 worktrees, you brief, review, merge, and ship.
 
+Open work from the last batch, if any, is in [.claude/HANDOFF.md](.claude/HANDOFF.md): read it before starting anything.
+
 ## Spawn an agent
 
 1. **Worktree** (always on `/Volumes/data`, never inside the repo):
