@@ -23,8 +23,6 @@
 import { div } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import * as herdr from "herdr";
-import type { Guarded } from "./guard.ts";
-import { isBoolean, isString, object } from "./guard.ts";
 
 /** What a layout's root says about the look. */
 export interface Look {
@@ -35,10 +33,27 @@ export interface Look {
 /** Nocturne's look: what a layout that can't be read gets. */
 const NOCTURNE: Look = { dithered: true, square: true };
 
-/** What the look reads of a layout's root (layout()): its scrim and corners. */
-const isLookRoot = object({}, { scrim: object({}, { dither: isBoolean }), corners: isString });
+/** What the look reads of a layout's root (layout()): its scrim and corners.
+ *  (Its own guards: a mod converted to Effect has no guard.ts to share.) */
+export interface LookRoot {
+  readonly scrim?: { readonly dither?: boolean };
+  readonly corners?: string;
+}
 
-export type LookRoot = Guarded<typeof isLookRoot>;
+/** A scrim as the look reads it: an object whose `dither`, if there, is a boolean. */
+function isLookScrim(v: unknown): v is { readonly dither?: boolean } {
+  return typeof v === "object" && v !== null && (!("dither" in v) || typeof v.dither === "boolean");
+}
+
+/** A layout root as the look reads it: an object, its scrim and corners, if there, as above. */
+function isLookRoot(v: unknown): v is LookRoot {
+  if (typeof v !== "object" || v === null) return false;
+
+  return (!("scrim" in v) || isLookScrim(v.scrim)) && (!("corners" in v) || typeof v.corners === "string");
+}
+
+/** The layout's name as shared("layout") holds it. */
+const isName = (v: unknown): v is string => typeof v === "string" && v !== "";
 
 /** The look a layout's root asks for. */
 export const lookOf = (root: LookRoot): Look => ({ dithered: root.scrim?.dither === true, square: root.corners === "square" });
@@ -61,7 +76,7 @@ export function lookNow(): Look {
   try {
     const name = herdr.shared("layout");
 
-    if (!isString(name) || name === "") return readLook();
+    if (!isName(name)) return readLook();
 
     if (shownLook?.name !== name) shownLook = { name, look: readLook() };
 
