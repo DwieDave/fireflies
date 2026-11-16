@@ -214,3 +214,14 @@ test("a copy's runs: failures reported in its words, interruptions silent, close
   await Bun.sleep(5);
   expect(said.length).toBe(1);
 });
+
+// ---- the tests' mod loader
+
+test("importMod loads a mod's libraries (effect, @fireflies/kit) for real, standing in only for the app", async () => {
+  const { importMod } = await import("./mod-source.ts");
+  const m = await importMod("usage/limits.ts", { herdr: {} });
+  expect(m.PROVIDERS.map((p: { id: string }) => p.id)).toEqual(["claude", "codex"]);
+  const shared = sharedTest();
+  shared.store.set("usage.provider", "codex");
+  expect((await Effect.runPromise(Effect.provide(m.provider, shared.layer))).id).toBe("codex");
+});

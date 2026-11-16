@@ -290,15 +290,17 @@ next to its reason), one that should be shown becomes the mod's note.
      reading `Date.now()`, `localTime` reading `new Date`, `HttpLive` calling
      `fetch` (they are the Clock, the local time, the HttpClient).
 
-**Decision for Developer**: run over the mods not yet converted
-(`bun scripts/effect-survey.ts`), "every diagnostic on" finds about
-19,000 things: 70 % `strict-boolean-expressions` (`if (x)` on a non-boolean),
-25 % `prefer-effect-array` / `prefer-effect-string` (`xs.map(f)` → `Arr.map(xs, f)`,
-`s.trim()` → `Str.trim(s)`). The first is real type safety; the second is
-mostly style (it matters where it returns an Option: `find`, `indexOf`,
-`split`). The pilot meets all of them. If the conversions should skip
-`prefer-effect-array`/`-string` for calls that return the same thing either
-way, say so before the waves start: it is a quarter of their mechanical work.
+**Every finding is fixed.** Run over the mods not yet converted (`bun
+scripts/effect-survey.ts`), every diagnostic on finds about 19,000 things:
+70 % `strict-boolean-expressions` (`if (x)` on a non-boolean), 25 %
+`prefer-effect-array` / `prefer-effect-string` (`xs.map(f)` → `Arr.map(xs, f)`,
+`s.trim()` → `Str.trim(s)`), and the shared copies about 1,220 more. Asked
+whether the conversions should skip the style part, Developer (2026-11-16):
+
+> yes youre expected to fix all findings too
+
+So every rule stays on as an error for every converted file, the style
+ones included, and a mod isn't done while one finding is left (below).
 
 ### In the editor
 
@@ -407,40 +409,101 @@ note, a toast, or a typed fallback with its reason):
 
 ### In waves
 
-A firefly converts its mods whole, adds them to `effect_sources`, and never
-edits a shared copy it doesn't own: the owner converts it and copies it over
-the others (as docs/mods-typescript.md says), the others merge integrate.
-Sizes are lines of the mod's own files.
+A firefly converts its files whole and adds them to `effect_sources`; the
+Effect pass on them is the measure of done. Sizes are the mods' own lines
+and today's Effect findings (the survey); the shared copies are wave 0's.
 
-| wave | firefly | mods | lines | owns (shared copies) | waits for |
-|---|---|---|---|---|---|
-| 1 | databases | databases | 12.2k | envrc.ts | |
-| 1 | github | github | 12.2k | | |
-| 1 | git | git | 9.0k | | |
-| 1 | nocturne | nocturne | 14.7k | scratch.ts, toolground.ts | |
-| 1 | small-a | procs, scripts, pip, diff, equalize-panes | 8.0k | | |
-| 1 | small-b | agent-graph, notifications, browser | 8.6k | | |
-| 2 | viewers | preview, file-tree | 10.7k | viewer*.ts, kinds.ts, image.ts, table.ts, diff.ts, keys.ts, file-icons.ts | wave 1 merged |
-| 2 | editor | editor, markdown, finder | 19.9k | markdown*.ts, paths.ts, follow.ts, editor-route.ts | wave 1 merged; takes envrc.ts from databases and scratch.ts from nocturne as copies |
+**Wave 0: the shared copies become libraries (two fireflies, first).** A
+mod can't import another's files, so files two mods need are copied into
+each, byte for byte, with a test per file that the copies agree. Library
+modules end that: the file moves to `defaults/lib/@fireflies/<name>/`, every
+mod imports it by name, the app serves one copy. Each moved library is in
+the Effect pass at once (`effect_sources` names `defaults/lib`), so wave 0
+converts what it moves: its findings fixed, its IO on the kit's services,
+its parsing through Schema. After wave 0 no mod carries a copy, and no later
+wave touches another's file.
 
-Six in wave 1 share no file. Wave 2's two share the viewer copies: the
-editor firefly takes them from viewers' branch, never edits them.
+| firefly | libraries (from → to) | importers | lines | findings |
+|---|---|---|---|---|
+| 0a | `keyhelp.ts` → `@fireflies/keyhelp`; `form-keys.ts` → `@fireflies/form-keys`; `toolground.ts` → `@fireflies/toolground`; `editor-route.ts` → `@fireflies/editor-route`; `scratch.ts` → `@fireflies/scratch`; `envrc.ts` → `@fireflies/envrc`; `limits.ts` → `@fireflies/usage-limits` | keyhelp: 15 mods; form-keys: nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback; toolground: nocturne, notifications; editor-route: editor, file-tree, finder, markdown; scratch: nocturne, editor; envrc: editor, databases; limits: usage, nocturne | 2.1k | 212 |
+| 0b | `viewer.ts` and `viewer-*.ts`, `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts`, `file-icons.ts` → `@fireflies/viewer`; `markdown.ts`, `markdown-parse.ts`, `paths.ts`, `follow.ts` → `@fireflies/markdown` | viewer: preview, editor, file-tree (`kinds.ts` and `file-icons.ts` also nocturne, `table.ts` also databases); markdown: editor, github, markdown | 5.5k | 1,006 |
 
-**Ending the shared copies.** Library modules end them: a shared copy moves
-to `defaults/lib/@fireflies/<name>` and its importers import it by name
-(`@fireflies/keyhelp`, `@fireflies/form-keys`): one file, no drift test,
-one evaluation. guard.ts needs no move: each conversion drops its copy
-(Schema replaces it), and it goes when the last mod does. The rest
-(keyhelp.ts in 15 mods, form-keys.ts in 9, editor-route.ts, file-icons.ts,
-…) move in one mechanical commit by one firefly *before* wave 1 (wave 0:
-import lines in every mod, and the tests that read their text: form-keys.test.ts,
-keyhelp.test.ts): after it, no wave touches a copy. A shared file that is
-a mod's own logic stays with that mod.
+How, for each library:
 
+1. `git mv` the source copy (the one its drift test names as the source) to
+   `defaults/lib/@fireflies/<name>/`, `git rm` the other copies. Its own
+   imports of sibling files stay relative (`./kinds.ts`) inside one library;
+   an import of another library is by name.
+2. Beside it a `package.json`: `{"name": "@fireflies/<name>", "private":
+   true, "type": "module", "exports": {".": "./index.ts"}}` (more entries for
+   more files a mod imports, as the kit's `./live`, `./testing`); `bun
+   install` links it (the root package.json's workspaces take
+   `defaults/lib/@fireflies/*`). tsc, oxlint, bun and the app then resolve
+   the same name.
+3. Every importer: `from "./keyhelp.ts"` → `from "@fireflies/keyhelp"`
+   (type imports too). Nothing else in the importer changes in wave 0.
+4. The tests: a drift test ("every copy is the source byte for byte":
+   keyhelp.test.ts, form-keys.test.ts' copies, preview-shared.test.ts,
+   editor-tabs.test.ts, markdown.test.ts, databases-data.test.ts,
+   nocturne-scratchpad.test.ts, nocturne-tab-seam.test.ts,
+   usage-limits.test.ts, mods-typescript.test.ts) becomes "no mod carries
+   a copy of it"; a test that reads a file's text (form-keys.test.ts,
+   nocturne-floatfocus.test.ts) takes the new path; `load()`-style loaders
+   that evaluate a file's text with its imports dropped get the library from
+   node_modules (`importMod` already loads `@fireflies/*` for real).
+5. Assets stay where they are: `file-icons.ts`'s `iconSvg(icon, mod)` keeps
+   naming a mod's `icons/` folder (an app path, `mods/<mod>/icons/x.svg`,
+   which any mod may name).
+6. Convert it: its findings fixed, a `*Schema` for what it decodes
+   (viewer-load's native answers, envrc's `direnv export json`, scratch's
+   index.json), its `exec`/file reads through the kit's `Exec`/`Files`
+   (scratch, envrc, viewer-load), no `catch(() => null)` (viewer-load has 2,
+   envrc 3). A library that is UI only (keyhelp, form-keys, toolground) has
+   findings to fix and nothing to convert.
+7. docs/mods-typescript.md's "Shared copies" table becomes a table of
+   libraries.
+
+0a and 0b move different files; some importers import from both (nocturne,
+editor), so the two touch different import lines of the same files: the
+second to merge merges integrate first. guard.ts doesn't move: each
+conversion drops its mod's copy (Schema replaces it), and it is gone with
+the last one. Both must merge before wave 1 starts.
+
+**Wave 1 (six fireflies, in parallel).**
+
+| firefly | mods | lines | findings |
+|---|---|---|---|
+| nocturne | nocturne | 14.7k | 2,772 |
+| github | github | 12.2k | 2,785 |
+| editor | editor, markdown, finder | 19.9k | 2,844 |
+| databases | databases | 12.2k | 2,550 |
+| git | git | 9.0k | 2,163 |
+| viewers | preview, file-tree | 10.7k | 2,114 |
+
+**Wave 2 (two fireflies, in parallel, after wave 1 or as wave 1 fireflies
+free up).**
+
+| firefly | mods | lines | findings |
+|---|---|---|---|
+| small-a | procs, scripts, pip, diff, equalize-panes | 8.0k | 1,263 |
+| small-b | agent-graph, notifications, browser | 8.6k | 1,525 |
+
+About 2,500 findings is a firefly's share: wave 1's six are near it, wave
+2's two under it (they can start as soon as two of wave 1 report).
 
 ## What "done" means for a converted mod
 
-- Its files are in the justfile's `effect_sources`; both lint passes clean.
+- **The full Effect pass is green on it**: its files are in the justfile's
+  `effect_sources`, `just lint` (both passes) passes, with every rule on as
+  documented here (the two off: `missing-pipeable-signature`,
+  `prefer-namespace-import`; the two scoped: `unstable-api-usage` and
+  `api-stability-leak` in HTTP boundary files, `deterministic-keys` in
+  mods). No per-file or per-line disable in a mod; the only disables in the
+  repo are the kit's: the Clock reading `Date.now()`, `localTime` reading
+  `new Date`, `HttpLive` calling `fetch`, and http.ts's `pipe` handing
+  `arguments` to Effect's own helper, each with its reason. A
+  rule that seems wrong for a case goes to the orchestrator, not into a
+  comment.
 - Its own copy of guard.ts is gone; everything it decodes goes through Schema
   (a `*Schema` per shape, types from `typeof X.Type`).
 - It talks to the app through the kit's services; its tests use
