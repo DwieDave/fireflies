@@ -80,6 +80,28 @@ export function formatOf(path: string | null | undefined): Format | null {
   return EXT_FORMAT.get(extension(path)) ?? null;
 }
 
+/**
+ * How many first bytes `sniff` needs for a picture whose name says `format`
+ * (none known: the most, `max`). Sizes and motion sit in the first few bytes
+ * of most formats; a JPEG's size marker comes after its EXIF and colour
+ * profile (each up to 64 KB), a GIF's frames are counted through its blocks,
+ * TIFF and HEIF keep their sizes where their directories point.
+ */
+export function headBytes(format: Format | null, max: number): number {
+  switch (format) {
+    case "bmp":
+    case "webp":
+      return 64;
+    // PNG: IHDR at 16, an acTL within the first 4 KB makes it animated; ICO: 16 bytes an image entry; SVG: its root tag.
+    case "png":
+    case "ico":
+    case "svg":
+      return 4096;
+    default:
+      return max;
+  }
+}
+
 /** `od -An -v -tx1` output -> bytes. */
 export function hexBytes(text: string | null | undefined): number[] {
   const out: number[] = [];
@@ -106,7 +128,10 @@ const encoder = new TextEncoder();
 function findAscii(b: Bytes, s: string, from: number, to: number): number {
   const codes = Arr.fromIterable(encoder.encode(s));
 
-  for (let i = from; i + codes.length <= to; i++) if (Arr.every(codes, (c, j) => b[i + j] === c)) return i;
+  const first = codes[0];
+
+  // The first byte compared alone first: a long head is scanned without a closure a byte.
+  for (let i = from; i + codes.length <= to; i++) if (b[i] === first && Arr.every(codes, (c, j) => b[i + j] === c)) return i;
 
   return -1;
 }
@@ -283,9 +308,11 @@ export function sniff(b: Bytes | null | undefined): Picture | null {
   // PNG: the IHDR chunk; an acTL chunk before the pictures makes it animated (APNG).
   if (b[0] === 0x89 && ascii(b, 1, 3) === "PNG") {
     const actl = findAscii(b, "acTL", 8, Math.min(b.length, 4096));
+    const idat = findAscii(b, "IDAT", 8, b.length);
     const size = { format: "png", width: b.length >= 24 ? be32(b, 16) : 0, height: b.length >= 24 ? be32(b, 20) : 0 } as const;
 
-    return actl >= 0 && actl < findAscii(b, "IDAT", 8, b.length) ? { ...size, animated: true } : size;
+    // No IDAT in the bytes read: the pictures start after them, so after the acTL.
+    return actl >= 0 && (idat < 0 || actl < idat) ? { ...size, animated: true } : size;
   }
 
   if (ascii(b, 0, 4) === "GIF8") {

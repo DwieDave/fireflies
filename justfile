@@ -150,8 +150,10 @@ test:
     bun test scripts/file-tree-preview.test.ts
     # Where the files pane opens a file: a picture in its own preview pane, else its editor's tab; a text file turning that preview pane into the editor (file-tree routing.ts, preview main.ts), with stand-ins.
     bun test scripts/file-tree-open.test.ts
-    # file-tree ships the preview's viewer and what it imports: each copy is preview's byte for byte.
+    # The viewer is a library (@fireflies/viewer): no mod carries a copy of its files.
     bun test scripts/preview-shared.test.ts
+    # The viewer's reads under the engine's turn budget: the first bytes a kind needs, a long head a slice a turn, a cut-off read says so (mocks herdr: alone).
+    bun test scripts/preview-turns.test.ts
     # The tab strip's toolbar: the "+ new" menu's tiles (none that float), the tools' order with "+ new" last, its menu inside the window.
     bun test scripts/nocturne-toolbar.test.ts
     # Git, GitHub and Scripts opened as normal panes: nocturne.<mod>:pane | :tab | :window | {as, folder?, on?}, the "+ new" tiles, the palette's "… in a pane".
