@@ -19,6 +19,8 @@ mod page;
 #[cfg(all(target_os = "macos", feature = "chromium"))]
 pub mod chromium;
 pub mod cef_install;
+// Chromium's DevTools in a pane: the frontend's WebSocket to the page (no CEF).
+pub mod devtools;
 #[cfg(target_os = "macos")]
 mod tabs;
 // Picture in picture's live resize, its decisions pure (tested everywhere, used on macOS).

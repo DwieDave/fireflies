@@ -50,6 +50,15 @@ pub fn set_event_sink(sink: impl Fn(Event) + 'static) {
     SINK.with(|s| *s.borrow_mut() = Some(Box::new(sink)));
 }
 
+/// A Chromium view's browser, by its key (the DevTools bridge's target).
+#[cfg(feature = "chromium")]
+pub(crate) fn chromium_browser(key: &str) -> Option<cef::Browser> {
+    VIEWS.with(|v| match v.try_borrow().ok()?.get(key).map(|e| &e.renderer) {
+        Some(Renderer::Chromium(c)) => Some(c.browser.clone()),
+        _ => None,
+    })
+}
+
 /// For renderers outside this file (chromium.rs).
 #[allow(dead_code)]
 pub(crate) fn emit_event(key: &str, generation: u64, name: &'static str, data: Value) {
@@ -406,6 +415,14 @@ fn make(
     parent: &NSView,
 ) -> Result<(Retained<NSView>, Renderer), String> {
     let _ = parent;
+    // An inspector of a Chromium page: a Chromium view on the DevTools frontend.
+    #[cfg(feature = "chromium")]
+    if let (Kind::Inspector, Source::Inspect(of)) = (spec.kind, &spec.source)
+        && VIEWS.with(|v| v.try_borrow().is_ok_and(|v| matches!(v.get(of).map(|e| &e.renderer), Some(Renderer::Chromium(_)))))
+    {
+        let (view, c) = crate::chromium::create_inspector(mtm, key, parent, of, generation)?;
+        return Ok((view, Renderer::Chromium(c)));
+    }
     if spec.kind == Kind::Chromium {
         #[cfg(feature = "chromium")]
         {
@@ -615,6 +632,9 @@ fn load(
                 start_inspector(key);
                 Ok(None)
             }
+            // A Chromium inspector loaded its frontend when it was made.
+            #[cfg(feature = "chromium")]
+            (Renderer::Chromium(_), Source::Inspect(_)) => Ok(None),
             (Renderer::Pip { view }, Source::Pip(of)) => {
                 crate::pip::attach(key, generation, of, view);
                 Ok(None)
@@ -1275,14 +1295,6 @@ pub fn dispose(key: &str) {
             }
             Renderer::QuickLook { view } => view.close(),
             Renderer::Pip { .. } => crate::pip::detach(key),
-            #[cfg(feature = "chromium")]
-            Renderer::Inspector { target, window, .. } if window.borrow().is_some() && VIEWS.with(|v| matches!(v.borrow().get(target).map(|t| &t.renderer), Some(Renderer::Chromium(_)))) => {
-                VIEWS.with(|v| {
-                    if let Some(Renderer::Chromium(c)) = v.borrow().get(target).map(|t| &t.renderer) {
-                        crate::chromium::close_dev_tools(c);
-                    }
-                });
-            }
             Renderer::Inspector { inspector, .. } => {
                 // Closes WebKit's inspector, and with it its (hidden) window.
                 if let Some(i) = inspector.borrow().as_ref() {

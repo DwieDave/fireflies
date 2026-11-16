@@ -26,6 +26,7 @@ use objc2_app_kit::NSView;
 use objc2_foundation::NSTimer;
 use serde_json::{Value, json};
 use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -48,6 +49,9 @@ pub struct Info {
     pub can_forward: bool,
     pub progress: f64,
     pub video: bool,
+    /// The page zoom the mod asked for (1 = 100%): Chromium keeps zoom per
+    /// site, so it is set again after each page's load.
+    pub zoom: f64,
 }
 
 pub struct ChromiumView {
@@ -55,6 +59,8 @@ pub struct ChromiumView {
     pub browser: Browser,
     pub info: Arc<Mutex<Info>>,
     pub generation: Arc<AtomicU64>,
+    /// An inspector's view: its DevTools bridge token (crate::devtools).
+    pub devtools_token: Option<String>,
 }
 
 thread_local! {
@@ -62,6 +68,8 @@ thread_local! {
     static START_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
     static PUMP: RefCell<Option<Retained<NSTimer>>> = const { RefCell::new(None) };
     static IN_PUMP: Cell<bool> = const { Cell::new(false) };
+    /// Per DevTools bridge token: the observer on the inspected page.
+    static OBSERVERS: RefCell<HashMap<String, Registration>> = RefCell::new(HashMap::new());
     /// CefAppProtocol's flag: `-[NSApplication sendEvent:]` is on the stack.
     static SENDING: Cell<bool> = const { Cell::new(false) };
     /// `sendEvent:` as the app class had it before ours wrapped it.
@@ -173,6 +181,19 @@ fn pump() {
         return;
     }
     do_message_loop_work();
+    // What the DevTools frontends sent: to their pages, on this (CEF's UI) thread.
+    for (token, message) in crate::devtools::take_inbox() {
+        let Some(target) = crate::devtools::target_of(&token) else { continue };
+        let Some(browser) = crate::macos::chromium_browser(&target) else { continue };
+        let Some(host) = browser.host() else { continue };
+        if !OBSERVERS.with(|o| o.borrow().contains_key(&token)) {
+            let mut obs = BridgeObserver::new(Some(token.clone()));
+            if let Some(r) = host.add_dev_tools_message_observer(Some(&mut obs)) {
+                OBSERVERS.with(|o| o.borrow_mut().insert(token.clone(), r));
+            }
+        }
+        host.send_dev_tools_message(Some(&message));
+    }
     IN_PUMP.with(|p| p.set(false));
 }
 
@@ -376,20 +397,49 @@ pub fn create(
     .ok_or("Chromium could not create a browser")?;
     watch_media(&browser);
     let view = browser_view(&browser)?;
-    Ok((view, ChromiumView { key: key.to_owned(), browser, info, generation: gen_cell }))
+    Ok((view, ChromiumView { key: key.to_owned(), browser, info, generation: gen_cell, devtools_token: None }))
 }
+
+/// An inspector view for the Chromium view `target`: the DevTools frontend
+/// CEF ships, on the bridge (crate::devtools). Loaded as the browser's first
+/// address: a page can't navigate to devtools://, the app can.
+pub fn create_inspector(mtm: MainThreadMarker, key: &str, parent: &NSView, target: &str, generation: u64) -> Result<(Retained<NSView>, ChromiumView), String> {
+    let (url, token) = crate::devtools::frontend(target)?;
+    match create(mtm, key, parent, &url, generation, false) {
+        Ok((view, mut c)) => {
+            c.devtools_token = Some(token);
+            Ok((view, c))
+        }
+        Err(e) => {
+            crate::devtools::forget(&token);
+            Err(e)
+        }
+    }
+}
+
+wrap_dev_tools_message_observer! {
+    struct BridgeObserver {
+        token: Option<String>,
+    }
+
+    impl DevToolsMessageObserver {
+        // Everything the inspected page's DevTools agent says goes to the
+        // frontend as it is.
+        fn on_dev_tools_message(&self, _browser: Option<&mut Browser>, message: Option<&[u8]>) -> i32 {
+            if let (Some(t), Some(m)) = (self.token.as_deref(), message) {
+                crate::devtools::to_frontend(t, m);
+            }
+            1
+        }
+    }
+}
+
 
 fn browser_view(browser: &Browser) -> Result<Retained<NSView>, String> {
     let host = browser.host().ok_or("browser has no host")?;
     let handle = host.window_handle();
     // SAFETY: CEF returns the browser's NSView (a subview of its parent); we retain it.
     unsafe { Retained::retain(handle as *mut NSView) }.ok_or_else(|| "browser has no view".into())
-}
-
-pub fn close_dev_tools(of: &ChromiumView) {
-    if let Some(h) = of.browser.host() {
-        h.close_dev_tools();
-    }
 }
 
 impl ChromiumView {
@@ -420,8 +470,9 @@ impl ChromiumView {
 
     /// The page zoom as a factor (1 = 100%); Chromium's level is log-1.2.
     pub fn set_zoom(&self, factor: f64) {
+        self.info.lock().unwrap().zoom = factor;
         if let Some(h) = self.browser.host() {
-            h.set_zoom_level(factor.max(0.01).ln() / 1.2f64.ln());
+            h.set_zoom_level(zoom_level(factor));
         }
     }
 
@@ -454,11 +505,19 @@ impl ChromiumView {
     }
 
     pub fn close(&self) {
+        if let Some(t) = &self.devtools_token {
+            OBSERVERS.with(|o| o.borrow_mut().remove(t));
+            crate::devtools::forget(t);
+        }
         if let Some(h) = self.browser.host() {
-            h.close_dev_tools();
             h.close_browser(1);
         }
     }
+}
+
+/// Chromium's zoom level for a factor (its levels are powers of 1.2).
+fn zoom_level(factor: f64) -> f64 {
+    factor.max(0.01).ln() / 1.2f64.ln()
 }
 
 /// The marker a page script prefixes its console messages with. The page can
@@ -654,9 +713,16 @@ wrap_load_handler! {
             };
             report(&self.key, &self.generation, "load.commit", state);
         }
-        fn on_load_end(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, _http_status_code: i32) {
-            if let Some(f) = frame {
-                f.execute_java_script(Some(&CefString::from(PAGE_SCRIPT)), None, 0);
+        fn on_load_end(&self, browser: Option<&mut Browser>, frame: Option<&mut Frame>, _http_status_code: i32) {
+            let Some(f) = frame else { return };
+            f.execute_java_script(Some(&CefString::from(PAGE_SCRIPT)), None, 0);
+            // The mod's zoom, again: Chromium's is per site.
+            let zoom = self.info.lock().unwrap().zoom;
+            if f.is_main() != 0
+                && zoom > 0.0
+                && let Some(h) = browser.and_then(|b| b.host())
+            {
+                h.set_zoom_level(zoom_level(zoom));
             }
         }
         fn on_load_error(&self, _browser: Option<&mut Browser>, frame: Option<&mut Frame>, error_code: Errorcode, error_text: Option<&CefString>, failed_url: Option<&CefString>) {

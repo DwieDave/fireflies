@@ -409,7 +409,8 @@ export default class Browser extends View {
       this.ring = null;
       this.call("focus");
     } else if (c === "pip") {
-      if (this.start) this.call("web.pip");
+      // WebKit's player only (it takes a WKWebView).
+      if (this.start && viewKind(this.tab.engine, this.tab.start) === "web") this.call("web.pip");
     } else if (c === "zoom_in" || c === "zoom_out" || c === "zoom_reset") {
       const z = c === "zoom_reset" ? 0.9 : this.zoom + (c === "zoom_in" ? 0.1 : -0.1);
 

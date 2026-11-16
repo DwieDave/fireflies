@@ -1593,3 +1593,18 @@ test("media: ask posts a toast whose click reopens that tab; error leaves the pa
   expect(b.view.tab.engine).toBe("chromium");
   expect(app.notes).toEqual([]);
 });
+
+test("chromium: its load errors in words; no picture in picture on its tabs (WebKit's player)", async () => {
+  reset();
+  app.chromium = true;
+  const { view, cx, mod, native } = await webPane({ props: { slot: "p1", url: "https://www.a.example/", engine: "chromium" } });
+  expect(mod.loadFailure({ domain: "chromium", code: -105, failingUrl: "https://www.nope.example/x", message: "net::ERR_NAME_NOT_RESOLVED" }))
+    .toEqual({ message: "Can't find nope.example: no such site, or no name server.", url: "https://www.nope.example/x" });
+  expect(mod.loadFailure({ domain: "chromium", code: -999999, failingUrl: "https://b.example/", message: "net::ERR_SOMETHING" }))
+    .toEqual({ message: "net::ERR_SOMETHING", url: "https://b.example/" });
+  view.video = true;
+  expect(walk(view.render()).some((e: any) => callOf(e, "id").some((a: any) => a[0] === "pip"))).toBe(false);
+  native.length = 0;
+  view.command("pip", cx);
+  expect(native.filter(([, a]: any) => a === "web.pip")).toEqual([]);
+});
