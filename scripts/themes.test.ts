@@ -22,6 +22,8 @@ const ALLOWED: Record<string, readonly string[]> = {
   "databases/kit.ts": ["#0000008c"],
   "github/kit.ts": ["#0000008c"],
   "git/draw.ts": ["#0000008c"],
+  // @fireflies/look's veil(): nocturne's dithered #0000008c, upstream's flat black at 35% (#00000059)
+  "../lib/@fireflies/look/paint.ts": ["#0000008c", "#00000059"],
   // letterbox black behind the native video
   "pip/main.ts": ["#000000"],
   // a PDF page's paper

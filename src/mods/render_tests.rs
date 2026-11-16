@@ -226,6 +226,14 @@ fn module(values: BTreeMap<String, Value>, calls: Rc<RefCell<Calls>>) -> HostMod
                 {
                     Some(json!({"code":0,"stdout":"","stderr":""}))
                 }
+                // scripts, opened without a folder (mod.open, a pane), probes the shown space's
+                // folder (scripts/here.ts, detect.ts PROBE): an empty one here.
+                "exec"
+                    if first == "sh"
+                        && a.get(1).map(from_host).and_then(|v| v.get(1).and_then(Value::as_str).map(|s| s.starts_with("printf '\\036ls\\n'; ls -1A"))) == Some(true) =>
+                {
+                    Some(json!({"code":0,"stdout":"","stderr":""}))
+                }
                 // procs reads processes, ports and the system graphs' sources: nothing here.
                 "exec"
                     if first == "sh"
