@@ -1157,7 +1157,10 @@ the highlighted line shows where it will land.
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
   "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
   `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
-  a new tab" or the tile with the menu set to new tab): a Markdown note that
+  a new tab" or the tile with the menu set to new tab;
+  `nocturne.scratchpad-copy-path`: its path to the clipboard, to hand the note
+  to an agent, the palette's "Scratchpad: copy its path", a toast saying what
+  was copied): a Markdown note that
   belongs to the shown space's repository but isn't in it, opened rendered in
   an editor pane of its own beside the focused pane. When it can't be found
   or opened a toast says why (git not answering opens the folder's own note

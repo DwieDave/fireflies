@@ -54,6 +54,10 @@ function panelEntries(): Entry[] {
       title: `${p.name} in a new tab`, words: `open ${p.words} tab`, go: () => p.tab() }, BIND_TAB.get(p.id)));
   }
 
+  // The scratchpad's path to the clipboard (the sidebar's copy finds it, as it opens it).
+  out.push({ name: "nocturne.scratchpad-copy-path", args: {}, group: "Open", icon: "files", bind: "nocturne.scratchpad-copy-path",
+    title: "Scratchpad: copy its path", words: "scratchpad note notes path copy clipboard file agent hand", go: () => run("nocturne.scratchpad-copy-path") });
+
   return out;
 }
 
