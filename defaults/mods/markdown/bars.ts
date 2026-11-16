@@ -16,6 +16,7 @@ import { keysHint, keysView } from "./keyhelp.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { edge as edgeTone } from "./tones.ts";
 import type { default as Markdown } from "./main.ts";
+import { flat } from "./layout-look.ts";
 
 const ART = "mods/nocturne/art";
 
@@ -23,6 +24,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
   const zoom = settings().zoom || 1;
 
