@@ -18,6 +18,7 @@ import { readTextFile, settings, theme, writeTextFile } from "herdr";
 import type { Doc } from "./pane-kit.ts";
 import { dither, errorText, HINTS, selectionColor, zoom } from "./pane-kit.ts";
 import { imageOf, loadImageSrcs, pasteImageBlock, pickImage, previewLink } from "./preview-pane.ts";
+import { edge } from "./tones.ts";
 
 /** A Markdown command's entry in the list: [title, its letter after cmd-., what it writes]. */
 export type MdEntry = readonly [title: string, key: string, mark: string];
@@ -54,7 +55,7 @@ export function renderedHost(ed: EditorPane): RenderedHost {
     selection: selectionColor(theme()),
     zoom,
     dither: (color) => dither(color, 1),
-    moon: (t) => svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.ansi8),
+    moon: (t) => svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.muted),
     onKey: (e, cx) => blockKey(ed, e, cx),
     link: (url, cx) => previewLink(ed, url, cx),
     notify: (cx) => cx?.notify(),
@@ -297,7 +298,7 @@ export function mdMenuView(ed: EditorPane, t: Theme): Element {
     .w(400)
     .bg(t.background)
     .border(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .shadow_lg()
     .child(
       h_flex()
@@ -307,7 +308,7 @@ export function mdMenuView(ed: EditorPane, t: Theme): Element {
         .gap(10)
         .items_center()
         .child(div().text_color(t.accent).child(ed.vimOn() ? "space .  markdown" : "cmd-.  markdown"))
-        .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.muted, 1)))
         .child(div().text_color(t.dim).child("esc")),
     )
     .child(
@@ -373,7 +374,7 @@ function mdRow(ed: EditorPane, t: Theme, n: string, on: ReadonlySet<string>): El
     .px(4)
     .ml(-4)
     .cursor_pointer()
-    .hover((s) => s.bg(t.ansi0))
+    .hover((s) => s.bg(edge(t)))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => {
       cx.stop_propagation();
@@ -401,7 +402,7 @@ function levelChip(ed: EditorPane, t: Theme, n: string): Element {
       .items_center()
       .justify_center()
       .border(1)
-      .border_color(t.ansi0)
+      .border_color(edge(t))
       .text_color(t.accent)
       .cursor_pointer()
       .hover((s) => s.border_color(t.accent))

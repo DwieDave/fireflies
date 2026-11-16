@@ -15,6 +15,7 @@ import type { Theme } from "herdr";
 import { run } from "herdr";
 import type { Doc, ViewerPropsNow } from "./pane-kit.ts";
 import { dither, focusOn, HINTS, whereArgs } from "./pane-kit.ts";
+import { edge } from "./tones.ts";
 
 /** A change to the viewer's props. */
 export type ViewerChange = Partial<Pick<ViewerPropsNow, "scroll" | "reload">>;
@@ -188,7 +189,7 @@ export function lookHints(ed: EditorPane, t: Theme): Element {
     .gap(14)
     .items_center()
     .overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
     .children(
       list.map(([k, what, act], i) =>
         h_flex()
