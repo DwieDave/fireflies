@@ -2,6 +2,7 @@
 // address field and who has the keyboard, and the loops it lives on: the tabs
 // shown lately, its web views' events, its commands.
 
+import { reopenCommand } from "./media.ts";
 import type { AsyncContext } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { nextCommand } from "herdr";
@@ -105,6 +106,7 @@ export function listen(view: Browser, cx: AsyncContext): void {
       }
       // A tab pinned to the shelf: the pane named by its slot shows it.
       else if (c.startsWith("show:")) showCommand(view, c.slice(5), cx);
+      else if (c.startsWith("reopen:")) reopenCommand(view, c.slice(7), cx);
       // A pick in a tab's menu (the menu is another copy): { slot, tab, act }.
       else if (c.startsWith("tab_act:")) view.tabAct(c.slice(8), cx);
       // open names its pane by slot (else the one that takes the rest).

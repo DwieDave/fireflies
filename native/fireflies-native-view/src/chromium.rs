@@ -97,7 +97,10 @@ pub fn present() -> bool {
 
 /// The helper executable the app ships beside its own (`fireflies-cef-helper`).
 pub fn helper_source() -> Option<PathBuf> {
-    let p = std::env::current_exe().ok()?.parent()?.join("fireflies-cef-helper");
+    // Resolved: the app may run through a link (a nix profile's bin/fireflies).
+    let exe = std::env::current_exe().ok()?;
+    let exe = std::fs::canonicalize(&exe).unwrap_or(exe);
+    let p = exe.parent()?.join("fireflies-cef-helper");
     p.exists().then_some(p)
 }
 
@@ -250,6 +253,7 @@ fn start() -> Result<(), String> {
     let profile = std::fs::canonicalize(&profile).map_err(|e| format!("profile folder: {e}"))?;
     let args = args::Args::new();
     let settings = Settings {
+        // No sandbox yet (fireflies_cef_helper.rs says why).
         no_sandbox: 1,
         external_message_pump: 1,
         multi_threaded_message_loop: 0,
@@ -370,6 +374,7 @@ pub fn create(
         None,
     )
     .ok_or("Chromium could not create a browser")?;
+    watch_media(&browser);
     let view = browser_view(&browser)?;
     Ok((view, ChromiumView { key: key.to_owned(), browser, info, generation: gen_cell }))
 }
@@ -472,6 +477,60 @@ const PAGE_SCRIPT: &str = r#"(() => {
   check();
 })();"#;
 
+/// Before any page script, in every frame (Page.addScriptToEvaluateOnNewDocument
+/// through CEF's in-process DevTools channel: no port is opened): what a page
+/// wants of media that this Chromium can't play (its build has no H.264, AAC
+/// or DRM), reported once per document as `{ type: "media", reason, codec, sure }`.
+/// Sure: a media element's own error (not supported / can't decode), a source
+/// set but nothing found to play (networkState NO_SOURCE, readyState 0: what a
+/// plain .mp4 shows), a refused DRM request. Likely (`sure: false`): the page
+/// asked for H.264 or AAC (canPlayType, MediaSource.isTypeSupported), heard no,
+/// then a play started and nothing played for 8 s. A no alone never counts:
+/// YouTube asks for H.264, hears no and plays VP9.
+const MEDIA_SCRIPT: &str = r#"(() => {
+  if (window.__firefliesMedia) return; window.__firefliesMedia = true;
+  const M = "\u2063fireflies:";
+  let said = false, asked = null;
+  const tell = (reason, codec, sure) => { if (said) return; said = true; try { console.debug(M + JSON.stringify({ type: "media", reason, codec: codec || asked || null, sure })); } catch {} };
+  const proprietary = /avc1|avc3|hev1|hvc1|mp4a|ac-3|ec-3|video\/mp4|audio\/mp4|x-m4v|quicktime|audio\/aac/i;
+  const note = (t, ok) => { if (!ok && typeof t === "string" && proprietary.test(t) && !asked) asked = t; };
+  const cpt = HTMLMediaElement.prototype.canPlayType;
+  HTMLMediaElement.prototype.canPlayType = function (t) { const r = cpt.call(this, t); note(t, r !== ""); return r; };
+  for (const name of ["MediaSource", "ManagedMediaSource"]) {
+    const MS = window[name];
+    if (MS && MS.isTypeSupported) { const f = MS.isTypeSupported.bind(MS); MS.isTypeSupported = (t) => { const r = f(t); note(t, r); return r; }; }
+  }
+  if (navigator.requestMediaKeySystemAccess) {
+    const r = navigator.requestMediaKeySystemAccess.bind(navigator);
+    navigator.requestMediaKeySystemAccess = (ks, cfg) => r(ks, cfg).catch((e) => { tell("drm", String(ks), true); throw e; });
+  }
+  const stuck = (m) => m.networkState === 3 && m.readyState === 0 && Boolean(m.currentSrc || m.getAttribute("src") || m.querySelector("source"));
+  addEventListener("error", (e) => {
+    const t = e.target;
+    if (t instanceof HTMLMediaElement && t.error && (t.error.code === 3 || t.error.code === 4)) tell("error", t.currentSrc, true);
+    else if (t instanceof HTMLSourceElement) setTimeout(() => { const m = t.parentElement; if (m instanceof HTMLMediaElement && stuck(m)) tell("nosource", t.type || t.src, true); }, 0);
+  }, true);
+  addEventListener("play", (e) => {
+    const m = e.target;
+    if (!(m instanceof HTMLMediaElement)) return;
+    const at = m.currentTime;
+    setTimeout(() => { if (asked && !m.paused && m.readyState < 2 && m.currentTime === at) tell("probe", asked, false); }, 8000);
+  }, true);
+  // Polled from the parsed document on, every second for 20 s: a media
+  // element's failure sets no error when nothing in its source was playable.
+  const look = () => { for (const m of document.querySelectorAll("video, audio")) if (stuck(m)) { tell("nosource", m.currentSrc || m.getAttribute("src"), true); return true; } return false; };
+  const poll = () => { let n = 0; const id = setInterval(() => { if (said || look() || ++n >= 20) clearInterval(id); }, 1000); };
+  if (document.readyState === "loading") addEventListener("DOMContentLoaded", poll, { once: true }); else poll();
+})();"#;
+
+/// Registers MEDIA_SCRIPT for every document `browser` loads from now on.
+fn watch_media(browser: &Browser) {
+    let Some(host) = browser.host() else { return };
+    let Some(mut params) = dictionary_value_create() else { return };
+    params.set_string(Some(&CefString::from("source")), Some(&CefString::from(MEDIA_SCRIPT)));
+    host.execute_dev_tools_method(0, Some(&CefString::from("Page.addScriptToEvaluateOnNewDocument")), Some(&mut params));
+}
+
 wrap_client! {
     struct FirefliesClient {
         key: String,
@@ -553,6 +612,12 @@ wrap_display_handler! {
                 let has = v["has"].as_bool().unwrap_or(false);
                 self.info.lock().unwrap().video = has;
                 report(&self.key, &self.generation, "web.video", json!({ "present": has }));
+            }
+            if v["type"] == "media" {
+                let reason = v["reason"].as_str().filter(|r| ["error", "nosource", "drm", "probe"].contains(r)).unwrap_or("error");
+                let codec = v["codec"].as_str().map(|c| c.chars().take(120).collect::<String>());
+                let sure = v["sure"].as_bool().unwrap_or(false);
+                report(&self.key, &self.generation, "web.mediaUnsupported", json!({ "reason": reason, "codec": codec, "sure": sure }));
             }
             // Not in the log.
             1

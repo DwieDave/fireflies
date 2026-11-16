@@ -438,17 +438,28 @@ export default class Browser extends View {
    *  Its view is made anew (another kind); its history stays behind. */
   otherEngine(cx?: Context) {
     const tab = this.tab;
-    const to = otherEngine(viewKind(tab.engine, tab.start) === "chromium" ? "chromium" : "webkit");
 
-    if (to === "chromium" && !chromiumReady()) return;
+    this.reopenIn(tab, otherEngine(viewKind(tab.engine, tab.start) === "chromium" ? "chromium" : "webkit"), cx);
+  }
 
-    tab.engine = to;
+  /** Tab `tab`'s page again in `engine`, at its address (its view is made anew). */
+  reopenIn(tab: Tab, engine: Engine, cx?: Context) {
+    if (engine === "chromium" && !chromiumReady()) return;
+
+    tab.engine = engine;
     tab.start = tab.page.href ?? tab.start;
     tab.failed = null;
-    this.error = null;
+    // A page back in Chromium may say again what it can't play.
+    this.mediaTold.delete(tab.id);
+
+    if (tab === this.tab) this.error = null;
+
     this.saveTabs();
     cx?.notify();
   }
+
+  /** Tabs whose page said it can't play its media in Chromium (media.ts): once per page. */
+  mediaTold = new Set<string>();
 
   key(e: KeyEvent, cx: Context) {
     this.claim();

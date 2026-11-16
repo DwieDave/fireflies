@@ -2251,7 +2251,14 @@ The main ones:
   `herdr.nativeView.new(id, { kind: "chromium", url })`: a Chromium page (Alloy style: no
   `chrome://` pages, no extensions; VP9, AV1 and Opus play, H.264, AAC and DRM don't) with
   the web view's events (`web.location`, `load.*`, `web.newTab`, `web.icon`, `web.video`) and
-  actions (`browser.*`, `web.inspect`).
+  actions (`browser.*`, `web.inspect`), and one of its own: `web.mediaUnsupported { reason,
+  codec, sure }` when its page wants media this Chromium can't play (`reason`: `error`, a
+  media element's own; `nosource`, a source with nothing playable in it; `drm`, a refused
+  DRM request: all `sure`; `probe`, it asked for H.264 or AAC, heard no, then a play
+  started and nothing played for 8 s: likely). The browser follows `chromium_video`.
+  Building with Chromium: the app's `chromium` cargo feature (off by default; it needs the
+  pinned CEF archive's headers as `CEF_PATH`, cmake and ninja), and the
+  `fireflies-cef-helper` executable beside the app's own.
 - Native views (this fork, interface native-view/0): `native.debug` (every native view's frame,
   visibility, focus, content state and recent events), `native.call {key, action, args?}`
   (one whitelisted action, key `<copy>:<id>`). A web view takes a `zoom` prop

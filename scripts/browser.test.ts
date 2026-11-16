@@ -54,8 +54,10 @@ const app = {
   /** Chromium is enabled (nativeViewCapabilities lists its kind), and settings.json web_engine. */
   chromium: false,
   webEngine: "webkit" as "webkit" | "chromium",
+  chromiumVideo: undefined as undefined | "fallback" | "ask" | "error",
+  notes: [] as any[],
 };
-const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; app.execs = []; app.answer = null; app.chromium = false; app.webEngine = "webkit"; };
+const reset = () => { app.store = {}; app.panes = []; app.focusedPane = null; app.ran = []; app.overlays = []; app.closed = []; app.execs = []; app.answer = null; app.chromium = false; app.webEngine = "webkit"; app.chromiumVideo = undefined; app.notes = []; };
 /** An element that remembers its source (svg / image). */
 const sourced = (kind: string) => (src: string) => { const el: any = new Element(); el[kind] = src; return el; };
 const kit = { View: class {}, div: () => new Element(), svg: sourced("svg"), image: sourced("image"), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
@@ -104,7 +106,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   let waiting: ((c: string) => void) | null = null;
   const native: [string, string, any][] = [];
   const herdr = {
-    props: () => own.props ?? {}, theme: () => ({}), settings: () => ({ zoom: 1, web_engine: app.webEngine }),
+    props: () => own.props ?? {}, theme: () => ({}), settings: () => ({ zoom: 1, web_engine: app.webEngine, chromium_video: app.chromiumVideo }),
+    notify: (n: any) => { app.notes.push(n); return `n${app.notes.length}`; },
     nativeViewCapabilities: () => ({ kinds: app.chromium ? [{ kind: "web", actions: [] }, { kind: "chromium", actions: [] }] : [{ kind: "web", actions: [] }] }),
     nextCommand: () => (queue.length ? Promise.resolve(queue.shift()!) : new Promise<string>((r) => { waiting = r; })),
     shared: (k: string) => app.store[k] ?? null, setShared: (k: string, v: any) => { app.store[k] = v; return null; },
@@ -1555,4 +1558,48 @@ test("engine: a tab's engine survives a restart; browser.open takes one", async 
   expect(linked.engine).toBe("chromium");
   expect(Tabs.openArgs('{"url":"https://x.example","slot":"s1","engine":"chromium"}')).toEqual({ url: "https://x.example", slot: "s1", engine: "chromium" });
   expect(Tabs.openArgs('{"url":"https://x.example","engine":"gecko"}')).toEqual({ url: "https://x.example", slot: null });
+});
+
+// ---- media Chromium can't play here (media.ts, chromium.rs MEDIA_SCRIPT)
+
+test("media: fallback (default) reopens the page in WebKit and says so; once per page", async () => {
+  reset();
+  app.chromium = true;
+  const { view, cx, mod } = await webPane({ props: { slot: "m1", url: "https://www.example.com/v.mp4", engine: "chromium" } });
+  view.page.href = "https://www.example.com/v.mp4";
+  mod.mediaUnsupported(view, view.tab, { reason: "nosource", codec: "video/mp4", sure: true }, cx);
+  expect(view.tab.engine).toBe("webkit");
+  expect(viewsOf(view.render())[0]?.[1].kind).toBe("web");
+  expect(app.notes).toEqual([{ title: "Reopened in WebKit", body: "example.com plays H.264 video, which Chromium here can't.", level: "info", timeout: 6000 }]);
+  // A WebKit tab hears nothing (the page is where it plays).
+  mod.mediaUnsupported(view, view.tab, { reason: "error", codec: null, sure: true }, cx);
+  expect(app.notes.length).toBe(1);
+});
+
+test("media: ask posts a toast whose click reopens that tab; error leaves the page", async () => {
+  reset();
+  app.chromium = true;
+  app.chromiumVideo = "ask";
+  const { view, cx, mod } = await webPane({ props: { slot: "m2", url: "https://tv.example/watch", engine: "chromium" } });
+  view.page.href = "https://tv.example/watch";
+  mod.mediaUnsupported(view, view.tab, { reason: "drm", codec: "com.widevine.alpha", sure: true }, cx);
+  expect(view.tab.engine).toBe("chromium");
+  const note = app.notes[0];
+  expect(note.body).toBe("tv.example wants protected (DRM) video. Click to reopen it in WebKit.");
+  expect(note.action.name).toBe('browser.reopen:{"slot":"m2","tab":"web","engine":"webkit"}');
+  // The toast's click: the command reaches this pane (by its slot) and that tab.
+  mod.reopenCommand(view, note.action.name.slice("browser.reopen:".length), cx);
+  expect(view.tab.engine).toBe("webkit");
+  // Another pane's slot: not this one.
+  view.tab.engine = "chromium";
+  mod.reopenCommand(view, '{"slot":"other","tab":"web","engine":"webkit"}', cx);
+  expect(view.tab.engine).toBe("chromium");
+  // error: nothing happens, nothing is said.
+  reset();
+  app.chromium = true;
+  app.chromiumVideo = "error";
+  const b = await webPane({ props: { slot: "m3", url: "https://a.example/", engine: "chromium" } });
+  b.mod.mediaUnsupported(b.view, b.view.tab, { reason: "error", codec: "mp4a.40.2", sure: true }, b.cx);
+  expect(b.view.tab.engine).toBe("chromium");
+  expect(app.notes).toEqual([]);
 });
