@@ -17,8 +17,8 @@
 import * as herdr from "herdr";
 import type { Here } from "./panels.ts";
 import { here } from "./panels.ts";
-import { locate } from "./scratch.ts";
-import type { Note } from "./scratch.ts";
+import { locate } from "@fireflies/scratch";
+import type { Note } from "@fireflies/scratch";
 
 /** The folder whose repository the note is for: the focused pane's, else the space's, else home. */
 export function scratchFolder(h: Here = here()): string {

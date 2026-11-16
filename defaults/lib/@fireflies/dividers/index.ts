@@ -4,13 +4,13 @@
 // keyboard step (+ / = grows the focused panel, - shrinks it: each of its
 // edges moves out or in by STEP), the reset (a double click on a divider), and
 // the sizes kept as { [divider's key]: px }, saved once a drag, a step or a
-// reset ends (the owner says where, and proves what it reads back: shared
-// state through its guard, the mod's store).
+// reset ends (the owner says where, and decodes what it reads back with
+// `SizesSchema`).
 //
-// Self-contained (it imports only gpui-kit and herdr), so another mod copies
-// it as it is: the Databases window's panels (chrome.ts) and query split
-// (main-view.ts) use it; the Kubernetes mod (fireflies-k8s) carries a copy.
-// scripts/databases-dividers.test.ts is its test.
+// A library (docs/effect-mods.md): the app serves this one copy to every mod
+// by name (`import { Dividers } from "@fireflies/dividers"`): the Databases
+// window's panels (chrome.ts) and query split (main-view.ts) use it, and the
+// Kubernetes mod (fireflies-k8s). scripts/databases-dividers.test.ts is its test.
 //
 // How a view uses it:
 //   const ds = new Dividers(kept, (sizes) => save(sizes));
@@ -18,6 +18,7 @@
 //   ... .child(leftPanel.w(ds.size(d))).child(divider(t, "split-left", d, ds, 6)).child(rest)
 //   root: tracking(view, ds, cx => cx.notify()); keys: ds.stepAll(edges, +1 | -1)
 
+import { Schema } from "effect";
 import { div } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent, MouseMoveEvent, Point } from "gpui-kit";
 import { settings } from "herdr";
@@ -39,8 +40,12 @@ export interface Divider {
   readonly start: number;
 }
 
-/** The sizes kept: each divider's panel size in layout px, by the divider's key. */
-export type Sizes = { readonly [key: string]: number };
+/** The sizes kept: each divider's panel size in layout px, by the divider's key. What an owner
+ *  reads back (shared state, its store) decodes with this: a size that isn't a finite number
+ *  refuses the record, and the view starts from each divider's `start`. */
+export const SizesSchema = Schema.Record(Schema.String, Schema.Finite);
+
+export type Sizes = typeof SizesSchema.Type;
 
 /** One + / - step, in layout px. */
 export const STEP = 24;
@@ -116,7 +121,7 @@ export class Dividers {
   move(pointer: number): boolean {
     const g = this.drag;
 
-    if (!g) return false;
+    if (g === null) return false;
 
     const px = clampSize(g.divider, g.from + (pointer - g.at) * g.divider.side);
 
@@ -129,7 +134,7 @@ export class Dividers {
 
   /** The release (or the pointer leaving the view): the drag ends and the size is kept. */
   up(): boolean {
-    if (!this.drag) return false;
+    if (this.drag === null) return false;
 
     this.drag = null;
     this.#save(this.sizes);
@@ -237,20 +242,20 @@ export function tracking(el: Element, ds: Dividers, also: Also = {}): Element {
     .when(axis === "y", (e) => e.cursor_row_resize())
     .on_mouse_move((e, cx) => {
       const g = ds.drag;
-      const moved = g ? ds.move(along(g.divider.axis, e.position)) : false;
+      const moved = g === null ? false : ds.move(along(g.divider.axis, e.position));
 
-      if (also.move?.(e, cx) || moved) cx.notify();
+      if (also.move?.(e, cx) === true || moved) cx.notify();
     })
     .on_mouse_up("left", (_e, cx) => {
       const up = ds.up();
 
-      if (also.up?.(cx) || up) cx.notify();
+      if (also.up?.(cx) === true || up) cx.notify();
     })
     .on_hover((over, cx) => {
       if (over) return;
 
       const up = ds.up();
 
-      if (also.leave?.(cx) || up) cx.notify();
+      if (also.leave?.(cx) === true || up) cx.notify();
     });
 }

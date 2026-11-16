@@ -1,6 +1,7 @@
-// Keyboard-first forms: the one way every form takes its keys. A mod can't
-// import another mod's files, so this file is copied byte for byte into each
-// mod that draws a form (scripts/form-keys.test.ts checks the copies match).
+// @fireflies/form-keys: keyboard-first forms, the one way every form takes
+// its keys. A library (docs/effect-mods.md): the app serves this one copy to
+// every mod and the frame's dialogs by name (`import { formKey } from
+// "@fireflies/form-keys"`).
 //
 // A form is its stops in tab order: the fields, then the buttons.
 //   stop: { id, kind }  kind: "text" (one line) | "area" (lines) | "choice"
@@ -40,6 +41,7 @@
 // root that says a form has the keyboard (tabActions' `open`: the "FormOpen"
 // context). Elsewhere (a pane that shows no form) they switch the app's tabs.
 
+import { Array as Arr, String as Str } from "effect";
 import { div } from "gpui-kit";
 import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 
@@ -103,7 +105,7 @@ export function bindTab(cx: Context): void {
     cx.bind_keys([
       { keystroke: "tab", action: TAB, context: FORM_CONTEXT },
       { keystroke: "shift-tab", action: TAB_BACK, context: FORM_CONTEXT },
-      ...[`${FORM_CONTEXT} > Input`, FORM_OPEN].flatMap((context) => [
+      ...Arr.flatMap([`${FORM_CONTEXT} > Input`, FORM_OPEN], (context) => [
         { keystroke: "ctrl-tab", action: TAB, context },
         { keystroke: "ctrl-shift-tab", action: TAB_BACK, context },
       ]),
@@ -137,7 +139,7 @@ export const chord = (mac: boolean): string => (mac ? "⌘enter" : "ctrl-enter")
 
 /** Stop `at` moved by `by`, wrapping at both ends (0 in an empty form). */
 export function wrap(n: number, at: number, by: number): number {
-  return n ? (((at + by) % n) + n) % n : 0;
+  return n === 0 ? 0 : (((at + by) % n) + n) % n;
 }
 
 /** The next (`down`) or previous stop. */
@@ -153,7 +155,7 @@ function listKey(kind: "choice" | "multi", k: string, char: string | null): Form
 
   const typed = char ?? (k.length === 1 ? k : null);
 
-  if (typed && typed.length === 1 && typed.trim()) return { act: "open", typed };
+  if (typed !== null && typed.length === 1 && Str.isNonEmpty(Str.trim(typed))) return { act: "open", typed };
 
   return { act: "none" };
 }
@@ -164,7 +166,7 @@ function buttonKey(stops: readonly Stop[], at: number, k: string): FormAction {
 
   if (k === "left" || k === "right") {
     // Along the row of buttons, wrapping inside it.
-    const row = stops.flatMap((x, i) => (x.kind === "button" ? [i] : []));
+    const row = Arr.flatMap(stops, (x, i) => (x.kind === "button" ? [i] : []));
 
     return { act: "move", to: row[wrap(row.length, row.indexOf(at), k === "right" ? 1 : -1)] ?? at };
   }
@@ -189,15 +191,15 @@ export function formKey(stops: readonly Stop[], at: number, k: string, m: FormMo
   const n = stops.length;
   const s = stops[at];
 
-  if (k === "enter" && (m.platform || m.control)) return { act: "submit" };
+  if (k === "enter" && (m.platform === true || m.control === true)) return { act: "submit" };
 
-  if (m.platform || m.alt) return null;
+  if (m.platform === true || m.alt === true) return null;
 
   if (k === "escape") return { act: "cancel" };
 
-  if (k === "tab") return { act: "move", to: wrap(n, at, m.shift ? -1 : 1) };
+  if (k === "tab") return { act: "move", to: wrap(n, at, m.shift === true ? -1 : 1) };
 
-  if (!s) return k === "enter" ? { act: "submit" } : null;
+  if (s === undefined) return k === "enter" ? { act: "submit" } : null;
 
   const vertically = k === "up" || k === "down";
 
@@ -205,7 +207,7 @@ export function formKey(stops: readonly Stop[], at: number, k: string, m: FormMo
 
   if (s.kind === "area") return { act: "type" };
 
-  if (m.control) return null;
+  if (m.control === true) return null;
 
   if (vertically) return vertical(n, at, k);
 
@@ -222,7 +224,7 @@ export function formKey(stops: readonly Stop[], at: number, k: string, m: FormMo
 export function submitKey(stops: readonly Stop[], at: number, mac: boolean): string {
   const s = stops[at];
 
-  return s?.kind === "area" || (s?.kind === "button" && !s.submit) ? chord(mac) : "enter";
+  return s?.kind === "area" || (s?.kind === "button" && s.submit !== true) ? chord(mac) : "enter";
 }
 
 /** What the focused stop takes, for the hint line. */
@@ -232,7 +234,7 @@ function ownHints(s: Stop | undefined): readonly FormHint[] {
     case "multi": return [["space", "pick"], ["type", "filter"]];
     case "toggle": return [["space", "on / off"]];
     case "area": return [["enter", "new line"]];
-    case "button": return s.submit ? [] : [["enter", "press"]];
+    case "button": return s.submit === true ? [] : [["enter", "press"]];
     default: return [];
   }
 }

@@ -5,14 +5,15 @@
 // PATH and HOME, so no request leaves the machine. The app's services are
 // @fireflies/kit's test layers: no module is mocked.
 import { test, expect, beforeEach } from "bun:test";
+import { copiesOf } from "./mod-source.ts";
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, utimesSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
 import { Effect, Layer } from "effect";
 import type { Schema } from "effect";
 import { execTest, sharedTest, workspaceTest } from "@fireflies/kit/testing";
-import { UsageEndpoint, lastUsage, readUsage, refreshUsage, usageNote } from "../defaults/mods/nocturne/limits.ts";
-import type { ProviderId, UsageServices } from "../defaults/mods/nocturne/limits.ts";
+import { UsageEndpoint, lastUsage, readUsage, refreshUsage, usageNote } from "@fireflies/usage-limits";
+import type { ProviderId, UsageServices } from "@fireflies/usage-limits";
 
 const root = mkdtempSync(join(tmpdir(), "usage-limits-"));
 const bin = join(root, "bin"), home = join(root, "home"), calls = join(root, "calls");
@@ -50,10 +51,8 @@ const curls = () => asked().filter((c) => c === "curl").length;
 const asked = () => (existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n").filter(Boolean) : []);
 beforeEach(() => { rmSync(calls, { force: true }); rmSync(cache, { recursive: true, force: true }); env = { HERDR_USAGE_DIR: cache }; a = app(); });
 
-test("the two limits.ts copies are the same file", () => {
-  const x = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne/limits.ts`, "utf8");
-  const y = readFileSync(`${import.meta.dir}/../defaults/mods/usage/limits.ts`, "utf8");
-  expect(x).toBe(y);
+test("no mod carries a copy of limits.ts: nocturne and usage import @fireflies/usage-limits", () => {
+  expect(copiesOf("limits.ts")).toEqual([]);
 });
 
 for (const p of ["claude", "codex"] as const satisfies readonly ProviderId[]) {

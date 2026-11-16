@@ -34,7 +34,7 @@ import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import * as herdr from "herdr";
 import type { PaneInfo, Theme } from "herdr";
-import { openInEditor } from "./editor-route.ts";
+import { openInEditor } from "@fireflies/editor-route";
 import { props, theme, settings, exec, run, panes, shared, setShared, readTextFile, writeTextFile, watchFolder, nextCommand, home, window as appWindow } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isString, nullable, object, readSharedMap, sharedMapKey, writeSharedMap } from "./guard.ts";

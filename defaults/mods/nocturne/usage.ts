@@ -27,8 +27,8 @@ import { isBoolean, readShared, sharedKey, writeShared } from "./guard.ts";
 import { ART, dither, eyebrow, navRow, navRing } from "./kit.ts";
 import type { Nav } from "./nav.ts";
 import { runtime } from "./fx.ts";
-import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.ts";
-import type { ProviderId, Usage, UsageServices, UsageWindow } from "./limits.ts";
+import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "@fireflies/usage-limits";
+import type { ProviderId, Usage, UsageServices, UsageWindow } from "@fireflies/usage-limits";
 import { edge } from "@fireflies/tones";
 
 const FOLDED = sharedKey("nocturne.usageFolded", isBoolean);

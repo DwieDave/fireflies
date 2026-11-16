@@ -17,11 +17,10 @@
 // from its rectangle, `over` the pane or block it's measured in; nothing: a
 // dialog in the middle).
 //
-// Self-contained (it imports nothing), so every mod that opens a menu carries
-// this file as it is (databases/menu-place.ts is the source; the copies are
-// checked byte for byte by scripts/menu-place.test.ts; the Kubernetes mod,
-// fireflies-k8s mod/menu-place.ts, carries a copy too).
-// scripts/databases-menu-place.test.ts is its test.
+// A library (docs/effect-mods.md): the app serves this one copy to every mod
+// by name (`import { placeMenu } from "@fireflies/menu-place"`), the
+// Kubernetes mod (fireflies-k8s) too. scripts/databases-menu-place.test.ts is
+// its test.
 
 /** A point, in whichever px the caller says. */
 export interface Pt {
@@ -81,7 +80,7 @@ function side(after: number, before: number, len: number, room: number): number 
 
 /** The menu's top left corner in the view (layout px, rounded), for a menu of `size` in a view of `room`. */
 export function placeMenu(size: Box, room: Box, at: Anchor): Pt {
-  if (!at) {
+  if (at === null) {
     return { x: Math.max(MARGIN, Math.round((room.width - size.width) / 2)), y: Math.max(MARGIN, Math.round((room.height - size.height) / 2.4)) };
   }
 
@@ -118,10 +117,10 @@ export interface HungAt {
 export function overlayOf(opened: Opened): { readonly kind: "popup"; readonly at?: HungAt } | { readonly kind: "dialog" } {
   if (opened === "pointer") return { kind: "popup" };
 
-  if (!opened) return { kind: "dialog" };
+  if (opened === null) return { kind: "dialog" };
 
   const { over, rect: r } = opened;
   const box = { x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) };
 
-  return { kind: "popup", at: over ? { over, ...box } : box };
+  return { kind: "popup", at: over === undefined || over === null || over === "" ? box : { over, ...box } };
 }

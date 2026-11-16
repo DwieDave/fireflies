@@ -5,7 +5,7 @@
 
 import type { Context } from "gpui-kit";
 import * as herdr from "herdr";
-import { editorProps, openInEditor } from "./editor-route.ts";
+import { editorProps, openInEditor } from "@fireflies/editor-route";
 import { exec, run, panes, terminals, focused, shared, setShared } from "herdr";
 import { readShared, readSharedMap, writeSharedMap } from "./guard.ts";
 import type { Row } from "./logic.ts";

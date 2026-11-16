@@ -4,8 +4,9 @@
 // git gets its own; the index of notes; saving as it's typed (a wait after
 // the last change, at once on close, never two writes at a time).
 import { test, expect, describe } from "bun:test";
+import { copiesOf } from "./mod-source.ts";
 import { readFileSync } from "node:fs";
-import { owner, notePath, fileName, isNote, noteName, repoName, absolute, locate, indexed, Autosave, AUTOSAVE } from "../defaults/mods/editor/scratch.ts";
+import { owner, notePath, fileName, isNote, noteName, repoName, absolute, locate, indexed, Autosave, AUTOSAVE } from "@fireflies/scratch";
 
 const HOME = "/Users/dev/.config/herdr-app";
 /** A fake `exec` for `git rev-parse --git-common-dir` by folder: what git prints (relative in a main worktree). */
@@ -98,6 +99,24 @@ describe("locate: the note and the index", () => {
     const io = { exec: git({}), appHome: HOME, readTextFile: async () => "{not json", writeTextFile: async () => { throw new Error("read-only"); } };
     expect((await locate(io, "/tmp/n")).path).toMatch(/\/scratchpad\/n-[0-9a-f]{8}\.md$/);
   });
+  test("another window writing the index meanwhile: read again and recorded, neither entry lost", async () => {
+    const at = `${HOME}/scratchpad/index.json`;
+    const files: Record<string, string> = { [at]: JSON.stringify({ "x-00000000.md": { name: "x", dir: "/x", repo: true } }) };
+    let raced = false;
+    const io = {
+      exec: git({ "/code/app": ".git" }), appHome: HOME,
+      readTextFile: async (p: string) => files[p] ?? null,
+      writeTextFile: async (p: string, t: string, was: string | null) => {
+        // The other window records its note between this one's read and write, once.
+        if (!raced) { raced = true; files[p] = JSON.stringify({ ...JSON.parse(files[p]!), "y-11111111.md": { name: "y", dir: "/y", repo: false } }); }
+        if (was !== (files[p] ?? null)) throw new Error("stale: the file changed since it was read");
+        files[p] = t;
+        return null;
+      },
+    };
+    const n = await locate(io, "/code/app");
+    expect(Object.keys(JSON.parse(files[at]!)).sort()).toEqual([n.path.split("/").pop(), "x-00000000.md", "y-11111111.md"].sort());
+  });
   test("indexed keeps the same object when nothing changes", () => {
     const i = indexed(new Map(), "/h/scratchpad/a-1.md", { name: "a", dir: "/a/.git", repo: true });
     expect(indexed(i, "/h/scratchpad/a-1.md", { name: "a", dir: "/a/.git", repo: true })).toBe(i);
@@ -172,7 +191,6 @@ describe("autosave", () => {
   });
 });
 
-test("nocturne ships the same scratch.ts byte for byte", () => {
-  const a = readFileSync("defaults/mods/editor/scratch.ts", "utf8");
-  expect(readFileSync("defaults/mods/nocturne/scratch.ts", "utf8")).toBe(a);
+test("no mod carries a copy of scratch.ts: nocturne and the editor import @fireflies/scratch", () => {
+  expect(copiesOf("scratch.ts")).toEqual([]);
 });

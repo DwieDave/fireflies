@@ -5,7 +5,7 @@
 import type { Context, MouseButtonEvent } from "gpui-kit";
 import type { Ran, Repo } from "./gh.ts";
 import type { Axis, Note } from "./kit.ts";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 
 /** A row of the window's picker (L's links, a right-click menu): its words, what it does. */
 export interface PickRow {

@@ -94,7 +94,7 @@ const shared = { ...kinds, ...fileIcons, ...imageLogic, ...tableRest, parseTable
 const { default: Viewer } = await importMod(`${F}/viewer.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} });
 // The pure parts (logic.ts and the modules it was split into), as the pane imports them.
 const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`${F}/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
-const route = await load(`${F}/editor-route.ts`);
+const route = await import("@fireflies/editor-route");
 // The pane imported for real (its split modules as the app loads them), the viewer as loaded above.
 (globalThis as any).window = { paint_path: () => new Element() };
 const { default: Files } = await importMod(`${F}/main.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} }, { "./viewer.ts": { default: Viewer } });

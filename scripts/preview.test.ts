@@ -88,7 +88,7 @@ test("pictures are told apart by extension, any case", () => {
 });
 
 test("file-tree: a picture in the preview pane (a double click, enter; no editor of the files pane's), p the same, alt-double-click / e the other way", async () => {
-  const route = await load("file-tree/editor-route.ts");
+  const route = await import("@fireflies/editor-route");
   const standins = { herdr: { ...herdr, ...{ run: (n: string, a: any) => commands.push([n, a]), panes: () => world.panes, spaces: () => world.spaces, focused: () => null, shared: () => null, setShared() {} } }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
   (globalThis as any).window = { paint_path: () => new Element() };
   const { default: Files } = await importMod("file-tree/main.ts", standins, { "./viewer.ts": { default: class {} } });

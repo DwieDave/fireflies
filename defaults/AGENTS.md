@@ -946,7 +946,7 @@ the highlighted line shows where it will land.
   its pane; each editor notes its files by slot in shared
   `editor.paths` (`editor.open` reads it to find the editor holding a
   file in any tab) and the last one with the keyboard in `editor.last`
-  (see `defaults/mods/editor/editor-route.ts`). Closing a tab with
+  (see the `@fireflies/editor-route` library). Closing a tab with
   unsaved changes asks on a line under the bar (s save and close, d discard,
   esc keep; tab / ← → and enter too); closing the last tab closes the pane;
   closing the pane asks once, naming every edited tab. Tabs come back after a
@@ -2639,8 +2639,8 @@ has 120 programs (agents, editors, runtimes, tools, databases, infra);
   (`mod:nocturne-editor`) or binding (`nocturne-editor.save`) and a command
   (`nocturne-browser.open:…`); its shared keys, localStorage and cache moved
   to the new name on the first start. Write the new names.
-- A form (fields and buttons): copy `mods/nocturne/form-keys.ts` into your
-  mod (a mod can't import another's files). `formKey(stops, at, key,
+- A form (fields and buttons): import `@fireflies/form-keys` (a library
+  every mod may import by name). `formKey(stops, at, key,
   modifiers, char)` says what a key does on the focused stop (`{ act: "move",
   to }`, `"submit"`, `"cancel"`, `"press"`, `"step"`, `"flip"`, `"open"`,
   `"type"`: let the input have it: return from your `on_key_down` without
@@ -2885,7 +2885,13 @@ the source); a mod of yours may use it or not.
 - The shipped mods' shared parts are libraries too, served the same way and
   open to your mods: `@fireflies/tones` (`edge`, `tone`, `over`),
   `@fireflies/layout-look` (`flat`, `dithered`, `square`, `radius`),
-  `@fireflies/keyhelp` (the `?` overview and the bars' `? keys`).
+  `@fireflies/keyhelp` (the `?` overview and the bars' `? keys`),
+  `@fireflies/form-keys` (a form's keys: `formKey`, `formHints`,
+  `tabActions`), `@fireflies/menu-place` (`placeMenu`, `overlayOf`: where a
+  menu opens), `@fireflies/dividers` (panels resized by dragging),
+  `@fireflies/editor-route` (`openInEditor`: a file to the editor as a tab),
+  `@fireflies/envrc` (a folder's direnv environment), `@fireflies/scratch`
+  (the scratchpad's note), `@fireflies/toolground`, `@fireflies/usage-limits`.
 - A mod in a repository of its own: `herdr-app types <dir>` also writes the
   `@fireflies/*` libraries into `<dir>/node_modules/@fireflies/` (types and
   test code); install `effect` from npm at the version the kit's
@@ -2968,7 +2974,7 @@ All of it is in `herdr.d.ts`. In short:
   foot; with `over` measured in that pane's, block's or overlay's own px from its top left), or
   `{ over: id }`, centred on that window (an overlay's id) or pane where it is drawn now, kept
   inside the app window, so it opens over what it belongs to however that got there.
-  Menus follow one rule (each mod's copy of `menu-place.ts`): a right click or a click opens
+  Menus follow one rule (`@fireflies/menu-place`, which every mod imports): a right click or a click opens
   one at the pointer; a key on a selected row or element (`m`) opens it beside that element;
   a key with nothing selected opens it in the middle.
   `notify({ title, body, level, icon, timeout })` posts a notification, drawn

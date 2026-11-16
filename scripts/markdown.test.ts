@@ -156,7 +156,7 @@ test("path helpers", () => {
 });
 
 test("file-tree opens Markdown as a tab of the editor to read (its preview) on a double click; p in the viewer beside; alt-double-click and e open it as text", async () => {
-  const route = await load("file-tree/editor-route.ts");
+  const route = await import("@fireflies/editor-route");
   const standins = { herdr: { window: () => ({ platform: "macos" }), ...{ ...herdr, spaces: () => world.spaces, panes: () => world.panes, shared: (k: string) => kept[k] ?? null, setShared: (k: string, v: any) => { kept[k] = v; } } }, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
   (globalThis as any).window = { paint_path: () => new Element() };
   const { default: Files } = await importMod("file-tree/main.ts", standins, { "./viewer.ts": { default: class {} } });

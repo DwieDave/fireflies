@@ -21,7 +21,7 @@ import { answer } from "./drive.ts";
 import { forget, followCommands } from "./open.ts";
 import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, kbd, stop } from "./kit.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Question, QuestionRequest } from "./request.ts";
 import { edge } from "@fireflies/tones";
 

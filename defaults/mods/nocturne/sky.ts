@@ -77,7 +77,7 @@ import { dismissUpdate } from "./screens.ts";
 import { calm } from "./flight.ts";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.ts";
 import type { GlowPlace, GlowProps } from "./glow.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import { edge } from "@fireflies/tones";
 
 export { GLOW_SQUARE };

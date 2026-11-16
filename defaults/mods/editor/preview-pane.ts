@@ -4,8 +4,8 @@
 
 import type EditorPane from "./main.ts";
 import * as herdr from "herdr";
-import type { EditorView } from "./editor-route.ts";
-import { editorPaths, OPEN_KEY, PATHS_KEY } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
+import { editorPaths, OPEN_KEY, PATHS_KEY } from "@fireflies/editor-route";
 import { readShared, readSharedMap, writeShared, writeSharedMap } from "./guard.ts";
 import { assetPlace, imageMarkdown, insertImage, isImagePath, maybeCopiedImage, readClipboardImage, relative, stamp } from "./images.ts";
 import { unitFor, units as liveUnits } from "./live.ts";

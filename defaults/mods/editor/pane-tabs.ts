@@ -3,13 +3,13 @@
 // (asking about unsaved changes); what the pane keeps and tells others.
 
 import type EditorPane from "./main.ts";
-import type { EditorView } from "./editor-route.ts";
-import { editorPaths, isScratchpad, LAST_KEY, OPEN_KEY, PATHS_KEY } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
+import { editorPaths, isScratchpad, LAST_KEY, OPEN_KEY, PATHS_KEY } from "@fireflies/editor-route";
 import { readShared, writeShared, writeSharedMap } from "./guard.ts";
 import { basename, languageSettings, syntaxColors, uri } from "./logic.ts";
 import { MarkdownDoc } from "./markdown.ts";
 import { Rendered } from "./rendered.ts";
-import { Autosave, isNote } from "./scratch.ts";
+import { Autosave, isNote } from "@fireflies/scratch";
 import type { Handover } from "./tabs.ts";
 import { afterClose, drawnAfter, handover, HANDOVER_KEY, handoverFor, keptTabs, moved, placeTab, startsDrawn, stepTab, tabKind, unsavedNote } from "./tabs.ts";
 import { CARET } from "./vim.ts";

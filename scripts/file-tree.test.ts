@@ -68,7 +68,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
 // The pure parts (logic.ts and the modules it was split into), as the pane imports them.
 const logic = Object.assign({}, ...(await Promise.all(["logic", "ops", "fit", "split-size"].map((m) => importMod(`file-tree/${m}.ts`, { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} })))));
 const keyhelp = await keyhelpWith({ ...kit, ...base, ...herdr });
-const route = await load("file-tree/editor-route.ts");
+const route = await import("@fireflies/editor-route");
 const fileIcons = await load("file-tree/file-icons.ts", await load("file-tree/kinds.ts"));
 // The pane itself is imported for real (its modules as the app loads them),
 // with the stand-ins above for the app's modules and none for the viewer.

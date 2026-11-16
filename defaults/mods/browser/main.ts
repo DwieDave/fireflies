@@ -94,7 +94,7 @@ import { defaultEngine, otherEngine, viewKind, chromiumReady } from "./engine.ts
 import type { Engine } from "./engine.ts";
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent } from "gpui-kit";
-import type { Rect } from "./menu-place.ts";
+import type { Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import type { InputState } from "gpui-base";

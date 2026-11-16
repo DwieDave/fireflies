@@ -1,11 +1,11 @@
-// Where a menu opens (defaults/mods/databases/menu-place.ts, the same file the
-// Kubernetes mod carries): at a press, its top left corner just past the
+// Where a menu opens (@fireflies/menu-place, the library the mods and the
+// Kubernetes mod import): at a press, its top left corner just past the
 // press, flipped left or up near the view's right and bottom edges, never
 // under the press, whole inside the view; at a row or a node (a key opened
 // it), under it, above it near the foot; nothing: the middle. A press in
 // window px taken into the view's layout px at zoom 1 and Developer's 0.9.
 import { describe, expect, test } from "bun:test";
-import { GAP, MARGIN, inView, originOf, overlayOf, placeMenu } from "../defaults/mods/databases/menu-place.ts";
+import { GAP, MARGIN, inView, originOf, overlayOf, placeMenu } from "@fireflies/menu-place";
 
 const room = { width: 1000, height: 700 };
 const menu = { width: 300, height: 200 };

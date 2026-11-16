@@ -7,6 +7,7 @@
 // count and without. Stand-ins for herdr and gpui (mock.module is
 // process-wide: this file runs alone).
 import { test, expect, mock, beforeEach } from "bun:test";
+import { copiesOf } from "./mod-source.ts";
 import { readFileSync } from "node:fs";
 
 class El {
@@ -181,7 +182,7 @@ for (const [what, list] of [
 }
 
 test("the toolbar's ground is one file in both mods (nocturne, notifications), and both kits pass it on", () => {
-  expect(readFileSync("defaults/mods/notifications/toolground.ts", "utf8")).toBe(readFileSync("defaults/mods/nocturne/toolground.ts", "utf8"));
+  expect(copiesOf("toolground.ts")).toEqual([]);
   for (const k of [kit, nkit]) for (const name of ["dither", "TOOL_LOOK", "toolGround", "mix", "toolHover"]) expect(k[name]).toBeDefined();
   expect(nkit.TOOL_LOOK).toBe(kit.TOOL_LOOK);
   expect(nkit.toolGround(theme).map(shape)).toEqual(ground());

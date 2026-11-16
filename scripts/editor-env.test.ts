@@ -4,7 +4,7 @@
 // asked-for hover (cmd-i) says when no server answers (logic.ts serverNote).
 // `exec` is a fake that answers as sh and direnv would.
 import { test, expect, beforeEach } from "bun:test";
-import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName, keptEnv, keptEnvText } from "../defaults/mods/editor/envrc.ts";
+import { projectEnv, lookup, wrap, forgetEnvs, envrcDir, PROBE_SCRIPT, cacheName, keptEnv, keptEnvText } from "@fireflies/envrc";
 import { serverNote } from "../defaults/mods/editor/logic.ts";
 
 type Call = { cmd: string; args: string[]; opts?: any };

@@ -4,10 +4,10 @@
 
 import type { ExecResult } from "herdr";
 import type { EnvNote, ServerCandidate, ServerCaps } from "./logic.ts";
-import type { EnvCache, EnvVars, KeptEnv, ProjectEnv } from "./envrc.ts";
+import type { EnvCache, EnvVars, KeptEnv, ProjectEnv } from "@fireflies/envrc";
 import type EditorPane from "./main.ts";
-import { editorPaths, filesOf } from "./editor-route.ts";
-import { cacheName, keptEnv, keptEnvText, lookup, projectEnv, wrap } from "./envrc.ts";
+import { editorPaths, filesOf } from "@fireflies/editor-route";
+import { cacheName, keptEnv, keptEnvText, lookup, projectEnv, wrap } from "@fireflies/envrc";
 import type { Guard } from "./guard.ts";
 import { isString, object, oneOf } from "./guard.ts";
 import { isJsonObject, isList } from "./guards.ts";

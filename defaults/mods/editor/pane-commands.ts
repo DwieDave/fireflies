@@ -2,8 +2,8 @@
 // name to what it does in the pane.
 
 import type EditorPane from "./main.ts";
-import type { EditorView } from "./editor-route.ts";
-import { isEditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
+import { isEditorView } from "@fireflies/editor-route";
 import { isNumber, isString, nullable, object, parseJson } from "./guard.ts";
 import { dirname } from "./logic.ts";
 import { join } from "./paths.ts";

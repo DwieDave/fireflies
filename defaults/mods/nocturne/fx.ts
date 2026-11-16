@@ -6,6 +6,6 @@
 import { Layer } from "effect";
 import { modRuntime } from "@fireflies/kit";
 import { Live } from "@fireflies/kit/live";
-import { UsageEndpoint } from "./limits.ts";
+import { UsageEndpoint } from "@fireflies/usage-limits";
 
 export const runtime = modRuntime(Layer.provideMerge(UsageEndpoint.layer, Live));

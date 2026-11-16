@@ -34,8 +34,8 @@ import { Commands, localTime, modRuntime, redraw } from "@fireflies/kit";
 import type { ViewFx } from "@fireflies/kit";
 import { Live, toast } from "@fireflies/kit/live";
 import { ART, OWN, dither } from "./kit.ts";
-import { PROVIDERS, UsageEndpoint, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.ts";
-import type { Note, ProviderId, ScopedWindow, Usage, UsageServices, UsageWindow, Why } from "./limits.ts";
+import { PROVIDERS, UsageEndpoint, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "@fireflies/usage-limits";
+import type { Note, ProviderId, ScopedWindow, Usage, UsageServices, UsageWindow, Why } from "@fireflies/usage-limits";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysHint, keysView, keysKey } from "@fireflies/keyhelp";
 import { edge } from "@fireflies/tones";

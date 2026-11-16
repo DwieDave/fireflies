@@ -54,15 +54,17 @@ export default defineConfig({
     {
       // Effect marks all of `effect/http` unstable (4.1). Developer asked for
       // its HTTP client; the version is pinned, and these files are where a
-      // breaking change would land: the kit's transports and test server, and
-      // a mod's own endpoint code. Anywhere else, an unstable API is an error.
-      files: ["defaults/lib/@fireflies/kit/http.ts", "defaults/lib/@fireflies/kit/live.ts", "defaults/lib/@fireflies/kit/testing.ts", "defaults/lib/@fireflies/kit/index.ts", "defaults/mods/*/limits.ts", "defaults/mods/*/fx.ts"],
+      // breaking change would land: the kit's transports and test server, the
+      // usage endpoints (@fireflies/usage-limits), and a mod's own endpoint
+      // code. Anywhere else, an unstable API is an error.
+      files: ["defaults/lib/@fireflies/kit/http.ts", "defaults/lib/@fireflies/kit/live.ts", "defaults/lib/@fireflies/kit/testing.ts", "defaults/lib/@fireflies/kit/index.ts", "defaults/lib/@fireflies/usage-limits/index.ts", "defaults/mods/*/fx.ts"],
       rules: { "effecttsgo/unstable-api-usage": "off", "effecttsgo/api-stability-leak": "off" },
     },
     {
-      // A service's key is derived from its file's path. A mod's file is often
-      // a byte-for-byte copy in several mods (limits.ts is in usage and
-      // nocturne), and one text can't hold two paths. The kit's keys follow it.
+      // A service's key is derived from its file's path. A mod's file was often
+      // a byte-for-byte copy in several mods (one text can't hold two paths);
+      // the copies are libraries now (defaults/lib, whose keys follow it), and
+      // the mods' own keys come in with their conversions.
       files: ["defaults/mods/**"],
       rules: { "effecttsgo/deterministic-keys": "off" },
     },

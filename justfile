@@ -59,7 +59,7 @@ types:
 
 # The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
 # converted mod joins this list in its conversion's commit.
-effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/usage/limits.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/limits.ts defaults/mods/nocturne/usage.ts"
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/usage.ts"
 
 # oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
@@ -96,7 +96,7 @@ test:
     bun test scripts/dialogs-keys.test.ts
     # Settings → Web: enabling Chromium (download, progress, failure, removal) and the rows waiting for it.
     bun test scripts/settings-chromium.test.ts
-    # Every form by its keys (form-keys.js): tab order both ways, the wrap, submit, cancel; writes go to stand-ins.
+    # Every form by its keys (@fireflies/form-keys): tab order both ways, the wrap, submit, cancel; writes go to stand-ins.
     bun test scripts/form-keys.test.ts
     # Nocturne's palette through its real imports, herdr and gpui stand-ins; no command, key or mod command goes missing from it.
     bun test scripts/nocturne-palette.test.ts
@@ -140,7 +140,7 @@ test:
     bun test scripts/editor-env.test.ts
     # The editor's hover card (its place, every way it closes in each vim mode, a card that waits and fills in), progress words, ranged edits, kept answers: a whole pane with herdr and gpui stand-ins (mocks herdr).
     bun test scripts/editor-card.test.ts
-    # The editor's file tabs (own text, undo, caret, unsaved changes; switch, close asking, the last closing the pane, a restart) and where files go as tabs (definition, files pane, picker, Markdown viewer; editor-route.js copies identical), one server listener for every tab, vim's gt / :bn / :bd (mocks herdr).
+    # The editor's file tabs (own text, undo, caret, unsaved changes; switch, close asking, the last closing the pane, a restart) and where files go as tabs (definition, files pane, picker, Markdown viewer; @fireflies/editor-route, no copies), one server listener for every tab, vim's gt / :bn / :bd (mocks herdr).
     bun test scripts/editor-tabs.test.ts
     # Editors and the Markdown viewer follow a file renamed, moved or deleted from the files pane (shared nocturne.files.changes), with stand-ins.
     bun test scripts/editor-follow.test.ts
@@ -182,7 +182,7 @@ test:
     bun test scripts/pip.test.ts
     # Keys never land behind a floating window that shows: every Git and GitHub window opens with a scrim, GitHub takes the keyboard on `focus`.
     bun test scripts/nocturne-floatfocus.test.ts
-    # Usage limits: a scratch app asks nothing; the two limits.ts copies are one file.
+    # Usage limits (@fireflies/usage-limits): a scratch app asks nothing; no mod carries a copy.
     bun test scripts/usage-limits.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/usage-poll.test.ts
@@ -242,9 +242,9 @@ test:
     bun test scripts/qclose.test.ts
     # The dividers between panels (dividers.ts, the pattern the Kubernetes mod copies): a drag by its handlers, the clamp, + / - steps, the double click's reset, the sizes kept.
     bun test scripts/databases-dividers.test.ts
-    # Where a menu opens (menu-place.ts, the helper every mod copies): at a press, flipped near the right and bottom edges, never under the press, whole; at a key's row or cell; a press taken into the view at zoom 1 and 0.9; an overlay menu's kind and at for each case.
+    # Where a menu opens (@fireflies/menu-place, the library every mod imports): at a press, flipped near the right and bottom edges, never under the press, whole; at a key's row or cell; a press taken into the view at zoom 1 and 0.9; an overlay menu's kind and at for each case.
     bun test scripts/databases-menu-place.test.ts
-    # Every mod's menu-place.ts is the databases one byte for byte, and each mod that imports it carries it.
+    # No mod carries a copy of menu-place.ts; the mods that open menus import @fireflies/menu-place.
     bun test scripts/menu-place.test.ts
     # Editing cells: each engine's quoting, the changes staged by row key, what's editable, the save's statements (one UPDATE per row, the old values checked, one transaction), a real round trip on a throwaway SQLite file.
     bun test scripts/databases-edit.test.ts

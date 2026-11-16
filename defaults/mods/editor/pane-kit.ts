@@ -2,14 +2,14 @@
 // record (Doc) and the pane's other records, sizes, and small helpers.
 
 import type { CardLink } from "./cardlinks.ts";
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, nullable, object, sharedMapKey } from "./guard.ts";
 import type { ColorRun, LanguageOptions, ServerNote, ServerState } from "./logic.ts";
 import type { HoverPart, Problem, SeverityColors, Work } from "./lsp-replies.ts";
 import type { MarkdownDoc } from "./markdown.ts";
 import type { Rendered } from "./rendered.ts";
-import type { Autosave, AutosaveState } from "./scratch.ts";
+import type { Autosave, AutosaveState } from "@fireflies/scratch";
 import type { Handover, TabKind } from "./tabs.ts";
 import type { EditorFindState, EditorState as EditorStateT } from "gpui-base";
 import type { Color, Context, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";

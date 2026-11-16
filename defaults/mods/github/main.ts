@@ -37,7 +37,7 @@
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
-import type { Pt, Rect } from "./menu-place.ts";
+import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
@@ -53,7 +53,7 @@ import { lookup, repoKey } from "./cache.ts";
 import * as store from "./store.ts";
 import type { Axis, Hint, Note } from "./kit.ts";
 import { hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Host, Picker, ReadOptions, ResizeOptions, RunFilter } from "./host.ts";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";

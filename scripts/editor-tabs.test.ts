@@ -94,7 +94,7 @@ mock.module("gpui-base", () => ({
 
 const { default: EditorPane } = await import("../defaults/mods/editor/main.ts");
 const tabs = await import("../defaults/mods/editor/tabs.ts");
-const route = await import("../defaults/mods/editor/editor-route.ts");
+const route = await import("@fireflies/editor-route");
 const icons = await import("../defaults/mods/editor/file-icons.ts");
 const { createVim, feed } = await import("../defaults/mods/editor/vim.ts");
 
@@ -388,9 +388,11 @@ test("route: with an editor the file goes to it as a tab and it gets the focus; 
   expect(sharedNow["editor.open"]).toMatchObject({ slot: null, path: "/p/y.md", view: "split", n: 2 });
 });
 
-test("route: the copies in the files pane, the picker and the Markdown viewer are the editor's, byte for byte", () => {
-  const read = (m: string) => readFileSync(new URL(`../defaults/mods/${m}/editor-route.ts`, import.meta.url), "utf8");
-  for (const m of ["file-tree", "finder", "markdown"]) expect(read(m)).toBe(read("editor"));
+test("route: the files pane, the picker and the Markdown viewer import @fireflies/editor-route; no mod carries a copy", async () => {
+  const { copiesOf } = await import("./mod-source.ts");
+  expect(copiesOf("editor-route.ts")).toEqual([]);
+  const read = (f: string) => readFileSync(new URL(`../defaults/mods/${f}`, import.meta.url), "utf8");
+  for (const f of ["file-tree/opening.ts", "finder/main.ts", "markdown/main.ts"]) expect([f, read(f).includes('from "@fireflies/editor-route"')]).toEqual([f, true]);
 });
 
 test("the picker opens into the focused editor, else the shown tab's; the files pane into the one it sent files to", async () => {

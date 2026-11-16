@@ -282,10 +282,10 @@ next to its reason), one that should be shown becomes the mod's note.
      every)`), `prefer-namespace-import` (contradicts `prefer-barrel-import`;
      the app serves the barrels). Scoped: `unstable-api-usage` and
      `api-stability-leak` (all of `effect/http` is marked unstable) are
-     allowed in the kit's HTTP files and a mod's `limits.ts`/`fx.ts`;
-     `deterministic-keys` (a key derived from the file's path) holds in the
-     kit but not in mods, whose files are byte-for-byte copies in several
-     folders.
+     allowed in the kit's HTTP files, `@fireflies/usage-limits` and a mod's
+     `fx.ts`; `deterministic-keys` (a key derived from the file's path)
+     holds in defaults/lib but not in mods, whose files were byte-for-byte
+     copies in several folders (wave 0 made them libraries).
    - Allowed by a comment on the line, with its reason: the kit's clock
      reading `Date.now()`, `localTime` reading `new Date`, `HttpLive` calling
      `fetch` (they are the Clock, the local time, the HttpClient).
@@ -573,6 +573,37 @@ editor), so the two touch different import lines of the same files: the
 second to merge merges integrate first. guard.ts doesn't move: each
 conversion drops its mod's copy (Schema replaces it), and it is gone with
 the last one. Both must merge before wave 1 starts.
+
+**Wave 0a, done (2026-11-16).** Eleven libraries: `@fireflies/tones`,
+`layout-look`, `keyhelp`, `form-keys`, `menu-place`, `toolground`,
+`dividers`, `editor-route`, `scratch`, `envrc`, `usage-limits`; 82 files
+gone from the mods and the frame. Each keeps its exports and the importers
+changed only their import lines. Where an unconverted mod still reads a key
+with guard.ts (the editor's `OPEN_KEY`, `LAST_KEY`, `PATHS_KEY`), the
+library's key carries both its Schema (`schema`, for the kit) and a guard
+made from it (`guard`, `entry`), so both read the same shape; wave 1 drops
+the guard side. A library whose callers hand it herdr's functions
+(`owner(exec, …)`, `projectEnv(exec, …)`, `locate(io, …)`) runs its Effect
+over them with the kit's `execService(exec)` / `filesService(read, write)`;
+a mod on the kit calls the Effect entries (`ownerOf`, `locateIn`,
+`probeIn`, `projectEnvIn`, `lookupIn`) with its own `Exec` and `Files`.
+What a read of them showed, and what closed each:
+
+| weakness | where | now |
+|---|---|---|
+| The shared files had drifted between repositories (fireflies-k8s carries older keyhelp, menu-place, dividers) and would again: a copy per mod, a byte-for-byte test per file | every shared copy | one copy, served by name; each test checks no mod carries one again |
+| A failed write of the kept direnv environment was an unhandled promise rejection (`env.then((e) => cache.write(…), …)` and `void cache.write(…)` in the refresh) | envrc `projectEnv` | `keep`: a failed write is ignored on purpose (it only costs the next start a load), inside the load's fiber |
+| direnv's JSON and the disk's copy were walked by hand (`getOwnPropertyDescriptor`), with a guard from the importing mod's own `guards.ts` (`isList`) | envrc | `Schema.Record(String, NullOr(String))`, `KeptJsonSchema`; no import from a mod |
+| A load's failure was a thrown `Error` carried through a shared promise | envrc | a typed `ExitError` (direnv's last words) / `DecodeError` / `ExecError` through a `Deferred` every waiting editor shares; the refresh is a detached fiber, not a promise nobody holds |
+| Two windows recording notes at once: the second's index write was refused as stale and swallowed with everything else (`catch {}`), so its note went missing from index.json | scratch `locate` | the write is retried against a fresh read (twice) on `StaleFile` only; any other failure is still a nicety the note opens without (test: "another window writing the index meanwhile") |
+| index.json and the `editor.open` record decoded by guards; the open record written unchecked | scratch, editor-route | Schemas (`IndexEntrySchema`, `OpenRequestSchema`, `EditorPropsSchema`); the kit's `writeShared` encodes through the key's schema, so a record its readers would refuse (a `NaN` count) isn't written |
+| A negative `line` reached `editor.open` (`if (line)`) | editor-route `openInEditor` | only a positive line is sent (none: the file's top) |
+| The layout's root and `shared("layout")` read by hand-written type guards, both inside one `try` | layout-look | `LookRootSchema`, `sharedKey("layout", NonEmptyString)`; each app call guarded on its own |
+| `settings().zoom \|\| 1` let a negative zoom size the checker | keyhelp, toolground | a zoom that isn't positive is 1 |
+| The usage endpoints' service key (`usage/UsageEndpoint`) named no file: two copies, one key | usage-limits | `@fireflies/usage-limits/UsageEndpoint` (deterministic-keys holds) |
+| What a dividers owner read back (sizes kept in shared state) was each owner's to prove | dividers | `SizesSchema` exported beside `Sizes` (databases' layout.ts adopts it in its conversion) |
+| Six test files each carried a loader that evaluated keyhelp's text with its imports dropped | scripts | `keyhelpFor` / `importLibrary` (scripts/mod-source.ts): the library loaded with the test's stand-ins |
+| The render tests (cargo) registered the libraries only when another test happened to first | src/mods/render_tests.rs | `Staged::new()` registers them; `every_fireflies_library_resolves_from_a_mod_by_its_name` |
 
 **Wave 1 (six fireflies, in parallel, once wave 0 has merged).**
 

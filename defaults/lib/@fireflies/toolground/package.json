@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/toolground",
+  "private": true,
+  "type": "module",
+  "description": "The toolbar's ground under the tools, the bell and + new (toolGround, toolHover, mix, dither). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

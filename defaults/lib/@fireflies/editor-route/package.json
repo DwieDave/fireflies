@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/editor-route",
+  "private": true,
+  "type": "module",
+  "description": "Which editor pane takes a file, as a tab (openInEditor, editorFor, the editor.open record). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

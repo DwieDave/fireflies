@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/scratch",
+  "private": true,
+  "type": "module",
+  "description": "The scratchpad's note per repository: where it lives, its index, saving as it's typed (locate, Autosave). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}
