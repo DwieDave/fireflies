@@ -296,11 +296,29 @@ read going on), `databases.forward-start` / `databases.forward-anyway` /
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "secret"?, "forward"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "forward"?, "sslmode"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
-0.88, props: {connect}})`. It is listed under "sent here" in that window
+0.88, props: {connect}})`. `sslmode` is how a Postgres or MySQL connection
+asks for TLS, in libpq's names: `"disable" | "allow" | "prefer" | "require" |
+"verify-ca" | "verify-full"` (another value refuses the request:
+`databases.connect: sslmode "…" isn't one of …`; a file's is left out).
+Absent, the client's own default (psql's prefer). The Kubernetes mod's
+port-forwards send `"disable"`: through a forward that closes the connection
+on Postgres' TLS request, psql's prefer fails instead of going on in plain.
+psql gets it in `-d`'s conninfo (`dbname='lantern' sslmode=disable`, shown in
+the Log); MySQL's client `--ssl-mode=` (DISABLED, PREFERRED for allow and
+prefer, REQUIRED, VERIFY_CA, VERIFY_IDENTITY); MariaDB's (its `mysql` too:
+its `--version` tells them apart) `--skip-ssl` for disable, nothing for allow
+and prefer, `--ssl --ssl-verify-server-cert` for the rest (its only flag that
+insists on TLS, and it checks the certificate). The verify modes want a CA
+the window doesn't set (`~/.postgresql/root.crt`, or a client's own option
+file). The connection form's `ssl` toggle (Postgres, MySQL) is on by default
+(no sslmode); off saves `disable`; a pasted URL's `?sslmode=require` (MySQL's
+`ssl-mode=` / `sslMode=`), a found `DATABASE_URL`'s or direnv's `PGSSLMODE`
+fill it, and another value than disable is kept through an edit and shown
+beside the toggle (`sslmode=require`). It is listed under "sent here" in that window
 until the person pins it. Pinned connections (saved: `P` or `s` on a sent or
 found one, its menu's "Pin it", a click on the row's pin, or the new
 connection form) are one list for the machine, `data/databases/connections.json`
@@ -718,7 +736,8 @@ the highlighted line shows where it will land.
   `>` in the bar (the ringed tab, else the shown one); the order is kept. A
   right-click on a tab (or `m` in the bar) opens its menu: pin it to the
   sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
-  close it; ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
+  close it; a right-click on the bar opens the shown tab's (a pane with one
+  tab has no strip: this is its tab's menu); ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
   `browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
@@ -733,7 +752,8 @@ the highlighted line shows where it will land.
   slot in `panes()` (`mod: "browser"`, `props.slot`). Each web pane with a slot
   publishes its shown tab's title (else its host) in shared `browser.titles`
   (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
-  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
+  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`),
+  and which tab it shows in `browser.shown-tabs` (`{ [slot]: tab id }`).
   Each tab on the strip shows its page's favicon before its title (the web
   pane's mark until one is known): the page's own `link[rel~=icon]`, else its
   origin's `/favicon.ico` (no icon service is asked), fetched once per origin
@@ -986,14 +1006,26 @@ the highlighted line shows where it will land.
   block the caret is in (a heading, a paragraph, one list item or task, a
   quote, a code block, a table) shows as its own Markdown, in place, on a
   dithered ground with the accent rail and its kind at the corner; every
-  other block stays drawn. Up / down past a block's first or last row step
-  into the next block (blank lines between are passed over); a click on a
-  drawn block puts the caret in it; enter on a list item, task or quote starts
-  the next one (on an empty one it ends the list); enter on the last line of
-  any other block, or anywhere in a paragraph, starts a new paragraph under it
-  (the text after the caret goes with it; shift-enter is a line break inside
-  the block; inside a code block enter is a new line, at its closing line's
-  end a new block; on an empty new block it stays as it is); with vim in
+  other block stays drawn. The caret crosses blocks as it crosses lines:
+  up / down past a block's first or last drawn row step into the next block
+  (blank lines between are passed over), onto its nearest row and the same
+  place in the text (marks such as a heading's # or a task's box taken off);
+  left at a block's start goes to the end of the one before, right at its end
+  to the next one's text; a click on a drawn block puts the caret about where
+  it was pressed; enter on a list item, task or quote starts the next one (on
+  an empty one at the list's end the list ends and a new block starts under
+  it); enter at a block's very start opens an empty block above it; enter on
+  the last line of any other block, or anywhere in a paragraph, starts a new
+  paragraph under it (the text after the caret goes with it; shift-enter is a
+  line break inside the block; inside a code block enter is a new line, at
+  its closing line's end a new block; on an empty new block it stays as it
+  is); backspace at the start of a block's text takes its mark off (a
+  heading, item, task or quote becomes text), before the mark it joins the
+  block's text onto the block before (not onto a code block, table or
+  picture: the caret goes there), in an empty block it removes the block;
+  delete at a block's end joins the next block's text on. An empty block
+  made by enter or a "+" that the caret leaves without a key typed in it
+  goes again with the lines it added, so no blank lines pile up; with vim in
   normal mode, enter makes the new block under the lit one and types into it
   (insert mode; with a count or an operator pending it's vim's own); a task
   box ticks with a click. Adding a block with the pointer: the "+" left of
@@ -1001,7 +1033,8 @@ the highlighted line shows where it will land.
   block, put an empty paragraph there. An empty block made so offers the
   kinds (heading, list, task, quote, code, rule, image): a click on one, or cmd-.
   and its letter. The block being typed into stays one stable thing (its
-  height kept, edited in place), and a key costs the same in a long file.
+  height kept, edited in place, never shorter than its text's rows), and a
+  key costs the same in a long file.
   The file's own editor holds the whole text, so saving, undo (cmd-z,
   vim's u), the unsaved mark and the language server are the text view's, and
   lines that aren't edited stay byte for byte. Vim works over the whole text
@@ -1009,8 +1042,8 @@ the highlighted line shows where it will land.
   blocks): the lit block follows its caret, and a visual selection lights
   every block it touches, drawn in the block. What it can't do: a block
   being typed into is code-font source (a heading isn't heading-size then), a
-  click lands on a block's first line, not the character clicked; find and
-  replace work in the text view.
+  click's place is an estimate from the drawn block's width (the source shows
+  marks the drawing hides); find and replace work in the text view.
   **Pictures**: a line holding only images (`![alt](path)`, `<img src>`) is an
   image block in the rendered view: each picture fits the column and keeps
   its shape; one on the web is drawn as the preview draws it; a path that
@@ -1027,7 +1060,7 @@ the highlighted line shows where it will land.
   the system's own tool: macOS osascript, Linux wl-paste or xclip, Windows
   PowerShell.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
-  space .), or the bar's "markdown" chip, opens their list at the caret, lit
+  space .), or the bar's "markdown" chip (a scratchpad's "format"), opens their list at the caret, lit
   for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
   t task box, x tick, q quote, c code block, r rule, p image from a file, v
@@ -1120,13 +1153,17 @@ the highlighted line shows where it will land.
   `.preview-split`, `.preview-only`, `.preview-text`, `.preview-rendered`, `.md-menu` (the
   Markdown commands' list), `.md-<command>` (`md-bold`, `md-italic`, `md-code`, `md-link`,
   `md-heading-up`, `md-heading-down`, `md-heading-0` … `md-heading-6`, `md-bullets`,
-  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.next-tab`, `.prev-tab`,
+  `md-numbers`, `md-task`, `md-tick`, `md-quote`, `md-fence`, `md-rule`, `md-image`, `md-image-paste`), `.more` and
+  `.copy-path` (a scratchpad's more menu, its path to the clipboard), `.next-tab`, `.prev-tab`,
   `.close-tab`, and `editor.open:{"path","line"?,"col"?,"view"?}` (a file as a
   tab of the focused editor; a relative path is its file's folder's).
 - **The scratchpad** (`nocturne.scratchpad`: cmd-shift-;, the palette's
   "Scratchpad", the "+ new" menu's Scratchpad tile, letter s;
   `nocturne.scratchpad-tab`: in a tab of its own, the palette's "Scratchpad in
-  a new tab" or the tile with the menu set to new tab): a Markdown note that
+  a new tab" or the tile with the menu set to new tab;
+  `nocturne.scratchpad-copy-path`: its path to the clipboard, to hand the note
+  to an agent, the palette's "Scratchpad: copy its path", a toast saying what
+  was copied): a Markdown note that
   belongs to the shown space's repository but isn't in it, opened rendered in
   an editor pane of its own beside the focused pane. When it can't be found
   or opened a toast says why (git not answering opens the folder's own note
@@ -1137,7 +1174,15 @@ the highlighted line shows where it will land.
   `scratchpad/index.json` maps each file to its repository: `{ name, dir,
   repo, machine? }`). It saves itself: 600 ms after the last key, and at once
   when its pane or tab closes; it never shows unsaved or asks on close, and
-  the bar says saving… / saved (not saved, red, when a write failed). The
+  the bar says saving… / saved (not saved, red, when a write failed). Its bar
+  is one quiet line: vim's mode, the kind of block the caret is in, the save,
+  "format" (the Markdown commands, cmd-. / space .) and "more" (a click or
+  `editor.more`: copy its path y, rendered r, text e, split with the preview
+  s, word wrap w, vim v; a letter or a click runs one); no language, indent,
+  server or line:col, and the header names the note. Only the focused pane
+  takes the keyboard: an editor that starts out of sight (a pane pinned to
+  the shelf, loaded parked) or another editor on the same note leaves it
+  where it is. The
   pane's tab reads "scratchpad" and its repository; other files (a picker's,
   a link's) open in an editor beside it, never as its tabs. Agents may read
   and write the note like any file (`writeTextFile` semantics: an open pane
@@ -1653,13 +1698,18 @@ and props if a restart gives the pane a new id, and gone once the pane has
 been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
 its page's title when browser notes it in shared
 `browser.titles` (by slot), else the host it opened on. One tab of a
-web pane can be pinned on its own (the tab's right-click menu or `m` in the
-bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
+web pane can be pinned on its own, shown or not, the pane's only tab too (the
+tab's right-click menu, a right-click on the bar or `m` in it for the shown
+tab, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf";
+the pane's menu, "Pin this web tab to the shelf", for the tab it shows):
 a record with `tab` (the web tab's id, kept across restarts), its own tile named
 by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`)
 and wearing its favicon (`browser.tab-icons`; a whole web pane's tile its
 shown tab's, `browser.icons`), keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
-whole, can each have a tile. Going to it focuses the pane, then
+whole, can each have a tile. A tab's tile is lit (and wears the focus ticks)
+only while its pane is on screen and shows that tab (`browser.shown-tabs`);
+the pane's other tabs' tiles stay unlit, and the whole pane's tile goes by the
+pane. Going to it focuses the pane, then
 `browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
 screen yet takes the same wish from shared `browser.show` when it
 shows). Closing the tab drops its pin. A whole tab of a space (all its panes,
@@ -2200,8 +2250,10 @@ The main ones:
   space, with the Nocturne player's bar in its order and sections, ↩ « ❚❚ » sound ◧ ⤓ ⇲
   magnet ? ✕, keeping the video's shape when resized; ⇲, ◧ and ⤓ send the page `pip.popIn
   { of, then }` (`then`: null, `"pane"` or `"park"`, for the player to go on with); the view
-  may go). With `snap` (default true) it snaps to its screen's usable area (menu bar and Dock
-  left out, 10 pt in): dragged by its bar within 64 pt of a corner or an edge's middle it
+  may go). It moves by its bar or anywhere on its video, as the Fireflies player's window: a
+  left press on the video that moves 4 pt drags it, less is a click (right-clicks and the wheel
+  stay the page's). With `snap` (default true) it snaps to its screen's usable area (menu bar
+  and Dock left out, 10 pt in): dragged within 64 pt of a corner or an edge's middle it
   lands exactly there and stays on it as its size or the screens change; it opens on the place
   it sat on last (first: bottom right). Without, it opens in the screen's bottom right corner.
   Its magnet switches that and sends the page `pip.snapped { on }`; its ? shows its keys over
@@ -2230,7 +2282,7 @@ The main ones:
   narrow bar goes into a ⋯ menu before ✕ (play/pause and close stay; a section left empty
   takes its seam along), which lists them in the same sections, a dithered rule between. The
   window moves by its bar or anywhere on its video (a press that moves 4 px; a click on the
-  video gives the player the keyboard), and resizes by its edges and corners. The
+  video gives the player the keyboard), out of Fireflies too, and resizes by its edges and corners. The
   control under the pointer shows its name in the bar's title (tooltips would be drawn under
   the video, a native view). Commands
   `pip.toggle`, `.rewind`, `.forward`, `.mute`, `.pane`, `.park`, `.out`, `.back`,

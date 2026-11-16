@@ -71,7 +71,8 @@ password: the window asks for it, or, for a port-forward on 127.0.0.1, reads
 it itself from the Kubernetes secret `"secret":{"from":"kubernetes","context":…,"namespace":…,"name":…,"key":…}`
 names, and `"forward":{"context":…,"namespace":…,"target":"pod/…","remote":5432,"local":15432}`
 the port-forward it came from, started again when the person says so if its
-port is down: defaults/AGENTS.md has the whole contract; without a
+port is down; `"sslmode":"disable"` (libpq's names, "disable" … "verify-full")
+how it asks for TLS: defaults/AGENTS.md has the whole contract; without a
 `"database"` a Postgres connection is in the server's default, `postgres`, and
 `herdr-app do databases.databases` shows them the server's databases to pick
 from), then `herdr-app do
@@ -144,7 +145,8 @@ jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
-a web pane can have a tile of its own (its tab's menu, or `herdr-app do
+a web pane can have a tile of its own, its only tab too (its tab's menu, a
+right-click on the web pane's bar for the shown tab, or `herdr-app do
 browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
 wears its favicon, as the web pane's tab strip does. A whole tab of a space
 can be pinned as one tile too (`herdr-app do nocturne.pin-tab` for the shown

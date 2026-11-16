@@ -206,7 +206,7 @@ test("keys: panels by number and tab, ? the overview, n the form, m a row's menu
   v.key(key("escape"), cx);
   v.key(key("n"), cx);
   expect(v.form).not.toBeNull();
-  expect(v.form.stops().map((s: any) => s.id)).toEqual(["kind", "name", "host", "port", "user", "database", "password", "ask", "readonly", "test", "save", "cancel"]);
+  expect(v.form.stops().map((s: any) => s.id)).toEqual(["kind", "name", "host", "port", "user", "database", "password", "ask", "ssl", "readonly", "test", "save", "cancel"]);
   expect(v.form.inputs.get("password").masked).toBe(true);
   v.key(key("escape"), cx);
   expect(v.form).toBeNull();

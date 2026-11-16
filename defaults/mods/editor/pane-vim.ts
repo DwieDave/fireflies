@@ -18,6 +18,7 @@ import { BAR, errorText, HINTS, isLspPos, serverId, whereArgs } from "./pane-kit
 import { appKey, cardKeyDown, later } from "./card.ts";
 import { format, loadDoc, save } from "./file-io.ts";
 import { mdMenuKey, openMdMenu, runMdCommand } from "./md-pane.ts";
+import { moreKey } from "./scratch-bar.ts";
 import { askKey } from "./pane-lines.ts";
 import { closeTab, ownPane, popIn, popOut, select, stepMove, stepShownTab } from "./pane-tabs.ts";
 import { imagePasteKey } from "./preview-pane.ts";
@@ -85,6 +86,9 @@ export function vimKey(ed: EditorPane, e: KeyEvent, cx: Context): boolean {
 
   // The Markdown commands' list (cmd-.): its letter runs one.
   if (ed.mdMenu) return mdMenuKey(ed, e, cx);
+
+  // A scratchpad's more menu: its letter runs an entry.
+  if (ed.moreMenu) return moreKey(ed, e, cx);
 
   if (ed.markdown && isMdMenuKey(e)) {
     openMdMenu(ed, cx);
