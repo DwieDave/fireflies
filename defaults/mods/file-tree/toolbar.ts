@@ -20,10 +20,11 @@ import type { NewKind } from "./fit.ts";
 import { lensLayout, toolbarFit, KEYS, ADDS } from "./fit.ts";
 import { lookSide } from "./split-size.ts";
 import { deleteQuestion } from "./ops.ts";
+import { edge } from "./tones.ts";
 
 export function toolChip(v: Files, t: Theme, id: string, label: string, action: (cx: Context) => void, on = true): Element {
   return h_flex().id(id).relative().h(20).px(6).flex_none().items_center()
-    .text_color(on ? t.muted : t.ansi0).when(on, (el) => el.hover((s) => s.text_color(t.foreground)))
+    .text_color(on ? t.muted : edge(t)).when(on, (el) => el.hover((s) => s.text_color(t.foreground)))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       if (on) action(cx);
@@ -43,7 +44,7 @@ export function drawToolbar(v: Files, t: Theme, w: number, focused: boolean): El
   const branch = v.branch;
 
   return h_flex().id("nf-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
-    .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(focused ? t.accent : t.ansi8).child("FILES")))
+    .when(fit.eyebrow, (el) => el.child(div().flex_none().text_color(focused ? t.accent : t.muted).child("FILES")))
     .child(toolChip(v, t, "nf-back", "‹", (cx) => v.back(cx), v.root !== "/" || v.nav.past.length > 0))
     .child(toolChip(v, t, "nf-forward", "›", (cx) => v.forward(cx), v.nav.future.length > 0))
     .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
@@ -59,7 +60,7 @@ export function drawToolbar(v: Files, t: Theme, w: number, focused: boolean): El
       .on_click(() => closePane(v))
       .child(svg(`${ICONS}/x.svg`).size(12))))
     // The keyboard is here: the rule under the toolbar lights up.
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(focused ? t.accent : edge(t), 1)));
 }
 
 /** The preview split's switch: where it opens (right or bottom), lit while it's on. */
@@ -82,7 +83,7 @@ export function lookChip(v: Files, t: Theme): Element {
 export function filterChip(v: Files, t: Theme, id: string, label: string, on: boolean, cut: number, action: (cx: Context) => void, ringed = false): Element {
   return h_flex().id(id).relative().h(20).px(4).gap(4).flex_none().items_center()
     .when(ringed, (el) => el.child(ring(t)))
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => action(cx))
     .child(svg(on ? `${ICONS}/eye.svg` : `mods/${MOD}/eye-off.svg`).relative().size(11).flex_none().text_color(on ? t.dim : t.ansi3))
@@ -95,7 +96,7 @@ export function addChip(v: Files, t: Theme, kind: NewKind, label: string, ringed
   const word = label.replace(/^\+\s*/, "");
 
   return h_flex().id(`nf-add-${kind}`).relative().h(20).px(4).gap(7).flex_none().items_center().text_color(t.muted)
-    .hover((s) => s.bg(`${t.ansi0}55`).text_color(t.foreground))
+    .hover((s) => s.bg(`${edge(t)}55`).text_color(t.foreground))
     .when(ringed, (el) => el.child(ring(t)))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
@@ -151,7 +152,7 @@ export function drawLens(v: Files, t: Theme, w: number, found: number): Element 
   }).relative().h(20).px(4)
     .when(at === "keys", (el) => el.child(ring(t)));
 
-  const rule = (): Element => div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1));
+  const rule = (): Element => div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1));
 
   if (fit.rows === 1) return row("nf-lens").child(icon).child(find).children(count).children(chips).child(keys).child(rule());
 
@@ -163,10 +164,10 @@ export function drawLens(v: Files, t: Theme, w: number, found: number): Element 
         startFind(v, cx);
       })
       // Typing: the field's own frame, so it reads as a place to type.
-      .when(live, (el) => el.child(div().absolute().left(4).right(4).top(3).bottom(3).border(1).border_color(v.typing ? t.accent : t.ansi0)))
+      .when(live, (el) => el.child(div().absolute().left(4).right(4).top(3).bottom(3).border(1).border_color(v.typing ? t.accent : edge(t))))
       .child(icon).child(find).children(count)
       .when(Boolean(v.query), (el) => el.child(div().flex_none().text_color(t.dim).child("esc clears")))
-      .child(div().absolute().left(10).right(10).bottom(0).h(1).opacity(0.5).child(dither(t.ansi0, 1))))
+      .child(div().absolute().left(10).right(10).bottom(0).h(1).opacity(0.5).child(dither(edge(t), 1))))
     .child(row("nf-lens-chips").children(chips).child(div().flex_1()).child(keys).child(rule()));
 }
 
@@ -180,7 +181,7 @@ export function drawKeysStrip(v: Files, t: Theme, width = v.size.width): Element
 /** A key and what it does in the hint line, clickable. */
 export function hintKey(v: Files, t: Theme, id: string, key: string, label: string, action: (cx: Context) => void): Element {
   return h_flex().id(id).relative().flex_none().gap(4).items_center()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       action(cx);
@@ -193,7 +194,7 @@ export function hintKey(v: Files, t: Theme, id: string, key: string, label: stri
 /** The hint line at the bottom: the delete question, the name input's keys,
  *  what an operation said, else the copy, search and listing notes. */
 export function footer(v: Files, t: Theme, searching: boolean): Element | null {
-  const line = (): Element => v_flex().id("nf-foot").flex_none().px(10).py(4).gap(3).text_size(10).text_color(t.dim).border_t(1).border_color(t.ansi0);
+  const line = (): Element => v_flex().id("nf-foot").flex_none().px(10).py(4).gap(3).text_size(10).text_color(t.dim).border_t(1).border_color(edge(t));
   const keys = (...ks: Element[]): Element => h_flex().flex_wrap().gap_x(12).gap_y(2).children(ks);
   const d = v.drag;
 
