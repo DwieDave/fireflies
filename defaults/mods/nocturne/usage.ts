@@ -19,19 +19,24 @@ import type { AsyncContext, ClickEvent, Color, Context, Element, MouseButtonEven
 import { h_flex, v_flex } from "gpui-base";
 import { spaces, panes, run, shared, setShared } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
+import { Array as Arr, Clock, Effect, Option, String as Str } from "effect";
+import { localTime, redraw } from "@fireflies/kit";
+import type { ViewFx } from "@fireflies/kit";
+import { toast } from "@fireflies/kit/live";
 import { isBoolean, readShared, sharedKey, writeShared } from "./guard.ts";
 import { ART, dither, eyebrow, navRow, navRing } from "./kit.ts";
 import type { Nav } from "./nav.ts";
+import { runtime } from "./fx.ts";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.ts";
-import type { ProviderId, Usage, UsageWindow } from "./limits.ts";
+import type { ProviderId, Usage, UsageServices, UsageWindow } from "./limits.ts";
 
 const FOLDED = sharedKey("nocturne.usageFolded", isBoolean);
-const TICK = 30_000;
+const TICK = "30 seconds";
 
-/** The first read, this long after the section first draws (ms). */
-const FIRST = 1000;
+/** The first read, this long after the section first draws. */
+const FIRST = "1 second";
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
-const pad = (n: number) => String(n).padStart(2, "0");
+const pad = (n: number) => Str.padStart(2, "0")(String(n));
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const left = (w: UsageWindow) => Math.max(0, Math.min(100, Math.round(100 - w.used)));
@@ -45,21 +50,24 @@ const HOUR = 3600_000;
 
 /** The picked provider's last answer, its windows' lengths filled in where it gave none (5 h and 7 d, as the usage pane takes them). */
 function reading(): Usage | null {
-  const d = lastUsage();
+  const d = runtime.now(lastUsage());
 
-  if (!d) return null;
+  if (d === null) return null;
 
-  const sized = (w: UsageWindow | null, length: number): UsageWindow | null => w && { ...w, length: w.length ?? length };
+  const sized = (w: UsageWindow | null, length: number): UsageWindow | null => (w === null ? null : { ...w, length: w.length ?? length });
 
   return { ...d, session: sized(d.session, 5 * HOUR), week: sized(d.week, 168 * HOUR) };
 }
 
-/** How far through its window the clock is, 0–1 (null without a reset time or length). */
-function elapsed(w: UsageWindow): number | null {
-  if (!w.resets || !w.length) return null;
+/** How far through its window the clock is at `now`, 0–1 (null without a reset time or length). */
+function elapsed(w: UsageWindow, now: number): number | null {
+  if (w.resets === null || w.length === null || w.length <= 0) return null;
 
-  return Math.max(0, Math.min(1, 1 - (w.resets - Date.now()) / w.length));
+  return Math.max(0, Math.min(1, 1 - (w.resets - now) / w.length));
 }
+
+/** The time a render draws at (ms). */
+const nowMs = () => runtime.now(Clock.currentTimeMillis);
 
 function span(ms: number): string {
   const m = Math.max(0, Math.round(ms / 60000));
@@ -72,65 +80,60 @@ function span(ms: number): string {
 }
 
 const clock = (ms: number) => {
-  const d = new Date(ms);
+  const d = localTime(ms);
 
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.hours)}:${pad(d.minutes)}`;
 };
 
 /** The usage pane in the shown tab, if it's open. */
 export function usagePane(): PaneInfo | null {
-  const tab = spaces().find((s) => s.active)?.tabs.find((c) => c.active)?.id;
+  const tab = Option.getOrUndefined(Option.flatMap(Arr.findFirst(spaces(), (s) => s.active), (s) => Option.map(Arr.findFirst(s.tabs, (c) => c.active), (c) => c.id)));
 
-  return panes().find((p) => p.mod === "usage" && p.tab === tab) ?? null;
+  return Option.getOrNull(Arr.findFirst(panes(), (p) => p.mod === "usage" && p.tab === tab));
 }
 
 /** Opens the usage pane beside the focused pane, or closes it. */
 export function toggleUsage(): void {
   const open = usagePane();
 
-  if (open) {
+  if (open !== null) {
     run("pane.close", { pane: open.pane });
 
     return;
   }
 
-  const focused = panes().find((p) => p.focused)?.pane;
+  const focused = Arr.findFirst(panes(), (p) => p.focused);
 
-  run("pane.split", focused ? { direction: "auto", pane: focused, mod: "usage", props: {} } : { direction: "auto", mod: "usage", props: {} });
-}
-
-/** Picks provider `id` and asks it for its usage if its answer is old. */
-function pick(id: ProviderId, cx: Context): void {
-  pickProvider(id);
-  cx.spawn(async () => {
-    await refreshUsage("open", id);
-  });
+  run("pane.split", Option.match(focused, {
+    onNone: () => ({ direction: "auto", mod: "usage", props: {} }),
+    onSome: (p) => ({ direction: "auto", pane: p.pane, mod: "usage", props: {} }),
+  }));
 }
 
 export class UsageSection {
   height = 0; // as last drawn, px
   railHeight = 0; // the rail's, as last drawn
+  /** The section's effects (@fireflies/kit): its first read and its tick. */
+  fx: ViewFx<UsageServices> | null = null;
 
-  init(cx: Context): void {
+  init(cx: AsyncContext): void {
     this.height = 0;
     this.railHeight = 0;
+    this.fx = runtime.attach(cx, toast("Usage"));
 
-    // Ask when the shared answer is old (whichever copy is shown first asks);
-    // the tick also keeps the countdowns and the clock's plus moving.
-    const tick = (later: AsyncContext) => {
-      later.spawn(async () => {
-        await refreshUsage();
-      });
-      later.notify();
-    };
+    // The first read after the first frame (drawing never waits on, or runs, the machine's cache
+    // script); then every TICK it asks when the shared answer is old (whichever copy is shown
+    // first asks), and the countdowns and the clock's plus move.
+    this.fx.run(Effect.andThen(Effect.sleep(FIRST), refreshUsage()).pipe(
+      Effect.andThen(redraw),
+      Effect.andThen(Effect.forever(Effect.sleep(TICK).pipe(Effect.andThen(refreshUsage()), Effect.andThen(redraw)))),
+    ));
+  }
 
-    // The first read after the first frame: drawing never waits on (or runs) the machine's cache script.
-    cx.spawn(async (later) => {
-      await later.sleep(FIRST);
-      await refreshUsage();
-      later.notify();
-    });
-    cx.timer.every(TICK, tick);
+  /** Picks provider `id` and asks it for its usage if its answer is old. */
+  pick(id: ProviderId): void {
+    runtime.now(pickProvider(id));
+    this.fx?.run(refreshUsage("open", id), { key: "pick" });
   }
 
   get folded(): boolean {
@@ -140,10 +143,10 @@ export class UsageSection {
   /** The path: what's used in the tone of how close the limit is, and the plus where the clock is. */
   path(t: Theme, w: UsageWindow, width: number | null = null): Element {
     const u = used(w);
-    const now = elapsed(w);
+    const now = elapsed(w, nowMs());
     const el = div().relative().h(6).flex_none();
 
-    return (width ? el.w(width) : el.w_full())
+    return (width === null ? el.w_full() : el.w(width))
       .child(div().absolute().left(0).right(0).top(2).h(2).child(dither(t.ansi8, 1)))
       // Shares of the row as flex weights, not pixels.
       .child(h_flex().absolute().left(0).right(0).top(1).h(4)
@@ -192,17 +195,17 @@ export class UsageSection {
 
   /** The providers' logos; the picked one lit. */
   switcher(t: Theme, nav?: Nav): Element {
-    const on = provider().id;
+    const on = runtime.now(provider).id;
 
     return h_flex().id("usage-providers").flex_none().gap(2).items_center()
-      .children(PROVIDERS.map((p) => div().id(`usage-provider-${p.id}`).relative().p(2).flex_none()
-        .map((el) => navRing(t, el, nav?.(`usage-provider-${p.id}`, "usage", { go: (cx) => pick(p.id, cx) }) ?? false))
+      .children(Arr.map(PROVIDERS, (p) => div().id(`usage-provider-${p.id}`).relative().p(2).flex_none()
+        .map((el) => navRing(t, el, nav?.(`usage-provider-${p.id}`, "usage", { go: () => this.pick(p.id) }) ?? false))
         .tooltip(p.id === on ? `${p.name} usage` : `Show ${p.name} usage`)
         .when(p.id !== on, (el) => el.hover((s) => s.bg(t.ansi0)))
         .on_mouse_down("left", stop)
         .on_click((_e: ClickEvent, cx: Context) => {
           cx.stop_propagation();
-          pick(p.id, cx);
+          this.pick(p.id);
         })
         .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).text_color(p.id === on ? t.foreground : t.ansi8))));
   }
@@ -217,14 +220,14 @@ export class UsageSection {
     const meter = (id: string, w: UsageWindow, label: string) => v_flex().id(id).relative().w_full().px(14).py(4).gap(3).flex_none()
       .map((el) => navRing(t, el, nav?.(id, "usage", { go: () => toggleUsage() }) ?? false))
       .hover((s) => s.bg(t.ansi0))
-      .tooltip(`${provider().name} ${label}: ${left(w)}% left`)
+      .tooltip(`${runtime.now(provider).name} ${label}: ${left(w)}% left`)
       .on_mouse_down("left", stop)
       .on_click((_e: ClickEvent, cx: Context) => {
         cx.stop_propagation();
         toggleUsage();
       })
       .child(h_flex().items_baseline().text_size(10)
-        .child(div().flex_none().text_color(t.ansi8).child(label.toUpperCase()))
+        .child(div().flex_none().text_color(t.ansi8).child(Str.toUpperCase(label)))
         .child(div().flex_1())
         .child(div().flex_none().text_color(left(w) === 0 ? t.blocked : t.foreground).child(`${left(w)}%`)))
       .child(this.path(t, w));
@@ -238,24 +241,24 @@ export class UsageSection {
       })
       .child(div().w(28).h(2).mb(6).relative().child(dither(t.ansi8, 1)));
 
-    if (!d) return box.child(div().py(4).text_size(10).text_color(t.dim).child("usage …"));
+    if (d === null) return box.child(div().py(4).text_size(10).text_color(t.dim).child("usage …"));
 
     const s = d.session;
     const wk = d.week;
-    const withSession = s ? box.child(meter("usage-rail-5h", s, windowName(s, "5h"))) : box;
+    const withSession = s === null ? box : box.child(meter("usage-rail-5h", s, windowName(s, "5h")));
 
-    return wk ? withSession.child(meter("usage-rail-wk", wk, windowName(wk, "week"))) : withSession;
+    return wk === null ? withSession : withSession.child(meter("usage-rail-wk", wk, windowName(wk, "week")));
   }
 
   /** `nav` (sky.ts): registers a control with the keyboard's cursor, true while it's on it. */
   render(t: Theme, nav?: Nav): Element {
     const d = reading();
-    const note = usageNote();
-    const who = provider();
+    const note = runtime.now(usageNote());
+    const who = runtime.now(provider);
     const folded = this.folded;
     const fold = () => writeShared(setShared, FOLDED, !folded);
     const foldOn = nav?.("usage-fold", "usage", { go: fold }) ?? false;
-    const nums = d ? [d.session, d.week].flatMap((w) => (w ? [`${left(w)}%`] : [])).join(" · ") : "";
+    const nums = d === null ? "" : Arr.join(Arr.flatMap([d.session, d.week], (w) => (w === null ? [] : [`${left(w)}%`])), " · ");
 
     const head = h_flex().id("usage-head").px(16).pb(4).gap(6).items_center()
       .child(h_flex().id("usage-fold").relative().flex_1().gap(6).items_center()
@@ -282,28 +285,29 @@ export class UsageSection {
 
     if (folded) return box;
 
-    if (!d) {
-      const say = !note ? "asking the moon…" : note.state === "off" ? "usage is off in a scratch app" : note.state === "nologin" ? `no ${who.name} login here` : note.state === "expired" ? "the login is napping" : "couldn't reach the moon";
+    if (d === null) {
+      const say = note === null ? "asking the moon…" : note.state === "off" ? "usage is off in a scratch app" : note.state === "nologin" ? `no ${who.name} login here` : note.state === "expired" ? "the login is napping" : "couldn't reach the moon";
 
       return box.child(div().px(16).py(4).text_size(11).text_color(t.dim).child(say));
     }
 
-    const now = Date.now();
+    const now = nowMs();
     const s = d.session;
     const wk = d.week;
 
-    const withSession = s
-      ? box.child(this.row(t, "usage-5h", this.hourglass(t, s), windowName(s, "5h"), s,
-        s.resets ? (left(s) === 0 ? `turned at ${clock(s.resets)}` : `fresh in ${span(s.resets - now)}`) : null, nav))
-      : box;
+    const turned = (w: UsageWindow, at: number) => (left(w) === 0 ? `turned at ${clock(at)}` : `fresh in ${span(at - now)}`);
+    const full = (at: number) => `full ${DAYS[localTime(at).weekday] ?? ""} ${clock(at)} · in ${span(at - now)}`;
 
-    const withWeek = wk
-      ? withSession.child(this.row(t, "usage-wk", this.moon(t, wk, 20), windowName(wk, "week"), wk,
-        wk.resets ? `full ${DAYS[new Date(wk.resets).getDay()] ?? ""} ${clock(wk.resets)} · in ${span(wk.resets - now)}` : null, nav))
-      : withSession;
+    const withSession = s === null
+      ? box
+      : box.child(this.row(t, "usage-5h", this.hourglass(t, s), windowName(s, "5h"), s, s.resets === null ? null : turned(s, s.resets), nav));
+
+    const withWeek = wk === null
+      ? withSession
+      : withSession.child(this.row(t, "usage-wk", this.moon(t, wk, 20), windowName(wk, "week"), wk, wk.resets === null ? null : full(wk.resets), nav));
 
     // Backing off (limits.ts): the numbers stay, with their age.
-    return note && (note.until ?? 0) > now
+    return note !== null && (note.until ?? 0) > now
       ? withWeek.child(div().id("usage-stale").px(16).pt(2).text_size(10).text_color(t.dim)
         .child(`${note.state === "busy" ? "rate limited" : "couldn't read"} · from ${span(now - d.at)} ago`))
       : withWeek;

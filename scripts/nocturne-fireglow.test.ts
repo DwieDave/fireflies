@@ -83,6 +83,8 @@ const named = (el: El, name: string) => calls(el).filter(([n]) => n === name);
 function sky(folded = false) {
   const s = new Sky();
   s.init({ role: "sky" }, cx);
+  // The timers init starts (the usage section's first read sleeps on cx.timer) aren't the glow's.
+  timers = [];
   s.size = { width: folded ? 90 : 252, height: 900 };
   s.render(cx);
   const root = byId["sky"];

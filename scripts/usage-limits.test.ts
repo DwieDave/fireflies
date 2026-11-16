@@ -1,12 +1,18 @@
 // The usage limits' readers (nocturne/limits.ts, the same file as
-// usage/limits.ts): what they ask, and when they don't. The real
-// shell scripts run, with stand-in `security`, `curl` and `cat`-able login
-// files on PATH and HOME, so no request leaves the machine. Its own process:
-// it stands in for "herdr".
-import { test, expect, mock, beforeEach } from "bun:test";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync } from "fs";
+// usage/limits.ts): what they ask, and when they don't. The real shell
+// scripts run (the login checks, the request's headers, the machine's
+// record), with stand-in `security`, `curl` and `cat`-able login files on
+// PATH and HOME, so no request leaves the machine. The app's services are
+// @fireflies/kit's test layers: no module is mocked.
+import { test, expect, beforeEach } from "bun:test";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodSync, rmSync, utimesSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
+import { Effect, Layer } from "effect";
+import type { Schema } from "effect";
+import { execTest, sharedTest, workspaceTest } from "@fireflies/kit/testing";
+import { UsageEndpoint, lastUsage, readUsage, refreshUsage, usageNote } from "../defaults/mods/nocturne/limits.ts";
+import type { ProviderId, UsageServices } from "../defaults/mods/nocturne/limits.ts";
 
 const root = mkdtempSync(join(tmpdir(), "usage-limits-"));
 const bin = join(root, "bin"), home = join(root, "home"), calls = join(root, "calls");
@@ -14,85 +20,108 @@ mkdirSync(bin); mkdirSync(join(home, ".codex"), { recursive: true });
 // A login for each provider, and stand-ins that note being called.
 writeFileSync(join(home, ".codex/auth.json"), JSON.stringify({ tokens: { access_token: "tok", account_id: "acct" } }));
 const stand = (name: string, out: string) => {
-  writeFileSync(join(bin, name), `#!/bin/sh\necho ${name} >> "${calls}"\ncat >/dev/null 2>&1 </dev/null\n${out}\n`);
+  writeFileSync(join(bin, name), `#!/bin/sh\necho ${name} >> "${calls}"\ncat >/dev/null 2>&1\n${out}\n`);
   chmodSync(join(bin, name), 0o755);
 };
 stand("security", `printf '%s' '{"claudeAiOauth":{"accessToken":"tok","subscriptionType":"max","rateLimitTier":"default_claude_max_5x"}}'`);
 stand("curl", `printf '%s\\n@code\\t200' '{"five_hour":{"utilization":10,"resets_at":null},"seven_day":{"utilization":20,"resets_at":null},"rate_limit":{"primary_window":{"used_percent":5},"secondary_window":{"used_percent":6}}}'`);
 
 let env: Record<string, string> = {};
-const store: Record<string, unknown> = {};
-mock.module("herdr", () => ({
-  window: () => ({ active: true }), terminals: () => [], panes: () => [], spaces: () => [],
-  shared: (k: string) => store[k] ?? null,
-  setShared: (k: string, v: unknown) => { store[k] = v; return null; },
-  exec: async (cmd: string, args: string[]) => {
-    const r = Bun.spawnSync([cmd, ...args], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, ...env } });
-    return { code: r.exitCode, stdout: r.stdout.toString(), stderr: r.stderr.toString() };
-  },
-}));
-const { readUsage, refreshUsage, lastUsage, usageNote } = await import("../defaults/mods/nocturne/limits.ts");
+
+/** The machine: programs run for real, with the stand-ins first on PATH and this test's HOME. */
+const exec = execTest(async (command, args) => {
+  const p = Bun.spawn([command, ...args], { env: { PATH: `${bin}:/usr/bin:/bin`, HOME: home, ...env }, stdin: "ignore", stdout: "pipe", stderr: "pipe" });
+  const [stdout, stderr] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text()]);
+  return { code: await p.exited, stdout, stderr };
+});
+
+/** An app: its own shared() store over the same machine (each Fireflies app has its own shared.json). */
+function app() {
+  const shared = sharedTest();
+  const layer = Layer.provideMerge(UsageEndpoint.layer, Layer.mergeAll(exec.layer, shared.layer, workspaceTest().layer));
+  const run = <A>(e: Effect.Effect<A, never, UsageServices>) => Effect.runPromise(Effect.provide(e, layer));
+  return { store: shared.store, run };
+}
+
+let a = app();
 const cache = join(root, "cache");
 
 const curls = () => asked().filter((c) => c === "curl").length;
 const asked = () => (existsSync(calls) ? readFileSync(calls, "utf8").trim().split("\n").filter(Boolean) : []);
-beforeEach(() => { rmSync(calls, { force: true }); rmSync(cache, { recursive: true, force: true }); env = { HERDR_USAGE_DIR: cache }; for (const k of Object.keys(store)) delete store[k]; });
+beforeEach(() => { rmSync(calls, { force: true }); rmSync(cache, { recursive: true, force: true }); env = { HERDR_USAGE_DIR: cache }; a = app(); });
 
 test("the two limits.ts copies are the same file", () => {
-  const a = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne/limits.ts`, "utf8");
-  const b = readFileSync(`${import.meta.dir}/../defaults/mods/usage/limits.ts`, "utf8");
-  expect(a).toBe(b);
+  const x = readFileSync(`${import.meta.dir}/../defaults/mods/nocturne/limits.ts`, "utf8");
+  const y = readFileSync(`${import.meta.dir}/../defaults/mods/usage/limits.ts`, "utf8");
+  expect(x).toBe(y);
 });
 
-for (const p of ["claude", "codex"]) {
+for (const p of ["claude", "codex"] as const satisfies readonly ProviderId[]) {
   test(`${p}: a scratch app (HERDR_APP_HOME elsewhere) asks nothing and reads no login`, async () => {
     env = { HERDR_APP_HOME: "/var/tmp/scratch-home" };
-    expect(await readUsage(p)).toEqual({ state: "off", local: true });
+    expect(await a.run(readUsage(p))).toEqual({ state: "off", local: true });
     expect(asked()).toEqual([]);
   });
 
   test(`${p}: the real app (no HERDR_APP_HOME, or the default home) asks`, async () => {
     for (const e of [{}, { HERDR_APP_HOME: join(home, ".config/herdr-app") }, { HERDR_APP_HOME: join(home, ".config/herdr-app/") }, { XDG_CONFIG_HOME: join(root, "xdg"), HERDR_APP_HOME: join(root, "xdg/herdr-app") }]) {
       rmSync(calls, { force: true });
-      env = { HERDR_USAGE_DIR: cache, ...e } as Record<string, string>;
-      expect((await readUsage(p)).state).toBe("ok");
+      env = { HERDR_USAGE_DIR: cache, ...e };
+      expect((await a.run(readUsage(p))).state).toBe("ok");
       expect(asked()).toContain("curl");
     }
   });
 
   test(`${p}: HERDR_APP_USAGE=1 turns it on in a scratch app`, async () => {
     env = { HERDR_USAGE_DIR: cache, HERDR_APP_HOME: "/var/tmp/scratch-home", HERDR_APP_USAGE: "1" };
-    expect((await readUsage(p)).state).toBe("ok");
+    expect((await a.run(readUsage(p))).state).toBe("ok");
     expect(asked()).toContain("curl");
+  });
+
+  test(`${p}: the token reaches curl on its stdin, never in a program's arguments`, async () => {
+    await a.run(readUsage(p));
+    expect(exec.calls.length).toBeGreaterThan(0);
+    for (const c of exec.calls) expect(c.args.join(" ")).not.toContain("tok\n");
+    expect(exec.calls.some((c) => c.args.some((x) => / tok\b|Bearer tok/.test(x)))).toBe(false);
   });
 }
 
+test("no login on this machine: nologin, nothing asked", async () => {
+  const before = readFileSync(join(bin, "security"), "utf8");
+  stand("security", "exit 44");
+  try {
+    env = { HERDR_USAGE_DIR: cache, HOME: join(root, "nobody") };
+    expect(await a.run(readUsage("claude"))).toEqual({ state: "nologin", local: true });
+    expect(curls()).toBe(0);
+  } finally {
+    writeFileSync(join(bin, "security"), before);
+  }
+});
+
 test("off: the views get no numbers (not a scratch home's stale ones), and it isn't asked again every tick", async () => {
   env = { HERDR_USAGE_DIR: cache, HERDR_APP_HOME: "/var/tmp/scratch-home" };
-  store["usage.last"] = { state: "ok", session: { used: 1 }, at: 1 };
-  await refreshUsage();
-  expect(usageNote()?.state).toBe("off");
-  expect(lastUsage()).toBe(null);
+  a.store.set("usage.last", { state: "ok", session: { used: 1, resets: null, length: null }, week: null, scoped: [], plan: null, at: 1 });
+  await a.run(refreshUsage());
+  expect((await a.run(usageNote()))?.state).toBe("off");
+  expect(await a.run(lastUsage())).toBe(null);
   rmSync(calls, { force: true });
-  await refreshUsage();
+  await a.run(refreshUsage());
   expect(asked()).toEqual([]);
 });
 
 test("off: a scratch app stays out of the machine's record (the real app never adopts its off, the scratch app shows none of the real numbers)", async () => {
   // The real app reads and writes the record.
-  await refreshUsage();
+  await a.run(refreshUsage());
   const file = join(cache, "usage-claude.json");
   const before = readFileSync(file, "utf8");
   expect(JSON.parse(before).note).toBe(null);
   // A scratch app on the same machine: its own shared() store, the same cache folder.
-  const scratch: any = await import(`../defaults/mods/nocturne/limits.ts?scratch=${Math.random()}`);
-  const its: Record<string, unknown> = {};
-  scratch.setHost({ shared: (k: string) => its[k] ?? null, setShared: (k: string, v: unknown) => { its[k] = v; return null; } });
+  const scratch = app();
   env = { HERDR_USAGE_DIR: cache, HERDR_APP_HOME: "/var/tmp/scratch-home" };
-  await scratch.refreshUsage("force");
-  expect(scratch.usageNote()?.state).toBe("off");
-  expect(scratch.lastUsage()).toBe(null);
-  expect(Object.values(its).some((v) => JSON.stringify(v).includes('"session"'))).toBe(false);
+  await scratch.run(refreshUsage("force"));
+  expect((await scratch.run(usageNote()))?.state).toBe("off");
+  expect(await scratch.run(lastUsage())).toBe(null);
+  expect([...scratch.store.values()].some((v) => JSON.stringify(v).includes('"session"'))).toBe(false);
   expect(readFileSync(file, "utf8")).toBe(before);
   expect(existsSync(`${file}.lock`)).toBe(false);
 });
@@ -101,57 +130,74 @@ test("off: an off note an older scratch app left in the machine's record isn't t
   mkdirSync(cache, { recursive: true });
   const old = Date.now() - 3600_000;
   writeFileSync(join(cache, "usage-claude.json"), JSON.stringify({ answer: { state: "ok", session: { used: 15, resets: null, length: 1 }, week: { used: 74, resets: null, length: 1 }, scoped: [], plan: "max 5x", at: old }, note: { state: "off", local: true, at: Date.now() }, tried: Date.now(), until: 0, fails: 0 }));
-  await refreshUsage();
-  expect(usageNote()).toBe(null);
+  await a.run(refreshUsage());
+  expect(await a.run(usageNote())).toBe(null);
   expect(curls()).toBe(1);
   expect(JSON.parse(readFileSync(join(cache, "usage-claude.json"), "utf8")).note).toBe(null);
 });
 
+test("a scratch check that can't run counts as a scratch app: nothing is asked", async () => {
+  const broken = execTest((_c, args) => {
+    if (String(args[1]).includes("HERDR_APP_HOME")) throw new Error("sh: not found");
+    return { code: 0, stdout: "", stderr: "" };
+  });
+  const shared = sharedTest();
+  const layer = Layer.provideMerge(UsageEndpoint.layer, Layer.mergeAll(broken.layer, shared.layer, workspaceTest().layer));
+  await Effect.runPromise(Effect.provide(refreshUsage("force"), layer));
+  expect(broken.calls.some((c) => String(c.args[1]).includes("curl"))).toBe(false);
+  expect(shared.store.get("usage.note")).toMatchObject({ state: "off" });
+});
+
 // ---- the machine's record: the real file and lock script
 
-
 test("the machine's file: one app asks and writes it, another app adopts it without asking", async () => {
-  await refreshUsage();
+  await a.run(refreshUsage());
   expect(curls()).toBe(1);
   const rec = JSON.parse(readFileSync(join(cache, "usage-claude.json"), "utf8"));
   expect([rec.answer.state, rec.fails, rec.until]).toEqual(["ok", 0, 0]);
   expect(existsSync(join(cache, "usage-claude.json.lock"))).toBe(false);
   // Another app: its own shared() store, the same file.
-  const other: any = await import(`../defaults/mods/nocturne/limits.ts?other=${Math.random()}`);
-  const mine: Record<string, unknown> = {};
-  other.setHost({ shared: (k: string) => mine[k] ?? null, setShared: (k: string, v: unknown) => { mine[k] = v; return null; } });
-  await other.refreshUsage();
+  const other = app();
+  await other.run(refreshUsage());
   expect(curls()).toBe(1);
-  expect(other.lastUsage()?.state).toBe("ok");
+  expect((await other.run(lastUsage()))?.state).toBe("ok");
 });
 
 test("the lock: held by another app, nobody else asks; left behind for minutes, it's taken over", async () => {
   mkdirSync(join(cache, "usage-claude.json.lock"), { recursive: true });
-  await refreshUsage();
+  await a.run(refreshUsage());
   expect(curls()).toBe(0);
-  for (const k of Object.keys(store)) delete store[k];
+  a = app();
   const old = new Date(Date.now() - 5 * 60_000);
-  require("fs").utimesSync(join(cache, "usage-claude.json.lock"), old, old);
-  await refreshUsage();
+  utimesSync(join(cache, "usage-claude.json.lock"), old, old);
+  await a.run(refreshUsage());
   expect(curls()).toBe(1);
   expect(existsSync(join(cache, "usage-claude.json.lock"))).toBe(false);
 });
 
 test("the default place is ~/.cache/herdr-app (XDG_CACHE_HOME respected)", async () => {
   env = {};
-  await refreshUsage();
+  await a.run(refreshUsage());
   expect(existsSync(join(home, ".cache/herdr-app/usage-claude.json"))).toBe(true);
-  for (const k of Object.keys(store)) delete store[k];
+  a = app();
   env = { XDG_CACHE_HOME: join(root, "xdgc") };
-  await refreshUsage();
+  await a.run(refreshUsage());
   expect(existsSync(join(root, "xdgc/herdr-app/usage-claude.json"))).toBe(true);
+});
+
+test("a record file in another shape is written over, not a crash or a stuck reading", async () => {
+  mkdirSync(cache, { recursive: true });
+  writeFileSync(join(cache, "usage-claude.json"), '{"answer": "not an answer", "tried": "yesterday"}');
+  await a.run(refreshUsage());
+  expect(curls()).toBe(1);
+  expect(JSON.parse(readFileSync(join(cache, "usage-claude.json"), "utf8")).answer.state).toBe("ok");
 });
 
 // The endpoint's answer as it came on 2026-11-13: null for what doesn't apply (a limit's `scope` on
 // the session and whole-week limits, the model windows, fields this build doesn't read). A guard
 // that asked for an object there refused the whole answer ("couldn't read").
 test("claude: the real answer's nulls (a limit without a scope, absent windows) still read", async () => {
-  const real = {
+  const real: Schema.Json = {
     five_hour: { utilization: 81.0, resets_at: "2026-11-13T13:30:00.063213+00:00", limit_dollars: null, locked_reason: null },
     seven_day: { utilization: 48.0, resets_at: "2026-11-16T17:00:00.063233+00:00", limit_dollars: null, locked_reason: null },
     seven_day_oauth_apps: null, seven_day_opus: null, seven_day_sonnet: null, pace: null, indicator: null,
@@ -167,10 +213,24 @@ test("claude: the real answer's nulls (a limit without a scope, absent windows) 
   stand("curl", `printf '%s\\n@code\\t200' '${JSON.stringify(real)}'`);
 
   try {
-    const r = await readUsage("claude");
+    const r = await a.run(readUsage("claude"));
     expect(r.state).toBe("ok");
-    expect(r).toMatchObject({ session: { used: 81 }, week: { used: 48 }, scoped: [{ name: "Fable", used: 30 }] });
+    expect(r).toMatchObject({ session: { used: 81 }, week: { used: 48 }, scoped: [{ name: "Fable", used: 30 }], plan: "max 5x" });
   } finally {
     writeFileSync(join(bin, "curl"), before);
   }
 });
+
+test("an answer of another shape says so; curl that can't connect says why", async () => {
+  const before = readFileSync(join(bin, "curl"), "utf8");
+  try {
+    stand("curl", `printf '%s\\n@code\\t200' '{"five_hour": "lots"}'`);
+    expect(await a.run(readUsage("claude"))).toEqual({ state: "error", message: "the usage endpoint's answer wasn't in a shape this build reads" });
+    stand("curl", `echo 'curl: (6) Could not resolve host: api.anthropic.com' >&2; printf '\\n@code\\t000'; exit 6`);
+    expect(await a.run(readUsage("claude"))).toEqual({ state: "error", message: "curl: (6) Could not resolve host: api.anthropic.com" });
+    // A transport failure is tried again twice inside the reading (1 s, 2 s): three requests, one reading.
+    expect(curls()).toBe(1 + 3);
+  } finally {
+    writeFileSync(join(bin, "curl"), before);
+  }
+}, 15_000);
