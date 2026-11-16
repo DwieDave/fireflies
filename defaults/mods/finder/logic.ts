@@ -194,7 +194,7 @@ export function syntaxColors(t: Theme): ReadonlyMap<string, Color> {
     ["type", t.ansi10], ["type.builtin", t.ansi10], ["tag", t.ansi10], ["attribute", t.ansi13], ["namespace", t.ansi6], ["module", t.ansi6],
     ["string", t.ansi11], ["string.escape", t.ansi9], ["string.special", t.ansi3], ["string.regex", t.ansi3], ["character", t.ansi11], ["escape", t.ansi9],
     ["number", t.ansi3], ["float", t.ansi3], ["boolean", t.ansi3], ["constant", t.ansi3], ["constant.builtin", t.ansi3],
-    ["comment", t.ansi8], ["comment.documentation", t.ansi8],
+    ["comment", t.muted], ["comment.documentation", t.muted],
     ["property", t.ansi6], ["field", t.ansi6], ["label", t.ansi3], ["operator", t.ansi9],
     ["variable.builtin", t.ansi4], ["variable.parameter", t.foreground], ["embedded", t.foreground],
     ["text.title", t.ansi4], ["text.literal", t.ansi11], ["text.uri", t.ansi6], ["text.reference", t.ansi12], ["text.emphasis", t.ansi5], ["text.strong", t.ansi5],

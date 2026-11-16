@@ -37,6 +37,7 @@ import type { Guarded } from "./guard.ts";
 import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote } from "./logic.ts";
+import { edge } from "./tones.ts";
 
 const ROW = 28;
 const LINE = 24;
@@ -521,7 +522,7 @@ export default class Picker extends View {
     const other = otherMode(this.mode);
 
     return h_flex().relative().flex_wrap().min_h(26).flex_none().px(16).py(6).gap_x(14).gap_y(4).items_center().text_size(10)
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
       .child(hint2("↑↓", "ctrl-p ctrl-n", "pick")).child(hint("pgup pgdn", "page")).child(hint("enter", this.mode === "files" ? "edit" : "edit at line"))
       .child(hint2("tab", key(other), other))
       .when(this.mode === "grep", (el) => el.child(hint("ctrl-r", "regex")).child(hint("ctrl-t", "fuzzy")))
@@ -556,18 +557,18 @@ export default class Picker extends View {
         cx.notify();
       }))
       .child(div().child(m))
-      .child(div().text_size(9.5).text_color(this.mode === m ? t.background : t.ansi8).opacity(this.mode === m ? 0.75 : 1).child(key(m)));
+      .child(div().text_size(9.5).text_color(this.mode === m ? t.background : t.muted).opacity(this.mode === m ? 0.75 : 1).child(key(m)));
 
     const hint = (k: string, what: string): Element => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(what));
 
     // Two keys for one thing: "tab / cmd-shift-f grep".
-    const hint2 = (a: string, b: string, what: string): Element => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(a)).child(div().text_color(t.ansi8).child("/"))
+    const hint2 = (a: string, b: string, what: string): Element => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(a)).child(div().text_color(t.muted).child("/"))
       .child(div().text_color(t.accent).child(b)).child(div().text_color(t.dim).child(what));
 
     const note = this.note;
     const shown = wide ? this.preview : null;
 
-    return v_flex().id("finder").size_full().bg(t.background).border(1).border_color(t.ansi0).text_size(11)
+    return v_flex().id("finder").size_full().bg(t.background).border(1).border_color(edge(t)).text_size(11)
       .key_context(CONTEXT)
       .on_action(SWITCH, (_e, cx) => {
         this.switchMode(cx);
@@ -587,14 +588,14 @@ export default class Picker extends View {
         .children(this.input ? [Input.new(this.input).flex_1().h_full().text_size(13).text_color(t.foreground).when(this.mode === "grep", (el) => el.font_family(code))] : [])
         .child(div().flex_none().text_size(10).text_color(t.dim).child(count))
         .when(this.mode === "grep", (el) => el
-          .child(div().id("grep-regex").flex_none().px(5).border(1).border_color(this.regex ? t.accent : t.ansi0).text_color(this.regex ? t.accent : t.dim)
+          .child(div().id("grep-regex").flex_none().px(5).border(1).border_color(this.regex ? t.accent : edge(t)).text_color(this.regex ? t.accent : t.dim)
             .on_click((_e, cx) => {
               this.regex = !this.regex;
               this.fuzzy = false;
               this.query(cx);
             }).child(".*")))
-        .child(h_flex().flex_none().border(1).border_color(t.ansi0).child(modeChip("files")).child(modeChip("grep")))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
+        .child(h_flex().flex_none().border(1).border_color(edge(t)).child(modeChip("files")).child(modeChip("grep")))
+        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))))
       .children(note === null ? [] : [div().px(16).py(4).text_color(t.ansi3).child(note)])
       .child(h_flex().flex_1().min_h(0)
         .child(div().id("picker-list").relative().flex_1().min_w(0).h_full().py(4)
@@ -641,7 +642,7 @@ export default class Picker extends View {
     const sel = i === this.at;
 
     return this.selected(t, h_flex().id(`file-${i}`).relative().h(ROW).flex_none().px(16).gap(10).items_center().text_size(12)
-      .hover((s) => s.bg(`${t.ansi0}55`)), sel)
+      .hover((s) => s.bg(`${edge(t)}55`)), sel)
       .child(div().relative().w(10).flex_none().text_size(11).text_color(g ? gitColor(t, g) : t.dim).child(g ?? ""))
       .child(h_flex().relative().flex_none().children(this.pieces(t, marks(name, nameRanges(r.path, r.file.ranges)), t.foreground)))
       .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().children(this.pieces(t, marks(dir, dirRanges(r.path, r.file.ranges)), sel ? t.muted : t.dim)));
@@ -653,7 +654,7 @@ export default class Picker extends View {
     return h_flex().id(`head-${i}`).h(HEAD).flex_none().px(16).pb(4).gap(10).items_end().text_size(10).text_color(t.muted)
       .child(div().flex_none().text_size(11).text_color(t.foreground).child(name))
       .child(div().flex_none().max_w(320).truncate().child(dir))
-      .child(div().relative().flex_1().h(1).mb(5).opacity(0.6).child(dither(t.ansi8, 1)))
+      .child(div().relative().flex_1().h(1).mb(5).opacity(0.6).child(dither(t.muted, 1)))
       .child(div().flex_none().child(String(r.count)));
   }
 
@@ -676,7 +677,7 @@ export default class Picker extends View {
     const out = this.lineRuns(r);
 
     return this.selected(t, h_flex().id(`line-${i}`).relative().h(LINE).flex_none().pl(26).pr(16).gap(10).items_center()
-      .hover((s) => s.bg(`${t.ansi0}55`)), sel)
+      .hover((s) => s.bg(`${edge(t)}55`)), sel)
       .child(div().relative().w(40).flex_none().text_right().font_family(code).text_size(11.5).text_color(t.dim).child(String(m.line)))
       .child(h_flex().relative().flex_1().min_w(0).overflow_hidden().font_family(code).text_size(12)
         .children(out.map(([piece, color, hit], j) => div().id(`l-${i}-${j}`).flex_none()
@@ -687,8 +688,8 @@ export default class Picker extends View {
     const root = this.root ?? "";
     const rel = p.path.startsWith(`${root}/`) ? p.path.slice(root.length + 1) : p.path;
 
-    return v_flex().id("picker-preview").w(previewWidth(this.size.width)).flex_none().h_full().border_l(1).border_color(t.ansi0)
-      .child(h_flex().h(26).flex_none().px(14).gap(10).items_center().border_b(1).border_color(t.ansi0).text_color(t.dim)
+    return v_flex().id("picker-preview").w(previewWidth(this.size.width)).flex_none().h_full().border_l(1).border_color(edge(t))
+      .child(h_flex().h(26).flex_none().px(14).gap(10).items_center().border_b(1).border_color(edge(t)).text_color(t.dim)
         .child(div().text_color(t.foreground).truncate().child(rel))
         .child(div().child(`${p.line}`))
         .child(div().flex_1())
