@@ -40,7 +40,8 @@ export default defineConfig({
   options: { typeAware: true },
   plugins: ["effecttsgo"],
   jsPlugins: [{ name: "anti-slop-effect", specifier: "./tools/oxlint/anti-slop/effect/index.ts" }],
-  ignorePatterns: ["tools/oxlint/anti-slop/**", "**/gpui-kit.d.ts", "**/*.d.ts"],
+  // defaults/lib/effect is Effect itself, bundled (scripts/effect-bundle.ts): not ours to lint.
+  ignorePatterns: ["tools/oxlint/anti-slop/**", "**/gpui-kit.d.ts", "**/*.d.ts", "defaults/lib/effect/**"],
   rules: {
     ...rules,
     "anti-slop-effect/no-manual-effect-error-tag": "error",
