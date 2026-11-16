@@ -29,6 +29,26 @@ pub fn export_libraries() {
     }));
 }
 
+/// `herdr-app types <dir>` for a mod that uses the libraries (a mod in a
+/// repository of its own, docs/effect-mods.md "Mods outside this repository"):
+/// the `@fireflies/*` libraries, every file as this build serves them (and
+/// their package.json and .d.ts files), into `<dir>/node_modules/@fireflies/`,
+/// where tsc, oxlint and bun find them by name. `effect` itself isn't written:
+/// the mod installs it from npm, at the version the kit's package.json names
+/// as its peer. Answers how many files it wrote.
+pub fn write_library_types(dir: &Path) -> std::io::Result<usize> {
+    let mut written = 0;
+    for (path, bytes) in MOD_LIBRARIES.iter().filter(|(path, _)| path.starts_with("@fireflies/")) {
+        let to = dir.join("node_modules").join(path);
+        if let Some(parent) = to.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(&to, bytes)?;
+        written += 1;
+    }
+    Ok(written)
+}
+
 #[cfg(test)]
 mod render_tests;
 #[cfg(test)]
