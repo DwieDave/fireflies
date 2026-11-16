@@ -572,6 +572,16 @@ pub fn click_opens_tab(link: bool, button: i64, cmd: bool, shift: bool) -> Optio
     (link && (middle || cmd)).then_some(!shift)
 }
 
+/// WKFullscreenState in words, for `native.debug`.
+pub fn fullscreen_name(state: i64) -> &'static str {
+    match state {
+        1 => "entering",
+        2 => "in",
+        3 => "exiting",
+        _ => "none",
+    }
+}
+
 /// The link menu's "… in New Window" items open a tab in a `tabs: true` web
 /// view: their title says so. None: not such an item (or another language).
 pub fn tab_menu_title(title: &str) -> Option<String> {
@@ -708,6 +718,11 @@ mod tests {
         // In an 800pt-high unflipped view the top edge at y=20 becomes 800-20-50.
         assert_eq!(a.flipped(800.0), (10.0, 730.0, 100.0, 50.0));
         assert!(a.contains(10.0, 20.0) && !a.contains(110.0, 20.0));
+    }
+
+    #[test]
+    fn fullscreen_states_have_names() {
+        assert_eq!([0, 1, 2, 3].map(fullscreen_name), ["none", "entering", "in", "exiting"]);
     }
 
     #[test]

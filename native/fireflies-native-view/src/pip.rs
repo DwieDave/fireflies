@@ -319,6 +319,14 @@ pub(crate) fn start(mtm: MainThreadMarker, web_key: &str, generation: u64, web: 
         end(mtm, web_key, true);
         return Ok(json!({ "of": web_key, "active": false }));
     }
+    // A page in fullscreen sits in WebKit's own window: it comes back into its
+    // pane first (as Esc brings it: WebKit's closeAllMediaPresentations leaves
+    // the view at the screen's size), then the video is taken from there.
+    if crate::macos::in_fullscreen(web) {
+        run_then(mtm, web, None, EXIT_FULLSCREEN_SCRIPT, |_| {});
+        out_of_fullscreen(web_key.to_owned(), generation, Weak::from(web), FULLSCREEN_TRIES);
+        return Ok(json!({ "of": web_key, "active": true }));
+    }
     // One at a time: another page's video goes home first.
     if let Some(other) = SESSION.with(|s| s.borrow().as_ref().map(|s| s.source.clone())) {
         end(mtm, &other, false);
@@ -342,6 +350,36 @@ pub(crate) fn start(mtm: MainThreadMarker, web_key: &str, generation: u64, web: 
         });
     });
     Ok(json!({ "of": web_key, "active": true }))
+}
+
+/// Leaves the page's fullscreen as its Esc does (an iframe's too: from the top
+/// document, it is left entirely).
+const EXIT_FULLSCREEN_SCRIPT: &str = "document.fullscreenElement && document.exitFullscreen().catch(() => {}); 'ok'";
+
+/// How long picture in picture waits for a page to leave fullscreen: tries of
+/// FULLSCREEN_STEP.
+const FULLSCREEN_TRIES: u32 = 40;
+const FULLSCREEN_STEP: f64 = 0.1;
+
+/// Starts picture in picture once the page is back in its pane (WebKit's
+/// fullscreen state says none), or says it couldn't.
+fn out_of_fullscreen(key: String, generation: u64, web: Weak<WKWebView>, tries: u32) {
+    let block = RcBlock::new(move |_timer: std::ptr::NonNull<AnyObject>| {
+        let (Some(mtm), Some(w)) = (MainThreadMarker::new(), web.load()) else { return };
+        if !crate::macos::in_fullscreen(&w) {
+            if let Err(e) = start(mtm, &key, generation, &w) {
+                emit_event(&key, generation, "pip.start", json!({ "error": e }));
+            }
+        } else if tries == 0 {
+            emit_event(&key, generation, "pip.start", json!({ "error": "the page didn't leave fullscreen" }));
+        } else {
+            out_of_fullscreen(key.clone(), generation, web.clone(), tries - 1);
+        }
+    });
+    let Some(cls) = objc2::runtime::AnyClass::get(c"NSTimer") else { return };
+    let _: Retained<AnyObject> = unsafe {
+        msg_send![cls, scheduledTimerWithTimeInterval: FULLSCREEN_STEP, repeats: false, block: &*block]
+    };
 }
 
 /// A video is marked: the session starts and the page's mod opens a player.

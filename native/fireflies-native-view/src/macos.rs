@@ -27,7 +27,7 @@ use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
 use objc2_web_kit::{
     WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate, WKScriptMessage,
     WKScriptMessageHandler, WKUIDelegate, WKUserContentController, WKWebView,
-    WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
+    WKFullscreenState, WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
 };
 use serde_json::{Value, json};
 use std::cell::{Cell, RefCell};
@@ -426,6 +426,9 @@ fn make(
                 config
                     .preferences()
                     .setJavaScriptCanOpenWindowsAutomatically(false);
+                // A page may go fullscreen (a video's button, `requestFullscreen`):
+                // WebKit moves the view into a fullscreen window of its own and back.
+                fullscreen_on(&config);
                 if let Source::File {
                     trust: Trust::Static,
                     ..
@@ -704,6 +707,39 @@ fn web_state(view: &WKWebView) -> Value {
             "canGoBack": view.canGoBack(),
             "canGoForward": view.canGoForward(),
         })
+    }
+}
+
+/// Lets the page's elements go fullscreen (`WKPreferences.elementFullscreenEnabled`,
+/// macOS 12.3; off by default, and `document.fullscreenEnabled` says false).
+fn fullscreen_on(config: &WKWebViewConfiguration) {
+    unsafe {
+        let prefs = config.preferences();
+        let can: bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(setElementFullscreenEnabled:)];
+        if can {
+            prefs.setElementFullscreenEnabled(true);
+        }
+    }
+}
+
+/// Whether the page may go fullscreen, and where it is (`none`, `entering`,
+/// `in`, `exiting`; WKWebView.fullscreenState, macOS 13), for `native.debug`.
+fn fullscreen_state(view: &WKWebView) -> Value {
+    unsafe {
+        let prefs = view.configuration().preferences();
+        let enabled: bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(isElementFullscreenEnabled)];
+        let enabled = enabled && prefs.isElementFullscreenEnabled();
+        let has_state: bool = msg_send![view, respondsToSelector: objc2::sel!(fullscreenState)];
+        let state = has_state.then(|| crate::fullscreen_name(view.fullscreenState().0 as i64));
+        json!({ "enabled": enabled, "state": state })
+    }
+}
+
+/// Whether the page has an element fullscreen (or is going in or out).
+pub(crate) fn in_fullscreen(view: &WKWebView) -> bool {
+    unsafe {
+        let has_state: bool = msg_send![view, respondsToSelector: objc2::sel!(fullscreenState)];
+        has_state && view.fullscreenState() != WKFullscreenState::NotInFullscreen
     }
 }
 
@@ -1096,6 +1132,7 @@ fn entry_state(key: &str, e: &Entry, r: &Renderer) -> Value {
         Renderer::Web { view, .. } => {
             let mut s = web_state(view);
             s["video"] = json!(crate::page::has_video(key));
+            s["fullscreen"] = fullscreen_state(view);
             s
         }
         Renderer::Pdf { view, .. } => pdf_state(view),

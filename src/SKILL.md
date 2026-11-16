@@ -43,7 +43,8 @@ their `links` setting). A web pane keeps tabs: `herdr-app do
 browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
-the shown one).
+the shown one). A page may go fullscreen there (a video's button; Esc
+comes back).
 
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
@@ -319,7 +320,9 @@ those files or the generated guide. The app rewrites them on start.
   don't appear in `shot`. Every overlay painted after the one a view is in
   (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
   backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
-  layer, holes and dim, so check those instead of a screenshot.
+  layer, holes and dim, so check those instead of a screenshot. A web view's
+  entry there also says whether its page may go fullscreen and whether it is
+  (`fullscreen { enabled, state }`).
 - A window overlay opened with `snap: true` (the picture in picture player,
   while its snapping is on) snaps to the eight places of the shown tab's pane
   grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`
