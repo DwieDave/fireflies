@@ -19,8 +19,8 @@ import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
 
 /** A "#rrggbb" or "#rrggbbaa" color's channels and alpha (0..1), or null. */
-function parts(c: string | undefined): readonly [number, number, number, number] | null {
-  if (typeof c !== "string" || !/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(c)) return null;
+function parts(c: Color | undefined): readonly [number, number, number, number] | null {
+  if (c === undefined || !/^#(?:[0-9a-f]{6}|[0-9a-f]{8})$/i.test(c)) return null;
 
   const at = (i: number) => parseInt(c.slice(i, i + 2), 16);
 

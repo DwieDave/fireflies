@@ -18,6 +18,7 @@ import type { JobBox, Routed } from "./wires.ts";
 import { route, NW, NH, RW } from "./wires.ts";
 
 export { NW, NH, GAP_X, GAP_Y, PAD, RW } from "./wires.ts";
+
 import { edge } from "./tones.ts";
 
 /** Which jobs each job waits for (model.ts jobParents), or null. */
