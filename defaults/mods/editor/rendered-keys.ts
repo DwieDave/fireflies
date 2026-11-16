@@ -1,13 +1,17 @@
 // Keys in the rendered view's lit block (rendered.ts hands them here) and
 // adding blocks: up / down past its first or last row step into the unit
 // before or after; enter continues a list, task or quote (mdedit.ts enter),
-// else makes a new paragraph below (a paragraph splits at the caret; vim's
-// normal mode: enterBelow); undo and redo are the file's; a "+" or "add a
-// block" puts an empty paragraph after a unit; a click lights a unit up.
+// at a block's very start opens a new empty block above it (the caret in
+// it), else makes a new paragraph below (a paragraph splits at the caret;
+// vim's normal mode: enterBelow); undo and redo are the file's; a "+" or "add
+// a block" puts an empty paragraph after a unit; a click lights a unit up.
+// An empty block made here (enter, a "+") that the caret leaves without a key
+// typed in it goes again, the lines it added with it: the note's bytes are as
+// they were, no blank lines piling up at its top or between its blocks.
 
 import type { Context, KeyEvent } from "gpui-kit";
 import type { EditorPosition } from "gpui-base";
-import type { Unit } from "./live.ts";
+import type { Range, Unit } from "./live.ts";
 import { step, unitFor } from "./live.ts";
 import { enter } from "./mdedit.ts";
 import { editBetween } from "./md-text.ts";
@@ -39,6 +43,51 @@ export function blockKey(v: Rendered, e: KeyEvent, cx: Context): boolean {
   return false;
 }
 
+/** The file's line end. */
+const eolOf = (v: Rendered): string => (/\r\n/.test(v.text ?? "") ? "\r\n" : "\n");
+
+/** An edit of the file made here, the view brought up to it without lighting from the change event. */
+function editFile(v: Rendered, start: Pos, end: Pos, text: string, cx: Context | null | undefined): void {
+  v.pushing = true;
+
+  try {
+    v.doc.editor.edit([{ start, end, text }]);
+  } finally {
+    v.pushing = false;
+  }
+
+  v.setText(v.fileText());
+  v.recut(cx);
+}
+
+/** An empty block made here that the caret leaves untouched: the lines it added go (the note
+ *  as it was). -> the lines removed, null when there were none. */
+export function dropMade(v: Rendered, cx: Context | null | undefined): Range | null {
+  const span = v.madeSpan;
+  const at = v.made;
+
+  v.madeSpan = null;
+
+  if (!span || at === null || at < span.from || at > span.to) return null;
+
+  v.setText(v.fileText());
+
+  const ls = v.lines();
+
+  if (span.to >= ls.length || ls.slice(span.from, span.to + 1).some((l) => l.trim())) return null;
+
+  v.made = null;
+
+  if (span.to + 1 < ls.length) editFile(v, { line: span.from, col: 0 }, { line: span.to + 1, col: 0 }, "", cx);
+  else if (span.from > 0) editFile(v, { line: span.from - 1, col: (ls[span.from - 1] ?? "").length }, { line: span.to, col: (ls[span.to] ?? "").length }, "", cx);
+  else editFile(v, { line: 0, col: 0 }, { line: span.to, col: (ls[span.to] ?? "").length }, "", cx);
+
+  return span;
+}
+
+/** A line's number after `span` was removed. */
+const shifted = (line: number, span: Range | null): number => (span && line > span.to ? line - (span.to - span.from + 1) : line);
+
 /** Enter: a list item, task or quote goes on (mdedit.ts); on the last line of any other block, a new paragraph below. */
 function enterKey(v: Rendered, cx: Context): boolean {
   const sel = v.localSel();
@@ -65,6 +114,13 @@ function enterKey(v: Rendered, cx: Context): boolean {
   // An empty block made here is the new block already: enter keeps it (no blank lines piling up).
   if (v.offersKinds()) return true;
 
+  // At the block's very start: a new block above it, the caret in it (nothing moves from under it).
+  if (c.line === 0 && c.col === 0 && v.piece.trim() && v.unit.kind !== "front") {
+    openAbove(v, cx);
+
+    return true;
+  }
+
   // A paragraph splits at the caret on any of its lines (the lines after go with the rest).
   if (v.unit.kind === "para" && c.line < last) {
     splitAt(v, v.range.from + c.line, c.col, cx, false);
@@ -82,6 +138,25 @@ function enterKey(v: Rendered, cx: Context): boolean {
   splitAt(v, v.range.to, c.col, cx);
 
   return true;
+}
+
+/** A new empty block above the lit one, the caret in it. */
+function openAbove(v: Rendered, cx: Context): void {
+  const at = v.range.from;
+  const ls = v.lines();
+  const nl = eolOf(v);
+  // A blank line before it too when a block ends right above (else it'd be more of that one).
+  const glue = at > 0 && Boolean(ls[at - 1]?.trim());
+
+  v.doc.editor.edit([{ start: { line: at, col: 0 }, end: { line: at, col: 0 }, text: glue ? nl + nl + nl : nl + nl }]);
+
+  const made = glue ? at + 1 : at;
+
+  v.doc.editor.set_cursor(made, 0);
+  v.made = made;
+  v.pull(cx);
+  v.madeSpan = { from: at, to: at + (glue ? 2 : 1) };
+  v.block.focus();
 }
 
 /** Vim's enter in normal mode (nothing pending): a new block below the lit one, as enter at
@@ -102,8 +177,7 @@ export function enterBelow(v: Rendered, cx: Context): boolean {
  *  inside a paragraph, its lines after go with the rest). */
 export function splitAt(v: Rendered, line: number, col: number, cx: Context, glue = true): void {
   const ls = v.lines();
-  const crlf = /\r\n/.test(v.text ?? "");
-  const nl = crlf ? "\r\n" : "\n";
+  const nl = eolOf(v);
   const rest = (ls[line] ?? "").slice(col);
   const next = ls[line + 1];
   // A blank line between, and one after it when something follows straight on.
@@ -116,11 +190,17 @@ export function splitAt(v: Rendered, line: number, col: number, cx: Context, glu
   v.doc.editor.set_cursor(line + 2, 0);
   v.made = line + 2;
   v.pull(cx);
+
+  // An empty new block: the lines it added, to take away again if it's left untouched.
+  if (glue && !rest) v.madeSpan = { from: line + 1, to: line + 2 + (tail ? 1 : 0) };
+
   v.block.focus();
 }
 
 /** An empty paragraph after unit `u` (the "+" beside it, "add a block" under the last), lit, the caret in it. */
 export function addAfter(v: Rendered, u: Unit | null, cx: Context): void {
+  const span = dropMade(v, cx);
+
   if (!u) {
     // An empty document: its first line.
     v.doc.editor.set_cursor(0, 0);
@@ -134,7 +214,7 @@ export function addAfter(v: Rendered, u: Unit | null, cx: Context): void {
   if (v.stale) v.recut(cx);
 
   const ls = v.lines();
-  const at = Math.min(u.to, ls.length - 1);
+  const at = Math.min(shifted(u.to, span), ls.length - 1);
 
   splitAt(v, at, (ls[at] ?? "").length, cx);
 }
@@ -153,12 +233,14 @@ function edge(v: Rendered, dir: number, cx: Context): boolean {
 
 /** Into the unit before (-1) or after (1); false at the document's ends. */
 function stepUnit(v: Rendered, dir: number, col: number, cx: Context): boolean {
-  if (v.stale) {
-    v.recut(cx);
-    v.units = v.all.filter((u) => u.to < v.range.from || u.from > v.range.to);
-  }
+  const span = dropMade(v, cx);
 
-  const s = step(v.text, v.units, v.range, dir, col);
+  if (v.stale) v.recut(cx);
+
+  v.units = v.all.filter((u) => u.to < v.range.from || u.from > v.range.to);
+
+  // The new block is gone: its neighbours are the units around where it stood.
+  const s = span ? step(v.text, v.all, { from: span.from, to: span.from - 1 }, dir, col) ?? step(v.text, v.all, { from: span.from, to: span.from - 1 }, -dir, col) : step(v.text, v.units, v.range, dir, col);
 
   if (!s) return false;
 
@@ -189,9 +271,11 @@ function lastRow(v: Rendered, c: Pos, lines: readonly string[]): boolean {
 
 /** A click on a drawn unit: it lights up, the caret on its first line (`end`: its last). */
 export function clickUnit(v: Rendered, clicked: Unit, cx: Context, end = false): void {
+  const span = dropMade(v, cx);
   let u = clicked;
 
-  if (v.stale) {
+  if (span) u = unitFor(v.all, shifted(clicked.from, span));
+  else if (v.stale) {
     v.recut(cx);
     u = unitFor(v.all, u.from);
   }

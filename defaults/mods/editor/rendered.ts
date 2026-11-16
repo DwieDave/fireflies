@@ -173,6 +173,8 @@ export class Rendered {
   pushing = false;
   pre: Pre | null = null;
   made: number | null = null; // the line of an empty block made here (enter, a +)
+  /** The lines that empty block added: they go again when the caret leaves it untouched. */
+  madeSpan: Range | null = null;
   block: EditorStateT;
 
   constructor(doc: RenderedDoc, host: RenderedHost) {
@@ -382,6 +384,9 @@ export class Rendered {
     this.piece = v;
     this.range = r.range;
 
+    // A block made here and typed into is the note's now: leaving it keeps it.
+    if (v.trim()) this.madeSpan = null;
+
     // The units after the lit lines move with them (their text, keys and heights kept);
     // those that were inside them are cut again once the caret leaves.
     const oldTo = r.range.to - delta;
@@ -425,6 +430,9 @@ export class Rendered {
     const now = this.fileText();
 
     if (now !== this.text) {
+      // Changed from elsewhere (vim, undo, a command, the disk): the lines a new block added
+      // aren't known to be where they were.
+      this.madeSpan = null;
       this.setText(now);
       this.recut(cx);
       // What's lit is the caret's now, its lines as they are (on the same first line, edited

@@ -322,8 +322,10 @@ export function onChanged(ed: EditorPane, cx: Context, d: Doc = ed.shown()): voi
   if (d.markdown && d.view === "rendered") d.rendered?.pull(cx);
 
   if (d.scratch) {
-    // A scratchpad saves itself: never unsaved, written a moment after the typing.
-    if (d.text !== (d.saved ?? "")) {
+    // A scratchpad saves itself: never unsaved, written a moment after the typing. Against
+    // the write under way when there is one: a text back to what was on disk before it
+    // (a new block left untouched) is written again.
+    if (d.text !== (d.writing ?? d.saved ?? "")) {
       ed.timerCx = cx;
       d.autosave?.touch();
     }

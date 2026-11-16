@@ -149,6 +149,8 @@ test:
     bun test scripts/editor-rendered.test.ts
     # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
+    # The scratchpad edited as one document, by keys on a note like Developer's: enter at a block's start opens one above, an untouched new block leaves no blank lines (on disk too).
+    bun test scripts/editor-scratchpad-edit.test.ts
     # Pictures in Markdown: image blocks drawn (broken and web ones too), a pasted screenshot or copied image file saved beside the file once and put in as a block, vim's p, undo, round trip (fake clipboard, a real PNG).
     bun test scripts/editor-images.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
