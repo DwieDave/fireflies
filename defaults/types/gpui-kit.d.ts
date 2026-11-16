@@ -536,6 +536,17 @@ declare module "gpui-kit" {
     modifiers: Modifiers;
   }
 
+  /** What an `on_pinch` handler receives: a trackpad pinch. */
+  export interface PinchEvent {
+    /** The change in magnification: 0.1 is ten percent larger, -0.1 smaller. */
+    delta: number;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
   /**
    * The base class of every view: subclass it and default-export the subclass.
    *
@@ -796,6 +807,11 @@ declare module "gpui-kit" {
      * the gesture drives something else — a zoom, a value, a custom viewport.
      */
     on_scroll_wheel<Self extends Element>(this: Self, handler: (event: ScrollWheelEvent, cx: Context) => void): Self;
+    /**
+     * GPUI `InteractiveElement::on_pinch`: a trackpad pinch over this element
+     * (macOS), for a zoom. Use on a plain layout element.
+     */
+    on_pinch<Self extends Element>(this: Self, handler: (event: PinchEvent, cx: Context) => void): Self;
     /**
      * `handler(event, cx)` when the named action is dispatched to this element
      * or to something inside it.
