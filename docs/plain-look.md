@@ -163,11 +163,13 @@ In plain only what the cards need: header heights, gutters.
 | `@fireflies/toolground` (0a) | the tab strip's plate and ledge: `fill()` flat, the horizon `rule()` | themes firefly, after wave 0 |
 | `@fireflies/viewer` (0b) | `viewer-bars.ts` buttons and chips; `viewer-views.ts` checker stays (a picture's transparency) | themes firefly, after wave 0 |
 | `@fireflies/form-keys`, `@fireflies/menu-place`, `@fireflies/dividers` | no chrome of their own | none |
-| `@fireflies/tones`, `@fireflies/layout-look` (0a) | look's copies (`look/tones.ts`, `look/layout-look.ts`) go: look imports them by name and re-exports them | themes firefly, after 0a |
+| `@fireflies/tones`, `@fireflies/layout-look` (0a) | look imports them by name and re-exports them (`import { edge, dithered } from "@fireflies/look"` works) | done |
 
-When 0a lands: `@fireflies/look`'s `index.ts` re-exports `@fireflies/tones`
-and `@fireflies/layout-look` instead of its copies; the mods' own copies are
-gone with 0a already.
+A test that loads a mod importing `@fireflies/look` (or a library itself)
+uses scripts/mod-source.ts: `importMod` loads `@fireflies/*` with the test's
+stand-ins, `importLibrary(spec, standins)` loads one library; a stand-in for
+`herdr` gives `layout` (a layout tree, nocturne's for the dithered look) and
+`shared("layout")` (its name), as scripts/look.test.ts does.
 
 ## Art that stays (both looks)
 
