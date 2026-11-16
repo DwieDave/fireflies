@@ -296,6 +296,13 @@ export function previewLines(height: number): number {
   return Math.max(12, Math.ceil(Math.max(0, height - PREVIEW_CHROME) / PREVIEW_LINE) + 3);
 }
 
+/** A file the preview draws and the editor doesn't edit (a picture, SVG too,
+ *  a PDF, a database, a font, a clip): picked, it opens in a preview pane, as
+ *  from the files pane (file-tree/state.ts isPreviewFile, the same list). */
+export const PREVIEW_FILE = /\.(png|jpe?g|gif|webp|bmp|tiff?|ico|svg|avif|hei[cf]|pdf|sqlite3?|db3?|ttf|otf|ttc|woff2?|mp4|m4v|mov|mp3|m4a|aac|wav|aiff?|flac|caf)$/i;
+
+export const isPreviewFile = (path: string): boolean => PREVIEW_FILE.test(path);
+
 /** The other mode. */
 export const otherMode = (mode: Mode): Mode => (mode === "files" ? "grep" : "files");
 
