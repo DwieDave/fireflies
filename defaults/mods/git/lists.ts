@@ -31,6 +31,7 @@ export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, d
   const vis = px ? rowWindow(n, 0, px, rowH).vis : Math.max(1, v.vis[ctx] ?? 12);
 
   v.vis[ctx] = vis;
+  v.rowPx[ctx] = rowH;
 
   let top = v.top[ctx] ?? 0;
   const sel = Math.min(v.sel[ctx] ?? 0, Math.max(0, n - 1));

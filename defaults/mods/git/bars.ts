@@ -6,7 +6,7 @@ import { div, svg } from "gpui-kit";
 import type { Context } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import type { Binding, KeyContext, ListContext } from "./keys.ts";
+import type { Action, Binding, KeyContext, ListContext } from "./keys.ts";
 import { lookup, barKeys, menuKeys, bindings, keyLabel, isListContext } from "./keys.ts";
 import { act } from "./actions.ts";
 import type { MenuItem } from "./popups.ts";
@@ -116,7 +116,16 @@ export function openKeys(v: GitView) {
 
 /** A row's right-click menu: its context's actions with their keys. */
 export function contextMenu(v: GitView, ctx: ListContext | "staging" | "main") {
-  const items: MenuItem[] = menuKeys(ctx).map((b) => ({ key: keyLabel(b.key), label: b.label, danger: b.flags.has("danger"), go: (cx: Context) => v.run(b.action, cx) }));
+  // At the press; a menu an entry opens (Discard…, Reset to this…) stands there too.
+  const at = { x: v.mouse.x, y: v.mouse.y };
+
+  const go = (action: Action, cx: Context) => {
+    v.menuNear = at;
+    v.run(action, cx);
+    v.menuNear = undefined;
+  };
+
+  const items: MenuItem[] = menuKeys(ctx).map((b) => ({ key: keyLabel(b.key), label: b.label, danger: b.flags.has("danger"), go: (cx: Context) => go(b.action, cx) }));
 
   if (!v.show && PANE_CONTEXTS.has(ctx)) {
     items.push({ key: "ctrl-p", label: "Open the diff as a pane", go: () => openPane(v, false) });
@@ -126,5 +135,5 @@ export function contextMenu(v: GitView, ctx: ListContext | "staging" | "main") {
   const x = v.item(ctx);
   const title = nameOf(x) ?? pathOf(x) ?? subjectOf(x) ?? CONTEXT_NAMES[ctx];
 
-  v.menu({ title: title.slice(0, 60), items, at: { x: v.mouse.x, y: v.mouse.y } });
+  v.menu({ title: title.slice(0, 60), items, at });
 }

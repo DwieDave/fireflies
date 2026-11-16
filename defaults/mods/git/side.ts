@@ -5,7 +5,7 @@ import { div } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
-import { panel } from "./draw.ts";
+import { panel, unzoom } from "./draw.ts";
 import type { Panel, Tab, SideOptions } from "./state.ts";
 import { PANELS, isTabbed, TABS, WIDE_ROW, ROW } from "./state.ts";
 import { drawRow } from "./rows.ts";
@@ -113,6 +113,9 @@ export function sidePanel(v: GitView, t: Theme, p: Panel, options: SideOptions =
       loadMain(v);
       cx.notify();
     },
+  }).on_size_change((size) => {
+    // Where a key's menu finds the selected row (menu-anchor.ts).
+    v.panelPx[p] = { width: unzoom(size.width), height: unzoom(size.height) };
   }).on_mouse_down("left", (_e, cx) => {
     v.handle?.focus();
 

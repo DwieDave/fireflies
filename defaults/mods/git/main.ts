@@ -61,6 +61,8 @@ import { act } from "./actions.ts";
 import type { CommitOptions, ConfirmOptions, MenuOptions, PromptOptions } from "./popups.ts";
 import { Popups } from "./popups.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
+import type { Anchor } from "./menu-place.ts";
+import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
 import { empty, unzoom, unzoomSize } from "./draw.ts";
@@ -157,6 +159,13 @@ export default class GitView extends View {
   reloadQueued = false;
   pickedPath = false;
   listPx: { [C in ListContext]?: number } = {};
+  /** Each list's row height as last drawn, and each side panel's size (layout px): where a key's
+   *  menu finds the selected row (menu-anchor.ts). */
+  rowPx: { [C in ListContext]?: number } = {};
+  panelPx: { [P in Panel]?: { readonly width: number; readonly height: number } } = {};
+  /** What a menu opened while an action runs stands at (menu-place.ts): the selected row for a
+   *  row's key, the press for an entry of a right-click menu; undefined: in the middle. */
+  menuNear: Anchor | undefined = undefined;
   mainPx: MainHeights = {};
   otherTop: OtherTops = {};
   mainVis: number | null = null;
@@ -427,7 +436,7 @@ export default class GitView extends View {
 
   prompt(o: PromptOptions) { this.popups.prompt(o); }
 
-  menu(o: MenuOptions) { this.popups.menu(o); }
+  menu(o: MenuOptions) { this.popups.menu(o.at === undefined ? { ...o, at: this.menuNear ?? null } : o); }
 
   commitPopup(o: CommitOptions) { this.popups.commit(o); }
 
@@ -629,7 +638,14 @@ export default class GitView extends View {
 
     if (!b) return;
 
-    if (!act(this, b.action, cx)) return;
+    // A row's own action (one its right-click menu lists) opens its menu beside the row.
+    this.menuNear = b.flags.has("menu") && isListContext(ctx) ? rowAnchor(this, ctx) : undefined;
+
+    const done = act(this, b.action, cx);
+
+    this.menuNear = undefined;
+
+    if (!done) return;
 
     cx.stop_propagation();
     cx.notify();
