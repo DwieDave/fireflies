@@ -28,7 +28,7 @@ import type { Guarded } from "./guard.ts";
 import { rows } from "./keymap.ts";
 import type { KeyEntry, MapRow } from "./keymap.ts";
 import { ART, dither, pip, tracked } from "./kit.ts";
-import { keysHint, keysView, keysKey } from "./keyhelp.ts";
+import { keysHint, keysView, keysKey } from "@fireflies/keyhelp";
 import type { HelpLine } from "./nav.ts";
 import { edge } from "@fireflies/tones";
 

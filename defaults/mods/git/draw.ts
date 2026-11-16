@@ -13,7 +13,7 @@ import type { Theme } from "herdr";
 import type { GraphRow } from "./graph.ts";
 import { segments } from "./graph.ts";
 import type { DiffRow } from "./patch.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import { edge as edgeTone } from "@fireflies/tones";
 import { flat } from "@fireflies/layout-look";
 

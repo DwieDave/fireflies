@@ -57,7 +57,7 @@ import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
 import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import { SIDEBAR_HELP, blockOf, isLayoutNode } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.ts";

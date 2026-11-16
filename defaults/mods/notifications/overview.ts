@@ -37,8 +37,8 @@ import { answer } from "./drive.ts";
 import { openAsk, forget, followCommands, overviewBeat, BEAT, OVERVIEW_H } from "./open.ts";
 import type { KeyContext, KeyInput } from "./open.ts";
 import { dither, pip, logo, horizon, button, stop, TYPE_COLOR } from "./kit.ts";
-import type { KeyRow } from "./keyhelp.ts";
-import { hint as barHint, keysHint, keysView, keysKey } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
+import { hint as barHint, keysHint, keysView, keysKey } from "@fireflies/keyhelp";
 import type { OptionKind, PermissionRequest, QuestionRequest } from "./request.ts";
 import { edge } from "@fireflies/tones";
 

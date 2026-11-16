@@ -6,7 +6,7 @@
 import { home, props } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 import type { Index, Port, ProcNode, Row } from "./logic.ts";
 import { stripLayout } from "./vitals.ts";
 

@@ -42,8 +42,8 @@ import { fenced, isLocalSource, MarkdownDoc, cacheImage, taskToggle } from "./ma
 import { follow, dirname, basename, join, tilde } from "./paths.ts";
 import type { DocLink } from "./links.ts";
 import { anchorOf, documentLinks, lastIndex, nextLink, nextHeading } from "./links.ts";
-import { keysKey } from "./keyhelp.ts";
-import type { KeyRow } from "./keyhelp.ts";
+import { keysKey } from "@fireflies/keyhelp";
+import type { KeyRow } from "@fireflies/keyhelp";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
 import * as Bars from "./bars.ts";
 

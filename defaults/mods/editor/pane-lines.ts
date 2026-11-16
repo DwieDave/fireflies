@@ -3,7 +3,7 @@
 // conflict, the body, the problems' drawer, the hints and keys strip.
 
 import type EditorPane from "./main.ts";
-import { hint, keysHint, keysKey, keysView } from "./keyhelp.ts";
+import { hint, keysHint, keysKey, keysView } from "@fireflies/keyhelp";
 import { basename, editorKeys, hintList } from "./logic.ts";
 import { LOOK_KEYS } from "./tabs.ts";
 import { Editor, h_flex, v_flex } from "gpui-base";

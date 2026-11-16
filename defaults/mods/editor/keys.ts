@@ -1,7 +1,7 @@
 // The preview's keys as the `?` strip lists them, per way of showing a file,
 // and a key event's name (no herdr imports: bun tests it).
 
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 import type { LookKind } from "./kinds.ts";
 
 /** A key as keyOf reads it (GPUI's KeyEvent has these and more). */

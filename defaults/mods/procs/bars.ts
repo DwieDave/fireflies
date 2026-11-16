@@ -5,7 +5,7 @@ import { div, svg } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import { hint, keysHint } from "./keyhelp.ts";
+import { hint, keysHint } from "@fireflies/keyhelp";
 import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
 import { ART, FOOT, HEAD } from "./state.ts";

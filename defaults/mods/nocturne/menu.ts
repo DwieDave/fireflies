@@ -31,7 +31,7 @@ import type { PaneInfo, SpaceInfo, TabInfo, Theme } from "herdr";
 import { arrayOf, isNumber, isString, literal, nullable, object, readShared, readSharedList, sharedKey, writeShared } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
-import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
+import { keysView, keysKey, keysHeight } from "@fireflies/keyhelp";
 import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";

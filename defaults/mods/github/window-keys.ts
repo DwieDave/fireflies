@@ -4,7 +4,7 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import type { WebLink } from "./model.ts";
 import { noteOf } from "./kit.ts";
-import { keysKey } from "./keyhelp.ts";
+import { keysKey } from "@fireflies/keyhelp";
 import Actions from "./actions.ts";
 import { TABS, isTabId } from "./window-chrome.ts";
 import type { default as GitHub } from "./main.ts";

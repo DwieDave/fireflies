@@ -9,7 +9,7 @@ import { isString } from "./guard.ts";
 import type { Row } from "./detect.ts";
 import type { Run, Tone } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
-import { hint } from "./keyhelp.ts";
+import { hint } from "@fireflies/keyhelp";
 import { short, SECTION, ART, CHIP, CHIPS_W, ICON, OWN, ROW, aside } from "./state.ts";
 import type { Asked, Chip, Item, Top } from "./state.ts";
 import { dither, eyebrow, toneColor } from "./paint.ts";

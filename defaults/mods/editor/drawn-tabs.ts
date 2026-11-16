@@ -3,7 +3,7 @@
 // their keys, and the hints under them.
 
 import type EditorPane from "./main.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import type { LookAct } from "./tabs.ts";
 import { lookAction } from "./tabs.ts";
 import Viewer from "./viewer.ts";

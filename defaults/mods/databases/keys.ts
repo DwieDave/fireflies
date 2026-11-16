@@ -4,7 +4,7 @@
 // What each action does is actions.ts's.
 
 import type { KeyEvent } from "gpui-kit";
-import type { KeySection } from "./keyhelp.ts";
+import type { KeySection } from "@fireflies/keyhelp";
 
 /** Where a key is read: the window (always), or what has the keyboard. */
 export type Place = "window" | "conns" | "tables" | "structure" | "rows" | "results" | "editor" | "log";

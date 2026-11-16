@@ -11,7 +11,7 @@ import type { Guarded } from "./guard.ts";
 import { literal } from "./guard.ts";
 import type { Hint } from "./kit.ts";
 import { dither, chip, stop, pip, band, ART, popupScrim, unzoom } from "./kit.ts";
-import { keysView } from "./keyhelp.ts";
+import { keysView } from "@fireflies/keyhelp";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";
 import Projects from "./projects.ts";

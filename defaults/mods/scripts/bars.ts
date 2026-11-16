@@ -10,7 +10,7 @@ import { readSharedMap, writeSharedMap } from "./guard.ts";
 import { APP_MANAGEMENT } from "./nix.ts";
 import type { Run } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
-import { keysHint, keysView } from "./keyhelp.ts";
+import { keysHint, keysView } from "@fireflies/keyhelp";
 import { CHORD, deckProps, SECTION, plain, ART, FOOT, PROMPTS, HEAD, short, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Item } from "./state.ts";
 import { dither, toneColor } from "./paint.ts";

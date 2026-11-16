@@ -351,17 +351,37 @@ what the owner drops.
 | `typeof x === "number"` outside a guard | `const v = x ?? null; v === null ? … : …`, or `isNumber(x)` from guard.ts |
 | a literal table read by a union key | `{ … } as const satisfies { readonly [K in Union]: X }` |
 
+### Libraries
+
+What several mods need lives in a library under `defaults/lib/@fireflies/`,
+served by the app to every mod by name and evaluated once per window
+(docs/effect-mods.md, "How Effect reaches a mod"): `import { edge } from
+"@fireflies/tones"`. Each is in the Effect lint pass (`effect_sources` names
+`defaults/lib`), decodes with Schema and does its IO through the kit's
+services. Its package.json names its entries; the root package.json lists it
+(`"@fireflies/<name>": "workspace:*"`), so tsc, oxlint and bun resolve the
+name as the app does. A library's exported types are the contract the mods
+build on (read the file's top and its `export type`s):
+
+| library | importers | test | what it types |
+|---|---|---|---|
+| `@fireflies/kit` | the mods on Effect | `effect-kit.test.ts` | services, errors, schema helpers, the runtime, HTTP (docs/effect-mods.md) |
+| `@fireflies/tones` | nocturne and its mods | `themes.test.ts` | `edge(t)`, `tone(t, k)`, `over(c, under)` |
+| `@fireflies/layout-look` | nocturne and its mods (their dithers), keyhelp, toolground | `themes.test.ts` | `Look`, `LookRoot`, `lookOf`, `lookNow`, `flat`, `dithered`, `square`, `radius` |
+| `@fireflies/keyhelp` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
+
+Each library's test checks that no mod carries a copy of it again.
+
 ### Shared copies
 
-A mod can't import another mod's files, so a shared file is copied into
-every mod that uses it, byte for byte, and a test fails when copies drift.
-All of them are TypeScript now; each one's exported types are the contract
-the mods build on (read the file's top and its `export type`s):
+A mod can't import another mod's files, so a shared file not yet a library
+is copied into every mod that uses it, byte for byte, and a test fails when
+copies drift. All of them are TypeScript now; each one's exported types are
+the contract the mods build on:
 
 | file | copies | test | what it types |
 |---|---|---|---|
 | `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
-| `keyhelp.ts` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
 | `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
 | `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
 | `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts; `table.ts` also databases) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`; databases' `table.ts`: `databases-data.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
@@ -389,7 +409,12 @@ type-checked or linted.
 - A test that reads a mod's source and evaluates it (`load()` in
   preview.test.ts and the like) passes a `.ts` file through
   `scripts/mod-source.ts` (`asJs`) and puts guard.ts's exports in its scope
-  (`guard`).
+  (`guard`), the tones (`tonesFor`) and keyhelp (`keyhelpFor`).
+- `importMod("<mod>/<file>", standins)` imports a mod's file for real, its
+  imports of the app ("herdr", "gpui-kit") given `standins`; `effect` and
+  `@fireflies/kit` load from node_modules, the other `@fireflies/…` libraries
+  are copied with the same stand-ins. `importLibrary("@fireflies/<name>",
+  standins)` does that for a library alone.
 - A view made in a test is `new X()`, not `Object.create(X.prototype)`: only
   `new` runs the field initializers. A fixture that keeps `Object.create`
   gives the view every field the code under test reads, and a generic

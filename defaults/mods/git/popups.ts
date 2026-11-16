@@ -19,8 +19,8 @@ import { dither, ink, stop, edgeRow, popupScrim } from "./draw.ts";
 import { keyLabel } from "./keys.ts";
 import type { FormModifiers, Stop } from "./form-keys.ts";
 import { formKey, formHints, ring } from "./form-keys.ts";
-import type { KeyRow, KeySection } from "./keyhelp.ts";
-import { keysView, keysKey } from "./keyhelp.ts";
+import type { KeyRow, KeySection } from "@fireflies/keyhelp";
+import { keysView, keysKey } from "@fireflies/keyhelp";
 import { type Anchor, placeMenu } from "./menu-place.ts";
 import { edge as edgeTone } from "@fireflies/tones";
 

@@ -6,7 +6,7 @@ import type { Context, Element } from "gpui-kit";
 import { h_flex, v_flex, Input } from "gpui-base";
 import * as herdr from "herdr";
 import type { Theme } from "herdr";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import * as Tabs from "./tabs.ts";
 import type { Tab } from "./tabs.ts";
 import { dither } from "./dither.ts";

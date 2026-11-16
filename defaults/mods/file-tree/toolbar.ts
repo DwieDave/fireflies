@@ -7,7 +7,7 @@ import type { Context, Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { h_flex, v_flex, Input } from "gpui-base";
 import { parent, deleteManyQuestion, base } from "./logic.ts";
-import { keysHint, keysView, SECTION } from "./keyhelp.ts";
+import { keysHint, keysView, SECTION } from "@fireflies/keyhelp";
 import { MOD, PER_FOLDER, TOTAL, tilde, ICONS } from "./state.ts";
 import { stop, dither, ring } from "./paint.ts";
 import { toggleLook } from "./look.ts";

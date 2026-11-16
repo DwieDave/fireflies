@@ -17,7 +17,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
-import { keysKey, keysView } from "./keyhelp.ts";
+import { keysKey, keysView } from "@fireflies/keyhelp";
 import { helpSections, keyName, shown } from "./keys.ts";
 import { keepRename } from "./menus.ts";
 import { applyFilter } from "./act-grid.ts";

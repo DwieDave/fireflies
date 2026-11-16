@@ -6,7 +6,10 @@
       "name": "fireflies-tools",
       "devDependencies": {
         "@effect/tsgo": "0.69.0",
+        "@fireflies/keyhelp": "workspace:*",
         "@fireflies/kit": "workspace:*",
+        "@fireflies/layout-look": "workspace:*",
+        "@fireflies/tones": "workspace:*",
         "@oxlint/plugins": "1.93.0",
         "@types/bun": "1.4.4",
         "effect": "4.1.4",
@@ -15,8 +18,17 @@
         "typescript": "7.0.2",
       },
     },
+    "defaults/lib/@fireflies/keyhelp": {
+      "name": "@fireflies/keyhelp",
+    },
     "defaults/lib/@fireflies/kit": {
       "name": "@fireflies/kit",
+    },
+    "defaults/lib/@fireflies/layout-look": {
+      "name": "@fireflies/layout-look",
+    },
+    "defaults/lib/@fireflies/tones": {
+      "name": "@fireflies/tones",
     },
   },
   "packages": {
@@ -36,7 +48,13 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.69.0", "", { "os": "win32", "cpu": "x64" }, "sha512-EIxwudo6cSjandzmfputEmpTfdlAfTd2sWQ29vWh3F3qFb6MC9JDCAYHXQFWSGOPNhMBK6NXd/8humPW/WkpGA=="],
 
+    "@fireflies/keyhelp": ["@fireflies/keyhelp@workspace:defaults/lib/@fireflies/keyhelp"],
+
     "@fireflies/kit": ["@fireflies/kit@workspace:defaults/lib/@fireflies/kit"],
+
+    "@fireflies/layout-look": ["@fireflies/layout-look@workspace:defaults/lib/@fireflies/layout-look"],
+
+    "@fireflies/tones": ["@fireflies/tones@workspace:defaults/lib/@fireflies/tones"],
 
     "@oxlint-tsgolint/darwin-arm64": ["@oxlint-tsgolint/darwin-arm64@7.0.2007", "", { "os": "darwin", "cpu": "arm64" }, "sha512-bjNxPFyu1wNK74epHzXrtVLrj7oEuB8jQvJZDSia2d5EZ/0YgnyhI37E9U530IUZlNCqlTWjko1iT3CKAYF9+A=="],
 

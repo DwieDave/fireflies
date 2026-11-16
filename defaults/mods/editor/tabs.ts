@@ -14,7 +14,7 @@ import { isBoolean, isNumber, isString, nullable, object, sharedKey } from "./gu
 import type { EditorView } from "./editor-route.ts";
 import { HANDOVER, isEditorView } from "./editor-route.ts";
 import { isList } from "./guards.ts";
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 import { ICON_SIZE } from "./file-icons.ts";
 import { kindOf } from "./kinds.ts";
 import { basename, dirname } from "./logic.ts";

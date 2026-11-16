@@ -4,7 +4,7 @@
 import type { Context, KeyEvent, Modifiers, PinchEvent, ScrollWheelEvent } from "gpui-kit";
 import { zoomTo, panBy } from "./image.ts";
 import { keyOf, cycle } from "./keys.ts";
-import { keysKey } from "./keyhelp.ts";
+import { keysKey } from "@fireflies/keyhelp";
 import type { How } from "./viewer-state.ts";
 import { unzoom, SEEK_FAR, SEEK, SHOVE, NUDGE, pointOf } from "./viewer-state.ts";
 import { goTo, loadPath } from "./viewer-load.ts";

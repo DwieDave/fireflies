@@ -9,7 +9,7 @@ import type { Theme } from "herdr";
 import { duration, tag, fileSize, count } from "./kinds.ts";
 import { percent } from "./image.ts";
 import { keyList } from "./keys.ts";
-import { keysHint, keysView } from "./keyhelp.ts";
+import { keysHint, keysView } from "@fireflies/keyhelp";
 import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import { held, lastPart, unzoom, basename, MOD, stop, checker, ART } from "./viewer-state.ts";
 import { goTo } from "./viewer-load.ts";

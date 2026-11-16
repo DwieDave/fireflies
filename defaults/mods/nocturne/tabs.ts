@@ -46,7 +46,7 @@ import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
 import { openMenu, openKeys, toggleGitMenu, gitMenuOpen, openToSpace } from "./menu.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import { headerControls, iconPath, modLook, paneMenu, renamePane } from "./header.ts";
 import { CURSOR_KEY, STRIP_KEYS, STRIP_HELP, HEADER_HELP, PARKED_HELP, keyVerb, move, blockOf, hasMod, isLayoutNode } from "./nav.ts";
 import type { ChromeCursor, LayoutNode } from "./nav.ts";

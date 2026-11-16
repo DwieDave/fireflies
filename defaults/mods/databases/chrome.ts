@@ -17,7 +17,7 @@ import type { PanelId } from "./state.ts";
 import { PANEL_KEY, PANEL_NAME } from "./state.ts";
 import { ART, chip, dither, kindBadge, toneColor, unzoom } from "./kit.ts";
 import { stateMark } from "./connmark.ts";
-import { hint, keysHint } from "./keyhelp.ts";
+import { hint, keysHint } from "@fireflies/keyhelp";
 import { barHints } from "./keys.ts";
 import { connsPanel, logPanel, structPanel, tablesPanel, NARROW_ORDER } from "./panels.ts";
 import { mainPanel } from "./main-view.ts";

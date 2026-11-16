@@ -7,7 +7,7 @@ import { readFileSync } from "fs";
 // file-tree and editor ship copies of it and of what it imports.
 // Edit preview's and copy them over: these fail when a copy drifts.
 const VIEWER_PARTS = ["state", "load", "text", "table", "native", "pan", "keys", "bars", "views"].map((p) => `viewer-${p}.ts`);
-const SHARED = ["viewer.ts", ...VIEWER_PARTS, "kinds.ts", "image.ts", "table.ts", "diff.ts", "keys.ts", "keyhelp.ts", "guard.ts", "file-icons.ts"];
+const SHARED = ["viewer.ts", ...VIEWER_PARTS, "kinds.ts", "image.ts", "table.ts", "diff.ts", "keys.ts", "guard.ts", "file-icons.ts"];
 const read = (mod: string, file: string) => readFileSync(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
 
 for (const host of ["file-tree", "editor"]) {

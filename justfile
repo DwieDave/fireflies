@@ -128,7 +128,7 @@ test:
     bun test scripts/notifications-open.test.ts
     # The blue corner ticks on what's shown: the focused agent's firefly square, the shown space open and on the rail, with recording gpui stand-ins.
     bun test scripts/nocturne-highlight.test.ts
-    # Nocturne's one key help: every keyhelp.js copy is the source byte for byte; in every mod ? opens the overview, ? or esc closes it.
+    # Nocturne's one key help (@fireflies/keyhelp): no mod carries a copy; in every mod ? opens the overview, ? or esc closes it.
     bun test scripts/keyhelp.test.ts
     # A menu's ask (rename, delete a space) is answered from a task after the render, never in it (GPUI refuses cx.notify there), with a cx that throws as GPUI does.
     bun test scripts/nocturne-render-asks.test.ts
