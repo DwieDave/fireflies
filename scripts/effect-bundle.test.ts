@@ -16,4 +16,7 @@ test("defaults/lib/effect is node_modules/effect, freshly built (else: bun scrip
   }
   const pinned = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf8")).devDependencies.effect;
   expect(readFileSync(join(out, "index.js"), "utf8").startsWith(`// effect@${pinned} `)).toBe(true);
+  // A mod outside this repository installs the kit's peer: the same Effect.
+  const kit = JSON.parse(readFileSync(join(import.meta.dir, "../defaults/lib/@fireflies/kit/package.json"), "utf8"));
+  expect(kit.peerDependencies.effect).toBe(pinned);
 }, 60_000);
