@@ -13,7 +13,7 @@ import { InputState } from "gpui-base";
 import { isEditorView, LAST_KEY, OPEN_KEY } from "./editor-route.ts";
 import { MOD } from "./pane-kit.ts";
 import type { OpenRequest } from "./editor-route.ts";
-import { bindTab } from "./form-keys.ts";
+import { bindTab } from "@fireflies/form-keys";
 import { command } from "./pane-commands.ts";
 import { createVim } from "./vim.ts";
 import { fileChanges, newestId } from "./follow.ts";

@@ -53,7 +53,7 @@ import { lookup, repoKey } from "./cache.ts";
 import * as store from "./store.ts";
 import type { Axis, Hint, Note } from "./kit.ts";
 import { hints, empty, unzoom, unzoomSize, noteOf } from "./kit.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Host, Picker, ReadOptions, ResizeOptions, RunFilter } from "./host.ts";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";

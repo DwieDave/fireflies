@@ -10,7 +10,7 @@
 import { View, div, svg, image } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, InputState, Input, Popup, ScrollHandle } from "gpui-base";
 import { hc, run, theme, themes, fonts, updates, settings, layouts, shared, appHome, readTextFile, writeTextFile, playSound, props, closeOverlay, window } from "herdr";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 
 const I = (name) => `frame/settings/${name}.svg`;
 

@@ -43,7 +43,7 @@ import type { InputState } from "gpui-base";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { props, theme, nextCommand, shared, setShared, closeOverlay, exec } from "herdr";
 import { readShared, writeShared } from "./guard.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Conn, Kind } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import type { TableRef } from "./catalog.ts";

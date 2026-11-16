@@ -8,9 +8,10 @@
 import { test, expect, beforeEach } from "bun:test";
 import { readFileSync, readdirSync, existsSync } from "fs";
 import { state, find, cx, press, key, texts, act } from "./dialog-stubs.ts";
+import { copiesOf } from "./mod-source.ts";
 
 const root = new URL("../defaults/", import.meta.url).pathname;
-const { formKey, formHints, submitKey, wrap } = await import("../defaults/mods/nocturne/form-keys.ts");
+const { formKey, formHints, submitKey, wrap } = await import("@fireflies/form-keys");
 const { Popups } = await import("../defaults/mods/git/popups.ts");
 const { Prompt, Confirm } = await import("../defaults/mods/nocturne/dialog.ts");
 const { default: Spaces } = await import("../defaults/mods/nocturne/spaces.ts");
@@ -27,17 +28,15 @@ beforeEach(() => {
 
 // ---- the helper
 
-test("one helper: every mod with a form ships the same form-keys.ts", () => {
-  const copies = [
+test("one helper: every mod with a form imports @fireflies/form-keys, none carries a copy", () => {
+  expect(copiesOf("form-keys.ts")).toEqual([]);
+  const users = [
     "mods/nocturne", "mods/github", "mods/git", "mods/editor", "mods/notifications",
     "mods/machine-add", "mods/databases", "frame/feedback", "frame/settings",
-  ].map((d) => `${root}${d}/form-keys.ts`);
-  const canon = readFileSync(copies[0], "utf8");
-  for (const c of copies) expect([c, readFileSync(c, "utf8") === canon]).toEqual([c, true]);
-  // No mod carries a stale copy this list forgets.
-  for (const kind of ["mods", "frame"]) for (const d of readdirSync(`${root}${kind}`)) {
-    const f = `${root}${kind}/${d}/form-keys.ts`;
-    if (existsSync(f)) expect(copies).toContain(f);
+  ];
+  for (const d of users) {
+    const files = readdirSync(`${root}${d}`).filter((f) => /\.(js|ts)$/.test(f));
+    expect([d, files.some((f) => readFileSync(`${root}${d}/${f}`, "utf8").includes('from "@fireflies/form-keys"'))]).toEqual([d, true]);
   }
 });
 
@@ -54,7 +53,7 @@ const ROOTS: [string, string, string?][] = [
 ];
 
 test("tab is bound: shift-tab and tab become the forms' actions in the Form context", async () => {
-  const keys = await import("../defaults/mods/machine-add/form-keys.ts");
+  const keys = await import("@fireflies/form-keys");
   (globalThis as any).boundKeys = [];
   keys.bindTab(cx());
   keys.bindTab(cx()); // once is enough: the keymap is the app's
@@ -69,7 +68,7 @@ test("tab is bound: shift-tab and tab become the forms' actions in the Form cont
 });
 
 test("ctrl-tab: a root says when a form has its keyboard; the bound tab reaches the key handler as tab", async () => {
-  const keys = await import("../defaults/mods/github/form-keys.ts");
+  const keys = await import("@fireflies/form-keys");
   const root = () => {
     const el: any = { acts: {}, key_context(c: string) { el.ctx = c; return el; }, on_action(n: string, f: any) { el.acts[n] = f; return el; } };
     return el;

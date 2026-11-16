@@ -15,7 +15,7 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextView, ScrollHandle } from "gpui-base";
 import { hc, exec, home, readTextFile, theme, props, closeOverlay, window as appWindow } from "herdr";
-import { formKey, formHints, ring, bindTab, tabActions } from "./form-keys.ts";
+import { formKey, formHints, ring, bindTab, tabActions } from "@fireflies/form-keys";
 
 const I = (name) => `mods/workspace-chrome/${name}.svg`;
 const shellArg = (target) => /^[a-z0-9_@%+=:,./-]+$/i.test(target) ? target : "'" + target.replace(/'/g, "'\\''") + "'";

@@ -60,7 +60,7 @@ import { lookup, keyName, isListContext } from "./keys.ts";
 import { act } from "./actions.ts";
 import type { CommitOptions, ConfirmOptions, MenuOptions, PromptOptions } from "./popups.ts";
 import { Popups } from "./popups.ts";
-import { bindTab, tabActions } from "./form-keys.ts";
+import { bindTab, tabActions } from "@fireflies/form-keys";
 import type { Anchor } from "@fireflies/menu-place";
 import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
