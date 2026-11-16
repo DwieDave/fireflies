@@ -15,8 +15,9 @@ import { placeMenu } from "./menu-place.ts";
 import type { Run } from "./runs.ts";
 import { allRuns } from "./runs.ts";
 import type { Act } from "./state.ts";
-import { HEAD, ROW, SECTION } from "./state.ts";
-import { DECK_W, deckHeight, unzoom } from "./place.ts";
+import { ROW, SECTION } from "./state.ts";
+import { menuBox } from "@fireflies/look";
+import { DECK_W, deckHeight, headHeight, unzoom } from "./place.ts";
 import { band } from "./rows-view.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 
@@ -50,7 +51,7 @@ export function runEntries(r: Run): readonly Entry[] {
 export function runRect(v: ScriptsDeck, i: number): Rect {
   const scrolled = -v.runsScroll.offset().y;
 
-  return { x: 0, y: HEAD + SECTION + i * ROW - unzoom(scrolled), w: v.width || DECK_W, h: ROW };
+  return { x: 0, y: headHeight(v) + SECTION + i * ROW - unzoom(scrolled), w: v.width || DECK_W, h: ROW };
 }
 
 /** Opens run `i`'s menu at `at` (deck px; a key's: its row). */
@@ -146,7 +147,7 @@ export function runMenuView(v: ScriptsDeck, t: Theme, m: RunMenu): Element | nul
   return div().id("rm-layer").absolute().inset_0()
     .on_mouse_down("left", (_e, cx) => close(cx))
     .on_mouse_down("right", (_e, cx) => close(cx))
-    .child(v_flex().id("rm-menu").absolute().left(at.x).top(at.y).w(MENU_W).py(6).bg(t.background).border(1).border_color(t.accent)
+    .child(menuBox(t, v_flex().id("rm-menu").absolute().left(at.x).top(at.y).w(MENU_W).py(6))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .child(div().px(10).pb(4).text_size(10).text_color(t.muted).truncate().child(r.name))
       .children(rows));

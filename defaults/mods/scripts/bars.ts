@@ -11,15 +11,15 @@ import { APP_MANAGEMENT } from "./nix.ts";
 import type { Run } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
 import { keysHint, keysView } from "./keyhelp.ts";
-import { CHORD, deckProps, SECTION, plain, ART, FOOT, PROMPTS, HEAD, short, INPUT } from "./state.ts";
+import { CHORD, deckProps, SECTION, plain, FOOT, PROMPTS, HEAD, short, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Item } from "./state.ts";
-import { dither, toneColor } from "./paint.ts";
+import { toneColor } from "./paint.ts";
+import { boxed, button, glyph, hairline, icon, rule } from "@fireflies/look";
 import { asked } from "./actions.ts";
 import { actionChip, badge, keyHint } from "./rows-view.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { deckKeys } from "./main.ts";
 import { inPane, move } from "./place.ts";
-import { edge } from "./tones.ts";
 
 /** Opens the App Management setting and shows Herdr Core in Finder, on the run's machine. */
 export function openGrant(r: Run) {
@@ -33,7 +33,7 @@ export function openGrant(r: Run) {
  *  script row's own aside is for. */
 export function footBar(v: ScriptsDeck, t: Theme, cur: Item | undefined) {
   const bar = h_flex().relative().h(FOOT).flex_none().px(12).gap(10).items_center().text_size(11)
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)));
+    .child(rule(t, "top"));
 
   const left = (...kids: Element[]) => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids);
   const keys = (...caps: (Element | null)[]) => h_flex().flex_none().gap(10).items_center().children(caps.flatMap((c) => (c === null ? [] : [c])));
@@ -102,10 +102,10 @@ export function passwordBar(t: Theme, bar: PasswordBar) {
   };
 
   return h_flex().id("pw-bar").size_full().px(12).gap(8).items_center().text_size(12)
-    .child(svg(`${ART}/lock.svg`).size(9).flex_none().text_color(t.working))
+    .child(svg(icon("lock", "lock")).size(9).flex_none().text_color(t.working))
     .child(div().min_w(0).truncate().text_color(t.foreground).child(name))
     .child(div().flex_none().text_color(t.dim).child("· password"))
-    .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)))
+    .child(hairline(t))
     .child(passwordHint(t))
     // Cancel always shows; the name truncates (an ellipsis) once the hint has gone.
     .child(actionChip(t, "pw-cancel", "cancel", t.blocked, cancel));
@@ -147,7 +147,7 @@ export function outputView(v: ScriptsDeck, t: Theme, h: number, o: Output) {
     .child(h_flex().h(SECTION).flex_none().px(12).pt(6).gap(8).items_center().text_size(11)
       .child(actionChip(t, "out-back", "‹ back", null, (cx) => { v.output = null; cx.notify(); }))
       .child(div().flex_none().text_color(t.foreground).child(r.name))
-      .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)))
+      .child(hairline(t))
       .child(div().flex_none().text_color(t.dim).child(back ? `${back} lines up` : "the end")))
     .when(grant, (el) => el.child(grantHint(t, r, HINT)))
     .child(v_flex().flex_1().min_h(0).overflow_hidden().px(12).pt(6).pb(6).justify_end()
@@ -158,12 +158,10 @@ export function outputView(v: ScriptsDeck, t: Theme, h: number, o: Output) {
 /** Why a nix-darwin switch couldn't update its apps, and the way to fix it
  *  (nix.ts APP_MANAGEMENT): open the setting and show Herdr Core in Finder. */
 export function grantHint(t: Theme, r: Run, h: number) {
-  return v_flex().id("grant").h(h).flex_none().mx(12).mt(6).px(10).py(6).gap(4)
-    .border(1).border_color(t.blocked)
+  return boxed(t, v_flex().id("grant").h(h).flex_none().mx(12).mt(6).px(10).py(6).gap(4), t.blocked)
     .child(h_flex().h(22).flex_none().gap(8).items_center()
       .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.blocked).child("Couldn't update Nix Apps"))
-      .child(div().id("grant-open").flex_none().h(22).px(8).flex().items_center().text_size(11)
-        .bg(edge(t)).text_color(t.foreground).cursor_pointer().hover((s) => s.bg(t.muted))
+      .child(button(t, div().id("grant-open").flex_none().h(22).px(8).flex().items_center().text_size(11))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => { cx.stop_propagation(); openGrant(r); })
         .child("Open settings")))
@@ -184,16 +182,16 @@ function moveChip(v: ScriptsDeck, t: Theme): Element {
       move(v, cx);
       cx.notify();
     })
-    .child(pane ? "⧉" : "◧");
+    .child(glyph(pane ? "⧉" : "◧", pane ? "app-window" : "panel-left"));
 }
 
 export function deckHead(v: ScriptsDeck, t: Theme): Element {
   return h_flex().relative().h(HEAD).flex_none().px(12).gap(10).items_center()
-        .child(svg(`${ART}/play.svg`).size(9).flex_none().text_color(t.accent))
+        .child(svg(icon("play", "play")).size(9).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(12).text_color(t.foreground).child("Scripts"))
         .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).flex().justify_end().child(short(v.folder) + (v.on ? ` on ${v.on}` : "")))
         .child(moveChip(v, t))
-        .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
+        .child(rule(t, "bottom"));
 }
 
 /** The filter line: / and what's typed (a caret while typing), what's being
@@ -208,5 +206,5 @@ export function filterLine(v: ScriptsDeck, t: Theme, n: number): Element {
           .when(!v.query && !v.typing, (el) => el.child(div().text_color(t.dim).child("filter"))))
         .child(div().flex_none().text_size(10).text_color(t.dim).child(v.nix === "evaluating" ? "nix…" : v.looking && v.scripts ? "looking…"
           : v.nix === "failed" ? `nix eval failed · ${n}` : n ? `${n}` : ""))
-        .child(div().absolute().left(0).right(0).bottom(0).h(1).opacity(0.6).child(dither(t.muted, 1)));
+        .child(rule(t, "bottom", { height: 1, color: t.muted, opacity: 0.6 }));
 }

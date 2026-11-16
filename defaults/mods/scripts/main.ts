@@ -45,7 +45,7 @@ import type { Run } from "./runs.ts";
 import { allRuns } from "./runs.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { keysKey } from "./keyhelp.ts";
-import { CHORD, deckProps, FOUND, ESCAPE, CONTEXT, DECK, SECTION, ROW, FOOT, RUNS_SHOWN, HEAD, INPUT } from "./state.ts";
+import { CHORD, deckProps, FOUND, ESCAPE, CONTEXT, DECK, SECTION, ROW, FOOT, RUNS_SHOWN, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Asking, Item, Act } from "./state.ts";
 import { lookForScripts, recent } from "./found.ts";
 import { enterRow, escapeKey, groups, runAct, showOutput } from "./actions.ts";
@@ -54,8 +54,8 @@ import { footBar, helpView, outputView, passwordBar, deckHead, filterLine } from
 import { outputKey, typedKey } from "./input.ts";
 import type { RunMenu } from "./run-menu.ts";
 import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
-import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
-import { edge } from "./tones.ts";
+import { deckHeight, headHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
+import { frameBox, titleShown } from "@fireflies/look";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [
@@ -362,7 +362,7 @@ export default class ScriptsDeck extends View {
 
     // The runs: up to RUNS_SHOWN rows tall; the rest scroll.
     const runsH = all.length ? SECTION + Math.min(all.length, RUNS_SHOWN) * ROW + 4 : 0;
-    const listH = Math.max(ROW, deckHeight(this) - 2 - HEAD - runsH - INPUT - FOOT - 4);
+    const listH = Math.max(ROW, deckHeight(this) - 2 - headHeight(this) - runsH - INPUT - FOOT - 4);
 
     this.page = Math.max(1, Math.floor(listH / ROW) - 1);
 
@@ -391,7 +391,7 @@ export default class ScriptsDeck extends View {
     const handle = this.handle;
     // Over the tab it draws its frame; a pane has the pane's.
     const root = v_flex().id("scripts-deck").size_full().bg(t.background);
-    const deck = inPane(this) ? root : root.border(1).border_color(edge(t));
+    const deck = inPane(this) ? root : frameBox(t, root);
 
     return (handle ? deck.track_focus(handle) : deck)
       .key_context(CONTEXT)
@@ -411,7 +411,7 @@ export default class ScriptsDeck extends View {
 
         if (inPane(this)) this.width = unzoom(drawn.width);
       })
-      .child(deckHead(this, t))
+      .when(titleShown(inPane(this)), (el) => el.child(deckHead(this, t)))
       .when(all.length > 0, (el) => el
         .child(section(t, "runs", tally(this, t, all)))
         .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll().track_scroll(this.runsScroll)

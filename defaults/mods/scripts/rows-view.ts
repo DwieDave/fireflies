@@ -10,9 +10,10 @@ import type { Row } from "./detect.ts";
 import type { Run, Tone } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
 import { hint } from "./keyhelp.ts";
-import { short, SECTION, ART, CHIP, CHIPS_W, ICON, OWN, ROW, aside } from "./state.ts";
+import { short, SECTION, CHIP, CHIPS_W, ICON, OWN, ROW, aside } from "./state.ts";
 import type { Asked, Chip, Item, Top } from "./state.ts";
-import { dither, eyebrow, toneColor } from "./paint.ts";
+import { toneColor } from "./paint.ts";
+import { boxed, dot, hairline, heading, icon, lit, radius } from "@fireflies/look";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { rightPress } from "./run-menu.ts";
@@ -28,7 +29,7 @@ export function actionChip(t: Theme, id: string, label: string, color: Color | n
 }
 
 export function pip(color: Color, live: boolean) {
-  const el = svg(`${ART}/pip.svg`).size(6).flex_none().text_color(color);
+  const el = dot(color, 6);
 
   return live ? el.loop("opacity", { from: 0.3, to: 1, period: 1600 }) : el;
 }
@@ -36,23 +37,22 @@ export function pip(color: Color, live: boolean) {
 export function badge(t: Theme, text: string, on: boolean, w?: number) {
   const el = div().flex_none().h(14).px(4);
 
-  return (w === undefined ? el : el.w(w).justify_center()).flex().items_center()
-    .border(1).border_color(on ? t.muted : edge(t)).text_size(9).text_color(on ? t.muted : t.dim).child(text);
+  return boxed(t, (w === undefined ? el : el.w(w).justify_center()).flex().items_center(), on ? t.muted : null).text_size(9).text_color(on ? t.muted : t.dim).child(text);
 }
 
 export function section(t: Theme, label: string, aside: string | Element | null) {
   const head = h_flex().h(SECTION).flex_none().px(12).pt(6).gap(8).items_center()
-    .child(eyebrow(t, label))
-    .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)));
+    .child(heading(t, label))
+    .child(hairline(t));
 
   if (aside === null || aside === "") return head;
 
   return head.child(isString(aside) ? div().flex_none().text_size(10).text_color(t.dim).child(aside) : aside);
 }
 
-/** The row under the cursor: a dithered band and a blue edge, like Nocturne's menus. */
+/** The row under the cursor: a dithered band and a blue edge, like Nocturne's menus (@fireflies/look lit). */
 export function band(el: Element, t: Theme, on: boolean) {
-  return on ? el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : el;
+  return on ? lit(t, el, true) : el;
 }
 
 /**
@@ -65,7 +65,7 @@ export function runChip(t: Theme, id: string, c: Chip, go: (cx: Context) => void
   const fill = color ?? t.foreground;
 
   return h_flex().id(id).relative().flex_none().h(CHIP).px(5).gap(4).items_center().text_size(10)
-    .border(1).border_color(asking ? fill : edge(t)).text_color(asking ? t.background : t.muted)
+    .border(1).border_color(asking ? fill : edge(t)).rounded(radius(5)).text_color(asking ? t.background : t.muted)
     .when(asking, (el) => el.bg(fill))
     .hover((s) => (asking ? s : s.border_color(color ?? t.muted).text_color(fill).bg(edge(t))))
     .tooltip(tip)
@@ -160,7 +160,7 @@ export function scriptRow(v: ScriptsDeck, t: Theme, row: Row, i: number, on: boo
 
 /** Runs as root (asks for a password first): a small pixel lock. */
 export function lock(t: Theme, on: boolean) {
-  return svg(`${ART}/lock.svg`).size(9).flex_none().text_color(on ? t.working : t.dim);
+  return svg(icon("lock", "lock")).size(9).flex_none().text_color(on ? t.working : t.dim);
 }
 
 /** A bar entry: the key in the accent, what it does dimmed (keyhelp.ts, as every Nocturne bar). */

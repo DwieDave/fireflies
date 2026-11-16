@@ -12,7 +12,8 @@ import { panes, focused, run, openOverlay, closeOverlay, shared, setShared, sett
 import type { OverlaySpec, PaneInfo } from "herdr";
 import type { Context } from "gpui-kit";
 import { isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
-import { DECK, H } from "./state.ts";
+import { DECK, H, HEAD } from "./state.ts";
+import { titleShown } from "@fireflies/look";
 import type { default as ScriptsDeck } from "./main.ts";
 
 /** The deck as nocturne's scripts.ts opens it centered (a copy: a mod can't import another's). */
@@ -41,6 +42,9 @@ export const newSlot = () => Date.now().toString(36) + Math.random().toString(36
 
 /** This copy is a pane: no overlay (the password bar is always an overlay). */
 export const inPane = (v: ScriptsDeck) => v.overlay === null;
+
+/** The deck head's height: none in a plain layout's pane, whose header names it (@fireflies/look titleShown). */
+export const headHeight = (v: ScriptsDeck): number => (titleShown(inPane(v)) ? HEAD : 0);
 
 /** This copy's pane, found by its slot. */
 export function ownPane(v: ScriptsDeck): PaneInfo | null {
