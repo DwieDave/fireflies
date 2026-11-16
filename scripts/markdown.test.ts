@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, tones, tonesFor, importMod, keyhelpFor } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod, importLibrary, keyhelpFor, copiesOf } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -51,20 +51,15 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 
-// markdown.ts and its parser imported for real, with the stand-ins above.
+// @fireflies/markdown and its parser imported for real, with the stand-ins above.
 const mdStandins = { herdr, "gpui-kit": kit, "gpui-base": base, "gpui-shell": {} };
-const mdMain = await importMod("markdown/markdown.ts", mdStandins);
-const md = { ...mdMain, ...(await importMod("markdown/markdown-parse.ts", mdStandins)) };
+const mdMain = await importLibrary("@fireflies/markdown", mdStandins);
+const md = { ...mdMain, ...(await importLibrary("@fireflies/markdown/markdown-parse", mdStandins)) };
 const { markdown, fenced, slug, blocks, imagesAsLinks, imageLine, taskToggle, footnoteRefs, MarkdownDoc, isLocalSource } = md;
-const { follow, join, dirname, basename, tilde } = await load("markdown/paths.ts");
+const { follow, join, dirname, basename, tilde } = await importLibrary("@fireflies/markdown/paths", {});
 
-test("the GitHub window, the viewer and the editor ship the same markdown.ts and markdown-parse.ts (and the editor the viewer's paths.ts)", async () => {
-  const read = (mod: string, file = "markdown.ts") => readFile(new URL(`../defaults/mods/${mod}/${file}`, import.meta.url), "utf8");
-  for (const file of ["markdown.ts", "markdown-parse.ts"]) {
-    expect(await read("github", file)).toBe(await read("markdown", file));
-    expect(await read("editor", file)).toBe(await read("markdown", file));
-  }
-  expect(await read("editor", "paths.ts")).toBe(await read("markdown", "paths.ts"));
+test("the GitHub window, the viewer and the editor import @fireflies/markdown: no mod carries a copy of its files", () => {
+  for (const file of ["markdown.ts", "markdown-parse.ts", "paths.ts", "follow.ts"]) expect([file, copiesOf(file)]).toEqual([file, []]);
 });
 
 test("markdown() draws selectable Markdown in the theme's text and routes links", () => {
@@ -83,7 +78,7 @@ test("markdown() draws selectable Markdown in the theme's text and routes links"
 
 test("the GitHub window renders PR bodies and comments through the shared module", async () => {
   const prs = await readFile(new URL("../defaults/mods/github/prs.ts", import.meta.url), "utf8");
-  expect(prs).toContain('import { markdown } from "./markdown.ts"');
+  expect(prs).toContain('import { markdown } from "@fireflies/markdown"');
   expect(prs).not.toContain("TextView");
 });
 
@@ -345,7 +340,7 @@ test("document links carry their block (tasks, callouts and footnotes too); tab 
 });
 
 test("the viewer: tab marks a link's block and shows where it goes, enter follows, ] [ headings, f y ?, esc backs out", async () => {
-  const filesLog = await load("markdown/follow.ts");
+  const filesLog = await importLibrary("@fireflies/markdown/follow", {});
   const paint = { appWindow: herdr.window, window: { paint_path: () => new Element() }, PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
   // the viewer's bars (bars.ts), as main.ts's `import * as Bars` brings them
   const Bars = await load("markdown/bars.ts", { dirname, basename, tilde, ...paint });

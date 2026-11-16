@@ -7,7 +7,7 @@ import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, nullable, object, sharedMapKey } from "./guard.ts";
 import type { ColorRun, LanguageOptions, ServerNote, ServerState } from "./logic.ts";
 import type { HoverPart, Problem, SeverityColors, Work } from "./lsp-replies.ts";
-import type { MarkdownDoc } from "./markdown.ts";
+import type { MarkdownDoc } from "@fireflies/markdown";
 import type { Rendered } from "./rendered.ts";
 import type { Autosave, AutosaveState } from "@fireflies/scratch";
 import type { Handover, TabKind } from "./tabs.ts";

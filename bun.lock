@@ -13,6 +13,7 @@
         "@fireflies/keyhelp": "workspace:*",
         "@fireflies/kit": "workspace:*",
         "@fireflies/layout-look": "workspace:*",
+        "@fireflies/markdown": "workspace:*",
         "@fireflies/menu-place": "workspace:*",
         "@fireflies/scratch": "workspace:*",
         "@fireflies/tones": "workspace:*",
@@ -49,6 +50,9 @@
     },
     "defaults/lib/@fireflies/layout-look": {
       "name": "@fireflies/layout-look",
+    },
+    "defaults/lib/@fireflies/markdown": {
+      "name": "@fireflies/markdown",
     },
     "defaults/lib/@fireflies/menu-place": {
       "name": "@fireflies/menu-place",
@@ -96,6 +100,8 @@
     "@fireflies/kit": ["@fireflies/kit@workspace:defaults/lib/@fireflies/kit"],
 
     "@fireflies/layout-look": ["@fireflies/layout-look@workspace:defaults/lib/@fireflies/layout-look"],
+
+    "@fireflies/markdown": ["@fireflies/markdown@workspace:defaults/lib/@fireflies/markdown"],
 
     "@fireflies/menu-place": ["@fireflies/menu-place@workspace:defaults/lib/@fireflies/menu-place"],
 

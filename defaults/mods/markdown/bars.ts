@@ -10,7 +10,7 @@ import type { Color, Context, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
 import { settings, home, window as appWindow } from "herdr";
-import { basename, dirname, tilde } from "./paths.ts";
+import { basename, dirname, tilde } from "@fireflies/markdown/paths";
 import type { DocLink } from "./links.ts";
 import { keysHint, keysView } from "@fireflies/keyhelp";
 import type { KeyRow } from "@fireflies/keyhelp";

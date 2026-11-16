@@ -8,7 +8,7 @@ import { isList } from "./guards.ts";
 import { basename, dirname, uri } from "./logic.ts";
 import { firstLocation, isLocations } from "./lsp-replies.ts";
 import { editBetween } from "./md-text.ts";
-import { join } from "./paths.ts";
+import { join } from "@fireflies/markdown/paths";
 import { beginInsert } from "./vim-ops.ts";
 import type { Doc as VimDoc, FeedResult, Played } from "./vim.ts";
 import { applyEdits, CARET, feed, play, token } from "./vim.ts";

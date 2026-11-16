@@ -2,7 +2,7 @@
 // viewer (TextView draws them, but can't say where they are). No herdr
 // imports: scripts/markdown.test.ts checks them.
 
-import type { Block } from "./markdown.ts";
+import type { Block } from "@fireflies/markdown";
 
 /** A link as read: its text and where it goes. */
 export interface TextLink {

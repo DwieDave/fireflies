@@ -47,7 +47,8 @@ let copies = 0;
 function modFiles(dir: string, under = ""): string[] {
   return readdirSync(join(dir, under)).flatMap((name) => {
     const rel = under ? `${under}/${name}` : name;
-    if (statSync(join(dir, rel)).isDirectory()) return modFiles(dir, rel);
+    // A library's own node_modules (the kit's peer, effect) is bun's, not its files.
+    if (statSync(join(dir, rel)).isDirectory()) return name === "node_modules" ? [] : modFiles(dir, rel);
     return /\.(ts|js)$/.test(name) && !name.endsWith(".d.ts") ? [rel] : [];
   });
 }
@@ -78,8 +79,12 @@ function importedNames(clause: string): string[] {
 /** A library the app serves every mod by name (defaults/lib). */
 const isLibrary = (spec: string) => spec === "effect" || spec.startsWith("effect/") || spec.startsWith("@fireflies/");
 
-/** A library loaded as it is (it imports none of the app's modules at run time, or a test mocks them). */
-const isShared = (spec: string) => spec === "effect" || spec.startsWith("effect/") || spec === "@fireflies/kit" || spec.startsWith("@fireflies/kit/");
+/**
+ * A library loaded as it is (it imports none of the app's modules at run
+ * time, or a test mocks them). The kit's `live` entry is the exception: it
+ * is the kit's services over `herdr`, so it is copied with the stand-ins.
+ */
+const isShared = (spec: string) => spec === "effect" || spec.startsWith("effect/") || ((spec === "@fireflies/kit" || spec.startsWith("@fireflies/kit/")) && spec !== "@fireflies/kit/live");
 
 const repo = new URL("..", import.meta.url).pathname;
 const LIB = new URL("../defaults/lib/", import.meta.url).pathname;

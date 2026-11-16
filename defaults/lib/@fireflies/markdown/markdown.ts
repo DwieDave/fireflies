@@ -1,9 +1,7 @@
 // Markdown in Nocturne's look: the GitHub window's PR bodies and comments,
-// the Markdown viewer, and the editor's live preview. Shared by
-// github, markdown and editor. A mod can import
-// only its own files, so each of them ships this same file and its parser,
-// markdown-parse.ts; scripts/markdown.test.ts fails when the copies differ:
-// edit markdown's and copy them over.
+// the Markdown viewer, and the editor's live preview. github, markdown and
+// editor import it (`@fireflies/markdown`), with its parser,
+// markdown-parse.ts.
 //
 // What the app draws natively inside every Markdown text (src/markdown.rs):
 // math ($…$, $$…$$, a ```math fence), mermaid diagrams (a ```mermaid fence),
@@ -12,11 +10,15 @@
 // editor), task lists you can tick, callouts (> [!NOTE], !!! note),
 // footnotes, local images, front matter.
 
+import { Array as Arr, Effect, Option, pipe, String as Str } from "effect";
 import { div, image } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
 import { TextView, h_flex, v_flex } from "gpui-base";
-import { exec, appHome } from "herdr";
+import { appHome } from "herdr";
 import type { Theme } from "herdr";
+import { execOk, replaceWith } from "@fireflies/kit";
+import type { Exec, ExecError, ExitError } from "@fireflies/kit";
+import { ExecLive } from "@fireflies/kit/live";
 import { blocks, TASK } from "./markdown-parse.ts";
 
 /** The theme colours a callout is drawn in. */
@@ -103,13 +105,13 @@ export function markdown(t: Theme, id: string, text: string, options: MarkdownOp
   const { onLink, size = 12.5 } = options;
   const view = TextView.markdown(id, text).selectable(true);
 
-  return div().text_size(size).text_color(t.foreground).child(onLink ? view.on_link_click(onLink) : view);
+  return div().text_size(size).text_color(t.foreground).child(onLink === undefined ? view : view.on_link_click(onLink));
 }
 
 /** The text as one code block, for a raw view: a fence longer than any inside it. */
 export function fenced(text: string): string {
-  const longest = Math.max(2, ...[...text.matchAll(/`{3,}/g)].map((m) => m[0].length));
-  const fence = "`".repeat(longest + 1);
+  const longest = Math.max(2, ...Arr.map(Arr.fromIterable(Str.matchAll(/`{3,}/g)(text)), (m) => m[0].length));
+  const fence = Str.repeat(longest + 1)("`");
 
   return `${fence}\n${text}\n${fence}`;
 }
@@ -117,13 +119,15 @@ export function fenced(text: string): string {
 /** A heading's anchor, as GitHub makes it: lowercase, links and marks gone,
  *  punctuation dropped (letters, digits, `-` and `_` stay), spaces to `-`. */
 export function slug(heading: string): string {
-  return heading
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
-    .toLowerCase()
-    .trim()
-    .replace(/[^\p{L}\p{N}\p{M} _-]/gu, "")
-    .replace(/ /g, "-");
+  return pipe(
+    heading,
+    Str.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1"),
+    Str.replace(/<[^>]+>/g, ""),
+    Str.toLowerCase,
+    Str.trim,
+    Str.replace(/[^\p{L}\p{N}\p{M} _-]/gu, ""),
+    Str.replace(/ /g, "-"),
+  );
 }
 
 /** Callout colors and names by type (a document names the type): GitHub's five
@@ -140,37 +144,59 @@ export const CALLOUTS: ReadonlyMap<string, readonly [color: CalloutColor, name: 
 ]);
 
 /** Local images inside running text (TextView can't draw them) as links to the file. */
-export function imagesAsLinks(line: string): string {
-  return line.replace(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+["'(][^)]*["')])?\s*\)/g,
-    (m, alt: string, src: string) => (isLocalSource(src) ? `[▧ ${alt || src.split("/").pop() || src}](${src})` : m));
-}
+export const imagesAsLinks: (line: string) => string = replaceWith(/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(\s+["'(][^)]*["')])?\s*\)/g, (m) => {
+  const alt = m[1] ?? "";
+  const src = m[2] ?? "";
+
+  if (!isLocalSource(src)) return m[0];
+
+  const name = Arr.lastNonEmpty(Str.split(src, "/"));
+
+  return `[▧ ${Str.isNonEmpty(alt) ? alt : Str.isNonEmpty(name) ? name : src}](${src})`;
+});
 
 /** Whether an image source is a file next to the document (not http, data: or another scheme). */
 export function isLocalSource(src: string): boolean {
-  return !/^[a-z][a-z0-9+.-]*:/i.test(src) && !src.startsWith("//");
+  return !/^[a-z][a-z0-9+.-]*:/i.test(src) && !Str.startsWith("//")(src);
 }
 
 /** The edit that ticks or unticks the task on `line` of `text`: the one
  *  character inside its brackets (1-based column), or null. */
 export function taskToggle(text: string, line: number): { readonly line: number; readonly col: number; readonly text: string } | null {
-  const l = text.replace(/\r\n?/g, "\n").split("\n")[line];
-  const m = l === undefined ? null : TASK.exec(l);
+  const l = Str.split(Str.replace(/\r\n?/g, "\n")(text), "\n")[line];
 
-  if (!l || !m) return null;
+  if (l === undefined || Str.isEmpty(l)) return null;
 
-  const col = l.indexOf("[", (m[1] ?? "").length + (m[2] ?? "").length) + 1;
+  const m = TASK.exec(l);
+
+  if (m === null) return null;
+
+  const from = (m[1] ?? "").length + (m[2] ?? "").length;
+  const col = Option.match(Str.indexOf("[")(Str.slice(from)(l)), { onNone: () => 0, onSome: (at) => from + at + 1 });
 
   return { line, col, text: m[3] === " " ? "x" : " " };
 }
 
-/** Copies a local image into the app's cache, named by its contents (image()
- *  reads only under the app's folder): its name under `cache/<dir>`, or null. */
-export async function cacheImage(path: string, dir: string): Promise<string | null> {
-  const script = 'mkdir -p "$2" && [ -f "$1" ] || exit 3; s=$(cksum < "$1" | cut -d" " -f1); n="$s.${1##*.}"; [ -f "$2/$n" ] || cp "$1" "$2/$n" || exit 4; printf %s "$n"';
-  const r = await exec("sh", ["-c", script, "md-image", path, `${appHome()}/cache/${dir}`]).catch(() => null);
+// Exit 3: the picture isn't there; 4: it couldn't be copied.
+const IMAGE_COPY = 'mkdir -p "$2" && [ -f "$1" ] || exit 3; s=$(cksum < "$1" | cut -d" " -f1); n="$s.${1##*.}"; [ -f "$2/$n" ] || cp "$1" "$2/$n" || exit 4; printf %s "$n"';
 
-  return r?.code === 0 && r.stdout ? r.stdout.trim() : null;
-}
+/** Copies a local image into the app's cache, named by its contents (image()
+ *  reads only under the app's folder): its name under `cache/<dir>`. */
+export const imageCopy = (path: string, dir: string): Effect.Effect<string, ExecError | ExitError, Exec> =>
+  Effect.map(execOk("sh", ["-c", IMAGE_COPY, "md-image", path, `${appHome()}/cache/${dir}`]), Str.trim);
+
+/**
+ * `imageCopy` for a caller not on Effect yet (the editor's preview, the
+ * Markdown viewer): the name, or null when the picture can't be copied. A
+ * picture that can't be drawn shows as a link to its file, which is how its
+ * failure is seen.
+ */
+export const cacheImage = (path: string, dir: string): Promise<string | null> =>
+  Effect.runPromise(imageCopy(path, dir).pipe(
+    Effect.map((name) => (Str.isEmpty(name) ? null : name)),
+    Effect.orElseSucceed(() => null),
+    Effect.provide(ExecLive),
+  ));
 
 /** Each block's top, and the document's height. */
 export interface Tops {
@@ -206,7 +232,7 @@ export class MarkdownDoc {
   setText(text: string | null | undefined): void {
     this.parts = text === null || text === undefined ? [] : blocks(text);
 
-    const keys = new Set(this.parts.map((p) => p.key));
+    const keys = new Set(Arr.map(this.parts, (p) => p.key));
 
     for (const k of this.heights.keys()) if (!keys.has(k)) this.heights.delete(k);
   }
@@ -219,7 +245,7 @@ export class MarkdownDoc {
 
     if (p.kind === "images") return 200;
 
-    const lines = p.kind === "md" ? p.text.split("\n").length : p.to - p.from + 1;
+    const lines = p.kind === "md" ? Str.split(p.text, "\n").length : p.to - p.from + 1;
 
     return 22 * lines + 8;
   }
@@ -254,15 +280,17 @@ export class MarkdownDoc {
 
   /** The block holding `anchor` (a heading or a footnote) at the top. */
   scrollTo(anchor: string): boolean {
-    const i = this.parts.findIndex((p) => (p.kind === "md" && p.anchor === anchor) || p.anchors?.includes(anchor) || (p.kind === "footnotes" && p.notes.some((n) => n.anchor === anchor)));
+    const found = Arr.findFirstIndex(this.parts, (p) => (p.kind === "md" && p.anchor === anchor) || p.anchors?.includes(anchor) === true || (p.kind === "footnotes" && Arr.some(p.notes, (n) => n.anchor === anchor)));
 
-    if (i < 0) {
+    if (Option.isNone(found)) {
       this.want = null;
 
       return false;
     }
 
-    this.want = this.parts.slice(0, i).some((p) => !this.heights.has(p.key)) ? anchor : null;
+    const i = found.value;
+
+    this.want = Arr.some(Arr.take(this.parts, i), (p) => !this.heights.has(p.key)) ? anchor : null;
     this.setScroll((this.tops().tops[i] ?? 0) - 8);
 
     return true;
@@ -277,7 +305,7 @@ export class MarkdownDoc {
       const p = this.parts[i];
       const top = tops[i] ?? 0;
 
-      if (!p || p.kind === "footnotes") continue;
+      if (p === undefined || p.kind === "footnotes") continue;
 
       if (p.from <= line) best = { top, part: p };
 
@@ -288,7 +316,7 @@ export class MarkdownDoc {
       }
     }
 
-    if (!best) return 0;
+    if (best === null) return 0;
 
     // Between blocks (blank lines): the gap after the one before.
     return best.top + this.height(best.part) + GAP / 2;
@@ -303,13 +331,13 @@ export class MarkdownDoc {
       const p = this.parts[i];
       const top = tops[i] ?? 0;
 
-      if (!p || p.kind === "footnotes") continue;
+      if (p === undefined || p.kind === "footnotes") continue;
 
       const h = this.height(p);
 
       if (y < top) {
         // In the gap above it: between the last block's end and this one's start.
-        if (!prev) return p.from;
+        if (prev === null) return p.from;
 
         const t = (y - prev.bottom) / Math.max(1, top - prev.bottom);
 
@@ -321,7 +349,7 @@ export class MarkdownDoc {
       prev = { to: p.to, bottom: top + h };
     }
 
-    return prev ? prev.to + 1 : 0;
+    return prev === null ? 0 : prev.to + 1;
   }
 
   /** A block was measured: keep what's on screen in place when a block
@@ -331,18 +359,19 @@ export class MarkdownDoc {
 
     if (old !== undefined && Math.abs(old - h) <= 1) return false;
 
-    const i = this.parts.findIndex((p) => p.key === key);
-    const part = this.parts[i];
+    const i = Arr.findFirstIndex(this.parts, (p) => p.key === key);
 
-    if (part) {
-      const was = old ?? this.height(part);
+    if (Option.isSome(i)) {
+      const at = i.value;
+      const part = this.parts[at];
+      const was = old ?? (part === undefined ? h : this.height(part));
 
-      if ((this.tops().tops[i] ?? 0) + was < this.scrollY && !this.want) this.scrollY += h - was;
+      if ((this.tops().tops[at] ?? 0) + was < this.scrollY && this.want === null) this.scrollY += h - was;
     }
 
     this.heights.set(key, h);
 
-    if (this.want) this.scrollTo(this.want);
+    if (this.want !== null) this.scrollTo(this.want);
 
     this.scroll(0);
 
@@ -355,7 +384,7 @@ export class MarkdownDoc {
     const lo = this.scrollY - this.viewH * OVERDRAW;
     const hi = this.scrollY + this.viewH * (1 + OVERDRAW);
 
-    const shown = this.parts.flatMap((p, i) => {
+    const shown = Arr.flatMap(this.parts, (p, i) => {
       const top = tops[i] ?? 0;
 
       return top + this.height(p) >= lo && top <= hi ? [{ p, top }] : [];
@@ -383,7 +412,7 @@ export class MarkdownDoc {
         o.notify(cx);
       })
       .child(h_flex().absolute().left(0).right(0).top(first - this.scrollY).justify_center()
-        .child(v_flex().w_full().max_w(o.maxWidth ?? 780).px(24).gap(GAP).children(shown.map(({ p }) => {
+        .child(v_flex().w_full().max_w(o.maxWidth ?? 780).px(24).gap(GAP).children(Arr.map(shown, ({ p }) => {
           const block = div().id(`${this.prefix}-${p.key}`).relative().on_size_change((size, cx) => {
             if (this.measured(p.key, o.unzoom(size.height))) o.notify(cx);
           });
@@ -395,7 +424,7 @@ export class MarkdownDoc {
 
     return view.child(div().absolute().right(1).w(3)
       .top(Math.round((this.scrollY / max) * this.viewH * (1 - frac))).h(Math.max(16, Math.round(this.viewH * frac)))
-      .child(o.dither(o.focused ? t.accent : t.muted)));
+      .child(o.dither(o.focused === true ? t.accent : t.muted)));
   }
 
   part(t: Theme, p: Block, o: DocOptions): Element {
@@ -418,7 +447,7 @@ export class MarkdownDoc {
             .child(div().relative().size(8).flex_none().border(1).border_color(color).child(o.dither(color)))
             .child(div().text_size(size - 1).text_color(color).child(p.title)));
 
-        return p.text.trim() ? box.child(div().relative().child(md(`${id}-md`, p.text))) : box;
+        return Str.isEmpty(Str.trim(p.text)) ? box : box.child(div().relative().child(md(`${id}-md`, p.text)));
       }
 
       case "footnotes":
@@ -426,22 +455,22 @@ export class MarkdownDoc {
           .child(h_flex().gap(10).items_center().text_size(10.5).text_color(t.dim)
             .child(div().child("FOOTNOTES"))
             .child(div().relative().flex_1().h(1).opacity(0.6).child(o.dither(t.muted))))
-          .children(p.notes.map((n) => h_flex().id(`${id}-${n.anchor}`).gap(8).items_start()
+          .children(Arr.map(p.notes, (n) => h_flex().id(`${id}-${n.anchor}`).gap(8).items_start()
             .child(div().w(22).flex_none().text_size(size - 1).text_color(t.accent).child(`${n.n}.`))
             .child(div().flex_1().min_w(0).child(md(`${id}-${n.anchor}-md`, n.text)))
             .child(div().id(`${id}-${n.anchor}-back`).flex_none().text_color(t.dim).hover((s) => s.text_color(t.accent)).cursor_pointer()
               .on_click((_e, cx) => {
                 cx.stop_propagation();
-                o.onLink?.(`#fnref-${n.anchor.slice(3)}`, cx);
+                o.onLink?.(`#fnref-${Str.slice(3)(n.anchor)}`, cx);
               })
               .child("↩"))));
     }
   }
 
   tasks(t: Theme, items: readonly TaskItem[], id: string, o: DocOptions, md: (key: string, text: string) => Element): Element {
-    const base = Math.min(...items.map((it) => it.indent));
+    const base = Math.min(...Arr.map(items, (it) => it.indent));
 
-    return v_flex().gap(3).children(items.map((it, j) => {
+    return v_flex().gap(3).children(Arr.map(items, (it, j) => {
       const box = it.checked === null
         ? div().w(14).flex_none().text_color(t.dim).child(/^\d/.test(it.marker) ? it.marker : "•")
         : this.tickBox(t, it, `${id}-box-${j}`, o);
@@ -450,13 +479,13 @@ export class MarkdownDoc {
 
       return h_flex().id(`${id}-item-${j}`).gap(8).items_start().pl(Math.max(0, it.indent - base) * 7)
         .child(box)
-        .child((it.checked === true ? words.opacity(0.6) : words).child(md(`${id}-item-${j}-md`, it.text || " ")));
+        .child((it.checked === true ? words.opacity(0.6) : words).child(md(`${id}-item-${j}-md`, Str.isEmpty(it.text) ? " " : it.text)));
     }));
   }
 
   /** A task's box: a click ticks or unticks it. */
   tickBox(t: Theme, it: TaskItem, id: string, o: DocOptions): Element {
-    const box = div().id(id).relative().size(12).mt(3).flex_none().border(1).border_color(it.checked ? t.accent : t.muted)
+    const box = div().id(id).relative().size(12).mt(3).flex_none().border(1).border_color(it.checked === true ? t.accent : t.muted)
       .cursor_pointer().hover((s) => s.border_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => {
@@ -464,14 +493,14 @@ export class MarkdownDoc {
         o.onTask?.(it.line, cx);
       });
 
-    return it.checked ? box.child(div().absolute().top(2).left(2).right(2).bottom(2).child(o.dither(t.accent))) : box;
+    return it.checked === true ? box.child(div().absolute().top(2).left(2).right(2).bottom(2).child(o.dither(t.accent))) : box;
   }
 
   images(t: Theme, images: readonly ImageRef[], id: string, o: DocOptions): Element {
-    return v_flex().gap(6).children(images.map((img, j) => {
+    return v_flex().gap(6).children(Arr.map(images, (img, j) => {
       const got = o.image?.(img.src) ?? { abs: null, name: null };
 
-      if (got.name) {
+      if (got.name !== null && got.name !== undefined && Str.isNonEmpty(got.name)) {
         return div().id(`${id}-imgbox-${j}`).flex().cursor_pointer()
           .on_click((_e, cx) => {
             cx.stop_propagation();
@@ -480,9 +509,9 @@ export class MarkdownDoc {
           .child(image(got.name).id(`${id}-img-${j}`).max_w_full().max_h(360));
       }
 
-      const label = got.name === undefined && got.abs ? "loading…" : img.alt || img.src;
+      const label = got.name === undefined && got.abs !== null && Str.isNonEmpty(got.abs) ? "loading…" : Str.isEmpty(img.alt) ? img.src : img.alt;
 
-      return markdown(t, `${id}-imgalt-${j}`, `[▧ ${label.replace(/[[\]]/g, "")}](${img.src})`, { onLink: o.onLink }).text_color(t.muted);
+      return markdown(t, `${id}-imgalt-${j}`, `[▧ ${Str.replace(/[[\]]/g, "")(label)}](${img.src})`, { onLink: o.onLink }).text_color(t.muted);
     }));
   }
 }

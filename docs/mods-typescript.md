@@ -237,7 +237,7 @@ Two more shapes, both in guard.ts:
   index.json.
 - A list other mods append to: `sharedListKey(name, itemGuard)`,
   `readSharedList(shared, KEY)`: one entry in another shape is left out, not
-  the whole list (follow.ts `CHANGES_KEY`, the files pane's moves).
+  the whole list (the files pane's moves; on Schema: `@fireflies/markdown/follow`'s `fileChanges`).
 
 A record another mod reads by its old string name keeps the name exported
 as a string beside its typed key (`OPEN = "editor.open"`, `OPEN_KEY`): the app
@@ -379,6 +379,8 @@ build on (read the file's top and its `export type`s):
 | `@fireflies/scratch` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry` (`IndexEntrySchema`), `ScratchIo`, `Autosave`, `AutosaveState`; `ownerOf`, `locateIn` on the kit's `Exec` and `Files` |
 | `@fireflies/envrc` | editor, databases | `editor-env.test.ts`, `databases-data.test.ts` | `Exec`, `EnvVars`, `Probe`, `ProjectEnv`, `EnvCache`, `KeptEnv`; `probeIn`, `projectEnvIn`, `lookupIn` on the kit's `Exec` |
 | `@fireflies/usage-limits` | nocturne, usage | `usage-limits.test.ts`, `usage-poll.test.ts` | the usage windows, `UsageEndpoint`, `refreshUsage` |
+| `@fireflies/markdown` (`markdown.ts`, its parser `markdown-parse.ts`) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map), `MarkdownDoc`; `imageCopy` on the kit's `Exec` (`cacheImage` its promise for mods not on Effect yet) |
+| `@fireflies/markdown/paths`, `/follow` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange` (`FileChangeSchema`), `Followed` |
 
 Each library's test checks that no mod carries a copy of it again.
 
@@ -394,8 +396,6 @@ the contract the mods build on:
 | `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
 | `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts; `table.ts` also databases) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`; databases' `table.ts`: `databases-data.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
 | `file-icons.ts` (and `icons/*.svg`) | editor, file-tree, preview (viewer.ts imports it), nocturne (the jar shelf's tiles) | `editor-tabs.test.ts`, `preview-shared.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
-| `markdown.ts`, `markdown-parse.ts` (its blocks) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
-| `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |
 
 Not copies (same name, different file per mod): `kit.ts`, `logic.ts`,
 `tabs.ts`, `graph.ts`, git's `keys.ts` and `kinds.ts`.

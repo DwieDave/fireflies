@@ -5,7 +5,7 @@
 // write relative paths or `path:12:5`.
 
 import type { HoverPart } from "./lsp-replies.ts";
-import { follow } from "./paths.ts";
+import { follow } from "@fireflies/markdown/paths";
 
 /** A link's words without Markdown's marks (`code`, *emphasis*). */
 function plain(label: string): string {

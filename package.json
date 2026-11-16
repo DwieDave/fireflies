@@ -12,6 +12,7 @@
     "@fireflies/keyhelp": "workspace:*",
     "@fireflies/kit": "workspace:*",
     "@fireflies/layout-look": "workspace:*",
+    "@fireflies/markdown": "workspace:*",
     "@fireflies/menu-place": "workspace:*",
     "@fireflies/scratch": "workspace:*",
     "@fireflies/tones": "workspace:*",
