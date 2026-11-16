@@ -67,6 +67,10 @@ export function stripView(view: Browser, t: Theme): Element {
         view.pressed = { id: tab.id, x: e.position.x };
       })
       .on_mouse_move((e, cx) => dragOver(view, Tabs.gapAt(tab.id, e.local_position.x, e.bounds.width), e.position, cx))
+      // Where it's drawn: m's menu hangs from it.
+      .on_bounds_change((b) => {
+        view.tabBoxes.set(tab.id, { x: b.x, y: b.y, w: b.width, h: b.height });
+      })
       .on_mouse_up("left", (_e, cx) => {
         if (!view.drag && view.pressed?.id === tab.id) {
           view.claim();

@@ -6,6 +6,7 @@ import { div } from "gpui-kit";
 import type { AsyncContext, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run, openOverlay } from "herdr";
+import { overlayOf } from "./menu-place.ts";
 import type { Theme } from "herdr";
 import { isNull, isNumber, isString, nullable, object, oneOf, parseJson, readShared, readSharedList, sharedKey, writeShared } from "./guard.ts";
 import * as Tabs from "./tabs.ts";
@@ -72,8 +73,8 @@ export function takeShow(view: Browser, cx: Context) {
 
 // ---- the tab's menu: this mod as a popup (props { tabMenu })
 
-/** Opens tab `id`'s menu: at the pointer (a right-click), or in the middle
- *  from the keyboard (`keyboard`: m in the bar), as Nocturne's menus open. */
+/** Opens tab `id`'s menu: at the pointer (a right-click), or from the keyboard (`keyboard`: m in
+ *  the bar) under its tab, in the middle with one tab (no strip), as Nocturne's menus open. */
 export function openTabMenu(view: Browser, id: string, keyboard: boolean) {
   const index = Tabs.indexOf(view.tabs, id);
   const tab = view.tabs.list[index];
@@ -86,7 +87,10 @@ export function openTabMenu(view: Browser, id: string, keyboard: boolean) {
   const rows = Tabs.menuRows(menu);
   const height = rows.flat().length * MENU_ROW + (rows.length - 1) * MENU_RULE + MENU_ROW + 10;
 
-  openOverlay({ mod: "browser", kind: keyboard ? "dialog" : "popup", frame: "none", width: MENU_W, height, props: { tabMenu: menu } });
+  // From the keyboard: under its tab on the strip (menu-place.ts), in the middle with no strip.
+  const box = keyboard && view.tabs.list.length > 1 ? view.tabBoxes.get(id) ?? null : null;
+
+  openOverlay({ mod: "browser", ...overlayOf(keyboard ? (box ? { rect: box } : null) : "pointer"), frame: "none", width: MENU_W, height, props: { tabMenu: menu } });
 }
 
 /** `tab_act:{ slot, tab, act }`: a pick in a tab's menu, for the pane it names. */

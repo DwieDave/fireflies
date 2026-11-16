@@ -90,6 +90,7 @@
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent } from "gpui-kit";
+import type { Rect } from "./menu-place.ts";
 import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import type { InputState } from "gpui-base";
@@ -145,6 +146,9 @@ export default class Browser extends View {
   barW = 600;
   // A left press on a tab ({ id, x }), and the drag it became ({ id, gap }: Tabs.dropIndex).
   pressed: { readonly id: string; readonly x: number } | null = null;
+  /** Where each tab of the strip is drawn (window px, its on_bounds_change): a key's tab menu
+   *  hangs from its tab (menu-place.ts). */
+  tabBoxes = new Map<string, Rect>();
   drag: { readonly id: string; gap: Gap | null } | null = null;
   handle: FocusHandle | null = null;
   input: InputState | null = null;
