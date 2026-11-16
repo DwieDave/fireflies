@@ -6,6 +6,7 @@ import { div, svg, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Status, Theme } from "herdr";
+import { flat } from "@fireflies/layout-look";
 
 export const ART = "mods/nocturne/art";
 
@@ -13,6 +14,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** A layer filling its parent with a 50% checker dither, in `cell`-px squares (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

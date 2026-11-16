@@ -9,14 +9,14 @@ import { isString } from "./guard.ts";
 import type { Row } from "./detect.ts";
 import type { Run, Tone } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
-import { hint } from "./keyhelp.ts";
+import { hint } from "@fireflies/keyhelp";
 import { short, SECTION, ART, CHIP, CHIPS_W, ICON, OWN, ROW, aside } from "./state.ts";
 import type { Asked, Chip, Item, Top } from "./state.ts";
 import { dither, eyebrow, toneColor } from "./paint.ts";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { rightPress } from "./run-menu.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A word that acts on a click (‹ back, cancel): dim, lit under the pointer. */
 export function actionChip(t: Theme, id: string, label: string, color: Color | null, go: (cx: Context) => void) {

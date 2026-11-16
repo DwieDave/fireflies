@@ -4,6 +4,7 @@
 import { PathBuilder, Background } from "gpui-kit";
 import type { Color } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
+import { flat } from "@fireflies/layout-look";
 
 /** Nocturne's sky art (moon, stars, hills, glow, pip). */
 export const ART = "mods/nocturne/art";
@@ -15,6 +16,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** A layer filling its parent with a 50% checker dither, in `cell`-px squares (Retina on macOS). */
 export function dither(color: Color, cell = 1) {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

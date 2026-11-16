@@ -4,7 +4,7 @@
 
 import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either
  *  isn't one (../nocturne/toolground.ts's mix: a mod can't import another's files). */

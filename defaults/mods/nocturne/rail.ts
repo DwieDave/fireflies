@@ -17,7 +17,7 @@ import { doneBadge, railGlass } from "./meadow.ts";
 import { flyMark } from "./winged.ts";
 import { pinTile } from "./shelf.ts";
 import type Sky from "./sky.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The rail's name for a space: its first letter, and the next one small ("Mo"). */
 export function initials(name: string): string {

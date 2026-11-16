@@ -24,7 +24,7 @@ import { textIn } from "./form-fields.ts";
 import { Form } from "./form.ts";
 import type { Note } from "./kit.ts";
 import { panel, empty, band, noteOf } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const WAIT = 2000, WAIT_FOR = 120000; // how often, and how long, to look for the new run
 

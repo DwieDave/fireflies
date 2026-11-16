@@ -1,6 +1,6 @@
 import { keysNow } from "./nocturne-mods.ts";
 import { test, expect } from "bun:test";
-import { asJs, guard, tones, tonesFor } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, keyhelpFor } from "./mod-source.ts";
 import { readFile } from "node:fs/promises";
 
 // The web pane (browser) and the picture in picture player by keys,
@@ -63,16 +63,6 @@ const sourced = (kind: string) => (src: string) => { const el: any = new Element
 const kit = { View: class {}, div: () => new Element(), svg: sourced("svg"), image: sourced("image"), PathBuilder: { fill: () => new Element() }, Background: { checkerboard: () => ({}) } };
 
 /** A loaded copy of a mod: `props` its own, its commands from `send`, its native calls in `native`. */
-/** A mod file's keyhelp.ts exports (imports stripped), when the file imports it. */
-async function keyhelpOf(path: string, source: string, scope: Record<string, any>): Promise<Record<string, unknown>> {
-  if (!/from "\.\/keyhelp\.ts"/.test(source)) return {};
-  const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
-  const names: string[] = [];
-  const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
-    settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
-  return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
-}
 
 // The mod's own files loaded for real (they import nothing of the app's), or as keyhelp.ts is.
 const REAL = /^(guard|guards|editor-route|tabs|favicons|keyhelp)\.ts$/;
@@ -134,7 +124,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
     } },
   };
   const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
-  Object.assign(scope, await keyhelpOf(path, source, scope));
+  Object.assign(scope, await keyhelpFor(source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
   // guards.ts and editor-route.ts only guard.ts): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts|guards\.ts|editor-route\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));

@@ -33,7 +33,7 @@ import { hasRange, inRange, rangeOf, rowsSelected, stretched, wholeRows } from "
 import { dropTarget, pressAt } from "./press.ts";
 import { insertName } from "./actions.ts";
 import type { default as DbView } from "./main.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 /** The grid's handlers for the shown grid (the Rows tab's or a query's). */
 function handlers(t: Theme, v: DbView, q: QueryTab | null): GridHandlers {

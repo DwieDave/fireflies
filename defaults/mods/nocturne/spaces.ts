@@ -46,7 +46,7 @@ import { EDIT_SPACE_KEY, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";
 import { SPACE_ROWS, spaceRowsOf } from "./tabmove.ts";
 import type { Nav, NavActs } from "./nav.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;

@@ -43,7 +43,8 @@ const bellBlock = { id: "notify", type: "block", size: { px: 28 }, content: { mo
 const newBlock = { id: "new", type: "block", size: { px: 62 }, content: { mod: "nocturne", props: { role: "newbutton" } } };
 /** The nocturne layout; `row`: the tab row's blocks after the strip. */
 const layoutWith = (row: any[]) => ({
-  id: "root", type: "row", children: [
+  // the shipped nocturne layout's look (layout-look.ts reads it): dithered, square
+  id: "root", type: "row", scrim: { dither: true }, corners: "square", children: [
     { id: "sidebar", type: "block", content: { mod: "nocturne", props: { role: "sky" } } },
     { id: "work", type: "column", children: [
       { id: "tab-row", type: "row", children: [{ id: "tabs", type: "block", content: { mod: "nocturne", props: { role: "tabs" } } }, ...row] },

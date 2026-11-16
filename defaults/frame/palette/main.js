@@ -88,6 +88,14 @@ const NAMED = [
   ["app.hide_others", {}, "App", "Hide other apps", "macos"],
   ["app.show_all", {}, "App", "Show all apps", "macos unhide"],
   ["app.quit", {}, "App", "Quit Fireflies", "exit"],
+  // Fireflies' windows in any layout (Nocturne opens them from its own palette and keys):
+  // each mod's mod.json says how its window opens; a second run closes it.
+  ["mod.open", { name: "git" }, "Window", "Git", "repository status commit branch stage diff"],
+  ["mod.open", { name: "github" }, "Window", "GitHub", "pull requests actions runs issues projects"],
+  ["mod.open", { name: "databases" }, "Window", "Databases", "sql postgres mysql sqlite query tables"],
+  ["mod.open", { name: "procs" }, "Window", "Processes", "ports cpu memory kill top"],
+  ["mod.open", { name: "scripts" }, "Window", "Scripts", "just npm make run tasks"],
+  ["pane.split", { direction: "right", mod: "file-tree" }, "Pane", "Files beside", "tree folder explorer"],
   // The shipped themes a person picks from (ink, moss and atom-one-dark still load
   // when named, but aren't offered): moonfly is Nocturne's, graphite herdr-app's default look.
   ...[["moonfly", "moonfly", ""], ["graphite", "graphite (herdr-app default)", " herdr default"], ["paper", "paper (light)", " light"]]

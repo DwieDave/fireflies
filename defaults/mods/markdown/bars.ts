@@ -12,10 +12,11 @@ import type { Theme } from "herdr";
 import { settings, home, window as appWindow } from "herdr";
 import { basename, dirname, tilde } from "./paths.ts";
 import type { DocLink } from "./links.ts";
-import { keysHint, keysView } from "./keyhelp.ts";
-import type { KeyRow } from "./keyhelp.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { keysHint, keysView } from "@fireflies/keyhelp";
+import type { KeyRow } from "@fireflies/keyhelp";
+import { edge as edgeTone } from "@fireflies/tones";
 import type { default as Markdown } from "./main.ts";
+import { flat } from "@fireflies/layout-look";
 
 const ART = "mods/nocturne/art";
 
@@ -23,6 +24,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** A 50% checker dither filling the parent (same as ../nocturne/kit.ts). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
   const zoom = settings().zoom || 1;
 

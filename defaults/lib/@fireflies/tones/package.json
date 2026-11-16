@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/tones",
+  "private": true,
+  "type": "module",
+  "description": "The tones the mods draw with that the theme has no name for (edge, tone, over). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

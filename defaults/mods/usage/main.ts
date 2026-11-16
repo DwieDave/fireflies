@@ -37,8 +37,8 @@ import { ART, OWN, dither } from "./kit.ts";
 import { PROVIDERS, UsageEndpoint, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.ts";
 import type { Note, ProviderId, ScopedWindow, Usage, UsageServices, UsageWindow, Why } from "./limits.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
-import { keysHint, keysView, keysKey } from "./keyhelp.ts";
-import { edge } from "./tones.ts";
+import { keysHint, keysView, keysKey } from "@fireflies/keyhelp";
+import { edge } from "@fireflies/tones";
 
 const TICK = "30 seconds"; // countdowns, and asking again once the answer is old
 const FIRST = "1 second"; // the first read, this long after the pane first draws

@@ -9,14 +9,14 @@ import type { Theme } from "herdr";
 import { duration, tag, fileSize, count } from "./kinds.ts";
 import { percent } from "./image.ts";
 import { keyList } from "./keys.ts";
-import { keysHint, keysView } from "./keyhelp.ts";
+import { keysHint, keysView } from "@fireflies/keyhelp";
 import { fileIcon, iconColor, iconSvg, ICON_SIZE } from "./file-icons.ts";
 import { held, lastPart, unzoom, basename, MOD, stop, checker, ART } from "./viewer-state.ts";
 import { goTo } from "./viewer-load.ts";
 import { actual, copyPath, editable, fit, openInSystem, pageGo, ready, reveal, turn, zoomBy } from "./viewer-pan.ts";
 import { openInDatabases } from "./viewer-table.ts";
 import type { default as Viewer } from "./viewer.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A control on the bar or the strip; tab / shift-tab reach it in drawing order. */
 export function chip(v: Viewer, t: Theme, id: string, label: string, action: (cx: Context) => void, on = false): Element {

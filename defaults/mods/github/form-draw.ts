@@ -13,7 +13,7 @@ import { cellOf, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TO
 import type { Choice, Field } from "./form-fields.ts";
 import { isText, isList } from "./form-fields.ts";
 import type { Form, PickerSpot } from "./form.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 /** The fields (scrolled when they don't fit) over the footer with the buttons. */
 export function body<R>(f: Form<R>, t: Theme): Element {

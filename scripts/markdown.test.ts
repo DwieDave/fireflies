@@ -1,6 +1,6 @@
 import { test, expect } from "bun:test";
 import { readFile } from "node:fs/promises";
-import { asJs, guard, tones, tonesFor, importMod } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor, importMod, keyhelpFor } from "./mod-source.ts";
 
 // The mods import the app's modules; stand-ins record what they're asked.
 class Element {
@@ -38,16 +38,6 @@ const base = {
 /** A shipped mod file run with stand-ins for the app's modules (imports
  *  dropped, exports returned), the way picker.test.ts does it: no module mocks,
  *  which would leak into the other test files of the same run. */
-/** A mod file's keyhelp.ts exports (imports stripped), when the file imports it. */
-async function keyhelpOf(path: string, source: string, scope: Record<string, any>): Promise<Record<string, unknown>> {
-  if (!/from "\.\/keyhelp\.ts"/.test(source)) return {};
-  const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
-  const names: string[] = [];
-  const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
-    settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
-  return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
-}
 
 async function load(path: string, extra: Record<string, unknown> = {}): Promise<any> {
   const source = asJs(path, await readFile(new URL(`../defaults/mods/${path}`, import.meta.url), "utf8"));
@@ -57,7 +47,7 @@ async function load(path: string, extra: Record<string, unknown> = {}): Promise<
     .replace(/^export default class (\w+)/m, (_m, n) => { names.push(`default: ${n}`); return `class ${n}`; })
     .replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
   const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, ...extra, window: extra.window ?? globalThis.window };
-  Object.assign(scope, await keyhelpOf(path, source, scope));
+  Object.assign(scope, await keyhelpFor(source, scope));
   return new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));
 }
 

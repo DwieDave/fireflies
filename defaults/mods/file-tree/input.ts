@@ -10,7 +10,7 @@ import { askKey, startDraft, startRename, paste, cutRow, askDelete } from "./fil
 import { cancelDrag, markRange, markToggle } from "./drag.ts";
 import { clearSearch, pressStop, startFind, reveal, openWeb } from "./search.ts";
 import { stepRow, selectRow } from "./list-view.ts";
-import { keysKey } from "./keyhelp.ts";
+import { keysKey } from "@fireflies/keyhelp";
 import { parent } from "./logic.ts";
 import { toggleLook, resizeLook } from "./look.ts";
 import { closePane, terminalEdit, nvim, previewRow, openPane, copyPath } from "./opening.ts";

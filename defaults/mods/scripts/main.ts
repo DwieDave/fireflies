@@ -43,8 +43,8 @@ import type { Sys } from "./nix.ts";
 import { NO_SYS } from "./nix.ts";
 import type { Run } from "./runs.ts";
 import { allRuns } from "./runs.ts";
-import type { KeyRow } from "./keyhelp.ts";
-import { keysKey } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
+import { keysKey } from "@fireflies/keyhelp";
 import { CHORD, deckProps, FOUND, ESCAPE, CONTEXT, DECK, SECTION, ROW, FOOT, RUNS_SHOWN, HEAD, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Asking, Item, Act } from "./state.ts";
 import { lookForScripts, recent } from "./found.ts";
@@ -55,7 +55,7 @@ import { outputKey, typedKey } from "./input.ts";
 import type { RunMenu } from "./run-menu.ts";
 import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** What ? lists (`cmd`: ⌘ or ctrl-): every key onKey() takes, the keys entry last. */
 export const deckKeys = (cmd: string): KeyRow[] => [

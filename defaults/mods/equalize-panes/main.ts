@@ -24,7 +24,8 @@ import type { Guarded } from "./guard.ts";
 import { isString, object } from "./guard.ts";
 import type { ScopeRow } from "./scopes.ts";
 import { rows, shortcut } from "./scopes.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
+import { flat } from "@fireflies/layout-look";
 
 const ROW = 26;
 const HERE = "mods/equalize-panes";
@@ -44,6 +45,10 @@ const equalizeProps = (): EqualizeProps => {
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 

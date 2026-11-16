@@ -19,7 +19,7 @@ import { graphFor, shownWidth } from "./rows.ts";
 import type { default as GitView } from "./main.ts";
 import { contextMenu } from "./bars.ts";
 import { loadMain, readMore } from "./content.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A list body: only the rows in view are drawn (lazygit scrolls by row). */
 export function sideList(v: GitView, t: Theme, ctx: ListContext, rowH: number, draw: DrawRow, active: boolean) {

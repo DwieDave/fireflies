@@ -16,7 +16,7 @@ import { dither } from "./dither.ts";
 import { keyOf, closeOwn } from "./props.ts";
 import type { TabMenu } from "./props.ts";
 import type Browser from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // A tab to show once this pane is on screen (nocturne's goToPin): { slot, tab, at }.
 export const SHOW = sharedKey("browser.show", nullable(object({ tab: isString }, { slot: oneOf(isString, isNumber, isNull), at: isNumber })));

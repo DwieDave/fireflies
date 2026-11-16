@@ -12,7 +12,7 @@ import { NIX_NOTE, PROGRAMS, installHow, installLine } from "./clients.ts";
 import type { Read } from "./reads.ts";
 import { readWords } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A read going on, in the middle of its panel: the moon, what runs and for how long, its stop. */
 export function readingView(t: Theme, id: string, r: Read): Element {

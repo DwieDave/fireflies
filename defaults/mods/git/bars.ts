@@ -10,8 +10,8 @@ import type { Action, Binding, KeyContext, ListContext } from "./keys.ts";
 import { lookup, barKeys, menuKeys, bindings, keyLabel, isListContext } from "./keys.ts";
 import { act } from "./actions.ts";
 import type { MenuItem } from "./popups.ts";
-import { keysHint } from "./keyhelp.ts";
-import type { KeyRow, KeySection } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
+import type { KeyRow, KeySection } from "@fireflies/keyhelp";
 import type { Hint } from "./draw.ts";
 import { ART, dither, chip, hints, short } from "./draw.ts";
 import { CONTEXT_NAMES } from "./state.ts";
@@ -20,7 +20,7 @@ import type { default as GitView } from "./main.ts";
 import { openPane, quit } from "./panes.ts";
 import { reload } from "./reads.ts";
 import { inPane, movable, move } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A bar label: the first words before "/" or "…". */
 export const shortLabel = (s: string) => (s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0]?.split(",")[0]?.split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0] ?? "").toLowerCase();

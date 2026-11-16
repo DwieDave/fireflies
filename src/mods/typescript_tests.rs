@@ -243,6 +243,60 @@ fn mods_import_effect_and_the_kit_by_name_and_share_them(cx: &mut TestAppContext
     cx.run_until_parked();
 }
 
+/// Every library under defaults/lib/@fireflies (a folder with a package.json)
+/// resolves from a mod by its bare name, the app's modules it imports
+/// (`herdr`, `gpui-kit`) included: a library added there is served without
+/// registering it anywhere else.
+#[gpui::test]
+fn every_fireflies_library_resolves_from_a_mod_by_its_name(cx: &mut TestAppContext) {
+    cx.update(gpui_shell::init);
+    export_libraries();
+    let names: std::collections::BTreeSet<&str> = MOD_LIBRARIES
+        .iter()
+        .filter_map(|(path, _)| path.strip_prefix("@fireflies/")?.strip_suffix("/package.json"))
+        .collect();
+    assert!(names.len() > 3 && names.contains("kit") && names.contains("keyhelp"), "{names:?}");
+    let tree = Tree::new();
+    let imports: String = names.iter().enumerate().map(|(i, name)| format!("import * as l{i} from \"@fireflies/{name}\";\n")).collect();
+    let counts: Vec<String> = names.iter().enumerate().map(|(i, name)| format!("{name}=${{Object.keys(l{i}).length > 0}}")).collect();
+    tree.write("main.ts", &format!(
+        "import {{ View, div }} from \"gpui-kit\";\n{imports}export default class P extends View {{ render() {{ return div().child(`{}`); }} }}\n",
+        counts.join(" ")
+    ));
+    let policy = Policy::new().with_host_module(module(Instance { name: String::new(), props: Value::Null }, 0)).unwrap();
+    let runtime = ShellRuntime::new_isolated().unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    window.update(cx, |_, window, cx| {
+        let mut session = DescriptionSession::load(runtime.clone(), &tree.0, policy, window, cx).unwrap_or_else(|e| panic!("{e:#}"));
+        let tree = session.describe(window, cx).unwrap_or_else(|e| panic!("{e:#}"));
+        for name in &names {
+            assert!(tree.contains(&format!("{name}=true")), "@fireflies/{name}: {tree}");
+        }
+    }).unwrap();
+    window.update(cx, |_, window, _| window.remove_window()).unwrap();
+    cx.run_until_parked();
+}
+
+/// `herdr-app types <dir>` writes the @fireflies/* libraries where a mod in a
+/// repository of its own resolves them (node_modules), never Effect itself
+/// (that comes from npm at the kit's peer version).
+#[test]
+fn types_write_the_fireflies_libraries_for_a_mod_outside_the_repo() {
+    let tree = Tree::new();
+    let written = write_library_types(&tree.0).unwrap();
+    assert!(written > 5, "{written}");
+    let kit = tree.0.join("node_modules/@fireflies/kit");
+    for file in ["index.ts", "live.ts", "testing.ts", "engine-globals.d.ts", "package.json"] {
+        assert!(kit.join(file).is_file(), "{file}");
+    }
+    let manifest = std::fs::read_to_string(kit.join("package.json")).unwrap();
+    assert!(manifest.contains("\"peerDependencies\"") && manifest.contains("\"effect\""), "{manifest}");
+    assert!(!tree.0.join("node_modules/effect").exists());
+    // Nor anything bun linked beside a library (its peer, Effect): build.rs never embeds a node_modules.
+    assert!(!kit.join("node_modules").exists(), "a library's node_modules was embedded");
+    assert!(MOD_LIBRARIES.iter().all(|(path, _)| !path.contains("node_modules/")));
+}
+
 #[test]
 fn a_folder_with_main_ts_is_a_mod() {
     let tree = Tree::new();

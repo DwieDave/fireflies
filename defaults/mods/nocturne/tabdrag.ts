@@ -11,7 +11,7 @@ import { div } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { dither } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** How far (window px) a press moves before it's a drag rather than a click. */
 export const DRAG_START = 4;

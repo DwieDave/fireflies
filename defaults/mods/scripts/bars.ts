@@ -10,7 +10,7 @@ import { readSharedMap, writeSharedMap } from "./guard.ts";
 import { APP_MANAGEMENT } from "./nix.ts";
 import type { Run } from "./runs.ts";
 import { elapsed, tone } from "./runs.ts";
-import { keysHint, keysView } from "./keyhelp.ts";
+import { keysHint, keysView } from "@fireflies/keyhelp";
 import { CHORD, deckProps, SECTION, plain, ART, FOOT, PROMPTS, HEAD, short, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Item } from "./state.ts";
 import { dither, toneColor } from "./paint.ts";
@@ -19,7 +19,7 @@ import { actionChip, badge, keyHint } from "./rows-view.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { deckKeys } from "./main.ts";
 import { inPane, move } from "./place.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** Opens the App Management setting and shows Herdr Core in Finder, on the run's machine. */
 export function openGrant(r: Run) {

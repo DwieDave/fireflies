@@ -17,7 +17,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Ask, Menu, Taken } from "./state.ts";
 import { band, chip, dither, popupScrim, stop } from "./kit.ts";
-import { keysKey, keysView } from "./keyhelp.ts";
+import { keysKey, keysView } from "@fireflies/keyhelp";
 import { helpSections, keyName, shown } from "./keys.ts";
 import { keepRename } from "./menus.ts";
 import { applyFilter } from "./act-grid.ts";
@@ -28,7 +28,7 @@ import type { default as DbView } from "./main.ts";
 import type { Box, Rect } from "./menu-place.ts";
 import { placeMenu } from "./menu-place.ts";
 import { keyedAnchor, rowAnchor, tabAnchor } from "./menu-anchor.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
 function askKey(v: DbView, ask: Ask, e: KeyEvent): Taken {

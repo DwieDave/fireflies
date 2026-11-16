@@ -57,7 +57,7 @@ import { walkStops, walkAt, walkNext } from "./walk.ts";
 import { adoptDock, dockMaking, shellWaiting } from "./dock.ts";
 import Spaces from "./spaces.ts";
 import { NAME_AGENT_KEY, EDIT_SPACE_KEY, openMenu, openKeys } from "./menu.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import { SIDEBAR_HELP, blockOf, isLayoutNode } from "./nav.ts";
 import type { NavActs } from "./nav.ts";
 import { toggleGit, openWorktrees } from "./git.ts";
@@ -78,7 +78,7 @@ import { calm } from "./flight.ts";
 import { Fireglow, nextGlow, GONE_AFTER } from "./glow.ts";
 import type { GlowPlace, GlowProps } from "./glow.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export { GLOW_SQUARE };
 

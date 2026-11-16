@@ -1,12 +1,7 @@
-// Nocturne's one key help: the "? keys" entry that ends a bar and the keys
-// overview ? opens, the same in every Nocturne pane, panel and window.
-//
-// This file is the source. A mod can't import another mod's files, so every
-// Nocturne mod that lists its keys carries a byte-identical copy (its
-// keyhelp.ts); scripts/keyhelp.test.ts fails when a copy drifts. Change it
-// here, then copy it: for m in defaults/mods/*/keyhelp.ts; do cp
-// defaults/mods/nocturne/keyhelp.ts "$m"; done (the mods listed in
-// scripts/nocturne-mods.ts carry it; no stock mod has one)
+// @fireflies/keyhelp: Nocturne's one key help, the "? keys" entry that ends a
+// bar and the keys overview ? opens, the same in every Nocturne pane, panel
+// and window. A library (docs/effect-mods.md): the app serves this one copy
+// to every mod by name (`import { keysHint } from "@fireflies/keyhelp"`).
 //
 //   hint(t, id, key, what)       a bar entry: the key in the accent, what it does dimmed
 //   keysHint(t, id, on, toggle, key)  the bar's last entry, "? keys": bright while
@@ -26,12 +21,14 @@
 // Lists are [[key, what], ...] or sections [{ title, keys: [[key, what], ...] }].
 // Rows may carry `go` (git's runnable rows): `opts.cursor` marks one, a press runs it.
 
+import { Array as Arr, String as Str } from "effect";
 import { div, PathBuilder, Background } from "gpui-kit";
 import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
+import { flat } from "@fireflies/layout-look";
 
 /** One row: the key, what it does, and (git's runnable rows) what a press runs.
  *  git's rows also carry the key a press of the row's own letter runs (`key`)
@@ -87,7 +84,12 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 
 /** The dither fill, as nocturne/kit.ts has it. */
 function dither(color: Color, cell = 1): Element {
-  const zoom = settings().zoom || 1;
+  const plain = flat(color, cell);
+
+  if (plain !== null) return plain;
+
+  const asked = settings().zoom;
+  const zoom = asked > 0 ? asked : 1;
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
@@ -107,7 +109,7 @@ export function hint(t: Theme, id: string, key: string, what?: string | null): E
   const el = h_flex().id(id).flex_none().gap(4).items_center().text_size(11)
     .child(div().text_color(t.accent).child(key));
 
-  return what ? el.child(div().text_color(t.dim).child(what)) : el;
+  return what === undefined || what === null || what === "" ? el : el.child(div().text_color(t.dim).child(what));
 }
 
 /** The bar's last entry, "? keys": bright while the overview is open; a click toggles it. */
@@ -131,31 +133,31 @@ export function hintBar(t: Theme, id: string, list: readonly KeyRow[], options: 
 
   const bar = h_flex().id(id).relative().h(22).flex_none().px(px).gap(12).items_center().text_size(11).overflow_hidden()
     .child(foot ? rule.top(0) : rule.bottom(0))
-    .children(list.map(([k, w], i) => hint(t, `${id}-${i}`, k, w)))
+    .children(Arr.map(list, ([k, w], i) => hint(t, `${id}-${i}`, k, w)))
     .child(div().flex_1());
 
-  const withRight = right ? bar.child(right) : bar;
+  const withRight = right === null ? bar : bar.child(right);
 
-  return keys ? withRight.child(keysHint(t, `${id}-keys`, keys.on, keys.toggle)) : withRight;
+  return keys === null ? withRight : withRight.child(keysHint(t, `${id}-keys`, keys.on, keys.toggle));
 }
 
 /** Whether a list is sections (its first entry a section, not a row). */
 const isSections = (list: KeyList): list is readonly KeySection[] => {
   const first = list[0];
 
-  return first !== undefined && !Array.isArray(first);
+  return first !== undefined && !Arr.isArray(first);
 };
 
 /** [[k, w]] or [{ title, keys }] as sections; empty sections are left out. */
 export function sectionsOf(list: KeyList): readonly KeySection[] {
-  if (!list.length) return [];
+  if (list.length === 0) return [];
 
-  return isSections(list) ? list.filter((s) => s.keys.length > 0) : [{ title: null, keys: list }];
+  return isSections(list) ? Arr.filter(list, (s) => s.keys.length > 0) : [{ title: null, keys: list }];
 }
 
 /** Every row of `list` in order (sections flattened). */
 export function rowsOf(list: KeyList): readonly KeyRow[] {
-  return sectionsOf(list).flatMap((s) => s.keys);
+  return Arr.flatMap(sectionsOf(list), (s) => s.keys);
 }
 
 /** How tall the overview is for `list` in a host `width` px wide, one section
@@ -167,7 +169,7 @@ export function keysHeight(list: KeyList, width: number): number {
     const keyW = keyWidth(s.keys);
     const room = Math.max(60, width - 24 - 8 - keyW - 10);
 
-    if (s.title) h += 18;
+    if (s.title !== null && s.title !== "") h += 18;
 
     for (const [, what] of s.keys) h += 18 * Math.max(1, Math.ceil((what.length * CHAR) / room)) + 2;
 
@@ -179,14 +181,14 @@ export function keysHeight(list: KeyList, width: number): number {
 
 /** A section's key column: its longest key, within bounds. */
 function keyWidth(keys: readonly KeyRow[]): number {
-  return Math.min(KEY_MAX, Math.max(KEY_MIN, CHAR * Math.max(...keys.map(([k]) => k.length)) + 12));
+  return Math.min(KEY_MAX, Math.max(KEY_MIN, CHAR * Math.max(...Arr.map(keys, ([k]) => k.length)) + 12));
 }
 
 /** What a key does to the overview: ? toggles it, esc or q close it while open. */
 export function keysKey(e: KeyPress | null | undefined, open: boolean): KeysAction | null {
   const m = e?.modifiers;
 
-  if (m?.platform || m?.control || m?.alt) return null;
+  if (m?.platform === true || m?.control === true || m?.alt === true) return null;
 
   const c = e?.key_char;
   const k = e?.key;
@@ -200,7 +202,7 @@ export function keysKey(e: KeyPress | null | undefined, open: boolean): KeysActi
 
 /** What a click on a row runs: `pick`, else the row's own `go`, else nothing. */
 const pressOf = (row: KeyRow, pick: ((row: KeyRow, cx: Context) => void) | null): ((cx: Context) => void) | null => {
-  if (pick) return (cx) => pick(row, cx);
+  if (pick !== null) return (cx) => pick(row, cx);
 
   return row[2] ?? null;
 };
@@ -218,27 +220,27 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
     const press = pressOf(r, pick);
     const base = h_flex().id(`${id}-r${i}`).relative().min_h(18).gap(10).items_start().px(4);
 
-    const clickable = press
-      ? base.cursor_pointer().on_click((_e, cx) => {
+    const clickable = press === null
+      ? base
+      : base.cursor_pointer().on_click((_e, cx) => {
         cx.stop_propagation();
         press(cx);
-      })
-      : base;
+      });
 
     const marked = on ? clickable.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : clickable;
 
     return marked
       .child(div().relative().w(keyW).flex_none().pt(1).text_color(t.accent).child(k))
-      .child(div().relative().flex_1().min_w(0).pt(1).text_color(on ? t.foreground : r.danger ? t.blocked : t.muted).child(what));
+      .child(div().relative().flex_1().min_w(0).pt(1).text_color(on ? t.foreground : r.danger === true ? t.blocked : t.muted).child(what));
   };
 
   const section = (s: KeySection, si: number): Element => {
     const keyW = keyWidth(s.keys);
     const base = v_flex().id(`${id}-s${si}`).gap(2).min_w(0);
     const sized = narrow ? base.w_full() : base.flex_basis(SECTION).flex_grow(1).max_w(SECTION + 120);
-    const titled = s.title ? sized.child(div().pb(4).text_size(10).text_color(t.muted).child(s.title.toUpperCase())) : sized;
+    const titled = s.title === null || s.title === "" ? sized : sized.child(div().pb(4).text_size(10).text_color(t.muted).child(Str.toUpperCase(s.title)));
 
-    return titled.children(s.keys.map((r) => row(r, keyW)));
+    return titled.children(Arr.map(s.keys, (r) => row(r, keyW)));
   };
 
   const closer = h_flex().id(`${id}-close`).flex_none().gap(4).cursor_pointer();
@@ -248,18 +250,18 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
 
   return v_flex().id(id).absolute().top(0).left(0).size_full().bg(t.background).text_size(11)
     .on_mouse_down("left", stop)
-    .child((title ? head.child(div().min_w(0).truncate().text_color(t.muted).child(title)) : head)
+    .child((title === "" ? head : head.child(div().min_w(0).truncate().text_color(t.muted).child(title)))
       .child(div().flex_1())
-      .child((close
-        ? closer.on_click((_e, cx) => {
+      .child((close === null
+        ? closer
+        : closer.on_click((_e, cx) => {
           cx.stop_propagation();
           close(cx);
           cx.notify();
-        })
-        : closer)
+        }))
         .child(div().text_color(t.accent).child("? esc")).child(div().text_color(t.dim).child("close")))
       .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))))
     .child(div().id(`${id}-body`).flex_1().min_h(0).overflow_y_scroll()
       .child(h_flex().flex_wrap().items_start().px(12).pt(10).pb(12).gap_x(28).gap_y(14)
-        .children(sectionsOf(list).map(section))));
+        .children(Arr.map(sectionsOf(list), section))));
 }

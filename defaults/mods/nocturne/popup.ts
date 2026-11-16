@@ -22,7 +22,7 @@ import { closeOverlay, props } from "herdr";
 import type { Theme } from "herdr";
 import { isString, object } from "./guard.ts";
 import { dither, eyebrow } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const ROW = 26;
 

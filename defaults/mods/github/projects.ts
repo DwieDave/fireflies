@@ -38,12 +38,12 @@ import { projectListQuery, parseProjectList, boardQuery, parseBoard, addPage, sc
 import { layout, grid, find, carried } from "./board-layout.ts";
 import { overlay } from "./board-edits.ts";
 import type { Host, ReadOptions } from "./host.ts";
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 import { FOLD_W, HANDLES, GAP, DETAIL_W, bar, columnRows, columns, detail, menuPanel } from "./projects-draw.ts";
 import { options, submitValue } from "./projects-menus.ts";
 import { addDraft } from "./projects-edits.ts";
 import { key } from "./projects-keys.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const LIST_EVERY = 10 * 60000; // the picker's list is read again this rarely
 

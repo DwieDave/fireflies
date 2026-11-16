@@ -23,7 +23,7 @@ import { closeTab, select, stepShownTab } from "./pane-tabs.ts";
 import { setWrap, toggleVim } from "./pane-vim.ts";
 import { scratchBar } from "./scratch-bar.ts";
 import { dragOver, dropTab, leaveStrip, openTabMenu } from "./tab-menu.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const TABS = 26;
 

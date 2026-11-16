@@ -8,7 +8,7 @@ import { h_flex, v_flex, Input } from "gpui-base";
 import type { InputState } from "gpui-base";
 import type { Theme } from "herdr";
 import { ART } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 

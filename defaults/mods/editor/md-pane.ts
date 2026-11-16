@@ -20,7 +20,7 @@ import { dither, errorText, GUTTER_INSET, HINTS, selectionColor, zoom } from "./
 import type { Pt, Rect } from "./menu-place.ts";
 import { placeMenu } from "./menu-place.ts";
 import { imageOf, loadImageSrcs, pasteImageBlock, pickImage, previewLink } from "./preview-pane.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A Markdown command's entry in the list: [title, its letter after cmd-., what it writes]. */
 export type MdEntry = readonly [title: string, key: string, mark: string];

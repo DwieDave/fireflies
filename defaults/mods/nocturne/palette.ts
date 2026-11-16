@@ -24,7 +24,7 @@ import type { Binding } from "./keymap.ts";
 import { entries, keyOf, sections } from "./palette-entries.ts";
 import type { Listed } from "./palette-entries.ts";
 import { readLaunchers } from "./launchers.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 // Fixed heights, so the list keeps one height while you move.
 const SHOWN = 12;

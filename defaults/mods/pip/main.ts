@@ -65,9 +65,10 @@ import { arrayOf, isBoolean, isNumber, isString, literal, nullable, object, pars
 import type { Command, ControlId } from "./commands.ts";
 import { KEYS, SKIP, keyControl, menuMove, parseCommand } from "./commands.ts";
 import { GLYPH_DROP, lift, mix, seamTone } from "./look.ts";
+import { flat } from "@fireflies/layout-look";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
-import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { keysView, keysKey, keysHeight } from "@fireflies/keyhelp";
+import { edge as edgeTone } from "@fireflies/tones";
 
 const ID = "pip";
 const BAR = 22;
@@ -205,6 +206,10 @@ const available = () => typeof herdr.nativeView !== "undefined";
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 
 function dither(color: Color, cell = 1) {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const zoom = settings().zoom || 1, dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();

@@ -17,7 +17,7 @@ import { v_flex } from "gpui-base";
 import { props, theme, panes, run, openOverlay, closeOverlay, setShared, nextCommand } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNull, isString, object, oneOf } from "./guard.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** The props this mod was opened with, the fields read here: git's own
  *  (folder, on, pr, repo, scope, …) are handed on as they are. `back` is the

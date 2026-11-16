@@ -23,7 +23,17 @@ worktrees, you brief, review, merge, and ship.
      `grep -l "rerun-if-changed=$PWD" target/debug/build/*/output` in
      `integrate` must list nothing.
    - `integrate`'s `target/` is current: the test run after each merge builds
-     it. Seed worktrees after that run, not during it.
+     it, and `cargo build --locked` after a green run builds the plain binary
+     the mod-only agents copy (`cargo test` alone leaves `target/debug/herdr-app`
+     as it was, without what `defaults/lib` gained). Seed worktrees after
+     that, not during it.
+   - The agent builds with the environment `integrate` was built in. Your
+     shell has the repo's dev shell (direnv), an agent's tab does not (its
+     worktree's `.envrc` isn't allowed), and cargo rebuilds a crate whose
+     build script watches a variable that changed. The one that differs is
+     `MACOSX_DEPLOYMENT_TARGET=14.0`: the rules block exports it. Check after
+     a dev shell change: `grep -h rerun-if-env-changed= target/debug/build/*/output | sort -u`
+     names every watched variable.
 
    Builds come in two tiers, as in the nix flake:
    - **The binary**: built once, in `integrate`. A branch that changes only

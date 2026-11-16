@@ -2,7 +2,7 @@
 // stops (tab) and what fits on it (labels full, short or icons; one row or
 // two), and the toolbar's parts by priority.
 
-import type { KeyRow } from "./keyhelp.ts";
+import type { KeyRow } from "@fireflies/keyhelp";
 
 /** About how wide a character is at the header's size 11 (logical px). */
 export const CH = 7;

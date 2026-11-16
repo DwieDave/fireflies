@@ -2,10 +2,13 @@
   "name": "@fireflies/kit",
   "private": true,
   "type": "module",
-  "description": "The Effect foundation of Fireflies' mods (docs/effect-mods.md). Served by the app as a built-in module; this file lets tsc, oxlint and bun find it in the repo.",
+  "description": "The Effect foundation of Fireflies' mods (docs/effect-mods.md). Served by the app as a built-in library; this file lets tsc, oxlint and bun find it (in this repo through the workspace, in a mod's own repository where `herdr-app types` writes it). Its peer is the Effect the app serves.",
   "exports": {
     ".": "./index.ts",
     "./live": "./live.ts",
     "./testing": "./testing.ts"
+  },
+  "peerDependencies": {
+    "effect": "4.1.4"
   }
 }

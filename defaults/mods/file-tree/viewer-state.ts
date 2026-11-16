@@ -17,6 +17,7 @@ import type { DbTable, Separator, Table } from "./table.ts";
 import { MAX_BYTES } from "./table.ts";
 import type { Patch } from "./diff.ts";
 import type { default as Viewer } from "./viewer.ts";
+import { flat } from "@fireflies/layout-look";
 
 export const MOD = "preview";
 
@@ -236,6 +237,10 @@ export const nativeViews = (): boolean => {
 
 /** A 50% checker filling the parent, `cell` px squares (as ../nocturne/kit.ts dither). */
 export function checker(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr())))).absolute().top(0).left(0).size_full();
 }
 

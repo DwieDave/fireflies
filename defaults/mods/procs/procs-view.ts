@@ -18,7 +18,7 @@ import type { default as ProcsDeck } from "./main.ts";
 import { spark, layer } from "./vitals-view.ts";
 import { emptyView } from "./bars.ts";
 import { procHeads } from "./heads.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
 
 export function pip(v: ProcsDeck, color: Color, live = false): Element {
   const el = svg(`${ART}/pip.svg`).size(6).flex_none().text_color(color);

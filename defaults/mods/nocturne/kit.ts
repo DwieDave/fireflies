@@ -20,7 +20,7 @@ import { dither } from "./toolground.ts";
 
 export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
 
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const ART = "mods/nocturne/art";
 export const FONT = "Departure Mono";

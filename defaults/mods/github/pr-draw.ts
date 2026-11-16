@@ -10,7 +10,7 @@ import { isNumber } from "./guard.ts";
 import type { CheckRow, PrRow, PrView, Tone } from "./model.ts";
 import { rowTone, ago, duration } from "./model.ts";
 import { dither, pip, band, toneColor, TONE_WORD, stop } from "./kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A row of the list, and of the checks, is this tall. */
 export const ROW = 38, CHECK_ROW = 22;

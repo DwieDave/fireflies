@@ -13,7 +13,7 @@ import { itemParts, quoteBody } from "./live.ts";
 import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addAfter } from "./rendered-keys.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export const GAP = 10;
 export const ADD_H = 30; // the "add a block" line under the last unit

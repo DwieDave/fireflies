@@ -27,7 +27,7 @@ import type { Command } from "./guards.ts";
 import { dither, tracked } from "./kit.ts";
 import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
 import type { FormHint, Stop } from "./form-keys.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 const cap = (s: string | undefined) => (s ?? "").replace(/^./, (c) => c.toUpperCase());

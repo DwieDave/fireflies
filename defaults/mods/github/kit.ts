@@ -8,9 +8,10 @@ import type { Color, Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { hint, keysHint } from "./keyhelp.ts";
+import { hint, keysHint } from "@fireflies/keyhelp";
 import type { Tone } from "./model.ts";
-import { edge as edgeTone } from "./tones.ts";
+import { edge as edgeTone } from "@fireflies/tones";
+import { flat } from "@fireflies/layout-look";
 
 export const ART = "mods/nocturne/art";
 
@@ -53,6 +54,10 @@ export function splitter(t: Theme, id: string, axis: Axis, dragging: boolean, on
 
 /** A layer filling its parent with a 50% checker dither, in `cell`-px squares (Retina on macOS). */
 export function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();

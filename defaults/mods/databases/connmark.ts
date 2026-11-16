@@ -24,7 +24,7 @@ import { connect, test } from "./conns.ts";
 import { openForm } from "./conn-form.ts";
 import { quoteName } from "./catalog.ts";
 import type { default as DbView } from "./main.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A state's pip: hollow when off, breathing while it works. */
 export function statePip(t: Theme, s: ConnState, size = 7): Element {

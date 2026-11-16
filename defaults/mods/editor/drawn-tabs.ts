@@ -3,7 +3,7 @@
 // their keys, and the hints under them.
 
 import type EditorPane from "./main.ts";
-import { keysHint } from "./keyhelp.ts";
+import { keysHint } from "@fireflies/keyhelp";
 import type { LookAct } from "./tabs.ts";
 import { lookAction } from "./tabs.ts";
 import Viewer from "./viewer.ts";
@@ -15,7 +15,7 @@ import type { Theme } from "herdr";
 import { run } from "herdr";
 import type { Doc, ViewerPropsNow } from "./pane-kit.ts";
 import { dither, focusOn, HINTS, whereArgs } from "./pane-kit.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 /** A change to the viewer's props. */
 export type ViewerChange = Partial<Pick<ViewerPropsNow, "scroll" | "reload">>;

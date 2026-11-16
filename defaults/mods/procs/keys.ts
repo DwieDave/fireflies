@@ -3,7 +3,7 @@
 // Every one is listed in ? (state.ts deckKeys).
 
 import type { Context, KeyEvent, Modifiers } from "gpui-kit";
-import { keysKey } from "./keyhelp.ts";
+import { keysKey } from "@fireflies/keyhelp";
 import type { Item } from "./state.ts";
 import { PROW, ROW, TABS } from "./state.ts";
 import { moveTo } from "./listing.ts";

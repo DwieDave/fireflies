@@ -85,7 +85,7 @@ import { closeOverlay, exec, nextCommand, shared, setShared, theme } from "herdr
 import { readShared, writeShared } from "./guard.ts";
 import type { Sorts } from "./sort.ts";
 import { NO_SORT, SORT } from "./sort.ts";
-import { keysView } from "./keyhelp.ts";
+import { keysView } from "@fireflies/keyhelp";
 import type { Index, Probe, Row, TreeNode } from "./logic.ts";
 import { PROBE, parseProbe, index } from "./logic.ts";
 import type { Measured, Reading } from "./sys.ts";
@@ -107,7 +107,7 @@ import { procsView } from "./procs-view.ts";
 import { vitalsStrip } from "./vitals-view.ts";
 import { portsView } from "./ports-view.ts";
 import { footBar, headBar } from "./bars.ts";
-import { edge } from "./tones.ts";
+import { edge } from "@fireflies/tones";
 
 export default class ProcsDeck extends View {
   static bound = false;
