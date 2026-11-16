@@ -2,8 +2,8 @@
 // form, the export, the password asked before connecting, a query tab's new
 // name, the ask in the bar
 // (y; for a destructive statement then its name typed), a menu (over the whole
-// view: at the press for a right click, at the cursor's cell for a key, else in
-// the middle: menuLayer, menu-place.ts), the keys
+// view: at the press for a right click, at the cursor's cell or row for a key,
+// else in the middle: menuLayer, menu-place.ts, menu-anchor.ts), the keys
 // overview, the filter and find lines. modalKey() hands a key to whichever is
 // up; overBody() and askBar() draw them.
 //
@@ -25,9 +25,9 @@ import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
 import { forwardAskKey, forwardAskPanel } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
-import type { Box } from "./menu-place.ts";
+import type { Box, Rect } from "./menu-place.ts";
 import { placeMenu } from "./menu-place.ts";
-import { keyedAnchor } from "./menu-anchor.ts";
+import { keyedAnchor, rowAnchor, tabAnchor } from "./menu-anchor.ts";
 import { edge } from "./tones.ts";
 
 /** The ask's answer to a key: always taken, but the name typed at step 2 is its input's. */
@@ -268,10 +268,20 @@ function centered(id: string, box: Element, close: (cx: Context) => void): Eleme
   return dimLayer(id, close).flex().items_center().justify_center().child(box.relative().on_mouse_down("left", stop));
 }
 
-/** The menu's size: narrower when it stands at something (a press, a cell), as tall as its rows. */
+/** What a key's menu stands at now (menu-anchor.ts): the cursor's cell, row, or the main panel's
+ *  title; null: the middle. */
+export function keyedAt(v: DbView, m: Menu): Rect | null {
+  if (m.keyed === "cell") return keyedAnchor(v);
+
+  if (m.keyed === "tab") return tabAnchor(v);
+
+  return m.keyed ? rowAnchor(v, m.keyed) : null;
+}
+
+/** The menu's size: narrower when it stands at something (a press, a cell, a row), as tall as its rows. */
 export function menuSize(v: DbView, m: Menu): Box {
   return {
-    width: Math.min(m.near || (m.cell && keyedAnchor(v)) ? 380 : 560, v.size.width - 40),
+    width: Math.min(m.near || keyedAt(v, m) ? 380 : 560, v.size.width - 40),
     height: Math.min(440, v.size.height - 80, 26 + m.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0)),
   };
 }
@@ -285,8 +295,8 @@ export function menuLayer(t: Theme, v: DbView): Element | null {
 
   const digits = digitsOf(m.rows);
   const { width: w, height: h } = menuSize(v, m);
-  // The cursor's cell is found now, not when the menu opened: the window may have been resized since.
-  const at = placeMenu({ width: w, height: h }, v.size, m.near ?? (m.cell ? keyedAnchor(v) : null));
+  // What a key's menu stands at is found now, not when it opened: the window may have been resized since.
+  const at = placeMenu({ width: w, height: h }, v.size, m.near ?? keyedAt(v, m));
 
   const rows = m.rows.map((r, i) => h_flex().id(`menu-${i}`).relative().h(r.sub ? 34 : 24).flex_none().px(10).gap(10).items_center().cursor_pointer()
     .hover((s) => s.bg(`${edge(t)}55`))

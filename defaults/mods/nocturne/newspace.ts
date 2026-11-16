@@ -32,7 +32,7 @@ import type { ScrollHandle as Scroll } from "gpui-base";
 import { theme, props, run, exec, home, spaces, panes, focused, shared, setShared, openOverlay, closeOverlay, pickFolder } from "herdr";
 import type { ExecResult, SpaceInfo, Theme } from "herdr";
 import { isString, nullable, object, readShared, readSharedList, sharedKey, sharedListKey, writeShared } from "./guard.ts";
-import { dither, eyebrow, spaceFolder } from "./kit.ts";
+import { dither, eyebrow, keyedSpec, spaceFolder } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { tilde, untilde, isPath, splitPath, rank, sources, pathRows, complete, ghost, up, remember, newArgs, nearParents, worktreePaths, checkoutsFrom, folderName, tail } from "./folderlist.ts";
@@ -110,7 +110,7 @@ export function openSpacePicker({ at = null, space = null, wasOpen = false, repl
 
   const id = openOverlay(at
     ? { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, at, height: HEAD + LIST_MAX + 4 * SEC + FOOT + 12, props }
-    : { mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props });
+    : keyedSpec({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props }));
 
   writeShared(setShared, OPEN_KEY, { id, space: space ?? null });
 

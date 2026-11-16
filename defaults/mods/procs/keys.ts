@@ -30,7 +30,7 @@ function rowKey(v: ProcsDeck, k: string, m: Modifiers, items: readonly Item[], i
   else if (k === "k" && m.shift) begin(v, item, false, true);
   else if (k === "c") copyRow(v, item, cx);
   else if (k === "p" && item) copyNumber(v, item, cx);
-  else if (k === "m") openMenu(v, items, i, { x: 40, y: v.selY }, v.selY - (v.tab === "ports" ? PROW : ROW));
+  else if (k === "m") openMenu(v, items, i, null);
   else if (k === "enter") activate(v, items, i);
   else if (k === "o" && v.tab === "ports") {
     openPortAt(v, item);

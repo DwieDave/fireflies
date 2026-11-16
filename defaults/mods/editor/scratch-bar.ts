@@ -143,7 +143,7 @@ function formatChip(ed: EditorPane, t: Theme): Element {
         focusText(ed);
         cx.notify();
       } else {
-        openMdMenu(ed, cx);
+        openMdMenu(ed, cx, true);
         focusText(ed);
       }
     })

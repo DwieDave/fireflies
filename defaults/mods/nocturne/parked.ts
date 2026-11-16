@@ -15,7 +15,7 @@ import { panes, props, theme, shared } from "herdr";
 import { isString, object, readShared } from "./guard.ts";
 import { dither, pip, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
-import { mark, middleCloses, paneName } from "./header.ts";
+import { mark, middleCloses, paneMenu, paneName } from "./header.ts";
 import type { MiddleHeld } from "./header.ts";
 import { edge } from "./tones.ts";
 
@@ -49,6 +49,11 @@ export default class Parked {
       .on_hover((h, cx) => {
         this.hovered = h;
         cx.notify();
+      })
+      // A right click: the pane's menu at the pointer, as m on the chip opens it under the chip.
+      .on_mouse_down("right", (_e, cx) => {
+        cx.stop_propagation();
+        paneMenu(p);
       })
       .child(mark(t, { ...p, focused: lit }))
       .when(Boolean(st) && st !== "idle", (el) => el.child(pip(t, st)))

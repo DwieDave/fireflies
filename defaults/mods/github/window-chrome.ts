@@ -6,10 +6,11 @@ import { div, svg } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
+import { placeMenu } from "./menu-place.ts";
 import type { Guarded } from "./guard.ts";
 import { literal } from "./guard.ts";
 import type { Hint } from "./kit.ts";
-import { dither, chip, stop, pip, band, ART, popupScrim } from "./kit.ts";
+import { dither, chip, stop, pip, band, ART, popupScrim, unzoom } from "./kit.ts";
 import { keysView } from "./keyhelp.ts";
 import Prs from "./prs.ts";
 import Actions from "./actions.ts";
@@ -138,14 +139,28 @@ export function pickerPanel(v: GitHub, t: Theme): Element {
       .child(div().truncate().text_color(i === p.at ? t.foreground : t.muted).child(r.label))
       .when(Boolean(r.sub), (el) => el.child(div().truncate().text_size(10).text_color(t.dim).child(r.sub ?? "")))));
 
-  return div().id("gh-picker").absolute().inset_0().flex().items_center().justify_center().text_size(12)
+  // A right-click's: at the press (flipped near the body's edges: menu-place.ts), narrower; else
+  // in the middle.
+  const near = p.near ?? null;
+  const w = near ? 380 : 560;
+  const h = Math.min(420, 14 + 8 + p.rows.reduce((n, r) => n + (r.sub ? 34 : 24), 0));
+  const b = v.bodyBox;
+  const at = near && b ? placeMenu({ width: w, height: h }, { width: unzoom(b.w), height: unzoom(b.h) }, near) : null;
+  const layer = div().id("gh-picker").absolute().inset_0().text_size(12);
+
+  return (at ? layer : layer.flex().items_center().justify_center())
     .on_mouse_down("left", (_e, cx) => {
       cx.stop_propagation();
       v.picker = null;
       cx.notify();
     })
+    .on_mouse_down("right", (_e, cx) => {
+      cx.stop_propagation();
+      v.picker = null;
+      cx.notify();
+    })
     .child(popupScrim("gh-picker-scrim"))
-    .child(v_flex().id("gh-picker-box").w(560).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(v.pickerScroll)
+    .child(v_flex().id("gh-picker-box").when(at !== null, (el) => el.absolute().left(at?.x ?? 0).top(at?.y ?? 0)).w(w).max_h(420).bg(t.background).border(1).border_color(t.accent).py(4).overflow_y_scroll().track_scroll(v.pickerScroll)
       .on_mouse_down("left", stop)
       .child(div().px(10).pb(4).text_size(10).text_color(t.muted).child(p.title))
       .children(rows));

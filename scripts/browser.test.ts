@@ -1307,6 +1307,22 @@ test("a web tab pinned from its menu (a right-click, at the pointer): the record
   expect(app.store[PINS]).toEqual([]);
 });
 
+test("the tab menu by keys hangs under its tab on the strip (where the tab says it's drawn); with one tab, no strip: the middle", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  app.focusedPane = "p1";
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  // One tab: no strip, the menu in the middle.
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "dialog" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  const root = view.render();
+  // The strip's tabs report where they're drawn (window px).
+  on(find(root, "webtab-web"), "on_bounds_change")({ x: 240.4, y: 80, width: 180, height: 28 }, cx);
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 240, y: 80, w: 180, h: 28 }, props: { tabMenu: { tab: "web" } } });
+});
+
 test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j k skip what can't be picked, esc closes; the wheel moves too", async () => {
   reset();
   app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];

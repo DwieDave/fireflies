@@ -21,6 +21,7 @@ import type { FormModifiers, Stop } from "./form-keys.ts";
 import { formKey, formHints, ring } from "./form-keys.ts";
 import type { KeyRow, KeySection } from "./keyhelp.ts";
 import { keysView, keysKey } from "./keyhelp.ts";
+import { type Anchor, placeMenu } from "./menu-place.ts";
 import { edge as edgeTone } from "./tones.ts";
 
 const mac = () => appWindow().platform === "macos";
@@ -41,7 +42,8 @@ function split(k: string): [string, FormModifiers] {
   return [key, { ...(shift ? { shift } : null), ...(control ? { control } : null), ...(platform ? { platform } : null) }];
 }
 
-const ROW = 20;
+// A menu's row, and the options bar under the body (draw.ts hints) menus stay clear of.
+const ROW = 20, OPTIONS_BAR = 22;
 
 /** What the popups need of the window. */
 export interface PopupHost {
@@ -84,8 +86,9 @@ export interface KeysOptions {
 export interface MenuOptions {
   readonly title: string;
   readonly items: readonly MenuItem[];
-  /** Where it opens (a right-click), else centered. */
-  readonly at?: { readonly x: number; readonly y: number } | null;
+  /** What it stands at (menu-place.ts): the press (a right-click), the selected row (its key),
+   *  else (null) centered; left out: the view's menuNear. */
+  readonly at?: Anchor;
   /** What it says with no items. */
   readonly empty?: string | null;
 }
@@ -123,7 +126,7 @@ export interface CommitOptions {
 /** The popup that's open. */
 type Popup =
   | { readonly kind: "keys"; readonly title: string; readonly sections: readonly KeySection[]; readonly rows: readonly KeyRow[]; sel: number }
-  | { readonly kind: "menu"; readonly title: string; readonly items: readonly MenuItem[]; sel: number; readonly at: { readonly x: number; readonly y: number } | null; readonly empty: string | null }
+  | { readonly kind: "menu"; readonly title: string; readonly items: readonly MenuItem[]; sel: number; readonly at: Anchor; readonly empty: string | null }
   | ConfirmPopup
   | PromptPopup
   | CommitPopup;
@@ -594,9 +597,8 @@ export class Popups {
     const shown = Math.min(p.items.length || 1, Math.max(4, Math.floor((size.height - 120) / ROW)));
     const first = Math.max(0, Math.min(p.sel - Math.floor(shown / 2), p.items.length - shown));
     const h = shown * ROW + 20;
-    const mid = this.center(size, w, h);
-    const x = p.at ? Math.min(Math.max(8, p.at.x), size.width - w - 8) : mid.x;
-    const y = p.at ? Math.min(Math.max(8, p.at.y), size.height - h - 30) : mid.y;
+    // At the press or under the row (menu-place.ts), clear of the options bar; else the middle.
+    const { x, y } = p.at ? placeMenu({ width: w, height: h }, { width: size.width, height: size.height - OPTIONS_BAR }, p.at) : this.center(size, w, h);
     const keyW = Math.max(30, ...p.items.map((it) => keyLabel(it.key ?? "").length * 7 + 14));
 
     const rows = p.items.slice(first, first + shown).map((it, n) => {

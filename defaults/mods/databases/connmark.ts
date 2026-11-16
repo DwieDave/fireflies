@@ -128,5 +128,5 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
 
   if (!dbsNow(v)?.sized) rows.push(entry("tables", "count", "Their sizes", () => void loadDatabases(v, cx, true), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
 
-  openMenu(v, name ?? "every database", rows);
+  openMenu(v, name ?? "every database", rows, "row");
 }

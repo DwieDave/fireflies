@@ -35,7 +35,7 @@ import { h_flex, v_flex, InputState } from "gpui-base";
 import { spaces, panes, agents, run, exec, shared, setShared } from "herdr";
 import type { PaneInfo, SpaceInfo, Theme } from "herdr";
 import { readShared } from "./guard.ts";
-import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow } from "./kit.ts";
+import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBelow, keyedAt } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { chip, field, confirm } from "./inline.ts";
 import type { Action } from "./inline.ts";
@@ -121,7 +121,10 @@ export default class Spaces {
 
   /** A space's right-click menu (`centered`: opened from the keyboard). */
   menu(s: SpaceInfo, centered = false, e: MouseButtonEvent | null = null): void {
-    this.pressed = e ? { id: s.id, at: dropBelow(e, PICKER_WIDTH), when: Date.now() } : null;
+    // Where its Change folder… hangs: under the pressed row, or under the cursor's row (a key).
+    const row = e ? null : keyedAt();
+
+    this.pressed = e ? { id: s.id, at: dropBelow(e, PICKER_WIDTH), when: Date.now() } : row ? { id: s.id, at: { x: Math.round(row.x), y: Math.round(row.y + row.h) }, when: Date.now() } : null;
     openMenu({ tab: "space", target: { id: s.id } }, { centered });
   }
 

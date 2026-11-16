@@ -44,14 +44,15 @@ export function entry(place: Place, act: string | null, label: string, go: () =>
   return act && key ? { label, go, ...more, act, key } : { label, go, ...more };
 }
 
-/** Opens a menu over the view: at the press when a right click asked for it (atPointer), else, for
- *  the grid's own menus (`cell`: a cell's, a row's, a column's), under the cursor's cell (found as
- *  it's drawn: popups.ts menuLayer), else in the middle (menu-place.ts). */
-export function openMenu(v: DbView, title: string, rows: readonly MenuRow[], cell = false): void {
+/** Opens a menu over the view: at the press when a right click asked for it (atPointer), else
+ *  (a key) at what it's for, found as it's drawn (popups.ts menuLayer, menu-anchor.ts): `cell`,
+ *  the grid's cursor cell (a cell's, a row's, a column's menu); `row`, the cursor's row of the
+ *  list that has the keys; `tab`, the main panel's title; null, the middle (menu-place.ts). */
+export function openMenu(v: DbView, title: string, rows: readonly MenuRow[], at: "cell" | "row" | "tab" | null = null): void {
   const near = v.menuNear;
 
   v.menuNear = null;
-  v.menu = rows.length ? { title, rows, at: 0, near, cell } : null;
+  v.menu = rows.length ? { title, rows, at: 0, near, keyed: at === "row" ? v.place() : at } : null;
 }
 
 /** A press's place in the view (layout px): its window position less the view's origin (both
@@ -98,7 +99,7 @@ export function connMenu(v: DbView, c: Conn, cx: Context): void {
   if (c.origin === "saved") rows.push(entry("conns", "conn-pin", "Unpin it…", () => confirmRemove(v, c, cx), { sub: "every Databases window drops it", danger: true }));
   else if (c.origin === "sent") rows.push(entry("conns", "conn-remove", "Remove…", () => confirmRemove(v, c, cx), { danger: true }));
 
-  openMenu(v, c.name, rows);
+  openMenu(v, c.name, rows, "row");
 }
 
 /** Asks before a connection goes (its keychain item and history with it). */
@@ -145,7 +146,7 @@ export function tableMenu(v: DbView, t: TableRef, cx: Context): void {
     entry("tables", "export", "Export…", () => openExport(v, { table: t }, cx)),
     ...(view ? [] : [entry("tables", null, "Empty it…", () => runInTab(v, empty, cx), { sub: `${empty} · ${asked}`, danger: true })]),
     entry("tables", null, view ? "Drop the view…" : "Drop it…", () => runInTab(v, `drop ${view ? "view" : "table"} ${name};`, cx), { sub: asked, danger: true }),
-  ]);
+  ], "row");
 }
 
 export function schemaMenu(v: DbView, schema: string | null, cx: Context): void {
@@ -157,7 +158,7 @@ export function schemaMenu(v: DbView, schema: string | null, cx: Context): void 
       entry("tables", "insert", "Its name into the query", () => insertName(v, quoteName(kind, schema), cx)),
       entry("tables", "copy", "Copy its name", () => copy(v, schema, cx)),
     ] : []),
-  ]);
+  ], "row");
 }
 
 // ---- [3] a structure row
@@ -172,7 +173,7 @@ export function structMenu(v: DbView, r: StructRow, cx: Context): void {
   if (r.name) rows.push(entry("structure", "insert", "The name into the query", () => insertName(v, quoteName(kind, r.name ?? ""), cx), { sub: "or drag the row into the query" }));
 
   rows.push(entry("structure", "copy", "Copy", () => copy(v, r.copy, cx), { sub: r.copy }));
-  openMenu(v, r.name ?? r.copy, rows);
+  openMenu(v, r.name ?? r.copy, rows, "row");
 }
 
 // ---- [0] the grids: a cell, a column's header, a row's number, a tab
@@ -237,7 +238,7 @@ export function cellMenu(v: DbView, row: number, col: number, cx: Context): void
     entry(place, "export", "Export…", () => exportShown(v, cx)),
   );
 
-  openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows, true);
+  openMenu(v, `${column} · row ${row + 1}${range ? " · a selection" : ""}`, rows, "cell");
 }
 
 /** A column's header menu: its sort (the database's on a table, the result's own), filter, width,
@@ -284,7 +285,7 @@ export function columnMenu(v: DbView, col: number, cx: Context): void {
     entry(place, null, "Copy its name", () => copy(v, name, cx)),
   );
 
-  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows, true);
+  openMenu(v, `${name}${type ? ` · ${type}` : ""}`, rows, "cell");
 }
 
 /** A row number's menu: select it, copy it (or the selected rows it's among). */
@@ -298,7 +299,7 @@ export function rowMenu(v: DbView, row: number, cx: Context): void {
   openMenu(v, rows.length > 1 ? `rows ${(rows[0] ?? 0) + 1}–${(rows.at(-1) ?? 0) + 1}` : `row ${row + 1}`, [
     entry(g.place, "select-row", "Select it", () => g.put(rowsSelected({ ...g.at, row }, g.set, row, row))),
     ...rowCopies(v, g, rows, cx),
-  ], true);
+  ], "cell");
 }
 
 /** The main view's tab `n` (0 the Rows, else a query tab): its menu. */
@@ -334,7 +335,7 @@ export function tabMenu(v: DbView, n: number, cx: Context): void {
 
   if (v.active) rows.push(entry("rows", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }));
 
-  openMenu(v, b ? `Rows · ${b.table.name}` : "Rows", rows);
+  openMenu(v, b ? `Rows · ${b.table.name}` : "Rows", rows, "tab");
 }
 
 function queryTabMenu(v: DbView, q: QueryTab, cx: Context): void {
@@ -353,7 +354,7 @@ function queryTabMenu(v: DbView, q: QueryTab, cx: Context): void {
     ...(others ? [entry("results", null, "Close the others", () => closeOthers(v, q))] : []),
     entry("results", "query-new", "New query tab", () => void v.addQuery("", cx)),
     entry("results", "history", "History…", () => historyMenu(v, cx), { sub: "what ran on this connection" }),
-  ]);
+  ], "tab");
 }
 
 /** Every query tab but `q` closed. */
@@ -401,7 +402,7 @@ export function logMenu(v: DbView, i: number, cx: Context): void {
     entry("log", "open", "Into a query tab", () => void v.addQuery(`${line.sql};`, cx), { sub: "not run" }),
     entry("log", "copy", "Copy the statement", () => copy(v, line.sql, cx)),
     ...(line.ok ? [] : [entry("log", null, "Copy what it said", () => copy(v, line.said, cx), { sub: line.said })]),
-  ]);
+  ], "row");
 }
 
 /** How long ago, in a few letters. */
