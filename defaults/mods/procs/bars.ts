@@ -8,7 +8,7 @@ import type { Theme } from "herdr";
 import { hint, keysHint } from "./keyhelp.ts";
 import { guardOf, address } from "./logic.ts";
 import type { Tab, Item } from "./state.ts";
-import { ART, FOOT, HEAD, PROW, ROW } from "./state.ts";
+import { ART, FOOT, HEAD } from "./state.ts";
 import { vitalLine } from "./vitals.ts";
 import { arrow as sortArrow } from "./sort.ts";
 import { dither } from "./paint.ts";
@@ -77,7 +77,7 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
   const sort = k("k-sort", "s", sorted ? `${sorted.col} ${sortArrow(sorted.dir)}` : "sort", () => sortKey(v, false));
 
   // m: the row's menu, under the selected row.
-  const menu = k("k-menu", "m", "menu", () => openMenu(v, items, ci, { x: 40, y: v.selY }, v.selY - (v.tab === "ports" ? PROW : ROW)));
+  const menu = k("k-menu", "m", "menu", () => openMenu(v, items, ci, null));
 
   const keep = (what: string): Element => k("k-no", "esc", what, () => {
     v.ask = null;
