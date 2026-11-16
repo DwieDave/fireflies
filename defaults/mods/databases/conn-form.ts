@@ -1,8 +1,10 @@
 // A connection's form (n: new, e: edit), keyboard first (form-keys.ts, as
 // the GitHub forms): the kind, its name, where it is (a server's host, port,
 // user and database; a file's path; a libSQL URL), its password or token
-// (masked: into the keychain, or "ask each time": memory only), read only.
-// A URL pasted into the host (postgres://ada@db/lantern) fills the fields.
+// (masked: into the keychain, or "ask each time": memory only), ssl (a
+// server's: off is sslmode=disable; another sslmode, from a pasted URL, is
+// kept and shown beside it), read only. A URL pasted into the host
+// (postgres://ada@db/lantern?sslmode=require) fills the fields.
 // Test runs `select 1` with what's typed; save writes connections.json.
 
 import { div } from "gpui-kit";
@@ -12,9 +14,9 @@ import { pickFile, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
 import type { Stop } from "./form-keys.ts";
 import { formHints, formKey, ring } from "./form-keys.ts";
-import type { Conn, ConnDraft, Kind } from "./kinds.ts";
+import type { Conn, ConnDraft, Kind, SslMode } from "./kinds.ts";
 import type { Taken } from "./state.ts";
-import { DEFAULT_PORT, KINDS, KIND_NAME, newId } from "./kinds.ts";
+import { DEFAULT_PORT, KINDS, KIND_NAME, newId, speaksTls } from "./kinds.ts";
 import { clientOf } from "./session.ts";
 import { installLine } from "./clients.ts";
 import { parseDbUrl } from "./discover.ts";
@@ -55,6 +57,11 @@ export class ConnForm {
   readonly inputs = new Map<Field, InputState>();
   ask: boolean;
   readonly: boolean;
+  /** The sslmode saved (absent: the client's default); the ssl toggle is off at "disable". */
+  sslmode: SslMode | undefined;
+  /** The sslmode the toggle turns back on to: the connection's own other one (a pasted
+   *  require), else none (the client's default). */
+  sslOn: SslMode | undefined;
   at = 1;
   error: string | null = null;
   busy = false;
@@ -66,6 +73,8 @@ export class ConnForm {
     this.remote = Boolean(c?.url);
     this.ask = c?.secret === "ask";
     this.readonly = c?.readonly ?? false;
+    this.sslmode = c?.sslmode;
+    this.sslOn = c?.sslmode === "disable" ? undefined : c?.sslmode;
 
     const value = (f: Field): string => {
       if (!c) return "";
@@ -127,6 +136,10 @@ export class ConnForm {
     put("database", u.database);
 
     if (u.password) put("password", u.password);
+
+    // The URL says how it asks for TLS, or nothing (the client's default).
+    this.sslmode = u.sslmode;
+    this.sslOn = u.sslmode === "disable" ? undefined : u.sslmode;
   }
 
   /** The stops in tab order: the kind, the fields, the toggles, the buttons. */
@@ -136,6 +149,7 @@ export class ConnForm {
     const toggles: Stop[] = [
       ...(this.kind === "libsql" ? [{ id: "remote", kind: "toggle" } as const] : []),
       ...(this.kind === "sqlite" || (this.kind === "libsql" && !this.remote) ? [] : [{ id: "ask", kind: "toggle" } as const]),
+      ...(speaksTls(this.kind) ? [{ id: "ssl", kind: "toggle" } as const] : []),
       { id: "readonly", kind: "toggle" },
     ];
 
@@ -183,7 +197,13 @@ export class ConnForm {
   flip(id: string): void {
     if (id === "remote") this.remote = !this.remote;
     else if (id === "ask") this.ask = !this.ask;
+    else if (id === "ssl") this.sslmode = this.ssl() ? "disable" : this.sslOn;
     else if (id === "readonly") this.readonly = !this.readonly;
+  }
+
+  /** Whether the ssl toggle is on (any sslmode but disable, or none). */
+  ssl(): boolean {
+    return this.sslmode !== "disable";
   }
 
   press(id: string, cx: Context): void {
@@ -227,6 +247,8 @@ export class ConnForm {
     if (has("path")) c.path = this.value("path").replace(/^~(?=\/)/, "");
 
     if (has("url")) c.url = this.value("url");
+
+    if (this.sslmode && speaksTls(this.kind)) c.sslmode = this.sslmode;
 
     return c;
   }
@@ -362,17 +384,19 @@ export class ConnForm {
   }
 
   toggleRow(t: Theme, on: (id: string) => boolean): Element {
-    const toggle = (id: string, label: string, value: boolean) => ring(h_flex().id(`form-${id}`).gap(6).px(4).h(22).items_center().cursor_pointer()
+    const toggle = (id: string, label: string, value: boolean, note = "") => ring(h_flex().id(`form-${id}`).gap(6).px(4).h(22).items_center().cursor_pointer()
       .on_mouse_down("left", (_e, cx) => {
         this.flip(id);
         cx.notify();
       })
       .child(div().text_color(value ? t.accent : t.dim).child(value ? "▣" : "□"))
-      .child(div().text_color(t.muted).child(label)), on(id), t.accent);
+      .child(div().text_color(t.muted).child(label))
+      .when(note !== "", (el) => el.child(div().id(`form-${id}-note`).text_color(t.dim).child(note))), on(id), t.accent);
 
     const ids = this.stops().filter((s) => s.kind === "toggle").map((s) => s.id);
 
-    return h_flex().gap(14).children(ids.map((id) => (id === "remote" ? toggle(id, "remote (Turso, sqld)", this.remote)
+    return h_flex().flex_wrap().gap(14).children(ids.map((id) => (id === "remote" ? toggle(id, "remote (Turso, sqld)", this.remote)
+      : id === "ssl" ? toggle(id, "ssl", this.ssl(), sslWords(this.sslmode))
       : id === "ask" ? toggle(id, "ask for the password each time", this.ask) : toggle(id, "read only", this.readonly))));
   }
 
@@ -401,6 +425,11 @@ export class ConnForm {
 
     cx.notify();
   }
+}
+
+/** The ssl toggle's note: the sslmode it saves, so one from a pasted URL isn't hidden. */
+export function sslWords(mode: SslMode | undefined): string {
+  return mode ? `sslmode=${mode}` : "client default";
 }
 
 /** A stop id that names a field. */

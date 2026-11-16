@@ -296,11 +296,29 @@ read going on), `databases.forward-start` / `databases.forward-anyway` /
 edited stages the cursor's cell as that text. Another mod hands it a connection,
 never a secret: `nocturne.databases:{"kind": "postgres" | "mysql" | "sqlite"
 | "libsql", "name"?, "host"?, "port"?, "database"?, "user"?, "path"?, "url"?,
-"readonly"?, "from"?, "secret"?, "forward"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
+"readonly"?, "from"?, "secret"?, "forward"?, "sslmode"?, "as"?: "pane" | "tab"}` (`from` is shown as where it
 came from; the window asks for a password it needs), `databases.connect:{…}`
 to an open window, or elsewhere `openOverlay({mod: "databases", kind:
 "window", key: "databases", frame: "none", scrim: true, width: 0.88, height:
-0.88, props: {connect}})`. It is listed under "sent here" in that window
+0.88, props: {connect}})`. `sslmode` is how a Postgres or MySQL connection
+asks for TLS, in libpq's names: `"disable" | "allow" | "prefer" | "require" |
+"verify-ca" | "verify-full"` (another value refuses the request:
+`databases.connect: sslmode "…" isn't one of …`; a file's is left out).
+Absent, the client's own default (psql's prefer). The Kubernetes mod's
+port-forwards send `"disable"`: through a forward that closes the connection
+on Postgres' TLS request, psql's prefer fails instead of going on in plain.
+psql gets it in `-d`'s conninfo (`dbname='lantern' sslmode=disable`, shown in
+the Log); MySQL's client `--ssl-mode=` (DISABLED, PREFERRED for allow and
+prefer, REQUIRED, VERIFY_CA, VERIFY_IDENTITY); MariaDB's (its `mysql` too:
+its `--version` tells them apart) `--skip-ssl` for disable, nothing for allow
+and prefer, `--ssl --ssl-verify-server-cert` for the rest (its only flag that
+insists on TLS, and it checks the certificate). The verify modes want a CA
+the window doesn't set (`~/.postgresql/root.crt`, or a client's own option
+file). The connection form's `ssl` toggle (Postgres, MySQL) is on by default
+(no sslmode); off saves `disable`; a pasted URL's `?sslmode=require` (MySQL's
+`ssl-mode=` / `sslMode=`), a found `DATABASE_URL`'s or direnv's `PGSSLMODE`
+fill it, and another value than disable is kept through an edit and shown
+beside the toggle (`sslmode=require`). It is listed under "sent here" in that window
 until the person pins it. Pinned connections (saved: `P` or `s` on a sent or
 found one, its menu's "Pin it", a click on the row's pin, or the new
 connection form) are one list for the machine, `data/databases/connections.json`
@@ -725,7 +743,8 @@ the highlighted line shows where it will land.
   `>` in the bar (the ringed tab, else the shown one); the order is kept. A
   right-click on a tab (or `m` in the bar) opens its menu: pin it to the
   sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
-  close it; ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
+  close it; a right-click on the bar opens the shown tab's (a pane with one
+  tab has no strip: this is its tab's menu); ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
   `browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
@@ -740,7 +759,8 @@ the highlighted line shows where it will land.
   slot in `panes()` (`mod: "browser"`, `props.slot`). Each web pane with a slot
   publishes its shown tab's title (else its host) in shared `browser.titles`
   (`{ [slot]: title }`, as the viewers' `…titles`), e.g. for a pinned pane's name,
-  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`).
+  and every tab's in `browser.tab-titles` (`{ [slot]: { [tab id]: title } }`),
+  and which tab it shows in `browser.shown-tabs` (`{ [slot]: tab id }`).
   Each tab on the strip shows its page's favicon before its title (the web
   pane's mark until one is known): the page's own `link[rel~=icon]`, else its
   origin's `/favicon.ico` (no icon service is asked), fetched once per origin
@@ -1660,13 +1680,18 @@ and props if a restart gives the pane a new id, and gone once the pane has
 been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
 its page's title when browser notes it in shared
 `browser.titles` (by slot), else the host it opened on. One tab of a
-web pane can be pinned on its own (the tab's right-click menu or `m` in the
-bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
+web pane can be pinned on its own, shown or not, the pane's only tab too (the
+tab's right-click menu, a right-click on the bar or `m` in it for the shown
+tab, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf";
+the pane's menu, "Pin this web tab to the shelf", for the tab it shows):
 a record with `tab` (the web tab's id, kept across restarts), its own tile named
 by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`)
 and wearing its favicon (`browser.tab-icons`; a whole web pane's tile its
 shown tab's, `browser.icons`), keyed `pane:<id>#<tab>` in the jar. Several tabs of a pane, and the pane as a
-whole, can each have a tile. Going to it focuses the pane, then
+whole, can each have a tile. A tab's tile is lit (and wears the focus ticks)
+only while its pane is on screen and shows that tab (`browser.shown-tabs`);
+the pane's other tabs' tiles stay unlit, and the whole pane's tile goes by the
+pane. Going to it focuses the pane, then
 `browser.show:{"slot": …, "tab": …}` shows the tab (a pane not on
 screen yet takes the same wish from shared `browser.show` when it
 shows). Closing the tab drops its pin. A whole tab of a space (all its panes,

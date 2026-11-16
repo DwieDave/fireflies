@@ -5,7 +5,7 @@
 // hrana.ts speaks to it over HTTP. Also what to install when a client is
 // missing (said, never done).
 
-import type { Conn, Kind } from "./kinds.ts";
+import type { Conn, Kind, SslMode } from "./kinds.ts";
 import { DEFAULT_PORT, onFile } from "./kinds.ts";
 import { NULL_MARK } from "./script.ts";
 
@@ -66,7 +66,12 @@ export function installHow(setup: Setup): string {
 /** What a nix setup gets wrong about a kind's client, or null. */
 export const NIX_NOTE = { postgres: "on nix psql comes with postgresql: libpq alone has no psql", mysql: null, sqlite: null, libsql: null } as const satisfies { readonly [K in Kind]: string | null };
 
-/** psql's arguments: CSV, no psqlrc, stop at the first error, never prompt, rows fetched 500 at a time. */
+/** A conninfo value, quoted (libpq: single quotes, a quote or backslash escaped). */
+const conninfo = (s: string): string => `'${s.replace(/[\\']/g, (ch) => `\\${ch}`)}'`;
+
+/** psql's arguments: CSV, no psqlrc, stop at the first error, never prompt, rows fetched 500 at a
+ *  time. An sslmode goes into -d's conninfo (`dbname='…' sslmode=…`): the Log's line shows it, and
+ *  it beats a PGSSLMODE the app's environment may hold. */
 function psqlArgs(c: Conn): string[] {
   const out = ["-X", "-A", "--csv", "-w", "-v", "ON_ERROR_STOP=1", "-v", "FETCH_COUNT=500", "-P", `null=${NULL_MARK}`];
 
@@ -76,14 +81,41 @@ function psqlArgs(c: Conn): string[] {
 
   if (c.user) out.push("-U", c.user);
 
-  out.push("-d", c.database || "postgres");
+  const database = c.database || "postgres";
+
+  out.push("-d", c.sslmode ? `dbname=${conninfo(database)} sslmode=${c.sslmode}` : database);
 
   return out;
 }
 
-/** mysql's arguments: XML (NULL apart from 'NULL'), batch, a connect timeout. */
-function mysqlArgs(c: Conn): string[] {
-  const out = ["--xml", "--batch", "--connect-timeout=10"];
+/** Which mysql client was found: Oracle's MySQL or MariaDB's (also installed as `mysql`). Their
+ *  TLS flags differ. */
+export type MysqlFlavor = "mysql" | "mariadb";
+
+/** The flavor from the client's `--version` ("… from 11.4.13-MariaDB, client 15.2 …"), else from its name. */
+export function flavorOf(version: string, path: string): MysqlFlavor {
+  return /MariaDB/.test(version) || (!version.trim() && path.endsWith("/mariadb")) ? "mariadb" : "mysql";
+}
+
+/** MySQL's --ssl-mode for each sslmode (it has no allow: preferred is the nearest). The verify
+ *  modes need a CA (--ssl-ca, which the window doesn't set): the client says so when it's missing. */
+const MYSQL_SSL = { disable: "DISABLED", allow: "PREFERRED", prefer: "PREFERRED", require: "REQUIRED", "verify-ca": "VERIFY_CA", "verify-full": "VERIFY_IDENTITY" } as const satisfies { readonly [M in SslMode]: string };
+
+/** MariaDB's flags for each sslmode. Its client tries TLS by default (11.4 on); --ssl alone still
+ *  goes on in plain when the server has none, so only --ssl-verify-server-cert insists on TLS (and
+ *  checks the certificate: 11.4 takes a self-signed one when a password is used). */
+const MARIADB_SSL = { disable: ["--skip-ssl"], allow: [], prefer: [], require: ["--ssl", "--ssl-verify-server-cert"], "verify-ca": ["--ssl", "--ssl-verify-server-cert"], "verify-full": ["--ssl", "--ssl-verify-server-cert"] } as const satisfies { readonly [M in SslMode]: readonly string[] };
+
+/** The client's TLS flags for an sslmode (none when it has none). */
+export function mysqlSslArgs(mode: SslMode | undefined, flavor: MysqlFlavor): string[] {
+  if (!mode) return [];
+
+  return flavor === "mariadb" ? [...MARIADB_SSL[mode]] : [`--ssl-mode=${MYSQL_SSL[mode]}`];
+}
+
+/** mysql's arguments: XML (NULL apart from 'NULL'), batch, a connect timeout, its TLS flags. */
+function mysqlArgs(c: Conn, flavor: MysqlFlavor): string[] {
+  const out = ["--xml", "--batch", "--connect-timeout=10", ...mysqlSslArgs(c.sslmode, flavor)];
 
   if (c.host) out.push("-h", c.host);
 
@@ -101,11 +133,12 @@ export function sqliteArgs(path: string, readonly: boolean): string[] {
   return ["-batch", "-bail", "-csv", "-header", "-nullvalue", NULL_MARK, "-cmd", ".changes on", ...(readonly ? ["-readonly"] : []), path];
 }
 
-/** The client for a connection, or null (a remote libSQL database). */
-export function clientFor(c: Conn): Client | null {
+/** The client for a connection, or null (a remote libSQL database). `flavor`: which mysql client
+ *  runs it (session.ts clientOf finds out). */
+export function clientFor(c: Conn, flavor: MysqlFlavor = "mysql"): Client | null {
   if (c.kind === "libsql" && c.url) return null;
 
   if (onFile(c)) return { programs: PROGRAMS.sqlite, args: sqliteArgs(c.path ?? "", c.readonly) };
 
-  return c.kind === "postgres" ? { programs: PROGRAMS.postgres, args: psqlArgs(c) } : { programs: PROGRAMS.mysql, args: mysqlArgs(c) };
+  return c.kind === "postgres" ? { programs: PROGRAMS.postgres, args: psqlArgs(c) } : { programs: PROGRAMS.mysql, args: mysqlArgs(c, flavor) };
 }
