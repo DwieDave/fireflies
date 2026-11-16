@@ -49,8 +49,9 @@
 // tab_menu, tab:<n>, tab_act:<{ slot, tab, act }> (the tab menu's picks), and
 // open:<{ url, slot? } as JSON, or a URL> (the editor's links): the copy
 // whose slot it names opens it in front and its pane takes the keyboard.
-// A tab's menu (a right-click on it; m in the bar, for the ringed tab else the
-// shown one): pin it to the shelf or unpin it, move it left / right, close it.
+// A tab's menu (a right-click on it; a right-click on the bar, for the shown
+// tab: a pane with one tab has no strip; m in the bar, for the ringed tab else
+// the shown one): pin it to the shelf or unpin it, move it left / right, close it.
 // It is this mod as a popup (props { tabMenu }); its picks come back as tab_act.
 // A pinned tab (nocturne's PANES_KEY record with `tab`, tabs.ts has the rules)
 // is its own tile on the shelf, named from shared browser.tab-titles

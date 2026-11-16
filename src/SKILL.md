@@ -144,7 +144,8 @@ jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
-a web pane can have a tile of its own (its tab's menu, or `herdr-app do
+a web pane can have a tile of its own, its only tab too (its tab's menu, a
+right-click on the web pane's bar for the shown tab, or `herdr-app do
 browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
 wears its favicon, as the web pane's tab strip does. A whole tab of a space
 can be pinned as one tile too (`herdr-app do nocturne.pin-tab` for the shown

@@ -1324,6 +1324,51 @@ test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j 
   expect(bm.view.rows[0]).toMatchObject({ act: "pin", enabled: false });
 });
 
+test("a pane with one tab has no strip: a right-click on its bar opens that tab's menu, so the one tab can be pinned on its own", async () => {
+  reset();
+  const pane = { pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" };
+  app.panes = [pane];
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.location", data: { href: "https://a.example/", title: "Alpha" } }, cx);
+  const root = view.render();
+  expect(find(root, "webtabs")).toBe(undefined);
+  // A right-click anywhere on the bar: the shown tab's menu, at the pointer.
+  cx.stopped = false;
+  on(find(root, "bar"), "on_mouse_down", "right")({}, cx);
+  expect(cx.stopped).toBe(true);
+  const spec = app.overlays.at(-1);
+  expect(spec).toMatchObject({ mod: "browser", kind: "popup", props: { tabMenu: { slot: "s1", tab: "web", title: "Alpha", pinned: false, canPin: true, index: 0, count: 1 } } });
+  const menu = await menuCopy(spec);
+  expect(menu.view.rows.map((r: any) => [r.act, r.enabled])).toEqual([["pin", true], ["left", false], ["right", false], ["close", true]]);
+  on(find(menu.view.render(), "tm-pin"), "on_click")({}, menu.cx);
+  view.tabAct(app.ran.at(-1)![0].slice("browser.tab_act:".length), cx);
+  expect(app.store[PINS]).toEqual([{ pane: "p1", mod: "browser", props: { slot: "s1" }, at: expect.any(Number), tab: "web" }]);
+  // Its tile on the shelf is that tab's, not the pane's.
+  const jar = pinsJs.jarItems({ agents: [], terminals: [], panes: [pane], records: pinsJs.paneRecords(() => app.store[PINS]) });
+  expect(jar.map((x: any) => x.key)).toEqual(["pane:p1#web"]);
+  // The bar's menu says Unpin now.
+  on(find(view.render(), "bar"), "on_mouse_down", "right")({}, cx);
+  expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ tab: "web", pinned: true });
+});
+
+test("a tab that isn't shown is pinned from its own menu (the strip's right-click, the pick sent to the pane); the shown one stays shown", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://c.example/", background: true } }, cx);
+  expect(view.tabs.active).toBe("web");
+  on(find(view.render(), "webtab-web-3"), "on_mouse_down", "right")({}, cx);
+  expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ tab: "web-3", canPin: true, pinned: false });
+  // The pick comes back as tab_act, through the command loop, to the copy whose slot it names.
+  view.tabAct(JSON.stringify({ slot: "s1", tab: "web-3", act: "pin" }), cx);
+  expect(app.store[PINS].map((r: any) => r.tab)).toEqual(["web-3"]);
+  expect(view.tabs.active).toBe("web");
+  // A pick naming another pane's slot is left to that pane.
+  view.tabAct(JSON.stringify({ slot: "s2", tab: "web-2", act: "pin" }), cx);
+  expect(app.store[PINS].map((r: any) => r.tab)).toEqual(["web-3"]);
+});
+
 test("show:{slot, tab} (a tab's tile on the shelf): the pane with that slot shows the tab; one off screen takes the wish when it shows", async () => {
   reset();
   app.panes = [{ pane: "pa", mod: "browser", props: { slot: "a" }, tab: "t1" }, { pane: "pb", mod: "browser", props: { slot: "b" }, tab: "t2" }];

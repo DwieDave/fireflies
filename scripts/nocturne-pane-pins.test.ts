@@ -469,6 +469,30 @@ test("a web tab's tile is named by that tab's title (browser.tab-titles), the pa
   expect(webName(WEB, "web-9")).toBe("Web");
 });
 
+test("the pane menu of a web pane pins the tab it shows on its own (browser.shown-tabs): a pane with one tab too; then Unpin this web tab", () => {
+  const rows = () => menuItems(theme, { tab: "pane", target: { pane: "p2", terminal: null } }).filter((r: any) => !r.rule);
+  const names = () => rows().slice(0, 2).map((r: any) => r.name);
+  // A browser that doesn't say which tab it shows: no such row.
+  expect(rows().some((r: any) => r.id === "pin-web-tab")).toBe(false);
+  // Its one tab, "web": a row under the pane's own pin.
+  sharedState["browser.shown-tabs"] = { w1: "web" };
+  expect(names()).toEqual(["Pin to the top", "Pin this web tab to the shelf"]);
+  rows()[1].go();
+  expect(stored()).toEqual([{ pane: "p2", mod: "browser", props: { slot: "w1" }, at: expect.any(Number), tab: "web" }]);
+  expect(kit.jar().filter(pins.onShelf).map((x: any) => x.key)).toEqual(["pane:p2#web"]);
+  // The pane isn't pinned whole by it; its row says the tab is.
+  expect(names()).toEqual(["Pin to the top", "Unpin this web tab"]);
+  // Another tab shown: that one can be pinned too; the first keeps its tile.
+  sharedState["browser.shown-tabs"] = { w1: "web-2" };
+  expect(names()[1]).toBe("Pin this web tab to the shelf");
+  rows()[1].go();
+  expect(records().map((r: any) => r.tab)).toEqual(["web", "web-2"]);
+  rows()[1].go();
+  expect(records().map((r: any) => r.tab)).toEqual(["web"]);
+  // Not a web pane: no row.
+  expect(menuItems(theme, { tab: "pane", target: { pane: "p3", terminal: null } }).some((r: any) => r.id === "pin-web-tab")).toBe(false);
+});
+
 test("tabs of one web pane pinned: only the shown tab's tile is lit and wears the focus (browser.shown-tabs); the pane's own tile goes by the pane", async () => {
   const { pinFocus } = await import("../defaults/mods/nocturne/shelf.ts");
   sharedState[pins.PANES_KEY] = [

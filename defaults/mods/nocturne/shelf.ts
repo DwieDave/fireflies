@@ -10,7 +10,7 @@ import { shared, focused, panes } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { dither, givenName, goToPin, cornerTicks, LOGO, shownWebTab, statusColor } from "./kit.ts";
 import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
 import { openMenu, tabTileMenu } from "./menu.ts";
 import { tabLead } from "./pins.ts";
@@ -127,18 +127,14 @@ export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): 
   return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
 }
 
-/** The web tab each web pane shows (browser/publish.ts), by slot: { [slot]: tab id }. */
-export const SHOWN_TABS = sharedMapKey("browser.shown-tabs", isString);
-
-/** A web tab's pin whose pane shows another tab now. A browser that doesn't say
- *  which tab it shows (none noted for its slot): not known, so not hidden. */
+/** A web tab's pin whose pane shows another tab now (kit.ts shownWebTab). A
+ *  browser that doesn't say which tab it shows: not known, so not hidden. */
 export function tabHidden(it: JarItem): boolean {
   if (it.kind !== "pane" || !it.tab) return false;
 
-  const slot = isWebProps(it.pane.props) ? it.pane.props.slot : undefined;
-  const shown = slot === undefined ? undefined : readSharedMap(shared, SHOWN_TABS).get(slot);
+  const shown = shownWebTab(it.pane);
 
-  return shown !== undefined && shown !== it.tab;
+  return shown !== null && shown !== it.tab;
 }
 
 /** On screen now: its tab is the shown one of the shown space, not parked;

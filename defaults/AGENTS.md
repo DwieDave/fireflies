@@ -718,7 +718,8 @@ the highlighted line shows where it will land.
   `>` in the bar (the ringed tab, else the shown one); the order is kept. A
   right-click on a tab (or `m` in the bar) opens its menu: pin it to the
   sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
-  close it; ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
+  close it; a right-click on the bar opens the shown tab's (a pane with one
+  tab has no strip: this is its tab's menu); ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
   zoom, picture in picture and the inspector act on the shown tab; the tabs come
   back after a restart (the others load when first shown). Commands
   `browser.tab_new`, `.tab_close`, `.tab_next`, `.tab_prev`,
@@ -1654,8 +1655,10 @@ and props if a restart gives the pane a new id, and gone once the pane has
 been closed for 15 s; a parked pane stays pinned. A web pane's tile goes by
 its page's title when browser notes it in shared
 `browser.titles` (by slot), else the host it opened on. One tab of a
-web pane can be pinned on its own (the tab's right-click menu or `m` in the
-bar, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf"):
+web pane can be pinned on its own, shown or not, the pane's only tab too (the
+tab's right-click menu, a right-click on the bar or `m` in it for the shown
+tab, "Pin this tab to the shelf"; the palette's "Pin the tab to the shelf";
+the pane's menu, "Pin this web tab to the shelf", for the tab it shows):
 a record with `tab` (the web tab's id, kept across restarts), its own tile named
 by that tab's title (`browser.tab-titles`, `{ [slot]: { [tab]: title } }`)
 and wearing its favicon (`browser.tab-icons`; a whole web pane's tile its
