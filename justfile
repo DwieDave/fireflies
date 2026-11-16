@@ -175,6 +175,8 @@ test:
     bun test scripts/usage-poll.test.ts
     # TypeScript mods: guard.ts and keyhelp.d.ts are one file each in every mod that has them; guard.ts proves or refuses data.
     bun test scripts/mods-typescript.test.ts
+    # The mods' TypeScript in the editor: its TypeScript server (the dev shell's), with the editor's root and initialize, finds every module of a mod file and a bun test and still reports a real type error.
+    bun test scripts/mod-types-lsp.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/procs.test.ts
     # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the readings strip and its second.
