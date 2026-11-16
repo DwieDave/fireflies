@@ -1,7 +1,9 @@
 //! The shipped mods' TypeScript at Developer's bar (docs/mods-typescript.md):
 //! `tsc -p defaults/tsconfig.json` (every .ts file, at full strictness, against
 //! the typings this binary writes with `herdr-app types`) and `oxlint` with
-//! anti-slop (oxlint.config.ts). The same as `just typecheck` and `just lint`.
+//! anti-slop (oxlint.config.ts), then the Effect pass (oxlint.effect.config.ts:
+//! Effect's language-service diagnostics and anti-slop's Effect rules) on the
+//! files written on Effect. The same as `just typecheck` and `just lint`.
 //! The tools are the exact versions in package.json, installed by
 //! `bun install --frozen-lockfile` when node_modules lacks them. CI has no bun
 //! there and skips these.
@@ -43,7 +45,25 @@ fn shipped_typescript_mods_type_check() {
 fn shipped_typescript_mods_lint() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let Some(oxlint) = tool(root, "oxlint") else { return eprintln!("CI: the mods' lint is skipped") };
-    passes(Command::new(oxlint).current_dir(root).args(["--deny-warnings", "defaults/mods", "defaults/frame"]), "oxlint defaults/mods defaults/frame");
+    passes(Command::new(oxlint).current_dir(root).args(["--deny-warnings", "defaults/mods", "defaults/frame", "defaults/lib"]), "oxlint defaults/mods defaults/frame defaults/lib");
+}
+
+/// The justfile's `effect_sources`: the kit and the mods converted to it (one list for both checks).
+fn effect_sources(root: &Path) -> Vec<String> {
+    let justfile = std::fs::read_to_string(root.join("justfile")).unwrap();
+    let line = justfile.lines().find_map(|l| l.strip_prefix("effect_sources := ")).expect("the justfile names effect_sources");
+    line.trim_matches('"').split_whitespace().map(str::to_owned).collect()
+}
+
+#[test]
+fn effect_sources_pass_the_effect_lint() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let Some(effect_tsgo) = tool(root, "effect-tsgo") else { return eprintln!("CI: the Effect lint is skipped") };
+    let sources = effect_sources(root);
+    passes(
+        Command::new(effect_tsgo).current_dir(root).args(["oxlint", "--type-aware", "--deny-warnings", "-c", "oxlint.effect.config.ts"]).args(&sources),
+        "effect-tsgo oxlint --type-aware -c oxlint.effect.config.ts",
+    );
 }
 
 /// One finding of `oxlint -c oxlint.size.json` as tests/mods_over_limits.txt
