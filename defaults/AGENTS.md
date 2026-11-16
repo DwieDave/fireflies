@@ -2718,9 +2718,13 @@ Herdr runs only `.js`: a mod that should run there too stays JavaScript.
 - Nothing checks types at run time. Check them: `herdr-app types <mod folder>`
   writes `gpui-kit.d.ts` there (every module, `herdr` included) and the app
   writes a strict `tsconfig.json` into a `main.ts` mod's folder (never over
-  yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod in a
-  repository of its own does the same: run `herdr-app types .` in it after
-  each Fireflies update and keep both files out of git.
+  yours); then `tsc -p <mod folder>` (TypeScript 5.8 or later). A mod folder
+  the app can't write into (one linked from the nix store) gets neither: the
+  `tsconfig.json` next to this file, rewritten on every start, covers those
+  mods against `gpui-kit.d.ts` and `herdr.d.ts` here, so an editor's
+  language server finds their modules too (yours in its place is kept). A
+  mod in a repository of its own does the same: run `herdr-app types .` in
+  it after each Fireflies update and keep both files out of git.
 - `props()`, `shared()`, `nativeViewCall()`, `terminals()` and anything
   parsed from `exec` or a file are `unknown`: another mod or an older version
   may have written them, so prove what they are before using them (a type
