@@ -11,10 +11,17 @@
 // pointer moves: their position less their local position) and over the app's
 // zoom. An element's `local_position` is no help: it is the pressed element's.
 //
-// Self-contained (it imports nothing), so another mod copies it as it is: the
-// Databases window (popups.ts) uses it, the Kubernetes mod (fireflies-k8s
-// mod/menu-place.ts) carries a copy. scripts/databases-menu-place.test.ts is
-// its test.
+// A menu Fireflies draws as a popup over the window (openOverlay) is placed
+// by the app, which measures it: overlayOf() says how to ask for each case (a
+// press: a popup at the pointer, flipped near the edges; a thing: a popup hung
+// from its rectangle, `over` the pane or block it's measured in; nothing: a
+// dialog in the middle).
+//
+// Self-contained (it imports nothing), so every mod that opens a menu carries
+// this file as it is (databases/menu-place.ts is the source; the copies are
+// checked byte for byte by scripts/menu-place.test.ts; the Kubernetes mod,
+// fireflies-k8s mod/menu-place.ts, carries a copy too).
+// scripts/databases-menu-place.test.ts is its test.
 
 /** A point, in whichever px the caller says. */
 export interface Pt {
@@ -89,4 +96,25 @@ export function placeMenu(size: Box, room: Box, at: Anchor): Pt {
     x: Math.round(side(at.x + GAP, at.x - GAP - size.width, size.width, room.width)),
     y: Math.round(side(at.y + GAP, at.y - GAP - size.height, size.height, room.height)),
   };
+}
+
+/** Where an overlay menu stands: at the press (a right click, a click), hung from a thing a key
+ *  opened it for (its rectangle in the layout px of `over`, the pane or layout block it is drawn
+ *  in, from that one's top left corner), or nothing positional (null: the middle). */
+export type Opened = "pointer" | { readonly over: string; readonly rect: Rect } | null;
+
+/** How openOverlay places it: a popup at the pointer (the app flips it left or up near the
+ *  window's edges), a popup hung from the rectangle (under it at its left edge, above it near the
+ *  foot), else a dialog (in the middle). */
+export function overlayOf(opened: Opened):
+  | { readonly kind: "popup" }
+  | { readonly kind: "popup"; readonly at: { readonly over: string; readonly x: number; readonly y: number; readonly w: number; readonly h: number } }
+  | { readonly kind: "dialog" } {
+  if (opened === "pointer") return { kind: "popup" };
+
+  if (!opened) return { kind: "dialog" };
+
+  const { over, rect: r } = opened;
+
+  return { kind: "popup", at: { over, x: Math.round(r.x), y: Math.round(r.y), w: Math.round(r.w), h: Math.round(r.h) } };
 }
