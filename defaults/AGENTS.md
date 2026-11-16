@@ -1516,6 +1516,21 @@ layout's look and a block can differ:
   are upgraded to readable terminal colors; edited theme files are kept.
   A theme named like a layout (`themes/win98.json`) is
   that layout's own: Settings offers it only there.
+- Your own theme reaches the mods (this fork): Nocturne and its mods
+  (editor, git, github, databases, …) draw only with `theme()` colors, so a
+  `themes/<name>.json` picked in the theme menu (or set as a layout's or
+  settings.json's `theme`) recolors them too, the nocturne layout's panes,
+  borders and focus ring included. What they use: `background`, `foreground`,
+  `muted` (dim text, horizons), `dim`, `accent`, `working` / `blocked` /
+  `done`, the hues `ansi1`–`ansi6`, `ansi9`–`ansi14` (status, syntax, graph
+  lanes, the fireflies' glow), `ansi7` (the moon, the stars) and the edge:
+  lines, plates, dithers, the lit row and faint text, drawn in your `input`
+  laid opaque over your `background` (moonfly: `#323437`). So for the look,
+  set `colors.input` (and `muted`, `accent`) in your theme; a light
+  background works (the edge comes out a light grey). `ansi0` and `ansi8`
+  color only terminals (and a CI log's ANSI codes). Writing a mod: use these
+  names, never hex; the shipped mods' `tones.ts` (`edge(t)`, `tone(t, k)`)
+  is the copy to take for the edge.
 - `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
   (their text sizes are their own, in px, and follow zoom). Optional: without
   them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).

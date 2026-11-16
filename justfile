@@ -233,6 +233,8 @@ test:
     bun test scripts/databases-pin.test.ts
     # Where a Databases connection is and whether it's connected: the server's default database said, the server's databases listed and picked (-d, kept in a pin), an empty database's words, the state mark and the three places that draw it, a dead server turning it, the focus check; FF_TEST_PG_BIN runs it on a throwaway PostgreSQL too.
     bun test scripts/databases-where.test.ts
+    # The fork's mods follow the theme: no color literal in a converted mod (an allow list for art and the black veils), no ansi0 / ansi8 as a UI tone, tones.ts the same in every mod, its edge on moonfly's old hex, the nocturne layout naming theme colors.
+    bun test scripts/themes.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

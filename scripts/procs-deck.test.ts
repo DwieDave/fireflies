@@ -869,7 +869,7 @@ test("a click on a column's head sorts by it, a second turns it; the head carrie
   draw();
   expect(words(ids["h-cpu"])).toEqual(["CPU ↓"]);
   expect(ids["h-cpu"].css.text_color[0]).toBe("accent");
-  expect(ids["h-mem"].css.text_color[0]).toBe("ansi8");
+  expect(ids["h-mem"].css.text_color[0]).toBe("muted");
   expect(words(ids["k-sort"])).toContain("cpu ↓");
   // In the tree: tA (rustc's 98 %) before tB; inside t4's chain nothing to reorder.
   expect(d.rows().filter((r: any) => r.kind === "tab").map((r: any) => r.key)).toEqual(["t:tA", "t:tB"]);
