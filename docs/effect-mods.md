@@ -291,10 +291,11 @@ next to its reason), one that should be shown becomes the mod's note.
      `fetch` (they are the Clock, the local time, the HttpClient).
 
 **Every finding is fixed.** Run over the mods not yet converted (`bun
-scripts/effect-survey.ts`), every diagnostic on finds about 19,000 things:
+scripts/effect-survey.ts`), every diagnostic on finds about 16,800 things
+in the mods' own files:
 70 % `strict-boolean-expressions` (`if (x)` on a non-boolean), 25 %
 `prefer-effect-array` / `prefer-effect-string` (`xs.map(f)` → `Arr.map(xs, f)`,
-`s.trim()` → `Str.trim(s)`), and the shared copies about 1,220 more. Asked
+`s.trim()` → `Str.trim(s)`), and the shared copies about 1,240 more. Asked
 whether the conversions should skip the style part, Developer (2026-11-16):
 
 > yes youre expected to fix all findings too
@@ -351,37 +352,79 @@ the glow's own.
 
 ## The plan for the rest
 
-To be refreshed against integrate once this batch of fireflies has merged
-(the table below is integrate as of 2026-11-16, `bun scripts/effect-survey.ts`).
+Refreshed against integrate on 2026-11-16 after the first batch merged
+(`bun scripts/effect-survey.ts`, merge a3c57ff). Still out then: chrome-panes
+(the browser mod and its native side) and themes' item 3 (a look.ts per mod,
+the dither turning flat in plain layouts): the browser conversion waits for
+chrome-panes, and every conversion merges integrate once themes' item 3 is in
+(a look.ts that lands as a shared copy joins wave 0a).
 
 ### Each mod: what it decodes, runs, fetches and times
 
-`bun scripts/effect-survey.ts`: a mod's own .ts files (shared copies are
-listed under them, below), its lines, its guard.ts calls (what it decodes
+`bun scripts/effect-survey.ts`: a mod's own .ts files (a file with the same
+name and text in two mods or more is a shared copy: counted once, in the
+second table), its lines, its guard.ts calls (what it decodes
 today), `JSON.parse` outside guards, `exec`/`hc` calls, `fetch`, timers and
 sleeps, `cx.spawn`, `catch(() => null)`-like swallows, and what the Effect
 lint says of it now (all rules, the five most frequent).
 
 | mod | files | lines | guards | JSON.parse | exec | fetch | timers | spawns | swallowed | Effect lint (top rules) |
 |---|---|---|---|---|---|---|---|---|---|---|
-| agent-graph | 11 | 2288 | 66 | 0 | 5 | 0 | 3 | 2 | 7 | 408: strict-boolean-expressions 256, prefer-effect-array 89, prefer-effect-string 34, global-date 13, async-function 8 |
-| browser | 15 | 2900 | 85 | 0 | 7 | 0 | 10 | 6 | 7 | 471: strict-boolean-expressions 339, prefer-effect-array 84, prefer-effect-string 30, async-function 8, prefer-effect-record 4 |
-| databases | 57 | 12213 | 78 | 1 | 43 | 1 | 5 | 2 | 30 | 2550: strict-boolean-expressions 1823, prefer-effect-array 314, prefer-effect-string 271, async-function 64, global-date 36 |
-| diff | 1 | 116 | 4 | 0 | 0 | 0 | 1 | 1 | 0 | 15: strict-boolean-expressions 9, global-date 2, global-json 2, async-function 1, prefer-effect-array 1 |
-| editor | 53 | 17912 | 73 | 0 | 72 | 0 | 29 | 18 | 28 | 2572: strict-boolean-expressions 1788, prefer-effect-string 425, prefer-effect-array 239, async-function 47, global-date 32 |
-| equalize-panes | 2 | 224 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 21: strict-boolean-expressions 11, prefer-effect-array 9, anti-slop-effect(prefer-effect-match) 1 |
-| file-tree | 29 | 7720 | 55 | 0 | 13 | 0 | 15 | 20 | 8 | 1565: strict-boolean-expressions 1238, prefer-effect-string 139, prefer-effect-array 128, async-function 40, global-date 11 |
-| finder | 2 | 1042 | 9 | 0 | 2 | 0 | 3 | 4 | 1 | 129: strict-boolean-expressions 77, prefer-effect-string 27, prefer-effect-array 17, async-function 6, global-date 2 |
-| git | 34 | 9014 | 64 | 0 | 23 | 0 | 5 | 7 | 4 | 2163: strict-boolean-expressions 1499, prefer-effect-array 275, prefer-effect-string 267, async-function 83, anti-slop-effect(prefer-effect-match) 15 |
-| github | 37 | 12188 | 255 | 0 | 26 | 0 | 9 | 20 | 19 | 2785: strict-boolean-expressions 2026, prefer-effect-array 398, prefer-effect-string 230, async-function 52, global-date 45 |
-| markdown | 2 | 908 | 5 | 0 | 3 | 0 | 2 | 4 | 1 | 143: strict-boolean-expressions 98, prefer-effect-array 20, prefer-effect-string 18, async-function 4, global-date 2 |
-| nocturne | 59 | 14747 | 231 | 0 | 25 | 0 | 37 | 12 | 28 | 2772: strict-boolean-expressions 1902, prefer-effect-array 494, prefer-effect-string 253, global-date 64, async-function 25 |
-| notifications | 13 | 3388 | 101 | 0 | 4 | 0 | 7 | 6 | 3 | 646: strict-boolean-expressions 427, prefer-effect-array 104, prefer-effect-string 87, async-function 11, global-json 7 |
-| pip | 3 | 838 | 21 | 0 | 0 | 0 | 4 | 2 | 1 | 133: strict-boolean-expressions 103, prefer-effect-array 18, prefer-effect-string 9, async-function 3 |
-| preview | 12 | 2976 | 19 | 0 | 4 | 0 | 6 | 7 | 2 | 549: strict-boolean-expressions 442, prefer-effect-string 54, prefer-effect-array 26, async-function 21, anti-slop-effect(prefer-effect-match) 4 |
-| procs | 19 | 4305 | 39 | 0 | 13 | 0 | 6 | 5 | 3 | 736: strict-boolean-expressions 531, prefer-effect-array 92, prefer-effect-string 82, global-date 12, async-function 8 |
-| scripts | 13 | 2604 | 56 | 1 | 13 | 0 | 5 | 4 | 5 | 358: strict-boolean-expressions 171, prefer-effect-string 83, prefer-effect-array 74, global-date 15, prefer-effect-record 8 |
-| usage | 2 | 561 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0:  |
+| agent-graph | 11 | 2296 | 66 | 0 | 5 | 0 | 3 | 2 | 7 | 408: strict-boolean-expressions 256, prefer-effect-array 89, prefer-effect-string 34, global-date 13, async-function 8 |
+| browser | 15 | 2960 | 86 | 0 | 7 | 0 | 10 | 6 | 7 | 475: strict-boolean-expressions 341, prefer-effect-array 86, prefer-effect-string 30, async-function 8, prefer-effect-record 4 |
+| databases | 57 | 12481 | 82 | 1 | 44 | 1 | 5 | 2 | 31 | 2639: strict-boolean-expressions 1895, prefer-effect-array 317, prefer-effect-string 283, async-function 65, global-date 36 |
+| diff | 1 | 117 | 4 | 0 | 0 | 0 | 1 | 1 | 0 | 15: strict-boolean-expressions 9, global-date 2, global-json 2, async-function 1, prefer-effect-array 1 |
+| editor | 44 | 16103 | 57 | 0 | 72 | 0 | 25 | 11 | 26 | 2250: strict-boolean-expressions 1543, prefer-effect-string 392, prefer-effect-array 220, global-date 32, async-function 26 |
+| equalize-panes | 2 | 225 | 1 | 0 | 0 | 0 | 0 | 0 | 0 | 21: strict-boolean-expressions 11, prefer-effect-array 9, anti-slop-effect(prefer-effect-match) 1 |
+| file-tree | 18 | 4789 | 39 | 0 | 9 | 0 | 10 | 13 | 6 | 1000: strict-boolean-expressions 784, prefer-effect-array 102, prefer-effect-string 84, async-function 19, global-date 8 |
+| finder | 2 | 1059 | 9 | 0 | 2 | 0 | 3 | 4 | 1 | 129: strict-boolean-expressions 77, prefer-effect-string 27, prefer-effect-array 17, async-function 6, global-date 2 |
+| git | 36 | 9190 | 64 | 0 | 23 | 0 | 5 | 7 | 4 | 2187: strict-boolean-expressions 1519, prefer-effect-array 279, prefer-effect-string 267, async-function 83, anti-slop-effect(prefer-effect-match) 15 |
+| github | 38 | 12269 | 255 | 0 | 26 | 0 | 9 | 20 | 19 | 2806: strict-boolean-expressions 2044, prefer-effect-array 401, prefer-effect-string 230, async-function 52, global-date 45 |
+| markdown | 3 | 954 | 5 | 0 | 3 | 0 | 2 | 4 | 1 | 143: strict-boolean-expressions 98, prefer-effect-array 20, prefer-effect-string 18, async-function 4, global-date 2 |
+| nocturne | 59 | 14947 | 235 | 0 | 25 | 0 | 37 | 12 | 29 | 2809: strict-boolean-expressions 1933, prefer-effect-array 495, prefer-effect-string 254, global-date 66, async-function 27 |
+| notifications | 13 | 3393 | 101 | 0 | 4 | 0 | 7 | 6 | 3 | 646: strict-boolean-expressions 427, prefer-effect-array 104, prefer-effect-string 87, async-function 11, global-json 7 |
+| pip | 3 | 840 | 21 | 0 | 0 | 0 | 4 | 2 | 1 | 133: strict-boolean-expressions 103, prefer-effect-array 18, prefer-effect-string 9, async-function 3 |
+| preview | 1 | 108 | 5 | 0 | 0 | 0 | 2 | 0 | 0 | 19: strict-boolean-expressions 19 |
+| procs | 19 | 4318 | 39 | 0 | 13 | 0 | 6 | 5 | 3 | 736: strict-boolean-expressions 531, prefer-effect-array 92, prefer-effect-string 82, global-date 12, async-function 8 |
+| scripts | 14 | 2776 | 56 | 1 | 13 | 0 | 5 | 4 | 5 | 388: strict-boolean-expressions 196, prefer-effect-string 85, prefer-effect-array 77, global-date 15, prefer-effect-record 8 |
+| usage | 2 | 562 | 0 | 0 | 0 | 0 | 2 | 0 | 0 | 0:  |
+
+| shared file | copies | lines | findings (one copy) |
+|---|---|---|---|
+| diff.ts | preview, file-tree, editor | 223 | 44 |
+| editor-route.ts | markdown, finder, file-tree, editor | 195 | 46 |
+| envrc.ts | databases, editor | 298 | 49 |
+| file-icons.ts | nocturne, preview, file-tree, editor | 86 | 5 |
+| follow.ts | markdown, editor | 100 | 9 |
+| form-keys.ts | machine-add, databases, nocturne, github, notifications, editor, git | 255 | 22 |
+| guard.ts | databases, markdown, nocturne, agent-graph, diff, procs, pip, browser, equalize-panes, github, finder, scripts, preview, file-tree, notifications, editor, git | 189 | 12 |
+| image.ts | preview, file-tree, editor | 515 | 70 |
+| keyhelp.ts | databases, markdown, nocturne, agent-graph, usage, procs, pip, browser, github, scripts, preview, file-tree, notifications, editor, git | 265 | 33 |
+| keys.ts | preview, file-tree, editor | 87 | 13 |
+| kinds.ts | nocturne, preview, file-tree, editor | 436 | 50 |
+| limits.ts | nocturne, usage | 692 | 0 |
+| markdown-parse.ts | markdown, github, editor | 463 | 150 |
+| markdown.ts | markdown, github, editor | 488 | 81 |
+| menu-place.ts | databases, nocturne, procs, browser, github, scripts, file-tree, editor, git | 127 | 8 |
+| paths.ts | markdown, editor | 85 | 30 |
+| scratch.ts | nocturne, editor | 287 | 54 |
+| table.ts | databases, preview, file-tree, editor | 274 | 29 |
+| tones.ts | databases, markdown, nocturne, agent-graph, diff, usage, procs, pip, browser, equalize-panes, github, finder, scripts, preview, file-tree, notifications, editor, git | 65 | 12 |
+| toolground.ts | nocturne, notifications | 77 | 8 |
+| viewer-bars.ts | preview, file-tree, editor | 273 | 58 |
+| viewer-keys.ts | preview, file-tree, editor | 228 | 28 |
+| viewer-load.ts | preview, file-tree, editor | 556 | 120 |
+| viewer-native.ts | preview, file-tree, editor | 110 | 10 |
+| viewer-pan.ts | preview, file-tree, editor | 190 | 46 |
+| viewer-state.ts | preview, file-tree, editor | 251 | 15 |
+| viewer-table.ts | preview, file-tree, editor | 342 | 62 |
+| viewer-text.ts | preview, file-tree, editor | 244 | 35 |
+| viewer-views.ts | preview, file-tree, editor | 203 | 81 |
+| viewer.ts | preview, file-tree, editor | 429 | 73 |
+
+In all: about 16,800 findings in the mods' own files, about 1,240 in the
+shared copies (one copy each), guard.ts (12) aside, which goes away rather
+than being fixed.
 
 What each runs, fetches and keeps, and what a read of it shows to fix in the
 conversion (the swallowed errors are each a place to name the failure: a
@@ -419,14 +462,14 @@ each, byte for byte, with a test per file that the copies agree. Library
 modules end that: the file moves to `defaults/lib/@fireflies/<name>/`, every
 mod imports it by name, the app serves one copy. Each moved library is in
 the Effect pass at once (`effect_sources` names `defaults/lib`), so wave 0
-converts what it moves: its findings fixed, its IO on the kit's services,
+converts what it moves: its findings fixed (about 1,240), its IO on the kit's services,
 its parsing through Schema. After wave 0 no mod carries a copy, and no later
 wave touches another's file.
 
 | firefly | libraries (from → to) | importers | lines | findings |
 |---|---|---|---|---|
-| 0a | `keyhelp.ts` → `@fireflies/keyhelp`; `form-keys.ts` → `@fireflies/form-keys`; `toolground.ts` → `@fireflies/toolground`; `editor-route.ts` → `@fireflies/editor-route`; `scratch.ts` → `@fireflies/scratch`; `envrc.ts` → `@fireflies/envrc`; `limits.ts` → `@fireflies/usage-limits` | keyhelp: 15 mods; form-keys: nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback; toolground: nocturne, notifications; editor-route: editor, file-tree, finder, markdown; scratch: nocturne, editor; envrc: editor, databases; limits: usage, nocturne | 2.1k | 212 |
-| 0b | `viewer.ts` and `viewer-*.ts`, `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts`, `file-icons.ts` → `@fireflies/viewer`; `markdown.ts`, `markdown-parse.ts`, `paths.ts`, `follow.ts` → `@fireflies/markdown` | viewer: preview, editor, file-tree (`kinds.ts` and `file-icons.ts` also nocturne, `table.ts` also databases); markdown: editor, github, markdown | 5.5k | 1,006 |
+| 0a | `keyhelp.ts` → `@fireflies/keyhelp`; `form-keys.ts` → `@fireflies/form-keys`; `menu-place.ts` → `@fireflies/menu-place`; `tones.ts` → `@fireflies/tones`; `toolground.ts` → `@fireflies/toolground`; `editor-route.ts` → `@fireflies/editor-route`; `scratch.ts` → `@fireflies/scratch`; `envrc.ts` → `@fireflies/envrc`; `limits.ts` → `@fireflies/usage-limits` | keyhelp: 15 mods; form-keys: 7 mods and frame/settings, frame/feedback; menu-place: 9 mods; tones: 18 mods; toolground: nocturne, notifications; editor-route: editor, file-tree, finder, markdown; scratch: nocturne, editor; envrc: editor, databases; limits: usage, nocturne | 2.3k | 232 |
+| 0b | `viewer.ts` and `viewer-*.ts`, `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts`, `file-icons.ts` → `@fireflies/viewer`; `markdown.ts`, `markdown-parse.ts`, `paths.ts`, `follow.ts` → `@fireflies/markdown` | viewer: preview, editor, file-tree (`kinds.ts` and `file-icons.ts` also nocturne, `table.ts` also databases); markdown: editor, github, markdown | 5.6k | 1,009 |
 
 How, for each library:
 
@@ -443,7 +486,8 @@ How, for each library:
 3. Every importer: `from "./keyhelp.ts"` → `from "@fireflies/keyhelp"`
    (type imports too). Nothing else in the importer changes in wave 0.
 4. The tests: a drift test ("every copy is the source byte for byte":
-   keyhelp.test.ts, form-keys.test.ts' copies, preview-shared.test.ts,
+   keyhelp.test.ts, form-keys.test.ts' copies, menu-place.test.ts,
+   themes.test.ts (tones.ts), preview-shared.test.ts,
    editor-tabs.test.ts, markdown.test.ts, databases-data.test.ts,
    nocturne-scratchpad.test.ts, nocturne-tab-seam.test.ts,
    usage-limits.test.ts, mods-typescript.test.ts) becomes "no mod carries
@@ -469,27 +513,28 @@ second to merge merges integrate first. guard.ts doesn't move: each
 conversion drops its mod's copy (Schema replaces it), and it is gone with
 the last one. Both must merge before wave 1 starts.
 
-**Wave 1 (six fireflies, in parallel).**
+**Wave 1 (six fireflies, in parallel, once wave 0 has merged).**
 
 | firefly | mods | lines | findings |
 |---|---|---|---|
-| nocturne | nocturne | 14.7k | 2,772 |
-| github | github | 12.2k | 2,785 |
-| editor | editor, markdown, finder | 19.9k | 2,844 |
-| databases | databases | 12.2k | 2,550 |
-| git | git | 9.0k | 2,163 |
-| viewers | preview, file-tree | 10.7k | 2,114 |
+| nocturne | nocturne | 14.9k | 2,809 |
+| github | github | 12.3k | 2,806 |
+| databases | databases | 12.5k | 2,639 |
+| editor | editor, markdown, finder | 18.1k | 2,522 |
+| panes | preview, file-tree, agent-graph, notifications, browser | 13.5k | 2,548 |
+| git | git | 9.2k | 2,187 |
 
-**Wave 2 (two fireflies, in parallel, after wave 1 or as wave 1 fireflies
-free up).**
+(preview is almost all shared code, wave 0b's: 108 lines of its own.
+browser waits for chrome-panes; until then the panes firefly does the
+other four.)
+
+**Wave 2 (one firefly, as soon as one of wave 1 reports).**
 
 | firefly | mods | lines | findings |
 |---|---|---|---|
-| small-a | procs, scripts, pip, diff, equalize-panes | 8.0k | 1,263 |
-| small-b | agent-graph, notifications, browser | 8.6k | 1,525 |
+| small | procs, scripts, pip, diff, equalize-panes | 8.3k | 1,293 |
 
-About 2,500 findings is a firefly's share: wave 1's six are near it, wave
-2's two under it (they can start as soon as two of wave 1 report).
+About 2,500 findings is a firefly's share: wave 1's six are near it.
 
 ## What "done" means for a converted mod
 

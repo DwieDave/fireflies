@@ -20,8 +20,22 @@ function files(dir: string): string[] {
   });
 }
 
-/** The shared copies (docs/mods-typescript.md, Shared copies): counted in the table of their own, not per mod. */
-const SHARED = new Set(["guard.ts", "keyhelp.ts", "form-keys.ts", "editor-route.ts", "kinds.ts", "image.ts", "table.ts", "diff.ts", "envrc.ts", "file-icons.ts", "markdown.ts", "markdown-parse.ts", "paths.ts", "follow.ts", "scratch.ts", "limits.ts", "toolground.ts"]);
+/**
+ * The shared copies: a file whose name and text are the same in two mods or
+ * more (docs/mods-typescript.md, Shared copies), found by content. Counted
+ * once, in a table of their own, not in each mod.
+ */
+const copies = new Map<string, string[]>();
+for (const mod of readdirSync(mods)) {
+  const dir = join(mods, mod);
+  if (!statSync(dir).isDirectory()) continue;
+  for (const f of files(dir)) {
+    const key = `${f.split("/").pop()}\n${readFileSync(f, "utf8")}`;
+    copies.set(key, [...(copies.get(key) ?? []), f]);
+  }
+}
+const shared = new Set([...copies.values()].filter((fs) => fs.length > 1).flat());
+const isShared = (f: string) => shared.has(f);
 
 const count = (text: string, re: RegExp) => (text.match(re) ?? []).length;
 
@@ -43,7 +57,7 @@ const rows: Row[] = [];
 for (const mod of readdirSync(mods).sort()) {
   const dir = join(mods, mod);
   if (!statSync(dir).isDirectory()) continue;
-  const own = files(dir).filter((f) => !SHARED.has(f.split("/").pop() ?? ""));
+  const own = files(dir).filter((f) => !isShared(f));
   if (own.length === 0) continue;
   const text = own.map((f) => readFileSync(f, "utf8")).join("\n");
   rows.push({
@@ -63,16 +77,30 @@ for (const mod of readdirSync(mods).sort()) {
 
 // The Effect lint over every mod's own files, one run per mod (type-aware).
 for (const row of rows) {
-  const own = files(join(mods, row.mod)).filter((f) => !SHARED.has(f.split("/").pop() ?? "")).map((f) => relative(root, f));
-  const run = Bun.spawnSync([join(root, "node_modules/.bin/effect-tsgo"), "oxlint", "--type-aware", "-c", "oxlint.effect.config.ts", "--format", "unix", ...own], { cwd: root });
-  for (const m of run.stdout.toString().matchAll(/\[(?:Error|Warning)\/((?:effecttsgo|anti-slop-effect)\([a-z0-9-]+\))\]/g)) {
-    const rule = m[1] ?? "";
-    row.lint.set(rule, (row.lint.get(rule) ?? 0) + 1);
-  }
+  const own = files(join(mods, row.mod)).filter((f) => !isShared(f)).map((f) => relative(root, f));
+  row.lint = lint(own);
 }
 
+/** The Effect lint's findings over `paths`, by rule. */
+function lint(paths: string[]): Map<string, number> {
+  const found = new Map<string, number>();
+  const run = Bun.spawnSync([join(root, "node_modules/.bin/effect-tsgo"), "oxlint", "--type-aware", "-c", "oxlint.effect.config.ts", "--format", "unix", ...paths], { cwd: root });
+  for (const m of run.stdout.toString().matchAll(/\[(?:Error|Warning)\/((?:effecttsgo|anti-slop-effect)\([a-z0-9-]+\))\]/g)) {
+    const rule = m[1] ?? "";
+    found.set(rule, (found.get(rule) ?? 0) + 1);
+  }
+  return found;
+}
+
+/** One row per shared file: the mods that carry it, its lines, the findings of one copy. */
+const sharedRows = [...copies.values()].filter((fs) => fs.length > 1).map((fs) => {
+  const first = fs[0] ?? "";
+  const findings = [...lint([relative(root, first)]).values()].reduce((a, b) => a + b, 0);
+  return { file: first.split("/").pop() ?? "", mods: fs.map((f) => relative(mods, f).split("/")[0]), lines: count(readFileSync(first, "utf8"), /\n/g), findings };
+}).sort((a, b) => a.file.localeCompare(b.file));
+
 if (process.argv.includes("--json")) {
-  console.log(JSON.stringify(rows.map((r) => ({ ...r, lint: Object.fromEntries(r.lint) })), null, 2));
+  console.log(JSON.stringify({ mods: rows.map((r) => ({ ...r, lint: Object.fromEntries(r.lint) })), shared: sharedRows }, null, 2));
 } else {
   console.log("| mod | files | lines | guards | JSON.parse | exec | fetch | timers | spawns | swallowed | Effect lint (top rules) |");
   console.log("|---|---|---|---|---|---|---|---|---|---|---|");
@@ -81,4 +109,6 @@ if (process.argv.includes("--json")) {
     const total = [...r.lint.values()].reduce((a, b) => a + b, 0);
     console.log(`| ${r.mod} | ${r.files} | ${r.lines} | ${r.guards} | ${r.json} | ${r.exec} | ${r.fetch} | ${r.timers} | ${r.spawns} | ${r.swallowed} | ${total}: ${top} |`);
   }
+  console.log("\n| shared file | copies | lines | findings (one copy) |\n|---|---|---|---|");
+  for (const r of sharedRows) console.log(`| ${r.file} | ${r.mods.join(", ")} | ${r.lines} | ${r.findings} |`);
 }
