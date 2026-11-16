@@ -5,6 +5,7 @@
 // file, an argv or shared state.
 
 import { describe, expect, test } from "bun:test";
+import { copiesOf } from "./mod-source.ts";
 import { mkdtempSync, readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -282,9 +283,9 @@ describe.skipIf(!KEYCHAIN)("the keychain (a throwaway one)", () => {
 });
 
 describe("shared copies", () => {
-  test("databases' table.ts is the preview's and its envrc.ts the editor's, byte for byte", () => {
+  test("databases' table.ts is the preview's, byte for byte; envrc.ts is a library (@fireflies/envrc), no mod carries it", () => {
     const mods = new URL("../defaults/mods/", import.meta.url).pathname;
     expect(readFileSync(`${mods}databases/table.ts`, "utf8")).toBe(readFileSync(`${mods}preview/table.ts`, "utf8"));
-    expect(readFileSync(`${mods}databases/envrc.ts`, "utf8")).toBe(readFileSync(`${mods}editor/envrc.ts`, "utf8"));
+    expect(copiesOf("envrc.ts")).toEqual([]);
   });
 });

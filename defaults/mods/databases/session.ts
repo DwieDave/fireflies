@@ -21,7 +21,7 @@ import { clientFor, flavorOf, INSTALL, PROGRAMS } from "./clients.ts";
 import { connectWords } from "./words.ts";
 import { endWords, reading } from "./reads.ts";
 import { envPath, folderEnvReady, tilde } from "./folderenv.ts";
-import { lookup } from "./envrc.ts";
+import { lookup } from "@fireflies/envrc";
 import { readSecret } from "./secrets.ts";
 import type { FileIo } from "./store.ts";
 import type { Browse, TableRef } from "./catalog.ts";
