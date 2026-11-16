@@ -18,9 +18,15 @@
     },
     "defaults/lib/@fireflies/kit": {
       "name": "@fireflies/kit",
+      "peerDependencies": {
+        "effect": "4.1.4",
+      },
     },
     "defaults/lib/@fireflies/look": {
       "name": "@fireflies/look",
+      "peerDependencies": {
+        "effect": "4.1.4",
+      },
     },
   },
   "packages": {
