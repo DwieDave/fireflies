@@ -43,13 +43,19 @@ build:
     cargo build --locked
 
 # The mods' TypeScript (docs/mods-typescript.md): tsc at full strictness on every
-# .ts file under defaults/, against the typings the built app writes. The .js
-# mods are outside it until their migration. `cargo test` runs it too
-# (tests/mods_typescript.rs).
+# .ts file under defaults/, against the committed typings (defaults/types/, which
+# must be what this build writes: the cargo test checks it). The .js mods are
+# outside it until their migration. `cargo test` runs it too (tests/mods_typescript.rs).
 typecheck:
     bun install --frozen-lockfile
-    cargo run --locked -q -- types target/mod-types
+    cargo test --locked -q --test mods_typescript -- committed_mod_typings_are_current
     node_modules/.bin/tsc -p defaults/tsconfig.json
+
+# Rewrites the committed typings (defaults/types/gpui-kit.d.ts, runtime.d.ts) from
+# this build, after a change to gpui-kit's API (vendor/gpui-kit). `herdr` needs
+# none: the tsconfig files read defaults/herdr.d.ts itself.
+types:
+    HERDR_APP_WRITE_TYPES=1 cargo test --locked -q --test mods_typescript -- committed_mod_typings_are_current
 
 # oxlint with anti-slop (oxlint.config.ts) on the same files (mods and frame); `just lint --fix`
 # adds the blank lines require-readable-spacing asks for.
