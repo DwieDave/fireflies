@@ -5,6 +5,28 @@ usage. His words: "ship what is there and leave docs (commited) for the rest
 to be picked up by a fresh orchestrator". Read CLAUDE.md first; this file is
 the state it does not hold. Delete it when the open work below is done.
 
+## FIRST: a regression in what shipped (not fixed)
+
+After `darwin-rebuild` and a restart on 49abe6f, Developer's nocturne sidebar
+shows "This view could not be re-rendered; showing the last version that
+worked · interrupted", with no spaces and no fireflies (he had 10+ agents and
+several spaces). `herdr-app status` lists no errors. "interrupted" is the
+engine's uncatchable budget stop (vendor/gpui-kit/crates/shell/src/engine/quickjs/mod.rs,
+`JS_IsUncatchableError`): nocturne's render, or its first load, runs past its
+budget with his real state. It did not show in scratch apps (few spaces, no
+agents) except as the same banner "under load". Suspects, unchecked: the
+library modules' first evaluation in a window (effect + kit, about 0.4 s in a
+debug build) landing inside a render's budget; layout-look / tones / look
+calls on every row of a long sidebar; the Effect-converted usage section in
+nocturne. Reproduce with a scratch home holding many spaces and fake agents
+(memory: scratch-fake-agents), find which call is cut, fix, test, ship.
+He was told to roll back meanwhile (below). The orchestrator hit its usage
+limit before it could do more than this note.
+
+Rollback he was given: in /private/etc/nix-darwin `git checkout flake.lock`
+(the batch's lock was uncommitted) and `sudo darwin-rebuild switch --flake
+/private/etc/nix-darwin`, or `sudo darwin-rebuild switch --rollback`.
+
 ## Shipped with this commit
 
 On main, green on every justfile test line:
