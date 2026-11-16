@@ -26,8 +26,11 @@ fn main() {
     // Windows' canonical form is `\\?\C:\...`, which clang can't resolve includes against.
     let src = PathBuf::from(src.to_string_lossy().trim_start_matches(r"\\?\").to_owned());
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    // Watched by a path relative to this crate, not an absolute one: cargo keeps the
+    // printed text, so an absolute path makes a target/ copied into another
+    // checkout (a worktree seeded from a built one) stale and rebuilds all of it.
     for path in ["src", "build.zig", "build.zig.zon", "include"] {
-        println!("cargo:rerun-if-changed={}", src.join(path).display());
+        println!("cargo:rerun-if-changed=../../vendor/ghostty/{path}");
     }
     println!("cargo:rerun-if-env-changed=ZIG");
 

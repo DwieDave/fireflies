@@ -10,7 +10,7 @@ import type { Context } from "gpui-kit";
 import { InputState } from "gpui-base";
 import { exec, readTextFile } from "herdr";
 import type { Conn, ConnDraft } from "./kinds.ts";
-import { newId, where } from "./kinds.ts";
+import { isSslMode, newId, speaksTls, sslProblem, where } from "./kinds.ts";
 import type { Found } from "./discover.ts";
 import { ENV_FILES, FIND_SCRIPT, foundFile, foundInVars, mergeFound, parseEnvFile } from "./discover.ts";
 import { deleteSecret, hasSecret, saveSecret } from "./secrets.ts";
@@ -87,9 +87,11 @@ function setFound(v: DbView, list: readonly Found[]): void {
 }
 
 /** A connection another mod sent (databases.connect): listed and connected, not saved. A
- *  cluster's secret named in it is checked first (kube.ts): a bad one refuses the request. */
+ *  cluster's secret named in it is checked first (kube.ts), and its sslmode: a bad one refuses the
+ *  request. */
 export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
-  const problem = (a.secret ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward ? forwardProblem(a.forward, a.kind, a.host, a.port) : null);
+  const problem = (a.secret ? kubeProblem(a.secret, a.kind, a.host) : null) ?? (a.forward ? forwardProblem(a.forward, a.kind, a.host, a.port) : null)
+    ?? (a.sslmode !== undefined ? sslProblem(a.sslmode) : null);
 
   if (problem) {
     v.say(`databases.connect: ${problem}`, "failed");
@@ -115,8 +117,8 @@ export function receive(v: DbView, a: ConnectArgs, cx: Context): void {
   void connect(v, kept, cx);
 }
 
-/** Where a connection is: the fields a connect request may carry. */
-type Place = { -readonly [K in "host" | "port" | "user" | "database" | "path" | "url"]?: Conn[K] };
+/** Where a connection is and how it asks for TLS: the fields a connect request may carry. */
+type Place = { -readonly [K in "host" | "port" | "user" | "database" | "path" | "url" | "sslmode"]?: Conn[K] };
 
 /** The place fields of a connect request that are there. */
 function pick(a: ConnectArgs): Place {
@@ -133,6 +135,9 @@ function pick(a: ConnectArgs): Place {
   if (a.path !== undefined) out.path = a.path;
 
   if (a.url !== undefined) out.url = a.url;
+
+  // A file has no TLS: an sslmode sent with one is left out.
+  if (isSslMode(a.sslmode) && speaksTls(a.kind)) out.sslmode = a.sslmode;
 
   return out;
 }

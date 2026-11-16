@@ -25,6 +25,25 @@ export const isSecret = literal("keychain", "ask", "pgpass", "kubernetes", "none
 
 export type Secret = Guarded<typeof isSecret>;
 
+/** How a server connection asks for TLS, in libpq's names (sslmode): disable (never), allow and
+ *  prefer (when the server offers it), require (always, the certificate unchecked), verify-ca (a
+ *  certificate a known CA signed), verify-full (and the host's name in it). Absent: the client's
+ *  own default (psql's prefer, mysql's). Only postgres and mysql have it (clients.ts says what
+ *  each client gets). */
+export const SSL_MODES = ["disable", "allow", "prefer", "require", "verify-ca", "verify-full"] as const;
+
+export const isSslMode = literal(...SSL_MODES);
+
+export type SslMode = Guarded<typeof isSslMode>;
+
+/** Whether the kind speaks to a server that may take TLS (the kinds with an sslmode). */
+export const speaksTls = (kind: Kind): boolean => kind === "postgres" || kind === "mysql";
+
+/** Why `value` (a connect request's, any text) can't be an sslmode, or null. */
+export function sslProblem(value: string): string | null {
+  return isSslMode(value) ? null : `sslmode ${JSON.stringify(value)} isn't one of ${SSL_MODES.join(", ")}`;
+}
+
 /** Where a connection came from: saved by the person, found in the shown
  *  space's folder (its .env, direnv, a *.db), or sent by another mod. */
 export type Origin = "saved" | "found" | "sent";
@@ -33,7 +52,7 @@ export type Origin = "saved" | "found" | "sent";
  *  held in memory): no secret in any field. */
 export const isConnJson = object({ id: isString, name: isString, kind: isKind }, {
   host: isString, port: isNumber, user: isString, database: isString, path: isString, url: isString, readonly: isBoolean, secret: isSecret,
-  source: isKubeSource, forward: isKubeForward,
+  source: isKubeSource, forward: isKubeForward, sslmode: isSslMode,
 });
 
 export type ConnJson = Guarded<typeof isConnJson>;
@@ -57,6 +76,8 @@ export interface Conn {
   readonly source?: KubeSource;
   /** The port-forward it came from (kube.ts): started again, when asked, if its port is down. */
   readonly forward?: KubeForward;
+  /** How it asks for TLS (postgres, mysql); absent: the client's own default. */
+  readonly sslmode?: SslMode;
   readonly origin: Origin;
   /** Where a found or sent one came from, in words (".env · DATABASE_URL", "port :5432 (postgres in t3)"). */
   readonly from?: string;

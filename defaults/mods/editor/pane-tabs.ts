@@ -16,6 +16,8 @@ import { CARET } from "./vim.ts";
 import { EditorState } from "gpui-base";
 import type { Context } from "gpui-kit";
 import { appHome, languageOf, lspNotify, lspRelease, panes, run, setShared, settings, setUnsaved, shared, theme } from "herdr";
+// Read off the module when used: test stand-ins for herdr needn't know it.
+import * as herdr from "herdr";
 import type { Answer, Doc, Go } from "./pane-kit.ts";
 import { MOD, paneProps, selectionColor, serverId, whereArgs } from "./pane-kit.ts";
 import { mountViewer, setDrawn, syncViewer } from "./drawn-tabs.ts";
@@ -469,6 +471,25 @@ export function releaseDoc(ed: EditorPane, d: Doc): void {
 /** This copy's own pane (found by its slot). */
 export function ownPane(ed: EditorPane): { readonly pane: string; readonly tab: string } | null {
   return panes().find((p) => p.mod === MOD && paneProps(p).slot === ed.slot) ?? null;
+}
+
+/** Whether the app has this pane focused, so the keyboard is meant for it. A copy out of sight
+ *  (a pane pinned to the shelf, loaded parked; another editor on the same note) never takes
+ *  the keyboard from the pane being typed in. Its own pane not found: true (as before). */
+export function focusedHere(ed: EditorPane): boolean {
+  const me = ownPane(ed);
+
+  if (!me) return true;
+
+  let f: ReturnType<typeof herdr.focused> = null;
+
+  try {
+    f = herdr.focused();
+  } catch {
+    return true;
+  }
+
+  return f === null || f.pane === null ? true : f.pane === me.pane;
 }
 
 /** The tabs as kept for a restart (localStorage). */

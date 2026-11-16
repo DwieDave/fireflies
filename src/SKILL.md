@@ -43,7 +43,8 @@ their `links` setting). A web pane keeps tabs: `herdr-app do
 browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
-the shown one).
+the shown one). The mouse's side buttons and a two-finger swipe go back and
+forward there, and a page may go fullscreen (a video's button; Esc comes back).
 
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
@@ -71,7 +72,8 @@ password: the window asks for it, or, for a port-forward on 127.0.0.1, reads
 it itself from the Kubernetes secret `"secret":{"from":"kubernetes","context":…,"namespace":…,"name":…,"key":…}`
 names, and `"forward":{"context":…,"namespace":…,"target":"pod/…","remote":5432,"local":15432}`
 the port-forward it came from, started again when the person says so if its
-port is down: defaults/AGENTS.md has the whole contract; without a
+port is down; `"sslmode":"disable"` (libpq's names, "disable" … "verify-full")
+how it asks for TLS: defaults/AGENTS.md has the whole contract; without a
 `"database"` a Postgres connection is in the server's default, `postgres`, and
 `herdr-app do databases.databases` shows them the server's databases to pick
 from), then `herdr-app do
@@ -144,7 +146,8 @@ jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
-a web pane can have a tile of its own (its tab's menu, or `herdr-app do
+a web pane can have a tile of its own, its only tab too (its tab's menu, a
+right-click on the web pane's bar for the shown tab, or `herdr-app do
 browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
 wears its favicon, as the web pane's tab strip does. A whole tab of a space
 can be pinned as one tile too (`herdr-app do nocturne.pin-tab` for the shown
@@ -319,7 +322,9 @@ those files or the generated guide. The app rewrites them on start.
   don't appear in `shot`. Every overlay painted after the one a view is in
   (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
   backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
-  layer, holes and dim, so check those instead of a screenshot.
+  layer, holes and dim, so check those instead of a screenshot. A web view's
+  entry there also says whether its page may go fullscreen and whether it is
+  (`fullscreen { enabled, state }`).
 - A window overlay opened with `snap: true` (the picture in picture player,
   while its snapping is on) snaps to the eight places of the shown tab's pane
   grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`

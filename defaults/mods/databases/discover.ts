@@ -5,8 +5,8 @@
 // otherwise. A password or token found with them is handed back apart from
 // the connection (Found.secret): the window keeps it in memory only.
 
-import type { Conn, Kind } from "./kinds.ts";
-import { baseName } from "./kinds.ts";
+import type { Conn, Kind, SslMode } from "./kinds.ts";
+import { baseName, isSslMode } from "./kinds.ts";
 
 /** A connection found, where it came from, and its password or token (memory only), if any. */
 export interface Found {
@@ -24,6 +24,8 @@ export interface DbUrl {
   readonly path?: string;
   /** libSQL: the URL without its token. */
   readonly url?: string;
+  /** A server's sslmode from the URL's query (postgres' sslmode, MySQL's ssl-mode). */
+  readonly sslmode?: SslMode;
   readonly password: string | null;
 }
 
@@ -87,6 +89,27 @@ function withParts<T extends object>(base: T, parts: ServerParts): T & Partial<{
   return out;
 }
 
+/** MySQL's ssl-mode names (MySQL Shell's ssl-mode, Connector/J's sslMode) in libpq's words. */
+const MYSQL_MODES: ReadonlyMap<string, SslMode> = new Map([
+  ["disabled", "disable"], ["preferred", "prefer"], ["required", "require"], ["verify_ca", "verify-ca"], ["verify_identity", "verify-full"],
+]);
+
+/** The sslmode a URL's query names: libpq's `sslmode=require` (postgres, and mysql URLs written
+ *  the same way); a mysql URL's `ssl-mode=REQUIRED` or `sslMode=REQUIRED`. Unknown values: none. */
+export function sslOfQuery(kind: Kind, query: string): SslMode | undefined {
+  let out: SslMode | undefined;
+
+  for (const pair of query.split("&")) {
+    const [k = "", raw = ""] = pair.split("=");
+    const value = dec(raw).toLowerCase();
+
+    if (k === "sslmode" && isSslMode(value)) out = value;
+    else if (kind === "mysql" && (k === "ssl-mode" || k === "sslMode")) out = MYSQL_MODES.get(value) ?? out;
+  }
+
+  return out;
+}
+
 /** A server URL's parts: scheme://user:password@host:port/database?params. */
 function serverUrl(kind: Kind, rest: string): DbUrl {
   const m = /^\/\/(?:([^:@/]*)(?::([^@/]*))?@)?([^/:?]*|\[[^\]]*\])(?::(\d+))?(?:\/([^?]*))?/.exec(rest);
@@ -96,7 +119,9 @@ function serverUrl(kind: Kind, rest: string): DbUrl {
   const port = m?.[4] ? Number(m[4]) : undefined;
   const database = m?.[5] ? dec(m[5]) : undefined;
 
-  return withParts({ kind, password }, { user, host, port, database });
+  const sslmode = sslOfQuery(kind, rest.split("?")[1] ?? "");
+
+  return withParts(sslmode ? { kind, password, sslmode } : { kind, password }, { user, host, port, database });
 }
 
 /** A libSQL URL: its token (authToken in the query) taken out. */
@@ -164,7 +189,9 @@ export function foundInVars(vars: ReadonlyMap<string, string | null>, source: st
 
     const base = { id: foundId(`${source}:PG`), name: db ?? "PGHOST", kind: "postgres" as const, readonly: true, secret: pw ? "ask" as const : "none" as const, origin: "found" as const, from: `${source} · PG*` };
     const port = get("PGPORT");
-    const conn: Conn = withParts(base, { host: host ?? undefined, port: port ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined });
+    const ssl = get("PGSSLMODE");
+    const parts: ServerParts = { host: host ?? undefined, port: port ? Number(port) : undefined, user: get("PGUSER") ?? undefined, database: db ?? undefined };
+    const conn: Conn = withParts(isSslMode(ssl) ? { ...base, sslmode: ssl } : base, parts);
 
     out.push({ conn, secret: pw });
   }
@@ -184,7 +211,7 @@ export function foundFile(path: string, folder: string): Found {
 export const FIND_SCRIPT = 'cd "$1" 2>/dev/null || exit 0; find . -maxdepth 4 \\( -name node_modules -o -name .git -o -name target -o -name .direnv -o -name dist -o -name build -o -name .venv -o -name vendor \\) -prune -o -type f \\( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" -o -name "*.db3" \\) -size +0 -print 2>/dev/null | head -n 200 | while IFS= read -r f; do [ "$(head -c 15 "$f" 2>/dev/null)" = "SQLite format 3" ] && printf "%s\\n" "$1/${f#./}"; done | head -n 40';
 
 /** What makes two found connections the same one (direnv often loads the .env too). */
-const sameKey = (c: Conn): string => [c.name, c.kind, c.host, c.port, c.user, c.database, c.path, c.url].join("|");
+const sameKey = (c: Conn): string => [c.name, c.kind, c.host, c.port, c.user, c.database, c.path, c.url, c.sslmode].join("|");
 
 /** Every connection found once: a later list's (a later .env file, direnv) wins for the same one. */
 export function mergeFound(lists: readonly (readonly Found[])[]): Found[] {
