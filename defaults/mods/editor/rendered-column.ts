@@ -11,6 +11,7 @@ import type { Unit } from "./live.ts";
 import { rowStarts } from "./live.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addView, emptyView, kindsView, unitView, ADD_H, KINDS_H } from "./rendered-units.ts";
+import { edge } from "./tones.ts";
 
 const PAD_TOP = 18;
 const PAD_BOTTOM = 60;
@@ -146,7 +147,7 @@ function scrollbar(v: Rendered, o: ViewOptions, total: number): Element {
     .w(3)
     .top(Math.round((v.scrollY / max) * v.viewH * (1 - frac)))
     .h(Math.max(16, Math.round(v.viewH * frac)))
-    .child(v.host.dither(o.focused ? o.t.accent : o.t.ansi8));
+    .child(v.host.dither(o.focused ? o.t.accent : o.t.muted));
 }
 
 /** The view: the column of rows (only those near the view drawn), scrolled by the wheel. */
@@ -265,7 +266,7 @@ function litView(v: Rendered, o: ViewOptions): Element {
     .pl(12)
     .pr(o.kindInBar ? 12 : 92)
     .py(5)
-    .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(t.ansi0)))
+    .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(edge(t))))
     .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
     .when(!o.kindInBar, (el) => el.child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit))))
     .child(

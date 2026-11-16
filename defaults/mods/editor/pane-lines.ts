@@ -17,6 +17,7 @@ import { lookHints } from "./drawn-tabs.ts";
 import { renderedView } from "./md-pane.ts";
 import { answerClose } from "./pane-tabs.ts";
 import { previewView } from "./preview-pane.ts";
+import { edge } from "./tones.ts";
 
 export const DRAWER = 132;
 
@@ -43,9 +44,9 @@ export function askLine(ed: EditorPane, t: Theme): Element {
       .items_center()
       .gap(6)
       .border(1)
-      .border_color(a.at === id ? t.accent : t.ansi0)
+      .border_color(a.at === id ? t.accent : edge(t))
       .text_color(a.at === id ? t.foreground : t.muted)
-      .when(a.at === id, (el) => el.bg(t.ansi0))
+      .when(a.at === id, (el) => el.bg(edge(t)))
       .hover((s) => s.text_color(t.foreground))
       .on_click((_e, cx) => {
         answerClose(ed, id, cx);
@@ -120,7 +121,7 @@ export function exLine(ed: EditorPane, t: Theme, code: string): Element {
     .child(div().flex_1())
     .child(h_flex().flex_none().gap(4).font_family(ui).text_size(11).child(div().text_color(t.accent).child("enter")).child(div().text_color(t.dim).child("run")))
     .child(h_flex().flex_none().gap(4).font_family(ui).text_size(11).child(div().text_color(t.accent).child("esc")).child(div().text_color(t.dim).child("cancel")))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }
 
 /** The leader's next keys, which-key style, bottom right over the text. */
@@ -136,7 +137,7 @@ export function whichView(ed: EditorPane, t: Theme): Element {
     .bottom(HINTS + 8)
     .bg(t.background)
     .border(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .shadow_lg()
     .child(
       h_flex()
@@ -146,7 +147,7 @@ export function whichView(ed: EditorPane, t: Theme): Element {
         .gap(10)
         .items_center()
         .child(div().text_color(t.accent).child(ed.pending ? `leader ${ed.pending}` : "leader"))
-        .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.muted, 1)))
         .child(div().text_color(t.dim).child("esc")),
     )
     .child(
@@ -186,7 +187,7 @@ export function conflictLine(ed: EditorPane, t: Theme): Element {
       .flex()
       .items_center()
       .border(1)
-      .border_color(t.ansi0)
+      .border_color(edge(t))
       .text_color(t.foreground)
       .hover((s) => s.border_color(t.accent))
       .on_click((_e, cx) => {
@@ -269,7 +270,7 @@ export function bodyView(ed: EditorPane, t: Theme, code: string): Element {
     .flex_none()
     .when(side, (el) => el.w(1).h_full())
     .when(!side, (el) => el.h(1).w_full())
-    .child(dither(t.ansi8, 1));
+    .child(dither(t.muted, 1));
 
   // A plain row: h_flex centers its children, which would leave them no height.
   return (side ? div().flex().flex_row() : div().flex().flex_col())
@@ -290,9 +291,9 @@ export function noteView(ed: EditorPane, t: Theme, title: string, detail: string
     .justify_center()
     .gap(10)
     .px(16)
-    .child(svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.ansi8).opacity(0.6))
+    .child(svg("mods/nocturne/art/moon-8.svg").w(44).h(44).text_color(t.muted).opacity(0.6))
     .child(div().text_color(t.foreground).child(title))
-    .when(Boolean(detail), (el) => (detail ? el.child(div().text_center().text_color(t.ansi8).child(detail)) : el));
+    .when(Boolean(detail), (el) => (detail ? el.child(div().text_center().text_color(t.muted).child(detail)) : el));
 }
 
 export function drawerView(ed: EditorPane, t: Theme): Element {
@@ -307,7 +308,7 @@ export function drawerView(ed: EditorPane, t: Theme): Element {
     .h(DRAWER)
     .flex_none()
     .border_t(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .child(
       h_flex()
         .relative()
@@ -319,7 +320,7 @@ export function drawerView(ed: EditorPane, t: Theme): Element {
         .text_color(t.muted)
         .child(div().text_color(t.foreground).child("PROBLEMS"))
         .child(div().text_color(t.dim).child(`${ed.problems.length}`))
-        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.ansi8, 1)))
+        .child(div().relative().flex_1().h(1).opacity(0.6).child(dither(t.muted, 1)))
         .child(
           h_flex()
             .gap(4)
@@ -353,12 +354,12 @@ export function drawerView(ed: EditorPane, t: Theme): Element {
                   .gap(10)
                   .items_center()
                   .text_color(t.muted)
-                  .hover((s) => s.bg(`${t.ansi0}55`))
+                  .hover((s) => s.bg(`${edge(t)}55`))
                   .on_click((_e, cx) => {
                     ed.goto(d.line, d.col, cx);
                     cx.notify();
                   })
-                  .when(sel, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+                  .when(sel, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
                   .child(div().relative().size(7).flex_none().border(1).border_color(color).child(dither(color, 1)))
                   .child(div().relative().w(54).flex_none().text_color(t.dim).child(`${d.line + 1}:${d.col + 1}`))
                   .child(div().relative().flex_1().min_w(0).truncate().text_color(t.foreground).child(d.message.split("\n")[0] ?? ""))
@@ -388,7 +389,7 @@ export function hints(ed: EditorPane, t: Theme): Element {
     .gap(14)
     .items_center()
     .overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
     .children(rest.map(([k, what], i) => hint(t, `editor-hint-${i}`, k, what)))
     .when(Boolean(help), (el) => (help ? el.child(div().flex_1()).child(keysHint(t, "editor-hint-keys", ed.keysShown, () => toggleKeys(ed, !ed.keysShown), help[0])) : el));
 }

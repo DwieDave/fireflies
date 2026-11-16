@@ -301,7 +301,7 @@ export function tableView(view: Viewer, t: Theme, g: Table, focused: boolean): E
     .child(div().relative().flex_1().min_w(0).h_full().overflow_hidden()
       .child(h_flex().absolute().top(0).h_full().items_center().left(-view.sx)
         .children(g.cols.map((c) => cell(c, c.name, true)))))
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(t.ansi8, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(t.muted, 1)));
 
   const body = !g.body.length ? [div().absolute().left(gut + CELL).top(ROW + 8).text_color(t.dim).child("No rows")] : rows;
 
@@ -311,7 +311,7 @@ export function tableView(view: Viewer, t: Theme, g: Table, focused: boolean): E
 /** Dithered rails for rows that don't all fit: right (rows), bottom (columns). */
 export function rowRails(v: Viewer, t: Theme, focused: boolean, top: number, roomH: number, roomW: number, left: number): Element[] {
   const out: Element[] = [];
-  const color = focused ? t.accent : t.ansi8;
+  const color = focused ? t.accent : t.muted;
   const total = rowCount(v) * ROW;
 
   if (total > roomH + 1) {

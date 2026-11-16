@@ -15,6 +15,7 @@ import { isString, object } from "./guard.ts";
 import { spaceFolder } from "./kit.ts";
 import { openWorktrees } from "./git.ts";
 import type { WorktreesAsk } from "./git.ts";
+import { edge } from "./tones.ts";
 
 /** A saved worktrees pane's props. */
 const isRoleProps = object({}, { role: isString });
@@ -54,11 +55,11 @@ export class WorktreesPanel {
           cx.stop_propagation();
         }
       })
-      .child(svg("mods/nocturne/art/moon-8.svg").w(40).h(40).text_color(t.ansi8).opacity(0.6))
+      .child(svg("mods/nocturne/art/moon-8.svg").w(40).h(40).text_color(t.muted).opacity(0.6))
       .child(div().text_color(t.foreground).child("Worktrees live in Git now"))
-      .child(div().text_color(t.ansi8).child("Git's Files panel, Worktrees tab: cmd-g, then 2 and ["))
+      .child(div().text_color(t.muted).child("Git's Files panel, Worktrees tab: cmd-g, then 2 and ["))
       .child(div().id("worktrees-moved-open").px(8).py(3).border(1).border_color(t.accent).text_color(t.accent)
-        .hover((s) => s.bg(t.ansi0))
+        .hover((s) => s.bg(edge(t)))
         .on_click(() => openWorktrees())
         .child("enter  open the worktrees"));
   }

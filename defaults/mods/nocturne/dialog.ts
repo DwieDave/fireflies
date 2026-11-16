@@ -27,6 +27,7 @@ import type { Command } from "./guards.ts";
 import { dither, tracked } from "./kit.ts";
 import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
 import type { FormHint, Stop } from "./form-keys.ts";
+import { edge } from "./tones.ts";
 
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
 const cap = (s: string | undefined) => (s ?? "").replace(/^./, (c) => c.toUpperCase());
@@ -63,16 +64,16 @@ function titleRow(t: Theme, title: string): Element {
   return h_flex().relative().h(34).flex_none().px(14).items_center()
     .child(div().flex_1().min_w(0).truncate().text_size(12).text_color(t.foreground).child(title))
     .child(div().text_size(11).text_color(t.dim).child("esc"))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }
 
 /** A square button: `strong` fills on hover in its color, the other is a quiet
  *  chip. `focused` (the keyboard's) looks hovered, edged in the accent. */
 function button(t: Theme, id: string, label: string, color: Color, strong: boolean, action: () => void, focused = false): Element {
   return div().id(id).flex_none().h(24).px(10).flex().items_center().text_size(11)
-    .border(1).border_color(focused ? (strong ? color : t.accent) : strong ? color : t.ansi0).text_color(strong ? color : t.muted)
-    .when(focused, (el) => (strong ? el.bg(color).text_color(t.background) : el.text_color(t.foreground).bg(t.ansi0)))
-    .hover((s) => (strong ? s.bg(color).text_color(t.background) : s.text_color(t.foreground).bg(t.ansi0)))
+    .border(1).border_color(focused ? (strong ? color : t.accent) : strong ? color : edge(t)).text_color(strong ? color : t.muted)
+    .when(focused, (el) => (strong ? el.bg(color).text_color(t.background) : el.text_color(t.foreground).bg(edge(t))))
+    .hover((s) => (strong ? s.bg(color).text_color(t.background) : s.text_color(t.foreground).bg(edge(t))))
     .on_mouse_down("left", stop)
     .on_click((_e: ClickEvent, cx: Context) => {
       cx.stop_propagation();
@@ -93,7 +94,7 @@ function hintLine(t: Theme, hs: readonly FormHint[]): Element {
 const withQ = (hs: readonly FormHint[]): FormHint[] => hs.map(([k, w]) => [k === "esc" ? "esc q" : k, w]);
 
 function frame(t: Theme, id: string): Element {
-  return v_flex().id(id).w_full().min_h(0).bg(t.background).border(1).border_color(t.ansi0).text_color(t.foreground);
+  return v_flex().id(id).w_full().min_h(0).bg(t.background).border(1).border_color(edge(t)).text_color(t.foreground);
 }
 
 /** The prompt's stops. */
@@ -183,7 +184,7 @@ export class Prompt {
       .map((el) => tabActions(el, (e, cx) => this.key(e, cx)))
       .child(titleRow(t, cap(p.title)))
       .child(v_flex().px(14).pt(12).pb(12).gap(6)
-        .child(div().h(26).px(6).flex().items_center().border(1).border_color(this.at === "input" ? t.accent : t.ansi0).bg(t.background)
+        .child(div().h(26).px(6).flex().items_center().border(1).border_color(this.at === "input" ? t.accent : edge(t)).bg(t.background)
           .on_mouse_down("left", stop)
           .when(Boolean(input), (el) => (input ? el.child(Input.new(input).flex_1().h_full().text_size(12).text_color(t.foreground)) : el)))
         .when(Boolean(p.hint), (el) => el.child(div().text_size(11).text_color(t.dim).child(p.hint ?? "")))

@@ -301,7 +301,7 @@ export default class Agents extends View {
     if (this.help) return shell.child(div().relative().flex_1().min_h(0).child(this.helpPanel(t))).child(this.hints(t));
 
     const note = (text: string, sub: string) => shell.child(v_flex().flex_1().items_center().justify_center().gap(6).px(16).text_size(11)
-      .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.ansi8).child(sub)))
+      .child(div().text_color(t.foreground).child(text)).child(div().text_center().text_color(t.muted).child(sub)))
       .child(this.hints(t));
 
     if (!pane) return note("No Claude Code in this space", "Start one from + new, then its agents and workflows show here.");
@@ -327,7 +327,7 @@ export default class Agents extends View {
         return el;
       })
       .when(sel !== undefined, (el) => (sel ? el.child(details(this, t, sel, pane, data)) : el))
-      .when(!root.children.length, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.ansi8)
+      .when(!root.children.length, (el) => el.child(div().flex_none().px(12).pb(8).text_size(11).text_color(t.muted)
         .child("No subagents or workflows in this session yet.")))
       .child(this.hints(t));
   }

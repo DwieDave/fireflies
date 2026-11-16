@@ -1557,8 +1557,10 @@ layout's look and a block can differ:
   "terminal_padding": [10, 6], "terminal_opacity": 1, ... }
 ```
 
-- `theme`: `graphite`, `ink`, `moss` (dark), `paper` (light), or the name
-  of a file in `themes/`; or one for each appearance:
+- `theme`: `moonfly` (Nocturne's), `graphite` (herdr-app's default look),
+  `paper` (light), or the name of a file in `themes/`; `ink`, `moss` and
+  `atom-one-dark` still load when named but the pickers (Settings, the
+  palette, the menu) no longer offer them; or one for each appearance:
   `"theme": { "light": "paper", "dark": "graphite" }` follows the system's
   light or dark mode (or the person's `appearance`). `app.theme {name}`
   sets the half of the name's lightness. A layout without a theme shows
@@ -1569,10 +1571,25 @@ layout's look and a block can differ:
 - `themes/<name>.json`: `{ "background", "foreground", "selection",
   "cursor"?, "ansi": [16 colors], "colors"?: {...} }`, all `#rrggbb`; panel
   colors are derived from these, `colors` overrides them. Fireflies ships
-  `atom-one-dark`. The original unedited Atom One Dark and Win98 theme files
+  `moonfly` (and `atom-one-dark`, no longer offered). The original unedited Atom One Dark and Win98 theme files
   are upgraded to readable terminal colors; edited theme files are kept.
   A theme named like a layout (`themes/win98.json`) is
   that layout's own: Settings offers it only there.
+- Your own theme reaches the mods (this fork): Nocturne and its mods
+  (editor, git, github, databases, …) draw only with `theme()` colors, so a
+  `themes/<name>.json` picked in the theme menu (or set as a layout's or
+  settings.json's `theme`) recolors them too, the nocturne layout's panes,
+  borders and focus ring included. What they use: `background`, `foreground`,
+  `muted` (dim text, horizons), `dim`, `accent`, `working` / `blocked` /
+  `done`, the hues `ansi1`–`ansi6`, `ansi9`–`ansi14` (status, syntax, graph
+  lanes, the fireflies' glow), `ansi7` (the moon, the stars) and the edge:
+  lines, plates, dithers, the lit row and faint text, drawn in your `input`
+  laid opaque over your `background` (moonfly: `#323437`). So for the look,
+  set `colors.input` (and `muted`, `accent`) in your theme; a light
+  background works (the edge comes out a light grey). `ansi0` and `ansi8`
+  color only terminals (and a CI log's ANSI codes). Writing a mod: use these
+  names, never hex; the shipped mods' `tones.ts` (`edge(t)`, `tone(t, k)`)
+  is the copy to take for the edge.
 - `font` / `font_size`: the terminals' (px at zoom 1); `ui_font`: the mods'
   (their text sizes are their own, in px, and follow zoom). Optional: without
   them a layout uses settings.json's, else Fireflies' (JetBrains Mono 14, Geist).

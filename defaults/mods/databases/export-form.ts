@@ -232,7 +232,7 @@ export class ExportForm {
           .child(row("format", "format", FORMATS.map((f) => pickChip(`exp-f-${f}`, FORMAT_NAME[f], this.format === f, () => { this.format = f; }))))
           .child(row("to", "to", [pickChip("exp-to-clip", "the clipboard", !this.toFile, () => { this.toFile = false; }), pickChip("exp-to-file", "a file…", this.toFile, () => { this.toFile = true; })]))
           .when(this.toFile, (el) => el.child(v_flex().gap(4).child(div().text_color(t.dim).child("named (the folder is asked next)"))
-            .child(h_flex().h(26).px(8).items_center().border(1).border_color(on("name") ? t.accent : t.ansi8).child(Input.new(this.name).flex_1().text_size(12).text_color(t.foreground)))))
+            .child(h_flex().h(26).px(8).items_center().border(1).border_color(on("name") ? t.accent : t.muted).child(Input.new(this.name).flex_1().text_size(12).text_color(t.foreground)))))
           .when(this.error !== null, (el) => el.child(div().text_color(t.blocked).child(this.error ?? "")))
           .child(h_flex().gap(8).justify_end()
             .child(ring(chip(t, "exp-go", this.busy ? "exporting…" : "Export  enter", false, (cx) => void this.go(cx), t.accent), on("go"), t.accent))

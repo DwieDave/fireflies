@@ -10,6 +10,7 @@ import { isNumber } from "./guard.ts";
 import type { CheckRow, PrRow, PrView, Tone } from "./model.ts";
 import { rowTone, ago, duration } from "./model.ts";
 import { dither, pip, band, toneColor, TONE_WORD, stop } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 /** A row of the list, and of the checks, is this tall. */
 export const ROW = 38, CHECK_ROW = 22;
@@ -34,11 +35,11 @@ export function prRow(t: Theme, p: PrRow, sel: boolean, active: boolean): Elemen
   const [rev, revTone] = REVIEW.get(p.reviewDecision ?? "") ?? [null, null];
 
   return v_flex().id(`pr-${p.number}`).relative().h(ROW).w_full().pl(10).pr(8).justify_center().flex_none()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .when(sel, (el) => el.children(band(t, active)))
     .child(h_flex().relative().gap(7).items_center().text_size(12)
       .child(pip(t, tone ?? (p.isDraft ? "skipped" : null), 7))
-      .child(div().flex_none().text_color(sel ? t.accent : t.ansi8).child(`#${p.number}`))
+      .child(div().flex_none().text_color(sel ? t.accent : t.muted).child(`#${p.number}`))
       .child(div().flex_1().min_w(0).truncate().text_color(sel ? t.foreground : p.isDraft ? t.dim : t.muted).child(p.title)))
     .child(h_flex().relative().gap(6).pl(14).items_center().text_size(10).text_color(t.dim)
       .child(div().flex_none().child(p.author?.login ?? ""))
@@ -72,7 +73,7 @@ export function prHead(t: Theme, pr: PrView): Element {
     .when(labels.length > 0, (el) => el.child(h_flex().flex_wrap().gap(5).children(labels.map((l, i) =>
       div().id(`label-${i}`).relative().px(6).h(18).flex().items_center().text_size(10).text_color(t.foreground)
         .child(dither(`#${l.color ?? "666666"}88`, 1)).child(div().relative().child(l.name))))))
-    .child(div().relative().h(2).mt(4).child(dither(t.ansi0, 1)));
+    .child(div().relative().h(2).mt(4).child(dither(edge(t), 1)));
 }
 
 /** One entry of the conversation: who and what (a review's verdict, the line a comment is on), when, its words (`md` draws them). */
@@ -83,7 +84,7 @@ export function saidCard(t: Theme, c: Said, i: number, md: (id: string, text: st
   const reply = c.kind === "line" && c.reply;
 
   return v_flex().id(`c-${i}`).relative().gap(4).pl(reply ? 26 : 12).pr(4).py(8)
-    .child(div().absolute().left(reply ? 16 : 2).top(8).bottom(8).w(2).child(dither(tone ? toneColor(t, tone) : t.ansi0, 1)))
+    .child(div().absolute().left(reply ? 16 : 2).top(8).bottom(8).w(2).child(dither(tone ? toneColor(t, tone) : edge(t), 1)))
     .child(h_flex().gap(8).items_center().text_size(11)
       .child(div().text_color(t.accent).child(c.who ?? "ghost"))
       .when(Boolean(what), (el) => el.child(h_flex().gap(4).items_center().when(tone !== null, (e2) => e2.child(pip(t, tone, 6))).child(div().text_color(tone ? toneColor(t, tone) : t.muted).truncate().child(what))))
@@ -95,7 +96,7 @@ export function saidCard(t: Theme, c: Said, i: number, md: (id: string, text: st
 /** A check of the selected PR: its tone, workflow / name, how long it ran (a sweep while it runs); `onClick` opens it. */
 export function checkRow(t: Theme, c: CheckRow, i: number, sel: boolean, onClick: (cx: Context) => void): Element {
   return h_flex().id(`check-${i}`).relative().h(CHECK_ROW).px(10).gap(7).items_center().flex_none().text_size(11)
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => onClick(cx))
     .when(sel, (el) => el.children(band(t, true)))

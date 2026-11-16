@@ -19,6 +19,7 @@ import type { Color, Context, Element, KeyEvent } from "gpui-kit";
 import { div, svg } from "gpui-kit";
 import type { Theme } from "herdr";
 import { home, notify } from "herdr";
+import { edge } from "./tones.ts";
 
 /** The more button's mark: three dots on the pixel grid. */
 const MORE = "mods/editor/art/more.svg";
@@ -129,9 +130,9 @@ function formatChip(ed: EditorPane, t: Theme): Element {
     .gap(6)
     .items_center()
     .border(1)
-    .border_color(ed.mdMenu ? t.accent : t.ansi0)
+    .border_color(ed.mdMenu ? t.accent : edge(t))
     .text_color(ed.mdMenu ? t.accent : t.foreground)
-    .hover((s) => s.border_color(t.ansi8))
+    .hover((s) => s.border_color(t.muted))
     .tooltip("bold, headings, lists, tasks, quotes, code: the Markdown commands")
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => {
@@ -163,8 +164,8 @@ function moreChip(ed: EditorPane, t: Theme): Element {
     .items_center()
     .justify_center()
     .border(1)
-    .border_color(open ? t.accent : t.ansi0)
-    .hover((s) => s.border_color(t.ansi8))
+    .border_color(open ? t.accent : edge(t))
+    .hover((s) => s.border_color(t.muted))
     .tooltip("copy its path, the view, word wrap, vim")
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => toggleMore(ed, cx))
@@ -185,7 +186,7 @@ export function scratchBar(ed: EditorPane, t: Theme, parts: BarParts): Element {
     .gap(10)
     .items_center()
     .border_b(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .when(vim, (el) => el.child(parts.mode()))
     .when(vim && Boolean(recording), (el) => (recording ? el.child(div().flex_none().text_color(t.ansi1).child(`rec @${recording.reg}`)) : el))
     .child(div().id("bar-kind").flex_none().text_color(t.muted).child(where(ed)))
@@ -219,7 +220,7 @@ export function moreView(ed: EditorPane, t: Theme): Element {
         .gap(10)
         .items_center()
         .cursor_pointer()
-        .hover((s) => s.bg(t.ansi0))
+        .hover((s) => s.bg(edge(t)))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => {
           cx.stop_propagation();
@@ -241,7 +242,7 @@ export function moreView(ed: EditorPane, t: Theme): Element {
     .py(4)
     .bg(t.background)
     .border(1)
-    .border_color(t.ansi0)
+    .border_color(edge(t))
     .shadow_lg()
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .children(rows);

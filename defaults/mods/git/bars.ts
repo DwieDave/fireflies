@@ -20,6 +20,7 @@ import type { default as GitView } from "./main.ts";
 import { openPane, quit } from "./panes.ts";
 import { reload } from "./reads.ts";
 import { inPane, movable, move } from "./place.ts";
+import { edge } from "./tones.ts";
 
 /** A bar label: the first words before "/" or "…". */
 export const shortLabel = (s: string) => (s.replace(/ \(.*\)$/, "").replace(/…$/, "").split(" / ")[0]?.split(",")[0]?.split(/ (?:into|the|with|from|to|as|on|of|this|last|all) /)[0] ?? "").toLowerCase();
@@ -33,8 +34,8 @@ export function windowHeader(v: GitView, t: Theme) {
   const state = v.data.state;
 
   const head = h_flex().id("git-head").relative().h(34).flex_none().overflow_hidden().pl(12).pr(6).gap(10).items_center().text_size(11)
-    .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi8, 1)));
+    .child(div().absolute().inset_0().opacity(0.5).child(dither(edge(t), 2)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.muted, 1)));
 
   const flying = v.busyText ? head.child(svg(`${ART}/wings.svg`).absolute().top(4).size(10).text_color(t.working)
     .loop("left", { from: 140, to: Math.max(300, v.size.width - 260), period: 9000 })

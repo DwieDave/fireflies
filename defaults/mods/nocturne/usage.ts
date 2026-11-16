@@ -24,6 +24,7 @@ import { ART, dither, eyebrow, navRow, navRing } from "./kit.ts";
 import type { Nav } from "./nav.ts";
 import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, windowName } from "./limits.ts";
 import type { ProviderId, Usage, UsageWindow } from "./limits.ts";
+import { edge } from "./tones.ts";
 
 const FOLDED = sharedKey("nocturne.usageFolded", isBoolean);
 const TICK = 30_000;
@@ -144,7 +145,7 @@ export class UsageSection {
     const el = div().relative().h(6).flex_none();
 
     return (width ? el.w(width) : el.w_full())
-      .child(div().absolute().left(0).right(0).top(2).h(2).child(dither(t.ansi8, 1)))
+      .child(div().absolute().left(0).right(0).top(2).h(2).child(dither(t.muted, 1)))
       // Shares of the row as flex weights, not pixels.
       .child(h_flex().absolute().left(0).right(0).top(1).h(4)
         .child(div().h_full().flex_grow(Math.max(0.001, u)).bg(tone(t, u)))
@@ -162,7 +163,7 @@ export class UsageSection {
 
     return h_flex().id(id).relative().px(16).py(4).gap(10).items_center()
       .map((el) => navRow(t, el, on))
-      .hover((s) => s.bg(t.ansi0))
+      .hover((s) => s.bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e: ClickEvent, cx: Context) => {
         cx.stop_propagation();
@@ -171,10 +172,10 @@ export class UsageSection {
       .child(div().relative().w(20).h(22).flex_none().flex().items_center().justify_center().child(mark))
       .child(v_flex().relative().flex_1().min_w(0).gap(2)
         .child(h_flex().gap(6).items_baseline().text_size(11)
-          .child(div().flex_none().text_color(t.ansi8).child(label))
+          .child(div().flex_none().text_color(t.muted).child(label))
           .child(div().flex_1())
           .child(div().flex_none().text_color(r === 0 ? t.blocked : t.foreground).child(`${r}%`))
-          .child(div().flex_none().text_color(t.ansi8).child("left")))
+          .child(div().flex_none().text_color(t.muted).child("left")))
         .child(this.path(t, w))
         .when(Boolean(back), (el) => el.child(div().truncate().text_size(11).text_color(t.dim).child(back ?? ""))));
   }
@@ -182,7 +183,7 @@ export class UsageSection {
   /** The hourglass: its glass, and sand in the top bulb by what's left. */
   hourglass(t: Theme, w: UsageWindow): Element {
     return div().relative().w(18).h(22).flex_none()
-      .child(svg(`${ART}/hourglass-glass.svg`).w(18).h(22).absolute().top(0).left(0).text_color(t.ansi8))
+      .child(svg(`${ART}/hourglass-glass.svg`).w(18).h(22).absolute().top(0).left(0).text_color(t.muted))
       .child(svg(`${ART}/hourglass-${eighths(w)}.svg`).w(18).h(22).absolute().top(0).left(0).text_color(left(w) === 0 ? t.blocked : t.ansi7));
   }
 
@@ -198,13 +199,13 @@ export class UsageSection {
       .children(PROVIDERS.map((p) => div().id(`usage-provider-${p.id}`).relative().p(2).flex_none()
         .map((el) => navRing(t, el, nav?.(`usage-provider-${p.id}`, "usage", { go: (cx) => pick(p.id, cx) }) ?? false))
         .tooltip(p.id === on ? `${p.name} usage` : `Show ${p.name} usage`)
-        .when(p.id !== on, (el) => el.hover((s) => s.bg(t.ansi0)))
+        .when(p.id !== on, (el) => el.hover((s) => s.bg(edge(t))))
         .on_mouse_down("left", stop)
         .on_click((_e: ClickEvent, cx: Context) => {
           cx.stop_propagation();
           pick(p.id, cx);
         })
-        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).text_color(p.id === on ? t.foreground : t.ansi8))));
+        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).text_color(p.id === on ? t.foreground : t.muted))));
   }
 
   /** The folded rail's usage: one small meter per window (its name, what's
@@ -216,7 +217,7 @@ export class UsageSection {
 
     const meter = (id: string, w: UsageWindow, label: string) => v_flex().id(id).relative().w_full().px(14).py(4).gap(3).flex_none()
       .map((el) => navRing(t, el, nav?.(id, "usage", { go: () => toggleUsage() }) ?? false))
-      .hover((s) => s.bg(t.ansi0))
+      .hover((s) => s.bg(edge(t)))
       .tooltip(`${provider().name} ${label}: ${left(w)}% left`)
       .on_mouse_down("left", stop)
       .on_click((_e: ClickEvent, cx: Context) => {
@@ -224,7 +225,7 @@ export class UsageSection {
         toggleUsage();
       })
       .child(h_flex().items_baseline().text_size(10)
-        .child(div().flex_none().text_color(t.ansi8).child(label.toUpperCase()))
+        .child(div().flex_none().text_color(t.muted).child(label.toUpperCase()))
         .child(div().flex_1())
         .child(div().flex_none().text_color(left(w) === 0 ? t.blocked : t.foreground).child(`${left(w)}%`)))
       .child(this.path(t, w));
@@ -236,7 +237,7 @@ export class UsageSection {
           cx.notify();
         }
       })
-      .child(div().w(28).h(2).mb(6).relative().child(dither(t.ansi8, 1)));
+      .child(div().w(28).h(2).mb(6).relative().child(dither(t.muted, 1)));
 
     if (!d) return box.child(div().py(4).text_size(10).text_color(t.dim).child("usage …"));
 

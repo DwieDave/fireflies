@@ -14,10 +14,11 @@ import { COLS, NUM_W, numCols } from "./state.ts";
 import { isFlat } from "./listing.ts";
 import { sortPortsBy, sortProcsBy, toggleFlat } from "./actions.ts";
 import type { default as ProcsDeck } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** A head that sorts on a click: its label, lit with its arrow while it sorts. */
 function sortHead(v: ProcsDeck, t: Theme, id: string, label: string, on: Dir | null, go: () => void): Element {
-  return div().id(id).cursor_pointer().text_color(on ? t.accent : t.ansi8).hover((s) => s.text_color(t.foreground))
+  return div().id(id).cursor_pointer().text_color(on ? t.accent : t.muted).hover((s) => s.text_color(t.foreground))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => {
       cx.stop_propagation();
@@ -42,7 +43,7 @@ export function procHeads(v: ProcsDeck, t: Theme): Element {
   return h_flex().h(COLS).flex_none().px(12).gap(7).items_center().text_size(9)
     .child(h_flex().flex_1().min_w(0).gap(8).items_center()
       .child(sortHead(v, t, "h-name", what, dir("name"), () => sortProcsBy(v, "name")))
-      .when(numeric(s), (el) => el.child(div().id("h-flat").flex_none().px(3).border(1).border_color(flat ? t.accent : t.ansi0)
+      .when(numeric(s), (el) => el.child(div().id("h-flat").flex_none().px(3).border(1).border_color(flat ? t.accent : edge(t))
         .text_color(flat ? t.accent : t.dim).cursor_pointer().hover((st) => st.text_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
         .on_click((_e, cx) => {

@@ -104,10 +104,9 @@ function items(p, git) {
       return [
         ["New space", "space.new", {}],
         ["Keybinds", "app.help", {}],
-        ["Theme: graphite", "app.theme", { name: "graphite" }],
-        ["Theme: ink", "app.theme", { name: "ink" }],
-        ["Theme: moss", "app.theme", { name: "moss" }],
-        ["Theme: atom one dark", "app.theme", { name: "atom-one-dark" }],
+        ["Theme: moonfly", "app.theme", { name: "moonfly" }],
+        ["Theme: graphite (herdr-app default)", "app.theme", { name: "graphite" }],
+        ["Theme: paper (light)", "app.theme", { name: "paper" }],
       ];
   }
 }

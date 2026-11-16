@@ -45,6 +45,7 @@ import { anchorOf, documentLinks, lastIndex, nextLink, nextHeading } from "./lin
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import { fileChanges, newestId, follow as followFiles } from "./follow.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 const MOD = "markdown";
 
@@ -642,7 +643,7 @@ export default class Markdown extends View {
         action(cx);
         cx.notify();
       })
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
+      .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)))
       .child(div().relative().child(label));
   }
 
@@ -650,7 +651,7 @@ export default class Markdown extends View {
     const w = this.width;
 
     return h_flex().id("md-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
-      .when(w >= 320, (el) => el.child(div().flex_none().text_color(t.ansi8).child("MD")))
+      .when(w >= 320, (el) => el.child(div().flex_none().text_color(t.muted).child("MD")))
       .when(this.history.length > 0, (el) => el.child(this.chip(t, "md-back", "‹", (cx) => this.back(cx))))
       .child(h_flex().flex_1().min_w(0).gap(6).items_baseline()
         .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(basename(this.path || "Markdown")))
@@ -665,14 +666,14 @@ export default class Markdown extends View {
       .child(keysHint(t, "md-keys", Boolean(this.keysShown), () => {
         this.keysShown = !this.keysShown;
       }).ml(4))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edgeTone(t), 1)));
   }
 
   empty(t: Theme, title: string, hint: string): Element {
     return v_flex().size_full().items_center().justify_center().gap(10).px(16).text_size(11)
-      .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
+      .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.muted).opacity(0.6))
       .child(div().text_color(t.foreground).child(title))
-      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint)));
+      .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.muted).child(hint)));
   }
 
   /** A local image's place and its name in the cache (undefined while copying). */
@@ -697,7 +698,7 @@ export default class Markdown extends View {
   /** The chosen link, at the foot of the page: what it says and where it goes. */
   linkBar(t: Theme, l: DocLink, sel: number): Element {
     return h_flex().id("md-link").absolute().left(0).right(0).bottom(0).h(24).px(10).gap(8).items_center().text_size(11).bg(t.background)
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
       .child(div().flex_none().text_color(t.accent).child("enter"))
       .child(div().flex_none().max_w(260).truncate().text_color(t.foreground).child(`${l.image ? "▧ " : ""}${l.text}`))
       .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(l.href))

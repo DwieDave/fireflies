@@ -46,6 +46,7 @@ import { EDIT_SPACE_KEY, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";
 import { SPACE_ROWS, spaceRowsOf } from "./tabmove.ts";
 import type { Nav, NavActs } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 // The shown space's plate and its corner ticks: this far in from the sidebar's edges.
 export const SHOWN_INSET = 8;
@@ -434,7 +435,7 @@ export default class Spaces {
   /** A worktree space's indent: a faint guide line, then the row's own padding. */
   indent(t: Theme): Element {
     return div().relative().w(10).h_full().flex_none().ml(-2)
-      .child(div().absolute().left(2).top(0).bottom(0).w(1).bg(`${t.ansi8}55`));
+      .child(div().absolute().left(2).top(0).bottom(0).w(1).bg(`${t.muted}55`));
   }
 
   row(t: Theme, s: SpaceInfo, depth: number, nav?: Nav): Element {
@@ -461,8 +462,8 @@ export default class Spaces {
       return confirm(t, id, {
         title: `Delete ${s.name}?`,
         facts: [
-          terms ? [ags ? t.blocked : t.ansi8, `ends ${n(terms, "terminal", "terminals")}${ags ? `, ${n(ags, "agent", "agents")} among them` : ""}`]
-            : [t.ansi8, "nothing running in it"],
+          terms ? [ags ? t.blocked : t.muted, `ends ${n(terms, "terminal", "terminals")}${ags ? `, ${n(ags, "agent", "agents")} among them` : ""}`]
+            : [t.muted, "nothing running in it"],
           [t.dim, "its folders and files stay"],
         ],
         go: { label: on ? "delete (y)" : "delete", action: (cx) => this.remove(s, cx) },
@@ -479,11 +480,11 @@ export default class Spaces {
         this.menu(s, false, e);
       })
       .on_click(() => run("space.select", { id: s.id }))
-      .hover((st) => st.bg(`${t.ansi0}55`))
+      .hover((st) => st.bg(`${edge(t)}55`))
       // Shown: a plate of the ground, in from the sidebar's edges, with the
       // blue corner ticks on its corners, as its initials wear them on the rail.
       .when(s.active, (el) => el.child(div().absolute().top(0).bottom(0).left(SHOWN_INSET).right(SHOWN_INSET)
-        .child(dither(t.ansi0, 1)).children(cornerTicks(t, 0))))
+        .child(dither(edge(t), 1)).children(cornerTicks(t, 0))))
       .map((el) => navRow(t, el, on))
       .when(depth > 0, (el) => el.child(this.indent(t)))
       .child(pip(t, s.status))
@@ -496,7 +497,7 @@ export default class Spaces {
   header(t: Theme, r: { readonly header: string; readonly key: string }): Element {
     return h_flex().id(`repo-${r.key}`).h(22).px(16).gap(8).items_center().text_size(11)
       .child(div().w(6).flex_none())
-      .child(div().min_w(0).truncate().text_color(t.ansi8).child(r.header));
+      .child(div().min_w(0).truncate().text_color(t.muted).child(r.header));
   }
 
   /** `nav` (sky.ts): registers a control with the keyboard's cursor, true while it's on it. */
@@ -512,7 +513,7 @@ export default class Spaces {
           .on_mouse_down("left", (e) => {
             this.press = { e, open: pickerOpen() };
           })
-          .when(open, (el) => el.bg(t.ansi0)), newOn)))
+          .when(open, (el) => el.bg(edge(t))), newOn)))
       .children(this.rows().map((r) => ("s" in r ? this.row(t, r.s, r.depth, nav) : this.header(t, r))));
   }
 }

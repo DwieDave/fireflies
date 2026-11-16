@@ -15,6 +15,7 @@ import type { SaveStatement } from "./save-sql.ts";
 import { discardAll, dropEdit, keepEdit, liveEdits, nextEdit, openReview, runSave, toggleNull, undoCell } from "./cell-edit.ts";
 import { shownGrid } from "./act-grid.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** A key and what it does, as one click target. */
 function action(t: Theme, id: string, key: string, what: string, go: (cx: Context) => void, lit = false): Element {
@@ -101,7 +102,7 @@ function reviewRow(t: Theme, s: SaveStatement, i: number, failed: boolean, error
 
   if (s.role === "update") {
     return block.pt(6)
-      .child(h_flex().gap(6).text_size(10).text_color(failed ? t.ansi1 : t.ansi8).child(div().child(failed ? "✕" : String(s.row + 1))).child(div().child(s.where)))
+      .child(h_flex().gap(6).text_size(10).text_color(failed ? t.ansi1 : t.muted).child(div().child(failed ? "✕" : String(s.row + 1))).child(div().child(s.where)))
       .child(div().pl(14).child(sqlBlock(t, `review-sql-${i}`, s.text, false)))
       .when(failed, (el) => el.child(div().pl(14).text_color(t.ansi1).child(error)));
   }
@@ -138,7 +139,7 @@ export function reviewPanel(t: Theme, v: DbView): Element {
       .child(div().text_color(t.foreground).child(`Save ${changesWord(r.cells)} to ${r.table}`))
       .child(div().text_color(t.dim).child(`${rowsChanged} row${rowsChanged === 1 ? "" : "s"} · one transaction`)))
     .child(div().text_size(10).text_color(t.dim).child("Each UPDATE finds its row by its key and checks it still holds what was read. If one changes no row or fails, nothing is saved."))
-    .child(div().relative().h(2).flex_none().child(dither(t.ansi0, 1)))
+    .child(div().relative().h(2).flex_none().child(dither(edge(t), 1)))
     .child(v_flex().id("db-review-list").flex_1().min_h(0).overflow_y_scroll().gap(2).py(4)
       .children(r.statements.map((s, i) => reviewRow(t, s, i, err?.index === i, err?.message ?? ""))))
     .when(err !== null && (err.index === null || !r.statements[err.index]), (el) => el.child(div().text_color(t.ansi1).child(`✕ ${err?.message ?? ""}`)))

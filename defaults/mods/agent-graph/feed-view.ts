@@ -10,7 +10,7 @@ import { dither, pip } from "./kit.ts";
 import type { Feed, Snapshot } from "./claude.ts";
 import { ranFor, span } from "./claude.ts";
 import type { GraphNode } from "./graph.ts";
-import { TONE, WORDS } from "./graph.ts";
+import { toneOf, WORDS } from "./graph.ts";
 import type { ClaudePane, FeedRow, StatsPick } from "./state.ts";
 import { stop, ago } from "./state.ts";
 import { chip } from "./paint.ts";
@@ -18,12 +18,13 @@ import { poll, startFollowing } from "./reading.ts";
 import { askAgent, pickNode } from "./navigate.ts";
 import type { default as Agents } from "./main.ts";
 import { statsBody, tokens } from "./stats-view.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export function drawToolbar(v: Agents, t: Theme, list: readonly ClaudePane[], pane: ClaudePane | null): Element {
   const counts = v.data ? [...v.data.agents.values()].filter((a) => a.status === "working").length : 0;
 
   return h_flex().id("ag-toolbar").relative().h(34).flex_none().px(12).gap(6).items_center().text_size(11)
-    .child(div().flex_none().pr(4).text_color(t.ansi8).child("AGENTS"))
+    .child(div().flex_none().pr(4).text_color(t.muted).child("AGENTS"))
     .child(h_flex().id("ag-sessions").flex_1().min_w(0).gap(2).items_center().overflow_x_scroll()
       .children(list.map((p) => {
         const on = p.terminal === pane?.terminal;
@@ -39,12 +40,12 @@ export function drawToolbar(v: Agents, t: Theme, list: readonly ClaudePane[], pa
             poll(v, cx);
             cx.notify();
           })
-          .when(on, (el) => el.child(dither(t.ansi0, 1)))
+          .when(on, (el) => el.child(dither(edgeTone(t), 1)))
           .child(div().relative().child(pip(t, p.status, 5)))
           .child(div().relative().max_w(140).truncate().child(p.name));
       })))
     .when(counts > 0, (el) => el.child(div().flex_none().text_color(t.working).child(`${counts} working`)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edgeTone(t), 1)));
 }
 
 /**
@@ -68,7 +69,7 @@ export function feedList(v: Agents, t: Theme, f: Feed | null): Element {
     const box = div().id(`f-${i}`).h(height(x)).overflow_hidden();
 
     if (x.kind === "task") {
-      return box.px(12).pt(4).child(div().text_size(10).text_color(t.ansi8).child("TASK"))
+      return box.px(12).pt(4).child(div().text_size(10).text_color(t.muted).child("TASK"))
         .child(div().text_size(11).text_color(t.muted).child(x.text));
     }
 
@@ -131,10 +132,10 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
         v.selected = null;
         cx.notify();
       }))
-      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1))), statsBody(v, t, data));
+      .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1))), statsBody(v, t, data));
   }
 
-  const color = t[TONE[n.status]];
+  const color = toneOf(t, n.status);
 
   const head = h_flex().id("ag-detail-head").relative().h(30).flex_none().px(12).gap(8).items_center().text_size(11)
     .child(div().flex_none().w(8).h(8).relative().child(dither(color, 1)))
@@ -158,7 +159,7 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
       v.detail = null;
       cx.notify();
     }))
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)));
 
   if (n.kind === "run" || n.kind === "phase") {
     const r = n.run;
@@ -168,14 +169,14 @@ export function details(v: Agents, t: Theme, n: GraphNode | StatsPick, pane: Cla
       .when(n.kind === "run" && Boolean(r.summary), (el) => el.child(div().pb(4).text_color(t.muted).child(r.summary)))
       .when(n.kind === "run", (el) => el.child(div().pb(4).text_color(t.dim).child(`phases: ${r.phases.join(" → ") || "-"}`)))
       .children(ids.flatMap((id) => data.agents.get(id) ?? []).map((a) =>
-        h_flex().id(`ag-r-${a.id}`).gap(8).items_center().hover((s) => s.bg(`${t.ansi0}55`))
+        h_flex().id(`ag-r-${a.id}`).gap(8).items_center().hover((s) => s.bg(`${edgeTone(t)}55`))
           .on_click((_e, cx) => pickNode(v, { key: a.id, kind: "agent" }, cx))
-          .child(div().w(6).h(6).flex_none().relative().child(dither(t[TONE[a.status]], 1)))
+          .child(div().w(6).h(6).flex_none().relative().child(dither(toneOf(t, a.status), 1)))
           .child(div().w(54).flex_none().truncate().text_color(t.dim).child(a.phase ?? ""))
           .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(a.label))
           .child(div().flex_none().text_color(t.dim).child(tokens(v, a.file) ?? ""))
           .child(div().w(64).flex_none().text_color(a.status === "working" ? t.working : t.muted).child(span(ranFor(a))))
-          .child(div().w(54).flex_none().text_color(t[TONE[a.status]]).child(WORDS[a.status]))));
+          .child(div().w(54).flex_none().text_color(toneOf(t, a.status)).child(WORDS[a.status]))));
 
     return drawPanel(v, t, head, body);
   }

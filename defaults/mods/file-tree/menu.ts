@@ -17,6 +17,7 @@ import type { default as Files } from "./main.ts";
 import { askDelete, clipNow, cutRow, paste, startDraft, startRename } from "./file-ops.ts";
 import { setOf } from "./drag.ts";
 import { openInDatabases } from "./viewer-table.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 /** The empty space's row: the root. */
 export function rootRow(v: Files): TreeRow {
@@ -123,7 +124,7 @@ export function menuBox(v: Files, t: Theme, m: Menu): Element {
     .child(div().h(1).flex_1().min_w(8).bg(t.accent));
 
   const rows = m.items.map((it, i) => h_flex().id(`nf-mi-${i}`).relative().h(MENU_ROW).px(10).gap(10).items_center().text_size(11)
-    .hover((s) => s.bg(`${t.ansi0}66`))
+    .hover((s) => s.bg(`${edgeTone(t)}66`))
     .on_mouse_move((_e, cx) => {
       if (m.n !== i) {
         m.n = i;
@@ -136,7 +137,7 @@ export function menuBox(v: Files, t: Theme, m: Menu): Element {
       v.act(it.act, m.row, cx);
       cx.notify();
     })
-    .when(i === m.n, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+    .when(i === m.n, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
     .child(div().relative().w(keyW).min_w(keyW).flex_none().overflow_hidden().text_color(t.accent).child(it.key))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(i === m.n ? t.foreground : t.muted).child(it.label)));
 

@@ -27,4 +27,4 @@ export function dither(color: Color, cell = 1): Element {
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom * dpr)))).absolute().top(0).left(0).size_full();
 }
 
-export const eyebrow = (t: Theme, text: string) => div().text_size(11).text_color(t.ansi8).child(text.toUpperCase());
+export const eyebrow = (t: Theme, text: string) => div().text_size(11).text_color(t.muted).child(text.toUpperCase());

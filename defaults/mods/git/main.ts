@@ -674,7 +674,7 @@ export default class GitView extends View {
     };
 
     const root = v_flex().id("git").relative().size_full().bg(t.background);
-    const framed = this.overlay ? root.border(1).border_color(t.ansi8) : root;
+    const framed = this.overlay ? root.border(1).border_color(t.muted) : root;
     const handle = this.handle;
     const r = this.resizing;
 

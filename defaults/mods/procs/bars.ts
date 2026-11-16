@@ -18,6 +18,7 @@ import { badge } from "./procs-view.ts";
 import { openMenu } from "./menu-view.ts";
 import { inPane, move } from "./place.ts";
 import type { default as ProcsDeck } from "./main.ts";
+import { edge } from "./tones.ts";
 
 export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
   const box = v_flex().h(h).flex_none().items_center().justify_center().gap(8).px(24).text_size(11).text_color(t.dim);
@@ -29,7 +30,7 @@ export function emptyView(v: ProcsDeck, t: Theme, h: number): Element {
   if (v.query) return box.child(div().child(`Nothing matches "${v.query}".`));
 
   if (v.tab === "ports") {
-    return box.child(svg(`${ART}/plug.svg`).size(22).text_color(t.ansi0))
+    return box.child(svg(`${ART}/plug.svg`).size(22).text_color(edge(t)))
       .child(div().mt(6).text_size(12).text_color(t.muted).child("Nothing of yours listens on a port."))
       .child(div().child("a dev server shows here as it starts"));
   }
@@ -43,13 +44,13 @@ export function footBar(v: ProcsDeck, t: Theme, items: readonly Item[], ci: numb
   const item = items[ci];
 
   const bar = h_flex().relative().h(FOOT).flex_none().px(12).gap(10).items_center().text_size(11)
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)));
 
   const left = (...kids: (Element | null)[]): Element => h_flex().flex_1().min_w(0).gap(6).items_center().children(kids.flatMap((k) => (k ? [k] : [])));
   const keys = (...caps: (Element | null)[]): Element => h_flex().flex_none().gap(8).items_center().children(caps.flatMap((k) => (k ? [k] : [])));
 
   // A key's hint, and a click does what the key does.
-  const k = (id: string, key: string, what: string, go: (cx: Context) => void): Element => hint(t, id, key, what).px(2).cursor_pointer().hover((s) => s.bg(t.ansi0))
+  const k = (id: string, key: string, what: string, go: (cx: Context) => void): Element => hint(t, id, key, what).px(2).cursor_pointer().hover((s) => s.bg(edge(t)))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => {
       cx.stop_propagation();
@@ -169,7 +170,7 @@ export function headBar(v: ProcsDeck, t: Theme, nProcs: number, nPorts: number):
       .child(v.all ? `all of ${v.snap?.me ?? "yours"}` : "fireflies"))
     .child(badge(v, t, "a", false))
     .child(moveChip(v, t))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }
 
 /** ◧ into a pane, or from a pane ⧉ out over the tab (place.ts), as ctrl-t. */
