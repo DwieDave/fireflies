@@ -2236,6 +2236,19 @@ The main ones:
   (personal tree edits; on shipped layouts only click/look fields change),
   `layout.reset {name?}` (reset a shipped layout and its clicks),
   `layout.clone {name, as?}` (duplicate, then switch; default `<name>-copy`).
+- Chromium for web panes (macOS, this fork): not part of the app until the person enables it in
+  Settings → Web, which runs `chromium.install`: it downloads the pinned CEF build (about 135 MB)
+  into `<app home>/chromium`, checks it against the hash the app pins, and unpacks the framework
+  (about 330 MB on disk); a cut or cancelled download (`chromium.cancel`) resumes on the next
+  install. `chromium.remove {data?}` deletes it again (`data: true` also its logins and cache,
+  `<app home>/chromium/profile`); while Chromium runs, the removal finishes at the next start.
+  `nativeViewCapabilities().chromium` says how far it is (`installed`, `phase`: idle,
+  downloading, verifying, unpacking or failed, `done` / `total` bytes, `error` in words,
+  `engineBytes`, `dataBytes`); once installed, `kinds` lists `chromium` and a mod can make
+  `herdr.nativeView.new(id, { kind: "chromium", url })`: a Chromium page (Alloy style: no
+  `chrome://` pages, no extensions; VP9, AV1 and Opus play, H.264, AAC and DRM don't) with
+  the web view's events (`web.location`, `load.*`, `web.newTab`, `web.icon`, `web.video`) and
+  actions (`browser.*`, `web.inspect`).
 - Native views (this fork, interface native-view/0): `native.debug` (every native view's frame,
   visibility, focus, content state and recent events), `native.call {key, action, args?}`
   (one whitelisted action, key `<copy>:<id>`). A web view takes a `zoom` prop

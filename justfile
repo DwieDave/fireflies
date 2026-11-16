@@ -94,6 +94,8 @@ test:
     bun test scripts/nocturne-windows-keys.test.ts
     # The dialogs' keyboard (Settings, nocturne's dialogs, menus, screens), with stand-ins.
     bun test scripts/dialogs-keys.test.ts
+    # Settings → Web: enabling Chromium (download, progress, failure, removal) and the rows waiting for it.
+    bun test scripts/settings-chromium.test.ts
     # Every form by its keys (form-keys.js): tab order both ways, the wrap, submit, cancel; writes go to stand-ins.
     bun test scripts/form-keys.test.ts
     # Nocturne's palette through its real imports, herdr and gpui stand-ins; no command, key or mod command goes missing from it.

@@ -59,6 +59,8 @@ export const state = {
   opened: [] as any[],
   keys: [] as any[],
   settings: { zoom: 1, font_family: "Mono", ui_font_family: "Geist", font_size: 13, theme_light: "a", theme_dark: "b" } as any,
+  /** nativeViewCapabilities().chromium: Chromium's download (Settings → Web). */
+  chromium: { available: true, built: true, installed: false, phase: "idle", done: 0, total: 134874408 } as any,
 };
 
 class Input { value_ = ""; focused = 0; handlers: Record<string, any> = {}; constructor(o: any = {}) { this.value_ = o.value ?? ""; }
@@ -84,6 +86,7 @@ mock.module("herdr", () => ({
   shared: (k: string) => state.shared[k] ?? null, setShared: (k: string, v: unknown) => { state.shared[k] = v; },
   run: (name: string, args?: any) => { state.runs.push([name, args]); return null; },
   closeOverlay: (id: unknown) => { state.closed.push(id); }, openOverlay: (spec: any) => { state.opened.push(spec); return `ov${state.opened.length}`; },
+  nativeViewCapabilities: () => ({ interface: "native-view/0", platform: "macos", available: true, kinds: [], chromium: state.chromium }),
   keys: () => state.keys, window: () => ({ platform: "macos" }), spaces: () => [], panes: () => [], terminals: () => [], agents: () => [],
   focused: () => null, commands: () => [], hc: async () => ({ code: 1, stdout: "", stderr: "" }),
   updates: () => ({ app: { version: "1.0", updates: true }, core: { version: "1.0" }, checks: true, checked: 1, notes: [] }),

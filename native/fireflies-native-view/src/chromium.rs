@@ -58,7 +58,6 @@ pub struct ChromiumView {
 }
 
 thread_local! {
-    static HOME: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
     static STARTED: Cell<Option<bool>> = const { Cell::new(None) };
     static START_ERROR: RefCell<String> = const { RefCell::new(String::new()) };
     static PUMP: RefCell<Option<Retained<NSTimer>>> = const { RefCell::new(None) };
@@ -69,19 +68,9 @@ thread_local! {
     static SEND_EVENT: Cell<Option<Imp>> = const { Cell::new(None) };
 }
 
-/// Where Chromium lives: the folder holding the framework, the helper apps and
-/// the profile (`<app home>/chromium`). Set by the host before any view.
-pub fn set_home(dir: PathBuf) {
-    HOME.with(|h| *h.borrow_mut() = Some(dir));
-}
-
+/// Where Chromium lives (`<app home>/chromium`, crate::cef_install).
 pub fn home() -> Option<PathBuf> {
-    HOME.with(|h| h.borrow().clone())
-}
-
-/// The installed CEF build's folder: `<home>/<CEF version>`.
-pub fn build_dir() -> Option<PathBuf> {
-    Some(home()?.join(crate::cef_install::CEF_VERSION))
+    crate::cef_install::home()
 }
 
 /// The bundle the framework and helpers sit in. Chromium's processes find
@@ -93,12 +82,12 @@ pub const BUNDLE: &str = "Fireflies Chromium.app";
 pub const BUNDLE_ID: &str = "dev.herdr.app.chromium";
 
 pub fn bundle_dir() -> Option<PathBuf> {
-    Some(build_dir()?.join(BUNDLE))
+    Some(crate::cef_install::build_dir(&home()?).join(BUNDLE))
 }
 
 /// `Contents/Frameworks` of that bundle: the framework and the helper apps.
 pub fn frameworks_dir() -> Option<PathBuf> {
-    Some(bundle_dir()?.join("Contents/Frameworks"))
+    Some(crate::cef_install::frameworks_dir(&home()?))
 }
 
 /// Whether the framework is in place and the app has its helper (Chromium can start).

@@ -18,7 +18,6 @@ mod pip;
 mod page;
 #[cfg(all(target_os = "macos", feature = "chromium"))]
 pub mod chromium;
-#[cfg(feature = "chromium")]
 pub mod cef_install;
 #[cfg(target_os = "macos")]
 mod tabs;
@@ -567,7 +566,10 @@ pub fn capabilities() -> Value {
         .iter()
         .map(|k| json!({ "kind": k.name(), "actions": k.actions() }))
         .collect();
-    json!({ "interface": INTERFACE, "platform": std::env::consts::OS, "available": cfg!(target_os = "macos"), "kinds": kinds })
+    // Chromium: whether this build has it, and its download (Settings follows it).
+    let mut chromium = cef_install::status();
+    chromium["built"] = json!(cfg!(feature = "chromium"));
+    json!({ "interface": INTERFACE, "platform": std::env::consts::OS, "available": cfg!(target_os = "macos"), "kinds": kinds, "chromium": chromium })
 }
 
 /// A link click that opens a tab instead of going there (a `tabs: true` web
