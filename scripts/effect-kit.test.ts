@@ -324,6 +324,49 @@ test("a copy's runs: failures reported in its words, interruptions silent, close
 
 // ---- the tests' mod loader
 
+// The look library re-exports others (`export * from "@fireflies/tones"`): the
+// test loaders follow re-exports and import() as they do imports.
+const gpui = () => {
+  const el: any = new Proxy(() => el, { get: () => el, apply: () => el });
+  return { div: () => el, svg: () => el, PathBuilder: class {}, Background: {} };
+};
+const app = { settings: () => ({}), window: () => ({ platform: "macos" }), shared: () => undefined, setShared: () => null };
+
+test("a library re-exporting another loads through importLibrary and importMod", async () => {
+  const { importLibrary, importMod } = await import("./mod-source.ts");
+  const look = await importLibrary("@fireflies/look", { herdr: app, "gpui-kit": gpui(), "gpui-base": { h_flex: () => ({}) } });
+  expect(typeof look.edge).toBe("function");       // @fireflies/tones, through export *
+  expect(typeof look.dithered).toBe("function");   // @fireflies/layout-look, through export *
+  expect(typeof look.titleShown).toBe("function"); // look's own
+  const place = await importMod("scripts/place.ts", { herdr: { ...app, panes: () => [], focused: () => null, run: () => {}, openOverlay: () => {}, closeOverlay: () => {} }, "gpui-kit": gpui(), "gpui-base": { h_flex: () => ({}) } });
+  expect(place.DECK_W).toBe(420);
+});
+
+test("the copier points every form at its target: export * (as), export { } from, import()", async () => {
+  const { copier } = await import("./mod-source.ts");
+  const { mkdtempSync, writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { tmpdir } = await import("node:os");
+  const src = mkdtempSync(join(tmpdir(), "copier-src-"));
+  writeFileSync(join(src, "forms.ts"), [
+    'export * from "@fireflies/tones";',
+    'export * as kit from "@fireflies/kit";',
+    'export { platform } from "herdr";',
+    'export type { Theme } from "herdr";',
+    'export const later = () => import("herdr").then((h) => h.platform());',
+    "export const lazyTones = () => import('@fireflies/tones');",
+  ].join("\n"));
+  const copy = copier("copier-", { herdr: { platform: () => "macos" } });
+  copy.write(join(src, "forms.ts"), join(copy.dir, "forms.ts"));
+  copy.standins();
+  const m = await import(join(copy.dir, "forms.ts"));
+  expect(typeof m.edge).toBe("function");
+  expect(typeof m.kit.sharedKey).toBe("function");
+  expect(m.platform()).toBe("macos");
+  expect(await m.later()).toBe("macos");
+  expect(typeof (await m.lazyTones()).edge).toBe("function");
+});
+
 test("importLibrary loads a library and what it imports (effect, @fireflies/kit) for real, standing in only for the app", async () => {
   const { importLibrary } = await import("./mod-source.ts");
   const m = await importLibrary("@fireflies/usage-limits", { herdr: {} });
