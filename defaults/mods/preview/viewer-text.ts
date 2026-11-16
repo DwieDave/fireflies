@@ -240,5 +240,5 @@ export function textRail(v: Viewer, t: Theme, total: number): Element[] {
   const h = Math.max(16, room * (room / total));
   const y = (v.sy / Math.max(1, total - room)) * (room - h);
 
-  return [div().absolute().right(1).w(3).top(y).h(h).child(checker(t.ansi8, 1))];
+  return [div().absolute().right(1).w(3).top(y).h(h).child(checker(t.muted, 1))];
 }
