@@ -16,7 +16,8 @@ import { runHrana } from "./hrana.ts";
 import type { Fetch } from "./hrana.ts";
 import type { ScriptStatement } from "./script.ts";
 import { scriptOf } from "./script.ts";
-import { clientFor, INSTALL, PROGRAMS } from "./clients.ts";
+import type { MysqlFlavor } from "./clients.ts";
+import { clientFor, flavorOf, INSTALL, PROGRAMS } from "./clients.ts";
 import { connectWords } from "./words.ts";
 import { endWords, reading } from "./reads.ts";
 import { envPath, folderEnvReady, tilde } from "./folderenv.ts";
@@ -73,7 +74,10 @@ export async function clientOf(v: DbView, kind: Kind): Promise<ClientFound> {
     const path = inFolder ?? onApp;
 
     if (path) {
-      found = { path, from: inFolder && inFolder !== onApp ? "folder" : "app" };
+      const from = inFolder && inFolder !== onApp ? "folder" : "app";
+
+      // A mysql may be MariaDB's (their TLS flags differ): its --version says which.
+      found = kind === "mysql" ? { path, from, flavor: await flavorFound(path) } : { path, from };
 
       break;
     }
@@ -82,6 +86,13 @@ export async function clientOf(v: DbView, kind: Kind): Promise<ClientFound> {
   if (v.env.kind !== "loading") v.clients.set(kind, found);
 
   return found;
+}
+
+/** Which mysql client is at `path` (one `--version`; its name when that says nothing). */
+async function flavorFound(path: string): Promise<MysqlFlavor> {
+  const r = await exec(path, ["--version"], { timeout: 5000 }).catch(() => null);
+
+  return flavorOf(`${r?.stdout ?? ""}${r?.stderr ?? ""}`, path);
 }
 
 /** Where a client came from, in words: "~/lanterns's environment (direnv)" or "the app's PATH". */
@@ -120,8 +131,8 @@ export async function runOn(v: DbView, c: Conn, statements: readonly ScriptState
     return { ...o, ms: Date.now() - at };
   }
 
-  const client = clientFor(c);
   const found = await clientOf(v, c.kind);
+  const client = clientFor(c, "flavor" in found ? found.flavor : undefined);
   const dir = v.dir;
 
   if (!client || "missing" in found || !dir) {
