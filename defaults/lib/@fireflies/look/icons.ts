@@ -26,6 +26,8 @@ export type PlainIcon =
 
 /** The svg to draw: `art` (a name in ART, no extension) in a dithered layout,
  *  `plain` in a plain one; null where this layout has none. */
+export function icon(art: string, plain: PlainIcon): string;
+export function icon(art: string, plain: PlainIcon | null): string | null;
 export function icon(art: string, plain: PlainIcon | null): string | null {
   if (dithered()) return `${ART}/${art}.svg`;
 

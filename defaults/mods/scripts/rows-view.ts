@@ -13,7 +13,7 @@ import { hint } from "./keyhelp.ts";
 import { short, SECTION, CHIP, CHIPS_W, ICON, OWN, ROW, aside } from "./state.ts";
 import type { Asked, Chip, Item, Top } from "./state.ts";
 import { toneColor } from "./paint.ts";
-import { boxed, dot, hairline, heading, icon, lit, radius } from "@fireflies/look";
+import { boxed, dot, hairline, heading, icon, lit, pick, radius } from "@fireflies/look";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
 import { rightPress } from "./run-menu.ts";
@@ -160,7 +160,7 @@ export function scriptRow(v: ScriptsDeck, t: Theme, row: Row, i: number, on: boo
 
 /** Runs as root (asks for a password first): a small pixel lock. */
 export function lock(t: Theme, on: boolean) {
-  return svg(icon("lock", "lock")).size(9).flex_none().text_color(on ? t.working : t.dim);
+  return svg(icon("lock", "lock")).size(pick(9, 12)).flex_none().text_color(on ? t.working : t.dim);
 }
 
 /** A bar entry: the key in the accent, what it does dimmed (keyhelp.ts, as every Nocturne bar). */

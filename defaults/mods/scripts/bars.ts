@@ -14,7 +14,7 @@ import { keysHint, keysView } from "./keyhelp.ts";
 import { CHORD, deckProps, SECTION, plain, FOOT, PROMPTS, HEAD, short, INPUT } from "./state.ts";
 import type { PasswordBar, Output, Item } from "./state.ts";
 import { toneColor } from "./paint.ts";
-import { boxed, button, glyph, hairline, icon, rule } from "@fireflies/look";
+import { boxed, button, dithered, glyph, hairline, icon, pick, rule, titleBar } from "@fireflies/look";
 import { asked } from "./actions.ts";
 import { actionChip, badge, keyHint } from "./rows-view.ts";
 import type { default as ScriptsDeck } from "./main.ts";
@@ -102,7 +102,7 @@ export function passwordBar(t: Theme, bar: PasswordBar) {
   };
 
   return h_flex().id("pw-bar").size_full().px(12).gap(8).items_center().text_size(12)
-    .child(svg(icon("lock", "lock")).size(9).flex_none().text_color(t.working))
+    .child(svg(icon("lock", "lock")).size(pick(9, 12)).flex_none().text_color(t.working))
     .child(div().min_w(0).truncate().text_color(t.foreground).child(name))
     .child(div().flex_none().text_color(t.dim).child("· password"))
     .child(hairline(t))
@@ -186,10 +186,15 @@ function moveChip(v: ScriptsDeck, t: Theme): Element {
 }
 
 export function deckHead(v: ScriptsDeck, t: Theme): Element {
+  const where = div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).flex().justify_end().child(short(v.folder) + (v.on ? ` on ${v.on}` : ""));
+
+  // A plain layout's window: the shared title bar (@fireflies/look, concept A).
+  if (!dithered()) return titleBar(t, { id: "scripts-head", art: "play", plain: "play", title: "Scripts" }, [where, moveChip(v, t)]);
+
   return h_flex().relative().h(HEAD).flex_none().px(12).gap(10).items_center()
         .child(svg(icon("play", "play")).size(9).flex_none().text_color(t.accent))
         .child(div().flex_none().text_size(12).text_color(t.foreground).child("Scripts"))
-        .child(div().flex_1().min_w(0).truncate().text_size(11).text_color(t.dim).flex().justify_end().child(short(v.folder) + (v.on ? ` on ${v.on}` : "")))
+        .child(where)
         .child(moveChip(v, t))
         .child(rule(t, "bottom"));
 }
