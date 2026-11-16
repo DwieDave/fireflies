@@ -1,4 +1,4 @@
-// The subscription usage limits of each coding agent's account, as its own
+// @fireflies/usage-limits: the subscription usage limits of each coding agent's account, as its own
 // usage view shows them: a short window (5 hours), the weekly one, and any
 // weekly limit scoped to one model. One provider is picked at a time (the
 // sidebar's usage section and the usage pane switch it together).
@@ -23,10 +23,9 @@
 // request leaves a scratch app, and a check that can't run counts as one
 // (nothing is asked). It also stays out of the machine's record below.
 //
-// Two mods show it (Nocturne's sidebar and the usage pane), and a
-// mod can't import another's files: this file is in both, byte for byte.
-// Edit one, copy it over the other (scripts/usage-limits.test.ts
-// checks they match).
+// Two mods show it (Nocturne's sidebar and the usage pane): a library
+// (docs/effect-mods.md) the app serves to both by name (`import {
+// refreshUsage } from "@fireflies/usage-limits"`).
 //
 // One reading per machine, not per copy, window or app: every copy draws the
 // shared() answer, and before asking reads a small file all apps on this
@@ -593,7 +592,7 @@ const READERS = {
  */
 export class UsageEndpoint extends Context.Service<UsageEndpoint, {
   readonly client: (p: ProviderId) => HttpClient.HttpClient;
-}>()("usage/UsageEndpoint") {
+}>()("@fireflies/usage-limits/UsageEndpoint") {
   /** curl through `Exec`, each request's Authorization read from the login inside the shell. */
   static readonly layer = Layer.effect(UsageEndpoint, Effect.gen(function* () {
     const exec = yield* Exec;

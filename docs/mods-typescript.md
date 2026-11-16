@@ -223,8 +223,9 @@ writeShared(setShared, PANE, { of, pane, park });     // checked against the key
 
 The key carries its type; a value written by another mod or an older
 version in another shape reads as the fallback. `readShared` takes `shared`
-as an argument (guard.ts imports nothing at run time), which is also how
-`limits.ts` reads through its test seam (`host.shared`).
+as an argument (guard.ts imports nothing at run time). On the Effect kit
+the same is `sharedKey(name, schema)` with the kit's `readShared` or the
+`Shared` service (docs/effect-mods.md).
 
 Two more shapes, both in guard.ts:
 
@@ -258,8 +259,9 @@ what the owner drops.
 - A nested view's props (the host passes them, `init`/`update` get
   `Props | undefined`): a guard over them, written to what the hosts pass
   (viewer.ts `isViewerProps`).
-- `exec`: `r.stdout` is a string; JSON in it goes through `parseJson`
-  (`limits.ts`: the usage endpoints' answers, the machine's record file).
+- `exec`: `r.stdout` is a string; JSON in it goes through `parseJson` (on
+  the kit: `execJson(schema)`, `decodeJson`; `@fireflies/usage-limits` reads
+  the usage endpoints' answers and the machine's record file so).
 - A program's answers read in many places (gh): each read names the guard
   its answer must pass, and an answer of another shape is an error, never a
   value of the wrong type. github's `gh.ts` is the pattern: `api(repo, path,
@@ -271,7 +273,7 @@ what the owner drops.
   the guard (`request<T>(method, guard, …)`), so no `unknown` local and no
   `unknown` return.
 - `terminals()` is herdr-core's listing, `readonly unknown[]`: a guard for the
-  fields you read (`limits.ts` `isTerminalStatus`). An entry's `pid` is
+  fields you read (`@fireflies/usage-limits` decodes them with a Schema). An entry's `pid` is
   `number | null` (herdr-core sends null).
 - A `then` field in outside data: `unicorn(no-thenable)` refuses it as a key
   of a guard object; read it with `Object.getOwnPropertyDescriptor(v,
@@ -369,6 +371,14 @@ build on (read the file's top and its `export type`s):
 | `@fireflies/tones` | nocturne and its mods | `themes.test.ts` | `edge(t)`, `tone(t, k)`, `over(c, under)` |
 | `@fireflies/layout-look` | nocturne and its mods (their dithers), keyhelp, toolground | `themes.test.ts` | `Look`, `LookRoot`, `lookOf`, `lookNow`, `flat`, `dithered`, `square`, `radius` |
 | `@fireflies/keyhelp` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
+| `@fireflies/form-keys` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
+| `@fireflies/menu-place` | databases, nocturne, procs, browser, github, scripts, file-tree, editor, git (and fireflies-k8s) | `databases-menu-place.test.ts`, `menu-place.test.ts` | `Pt`, `Rect`, `Box`, `Anchor`, `Opened`, `HungAt`, `placeMenu`, `overlayOf` |
+| `@fireflies/toolground` | nocturne, notifications | `nocturne-tab-seam.test.ts` | `ToolLook`, `toolGround`, `toolHover`, `mix`, its `dither` |
+| `@fireflies/dividers` | databases (and fireflies-k8s) | `databases-dividers.test.ts` | `Divider`, `Edge`, `Sizes` (`SizesSchema` decodes what an owner reads back), `Dividers`, `divider`, `tracking` |
+| `@fireflies/editor-route` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost`; each a Schema (`OpenRequestSchema`, …), the shared keys usable by the kit and by guard.ts |
+| `@fireflies/scratch` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry` (`IndexEntrySchema`), `ScratchIo`, `Autosave`, `AutosaveState`; `ownerOf`, `locateIn` on the kit's `Exec` and `Files` |
+| `@fireflies/envrc` | editor, databases | `editor-env.test.ts`, `databases-data.test.ts` | `Exec`, `EnvVars`, `Probe`, `ProjectEnv`, `EnvCache`, `KeptEnv`; `probeIn`, `projectEnvIn`, `lookupIn` on the kit's `Exec` |
+| `@fireflies/usage-limits` | nocturne, usage | `usage-limits.test.ts`, `usage-poll.test.ts` | the usage windows, `UsageEndpoint`, `refreshUsage` |
 
 Each library's test checks that no mod carries a copy of it again.
 
@@ -382,21 +392,13 @@ the contract the mods build on:
 | file | copies | test | what it types |
 |---|---|---|---|
 | `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
-| `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
-| `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
 | `viewer.ts` and its parts `viewer-*.ts` (state, load, text, table, native, pan, keys, bars, views), `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts` | preview, editor, file-tree (`kinds.ts` also nocturne, for file-icons.ts; `table.ts` also databases) | `preview-shared.test.ts` (nocturne's `kinds.ts`: `editor-tabs.test.ts`; databases' `table.ts`: `databases-data.test.ts`) | `ViewerProps` (viewer-state.ts); `Kind`, `LookKind`, `Route`, `Run`, `Span`; `Picture`, `Plan`, `View`, `Size`; `Table`, `Column`, `DbTable`; `Patch`, `PatchRow`, `PatchFile`; `ShownAs` |
-| `envrc.ts` | editor, databases (its `guards.ts` gives `isList`) | `databases-data.test.ts` | `Exec`, `EnvVars`, `Probe`, `ProjectEnv`, `EnvCache`, `KeptEnv` |
 | `file-icons.ts` (and `icons/*.svg`) | editor, file-tree, preview (viewer.ts imports it), nocturne (the jar shelf's tiles) | `editor-tabs.test.ts`, `preview-shared.test.ts` | `FileIcon`, `fileIcon(path)`, `iconSvg(icon, mod)`, `iconColor(icon, theme)`, `ICON_SIZE` |
 | `markdown.ts`, `markdown-parse.ts` (its blocks) | editor, github, markdown | `markdown.test.ts` | `Block` (a union on `kind`), `DocOptions`, `TaskItem`, `Footnote`, `CALLOUTS` (a Map) |
 | `paths.ts`, `follow.ts` | editor, markdown | `markdown.test.ts`, `editor-follow.test.ts` | `Link` (a union on `kind`); `FileChange`, `Followed` |
-| `scratch.ts` | nocturne, editor | `nocturne-scratchpad.test.ts` | `Owner`, `Note`, `IndexEntry`, `ScratchIo`, `Autosave`, `AutosaveState` |
-| `limits.ts` | nocturne, usage | `usage-limits.test.ts` | the usage windows |
-| `toolground.ts` | nocturne, notifications | `nocturne-tab-seam.test.ts` | `ToolLook`, `toolGround`, `toolHover`, `mix`, its `dither` |
 
 Not copies (same name, different file per mod): `kit.ts`, `logic.ts`,
-`tabs.ts`, `graph.ts`, git's `keys.ts` and `kinds.ts`. The toolbar's ground
-and hover, once held equal as text inside nocturne's and notifications'
-kits, is `toolground.ts` now, a copy; both kits import it and pass it on.
+`tabs.ts`, `graph.ts`, git's `keys.ts` and `kinds.ts`.
 
 To change a shared file, edit one, copy it over the others
 (`for m in ...; do cp ...; done`), run its test.

@@ -10,8 +10,8 @@ import { test, expect, setSystemTime, afterAll } from "bun:test";
 import { Effect, Layer } from "effect";
 import { execTest, httpTest, sharedTest, workspaceTest } from "@fireflies/kit/testing";
 import { HttpClient } from "effect/http";
-import { UsageEndpoint, backoff, BACKOFF, CAP, refreshUsage } from "../defaults/mods/nocturne/limits.ts";
-import type { UsageServices } from "../defaults/mods/nocturne/limits.ts";
+import { UsageEndpoint, backoff, BACKOFF, CAP, refreshUsage } from "@fireflies/usage-limits";
+import type { UsageServices } from "@fireflies/usage-limits";
 
 type Answer = { code: number; retry?: number };
 let files = new Map<string, string>();
