@@ -76,7 +76,7 @@ export function engineChip(view: Browser, t: Theme): Element {
   const ringed = view.control("engine", true, (cx) => view.command("other_engine", cx));
 
   return div().id("engine").relative().flex_none().mr(6).px(4).h(14).flex().items_center()
-    .border(1).border_color(ringed ? t.accent : t.ansi8).text_size(9).text_color(t.ansi6)
+    .border(1).border_color(ringed ? t.accent : t.muted).text_size(9).text_color(t.ansi6)
     .hover((s) => s.border_color(t.muted))
     .on_mouse_down("left", (e, cx) => view.stop(e, cx))
     .on_click((_e, cx) => {
