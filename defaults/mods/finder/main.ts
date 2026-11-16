@@ -38,6 +38,7 @@ import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, wr
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";
 import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote, isPreviewFile } from "./logic.ts";
 import { edge } from "./tones.ts";
+import { flat } from "./layout-look.ts";
 
 const ROW = 28;
 const LINE = 24;
@@ -122,6 +123,10 @@ const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").
 const zoom = (): number => settings().zoom || 1;
 
 function dither(color: Color, cell = 1): Element {
+  const plain = flat(color, cell);
+
+  if (plain) return plain;
+
   const dpr = appWindow().platform === "macos" ? 2 : 1;
 
   return window.paint_path(RECT(), Background.checkerboard(color, Math.max(1, Math.round(cell * zoom() * dpr)))).absolute().top(0).left(0).size_full();
