@@ -6,7 +6,7 @@ import type { ExecResult } from "herdr";
 import type { EnvNote, ServerCandidate, ServerCaps } from "./logic.ts";
 import type { EnvCache, EnvVars, KeptEnv, ProjectEnv } from "./envrc.ts";
 import type EditorPane from "./main.ts";
-import { editorPaths, filesOf } from "./editor-route.ts";
+import { editorPaths, filesOf } from "@fireflies/editor-route";
 import { cacheName, keptEnv, keptEnvText, lookup, projectEnv, wrap } from "./envrc.ts";
 import type { Guard } from "./guard.ts";
 import { isString, object, oneOf } from "./guard.ts";

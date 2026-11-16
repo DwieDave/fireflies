@@ -32,7 +32,7 @@ import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualLi
 import * as herdr from "herdr";
 import type { Theme } from "herdr";
 import { props, theme, settings, closeOverlay, shared, setShared, exec, run, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
-import { openInEditor } from "./editor-route.ts";
+import { openInEditor } from "@fireflies/editor-route";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";

@@ -19,8 +19,8 @@ import type { PaneInfo } from "herdr";
 import { panes, run, shared, setShared } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
-import type { EditorView } from "./editor-route.ts";
-import { EDITOR, editorProps, isScratchpad } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
+import { EDITOR, editorProps, isScratchpad } from "@fireflies/editor-route";
 import { keptFor } from "./tree.ts";
 import type { default as Files } from "./main.ts";
 

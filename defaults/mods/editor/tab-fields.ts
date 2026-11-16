@@ -2,7 +2,7 @@
 // tab's record (a Doc) and its fields as the pane's own, so `this.path` is
 // the shown tab's path, `this.editor` its editor, and so on (TAB_FIELDS).
 
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { LanguageOptions, ServerState } from "./logic.ts";
 import type { Problem, Work } from "./lsp-replies.ts";
 import type { MarkdownDoc } from "./markdown.ts";

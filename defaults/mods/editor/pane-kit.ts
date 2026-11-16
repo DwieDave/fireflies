@@ -2,7 +2,7 @@
 // record (Doc) and the pane's other records, sizes, and small helpers.
 
 import type { CardLink } from "./cardlinks.ts";
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, nullable, object, sharedMapKey } from "./guard.ts";
 import type { ColorRun, LanguageOptions, ServerNote, ServerState } from "./logic.ts";

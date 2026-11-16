@@ -131,7 +131,7 @@
 
 import { openTabs, runLoops, startFields, watchShared } from "./pane-start.ts";
 import { paneFrame } from "./pane-frame.ts";
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { Guard } from "./guard.ts";
 import type { Bound, ServerNote, SyntaxColors } from "./logic.ts";
 import type { Problem, ProgressParams } from "./lsp-replies.ts";
