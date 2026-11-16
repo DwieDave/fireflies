@@ -26,7 +26,7 @@
 // blue ring), ⋯ and close; it says where through shared(nav.ts CURSOR).
 
 import { div, svg } from "gpui-kit";
-import type { Context, Element, Size } from "gpui-kit";
+import type { Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
@@ -34,7 +34,7 @@ import type { PaneInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { NAME_PANE, openMenu } from "./menu.ts";
 import { statusMark } from "./winged.ts";
-import { ART, LOGO, dither, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
+import { ART, LOGO, dither, dropBelow, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
 import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
@@ -192,10 +192,13 @@ export function middleCloses(el: Element, pane: string | null, held: MiddleHeld)
     });
 }
 
-/** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard). */
-export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false): void {
+/** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard; `press`: a click
+ *  on the header's ⋯, which it hangs under). */
+export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false, press: MouseButtonEvent | null = null): void {
+  const at = press ? dropBelow(press, 260) : null;
+
   // 260: its rows' names beside the longest keys ("Move right" by cmd-alt-shift-]).
-  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered });
+  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered: centered && !at, at });
 }
 
 /** The header's naming ask (menu.ts NAME_PANE): which terminal, and when. */
@@ -212,7 +215,8 @@ export interface HeaderControl {
   readonly icon?: string;
   readonly text?: string;
   readonly tip?: string;
-  readonly go: () => void;
+  /** What a click (its press: where it hangs a menu from) or the strip's key does. */
+  readonly go: (press?: MouseButtonEvent | null) => void;
 }
 
 /** A command's arguments for a header control. */
@@ -248,7 +252,7 @@ export function headerControls(p: PaneInfo | null | undefined, all: readonly Pan
     ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
     ...(parkable(p, all) ? [c("park", CHROME("archive"), "pane.park", { pane }, `Park pane${park ? ` (${park})` : ""}`)] : []),
     c("zoom", p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }, p.zoomed ? "Unzoom" : "Zoom"),
-    { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: () => paneMenu(p, true) },
+    { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: (press) => paneMenu(p, true, press) },
     c("close", "close", "pane.close", { pane }, "Close"),
   ];
 }
@@ -270,6 +274,8 @@ export default class Header {
   /** A middle press on the bar, until it's let go (middleCloses). */
   held: MiddleHeld = { middle: false };
   width = 1000; // the header's, as last drawn
+  /** The press on a control, for its click (the ⋯ hangs its menu under it). */
+  press: MouseButtonEvent | null = null;
   git: GitState | null = null;
   naming = false;
   nameInput: InputState | null = null;
@@ -444,11 +450,15 @@ export default class Header {
     const el = div().id(`h-${c.id}-${p.pane ?? ""}`).relative().p(c.text ? 0 : 3).flex_none().text_color(on ? t.foreground : t.dim)
       .hover((s) => s.text_color(t.foreground))
       .when(Boolean(c.tip) && !c.text, (b) => b.tooltip(c.tip ?? ""))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_down("left", (e, cx) => {
+        cx.stop_propagation();
+        this.press = e;
+      })
       .map(keepMiddle)
       .on_click((_e, cx) => {
         cx.stop_propagation();
-        c.go();
+        c.go(this.press);
+        this.press = null;
       });
 
     const path = c.icon ? (c.icon.includes("/") ? c.icon : `mods/pane/${c.icon}.svg`) : "";

@@ -36,7 +36,7 @@ import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.ts";
-import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab } from "./kit.ts";
+import { ART, keyedSpec, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab } from "./kit.ts";
 import type { DropAt, PinTarget } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf, tabKey } from "./pins.ts";
@@ -316,14 +316,15 @@ export interface MenuOpening {
 }
 
 /** Opens a menu for these props (role "menu"). From the keyboard (`centered`)
- *  it opens in the middle as a dialog, since there's no pointer to hang it from;
- *  `at` places it (kit.ts dropBelow), else it opens at the pointer. */
+ *  it hangs from the cursor's thing while a sidebar or strip key runs (kit.ts
+ *  keyedSpec), else in the middle as a dialog; `at` places it (kit.ts
+ *  dropBelow), else it opens at the pointer (flipped near the window's edges). */
 export function openMenu(menu: MenuProps, { width = 220, centered = false, at = null }: MenuOpening = {}): string {
   const p = { role: "menu", ...menu };
   const kind = centered ? "dialog" : "popup";
   const height = menuHeight(p);
 
-  return openOverlay(at && !centered ? { mod: "nocturne", kind, frame: "none", width, height, at, props: p } : { mod: "nocturne", kind, frame: "none", width, height, props: p });
+  return openOverlay(keyedSpec(at && !centered ? { mod: "nocturne", kind, frame: "none", width, height, at, props: p } : { mod: "nocturne", kind, frame: "none", width, height, props: p }));
 }
 
 // The git mark's menu (its ▾, a right-click on it, the strip's keys): the open

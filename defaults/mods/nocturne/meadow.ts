@@ -10,7 +10,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { terminals, run, hc, settings } from "herdr";
 import type { AgentInfo, Theme } from "herdr";
 import { isTerminal } from "./guards.ts";
-import { ART, WORD, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
+import { ART, WORD, cursorMark, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { field } from "./inline.ts";
@@ -163,7 +163,7 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
   return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
     .transition("top", { duration: LAND, easing: "ease-in-out" })
     .when(a.focused || on, (el) => el.child(path))
-    .when(on, (el) => el.child(div().absolute().left(0).top(4).bottom(4).w(2).bg(t.accent)))
+    .when(on, (el) => el.child(div().absolute().left(0).top(4).bottom(4).w(2).bg(t.accent)).child(cursorMark(div().absolute().inset_0())))
     .child(inner);
 }
 

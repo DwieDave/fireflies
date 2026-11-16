@@ -19,7 +19,7 @@ import type { Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, parseJson, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { Terminal } from "./guards.ts";
-import { ART, dither, dropBelow } from "./kit.ts";
+import { ART, dither, dropBelow, keyedSpec } from "./kit.ts";
 import type { DropAt, ToolButton } from "./kit.ts";
 import { here } from "./panels.ts";
 
@@ -193,9 +193,9 @@ export function toggleDeck({ focus = "pick", centered = false, show = null, agai
 
   const kind = centered ? "dialog" : "popup";
 
-  const id = openOverlay(at && !centered
+  const id = openOverlay(keyedSpec(at && !centered
     ? { mod: "scripts", kind, frame: "none", width: DECK_W, height: DECK_H, at, props }
-    : { mod: "scripts", kind, frame: "none", width: DECK_W, height: DECK_H, props });
+    : { mod: "scripts", kind, frame: "none", width: DECK_W, height: DECK_H, props }));
 
   writeShared(setShared, DECK_KEY, { id, beat: Date.now() });
 }

@@ -10,7 +10,7 @@ import { shared, focused, panes } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { cursorMark, dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
 import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
 import { openMenu, tabTileMenu } from "./menu.ts";
 import { tabLead } from "./pins.ts";
@@ -243,7 +243,7 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
     .child(tileMark(t, it, glyph, bright))
     .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
-    .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+    .when(on, (el) => el.child(cursorMark(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent))));
 }
 
 /**
@@ -288,12 +288,16 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
       }
     })
     .on_mouse_down("left", stop)
+    .on_mouse_down("right", (_e, cx) => {
+      cx.stop_propagation();
+      dockMenu();
+    })
     .on_click(() => dockMenu())
     .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
     .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
     .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))
     .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none().text_color(hot || on ? t.foreground : t.dim))
-    .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+    .when(on, (el) => el.child(cursorMark(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent))));
 }
 
 /** The shelf at the jar's foot, `w` wide: a dithered board and the tiles in
