@@ -7,7 +7,7 @@ import type { LanguageOptions, ServerState } from "./logic.ts";
 import type { Problem, Work } from "./lsp-replies.ts";
 import type { MarkdownDoc } from "./markdown.ts";
 import type { Rendered } from "./rendered.ts";
-import type { Autosave, AutosaveState } from "./scratch.ts";
+import type { Autosave, AutosaveState } from "@fireflies/scratch";
 import type { TabKind } from "./tabs.ts";
 import type { EditorState as EditorStateT } from "gpui-base";
 import { View } from "gpui-kit";

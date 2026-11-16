@@ -8,7 +8,7 @@ import type { Sel } from "./md-text.ts";
 import { editBetween } from "./md-text.ts";
 import { active as mdActive, commandInfo, COMMANDS as MD_COMMANDS, LEVELS as MD_LEVELS, run as mdCommand, tickLine } from "./mdedit.ts";
 import type { RenderedHost } from "./rendered.ts";
-import { noteName } from "./scratch.ts";
+import { noteName } from "@fireflies/scratch";
 import { CARET } from "./vim.ts";
 import { h_flex, v_flex } from "gpui-base";
 import type { Context, Element, KeyEvent } from "gpui-kit";

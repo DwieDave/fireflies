@@ -9,7 +9,7 @@ import { readShared, writeShared, writeSharedMap } from "./guard.ts";
 import { basename, languageSettings, syntaxColors, uri } from "./logic.ts";
 import { MarkdownDoc } from "./markdown.ts";
 import { Rendered } from "./rendered.ts";
-import { Autosave, isNote } from "./scratch.ts";
+import { Autosave, isNote } from "@fireflies/scratch";
 import type { Handover } from "./tabs.ts";
 import { afterClose, drawnAfter, handover, HANDOVER_KEY, handoverFor, keptTabs, moved, placeTab, startsDrawn, stepTab, tabKind, unsavedNote } from "./tabs.ts";
 import { CARET } from "./vim.ts";
