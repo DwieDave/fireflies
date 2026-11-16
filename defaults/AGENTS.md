@@ -2851,6 +2851,12 @@ the source); a mod of yours may use it or not.
   open to your mods: `@fireflies/tones` (`edge`, `tone`, `over`),
   `@fireflies/layout-look` (`flat`, `dithered`, `square`, `radius`),
   `@fireflies/keyhelp` (the `?` overview and the bars' `? keys`).
+- A mod in a repository of its own: `herdr-app types <dir>` also writes the
+  `@fireflies/*` libraries into `<dir>/node_modules/@fireflies/` (types and
+  test code); install `effect` from npm at the version the kit's
+  package.json names as its peer. Keep the entry (`main.ts`) free of these
+  imports and bring the rest in with `import("./app.ts")` in `init`, so a
+  Fireflies too old to serve them shows your sentence instead of nothing.
 - Not in the engine: `Intl` (Effect's `DateTime` can't name the local zone:
   `localTime(ms)` from the kit), `AbortController` (don't take the `signal`
   argument of `Effect.tryPromise`).

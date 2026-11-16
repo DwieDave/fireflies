@@ -5,6 +5,8 @@
 /.env
 .direnv/
 /node_modules
+# bun links a library's peer (effect) beside it: not ours, never embedded (build.rs).
+/defaults/lib/**/node_modules
 # Written by the app (or `herdr-app types`) into a mod folder: generated, never shipped.
 /defaults/**/gpui-kit.d.ts
 # The mods' typings the repository keeps (`just types`; docs/mods-typescript.md).

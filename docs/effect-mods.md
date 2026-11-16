@@ -323,6 +323,67 @@ gate. For an installed mod (no node_modules), `herdr-app types` would have
 to write `effect`'s .d.ts and the kit beside gpui-kit.d.ts: mod-types' to
 settle with this contract.
 
+## Mods outside this repository
+
+An optional mod in a repository of its own (fireflies-k8s is the first)
+runs in the same engine: the app serves it `effect`, `effect/http` and the
+`@fireflies/*` libraries by name, as it serves the shipped mods. What the
+repository needs around that:
+
+- **Typings and test code for the libraries.** `herdr-app types <dir>` (what
+  such a repository already runs after each Fireflies update) also writes
+  every `@fireflies/*` library, as that build serves it, into
+  `<dir>/node_modules/@fireflies/<name>/` (sources, package.json, .d.ts; src/mods.rs
+  `write_library_types`). They are TypeScript, so the same files are the
+  types tsc and oxlint read and the code bun tests run. fireflies-k8s runs
+  `herdr-app types types`, so its tsconfig maps them:
+
+  ```jsonc
+  "paths": { "@fireflies/*": ["./types/node_modules/@fireflies/*"] },
+  "include": ["mod/**/*.ts", "types/gpui-kit.d.ts", "types/runtime.d.ts", "types/node_modules/@fireflies/kit/engine-globals.d.ts"]
+  ```
+
+  (bun reads the same `paths`; a mod whose `types` dir is its own folder
+  needs no mapping: node_modules beside it is found as it is.)
+- **Effect from npm**, the version the app serves: the kit's package.json
+  names it as its peer (`"peerDependencies": { "effect": "4.1.4" }`), and the
+  repository pins it exactly (`bun add -d --exact effect@4.1.4`). A Fireflies
+  update that moves Effect moves that peer; `just types` then shows the
+  mismatch, and the repository bumps its pin with it.
+- **The lint.** Its own copy of oxlint.effect.config.ts (this repository's,
+  with its `files` patterns: `mod/**`), `@effect/tsgo` and `oxlint-tsgolint`
+  at the versions here, anti-slop's `effect/` beside its vendored anti-slop,
+  and a second pass in its justfile: `effect-tsgo oxlint --type-aware
+  --deny-warnings -c oxlint.effect.config.ts mod` (the whole mod, once
+  converted). Its `deterministic-keys` may stay on (its files aren't copies
+  in other mods once the copies are libraries).
+- **An app older than the libraries.** An app without library modules
+  can't resolve `effect` and refuses the whole module graph at load, and the
+  person sees at best an error in `status`. So the mod's entry imports
+  nothing the app may lack, and brings its code in with `import()` in
+  `init`; a refusal becomes a sentence in the pane:
+
+  ```ts
+  // main.ts: gpui-kit only; the mod is app.ts, imported when the copy starts.
+  export default class K8s extends View {
+    app: Entity | null = null;
+    missing = "";
+    override init(props: Props | undefined, cx: AsyncContext) {
+      import("./app.ts").then((m: AppModule) => { this.app = cx.new(m.default, props); cx.notify(); }, (cause: unknown) => {
+        this.missing = `Kubernetes needs a newer Fireflies (one that serves effect and @fireflies/kit): ${causeLine(cause)}`;
+        cx.notify();
+      });
+    }
+    override render() { return this.app ?? div().p(16).child(this.missing); }
+  }
+  ```
+
+  Not a top-level `await import(…)`: `herdr-app check` hangs on one. Seen:
+  with this entry `herdr-app check` passes on an app from before the
+  libraries (integrate's build of 2026-11-16 18:15) and on this branch's;
+  the sentence itself wasn't seen in a window. The engine allows `import()`
+  on purpose (gpui-shell's sandbox, §18.2).
+
 ## The pilot: the usage mod
 
 `defaults/mods/usage` (the pane), `nocturne/usage.ts` (the sidebar's
@@ -468,7 +529,7 @@ wave touches another's file.
 
 | firefly | libraries (from → to) | importers | lines | findings |
 |---|---|---|---|---|
-| 0a | `keyhelp.ts` → `@fireflies/keyhelp`; `form-keys.ts` → `@fireflies/form-keys`; `menu-place.ts` → `@fireflies/menu-place`; `tones.ts` → `@fireflies/tones`; `toolground.ts` → `@fireflies/toolground`; `editor-route.ts` → `@fireflies/editor-route`; `scratch.ts` → `@fireflies/scratch`; `envrc.ts` → `@fireflies/envrc`; `limits.ts` → `@fireflies/usage-limits`; `layout-look.ts` → `@fireflies/layout-look` (merged after this plan was written) | keyhelp: 15 mods; form-keys: 7 mods and frame/settings, frame/feedback; menu-place: 9 mods; tones: 18 mods; toolground: nocturne, notifications; editor-route: editor, file-tree, finder, markdown; scratch: nocturne, editor; envrc: editor, databases; limits: usage, nocturne; layout-look: nocturne and 17 mods, keyhelp, toolground | 2.4k | 232 |
+| 0a | `keyhelp.ts` → `@fireflies/keyhelp`; `form-keys.ts` → `@fireflies/form-keys`; `menu-place.ts` → `@fireflies/menu-place`; `tones.ts` → `@fireflies/tones`; `toolground.ts` → `@fireflies/toolground`; `editor-route.ts` → `@fireflies/editor-route`; `scratch.ts` → `@fireflies/scratch`; `envrc.ts` → `@fireflies/envrc`; `limits.ts` → `@fireflies/usage-limits`; `dividers.ts` (databases', which fireflies-k8s copies) → `@fireflies/dividers`; `layout-look.ts` → `@fireflies/layout-look` (merged after this plan was written) | keyhelp: 15 mods; form-keys: 7 mods and frame/settings, frame/feedback; menu-place: 9 mods; tones: 18 mods; toolground: nocturne, notifications; editor-route: editor, file-tree, finder, markdown; scratch: nocturne, editor; envrc: editor, databases; limits: usage, nocturne; dividers: databases (and fireflies-k8s); layout-look: nocturne and 17 mods, keyhelp, toolground | 2.7k | 241 |
 | 0b | `viewer.ts` and `viewer-*.ts`, `kinds.ts`, `image.ts`, `table.ts`, `diff.ts`, `keys.ts`, `file-icons.ts` → `@fireflies/viewer`; `markdown.ts`, `markdown-parse.ts`, `paths.ts`, `follow.ts` → `@fireflies/markdown` | viewer: preview, editor, file-tree (`kinds.ts` and `file-icons.ts` also nocturne, `table.ts` also databases); markdown: editor, github, markdown | 5.6k | 1,009 |
 
 How, for each library:
@@ -527,6 +588,41 @@ the last one. Both must merge before wave 1 starts.
 (preview is almost all shared code, wave 0b's: 108 lines of its own.
 browser waits for chrome-panes; until then the panes firefly does the
 other four.)
+
+**fireflies-k8s (its own firefly, wave 2 timing: after wave 0's libraries
+exist, in its own repository).** Developer: "k8s too!". 33.9k lines in 79
+files under mod/; the Effect pass over it today: 2,049 findings
+(strict-boolean-expressions 1,337, prefer-effect-array 432,
+prefer-effect-string 186, async-function 28, prefer-effect-record 23,
+global-date 19, prefer-effect-match 12, global-json 9, node-builtin-import 2,
+global-random 1), 79 of them in its copies.
+
+| what | where | to fix in the conversion |
+|---|---|---|
+| runs | `kubectl` (kubectl.ts: every call with `--context`, `-n`; `Exec` its seam, 15 s reads), `argocd` (`app diff`, 60 s), `sh` (finding database clients, `command -v argocd`), `hc` (port-forwards as terminals in panes) | `Exec` from the kit replaces its own seam one for one; a kubectl failure is a tagged error with kubectl's last stderr line |
+| decodes | kubectl JSON lists and objects (objects.ts `isKList`, guards.ts), the secrets template's tab lines and one secret's base64 values (secrets.ts, its own base64: the engine had no atob then), Argo's Application objects (argo.ts), metrics-server answers, its settings (settings-keep.ts), kept state and handovers in `shared()` (host.ts), edits being tracked (edit.ts) | 143 guard calls become Schemas; base64 through `Buffer` or Effect's `Encoding`; the edits and handovers as `sharedKey`s |
+| timers and watches | `cx.timer.every` 500 ms (feeds' tick), 4 s (window beat), 2 s (edited files); feed.ts's own back-off (doubling to 30 s, a slow read waits twice its time) | one `fx.run` per loop with `Schedule.spaced`; feed.ts's back-off as a `Schedule` (`exponential` capped, `modifyDelay` for the slow read); `fx.close()` ends them with the window |
+| HTTP | none (kubectl and argocd speak to the clusters) | |
+| swallowed | 7 `catch(() => null)` (readTextFile of its settings and of the databases mod, `hc` starting a forward, the clients script, `argocd app diff`): a forward that didn't start, or a settings file it couldn't read, says nothing | each a tagged error shown on its row or the window's note |
+| finds other mods | reads `<app home>/mods/databases/…` to know whether Databases is installed | by its command (`commands()` lists `databases.connect`), as docs on optional mods ask, not by a file |
+
+Its copies of shared files, and what replaces each (all from wave 0):
+
+| its copy | state | replaced by |
+|---|---|---|
+| `guard.ts` | same as Fireflies' | Schema (gone) |
+| `form-keys.ts` | same as Fireflies' | `@fireflies/form-keys` |
+| `keyhelp.ts` | older (before themes: `t.ansi0` where Fireflies' has `edge(t)`) | `@fireflies/keyhelp` |
+| `menu-place.ts` | older (before the menus firefly's `overlayOf`) | `@fireflies/menu-place` |
+| `dividers.ts` | older copy of databases' (before themes) | `@fireflies/dividers`: wave 0a moves databases' `dividers.ts` too, since k8s carries it |
+| `tones.ts` | none yet (it predates themes) | `@fireflies/tones` |
+
+The copies have already drifted across the two repositories (three of
+five): libraries end that, the mod gets what the app serves.
+
+The firefly, in fireflies-k8s: set the repository up as "Mods outside this
+repository" says, entry by `import()` as there, then convert as any mod,
+done meaning the same (its whole `mod/` in its Effect pass, green).
 
 **Wave 2 (one firefly, as soon as one of wave 1 reports).**
 

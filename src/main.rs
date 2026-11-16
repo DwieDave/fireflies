@@ -95,6 +95,13 @@ fn main() {
     }
     // `herdr-app check <mod>` / `herdr-app types <mod>`: gpui-shell's own checker, with Fireflies' module installed.
     if matches!(args.get(1).map(String::as_str), Some("check" | "types")) {
+        // HERDR: beside the typings, the mods' libraries (@fireflies/*) as this build serves them.
+        if args.get(1).map(String::as_str) == Some("types")
+            && let Some(dir) = args.iter().skip(2).rfind(|a| !a.starts_with('-'))
+            && let Err(e) = mods::write_library_types(std::path::Path::new(dir))
+        {
+            eprintln!("herdr-app types: the mods' libraries were not written: {e}");
+        }
         mods::install_check_policy();
         gpui_shell::host::main_with_components(gpui_shell::FrozenComponentRegistry::default());
         return;
