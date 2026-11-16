@@ -18,15 +18,17 @@ import type { Risk, Verdict } from "./safety.ts";
 import type { HistoryEntry } from "./store.ts";
 import type { SaveStatement } from "./save-sql.ts";
 import type { ColumnLayout, LocalSort } from "./columns.ts";
+import type { MysqlFlavor } from "./clients.ts";
 
 export const MOD = "databases";
 
 /** What another mod sends to open a connection here (databases.connect, nocturne.databases:{…}):
  *  never a secret; `from` says who sent it; `secret` where a cluster keeps the password, `forward`
- *  the port-forward it came from (kube.ts). */
+ *  the port-forward it came from (kube.ts); `sslmode` how it asks for TLS (kinds.ts SSL_MODES:
+ *  any text here, so receive() refuses an unknown one in words). */
 export const isConnectArgs = object({ kind: isKind }, {
   name: isString, host: isString, port: isNumber, database: isString, user: isString, path: isString, url: isString, readonly: isBoolean, from: isString,
-  secret: isKubeSource, forward: isKubeForward,
+  secret: isKubeSource, forward: isKubeForward, sslmode: isString,
 });
 
 export type ConnectArgs = Guarded<typeof isConnectArgs>;
@@ -271,7 +273,7 @@ export interface Struct {
 /** A client found for a kind: its path, or why there is none. */
 /** A kind's client: where it was found (the folder's direnv environment or the app's PATH), or
  *  what to install. */
-export type ClientFound = { readonly path: string; readonly from: "folder" | "app" } | { readonly missing: string };
+export type ClientFound = { readonly path: string; readonly from: "folder" | "app"; readonly flavor?: MysqlFlavor } | { readonly missing: string };
 
 /** The window's note that it's open (nocturne's toggle reads it). */
 export const WINDOW_KEY = sharedKey("databases.window", nullable(object({ id: isString }, { beat: isNumber })));

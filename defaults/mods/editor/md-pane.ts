@@ -280,6 +280,7 @@ export function renderedView(ed: EditorPane, t: Theme): Element {
     maxWidth: 760,
     unzoom: (v) => v / zoom(),
     onTask: (line, cx) => tickRendered(ed, line, cx),
+    kindInBar: d.scratch,
   });
 }
 
@@ -310,7 +311,7 @@ export function mdMenuView(ed: EditorPane, t: Theme): Element {
         .px(12)
         .gap(10)
         .items_center()
-        .child(div().text_color(t.accent).child(ed.vimOn() ? "space .  markdown" : "cmd-.  markdown"))
+        .child(div().text_color(t.accent).child(`${ed.vimOn() ? "space ." : "cmd-."}  ${ed.scratch ? "format" : "markdown"}`))
         .child(div().relative().flex_1().min_w(40).h(1).opacity(0.6).child(dither(t.ansi8, 1)))
         .child(div().text_color(t.dim).child("esc")),
     )

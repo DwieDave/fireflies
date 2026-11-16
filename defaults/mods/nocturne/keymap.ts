@@ -139,6 +139,7 @@ const WORDS: ReadonlyMap<string, Words> = new Map<string, Words>([
   ["nocturne.grep", "Search in the files"],
   ["nocturne.scratchpad", "Scratchpad: this repository's note, kept out of it"],
   ["nocturne.scratchpad-tab", "Scratchpad in a new tab"],
+  ["nocturne.scratchpad-copy-path", "Scratchpad: copy its path (to hand the note to an agent)"],
   ["nocturne.gridify", "Arrange the tab's panes in an even grid"],
   ["nocturne.pin", "Pin the focused pane (an agent, a web page, an editor...) to the top, or unpin it"],
   ["nocturne.pin-up", "Move the pinned agent up in the jar, a pinned pane left on its shelf"],

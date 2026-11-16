@@ -7338,7 +7338,7 @@ mod tests {
         // A 220 x 72 menu: from a press (the pointer), or from a row (a key opened it).
         struct Popup {
             hang: super::Hang,
-            at: Point<Pixels>,
+            at: gpui::Point<gpui::Pixels>,
         }
         impl Render for Popup {
             fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
@@ -7353,7 +7353,7 @@ mod tests {
         let (view, cx) = cx.add_window_view(|_, _| Popup { hang: super::Hang::Press, at: point(px(100.0), px(120.0)) });
         let vp = cx.update(|window, _| window.viewport_size());
         let (gap, menu) = (px(super::PRESS_GAP), size(px(220.0), px(72.0)));
-        let mut shown = |hang: super::Hang, at: Point<Pixels>| {
+        let mut shown = |hang: super::Hang, at: gpui::Point<gpui::Pixels>| {
             view.update(cx, |v, cx| {
                 v.hang = hang;
                 v.at = at;
@@ -7363,7 +7363,7 @@ mod tests {
             cx.debug_bounds("popup").unwrap()
         };
         // In the open: just right of and below the press.
-        assert_eq!(shown(super::Hang::Press, point(px(100.0), px(120.0))), Bounds::new(point(px(100.0) + gap, px(120.0) + gap), menu));
+        assert_eq!(shown(super::Hang::Press, point(px(100.0), px(120.0))), gpui::Bounds::new(point(px(100.0) + gap, px(120.0) + gap), menu));
         // Near the bottom right corner: flipped left and up, ending at the press (not slid over it).
         let corner = point(vp.width - px(30.0), vp.height - px(20.0));
         let b = shown(super::Hang::Press, corner);
@@ -7381,17 +7381,17 @@ mod tests {
 
     #[test]
     fn a_rectangle_over_a_pane_is_measured_from_where_the_pane_is_drawn_at_the_zoom() {
-        let pane = Bounds::new(point(px(173.0), px(40.0)), size(px(600.0), px(400.0)));
+        let pane = gpui::Bounds::new(point(px(173.0), px(40.0)), size(px(600.0), px(400.0)));
         let at = super::under_rect(Some(Some(pane)), [10.0, 20.0, 100.0, 24.0], 0.9).unwrap();
-        assert_eq!(at, Bounds::new(point(px(173.0 + 9.0), px(40.0 + 18.0)), size(px(90.0), px(24.0 * 0.9))));
+        assert_eq!(at, gpui::Bounds::new(point(px(173.0 + 9.0), px(40.0 + 18.0)), size(px(90.0), px(24.0 * 0.9))));
         // Not drawn (another tab): nothing to hang from.
         assert_eq!(super::under_rect(Some(None), [10.0, 20.0, 100.0, 24.0], 0.9), None);
         // No pane: window px as given.
         assert_eq!(super::under_rect(None, [10.0, 20.0, 100.0, 24.0], 0.9).unwrap().origin, point(px(10.0), px(20.0)));
         // The spec: {x, y} is a corner, {x, y, w, h} a rectangle (over a pane or not), anything else the press.
-        assert_eq!(super::Hang::of(Some(&json!({ "x": 1, "y": 2 }))), super::Hang::Corner);
-        assert_eq!(super::Hang::of(Some(&json!({ "over": "side", "x": 1, "y": 2, "w": 3, "h": 4 }))), super::Hang::Under { over: Some("side".into()), rect: [1.0, 2.0, 3.0, 4.0] });
-        assert_eq!(super::Hang::of(Some(&json!("pointer"))), super::Hang::Press);
+        assert_eq!(super::Hang::of(Some(&serde_json::json!({ "x": 1, "y": 2 }))), super::Hang::Corner);
+        assert_eq!(super::Hang::of(Some(&serde_json::json!({ "over": "side", "x": 1, "y": 2, "w": 3, "h": 4 }))), super::Hang::Under { over: Some("side".into()), rect: [1.0, 2.0, 3.0, 4.0] });
+        assert_eq!(super::Hang::of(Some(&serde_json::json!("pointer"))), super::Hang::Press);
         assert_eq!(super::Hang::of(None), super::Hang::Press);
     }
 

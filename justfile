@@ -149,11 +149,13 @@ test:
     bun test scripts/editor-rendered.test.ts
     # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
+    # The scratchpad edited as one document, by keys on a note like Developer's: the caret across blocks (wrapped rows, marks), enter in a list and a task list, enter at a block's start, backspace / delete joins, an untouched new block leaves no blank lines, a long paragraph's box, untouched bytes; its quiet bar (format, more and its menu); the keyboard kept from copies out of sight and stale editor.open records.
+    bun test scripts/editor-scratchpad-edit.test.ts
     # Pictures in Markdown: image blocks drawn (broken and web ones too), a pasted screenshot or copied image file saved beside the file once and put in as a block, vim's p, undo, round trip (fake clipboard, a real PNG).
     bun test scripts/editor-images.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
     bun test scripts/nocturne-scratchpad.test.ts
-    # Opening the scratchpad from the palette, the + new menu's tile and its command: only the sidebar's copy awaits git; failures toast.
+    # Opening the scratchpad from the palette, the + new menu's tile and its command: only the sidebar's copy awaits git; failures toast; copying its path.
     bun test scripts/nocturne-scratchpad-open.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
     bun test scripts/nocturne-pane-pins.test.ts
@@ -235,6 +237,8 @@ test:
     bun test scripts/databases-pin.test.ts
     # Where a Databases connection is and whether it's connected: the server's default database said, the server's databases listed and picked (-d, kept in a pin), an empty database's words, the state mark and the three places that draw it, a dead server turning it, the focus check; FF_TEST_PG_BIN runs it on a throwaway PostgreSQL too.
     bun test scripts/databases-where.test.ts
+    # A connection's sslmode: kept in connections.json, a picked database and a pin; psql's -d conninfo, MySQL's --ssl-mode and MariaDB's --skip-ssl / --ssl-verify-server-cert (its --version tells them apart); the form's ssl toggle by key (a pasted require kept, shown beside it); a pasted URL, a found DATABASE_URL and PGSSLMODE; databases.connect carrying it, refusing an unknown one.
+    bun test scripts/databases-ssl.test.ts
     cargo test --locked
     # The native views' own tests (not a workspace member): picture in picture's live resize among them.
     cargo test --locked -p fireflies-native-view

@@ -36,7 +36,7 @@ import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.ts";
-import { ART, keyedSpec, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab } from "./kit.ts";
+import { ART, keyedSpec, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab, shownWebTab, webTabPinnedNow, pinWebTab } from "./kit.ts";
 import type { DropAt, PinTarget } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf, tabKey } from "./pins.ts";
@@ -224,6 +224,20 @@ export function pinItems(t: Theme, p: PinTarget): PopupItem[] {
     ...(i > 0 ? [{ id: "pin-up", mark: glyph(shelf ? "chevron-left" : "chevron-up"), name: shelf ? "Move left" : "Move up in the jar", hint: layoutKey("nocturne.pin-up"), go: () => movePin(key, -1) }] : []),
     ...(i >= 0 && i < group.length - 1 ? [{ id: "pin-down", mark: glyph(shelf ? "chevron-right" : "chevron-down"), name: shelf ? "Move right" : "Move down in the jar", hint: layoutKey("nocturne.pin-down"), go: () => movePin(key, 1) }] : []),
   ];
+}
+
+/** For a web pane: "Pin this web tab to the shelf" / "Unpin this web tab", the
+ *  tab it shows (kit.ts shownWebTab; one tab or many) as a tile of its own, as
+ *  the tab's own menu in the pane pins it. None while the browser doesn't say. */
+function webTabPinItems(t: Theme, p: PaneInfo | undefined): PopupItem[] {
+  const tab = p?.mod === "browser" ? shownWebTab(p) : null;
+
+  if (!p || !tab) return [];
+
+  const on = webTabPinnedNow(p, tab);
+  const hint = keys().find((b) => b.action === "browser.pin_tab")?.keys ?? "";
+
+  return [{ id: "pin-web-tab", mark: icon(t, on ? "pin-off" : "pin"), name: on ? "Unpin this web tab" : "Pin this web tab to the shelf", hint, go: () => pinWebTab(p, tab, !on) }];
 }
 
 /** Moving a jar item (its key) left or right among the shelf's tiles, while
@@ -518,6 +532,8 @@ function paneItems(t: Theme, tg: Guarded<typeof isMenuTarget>): PopupItem[] {
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => writeShared(setShared, NAME_PANE_KEY, { terminal: term.address, at: Date.now() }) }] : []),
     // Any pane can be pinned to the top of the sky: an agent's, a shell's, a web page, an editor.
     ...pinItems(t, { pane, terminal: term ? term.address : null }),
+    // A web pane's shown tab, on its own (its other tabs: their menu in the pane's strip).
+    ...webTabPinItems(t, mine),
     // Or kept in the dock (dock.ts: the space tied to no folder), pinned to the shelf.
     ...(dockable(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane }),

@@ -242,7 +242,7 @@ test("script runner: ? lists every key; every bar ends with the keys entry, cmd-
   const run = { kind: "run", r: { live: true, name: "x", word: "running", runner: "just" } };
   const row = { kind: "script", row: { s: { admin: false } } };
   const make = (state: Record<string, any>) => () => {
-    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], items: [run, row], ...state });
+    const d = surface(deck.default, ["onKey"], { help: false, output: null, typing: false, query: "", cursor: 0, page: 5, groups: () => [0, 1], items: [run, row], runsScroll: { offset: () => ({ x: 0, y: 0 }) }, ...state });
     return (e: any, cx: any) => d.onKey(e, cx, [run, row]);
   };
   // ctrl-x is cmd-x off macOS (the list names the platform's own).

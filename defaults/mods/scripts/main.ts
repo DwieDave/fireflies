@@ -61,6 +61,7 @@ export const deckKeys = (cmd: string): KeyRow[] => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
   ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
   ["w", "watch the run · an ended one's output"], [`x ${cmd}⌫`, "remove an ended run · stop a running one (twice)"], [`R ${cmd}R`, "run it again (a running one: twice)"],
+  ["m", "a run's menu (a right-click too)"],
   ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
   ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close (in a pane: q)"], ["ctrl-t", "into a pane · out over the tab"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
 ];

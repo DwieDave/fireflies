@@ -595,15 +595,16 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
 
 // ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands); H / L
 
-test("a scratchpad (one tab) has no strip either: the bar says scratchpad, no unsaved mark (it saves itself)", async () => {
+test("a scratchpad (one tab) has no strip either: its bar has no name (the header has it) and no unsaved mark (it saves itself)", async () => {
   const note = "/tmp/app/scratchpad/repo-0123abcd.md";
   disk[note] = "# note\n";
   const p = await pane(note);
   const view = p.render(cx());
   const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
   expect(ids(view)).not.toContain("editor-tabs");
-  expect(texts(byId(view, "bar-name"))).toEqual(["scratchpad"]);
+  expect(byId(view, "bar-name")).toBeUndefined();
   expect(byId(view, "bar-mark")).toBeUndefined();
+  expect(texts(byId(view, "bar-autosave"))).toEqual(["saved"]);
 });
 
 test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
