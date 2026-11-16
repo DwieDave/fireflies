@@ -31,6 +31,7 @@ import type { Color, Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
+import { edge } from "./tones.ts";
 
 /** One row: the key, what it does, and (git's runnable rows) what a press runs.
  *  git's rows also carry the key a press of the row's own letter runs (`key`)
@@ -126,7 +127,7 @@ export function keysHint(t: Theme, id: string, on: boolean, toggle: (cx: Context
  *  (`options.keys`: { on, toggle }; without it, no ? entry). `options.foot` false: the rule under it. */
 export function hintBar(t: Theme, id: string, list: readonly KeyRow[], options: HintBarOptions = {}): Element {
   const { right = null, keys = null, foot = true, px = 12 } = options;
-  const rule = div().absolute().left(0).right(0).h(2).child(dither(t.ansi0, 1));
+  const rule = div().absolute().left(0).right(0).h(2).child(dither(edge(t), 1));
 
   const bar = h_flex().id(id).relative().h(22).flex_none().px(px).gap(12).items_center().text_size(11).overflow_hidden()
     .child(foot ? rule.top(0) : rule.bottom(0))
@@ -224,7 +225,7 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
       })
       : base;
 
-    const marked = on ? clickable.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : clickable;
+    const marked = on ? clickable.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : clickable;
 
     return marked
       .child(div().relative().w(keyW).flex_none().pt(1).text_color(t.accent).child(k))
@@ -235,7 +236,7 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
     const keyW = keyWidth(s.keys);
     const base = v_flex().id(`${id}-s${si}`).gap(2).min_w(0);
     const sized = narrow ? base.w_full() : base.flex_basis(SECTION).flex_grow(1).max_w(SECTION + 120);
-    const titled = s.title ? sized.child(div().pb(4).text_size(10).text_color(t.ansi8).child(s.title.toUpperCase())) : sized;
+    const titled = s.title ? sized.child(div().pb(4).text_size(10).text_color(t.muted).child(s.title.toUpperCase())) : sized;
 
     return titled.children(s.keys.map((r) => row(r, keyW)));
   };
@@ -243,7 +244,7 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
   const closer = h_flex().id(`${id}-close`).flex_none().gap(4).cursor_pointer();
 
   const head = h_flex().id(`${id}-head`).relative().h(26).flex_none().px(12).gap(8).items_center()
-    .child(div().flex_none().text_size(10).text_color(t.ansi8).child("KEYS"));
+    .child(div().flex_none().text_size(10).text_color(t.muted).child("KEYS"));
 
   return v_flex().id(id).absolute().top(0).left(0).size_full().bg(t.background).text_size(11)
     .on_mouse_down("left", stop)
@@ -257,7 +258,7 @@ export function keysView(t: Theme, options: KeysViewOptions = {}): Element {
         })
         : closer)
         .child(div().text_color(t.accent).child("? esc")).child(div().text_color(t.dim).child("close")))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1))))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1))))
     .child(div().id(`${id}-body`).flex_1().min_h(0).overflow_y_scroll()
       .child(h_flex().flex_wrap().items_start().px(12).pt(10).pb(12).gap_x(28).gap_y(14)
         .children(sectionsOf(list).map(section))));
