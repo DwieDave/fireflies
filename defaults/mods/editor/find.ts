@@ -2,8 +2,8 @@
 // (main.ts), and the find line drawn.
 
 import type EditorPane from "./main.ts";
-import type { Stop } from "./form-keys.ts";
-import { formKey, tabActions } from "./form-keys.ts";
+import type { Stop } from "@fireflies/form-keys";
+import { formKey, tabActions } from "@fireflies/form-keys";
 import { nextProblem, parseGoto } from "./lsp-replies.ts";
 import { h_flex, Input, v_flex } from "gpui-base";
 import type { Context, Element, KeyEvent } from "gpui-kit";

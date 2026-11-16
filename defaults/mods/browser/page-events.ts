@@ -2,6 +2,7 @@
 // (parseEvent), what a failed load says (loadFailure), and what each event
 // does to its tab (onEvent).
 
+import { isMediaData, mediaUnsupported } from "./media.ts";
 import type { Context } from "gpui-kit";
 import { shared, setShared, panes, openOverlay } from "herdr";
 import type { Guarded } from "./guard.ts";
@@ -66,6 +67,7 @@ export const isWebEvent = oneOf(
   object({ event: literal("load.error"), data: isLoadError }, FROM),
   object({ event: literal("web.video") }, { ...FROM, data: object({}, { present: isBoolean }) }),
   object({ event: literal("web.icon") }, { ...FROM, data: object({}, { href: nullable(isString) }) }),
+  object({ event: literal("web.mediaUnsupported"), data: isMediaData }, FROM),
   object({ event: literal("pip.start") }, { ...FROM, data: object({}, { result: isString, error: isString }) }),
   object({ event: literal("pip.snapped"), data: object({ on: isBoolean }) }, FROM),
   object({ event: literal("view.click", "view.escapeKey", "web.inspectKey", "web.reloadKey", "web.backButton", "web.forwardButton", "pip.leave", "pip.moved") }, { ...FROM, data: isNoData }),
@@ -170,6 +172,11 @@ export function onEvent(view: Browser, e: WebEvent, cx: Context) {
   if (!tab) return;
 
   switch (e.event) {
+    // A Chromium page wants media Chromium can't play here (media.ts).
+    case "web.mediaUnsupported":
+      mediaUnsupported(view, tab, e.data, cx);
+
+      return;
     // A new window, a middle or Cmd click, the link menu (native view `tabs: true`).
     case "web.newTab":
       if (!e.data.url) return;

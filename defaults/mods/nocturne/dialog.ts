@@ -25,8 +25,8 @@ import type { Guarded } from "./guard.ts";
 import { argsOf, commandOf, isStoredCommand } from "./guards.ts";
 import type { Command } from "./guards.ts";
 import { dither, tracked } from "./kit.ts";
-import { formKey, formHints, bindTab, tabActions } from "./form-keys.ts";
-import type { FormHint, Stop } from "./form-keys.ts";
+import { formKey, formHints, bindTab, tabActions } from "@fireflies/form-keys";
+import type { FormHint, Stop } from "@fireflies/form-keys";
 import { edge } from "@fireflies/tones";
 
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();

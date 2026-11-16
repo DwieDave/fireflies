@@ -6,7 +6,7 @@ import { div, svg } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import type { Theme } from "herdr";
-import { placeMenu } from "./menu-place.ts";
+import { placeMenu } from "@fireflies/menu-place";
 import type { Guarded } from "./guard.ts";
 import { literal } from "./guard.ts";
 import type { Hint } from "./kit.ts";

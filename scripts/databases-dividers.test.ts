@@ -1,4 +1,4 @@
-// The dividers between panels (defaults/mods/databases/dividers.ts, the pattern
+// The dividers between panels (@fireflies/dividers, the pattern
 // the Kubernetes mod copies): a drag by calling the handlers (the grab's press,
 // the root's moves and release), the clamp so no panel vanishes, the keyboard
 // steps (+ grows the focused panel at each edge, - shrinks it), the double
@@ -22,7 +22,7 @@ function element(calls: Call[]): any {
 let calls: Call[] = [];
 mock.module("gpui-kit", () => ({ div: () => element(calls) }));
 
-const { Dividers, clampSize, divider, tracking, STEP } = await import("../defaults/mods/databases/dividers.ts");
+const { Dividers, clampSize, divider, tracking, STEP } = await import("@fireflies/dividers");
 
 const theme: any = { accent: "#ff0000", muted: "#808080" };
 const cx: any = { stop_propagation() {}, notify() {} };

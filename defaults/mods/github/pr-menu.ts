@@ -3,7 +3,7 @@
 // (menu-place.ts, the window's picker), in the middle when a key asked.
 
 import type { Context } from "gpui-kit";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import type { PickRow } from "./host.ts";
 import type { default as Prs } from "./prs.ts";
 

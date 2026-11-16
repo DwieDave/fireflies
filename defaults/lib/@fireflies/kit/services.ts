@@ -8,7 +8,7 @@
 // This file imports `herdr` for types only: it loads in any test.
 
 import { Context, Effect, Option } from "effect";
-import type { Settings, panes, spaces, terminals, window as appWindow, ExecResult } from "herdr";
+import type { Settings, panes, spaces, terminals, window as appWindow, ExecResult, exec as herdrExec, readTextFile as herdrRead, writeTextFile as herdrWrite } from "herdr";
 import { ExecError, ExitError, FileError, StaleFile, causeMessage, lastLine } from "./errors.ts";
 import type { DecodeError } from "./errors.ts";
 import { decodeJson } from "./schema.ts";
@@ -116,6 +116,21 @@ export class Notify extends Context.Service<Notify, {
 export const execError = (command: string) => (cause: unknown) => ExecError.make({ command, message: causeMessage(cause) });
 
 export const fileError = (path: string) => (cause: unknown) => FileError.make({ path, message: causeMessage(cause) });
+
+/**
+ * `Exec` over a function shaped like herdr's `exec` (herdr's own: live.ts; a
+ * caller's or a test's): a rejection is an `ExecError`. For a library whose
+ * callers hand it `exec` (`Effect.provideService(effect, Exec, execService(exec))`).
+ */
+export const execService = (run: typeof herdrExec): Exec["Service"] => Exec.of({
+  run: (command, args, options) => Effect.tryPromise({ try: () => run(command, [...args], options), catch: execError(command) }),
+});
+
+/** `Files` over functions shaped like herdr's `readTextFile` and `writeTextFile` (see execService). */
+export const filesService = (read: typeof herdrRead, write: typeof herdrWrite): Files["Service"] => Files.of({
+  read: (path) => Effect.map(Effect.tryPromise({ try: () => read(path), catch: fileError(path) }), Option.fromNullOr),
+  write: (path, text, expected) => Effect.asVoid(Effect.tryPromise({ try: () => write(path, text, expected), catch: writeError(path) })),
+});
 
 /** A write's rejection: the app refuses a stale snapshot with a message that says so. */
 export const writeError = (path: string) => (cause: unknown) => {

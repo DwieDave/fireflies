@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/form-keys",
+  "private": true,
+  "type": "module",
+  "description": "Keyboard-first forms: what a key does to a form (formKey, formHints, tabActions, ring). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

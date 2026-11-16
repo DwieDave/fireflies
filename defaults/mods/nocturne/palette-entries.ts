@@ -7,7 +7,7 @@ import { commands, layouts, run, window as win, panes, terminals, updates } from
 import type { PaneInfo } from "herdr";
 import { isString, object } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
-import { here } from "./panels.ts";
+import { here, chromiumReady } from "./panels.ts";
 import { gitOpen } from "./git.ts";
 import { githubOpen } from "./github.ts";
 import { togglePicker } from "./picker.ts";
@@ -83,6 +83,7 @@ const PANE: ReadonlyMap<string, readonly [string, readonly PaneCommand[]]> = new
     ["back", "Back", "history previous page"],
     ["forward", "Forward", "history next page"],
     ["inspect", "Inspect the page", "web inspector devtools developer console"],
+    ["other_engine", "Reopen the page in the other engine", "chromium chrome webkit safari engine switch", () => chromiumReady()],
     ["pip", "Picture in picture", "pip video float player"],
     ["zoom_in", "Page zoom in", "bigger larger text"],
     ["zoom_out", "Page zoom out", "smaller text"],

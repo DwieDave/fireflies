@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/usage-limits",
+  "private": true,
+  "type": "module",
+  "description": "The Claude and Codex usage windows, read once per machine and shared (refreshUsage, the readings). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

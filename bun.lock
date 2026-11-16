@@ -6,11 +6,19 @@
       "name": "fireflies-tools",
       "devDependencies": {
         "@effect/tsgo": "0.69.0",
+        "@fireflies/dividers": "workspace:*",
+        "@fireflies/editor-route": "workspace:*",
+        "@fireflies/envrc": "workspace:*",
+        "@fireflies/form-keys": "workspace:*",
         "@fireflies/keyhelp": "workspace:*",
         "@fireflies/kit": "workspace:*",
         "@fireflies/layout-look": "workspace:*",
         "@fireflies/look": "workspace:*",
+        "@fireflies/menu-place": "workspace:*",
+        "@fireflies/scratch": "workspace:*",
         "@fireflies/tones": "workspace:*",
+        "@fireflies/toolground": "workspace:*",
+        "@fireflies/usage-limits": "workspace:*",
         "@oxlint/plugins": "1.93.0",
         "@types/bun": "1.4.4",
         "effect": "4.1.4",
@@ -18,6 +26,18 @@
         "oxlint-tsgolint": "7.0.2007",
         "typescript": "7.0.2",
       },
+    },
+    "defaults/lib/@fireflies/dividers": {
+      "name": "@fireflies/dividers",
+    },
+    "defaults/lib/@fireflies/editor-route": {
+      "name": "@fireflies/editor-route",
+    },
+    "defaults/lib/@fireflies/envrc": {
+      "name": "@fireflies/envrc",
+    },
+    "defaults/lib/@fireflies/form-keys": {
+      "name": "@fireflies/form-keys",
     },
     "defaults/lib/@fireflies/keyhelp": {
       "name": "@fireflies/keyhelp",
@@ -37,8 +57,20 @@
         "effect": "4.1.4",
       },
     },
+    "defaults/lib/@fireflies/menu-place": {
+      "name": "@fireflies/menu-place",
+    },
+    "defaults/lib/@fireflies/scratch": {
+      "name": "@fireflies/scratch",
+    },
     "defaults/lib/@fireflies/tones": {
       "name": "@fireflies/tones",
+    },
+    "defaults/lib/@fireflies/toolground": {
+      "name": "@fireflies/toolground",
+    },
+    "defaults/lib/@fireflies/usage-limits": {
+      "name": "@fireflies/usage-limits",
     },
   },
   "packages": {
@@ -58,6 +90,14 @@
 
     "@effect/tsgo-win32-x64": ["@effect/tsgo-win32-x64@0.69.0", "", { "os": "win32", "cpu": "x64" }, "sha512-EIxwudo6cSjandzmfputEmpTfdlAfTd2sWQ29vWh3F3qFb6MC9JDCAYHXQFWSGOPNhMBK6NXd/8humPW/WkpGA=="],
 
+    "@fireflies/dividers": ["@fireflies/dividers@workspace:defaults/lib/@fireflies/dividers"],
+
+    "@fireflies/editor-route": ["@fireflies/editor-route@workspace:defaults/lib/@fireflies/editor-route"],
+
+    "@fireflies/envrc": ["@fireflies/envrc@workspace:defaults/lib/@fireflies/envrc"],
+
+    "@fireflies/form-keys": ["@fireflies/form-keys@workspace:defaults/lib/@fireflies/form-keys"],
+
     "@fireflies/keyhelp": ["@fireflies/keyhelp@workspace:defaults/lib/@fireflies/keyhelp"],
 
     "@fireflies/kit": ["@fireflies/kit@workspace:defaults/lib/@fireflies/kit"],
@@ -66,7 +106,15 @@
 
     "@fireflies/look": ["@fireflies/look@workspace:defaults/lib/@fireflies/look"],
 
+    "@fireflies/menu-place": ["@fireflies/menu-place@workspace:defaults/lib/@fireflies/menu-place"],
+
+    "@fireflies/scratch": ["@fireflies/scratch@workspace:defaults/lib/@fireflies/scratch"],
+
     "@fireflies/tones": ["@fireflies/tones@workspace:defaults/lib/@fireflies/tones"],
+
+    "@fireflies/toolground": ["@fireflies/toolground@workspace:defaults/lib/@fireflies/toolground"],
+
+    "@fireflies/usage-limits": ["@fireflies/usage-limits@workspace:defaults/lib/@fireflies/usage-limits"],
 
     "@oxlint-tsgolint/darwin-arm64": ["@oxlint-tsgolint/darwin-arm64@7.0.2007", "", { "os": "darwin", "cpu": "arm64" }, "sha512-bjNxPFyu1wNK74epHzXrtVLrj7oEuB8jQvJZDSia2d5EZ/0YgnyhI37E9U530IUZlNCqlTWjko1iT3CKAYF9+A=="],
 

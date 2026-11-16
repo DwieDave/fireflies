@@ -198,3 +198,16 @@ export async function keyhelpWith(scope: Record<string, any>): Promise<Record<st
     "@fireflies/layout-look": nocturneLook,
   });
 }
+
+/** The mods and frame mods (`mods/<name>`, `frame/<name>`) that carry a file
+ *  named `file`: a shared copy once, a library now, so none should. */
+export function copiesOf(file: string): string[] {
+  const root = new URL("../defaults/", import.meta.url).pathname;
+  return ["mods", "frame"].flatMap((kind) => readdirSync(join(root, kind)).filter((m) => {
+    try {
+      return statSync(join(root, kind, m, file)).isFile();
+    } catch {
+      return false;
+    }
+  }).map((m) => `${kind}/${m}`));
+}

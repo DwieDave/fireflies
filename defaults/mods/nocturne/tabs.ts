@@ -42,7 +42,7 @@ import { isBoolean, readShared, writeShared } from "./guard.ts";
 import { statusMark } from "./winged.ts";
 import { byKey, dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
-import type { ToolLook } from "./toolground.ts";
+import type { ToolLook } from "@fireflies/toolground";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
 import { newButtonNode } from "./newbutton.ts";
 import { openMenu, openKeys, toggleGitMenu, gitMenuOpen, openToSpace } from "./menu.ts";

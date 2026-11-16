@@ -9,8 +9,8 @@
 
 import type { Context } from "gpui-kit";
 import { exec, home } from "herdr";
-import { projectEnv } from "./envrc.ts";
-import type { EnvVars } from "./envrc.ts";
+import { projectEnv } from "@fireflies/envrc";
+import type { EnvVars } from "@fireflies/envrc";
 import { reading } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
 

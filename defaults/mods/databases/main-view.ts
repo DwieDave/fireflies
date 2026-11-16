@@ -13,7 +13,7 @@ import type { QueryTab } from "./state.ts";
 import { PANEL_KEY } from "./state.ts";
 import type { TabMore } from "./kit.ts";
 import { chip, dither, empty, panel, pip, titleTabs, unzoom, unzoomSize } from "./kit.ts";
-import { divider } from "./dividers.ts";
+import { divider } from "@fireflies/dividers";
 import { editorDivider } from "./layout.ts";
 import { colWidth, grid } from "./grid.ts";
 import type { GridHandlers, GridOverlay } from "./grid.ts";

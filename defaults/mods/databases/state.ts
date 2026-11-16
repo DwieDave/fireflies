@@ -4,7 +4,7 @@
 // nocturne's toggle, the one-shot handover when it moves between a window and
 // a pane), and the things a panel holds (a query tab, a page of rows, an ask).
 
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import type { Place } from "./keys.ts";
 import type { EditorState, InputState } from "gpui-base";
 import type { Guarded } from "./guard.ts";

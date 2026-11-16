@@ -7,8 +7,8 @@
 // menu teaches the keys and can't drift from them or from `?`.
 
 import type { Context } from "gpui-kit";
-import type { Pt } from "./menu-place.ts";
-import { inView } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
+import { inView } from "@fireflies/menu-place";
 import { zoom } from "./kit.ts";
 import { InputState } from "gpui-base";
 import type { Conn } from "./kinds.ts";

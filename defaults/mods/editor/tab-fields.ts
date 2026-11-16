@@ -2,12 +2,12 @@
 // tab's record (a Doc) and its fields as the pane's own, so `this.path` is
 // the shown tab's path, `this.editor` its editor, and so on (TAB_FIELDS).
 
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { LanguageOptions, ServerState } from "./logic.ts";
 import type { Problem, Work } from "./lsp-replies.ts";
 import type { MarkdownDoc } from "./markdown.ts";
 import type { Rendered } from "./rendered.ts";
-import type { Autosave, AutosaveState } from "./scratch.ts";
+import type { Autosave, AutosaveState } from "@fireflies/scratch";
 import type { TabKind } from "./tabs.ts";
 import type { EditorState as EditorStateT } from "gpui-base";
 import { View } from "gpui-kit";

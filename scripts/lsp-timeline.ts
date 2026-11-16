@@ -9,7 +9,7 @@
 //
 // line and col are one-based (as the bar shows them). Prints a timeline and,
 // last, one JSON line with the phases' times (ms from the start).
-import { projectEnv, lookup, wrap, forgetEnvs } from "../defaults/mods/editor/envrc.ts";
+import { projectEnv, lookup, wrap, forgetEnvs } from "@fireflies/envrc";
 import { serverCandidates, languageSettings, ROOTS, rootScript, pickRoot, uri, languageId } from "../defaults/mods/editor/logic.ts";
 
 const [file, lineArg, colArg, ...rest] = process.argv.slice(2);

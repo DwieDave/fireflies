@@ -12,9 +12,11 @@ import type Browser from "./main.ts";
 
 /** A new tab on `url` (null: blank, its address open). In front unless
  *  `background`; `opener`: the tab whose link opened it. */
-export function openTab(view: Browser, url: string | null, { background = false, opener = null }: Tabs.OpenOptions, cx?: Context): Tab {
+export function openTab(view: Browser, url: string | null, { background = false, opener = null, engine }: Tabs.OpenOptions, cx?: Context): Tab {
   const before = view.tabs.active;
-  const [next, tab] = Tabs.open(view.tabs, url, { background, opener });
+  // A page's tab takes its opener's engine (Tabs.open); any other, the pane's.
+  const chosen = engine ?? (opener ? null : view.engine);
+  const [next, tab] = Tabs.open(view.tabs, url, chosen ? { background, opener, engine: chosen } : { background, opener });
 
   view.tabs = next;
 

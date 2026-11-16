@@ -6,7 +6,7 @@ import type EditorPane from "./main.ts";
 import { fileChanges, follow as followFiles } from "./follow.ts";
 import { readSharedMap, writeSharedMap } from "./guard.ts";
 import { basename, dirname, languageId, languageSettings, tilde, uri } from "./logic.ts";
-import { noteName } from "./scratch.ts";
+import { noteName } from "@fireflies/scratch";
 import { tabKind } from "./tabs.ts";
 import type { Context } from "gpui-kit";
 import { appHome, exec, home, languageOf, lspNotify, lspRelease, props, readTextFile, setShared, settings, shared, watchFolder, writeTextFile } from "herdr";

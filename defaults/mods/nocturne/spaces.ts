@@ -39,8 +39,8 @@ import { dither, pip, eyebrow, spaceFolder, navRow, navRing, cornerTicks, dropBe
 import type { DropAt } from "./kit.ts";
 import { chip, field, confirm } from "./inline.ts";
 import type { Action } from "./inline.ts";
-import { formKey } from "./form-keys.ts";
-import type { Stop } from "./form-keys.ts";
+import { formKey } from "@fireflies/form-keys";
+import type { Stop } from "@fireflies/form-keys";
 import { openSpacePicker, pickerOpen, WIDTH as PICKER_WIDTH } from "./newspace.ts";
 import { EDIT_SPACE_KEY, openMenu, newWorktree } from "./menu.ts";
 import { isDock } from "./dock.ts";

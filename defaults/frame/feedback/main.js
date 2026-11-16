@@ -1,7 +1,7 @@
 import { View, div } from "gpui-kit";
 import { v_flex, h_flex, InputState, Input, TextareaState, Textarea } from "gpui-base";
 import { theme, props, closeOverlay, feedbackIssue, run, window as appWindow } from "herdr";
-import { formKey, formHints, submitKey, ring, bindTab, tabActions } from "./form-keys.ts";
+import { formKey, formHints, submitKey, ring, bindTab, tabActions } from "@fireflies/form-keys";
 
 // Feedback is a GitHub issue: this drafts it, GitHub's page (opened like any
 // link) is where the person adds screenshots and submits. Nothing is sent from here.

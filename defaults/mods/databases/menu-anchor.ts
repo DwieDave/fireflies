@@ -20,11 +20,11 @@
 // first one shown, its columns from the first one shown).
 
 import type { default as DbView } from "./main.ts";
-import type { Rect } from "./menu-place.ts";
+import type { Rect } from "@fireflies/menu-place";
 import { shownGrid } from "./act-grid.ts";
 import { HEAD, ROW, colWidth, gutterWidth } from "./grid.ts";
 import { GAP_X, GAP_Y, NARROW, RESULT_HEAD, editorDivider, wideDividers } from "./layout.ts";
-import { GRAB } from "./dividers.ts";
+import { GRAB } from "@fireflies/dividers";
 import type { Place } from "./keys.ts";
 import { connList } from "./conns.ts";
 import { rowsBefore } from "./panels.ts";

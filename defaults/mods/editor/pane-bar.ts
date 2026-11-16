@@ -5,7 +5,7 @@ import type EditorPane from "./main.ts";
 import { fileIcon, ICON_SIZE, iconColor, iconSvg } from "./file-icons.ts";
 import { basename, dirname, serverNote, tilde } from "./logic.ts";
 import { busy, counts, progressWord } from "./lsp-replies.ts";
-import { noteName } from "./scratch.ts";
+import { noteName } from "@fireflies/scratch";
 import { dropIndex, gapAt, MORE, showStrip, stakeAt, tabLabels, tabWidth, visibleTabs } from "./tabs.ts";
 import type { TabLabel } from "./tabs.ts";
 import type { Mode } from "./vim.ts";

@@ -104,6 +104,10 @@ pub const COMMANDS: &[Command] = &[
     // Native content views (native-view/0).
     cmd("native.debug", &[], "Every native view: frame, visibility, focus, content state and recent events."),
     cmd("native.call", &[req("key"), req("action"), opt("args")], "Run one whitelisted action on a native view (key: <copy>:<id>)."),
+    // Chromium for web panes: downloaded only when the person enables it (Settings → Web).
+    cmd("chromium.install", &[], "Download and unpack the pinned Chromium (CEF) build into the app's data folder, checked against its pinned hash; resumes a cut download. Progress: nativeViewCapabilities().chromium."),
+    cmd("chromium.cancel", &[], "Stop a running Chromium download (what came so far is kept for the next chromium.install)."),
+    cmd("chromium.remove", &[opt("data")], "Delete the downloaded Chromium; data: true also deletes its logins and cache (its profile)."),
     cmd("app.help", &[], "Toggle the keys dialog."),
     cmd("app.welcome", &[], "Show the welcome again."),
     cmd("app.open_url", &[req("url"), opt("in")], "Open a web page (http or https) in a web pane beside the focused pane (in \"app\") or the system's browser (in \"system\"); default: settings.json links."),

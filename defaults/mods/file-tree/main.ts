@@ -133,7 +133,7 @@ import { mountLook, scrollLookBy, toggleLook, placeLook } from "./look.ts";
 import { enterRow, reveal, runSearch } from "./search.ts";
 import { editPath, openFileAt, ownPane, publish } from "./opening.ts";
 import { menuBox, menuKey, openMenu, runAct } from "./menu.ts";
-import type { Anchor } from "./menu-place.ts";
+import type { Anchor } from "@fireflies/menu-place";
 import { commitDraft, endDraft, selectStem, withDraft } from "./file-ops.ts";
 import { ghost, hitAt, markToggle, moveSet, unmark, withPointer } from "./drag.ts";
 import { drawKeysStrip, drawLens, drawToolbar, footer } from "./toolbar.ts";

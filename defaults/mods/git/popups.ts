@@ -17,11 +17,11 @@ import { window as appWindow } from "herdr";
 import type { Ink } from "./draw.ts";
 import { dither, ink, stop, edgeRow, popupScrim } from "./draw.ts";
 import { keyLabel } from "./keys.ts";
-import type { FormModifiers, Stop } from "./form-keys.ts";
-import { formKey, formHints, ring } from "./form-keys.ts";
+import type { FormModifiers, Stop } from "@fireflies/form-keys";
+import { formKey, formHints, ring } from "@fireflies/form-keys";
 import type { KeyRow, KeySection } from "@fireflies/keyhelp";
 import { keysView, keysKey } from "@fireflies/keyhelp";
-import { type Anchor, placeMenu } from "./menu-place.ts";
+import { type Anchor, placeMenu } from "@fireflies/menu-place";
 import { edge as edgeTone } from "@fireflies/tones";
 
 const mac = () => appWindow().platform === "macos";

@@ -131,7 +131,7 @@
 
 import { openTabs, runLoops, startFields, watchShared } from "./pane-start.ts";
 import { paneFrame } from "./pane-frame.ts";
-import type { EditorView } from "./editor-route.ts";
+import type { EditorView } from "@fireflies/editor-route";
 import type { Guard } from "./guard.ts";
 import type { Bound, ServerNote, SyntaxColors } from "./logic.ts";
 import type { Problem, ProgressParams } from "./lsp-replies.ts";
@@ -160,7 +160,7 @@ import { closeTab, leave, openFile, ownPane, popIn, popOut, select, stepMove, st
 import { setWrap, vimCommand, vimDoc, vimKey, vimOn, vimSettled } from "./pane-vim.ts";
 import { closePane, imageOf, previewLink, setView, tick } from "./preview-pane.ts";
 import { closeTabMenu, openTabMenu, tabMenuKeyDown, tabMenuView } from "./tab-menu.ts";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import { TabFields } from "./tab-fields.ts";
 
 

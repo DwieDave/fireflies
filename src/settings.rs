@@ -438,6 +438,13 @@ pub struct Person {
     /// Where web links open: a web pane in the app, or the system's browser.
     #[serde(skip_serializing_if = "Links::is_app")]
     pub links: Links,
+    /// The engine new web panes open in (cmd-click, "+ new" > Web): WebKit,
+    /// or Chromium once it is enabled (Settings → Web).
+    #[serde(skip_serializing_if = "WebEngine::is_webkit")]
+    pub web_engine: WebEngine,
+    /// What a Chromium tab does with a video it can't play (H.264, AAC, DRM).
+    #[serde(skip_serializing_if = "ChromiumVideo::is_fallback")]
+    pub chromium_video: ChromiumVideo,
     /// macOS Option sends Alt shortcuts, or follows the keyboard layout.
     #[serde(skip_serializing_if = "OptionAsAlt::is_auto")]
     pub option_as_alt: OptionAsAlt,
@@ -585,6 +592,42 @@ impl Links {
     }
 }
 
+/// The engine new web panes open in.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WebEngine {
+    /// The system's WebKit (Safari's engine).
+    #[default]
+    Webkit,
+    /// Chromium (CEF), when it is enabled; else WebKit.
+    Chromium,
+}
+
+impl WebEngine {
+    fn is_webkit(&self) -> bool {
+        *self == WebEngine::Webkit
+    }
+}
+
+/// A Chromium tab whose page asks for a video Chromium can't play.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ChromiumVideo {
+    /// The page reopens in WebKit at the same address (a toast says so).
+    #[default]
+    Fallback,
+    /// A toast asks: reopen in WebKit, or stay.
+    Ask,
+    /// Nothing: the page shows its own error.
+    Error,
+}
+
+impl ChromiumVideo {
+    fn is_fallback(&self) -> bool {
+        *self == ChromiumVideo::Fallback
+    }
+}
+
 fn is_true(b: &bool) -> bool {
     *b
 }
@@ -604,6 +647,8 @@ impl Default for Person {
             system_notifications: true,
             minimum_contrast: 1.0,
             links: Links::App,
+            web_engine: WebEngine::Webkit,
+            chromium_video: ChromiumVideo::Fallback,
             option_as_alt: OptionAsAlt::Auto,
             appearance: Appearance::System,
             theme: None,
@@ -644,6 +689,8 @@ pub struct Settings {
     pub clipboard_write: bool,
     pub minimum_contrast: f32,
     pub links: Links,
+    pub web_engine: WebEngine,
+    pub chromium_video: ChromiumVideo,
     pub option_as_alt: OptionAsAlt,
     pub sounds: Sounds,
     /// settings.json `editor`, as written.
@@ -691,6 +738,8 @@ impl Default for Settings {
             clipboard_write: true,
             minimum_contrast: 1.0,
             links: Links::App,
+            web_engine: WebEngine::Webkit,
+            chromium_video: ChromiumVideo::Fallback,
             option_as_alt: OptionAsAlt::Auto,
             sounds: Sounds::default(),
             editor: EditorSettings::default(),
@@ -733,6 +782,8 @@ impl Settings {
             clipboard_write: person.clipboard_write,
             minimum_contrast: person.minimum_contrast,
             links: person.links,
+            web_engine: person.web_engine,
+            chromium_video: person.chromium_video,
             option_as_alt: person.option_as_alt,
             editor: person.editor.clone(),
             files: person.files.clone(),

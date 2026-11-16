@@ -5,21 +5,16 @@
 // called: a test that stands in for `herdr` with only the functions it needs
 // (most of the bun tests) still loads a mod built on this file.
 
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer } from "effect";
 import { HttpClient } from "effect/http";
 import * as herdr from "herdr";
 import { fetchClient } from "./http.ts";
 import { readSharedOption, writeShared } from "./schema.ts";
-import { Commands, Exec, Files, Notify, Shared, Workspace, execError, fileError, writeError } from "./services.ts";
+import { Commands, Exec, Files, Notify, Shared, Workspace, execService, filesService } from "./services.ts";
 
-export const ExecLive = Layer.succeed(Exec, Exec.of({
-  run: (command, args, options) => Effect.tryPromise({ try: () => herdr.exec(command, [...args], options), catch: execError(command) }),
-}));
+export const ExecLive = Layer.succeed(Exec, execService((command, args, options) => herdr.exec(command, args, options)));
 
-export const FilesLive = Layer.succeed(Files, Files.of({
-  read: (path) => Effect.map(Effect.tryPromise({ try: () => herdr.readTextFile(path), catch: fileError(path) }), Option.fromNullOr),
-  write: (path, text, expected) => Effect.asVoid(Effect.tryPromise({ try: () => herdr.writeTextFile(path, text, expected), catch: writeError(path) })),
-}));
+export const FilesLive = Layer.succeed(Files, filesService((path) => herdr.readTextFile(path), (path, text, expected) => herdr.writeTextFile(path, text, expected)));
 
 export const SharedLive = Layer.succeed(Shared, Shared.of({
   get: (key) => Effect.sync(() => readSharedOption(herdr.shared, key)),

@@ -12,6 +12,7 @@
 //           live    its view exists: a restored tab gets one when first shown
 //           opener  the tab whose link opened it (it goes after its siblings)
 
+import type { Engine } from "./engine.ts";
 import type { PaneInfo } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isBoolean, isNull, isNumber, isString, nullable, object, oneOf, parseJson, sharedKey, sharedListKey } from "./guard.ts";
@@ -61,6 +62,8 @@ export interface Tab {
   live: boolean;
   opener: string | null;
   of: string | null;
+  /** The engine its page runs on (engine.ts): kept across restarts. */
+  engine: Engine;
 }
 
 /** A pane's tabs: the list in strip order, the shown one, the next tab's number. */
@@ -78,17 +81,18 @@ export interface TabOptions {
   readonly title?: string | null;
   readonly live?: boolean;
   readonly opener?: string | null;
+  readonly engine?: Engine;
 }
 
 /** A tab on `url` (null: blank). */
-export function makeTab(id: string, url: string | null | undefined, zoom: number, { title = null, live = true, opener = null }: TabOptions = {}): Tab {
+export function makeTab(id: string, url: string | null | undefined, zoom: number, { title = null, live = true, opener = null, engine = "webkit" }: TabOptions = {}): Tab {
   return { id, start: url ?? null, page: { href: url ?? null, title, loading: false, progress: 0, canGoBack: false, canGoForward: false },
-    error: null, failed: null, video: false, zoom, live, opener, of: null };
+    error: null, failed: null, video: false, zoom, live, opener, of: null, engine };
 }
 
-/** One tab on `url`. */
-export function single(url: string | null | undefined, zoom: number): Tabs {
-  return { list: [makeTab(tabId(1), url, zoom)], active: tabId(1), next: 2 };
+/** One tab on `url`, in `engine`. */
+export function single(url: string | null | undefined, zoom: number, engine: Engine = "webkit"): Tabs {
+  return { list: [makeTab(tabId(1), url, zoom, { engine })], active: tabId(1), next: 2 };
 }
 
 /** The shown tab (else the first; undefined only for an empty list, which close() never leaves). */
@@ -101,14 +105,17 @@ export interface OpenOptions {
   readonly background?: boolean;
   readonly opener?: string | null;
   readonly zoom?: number;
+  /** Default: the opener's engine, else WebKit. */
+  readonly engine?: Engine;
 }
 
 /** A new tab on `url` (null: blank). From a link (`opener`): after the shown
  *  tab and the tabs it opened already, as a browser does; else at the end.
  *  `background`: the shown tab stays. Returns `[tabs, tab]`. */
-export function open(m: Tabs, url: string | null, { background = false, opener = null, zoom }: OpenOptions = {}): [Tabs, Tab] {
+export function open(m: Tabs, url: string | null, { background = false, opener = null, zoom, engine }: OpenOptions = {}): [Tabs, Tab] {
   const from = activeTab(m);
-  const tab = makeTab(tabId(m.next), url, zoom ?? from?.zoom ?? 0.9, { opener });
+  const by = opener ? m.list.find((t) => t.id === opener) : undefined;
+  const tab = makeTab(tabId(m.next), url, zoom ?? from?.zoom ?? 0.9, { opener, engine: engine ?? by?.engine ?? "webkit" });
   let at = m.list.length;
 
   if (opener) {
@@ -138,7 +145,7 @@ export function close(m: Tabs, id: string): [Tabs, Tab | null] {
   const after = list[i] ?? list[i - 1];
 
   if (!after) {
-    const fresh = makeTab(tabId(m.next), null, closed.zoom);
+    const fresh = makeTab(tabId(m.next), null, closed.zoom, { engine: closed.engine });
 
     return [{ list: [fresh], active: fresh.id, next: m.next + 1 }, closed];
   }
@@ -241,13 +248,29 @@ export function stakeBefore(m: Tabs, dragged: string, index: number | null): str
 /** What survives a restart: each tab's address, title and zoom. */
 export function save(m: Tabs): string {
   return JSON.stringify({ active: m.active, next: m.next,
-    tabs: m.list.map((t) => ({ id: t.id, href: t.page.href ?? t.start ?? null, title: t.page.title ?? null, zoom: t.zoom })) });
+    tabs: m.list.map(savedTab) });
+}
+
+/** One tab in the saved "tabs" (localStorage). */
+interface SavedTab {
+  readonly id: string;
+  readonly href: string | null;
+  readonly title: string | null;
+  readonly zoom: number;
+  /** Only a Chromium tab says so (WebKit's is the default). */
+  readonly engine?: Engine;
+}
+
+function savedTab(t: Tab): SavedTab {
+  const base = { id: t.id, href: t.page.href ?? t.start ?? null, title: t.page.title ?? null, zoom: t.zoom };
+
+  return t.engine === "chromium" ? { ...base, engine: t.engine } : base;
 }
 
 /** The saved tabs as save() wrote them (a tab in another shape is left out). */
 const isSaved = object({}, { active: isString, next: isNumber, tabs: isList });
 
-const isSavedTab = object({ id: isString }, { href: nullable(isString), title: nullable(isString), zoom: nullable(isNumber) });
+const isSavedTab = object({ id: isString }, { href: nullable(isString), title: nullable(isString), zoom: nullable(isNumber), engine: nullable(isString) });
 
 /** The saved tabs, or null. Only the shown tab gets its view at once; the
  *  others load when first shown. */
@@ -259,7 +282,7 @@ export function restore(text: string, zoom: number): Tabs | null {
   if (!s || !first) return null;
 
   const active = saved.some((t) => t.id === s.active) ? s.active ?? first.id : first.id;
-  const list = saved.map((t) => makeTab(t.id, t.href ?? null, t.zoom || zoom, { title: t.title ?? null, live: t.id === active }));
+  const list = saved.map((t) => makeTab(t.id, t.href ?? null, t.zoom || zoom, { title: t.title ?? null, live: t.id === active, engine: t.engine === "chromium" ? "chromium" : "webkit" }));
   const top = Math.max(1, ...saved.map((t) => Number(/^web-(\d+)$/.exec(t.id)?.[1] ?? 1)));
 
   return { list, active, next: Math.max(s.next || 0, top + 1) };
@@ -317,11 +340,13 @@ const slotText = (slot: string | number | null | undefined): string | null => (s
 export interface OpenArgs {
   readonly url: string;
   readonly slot: string | null;
+  /** The engine the page opens in (default: the pane's). */
+  readonly engine?: Engine;
 }
 
-const isOpenValue = object({ url: isString }, { slot: isSlotValue });
+const isOpenValue = object({ url: isString }, { slot: isSlotValue, engine: isString });
 
-/** A `browser.open:<value>` value: JSON `{ url, slot? }`, or a bare URL. */
+/** A `browser.open:<value>` value: JSON `{ url, slot?, engine? }`, or a bare URL. */
 export function openArgs(value: string): OpenArgs | null {
   const v = value.trim();
 
@@ -330,7 +355,11 @@ export function openArgs(value: string): OpenArgs | null {
   if (v.startsWith("{")) {
     const o = parseJson(v, isOpenValue);
 
-    return o?.url.trim() ? { url: o.url.trim(), slot: slotText(o.slot) } : null;
+    if (!o?.url.trim()) return null;
+
+    const url = o.url.trim(), slot = slotText(o.slot);
+
+    return o.engine === "chromium" || o.engine === "webkit" ? { url, slot, engine: o.engine } : { url, slot };
   }
 
   return { url: v, slot: null };

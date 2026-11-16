@@ -5,8 +5,8 @@ import { div, svg } from "gpui-kit";
 import type { Color, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import type { AgentInfo, ExecResult, OverlaySpec, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
-import type { Rect } from "./menu-place.ts";
-import { overlayOf } from "./menu-place.ts";
+import type { Rect } from "@fireflies/menu-place";
+import { overlayOf } from "@fireflies/menu-place";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
@@ -16,9 +16,9 @@ import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned,
 import type { JarItem, PaneRecord, SortedAgents, TabRecord } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
 // ../nocturne and ../notifications).
-import { dither } from "./toolground.ts";
+import { dither } from "@fireflies/toolground";
 
-export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "./toolground.ts";
+export { dither, TOOL_LOOK, toolGround, mix, toolHover } from "@fireflies/toolground";
 
 import { edge } from "@fireflies/tones";
 

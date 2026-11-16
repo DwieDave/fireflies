@@ -19,7 +19,7 @@
 // where the terminal runs one directly (an agent).
 
 import type { Context } from "gpui-kit";
-import type { Anchor } from "./menu-place.ts";
+import type { Anchor } from "@fireflies/menu-place";
 import { appHome, exec, focused, openOverlay, panes, run, shared } from "herdr";
 import type { Index, ProcNode, Row, TreeNode } from "./logic.ts";
 import { SEP, guardOf, targets, terminalOf } from "./logic.ts";

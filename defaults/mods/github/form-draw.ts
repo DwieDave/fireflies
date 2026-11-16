@@ -7,7 +7,7 @@ import type { Context, Element, MouseButtonEvent } from "gpui-kit";
 import { h_flex, v_flex, Input, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import { dither, stop, band, sweep, empty, unzoom } from "./kit.ts";
-import { submitKey } from "./form-keys.ts";
+import { submitKey } from "@fireflies/form-keys";
 import type { Cell, Layout, Row as LayoutRow } from "./form-layout.ts";
 import { cellOf, pickerHeight, pickerPlace, LABEL, LABEL_GAP, CONTROL, ERROR, TOGGLE, JOIN, FOOTER, PICK_HEAD, PICK_ROW, PICK_ROW_SUB } from "./form-layout.ts";
 import type { Choice, Field } from "./form-fields.ts";

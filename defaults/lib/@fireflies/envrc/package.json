@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/envrc",
+  "private": true,
+  "type": "module",
+  "description": "A workspace's own environment for its language servers, through direnv (projectEnv, lookup, wrap). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}
