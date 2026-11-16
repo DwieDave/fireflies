@@ -5,11 +5,11 @@ import { div, svg } from "gpui-kit";
 import type { Color, Element, FocusHandle, MouseButtonEvent } from "gpui-kit";
 import { settings, terminals, hc, home, run, agents, focused, panes, shared, setShared, spaces } from "herdr";
 import type { AgentInfo, ExecResult, PaneInfo, SpaceInfo, Status, Theme } from "herdr";
-import { isNumber, isString, nullable, object, sharedKey, writeShared } from "./guard.ts";
+import { isNumber, isString, nullable, object, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { JsonMap, Labels, Terminal } from "./guards.ts";
 import { isDock, toDock, newSlot, adoptShell } from "./dock.ts";
-import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY,
+import { AT_LABEL, isPinned, sortAgents, paneRecords, storedRecords, panePinned, tabPinned, pinPaneRecord, pinTabRecord, paneKey, isPaneKey, jarItems, reorder, retime, PANES_KEY,
   TABS_KEY, tabRecords, tabPinnedWhole, pinWholeTab, retimeTabs, isTabKey, findTab } from "./pins.ts";
 import type { JarItem, PaneRecord, SortedAgents, TabRecord } from "./pins.ts";
 // The toolbar's ground and the dither fill: toolground.ts (the same file in
@@ -170,6 +170,26 @@ export function pinPane(p: PinTarget | null | undefined, on = !panePinnedNow(p))
   if (!info) return;
 
   storeRecords(pinPaneRecord(paneRecordsNow(), info, on, Date.now()));
+}
+
+/** The web tab each web pane shows (browser/publish.ts), by slot: { [slot]: tab id }. */
+export const SHOWN_TABS = sharedMapKey("browser.shown-tabs", isString);
+
+/** The web tab a web pane shows now (SHOWN_TABS, by its props' slot), or null:
+ *  no slot, or its browser doesn't say. */
+export function shownWebTab(p: { readonly props?: unknown } | null | undefined): string | null {
+  const slot = isWebProps(p?.props) ? p.props.slot : undefined;
+
+  return slot === undefined ? null : (readSharedMap(shared, SHOWN_TABS).get(slot) ?? null);
+}
+
+/** Tab `tab` of web pane `p` has a tile of its own. */
+export const webTabPinnedNow = (p: PaneInfo, tab: string): boolean => tabPinned(paneRecordsNow(), p.pane, tab);
+
+/** Pins tab `tab` of web pane `p` to the shelf on its own (a record with `tab`,
+ *  as the browser's tab menu writes it), or unpins it. */
+export function pinWebTab(p: PaneInfo, tab: string, on = !webTabPinnedNow(p, tab)): void {
+  storeRecords(pinTabRecord(paneRecordsNow(), p, tab, on, Date.now()));
 }
 
 /** Moves a pin (its jar key: a terminal's address or "pane:<id>") one step up

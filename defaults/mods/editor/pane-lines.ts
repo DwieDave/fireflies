@@ -372,7 +372,9 @@ export function drawerView(ed: EditorPane, t: Theme): Element {
 export function hints(ed: EditorPane, t: Theme): Element {
   if (ed.look) return lookHints(ed, t);
 
-  const list = hintList({ mode: ed.mode, vim: ed.vimOn(), vimMode: ed.vim.mode, server: serverId(ed.server) !== null, markdown: ed.markdown, view: ed.view });
+  const all = hintList({ mode: ed.mode, vim: ed.vimOn(), vimMode: ed.vim.mode, server: serverId(ed.server) !== null, markdown: ed.markdown, view: ed.view });
+  // A scratchpad's bar has its "format" button with the key on it.
+  const list = ed.scratch ? all.filter(([, what]) => what !== "markdown") : all;
   // The keys entry (the last) is keyhelp.ts's: its key is the chord that opens it here.
   const last = list.at(-1);
   const help = last?.[1] === "keys" ? last : null;

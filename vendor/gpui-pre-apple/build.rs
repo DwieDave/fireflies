@@ -84,7 +84,9 @@ mod apple_build {
         let local_src_paths = [crate_dir.join("src/metal_renderer.rs")];
 
         for src_path in gpui_src_paths.iter().chain(local_src_paths.iter()) {
-            println!("cargo:rerun-if-changed={}", src_path.display());
+            // Relative to this crate (fork change): an absolute path here makes a
+            // target/ copied into another checkout stale, and everything on GPUI rebuilds.
+            println!("cargo:rerun-if-changed={}", src_path.strip_prefix(&crate_dir).unwrap_or(src_path.as_path()).display());
             builder = builder.with_src(src_path);
         }
 

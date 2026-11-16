@@ -15,7 +15,7 @@
 //!
 //! A view without `tabs` keeps loading a new window in place.
 
-use crate::macos::{emit_event, web_view_key};
+use crate::macos::{emit_event, web_view_key, web_view_load};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject, NSObjectProtocol, Sel};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, msg_send, sel};
@@ -96,14 +96,46 @@ fn opens_window(id: &str) -> bool {
     id.starts_with("WKMenuItemIdentifierOpen") && id.ends_with("InNewWindow")
 }
 
+/// A side button of the mouse (3 back, 4 forward) over the page: its mod
+/// hears `web.backButton` / `web.forwardButton` on the release and goes back
+/// or forward, as its bar's arrows do. The press and the release don't reach
+/// the page (as in a browser). False: another button, or the page's video is
+/// out in a player (its history stays put): the page has it.
+fn side_button(web: &WKWebView, event: &NSEvent, up: bool) -> bool {
+    let Some(name) = crate::nav_button(event.buttonNumber() as i64) else { return false };
+    let Some((key, generation)) = web_view_load(web) else { return false };
+    if crate::pip::active(&key) {
+        return false;
+    }
+    if up {
+        emit_event(&key, generation, name, json!({}));
+    }
+    true
+}
+
 define_class!(
-    // SAFETY: WKWebView may be subclassed; only the menu hook is added, and it
-    // calls super first; no ivars, no Drop impl.
+    // SAFETY: WKWebView may be subclassed; the menu hook calls super first, the
+    // side buttons' hooks call super for every other button; no ivars, no Drop impl.
     #[unsafe(super(WKWebView, NSView, NSResponder, NSObject))]
     #[thread_kind = MainThreadOnly]
     struct WebPage;
 
     impl WebPage {
+        #[unsafe(method(otherMouseDown:))]
+        fn other_mouse_down(&self, event: &NSEvent) {
+            if !side_button(self, event, false) {
+                let _: () = unsafe { msg_send![super(self), otherMouseDown: event] };
+            }
+        }
+
+        #[unsafe(method(otherMouseUp:))]
+        fn other_mouse_up(&self, event: &NSEvent) {
+            if !side_button(self, event, true) {
+                let _: () = unsafe { msg_send![super(self), otherMouseUp: event] };
+            }
+        }
+
+
         #[unsafe(method(willOpenMenu:withEvent:))]
         fn will_open_menu(&self, menu: &NSMenu, event: &NSEvent) {
             let _: () = unsafe { msg_send![super(self), willOpenMenu: menu, withEvent: event] };

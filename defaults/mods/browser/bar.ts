@@ -12,6 +12,7 @@ import type { Tab } from "./tabs.ts";
 import { dither } from "./dither.ts";
 import { retry, external, editAddress } from "./address.ts";
 import { toggleInspector } from "./inspector.ts";
+import { openTabMenu } from "./tab-menu.ts";
 import { ICONS, available } from "./props.ts";
 import type Browser from "./main.ts";
 import { edge } from "./tones.ts";
@@ -65,10 +66,22 @@ export function addressField(view: Browser, t: Theme): Element {
     .child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(rest));
 }
 
+/** The bar: back, forward, reload, the address, zoom, picture in picture, the
+ *  inspector, the system's browser, the keys. A right-click on it opens the
+ *  shown tab's menu (pin it, move it, close it), as a right-click on its tab
+ *  in the strip does: a pane with one tab has no strip. Not while the
+ *  address is typed in: the field keeps its own right-click. */
 export function barView(view: Browser, t: Theme): Element {
   const p = view.page, loading = p.loading && Boolean(view.start);
 
   return h_flex().id("bar").relative().h(32).flex_none().px(6).gap(4).items_center()
+    .on_mouse_down("right", (_e, cx) => {
+      if (view.editing) return;
+
+      cx.stop_propagation();
+      view.claim();
+      openTabMenu(view, view.tabs.active, false);
+    })
     .on_size_change((size, cx) => {
       if (Math.abs(size.width - view.barW) > 1) {
         view.barW = size.width;

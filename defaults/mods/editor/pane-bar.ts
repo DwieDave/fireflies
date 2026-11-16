@@ -21,6 +21,7 @@ import { setDrawn } from "./drawn-tabs.ts";
 import { focusText, openMdMenu } from "./md-pane.ts";
 import { closeTab, select, stepShownTab } from "./pane-tabs.ts";
 import { setWrap, toggleVim } from "./pane-vim.ts";
+import { scratchBar } from "./scratch-bar.ts";
 import { dragOver, dropTab, leaveStrip, openTabMenu } from "./tab-menu.ts";
 import { edge } from "./tones.ts";
 
@@ -68,6 +69,15 @@ export function bar(ed: EditorPane, t: Theme): Element {
   const recording = ed.vim.recording;
   const msg = ed.message && Date.now() - ed.message.at < 4000 ? ed.message : null;
 
+  // A scratchpad's own quiet line (scratch-bar.ts).
+  if (ed.scratch) {
+    return scratchBar(ed, t, {
+      mode: () => modeChip(ed, t),
+      problems: () => problemChips(ed, t),
+      message: () => (msg ? div().flex_none().text_color(msg.bad ? t.ansi1 : t.ansi2).truncate().max_w(260).child(msg.text) : null),
+    });
+  }
+
   return h_flex()
     .id("editor-bar")
     .h(BAR)
@@ -88,10 +98,8 @@ export function bar(ed: EditorPane, t: Theme): Element {
         .min_w(0)
         .truncate()
         .text_color(t.dim)
-        .child(narrow ? "" : ed.scratch ? `${noteName(ed.path)} · every worktree of it` : tilde(dirname(ed.path), home())),
+        .child(narrow ? "" : tilde(dirname(ed.path), home())),
     )
-    // A scratchpad: saving… while it waits to write, saved after (green), what went wrong (red).
-    .when(ed.scratch, (el) => el.child(autosaveChip(ed, t)))
     .when(Boolean(msg), (el) =>
       msg
         ? el.child(
@@ -149,23 +157,6 @@ function oneFile(ed: EditorPane, t: Theme): Element[] {
       .child(ed.scratch ? "scratchpad" : basename(ed.path) || "untitled");
 
   return [...(ed.scratch ? [] : [mark]), typeMark(ed, t, ed.shown(), "bar-icon", true), name];
-}
-
-/** A scratchpad's autosave: saving…, saved (green), not saved (red). */
-function autosaveChip(ed: EditorPane, t: Theme): Element {
-  const st = ed.saveState;
-  const color = st === "error" ? t.ansi1 : st === "saved" ? t.ansi2 : t.ansi3;
-
-  return (
-    h_flex()
-      .id("bar-autosave")
-      .flex_none()
-      .gap(6)
-      .items_center()
-      .text_color(color)
-      .child(div().relative().size(7).border(1).border_color(color).child(dither(color, 1)))
-      .child(st === "error" ? "not saved" : st === "saved" ? "saved" : "saving…")
-  );
 }
 
 /** The errors' and warnings' counts (a click opens the problems' drawer). */

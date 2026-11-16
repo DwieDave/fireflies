@@ -190,6 +190,13 @@ export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
       }
     })
     .cursor_text()
+    // Where it's pressed: the caret goes about there (rendered-keys.ts clickUnit).
+    .on_mouse_down("left", (e) => {
+      const at = e.local_position;
+      const b = e.bounds;
+
+      v.press = at && b ? { key: r.key, x: o.unzoom(at.x), y: o.unzoom(at.y), w: o.unzoom(b.width) } : null;
+    })
     .on_click((_e, cx) => v.clickUnit(u, cx, false))
     .child(body)
     // Its "+": an empty paragraph after it (shown while the pointer is over it).

@@ -10,7 +10,7 @@ import { shared, focused, panes } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { dither, givenName, goToPin, cornerTicks, LOGO, shownWebTab, statusColor } from "./kit.ts";
 import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
 import { openMenu, tabTileMenu } from "./menu.ts";
 import { tabLead } from "./pins.ts";
@@ -128,22 +128,34 @@ export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): 
   return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
 }
 
-/** On screen now: its tab is the shown one of the shown space, not parked. */
+/** A web tab's pin whose pane shows another tab now (kit.ts shownWebTab). A
+ *  browser that doesn't say which tab it shows: not known, so not hidden. */
+export function tabHidden(it: JarItem): boolean {
+  if (it.kind !== "pane" || !it.tab) return false;
+
+  const shown = shownWebTab(it.pane);
+
+  return shown !== null && shown !== it.tab;
+}
+
+/** On screen now: its tab is the shown one of the shown space, not parked;
+ *  a web tab's pin also needs its pane to show that tab (tabHidden). */
 export function pinLit(sky: Sky, it: JarItem): boolean {
   if (it.kind === "tab") return sky.shownTabs.has(it.tabInfo.id);
 
   const p = paneOf(it);
 
-  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "");
+  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "") && !tabHidden(it);
 }
 
-/** It holds the focus: the focused pane, or the focused terminal. */
+/** It holds the focus: the focused pane (a web tab's pin: while its pane shows
+ *  that tab), or the focused terminal. */
 export function pinFocus(it: JarItem): boolean {
   const f = focused();
 
   if (it.kind === "tab") return Boolean(f?.tab) && f?.tab === it.tabInfo.id;
 
-  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane : Boolean(f?.terminal) && f?.terminal === it.key;
+  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane && !tabHidden(it) : Boolean(f?.terminal) && f?.terminal === it.key;
 }
 
 /** What a tile is called: the pane's name (header.ts paneName), a terminal's given name. */
