@@ -22,6 +22,7 @@ import type { Guarded } from "./guard.ts";
 import { argsOf, commandOf, isStoredCommand, storedCommand } from "./guards.ts";
 import type { Command } from "./guards.ts";
 import { ART, dither } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 // The level's theme color: the same words the fireflies use for status.
 const COLOR: ReadonlyMap<string, "blocked" | "working" | "done" | "accent"> = new Map([["error", "blocked"], ["warning", "working"], ["success", "done"], ["info", "accent"]]);
@@ -153,18 +154,18 @@ export default class Toast {
 
     const line = ask?.line ?? p.body;
 
-    return h_flex().id("nocturne-toast").relative().size_full().bg(t.background).border(1).border_color(t.ansi0)
+    return h_flex().id("nocturne-toast").relative().size_full().bg(t.background).border(1).border_color(edge(t))
       .cursor_pointer()
       .on_click(() => act(p))
       // A dithered stripe down the left edge in the level's color.
       .child(div().relative().w(6).h_full().flex_none().child(dither(color, 1)))
       .child(h_flex().relative().flex_1().min_w(0).h_full().px(12).gap(12).items_center()
-        .hover((s) => s.bg(`${t.ansi0}55`))
+        .hover((s) => s.bg(`${edge(t)}55`))
         .child(div().w(16).flex_none().flex().items_center().justify_center().child(mark))
         .child(v_flex().flex_1().min_w(0).gap(3)
           .child(div().truncate().text_size(12).text_color(urgent ? color : t.foreground).child(ask?.title ?? p.title ?? ""))
           .when(Boolean(line), (el) => el.child(div().truncate().text_size(11).text_color(t.muted).child(line ?? "")))))
       // The horizon line, like the tab strip's.
-      .child(div().absolute().left(6).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      .child(div().absolute().left(6).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
   }
 }

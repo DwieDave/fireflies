@@ -27,16 +27,24 @@ import { View, div, svg } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent } from "gpui-kit";
 import type { LoopPolicy, Props } from "gpui-shell";
 import { h_flex, v_flex } from "gpui-base";
-import { theme, nextCommand } from "herdr";
+import { theme } from "herdr";
 import type { Theme } from "herdr";
+import { Array as Arr, Clock, Effect, Layer, Option, String as Str } from "effect";
+import { Commands, localTime, modRuntime, redraw } from "@fireflies/kit";
+import type { ViewFx } from "@fireflies/kit";
+import { Live, toast } from "@fireflies/kit/live";
 import { ART, OWN, dither } from "./kit.ts";
-import { PROVIDERS, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.ts";
-import type { Note, ProviderId, ScopedWindow, Usage, UsageWindow, Why } from "./limits.ts";
+import { PROVIDERS, UsageEndpoint, provider, pickProvider, lastUsage, usageNote, refreshUsage, asking } from "./limits.ts";
+import type { Note, ProviderId, ScopedWindow, Usage, UsageServices, UsageWindow, Why } from "./limits.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysHint, keysView, keysKey } from "./keyhelp.ts";
+import { edge } from "./tones.ts";
 
-const TICK = 30_000; // countdowns, and asking again once the answer is old
-const FIRST = 1000; // the first read, this long after the pane first draws (ms)
+const TICK = "30 seconds"; // countdowns, and asking again once the answer is old
+const FIRST = "1 second"; // the first read, this long after the pane first draws
+
+/** The mod's runtime: the app's services, and the usage endpoints over them (curl, the login in the shell). */
+const runtime = modRuntime(Layer.provideMerge(UsageEndpoint.layer, Live));
 const SESSION_MS = 5 * 3600_000;
 const WEEK_MS = 7 * 86400_000;
 
@@ -51,7 +59,7 @@ const BAR = 34; // the toolbar
 export const KEYS: readonly (readonly [string, string])[] = [["r", "read again now"], ["p", "the next provider"], ["esc", "keys away"], ["?", "keys"]];
 const GAP = 12;
 const stop = (_e: MouseButtonEvent, cx: Context) => cx.stop_propagation();
-const pad = (n: number) => String(n).padStart(2, "0");
+const pad = (n: number) => Str.padStart(2, "0")(String(n));
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 const left = (w: UsageWindow) => Math.max(0, Math.min(100, Math.round(100 - w.used)));
@@ -72,22 +80,22 @@ function span(ms: number) {
 }
 
 const clock = (ms: number) => {
-  const d = new Date(ms);
+  const d = localTime(ms);
 
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return `${pad(d.hours)}:${pad(d.minutes)}`;
 };
 
-const day = (ms: number) => `${DAYS[new Date(ms).getDay()] ?? ""} ${clock(ms)}`;
+const day = (ms: number) => `${DAYS[localTime(ms).weekday] ?? ""} ${clock(ms)}`;
 
-/** How far through its window the clock is, 0–1 (null without a reset time). */
-function elapsed(w: UsageWindow, length: number) {
-  if (!w?.resets) return null;
+/** How far through its window the clock is at `now`, 0–1 (null without a reset time). */
+function elapsed(w: UsageWindow, length: number, now: number) {
+  if (w.resets === null) return null;
 
-  return Math.max(0, Math.min(1, 1 - (w.resets - Date.now()) / length));
+  return Math.max(0, Math.min(1, 1 - (w.resets - now) / length));
 }
 
 /** Words for the remaining share, from a list of [at least, words]. */
-const pick = (n: number, table: Words) => table.find(([min]) => n >= min)?.[1] ?? "";
+const pick = (n: number, table: Words) => Option.getOrElse(Option.map(Arr.findFirst(table, ([min]) => n >= min), ([, words]) => words), () => "");
 
 /** [at least this much left, what to say], most first. */
 type Words = readonly (readonly [number, string])[];
@@ -155,7 +163,7 @@ function arrange(width: number, height: number, extra: number, foot: number): Ar
   const W = width - 2 * GAP, H = height - BAR - 2 * GAP - foot;
   const side = fitCard((W - GAP) / 2, H, extra);
   const stacked = fitCard(W, (H - GAP) / 2, extra);
-  const s = side.scroll ? 0 : side.s, t = stacked.scroll ? 0 : stacked.s;
+  const s = side.scroll === true ? 0 : side.s, t = stacked.scroll === true ? 0 : stacked.s;
 
   if (s > t || (s === t && W >= H * 1.4)) return { side: true, ...side };
 
@@ -171,30 +179,44 @@ export default class UsagePane extends View {
   paths = new Map<PathId, number>();
   handle: FocusHandle | null = null;
   keysShown = false;
+  /** The time this render draws at (ms): read once per render from the clock, so every countdown agrees. */
+  now = 0;
+  /** This copy's effects (@fireflies/kit): its reads, its tick, its commands; interrupted in close(). */
+  fx: ViewFx<UsageServices> | null = null;
 
   override init(_props: Props | undefined, cx: AsyncContext) {
     const handle = cx.focus_handle();
+    const fx = runtime.attach(cx, toast("Usage"));
 
     this.handle = handle;
-    cx.spawn(async (cx) => {
-      for (;;) {
-        const c = String(await nextCommand()).replace(/^usage\./, "");
+    this.fx = fx;
+    // Its key commands ("usage.focus", "usage.refresh", "usage.keys"), one after another.
+    fx.run(Effect.forever(Commands.use((x) => x.next).pipe(
+      Effect.tap((c) => Effect.sync(() => this.command(Str.replace(/^usage\./, "")(c), handle))),
+      Effect.andThen(redraw),
+    )));
+    // The first read after the first frame (drawing never runs the machine's cache script), then
+    // every TICK: the countdowns move, and it asks again once the answer is old.
+    fx.run(Effect.andThen(Effect.sleep(FIRST), refreshUsage("open")).pipe(
+      Effect.andThen(Effect.forever(Effect.sleep(TICK).pipe(Effect.andThen(refreshUsage("tick")), Effect.andThen(redraw)))),
+    ));
+  }
 
-        if (c === "focus") handle.focus();
-        else if (c === "refresh") this.read(cx, "force");
-        else if (c === "keys") this.keysShown = !this.keysShown;
-        cx.notify();
-      }
-    });
-    // The first read after the first frame (drawing never runs the machine's cache script).
-    cx.spawn(async (cx) => { await cx.sleep(FIRST); await refreshUsage("open"); cx.notify(); });
-    cx.timer.every(TICK, (cx) => { this.read(cx); cx.notify(); });
+  /** One key command: "focus" (pane.go landed here), "refresh", "keys". */
+  command(c: string, handle: FocusHandle) {
+    if (c === "focus") handle.focus();
+    else if (c === "refresh") this.read("force");
+    else if (c === "keys") this.keysShown = !this.keysShown;
+  }
+
+  /** Stops its reads and timers (an answer on its way is dropped; the machine's lock is let go). */
+  override close() {
+    return this.fx?.close();
   }
 
   /** Asks again when it's due (limits.ts due: "tick", "open", "force"); shared() redraws every copy. */
-  read(cx: Context, why: Why | boolean = "tick") {
-    cx.spawn(async (cx) => { await refreshUsage(why); cx.notify(); });
-    cx.notify();
+  read(why: Why | boolean = "tick") {
+    this.fx?.run(refreshUsage(why), { key: "read" });
   }
 
   key(e: KeyEvent, cx: Context) {
@@ -203,12 +225,13 @@ export default class UsagePane extends View {
     if (m.platform || m.control || m.alt) return;
     const help = keysKey(e, this.keysShown);
 
-    if (help) this.keysShown = help === "toggle" ? !this.keysShown : false;
+    if (help !== null) this.keysShown = help === "toggle" ? !this.keysShown : false;
     else if (this.keysShown) return;
-    else if (e.keystroke === "r") this.read(cx, "force");
+    else if (e.keystroke === "r") this.read("force");
     else if (e.keystroke === "p") {
-      const i = PROVIDERS.findIndex((p) => p.id === provider().id);
-      this.pick((PROVIDERS[(i + 1) % PROVIDERS.length] ?? PROVIDERS[0]).id, cx);
+      const at = runtime.now(provider).id;
+      const i = Option.getOrElse(Arr.findFirstIndex(PROVIDERS, (p) => p.id === at), () => -1);
+      this.pick((PROVIDERS[(i + 1) % PROVIDERS.length] ?? PROVIDERS[0]).id);
     } else return;
     cx.stop_propagation();
     cx.notify();
@@ -221,9 +244,9 @@ export default class UsagePane extends View {
 
 
   /** Shows provider `id` here and in the sidebar, asking it if its answer is old. */
-  pick(id: ProviderId, cx: Context) {
-    pickProvider(id);
-    this.read(cx, "open");
+  pick(id: ProviderId) {
+    runtime.now(pickProvider(id));
+    this.read("open");
   }
 
   /** Color for how much of a window is used. */
@@ -241,13 +264,13 @@ export default class UsagePane extends View {
 
     const f = div().relative().size(box).flex_none()
       // The dish.
-      .child(div().absolute().bottom(0).left(at(2)).w(40 * s).h(2 * s).bg(t.ansi8))
-      .child(div().absolute().bottom(2 * s).left(at(6)).w(32 * s).h(2 * s).child(dither(t.ansi8, s)))
+      .child(div().absolute().bottom(0).left(at(2)).w(40 * s).h(2 * s).bg(t.muted))
+      .child(div().absolute().bottom(2 * s).left(at(6)).w(32 * s).h(2 * s).child(dither(t.muted, s)))
       // Wax, shaded on its right, with a drip down the left.
       .child(div().absolute().bottom(base).left(at(15)).w(14 * s).h(wax).bg(t.ansi7)
-        .child(div().absolute().top(0).right(0).w(5 * s).h_full().child(dither(t.ansi8, s))))
+        .child(div().absolute().top(0).right(0).w(5 * s).h_full().child(dither(t.muted, s))))
       .when(wax > 14 * s, (el) => el.child(div().absolute().bottom(top - 10 * s).left(at(13)).w(2 * s).h(8 * s).bg(t.ansi7)))
-      .child(div().absolute().bottom(top).left(at(21)).w(2 * s).h(4 * s).bg(t.ansi8));
+      .child(div().absolute().bottom(top).left(at(21)).w(2 * s).h(4 * s).bg(t.muted));
 
     if (r > 0) {
       const y = top + 2 * s;
@@ -262,7 +285,7 @@ export default class UsagePane extends View {
     }
 
     // Out: two wisps of smoke drifting up from the wick.
-    const wisp = (x: number, period: number, ch: string) => div().absolute().left(at(x)).text_size(small(s)).text_color(t.ansi8).child(ch)
+    const wisp = (x: number, period: number, ch: string) => div().absolute().left(at(x)).text_size(small(s)).text_color(t.muted).child(ch)
       .loop("top", { from: box - top - 16 * s, to: box - top - 44 * s, period, easing: "linear" })
       .loop("opacity", { from: 0.9, to: 0, period, easing: "linear" });
 
@@ -289,7 +312,7 @@ export default class UsagePane extends View {
   path(t: Theme, id: PathId, w: UsageWindow, length: number, s: number) {
     const width = this.paths.get(id) ?? 160;
     const used = Math.max(0, Math.min(100, w.used));
-    const now = elapsed(w, length);
+    const now = elapsed(w, length, this.now);
     const lead = now === null ? 0 : used - now * 100;
     const words = now === null ? "" : lead > 12 ? "galloping ahead of the clock" : lead < -12 ? "grazing slowly, loads of night left" : "trotting right along with the clock";
     const star = 8 * Math.min(s, 2);
@@ -298,11 +321,11 @@ export default class UsagePane extends View {
       // The star sits centred on the path; the box is tall enough for both.
       .child(div().id(`path-${id}`).relative().h(star + 4 * s).w_full()
         .on_size_change((z, cx) => { if (Math.abs((this.paths.get(id) ?? 0) - z.width) > 1) { this.paths.set(id, z.width); cx.notify(); } })
-        .child(div().absolute().left(0).right(0).top(star / 2 + s).h(2 * s).child(dither(t.ansi8, s)))
+        .child(div().absolute().left(0).right(0).top(star / 2 + s).h(2 * s).child(dither(t.muted, s)))
         .child(div().absolute().left(0).top(star / 2).h(4 * s).w(Math.round((used / 100) * width)).bg(this.tone(t, used)))
         .when(now !== null, (el) => el.child(svg(`${ART}/pip.svg`).size(star).absolute().top(2 * s)
           .left(Math.max(0, Math.min(width - star, Math.round((now ?? 0) * width) - star / 2))).text_color(t.foreground))))
-      .when(Boolean(words), (el) => el.child(div().text_size(small(s)).text_color(lead > 12 ? this.tone(t, 90) : t.dim).child(words)));
+      .when(Str.isNonEmpty(words), (el) => el.child(div().text_size(small(s)).text_color(lead > 12 ? this.tone(t, 90) : t.dim).child(words)));
   }
 
   /** Big number, what it means, when it comes back. */
@@ -326,19 +349,20 @@ export default class UsagePane extends View {
       .when(!beside, (el) => el.w_full().items_center())
       .child(words).child(path);
 
-    return v_flex().id(id).relative().flex_1().min_w(0).min_h(0).p(12 * s).gap(10 * s).bg(t.background).border(1).border_color(t.ansi0)
+    return v_flex().id(id).relative().flex_1().min_w(0).min_h(0).p(12 * s).gap(10 * s).bg(t.background).border(1).border_color(edge(t))
       .child(h_flex().gap(8 * s).items_baseline().text_size(small(s))
-        .child(div().text_color(t.ansi8).child(title.toUpperCase()))
+        .child(div().text_color(t.muted).child(Str.toUpperCase(title)))
         .child(div().text_color(t.dim).child(sub)))
       .child((beside ? h_flex().gap(16 * s) : v_flex().gap(12 * s)).flex_1().min_h(0).items_center().justify_center()
         .child(figure).child(text))
-      .when(below !== null, (el) => (below ? el.child(below) : el));
+      .when(below !== null, (el) => (below === null ? el : el.child(below)));
   }
 
   session(t: Theme, w: UsageWindow, fit: CardFit) {
     const { s, beside } = fit;
     const length = w.length ?? SESSION_MS;
-    const back = w.resets ? (left(w) === 0 ? `relit at ${clock(w.resets)}, in ${span(w.resets - Date.now())}` : `fresh candle in ${span(w.resets - Date.now())} · ${clock(w.resets)}`) : null;
+    const resets = w.resets;
+    const back = resets === null ? null : left(w) === 0 ? `relit at ${clock(resets)}, in ${span(resets - this.now)}` : `fresh candle in ${span(resets - this.now)} · ${clock(resets)}`;
 
     return this.card(t, "candle", "tonight's candle", lengthName(length), this.candle(t, w, s),
       this.figures(t, w, pick(left(w), CANDLE), back, s, !beside), this.path(t, "session", w, length, s), fit);
@@ -348,9 +372,10 @@ export default class UsagePane extends View {
     const { s, beside } = fit;
     const length = w.length ?? WEEK_MS;
     const k = Math.min(s, 2);
-    const back = w.resets ? `full again ${day(w.resets)} · in ${span(w.resets - Date.now())}` : null;
+    const resets = w.resets;
+    const back = resets === null ? null : `full again ${day(resets)} · in ${span(resets - this.now)}`;
 
-    const below = scoped.length ? v_flex().gap(4 * k).children(scoped.map((x) => h_flex().gap(8 * k).items_center().text_size(small(k))
+    const below = Arr.isReadonlyArrayNonEmpty(scoped) ? v_flex().gap(4 * k).children(Arr.map(scoped, (x) => h_flex().gap(8 * k).items_center().text_size(small(k))
       .child(this.moon(t, x, k, true))
       .child(div().text_color(t.foreground).child(x.name))
       .child(div().min_w(0).truncate().text_color(t.dim).child(left(x) === 100 ? "a whole moon of its own" : `${left(x)}% of its own moon left`)))) : null;
@@ -361,20 +386,20 @@ export default class UsagePane extends View {
 
   /** The sheep in the meadow: grazing, drowsy, or asleep, with something to say. */
   sheep(t: Theme, d: Usage, k: number) {
-    const windows = [d.session, d.week].flatMap((w) => (w ? [w] : []));
-    const least = Math.min(...windows.map(left));
+    const windows = Arr.filter([d.session, d.week], (w) => w !== null);
+    const least = Math.min(...Arr.map(windows, left));
     const asleep = least === 0;
     const drowsy = !asleep && least < 15;
-    const out = windows.flatMap((w) => (left(w) === 0 && w.resets ? [w.resets] : []));
+    const out = Arr.flatMap(windows, (w) => (left(w) === 0 && w.resets !== null ? [w.resets] : []));
 
-    const says = asleep ? `z z z … wakes ${out.length ? clock(Math.max(...out)) : "soon"}`
+    const says = asleep ? `z z z … wakes ${Arr.isReadonlyArrayNonEmpty(out) ? clock(Math.max(...out)) : "soon"}`
       : drowsy ? "baa… getting sleepy" : least < 40 ? "baa. pacing myself" : "baa! the meadow is wide open";
 
     const kind = asleep ? "asleep" : "awake";
 
     const body = div().relative().w(38 * k).h(24 * k).flex_none()
       .child(svg(`${OWN}/sheep-${kind}-wool.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.ansi7))
-      .child(svg(`${OWN}/sheep-${kind}-face.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.ansi8));
+      .child(svg(`${OWN}/sheep-${kind}-face.svg`).w(38 * k).h(24 * k).absolute().top(0).left(0).text_color(t.muted));
 
     const z = (x: number, period: number, rise: number) => div().absolute().left(x * k).text_size(small(k)).text_color(t.ansi4).child("z")
       .loop("top", { from: 8 * k, to: -rise * k, period, easing: "linear" })
@@ -389,66 +414,66 @@ export default class UsagePane extends View {
 
     return h_flex().absolute().left(16 * k).bottom(20 * k).gap(4 * k).items_end()
       .child(sheep)
-      .child(div().mb(20 * k).px(6).py(2).text_size(small(k)).bg(t.background).border(1).border_color(t.ansi0).text_color(asleep ? t.ansi4 : t.muted).child(says));
+      .child(div().mb(20 * k).px(6).py(2).text_size(small(k)).bg(t.background).border(1).border_color(edge(t)).text_color(asleep ? t.ansi4 : t.muted).child(says));
   }
 
   toolbar(t: Theme, d: Usage | null, note: Note | null) {
-    const busy = asking();
-    const read = d ? `read ${span(Date.now() - d.at)} ago` : "";
+    const busy = runtime.now(asking());
+    const read = d === null ? "" : `read ${span(this.now - d.at)} ago`;
 
     const status = busy ? "asking the moon…"
-      : note && (note.state === "busy" || (note.until ?? 0) > Date.now())
-        ? `${note.state === "busy" ? "rate limited" : "couldn't read"}${d ? ` · ${read}` : ""} · next try in ${span(Math.max(0, (note.until ?? 0) - Date.now()))}`
+      : note !== null && (note.state === "busy" || (note.until ?? 0) > this.now)
+        ? `${note.state === "busy" ? "rate limited" : "couldn't read"}${d === null ? "" : ` · ${read}`} · next try in ${span(Math.max(0, (note.until ?? 0) - this.now))}`
         : read;
 
     const plan = d?.plan ?? null;
 
     return h_flex().id("us-toolbar").relative().h(BAR).flex_none().px(12).gap(8).items_center().text_size(11)
-      .child(div().flex_none().text_color(t.ansi8).child("USAGE"))
+      .child(div().flex_none().text_color(t.muted).child("USAGE"))
       .child(this.providers(t))
       .when(plan !== null, (el) => el.child(div().flex_none().relative().px(6).h(20).flex().items_center().text_color(t.muted)
-        .child(dither(t.ansi0, 1)).child(div().relative().child(plan ?? ""))))
+        .child(dither(edge(t), 1)).child(div().relative().child(plan ?? ""))))
       .child(div().flex_1())
       .child(div().id("us-read").flex_none().px(6).h(20).flex().items_center().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .hover((s) => s.text_color(t.foreground).bg(edge(t)))
         .on_mouse_down("left", stop)
-        .on_click((_e, cx) => { cx.stop_propagation(); this.read(cx, true); })
+        .on_click((_e, cx) => { cx.stop_propagation(); this.read(true); })
         .child(busy ? div().child("·").frames(["·", "✦", "✧", "·"], 220) : "↻")
         .child(div().ml(6).child(status)))
       // ? keys: the toolbar's last item (keyhelp.ts).
       .child(keysHint(t, "us-keys-chip", this.keysShown, () => { this.keysShown = !this.keysShown; }).ml(6))
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
   }
 
   /** The providers, the shown one lit: click one to show it (here and in the sidebar). */
   providers(t: Theme) {
-    const on = provider().id;
+    const on = runtime.now(provider).id;
 
     return h_flex().flex_none().gap(2).items_center()
-      .children(PROVIDERS.map((p) => h_flex().id(`us-provider-${p.id}`).flex_none().px(6).h(20).gap(5).items_center()
-        .text_color(p.id === on ? t.foreground : t.ansi8)
-        .when(p.id === on, (el) => el.bg(t.ansi0))
-        .when(p.id !== on, (el) => el.hover((s) => s.text_color(t.muted).bg(t.ansi0)))
+      .children(Arr.map(PROVIDERS, (p) => h_flex().id(`us-provider-${p.id}`).flex_none().px(6).h(20).gap(5).items_center()
+        .text_color(p.id === on ? t.foreground : t.muted)
+        .when(p.id === on, (el) => el.bg(edge(t)))
+        .when(p.id !== on, (el) => el.hover((s) => s.text_color(t.muted).bg(edge(t))))
         .on_mouse_down("left", stop)
-        .on_click((_e, cx) => { cx.stop_propagation(); this.pick(p.id, cx); })
-        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).flex_none().text_color(p.id === on ? t.foreground : t.ansi8))
-        .child(div().child(p.name.toLowerCase()))));
+        .on_click((_e, cx) => { cx.stop_propagation(); this.pick(p.id); })
+        .child(svg(`${ART}/logo-${p.logo}.svg`).size(12).flex_none().text_color(p.id === on ? t.foreground : t.muted))
+        .child(div().child(Str.toLowerCase(p.name)))));
   }
 
   /** What to say when there's no answer to draw. */
   message(t: Theme, n: Note | null) {
-    const who = provider();
+    const who = runtime.now(provider);
 
-    const [title, sub] = !n ? ["asking the moon how much night is left…", ""]
+    const [title, sub] = n === null ? ["asking the moon how much night is left…", ""]
       : n.state === "off" ? ["usage is off in a scratch app", "it would ask with this machine's login; HERDR_APP_USAGE=1 turns it on"]
       : n.state === "nologin" ? [`no ${who.name} login on this machine`, `sign in to ${who.agent} and the moon will know you`]
       : n.state === "expired" ? ["the login is napping", `${who.agent} wakes it the next time it runs; this pane only reads it`]
-      : n.state === "busy" ? ["the moon asked us to wait a moment", `rate limited · trying again in ${span(Math.max(0, (n.until ?? Date.now()) - Date.now()))}`]
+      : n.state === "busy" ? ["the moon asked us to wait a moment", `rate limited · trying again in ${span(Math.max(0, (n.until ?? this.now) - this.now))}`]
       : ["couldn't reach the moon", n.state === "error" ? n.message : ""];
 
     return v_flex().flex_1().items_center().justify_center().gap(6).px(16).pb(120).text_size(11)
       .child(div().text_color(t.foreground).child(title))
-      .child(div().text_center().text_color(t.ansi8).child(sub));
+      .child(div().text_center().text_color(t.muted).child(sub));
   }
 
   override render() {
@@ -458,13 +483,16 @@ export default class UsagePane extends View {
   /** The pane: the toolbar, then the candle and the moon (or a note). */
   page() {
     const t = theme();
-    const d = lastUsage(), note = usageNote();
+    const d = runtime.now(lastUsage()), note = runtime.now(usageNote());
     const { width, height } = this.size;
+
+    this.now = runtime.now(Clock.currentTimeMillis);
+
     // Nocturne's sky behind it all, in 480px tiles across the pane: stars,
     // moonlight haze, the hills.
-    const tiles = [...Array(Math.max(1, Math.ceil(width / 480))).keys()].map((i) => i * 480);
+    const tiles = Arr.makeBy(Math.max(1, Math.ceil(width / 480)), (i) => i * 480);
 
-    const layer = (file: string, h: number, color: Theme["background"], opacity: number, top = false) => tiles.map((x) => {
+    const layer = (file: string, h: number, color: Theme["background"], opacity: number, top = false) => Arr.map(tiles, (x) => {
       const el = svg(`${ART}/${file}.svg`).w(480).h(h).absolute().left(x).text_color(color).opacity(opacity);
 
       return top ? el.top(0) : el.bottom(0);
@@ -473,19 +501,19 @@ export default class UsagePane extends View {
     const handle = this.handle;
     const base = v_flex().id("usage").relative().size_full().overflow_hidden().bg(t.background);
 
-    const root = (handle ? base.track_focus(handle) : base)
+    const root = (handle === null ? base : base.track_focus(handle))
       .on_key_down((e, cx) => this.key(e, cx))
       .on_size_change((size, cx) => { this.size = size; cx.notify(); })
-      .children(layer("stars", 900, t.ansi8, 0.55, true))
+      .children(layer("stars", 900, t.muted, 0.55, true))
       .children(layer("haze", 1400, t.ansi4, 0.2))
       .children(layer("hills-fill", 144, t.background, 1))
-      .children(layer("hills-rim", 144, t.ansi8, 0.5))
+      .children(layer("hills-rim", 144, t.muted, 0.5))
       .child(this.toolbar(t, d, note));
 
     // ?: the keys in the meadow's place, the toolbar stays (keyhelp.ts).
     if (this.keysShown) return root.child(div().relative().flex_1().min_h(0).child(this.keysStrip(t)));
 
-    if (!d) return root.child(this.message(t, note));
+    if (d === null) return root.child(this.message(t, note));
     // The meadow keeps the bottom for the sheep; a short pane gives it up.
     const meadow = height >= 340;
     const k = height >= 900 && width >= 900 ? 2 : 1; // the sheep's scale
@@ -494,8 +522,8 @@ export default class UsagePane extends View {
     const fit = arrange(width, height, scoped.length * 28, foot);
 
     const cards = [
-      ...(d.session ? [this.session(t, d.session, fit)] : []),
-      ...(d.week ? [this.week(t, d.week, scoped, fit)] : []),
+      ...(d.session === null ? [] : [this.session(t, d.session, fit)]),
+      ...(d.week === null ? [] : [this.week(t, d.week, scoped, fit)]),
     ];
 
     // At least the pane's height, so the cards stretch to fill it; taller
@@ -504,7 +532,7 @@ export default class UsagePane extends View {
 
     return root
       .child(div().id("us-body").flex_1().min_h(0).overflow_y_scroll().child(body.children(cards)))
-      .when(note !== null && note.state !== "busy", (el) => el.child(div().absolute().right(12).bottom(12).text_size(11).text_color(t.ansi8)
+      .when(note !== null && note.state !== "busy", (el) => el.child(div().absolute().right(12).bottom(12).text_size(11).text_color(t.muted)
         .child(note?.state === "expired" ? "login napping, showing the last read" : "couldn't read just now, showing the last read")))
       .when(meadow, (el) => el.child(this.sheep(t, d, k)));
   }

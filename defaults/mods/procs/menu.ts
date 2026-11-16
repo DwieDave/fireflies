@@ -19,6 +19,7 @@
 // where the terminal runs one directly (an agent).
 
 import type { Context } from "gpui-kit";
+import type { Anchor } from "./menu-place.ts";
 import { appHome, exec, focused, openOverlay, panes, run, shared } from "herdr";
 import type { Index, ProcNode, Row, TreeNode } from "./logic.ts";
 import { SEP, guardOf, targets, terminalOf } from "./logic.ts";
@@ -44,13 +45,12 @@ export interface At {
   readonly y: number;
 }
 
-/** The open menu: its row, its entries, where it hangs (deck px; `above`: where its foot sits
- *  when it opens upward, too low in the deck to open down), the entry under the cursor. */
+/** The open menu: its row, its entries, what it stands at (deck px: the press, or the row a key
+ *  opened it for: menu-place.ts), the entry under the cursor. */
 export interface Menu {
   readonly key: string;
   readonly entries: readonly MenuEntry[];
-  readonly at: At;
-  readonly above: number;
+  readonly at: Anchor;
   n: number;
 }
 

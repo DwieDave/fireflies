@@ -10,7 +10,7 @@ import { shared, focused, panes } from "herdr";
 import type { PaneInfo, Theme } from "herdr";
 import { isString, object, readSharedMap, sharedMapKey } from "./guard.ts";
 import { isRawObject, mapOf } from "./guards.ts";
-import { dither, givenName, goToPin, cornerTicks, LOGO, statusColor } from "./kit.ts";
+import { cursorMark, dither, givenName, goToPin, cornerTicks, LOGO, shownWebTab, statusColor } from "./kit.ts";
 import { fileIcon, iconColor, iconSvg } from "./file-icons.ts";
 import { openMenu, tabTileMenu } from "./menu.ts";
 import { tabLead } from "./pins.ts";
@@ -19,6 +19,7 @@ import { markPath, modKind, paneName, paneMenu } from "./header.ts";
 import { stop, SHELF_PAD, TILE, TILE_GAP, BOARD, BOARD_GAP, paneOf } from "./sky-plan.ts";
 import { pinActs } from "./sky-keys.ts";
 import type Sky from "./sky.ts";
+import { edge } from "./tones.ts";
 
 /** A web pane's props, as far as its name goes: its slot and the address it opened on. */
 export const isWebProps = object({}, { slot: isString, url: isString });
@@ -127,22 +128,34 @@ export function tileMark(t: Theme, it: JarItem, size: number, bright: boolean): 
   return svg(markPath(marked)).id(id).size(size).flex_none().text_color(tint);
 }
 
-/** On screen now: its tab is the shown one of the shown space, not parked. */
+/** A web tab's pin whose pane shows another tab now (kit.ts shownWebTab). A
+ *  browser that doesn't say which tab it shows: not known, so not hidden. */
+export function tabHidden(it: JarItem): boolean {
+  if (it.kind !== "pane" || !it.tab) return false;
+
+  const shown = shownWebTab(it.pane);
+
+  return shown !== null && shown !== it.tab;
+}
+
+/** On screen now: its tab is the shown one of the shown space, not parked;
+ *  a web tab's pin also needs its pane to show that tab (tabHidden). */
 export function pinLit(sky: Sky, it: JarItem): boolean {
   if (it.kind === "tab") return sky.shownTabs.has(it.tabInfo.id);
 
   const p = paneOf(it);
 
-  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "");
+  return Boolean(p) && !p?.parked && sky.shownTabs.has(p?.tab ?? "") && !tabHidden(it);
 }
 
-/** It holds the focus: the focused pane, or the focused terminal. */
+/** It holds the focus: the focused pane (a web tab's pin: while its pane shows
+ *  that tab), or the focused terminal. */
 export function pinFocus(it: JarItem): boolean {
   const f = focused();
 
   if (it.kind === "tab") return Boolean(f?.tab) && f?.tab === it.tabInfo.id;
 
-  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane : Boolean(f?.terminal) && f?.terminal === it.key;
+  return it.kind === "pane" ? Boolean(f?.pane) && f?.pane === it.pane.pane && !tabHidden(it) : Boolean(f?.terminal) && f?.terminal === it.key;
 }
 
 /** What a tile is called: the pane's name (header.ts paneName), a terminal's given name. */
@@ -236,14 +249,14 @@ export function pinTile(sky: Sky, t: Theme, it: JarItem, size = TILE): Element {
     })
     .on_click(() => goToPin(it))
     .when(lit, (el) => el.child(div().absolute().top(ear + 1).left(1).w(size - 2).h(size - ear - 2).opacity(0.35).child(dither(t.ansi4, 1))))
-    .when(hot, (el) => el.child(div().absolute().top(ear).left(0).w(size).h(size - ear).bg(`${t.ansi0}88`)))
-    .child(div().absolute().top(ear).left(0).w(size).h(size - ear).border(1).border_color(lit ? t.ansi8 : t.ansi0))
+    .when(hot, (el) => el.child(div().absolute().top(ear).left(0).w(size).h(size - ear).bg(`${edge(t)}88`)))
+    .child(div().absolute().top(ear).left(0).w(size).h(size - ear).border(1).border_color(lit ? t.muted : edge(t)))
     .when(ear > 0, (el) => el.child(tabEar(t, lit, ear, small)))
     .child(div().absolute().top(at + ear / 2).left(at).size(plate).bg(t.background))
     // What the pane is (tileMark): a favicon, a file's type mark, the folder, a program's logo.
     .child(tileMark(t, it, glyph, bright))
     .when(focus, (el) => el.children(cornerTicks(t, small ? 2 : 3)))
-    .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+    .when(on, (el) => el.child(cursorMark(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent))));
 }
 
 /**
@@ -259,7 +272,7 @@ export function tabEar(t: Theme, lit: boolean, h: number, small: boolean): Eleme
 
   // h px tall, open below: the tile's top edge runs on under it.
   return div().absolute().top(0).left(small ? 3 : 4).w(w).h(h)
-    .border_t(1).border_l(1).border_r(1).border_color(lit ? t.ansi8 : t.ansi0)
+    .border_t(1).border_l(1).border_r(1).border_color(lit ? t.muted : edge(t))
     .when(lit, (el) => el.child(div().absolute().top(1).left(1).w(w - 4).h(h - 2).child(dither(t.accent, 1))));
 }
 
@@ -288,12 +301,16 @@ export function newTile(sky: Sky, t: Theme, size = TILE): Element {
       }
     })
     .on_mouse_down("left", stop)
+    .on_mouse_down("right", (_e, cx) => {
+      cx.stop_propagation();
+      dockMenu();
+    })
     .on_click(() => dockMenu())
-    .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${t.ansi0}88`)))
-    .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(t.ansi0, 1)))
+    .when(hot, (el) => el.child(div().absolute().top(0).left(0).size_full().bg(`${edge(t)}88`)))
+    .child(div().absolute().top(0).left(0).size_full().opacity(0.5).child(dither(edge(t), 1)))
     .child(div().absolute().top(1).left(1).size(size - 2).bg(t.background))
     .child(svg("mods/workspace-chrome/plus.svg").size(12).flex_none().text_color(hot || on ? t.foreground : t.dim))
-    .when(on, (el) => el.child(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent)));
+    .when(on, (el) => el.child(cursorMark(div().absolute().top(-2).left(-2).size(size + 4).border(1).border_color(t.accent))));
 }
 
 /** The shelf at the jar's foot, `w` wide: a dithered board and the tiles in
@@ -305,6 +322,6 @@ export function shelfView(sky: Sky, t: Theme, kept: readonly JarItem[], w: numbe
   const tiles = [...kept.map((it) => pinTile(sky, t, it)), newTile(sky, t)];
 
   return v_flex().id("shelf").w(w)
-    .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.ansi8, 1)))
+    .child(div().relative().h(BOARD).mx(4).mb(BOARD_GAP).opacity(0.7).child(dither(t.muted, 1)))
     .child(h_flex().flex_wrap().px(SHELF_PAD).gap(TILE_GAP).children(tiles));
 }

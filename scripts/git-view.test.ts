@@ -272,6 +272,38 @@ test("keys: ? opens the keys overview (keyhelp.ts), its rows run; the bar follow
   v.render();
 });
 
+test("menus: a row's key opens its menu under the selected row, a right-click's entries open theirs at the press, a global key's in the middle", async () => {
+  const v = await open();
+  v.size = { width: 1200, height: 800 };
+  v.setPanel("branches"); v.moveTo(0); await settle(v);
+  v.render();
+  // The side panels as drawn (their on_size_change): status 30, files 200, branches 220, 350 wide.
+  v.panelPx = { status: { width: 350, height: 30 }, files: { width: 350, height: 200 }, branches: { width: 350, height: 220 } };
+  // s (the row's Sort order…, one of its right-click entries): under the selected row, in the branches panel.
+  await press(v, "s");
+  expect(v.popups.kind).toBe("menu");
+  expect(v.popups.top.at).toEqual({ x: 7, y: 34 + 4 + 7 + (30 + 12) + (200 + 12) + 7, w: 348, h: 18 });
+  await press(v, "escape");
+  // The main view has the keys: no row to stand at, the middle.
+  v.focus = "main";
+  expect((await import("../defaults/mods/git/menu-anchor.ts")).rowAnchor(v, "branches")).toBeNull();
+  v.focus = "side";
+  // A right-click at the pointer: its menu there, and the menu its entry opens there too.
+  v.mouse = { x: 1150, y: 760 };
+  v.rowMenu("branches", 0, cx);
+  expect(v.popups.top.at).toEqual({ x: 1150, y: 760 });
+  const sort = v.popups.top.items.findIndex((x: any) => x.label === "Sort order…");
+  v.popups.top.items[sort].go(cx);
+  expect(v.popups.top.title).not.toBe("");
+  expect(v.popups.top.at).toEqual({ x: 1150, y: 760 });
+  await press(v, "escape");
+  // A global key (@, the command log's options): the middle.
+  await press(v, "@");
+  expect(v.popups.kind).toBe("menu");
+  expect(v.popups.top.at).toBeNull();
+  await press(v, "escape");
+});
+
 test("ctrl-p opens the main view as a pane (ctrl-shift-p a tab); the pane shows it and q closes it", async () => {
   const v = await open();
   v.overlay = "w1";

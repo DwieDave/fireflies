@@ -1310,6 +1310,17 @@ const CONTEXT_AND_VIEW: &str = r#"  /**
     modifiers: Modifiers;
   }
 
+  /** What an `on_pinch` handler receives: a trackpad pinch. */
+  export interface PinchEvent {
+    /** The change in magnification: 0.1 is ten percent larger, -0.1 smaller. */
+    delta: number;
+    touch_phase: "started" | "moved" | "ended" | "cancelled";
+    position: Point;
+    local_position?: Point;
+    bounds?: import("gpui-shell").ElementBounds;
+    modifiers: Modifiers;
+  }
+
   /**
    * The base class of every view: subclass it and default-export the subclass.
    *
@@ -1500,6 +1511,11 @@ const ELEMENT_METHODS: &str = r#"    /**
     /** div/h_flex/v_flex: initial size and changed layout size, in logical pixels.
      * Runs after layout, even without pointer movement. Use a stable id. */
     on_size_change<Self extends Element>(this: Self, handler: (size: { width: number; height: number }, cx: Context) => void): Self;
+    /** HERDR: div/h_flex/v_flex: where the element is drawn, in window pixels
+     * (`x`, `y` its top left corner), first and whenever that changes (it
+     * moved, scrolled, or changed size). Runs after layout, even without
+     * pointer movement. Use a stable id. */
+    on_bounds_change<Self extends Element>(this: Self, handler: (bounds: { x: number; y: number; width: number; height: number }, cx: Context) => void): Self;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover<Self extends Element>(this: Self, handler: (hovered: boolean, cx: Context) => void): Self;
     /**
@@ -1567,6 +1583,11 @@ const ELEMENT_METHODS: &str = r#"    /**
      * the gesture drives something else — a zoom, a value, a custom viewport.
      */
     on_scroll_wheel<Self extends Element>(this: Self, handler: (event: ScrollWheelEvent, cx: Context) => void): Self;
+    /**
+     * GPUI `InteractiveElement::on_pinch`: a trackpad pinch over this element
+     * (macOS), for a zoom. Use on a plain layout element.
+     */
+    on_pinch<Self extends Element>(this: Self, handler: (event: PinchEvent, cx: Context) => void): Self;
     /**
      * `handler(event, cx)` when the named action is dispatched to this element
      * or to something inside it.
@@ -3116,6 +3137,10 @@ const BASE: &str = r#"  /** A row. */
      * Requests are consumed once, after layout; already visible children stay put.
      */
     scroll_to_item(index: number): void;
+    /** HERDR: where the area is scrolled to after its last layout, as
+     * VirtualListScrollHandle.offset(): the content's offset in window pixels,
+     * `{ x: 0, y: -120 }` 120 px down. A plain read; legal in render too. */
+    offset(): { x: number; y: number };
     /** Releases the handle. Using it afterwards throws. */
     release(): boolean;
   }
@@ -4065,10 +4090,10 @@ interface ShellFetchOptions {
 }
 declare function fetch(url: string, options?: ShellFetchOptions): Promise<ShellFetchResponse>;
 declare const process: typeof import("process").default;
-// HERDR: the web globals the engine installs (LLRT's Buffer, URL and crypto),
-// which `lib: ["ES2022"]` leaves out. Not declared, because the engine has
-// none of them: setTimeout and setInterval (stubs that throw: use cx.timer),
-// TextDecoder, TextEncoder, structuredClone.
+// HERDR: the web globals the engine installs (LLRT's Buffer, URL and crypto;
+// its own UTF-8 TextEncoder and TextDecoder), which `lib: ["ES2022"]` leaves
+// out. Not declared, because the engine has none of them: setTimeout and
+// setInterval (stubs that throw: use cx.timer), structuredClone.
 declare function atob(data: string): string;
 declare function btoa(data: string): string;
 declare function queueMicrotask(callback: () => void): void;
@@ -4116,7 +4141,22 @@ interface Crypto {
   randomUUID(): string;
   readonly subtle: unknown;
 }
-declare const crypto: Crypto;
+// HERDR: a `var`, as lib.dom has it, so `globalThis.crypto` types (Effect's declarations read it).
+declare var crypto: Crypto;
+// HERDR: UTF-8 only (the engine's own, over Buffer); another label throws a RangeError.
+interface TextEncoder {
+  readonly encoding: "utf-8";
+  encode(input?: string): Uint8Array;
+  encodeInto(input: string, destination: Uint8Array): { read: number; written: number };
+}
+declare var TextEncoder: { prototype: TextEncoder; new (): TextEncoder };
+interface TextDecoder {
+  readonly encoding: "utf-8";
+  readonly fatal: boolean;
+  readonly ignoreBOM: boolean;
+  decode(input?: ArrayBuffer | ArrayBufferView): string;
+}
+declare var TextDecoder: { prototype: TextDecoder; new (label?: "utf-8" | "utf8", options?: { fatal?: boolean; ignoreBOM?: boolean }): TextDecoder };
 "#;
 
 /// `window` is a real global — see the runtime's `overlay` module.
@@ -4231,6 +4271,7 @@ mod tests {
         "on_mouse_down_out",
         "on_drop",
         "on_scroll_wheel",
+        "on_pinch",
         "on_action",
         "key_context",
         "image",

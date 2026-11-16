@@ -12,6 +12,22 @@ export const asJs = (path: string, source: string): string => (path.endsWith(".t
  *  loader that drops a mod file's imports: what `from "./guard.ts"` brings. */
 export const guard = await import("../defaults/mods/pip/guard.ts");
 
+/** tones.ts's exports (it imports nothing at run time), for the same loaders,
+ *  under the names a mod file may import them as (`edge as edgeTone`). */
+const tonesTs = await import("../defaults/mods/nocturne/tones.ts");
+export const tones = { ...tonesTs, edgeTone: tonesTs.edge };
+
+/** The part of `tones` a mod file's source imports (`edge`, `edge as edgeTone`,
+ *  `tone`), so a loader's scope doesn't clash with names the file declares. */
+export function tonesFor(source: string): Record<string, unknown> {
+  const clause = /import \{([^}]*)\} from "\.\/tones\.ts";/.exec(source)?.[1] ?? "";
+  const all: Record<string, unknown> = tones;
+  return Object.fromEntries(clause.split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+    const [name, as] = s.split(/\s+as\s+/);
+    return [as ?? name!, all[name!]];
+  }));
+}
+
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -45,7 +61,16 @@ function importedNames(clause: string): string[] {
  * view, say). Each call loads a fresh copy (in a temp folder), so tests that
  * set up different stand-ins don't share a module. Unlike `load()`-style
  * loaders it needs no list of what each file imports.
+ *
+ * The mods' libraries (`effect`, `effect/http`, `@fireflies/…`: what the app
+ * serves every mod by name, docs/effect-mods.md) load for real from the
+ * repo's node_modules, unless `standins` names one.
  */
+/** A library the app serves every mod by name (defaults/lib). */
+const isLibrary = (spec: string) => spec === "effect" || spec.startsWith("effect/") || spec.startsWith("@fireflies/");
+
+const repo = new URL("..", import.meta.url).pathname;
+
 export async function importMod(entry: string, standins: Record<string, Standin>, replace: Record<string, Standin> = {}): Promise<any> {
   const [mod, ...rest] = entry.split("/");
   const src = new URL(`../defaults/mods/${mod}/`, import.meta.url).pathname;
@@ -60,6 +85,7 @@ export async function importMod(entry: string, standins: Record<string, Standin>
     const text = readFileSync(join(src, file), "utf8").replace(
       /(import\s+(type\s+)?([\s\S]*?)\s+from\s+)"([^"]+)"/g,
       (whole, head: string, isType: string | undefined, clause: string, spec: string) => {
+        if (isLibrary(spec) && !(spec in standins)) return `${head}"${Bun.resolveSync(spec, repo)}"`;
         const stood = spec.startsWith(".") ? (spec in replace ? spec : null) : spec;
         if (!stood || isType) return whole;
         const names = wanted.get(stood) ?? new Set<string>();

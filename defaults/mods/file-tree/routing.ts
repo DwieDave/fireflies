@@ -5,23 +5,22 @@
 // the app made through editor.open / preview.open, whose slot comes later).
 //
 //   a preview file (state.ts isPreviewFile: a picture, a PDF, a clip, a
-//   font, a database: what the preview draws and the editor doesn't edit):
-//     an editor in the shown tab holding it: that tab (no second copy);
-//     else this pane's editor: a new tab of it, drawn;
-//     else this pane's preview pane: it shows the file (shared `preview.show`);
-//     else a new preview pane, noted as this pane's.
+//   font, a database: what the preview draws and the editor doesn't edit)
+//   goes to a preview pane, never the editor:
+//     this pane's preview pane: it shows the file (shared `preview.show`);
+//     else preview.open beside: the app shows it in a preview pane already
+//     in the tab (the one that last had the keyboard, else the first) or
+//     makes one; noted as this pane's by the file.
 //   any other file (code, Markdown, a table) goes to the editor
-//   (editor-route.ts); with no editor of this pane's but its preview pane
-//   there, the editor takes the preview pane's place: the preview's file its
-//   first tab (drawn), this one the second, shown; the preview pane goes.
+//   (editor-route.ts), beside; the preview pane stays a preview.
 // A pane closed by hand (or moved to another tab) is no longer this pane's.
 
 import type { PaneInfo } from "herdr";
 import { panes, run, shared, setShared } from "herdr";
 import type { Guarded } from "./guard.ts";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
-import type { EditorView, OpenRequest } from "./editor-route.ts";
-import { EDITOR, OPEN_KEY, editorPaths, editorProps, filesOf, isScratchpad } from "./editor-route.ts";
+import type { EditorView } from "./editor-route.ts";
+import { EDITOR, editorProps, isScratchpad } from "./editor-route.ts";
 import { keptFor } from "./tree.ts";
 import type { default as Files } from "./main.ts";
 
@@ -46,9 +45,6 @@ export const SHOW_KEY = sharedKey("preview.show", nullable(isShowRequest));
 
 /** The file each preview pane shows, by its slot (preview/viewer-load.ts titleOf). */
 const SHOWN = sharedMapKey("preview.paths", nullable(isString));
-
-/** A slot for an editor this pane makes itself (as editor/pane-tabs.ts newSlot). */
-export const newEditorSlot = (): string => `ed-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
 /** This pane's own panes, as kept (a restart keeps them by its slot). */
 export function openedOf(v: Files): Opened {
@@ -75,8 +71,9 @@ function canBeMine(p: PaneInfo, which: "editor" | "preview"): boolean {
 }
 
 /** A pane in the shown tab that is this pane's own (`which`); one
- *  found by its file takes its slot from now on. Popped editor tabs, parked
- *  panes and scratchpads aren't. */
+ *  found by its file (a preview pane: the file it shows now, the app may have
+ *  sent it to one already there) takes its slot from now on. Popped editor
+ *  tabs, parked panes and scratchpads aren't. */
 function own(v: Files, which: "editor" | "preview"): PaneInfo | null {
   const mine = openedOf(v)[which];
 
@@ -85,7 +82,8 @@ function own(v: Files, which: "editor" | "preview"): PaneInfo | null {
   const tab = v.shownTab() ?? null;
   const fit = panes().filter((p) => p.tab === tab && canBeMine(p, which));
   const slotOf = (p: PaneInfo): string | null => editorProps(p).slot ?? null;
-  const found = mine.slot ? fit.find((p) => slotOf(p) === mine.slot) : fit.find((p) => editorProps(p).path === mine.path);
+  const fileOf = (p: PaneInfo): string | null => (which === "preview" ? previewFile(p) : editorProps(p).path ?? null);
+  const found = mine.slot ? fit.find((p) => slotOf(p) === mine.slot) : fit.find((p) => fileOf(p) === mine.path);
 
   if (found && !mine.slot) {
     const slot = slotOf(found);
@@ -101,14 +99,6 @@ export const ownEditor = (v: Files): PaneInfo | null => own(v, "editor");
 
 /** This pane's preview pane in the shown tab, or null. */
 export const ownPreview = (v: Files): PaneInfo | null => own(v, "preview");
-
-/** Whether an editor in the shown tab holds `abs` as a tab. */
-export function heldInTab(v: Files, abs: string): boolean {
-  const tab = v.shownTab() ?? null;
-  const paths = editorPaths(shared);
-
-  return panes().some((p) => p.mod === EDITOR && p.tab === tab && !p.parked && filesOf(p, paths).includes(abs));
-}
 
 /** The file a preview pane shows: as it noted (it steps through its folder), else its props'. */
 export function previewFile(pane: PaneInfo): string | null {
@@ -129,46 +119,8 @@ export function showInPreview(pane: PaneInfo, abs: string): void {
   run("pane.focus", { pane: pane.pane });
 }
 
-type Writable<T> = { -readonly [K in keyof T]: T[K] };
-
 /** How a file goes to the editor: drawn to look at, or Markdown's view. */
 export interface EditorAsk {
   readonly look?: boolean;
   readonly view?: EditorView | null;
-}
-
-/** The props of an editor this pane makes in its preview pane's place. */
-interface NewEditorProps {
-  path: string;
-  slot: string;
-  look?: true;
-}
-
-/** The editor in the preview pane's place: the preview's file its first tab
- *  (drawn), `abs` the second and shown (sent to the new editor's slot before
- *  it starts: editor/pane-start.ts opens it on its first frame); the preview
- *  pane goes. Noted as this pane's editor. */
-export function editorForPreview(v: Files, preview: PaneInfo, abs: string, ask: EditorAsk): void {
-  const slot = newEditorSlot();
-  const first = previewFile(preview);
-
-  const props: NewEditorProps = { path: abs, slot };
-
-  if (first && first !== abs) {
-    // `abs` waits for the new editor in shared editor.open, addressed to its slot.
-    const request: Writable<OpenRequest> = { slot, path: abs, n: (readShared(shared, OPEN_KEY, null)?.n ?? 0) + 1, at: Date.now() };
-
-    if (ask.look) request.look = true;
-
-    if (ask.view) request.view = ask.view;
-
-    writeShared(setShared, OPEN_KEY, request);
-    props.path = first;
-    props.look = true;
-  } else if (ask.look) props.look = true;
-
-  run("pane.split", { direction: "auto", pane: preview.pane, mod: EDITOR, props });
-  run("pane.close", { pane: preview.pane });
-  noteMine(v, "editor", { slot });
-  noteMine(v, "preview", null);
 }

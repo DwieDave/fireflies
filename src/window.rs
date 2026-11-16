@@ -469,6 +469,35 @@ struct Overlay {
     /// A popup opened `at: { over }`: centred on that window (an overlay's id)
     /// or pane, where it is drawn now, never cut by the app window's edge.
     over: Option<String>,
+    /// How a popup hangs from `at` (or from an element's rectangle).
+    hang: Hang,
+}
+
+/// How a popup hangs. `at: {x, y}` puts its top left there (a drop-down a mod
+/// placed itself); the pointer (no `at`) hangs it just past the press, flipped
+/// left or up where the window has no room, never slid back over the press;
+/// `at: {x, y, w, h}` hangs it from an element (a selected row a key opened it
+/// for): under it at its left edge, above it where there's no room below. That
+/// rectangle is in window px, or with `over` in that pane's or overlay's own
+/// px (the mod's layout px) from its top left corner, where it is drawn now.
+#[derive(Clone, Debug, PartialEq)]
+enum Hang {
+    Corner,
+    Press,
+    Under { over: Option<String>, rect: [f32; 4] },
+}
+
+impl Hang {
+    fn of(at: Option<&Value>) -> Self {
+        match at {
+            Some(v) if v.get("x").is_some() && v.get("w").is_some() => Hang::Under {
+                over: v.get("over").and_then(Value::as_str).map(str::to_owned),
+                rect: [num_in(v, "x"), num_in(v, "y"), num_in(v, "w"), num_in(v, "h")],
+            },
+            Some(v) if v.get("x").is_some() => Hang::Corner,
+            _ => Hang::Press,
+        }
+    }
 }
 
 struct Drag {
@@ -1682,10 +1711,12 @@ impl AppWindow {
                 }
                 TerminalEvent::OpenFile(path, place) => {
                     let Some(viewer) = Viewer::of(path) else { return };
+                    let text = crate::links::preview_text(path);
                     let path = path.to_string_lossy().into_owned();
-                    // Markdown and what the preview shows open as a tab of the editor,
-                    // to be looked at (a picture drawn, Markdown in the editor's view for it).
-                    let (viewer, look) = editor_takes(viewer, this.folders.contains_key(Viewer::Editor.mod_name()));
+                    // Markdown, tables and patches open as a tab of the editor, to be
+                    // looked at (Markdown in the editor's view for it, a table drawn);
+                    // pictures, PDFs and the rest the preview shows in a preview pane.
+                    let (viewer, look) = editor_takes(viewer, text, this.folders.contains_key(Viewer::Editor.mod_name()));
                     // `path:42:7`: the editor goes there.
                     let extra = match place {
                         _ if look => json!({ "look": true }),
@@ -3106,6 +3137,31 @@ impl AppWindow {
             return match r.get("error") {
                 Some(e) => Err(e.to_string()),
                 None => Ok(json!({ "pane": id, "opened": "app", "path": path, "as": "tab" })),
+            };
+        }
+        // A preview pane in the tab shows the file instead of a new one opening
+        // (the one asked from, else the one that last had the keyboard, else
+        // the first): shared `preview.show` { slot, path, n, at } for its slot
+        // (the preview's main.ts). `in: "pane"`: a new preview beside.
+        let reuse = (viewer == Viewer::Preview && shown.is_none() && !tab && place != Some("pane"))
+            .then(|| pane.as_ref().and_then(|p| self.model.tab_of(p)))
+            .flatten()
+            .and_then(|t| {
+                let previews: Vec<(String, Value)> = t.root.panes().into_iter().filter_map(|n| match n.content() {
+                    Some(Content::Mod { name, props }) if name == viewer_mod => Some((n.id.clone(), props.clone())),
+                    _ => None,
+                }).collect();
+                let last = crate::mods::shared("preview.last");
+                tab_preview(&previews, on, pane.as_deref(), last.as_ref().and_then(Value::as_str))
+            });
+        if let Some((id, slot)) = reuse {
+            let n = crate::mods::shared("preview.show").and_then(|r| r.get("n").and_then(Value::as_u64)).unwrap_or(0) + 1;
+            let at = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_millis() as u64);
+            crate::mods::set_shared("preview.show".into(), json!({ "slot": slot, "path": path, "n": n, "at": at }));
+            let r = self.run_as("pane.focus", json!({ "pane": id }), false, window, cx);
+            return match r.get("error") {
+                Some(e) => Err(e.to_string()),
+                None => Ok(json!({ "pane": id, "opened": "app", "path": path, "as": "shown" })),
             };
         }
         if let Some(id) = shown {
@@ -4791,7 +4847,8 @@ impl AppWindow {
             _ => self.pointer,
         };
         let top = (spec.get("at").and_then(Value::as_str) == Some("top")).then(|| num("offset", 0.0));
-        let over = spec.get("at").and_then(|a| a.get("over")).and_then(Value::as_str).filter(|_| kind == OverlayKind::Popup).map(str::to_owned);
+        let hang = Hang::of(spec.get("at"));
+        let over = spec.get("at").filter(|_| !matches!(hang, Hang::Under { .. })).and_then(|a| a.get("over")).and_then(Value::as_str).filter(|_| kind == OverlayKind::Popup).map(str::to_owned);
         let fit = layout.is_none() && resized.is_none() && (kind == OverlayKind::Popup || (matches!(kind, OverlayKind::Dialog | OverlayKind::Window) && spec.get("height").is_none()));
         if kind == OverlayKind::Window && place.is_none() && spec.get("at").is_some_and(|v| v.get("x").is_some()) {
             place = Some(at);
@@ -4859,6 +4916,7 @@ impl AppWindow {
             snap,
             anchor,
             over,
+            hang,
         });
         if let Some(k) = &key {
             if spec.get("keep").and_then(Value::as_bool) == Some(true) {
@@ -5813,11 +5871,21 @@ impl AppWindow {
                         let bounds = self.bounds.borrow();
                         bounds.get(&format!("overlay:{id}")).or_else(|| bounds.get(id)).copied()
                     });
-                    let at = match (o.top, over) {
+                    let placed = match (o.top, over, &o.hang) {
                         // Centered, hanging from `offset` px below the top (a drop-down from a bar).
-                        (Some(off), _) => point((viewport.width - w) / 2.0, settings::z(off)),
-                        (None, Some(b)) => popup_over(b, size(w, h), viewport),
-                        (None, None) => o.at,
+                        (Some(off), _, _) => position_popup(point((viewport.width - w) / 2.0, settings::z(off)), body),
+                        (None, Some(b), _) => position_popup(popup_over(b, size(w, h), viewport), body),
+                        (None, None, Hang::Corner) => position_popup(o.at, body),
+                        (None, None, Hang::Press) => press_popup(o.at, body),
+                        (None, None, Hang::Under { over, rect }) => {
+                            let bounds = self.bounds.borrow();
+                            let drawn = over.as_ref().map(|id| bounds.get(&format!("overlay:{id}")).or_else(|| bounds.get(id)).copied());
+                            match under_rect(drawn, *rect, settings::zoom()) {
+                                Some(r) => under_popup(r, body),
+                                // What it belongs to isn't drawn (another tab): the middle.
+                                None => position_popup(popup_over(Bounds::new(point(px(0.0), px(0.0)), viewport), size(w, h), viewport), body),
+                            }
+                        }
                     };
                     out.push(
                         div()
@@ -5830,7 +5898,7 @@ impl AppWindow {
                                 let id = o.id.clone();
                                 move |this, _, w, cx| this.close_overlay(&id, w, cx)
                             }))
-                            .child(position_popup(at, body))
+                            .child(placed)
                             .into_any_element(),
                     );
                 }
@@ -6023,6 +6091,35 @@ fn position_popup(at: Point<Pixels>, body: Stateful<Div>) -> Anchored {
         .position(point(at.x.max(px(8.0)), at.y.max(px(8.0))))
         .snap_to_window_with_margin(px(8.0))
         .child(body)
+}
+
+/// How far past a press a popup's corner stands, so the press isn't on it.
+const PRESS_GAP: f32 = 2.0;
+
+/// A popup at a press: its top left just past it, flipped left of it or above
+/// it where the window has no room (GPUI's switched anchor, which measures the
+/// popup as drawn), so it never covers the press; slid inside only when it
+/// fits on neither side.
+fn press_popup(at: Point<Pixels>, body: Stateful<Div>) -> Anchored {
+    anchored().position(point(at.x.max(px(0.0)), at.y.max(px(0.0)))).offset(point(px(PRESS_GAP), px(PRESS_GAP))).child(body)
+}
+
+/// A popup hung from an element `r` (window px): under it at its left edge,
+/// above it where there's no room below (right of its left edge flipped to
+/// end there where there's no room on the right).
+fn under_popup(r: Bounds<Pixels>, body: Stateful<Div>) -> Anchored {
+    anchored().position(r.origin).offset(point(px(0.0), r.size.height)).child(body)
+}
+
+/// An element's rectangle `[x, y, w, h]` in window px: as given without the
+/// pane or overlay it's measured in (`drawn` None), else from that one's top
+/// left corner in its own px (the app's zoom); Some(None): that one isn't drawn.
+fn under_rect(drawn: Option<Option<Bounds<Pixels>>>, [x, y, w, h]: [f32; 4], zoom: f32) -> Option<Bounds<Pixels>> {
+    match drawn {
+        None => Some(Bounds::new(point(px(x), px(y)), size(px(w), px(h)))),
+        Some(Some(b)) => Some(Bounds::new(b.origin + point(px(x * zoom), px(y * zoom)), size(px(w * zoom), px(h * zoom)))),
+        Some(None) => None,
+    }
 }
 
 /// An overlay's blocks get ids of their own (`<overlay>/<id>`), and its mods learn the overlay.
@@ -6256,14 +6353,33 @@ fn split_edge(edge: &str) -> Option<crate::layout::Edge> {
 const WEB_MOD: &str = "browser";
 
 /// Whether a web link opens in the app's web pane (true) or the system's
-/// Where a terminal's link to a file goes: Markdown and what the preview shows
-/// open in the editor (when its mod is there) as a tab to look at (`true`):
-/// Markdown in the editor's view for it, a picture or a PDF drawn by the preview's viewer.
-fn editor_takes(viewer: Viewer, editor: bool) -> (Viewer, bool) {
+/// Where a terminal's link to a file goes: Markdown and the preview's text
+/// kinds (`text`: CSV/TSV, a patch) open in the editor (when its mod is there)
+/// as a tab to look at (`true`): Markdown in the editor's view for it, a table
+/// drawn. Pictures, PDFs, databases, fonts and clips go to the preview pane.
+fn editor_takes(viewer: Viewer, text: bool, editor: bool) -> (Viewer, bool) {
     match viewer {
-        Viewer::Markdown | Viewer::Preview if editor => (Viewer::Editor, true),
+        Viewer::Markdown if editor => (Viewer::Editor, true),
+        Viewer::Preview if editor && text => (Viewer::Editor, true),
         other => (other, false),
     }
+}
+
+/// The preview pane of a tab that shows another file instead of a new one
+/// opening: among `previews` (a preview pane's id and props, in the tab's
+/// order) on machine `on`, the one `pane` is (a preview opening another file),
+/// else the one whose slot is `last` (it last had the keyboard), else the
+/// first. -> (pane, slot).
+fn tab_preview(previews: &[(String, Value)], on: Option<&str>, pane: Option<&str>, last: Option<&str>) -> Option<(String, String)> {
+    let fit: Vec<(String, String)> = previews.iter().filter_map(|(id, props)| {
+        let slot = props.get("slot").and_then(Value::as_str)?;
+        let here = props.get("on").and_then(Value::as_str).filter(|m| !m.is_empty()) == on;
+        here.then(|| (id.clone(), slot.to_owned()))
+    }).collect();
+    fit.iter().find(|(id, _)| Some(id.as_str()) == pane)
+        .or_else(|| fit.iter().find(|(_, slot)| Some(slot.as_str()) == last))
+        .or(fit.first())
+        .cloned()
 }
 
 /// The editor pane of a tab that takes a file as a new tab: among `eds` (an
@@ -7261,6 +7377,69 @@ mod tests {
                 assert_eq!(bounds.origin, point(px(100.0), px(200.0)));
             }
         }
+    }
+
+    #[gpui::test]
+    fn popups_at_a_press_flip_and_popups_from_an_element_hang_under_or_above_it(cx: &mut TestAppContext) {
+        // A 220 x 72 menu: from a press (the pointer), or from a row (a key opened it).
+        struct Popup {
+            hang: super::Hang,
+            at: gpui::Point<gpui::Pixels>,
+        }
+        impl Render for Popup {
+            fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
+                let body = div().id("popup").debug_selector(|| "popup".into()).w(px(220.0)).child(div().h(px(72.0)));
+                let placed = match &self.hang {
+                    super::Hang::Under { rect, .. } => super::under_popup(super::under_rect(None, *rect, 1.0).unwrap(), body),
+                    _ => super::press_popup(self.at, body),
+                };
+                div().size_full().child(placed)
+            }
+        }
+        let (view, cx) = cx.add_window_view(|_, _| Popup { hang: super::Hang::Press, at: point(px(100.0), px(120.0)) });
+        let vp = cx.update(|window, _| window.viewport_size());
+        let (gap, menu) = (px(super::PRESS_GAP), size(px(220.0), px(72.0)));
+        let mut shown = |hang: super::Hang, at: gpui::Point<gpui::Pixels>| {
+            view.update(cx, |v, cx| {
+                v.hang = hang;
+                v.at = at;
+                cx.notify();
+            });
+            cx.run_until_parked();
+            cx.debug_bounds("popup").unwrap()
+        };
+        // In the open: just right of and below the press.
+        assert_eq!(shown(super::Hang::Press, point(px(100.0), px(120.0))), gpui::Bounds::new(point(px(100.0) + gap, px(120.0) + gap), menu));
+        // Near the bottom right corner: flipped left and up, ending at the press (not slid over it).
+        let corner = point(vp.width - px(30.0), vp.height - px(20.0));
+        let b = shown(super::Hang::Press, corner);
+        assert_eq!(b.bottom_right(), corner, "flipped, not slid: {b:?}");
+        // Near the right edge only: flipped left (its top right corner at the press: GPUI's switched
+        // anchor drops the gap), still below.
+        let right = point(vp.width - px(30.0), px(50.0));
+        assert_eq!(shown(super::Hang::Press, right).origin, point(right.x - menu.width, px(50.0)));
+        // From a row: under it at its left edge.
+        let row = |y: f32| super::Hang::Under { over: None, rect: [40.0, y, 300.0, 24.0] };
+        assert_eq!(shown(row(200.0), corner).origin, point(px(40.0), px(224.0)));
+        // A row near the foot: above it.
+        let low = f32::from(vp.height) - 40.0;
+        assert_eq!(shown(row(low), corner).bottom_left(), point(px(40.0), px(low)));
+    }
+
+    #[test]
+    fn a_rectangle_over_a_pane_is_measured_from_where_the_pane_is_drawn_at_the_zoom() {
+        let pane = gpui::Bounds::new(point(px(173.0), px(40.0)), size(px(600.0), px(400.0)));
+        let at = super::under_rect(Some(Some(pane)), [10.0, 20.0, 100.0, 24.0], 0.9).unwrap();
+        assert_eq!(at, gpui::Bounds::new(point(px(173.0 + 9.0), px(40.0 + 18.0)), size(px(90.0), px(24.0 * 0.9))));
+        // Not drawn (another tab): nothing to hang from.
+        assert_eq!(super::under_rect(Some(None), [10.0, 20.0, 100.0, 24.0], 0.9), None);
+        // No pane: window px as given.
+        assert_eq!(super::under_rect(None, [10.0, 20.0, 100.0, 24.0], 0.9).unwrap().origin, point(px(10.0), px(20.0)));
+        // The spec: {x, y} is a corner, {x, y, w, h} a rectangle (over a pane or not), anything else the press.
+        assert_eq!(super::Hang::of(Some(&serde_json::json!({ "x": 1, "y": 2 }))), super::Hang::Corner);
+        assert_eq!(super::Hang::of(Some(&serde_json::json!({ "over": "side", "x": 1, "y": 2, "w": 3, "h": 4 }))), super::Hang::Under { over: Some("side".into()), rect: [1.0, 2.0, 3.0, 4.0] });
+        assert_eq!(super::Hang::of(Some(&serde_json::json!("pointer"))), super::Hang::Press);
+        assert_eq!(super::Hang::of(None), super::Hang::Press);
     }
 
     #[test]
@@ -8429,16 +8608,36 @@ export default class SystemToast extends View {
     }
 
     #[test]
-    fn a_terminals_markdown_and_preview_links_open_in_the_editor_to_look_at() {
+    fn a_terminals_markdown_and_table_links_open_in_the_editor_to_look_at_pictures_in_the_preview() {
         use super::editor_takes;
         use crate::links::Viewer;
-        assert_eq!(editor_takes(Viewer::Markdown, true), (Viewer::Editor, true));
-        assert_eq!(editor_takes(Viewer::Preview, true), (Viewer::Editor, true));
-        assert_eq!(editor_takes(Viewer::Editor, true), (Viewer::Editor, false));
-        assert_eq!(editor_takes(Viewer::Files, true), (Viewer::Files, false));
+        assert_eq!(editor_takes(Viewer::Markdown, false, true), (Viewer::Editor, true));
+        // A table or a patch: drawn in the editor; a picture, a PDF, a clip: the preview pane.
+        assert_eq!(editor_takes(Viewer::Preview, true, true), (Viewer::Editor, true));
+        assert_eq!(editor_takes(Viewer::Preview, false, true), (Viewer::Preview, false));
+        assert_eq!(editor_takes(Viewer::Editor, false, true), (Viewer::Editor, false));
+        assert_eq!(editor_takes(Viewer::Files, false, true), (Viewer::Files, false));
         // Without the editor's mod: the viewers, as before.
-        assert_eq!(editor_takes(Viewer::Markdown, false), (Viewer::Markdown, false));
-        assert_eq!(editor_takes(Viewer::Preview, false), (Viewer::Preview, false));
+        assert_eq!(editor_takes(Viewer::Markdown, false, false), (Viewer::Markdown, false));
+        assert_eq!(editor_takes(Viewer::Preview, true, false), (Viewer::Preview, false));
+    }
+
+    #[test]
+    fn a_preview_file_goes_to_the_tabs_preview_pane_asked_from_else_the_last_focused_else_its_first() {
+        use super::tab_preview;
+        use serde_json::json;
+        let pv = |id: &str, slot: &str, on: Option<&str>| (id.to_owned(), json!({ "slot": slot, "path": "/r/a.png", "on": on }));
+        let previews = vec![pv("p1", "s1", None), pv("p2", "s2", None), pv("p3", "s3", Some("box"))];
+        assert_eq!(tab_preview(&previews, None, None, None), Some(("p1".into(), "s1".into())));
+        assert_eq!(tab_preview(&previews, None, None, Some("s2")), Some(("p2".into(), "s2".into())));
+        // Opened from a preview pane: that one, over the last.
+        assert_eq!(tab_preview(&previews, None, Some("p1"), Some("s2")), Some(("p1".into(), "s1".into())));
+        // Another machine's preview shows that machine's files only.
+        assert_eq!(tab_preview(&previews, None, None, Some("s3")), Some(("p1".into(), "s1".into())));
+        assert_eq!(tab_preview(&previews, Some("box"), None, None), Some(("p3".into(), "s3".into())));
+        // None in the tab, or none with a slot: none (a new preview opens beside).
+        assert_eq!(tab_preview(&[], None, None, None), None);
+        assert_eq!(tab_preview(&[("p5".to_owned(), json!({ "path": "/r/a.png" }))], None, None, None), None);
     }
 
     #[test]

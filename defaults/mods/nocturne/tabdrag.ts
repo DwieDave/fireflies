@@ -11,6 +11,7 @@ import { div } from "gpui-kit";
 import type { Element } from "gpui-kit";
 import type { Theme } from "herdr";
 import { dither } from "./kit.ts";
+import { edge } from "./tones.ts";
 
 /** How far (window px) a press moves before it's a drag rather than a click. */
 export const DRAG_START = 4;
@@ -84,7 +85,7 @@ export function stake(t: Theme): Element {
  *  plate edged in the accent, both 3 px off the horizon's way. */
 export function lift(t: Theme): Element[] {
   return [
-    div().absolute().left(6).right(0).top(9).bottom(2).child(dither(t.ansi0, 1)),
+    div().absolute().left(6).right(0).top(9).bottom(2).child(dither(edge(t), 1)),
     div().absolute().left(3).right(3).top(5).bottom(5).bg(t.background).border(1).border_color(t.accent),
   ];
 }

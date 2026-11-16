@@ -17,6 +17,7 @@ import { absOf, isCut } from "./file-ops.ts";
 import type { default as Files } from "./main.ts";
 import type { Side } from "./split-size.ts";
 import { folderFacts, DIVIDER } from "./split-size.ts";
+import { edge } from "./tones.ts";
 
 export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
   // The name's input (a new item's row, or the row being renamed) in place of the name.
@@ -41,16 +42,16 @@ export function drawRow(v: Files, t: Theme, r: Row, focused: boolean): Element {
     : div().relative().flex_1().min_w(0).truncate().text_color(r.head || dragged ? t.dim : marked ? t.accent : color).child(r.name);
 
   return h_flex().id(`nf-${r.path}`).relative().h(ROW).w_full().pl(8 + r.depth * 14).pr(10).gap(6).items_center()
-    .hover((s) => s.bg(`${t.ansi0}55`))
+    .hover((s) => s.bg(`${edge(t)}55`))
     // A marked row: a light accent dither and a dotted accent edge on the left.
     .when(marked && !sel, (el) => el.child(dither(`${t.accent}30`, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).child(dither(t.accent, 1))))
-    .when(sel, (el) => el.child(dither(focused ? t.ansi0 : `${t.ansi0}88`, 1))
+    .when(sel, (el) => el.child(dither(focused ? edge(t) : `${edge(t)}88`, 1))
       .when(marked, (el) => el.child(dither(`${t.accent}30`, 1)))
-      .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(focused ? t.accent : t.ansi8)))
+      .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(focused ? t.accent : t.muted)))
     // The folder a drop goes into: framed in the accent.
     .when(target, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)).child(dither(`${t.accent}40`, 1)))
     // Indent guides: one dotted rule per level.
-    .children(Array.from({ length: r.depth }, (_, d) => div().absolute().top(0).bottom(0).left(14 + d * 14).w(1).opacity(0.5).child(dither(t.ansi0, 1))))
+    .children(Array.from({ length: r.depth }, (_, d) => div().absolute().top(0).bottom(0).left(14 + d * 14).w(1).opacity(0.5).child(dither(edge(t), 1))))
     .child(r.head ? div().w(10).flex_none() : r.dir ? svg(`mods/files/chevron-${open ? "down" : "right"}.svg`).relative().size(10).flex_none().text_color(t.dim) : div().w(10).flex_none())
     .child(r.dir ? svg("mods/files/folder.svg").relative().size(12).flex_none().text_color(open ? t.accent : t.ansi4) : typeMark(t, r.name, `nf-icon-${r.path}`))
     .child(name)
@@ -70,10 +71,10 @@ export function drawFolderView(v: Files, t: Theme, d: LookDir): Element {
   const facts = d.error ? "" : d.entries ? folderFacts(entries) : "listing…";
 
   const bar = h_flex().id("nf-look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
-    .child(div().flex_none().text_color(t.ansi8).child("DIR"))
+    .child(div().flex_none().text_color(t.muted).child("DIR"))
     .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.foreground).child(d.abs === "/" ? "/" : base(d.abs)))
     .when(Boolean(facts), (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(facts)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(dither(edge(t), 1)));
 
   const list = v_flex().flex_1().min_h(0).overflow_hidden().py(4).text_size(12)
     .children(d.error ? [div().px(12).py(6).text_size(11).text_color(t.dim).child(d.error)] : [])
@@ -97,7 +98,7 @@ export function drawSplit(v: Files, t: Theme, side: Side, px: number, list: Elem
   const lit = Boolean(v.dragging) || v.dividerHover;
   const band = lit ? DIVIDER - 2 : 1;
   const at = Math.floor((DIVIDER - band) / 2);
-  const line = dither(lit ? t.accent : t.ansi8, 1);
+  const line = dither(lit ? t.accent : t.muted, 1);
 
   const divider = div().id("nf-divider").relative().flex_none()
     .when(right, (el) => el.w(DIVIDER).h_full().cursor_col_resize().child(div().absolute().top(0).bottom(0).left(at).w(band).child(line)))
@@ -128,18 +129,18 @@ export function drawSplit(v: Files, t: Theme, side: Side, px: number, list: Elem
 
 export function emptyView(v: Files, t: Theme, title: string, hint: string | null, add = false): Element {
   return v_flex().flex_1().min_h(0).items_center().justify_center().gap(10).px(16).text_size(11)
-    .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
+    .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.muted).opacity(0.6))
     .child(div().text_color(t.foreground).child(title))
-    .children(hint ? [div().text_center().text_color(t.ansi8).child(hint)] : [])
+    .children(hint ? [div().text_center().text_color(t.muted).child(hint)] : [])
     // An empty folder: its first file, as a / + file make it.
     .when(add, (el) => el.child(h_flex().id("nf-empty-add").relative().h(20).px(6).gap(7).items_center().text_color(t.muted)
-      .hover((s) => s.bg(`${t.ansi0}55`).text_color(t.foreground))
+      .hover((s) => s.bg(`${edge(t)}55`).text_color(t.foreground))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {
         addNew(v, "file", cx);
         cx.notify();
       })
-      .child(div().text_color(t.accent).child("+")).child(div().child("new file")).child(div().text_color(t.ansi8).child("a"))));
+      .child(div().text_color(t.accent).child("+")).child(div().child("new file")).child(div().text_color(t.muted).child("a"))));
 }
 
 /** The divider's drag ends: its share is kept. */

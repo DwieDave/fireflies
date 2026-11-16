@@ -44,7 +44,7 @@ function ownKeys(how: ShownAs | null, kind: LookKind | null, options: KeyListOpt
   }
 
   if (how === "native" && kind === "pdf") {
-    return [["+ -", "zoom"], ["0", "fit width"], ["← →  h l", "pages"], ["space ⌫  pgdn pgup", "pages"], ["g G", "first / last"], ["esc", "out of the page"]];
+    return [["+ -", "zoom"], ["0", "fit width"], ["1", "100%"], ["← →  h l", "pages"], ["space ⌫  pgdn pgup", "pages"], ["g G", "first / last"], ["esc", "out of the page"]];
   }
 
   if (how === "native" && (kind === "video" || kind === "audio")) {

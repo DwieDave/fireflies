@@ -15,6 +15,8 @@ import type { Asked, Chip, Item, Top } from "./state.ts";
 import { dither, eyebrow, toneColor } from "./paint.ts";
 import { goTo } from "./found.ts";
 import type { default as ScriptsDeck } from "./main.ts";
+import { rightPress } from "./run-menu.ts";
+import { edge } from "./tones.ts";
 
 /** A word that acts on a click (‹ back, cancel): dim, lit under the pointer. */
 export function actionChip(t: Theme, id: string, label: string, color: Color | null, go: (cx: Context) => void) {
@@ -35,13 +37,13 @@ export function badge(t: Theme, text: string, on: boolean, w?: number) {
   const el = div().flex_none().h(14).px(4);
 
   return (w === undefined ? el : el.w(w).justify_center()).flex().items_center()
-    .border(1).border_color(on ? t.ansi8 : t.ansi0).text_size(9).text_color(on ? t.muted : t.dim).child(text);
+    .border(1).border_color(on ? t.muted : edge(t)).text_size(9).text_color(on ? t.muted : t.dim).child(text);
 }
 
 export function section(t: Theme, label: string, aside: string | Element | null) {
   const head = h_flex().h(SECTION).flex_none().px(12).pt(6).gap(8).items_center()
     .child(eyebrow(t, label))
-    .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.ansi8, 1)));
+    .child(div().flex_1().h(1).relative().opacity(0.6).child(dither(t.muted, 1)));
 
   if (aside === null || aside === "") return head;
 
@@ -50,7 +52,7 @@ export function section(t: Theme, label: string, aside: string | Element | null)
 
 /** The row under the cursor: a dithered band and a blue edge, like Nocturne's menus. */
 export function band(el: Element, t: Theme, on: boolean) {
-  return on ? el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : el;
+  return on ? el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)) : el;
 }
 
 /**
@@ -63,9 +65,9 @@ export function runChip(t: Theme, id: string, c: Chip, go: (cx: Context) => void
   const fill = color ?? t.foreground;
 
   return h_flex().id(id).relative().flex_none().h(CHIP).px(5).gap(4).items_center().text_size(10)
-    .border(1).border_color(asking ? fill : t.ansi0).text_color(asking ? t.background : t.muted)
+    .border(1).border_color(asking ? fill : edge(t)).text_color(asking ? t.background : t.muted)
     .when(asking, (el) => el.bg(fill))
-    .hover((s) => (asking ? s : s.border_color(color ?? t.ansi8).text_color(fill).bg(t.ansi0)))
+    .hover((s) => (asking ? s : s.border_color(color ?? t.muted).text_color(fill).bg(edge(t))))
     .tooltip(tip)
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => { cx.stop_propagation(); go(cx); })
@@ -82,7 +84,7 @@ export function runChips(v: ScriptsDeck, t: Theme, r: Run, i: number) {
     .child(runChip(t, `w-${i}`, { mark: ICON("eye"), key: "w", tip: r.live ? "Watch it (w, enter)" : "Its output (w, enter)" }, (cx) => v.act("watch", r, cx)))
     .child(runChip(t, `a-${i}`, { mark: OWN("rotate-cw"), key: "R", tip: r.live ? "Run it again: stops this one first (R)" : "Run it again (R)", asking: asked("again"), ask: "again?", color: asked("again") ? t.working : null }, (cx) => v.act("again", r, cx)))
     // Set apart: a gap and a rule, so it isn't hit for its neighbours.
-    .child(div().w(1).h(14).mx(4).flex_none().bg(t.ansi0))
+    .child(div().w(1).h(14).mx(4).flex_none().bg(edge(t)))
     .child(r.live
       ? runChip(t, `s-${i}`, { mark: ICON("square"), key: "x", tip: "Stop it (x, twice)", color: t.blocked, asking: asked("stop"), ask: "stop?" }, (cx) => v.act("stop", r, cx))
       : runChip(t, `d-${i}`, { mark: ICON("x"), key: "x", tip: "Remove it from the list (x)", color: t.blocked }, (cx) => v.act("dismiss", r, cx)));
@@ -99,7 +101,9 @@ export function runRow(v: ScriptsDeck, t: Theme, r: Run, i: number, on: boolean)
 
       if (k !== v.hover) { v.hover = k; cx.notify(); }
     })
-    .on_click((_e, cx) => { v.cursor = i; v.act("watch", r, cx); }), t, on)
+    .on_click((_e, cx) => { v.cursor = i; v.act("watch", r, cx); })
+    // A right-click: the run's menu at the pointer (run-menu.ts).
+    .on_mouse_down("right", (e, cx) => { cx.stop_propagation(); rightPress(v, i, e); cx.notify(); }), t, on)
     .child(div().relative().w(8).flex_none().flex().items_center().child(pip(color, r.live)))
     .child(h_flex().relative().flex_1().min_w(0).gap(6).items_center()
       .child(div().min_w(0).truncate().child(r.name))

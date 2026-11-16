@@ -20,7 +20,7 @@ import type { Theme } from "herdr";
 import { blocks, TASK } from "./markdown-parse.ts";
 
 /** The theme colours a callout is drawn in. */
-export type CalloutColor = "ansi1" | "ansi2" | "ansi3" | "ansi4" | "ansi5" | "ansi6" | "ansi8" | "ansi13";
+export type CalloutColor = "ansi1" | "ansi2" | "ansi3" | "ansi4" | "ansi5" | "ansi6" | "muted" | "ansi13";
 
 /** A picture on a line of its own: its alt text and its source. */
 export interface ImageRef {
@@ -136,7 +136,7 @@ export const CALLOUTS: ReadonlyMap<string, readonly [color: CalloutColor, name: 
   ["caution", ["ansi1", "Caution"]], ["danger", ["ansi1", "Danger"]], ["error", ["ansi1", "Error"]], ["bug", ["ansi1", "Bug"]], ["failure", ["ansi1", "Failure"]], ["fail", ["ansi1", "Fail"]],
   ["question", ["ansi6", "Question"]], ["help", ["ansi6", "Help"]], ["faq", ["ansi6", "FAQ"]],
   ["abstract", ["ansi6", "Abstract"]], ["summary", ["ansi6", "Summary"]], ["tldr", ["ansi6", "TL;DR"]],
-  ["quote", ["ansi8", "Quote"]], ["cite", ["ansi8", "Cite"]],
+  ["quote", ["muted", "Quote"]], ["cite", ["muted", "Cite"]],
 ]);
 
 /** Local images inside running text (TextView can't draw them) as links to the file. */
@@ -395,7 +395,7 @@ export class MarkdownDoc {
 
     return view.child(div().absolute().right(1).w(3)
       .top(Math.round((this.scrollY / max) * this.viewH * (1 - frac))).h(Math.max(16, Math.round(this.viewH * frac)))
-      .child(o.dither(o.focused ? t.accent : t.ansi8)));
+      .child(o.dither(o.focused ? t.accent : t.muted)));
   }
 
   part(t: Theme, p: Block, o: DocOptions): Element {
@@ -425,7 +425,7 @@ export class MarkdownDoc {
         return v_flex().gap(6).pt(4)
           .child(h_flex().gap(10).items_center().text_size(10.5).text_color(t.dim)
             .child(div().child("FOOTNOTES"))
-            .child(div().relative().flex_1().h(1).opacity(0.6).child(o.dither(t.ansi8))))
+            .child(div().relative().flex_1().h(1).opacity(0.6).child(o.dither(t.muted))))
           .children(p.notes.map((n) => h_flex().id(`${id}-${n.anchor}`).gap(8).items_start()
             .child(div().w(22).flex_none().text_size(size - 1).text_color(t.accent).child(`${n.n}.`))
             .child(div().flex_1().min_w(0).child(md(`${id}-${n.anchor}-md`, n.text)))
@@ -456,7 +456,7 @@ export class MarkdownDoc {
 
   /** A task's box: a click ticks or unticks it. */
   tickBox(t: Theme, it: TaskItem, id: string, o: DocOptions): Element {
-    const box = div().id(id).relative().size(12).mt(3).flex_none().border(1).border_color(it.checked ? t.accent : t.ansi8)
+    const box = div().id(id).relative().size(12).mt(3).flex_none().border(1).border_color(it.checked ? t.accent : t.muted)
       .cursor_pointer().hover((s) => s.border_color(t.foreground))
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => {

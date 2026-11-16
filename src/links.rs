@@ -220,6 +220,16 @@ const PREVIEW_EXTS: &[&str] = &[
 /// Fonts, audio and video: the preview shows them in macOS views (Quick Look,
 /// AVPlayerView), so elsewhere their links keep going to the system's app.
 const PREVIEW_MACOS_EXTS: &[&str] = &["ttf", "otf", "ttc", "woff", "woff2", "mp4", "m4v", "mov", "mp3", "m4a", "aac", "wav", "aif", "aiff", "flac", "caf"];
+/// The preview's kinds that are text: the editor draws them in a tab too (a
+/// table, a colored patch), so a terminal's link to one opens there; the
+/// rest (pictures, PDFs, databases, fonts, clips) open in a preview pane.
+const PREVIEW_TEXT_EXTS: &[&str] = &["csv", "tsv", "diff", "patch"];
+
+/// Whether a file the preview shows is text the editor draws as well (CSV/TSV, a patch).
+pub fn preview_text(path: &Path) -> bool {
+    let ext = path.extension().and_then(|e| e.to_str()).map(str::to_ascii_lowercase).unwrap_or_default();
+    PREVIEW_TEXT_EXTS.contains(&ext.as_str())
+}
 
 impl Viewer {
     /// The viewer for a file, by its extension (the editor also by name); a
@@ -700,6 +710,16 @@ mod tests {
             assert!(Viewer::Preview.takes(ext, false), "{ext}");
         }
         assert!(!Viewer::Preview.takes("md", true));
+    }
+
+    #[test]
+    fn tables_and_patches_are_the_previews_text_the_rest_is_drawn_only_there() {
+        for name in ["t.csv", "T.TSV", "x.diff", "y.patch"] {
+            assert!(preview_text(Path::new(name)), "{name}");
+        }
+        for name in ["a.png", "r.pdf", "u.sqlite", "f.woff2", "c.mov", "notes.md", "main.rs", "csv"] {
+            assert!(!preview_text(Path::new(name)), "{name}");
+        }
     }
 
     #[test]

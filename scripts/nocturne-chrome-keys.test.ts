@@ -209,6 +209,40 @@ test("tab jumps to the fireflies; enter focuses the agent, p pins it, m opens it
   expect(press(s, "j")).toBe(false);
 });
 
+test("a menu a key opens hangs from the cursor's thing (its ring's place); a click's at the pointer; a global key's in the middle", () => {
+  // The cursor's band reports where it's drawn (window px; kit.ts navRow / navRing on_bounds_change).
+  sharedState["nocturne.cursor-box"] = { x: 12, y: 96, w: 180, h: 24 };
+  const s = sky();
+  press(s, "m");
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 12, y: 96, w: 180, h: 24 }, props: { tab: "space", target: { id: "s1" } } });
+  // Its Change folder… (a menu entry) hangs under the same row.
+  expect(s.spaces.pressed).toMatchObject({ id: "s1", at: { x: 12, y: 120 } });
+  // f (the folder picker) and a firefly's m: from the cursor too.
+  press(s, "f");
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 12, y: 96, w: 180, h: 24 }, props: { role: "newspace", space: "s1" } });
+  press(s, "tab");
+  press(s, "m");
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 12, y: 96, w: 180, h: 24 }, props: { tab: "fly" } });
+  // The strip: a tab's m, the + new button's enter.
+  const t = strip();
+  sharedState["nocturne.cursor-box"] = { x: 300, y: 4, w: 90, h: 28 };
+  press(t, "m");
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 300, y: 4, w: 90, h: 28 }, props: { tab: "tab", target: { id: "t1" } } });
+  // A right click (no key running): at the pointer, no place asked.
+  s.spaces.menu(spacesNow[0], false, { position: { x: 40, y: 100 }, local_position: { x: 4, y: 4 }, bounds: { x: 0, y: 0, width: 180, height: 24 } });
+  expect(overlays.at(-1).kind).toBe("popup");
+  expect(overlays.at(-1).at).toBeUndefined();
+  // A click on the pane header's ⋯: under the button (its right edge on the button's), not in the middle.
+  const more = headerControls(panesNow[0], panesNow).find((c: any) => c.id === "more");
+  more.go({ position: { x: 905, y: 50 }, local_position: { x: 5, y: 6 }, bounds: { x: 0, y: 0, width: 18, height: 18 } });
+  expect(overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 900 + 18 - 260, y: 44 + 18 + 6 }, props: { tab: "pane" } });
+  // A global key (cmd-n, nocturne.new: no cursor's key running): the middle.
+  queue.push("new");
+  return new Promise((r) => setTimeout(r, 10)).then(() => {
+    expect(overlays.at(-1)).toMatchObject({ kind: "dialog", props: { role: "new" } });
+  });
+});
+
 test("on a space: rename, folder (the picker), new tab, worktree, menu; delete asks and y deletes; n opens the picker", () => {
   const s = sky();
   press(s, "m");

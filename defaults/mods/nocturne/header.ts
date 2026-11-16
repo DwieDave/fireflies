@@ -26,7 +26,7 @@
 // blue ring), ⋯ and close; it says where through shared(nav.ts CURSOR).
 
 import { div, svg } from "gpui-kit";
-import type { Context, Element, Size } from "gpui-kit";
+import type { Context, Element, MouseButtonEvent, Size } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { h_flex, InputState } from "gpui-base";
 import { panes, spaces, props, run, theme, home, shared, setShared, keys } from "herdr";
@@ -34,13 +34,14 @@ import type { PaneInfo, Status, Theme } from "herdr";
 import { isNumber, isString, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared } from "./guard.ts";
 import { NAME_PANE, openMenu } from "./menu.ts";
 import { statusMark } from "./winged.ts";
-import { ART, LOGO, dither, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
+import { ART, LOGO, dither, dropBelow, WORD, givenName, nameTerminal, navRing } from "./kit.ts";
 import { CURSOR_KEY } from "./nav.ts";
 import { field } from "./inline.ts";
 import { isLazygit, gitState } from "./lazygit.ts";
 import type { GitState } from "./lazygit.ts";
 import { openEqualize } from "./equalize.ts";
 import { launchers, launcherIcon } from "./launchers.ts";
+import { edge } from "./tones.ts";
 
 /** A pane as a header draws it: a pane (panes()), or a pane-less terminal (peek.ts). */
 export interface HeaderPane {
@@ -192,10 +193,13 @@ export function middleCloses(el: Element, pane: string | null, held: MiddleHeld)
     });
 }
 
-/** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard). */
-export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false): void {
+/** The pane menu (menu.ts), as on a right-click (`centered`: from the keyboard; `press`: a click
+ *  on the header's ⋯, which it hangs under). */
+export function paneMenu(p: Pick<HeaderPane, "pane" | "terminal">, centered = false, press: MouseButtonEvent | null = null): void {
+  const at = press ? dropBelow(press, 260) : null;
+
   // 260: its rows' names beside the longest keys ("Move right" by cmd-alt-shift-]).
-  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered });
+  openMenu({ tab: "pane", target: { pane: p.pane, terminal: p.terminal } }, { width: 260, centered: centered && !at, at });
 }
 
 /** The header's naming ask (menu.ts NAME_PANE): which terminal, and when. */
@@ -212,7 +216,8 @@ export interface HeaderControl {
   readonly icon?: string;
   readonly text?: string;
   readonly tip?: string;
-  readonly go: () => void;
+  /** What a click (its press: where it hangs a menu from) or the strip's key does. */
+  readonly go: (press?: MouseButtonEvent | null) => void;
 }
 
 /** A command's arguments for a header control. */
@@ -248,7 +253,7 @@ export function headerControls(p: PaneInfo | null | undefined, all: readonly Pan
     ...(tab.filter((x) => !x.parked).length > 2 ? [c("gridify", "mods/equalize-panes/grid.svg", "nocturne.gridify", undefined, "Gridify panes")] : []),
     ...(parkable(p, all) ? [c("park", CHROME("archive"), "pane.park", { pane }, `Park pane${park ? ` (${park})` : ""}`)] : []),
     c("zoom", p.zoomed ? "unzoom" : "zoom", "pane.zoom", { pane }, p.zoomed ? "Unzoom" : "Zoom"),
-    { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: () => paneMenu(p, true) },
+    { id: "more", icon: `${ART}/more.svg`, tip: parkable(p, all) ? "More: split, even out, park, move, close" : "More: split, even out, move, close", go: (press) => paneMenu(p, true, press) },
     c("close", "close", "pane.close", { pane }, "Close"),
   ];
 }
@@ -270,6 +275,8 @@ export default class Header {
   /** A middle press on the bar, until it's let go (middleCloses). */
   held: MiddleHeld = { middle: false };
   width = 1000; // the header's, as last drawn
+  /** The press on a control, for its click (the ⋯ hangs its menu under it). */
+  press: MouseButtonEvent | null = null;
   git: GitState | null = null;
   naming = false;
   nameInput: InputState | null = null;
@@ -379,7 +386,7 @@ export default class Header {
   lazygit(t: Theme, p: HeaderPane): Element {
     const g = this.git;
     const on = p.focused;
-    const band = on ? t.accent : t.ansi0;
+    const band = on ? t.accent : edge(t);
     const step = (o: number) => div().flex_1().h_full().relative().opacity(o).child(dither(band, 2));
     const count = (s: string, c: Theme["accent"]) => div().flex_none().text_color(c).child(s);
     const branch = g?.branch || p.branch;
@@ -444,11 +451,15 @@ export default class Header {
     const el = div().id(`h-${c.id}-${p.pane ?? ""}`).relative().p(c.text ? 0 : 3).flex_none().text_color(on ? t.foreground : t.dim)
       .hover((s) => s.text_color(t.foreground))
       .when(Boolean(c.tip) && !c.text, (b) => b.tooltip(c.tip ?? ""))
-      .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
+      .on_mouse_down("left", (e, cx) => {
+        cx.stop_propagation();
+        this.press = e;
+      })
       .map(keepMiddle)
       .on_click((_e, cx) => {
         cx.stop_propagation();
-        c.go();
+        c.go(this.press);
+        this.press = null;
       });
 
     const path = c.icon ? (c.icon.includes("/") ? c.icon : `mods/pane/${c.icon}.svg`) : "";
@@ -517,7 +528,7 @@ export default class Header {
       .child(label)
       // The folder gives way long before the name does (shrinks 50x faster), then goes.
       .when(this.width >= FOLDER_MIN && !(this.hovered && this.width < FULL_MIN) && !this.cursor(p) && Boolean(p.cwd), (el) => el.child(div().min_w(0).max_w(260).flex_shrink(50).truncate().text_color(t.dim).child(folder(p.cwd))))
-      .child(div().flex_1().min_w(8).h(6).relative().child(dither(p.focused ? t.accent : t.ansi0, 2)))
+      .child(div().flex_1().min_w(8).h(6).relative().child(dither(p.focused ? t.accent : edge(t), 2)))
       .when((st === "blocked" || st === "working") && this.width >= WORD_MIN, (el) => (st === "blocked" || st === "working" ? el.child(div().flex_none().text_color(t[st]).child(WORD[st])) : el)), p);
   }
 }

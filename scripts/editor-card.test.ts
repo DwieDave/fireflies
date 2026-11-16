@@ -63,7 +63,7 @@ class Ed {
   value() { return this.v; } set_value(v: string) { this.v = v; }
   cursor() { return { ...this.caret }; } set_cursor(line: number, col: number) { this.caret = { line, col }; }
   bounds(_at: any) { return this.drawn; }
-  focus() {} set_tab_size() {} set_cursor_shape() {} set_diagnostics() {} set_line_notes() {} find_close() {} top_line() { return 0; }
+  focus() {} set_tab_size() {} set_cursor_shape() {} set_diagnostics() {} set_line_notes() {} find_close() {} top_line() { return 0; } scroll_to_line() {}
   selection() { return { start: this.caret, end: this.caret, text: "" }; } edit() {} set_selections() {}
 }
 let ed: Ed;

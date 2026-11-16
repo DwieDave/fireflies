@@ -488,7 +488,7 @@ export default class Databases extends View {
     const formOpen = Boolean(this.form || this.exporting);
 
     const view = v_flex().id("databases").relative().size_full().bg(t.background).text_size(11).text_color(t.foreground)
-      .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.ansi8));
+      .when(Boolean(this.overlay), (el) => el.border(1).border_color(t.muted));
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => this.key(e, cx))

@@ -25,6 +25,7 @@ import { askBar, overBody } from "./popups.ts";
 import { divider } from "./dividers.ts";
 import { GAP_X, GAP_Y, NARROW, wideDividers } from "./layout.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** The top bar: where the window drags from (presses on it aren't stopped). First after the
  *  title, the connection's state (connmark.ts); then which connection, where, from where. */
@@ -36,19 +37,19 @@ function header(t: Theme, v: DbView): Element {
   const server = c ? where({ ...c, database: "" }, home()) : "";
 
   return h_flex().id("db-head").relative().h(34).flex_none().pl(12).pr(6).gap(10).items_center().text_size(11)
-    .child(div().absolute().inset_0().opacity(0.5).child(dither(t.ansi0, 2)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi8, 1)))
+    .child(div().absolute().inset_0().opacity(0.5).child(dither(edge(t), 2)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.muted, 1)))
     .child(h_flex().relative().flex_none().gap(8).items_center()
       .child(svg(`${ART}/moon-6.svg`).size(16).text_color(t.foreground))
       .when(!narrow, (el) => el.child(div().text_color(t.foreground).child("DATABASES"))))
     .child(stateMark(t, v, narrow))
     // Which connection gives way before where it is (the mark's words).
     .when(c !== null, (el) => el.child(h_flex().relative().flex_shrink(4).min_w(0).gap(8).items_center().overflow_hidden()
-      .child(div().flex_none().text_color(t.ansi8).child("·"))
+      .child(div().flex_none().text_color(t.muted).child("·"))
       .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(c?.name ?? ""))
       .child(c ? kindBadge(t, c.kind) : div())
       .when(!narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(server)))
-      .when(Boolean(c?.from) && !narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi8).child(`· ${c?.from ?? ""}`)))
+      .when(Boolean(c?.from) && !narrow, (x) => x.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.muted).child(`· ${c?.from ?? ""}`)))
       .map((x) => {
         // Where a cluster-secret connection's password came from (or why it didn't): never the value.
         const read = c ? v.sourced.get(c.id) : undefined;
@@ -72,7 +73,7 @@ function keyBar(t: Theme, v: DbView): Element {
   const word = place === "rows" ? "ROWS" : place === "results" ? "RESULT" : place === "editor" ? "QUERY" : PANEL_NAME[v.panel].toUpperCase();
 
   return h_flex().id("db-keys").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
     .child(div().relative().flex_none().text_color(t.dim).child(word))
     .children(list.map(([k, what], i) => hint(t, `db-hint-${i}`, k, what).relative()))
     .child(div().flex_1())

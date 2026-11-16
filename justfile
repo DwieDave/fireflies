@@ -43,19 +43,32 @@ build:
     cargo build --locked
 
 # The mods' TypeScript (docs/mods-typescript.md): tsc at full strictness on every
-# .ts file under defaults/, against the typings the built app writes. The .js
-# mods are outside it until their migration. `cargo test` runs it too
-# (tests/mods_typescript.rs).
+# .ts file under defaults/, against the committed typings (defaults/types/, which
+# must be what this build writes: the cargo test checks it). The .js mods are
+# outside it until their migration. `cargo test` runs it too (tests/mods_typescript.rs).
 typecheck:
     bun install --frozen-lockfile
-    cargo run --locked -q -- types target/mod-types
+    cargo test --locked -q --test mods_typescript -- committed_mod_typings_are_current
     node_modules/.bin/tsc -p defaults/tsconfig.json
 
-# oxlint with anti-slop (oxlint.config.ts) on the same files (mods and frame); `just lint --fix`
-# adds the blank lines require-readable-spacing asks for.
+# Rewrites the committed typings (defaults/types/gpui-kit.d.ts, runtime.d.ts) from
+# this build, after a change to gpui-kit's API (vendor/gpui-kit). `herdr` needs
+# none: the tsconfig files read defaults/herdr.d.ts itself.
+types:
+    HERDR_APP_WRITE_TYPES=1 cargo test --locked -q --test mods_typescript -- committed_mod_typings_are_current
+
+# The files written on Effect (docs/effect-mods.md): the kit, and each mod converted to it. A
+# converted mod joins this list in its conversion's commit.
+effect_sources := "defaults/lib defaults/mods/usage/main.ts defaults/mods/usage/limits.ts defaults/mods/nocturne/fx.ts defaults/mods/nocturne/limits.ts defaults/mods/nocturne/usage.ts"
+
+# oxlint with anti-slop (oxlint.config.ts) on the same files (mods, frame and the kit); `just lint --fix`
+# adds the blank lines require-readable-spacing asks for. Then the Effect pass (oxlint.effect.config.ts):
+# Effect's language-service diagnostics as type-aware rules (@effect/tsgo) and anti-slop's Effect rules,
+# on `effect_sources`.
 lint *args:
     bun install --frozen-lockfile
-    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods defaults/frame
+    node_modules/.bin/oxlint --deny-warnings {{args}} defaults/mods defaults/frame defaults/lib
+    node_modules/.bin/effect-tsgo oxlint --type-aware --deny-warnings -c oxlint.effect.config.ts {{args}} {{effect_sources}}
 
 test:
     bun test scripts/files.test.ts scripts/machine-add.test.ts scripts/picker.test.ts scripts/palette.test.ts scripts/agents.test.ts scripts/spaces.test.ts scripts/worktree.test.ts scripts/github.test.ts scripts/github-graph.test.ts scripts/github-cache.test.ts scripts/github-remotes.test.ts scripts/github-create.test.ts scripts/equalize-panes.test.ts scripts/scripts.test.ts scripts/scripts-runs.test.ts scripts/scripts-nix.test.ts scripts/markdown.test.ts scripts/notifications.test.ts scripts/preview.test.ts scripts/preview-table.test.ts scripts/preview-diff.test.ts scripts/preview-native.test.ts scripts/github-projects.test.ts scripts/nocturne-gridify.test.ts scripts/nocturne-pins.test.ts scripts/git.test.ts scripts/editor.test.ts scripts/finder.test.ts scripts/nocturne-vim.test.ts scripts/file-tree.test.ts scripts/browser.test.ts
@@ -149,11 +162,15 @@ test:
     bun test scripts/editor-rendered.test.ts
     # The rendered view as it's typed into: no flicker or lost keys through autosaves and reloads, per-key work, adding blocks by keys and pointer, vim across blocks as on plain text.
     bun test scripts/editor-mdlive.test.ts
+    # A file changed on disk read again: the line at the top of the text, the preview and the rendered view (a scratchpad's too), the caret and selection kept on their text, moved by lines added above; the keyboard not taken.
+    bun test scripts/editor-reload.test.ts
+    # The scratchpad edited as one document, by keys on a note like Developer's: the caret across blocks (wrapped rows, marks), enter in a list and a task list, enter at a block's start, backspace / delete joins, an untouched new block leaves no blank lines, a long paragraph's box, untouched bytes; its quiet bar (format, more and its menu); the keyboard kept from copies out of sight and stale editor.open records.
+    bun test scripts/editor-scratchpad-edit.test.ts
     # Pictures in Markdown: image blocks drawn (broken and web ones too), a pasted screenshot or copied image file saved beside the file once and put in as a block, vim's p, undo, round trip (fake clipboard, a real PNG).
     bun test scripts/editor-images.test.ts
     # The scratchpad's note per repository and worktree (git faked), its index, autosave timing and the flush on close.
     bun test scripts/nocturne-scratchpad.test.ts
-    # Opening the scratchpad from the palette, the + new menu's tile and its command: only the sidebar's copy awaits git; failures toast.
+    # Opening the scratchpad from the palette, the + new menu's tile and its command: only the sidebar's copy awaits git; failures toast; copying its path.
     bun test scripts/nocturne-scratchpad-open.test.ts
     # Pinning panes that aren't agents (web, editor, files, a shell) to the jar's shelf: the handlers, menu, palette, keys and tiles.
     bun test scripts/nocturne-pane-pins.test.ts
@@ -167,8 +184,14 @@ test:
     bun test scripts/usage-limits.test.ts
     # Usage requests per hour: one reading per machine, the paces, the 429 back-off (a simulated hour, fake endpoint).
     bun test scripts/usage-poll.test.ts
+    # The mods' Effect kit (@fireflies/kit): decoding, exec, shared keys, the HTTP policy (fake server; curl against a local one), a view's runs and close.
+    bun test scripts/effect-kit.test.ts
+    # The Effect the app serves the mods (defaults/lib/effect) is a fresh build of the pinned package.
+    bun test scripts/effect-bundle.test.ts
     # TypeScript mods: guard.ts and keyhelp.d.ts are one file each in every mod that has them; guard.ts proves or refuses data.
     bun test scripts/mods-typescript.test.ts
+    # The mods' TypeScript in the editor: its TypeScript server (the dev shell's), with the editor's root and initialize, finds every module of a mod file and a bun test and still reports a real type error.
+    bun test scripts/mod-types-lsp.test.ts
     # The processes and ports manager: ps and lsof parsers, the tree, folds, search, the kill flow, the port actions.
     bun test scripts/procs.test.ts
     # Its deck and the strip's tree mark: every key and its pointer twin (the wheel's lines and pixels, clicks, the scrollbar), the cursor across refreshes, ask / TERM / KILL against a fake exec, the readings strip and its second.
@@ -217,8 +240,10 @@ test:
     bun test scripts/qclose.test.ts
     # The dividers between panels (dividers.ts, the pattern the Kubernetes mod copies): a drag by its handlers, the clamp, + / - steps, the double click's reset, the sizes kept.
     bun test scripts/databases-dividers.test.ts
-    # Where a menu opens (menu-place.ts, the pattern the Kubernetes mod copies): at a press, flipped near the right and bottom edges, never under the press, whole; at a key's row or cell; a press taken into the view at zoom 1 and 0.9.
+    # Where a menu opens (menu-place.ts, the helper every mod copies): at a press, flipped near the right and bottom edges, never under the press, whole; at a key's row or cell; a press taken into the view at zoom 1 and 0.9; an overlay menu's kind and at for each case.
     bun test scripts/databases-menu-place.test.ts
+    # Every mod's menu-place.ts is the databases one byte for byte, and each mod that imports it carries it.
+    bun test scripts/menu-place.test.ts
     # Editing cells: each engine's quoting, the changes staged by row key, what's editable, the save's statements (one UPDATE per row, the old values checked, one transaction), a real round trip on a throwaway SQLite file.
     bun test scripts/databases-edit.test.ts
     # Editing cells through the window's keys and handlers on a throwaway SQLite file: c / a double click, enter, esc, tab, ctrl-n, N, u, U, w and y; changes kept through pages and sorting; the asks before leaving; q types while editing.
@@ -233,6 +258,8 @@ test:
     bun test scripts/databases-pin.test.ts
     # Where a Databases connection is and whether it's connected: the server's default database said, the server's databases listed and picked (-d, kept in a pin), an empty database's words, the state mark and the three places that draw it, a dead server turning it, the focus check; FF_TEST_PG_BIN runs it on a throwaway PostgreSQL too.
     bun test scripts/databases-where.test.ts
+    # The fork's mods follow the theme: no color literal in a converted mod (an allow list for art and the black veils), no ansi0 / ansi8 as a UI tone, tones.ts the same in every mod, its edge on moonfly's old hex, the nocturne layout naming theme colors.
+    bun test scripts/themes.test.ts
     # A connection's sslmode: kept in connections.json, a picked database and a pin; psql's -d conninfo, MySQL's --ssl-mode and MariaDB's --skip-ssl / --ssl-verify-server-cert (its --version tells them apart); the form's ssl toggle by key (a pasted require kept, shown beside it); a pasted URL, a found DATABASE_URL and PGSSLMODE; databases.connect carrying it, refusing an unknown one.
     bun test scripts/databases-ssl.test.ts
     cargo test --locked

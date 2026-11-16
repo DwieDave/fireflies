@@ -1,6 +1,7 @@
 //! Embeds the default mods (defaults/mods/**), the program icons
-//! (defaults/icons/*) and the frame's mods (defaults/frame/**) so Fireflies can
-//! install them.
+//! (defaults/icons/*), the frame's mods (defaults/frame/**) so Fireflies can
+//! install them, and the mods' libraries (defaults/lib/**: Effect and
+//! @fireflies/kit), which the app serves to every mod by name.
 //!
 //! Worktrees may share one target dir, and with it this script and its output.
 //! So nothing here names this checkout: paths are relative to the package and
@@ -38,6 +39,7 @@ fn main() {
     embed(&base, "defaults/mods", "DEFAULT_MODS", "default_mods.rs");
     embed(&base, "defaults/icons", "DEFAULT_ICONS", "default_icons.rs");
     embed(&base, "defaults/frame", "FRAME_MODS", "frame_mods.rs");
+    embed(&base, "defaults/lib", "MOD_LIBRARIES", "mod_libraries.rs");
 
     // Windows takes the window, taskbar and Start menu icon from the program file.
     #[cfg(windows)]

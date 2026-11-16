@@ -18,6 +18,7 @@ import type { default as ProcsDeck } from "./main.ts";
 import { spark, layer } from "./vitals-view.ts";
 import { emptyView } from "./bars.ts";
 import { procHeads } from "./heads.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export function pip(v: ProcsDeck, color: Color, live = false): Element {
   const el = svg(`${ART}/pip.svg`).size(6).flex_none().text_color(color);
@@ -26,12 +27,12 @@ export function pip(v: ProcsDeck, color: Color, live = false): Element {
 }
 
 export function badge(v: ProcsDeck, t: Theme, text: string, on: boolean): Element {
-  return div().flex_none().h(14).px(4).flex().items_center().border(1).border_color(on ? t.ansi8 : t.ansi0).text_size(9).text_color(on ? t.muted : t.dim).child(text);
+  return div().flex_none().h(14).px(4).flex().items_center().border(1).border_color(on ? t.muted : edgeTone(t)).text_size(9).text_color(on ? t.muted : t.dim).child(text);
 }
 
 /** The row under the cursor: a dithered band and a blue edge, like Nocturne's menus. */
 export function band(v: ProcsDeck, el: Element, t: Theme, on: boolean, edge: Color = t.accent): Element {
-  return el.when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(edge)));
+  return el.when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(edge)));
 }
 
 export function actionChip(v: ProcsDeck, t: Theme, id: string, label: string, color: Color | null, go: (cx: Context) => void): Element {
@@ -139,7 +140,7 @@ export function treeRow(v: ProcsDeck, t: Theme, r: Row, i: number, on: boolean, 
         case "cpu": return numCell(v, t, NUM_W.cpu, p.cpu.toFixed(1), p.cpu >= 20 ? t.working : null);
         case "mem": return numCell(v, t, NUM_W.mem, memory(p.rss));
         case "up": return numCell(v, t, NUM_W.up, uptime(p.secs));
-        case "pid": return numCell(v, t, NUM_W.pid, String(p.pid), t.ansi8);
+        case "pid": return numCell(v, t, NUM_W.pid, String(p.pid), t.muted);
       }
     }));
 }
@@ -179,12 +180,12 @@ export function detail(view: ProcsDeck, t: Theme, item: ProcRow): Element {
 
   return div().id(`detail-${pid}`).relative().h(h).flex_none().text_size(11)
     .child(v_flex().id("block").absolute().left(0).right(0).top(0).bottom(D_AFTER).pl(D_LEFT).pr(D_RIGHT).pt(D_TOP)
-      .child(div().absolute().left(0).right(0).top(0).bottom(0).opacity(0.45).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).top(0).bottom(0).opacity(0.45).child(dither(edgeTone(t), 1)))
       .child(div().absolute().left(0).top(0).bottom(0).w(1).opacity(0.7).child(dither(t.accent, 1)))
-      .child(div().absolute().left(12).right(D_RIGHT).bottom(0).h(1).child(dither(t.ansi8, 1)))
+      .child(div().absolute().left(12).right(D_RIGHT).bottom(0).h(1).child(dither(t.muted, 1)))
       .child(command(view, t, pid, full, cmdLines(view, pid, full) * CMD_LINE))
       .child(h_flex().id("facts").relative().h(D_LINE).mt(D_GAP).flex_none().gap(14).items_center()
-        .child(meta("pid", String(p.pid), t.ansi8))
+        .child(meta("pid", String(p.pid), t.muted))
         .children(up ? [meta("parent", `${up.name} ${up.pid}`)] : [])
         .child(div().flex_1())
         .when(Boolean(here), (el) => el.child(actionChip(view, t, "d-show", "show", null, () => showTerminal(view, item))))
@@ -232,13 +233,13 @@ export function command(v: ProcsDeck, t: Theme, pid: number, full: string, box: 
       })
       .child(full))
     .when(room > 0, (el) => el.child(div().absolute().right(0).w(1).h(Math.max(6, Math.round((box * box) / c.h))).top(Math.round((c.y / room) * (box - Math.max(6, Math.round((box * box) / c.h)))))
-      .child(dither(t.ansi8, 1))));
+      .child(dither(t.muted, 1))));
 }
 
 /** The band that asks before ending, then tells what held on. */
 export function confirmBand(v: ProcsDeck, t: Theme, a: Ask): Element {
-  const btn = (id: string, label: string, hot: boolean, go: (cx: Context) => void): Element => div().id(id).flex_none().h(20).px(8).flex().items_center().border(1).border_color(hot ? t.blocked : t.ansi0)
-    .text_size(11).text_color(hot ? t.blocked : t.muted).cursor_pointer().hover((s) => s.bg(t.ansi0))
+  const btn = (id: string, label: string, hot: boolean, go: (cx: Context) => void): Element => div().id(id).flex_none().h(20).px(8).flex().items_center().border(1).border_color(hot ? t.blocked : edgeTone(t))
+    .text_size(11).text_color(hot ? t.blocked : t.muted).cursor_pointer().hover((s) => s.bg(edgeTone(t)))
     .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
     .on_click((_e, cx) => {
       cx.stop_propagation();
@@ -343,6 +344,6 @@ export function procsView(v: ProcsDeck, t: Theme, items: readonly Row[], ci: num
       ? div().id("procs-list").relative().h(listHt).flex_none().overflow_hidden()
         .on_scroll_wheel((e, cx) => wheelList(v, "procs", e, ROW, max, cx))
         .children(kids)
-        .children([...layer(v, guides, Background.checkerboard(t.ansi0, dotCell()).opacity(0.9), W - 2, listHt), ...scrollbar(v, t, "procs", y, listHt)])
+        .children([...layer(v, guides, Background.checkerboard(edgeTone(t), dotCell()).opacity(0.9), W - 2, listHt), ...scrollbar(v, t, "procs", y, listHt)])
       : emptyView(v, t, listHt));
 }

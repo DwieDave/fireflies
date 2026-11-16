@@ -4,6 +4,7 @@
 
 import type { Color } from "gpui-kit";
 import type { Theme } from "herdr";
+import { edge } from "./tones.ts";
 
 /** Two "#rrggbb" colors mixed, `k` of the way from `a` to `b`; `a` when either
  *  isn't one (../nocturne/toolground.ts's mix: a mod can't import another's files). */
@@ -18,9 +19,9 @@ export function mix(a: Color, b: Color, k: number): Color {
 }
 
 /** The seams' and the ⋯ menu's rules' tone: a third of the way from the
- *  icons' dim to ansi0, the bar's hover (moonfly: #5f6d6d → #505a5b). One
+ *  icons' dim to the edge (tones.ts), the bar's hover (moonfly: #5f6d6d → #505a5b). One
  *  step darker than the dim they had, still there. */
-export const seamTone = (t: Theme): Color => mix(t.dim, t.ansi0, 1 / 3);
+export const seamTone = (t: Theme): Color => mix(t.dim, edge(t), 1 / 3);
 
 /**
  * How far each glyph's ink sits below the middle of its box, in em. An svg

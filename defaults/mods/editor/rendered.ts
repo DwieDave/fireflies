@@ -20,13 +20,12 @@
 // keep their keys (named by their text, so moving down a line keeps their
 // height and drawing), and nothing is split again per drawn unit.
 //
-// Keys in the block (key): up / down past its first or last row step into the
-// unit before or after (blank lines between are passed over); enter on a list
-// item, task or quote starts the next one (mdedit.ts enter); enter on the
-// last line of any other block (on any line of a paragraph) starts a new
-// paragraph below it (the text after the caret goes with it; shift-enter: a
-// line break inside the block; on an empty new block it stays as it is);
-// with vim in normal mode, enter makes the new block below the lit one and
+// Keys in the block (rendered-keys.ts): the caret crosses blocks as it
+// crosses lines (up / down onto the nearest row at the same place in the
+// text, left / right at the ends); enter continues a list, opens a block
+// above at a block's start, else starts a paragraph below; backspace takes a
+// mark off and joins blocks; an untouched new block goes as the caret leaves
+// it; with vim in normal mode, enter makes the new block below the lit one and
 // types into it (main.ts vimKey);
 // undo and redo are the file's. With vim, the keys go to vim over the whole
 // text first (its caret mapped there), and the lit lines follow vim: the
@@ -107,6 +106,16 @@ export interface ViewOptions {
   readonly onTask: (line: number, cx: Context) => void;
   readonly maxWidth?: number;
   readonly unzoom: (px: number) => number;
+  /** The block's kind is named in the bar (a scratchpad's): none at the lit block's corner, its text the column's width. */
+  readonly kindInBar?: boolean;
+}
+
+/** A press on a drawn unit: its key, where in it, and its size (layout px). */
+export interface Press {
+  readonly key: string;
+  readonly x: number;
+  readonly y: number;
+  readonly w: number;
 }
 
 /** A caret and the selection's other end. */
@@ -162,6 +171,7 @@ export class Rendered {
   srcs = new WeakMap<Unit, string>();
   blockH: number | null = null; // the block editor's measured content height
   blockHFor: string | null = null; // the text it was measured with
+  padTop = 0; // the room above the block editor's first row (layout px)
   litW = 600; // the block editor's width (layout px)
   cw = CHAR;
   rowH = ROW;
@@ -169,10 +179,18 @@ export class Rendered {
   viewH = 400;
   litTop = 0;
   reveal = true; // keep the lit block in view on the next draw
+  /** The unit drawn at the top as last drawn: its first line, the scroll past its top (layout px). */
+  topAt: { line: number; dy: number } | null = null;
+  /** A line to put back at the top on the next draw (a reload, keepTop), before revealing the lit block. */
+  keep: { line: number; dy: number } | null = null;
   hover: string | null = null; // the drawn unit under the pointer (its key): its "+" shows
   pushing = false;
   pre: Pre | null = null;
   made: number | null = null; // the line of an empty block made here (enter, a +)
+  /** The lines that empty block added: they go again when the caret leaves it untouched. */
+  madeSpan: Range | null = null;
+  /** Where the pointer pressed a drawn unit (its key, the press in it, its size: layout px). */
+  press: Press | null = null;
   block: EditorStateT;
 
   constructor(doc: RenderedDoc, host: RenderedHost) {
@@ -274,6 +292,15 @@ export class Rendered {
     this.lightAt(cx, true);
     this.reveal = true;
     cx?.notify();
+  }
+
+  /** After the file's text was replaced (a reload, open() first): the unit that was at the top
+   *  stays there, found by where its first line is now (`moved`, keep-place.ts), instead of
+   *  the view scrolling to the lit block. */
+  keepTop(moved: (line: number) => number): void {
+    const t = this.topAt;
+
+    this.keep = t ? { line: moved(t.line), dy: t.dy } : null;
   }
 
   /** The file's caret and selection: { anchor, head } (file coordinates). */
@@ -382,6 +409,9 @@ export class Rendered {
     this.piece = v;
     this.range = r.range;
 
+    // A block made here and typed into is the note's now: leaving it keeps it.
+    if (v.trim()) this.madeSpan = null;
+
     // The units after the lit lines move with them (their text, keys and heights kept);
     // those that were inside them are cut again once the caret leaves.
     const oldTo = r.range.to - delta;
@@ -425,6 +455,9 @@ export class Rendered {
     const now = this.fileText();
 
     if (now !== this.text) {
+      // Changed from elsewhere (vim, undo, a command, the disk): the lines a new block added
+      // aren't known to be where they were.
+      this.madeSpan = null;
       this.setText(now);
       this.recut(cx);
       // What's lit is the caret's now, its lines as they are (on the same first line, edited

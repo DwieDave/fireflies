@@ -33,6 +33,8 @@ const APPEARANCES = [
 // What the app uses when settings.json names no font (settings.rs).
 const DEFAULT_FONT = "JetBrains Mono";
 const DEFAULT_UI_FONT = "Geist";
+/** Shipped themes Settings doesn't offer (they still load when settings.json or a layout names them). */
+const UNOFFERED_THEMES = ["ink", "moss", "atom-one-dark"];
 
 export default class Settings extends View {
   init(_props, cx) {
@@ -464,11 +466,13 @@ export default class Settings extends View {
       .gap(8)
       .children(
         // A theme named like a layout (themes/win98.json) is that layout's own.
+        // ink, moss and atom-one-dark still load when named, but aren't offered (unless picked).
         themes()
           .filter((x) => Boolean(x.light) === light && (x.name === shared("layout") || !layouts().includes(x.name)))
+          .filter((x) => !UNOFFERED_THEMES.includes(x.name) || x.name === current)
           .map(({ name, colors: c }) => {
           const on = name === current;
-          const label = name.replace(/-/g, " ");
+          const label = name === "graphite" ? "graphite (herdr-app default)" : name.replace(/-/g, " ");
           const dot = (color) => div().w(8).h(8).rounded(4).bg(color);
           return this.ring(v_flex()
             .id(`st-t-${name}`)

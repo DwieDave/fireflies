@@ -10,7 +10,7 @@ the conversion settled on.
 `nocturne` and all seventeen of its mods (listed in `scripts/nocturne-mods.ts`,
 once `nocturne-<name>`) are TypeScript, with the files they share (below). The stock mods (agents, files, picker, pane, tabs,
 spaces, win98, …) and the frame's older pages are JavaScript and stay as
-they are. Read `pip` and `usage` as small patterns, preview's `viewer.ts`
+they are. Read `pip` as a small pattern (`usage` is on Effect now: docs/effect-mods.md), preview's `viewer.ts`
 for a whole view, github's `gh.ts` and `cache.ts` for outside data read and
 kept.
 
@@ -81,12 +81,53 @@ JavaScript that remains (the stock mods, parts of the frame) is outside both
 (`checkJs` is off; the lint ignores `**/*.js`).
 `scripts/` (the bun tests) is outside the lint: they stand in for `herdr`
 with `mock.module`, which anti-slop's `no-module-mocking` rejects, and
-changing that is a refactoring of the tests, not of the mods. The tools are
+changing that is a refactoring of the tests, not of the mods. It is outside
+the type check too (its fakes are partial objects strict typing reports;
+`scripts/tsconfig.json` is there for the editor, below). The tools are
 the exact versions in `package.json` (`bun install` puts them in
 `node_modules/`). Without `just`, the recipes' commands run as they are:
-`cargo run --locked -q -- types target/mod-types`,
+`cargo test --locked --test mods_typescript -- committed_mod_typings_are_current`,
 `node_modules/.bin/tsc -p defaults/tsconfig.json`,
 `node_modules/.bin/oxlint --deny-warnings defaults/mods defaults/frame`.
+
+### In an editor
+
+The checks' setup is what an editor's language server finds, with no build
+in the checkout: open a mod file and it type-checks as `just typecheck` does,
+a bun test against bun's types.
+
+| file opened | its tsconfig.json | typings |
+| --- | --- | --- |
+| `defaults/mods/<mod>/*.ts`, `defaults/frame/**/*.ts` | `defaults/tsconfig.json` | `defaults/types/gpui-kit.d.ts` and `runtime.d.ts` (committed), `herdr` from `defaults/herdr.d.ts` (`paths`) |
+| `scripts/*.ts` (the bun tests) | `scripts/tsconfig.json` | `@types/bun` (`bun install` once), the gpui modules from `defaults/types/gpui-kit.d.ts`, `window` from `scripts/mod-globals.d.ts`, `herdr` as above |
+| an installed mod, `~/.config/herdr-app/mods/<mod>/` | its own, which the app writes on load beside a `gpui-kit.d.ts` | that file (`herdr` included) |
+| an installed mod the app can't write into (linked from the nix store) | `~/.config/herdr-app/tsconfig.json`, which the app writes on every start for exactly those mods | `gpui-kit.d.ts` and `herdr.d.ts` beside it |
+
+`defaults/types/` is what `herdr-app types` writes for this build, without
+`herdr`, split in two: `gpui-kit.d.ts` holds the gpui modules (gpui-kit,
+gpui-base, gpui-shell, gpui-fps), `runtime.d.ts` the runtime's globals and
+Node-like modules (`console`, `Buffer`, `URL`, `"path"`, …), which a bun test
+takes from bun instead. `cargo test` (and `just typecheck`) fails while they
+are not what the build writes: after a change to gpui-kit's API, `just types`
+rewrites them; commit them with the change. `herdr` never needs that:
+`defaults/herdr.d.ts` is read as it is (an ambient copy would win over it).
+
+A bare import of a library (`import { Effect } from "effect"`) resolves as
+`moduleResolution: "bundler"` does: through a `node_modules` folder up from
+the importing file. In the repository that is the root's (`bun install`); in
+an installed mod, its own `node_modules` (where gpui-shell links a mod's Git
+dependencies for editors) or one above it. A language-service plugin goes in
+`compilerOptions.plugins` of these files; the editor's
+typescript-language-server loads it from where its `initializationOptions`
+say (`plugins: [{ name, location }]`, settings.json's
+`editor.languages.typescript.server_settings`), since it doesn't look in the
+project's own `node_modules`.
+
+The editor's server is typescript-language-server (from the repository's
+dev shell, `flake.nix`, through `.envrc`): it runs TypeScript 5.9's tsserver
+(TypeScript 7 has none), while the checks run `tsc` 7 from `package.json`.
+`scripts/mod-types-lsp.test.ts` starts it as the editor does (its root, its
+`initialize`) and holds the table's first two rows.
 
 ## Converting a mod, step by step
 
@@ -319,7 +360,7 @@ the mods build on (read the file's top and its `export type`s):
 
 | file | copies | test | what it types |
 |---|---|---|---|
-| `guard.ts` | nocturne and all 17 mods | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
+| `guard.ts` | nocturne and its mods, but those on the Effect kit (usage: docs/effect-mods.md) | `mods-typescript.test.ts` | `Guard<T>`, `Guarded`, `object`, `SharedKey`, `SharedMapKey`, `SharedListKey`, `parseJson(Map)` |
 | `keyhelp.ts` | 15 mods | `keyhelp.test.ts` | `KeyRow` (key, what, go?, `.key`, `.danger`), `KeySection`, `KeyList`, `KeyPress`, `HintBarOptions`, `KeysViewOptions` |
 | `form-keys.ts` | nocturne, editor, git, github, notifications, machine-add, databases, frame/settings, frame/feedback | `form-keys.test.ts` | `Stop`, `StopKind`, `FormAction` (a union on `act`), `FormHint`, `FormModifiers` |
 | `editor-route.ts` | editor, file-tree, finder, markdown | `editor-tabs.test.ts` | `OpenRequest` (`editor.open`), `EditorView`, `EditorProps`, `EditorQuery`, `OpenFile`, `EditorHost` |
@@ -407,9 +448,9 @@ type-checked or linted.
 engine's globals and the `herdr` module, from `defaults/herdr.d.ts`) and the
 editor config: a strict `tsconfig.json` for a `main.ts` mod, `jsconfig.json`
 for a `.js` one; an author's own config is never replaced. The app does the
-same on every load. `just typecheck` writes them to `target/mod-types/` from
-the built app; change the typings in `defaults/herdr.d.ts` or in the
-generator (`vendor/gpui-kit/crates/shell/src/typings.rs`), never in a
+same on every load. The repository keeps its copy in `defaults/types/` (In an
+editor, above; `just types`); change the typings in `defaults/herdr.d.ts` or
+in the generator (`vendor/gpui-kit/crates/shell/src/typings.rs`), never in a
 generated file. In an interface, `new(...)` is a construct signature; a
 method called `new` (`cx.new(Class, props)`) is written `"new"(...)`.
 

@@ -40,7 +40,7 @@ import { spaces, panes, run, theme, shared, setShared, layout, focused, nextComm
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { isBoolean, readShared, writeShared } from "./guard.ts";
 import { statusMark } from "./winged.ts";
-import { dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
+import { byKey, dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
@@ -63,6 +63,7 @@ import { watchPrompts } from "./prompt.ts";
 import { DRAG_START, gapAt, dropIndex, stakeAt, stake, lift } from "./tabdrag.ts";
 import type { Gap, StakeAt } from "./tabdrag.ts";
 import { readLaunchers } from "./launchers.ts";
+import { edge } from "./tones.ts";
 
 const chrome = (n: string) => `mods/workspace-chrome/${n}.svg`;
 
@@ -110,7 +111,7 @@ export function seamFade(t: Theme, look: ToolLook = TOOL_LOOK): Element {
 export function seam(t: Theme, look: ToolLook = TOOL_LOOK): Element {
   if (look === "plate") {
     return div().id("tab-seam").relative().flex_none().w(SEAM.plate.band).h_full()
-      .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(dither(t.ansi8, 1)));
+      .child(div().absolute().top(0).left(0).size_full().opacity(0.9).child(dither(t.muted, 1)));
   }
 
   return div().id("tab-seam").relative().flex_none().w(SEAM.ledge.gap).h_full().bg(t.background);
@@ -321,7 +322,7 @@ export default class Tabs {
     const fp = all.find((p) => p.focused && !p.parked);
 
     const head = fp ? headerControls(fp, all).map((c): StripItem => ({
-      id: c.id, go: c.go, menu: () => paneMenu(fp, true), rename: () => renamePane(fp), close: () => run("pane.close", { pane: fp.pane }),
+      id: c.id, go: () => c.go(), menu: () => paneMenu(fp, true), rename: () => renamePane(fp), close: () => run("pane.close", { pane: fp.pane }),
     })) : [];
 
     const tab = space?.tabs.find((c) => c.active)?.id;
@@ -425,7 +426,8 @@ export default class Tabs {
           return;
         }
 
-        if (item && isItemVerb(verb)) item[verb]?.(cx);
+        // A menu or deck the key opens hangs from the cursor's thing (kit.ts keyedSpec).
+        if (item && isItemVerb(verb)) byKey(() => item[verb]?.(cx));
     }
 
     this.reveal();
@@ -560,7 +562,7 @@ export default class Tabs {
       .text_color(on ? t.foreground : t.muted)
     .hover((s) => s.text_color(t.foreground).bg(toolHover(t)))
       .when(Boolean(tip), (el) => el.tooltip(tip ?? ""))
-      .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
+      .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(4).right(4).bottom(0).h(2).bg(t.accent)))
       .children(kids.map((k) => k.relative()))
       .map((el) => navRing(t, el, this.at(id)));
   }
@@ -698,7 +700,7 @@ export default class Tabs {
       .on_mouse_move((e, cx) => this.dragOver({ id: null, after: false }, e, cx))
       .when(Boolean(at) && at?.before === null, (el) => el.child(stake(t)));
 
-    const rule = () => div().w(1).h(14).mx(4).flex_none().bg(t.ansi0);
+    const rule = () => div().w(1).h(14).mx(4).flex_none().bg(edge(t));
     const handle = this.handle;
     const scroll = this.scroll;
     const strip = h_flex().id("tab-scroll").flex_1().min_w(0).h_full().pl(4).items_center().overflow_x_scrollbar();
@@ -715,7 +717,7 @@ export default class Tabs {
         if (Math.abs(e.delta.y) >= 1) run(e.delta.y > 0 ? "tab.prev" : "tab.next");
       })
       // The horizon: a 2 px dithered line the tabs stand on.
-      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)))
       // Its left padding inside the scroll, so a stake before the first tab isn't cut.
       .child(h_flex().id("tab-area").relative().flex_1().min_w(0).h_full()
         .child((scroll ? strip.track_scroll(scroll) : strip).children(shown.map(item)).child(end))

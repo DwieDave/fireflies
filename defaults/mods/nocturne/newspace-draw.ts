@@ -10,6 +10,7 @@ import type { SpaceInfo, Theme } from "herdr";
 import { dither } from "./kit.ts";
 import { tilde, isPath, folderName, tail, parentOf } from "./folderlist.ts";
 import type { RankedRow } from "./folderlist.ts";
+import { edge } from "./tones.ts";
 
 /** A row's height, the head's and the foot's (layout px). */
 export const ROW = 26;
@@ -62,8 +63,8 @@ export function pickRow(t: Theme, r: PickRow, i: number, on: boolean, home: stri
     // opens doesn't (enter would pick the row under it, not "here").
     .on_mouse_move((_e, cx) => acts.hoverRow(i, cx))
     .on_click((_e, cx) => acts.pickRow(i, cx))
-    .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
-    .child(svg(chrome(icon)).size(12).flex_none().relative().text_color(on || !folder ? t.accent : t.ansi8))
+    .when(on, (el) => el.child(dither(edge(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+    .child(svg(chrome(icon)).size(12).flex_none().relative().text_color(on || !folder ? t.accent : t.muted))
     .child(div().relative().flex_none().child(nameText(t, r, on)))
     .child(div().relative().flex_1().min_w(0).truncate().text_color(t.dim).child(words))
     .when(Boolean(tag), (el) => el.child(div().relative().flex_none().text_color(tagColor).child(tag)));
@@ -124,11 +125,11 @@ export function pickerHead(t: Theme, title: string, field: Element, onEsc: (cx: 
     .child(div().flex_none().text_color(t.foreground).child(title))
     .child(field)
     .child(div().id("ns-esc").flex_none().px(5).h(18).flex().items_center().text_color(t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => onEsc(cx))
       .child("esc"))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }
 
 /** What the foot shows: what enter does, whether that's an error, tab's completion, the mode. */
@@ -145,7 +146,7 @@ export function pickerFoot(t: Theme, f: FootState): Element {
   const hint = (k: string, w: string) => h_flex().flex_none().gap(4).child(div().text_color(t.accent).child(k)).child(div().text_color(t.dim).child(w));
 
   return h_flex().id("ns-foot").relative().h(FOOT).flex_none().px(12).gap(12).items_center().text_size(11)
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edge(t), 1)))
     .child(div().id("ns-say").flex_1().min_w(0).truncate().text_color(f.error ? t.blocked : t.muted).child(f.say))
     .when(Boolean(f.ghost), (el) => el.child(hint("tab", f.ghost)))
     .when(!f.ghost && !f.naming, (el) => el.child(hint("enter", f.attaching ? "attach" : "make")))

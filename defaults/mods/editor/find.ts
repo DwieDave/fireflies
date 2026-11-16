@@ -12,6 +12,7 @@ import type { Theme } from "herdr";
 import { settings, window as appWindow } from "herdr";
 import { dither, FIND, focusOn } from "./pane-kit.ts";
 import { closeCard, showCard } from "./card.ts";
+import { edge } from "./tones.ts";
 
 // The find line's stops in tab order (form-keys.ts): the find field, Aa, ‹, ›
 // and, replacing, the "with" field, replace, all.
@@ -153,7 +154,7 @@ export function findLine(ed: EditorPane, t: Theme): Element {
     .map((el) => tabActions(el, (e, cx) => findKey(ed, e, cx)))
     .child(findRow(ed, t, line, font))
     .when(ed.mode === "replace", (el) => el.child(replaceRow(ed, t, font)))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)));
 }
 
 /** A chip on the find line; one with the keyboard wears the dialogs' ring: a band, an accent edge. */
@@ -167,9 +168,9 @@ function findChip(ed: EditorPane, t: Theme, id: string, label: string, on: boole
       .flex()
       .items_center()
       .border(1)
-      .border_color(on || ed.findAt === id ? t.accent : t.ansi0)
+      .border_color(on || ed.findAt === id ? t.accent : edge(t))
       .text_color(on ? t.accent : ed.findAt === id ? t.foreground : t.muted)
-      .when(ed.findAt === id, (el) => el.bg(t.ansi0))
+      .when(ed.findAt === id, (el) => el.bg(edge(t)))
       .hover((s) => s.text_color(t.foreground))
       .on_click((_e, cx) => {
         go(cx);
@@ -255,7 +256,7 @@ function replaceRow(ed: EditorPane, t: Theme, font: string): Element {
           .flex_none()
           .h(20)
           .border_b(1)
-          .border_color(ed.findAt === "with" ? t.accent : t.ansi0)
+          .border_color(ed.findAt === "with" ? t.accent : edge(t))
           .when(Boolean(replaceInput), (el) => (replaceInput ? el.child(Input.new(replaceInput).size_full().text_size(12).font_family(font)) : el)),
       )
       .child(findChip(ed, t, "replace-one", "replace", false, (cx) => ed.replace(false, cx)))

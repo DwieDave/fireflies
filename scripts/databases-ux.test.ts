@@ -58,7 +58,7 @@ class Input {
 }
 class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } caretAt: any = null; cursor() { return { line: 0, col: 0 }; } set_cursor(line: number, col: number) { this.caretAt = { line, col }; } selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
 mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) },
   InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
   EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
 }));
@@ -521,19 +521,41 @@ test.skipIf(!SQLITE)("a menu by right click stands at the press (the view's orig
   v.rows.at = { row: 2, col: 1, top: 0, left: 0 };
   expect(anchor.keyedAnchor(v).y).toBe(34 + 12 + 7 + 24 + 22 + 40);
   expect(anchor.keyedAnchor(v).x).toBe(left + ux.gridView.gutterWidth(v.rows.set.rows.length) + ux.gridView.colWidth(ux.grid.shownGrid(v).cols[0]));
-  // Another panel with the keys: the middle.
+  // A list with the keys ([4] Log): under the cursor's row, not at the cell.
   v.panel = "log";
   v.logLine({ sql: "select 1", ok: true, ms: 1, said: "", conn: "lantern.db" });
   v.key(key("m"), cx);
   expect(v.menu.near).toBe(null);
   expect(anchor.keyedAnchor(v)).toBe(null);
+  expect(v.menu.keyed).toBe("log");
+  const logTop = 34 + v.bodyH - 6 - 92;
+  expect(anchor.rowAnchor(v, "log")).toEqual({ x: left, y: logTop + 7, w: 1100 - 6 - left - 1, h: 19 });
+  expect(drawnAt()).toEqual({ x: left, y: logTop + 7 + 19 });
   v.menu = null;
+  // [1] Connections: under the connection's row (its group rule above it).
+  v.panel = "conns";
+  v.connAt = 0;
+  v.key(key("m"), cx);
+  expect(v.menu.keyed).toBe("conns");
+  expect(anchor.rowAnchor(v, "conns")).toEqual({ x: 7, y: 34 + 12 + 7 + 20, w: 330 - 2, h: 19 });
+  expect(drawnAt()).toEqual({ x: 8, y: 34 + 12 + 7 + 20 + 19 });
+  v.menu = null;
+  // T (the main view's tabs): under the main panel's title.
+  v.panel = "main";
+  v.key(key("T"), cx);
+  expect(v.menu.keyed).toBe("tab");
+  expect(drawnAt()).toEqual({ x: left, y: 34 + 12 + 7 });
+  v.menu = null;
+  // Narrow: no panels side by side to find a row in: the middle.
+  v.size = { width: 600, height: 720 };
+  expect(anchor.rowAnchor(v, "conns")).toBe(null);
+  v.size = { width: 1100, height: 720 };
   // The head mark's menu (connmark.ts): C with the grid's keys stands in the middle, not at the cell;
   // a click on the mark (a click carries no position) at the pointer as the root last heard it.
   v.panel = "main";
   v.key(key("C"), cx);
   expect(v.menu.title).toContain("lantern.db");
-  expect(v.menu.cell).toBe(false);
+  expect(v.menu.keyed).toBe(null);
   expect(v.menu.near).toBe(null);
   v.menu = null;
   const mark = await import("../defaults/mods/databases/connmark.ts");

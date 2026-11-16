@@ -1,6 +1,6 @@
 import { keysNow } from "./nocturne-mods.ts";
 import { test, expect } from "bun:test";
-import { asJs, guard } from "./mod-source.ts";
+import { asJs, guard, tones, tonesFor } from "./mod-source.ts";
 import { readFile } from "node:fs/promises";
 
 // The web pane (browser) and the picture in picture player by keys,
@@ -64,7 +64,7 @@ async function keyhelpOf(path: string, source: string, scope: Record<string, any
   const src = asJs("keyhelp.ts", await readFile(new URL(`../defaults/mods/${path.replace(/[^/]+$/, "keyhelp.ts")}`, import.meta.url), "utf8"));
   const names: string[] = [];
   const body = src.replace(/^import [^;]*;\n/gm, "").replace(/^export (async function|function|const|class) (\w+)/gm, (_m, kind, n) => { names.push(n); return `${kind} ${n}`; });
-  const s: Record<string, unknown> = { div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
+  const s: Record<string, unknown> = { ...tones, div: scope.div, PathBuilder: scope.PathBuilder, Background: scope.Background, h_flex: scope.h_flex, v_flex: scope.v_flex,
     settings: scope.settings ?? (() => ({ zoom: 1 })), appWindow: scope.appWindow ?? (() => ({ platform: "macos" })), window: scope.window ?? { paint_path: scope.div } };
   return new Function(...Object.keys(s), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(s));
 }
@@ -126,7 +126,7 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
       return state;
     } },
   };
-  const scope: Record<string, unknown> = { ...guard, ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
+  const scope: Record<string, unknown> = { ...guard, ...tonesFor(source), ...kit, ...base, ...herdr, herdr, appWindow: herdr.window, window: { paint_path: () => new Element() } };
   Object.assign(scope, await keyhelpOf(path, source, scope));
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
   // guards.ts and editor-route.ts only guard.ts): the real ones.
@@ -381,6 +381,32 @@ test("the page has the keyboard: a press, cmd-esc, cmd-r and cmd-alt-i", async (
   expect(native).toEqual([["web", "browser.reload", {}]]);
   view.onEvent({ event: "web.inspectKey", data: { of: "1:web" } }, cx);
   expect(app.ran.at(-1)?.[0]).toBe("pane.split");
+});
+
+test("a mouse's side buttons over the page go back and forward in the shown tab, as the bar's arrows", async () => {
+  reset();
+  const store = storage();
+  try {
+    const { view, cx, native, mod } = await webPane({ slot: "b1", url: "https://a.example/x", copy: 1 });
+    // As the native view sends them (nextNativeViewEvent's text): proven where they come in.
+    const back = mod.parseEvent(JSON.stringify({ id: "web", generation: 1, event: "web.backButton", data: {} }));
+    const forward = mod.parseEvent(JSON.stringify({ id: "web", generation: 1, event: "web.forwardButton", data: {} }));
+    expect([back?.event, forward?.event]).toEqual(["web.backButton", "web.forwardButton"]);
+    native.length = 0;
+    view.onEvent(back, cx);
+    view.onEvent(forward, cx);
+    expect(native).toEqual([["web", "browser.back", {}], ["web", "browser.forward", {}]]);
+    // The bar's arrows take the same way.
+    native.length = 0;
+    view.command("back");
+    view.command("forward");
+    expect(native).toEqual([["web", "browser.back", {}], ["web", "browser.forward", {}]]);
+    // A tab behind isn't under the pointer: its word moves nothing.
+    view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+    native.length = 0;
+    view.onEvent({ id: "web-2", event: "web.backButton", data: {} }, cx);
+    expect(native).toEqual([]);
+  } finally { store.done(); }
 });
 
 test("two web panes: a command acts only in the focused one, however the focus got there", async () => {
@@ -1144,6 +1170,30 @@ test("browser.tab-titles: every tab's name by the pane's slot (blank tabs none);
   expect(tt()).toEqual({});
 });
 
+test("browser.shown-tabs: the tab each pane shows, by its slot (a tab's tile on the shelf is lit by it); it follows the shown tab and goes with the pane", async () => {
+  reset();
+  const shown = () => app.store["browser.shown-tabs"];
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  app.store["browser.shown-tabs"] = { gone: "web-3" };
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/x" });
+  expect(shown()).toEqual({ s1: "web" });
+  // A tab opened behind: the shown one stays; shown by a click, a key or the shelf's show: it follows.
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  expect(shown()).toEqual({ s1: "web" });
+  view.showTab("web-2", cx);
+  expect(shown()).toEqual({ s1: "web-2" });
+  view.command("tab:1", cx);
+  expect(shown()).toEqual({ s1: "web" });
+  const { showCommand } = (await load("browser/tab-menu.ts")).mod;
+  showCommand(view, '{"slot":"s1","tab":"web-2"}', cx);
+  expect(shown()).toEqual({ s1: "web-2" });
+  // The shown tab closed: the one shown after it.
+  view.closeTab("web-2", cx);
+  expect(shown()).toEqual({ s1: "web" });
+  await view.close();
+  expect(shown()).toEqual({});
+});
+
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const favicons = await import("../defaults/mods/browser/favicons.ts");
 
@@ -1257,6 +1307,22 @@ test("a web tab pinned from its menu (a right-click, at the pointer): the record
   expect(app.store[PINS]).toEqual([]);
 });
 
+test("the tab menu by keys hangs under its tab on the strip (where the tab says it's drawn); with one tab, no strip: the middle", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  app.focusedPane = "p1";
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  // One tab: no strip, the menu in the middle.
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "dialog" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  const root = view.render();
+  // The strip's tabs report where they're drawn (window px).
+  on(find(root, "webtab-web"), "on_bounds_change")({ x: 240.4, y: 80, width: 180, height: 28 }, cx);
+  press(view, cx, "m", char("m"));
+  expect(app.overlays.at(-1)).toMatchObject({ kind: "popup", at: { x: 240, y: 80, w: 180, h: 28 }, props: { tabMenu: { tab: "web" } } });
+});
+
 test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j k skip what can't be picked, esc closes; the wheel moves too", async () => {
   reset();
   app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
@@ -1298,6 +1364,51 @@ test("the tab menu by keys: m in the bar opens it in the middle (no pointer); j 
   expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ slot: null, canPin: false });
   const bm = await menuCopy(app.overlays.at(-1));
   expect(bm.view.rows[0]).toMatchObject({ act: "pin", enabled: false });
+});
+
+test("a pane with one tab has no strip: a right-click on its bar opens that tab's menu, so the one tab can be pinned on its own", async () => {
+  reset();
+  const pane = { pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" };
+  app.panes = [pane];
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.location", data: { href: "https://a.example/", title: "Alpha" } }, cx);
+  const root = view.render();
+  expect(find(root, "webtabs")).toBe(undefined);
+  // A right-click anywhere on the bar: the shown tab's menu, at the pointer.
+  cx.stopped = false;
+  on(find(root, "bar"), "on_mouse_down", "right")({}, cx);
+  expect(cx.stopped).toBe(true);
+  const spec = app.overlays.at(-1);
+  expect(spec).toMatchObject({ mod: "browser", kind: "popup", props: { tabMenu: { slot: "s1", tab: "web", title: "Alpha", pinned: false, canPin: true, index: 0, count: 1 } } });
+  const menu = await menuCopy(spec);
+  expect(menu.view.rows.map((r: any) => [r.act, r.enabled])).toEqual([["pin", true], ["left", false], ["right", false], ["close", true]]);
+  on(find(menu.view.render(), "tm-pin"), "on_click")({}, menu.cx);
+  view.tabAct(app.ran.at(-1)![0].slice("browser.tab_act:".length), cx);
+  expect(app.store[PINS]).toEqual([{ pane: "p1", mod: "browser", props: { slot: "s1" }, at: expect.any(Number), tab: "web" }]);
+  // Its tile on the shelf is that tab's, not the pane's.
+  const jar = pinsJs.jarItems({ agents: [], terminals: [], panes: [pane], records: pinsJs.paneRecords(() => app.store[PINS]) });
+  expect(jar.map((x: any) => x.key)).toEqual(["pane:p1#web"]);
+  // The bar's menu says Unpin now.
+  on(find(view.render(), "bar"), "on_mouse_down", "right")({}, cx);
+  expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ tab: "web", pinned: true });
+});
+
+test("a tab that isn't shown is pinned from its own menu (the strip's right-click, the pick sent to the pane); the shown one stays shown", async () => {
+  reset();
+  app.panes = [{ pane: "p1", mod: "browser", props: { slot: "s1" }, tab: "t1" }];
+  const { view, cx } = await webPane({ slot: "s1", url: "https://a.example/" });
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://b.example/", background: true } }, cx);
+  view.onEvent({ id: "web", event: "web.newTab", data: { url: "https://c.example/", background: true } }, cx);
+  expect(view.tabs.active).toBe("web");
+  on(find(view.render(), "webtab-web-3"), "on_mouse_down", "right")({}, cx);
+  expect(app.overlays.at(-1).props.tabMenu).toMatchObject({ tab: "web-3", canPin: true, pinned: false });
+  // The pick comes back as tab_act, through the command loop, to the copy whose slot it names.
+  view.tabAct(JSON.stringify({ slot: "s1", tab: "web-3", act: "pin" }), cx);
+  expect(app.store[PINS].map((r: any) => r.tab)).toEqual(["web-3"]);
+  expect(view.tabs.active).toBe("web");
+  // A pick naming another pane's slot is left to that pane.
+  view.tabAct(JSON.stringify({ slot: "s2", tab: "web-2", act: "pin" }), cx);
+  expect(app.store[PINS].map((r: any) => r.tab)).toEqual(["web-3"]);
 });
 
 test("show:{slot, tab} (a tab's tile on the shelf): the pane with that slot shows the tab; one off screen takes the wish when it shows", async () => {

@@ -14,6 +14,7 @@ import type { GraphRow } from "./graph.ts";
 import { segments } from "./graph.ts";
 import type { DiffRow } from "./patch.ts";
 import { keysHint } from "./keyhelp.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 export const ART = "mods/nocturne/art";
 
@@ -52,7 +53,7 @@ export function popupScrim(id: string) {
 export const laneColors = (t: Theme): readonly Color[] => [t.ansi4, t.ansi2, t.ansi5, t.ansi6, t.ansi3, t.ansi13, t.ansi10, t.ansi12];
 
 /** Lane `i`'s color. */
-const laneColor = (colors: readonly Color[], i: number) => colors[i % colors.length] ?? colors[0] ?? "#808080";
+const laneColor = (t: Theme, colors: readonly Color[], i: number) => colors[i % colors.length] ?? colors[0] ?? t.muted;
 
 /** lazygit's status letter colors: staged green, unstaged red. */
 export const letterColor = (t: Theme, ch: string, staged: boolean) => (ch === " " ? t.dim : ch === "?" ? t.ansi1 : ch === "U" ? t.ansi3 : staged ? t.ansi2 : t.ansi1);
@@ -105,7 +106,7 @@ export interface PanelOptions {
  *  top and bottom edges on the right. */
 export function panel(t: Theme, id: string, title: readonly Element[], active: boolean, body: Element, options: PanelOptions = {}) {
   const { foot = null, right = null, onTitle = null } = options;
-  const edge = active ? t.accent : t.ansi0;
+  const edge = active ? t.accent : edgeTone(t);
   // A long title ends in an ellipsis inside the frame, before the right chip.
   const titled = h_flex().min_w(0).gap(5).items_center().overflow_hidden().children(title.map((el) => el.min_w(0).truncate()));
   const head = onTitle ? titled.id(`${id}-title-hit`).on_mouse_down("left", (e, cx) => { cx.stop_propagation(); onTitle(e, cx); }) : titled;
@@ -118,17 +119,17 @@ export function panel(t: Theme, id: string, title: readonly Element[], active: b
 
 /** A selected row's band: dither with an accent edge (dimmer off focus). */
 export function band(t: Theme, active: boolean) {
-  return [dither(active ? t.ansi0 : `${t.ansi0}88`, 1), div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.ansi8)];
+  return [dither(active ? edgeTone(t) : `${edgeTone(t)}88`, 1), div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted)];
 }
 
 /** A small text button; `on` gives it the dithered pressed look. */
 export function chip(t: Theme, id: string, label: string | Element, on: boolean, action: (e: ClickEvent, cx: Context) => void, color?: Color | null) {
   const el = h_flex().id(id).relative().h(20).px(7).flex_none().items_center().text_size(11)
-    .text_color(on ? t.foreground : color ?? t.muted).hover((s) => s.text_color(t.foreground).bg(`${t.ansi0}66`))
+    .text_color(on ? t.foreground : color ?? t.muted).hover((s) => s.text_color(t.foreground).bg(`${edgeTone(t)}66`))
     .on_mouse_down("left", stop)
     .on_click((e, cx) => { cx.stop_propagation(); action(e, cx); cx.notify(); });
 
-  return (on ? el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : el)
+  return (on ? el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : el)
     .child(div().relative().child(label));
 }
 
@@ -150,10 +151,10 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, on
   const hint = (id: string) => ([key, what, ctx]: Hint, i: number) => {
     const el = h_flex().id(`git-${id}-${i}`).flex_none().gap(4);
 
-    if (ctx) return el.child(div().text_size(10).text_color(t.ansi8).child(ctx));
+    if (ctx) return el.child(div().text_size(10).text_color(t.muted).child(ctx));
 
     return el
-      .hover((s) => s.bg(`${t.ansi0}66`))
+      .hover((s) => s.bg(`${edgeTone(t)}66`))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => { onPress?.(key, cx); cx.notify(); })
       .child(div().text_color(t.accent).child(key))
@@ -161,7 +162,7 @@ export function hints(t: Theme, list: readonly Hint[], right: Element | null, on
   };
 
   const bar = h_flex().id("git-hints").relative().h(22).flex_none().px(10).gap(12).items_center().text_size(11).overflow_hidden()
-    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).top(0).h(2).child(dither(edgeTone(t), 1)))
     .children(list.map(hint("hint")))
     .child(div().flex_1())
     .children(ends.map(hint("end")));
@@ -183,12 +184,12 @@ export function empty(t: Theme, title: string, hint: string | null = null, optio
   const { moon = 8, small = false } = options;
   const note = v_flex().size_full().items_center().justify_center().gap(small ? 4 : 10).px(16).text_size(11);
 
-  const lit = small ? note : note.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6)
+  const lit = small ? note : note.child(svg(`${ART}/moon-${moon}.svg`).w(40).h(40).text_color(t.muted).opacity(0.6)
     .loop("opacity", { from: 0.35, to: 0.7, period: 5200 }));
 
   const titled = lit.child(div().text_center().text_color(small ? t.dim : t.foreground).child(title));
 
-  return hint ? titled.child(div().text_center().max_w(420).text_color(t.ansi8).child(hint)) : titled;
+  return hint ? titled.child(div().text_center().max_w(420).text_color(t.muted).child(hint)) : titled;
 }
 
 /** A graph cell's size: `lane` px per lane, `h` px tall; `head` rings HEAD's node, `big` a larger node. */
@@ -216,12 +217,12 @@ export function graphCell(t: Theme, row: GraphRow, width: number, options: CellO
     const y0 = v.from === 0 ? 0 : v.from === 0.5 ? mid : h;
     const y1 = v.to === 0.5 ? mid + 2 : h;
 
-    kids.push(seg(laneColor(colors, v.color), cx(v.lane), y0, 2, y1 - y0));
+    kids.push(seg(laneColor(t, colors, v.color), cx(v.lane), y0, 2, y1 - y0));
   }
 
-  for (const x of s.h) kids.push(seg(laneColor(colors, x.color), cx(x.from), mid, cx(x.to) - cx(x.from) + 2, 2));
+  for (const x of s.h) kids.push(seg(laneColor(t, colors, x.color), cx(x.from), mid, cx(x.to) - cx(x.from) + 2, 2));
 
-  const n = s.node, color = laneColor(colors, n.color);
+  const n = s.node, color = laneColor(t, colors, n.color);
   const size = big ? 9 : 7;
   const nx = cx(n.lane) + 1 - Math.floor(size / 2), ny = mid + 1 - Math.floor(size / 2);
 
@@ -250,7 +251,7 @@ export function graphPass(t: Theme, after: readonly (number | null)[], width: nu
   const kids = after.flatMap((c, i) => {
     if (c == null) return [];
 
-    const color = laneColor(colors, c);
+    const color = laneColor(t, colors, c);
 
     return [div().absolute().left(cx(i)).top(0).w(2).h(h).bg(`${color}99`).child(dither(color, 1))];
   });
@@ -282,7 +283,7 @@ function roleColor(t: Theme, role: string): Color | null {
     case "type": case "constructor": case "tag": return t.ansi10;
     case "string": case "character": return t.ansi11;
     case "number": case "float": case "boolean": case "constant": case "label": return t.ansi3;
-    case "comment": return t.ansi8;
+    case "comment": return t.muted;
     case "property": case "field": case "namespace": case "module": return t.ansi6;
     case "operator": case "escape": return t.ansi9;
     case "attribute": return t.ansi13;
@@ -342,7 +343,7 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
 
   if (row.kind === "@") {
     const head = h_flex().h(h).w_full().relative().items_center().px(8).gap(10).text_size(11).overflow_hidden()
-      .child(dither(t.ansi0, 2))
+      .child(dither(edgeTone(t), 2))
       .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(compact ? row.range.replace(/^@@ | @@$/g, "") : row.range));
 
     return row.text ? head.child(div().relative().min_w(0).truncate().px(4).bg(t.background).text_color(t.muted).child(row.text)) : head;
@@ -350,7 +351,7 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
 
   if (row.kind === "file") {
     const head = h_flex().h(h).w_full().relative().items_center().px(8).gap(10).text_size(11)
-      .child(dither(t.ansi0, 2))
+      .child(dither(edgeTone(t), 2))
       .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(row.text));
 
     return row.sub ? head.child(div().relative().px(4).bg(t.background).text_color(t.muted).child(row.sub)) : head;
@@ -377,7 +378,7 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
   const line = h_flex().h(h).w_full().relative().items_center().text_size(compact ? 11.5 : 12);
   const font = code === undefined ? line : line.font_family(code);
   const tinted = tint ? font.bg(`${tint}16`) : font;
-  const picked = pick ? tinted.bg(`${active ? t.accent : t.ansi8}26`) : tinted;
+  const picked = pick ? tinted.bg(`${active ? t.accent : t.muted}26`) : tinted;
 
   const numbered = picked.child(div().w(3).h_full().flex_none().relative().when(tint !== null, (el) => (tint ? el.child(dither(tint, 1)) : el)))
     .map((el) => (compact ? el.child(num(n ?? o, 34)) : el.child(num(o, 38)).child(num(n, 38))))
@@ -385,8 +386,8 @@ export function diffLine(t: Theme, row: MainRow, options: LineOptions = {}) {
     .child(spans ? text.child(h_flex().children(spans.map((s, i) => div().id(`sp-${i}`).flex_none().text_color(s.color).child(s.text)))) : text.child(row.text || " "));
 
   return cursor
-    ? numbered.child(div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.ansi8))
-      .child(div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.ansi8}aa`))
+    ? numbered.child(div().absolute().left(0).top(0).bottom(0).w(2).bg(active ? t.accent : t.muted))
+      .child(div().absolute().inset_0().border(1).border_color(`${active ? t.accent : t.muted}aa`))
     : numbered;
 }
 

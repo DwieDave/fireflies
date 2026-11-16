@@ -12,11 +12,12 @@ import { NIX_NOTE, PROGRAMS, installHow, installLine } from "./clients.ts";
 import type { Read } from "./reads.ts";
 import { readWords } from "./reads.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** A read going on, in the middle of its panel: the moon, what runs and for how long, its stop. */
 export function readingView(t: Theme, id: string, r: Read): Element {
   return v_flex().size_full().items_center().justify_center().gap(8).px(16).text_size(11)
-    .child(svg(`${ART}/moon-4.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6).loop("opacity", { from: 0.3, to: 0.8, period: 1600 }))
+    .child(svg(`${ART}/moon-4.svg`).w(40).h(40).text_color(t.muted).opacity(0.6).loop("opacity", { from: 0.3, to: 0.8, period: 1600 }))
     .child(div().text_center().text_color(t.muted).child(readWords(r)))
     .child(h_flex().gap(8).items_center()
       .child(div().text_color(t.dim).child("esc stops it"))
@@ -30,11 +31,11 @@ export function missingView(t: Theme, v: DbView, id: string, kind: Kind, where: 
   const note = NIX_NOTE[kind];
 
   return v_flex().size_full().items_center().justify_center().gap(8).px(16).text_size(11)
-    .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.ansi8).opacity(0.6))
+    .child(svg(`${ART}/moon-1.svg`).w(40).h(40).text_color(t.muted).opacity(0.6))
     .child(div().text_center().text_color(t.muted).child(`${PROGRAMS[kind].join(" or ")} isn't here`))
     .child(div().text_center().text_color(t.dim).child(where))
     .when(note !== null, (el) => el.child(div().text_center().text_color(t.dim).child(note ?? "")))
-    .child(v_flex().id(`${id}-copy`).w_full().max_w(420).gap(2).px(8).py(4).cursor_pointer().border(1).border_color(t.ansi0)
+    .child(v_flex().id(`${id}-copy`).w_full().max_w(420).gap(2).px(8).py(4).cursor_pointer().border(1).border_color(edge(t))
       .hover((s) => s.border_color(t.accent))
       .on_click((_e, cx) => {
         cx.stop_propagation();

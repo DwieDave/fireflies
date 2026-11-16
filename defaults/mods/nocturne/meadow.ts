@@ -10,7 +10,7 @@ import { h_flex, v_flex } from "gpui-base";
 import { terminals, run, hc, settings } from "herdr";
 import type { AgentInfo, Theme } from "herdr";
 import { isTerminal } from "./guards.ts";
-import { ART, WORD, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
+import { ART, WORD, cursorMark, dither, hash, givenName, navRing, cornerTicks, GLOW_SQUARE, TICK_OUT } from "./kit.ts";
 import { stamps } from "./pins.ts";
 import type { JarItem } from "./pins.ts";
 import { field } from "./inline.ts";
@@ -20,6 +20,7 @@ import type { Reach, Landing } from "./sky-plan.ts";
 import { flyActs } from "./sky-keys.ts";
 import { shelfView } from "./shelf.ts";
 import type Sky from "./sky.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 /** A 12 px check on a dark plate, set on a done firefly's mark. */
 export function doneBadge(t: Theme): Element {
@@ -151,7 +152,7 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
             .child(div().truncate().text_size(11).text_color(t.foreground).child(sub))
           : div().truncate().text_size(11).text_color(t.dim).child(sub))));
 
-  const step = (o: number) => div().flex_1().h_full().relative().opacity(o).child(dither(t.ansi0, 1));
+  const step = (o: number) => div().flex_1().h_full().relative().opacity(o).child(dither(edgeTone(t), 1));
 
   const path = h_flex().absolute().top(4).bottom(4).left(x + 36).right(0).gap(2)
     .child(step(1).flex_grow(3)).child(step(0.6)).child(step(0.3));
@@ -163,7 +164,7 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
   return div().id(`lane-${a.address}`).absolute().left(0).w(w).h(lane).top(y)
     .transition("top", { duration: LAND, easing: "ease-in-out" })
     .when(a.focused || on, (el) => el.child(path))
-    .when(on, (el) => el.child(div().absolute().left(0).top(4).bottom(4).w(2).bg(t.accent)))
+    .when(on, (el) => el.child(div().absolute().left(0).top(4).bottom(4).w(2).bg(t.accent)).child(cursorMark(div().absolute().inset_0())))
     .child(inner);
 }
 
@@ -175,7 +176,7 @@ export function firefly(sky: Sky, t: Theme, a: AgentInfo, y: number, lane: numbe
  */
 export function railGlass(sky: Sky, t: Theme, jarred: readonly AgentInfo[], n = RAIL_NECK): Element {
   const needs = jarred.some((a) => a.status === "blocked");
-  const tone = needs ? t.blocked : t.ansi8;
+  const tone = needs ? t.blocked : t.muted;
   const strip = (el: Element) => el.absolute().child(dither(tone, 1));
   // A mason jar, symmetric around its middle, square pixels only: a screw
   // band lid wider than the neck, the neck, shoulders stepping out in two
@@ -220,7 +221,7 @@ export function railGlass(sky: Sky, t: Theme, jarred: readonly AgentInfo[], n = 
  */
 export function glass(sky: Sky, t: Theme, jarred: readonly AgentInfo[], n = NECK): Element {
   const needs = jarred.some((a) => a.status === "blocked");
-  const tone = needs ? t.blocked : t.ansi8;
+  const tone = needs ? t.blocked : t.muted;
   const strip = (el: Element, c: Color = tone) => el.absolute().child(dither(c, 1));
   const solid = (el: Element, c: Color = tone) => el.absolute().bg(c);
   const pair = (mk: (side: (el: Element, x: number) => Element) => Element) => [mk((el, x) => el.left(x)), mk((el, x) => el.right(x))];
@@ -369,7 +370,7 @@ export function meadowView(sky: Sky, t: Theme, list: readonly AgentInfo[], jarre
     .when(Boolean(shelf), (el) => (shelf ? el.child(div().absolute().left(JAR_INSET).top(shelfY).w(shelfW).child(shelf)) : el))
     .when(more > 0, (el) => el.child(div().id("more").absolute().left(50).top(moreY).h(MORE_H).flex().items_center()
       .map((m) => navRing(t, m, sky.nav("more", "flies", { go: () => run("agent.next") })))
-      .text_size(11).text_color(t.ansi8).hover((s) => s.text_color(t.foreground))
+      .text_size(11).text_color(t.muted).hover((s) => s.text_color(t.foreground))
       .on_mouse_down("left", stop).on_click(() => run("agent.next"))
       .child(`+${more} more in the grass`)));
 }

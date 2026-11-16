@@ -1720,6 +1720,7 @@ impl ShellRuntime {
                 standard::resolver(),
                 builtin_resolver(),
                 host_modules::HostModuleLoader,
+                LibraryModules,
                 app_modules.clone(),
             ),
             (
@@ -1727,6 +1728,7 @@ impl ShellRuntime {
                 standard::loader(),
                 builtin_loader(),
                 host_modules::HostModuleLoader,
+                LibraryModules,
                 app_modules.clone(),
             ),
         );
@@ -4172,10 +4174,13 @@ impl ShellRuntime {
         self.callbacks.borrow().get(id)?.application.as_ref().map(|app| app.id())
     }
 
+    /// HERDR: `on_size_change` gets the size; `on_bounds_change` (`origin`)
+    /// the place in the window too.
     pub(crate) fn dispatch_size_change(
         self: &Rc<Self>,
         id: CallbackId,
-        size: gpui::Size<gpui::Pixels>,
+        bounds: gpui::Bounds<gpui::Pixels>,
+        origin: bool,
         window: &mut Window,
         cx: &mut App,
     ) {
@@ -4192,8 +4197,12 @@ impl ShellRuntime {
         let result = self.with_js(|ctx| {
             let handler = entry.value.clone().restore(ctx)?;
             let payload = Object::new(ctx.clone())?;
-            payload.set("width", f32::from(size.width))?;
-            payload.set("height", f32::from(size.height))?;
+            if origin {
+                payload.set("x", f32::from(bounds.origin.x))?;
+                payload.set("y", f32::from(bounds.origin.y))?;
+            }
+            payload.set("width", f32::from(bounds.size.width))?;
+            payload.set("height", f32::from(bounds.size.height))?;
             handler.call::<_, ()>((payload, context_object(ctx, ContextBinding::Call(generation))?))
         });
         if let Err(error) = result {
@@ -4376,6 +4385,35 @@ impl ShellRuntime {
                 }
                 None => payload.set("delta_lines", rquickjs::Undefined)?,
             }
+            payload.set("touch_phase", touch_phase)?;
+            set_pointer_geometry(ctx, &payload, position, bounds)?;
+            payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
+            Ok(payload)
+        });
+    }
+
+    /// Delivers one trackpad pinch to a script handler: `delta` is the change
+    /// in magnification (0.1: ten percent larger), at `position`.
+    pub(crate) fn dispatch_pinch(
+        self: &Rc<Self>,
+        id: CallbackId,
+        event: &gpui::PinchEvent,
+        bounds: Option<gpui::Bounds<gpui::Pixels>>,
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let delta = event.delta;
+        let position = event.position;
+        let modifiers = event.modifiers;
+        let touch_phase = match event.phase {
+            gpui::TouchPhase::Started => "started",
+            gpui::TouchPhase::Moved => "moved",
+            gpui::TouchPhase::Ended => "ended",
+            gpui::TouchPhase::Cancelled => "cancelled",
+        };
+        self.dispatch_simple_event(id, "pinch", window, cx, move |ctx| {
+            let payload = Object::new(ctx.clone())?;
+            payload.set("delta", delta)?;
             payload.set("touch_phase", touch_phase)?;
             set_pointer_geometry(ctx, &payload, position, bounds)?;
             payload.set("modifiers", modifiers_object(ctx, modifiers)?)?;
@@ -5386,6 +5424,46 @@ impl Loader for RegisteredComponentModule {
             ));
         }
         Module::declare(ctx.clone(), name, self.source.clone())
+    }
+}
+
+/// HERDR: the host's library modules (crate::library_modules): a bare name
+/// it registered, or a relative import from one of its files. Evaluated once
+/// per runtime, shared by every application that imports them.
+#[derive(Clone, Copy)]
+struct LibraryModules;
+
+impl Resolver for LibraryModules {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<String> {
+        let found = if name.starts_with('.') {
+            crate::library_modules::resolve_relative(base, name)
+        } else if name.starts_with('/') {
+            None
+        } else {
+            crate::library_modules::resolve_bare(name)
+        };
+        found.ok_or_else(|| JsError::new_resolving(base, name))
+    }
+}
+
+impl Loader for LibraryModules {
+    fn load<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> JsResult<Module<'js, Declared>> {
+        match crate::library_modules::source(name) {
+            None => Err(JsError::new_loading(name)),
+            Some(Err(message)) => Err(Exception::throw_message(ctx, &message)),
+            Some(Ok(source)) => Module::declare(ctx.clone(), name, source),
+        }
     }
 }
 
@@ -6693,6 +6771,10 @@ globalThis.__gpui = (() => {
       }
       __scroll_to_item(handle, index);
     },
+    offset: () => {
+      const [x, y] = __scroll_offset(handle);
+      return { x, y };
+    },
     release: () => __scroll_release(handle),
   });
 
@@ -7381,6 +7463,7 @@ impl ShellRuntime {
                 "on_mouse_down_out",
                 "on_drop",
                 "on_scroll_wheel",
+                "on_pinch",
                 "on_action",
                 "key_context",
                 "aria_level",
@@ -7419,6 +7502,7 @@ impl ShellRuntime {
                 "controls_right",
                 "on_resize",
                 "on_size_change",
+                "on_bounds_change",
                 "set_position",
                 "pressed",
                 "start",
@@ -8365,6 +8449,7 @@ impl ShellRuntime {
             | "on_link_click"
             | "on_resize"
             | "on_size_change"
+            | "on_bounds_change"
             | "on_change"
             | "token"
             | "on_token_click"
@@ -8383,6 +8468,7 @@ impl ShellRuntime {
             | "on_mouse_down_out"
             | "on_drop"
             | "on_scroll_wheel"
+            | "on_pinch"
             | "tab_bar"
             | "empty_group"
             | "drop_indicator"
@@ -10371,10 +10457,12 @@ fn callback_op_name(method: &str) -> Option<&'static str> {
         "on_mouse_down_out" => "on_mouse_down_out",
         "on_drop" => "on_drop",
         "on_scroll_wheel" => "on_scroll_wheel",
+        "on_pinch" => "on_pinch",
         "on_item_click" => "on_item_click",
         "on_item_secondary_click" => "on_item_secondary_click",
         "on_resize" => "on_resize",
         "on_size_change" => "on_size_change",
+        "on_bounds_change" => "on_bounds_change",
         "tab_bar" => "tab_bar",
         "empty_group" => "empty_group",
         "drop_indicator" => "drop_indicator",

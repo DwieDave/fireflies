@@ -67,6 +67,7 @@ import { KEYS, SKIP, keyControl, menuMove, parseCommand } from "./commands.ts";
 import { GLYPH_DROP, lift, mix, seamTone } from "./look.ts";
 // keyhelp.ts is one file shared by every nocturne mod (a copy here, byte for byte).
 import { keysView, keysKey, keysHeight } from "./keyhelp.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 const ID = "pip";
 const BAR = 22;
@@ -523,7 +524,7 @@ export default class Pip extends View {
 
     try {
       herdr.nativeViewCall(ID, "pip.popOut", {
-        colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: t.ansi0, accent: t.accent, seam: seamTone(t) },
+        colors: { background: t.background, foreground: t.foreground, dim: t.dim, border: t.border, hover: edgeTone(t), accent: t.accent, seam: seamTone(t) },
         snap: snapOn(),
       });
       this.leave();
@@ -589,7 +590,7 @@ export default class Pip extends View {
     const on = this.hover?.id === c.id;
 
     return this.hovers(div().id(`pip-${c.id}`).flex_none().w(BAR).h_full().flex().items_center().justify_center()
-      .when(on, (el) => el.bg(t.ansi0)), c.id, label(c.name, s))
+      .when(on, (el) => el.bg(edgeTone(t))), c.id, label(c.name, s))
       // A press on a button isn't a drag of the window.
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.command(c.id); cx.notify(); })
@@ -601,7 +602,7 @@ export default class Pip extends View {
     const on = this.hover?.id === "more";
 
     return this.hovers(div().id("pip-more").flex_none().w(BAR).h_full().flex().items_center().justify_center()
-      .text_color(on ? t.foreground : t.dim).when(on, (el) => el.bg(t.ansi0)), "more", "More")
+      .text_color(on ? t.foreground : t.dim).when(on, (el) => el.bg(edgeTone(t))), "more", "More")
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
       .on_click((_e, cx) => { cx.stop_propagation(); this.openMore(ids); })
       .child("⋯");
@@ -670,7 +671,7 @@ export default class Pip extends View {
    *  adds no height): so the host is as tall as the list itself, KEYS_H. */
   renderKeys(t: Theme) {
     const handle = this.handle;
-    const view = div().id("pip-keys").relative().w_full().h(KEYS_H).flex_none().bg(t.background).border(1).border_color(t.ansi0);
+    const view = div().id("pip-keys").relative().w_full().h(KEYS_H).flex_none().bg(t.background).border(1).border_color(edgeTone(t));
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => { if (keysKey(e, true)) { cx.stop_propagation(); closeOwn(); } })
@@ -692,13 +693,13 @@ export default class Pip extends View {
         .text_color(on ? t.foreground : t.muted)
         .on_hover((h, cx) => { if (h) { this.cursor = i; cx.notify(); } })
         .on_click(() => this.pick(c))
-        .when(on, (el) => el.child(dither(t.ansi0, 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
+        .when(on, (el) => el.child(dither(edgeTone(t), 1)).child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent)))
         .child(div().relative().w(14).flex_none().flex().items_center().justify_center().child(this.mark(c, on || c.lit?.(s) ? t.accent : t.dim, s, 12)))
         .child(div().relative().flex_1().min_w(0).truncate().child(label(c.name, s)));
     };
 
     const handle = this.handle;
-    const view = v_flex().id("pip-menu").size_full().bg(t.background).border(1).border_color(t.ansi0).py(4);
+    const view = v_flex().id("pip-menu").size_full().bg(t.background).border(1).border_color(edgeTone(t)).py(4);
 
     return (handle ? view.track_focus(handle) : view)
       .on_key_down((e, cx) => {

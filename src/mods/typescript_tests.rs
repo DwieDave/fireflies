@@ -166,7 +166,8 @@ fn javascript_mods_are_never_stripped(cx: &mut TestAppContext) {
 /// What the engine has of the web's globals, which bun (the mods' tests) has
 /// all of: a mod may use atob, btoa, URL, URLSearchParams, crypto, Buffer,
 /// queueMicrotask, fetch. setTimeout and setInterval are stubs that throw
-/// (`cx.timer` instead); TextDecoder, TextEncoder, structuredClone are absent.
+/// (`cx.timer` instead); TextEncoder and TextDecoder are there, UTF-8 only;
+/// structuredClone is absent.
 /// defaults/AGENTS.md and the generated typings say the same.
 #[gpui::test]
 fn the_engine_globals_mods_may_use(cx: &mut TestAppContext) {
@@ -179,7 +180,10 @@ fn the_engine_globals_mods_may_use(cx: &mut TestAppContext) {
          const has = names.map((n) => `${n}=${typeof (globalThis as any)[n]}`).join(\" \");\n\
          let timer = \"\";\n\
          try { (globalThis as any).setTimeout(() => {}, 1); } catch (e) { timer = String((e as Error).message); }\n\
-         const work = `${atob(\"aGk=\")} ${new URL(\"https://a.example/x?y=1\").searchParams.get(\"y\")} ${timer}`;\n\
+         const utf8 = new TextDecoder().decode(new TextEncoder().encode(\"mönd ✦\"));\n\
+         let latin = \"\";\n\
+         try { new TextDecoder(\"latin1\" as \"utf-8\"); } catch (e) { latin = (e as Error).name; }\n\
+         const work = `${atob(\"aGk=\")} ${new URL(\"https://a.example/x?y=1\").searchParams.get(\"y\")} ${timer} utf8=${utf8} latin=${latin}`;\n\
          export default class Probe extends View { render() { return div().child(has + \" \" + work); } }\n",
     );
     let runtime = ShellRuntime::new_isolated().unwrap();
@@ -190,9 +194,50 @@ fn the_engine_globals_mods_may_use(cx: &mut TestAppContext) {
             assert!(tree.contains(present), "{present}: {tree}");
         }
         assert!(tree.contains("`setTimeout` is not available in the shell: use cx.timer.after"), "{tree}");
-        for absent in ["TextDecoder=undefined", "TextEncoder=undefined", "structuredClone=undefined"] {
+        for present in ["TextDecoder=function", "TextEncoder=function", "utf8=mönd ✦", "latin=RangeError"] {
+            assert!(tree.contains(present), "{present}: {tree}");
+        }
+        for absent in ["structuredClone=undefined"] {
             assert!(tree.contains(absent), "{absent}: {tree}");
         }
+    }).unwrap();
+    window.update(cx, |_, window, _| window.remove_window()).unwrap();
+    cx.run_until_parked();
+}
+
+/// The mods' libraries (defaults/lib, docs/effect-mods.md): a mod imports
+/// `effect`, `effect/http` and `@fireflies/kit` by name, and every mod gets
+/// the same modules, evaluated once per runtime (a copy per mod would cost
+/// each one some 12 MB of the runtime's heap).
+#[gpui::test]
+fn mods_import_effect_and_the_kit_by_name_and_share_them(cx: &mut TestAppContext) {
+    cx.update(gpui_shell::init);
+    export_libraries();
+    let first = Tree::new();
+    let second = Tree::new();
+    let main = |name: &str| format!(
+        "import {{ View, div }} from \"gpui-kit\";\n\
+         import {{ Effect, Layer, Schema }} from \"effect\";\n\
+         import {{ HttpClient }} from \"effect/http\";\n\
+         import {{ decodeJson, modRuntime }} from \"@fireflies/kit\";\n\
+         const seen = globalThis as unknown as {{ firstEffect?: unknown }};\n\
+         const shared = seen.firstEffect === undefined ? \"first\" : String(seen.firstEffect === Effect.succeed);\n\
+         seen.firstEffect ??= Effect.succeed;\n\
+         const Answer = Schema.Struct({{ used: Schema.Finite }});\n\
+         const rt = modRuntime(Layer.empty);\n\
+         const good = rt.now(Effect.map(Effect.orElseSucceed(decodeJson(Answer, \"probe\")('{{\"used\": 7}}'), () => ({{ used: -1 }})), (a) => a.used));\n\
+         const bad = Effect.runSync(Effect.flip(decodeJson(Answer, \"probe\")('{{\"used\": \"7\"}}')))._tag;\n\
+         export default class P extends View {{ render() {{ return div().child(`{name} good=${{good}} bad=${{bad}} http=${{typeof HttpClient.make}} shared=${{shared}}`); }} }}\n"
+    );
+    first.write("main.ts", &main("one"));
+    second.write("main.ts", &main("two"));
+    let runtime = ShellRuntime::new_isolated().unwrap();
+    let window = cx.add_window(|_, _| Empty);
+    window.update(cx, |_, window, cx| {
+        let one = describe(&runtime, &first.0, window, cx).unwrap();
+        assert!(one.contains("one good=7 bad=DecodeError http=function shared=first"), "{one}");
+        let two = describe(&runtime, &second.0, window, cx).unwrap();
+        assert!(two.contains("two good=7 bad=DecodeError http=function shared=true"), "the second mod gets the same Effect: {two}");
     }).unwrap();
     window.update(cx, |_, window, _| window.remove_window()).unwrap();
     cx.run_until_parked();

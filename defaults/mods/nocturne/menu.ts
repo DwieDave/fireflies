@@ -36,13 +36,14 @@ import { Popup, icon, popupHeight } from "./popup.ts";
 import type { MenuItem, PopupItem } from "./popup.ts";
 import { openEqualize } from "./equalize.ts";
 import { openWorktrees } from "./git.ts";
-import { ART, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab } from "./kit.ts";
+import { ART, keyedSpec, panePinnedNow, pinPane, movePin, jar, pinKey, dockPane, dockable, dockWeb, dockShell, dockFiles, focusedPane, tracked, tabPinnedNow, pinTab, shownTab, shownWebTab, webTabPinnedNow, pinWebTab } from "./kit.ts";
 import type { DropAt, PinTarget } from "./kit.ts";
 import { isDock } from "./dock.ts";
 import { onShelf, tabKey } from "./pins.ts";
 import { tabMove, SPACE_ROWS_KEY } from "./tabmove.ts";
 import { isHelpLine } from "./nav.ts";
 import type { HelpLine } from "./nav.ts";
+import { edge } from "./tones.ts";
 
 /** A menu row's command arguments (the commands these rows run). */
 type MenuArgs = { terminal?: string; pane?: string | null; id?: string; space?: string | null; direction?: "right" | "down"; to?: "menu" | "program"; tab?: string };
@@ -226,6 +227,20 @@ export function pinItems(t: Theme, p: PinTarget): PopupItem[] {
   ];
 }
 
+/** For a web pane: "Pin this web tab to the shelf" / "Unpin this web tab", the
+ *  tab it shows (kit.ts shownWebTab; one tab or many) as a tile of its own, as
+ *  the tab's own menu in the pane pins it. None while the browser doesn't say. */
+function webTabPinItems(t: Theme, p: PaneInfo | undefined): PopupItem[] {
+  const tab = p?.mod === "browser" ? shownWebTab(p) : null;
+
+  if (!p || !tab) return [];
+
+  const on = webTabPinnedNow(p, tab);
+  const hint = keys().find((b) => b.action === "browser.pin_tab")?.keys ?? "";
+
+  return [{ id: "pin-web-tab", mark: icon(t, on ? "pin-off" : "pin"), name: on ? "Unpin this web tab" : "Pin this web tab to the shelf", hint, go: () => pinWebTab(p, tab, !on) }];
+}
+
 /** Moving a jar item (its key) left or right among the shelf's tiles, while
  *  there's a neighbor that way: "Move left" / "Move right". */
 function shelfMoves(t: Theme, key: string): PopupItem[] {
@@ -316,14 +331,15 @@ export interface MenuOpening {
 }
 
 /** Opens a menu for these props (role "menu"). From the keyboard (`centered`)
- *  it opens in the middle as a dialog, since there's no pointer to hang it from;
- *  `at` places it (kit.ts dropBelow), else it opens at the pointer. */
+ *  it hangs from the cursor's thing while a sidebar or strip key runs (kit.ts
+ *  keyedSpec), else in the middle as a dialog; `at` places it (kit.ts
+ *  dropBelow), else it opens at the pointer (flipped near the window's edges). */
 export function openMenu(menu: MenuProps, { width = 220, centered = false, at = null }: MenuOpening = {}): string {
   const p = { role: "menu", ...menu };
   const kind = centered ? "dialog" : "popup";
   const height = menuHeight(p);
 
-  return openOverlay(at && !centered ? { mod: "nocturne", kind, frame: "none", width, height, at, props: p } : { mod: "nocturne", kind, frame: "none", width, height, props: p });
+  return openOverlay(keyedSpec(at && !centered ? { mod: "nocturne", kind, frame: "none", width, height, at, props: p } : { mod: "nocturne", kind, frame: "none", width, height, props: p }));
 }
 
 // The git mark's menu (its ▾, a right-click on it, the strip's keys): the open
@@ -385,7 +401,7 @@ export class KeysDialog {
       if (p.overlay) closeOverlay(p.overlay);
     };
 
-    return tracked(div().id("keys-dialog").relative().size_full().bg(t.background).border(1).border_color(t.ansi0), this.handle)
+    return tracked(div().id("keys-dialog").relative().size_full().bg(t.background).border(1).border_color(edge(t)), this.handle)
       .on_key_down((e, cx) => {
         if (keysKey(e, true)) {
           cx.stop_propagation();
@@ -517,6 +533,8 @@ function paneItems(t: Theme, tg: Guarded<typeof isMenuTarget>): PopupItem[] {
     ...(term ? [{ id: "rename", mark: icon(t, "square-pen"), name: "Rename", hint: "", go: () => writeShared(setShared, NAME_PANE_KEY, { terminal: term.address, at: Date.now() }) }] : []),
     // Any pane can be pinned to the top of the sky: an agent's, a shell's, a web page, an editor.
     ...pinItems(t, { pane, terminal: term ? term.address : null }),
+    // A web pane's shown tab, on its own (its other tabs: their menu in the pane's strip).
+    ...webTabPinItems(t, mine),
     // Or kept in the dock (dock.ts: the space tied to no folder), pinned to the shelf.
     ...(dockable(mine) ? [{ id: "dock", mark: icon(t, "archive"), name: "Move to the dock", hint: "", go: () => dockPane(mine) }] : []),
     item(t, "split-right", "panel-right", "Split right", "pane.split", { direction: "right", pane }),

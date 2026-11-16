@@ -33,7 +33,7 @@
 //   e  edit as text in the editor (tables, patches, SVG)
 //   pictures: + = / - zoom, 0 fit, 1 100%, h j k l ←↓↑→ pan (← → step the
 //             folder when it fits), r / R turn, b background
-//   PDF:      + / - zoom, 0 fit width, ← → / pageup pagedown pages, g / G first / last
+//   PDF:      + / - zoom, 0 fit width, 1 100%, ← → / pageup pagedown pages, g / G first / last
 //   tables, patches: j k ↓ ↑ rows, J K / pageup pagedown pages, g / G top / bottom,
 //             h l ← → columns (tables), } { next / previous file (patches),
 //             t / T next / previous table (SQLite)
@@ -42,28 +42,38 @@
 //   ?  the keys, as a strip under the bar     esc  ring, then strip, away
 // A native view (the PDF, the player, Quick Look) that took the keyboard with a
 // click gives it back on esc (cmd-esc too): the preview's keys work again.
-// Mouse: pictures: drag to pan, ⌘/ctrl + scroll zooms at the pointer, scroll
-// pans, double-click toggles fit and 100%. Tables and patches: scroll (shift or
+// Mouse: pictures: a mouse wheel, ⌘/ctrl + scroll or a trackpad pinch zooms at
+// the pointer; drag and a trackpad's two-finger scroll pan when zoomed in;
+// double-click toggles fit and 100% (a PDF's own view takes its scroll and
+// pinch). The bar shows the zoom (pictures, PDFs). Tables and patches: scroll (shift or
 // sideways: across).
 // Commands (keys.json, `herdr-app do preview.<c>`; every shown preview
 // takes them): zoom_in, zoom_out, fit, actual, next, prev, rotate, background,
 // reload, page_next, page_prev.
 //
 // Another file in this pane: shared `preview.show` { slot, path, n, at } for
-// the pane whose slot it names (a files pane's own preview pane: a second
-// picture opened there shows here, file-tree/routing.ts).
+// the pane whose slot it names. The app sends it for `preview.open` (a
+// terminal's Cmd-click on a picture, the picker, a script) when a preview pane
+// is already in the tab: the one asked from, else the one that last had the
+// keyboard (shared `preview.last`, its slot, noted here), else the first; a
+// files pane sends it to its own preview pane (file-tree/routing.ts). So one
+// preview pane takes the next file instead of a new pane each time.
 //
 // What's drawn, and how, is viewer.ts: the files pane's preview split
 // (file-tree) shows a file with the same code.
 
 import type { AsyncContext, Context, Element } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { shared } from "herdr";
-import { isNumber, isString, nullable, object, readShared, sharedKey } from "./guard.ts";
+import { shared, setShared } from "herdr";
+import { isNumber, isString, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import Viewer from "./viewer.ts";
 
 /** A file for the preview pane whose slot it names. */
 export const SHOW_KEY = sharedKey("preview.show", nullable(object({ slot: isString, path: isString, n: isNumber }, { at: isNumber })));
+
+/** The preview pane that last had the keyboard (its slot): the app's
+ *  `preview.open` shows the next file there. */
+export const LAST_KEY = sharedKey("preview.last", nullable(isString));
 
 export default class PreviewView extends Viewer {
   // The last `preview.show` seen: one from before this pane started is old.
@@ -82,6 +92,14 @@ export default class PreviewView extends Viewer {
       cx.timer.after(0, (cx) => {
         this.open(ask.path, cx);
         cx.notify();
+      });
+    }
+
+    const slot = this.slot;
+
+    if (slot && !this.embedded && this.handle?.is_focused() === true && readShared(shared, LAST_KEY, null) !== slot) {
+      cx.timer.after(0, () => {
+        if (readShared(shared, LAST_KEY, null) !== slot) writeShared(setShared, LAST_KEY, slot);
       });
     }
 

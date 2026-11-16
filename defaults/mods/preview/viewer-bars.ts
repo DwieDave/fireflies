@@ -16,6 +16,7 @@ import { goTo } from "./viewer-load.ts";
 import { actual, copyPath, editable, fit, openInSystem, pageGo, ready, reveal, turn, zoomBy } from "./viewer-pan.ts";
 import { openInDatabases } from "./viewer-table.ts";
 import type { default as Viewer } from "./viewer.ts";
+import { edge } from "./tones.ts";
 
 /** A control on the bar or the strip; tab / shift-tab reach it in drawing order. */
 export function chip(v: Viewer, t: Theme, id: string, label: string, action: (cx: Context) => void, on = false): Element {
@@ -32,7 +33,7 @@ export function chip(v: Viewer, t: Theme, id: string, label: string, action: (cx
       cx.notify();
     });
 
-  const lit = on ? base.child(checker(t.ansi0, 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : base;
+  const lit = on ? base.child(checker(edge(t), 1)).child(div().absolute().left(0).right(0).bottom(0).h(2).bg(t.accent)) : base;
   const framed = ringed ? lit.child(div().absolute().inset_0().border(1).border_color(t.accent)) : lit;
 
   return framed.child(div().relative().child(label));
@@ -168,6 +169,7 @@ export function drawControls(view: Viewer, t: Theme, w: number, el: Element): El
       .when(w >= 400 && scale > 0, (e2) => e2.child(div().flex_none().text_color(t.dim).child(percent(scale))))
       .child(chip(view, t, "pdf-out", "−", (cx) => zoomBy(view, -1, cx)))
       .child(chip(view, t, "pdf-fit", "fit", (cx) => fit(view, cx), p.autoScales === true))
+      .when(w >= 360, (e2) => e2.child(chip(view, t, "pdf-actual", "100%", (cx) => actual(view, cx), p.autoScales !== true && Math.abs(scale - 1) < 1e-9)))
       .child(chip(view, t, "pdf-in", "+", (cx) => zoomBy(view, 1, cx)));
   }
 
@@ -189,7 +191,7 @@ export function drawToolbar(v: Viewer, t: Theme): Element {
   const facts = factsOf(v, w);
 
   const head = h_flex().id("preview-toolbar").relative().h(34).flex_none().px(10).gap(8).items_center().text_size(11)
-    .when(w >= 320, (e2) => e2.child(div().flex_none().text_color(t.ansi8).child(tag(v.kind, v.path))))
+    .when(w >= 320, (e2) => e2.child(div().flex_none().text_color(t.muted).child(tag(v.kind, v.path))))
     .child(h_flex().flex_1().min_w(0).gap(8).items_baseline()
       .child(div().flex_none().max_w_full().truncate().text_color(t.foreground).child(basename(v.path || "Preview")))
       .when(w >= 420 && Boolean(facts), (e2) => e2.child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(facts))))
@@ -205,7 +207,7 @@ export function drawToolbar(v: Viewer, t: Theme): Element {
       .when(w >= 540 && !v.on, (e3) => e3.child(chip(v, t, "img-open", "open", () => openInSystem(v))))
       .when(w >= 620, (e3) => e3.child(chip(v, t, "img-copy", v.copied ? "copied" : "copy", (cx) => copyPath(v, cx), Boolean(v.copied)))))
     .child(keysChip(v, t))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(edge(t), 1)));
 }
 
 /** A second strip: a database's tables, or what's left out of a table or patch. */
@@ -226,7 +228,7 @@ export function drawStrip(v: Viewer, t: Theme): Element | null {
     .when(Boolean(note), (el) => el.child(div().flex_1().min_w(0).when(tables.length > 0, (e2) => e2.pl(8)).truncate().text_color(t.ansi3).child(note ?? "")))
     // The whole database in the Databases window: its structure, every row, queries.
     .when(v.kind === "sqlite" && v.dbMod, (el) => el.child(div().flex_1()).child(chip(v, t, "db-open", "open in Databases", () => openInDatabases(v.path, "the preview"))))
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(checker(edge(t), 1)));
 }
 
 /** The look's bar: the kind (a language for code), the name, the facts, what's left out. */
@@ -241,12 +243,12 @@ export function drawLookBar(v: Viewer, t: Theme): Element {
   return h_flex().id("look-bar").relative().h(26).flex_none().px(10).gap(8).items_center().text_size(11).overflow_hidden()
     // The file's type mark (file-icons.ts; the copies in preview's icons/).
     .child(div().id("look-bar-icon").relative().flex_none().size(ICON_SIZE).child(svg(iconSvg(icon, MOD)).size(ICON_SIZE).text_color(iconColor(icon, t))))
-    .child(div().flex_none().text_color(t.ansi8).child(kind))
+    .child(div().flex_none().text_color(t.muted).child(kind))
     .child(div().flex_shrink(1).min_w(0).truncate().text_color(t.foreground).child(basename(v.path)))
     .when(Boolean(facts) && w >= 220, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.dim).child(facts)))
     .child(div().flex_1())
     .when(Boolean(note) && w >= 260, (el) => el.child(div().flex_shrink(1).min_w(0).truncate().text_color(t.ansi3).child(note ?? "")))
-    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(t.ansi0, 1)));
+    .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(edge(t), 1)));
 }
 
 /** One plain line (a binary, an unreadable file, reading). */
@@ -257,15 +259,15 @@ export function oneLineView(t: Theme, text: string): Element {
 /** What shows under a native view while it loads, or while a menu sets it aside. */
 export function standIn(v: Viewer, t: Theme): Element {
   return v_flex().size_full().items_center().justify_center().gap(6).px(16).text_size(11).bg(t.background)
-    .child(div().text_color(t.ansi8).child(tag(v.kind, v.path)))
+    .child(div().text_color(t.muted).child(tag(v.kind, v.path)))
     .child(div().max_w_full().truncate().text_color(t.foreground).child(basename(v.path)));
 }
 
 export function emptyView(v: Viewer, t: Theme, title: string, hint: string | null, offer = false): Element {
   return v_flex().size_full().items_center().justify_center().gap(10).px(16).text_size(11)
-    .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.ansi8).opacity(0.6))
+    .child(svg(`${ART}/moon-8.svg`).w(44).h(44).text_color(t.muted).opacity(0.6))
     .child(div().text_color(t.foreground).child(title))
-    .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.ansi8).child(hint ?? "")))
+    .when(Boolean(hint), (el) => el.child(div().text_center().text_color(t.muted).child(hint ?? "")))
     .when(offer && !v.on && Boolean(v.path), (el) => el.child(h_flex().pt(4).text_color(t.muted)
       .child(chip(v, t, "empty-open", "open in its app  o", () => openInSystem(v)))));
 }

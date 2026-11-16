@@ -9,6 +9,7 @@ import { place, canvas, sky, dims, ZOOM } from "./graph.ts";
 import { stop, PLACEHOLDER } from "./state.ts";
 import { pickNode, saveState, zoomTo } from "./navigate.ts";
 import type { default as Agents } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** Where the graph sits: dragged there, else at the left, the whole graph centred when it fits, else the session node. */
 export function panFor(v: Agents, height: number): Point {
@@ -87,7 +88,7 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
     .child(sky(t, at.x, at.y))
     .child(el)
     .when(Boolean(v.pan), (el) => el.child(div().id("ag-recentre").absolute().right(10).bottom(8).px(6).h(20).flex().items_center()
-      .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .text_size(11).text_color(t.muted).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {
         v.pan = null;
@@ -95,7 +96,7 @@ export function viewport(v: Agents, t: Theme, root: GraphNode): Element {
       })
       .child("centre")))
     .when(v.zoom !== 1, (el) => el.child(div().id("ag-zoom").absolute().left(10).bottom(8).px(6).h(20).flex().items_center()
-      .text_size(11).text_color(t.dim).bg(t.background).hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .text_size(11).text_color(t.dim).bg(t.background).hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .on_mouse_down("left", stop)
       .on_click((_e, cx) => {
         v.zoom = 1;

@@ -5,6 +5,7 @@
 // a pane), and the things a panel holds (a query tab, a page of rows, an ask).
 
 import type { Pt } from "./menu-place.ts";
+import type { Place } from "./keys.ts";
 import type { EditorState, InputState } from "gpui-base";
 import type { Guarded } from "./guard.ts";
 import { isBoolean, isNumber, isString, literal, nullable, object, sharedKey } from "./guard.ts";
@@ -173,8 +174,10 @@ export interface Menu {
   readonly rows: readonly MenuRow[];
   at: number;
   readonly near?: Pt | null;
-  /** A grid's own menu (a cell's, a row's, a column's): by key it stands under the cursor's cell. */
-  readonly cell?: boolean;
+  /** What it stands at when a key opened it (menu-anchor.ts, found as it's drawn): the grid's
+   *  cursor cell (a cell's, a row's, a column's menu), the cursor's row of a list's place, the
+   *  main panel's title (its tabs' menu); none: the middle. */
+  readonly keyed?: "cell" | "tab" | Place | null;
 }
 
 /** A query tab being renamed (a double click on it, its menu): the tab and the name's input. */

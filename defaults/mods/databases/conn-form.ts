@@ -27,6 +27,7 @@ import { test } from "./conns.ts";
 import { chip, popupScrim, stop } from "./kit.ts";
 import { hint } from "./keyhelp.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** The form's text fields. */
 type Field = "name" | "host" | "port" | "user" | "database" | "path" | "url" | "password";
@@ -364,7 +365,7 @@ export class ConnForm {
     const cell = (f: Field) => {
       const input = this.inputs.get(f);
 
-      const box = h_flex().h(26).px(8).items_center().border(1).border_color(on(f) ? t.accent : t.ansi8).when(on(f), (el) => el.bg(`${t.ansi0}66`))
+      const box = h_flex().h(26).px(8).items_center().border(1).border_color(on(f) ? t.accent : t.muted).when(on(f), (el) => el.bg(`${edge(t)}66`))
         .child(input ? Input.new(input).flex_1().text_size(12).text_color(t.foreground) : div())
         .when(f === "path", (el) => el.child(chip(t, "form-pick", "pick…", false, (cx) => void this.pick(cx))));
 
@@ -402,7 +403,7 @@ export class ConnForm {
 
   buttons(t: Theme, on: (id: string) => boolean): Element {
     const button = (id: string, label: string, key: string, main = false) => ring(h_flex().id(`form-${id}`).h(24).px(10).gap(8).items_center().border(1)
-      .border_color(main ? t.accent : t.ansi8).text_color(main ? t.foreground : t.muted).cursor_pointer()
+      .border_color(main ? t.accent : t.muted).text_color(main ? t.foreground : t.muted).cursor_pointer()
       .on_mouse_down("left", (_e, cx) => {
         cx.stop_propagation();
         this.press(id, cx);

@@ -21,6 +21,7 @@ import { contextMenu } from "./bars.ts";
 import { openPane } from "./panes.ts";
 import { pickedKeys, switchSide } from "./staging.ts";
 import { readMore } from "./content.ts";
+import { edge } from "./tones.ts";
 
 export function mainPanel(v: GitView, t: Theme) {
   const active = v.focus === "main" && !v.popups.open;
@@ -53,7 +54,7 @@ export function mainPanel(v: GitView, t: Theme) {
     : mainList(v, t, "main-diff", rows, (r) => diffLine(t, r, { code, compact: narrow, path: ("path" in r ? r.path : undefined) ?? m.path ?? null, active, h: rowH }), { key: "main", rowH });
 
   // ⧉: what this view shows, as a pane (shift: a new tab), like a pane header's split.
-  const asPane = !v.show && rows.length ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((st) => st.text_color(t.accent).bg(`${t.ansi0}66`))
+  const asPane = !v.show && rows.length ? div().id("main-as-pane").px(3).flex_none().text_color(t.dim).hover((st) => st.text_color(t.accent).bg(`${edge(t)}66`))
     .tooltip("Open as a pane beside (ctrl-p) · shift: in a new tab (ctrl-shift-p)")
     .on_mouse_down("left", (e, cx) => { cx.stop_propagation(); openPane(v, e.modifiers.shift); cx.notify(); })
     .child(svg("mods/workspace-chrome/panel-right.svg").size(11).text_color(t.dim)) : null;
@@ -170,7 +171,7 @@ export function mainList<R extends MainRow>(view: GitView, t: Theme, id: string,
       .children(tail ? [tail] : []));
 
   return rows.length > vis
-    ? list.child(div().absolute().right(0).w(2).top(`${Math.round((top / rows.length) * 100)}%`).h(`${Math.max(3, Math.round((vis / rows.length) * 100))}%`).bg(`${t.ansi8}66`))
+    ? list.child(div().absolute().right(0).w(2).top(`${Math.round((top / rows.length) * 100)}%`).h(`${Math.max(3, Math.round((vis / rows.length) * 100))}%`).bg(`${t.muted}66`))
     : list;
 }
 

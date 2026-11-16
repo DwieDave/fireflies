@@ -13,6 +13,7 @@ import { itemParts, quoteBody } from "./live.ts";
 import { markdown, CALLOUTS, imagesAsLinks, fenced } from "./markdown.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addAfter } from "./rendered-keys.ts";
+import { edge } from "./tones.ts";
 
 export const GAP = 10;
 export const ADD_H = 30; // the "add a block" line under the last unit
@@ -53,7 +54,7 @@ export function kindsView(v: Rendered, o: ViewOptions): Element {
           .gap(5)
           .items_center()
           .border(1)
-          .border_color(t.ansi0)
+          .border_color(edge(t))
           .text_color(t.muted)
           .cursor_pointer()
           .hover((s) => s.border_color(t.accent).text_color(t.foreground))
@@ -92,9 +93,9 @@ export function addView(v: Rendered, o: ViewOptions, after: Unit | null): Elemen
       cx.stop_propagation();
       addAfter(v, after, cx);
     })
-    .child(div().relative().size(14).flex_none().border(1).border_color(t.ansi8).flex().items_center().justify_center().child(svg(PLUS).size(10).text_color(t.accent)))
+    .child(div().relative().size(14).flex_none().border(1).border_color(t.muted).flex().items_center().justify_center().child(svg(PLUS).size(10).text_color(t.accent)))
     .child(div().flex_none().text_size(11.5).child("add a block"))
-    .child(div().relative().flex_1().h(1).opacity(0.5).child(v.host.dither(t.ansi8)))
+    .child(div().relative().flex_1().h(1).opacity(0.5).child(v.host.dither(t.muted)))
     .child(div().flex_none().text_size(10.5).child("or enter at a block's end"));
 }
 
@@ -189,6 +190,13 @@ export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
       }
     })
     .cursor_text()
+    // Where it's pressed: the caret goes about there (rendered-keys.ts clickUnit).
+    .on_mouse_down("left", (e) => {
+      const at = e.local_position;
+      const b = e.bounds;
+
+      v.press = at && b ? { key: r.key, x: o.unzoom(at.x), y: o.unzoom(at.y), w: o.unzoom(b.width) } : null;
+    })
     .on_click((_e, cx) => v.clickUnit(u, cx, false))
     .child(body)
     // Its "+": an empty paragraph after it (shown while the pointer is over it).
@@ -204,7 +212,7 @@ export function unitView(v: Rendered, r: Row, o: ViewOptions): Element {
           .items_center()
           .justify_center()
           .border(1)
-          .border_color(t.ansi8)
+          .border_color(t.muted)
           .bg(t.background)
           .cursor_pointer()
           .hover((s) => s.border_color(t.accent))
@@ -233,7 +241,7 @@ function unitBody(v: Rendered, u: Unit, id: string, o: ViewOptions, md: Md): Ele
 
   if (u.kind === "image") return imagesView(v, u, id, o, md);
 
-  if (u.kind === "rule") return div().relative().h(13).flex().items_center().child(div().relative().w_full().h(1).opacity(0.6).child(v.host.dither(t.ansi8)));
+  if (u.kind === "rule") return div().relative().h(13).flex().items_center().child(div().relative().w_full().h(1).opacity(0.6).child(v.host.dither(t.muted)));
 
   if (u.kind === "ref") return div().text_color(t.dim).font_family(v.host.font).text_size(11.5).child(src);
 
@@ -259,7 +267,7 @@ function itemBody(v: Rendered, u: Extract<Unit, { kind: "item" }>, p: ItemParts,
         .mt(4)
         .flex_none()
         .border(1)
-        .border_color(u.checked ? t.accent : t.ansi8)
+        .border_color(u.checked ? t.accent : t.muted)
         .cursor_pointer()
         .hover((s) => s.border_color(t.foreground))
         .on_mouse_down("left", (_e, cx) => cx.stop_propagation())

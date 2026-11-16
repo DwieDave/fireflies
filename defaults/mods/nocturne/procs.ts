@@ -19,7 +19,7 @@ import { isNumber, isString, literal, nullable, object, readShared, sharedKey, w
 import type { Guarded } from "./guard.ts";
 import { isTerminal } from "./guards.ts";
 import type { Terminal } from "./guards.ts";
-import { ART, dropBelow } from "./kit.ts";
+import { ART, dropBelow, keyedSpec } from "./kit.ts";
 import type { DropAt, ToolButton } from "./kit.ts";
 
 /** The deck's two tabs. */
@@ -75,9 +75,9 @@ export function toggleProcs({ centered = false, at = null, wasOpen = false, tab 
   const props = { tab: tab ?? "procs" };
   const kind = centered ? "dialog" : "popup";
 
-  const id = openOverlay(at && !centered
+  const id = openOverlay(keyedSpec(at && !centered
     ? { mod: "procs", kind, frame: "none", width: DECK_W, height: DECK_H, at, props }
-    : { mod: "procs", kind, frame: "none", width: DECK_W, height: DECK_H, props });
+    : { mod: "procs", kind, frame: "none", width: DECK_W, height: DECK_H, props }));
 
   writeShared(setShared, DECK_KEY, { id, tab: tab ?? "procs", beat: Date.now() });
 }

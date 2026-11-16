@@ -18,13 +18,14 @@ import { nativeId } from "./viewer-native.ts";
 import { actual, current, fit, pannable } from "./viewer-pan.ts";
 import { emptyView, oneLineView, standIn } from "./viewer-bars.ts";
 import type { default as Viewer } from "./viewer.ts";
+import { edge as edgeTone } from "./tones.ts";
 
 /** Where the view is when part of the picture is out of it: dithered rails on the
  *  right and bottom edges, as the Markdown viewer's scrollbar. */
 export function rails(v: Viewer, t: Theme, box: { readonly left: number; readonly top: number; readonly width: number; readonly height: number }, focused: boolean): Element[] {
   const port = v.port;
   const out: Element[] = [];
-  const color = focused ? t.accent : t.ansi8;
+  const color = focused ? t.accent : t.muted;
 
   if (box.height > port.height + 1) {
     const shown = port.height / box.height;
@@ -55,7 +56,7 @@ export function pictureView(gv: Viewer, t: Theme, v: Look, focused: boolean): El
   return [
     // The checker sits under the picture only: transparency reads, the pane stays dark.
     // A PDF page is paper: white under it.
-    gv.checker && !paper ? under.child(checker(t.ansi0, 8)) : under,
+    gv.checker && !paper ? under.child(checker(edgeTone(t), 8)) : under,
     image(gv.src ?? "").id(`img-${gv.slot ?? "view"}`).absolute().left(l).top(tp).w(w).h(h),
     ...rails(gv, t, box, focused),
   ];
@@ -76,7 +77,7 @@ export function patchRow(t: Theme, row: PatchRow, wide: boolean): Element {
 
   if (row.kind === "file") {
     const el = h_flex().h(ROW).w_full().relative().items_center().px(10).gap(10).text_size(11)
-      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(t.ansi0, 1)))
+      .child(div().absolute().left(0).right(0).bottom(0).h(1).child(checker(edgeTone(t), 1)))
       .child(div().flex_1().min_w(0).truncate().text_color(t.foreground).child(row.old ? `${row.old} → ${row.path}` : row.path || "(no name)"));
 
     return (row.binary ? el.child(div().flex_none().text_color(t.dim).child("binary")) : el)
@@ -86,7 +87,7 @@ export function patchRow(t: Theme, row: PatchRow, wide: boolean): Element {
 
   if (row.kind === "@") {
     const el = h_flex().h(ROW).w_full().relative().items_center().px(8).gap(10).text_size(11)
-      .child(checker(t.ansi0, 2))
+      .child(checker(edgeTone(t), 2))
       .child(div().relative().flex_none().px(4).bg(t.background).text_color(t.accent).child(wide ? row.range : row.range.replace(/^@@ | @@$/g, "")));
 
     return row.text ? el.child(div().relative().min_w(0).truncate().px(4).bg(t.background).text_color(t.muted).child(row.text)) : el;

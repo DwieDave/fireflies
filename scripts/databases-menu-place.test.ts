@@ -5,7 +5,7 @@
 // it), under it, above it near the foot; nothing: the middle. A press in
 // window px taken into the view's layout px at zoom 1 and Developer's 0.9.
 import { describe, expect, test } from "bun:test";
-import { GAP, MARGIN, inView, originOf, placeMenu } from "../defaults/mods/databases/menu-place.ts";
+import { GAP, MARGIN, inView, originOf, overlayOf, placeMenu } from "../defaults/mods/databases/menu-place.ts";
 
 const room = { width: 1000, height: 700 };
 const menu = { width: 300, height: 200 };
@@ -105,5 +105,24 @@ describe("a press taken into the view", () => {
 
   test("a zoom of 0 (not read yet) counts as 1", () => {
     expect(inView(press, { x: 0, y: 0 }, 0)).toEqual(press);
+  });
+});
+
+describe("a menu the app draws over the window (openOverlay)", () => {
+  test("a press: a popup at the pointer (the app flips it near the edges)", () => {
+    expect(overlayOf("pointer")).toEqual({ kind: "popup" });
+  });
+
+  test("a row a key opened it for: a popup hung from the row, measured in its pane or block", () => {
+    expect(overlayOf({ over: "sidebar", rect: { x: 12.4, y: 96, w: 180.6, h: 24 } }))
+      .toEqual({ kind: "popup", at: { over: "sidebar", x: 12, y: 96, w: 181, h: 24 } });
+  });
+
+  test("a row's rectangle in window px (no pane to measure it in)", () => {
+    expect(overlayOf({ rect: { x: 300.2, y: 40, w: 90, h: 24.6 } })).toEqual({ kind: "popup", at: { x: 300, y: 40, w: 90, h: 25 } });
+  });
+
+  test("nothing positional: a dialog in the middle", () => {
+    expect(overlayOf(null)).toEqual({ kind: "dialog" });
   });
 });

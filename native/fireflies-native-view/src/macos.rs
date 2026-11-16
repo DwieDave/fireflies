@@ -27,7 +27,7 @@ use objc2_quick_look_ui::{QLPreviewItem, QLPreviewView, QLPreviewViewStyle};
 use objc2_web_kit::{
     WKNavigation, WKNavigationAction, WKNavigationActionPolicy, WKNavigationDelegate, WKScriptMessage,
     WKScriptMessageHandler, WKUIDelegate, WKUserContentController, WKWebView,
-    WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
+    WKFullscreenState, WKWebViewConfiguration, WKWebsiteDataStore, WKWindowFeatures,
 };
 use serde_json::{Value, json};
 use std::cell::{Cell, RefCell};
@@ -438,6 +438,9 @@ fn make(
                 config
                     .preferences()
                     .setJavaScriptCanOpenWindowsAutomatically(false);
+                // A page may go fullscreen (a video's button, `requestFullscreen`):
+                // WebKit moves the view into a fullscreen window of its own and back.
+                fullscreen_on(&config);
                 if let Source::File {
                     trust: Trust::Static,
                     ..
@@ -453,6 +456,9 @@ fn make(
                 // Its link menu says "in New Tab" when the mod keeps tabs (crate::tabs).
                 let view = crate::tabs::new_web_view(mtm, frame, &config);
                 let _: () = msg_send![&*view, setInspectable: true];
+                // A trackpad's two-finger swipe goes back and forward, as in Safari
+                // (off while its video is out in a player: crate::pip).
+                view.setAllowsBackForwardNavigationGestures(true);
                 let delegate = WebDelegate::new(mtm, key, generation);
                 if spec.pip {
                     crate::pip::configure(mtm, &config, ProtocolObject::from_ref(&*delegate));
@@ -716,6 +722,39 @@ fn web_state(view: &WKWebView) -> Value {
             "canGoBack": view.canGoBack(),
             "canGoForward": view.canGoForward(),
         })
+    }
+}
+
+/// Lets the page's elements go fullscreen (`WKPreferences.elementFullscreenEnabled`,
+/// macOS 12.3; off by default, and `document.fullscreenEnabled` says false).
+fn fullscreen_on(config: &WKWebViewConfiguration) {
+    unsafe {
+        let prefs = config.preferences();
+        let can: bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(setElementFullscreenEnabled:)];
+        if can {
+            prefs.setElementFullscreenEnabled(true);
+        }
+    }
+}
+
+/// Whether the page may go fullscreen, and where it is (`none`, `entering`,
+/// `in`, `exiting`; WKWebView.fullscreenState, macOS 13), for `native.debug`.
+fn fullscreen_state(view: &WKWebView) -> Value {
+    unsafe {
+        let prefs = view.configuration().preferences();
+        let enabled: bool = msg_send![&*prefs, respondsToSelector: objc2::sel!(isElementFullscreenEnabled)];
+        let enabled = enabled && prefs.isElementFullscreenEnabled();
+        let has_state: bool = msg_send![view, respondsToSelector: objc2::sel!(fullscreenState)];
+        let state = has_state.then(|| crate::fullscreen_name(view.fullscreenState().0 as i64));
+        json!({ "enabled": enabled, "state": state })
+    }
+}
+
+/// Whether the page has an element fullscreen (or is going in or out).
+pub(crate) fn in_fullscreen(view: &WKWebView) -> bool {
+    unsafe {
+        let has_state: bool = msg_send![view, respondsToSelector: objc2::sel!(fullscreenState)];
+        has_state && view.fullscreenState() != WKFullscreenState::NotInFullscreen
     }
 }
 
@@ -1019,6 +1058,12 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                     view.setAutoScales(true);
                     Ok(pdf_state(view))
                 }
+                // The preview's `1`: the page at its own size (100%).
+                ("pdf.actualSize", Renderer::Pdf { view, .. }) => {
+                    view.setAutoScales(false);
+                    view.setScaleFactor(1.0);
+                    Ok(pdf_state(view))
+                }
                 (
                     "media.play",
                     Renderer::Media {
@@ -1104,6 +1149,7 @@ fn entry_state(key: &str, e: &Entry, r: &Renderer) -> Value {
         Renderer::Web { view, .. } => {
             let mut s = web_state(view);
             s["video"] = json!(crate::page::has_video(key));
+            s["fullscreen"] = fullscreen_state(view);
             s
         }
         Renderer::Pdf { view, .. } => pdf_state(view),
@@ -1263,6 +1309,17 @@ pub(crate) fn web_view_key(web: &WKWebView) -> Option<(String, bool)> {
         let v = v.try_borrow().ok()?;
         v.iter().find_map(|(k, e)| match &e.renderer {
             Renderer::Web { view, .. } if std::ptr::eq(Retained::as_ptr(view), web) => Some((k.clone(), e.spec.tabs)),
+            _ => None,
+        })
+    })
+}
+
+/// The key and load generation of a web view, for an event of its own.
+pub(crate) fn web_view_load(web: &WKWebView) -> Option<(String, u64)> {
+    VIEWS.with(|v| {
+        let v = v.try_borrow().ok()?;
+        v.iter().find_map(|(k, e)| match &e.renderer {
+            Renderer::Web { view, .. } if std::ptr::eq(Retained::as_ptr(view), web) => Some((k.clone(), e.generation)),
             _ => None,
         })
     })
@@ -1785,7 +1842,7 @@ define_class!(
 
 /// The mouse event AppKit is handing out now (hit tests run inside its
 /// dispatch), as a Press; none: Other.
-fn current_press(mtm: MainThreadMarker) -> Press {
+pub(crate) fn current_press(mtm: MainThreadMarker) -> Press {
     let app = objc2_app_kit::NSApplication::sharedApplication(mtm);
     app.currentEvent().map_or(Press::Other, |e| {
         Press::of_event(e.r#type().0 as u64, e.modifierFlags().contains(NSEventModifierFlags::Control))

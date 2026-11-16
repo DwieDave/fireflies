@@ -1,15 +1,17 @@
 // The rendered view's column (rendered.ts draws through it): the rows placed
 // top to bottom and scrolled (the lit block kept in view), only those near
 // the view drawn, the scrollbar; the lit block's box (its block editor, its
-// kind at the corner, the kinds under an empty one) and its height, measured
+// kind at the corner unless the bar names it, the kinds under an empty one) and its height, measured
 // from where its editor drew its last line, else estimated from its lines.
 
 import type { Context, Element } from "gpui-kit";
 import { div } from "gpui-kit";
 import { h_flex, v_flex, Editor } from "gpui-base";
 import type { Unit } from "./live.ts";
+import { rowStarts } from "./live.ts";
 import type { Rendered, Row, ViewOptions } from "./rendered.ts";
 import { addView, emptyView, kindsView, unitView, ADD_H, KINDS_H } from "./rendered-units.ts";
+import { edge } from "./tones.ts";
 
 const PAD_TOP = 18;
 const PAD_BOTTOM = 60;
@@ -43,12 +45,18 @@ export function kindWord(u: Unit | null | undefined): string {
   }
 }
 
-/** How many rows `text` takes in a box `width` px wide, `cw` px a character (an estimate: words wrap whole). */
+/** How many characters a row of a box `width` px wide holds, `cw` px a character. */
+export function wrapCols(width: number, cw = CHAR): number {
+  return Math.max(8, Math.floor((width - 4) / cw));
+}
+
+/** How many rows `text` takes in a box `width` px wide, `cw` px a character (an estimate: words
+ *  wrap whole, as the block editor wraps them). */
 export function wrappedRows(text: string, width: number, cw = CHAR): number {
-  const cols = Math.max(8, Math.floor((width - 4) / cw));
+  const cols = wrapCols(width, cw);
   let n = 0;
 
-  for (const l of text.split("\n")) n += Math.max(1, Math.ceil(l.replace(/\t/g, "    ").length / cols));
+  for (const l of text.split("\n")) n += rowStarts(l, cols).length;
 
   return n;
 }
@@ -63,8 +71,9 @@ interface Placed {
 /** A row's height as drawn (the lit one's, or its own). */
 const rowH = (v: Rendered, r: Row): number => (r.lit ? litHeight(v) : v.height(r.key, r.u));
 
-/** Places the rows top to bottom; scrolls the lit block into view (with room around it) when
- *  it asks to be shown, and keeps the scroll within the column. */
+/** Places the rows top to bottom; puts a kept line back at the top (a reload: rendered.ts
+ *  keepTop), else scrolls the lit block into view (with room around it) when it asks to be
+ *  shown; keeps the scroll within the column and notes the unit at the top. */
 function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const tops: number[] = [];
   let y = PAD_TOP;
@@ -78,7 +87,21 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
   const total = y + ADD_H + PAD_BOTTOM;
   const li = rows.findIndex((r) => r.lit);
 
-  if (v.reveal && li >= 0) {
+  const keep = v.keep;
+
+  if (keep) {
+    // The unit holding the kept line, else the first after it (it fell between units).
+    let i = rows.findIndex((r) => r.u.to >= keep.line);
+
+    if (i < 0) i = rows.length - 1;
+
+    const r = rows[i];
+
+    if (r) v.scrollY = (tops[i] ?? 0) + (r.u.from === keep.line ? Math.min(keep.dy, rowH(v, r)) : 0);
+
+    v.keep = null;
+    v.reveal = false;
+  } else if (v.reveal && li >= 0) {
     const top = tops[li] ?? 0;
     const bottom = top + litHeight(v);
 
@@ -90,6 +113,15 @@ function placeRows(v: Rendered, rows: readonly Row[]): Placed {
 
   v.scrollY = Math.max(0, Math.min(v.scrollY, Math.max(0, total - v.viewH)));
   v.litTop = li >= 0 ? (tops[li] ?? 0) - v.scrollY : 0;
+
+  // The unit at the top (the last one starting above the view's top edge, else the first).
+  let top = 0;
+
+  while (top + 1 < rows.length && (tops[top + 1] ?? 0) <= v.scrollY) top++;
+
+  const at = rows[top];
+
+  v.topAt = at ? { line: at.u.from, dy: v.scrollY - (tops[top] ?? 0) } : null;
 
   return { tops, total, li };
 }
@@ -139,7 +171,7 @@ function scrollbar(v: Rendered, o: ViewOptions, total: number): Element {
     .w(3)
     .top(Math.round((v.scrollY / max) * v.viewH * (1 - frac)))
     .h(Math.max(16, Math.round(v.viewH * frac)))
-    .child(v.host.dither(o.focused ? o.t.accent : o.t.ansi8));
+    .child(v.host.dither(o.focused ? o.t.accent : o.t.muted));
 }
 
 /** The view: the column of rows (only those near the view drawn), scrolled by the wheel. */
@@ -195,25 +227,20 @@ export function columnView(v: Rendered, o: ViewOptions): Element {
     .when(v.viewH < total, (el) => el.child(scrollbar(v, o, total)));
 }
 
-/** The lit block's height: its editor's content as measured, or (grown since) as its lines would wrap;
- *  an empty block has its kinds under it. */
+/** The lit block's height: its editor's content as measured, grown by the rows its text has
+ *  gained since, and never less than its lines take as they wrap (a box too short scrolls the
+ *  editor inside it: its first row slips out of sight); an empty block has its kinds under it. */
 export function litHeight(v: Rendered): number {
-  // Measured: that height, grown by the rows the text has gained since (never shrunk to an
-  // estimate, so it doesn't jump between the two on a key). Not yet: the estimate, a little
-  // slack in it (a box a little short lets the editor scroll inside it).
   const rows = wrappedRows(v.piece, v.litW, v.cw);
+  const estimate = rows * v.rowH + 6;
+  const measured = v.blockH === null ? 0 : v.blockHFor === v.piece ? v.blockH : v.blockH + Math.max(0, rows - wrappedRows(v.blockHFor ?? "", v.litW, v.cw)) * v.rowH;
 
-  const h =
-    v.blockH === null
-      ? rows * v.rowH + 6
-      : v.blockHFor === v.piece
-        ? v.blockH
-        : v.blockH + Math.max(0, rows - wrappedRows(v.blockHFor ?? "", v.litW, v.cw)) * v.rowH;
-
-  return Math.min(h, Math.max(ROW * 3, v.viewH - 60)) + 10 + (v.offersKinds() ? KINDS_H : 0);
+  return Math.min(Math.max(measured, estimate), Math.max(ROW * 3, v.viewH - 60)) + 10 + (v.offersKinds() ? KINDS_H : 0);
 }
 
-/** Measures the block editor's content from where it drew its last line; its row and character size too. */
+/** Measures the block editor's content from where it drew its first and last lines (so an
+ *  editor scrolled inside a box that was short still measures its whole text); its row and
+ *  character size too. */
 export function measureBlock(v: Rendered, cx: Context): void {
   const lines = v.piece.split("\n");
   const last = lines.length - 1;
@@ -231,7 +258,11 @@ export function measureBlock(v: Rendered, cx: Context): void {
 
   if (a0 && a1 && a1.y === a0.y && a1.x > a0.x) v.cw = (a1.x - a0.x) / z;
 
-  const h = (b.y + b.height - b.view.y) / z + 2;
+  // The room above the first row, kept from a measure where it was in view.
+  if (a0 && a0.y >= b.view.y) v.padTop = (a0.y - b.view.y) / z;
+
+  const top = a0 ? a0.y : b.view.y;
+  const h = (b.y + b.height - top) / z + v.padTop + 2;
   const changed = h > 4 && Math.abs((v.blockH ?? -1) - h) > 1;
 
   if (h > 4) {
@@ -257,11 +288,11 @@ function litView(v: Rendered, o: ViewOptions): Element {
     .ml(-12)
     .mr(-12)
     .pl(12)
-    .pr(92)
+    .pr(o.kindInBar ? 12 : 92)
     .py(5)
-    .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(t.ansi0)))
+    .child(div().absolute().inset_0().opacity(0.22).child(v.host.dither(edge(t))))
     .child(div().absolute().left(0).top(0).bottom(0).w(2).bg(t.accent))
-    .child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit)))
+    .when(!o.kindInBar, (el) => el.child(div().absolute().right(8).top(5).text_size(10.5).text_color(t.dim).child(kindWord(v.unit))))
     .child(
       v_flex()
         .relative()

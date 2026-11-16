@@ -12,11 +12,14 @@ const mods = readdirSync(MODS).filter((m) => !m.startsWith("."));
 const sources = (m: string) => readdirSync(`${MODS}/${m}`).filter((f) => /\.(js|ts)$/.test(f) && !f.endsWith(".d.ts"));
 const imports = (m: string, file: string) => sources(m).some((f) => readFileSync(`${MODS}/${m}/${f}`, "utf8").includes(`from "./${file}"`));
 
-test("every copy of guard.ts is the same file: nocturne and each of its mods has one, ready for its migration", () => {
+/** Mods converted to Effect (docs/effect-mods.md): they decode with Schema through @fireflies/kit, and carry no guard.ts. */
+const ON_THE_KIT = ["usage"];
+
+test("every copy of guard.ts is the same file: nocturne and each of its mods has one, but those on the Effect kit", () => {
   const source = readFileSync(`${MODS}/pip/guard.ts`, "utf8");
   const copies = mods.filter((m) => existsSync(`${MODS}/${m}/guard.ts`));
   for (const m of copies) expect([m, readFileSync(`${MODS}/${m}/guard.ts`, "utf8") === source]).toEqual([m, true]);
-  expect(copies.sort()).toEqual(["nocturne", ...NOCTURNE_MODS].sort());
+  expect(copies.sort()).toEqual(["nocturne", ...NOCTURNE_MODS].filter((m) => !ON_THE_KIT.includes(m)).sort());
   // A mod that imports it has its copy (no stock mod does).
   for (const m of mods.filter((x) => imports(x, "guard.ts"))) expect(copies).toContain(m);
 });

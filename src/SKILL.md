@@ -43,7 +43,8 @@ their `links` setting). A web pane keeps tabs: `herdr-app do
 browser.open:https://...` opens the page in a new tab of the web
 pane last used instead (`browser.tab_next`, `.tab_prev`,
 `.tab_close` move between them, `.tab_move_left` / `.tab_move_right` reorder
-the shown one).
+the shown one). The mouse's side buttons and a two-finger swipe go back and
+forward there, and a page may go fullscreen (a video's button; Esc comes back).
 
 To show them what runs and what listens (a dev server you started, a stuck
 build), `herdr-app do nocturne.procs` opens Nocturne's processes and ports
@@ -96,15 +97,19 @@ Cmd/Ctrl-click a `.md` path in terminal output.
 To show them a file to look at (a screenshot you took, a chart you drew, a
 PDF or CSV you generated, a patch, a SQLite database), `herdr-app do
 preview.open --path /abs/path/shot.png` opens it beside the focused pane in the
-preview: pictures fitted, PDFs paged, CSV/TSV and database tables as tables,
-patches colored (on macOS fonts and audio/video too; `image.open` is the same).
-It shows the file again when you overwrite it, so open it once and keep saving
-to the same path. Cmd/Ctrl-click on such a path (or a Markdown file) in
-terminal output opens it as a tab of their editor instead, drawn the same way
-(Markdown in the editor's view for it); `herdr-app do editor.open --path … --look true`
-does that too. Their files pane opens a picture or PDF in a preview pane of its
-own until they open a text file from it, which turns that preview pane into an
-editor (the picture its first tab); later pictures from it go to that editor.
+preview: pictures fitted (zoom with + - 0 1, the mouse wheel, pinch or
+Cmd-scroll; the bar shows the zoom), PDFs paged, CSV/TSV and database tables as tables, patches
+colored (on macOS fonts and audio/video too; `image.open` is the same). A
+preview pane already in that tab shows it instead of a new pane opening (the
+one they last looked at; `--in pane` opens another), so opening several files
+one after another doesn't fill the tab. It shows the file again when you
+overwrite it, so open it once and keep saving to the same path. Cmd/Ctrl-click
+on a picture, PDF, database, font or clip path in terminal output, their file
+picker and their files pane open it in that preview pane too; a table, a patch
+or a Markdown file goes to their editor as a tab, drawn (Markdown in the
+editor's view for it), and so does `herdr-app do editor.open --path … --look
+true` for any of these. A text file opened after a picture goes to the editor;
+the preview pane stays.
 
 To show them code or text at a place (the line you changed, a failing test),
 `herdr-app do editor.open --path /abs/path/src/main.rs --line 42 --col 7` opens
@@ -112,7 +117,7 @@ it in the editor beside the focused pane, the caret there (an editor already
 holding that file in one of its tabs shows that tab and goes there instead;
 an editor in that tab takes it as a new tab, but never one the person popped
 a tab out into (it keeps its one file); `--in pane` opens a new editor). It reloads by itself when you change a file it
-shows unedited; when the person has unsaved edits it asks them first, so don't
+shows unedited, keeping the line they were reading at the top and the caret on its text; when the person has unsaved edits it asks them first, so don't
 fight it. Cmd/Ctrl-click on `path:42:7` in terminal output does the same.
 `editor.open` doesn't save for them: their edits are theirs.
 
@@ -145,7 +150,8 @@ jar at the top of the sidebar: a plain terminal the same way (it sits as a tile
 on the jar's shelf), a web, editor or files pane from its right-click menu,
 the palette or `herdr-app do nocturne.pin` with that pane focused (kept in the
 mods' shared `nocturne.pinned-panes`; it ends when the pane closes). One tab of
-a web pane can have a tile of its own (its tab's menu, or `herdr-app do
+a web pane can have a tile of its own, its only tab too (its tab's menu, a
+right-click on the web pane's bar for the shown tab, or `herdr-app do
 browser.pin_tab` for the web pane's shown tab); the tile shows that tab and
 wears its favicon, as the web pane's tab strip does. A whole tab of a space
 can be pinned as one tile too (`herdr-app do nocturne.pin-tab` for the shown
@@ -320,7 +326,9 @@ those files or the generated guide. The app rewrites them on start.
   don't appear in `shot`. Every overlay painted after the one a view is in
   (or after the tabs, for a view in a pane) cuts a hole in it, and a dialog
   backdrop above it dims it; `native.debug`'s `layers` lists each mod copy's
-  layer, holes and dim, so check those instead of a screenshot.
+  layer, holes and dim, so check those instead of a screenshot. A web view's
+  entry there also says whether its page may go fullscreen and whether it is
+  (`fullscreen { enabled, state }`).
 - A window overlay opened with `snap: true` (the picture in picture player,
   while its snapping is on) snaps to the eight places of the shown tab's pane
   grid: its outer corners and edge middles. `overlay.snap {id?, on?, to?}`

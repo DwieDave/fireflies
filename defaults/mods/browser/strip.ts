@@ -15,6 +15,7 @@ import { tabIcon } from "./publish.ts";
 import { openTabMenu } from "./tab-menu.ts";
 import { ICONS, WEB_MARK } from "./props.ts";
 import type Browser from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** The drop marker of a tab drag, as the app's strip (nocturne/tabdrag.ts):
  *  a 2 px accent bar capped top and bottom, at the left edge of its box. */
@@ -29,7 +30,7 @@ export function stake(t: Theme): Element {
  *  edged in the accent, clear of the horizon. */
 export function lift(t: Theme): Element[] {
   return [
-    div().absolute().left(5).right(0).top(6).bottom(2).child(dither(t.ansi0, 1)),
+    div().absolute().left(5).right(0).top(6).bottom(2).child(dither(edge(t), 1)),
     div().absolute().left(2).right(3).top(3).bottom(4).bg(t.background).border(1).border_color(t.accent),
   ];
 }
@@ -45,6 +46,11 @@ export function tabMark(view: Browser, t: Theme, tab: Tab, bright: boolean): Ele
 /** The tabs, over the bar (two or more): number, title, ×, and + at the
  *  end; the shown one bright on a dithered accent line, as the app's tabs.
  *  A click shows a tab, a middle click or × closes it; tab rings them. */
+/** Keeps where tab `id` is drawn (window px): a key's tab menu hangs from it (tab-menu.ts). */
+const tabBox = (view: Browser, id: string) => (b: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void => {
+  view.tabBoxes.set(id, { x: b.x, y: b.y, w: b.width, h: b.height });
+};
+
 export function stripView(view: Browser, t: Theme): Element {
   const drag = view.drag;
   const pins = view.ownSlot ? readSharedList(shared, Tabs.PINS_LIST) : null;
@@ -66,7 +72,8 @@ export function stripView(view: Browser, t: Theme): Element {
         view.stop(e, cx);
         view.pressed = { id: tab.id, x: e.position.x };
       })
-      .on_mouse_move((e, cx) => dragOver(view, Tabs.gapAt(tab.id, e.local_position.x, e.bounds.width), e.position, cx))
+      // Where it's drawn (tabBox): m's menu hangs from it.
+      .on_mouse_move((e, cx) => dragOver(view, Tabs.gapAt(tab.id, e.local_position.x, e.bounds.width), e.position, cx)).on_bounds_change(tabBox(view, tab.id))
       .on_mouse_up("left", (_e, cx) => {
         if (!view.drag && view.pressed?.id === tab.id) {
           view.claim();
@@ -92,7 +99,7 @@ export function stripView(view: Browser, t: Theme): Element {
       .child(tabMark(view, t, tab, on || lifted))
       .child(div().flex_1().min_w(0).truncate().child(Tabs.label(tab)))
       .child(div().id(`webtab-x-${tab.id}`).size(16).flex_none().flex().items_center().justify_center().text_color(t.dim)
-        .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+        .hover((s) => s.text_color(t.foreground).bg(edge(t)))
         .on_mouse_down("left", (e, cx) => view.stop(e, cx))
         .on_click((_e, cx) => {
           cx.stop_propagation();
@@ -102,7 +109,7 @@ export function stripView(view: Browser, t: Theme): Element {
         })
         .child(svg(`${ICONS}/x.svg`).size(10)))
       // Loading: its line runs dim; shown: the accent line it stands on.
-      .when(on || tab.page.loading, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(2).child(dither(on ? t.accent : t.ansi8, 1))))
+      .when(on || tab.page.loading, (el) => el.child(div().absolute().left(6).right(6).bottom(0).h(2).child(dither(on ? t.accent : t.muted, 1))))
       .when(ringed, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .when(stakeAt === tab.id, (el) => el.child(stake(t)));
   };
@@ -118,14 +125,14 @@ export function stripView(view: Browser, t: Theme): Element {
     })
     .when(Boolean(drag), (el) => el.cursor_grabbing())
     // The horizon the tabs stand on, as the app's tab strip.
-    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(t.ansi0, 1)))
+    .child(div().absolute().left(0).right(0).bottom(0).h(2).child(dither(edge(t), 1)))
     .children(items)
     // Past the last tab (+ and the room after it): the gap at the end.
     .child(div().id("webtab-new").relative().size(22).flex_none().flex().items_center().justify_center()
       .on_mouse_move((e, cx) => end(e.position, cx))
       .when(stakeAt === null, (el) => el.child(stake(t)))
       .text_color(plusRinged ? t.foreground : t.muted)
-      .hover((s) => s.text_color(t.foreground).bg(t.ansi0))
+      .hover((s) => s.text_color(t.foreground).bg(edge(t)))
       .when(plusRinged, (el) => el.child(div().absolute().inset_0().border(1).border_color(t.accent)))
       .on_mouse_down("left", (e, cx) => view.stop(e, cx))
       .on_click((_e, cx) => {

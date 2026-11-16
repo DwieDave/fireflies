@@ -24,10 +24,11 @@ import { connect, test } from "./conns.ts";
 import { openForm } from "./conn-form.ts";
 import { quoteName } from "./catalog.ts";
 import type { default as DbView } from "./main.ts";
+import { edge } from "./tones.ts";
 
 /** A state's pip: hollow when off, breathing while it works. */
 export function statePip(t: Theme, s: ConnState, size = 7): Element {
-  if (s.kind === "off") return svg(`${ART}/pip-hollow.svg`).size(size).flex_none().text_color(t.ansi8);
+  if (s.kind === "off") return svg(`${ART}/pip-hollow.svg`).size(size).flex_none().text_color(t.muted);
 
   return pip(stateColor(t, s), size, breathes(s));
 }
@@ -43,7 +44,7 @@ export function stateMark(t: Theme, v: DbView, narrow: boolean): Element {
 
   const mark = h_flex().id("db-state").relative().flex_none().h(20).px(4).gap(6).items_center().cursor_pointer()
     .tooltip(stateTip(s, w, ro))
-    .hover((x) => x.bg(`${t.ansi0}66`))
+    .hover((x) => x.bg(`${edge(t)}66`))
     .on_mouse_down("left", stop)
     .on_click((_e, cx) => {
       cx.stop_propagation();
@@ -127,5 +128,5 @@ export function dbMenu(v: DbView, name: string | null, cx: Context): void {
 
   if (!dbsNow(v)?.sized) rows.push(entry("tables", "count", "Their sizes", () => void loadDatabases(v, cx, true), { sub: c.kind === "postgres" ? "reads each database's size from its files: can take a while on a big server" : "summed from information_schema" }));
 
-  openMenu(v, name ?? "every database", rows);
+  openMenu(v, name ?? "every database", rows, "row");
 }

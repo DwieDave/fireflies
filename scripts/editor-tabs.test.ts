@@ -595,15 +595,16 @@ test("word wrap belongs to the shown tab: each starts from its language, the tog
 
 // ---- one file: no strip; moving tabs (a drag, ]B / [B, :tabm, the commands); H / L
 
-test("a scratchpad (one tab) has no strip either: the bar says scratchpad, no unsaved mark (it saves itself)", async () => {
+test("a scratchpad (one tab) has no strip either: its bar has no name (the header has it) and no unsaved mark (it saves itself)", async () => {
   const note = "/tmp/app/scratchpad/repo-0123abcd.md";
   disk[note] = "# note\n";
   const p = await pane(note);
   const view = p.render(cx());
   const ids = (root: any) => all(root).map((x) => x.calls?.id?.[0]?.[0]).filter(Boolean);
   expect(ids(view)).not.toContain("editor-tabs");
-  expect(texts(byId(view, "bar-name"))).toEqual(["scratchpad"]);
+  expect(byId(view, "bar-name")).toBeUndefined();
   expect(byId(view, "bar-mark")).toBeUndefined();
+  expect(texts(byId(view, "bar-autosave"))).toEqual(["saved"]);
 });
 
 test("one file: no strip, the bar names it with its unsaved mark; from two files the strip shows and the bar doesn't", async () => {
@@ -1064,6 +1065,32 @@ test("pop in: the shown tab moves into the editor beside as a tab (the open reco
   paneList = [paneList[0]];
   q.popIn(cx());
   expect(q.message.text).toBe("no other editor in this tab");
+});
+
+test("the tab's menu stands at the press for a right-click, under its tab for space b m, under the bar with one tab", async () => {
+  // One tab: no strip; under the bar that names the file.
+  const one = await pane();
+  one.size = { width: 1200, height: 600 };
+  one.render(cx());
+  expect(one.stripH()).toBe(0);
+  one.openTabMenu(cx());
+  expect(byId(one.render(cx()), "editor-tab-menu").calls.top[0][0]).toBe(30);
+  one.closeTabMenu(cx());
+  const p = await three();
+  const strip = p.tabStrip(theme);
+  const at = () => { const m = byId(p.render(cx()), "editor-tab-menu"); return { x: m.calls.left[0][0], y: m.calls.top[0][0] }; };
+  // A right press 30 px into the third tab, 10 down: just past it.
+  byId(strip, "editor-tab-2").calls.on_mouse_down.find((c: any[]) => c[0] === "right")[1]({ position: { x: 0, y: 0 }, local_position: { x: 30, y: 10 } }, cx());
+  expect(p.tabMenu.near).toEqual({ x: p.tabX(2) + 30, y: 10 });
+  expect(at()).toEqual({ x: p.tabX(2) + 32, y: 12 });
+  // Near the pane's right edge it flips left of the press.
+  p.tabMenu = { ...p.tabMenu, near: { x: 1190, y: 10 } };
+  expect(at().x).toBe(1190 - 2 - 228);
+  p.closeTabMenu(cx());
+  // space b m (no press): under the shown tab, at its left edge.
+  p.openTabMenu(cx(), 1);
+  expect(at()).toEqual({ x: Math.max(8, p.tabX(1)), y: p.stripH() });
+  p.closeTabMenu(cx());
 });
 
 test("the tab's menu: a right-click on a tab, its entries, j / k / enter and letters, a click; close the others keeps unsaved ones", async () => {

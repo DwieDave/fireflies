@@ -1,5 +1,6 @@
 // The scratchpad (nocturne.scratchpad: the palette, the "+ new" menu's tile, a
-// key; nocturne.scratchpad-tab: in a tab of its own): the shown space's
+// key; nocturne.scratchpad-tab: in a tab of its own; nocturne.scratchpad-copy-path:
+// its path to the clipboard, for an agent): the shown space's
 // repository's note, in the editor beside the focused pane (or the editor
 // already open on it there). The note lives under the app's folder, one per
 // repository and shared by its worktrees (scratch.ts); the editor knows it by
@@ -43,14 +44,11 @@ const fail = (title: string, body: string) => {
 /** editor.open's arguments. */
 type EditorOpen = { path: string; in?: "tab"; pane?: string };
 
-/** Opens the note (`inTab`: in a tab of its own): -> its path, null when it
- *  couldn't (a toast says why). */
-export async function openScratchpad(inTab = false): Promise<string | null> {
-  let h: Here;
-  let note: Note;
-
+/** The note for the shown space's repository, found where opening it finds it; null when it
+ *  couldn't be (a toast says why). */
+async function findNote(): Promise<{ readonly h: Here; readonly note: Note } | null> {
   try {
-    h = here();
+    const h = here();
 
     // git failing isn't the end: the folder gets a note of its own (scratch.ts owner); a toast says so.
     let gitError: string | null = null;
@@ -60,20 +58,32 @@ export async function openScratchpad(inTab = false): Promise<string | null> {
       throw cause;
     });
 
-    note = await locate({ exec, appHome: herdr.appHome(), readTextFile: herdr.readTextFile, writeTextFile: herdr.writeTextFile }, scratchFolder(h), h.on);
+    const note = await locate({ exec, appHome: herdr.appHome(), readTextFile: herdr.readTextFile, writeTextFile: herdr.writeTextFile }, scratchFolder(h), h.on);
 
     if (gitError) {
       try {
-        herdr.notify({ title: "scratchpad: git didn't answer", body: `this folder's own note opened (${gitError})`, level: "warning" });
+        herdr.notify({ title: "scratchpad: git didn't answer", body: `this folder's own note (${gitError})`, level: "warning" });
       } catch {
         /* a nicety */
       }
     }
+
+    return { h, note };
   } catch (cause) {
     fail("couldn't find the scratchpad", said(cause));
 
     return null;
   }
+}
+
+/** Opens the note (`inTab`: in a tab of its own): -> its path, null when it
+ *  couldn't (a toast says why). */
+export async function openScratchpad(inTab = false): Promise<string | null> {
+  const found = await findNote();
+
+  if (!found) return null;
+
+  const { h, note } = found;
 
   try {
     // A refusal (no pane to split, no editor mod) comes back as the app's own toast.
@@ -91,4 +101,38 @@ export async function openScratchpad(inTab = false): Promise<string | null> {
   }
 
   return note.path;
+}
+
+/** A path under home written ~/…, as the toast shows it. */
+const tilde = (path: string): string => {
+  const home = herdr.home();
+
+  return home && path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+};
+
+/** The note's path to the clipboard (nocturne.scratchpad-copy-path), to hand it to an agent; a
+ *  toast says what was copied. The note needn't be open, nor exist yet. -> the path, null when
+ *  it couldn't (a toast says why). */
+export async function copyScratchpadPath(cx: { write_to_clipboard(text: string): void }): Promise<string | null> {
+  const found = await findNote();
+
+  if (!found) return null;
+
+  const { path } = found.note;
+
+  try {
+    cx.write_to_clipboard(path);
+  } catch (cause) {
+    fail("couldn't copy the scratchpad's path", said(cause));
+
+    return null;
+  }
+
+  try {
+    herdr.notify({ title: "copied the scratchpad's path", body: tilde(path), level: "success" });
+  } catch {
+    /* copied all the same */
+  }
+
+  return path;
 }
