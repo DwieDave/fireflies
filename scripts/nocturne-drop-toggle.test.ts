@@ -44,7 +44,8 @@ let open = new Set<string>(); // the overlays the stand-in core shows
 let waiting: ((v: string) => void)[] = [];
 let propsNow: any = null;
 const LAYOUT = {
-  id: "root", type: "row", children: [
+  // the shipped nocturne layout's look (layout-look.ts reads it): dithered, square
+  id: "root", type: "row", scrim: { dither: true }, corners: "square", children: [
     { id: "sidebar", type: "block", content: { mod: "nocturne", props: { role: "sky" } } },
     { id: "work", type: "column", children: [
       { id: "tab-row", type: "row", children: [

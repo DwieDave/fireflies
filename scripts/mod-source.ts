@@ -12,17 +12,23 @@ export const asJs = (path: string, source: string): string => (path.endsWith(".t
  *  loader that drops a mod file's imports: what `from "./guard.ts"` brings. */
 export const guard = await import("../defaults/mods/pip/guard.ts");
 
-/** tones.ts's exports (it imports nothing at run time), for the same loaders,
- *  under the names a mod file may import them as (`edge as edgeTone`). */
-const tonesTs = await import("../defaults/mods/nocturne/tones.ts");
-export const tones = { ...tonesTs, edgeTone: tonesTs.edge };
+/** layout-look.ts as the loaders below see it: the look is Nocturne's (its
+ *  own tests import it for real, with a layout). */
+const nocturneLook = { flat: () => null, dithered: () => true, square: () => true, radius: () => 0 };
 
-/** The part of `tones` a mod file's source imports (`edge`, `edge as edgeTone`,
- *  `tone`), so a loader's scope doesn't clash with names the file declares. */
+/** tones.ts's exports (it imports nothing at run time), for the same loaders,
+ *  under the names a mod file may import them as (`edge as edgeTone`), with
+ *  layout-look.ts's (Nocturne's look). */
+const tonesTs = await import("../defaults/mods/nocturne/tones.ts");
+export const tones = { ...tonesTs, edgeTone: tonesTs.edge, ...nocturneLook };
+
+/** The part of tones.ts and layout-look.ts a mod file's source imports
+ *  (`edge`, `edge as edgeTone`, `tone`, `flat`), so a loader's scope doesn't
+ *  clash with names the file declares. */
 export function tonesFor(source: string): Record<string, unknown> {
-  const clause = /import \{([^}]*)\} from "\.\/tones\.ts";/.exec(source)?.[1] ?? "";
   const all: Record<string, unknown> = tones;
-  return Object.fromEntries(clause.split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
+  const clauses = [...source.matchAll(/import \{([^}]*)\} from "\.\/(?:tones|layout-look)\.ts";/g)].map((m) => m[1] ?? "");
+  return Object.fromEntries(clauses.join(",").split(",").map((s) => s.trim()).filter(Boolean).map((s) => {
     const [name, as] = s.split(/\s+as\s+/);
     return [as ?? name!, all[name!]];
   }));

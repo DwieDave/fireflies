@@ -10,6 +10,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { NOCTURNE_MODS } from "./nocturne-mods.ts";
 import { edge, over, tone } from "../defaults/mods/nocturne/tones.ts";
+import { importMod } from "./mod-source.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
 const CONVERTED = ["nocturne", ...NOCTURNE_MODS];
@@ -143,4 +144,72 @@ test("a settings.json or layout naming ink, moss or atom-one-dark still loads: t
   expect(rust).toContain('("atom-one-dark", include_str!("../defaults/themes/atom-one-dark.json"))');
   const atom = JSON.parse(readFileSync(join(ROOT, "defaults/themes/atom-one-dark.json"), "utf8"));
   expect(atom.ansi).toHaveLength(16);
+});
+
+// ---- the look beyond colors (layout-look.ts): Nocturne's dithered, square one where
+// the layout says so (its scrim dithered, its corners square), plain elsewhere: the
+// herdr default layout (main), whose look is upstream herdr-app's
+
+/** An element stand-in that records its calls. */
+const element = (): any => {
+  const calls: [string, unknown[]][] = [];
+  const el: any = new Proxy({ calls }, { get: (o, k) => (k === "calls" ? calls : (...a: unknown[]) => { calls.push([String(k), a]); return el; }) });
+  return el;
+};
+
+/** layout-look.ts loaded for real, with the shown layout `root` named `name`. */
+async function lookWith(root: () => unknown, name: () => unknown = () => "x") {
+  return importMod("nocturne/layout-look.ts", { herdr: { layout: root, shared: (k: string) => (k === "layout" ? name() : null) }, "gpui-kit": { div: element } });
+}
+
+const shippedLayout = (n: string) => JSON.parse(readFileSync(`${import.meta.dir}/../defaults/layouts/${n}.json`, "utf8"));
+
+test("every converted mod carries layout-look.ts, byte for byte nocturne's", () => {
+  const source = readFileSync(join(MODS, "nocturne/layout-look.ts"), "utf8");
+  const copies = readdirSync(MODS).filter((m) => files(m).includes(`${m}/layout-look.ts`));
+  expect(copies.sort()).toEqual([...CONVERTED].sort());
+  for (const m of copies) expect([m, readFileSync(join(MODS, m, "layout-look.ts"), "utf8") === source]).toEqual([m, true]);
+});
+
+test("the shipped layouts' looks: nocturne dithered and square, main (herdr's default) plain and round", async () => {
+  const look = await lookWith(() => null);
+  expect(look.lookOf(shippedLayout("nocturne"))).toEqual({ dithered: true, square: true });
+  expect(look.lookOf(shippedLayout("main"))).toEqual({ dithered: false, square: false });
+});
+
+test("in nocturne every dither stays a dither: flat() gives nothing, radius 0", async () => {
+  const look = await lookWith(() => shippedLayout("nocturne"), () => "nocturne");
+  expect(look.flat("#323437", 1)).toBe(null);
+  expect(look.radius(6)).toBe(0);
+});
+
+test("in main a fine dither becomes a flat layer at half strength; a coarse checker (a picture's transparency) stays", async () => {
+  const look = await lookWith(() => shippedLayout("main"), () => "main");
+  const el = look.flat("#323437", 1);
+  expect(el.calls).toContainEqual(["bg", ["#323437"]]);
+  expect(el.calls).toContainEqual(["opacity", [0.5]]);
+  expect(look.flat("#323437", 8)).toBe(null);
+  expect(look.radius(6)).toBe(6);
+});
+
+test("the look follows a switch of layout (by name); a layout that can't be read looks like nocturne", async () => {
+  let shown = shippedLayout("main");
+  let name = "main";
+  const look = await lookWith(() => shown, () => name);
+  expect(look.dithered()).toBe(false);
+  shown = shippedLayout("nocturne");
+  name = "nocturne";
+  expect(look.dithered()).toBe(true);
+  const broken = await lookWith(() => { throw new Error("no layout"); });
+  expect(broken.dithered()).toBe(true);
+});
+
+test("every dither in a converted mod asks layout-look.ts first", () => {
+  // procs' vitals draw their sparklines in dots: a chart's art, not a fill (left to the art step)
+  const painters = sources.filter((f) => f !== "procs/vitals-view.ts" && /Background\.checkerboard\(color\b/.test(readFileSync(join(MODS, f), "utf8")));
+  expect(painters.length).toBeGreaterThan(20);
+  for (const f of painters) {
+    const text = readFileSync(join(MODS, f), "utf8");
+    expect([f, /import \{ flat \} from "\.\/layout-look\.ts";/.test(text) && text.includes("const plain = flat(color, cell);")]).toEqual([f, true]);
+  }
 });
