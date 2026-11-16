@@ -100,12 +100,12 @@ name). Three entries:
 | file | what |
 |---|---|
 | `errors.ts` | `ExecError`, `ExitError`, `FileError`, `StaleFile`, `DecodeError`, `HeaderScriptExit`, `CurlFailed`: branded `Schema.TaggedError`s with a `message`; `lastLine`, `causeMessage` |
-| `schema.ts` | `decode(schema, what)`, `decodeJson`, `decodeJsonOption`, `encodeJson`; `sharedKey(name, schema)`, `readShared`, `readSharedOption`, `writeShared` (render-side, over herdr's `shared`) |
-| `services.ts` | `Exec` (+ `execOk`, `execJson`), `Files`, `Shared` (+ `sharedOr`), `Commands`, `Workspace`, `Notify` |
-| `runtime.ts` | `modRuntime(layer)`, `ViewFx` (`run`, `now`, `close`, `running`), `Redraw` / `redraw`, `hostClock`, `describe`, `localTime` |
+| `schema.ts` | `decode(schema, what)`, `decodeJson`, `decodeJsonOption`, `encodeJson`; `listOf(item)`, `mapOf(entry)`; `sharedKey(name, schema)`, `readShared`, `readSharedOption`, `writeShared` (render-side, over herdr's `shared`) |
+| `services.ts` | `Exec` (+ `execOk`, `execJson`), `Hc` (+ `hcOk`, `hcJson`), `Files` (`read`, `write`, `list`), `Shared` (+ `sharedOr`), `Commands`, `Workspace` (+ `agents`, `focused`; `here` / `hereOf`), `Notify` |
+| `runtime.ts` | `modRuntime(layer)`, `ViewFx` (`run`, `now`, `close`, `running`), `Redraw` / `redraw`, `hostClock`, `describe`, `localTime`, `localStamp` |
 | `http.ts` | `fetchClient(fetch)`, `curlClient(run, { headersFrom, seconds })`, `policy({ timeout, retries, base, longest, statuses })`, `retryAfter` |
-| `live.ts` | `ExecLive`, `FilesLive`, `SharedLive`, `CommandsLive`, `WorkspaceLive`, `NotifyLive`, `HttpLive`, `Live`, `toast` |
-| `testing.ts` | `execTest(handler)`, `sharedTest()`, `filesTest()`, `workspaceTest(look)`, `commandsTest(queue)`, `notifyTest()`, `httpTest(answer)` |
+| `live.ts` | `ExecLive`, `HcLive`, `FilesLive`, `SharedLive`, `CommandsLive`, `WorkspaceLive`, `NotifyLive`, `HttpLive`, `Live`, `toast` |
+| `testing.ts` | `execTest(handler)`, `hcTest(handler)`, `sharedTest()`, `filesTest(files, folders)`, `workspaceTest(look)`, `commandsTest(queue)`, `notifyTest()`, `httpTest(answer)` |
 | `engine-globals.d.ts` | the web types Effect's declarations name (types only; the engine has none of them) |
 
 ### Running effects from a view
@@ -223,10 +223,47 @@ HttpClientResponse.schemaBodyJson(ClaudeAnswer)(response)  // a SchemaError sayi
 | `oneOf(a, b)` | `Schema.Union([a, b])` (first match wins: a member with more fields first) |
 | `parseJson(text, g)` | `decodeJson(schema, what)` (an Effect), `decodeJsonOption(schema)` (a render) |
 | `sharedKey(name, g)` / `readShared` | `sharedKey(name, schema)` / `readShared`, or `Shared.get(key)` in an effect |
+| `sharedListKey(name, g)` / `readSharedList` | `sharedKey(name, listOf(x))` / `readShared(shared, key, [])` |
+| `sharedMapKey(name, g)` / `readSharedMap` / `writeSharedMap` | `sharedKey(name, mapOf(x))` / `readShared(shared, key, new Map())` / `writeShared` |
+| `parseJsonMap(text, g)` | `decodeJsonOption(mapOf(x))(text)` |
 
 A `Schema.Struct` keeps only its fields (others are dropped, where a guard
 kept the object as it was): a value written back whole must carry every
 field its schema names. A key's value encodes through its schema on write.
+
+**Lists and maps other mods write to** (pinned panes, a folder's last
+state, slots' titles): `listOf(item)` and `mapOf(entry)` are schemas that
+read such a value entry by entry, leaving out an entry of another shape
+instead of the whole value. `mapOf` reads an object keyed by data as a
+`ReadonlyMap` and writes it as an object again. Being schemas, they work
+wherever one does: a plain `sharedKey`, `Shared.get` in an effect,
+`decodeJson` for a file. A value that isn't a list or an object at all, or
+an entry its own schema can't encode on write, fails as any schema does.
+
+### The app beyond programs and files
+
+- **herdr-core**: `Hc` runs `hc` (herdr's `hc(args)`: the app finds the
+  binary, which isn't on every PATH), its own service so an effect's type
+  says it talks to the core. `hcOk(args)` asks exit 0 (an `ExitError`
+  names the subcommand: `hc read`), `hcJson(schema, what)(args)` decodes
+  (pass `--json`). Tests: `hcTest((args) => result)`, `calls` records each.
+- **Folders**: `Files.list(dir)`, a folder's names sorted, `Option.none()`
+  when it isn't there, a `FileError` for a file or a path the mod may not
+  read (the engine's fs/promises behind it, so a mod imports no node
+  builtin). `filesTest(files, folders)` answers from its paths.
+- **What has the keyboard**: `Workspace.focused` (none before the window
+  has a space) and `Workspace.agents`, each in `workspaceTest(look)`.
+- **The folder for a pane opened without one** (`mod.open`, `pane.split
+  {mod}`): `here` (an effect over `Workspace`) and `hereOf({ spaces, panes,
+  focused })` (a render) give `{ folder: Option<string>, on }` by one rule:
+  the shown space's own folder (one chosen for it), else the focused
+  terminal's, else a terminal's in the shown tab, else the space's folder.
+  scripts/here.ts was its first copy; scripts, finder, file-tree, git,
+  github and databases use this one.
+- **Local dates**: `localTime(ms)` gives year, month (1 to 12), day, hours,
+  minutes, seconds, weekday and the zone's offset; `localStamp(ms, {
+  seconds, zone })` prints "2026-11-16 14:05" (`… 14:05:09 +0100`). The
+  engine has no `Intl`, so no mod prints with `Date` itself.
 
 ### HTTP
 

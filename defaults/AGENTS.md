@@ -2871,8 +2871,13 @@ the source); a mod of yours may use it or not.
   `runtime.now(effect)` reads in a render. `Effect.sleep` and schedules run
   on `cx.timer` (there is no `setTimeout`).
 - Its services stand for the app: `Exec` (`execOk`, `execJson(schema)`),
-  `Files`, `Shared` with `sharedKey(name, schema)`, `Commands`, `Workspace`,
-  `Notify`; tests provide `@fireflies/kit/testing`'s layers instead.
+  `Hc` for herdr-core (`hcOk`, `hcJson(schema)`), `Files` (`read`, `write`,
+  `list` a folder), `Shared` with `sharedKey(name, schema)`, `Commands`,
+  `Workspace` (`focused`, `agents`, …), `Notify`; tests provide
+  `@fireflies/kit/testing`'s layers instead. A list or map other mods write
+  to: `sharedKey(name, listOf(item))` / `mapOf(entry)`, read entry by entry.
+  `here` / `hereOf` give the folder for a pane opened without one;
+  `localStamp(ms)` prints a local "2026-11-16 14:05" (the engine has no `Intl`).
 - Decode what comes from outside with Schema: `decodeJson(schema, what)`,
   `decode(schema, what)`; a value of another shape is a `DecodeError` naming
   `what`.
