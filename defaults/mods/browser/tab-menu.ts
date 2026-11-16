@@ -6,7 +6,7 @@ import { div } from "gpui-kit";
 import type { AsyncContext, Context, Element, KeyEvent } from "gpui-kit";
 import { h_flex, v_flex } from "gpui-base";
 import { shared, setShared, run, openOverlay } from "herdr";
-import { overlayOf } from "./menu-place.ts";
+import { overlayOf } from "@fireflies/menu-place";
 import type { Theme } from "herdr";
 import { isNull, isNumber, isString, nullable, object, oneOf, parseJson, readShared, readSharedList, sharedKey, writeShared } from "./guard.ts";
 import * as Tabs from "./tabs.ts";

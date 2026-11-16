@@ -160,7 +160,7 @@ import { closeTab, leave, openFile, ownPane, popIn, popOut, select, stepMove, st
 import { setWrap, vimCommand, vimDoc, vimKey, vimOn, vimSettled } from "./pane-vim.ts";
 import { closePane, imageOf, previewLink, setView, tick } from "./preview-pane.ts";
 import { closeTabMenu, openTabMenu, tabMenuKeyDown, tabMenuView } from "./tab-menu.ts";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import { TabFields } from "./tab-fields.ts";
 
 

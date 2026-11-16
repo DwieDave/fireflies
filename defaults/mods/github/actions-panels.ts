@@ -5,7 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_virtual_list, v_flex } from "gpui-base";
 import { settings } from "herdr";
 import type { Theme } from "herdr";

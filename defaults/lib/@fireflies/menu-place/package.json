@@ -1,0 +1,9 @@
+{
+  "name": "@fireflies/menu-place",
+  "private": true,
+  "type": "module",
+  "description": "Where a menu opens: at the press, at what a key opened it for, or in the middle (placeMenu, overlayOf). Served by the app as a library module (docs/effect-mods.md); this file lets tsc, oxlint and bun find it in the repo.",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

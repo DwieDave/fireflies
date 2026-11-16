@@ -9,7 +9,7 @@
 // isn't drawn (the main view has the keys, a narrow window showing the main
 // view, a row scrolled out of sight): the menu stands in the middle.
 
-import type { Rect } from "./menu-place.ts";
+import type { Rect } from "@fireflies/menu-place";
 import type { ListContext } from "./keys.ts";
 import type { Panel } from "./state.ts";
 import { NARROW, PANELS } from "./state.ts";

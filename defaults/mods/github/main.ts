@@ -37,7 +37,7 @@
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
-import type { Pt, Rect } from "./menu-place.ts";
+import type { Pt, Rect } from "@fireflies/menu-place";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";

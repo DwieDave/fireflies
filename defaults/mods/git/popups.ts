@@ -21,7 +21,7 @@ import type { FormModifiers, Stop } from "./form-keys.ts";
 import { formKey, formHints, ring } from "./form-keys.ts";
 import type { KeyRow, KeySection } from "@fireflies/keyhelp";
 import { keysView, keysKey } from "@fireflies/keyhelp";
-import { type Anchor, placeMenu } from "./menu-place.ts";
+import { type Anchor, placeMenu } from "@fireflies/menu-place";
 import { edge as edgeTone } from "@fireflies/tones";
 
 const mac = () => appWindow().platform === "macos";

@@ -121,6 +121,8 @@ async function load(path: string, own: { props?: any; copy?: number } = {}) {
   // A TypeScript mod's own pure modules (guard.ts imports nothing at run time; the editor's
   // guards.ts and editor-route.ts only guard.ts): the real ones.
   for (const [, file] of source.matchAll(/^import [^;]* from "\.\/(guard\.ts|guards\.ts|editor-route\.ts)";$/gm)) Object.assign(scope, await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`));
+  // The libraries that import nothing of the app's at run time (@fireflies/menu-place, …): the real ones.
+  for (const [, lib] of source.matchAll(/^import [^;]* from "(@fireflies\/(?:menu-place|editor-route|scratch|envrc|dividers))";$/gm)) Object.assign(scope, await import(lib!));
   // `import * as Tabs from "./tabs.ts"` (and Favicons): the real modules (they import guard.ts alone).
   for (const [, name, file] of source.matchAll(/^import \* as (Tabs|Favicons) from "\.\/(tabs\.ts|favicons\.ts)";$/gm)) scope[name!] = await import(`../defaults/mods/${path.replace(/[^/]+$/, file!)}`);
   const mod = new Function(...Object.keys(scope), `${body}\nreturn { ${names.join(", ")} };`)(...Object.values(scope));

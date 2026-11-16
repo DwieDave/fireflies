@@ -5,7 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
-import type { Pt } from "./menu-place.ts";
+import type { Pt } from "@fireflies/menu-place";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";

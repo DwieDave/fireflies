@@ -25,8 +25,8 @@ import { editKey } from "./cell-edit.ts";
 import { reviewKey, reviewPanel } from "./review.ts";
 import { forwardAskKey, forwardAskPanel } from "./forward-view.ts";
 import type { default as DbView } from "./main.ts";
-import type { Box, Rect } from "./menu-place.ts";
-import { placeMenu } from "./menu-place.ts";
+import type { Box, Rect } from "@fireflies/menu-place";
+import { placeMenu } from "@fireflies/menu-place";
 import { keyedAnchor, rowAnchor, tabAnchor } from "./menu-anchor.ts";
 import { edge } from "@fireflies/tones";
 

@@ -17,8 +17,8 @@ import type { Theme } from "herdr";
 import { readTextFile, settings, theme, writeTextFile } from "herdr";
 import type { Doc } from "./pane-kit.ts";
 import { dither, errorText, GUTTER_INSET, HINTS, selectionColor, zoom } from "./pane-kit.ts";
-import type { Pt, Rect } from "./menu-place.ts";
-import { placeMenu } from "./menu-place.ts";
+import type { Pt, Rect } from "@fireflies/menu-place";
+import { placeMenu } from "@fireflies/menu-place";
 import { imageOf, loadImageSrcs, pasteImageBlock, pickImage, previewLink } from "./preview-pane.ts";
 import { edge } from "@fireflies/tones";
 

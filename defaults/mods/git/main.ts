@@ -61,7 +61,7 @@ import { act } from "./actions.ts";
 import type { CommitOptions, ConfirmOptions, MenuOptions, PromptOptions } from "./popups.ts";
 import { Popups } from "./popups.ts";
 import { bindTab, tabActions } from "./form-keys.ts";
-import type { Anchor } from "./menu-place.ts";
+import type { Anchor } from "@fireflies/menu-place";
 import { rowAnchor } from "./menu-anchor.ts";
 import * as WT from "./worktrees.ts";
 import { Review } from "./review.ts";
