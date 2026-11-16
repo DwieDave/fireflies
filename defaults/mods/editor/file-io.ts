@@ -16,7 +16,7 @@ import { closeCard, later } from "./card.ts";
 import { syncViewer } from "./drawn-tabs.ts";
 import { didChange } from "./lsp-client.ts";
 import { focusText } from "./md-pane.ts";
-import { keepTabs, noteUnsaved, publish, select } from "./pane-tabs.ts";
+import { focusedHere, keepTabs, noteUnsaved, publish, select } from "./pane-tabs.ts";
 import { refreshPreview } from "./preview-pane.ts";
 
 /** The pane header's name (nocturne/header.ts): the shown tab's. */
@@ -227,7 +227,7 @@ export function loadDoc(ed: EditorPane, cx: Context, go: Go | null, quiet: boole
     if (d.markdown && d.view === "rendered") {
       d.rendered?.open(cx);
 
-      if (d === ed.cur) focusText(ed);
+      if (d === ed.cur && focusedHere(ed)) focusText(ed);
     }
 
     cx.notify();

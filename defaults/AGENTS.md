@@ -1177,7 +1177,10 @@ the highlighted line shows where it will land.
   "format" (the Markdown commands, cmd-. / space .) and "more" (a click or
   `editor.more`: copy its path y, rendered r, text e, split with the preview
   s, word wrap w, vim v; a letter or a click runs one); no language, indent,
-  server or line:col, and the header names the note. The
+  server or line:col, and the header names the note. Only the focused pane
+  takes the keyboard: an editor that starts out of sight (a pane pinned to
+  the shelf, loaded parked) or another editor on the same note leaves it
+  where it is. The
   pane's tab reads "scratchpad" and its repository; other files (a picker's,
   a link's) open in an editor beside it, never as its tabs. Agents may read
   and write the note like any file (`writeTextFile` semantics: an open pane

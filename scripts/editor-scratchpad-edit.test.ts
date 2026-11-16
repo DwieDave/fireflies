@@ -39,6 +39,10 @@ const theme: any = new Proxy({}, { get: () => "#808080" });
 // ---- herdr
 const files: Record<string, string> = {};
 const toasts: any[] = [];
+/** The app's panes, its focused pane and shared state, as herdr reports them. */
+let panesNow: any[] = [];
+let focusedNow: any = null;
+let sharedNow: Record<string, unknown> = {};
 const clipboard: string[] = [];
 const writes: [string, string][] = [];
 let propsNow: any = { path: "/p/notes.md", slot: "s1" };
@@ -46,7 +50,7 @@ let writeGate: Promise<void> | null = null; // a write held open (a slow disk)
 const herdr: Record<string, any> = {
   settings: () => ({ zoom: 1, editor: { vim: false } }), window: () => ({ platform: "macos" }), appHome: () => "/tmp/app", home: () => "/home/a",
   props: () => propsNow, theme: () => theme, run: () => null,
-  keys: () => [], panes: () => [], shared: () => null, setShared: () => {},
+  keys: () => [], panes: () => panesNow, focused: () => focusedNow, shared: (k: string) => sharedNow[k] ?? null, setShared: (k: string, v: unknown) => { sharedNow[k] = v; },
   readTextFile: async (p: string) => files[p] ?? null,
   writeTextFile: async (p: string, t: string, was: string | null) => {
     if ((files[p] ?? null) !== was) throw new Error("the file changed outside");
@@ -219,7 +223,7 @@ const key = (k: string, mods: any = {}, ch: string | null = null) => ({ key: k, 
 
 const DOC = ["# Plan", "", "A paragraph that runs on.", "", "- one", "- two", "", "```", "code", "```", "", "Last words."].join("\n");
 
-beforeEach(() => { eds = []; later = []; effects = []; writes.length = 0; store = {}; writeGate = null; for (const k of Object.keys(files)) delete files[k]; });
+beforeEach(() => { panesNow = []; focusedNow = null; sharedNow = {}; eds = []; later = []; effects = []; writes.length = 0; store = {}; writeGate = null; for (const k of Object.keys(files)) delete files[k]; });
 
 async function pane(path = "/p/notes.md", text = DOC, vim = false): Promise<any> {
   files[path] = text;
@@ -592,4 +596,72 @@ test("format opens the Markdown commands (titled format); more opens its menu, a
   block(p).press("q");
   expect(p.moreMenu).toBeNull();
   expect(main(p).value()).toBe(NOTE);
+});
+
+// ---- the keyboard stays where he types (Developer, 2026-11-16: "Scratchpad randomly looses text focus")
+
+/** An editor pane `slot` on the note, as the app lists it. */
+const editorPane = (pane: string, slot: string, more: any = {}) => ({ pane, tab: "c1", mod: "editor", props: { path: PATH, slot }, focused: false, parked: false, title: "editor", zoomed: false, ...more });
+
+test("a copy of the scratchpad loaded out of sight (pinned to the shelf, parked) doesn't take the keyboard from the pane being typed in", async () => {
+  // He types in pane p1; the pinned copy (p9, slot s1) loads parked.
+  panesNow = [editorPane("p1", "s0", { focused: true }), editorPane("p9", "s1", { parked: true })];
+  focusedNow = { pane: "p1" };
+  const p = await note();
+  for (let i = 0; i < 4; i++) tick();
+  expect(block(p).focusedNow).toBe(false);
+  expect(main(p).focusedNow).toBe(false);
+  // The same copy when it is the focused pane (opened where he is): it takes it.
+  panesNow = [editorPane("p9", "s1", { focused: true })];
+  focusedNow = { pane: "p9" };
+  const q = await note();
+  for (let i = 0; i < 4; i++) tick();
+  expect(block(q).focusedNow).toBe(true);
+});
+
+test("the app's editor.open on the note moves only the pane it focused; one from before a pane started isn't for it", async () => {
+  // A record from earlier (shared keeps the last one): a pane starting now leaves it.
+  sharedNow["editor.goto"] = { path: PATH, n: 5 };
+  panesNow = [editorPane("p1", "s0", { focused: true }), editorPane("p9", "s1")];
+  focusedNow = { pane: "p1" };
+  const p = await note();
+  const opened: string[] = [];
+  p.openFile = (path: string) => { opened.push(path); };
+  p.render(cx());
+  tick();
+  expect(opened).toEqual([]);
+  // A new one while another pane is focused: not this pane's to answer.
+  sharedNow["editor.goto"] = { path: PATH, n: 6, line: 3 };
+  p.render(cx());
+  tick();
+  expect(opened).toEqual([]);
+  // A new one with this pane focused (the app focuses the pane it picked): it goes there.
+  focusedNow = { pane: "p9" };
+  sharedNow["editor.goto"] = { path: PATH, n: 7, line: 3 };
+  p.render(cx());
+  tick();
+  expect(opened).toEqual([PATH]);
+});
+
+test("its own autosave read back from disk changes nothing: no reload, the block not refilled, the keyboard kept", async () => {
+  const p = await note();
+  block(p).focus();
+  block(p).set_cursor(0, 7);
+  type(p, " now");
+  const sets = block(p).setValues;
+  // The write, and the folder's change event reading the note back mid-write and after.
+  writeGate = new Promise((ok) => setTimeout(ok, 5));
+  tick();
+  await flush();
+  p.load(cx(), null, true);
+  await new Promise((ok) => setTimeout(ok, 10));
+  await flush();
+  p.load(cx(), null, true);
+  await flush();
+  tick();
+  expect(files[PATH]).toBe(NOTE.replace("# Ideas", "# Ideas now"));
+  expect(block(p).setValues).toBe(sets);
+  expect(block(p).focusedNow).toBe(true);
+  expect(p.cur.conflict).toBe(false);
+  expect(caret(p)).toEqual({ line: 0, col: 11 });
 });
