@@ -4,15 +4,16 @@
 // so moonfly, paper or a person's themes/<name>.json reach every surface.
 // These fail when a converted mod gains a color literal, draws a UI tone with
 // a terminal slot (ansi0, ansi8: they equal border and muted only in moonfly),
-// or its copy of tones.ts drifts.
+// or a mod carries a copy of tones.ts again (it's the @fireflies/tones library).
 import { test, expect } from "bun:test";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { NOCTURNE_MODS } from "./nocturne-mods.ts";
-import { edge, over, tone } from "../defaults/mods/nocturne/tones.ts";
-import { importMod } from "./mod-source.ts";
+import { edge, over, tone } from "@fireflies/tones";
+import { importLibrary } from "./mod-source.ts";
 
 const MODS = `${import.meta.dir}/../defaults/mods`;
+const LIB = `${import.meta.dir}/../defaults/lib/@fireflies`;
 const CONVERTED = ["nocturne", ...NOCTURNE_MODS];
 
 /** Literals a converted mod may keep, file by file: art and what is the same in every theme. */
@@ -73,11 +74,11 @@ test("art brings its own colors only where listed: the rest is one color, tinted
   expect(colored).toEqual(ART);
 });
 
-test("every converted mod carries tones.ts, byte for byte nocturne's", () => {
-  const source = readFileSync(join(MODS, "nocturne/tones.ts"), "utf8");
-  const copies = readdirSync(MODS).filter((m) => files(m).includes(`${m}/tones.ts`));
-  expect(copies.sort()).toEqual([...CONVERTED].sort());
-  for (const m of copies) expect([m, readFileSync(join(MODS, m, "tones.ts"), "utf8") === source]).toEqual([m, true]);
+test("no mod carries a copy of tones.ts: every converted mod that draws a tone imports @fireflies/tones", () => {
+  expect(readdirSync(MODS).filter((m) => files(m).includes(`${m}/tones.ts`))).toEqual([]);
+  const importers = sources.filter((f) => readFileSync(join(MODS, f), "utf8").includes('from "@fireflies/tones"'));
+  expect(importers.length).toBeGreaterThan(20);
+  expect(sources.filter((f) => readFileSync(join(MODS, f), "utf8").includes('from "./tones.ts"'))).toEqual([]);
 });
 
 // ---- the tones land where the mods were designed in moonfly, and follow other themes
@@ -146,7 +147,7 @@ test("a settings.json or layout naming ink, moss or atom-one-dark still loads: t
   expect(atom.ansi).toHaveLength(16);
 });
 
-// ---- the look beyond colors (layout-look.ts): Nocturne's dithered, square one where
+// ---- the look beyond colors (@fireflies/layout-look): Nocturne's dithered, square one where
 // the layout says so (its scrim dithered, its corners square), plain elsewhere: the
 // herdr default layout (main), whose look is upstream herdr-app's
 
@@ -157,18 +158,16 @@ const element = (): any => {
   return el;
 };
 
-/** layout-look.ts loaded for real, with the shown layout `root` named `name`. */
+/** @fireflies/layout-look loaded for real, with the shown layout `root` named `name`. */
 async function lookWith(root: () => unknown, name: () => unknown = () => "x") {
-  return importMod("nocturne/layout-look.ts", { herdr: { layout: root, shared: (k: string) => (k === "layout" ? name() : null) }, "gpui-kit": { div: element } });
+  return importLibrary("@fireflies/layout-look", { herdr: { layout: root, shared: (k: string) => (k === "layout" ? name() : null) }, "gpui-kit": { div: element } });
 }
 
 const shippedLayout = (n: string) => JSON.parse(readFileSync(`${import.meta.dir}/../defaults/layouts/${n}.json`, "utf8"));
 
-test("every converted mod carries layout-look.ts, byte for byte nocturne's", () => {
-  const source = readFileSync(join(MODS, "nocturne/layout-look.ts"), "utf8");
-  const copies = readdirSync(MODS).filter((m) => files(m).includes(`${m}/layout-look.ts`));
-  expect(copies.sort()).toEqual([...CONVERTED].sort());
-  for (const m of copies) expect([m, readFileSync(join(MODS, m, "layout-look.ts"), "utf8") === source]).toEqual([m, true]);
+test("no mod carries a copy of layout-look.ts: the mods import @fireflies/layout-look", () => {
+  expect(readdirSync(MODS).filter((m) => files(m).includes(`${m}/layout-look.ts`))).toEqual([]);
+  expect(sources.filter((f) => readFileSync(join(MODS, f), "utf8").includes('from "./layout-look.ts"'))).toEqual([]);
 });
 
 test("the shipped layouts' looks: nocturne dithered and square, main (herdr's default) plain and round", async () => {
@@ -204,13 +203,17 @@ test("the look follows a switch of layout (by name); a layout that can't be read
   expect(broken.dithered()).toBe(true);
 });
 
-test("every dither in a converted mod asks layout-look.ts first", () => {
+test("every dither in a converted mod asks @fireflies/layout-look first", () => {
   // procs' vitals draw their sparklines in dots: a chart's art, not a fill (left to the art step)
-  const painters = sources.filter((f) => f !== "procs/vitals-view.ts" && /Background\.checkerboard\(color\b/.test(readFileSync(join(MODS, f), "utf8")));
-  expect(painters.length).toBeGreaterThan(20);
+  // The libraries the mods import (@fireflies/keyhelp, …) paint dithers too.
+  const libs = readdirSync(LIB).flatMap((l) => readdirSync(join(LIB, l)).filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts")).map((f) => `../lib/@fireflies/${l}/${f}`));
+  // @fireflies/look's fill() is the switch itself: it branches on dithered() (look.test.ts proves both looks).
+  const painters = [...sources, ...libs].filter((f) => f !== "procs/vitals-view.ts" && !f.startsWith("../lib/@fireflies/look/") && /Background\.checkerboard\(color\b/.test(readFileSync(join(MODS, f), "utf8")));
+  // (a floor: the mods' own painters, and one per library; keyhelp was 14 copies once)
+  expect(painters.length).toBeGreaterThan(15);
   for (const f of painters) {
     const text = readFileSync(join(MODS, f), "utf8");
-    expect([f, /import \{ flat \} from "\.\/layout-look\.ts";/.test(text) && text.includes("const plain = flat(color, cell);")]).toEqual([f, true]);
+    expect([f, /import \{ flat \} from "@fireflies\/layout-look";/.test(text) && text.includes("const plain = flat(color, cell);")]).toEqual([f, true]);
   }
 });
 

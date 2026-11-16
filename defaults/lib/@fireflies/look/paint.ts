@@ -13,8 +13,8 @@ import { div, PathBuilder, Background } from "gpui-kit";
 import type { Color, Element } from "gpui-kit";
 import { settings, window as appWindow } from "herdr";
 import type { Theme } from "herdr";
-import { dithered } from "./layout-look.ts";
-import { edge } from "./tones.ts";
+import { dithered } from "@fireflies/layout-look";
+import { edge } from "@fireflies/tones";
 
 const RECT = () => PathBuilder.fill().move_to("0%", "0%").line_to("100%", "0%").line_to("100%", "100%").line_to("0%", "100%").close().build();
 

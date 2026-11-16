@@ -9,7 +9,7 @@
 // hills, the fireflies' glow, the sheep) passes `null` as `plain`: a plain
 // layout draws no picture there.
 
-import { dithered } from "./layout-look.ts";
+import { dithered } from "@fireflies/layout-look";
 
 /** Nocturne's art folder. */
 export const ART = "mods/nocturne/art";

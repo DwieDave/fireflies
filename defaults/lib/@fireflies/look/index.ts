@@ -10,9 +10,9 @@
 // them as @fireflies/layout-look and @fireflies/tones; then these import them
 // by name and the copies go.
 
-export * from "./layout-look.ts";
+export * from "@fireflies/layout-look";
 
-export * from "./tones.ts";
+export * from "@fireflies/tones";
 
 export * from "./paint.ts";
 
