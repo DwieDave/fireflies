@@ -148,6 +148,6 @@ export function runMenuView(v: ScriptsDeck, t: Theme, m: RunMenu): Element | nul
     .on_mouse_down("right", (_e, cx) => close(cx))
     .child(v_flex().id("rm-menu").absolute().left(at.x).top(at.y).w(MENU_W).py(6).bg(t.background).border(1).border_color(t.accent)
       .on_mouse_down("left", (_e, cx) => cx.stop_propagation())
-      .child(div().px(10).pb(4).text_size(10).text_color(t.ansi8).truncate().child(r.name))
+      .child(div().px(10).pb(4).text_size(10).text_color(t.muted).truncate().child(r.name))
       .children(rows));
 }
