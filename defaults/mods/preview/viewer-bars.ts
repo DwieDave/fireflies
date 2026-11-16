@@ -168,6 +168,7 @@ export function drawControls(view: Viewer, t: Theme, w: number, el: Element): El
       .when(w >= 400 && scale > 0, (e2) => e2.child(div().flex_none().text_color(t.dim).child(percent(scale))))
       .child(chip(view, t, "pdf-out", "−", (cx) => zoomBy(view, -1, cx)))
       .child(chip(view, t, "pdf-fit", "fit", (cx) => fit(view, cx), p.autoScales === true))
+      .when(w >= 360, (e2) => e2.child(chip(view, t, "pdf-actual", "100%", (cx) => actual(view, cx), p.autoScales !== true && Math.abs(scale - 1) < 1e-9)))
       .child(chip(view, t, "pdf-in", "+", (cx) => zoomBy(view, 1, cx)));
   }
 

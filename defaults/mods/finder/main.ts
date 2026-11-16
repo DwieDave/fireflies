@@ -31,12 +31,12 @@ import type { Props } from "gpui-shell";
 import { h_flex, v_flex, InputState, Input, Scrollbar, v_virtual_list, VirtualListScrollHandle } from "gpui-base";
 import * as herdr from "herdr";
 import type { Theme } from "herdr";
-import { props, theme, settings, closeOverlay, shared, setShared, exec, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
+import { props, theme, settings, closeOverlay, shared, setShared, exec, run, findFiles, grep, readTextFile, highlight, languageOf, home, keys, nextCommand, window as appWindow } from "herdr";
 import { openInEditor } from "./editor-route.ts";
 import type { Guarded } from "./guard.ts";
 import { arrayOf, isString, literal, nullable, object, readShared, sharedKey, writeShared } from "./guard.ts";
 import type { FoundFile, GrepRow, HeadRow, HitRun, LineRow, Mark, Mode, Run, Span } from "./logic.ts";
-import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote } from "./logic.ts";
+import { marks, split, nameRanges, dirRanges, grepRows, move, first, around, syntaxColors, colorRuns, lineRuns, PAUSE, previewWidth, previewLines, PREVIEW_LINE, otherMode, keyFor, firstFolder, goneNote, isPreviewFile } from "./logic.ts";
 
 const ROW = 28;
 const LINE = 24;
@@ -475,9 +475,18 @@ export default class Picker extends View {
     const path = `${this.root}/${r.path}`;
 
     this.dismiss();
+
+    // A picture, a PDF, a clip, a font, a database picked: a preview pane, as from the
+    // files pane (the app shows it in one already in the tab, else opens one beside).
+    if (!("match" in r) && isPreviewFile(path)) {
+      run("preview.open", { path });
+
+      return;
+    }
+
     // The focused editor, else the shown tab's, takes it as a tab; with none, a new one (editor-route.ts).
-    // A file picked (no line): opened to be looked at, as a files pane's open: a picture or a
-    // table drawn, Markdown in the editor's view for it. A grep hit: the text at its line.
+    // A file picked (no line): opened to be looked at, as a files pane's open: a table drawn,
+    // Markdown in the editor's view for it. A grep hit: the text at its line.
     openInEditor(herdr, "match" in r ? { path, line: r.match.line, col: r.match.col + 1 } : { path, look: true });
   }
 

@@ -1,7 +1,7 @@
 // The viewer's keys and commands: the bar's, the kind's (a clip, a PDF, a
 // picture, a table), the common ones, the wheel. Shared like viewer.ts.
 
-import type { Context, KeyEvent, Modifiers, ScrollWheelEvent } from "gpui-kit";
+import type { Context, KeyEvent, Modifiers, PinchEvent, ScrollWheelEvent } from "gpui-kit";
 import { zoomTo, panBy } from "./image.ts";
 import { keyOf, cycle } from "./keys.ts";
 import { keysKey } from "./keyhelp.ts";
@@ -55,6 +55,7 @@ export function pdfKey(v: Viewer, k: string, m: Modifiers, cx: Context): boolean
   if (k === "+" || k === "=") zoomBy(v, 1, cx);
   else if (k === "-" || k === "_") zoomBy(v, -1, cx);
   else if (k === "0") fit(v, cx);
+  else if (k === "1") actual(v, cx);
   else if (k === "right" || k === "l" || k === "pagedown" || k === "space") pageGo(v, "next", cx);
   else if (k === "left" || k === "h" || k === "pageup" || k === "backspace") pageGo(v, "prev", cx);
   else if (k === "g" && !m.shift) pageGo(v, 1, cx);
@@ -193,12 +194,35 @@ export function wheelBy(view: Viewer, e: ScrollWheelEvent, cx: Context): void {
 
   if (!v) return;
 
+  // A mouse wheel (it counts lines; a trackpad counts pixels) zooms at the
+  // pointer, a notch about a fifth; ⌘/ctrl + scroll zooms from either; a
+  // trackpad's two-finger scroll (and a wheel turned sideways) pans.
+  const wheel = e.delta_lines?.y ?? 0;
+
   if (m.platform || m.control) {
     const k = Math.exp(Math.max(-1, Math.min(1, dy / 240)));
+
+    setView(view, zoomTo(v, v.scale * k, view.img(), view.port, pointOf(e)), cx);
+  } else if (wheel) {
+    const k = Math.exp(Math.max(-1, Math.min(1, wheel * WHEEL_ZOOM)));
 
     setView(view, zoomTo(v, v.scale * k, view.img(), view.port, pointOf(e)), cx);
   } else if (pannable(view)) setView(view, panBy(v, dx, dy, view.img(), view.port), cx);
   else return;
 
+  cx.notify();
+}
+
+/** How much one line of a mouse wheel zooms a picture (e^0.2: about a fifth). */
+export const WHEEL_ZOOM = 0.2;
+
+/** A trackpad pinch (macOS): a picture, or a PDF page drawn as one, zooms by
+ *  it at the pointer. The system's PDF view takes its own pinches. */
+export function pinchBy(view: Viewer, e: PinchEvent, cx: Context): void {
+  const v = current(view);
+
+  if (!v || !(e.delta > -1)) return;
+
+  setView(view, zoomTo(v, v.scale * (1 + e.delta), view.img(), view.port, pointOf(e)), cx);
   cx.notify();
 }

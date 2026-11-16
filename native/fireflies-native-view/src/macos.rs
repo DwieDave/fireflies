@@ -1050,6 +1050,12 @@ pub fn call(key: &str, action: &str, args: &Value) -> Result<Value, String> {
                     view.setAutoScales(true);
                     Ok(pdf_state(view))
                 }
+                // The preview's `1`: the page at its own size (100%).
+                ("pdf.actualSize", Renderer::Pdf { view, .. }) => {
+                    view.setAutoScales(false);
+                    view.setScaleFactor(1.0);
+                    Ok(pdf_state(view))
+                }
                 (
                     "media.play",
                     Renderer::Media {

@@ -19,7 +19,7 @@
 // { reload: n } (the folder changed).
 
 import { View, div } from "gpui-kit";
-import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, ScrollWheelEvent } from "gpui-kit";
+import type { AsyncContext, Color, Context, Element, FocusHandle, KeyEvent, PinchEvent, ScrollWheelEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
 import { v_flex } from "gpui-base";
 import * as herdr from "herdr";
@@ -41,7 +41,7 @@ import { scrollLook, wrappedRows, maxScroll } from "./viewer-text.ts";
 import { colStartsOf, gutterOf, pickTableOf, tableWidthOf, visibleRowsOf } from "./viewer-table.ts";
 import { actNative, onNativeEvent } from "./viewer-native.ts";
 import { current, editFile, imgOf, pannable, resized } from "./viewer-pan.ts";
-import { keyDown, runCommand, wheelBy } from "./viewer-keys.ts";
+import { keyDown, pinchBy, runCommand, wheelBy } from "./viewer-keys.ts";
 import { drawKeysStrip, drawLookBar, drawStrip, drawToolbar } from "./viewer-bars.ts";
 import { innerView, pressAt } from "./viewer-views.ts";
 
@@ -338,6 +338,10 @@ export default class Viewer extends View {
     return wheelBy(this, e, cx);
   }
 
+  pinch(e: PinchEvent, cx: Context): void {
+    return pinchBy(this, e, cx);
+  }
+
   // ---- parts
 
   /** `?`: the keys that do something here, in the file's place (keyhelp.ts): a
@@ -385,6 +389,7 @@ export default class Viewer extends View {
     const body = (pannable(this) ? (this.drag ? frame.cursor_grabbing() : frame.cursor_grab()) : frame)
       .on_size_change((size, cx) => resized(this, size, cx))
       .on_scroll_wheel((e, cx) => this.wheel(e, cx))
+      .on_pinch((e, cx) => this.pinch(e, cx))
       .on_mouse_down("left", (e, cx) => pressAt(this, e, cx))
       .on_mouse_move((e, cx) => {
         const at = pointOf(e);

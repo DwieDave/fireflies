@@ -217,6 +217,7 @@ impl Kind {
                 "pdf.zoomIn",
                 "pdf.zoomOut",
                 "pdf.fitWidth",
+                "pdf.actualSize",
             ],
             Kind::Media => &[
                 "focus",
