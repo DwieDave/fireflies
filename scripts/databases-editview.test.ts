@@ -53,7 +53,7 @@ class Input {
 }
 class Editor { text: string; constructor(o: any) { this.text = o.value ?? ""; } value() { return this.text; } on() { return true; } cursor() { return { line: 0, col: 0 }; } set_cursor() {} selection() { return { start: { line: 0, col: 0 }, end: { line: 0, col: 0 }, text: "" }; } set_diagnostics() {} focus() {} focused() { return false; } release() { return true; } }
 mock.module("gpui-base", () => ({
-  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {} }) },
+  h_flex: () => el, v_flex: () => el, ScrollHandle: { new: () => ({ scroll_to_item() {}, offset: () => ({ x: 0, y: 0 }) }) },
   InputState: { new: (o: any) => new Input(o) }, Input: { new: () => el },
   EditorState: { new: (o: any) => new Editor(o) }, Editor: { new: () => el },
 }));

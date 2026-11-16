@@ -1511,6 +1511,11 @@ const ELEMENT_METHODS: &str = r#"    /**
     /** div/h_flex/v_flex: initial size and changed layout size, in logical pixels.
      * Runs after layout, even without pointer movement. Use a stable id. */
     on_size_change<Self extends Element>(this: Self, handler: (size: { width: number; height: number }, cx: Context) => void): Self;
+    /** HERDR: div/h_flex/v_flex: where the element is drawn, in window pixels
+     * (`x`, `y` its top left corner), first and whenever that changes (it
+     * moved, scrolled, or changed size). Runs after layout, even without
+     * pointer movement. Use a stable id. */
+    on_bounds_change<Self extends Element>(this: Self, handler: (bounds: { x: number; y: number; width: number; height: number }, cx: Context) => void): Self;
     /** GPUI `InteractiveElement::on_hover`; reports both pointer entry and exit. */
     on_hover<Self extends Element>(this: Self, handler: (hovered: boolean, cx: Context) => void): Self;
     /**
@@ -3132,6 +3137,10 @@ const BASE: &str = r#"  /** A row. */
      * Requests are consumed once, after layout; already visible children stay put.
      */
     scroll_to_item(index: number): void;
+    /** HERDR: where the area is scrolled to after its last layout, as
+     * VirtualListScrollHandle.offset(): the content's offset in window pixels,
+     * `{ x: 0, y: -120 }` 120 px down. A plain read; legal in render too. */
+    offset(): { x: number; y: number };
     /** Releases the handle. Using it afterwards throws. */
     release(): boolean;
   }

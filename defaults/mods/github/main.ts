@@ -37,6 +37,7 @@
 
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent, MouseButtonEvent, Size } from "gpui-kit";
+import type { Pt, Rect } from "./menu-place.ts";
 import type { Props } from "gpui-shell";
 import { v_flex, ScrollHandle } from "gpui-base";
 import { theme, props, closeOverlay, openOverlay, nextCommand, shared, setShared, spaces, panes, focused, run, notify, settings, window as appWindow } from "herdr";
@@ -147,6 +148,8 @@ export default class GitHub extends View implements Host {
 
   /** L's list of links, a right-click menu. */
   picker: Picker | null = null;
+  /** Where the body is drawn (window px, its on_bounds_change): a press is placed in it. */
+  bodyBox: Rect | null = null;
 
   /** The picker's box follows its cursor. */
   pickerScroll = ScrollHandle.new();
@@ -625,6 +628,12 @@ export default class GitHub extends View implements Host {
     return helpPanel(this, t);
   }
 
+  pressAt(e: { readonly position: Pt }): Pt | null {
+    const b = this.bodyBox;
+
+    return b ? { x: unzoom(e.position.x - b.x), y: unzoom(e.position.y - b.y) } : null;
+  }
+
   pickerPanel(t: Theme): Element {
     return pickerPanel(this, t);
   }
@@ -701,6 +710,9 @@ export default class GitHub extends View implements Host {
       })
       .child(header(this, t))
       .child(div().id("gh-body").relative().flex_1().min_h(0).p(8)
+        .on_bounds_change((b) => {
+          this.bodyBox = { x: b.x, y: b.y, w: b.width, h: b.height };
+        })
         .on_mouse_down("left", (_e, cx) => {
           this.focusSelf();
           cx.stop_propagation();

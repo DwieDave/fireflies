@@ -5,6 +5,7 @@
 import type { Context, MouseButtonEvent } from "gpui-kit";
 import type { Ran, Repo } from "./gh.ts";
 import type { Axis, Note } from "./kit.ts";
+import type { Pt } from "./menu-place.ts";
 
 /** A row of the window's picker (L's links, a right-click menu): its words, what it does. */
 export interface PickRow {
@@ -13,11 +14,13 @@ export interface PickRow {
   readonly go: (cx: Context) => void;
 }
 
-/** The window's picker: a title, its rows, the row with the keyboard (and the one scrolled to). */
+/** The window's picker: a title, its rows, the row with the keyboard (and the one scrolled to),
+ *  and the press it stands at (a right-click's, in the body's layout px; none: the middle). */
 export interface Picker {
   readonly title: string;
   readonly rows: readonly PickRow[];
   at: number;
+  readonly near?: Pt | null;
   shownAt?: number;
 }
 
@@ -60,5 +63,8 @@ export interface Host {
   kick(cx: Context): void;
   refresh(cx: Context, force?: boolean | ReadOptions): void;
   dragged(key: string): boolean;
+  /** A press's place in the body (layout px), where a right-click's menu stands; null while the
+   *  body hasn't said where it's drawn. */
+  pressAt(e: { readonly position: Pt }): Pt | null;
   resize(e: MouseButtonEvent, key: string, axis: Axis, from: number, set: (px: number) => void, options?: ResizeOptions): void;
 }

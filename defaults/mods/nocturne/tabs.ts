@@ -40,7 +40,7 @@ import { spaces, panes, run, theme, shared, setShared, layout, focused, nextComm
 import type { SpaceInfo, TabInfo, Theme } from "herdr";
 import { isBoolean, readShared, writeShared } from "./guard.ts";
 import { statusMark } from "./winged.ts";
-import { dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
+import { byKey, dither, spaceFolder, givenName, dropBelow, navRing, toolGround, toolHover, TOOL_LOOK, pinTab } from "./kit.ts";
 import type { ToolButton } from "./kit.ts";
 import type { ToolLook } from "./toolground.ts";
 import { openNewMenu, newMenuOpen, WIDTH as NEW_W } from "./newmenu.ts";
@@ -322,7 +322,7 @@ export default class Tabs {
     const fp = all.find((p) => p.focused && !p.parked);
 
     const head = fp ? headerControls(fp, all).map((c): StripItem => ({
-      id: c.id, go: c.go, menu: () => paneMenu(fp, true), rename: () => renamePane(fp), close: () => run("pane.close", { pane: fp.pane }),
+      id: c.id, go: () => c.go(), menu: () => paneMenu(fp, true), rename: () => renamePane(fp), close: () => run("pane.close", { pane: fp.pane }),
     })) : [];
 
     const tab = space?.tabs.find((c) => c.active)?.id;
@@ -426,7 +426,8 @@ export default class Tabs {
           return;
         }
 
-        if (item && isItemVerb(verb)) item[verb]?.(cx);
+        // A menu or deck the key opens hangs from the cursor's thing (kit.ts keyedSpec).
+        if (item && isItemVerb(verb)) byKey(() => item[verb]?.(cx));
     }
 
     this.reveal();

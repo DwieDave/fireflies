@@ -5,7 +5,7 @@
 import type { Context, KeyEvent } from "gpui-kit";
 import { spaces, run, focused } from "herdr";
 import type { AgentInfo, SpaceInfo } from "herdr";
-import { pin, movePin, goToPin, unpin, pinFocused, moveFocused, pinShownTab } from "./kit.ts";
+import { pin, movePin, goToPin, unpin, pinFocused, moveFocused, pinShownTab, byKey } from "./kit.ts";
 import type { JarItem } from "./pins.ts";
 import { paneMenu } from "./header.ts";
 import { isDock } from "./dock.ts";
@@ -102,7 +102,8 @@ export function sidebarKey(sky: Sky, e: KeyEvent, cx: Context): void {
       openSpacePicker();
       break;
     default:
-      if (item && isActVerb(verb)) item[verb]?.(cx);
+      // A menu or picker the key opens hangs from the cursor's thing (kit.ts keyedSpec).
+      if (item && isActVerb(verb)) byKey(() => item[verb]?.(cx));
   }
 
   sky.navAt = Math.max(0, items.findIndex((x) => x.id === sky.cursor));

@@ -5,6 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Color, Context, Element } from "gpui-kit";
+import type { Pt } from "./menu-place.ts";
 import { h_flex, v_virtual_list, v_flex } from "gpui-base";
 import { settings } from "herdr";
 import type { Theme } from "herdr";
@@ -56,6 +57,14 @@ export function runsPanel(v: Actions, t: Theme): Element {
           v.selectRun(list.findIndex((r) => String(r.id) === key), cx);
           cx.notify();
         })
+        // A right-click on a run: that run's menu, at the pointer.
+        .on_item_secondary_click((key, e, cx) => {
+          cx.stop_propagation();
+          v.focus = "runs";
+          v.selectRun(list.findIndex((r) => String(r.id) === key), cx);
+          runsMenu(v, e);
+          cx.notify();
+        })
         .size_full().track_scroll(v.runsScroll));
 
   const running = list.filter((r) => r.status === "in_progress").length;
@@ -65,15 +74,15 @@ export function runsPanel(v: Actions, t: Theme): Element {
     .child(chip(t, "run-workflow", "▶ run workflow", false, (cx) => v.runWorkflow(cx), t.accent));
 
   return panel(t, "runs", v.filter ? `Runs · ${v.filter.label}` : "Runs", active, body, { right })
-    .on_mouse_down("right", (_e, cx) => {
+    .on_mouse_down("right", (e, cx) => {
       cx.stop_propagation();
-      runsMenu(v);
+      runsMenu(v, e);
       cx.notify();
     });
 }
 
-/** Right-click on the runs: what can be done from here. */
-export function runsMenu(v: Actions): void {
+/** Right-click on the runs (at the press `e`): what can be done from here. */
+export function runsMenu(v: Actions, e: { readonly position: Pt } | null = null): void {
   const r = v.run();
   const rows: PickRow[] = [{ label: "Run a workflow…", sub: "n", go: (cx) => v.runWorkflow(cx) }];
 
@@ -90,7 +99,7 @@ export function runsMenu(v: Actions): void {
       });
   }
 
-  v.app.picker = { title: "ACTIONS", at: 0, rows };
+  v.app.picker = { title: "ACTIONS", at: 0, rows, near: e ? v.app.pressAt(e) : null };
 }
 
 /** The selected run's jobs as a graph: panned to keep the selected job in view, dragged or scrolled by hand. */

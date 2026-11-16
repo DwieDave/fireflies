@@ -571,9 +571,14 @@ export interface OverlaySpec {
   /** px, or up to 1: a share of the window. */
   width?: number;
   height?: number;
-  /** A popup `{ over }`: centred on that window (an overlay's id) or pane, where it is drawn now,
-   *  kept inside the app window (a player's ? centres its keys on the player). */
-  at?: "pointer" | { x: number; y: number } | { over: string };
+  /** A popup: at the pointer (default: the last press; just past it, flipped left or up where
+   *  the window has no room, so it never covers it); `{ x, y }`: its top left there (window px);
+   *  `{ x, y, w, h }`: hung from that rectangle (a row a key opened the menu for), under it at its
+   *  left edge, above it where there's no room below; with `over` the rectangle is in that pane's,
+   *  layout block's or overlay's own px from its top left corner, where it is drawn now (the
+   *  middle while it isn't drawn); `{ over }` alone: centred on that window (an overlay's id) or
+   *  pane, kept inside the app window (a player's ? centres its keys on the player). */
+  at?: "pointer" | { x: number; y: number } | { x: number; y: number; w: number; h: number; over?: string } | { over: string };
 }
 
 /** Shows a mod (or a layout) above everything. Returns its id. The mod gets `props().overlay` = that id. */

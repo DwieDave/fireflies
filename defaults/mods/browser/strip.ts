@@ -46,6 +46,11 @@ export function tabMark(view: Browser, t: Theme, tab: Tab, bright: boolean): Ele
 /** The tabs, over the bar (two or more): number, title, ×, and + at the
  *  end; the shown one bright on a dithered accent line, as the app's tabs.
  *  A click shows a tab, a middle click or × closes it; tab rings them. */
+/** Keeps where tab `id` is drawn (window px): a key's tab menu hangs from it (tab-menu.ts). */
+const tabBox = (view: Browser, id: string) => (b: { readonly x: number; readonly y: number; readonly width: number; readonly height: number }): void => {
+  view.tabBoxes.set(id, { x: b.x, y: b.y, w: b.width, h: b.height });
+};
+
 export function stripView(view: Browser, t: Theme): Element {
   const drag = view.drag;
   const pins = view.ownSlot ? readSharedList(shared, Tabs.PINS_LIST) : null;
@@ -67,7 +72,8 @@ export function stripView(view: Browser, t: Theme): Element {
         view.stop(e, cx);
         view.pressed = { id: tab.id, x: e.position.x };
       })
-      .on_mouse_move((e, cx) => dragOver(view, Tabs.gapAt(tab.id, e.local_position.x, e.bounds.width), e.position, cx))
+      // Where it's drawn (tabBox): m's menu hangs from it.
+      .on_mouse_move((e, cx) => dragOver(view, Tabs.gapAt(tab.id, e.local_position.x, e.bounds.width), e.position, cx)).on_bounds_change(tabBox(view, tab.id))
       .on_mouse_up("left", (_e, cx) => {
         if (!view.drag && view.pressed?.id === tab.id) {
           view.claim();

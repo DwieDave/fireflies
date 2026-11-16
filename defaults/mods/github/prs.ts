@@ -5,6 +5,7 @@
 
 import { div } from "gpui-kit";
 import type { Context, Element, KeyEvent, Size } from "gpui-kit";
+import type { Pt } from "./menu-place.ts";
 import { h_flex, v_flex, v_virtual_list, VirtualListScrollHandle, ScrollHandle, TextareaState, Textarea } from "gpui-base";
 import type { Theme } from "herdr";
 import type { Guarded } from "./guard.ts";
@@ -20,7 +21,8 @@ import { markdown } from "./markdown.ts";
 import { PrForm } from "./prForm.ts";
 import type { Hint } from "./kit.ts";
 import { dither, panel, empty, stop, eyebrow, splitter, unzoom, chip, noteOf } from "./kit.ts";
-import type { Host, PickRow, ReadOptions } from "./host.ts";
+import type { Host, ReadOptions } from "./host.ts";
+import { prMenu, prRowMenu } from "./pr-menu.ts";
 import type { KeyRow } from "./keyhelp.ts";
 import type { Said } from "./pr-draw.ts";
 import { ROW, CHECK_ROW, prRow, prHead, saidCard, checkRow } from "./pr-draw.ts";
@@ -575,6 +577,8 @@ export default class Prs {
             this.select(list.findIndex((p) => String(p.number) === key), cx);
             cx.notify();
           })
+          // A right-click on a row: that row's menu, at the pointer.
+          .on_item_secondary_click((key, e, cx) => prRowMenu(this, key, e, cx))
           .size_full().track_scroll(this.listScroll));
 
     const right = h_flex().gap(6).items_center()
@@ -582,25 +586,16 @@ export default class Prs {
       .child(chip(t, "pr-new", "+ new", false, (cx) => this.newPr(cx), t.accent));
 
     return panel(t, "pr-list", `Pull requests · ${FILTER_WORD[this.filter]}`, active, body, { right }).flex_1()
-      .on_mouse_down("right", (_e, cx) => {
+      .on_mouse_down("right", (e, cx) => {
         cx.stop_propagation();
-        this.menu();
+        this.menu(e);
         cx.notify();
       });
   }
 
-  /** Right-click on the list: what can be done from here. */
-  menu(): void {
-    const p = this.current();
-    const rows: PickRow[] = [{ label: "New pull request…", sub: "n", go: (cx) => this.newPr(cx) }];
-
-    if (p) {
-      rows.push({ label: `Diff of #${p.number}`, sub: "d", go: () => this.app.openDiff(p.number) },
-        { label: `Comment on #${p.number}`, sub: "c", go: (cx) => this.startComment(cx) },
-        { label: `#${p.number} in the browser`, sub: "o", go: (cx) => this.app.openUrl(this.urlOf(p), cx) });
-    }
-
-    this.app.picker = { title: "PULL REQUESTS", at: 0, rows };
+  /** Right-click on the list (at the press `e`): what can be done from here (pr-menu.ts). */
+  menu(e: { readonly position: Pt } | null = null): void {
+    prMenu(this, e);
   }
 
   checksPanel(t: Theme): Element | null {

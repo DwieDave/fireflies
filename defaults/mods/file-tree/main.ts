@@ -133,6 +133,7 @@ import { mountLook, scrollLookBy, toggleLook, placeLook } from "./look.ts";
 import { enterRow, reveal, runSearch } from "./search.ts";
 import { editPath, openFileAt, ownPane, publish } from "./opening.ts";
 import { menuBox, menuKey, openMenu, runAct } from "./menu.ts";
+import type { Anchor } from "./menu-place.ts";
 import { commitDraft, endDraft, selectStem, withDraft } from "./file-ops.ts";
 import { ghost, hitAt, markToggle, moveSet, unmark, withPointer } from "./drag.ts";
 import { drawKeysStrip, drawLens, drawToolbar, footer } from "./toolbar.ts";
@@ -512,8 +513,8 @@ export default class Files extends View {
 
   // ---- the menu
 
-  openMenu(row: Row, cx: Context | null): void {
-    return openMenu(this, row, cx);
+  openMenu(row: Row, cx: Context | null, at?: Anchor): void {
+    return at === undefined ? openMenu(this, row, cx) : openMenu(this, row, cx, at);
   }
 
   act(act: Act, row: Row, cx: Context): void {

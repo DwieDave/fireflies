@@ -38,7 +38,7 @@ import { theme, spaces, knownAgents, openOverlay, closeOverlay, props, window as
 import type { Theme } from "herdr";
 import { arrayOf, isBoolean, isString, literal, nullable, object, readShared, readSharedMap, sharedKey, sharedMapKey, writeShared, writeSharedMap } from "./guard.ts";
 import type { Guarded } from "./guard.ts";
-import { ART, LOGO, dither, eyebrow } from "./kit.ts";
+import { ART, LOGO, dither, eyebrow, keyedSpec } from "./kit.ts";
 import type { DropAt } from "./kit.ts";
 import { panels, here, terminalPane, terminalTab, filesHere } from "./panels.ts";
 import type { Panel } from "./panels.ts";
@@ -251,7 +251,7 @@ export function openNewMenu({ centered = false, at = null, wasOpen = false }: Ne
   const props = { role: "new" };
 
   const id = centered
-    ? openOverlay({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props })
+    ? openOverlay(keyedSpec({ mod: "nocturne", kind: "dialog", frame: "none", width: WIDTH, props }))
     : openOverlay(at
       ? { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, height: MOST, at, props }
       : { mod: "nocturne", kind: "popup", frame: "none", width: WIDTH, height: MOST, props });

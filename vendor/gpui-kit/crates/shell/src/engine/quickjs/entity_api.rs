@@ -1204,6 +1204,21 @@ pub fn install(ctx: &Ctx<'_>, module: &Object<'_>, runtime: Weak<ShellRuntime>) 
             Ok(())
         }),
     )?;
+    // HERDR: where a plain scroll area is scrolled to, as the virtual list's
+    // offset() reads it: the content's offset in window pixels after the last
+    // layout (`-y` down), so a mod can tell where a row of it is drawn (a menu
+    // a key opens beside the selected row).
+    let plain_offset = runtime.clone();
+    globals.set(
+        "__scroll_offset",
+        Func::from(move |ctx: Ctx<'_>, handle: EntityHandle| -> JsResult<Vec<f32>> {
+            let scroll = alive(&ctx, &plain_offset)?
+                .entities().scroll(handle)
+                .ok_or_else(|| Exception::throw_type(&ctx, "this scroll handle has been released"))?;
+            let offset = scroll.handle.offset();
+            Ok(vec![f32::from(offset.x), f32::from(offset.y)])
+        }),
+    )?;
     let discard_scroll = runtime.clone();
     globals.set(
         "__scroll_release",

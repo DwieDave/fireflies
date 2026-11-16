@@ -33,7 +33,7 @@
 import { View, div } from "gpui-kit";
 import type { AsyncContext, Context, Element, FocusHandle, KeyEvent } from "gpui-kit";
 import type { Props } from "gpui-shell";
-import { v_flex } from "gpui-base";
+import { ScrollHandle, v_flex } from "gpui-base";
 import { closeOverlay, nextCommand, shared, setShared, theme } from "herdr";
 import type { Theme } from "herdr";
 import { readShared, readSharedMap, writeShared } from "./guard.ts";
@@ -52,6 +52,8 @@ import { enterRow, escapeKey, groups, runAct, showOutput } from "./actions.ts";
 import { emptyView, runRow, scriptRow, section, tally, placeRows } from "./rows-view.ts";
 import { footBar, helpView, outputView, passwordBar, deckHead, filterLine } from "./bars.ts";
 import { outputKey, typedKey } from "./input.ts";
+import type { RunMenu } from "./run-menu.ts";
+import { openRunMenu, runMenuKey, runMenuLayer } from "./run-menu.ts";
 import { deckHeight, inPane, move as moveDeck, quit, takeHandover, toPane, toWindow, unzoom } from "./place.ts";
 import { edge } from "./tones.ts";
 
@@ -60,6 +62,7 @@ export const deckKeys = (cmd: string): KeyRow[] => [
   ["j k ↑ ↓", "move"], ["g G home end", "first / last"], ["pgup pgdn", "a page"], ["tab ⇧tab", "next / previous group"],
   ["enter", "run in the background · watch a run"], ["⇧enter", "run and watch it"], ["/", "filter (esc clears, again: back)"],
   ["w", "watch the run · an ended one's output"], [`x ${cmd}⌫`, "remove an ended run · stop a running one (twice)"], [`R ${cmd}R`, "run it again (a running one: twice)"],
+  ["m", "a run's menu (a right-click too)"],
   ["j k pgup pgdn", "a run's output: scroll"], ["g G", "a run's output: top / end"], ["o", "a run's output: the setting it asks for"],
   ["esc ⌫ h ←", "a run's output: back to the list"], ["q esc", "close (in a pane: q)"], ["ctrl-t", "into a pane · out over the tab"], [`? ${CHORD}`, "keys (cmd-k ? while filtering)"],
 ];
@@ -75,6 +78,11 @@ export default class ScriptsDeck extends View {
   slot: string | null = null;
   /** A pane's height, as drawn (an overlay is H tall). */
   height = 0;
+  /** The deck's width in a pane (0: the window's, DECK_W). */
+  width = 0;
+  /** A run's menu (run-menu.ts), and the runs' scroll (where a key's menu finds its row). */
+  runMenu: RunMenu | null = null;
+  runsScroll = ScrollHandle.new();
   folder: string | null = null;
   on: string | null = null;
   key = ":";
@@ -299,7 +307,7 @@ export default class ScriptsDeck extends View {
     else if (k === "k") move(-1);
     else if (k === "end" || (k === "g" && m.shift)) move(n);
     else if (k === "home" || k === "g") move(-n);
-    else if (k === "w" && cur?.kind === "run") this.act("watch", cur.r, cx);
+    else if ((k === "w" || k === "m") && cur?.kind === "run") void (k === "w" ? this.act("watch", cur.r, cx) : openRunMenu(this, this.cursor));
     else if (k === "x" && cur?.kind === "run") this.act(cur.r.live ? "stop" : "dismiss", cur.r, cx);
     else if (k === "r" && m.shift && cur?.kind === "run") this.act("again", cur.r, cx);
     else if (k === "q") {
@@ -391,7 +399,8 @@ export default class ScriptsDeck extends View {
       // A click anywhere in it (a row too) leaves the keyboard here.
       .on_mouse_down("left", () => handle?.focus())
       .on_mouse_move(() => { this.moved = true; })
-      .on_key_down((e, cx) => this.onKey(e, cx, items))
+      // A run's menu (run-menu.ts) has every key while it's open.
+      .on_key_down((e, cx) => (this.runMenu ? runMenuKey(this, this.runMenu, e, cx) : this.onKey(e, cx, items)))
       .on_size_change((drawn, cx) => {
         const h = unzoom(drawn.height);
 
@@ -399,11 +408,13 @@ export default class ScriptsDeck extends View {
           this.height = h;
           cx.notify();
         }
+
+        if (inPane(this)) this.width = unzoom(drawn.width);
       })
       .child(deckHead(this, t))
       .when(all.length > 0, (el) => el
         .child(section(t, "runs", tally(this, t, all)))
-        .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll()
+        .child(v_flex().id("runs").h(Math.min(all.length, RUNS_SHOWN) * ROW).flex_none().overflow_y_scroll().track_scroll(this.runsScroll)
           .children(all.map((r, i) => runRow(this, t, r, i, this.cursor === i))))
         .child(div().h(4).flex_none()))
       .when(this.help, (el) => el.child(this.helpView(t, INPUT + 4 + listH)))
@@ -424,6 +435,7 @@ export default class ScriptsDeck extends View {
           })
           .children(list)
         : v_flex().h(listH).flex_none().mt(4).child(emptyView(this, t)))
-      .child(this.foot(t, cur));
+      .child(this.foot(t, cur))
+      .children(runMenuLayer(this, t));
   }
 }

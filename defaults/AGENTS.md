@@ -125,7 +125,8 @@ hidden columns, so limits and folds are Fireflies', per project, in shared state
 `project` (`gh auth refresh -s project`); the tab says which is missing.
 It also writes, always after a last step that shows the exact commands
 (enter or `y` sends, esc goes back; nothing runs before it). `n` on Pull
-requests (or its "+ new", a right-click on the list, the palette's "GitHub:
+requests (or its "+ new", a right-click on the list: the pressed pull
+request's menu at the pointer, the palette's "GitHub:
 new pull request…", `nocturne.github-pr` in keys.json) opens a new pull
 request: base (the default branch) and head (the current branch) picked
 from lists, title and body filled like `gh pr create --fill` (the body from
@@ -135,7 +136,8 @@ A head that isn't on GitHub, or is ahead of it, gets a "push first" toggle
 (`git push --set-upstream`). It runs `gh pr create` and selects the new
 pull request. `O` on a branch in the git window's branches panel opens it on
 that branch (the branch goes through shared `github.create`). `n`
-on Actions (its "run workflow", a right-click, "GitHub: run a workflow…",
+on Actions (its "run workflow", a right-click: the pressed run's menu at the
+pointer, "GitHub: run a workflow…",
 `nocturne.github-run`) runs a workflow by hand: only workflows with a
 `workflow_dispatch` trigger, a branch or tag, and the inputs that ref's file
 declares (text, number, a list for `choice` and `environment`, a toggle for
@@ -232,7 +234,7 @@ or a result as CSV, JSON or SQL inserts to the clipboard or a file; ctrl-h is
 the connection's history; `?` lists every key. Mouse and keyboard both reach
 everything: a right click opens a menu at the pointer (flipped left or up
 near the window's edges, never under the pointer) and `m` the same menu
-under what the cursor is on (the grid's cell; elsewhere in the middle) (a connection: connect / disconnect `x`, test, edit,
+under what the cursor is on (the grid's cell, a list's row, the main view's tabs for `T`; above it near the foot; in the middle in a narrow window) (a connection: connect / disconnect `x`, test, edit,
 duplicate `D` (never its password), copy its address `y` (no secret), save,
 remove; a table or view: rows, select, count, its name, copy, export, and
 "Empty it…" / "Drop it…", which put the statement in a query tab and run it
@@ -479,7 +481,8 @@ the highlighted line shows where it will land.
   Nocturne makes spaces folder first: the sidebar's "+ new" (or `n` in the
   sidebar, "+ new" > New space, the palette's New space, cmd-shift-n
   `nocturne.space-new`)
-  opens a folder list hanging under it (centered from a key): the focused
+  opens a folder list hanging under it (centered from a global key; under the
+  chip or row the sidebar's cursor is on from its keys): the focused
   pane's folder (its checkout's top), the spaces' folders, the git checkouts
   and worktrees beside them, then folders spaces were made in before (shared
   `nocturne.recent-folders`, newest first, 20). Typing filters it by name,
@@ -577,7 +580,7 @@ the highlighted line shows where it will land.
   `~/.local/share/herdr-core/active/Herdr Core.app` in Finder; if it's on already,
   remove it and add it again. A picked script runs in a pane-less
   terminal (`hc run --bg --no-parent`), one dithered cell per run beside ▶; the deck watches (floats it),
-  restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns), and shows an ended run's output; a failure
+  restarts, stops and removes runs (the cursor's and the hovered row show them as framed chips with their keys: watch, again and, set apart, remove or stop; they take the runner's badge's place, the status and time keep their columns; a right-click on a run opens the same actions as a menu at the pointer, `m` under the cursor's run), and shows an ended run's output; a failure
   toasts. A run is any terminal labeled `nocturne.script=<id>` (with
   `nocturne.script.name`, `.runner`, `.cmd`, `.folder`), so a script you start
   that way shows there too: `hc run --bg --no-parent --cwd ~/app --label
@@ -741,7 +744,8 @@ the highlighted line shows where it will land.
   closing the last leaves a blank tab (the pane stays). Drag a tab along the
   strip to move it (a marker shows where it lands; the numbers follow), or `<` /
   `>` in the bar (the ringed tab, else the shown one); the order is kept. A
-  right-click on a tab (or `m` in the bar) opens its menu: pin it to the
+  right-click on a tab opens its menu at the pointer (`m` in the bar under the
+  ringed or shown tab; in the middle with one tab): pin it to the
   sidebar's shelf on its own (a small mark shows on it) or unpin it, move it,
   close it; a right-click on the bar opens the shown tab's (a pane with one
   tab has no strip: this is its tab's menu); ↑ ↓ / j k, Enter, Esc, the wheel. The bar, the address,
@@ -903,8 +907,9 @@ the highlighted line shows where it will land.
   The strip shows from two files on: with one, the bar names the file with
   its unsaved mark and type mark. Drag a tab along the strip to move it (it lifts, a stake
   marks where it lands; dropped on the pane below the strip it pops out; off
-  the pane it stays); the order is kept. A right-click on a tab (or space b m,
-  `editor.tab-menu`) opens its menu: pop out into its own pane, pop
+  the pane it stays); the order is kept. A right-click on a tab opens its menu at
+  the pointer (space b m, `editor.tab-menu`, under the shown tab; under the bar
+  with one file): pop out into its own pane, pop
   out into a new tab, move into the editor beside, move left / right, close,
   close the others (those with unsaved changes stay); j k / ↑ ↓, enter, the
   entries' letters, esc. **Popping a tab out** (the menu, the drag, space b o,
@@ -1077,7 +1082,9 @@ the highlighted line shows where it will land.
   the system's own tool: macOS osascript, Linux wl-paste or xclip, Windows
   PowerShell.
   **The Markdown commands** (any Markdown view but preview only): cmd-. (vim:
-  space .), or the bar's "markdown" chip (a scratchpad's "format"), opens their list at the caret, lit
+  space .) opens their list under the caret (the lit block in the rendered view;
+  above it near the foot), the bar's "markdown" chip (a scratchpad's "format")
+  under the chip, lit
   for what's on there; a letter or a click runs one: b bold, i italic, \` inline code, k link, h / H heading level
   up / down, 0-6 text or that heading level, l bullet list, n numbered list,
   t task box, x tick, q quote, c code block, r rule, p image from a file, v
@@ -1784,8 +1791,8 @@ pane, a web page. "Move to the dock" (any pane's menu, the palette,
 terminal runs on in the core, a mod pane keeps its props) and pins it; its tile
 goes back to it, its menu's Close closes it (the app asks first for a running
 terminal or unsaved work). A pane on another machine doesn't dock: the dock is
-this computer's space. The shelf's last "+" tile opens the dock's menu (at the
-pointer; enter on it from the keyboard): the focused pane, a new web pane
+this computer's space. The shelf's last "+" tile opens the dock's menu (a click or a
+right click at the pointer; enter or m from the keyboard under the tile): the focused pane, a new web pane
 (`nocturne.dock-web`), a new shell in ~ (`nocturne.dock-shell`, pinned once its
 terminal is there: shared `nocturne.dock-shell` holds the ask) or a new files
 pane at ~ (`nocturne.dock-files`), each pinned; the palette has the same rows. Toasts by key:
@@ -1814,7 +1821,8 @@ ctrl-` / ctrl-shift-` pass the keyboard to the next / previous one
 (`overlay.focus`). To move or resize it by key, bind `overlay.move` in keys.json, e.g.
 `"ctrl-alt-left": {"command": "overlay.move", "args": {"dx": -40}}` (`dw`/`dh` resize). A blue ring or edge marks the
 cursor; j/k (↑↓) and h/l (←→) move, tab/shift-tab jump, enter acts, m opens
-the control's menu, r renames, esc/q go back to the pane, ? lists every key
+the control's menu (under the control, above it near the foot; what enter
+opens, a deck or "+ new", hangs there too), r renames, esc/q go back to the pane, ? lists every key
 of the row the cursor is on (the strip's, the header's, the parked chips') in
 a dialog (the chrome has no body to draw it over).
 
@@ -1890,7 +1898,7 @@ buttons) closes the pane as its close button does (`pane.close` without
 `confirmed`, so the app still asks about a working agent, a program in front
 of the shell or unsaved work). It closes on the release, and only when the
 press was on the bar too: a slip can be dragged off first. A parked pane's chip
-closes the same way, and a tab on the strip on a middle press (`tab.close`,
+opens its pane's menu on a right click, and closes the same way, and a tab on the strip on a middle press (`tab.close`,
 also asking).
 Nocturne's tab strip by mouse: drag a tab along it to move it. The dragged tab
 lifts where it is and a blue stake stands in the gap it will drop into: the
@@ -1923,7 +1931,8 @@ layout without it gets "+ new" in the strip before the bell). A drop-down
 (▶'s runs, the tree mark's, the ▾'s menu, the bell's, "+ new"'s) closes on a
 second press of what opened it (the ▾'s also on a second right-click on the git
 button). The strip's keyboard walk goes in that order. "+ new" (cmd-n, `nocturne.new`) drops a menu under it, its right edge on
-the button's, inside the window (a key opens it centered): where new
+the button's, inside the window (cmd-n opens it centered; enter on it in the
+strip's walk hangs it under the button): where new
 things land (a pane beside the focused one, or a new tab; tab flips it), a
 grid of panels, three to a row (Terminal t, Web w, Files f: a files pane of its own, not
 the docked panel the strip's files button and cmd-e toggle, Agents a, Usage
@@ -2866,9 +2875,15 @@ All of it is in `herdr.d.ts`. In short:
   returns an id; the mod gets `props().overlay` and closes itself with
   `closeOverlay(id)`; Esc closes the top dialog or popup. `frame: "none"`
   drops Fireflies' border, corners and shadow so the mod draws its own.
-  A popup opens at `at`: the pointer (default), `{ x, y }` (its top left), or `{ over: id }`,
-  centred on that window (an overlay's id) or pane where it is drawn now, kept inside the app
-  window, so it opens over what it belongs to however that got there.
+  A popup opens at `at`: the pointer (default: just past the last press, flipped left or up
+  near the window's edges so it never covers the press), `{ x, y }` (its top left),
+  `{ x, y, w, h, over? }` (hung from a rectangle: under it at its left edge, above it near the
+  foot; with `over` measured in that pane's, block's or overlay's own px from its top left), or
+  `{ over: id }`, centred on that window (an overlay's id) or pane where it is drawn now, kept
+  inside the app window, so it opens over what it belongs to however that got there.
+  Menus follow one rule (each mod's copy of `menu-place.ts`): a right click or a click opens
+  one at the pointer; a key on a selected row or element (`m`) opens it beside that element;
+  a key with nothing selected opens it in the middle.
   `notify({ title, body, level, icon, timeout })` posts a notification, drawn
   by the layout-chosen mod (default: `toast`).
 - Windows (`kind: "window"`): stay open until closed, over the layout and
